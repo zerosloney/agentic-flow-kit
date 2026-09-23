@@ -8,7 +8,7 @@
 # INCIDENT — CJS 语法脚本用 .js 扩展名，在 type:module 项目下崩溃
 
 ## 时间线
-- 2026-09-23：M4 自装后首次 commit 被 pre-commit 拦截（require is not defined in ES module scope，`.agents/hooks/commit-check.js:23`）
+- 2026-09-23：M4 自装后首次 commit 被 pre-commit 拦截（require is not defined in ES module scope，`.agents/hooks/commit-check`（时为 .js 扩展名）第 23 行）
 - 同日：全仓排查同类 → 5 份 CJS `.js` 定位 → 改 `.cjs` + 引用点同步 → `flow-kit sync` 落地装副本 → 真钩子通过、commit 落库
 
 ## 影响面
