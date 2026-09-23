@@ -1,0 +1,6 @@
+# agentic-flow-kit：钩子与 shell 脚本必须 LF（CRLF 会破坏 Git Bash/MSYS 执行）；
+# 预算表按 LF 计量（rule-budget.sh 已显式去 \r，此条为双保险）。已有自有 .gitattributes 的项目合并这几条即可。
+*.sh text eol=lf
+.githooks/* text eol=lf
+.agents/hooks/local-pre-commit text eol=lf
+*.ps1 text eol=crlf

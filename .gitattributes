@@ -1,0 +1,6 @@
+# 模板里的 shell 脚本与 git 钩子必须 LF——CRLF 会破坏 Git Bash/MSYS 执行
+* text=auto
+*.sh text eol=lf
+*.mjs text eol=lf
+*.js text eol=lf
+templates/_githooks/* text eol=lf

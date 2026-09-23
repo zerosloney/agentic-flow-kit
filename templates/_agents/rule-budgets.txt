@@ -1,0 +1,8 @@
+# 常驻面体积预算（单源：check-loop.sh 检查 13（--all，WARN）与 .githooks/pre-commit（--staged，硬拦）共读）
+# 格式：<路径或 glob> <上限字节>；路径以 / 结尾表示目录合计。上限 = 当前实测 + 余量。
+# 超限含义：常驻面只增不减——须先删除或下沉被取代条目再增（一进一出）。
+# 本文件会被 core.autocrlf 检出为 CRLF，读取方（rule-budget.sh）已显式去 \r，禁止依赖行尾格式。
+# 口径：预算比较用「索引 / HEAD 字节」（git cat-file，LF 归一）；禁用工作区 wc -c 核对（CRLF 膨胀）。
+AGENTS.md 7680
+.agents/commands/*.md 8192
+.agents/commands/ 49152

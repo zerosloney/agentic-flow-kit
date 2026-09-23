@@ -1,0 +1,58 @@
+#!/bin/sh
+# Git 原生 pre-commit hook（经 core.hooksPath 挂载，git 执行、不依赖 agent 客户端）— agentic-flow-kit 通用编排
+# 通用门禁序：闭环配对(增量) → wiki 台账(增量) → 常驻面体积预算(增量) → 项目门禁(local-pre-commit) → 敏感信息扫描+条件构建(commit-check.js)
+# 项目专属门禁（架构红线/业务守卫等）放 .agents/hooks/local-pre-commit——存在即在本钩子内执行，返回非零即阻断提交
+# 合并提交场景由 .githooks/pre-merge-commit 原样转发到本脚本（合并时 git 调的是 pre-merge-commit，
+# 不是 pre-commit）——门禁清单只此一份，避免两处分叉
+
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+# run_gate <标签> <脚本> [参数...]：sh 优先、无 sh 用 bash；非零即阻断
+run_gate() {
+  gate_label="$1"; shift
+  if command -v sh >/dev/null 2>&1; then sh "$@"; else bash "$@"; fi
+  rc=$?
+  if [ $rc -ne 0 ]; then
+    echo "pre-commit: $gate_label 未通过，提交已阻止" >&2
+    exit $rc
+  fi
+}
+
+# 闭环配对门禁（增量版，check-pairing-incremental.sh：本次暂存的 intents/incidents 入口须已有同名 plan）
+run_gate "闭环配对（增量）" .agents/hooks/check-pairing-incremental.sh
+
+# wiki 台账门禁（增量，check-wiki-ledger.sh：暂存区触及 wiki/ 时跑 verify-wiki-consistency 三方一致性；
+# 无 wiki/ 变更即跳过）
+run_gate "wiki 台账（增量）" .agents/hooks/check-wiki-ledger.sh
+
+# 常驻面体积预算（增量硬拦，rule-budget.sh --staged：只查本次暂存触及的条目与触及目录的合计；
+# 超限即阻断——常驻面只增不减，须先删除或下沉一条被取代条目再增）
+if [ -f .agents/scripts/rule-budget.sh ] && [ -f .agents/rule-budgets.txt ]; then
+  run_gate "常驻面体积预算" .agents/scripts/rule-budget.sh --staged
+fi
+
+# 项目门禁挂载点：.agents/hooks/local-pre-commit（项目自建门禁/门禁模块接线处，存在即执行）
+if [ -f .agents/hooks/local-pre-commit ]; then
+  run_gate "项目门禁（local-pre-commit）" .agents/hooks/local-pre-commit
+fi
+
+if ! command -v node >/dev/null 2>&1; then
+  echo "pre-commit: 未找到 node——敏感信息扫描与条件构建无法执行，提交已阻止（安装 Node.js 后重试）" >&2
+  exit 1
+fi
+
+# 合并提交 → 构建验证覆盖【完整合并树】，不做按扩展名的条件裁剪。
+# 两条路径：`git merge` 自动提交由 .githooks/pre-merge-commit 显式传 `--full` 转发到本脚本；
+# 冲突解决后手动 `git commit` 由 git 直接调本脚本，此处按 MERGE_HEAD 探测补上（此时合并仍在进行）。
+full_args="$*"
+if [ -z "$full_args" ] && git rev-parse -q --verify MERGE_HEAD >/dev/null 2>&1; then
+  full_args=--full
+fi
+
+node .agents/hooks/commit-check.js $full_args
+rc=$?
+if [ $rc -ne 0 ]; then
+  echo "pre-commit: 验证未通过，提交已阻止" >&2
+  exit $rc
+fi
+exit 0

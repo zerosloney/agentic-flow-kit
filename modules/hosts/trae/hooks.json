@@ -1,0 +1,29 @@
+{
+  "version": 1,
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "RunCommand|Bash|Shell|Terminal",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .trae/hooks/pre-shell-check.js",
+            "timeout": 480
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node .trae/hooks/post-edit-check.js",
+            "timeout": 60
+          }
+        ]
+      }
+    ]
+  }
+}

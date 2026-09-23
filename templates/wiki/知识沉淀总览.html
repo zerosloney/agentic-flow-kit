@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<title>知识沉淀总览</title>
+<style>
+  body{font-family:system-ui,'Segoe UI','Microsoft YaHei',sans-serif;max-width:1100px;margin:2rem auto;padding:0 1rem;color:#222}
+  h1{border-bottom:2px solid #ddd;padding-bottom:.4rem}
+  table{border-collapse:collapse;width:100%;margin:1rem 0}
+  td,th{border:1px solid #ddd;padding:.4rem .6rem;text-align:left;vertical-align:top}
+  th{background:#f6f6f6}
+  a{color:#0366d6;text-decoration:none}
+  a:hover{text-decoration:underline}
+  .muted{color:#888;font-size:.9em}
+</style>
+</head>
+<body>
+<h1>知识沉淀总览</h1>
+<p class="muted">生成物：<code>node .agents/scripts/gen-wiki-board.mjs</code> 重生成（人工只维护 wiki/INDEX.md 速览表「用途」列与磁盘文件本身）。</p>
+<div id="app"></div>
+<script>
+const DATA = {
+  "summary": { "total": 0, "topics": 0, "files": 0, "archive": 0 },
+  "topics": [
+  ]
+};
+(function () {
+  var el = document.getElementById('app');
+  var p = document.createElement('p');
+  p.textContent = '合计 ' + DATA.summary.files + ' 份知识文档 / ' + DATA.summary.topics + ' 个主题 / 归档 ' + DATA.summary.archive + ' 份';
+  el.appendChild(p);
+  var table = document.createElement('table');
+  var head = document.createElement('tr');
+  ['主题', '文件'].forEach(function (h) {
+    var th = document.createElement('th'); th.textContent = h; head.appendChild(th);
+  });
+  table.appendChild(head);
+  DATA.topics.forEach(function (t) {
+    var tr = document.createElement('tr');
+    var td1 = document.createElement('td'); td1.textContent = t.name; tr.appendChild(td1);
+    var td2 = document.createElement('td');
+    t.files.forEach(function (f, i) {
+      if (i) td2.appendChild(document.createElement('br'));
+      var a = document.createElement('a');
+      a.setAttribute('href', f.dir + f.file);
+      a.textContent = f.file;
+      td2.appendChild(a);
+    });
+    tr.appendChild(td2);
+    table.appendChild(tr);
+  });
+  el.appendChild(table);
+})();
+</script>
+</body>
+</html>
