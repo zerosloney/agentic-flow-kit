@@ -5,3 +5,4 @@
 
 | 日期 | 位置 | 症状 | 拟修 |
 |------|------|------|------|
+| 2026-09-23 | workflow/specs/_TEMPLATE.md「约束遵守映射」表 | 表内行是 Shipyard 项目特定红线（Application 禁引 Infrastructure / Drawer / a-select 等），通用包装户（非 dotnet+前端项目）对着表无从下笔，只能整表改写 | 红线表改为通用行 +「按项目 AGENTS.md 红线填」指引；模板属包源，修复走 templates/ → sync |
