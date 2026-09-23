@@ -4,4 +4,4 @@
 
 > 移驻说明：M1+M2 首个任务（`2026-09-23-agentic-flow-kit-npx-package`）于 2026-09-23 经用户拍板自任务发起仓库 Shipyard.Material 迁入——该仓库不留此任务留痕。文档内「本仓库」如无特别说明均指发起仓库 Shipyard.Material。
 
-> 待办（2026-09-23 用户对话内定序）：Shipyard.Material 的引擎增量**先收进包源**（templates/，走双源纪律→sync），**再整体回流**（其改为包消费者）。现 blocked——该仓库并行业务会话仍在改动引擎路径（已见：`56a1eed` 确认口径、`17ae8e6` check-loop advisory 裁定两笔引擎相关提交，另有未提交的 `.agents/scripts/check-loop.sh` 工作区改动）；其收口后另立 intent 推进。
+> 已完成（2026-09-24）：Shipyard.Material 引擎增量已收包（intent `2026-09-24-shipyard-increment-port`，commit 97a52ca）；回流迁移已完成（Shipyard 侧 L2 三件套 `2026-09-24-flow-kit-backflow`，迁移提交 908bbfc + 关单 0b9b85d——kit.json 台账 76 份 managed、4 项目门禁经 local-pre-commit 接线、前置双备份 tag `pre-flow-kit-backflow` + 171MB 文件快照）。遗留：builds 按扩展名全局触发会因 wiki html 跑前端构建（Shipyard papercuts 在案，包侧 path 过滤增强待立）。
