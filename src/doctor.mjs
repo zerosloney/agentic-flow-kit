@@ -48,7 +48,7 @@ export function doctor(args, pkgRoot) {
     '.agents/scripts/gen-wiki-board.mjs',
     '.agents/scripts/workflow-board-server.mjs',
     '.agents/board/index.html',
-    '.agents/hooks/commit-check.js',
+    '.agents/hooks/commit-check.cjs',
     '.agents/workflow-modules.txt',
     '.agents/rule-budgets.txt',
     '.agents/settings.json',

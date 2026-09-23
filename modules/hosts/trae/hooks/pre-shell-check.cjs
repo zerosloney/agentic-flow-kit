@@ -15,7 +15,7 @@
  */
 const { execFileSync } = require('child_process');
 const fs = require('fs');
-const { resolveShell } = require('./resolve-shell');
+const { resolveShell } = require('./resolve-shell.cjs');
 
 // --- 读取 stdin ---
 let raw = '';

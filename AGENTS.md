@@ -30,7 +30,7 @@
 ### 检索、看板与量化
 
 - 跨语料检索：`node .agents/scripts/kb-search.mjs "<词>"`（workflow 节级定位 + wiki 全文）；活跃流程读 `workflow/INDEX.md`（状态变更后 `node .agents/scripts/gen-workflow-index.mjs` 重生成）。
-- workflow 看板：http://127.0.0.1:{{BOARD_PORT}}（任务入口幂等拉起 ensure-board；只读预警层，非门禁）。
+- workflow 看板：http://127.0.0.1:8933（任务入口幂等拉起 ensure-board；只读预警层，非门禁）。
 - 委派 / 自做结果留痕 `workflow/delegations.md`（聚合 `node .agents/scripts/agg-delegations.cjs`）；命令 / 技能卡壳记 `workflow/papercuts.md`，不当场顺手改。
 
 ### 验证与关单
@@ -46,7 +46,8 @@
 
 ## 项目适配区（项目自填）
 
-- **构建 / 测试 / 类型检查命令**（静态门，各阶段命令引用此处口径）：构建 = {{BUILD_CMD}}；测试 = {{TEST_CMD}}；类型检查 = {{TYPECHECK_CMD}}
+- **构建 / 测试 / 类型检查命令**（静态门，各阶段命令引用此处口径）：构建 = 无（纯 JS 脚手架包，node 直跑）；测试 = `npm test`（跑全部套件）；类型检查 = 无（纯 JS）
+- **引擎双源纪律（本仓库特有）**：本仓库既是包源又是装户——引擎改动一律改 `templates/`（包源），随后 `node bin/flow-kit.mjs sync` 更新 `.agents/` 装副本；`.agents/` 直改会被 doctor 台账漂移告警
 - **运行时环境**（端口 / 进程 / 终端差异）：`.agents/notes/runtime-env.md`
 - **目录级规则**：如 `backend/AGENTS.md`、`frontend/AGENTS.md`（如有）——目录级约定不回填本文件
 - **权限与提交验证配置**：`.agents/settings.json`（allow / deny / ask）、`.agents/hooks/commit-check.config.json`（条件构建 / 质量检测命令与密钥白名单——质量检测只放秒级确定性检查（lint / 类型检查 / vet），测试不放提交门，关单在 test 阶段门）

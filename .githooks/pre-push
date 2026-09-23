@@ -1,0 +1,32 @@
+#!/bin/sh
+# Git 原生 pre-push hook（经 core.hooksPath 挂载，git push 时触发）
+# 跑 .agents/scripts/check-loop.sh：扫 workflow/ 闭环骨架断档
+#   - 硬阻断（exit 1）= 配对断裂 / 回路断档 → push 立即阻断
+#   - 警告（advisory）= 状态未确认 / 模板占位残留 / 引用漂移 等卫生项 → 仅打印提示
+#
+# 机器门：本地钩子（唯一本地机器门）——CI 配置为本地未入库件（.gitignore 排除），不构成跨环境保证。
+# 不要用 `git push --no-verify` 绕开——发现 hard-block 应先修 workflow 文档再推。
+
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+# 读 stdin（pre-push 协议要求消费 stdin：本地 ref + 远端 ref + sha x2 每行）
+while read -r _ _ _ _; do :; done
+
+SCRIPT=".agents/scripts/check-loop.sh"
+if [ ! -f "$SCRIPT" ]; then
+  echo "pre-push: 未找到 $SCRIPT，跳过闭环扫描" >&2
+  exit 0
+fi
+
+# Windows 下 git 自带 bash 能直接执行 sh 脚本；其它环境 sh 兼容
+if command -v sh >/dev/null 2>&1; then
+  sh "$SCRIPT"
+else
+  bash "$SCRIPT"
+fi
+rc=$?
+if [ $rc -ne 0 ]; then
+  echo "pre-push: 闭环骨架断档（hard-block）未通过，push 已阻断。修 workflow 文档后重推——不要用 --no-verify 绕过（CI 服务端会再次兜底拦截）" >&2
+  exit $rc
+fi
+exit 0

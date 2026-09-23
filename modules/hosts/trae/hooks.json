@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .trae/hooks/pre-shell-check.js",
+            "command": "node .trae/hooks/pre-shell-check.cjs",
             "timeout": 480
           }
         ]
@@ -19,7 +19,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .trae/hooks/post-edit-check.js",
+            "command": "node .trae/hooks/post-edit-check.cjs",
             "timeout": 60
           }
         ]

@@ -3,13 +3,13 @@
  * PostToolUse(Edit|Write) hook — 编辑 .cs 文件后即时跑架构红线检查
  *
  * Trae 宿主事实：PostToolUse 不能撤销已完成的编辑，但可用 hookSpecificOutput.additionalContext
- * 把违例喂回模型，让它在提交前自行修掉；硬阻断在 PreToolUse 的 pre-shell-check.js（走 .githooks/pre-commit）。
+ * 把违例喂回模型，让它在提交前自行修掉；硬阻断在 PreToolUse 的 pre-shell-check.cjs（走 .githooks/pre-commit）。
  *
  * stdin: { tool_name, llm_tool_name, tool_input: { file_path, ... }, cwd, workspace_roots, ... }
  */
 const { execFileSync } = require('child_process');
 const fs = require('fs');
-const { resolveShell } = require('./resolve-shell');
+const { resolveShell } = require('./resolve-shell.cjs');
 
 // --- 读取 stdin ---
 let raw = '';

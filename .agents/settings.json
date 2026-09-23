@@ -1,0 +1,28 @@
+{
+  "permissions": {
+    "allow": [
+      "node",
+      "git status",
+      "git diff",
+      "git add",
+      "git commit",
+      "git log",
+      "git push",
+      "npm run",
+      "npm install",
+      "npm ci"
+    ],
+    "deny": [
+      "git reset --hard",
+      "git push --force",
+      "git push -f",
+      "drop database"
+    ],
+    "ask": [
+      "git checkout",
+      "git clean",
+      "git branch -D",
+      "rm -rf"
+    ]
+  }
+}

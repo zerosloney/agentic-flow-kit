@@ -1,0 +1,24 @@
+#!/bin/sh
+# Git 原生 pre-merge-commit hook（经 core.hooksPath 挂载，git 执行、不依赖 agent 客户端）
+#
+# 背景：git 对 `git merge` 调的是**本钩子**，不是 pre-commit。此前仓库只挂了
+# pre-commit / pre-push / commit-msg，故合并提交绕过全部门禁、未经任何校验直接落库
+# （2026-09-19 实测，见 workflow/papercuts.md 同日行——那次合并带入后端 .cs 改动，
+# 靠人工补跑静态门 + 全量测试才覆盖到）。
+#
+# 做法：转发到 .githooks/pre-commit（门禁清单只此一份，避免两份拷贝日后分叉），
+# 并显式传 `--full`——本钩子「只对 merge 触发」这一身份就是最强信号，无需再去探测
+# MERGE_HEAD（2026-09-19 实测：本时点 MERGE_HEAD 已不可靠）。`--full` 令编译验证
+# 覆盖【完整合并树】、不按扩展名条件裁剪：合并结果是没人验证过的新状态，且其 diff
+# 相对第一父，裁剪会漏掉需要重跑的一侧。
+#
+# 冲突解决后手动 `git commit` 走的是 pre-commit 自身，那条路径由 pre-commit 内部的
+# MERGE_HEAD 探测覆盖（此时合并仍在进行，MERGE_HEAD 确定存在）。
+
+cd "$(git rev-parse --show-toplevel)" || exit 1
+
+if command -v sh >/dev/null 2>&1; then
+  exec sh .githooks/pre-commit --full
+else
+  exec bash .githooks/pre-commit --full
+fi

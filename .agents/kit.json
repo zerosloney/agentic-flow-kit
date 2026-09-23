@@ -1,0 +1,260 @@
+{
+  "kit": "agentic-flow-kit",
+  "version": "0.2.0",
+  "createdAt": "2026-09-23T15:07:19.753Z",
+  "options": {
+    "hosts": [
+      "zcode"
+    ],
+    "stack": "none",
+    "boardPort": "8933"
+  },
+  "managed": [
+    {
+      "rel": ".agents/board/index.html",
+      "sha256": "9e6978d602b1d85217ec4104a95f1305ee0f7e2f42cf96da25c3145a8add781e"
+    },
+    {
+      "rel": ".agents/board/marked.min.js",
+      "sha256": "c6c72555c722bd14965949d23f18efc3436a01f751c69e6c821ed3385c1a9f1b"
+    },
+    {
+      "rel": ".agents/cache/kb-index.json",
+      "sha256": "807f92c47b98cf715bc9c73bd9efdf7c6df5873932851934e9ad8222c3660659"
+    },
+    {
+      "rel": ".agents/commands/build.md",
+      "sha256": "f7e1693f098173f971e4c5056370b4d6e39a86fac2a9b52998955bf015343fb5"
+    },
+    {
+      "rel": ".agents/commands/deploy.md",
+      "sha256": "92f74aae3b9c1f302f64da648cf264f527bae32d121712d07b9487050533e575"
+    },
+    {
+      "rel": ".agents/commands/design.md",
+      "sha256": "aca57963724a12110625bb5b60ae7b9a3c45dca209e63679a5338927854cecb5"
+    },
+    {
+      "rel": ".agents/commands/maintain.md",
+      "sha256": "d4bda23e24c0053eb4bc799d7a1c5471ae17c14f867ae44e1f5214ac7fc97e90"
+    },
+    {
+      "rel": ".agents/commands/new-task.md",
+      "sha256": "4c978b41d947047225e0a0f32df7f3fdb92b4ac692b4d96fe19e328af002dc29"
+    },
+    {
+      "rel": ".agents/commands/plan.md",
+      "sha256": "6eff96128eaacbc0508a74c155db34c9d140b3d28c7bf591fc9ae78f57d3cab8"
+    },
+    {
+      "rel": ".agents/commands/review.md",
+      "sha256": "8be077df38b7f74fa9f170cc83f493c57a78622a9c9a324f4cf3d8723d14e725"
+    },
+    {
+      "rel": ".agents/commands/test.md",
+      "sha256": "cd2b0fdd10ed48e5d581fd434d8ec929817d49f6a8ad94a098f1b461f66f0ad4"
+    },
+    {
+      "rel": ".agents/hooks/check-pairing-incremental.sh",
+      "sha256": "81dcac14e081aca6c09017a12a46e21604380eb479ba4cbda69506141b4994a0"
+    },
+    {
+      "rel": ".agents/hooks/check-wiki-ledger.sh",
+      "sha256": "03471c6f14e50481bd7fb4966ee1725ffae4521fc66999e5607998d0b993984f"
+    },
+    {
+      "rel": ".agents/hooks/commit-check.cjs",
+      "sha256": "8b5afefdb151a7f52ea3e027a744a181084d4abb20989b14b0813d11d807e10c"
+    },
+    {
+      "rel": ".agents/roles/implementer.md",
+      "sha256": "7dae4e88fb9cc5b9ff8a9a930c5002c1383d86cbdd0bab8fa44df6bb565e59e6"
+    },
+    {
+      "rel": ".agents/roles/independent-reviewer.md",
+      "sha256": "b1829d6d275f27ec7897b493c42813f9fe9bb15bbd869f13cb89a656154ae649"
+    },
+    {
+      "rel": ".agents/roles/ui-verifier.md",
+      "sha256": "99236aedab1ed001dffb196d70a44d4b8a4c457d9d0325a48f31f6a937f1716d"
+    },
+    {
+      "rel": ".agents/scripts/agg-delegations.cjs",
+      "sha256": "f1b88a45cc46f5026eb518b72eb13f5d0a6d8b0b424d91fde1b5a9d6205a7fff"
+    },
+    {
+      "rel": ".agents/scripts/check-loop.sh",
+      "sha256": "88120a2b57bcf954969336f081b51d0e735f0cb03f132db26bbb540c1f2d8333"
+    },
+    {
+      "rel": ".agents/scripts/check-loop.test.sh",
+      "sha256": "9cfd47bb26277c33ed3e616a1cd21cf87df333b009e363ec6bf47bd8bc28d013"
+    },
+    {
+      "rel": ".agents/scripts/ensure-board.ps1",
+      "sha256": "d37a11770932226c045c4e020878873e9dbc3a7a6e2e4bd0c0393116eca51f5d"
+    },
+    {
+      "rel": ".agents/scripts/gen-wiki-board.mjs",
+      "sha256": "9fd2789ddc3e7133655aaa41bffe2d67961938615925c326372491cb12d7e268"
+    },
+    {
+      "rel": ".agents/scripts/gen-wiki-board.test.mjs",
+      "sha256": "ed3a042c4fb33f489e157cb39a0d5eba17337f8028e6cf76efc0ebe5e09a4266"
+    },
+    {
+      "rel": ".agents/scripts/gen-workflow-index.mjs",
+      "sha256": "499e4ee24f682a8dfecf84ac9c990b1cb720867de98617c1ce2392867b4bea09"
+    },
+    {
+      "rel": ".agents/scripts/gen-workflow-index.test.mjs",
+      "sha256": "4964b2dfb0aa5ec25019129a214ba76e08be59a8b796c7665fc9079c57ae153f"
+    },
+    {
+      "rel": ".agents/scripts/gen-workflow-metrics.mjs",
+      "sha256": "9445987c961b6e5fb4b6d8083f2dc17545d9bafdff22cc8bc0b7df1f868d54b3"
+    },
+    {
+      "rel": ".agents/scripts/gen-workflow-metrics.test.mjs",
+      "sha256": "31bfd55f6affc91d9cdf79395f5142e788e62398ebacf89c0d3581fc3f831a13"
+    },
+    {
+      "rel": ".agents/scripts/kb-cache-evict.mjs",
+      "sha256": "bd74ac72e611142e839df76e80e22d8e9c6b351dc498c7bb07e807d2e32e7fdb"
+    },
+    {
+      "rel": ".agents/scripts/kb-cache-evict.test.mjs",
+      "sha256": "ff25ee4c985a782274990b2e093e28447632660fff17f605e7510eae43f2170e"
+    },
+    {
+      "rel": ".agents/scripts/kb-search.mjs",
+      "sha256": "ed5d617511aa395fc9a4a9f7b8949b7861438a3e1bad2100296ded0d3fa8ed30"
+    },
+    {
+      "rel": ".agents/scripts/kb-search.test.mjs",
+      "sha256": "ba7d60633ec772ee41329cd4a5b3436982416081f82433b20fcf15b8d96e3c8d"
+    },
+    {
+      "rel": ".agents/scripts/rule-budget.sh",
+      "sha256": "6b1b2cdd6bd81691b0b238c10dbe85e71bc8746450e953e9f314f2e5e8ff7686"
+    },
+    {
+      "rel": ".agents/scripts/verify-wiki-consistency.mjs",
+      "sha256": "b0a58e4f02cad8a044e2bb6dd6ef091dfa91d6797bbf3657bc438bb508e90e73"
+    },
+    {
+      "rel": ".agents/scripts/wiki-search.mjs",
+      "sha256": "a493c85924644613619b83334b6f8e4db40ebf0d398960738422116d3afd3015"
+    },
+    {
+      "rel": ".agents/scripts/workflow-board-server.mjs",
+      "sha256": "1ec694e731a77f72f42be44655fe1a47a88d28655028a89629a616d8ad9bd058"
+    },
+    {
+      "rel": ".agents/skills/verify-ui/SKILL.md",
+      "sha256": "c5a9d43570e71027ae1d76b90fd59dba0ea67675c39661f35d162f768e8a9a4b"
+    },
+    {
+      "rel": ".agents/skills/wiki/SKILL.md",
+      "sha256": "3d8d54f19478f88552253b8309dd7e85ed93243c23fa06f0c833f1d4df86876f"
+    },
+    {
+      "rel": ".githooks/commit-msg",
+      "sha256": "7cf971b203c32af654f4cfbf8eb3dc605ed3a0489c2f63ff17cf2550c63c69f7"
+    },
+    {
+      "rel": ".githooks/post-commit",
+      "sha256": "cb97b622a957027e6cfc04c3b7220da476e64d4c3ec902ea00ee14e570c6f3f1"
+    },
+    {
+      "rel": ".githooks/pre-commit",
+      "sha256": "21b11546e3bc6739df167b23b649b26bcf201235b7c79742b63766ca15e46eac"
+    },
+    {
+      "rel": ".githooks/pre-merge-commit",
+      "sha256": "ab6d11707e78ac19261bc7d667056f7721466456d443cabf85ad7ba24dc797ac"
+    },
+    {
+      "rel": ".githooks/pre-push",
+      "sha256": "f03526aba46764d2dc04188a1d938270172409627188384ee9f39726e389d49b"
+    },
+    {
+      "rel": ".zcode/agents/implementer.md",
+      "sha256": "bd5b6291b33f0f87b1755fe3b4fc7aab7787690407c037ba1750686e3b1f95a9"
+    },
+    {
+      "rel": ".zcode/agents/independent-reviewer.md",
+      "sha256": "a86929cd28f2c4ba2954a979437d7e9abe8418544b76a6e2545ea0fa39320985"
+    },
+    {
+      "rel": ".zcode/agents/ui-verifier.md",
+      "sha256": "3c49e0d74f369900a8d28c2143e70ffb09d0b17b542848a9d925936bd789495a"
+    }
+  ],
+  "owned": [
+    {
+      "rel": "AGENTS.md",
+      "sha256": "86f3bea24a3b5e257d2c4f22e8c878fce887ebbe2e06b26fff65a625f1380508"
+    },
+    {
+      "rel": "wiki/drafts-archive/README.md",
+      "sha256": "623fe32d78312453ec593d9f8fcf677344a4f9f0c8ae8efd31303efed2d4c350"
+    },
+    {
+      "rel": "wiki/INDEX.md",
+      "sha256": "a09f5e6e069ab306bf571bbb38afa17ae030f999d9f8603786cacf4a9b61d35b"
+    },
+    {
+      "rel": "wiki/知识沉淀总览.html",
+      "sha256": "5922f5a83a8ac9b84ea7199ec6a13492abecd4069eebc37330236c74fd7d3a89"
+    },
+    {
+      "rel": "workflow/incidents/_TEMPLATE.md",
+      "sha256": "1251f74149c5abec042f1e999df05d072f23863ab191778dd6646ed372d78c97"
+    },
+    {
+      "rel": "workflow/intents/_TEMPLATE.md",
+      "sha256": "f994235b95838a5968fd1e0e3e27b619241cd22a9eb010b8242577d552421f5e"
+    },
+    {
+      "rel": "workflow/papercuts.md",
+      "sha256": "07f8b0fad8223d25a5f67ce2c672bc9d92288c7b2e123a28e430c509e2c83115"
+    },
+    {
+      "rel": "workflow/plans/_TEMPLATE.md",
+      "sha256": "ffe9824567c40d222aab9e3c9f122559bef90c4eee61ab8f88240fce5624fd62"
+    },
+    {
+      "rel": "workflow/regression-checklist.md",
+      "sha256": "057968f042d301089721b8e9106c8e7019c9a3ecdfd2d0f304e6bad36779fc07"
+    },
+    {
+      "rel": "workflow/specs/_TEMPLATE.md",
+      "sha256": "d4745deeafb11ee300496e704124e7ff701bc418198ecb17b9ec86c8d2b2cb13"
+    },
+    {
+      "rel": ".agents/hooks/local-pre-commit",
+      "sha256": "ca855027bd8d33535f3fa18b48a2612e4a0c76ea8633e62d73a290ff392f0537"
+    },
+    {
+      "rel": ".agents/notes/runtime-env.md",
+      "sha256": "5f02aa1dbe39c56d3742cab930ddeb2c49778da2c6875af7a89119d143daccc4"
+    },
+    {
+      "rel": ".agents/rule-budgets.txt",
+      "sha256": "3d21d9b8ab66915aac36e508d0c671dfd77304bbad56aa06e77df9cb2d707fe1"
+    },
+    {
+      "rel": ".agents/workflow-modules.txt",
+      "sha256": "d03593598f6b0495ebc650019c474da0d6538da06c6f58ccc00bd5a9cdc760f1"
+    },
+    {
+      "rel": ".agents/settings.json",
+      "sha256": "d1be55d7f5e5f349a8bf9806209aa9e14baa0e14d901b166012e90737d404c2a"
+    },
+    {
+      "rel": ".agents/hooks/commit-check.config.json",
+      "sha256": "c52fca656886381656865423297a8a233e3965ec98e7580cc98ec400b079fc36"
+    }
+  ]
+}

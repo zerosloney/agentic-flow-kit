@@ -29,7 +29,7 @@
 - **验证**：`.agents/commands/test.md`（静态门 + 实测；项目自有验证脚本/门禁如有，见 `.agents/hooks/local-pre-commit` 与 test.md 项目适配区）
 - **评审**：`.agents/commands/review.md`（按 P0 / P1 / P2 分级：机器兜底 + AI 自查出清单，用户决策定性与合入）
 - **上线**：`.agents/commands/deploy.md`（上线前必跑清单）
-- **量化**：委派/自做结果记 `delegations.md`，聚合跑 `node .agents/scripts/agg-delegations.js`（**并发扩容门槛见该文件——数字达标前不扩并发**）；语料与常驻面体积的**月度快照**跑 `node .agents/scripts/gen-workflow-metrics.mjs`（每月一行落 `metrics.md`，同月重跑即更新；明细看 stdout）
+- **量化**：委派/自做结果记 `delegations.md`，聚合跑 `node .agents/scripts/agg-delegations.cjs`（**并发扩容门槛见该文件——数字达标前不扩并发**）；语料与常驻面体积的**月度快照**跑 `node .agents/scripts/gen-workflow-metrics.mjs`（每月一行落 `metrics.md`，同月重跑即更新；明细看 stdout）
 - **追溯**：git 即审计——文档随代码同 commit、上线打 `release/<日期>` tag，`git log` 全链路可查；多人评审暂缓，git 历史即评审记录
 - **级别**：L0 例行 ｜ L1 实现级（页面 / 交互 / 样式等，未命中 L2/L3）｜ L2 规则 / 契约（编码权威 / 共享契约 / 既有接口语义 / 全局横切口径，触达面闭集见 `.agents/commands/new-task.md` §级别判断）｜ L3 数据与运行时结构（schema / 迁移 SQL / DI 链 / 认证与中间件管线）；混合改动就高不就低
 
