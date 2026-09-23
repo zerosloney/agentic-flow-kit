@@ -31,7 +31,7 @@
 
 ## 验收标准（可测试）
 - [ ] `git ls-files templates` 无 cache 文件；`.gitignore` 含 `templates/_agents/cache/`；npm pack 干跑清单无 cache、无 workflow/、无 .agents/
-- [ ] spec 模板红线表为通用指引（grep 无 Application/Infrastructure/Drawer/a-select 残留），本仓装副本同步一致
-- [ ] LICENSE 存在且 package.json license=MIT
-- [ ] tarball 临时安装冒烟：`npx flow-kit init --dir` → doctor 7 PASS（真实 npx 路径验证 bin）
+- [x] 模板红线通用化（grep 零残留）——范围较原验收略扩：intents/_TEMPLATE 影响面与红线节、new-task.md L2 触达面与先例行一并清理（同类残留一次清完）；本仓 owned 副本 cp 同步
+- [x] LICENSE 存在且 package.json license=MIT（tarball 含 1.1kB LICENSE）
+- [x] tarball 临时安装冒烟：npm install tgz → npx flow-kit version=0.2.0 / init → doctor 7 PASS 0 WARN
 - [ ] npm publish 成功且 `npm view agentic-flow-kit version` = 0.2.0（依赖用户 npm login）
