@@ -21,12 +21,11 @@
 - 前端：路由 / 组件 / store / api
 
 ## 约束遵守映射（对照 AGENTS.md 触达红线）
-| 红线 | 本 spec 如何满足 |
+| 红线（按本项目 AGENTS.md 实际红线逐行填，没有的行删除） | 本 spec 如何满足 |
 |------|------------------|
-| Application 禁引 Infrastructure / DbContext | <通过 XXX，不引入 YYY> |
-| 规则 / 契约（编码权威 / 共享契约 / 既有接口语义 / 全局横切口径） | <是否触及（触及即 L2 定级依据）；编码权威仍在后端> |
-| schema / 迁移 SQL（禁 dotnet ef） | <涉及 SQL 路径；历史 EF Migrations 目录（含 ModelSnapshot）已整体移除，不得重建> |
-| 前端：Drawer / 禁 a-select / style.css 统一 | <本 spec 涉及哪些前端约定> |
+| <示例：分层依赖约束 / 编码权威归属 / 数据迁移方式> | <通过 XXX，不引入 YYY；是否触及（触及即 L2 定级依据）> |
+| <示例：schema / 迁移路径约束> | <涉及路径与处理方式> |
+| <示例：前端或客户端约定（如有）> | <本 spec 涉及哪些约定> |
 
 ## 风险评估
 - <风险点 1> ｜ 应对：<测试 / hook / 评审>

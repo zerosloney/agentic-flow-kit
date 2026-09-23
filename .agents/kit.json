@@ -19,10 +19,6 @@
       "sha256": "c6c72555c722bd14965949d23f18efc3436a01f751c69e6c821ed3385c1a9f1b"
     },
     {
-      "rel": ".agents/cache/kb-index.json",
-      "sha256": "807f92c47b98cf715bc9c73bd9efdf7c6df5873932851934e9ad8222c3660659"
-    },
-    {
       "rel": ".agents/commands/build.md",
       "sha256": "f7e1693f098173f971e4c5056370b4d6e39a86fac2a9b52998955bf015343fb5"
     },
@@ -40,7 +36,7 @@
     },
     {
       "rel": ".agents/commands/new-task.md",
-      "sha256": "4c978b41d947047225e0a0f32df7f3fdb92b4ac692b4d96fe19e328af002dc29"
+      "sha256": "7e819789dc3827f505ecd82560215bc64c83c0413dccd3bbc948d9a0e02bf3aa"
     },
     {
       "rel": ".agents/commands/plan.md",

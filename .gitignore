@@ -4,3 +4,5 @@ tmp/
 # agentic-flow-kit
 .agents/cache/
 .zcode/
+templates/_agents/cache/
+*.tgz

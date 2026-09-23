@@ -22,16 +22,14 @@
 - <复用什么、不许动什么>
 
 ## 影响面
-- 模块：shared / material（Domain / Application / Infrastructure / API）
+- 模块：<词表之一，见 .agents/workflow-modules.txt>
 - 数据库：无 / <表名>（涉及 schema 变更 → L3；无 schema 的运行时 / 管线结构面亦为 L3，判据见 `.agents/commands/new-task.md` §级别判断）
 - 前端页面：<路由或组件，无则删本行>
 
 ## 触达红线（对照 AGENTS.md，勾选仅标记触及范围；具体如何满足在同名 spec 中说明）
-- [ ] Application 禁引 Infrastructure / DbContext（豁免仅限分类树原生 LINQ）
-- [ ] 编码生成逻辑（FormulaEngine / CategoryPrefix）→ 级别至少 L2
-- [ ] 跨调用方契约变更（共享层基类 / DTO 形状 / 接口签名 / 既有参数语义 / 全局响应与分页校验口径）→ 级别至少 L2
-- [ ] schema / 迁移 SQL / DI 链 → 级别 L3
-- [ ] 前端：Drawer 一律 / 禁 a-select 大数据量 / 样式统一 style.css
+- [ ] <按本项目 AGENTS.md 红线逐行补；无则删本行>
+- [ ] 规则 / 契约变更（编码权威 / 共享契约 / 接口签名 / 既有参数语义 / 全局口径）→ 级别至少 L2
+- [ ] schema / 迁移 SQL / DI 链 / 认证与中间件管线 → 级别 L3
 
 > 触及任一红线即为 L2 / L3，必须立 ../specs/YYYY-MM-DD-<主题>.md 写明如何满足，方可起草 plan。
 
