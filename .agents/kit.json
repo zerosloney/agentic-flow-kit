@@ -32,7 +32,7 @@
     },
     {
       "rel": ".agents/commands/maintain.md",
-      "sha256": "d4bda23e24c0053eb4bc799d7a1c5471ae17c14f867ae44e1f5214ac7fc97e90"
+      "sha256": "7d49cf3cfa0514fb1a9ab284c3b956216aa1835eaa952282fb0717963e71cfa4"
     },
     {
       "rel": ".agents/commands/new-task.md",
@@ -40,7 +40,7 @@
     },
     {
       "rel": ".agents/commands/plan.md",
-      "sha256": "c7c2600ead634c57b172496d5222bfda2f4cd07707e4297c137b8f57a9f105c1"
+      "sha256": "542df15388f4f2c5247e5cd065013db1356219bb90432184995bc9c72bd92f31"
     },
     {
       "rel": ".agents/commands/review.md",
@@ -60,7 +60,7 @@
     },
     {
       "rel": ".agents/hooks/commit-check.cjs",
-      "sha256": "8b5afefdb151a7f52ea3e027a744a181084d4abb20989b14b0813d11d807e10c"
+      "sha256": "865b11645bcc0a6395e12188f9eff28f711cebb98fd3c5a599ad81edb9ddfc4c"
     },
     {
       "rel": ".agents/roles/implementer.md",
@@ -87,8 +87,12 @@
       "sha256": "9cfd47bb26277c33ed3e616a1cd21cf87df333b009e363ec6bf47bd8bc28d013"
     },
     {
+      "rel": ".agents/scripts/commit-check-trigger.test.mjs",
+      "sha256": "5f45413b523a8e7d8d2992f513f630e6b6c73c1029e46fff812284499805176e"
+    },
+    {
       "rel": ".agents/scripts/ensure-board.ps1",
-      "sha256": "d37a11770932226c045c4e020878873e9dbc3a7a6e2e4bd0c0393116eca51f5d"
+      "sha256": "9efda00dd88a2d0bbcfa569b23794d487051251f3cd00626587c0ae234ff0df8"
     },
     {
       "rel": ".agents/scripts/gen-wiki-board.mjs",

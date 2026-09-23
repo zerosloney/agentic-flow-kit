@@ -1,4 +1,4 @@
-﻿# ensure-board.ps1 — 任务入口幂等拉起 workflow 看板（只起不关：Windows 重启即天然回收，无需 stop/status）
+﻿# ensure-board.ps1 — workflow 看板按需手动拉起（默认不自动开启；只起不关：Windows 重启即天然回收，无需 stop/status）
 # 行为：探活（端口占用者须响应 /api/board 才认定为看板，否则不动手、报占用者并 exit 1）
 #       → 前端或服务端任一代码早于进程 = 旧代码自动 kill 重启 → 全新启动成功后弹浏览器（重启/已运行不弹，SSE 自动重连）
 # 用法：powershell -NoProfile -File .agents/scripts/ensure-board.ps1 [-Port 8933] [-NoOpen]

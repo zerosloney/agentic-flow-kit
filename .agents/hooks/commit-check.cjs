@@ -11,13 +11,18 @@
 //       { "name": "frontend", "command": "npm run build", "ext": [".ts", ".tsx", ".vue", ".js", ".jsx"],
 //         "cwd": "frontend",
 //         "lockPattern": "MSB3026|MSB3027",                        // 可选：命中时按 lockHint 提示（文件锁类「与代码无关」失败）
-//         "lockHint": "构建被文件锁拦下——本地运行中的进程正占用产物，停进程后重试" }
+//         "lockHint": "构建被文件锁拦下——本地运行中的进程正占用产物，停进程后重试" },
+//       { "name": "docs-site", "command": "npm run build", "prefix": "docs/", "cwd": "docs" }   // prefix 可选：路径前缀触发
 //     ],
 //     "checks": [
 //       { "name": "typecheck", "command": "npx tsc --noEmit", "ext": [".ts", ".tsx"], "when": ["tsconfig.json"] },
 //       { "name": "lint",      "command": "npx eslint .", "ext": [".ts", ".js"], "when": ["eslint.config.js", ".eslintrc.json"] }
 //     ]
 //   }
+// builds/checks 触发判定（对暂存文件，.agents/ 与 .githooks/ 自身变更不计）：`ext 任一匹配 OR prefix 前缀命中`。
+//   - 只有 ext：按扩展名全局触发（跨目录，适合语言型触发——仓库里该扩展名基本只属于该构建）；
+//   - 只有 prefix：该前缀下任何文件触发（目录型触发——如 monorepo 子包，仓库其他位置的相同扩展名不触发）；
+//   - 两者同配为 OR 并集而非 AND 交集——要「前缀内的特定扩展名」请只配 prefix（目录内文档变更多跑一次构建，方向安全）。
 // checks.when：路径数组，任一存在才启用（元素支持尾部 * 一层通配，如 "*.sln"）——
 //   没有对应配置的项目自动跳过并提示，不 fail-closed 误拦；无 when 字段 = 无条件启用。
 const { execSync } = require('child_process');
