@@ -59,4 +59,4 @@ modules/gates/      可选门禁模块（dotnet-ca：Clean Architecture 参考�
 
 - [x] v0.1.0：init（flags 模式）+ doctor + 4 宿主适配 + dotnet-ca 门禁模块
 - [x] v0.2.0：sync 升级（未动覆盖 / 已改跳过报告 + `--force` / 生成器锚点重写）+ add-host / add-gate
-- [ ] npm 发布
+- [x] v0.2.0 已发布：npm view agentic-flow-kit（npx agentic-flow-kit init 即用；默认镜像源用户需等 npmmirror 同步或 --registry npmjs）
