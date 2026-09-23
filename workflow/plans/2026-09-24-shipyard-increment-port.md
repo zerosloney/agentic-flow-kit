@@ -14,6 +14,8 @@
 - 落地：`flow-kit sync`（managed 4 份）+ 本仓根 `AGENTS.md` 手工同步（owned）。
 - 引用通用化：Shipyard 的「第 5 条 / §5」节号 → 「门禁与提交」节（包内无固定编号）。
 
+- 完成注记：验证中发现 sync 会把包源跑测试落在 templates/_agents/cache/ 的磁盘残留当模板安装——连带修复 renderTree 跳过 .agents/cache/ 目录（src/render.mjs 一处守卫）+ sync.test.mjs 补 S10 两断言（40 例）。属 M5 清账同一问题的磁盘层尾巴，根因修复。
+
 ## 验证方式
 - `bash templates/_agents/scripts/check-loop.test.sh` 34 例 + `npm test` 7 套全绿。
 - grep 断言：新口径关键词就位、旧口径「不单独 commit」清零。

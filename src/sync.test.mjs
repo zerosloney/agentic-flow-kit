@@ -203,5 +203,16 @@ else if (cmd === 'add-gate') addGate(rest, root);
   check('S9 挂载行在 exit 0 原位之前追加', R(path.join(t, '.agents/hooks/local-pre-commit')) === '#!/bin/sh\n# 旧装态注释\nsh .agents/hooks/gate.sh\n', R(path.join(t, '.agents/hooks/local-pre-commit')));
 }
 
+// ============ 场景 10：模板树内的运行时缓存不进安装与台账 ============
+{
+  const fx = mkFixture();
+  W(path.join(fx, 'templates/_agents/cache/kb-index.json'), '{"stale":"test-residue"}');
+  const t = mkTarget(fx); // v1 安装态无 cache 文件
+  const r = runCmd('sync', fx, t);
+  check('S10 cache 残留不被安装', !fs.existsSync(path.join(t, '.agents/cache/kb-index.json')), r.stdout + r.stderr);
+  const kit = JSON.parse(R(path.join(t, '.agents/kit.json')));
+  check('S10 cache 不入 managed 台账', !kit.managed.some((f) => f.rel.startsWith('.agents/cache/')), JSON.stringify(kit.managed.filter((f) => f.rel.includes('cache'))));
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${failCount}`);
 process.exit(failCount ? 1 : 0);

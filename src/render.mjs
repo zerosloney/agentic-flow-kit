@@ -27,6 +27,8 @@ export function renderTree(srcRoot, targetRoot, vars, { force = false } = {}) {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
       const abs = path.join(dir, entry.name);
       if (entry.isDirectory()) {
+        // 运行时缓存不是模板（包源跑测试会在 templates/_agents/cache/ 落盘残留）——init/sync 一律跳过
+        if (relOf(abs, srcRoot) === '.agents/cache') continue;
         dirs.push(relOf(abs, srcRoot));
         walk(abs);
         continue;

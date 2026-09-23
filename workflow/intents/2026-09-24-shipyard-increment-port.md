@@ -30,8 +30,8 @@
 - 不触及（模板内容移植，引擎检查 14 本就是 warning 级；`src/` 零改动）。
 
 ## 验收标准（可测试）
-- [ ] check-loop.test.sh 34 例全绿（检查 14 语义不破坏存量用例）
-- [ ] 包内 check-loop.sh 含裁定注释 + 存量确认态豁免出账行；grep 验证
-- [ ] plan.md / design.md「确认后」节不再出现「不单独 commit」；build.md 第 4 步含「确认后立即 docs 提交留痕」
-- [ ] AGENTS.md（模板 + 本仓根）提交条目含新口径
-- [ ] npm test 7 套全绿；doctor 7 PASS；提交穿真钩子
+- [x] check-loop.test.sh 34 例全绿（检查 14 语义不破坏存量用例）
+- [x] 包内 check-loop.sh 含裁定注释（头注+体注）+ 存量确认态豁免出账行 + grep 验证（裁定演进×2、豁免×3）
+- [x] plan/design「确认后」节不再出现「不单独 commit」（grep 零残留）；build.md 第 4 步已含新口径
+- [x] AGENTS.md（模板 + 本仓根）提交条目含新口径（各 1 处）
+- [x] npm test 7 套全绿（145 例）；存量豁免对照探针（A 豁免/B 告警）通过；doctor 7 PASS

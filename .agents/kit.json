@@ -20,7 +20,7 @@
     },
     {
       "rel": ".agents/commands/build.md",
-      "sha256": "f7e1693f098173f971e4c5056370b4d6e39a86fac2a9b52998955bf015343fb5"
+      "sha256": "28f69429b74540bb2af5d916a74f4cb2118f8de6ceef97b49af803c85931b128"
     },
     {
       "rel": ".agents/commands/deploy.md",
@@ -28,7 +28,7 @@
     },
     {
       "rel": ".agents/commands/design.md",
-      "sha256": "aca57963724a12110625bb5b60ae7b9a3c45dca209e63679a5338927854cecb5"
+      "sha256": "7c3c0729a0f5629e369cf60e9b25cf96950e1273643a52f3ccee74f31e01cdee"
     },
     {
       "rel": ".agents/commands/maintain.md",
@@ -40,7 +40,7 @@
     },
     {
       "rel": ".agents/commands/plan.md",
-      "sha256": "6eff96128eaacbc0508a74c155db34c9d140b3d28c7bf591fc9ae78f57d3cab8"
+      "sha256": "c7c2600ead634c57b172496d5222bfda2f4cd07707e4297c137b8f57a9f105c1"
     },
     {
       "rel": ".agents/commands/review.md",
@@ -80,7 +80,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
-      "sha256": "88120a2b57bcf954969336f081b51d0e735f0cb03f132db26bbb540c1f2d8333"
+      "sha256": "d5293a7fa10102c124c5be643c2870f56b21ff670dba9dc911460b45d6201d28"
     },
     {
       "rel": ".agents/scripts/check-loop.test.sh",

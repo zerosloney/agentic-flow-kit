@@ -50,5 +50,5 @@ next: .agents/commands/build.md
 ## 确认后
 
 - spec 状态 draft → approved
-- 不单独 commit(根 `AGENTS.md` 第 5 条)
+- 立即 `docs(design)` 单独提交留痕(根 `AGENTS.md`「门禁与提交」节;check-loop 检查 14 口径)
 - 进 `next: .agents/commands/build.md`

@@ -25,6 +25,8 @@
 # 上限=瘦身后实测+余量,新增须先删除或下沉——一进一出)
 # 14. 新 done 的 spec/plan 须在 git 历史里出现过 `状态: approved`(确认环节留痕,2026-09-22 papercut;
 # 生效 2026-09-23=规则发布次日,不追溯发布当日已在途文档,口径同检查 12)[warning]
+#    2026-09-23 裁定演进(源自 Shipyard 回流):本检查恒为 advisory,永不升级 hard-block;确认后主智能体须立即
+#    docs(*) 提交 approved 留痕(根 AGENTS.md「门禁与提交」节),本警告即「遗漏提交」提醒——直跳 done 无留痕仍属流程瑕疵,仅提示
 #
 # 文档协议（2026-09-13 结构化改造,papercut #4 防复发）:
 #   状态/级别/日期/发现/流程/确认结果/确认时间 等机器字段一律由文件头 YAML frontmatter（受限子集）承载:
@@ -763,6 +765,8 @@ fi
 # --- 14. 新 done 的 spec/plan 须在 git 历史里出现过 approved(确认环节留痕)[warning] ---
 # 规则生效 2026-09-22(papercut 2026-09-22,用户点名):`approved` 是确认环节的机器可见态,`done` 只在关单出现;
 # 从 draft 直跳 done 会让确认环节在文档里消失——而检查 5 视 approved/done 同权,此前无任何门禁能发现跳态。
+# 2026-09-23 裁定演进(源自 Shipyard 回流):此警告恒为 advisory、永不升级 hard-block;确认后 docs(*) 提交留痕为必做
+# (根 AGENTS.md「门禁与提交」节),本警告即「遗漏提交」提醒。备注含「存量确认态豁免（…）」声明者出账(口径同检查 8)。
 # 作用域:日期 ≥ 2026-09-23(生效次日,不追溯发布当日已在途的并行文档;存量同理——避免对无法诚实补正的旧件刷屏,
 # 口径同检查 12:frontmatter 日期/发现 → 文件名前缀回退)。
 # 判据:当前状态为 done 的文件,须在 git 历史中至少有一个提交版本的**行首**出现过 `状态: approved`
@@ -781,6 +785,8 @@ if git rev-parse --git-dir >/dev/null 2>&1 && git rev-parse -q --verify HEAD >/d
  2026-09-2[3-9]|2026-09-[3-9][0-9]|2026-1[0-2]-[0-3][0-9]|202[7-9]-*|20[3-9][0-9]-*|2[1-9][0-9][0-9]-*) ;;
  *) continue ;;
  esac
+ # 出账:备注含「存量确认态豁免（…）」声明者跳过(口径同检查 8 的存量对账豁免;留痕规则生效前的存量 done 件)
+ [ -n "$(grep -m1 '存量确认态豁免（' "$f" 2>/dev/null)" ] && continue
  [ -n "$(git log -1 --format=%H -G'^状态:[[:space:]]*approved' -- "$f" 2>/dev/null)" ] && continue
  warnings="$warnings
 - [WARN 确认态缺失] $base 状态已 done 但 git 历史中从未出现行首「状态: approved」——确认环节未留痕(draft 直跳 done)"
