@@ -14,6 +14,13 @@ npx agentic-flow-kit init --stack node --hosts zcode,opencode
 
 # 体检（布局 / git 钩子 / managed 台账 / 索引漂移 / check-loop）
 npx agentic-flow-kit doctor
+
+# 包出新版后升级（未改动→覆盖；本地已改→跳过并报告，--force 才覆盖；owned 永不触碰）
+npx agentic-flow-kit sync
+
+# 后补宿主 / 装门禁（dotnet-ca：Clean Architecture 红线守卫，装后归项目）
+npx agentic-flow-kit add-host opencode
+npx agentic-flow-kit add-gate dotnet-ca
 ```
 
 | 选项 | 说明 |
@@ -39,6 +46,8 @@ modules/gates/      可选门禁模块（dotnet-ca：Clean Architecture 参考�
 
 **两态文件模型**：`.agents/kit.json` 记录 managed（引擎件，随包升级）与 owned（项目内容，永不覆盖）清单及 sha256；`doctor` 会校验漂移。已存在的文件 init 保守跳过（`--force` 覆盖）。
 
+**升级语义（sync）**：managed 文件三方比对（台账 sha / 磁盘 sha / 新版渲染 sha）——未改动 → 直接覆盖新版；本地已改 → 跳过并报告（`--force` 才覆盖，git diff 自查差异）；改动恰好等于新版 → 视为已最新。包内新增文件自动安装；包内已删文件仅报告不删盘；缺失的 managed 文件自动恢复。INDEX / wiki 看板等生成器目标不比对 sha，收尾重跑生成器走锚点重写。门禁模块（add-gate 装入）归项目所有，sync 永不覆盖。
+
 ## 设计原则
 
 - **权威单源**：角色行为只在 `.agents/roles/`，流程只在 `.agents/commands/`，宿主适配层是纯转发薄层——换宿主不换流程。
@@ -49,6 +58,5 @@ modules/gates/      可选门禁模块（dotnet-ca：Clean Architecture 参考�
 ## 路线
 
 - [x] v0.1.0：init（flags 模式）+ doctor + 4 宿主适配 + dotnet-ca 门禁模块
-- [ ] sync：升级 managed 文件（三态：覆盖 / 锚点保留 / 本地改动 diff 确认）
-- [ ] add-host / add-gate：后补宿主与门禁模块
+- [x] v0.2.0：sync 升级（未动覆盖 / 已改跳过报告 + `--force` / 生成器锚点重写）+ add-host / add-gate
 - [ ] npm 发布

@@ -4,6 +4,16 @@ Clean Architecture（Application/Domain/Infrastructure/API 分层）红线守卫
 
 ## 接线（一次性，装进项目本地）
 
+已装 agentic-flow-kit 的项目直接：
+
+```sh
+npx agentic-flow-kit add-gate dotnet-ca
+```
+
+（装 .agents/hooks/check-architecture.sh + 自动接线 local-pre-commit；装后归项目所有，sync 不覆盖。）
+
+手动装法等价于：
+
 ```sh
 mkdir -p .agents/hooks
 cp <包内 modules/gates/dotnet-ca/check-architecture.sh> .agents/hooks/

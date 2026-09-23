@@ -5,7 +5,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { execSync, spawnSync } from 'node:child_process';
 import { renderTree, sha256 } from './render.mjs';
-import { HOSTS, STACKS, settingsJson, commitCheckConfig } from './profiles.mjs';
+import { HOSTS, STACKS, settingsJson, commitCheckConfig, pickStackVars, isOwned } from './profiles.mjs';
 import { doctor } from './doctor.mjs';
 
 function fail(msg) {
@@ -16,12 +16,6 @@ function fail(msg) {
 function runNode(target, script, args = []) {
   const r = spawnSync(process.execPath, [script, ...args], { cwd: target, encoding: 'utf8' });
   return { ok: r.status === 0, out: `${r.stdout || ''}${r.stderr || ''}` };
-}
-
-// AGENTS.md「项目适配区」的命令预填变量（技术栈未知时留 <填写> 占位）
-function pickStackVars(stackKey) {
-  const s = STACKS[stackKey] || STACKS.none;
-  return { BUILD_CMD: s.build, TEST_CMD: s.test, TYPECHECK_CMD: s.typecheck };
 }
 
 // makePrompt：行队列式问答（比逐次 rl.question 稳——管道/EOF 提前关闭时不会抛错，安全回退默认值或取消）
@@ -155,10 +149,6 @@ export async function init(args, pkgRoot) {
   }
 
   // 6) kit.json：managed（模板/适配层，升级可覆盖）与 owned（基线配置+起步文档，升级不动）台账
-  const isOwned = (rel) =>
-    rel === 'AGENTS.md' || rel === '.gitattributes' || rel.startsWith('workflow/') || rel.startsWith('wiki/')
-    || rel.startsWith('.agents/notes/')
-    || rel === '.agents/workflow-modules.txt' || rel === '.agents/rule-budgets.txt';
   const managed = [
     ...t.written.filter((f) => !isOwned(f.rel)),
     // 宿主文件渲染时相对宿主根，入台账须还原为项目根相对路径

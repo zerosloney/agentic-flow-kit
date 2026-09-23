@@ -62,6 +62,21 @@ export const STACKS = {
   },
 };
 
+// AGENTS.md「项目适配区」的命令预填变量（技术栈未知时留 <填写> 占位）
+export function pickStackVars(stackKey) {
+  const s = STACKS[stackKey] || STACKS.none;
+  return { BUILD_CMD: s.build, TEST_CMD: s.test, TYPECHECK_CMD: s.typecheck };
+}
+
+// 两态文件模型的归属判定：managed（随包升级）之外皆 owned（项目内容，sync 永不覆盖）
+// local-pre-commit 是项目门禁挂载点——一旦接线即含项目内容，按 owned 起步（旧台账里若在 managed，改动后 sync 也会保守跳过）
+export function isOwned(rel) {
+  return rel === 'AGENTS.md' || rel === '.gitattributes' || rel.startsWith('workflow/') || rel.startsWith('wiki/')
+    || rel.startsWith('.agents/notes/')
+    || rel === '.agents/workflow-modules.txt' || rel === '.agents/rule-budgets.txt'
+    || rel === '.agents/hooks/local-pre-commit';
+}
+
 export function settingsJson(stackKey) {
   const allow = [...new Set([
     'node', 'git status', 'git diff', 'git add', 'git commit', 'git log', 'git push',

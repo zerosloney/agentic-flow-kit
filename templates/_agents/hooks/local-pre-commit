@@ -1,5 +1,6 @@
 #!/bin/sh
 # 项目门禁挂载点（.githooks/pre-commit 在通用门禁之后执行本文件；返回非零即阻断提交）
-# 把项目专属门禁逐行加在这里（示例：dotnet-ca 门禁模块接线见其 README）：
+# 把项目专属门禁逐行加在这里；npx agentic-flow-kit add-gate <门禁> 会自动接线（手动示例：）：
 #   sh .agents/hooks/check-architecture.sh
-exit 0
+# set -e：任一门禁非零即中止本脚本（退出码透传给 pre-commit 阻断提交）——不要在末尾加 exit 0
+set -e
