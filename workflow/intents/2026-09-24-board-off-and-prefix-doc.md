@@ -32,4 +32,4 @@
 - [x] commit-check-trigger.test.mjs 六断言全绿并接入 run-tests（npm test 全套件 8 套 151 例绿）
 - [x] 配置示例注释含 prefix 说明与触发语义三则；引擎逻辑零改动（仅注释）
 - [x] plan/maintain/AGENTS.md/workflow README/doctor/ensure-board 头注全部改为按需口径（grep「任务入口幂等拉起」零残留）
-- [x] Shipyard 落地与对照探针（见 Shipyard 侧应用提交）
+- [x] Shipyard 落地与对照探针（应用提交 5088cfb：wiki html 暂存 SKIP 不再起前端构建；看板进程已停；doctor 7 PASS）
