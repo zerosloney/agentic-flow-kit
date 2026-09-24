@@ -105,6 +105,33 @@ const run = (root, args = []) => spawnSync(process.execPath, [GEN, ...args], { c
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- 场景 5：kebab-case H1 不被连字符截断（2026-09-24 前缀正则收窄回归）----
+{
+  const root = mkfix();
+  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-09-22-kebab.md'), doc(
+    '状态: draft\n级别: L1\n日期: 2026-09-22\n模块: pipeline',
+    'workflow-doc-retrieval',
+  ), 'utf8');
+  const r = run(root);
+  const idx = fs.readFileSync(path.join(root, 'workflow', 'INDEX.md'), 'utf8');
+  check('场景 5：kebab-case H1 完整保留（未被截成末段）', idx.includes('| workflow-doc-retrieval |') && !idx.includes('| retrieval |'), idx.split('\n').filter((l) => l.includes('retrieval')).join('\n'));
+  check('场景 5：em-dash 前缀仍正常剥离', idx.includes('| 在跑的需求甲 |'), '');
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 6：END 锚点被截断 → fail-loud 不写盘（2026-09-24：原 append 分支产生双生成区）----
+{
+  const root = mkfix();
+  run(root);
+  const p = path.join(root, 'workflow', 'INDEX.md');
+  fs.writeFileSync(p, fs.readFileSync(p, 'utf8').replace('<!-- GENERATED:END -->', ''), 'utf8');
+  const r = run(root);
+  check('场景 6：END 锚点缺失 → exit 1', r.status === 1, `exit=${r.status}\n${r.stdout}${r.stderr}`);
+  check('场景 6：报错点名锚点不完整', (r.stderr || '').includes('锚点不完整'), r.stderr);
+  check('场景 6：未写盘（无双重生成区）', (fs.readFileSync(p, 'utf8').match(/GENERATED:BEGIN/g) || []).length === 1, '');
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 if (fail) {
   console.log(`\n${USAGE}`);

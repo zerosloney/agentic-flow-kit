@@ -39,11 +39,13 @@ const runAgg = (root) => spawnSync(process.execPath, [path.join(root, '.agents',
     '| 日期 | 被委派方(模型) | 任务一句话 | 结果 | 备注 |',
     '|------|----------------|------------|------|------|',
     '| 2026-09-23 | general-purpose(子代理) | 示例委派任务 | 一次通过 | fixture |',
+    '| 2026-09-24 | executor(子代理) | 结果列拼错的示例行 | 成功 | fixture |',
     '',
   ].join('\n'));
   const r = runAgg(root);
   check('场景 1：节标题缺失 + 表头合规 → exit 0', r.status === 0, `exit=${r.status}\n${r.stdout}${r.stderr}`);
   check('场景 1：数据行入账（有效任务 1，非「台账为空」）', /有效任务 1（/.test(r.stdout) && !r.stdout.includes('台账为空'), r.stdout);
+  check('场景 1：未知结果单列计数（不混入待修，2026-09-24 口径分离）', r.stdout.includes('待修 0、未知结果 1'), r.stdout);
   fs.rmSync(root, { recursive: true, force: true });
 }
 

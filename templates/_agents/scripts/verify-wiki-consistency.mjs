@@ -179,6 +179,7 @@ for (const t of DATA.topics) {
     if (!fs.existsSync(p) || !fs.statSync(p).isDirectory()) deadLinks.push(`${t.name}/${f.file} → ${f.dir}`);
   }
 }
+// 静态 href 扫描守的是「手工编辑看板」时加的链接（生成链接全在 JS 运行时拼，不落静态属性）——看板是 owned 内容，人为改动须可达
 for (const m2 of html.matchAll(/href="([^"]+)"/g)) {
   const href = m2[1];
   if (/^(https?:|mailto:|#)/i.test(href) || href.includes('${')) continue; // 外链 / 锚点 / 模板占位

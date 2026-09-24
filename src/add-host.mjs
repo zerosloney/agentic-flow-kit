@@ -39,6 +39,10 @@ export function addHost(args, pkgRoot) {
   const r = renderTree(path.join(pkgRoot, 'modules', 'hosts', host), path.join(target, HOSTS[host].dir), vars, { force });
   if (!r.written.length && r.skipped.length) console.log('  跳过（已存在，未覆盖）：' + r.skipped.join('、'));
   else console.log(`  安装 ${r.written.length} 份${r.skipped.length ? `，跳过已存在 ${r.skipped.length} 份` : ''}`);
+  if (r.skipped.length) {
+    // 跳过的文件不入 managed 台账（不接管既有内容）——后续 sync 只报「已存在未入台账」，永不升级；纳入包管理须 --force
+    console.log('  ⚠️ 跳过文件不入 managed 台账、后续 sync 不升级（每次仅报告）；纳入包管理用 --force 覆盖');
+  }
 
   // managed 台账按 rel 去重补记
   const ledger = new Map((kit.managed || []).map((f) => [f.rel, f]));

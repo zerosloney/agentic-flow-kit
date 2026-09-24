@@ -5,6 +5,7 @@
 #  按文档字面执行三次 commit 全绿、push 才爆红，只能后补）
 # 口径与 check-loop.sh 对齐：入口文档（intents/ incidents/ 直下 .md）↔ workflow/plans/ 同名；
 # 同 commit 携带 plan 合法（检查的是工作区文件存在，staged 新建 plan 同样命中）。
+# 已知边界：legacy 豁免读的是工作区文件而非暂存 blob——add 后又改工作区时可能误豁免/误拦（逐文件取 blob 的 fork 成本大于收益，接受）。
 
 cd "$(git rev-parse --show-toplevel)" || exit 1
 

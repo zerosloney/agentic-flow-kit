@@ -78,6 +78,8 @@ if [ -z "$PY_BIN" ]; then
   violations="$violations
 - 红线 4.3 无法执行：未找到 python/python3/py（Domain 导航属性扫描依赖 Python；门禁 fail-closed，不静默放行）"
 else
+    # 2026-09-24：①python 运行期报错也 fail-closed（原只对「没装 python」兜底，脚本报错时 nav_hits 为空即放行）；
+    # ②属性匹配改全文 finditer——支持「{ 换行」与 expression-bodied（=>）形态，先剥注释防误报
     nav_hits=$(DOMAIN_ENTITIES_DIR="$DOMAIN_ENTITIES_DIR" SHARED_TYPES="$SHARED_TYPES" "$PY_BIN" - <<'PYEOF'
 import re, glob, os
 from os import environ
@@ -91,19 +93,20 @@ for f in files:
 hits = []
 for f in files:
     with open(f, encoding='utf-8-sig') as fh:
-        for i, line in enumerate(fh, 1):
-            m = re.match(r'\s*public\s+(?:virtual\s+)?([\w<>,\s\.\?]+?)\s+(\w+)\s*\{', line)
-            if not m:
-                continue
-            typ = m.group(1).strip()
-            mm = re.search(r'(?:ICollection|List|IEnumerable|IReadOnlyCollection|IReadOnlyList)<\s*(\w+)\s*>', typ)
-            core = mm.group(1) if mm else (typ.rstrip('?') if re.fullmatch(r'\w+\??', typ) else None)
-            if core and (core in names or core in shared):
-                hits.append(f"{os.path.basename(f)}:{i} {m.group(2)} : {typ}")
+        src = re.sub(r'/\*.*?\*/', '', fh.read(), flags=re.S)
+    src = re.sub(r'//[^\n]*', '', src)
+    for m in re.finditer(r'\bpublic\s+(?:virtual\s+)?([\w<>, \t.\?]+?)\s+(\w+)\s*(?:\{|=>)', src):
+        typ = m.group(1).strip()
+        mm = re.search(r'(?:ICollection|List|IEnumerable|IReadOnlyCollection|IReadOnlyList)<\s*(\w+)\s*>', typ)
+        core = mm.group(1) if mm else (typ.rstrip('?') if re.fullmatch(r'\w+\??', typ) else None)
+        if core and (core in names or core in shared):
+            ln = src.count('\n', 0, m.start()) + 1
+            hits.append(f"{os.path.basename(f)}:{ln} {m.group(2)} : {typ}")
 if hits:
     print('\n'.join(hits))
 PYEOF
-    )
+    ) || violations="$violations
+- 红线 4.3 无法执行：python 扫描异常退出（fail-closed，不静默放行；诊断见上方 stderr）"
 fi
 if [ -n "$nav_hits" ]; then
   violations="$violations
@@ -112,6 +115,7 @@ $nav_hits"
 fi
 
 # 红线 5：Controller 禁把 InnerException 原文透传进响应体（详情只许进日志）
+# 已知天花板：grep 按整行排除 Log 调用——透传与 Log 写在同一行可绕过；语义级排除需 AST 工具，参考实现门禁按接受记录（2026-09-24）
 inner_hits=$(grep -rn "InnerException" "$CONTROLLERS_DIR" --include="*.cs" 2>/dev/null \
   | grep -v -e "/obj/" -e "/bin/" \
   | grep -vE "Log(Warning|Error|Information|Debug|Trace)")

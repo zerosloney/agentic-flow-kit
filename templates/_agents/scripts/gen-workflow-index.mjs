@@ -55,7 +55,8 @@ function parseDoc(text) {
   }
   const h1 = text.match(/^# (.+)$/m);
   let title = h1 ? h1[1] : '';
-  const dash = title.match(/\S+\s*[—–-]+\s*(.+)$/);
+  // 前缀分隔只认 em/en dash（任意间距）或带空格的 ASCII 连字符——裸连字符是 kebab-case 的一部分，不截断（2026-09-24）
+  const dash = title.match(/\S+\s*(?:[—–]+|\s-\s)\s*(.+)$/);
   if (dash) title = dash[1];
   return { meta, title };
 }
@@ -142,8 +143,12 @@ const docs = scan();
 const existing = fs.existsSync(INDEX_P) ? fs.readFileSync(INDEX_P, 'utf8') : '';
 const inner = `${BEGIN}\n\n${render(docs)}\n\n${END}`;
 let out;
-if (existing.includes(BEGIN) && existing.includes(END)) {
+if (existing.includes(BEGIN) && existing.includes(END) && existing.indexOf(BEGIN) < existing.indexOf(END)) {
   out = existing.slice(0, existing.indexOf(BEGIN)) + inner + existing.slice(existing.indexOf(END) + END.length);
+} else if (existing.includes(BEGIN) || existing.includes(END)) {
+  // 锚点残缺（END 被手工截断 / 顺序颠倒）：fail-loud 不写盘——曾走 append 分支产生双 GENERATED 区，旧区永不清理（2026-09-24）
+  console.error('❌ workflow/INDEX.md 生成锚点不完整（GENERATED:BEGIN/END 须成对且 BEGIN 在前）——手工修复锚点后重跑，未写盘');
+  process.exit(1);
 } else {
   out = (existing ? existing.replace(/\s*$/, '') + '\n\n' : HEADER) + inner + '\n';
 }

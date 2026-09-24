@@ -12,8 +12,17 @@ function resolveShell() {
   for (const p of candidates) {
     try { fs.accessSync(p); return p; } catch { /* 尝试下一个 */ }
   }
+  // PATH 回退须避开 WSL 启动器：C:\Windows\System32\bash.exe 能过 exit 0 探测，但路径/行尾语义是 Linux 侧的（2026-09-24）
   for (const c of ['bash', 'sh']) {
-    try { execFileSync(c, ['-c', 'exit 0'], { stdio: 'pipe', timeout: 5000 }); return c; } catch { /* 尝试下一个 */ }
+    let cand = c;
+    try {
+      const hits = execFileSync('where.exe', [c], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+        .split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+      const good = hits.find((p) => !/system32/i.test(p)); // 全部命中都在 System32（纯 WSL）→ 跳过该候选
+      if (good) cand = good;
+      else continue;
+    } catch { /* where 不可用（非 Windows）：按原名探测，保持旧行为 */ }
+    try { execFileSync(cand, ['-c', 'exit 0'], { stdio: 'pipe', timeout: 5000 }); return cand; } catch { /* 尝试下一个 */ }
   }
   return null;
 }

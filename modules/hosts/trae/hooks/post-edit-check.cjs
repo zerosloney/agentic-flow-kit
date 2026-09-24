@@ -75,6 +75,16 @@ try {
     }));
     process.exit(0);
   }
+  // 门禁脚本未装（未跑 add-gate dotnet-ca）≠ 发现违例——区分口径，对齐 pre-shell-check 的 ENOENT 处理（2026-09-24）
+  if (e.code === 'ENOENT') {
+    console.log(JSON.stringify({
+      hookSpecificOutput: {
+        hookEventName: 'PostToolUse',
+        additionalContext: '⚠️ 架构红线检查未执行：check-architecture.sh 未安装（flow-kit add-gate dotnet-ca 装入）——本次编辑未验证。'
+      }
+    }));
+    process.exit(0);
+  }
   const err = String((e.stderr || '') + (e.stdout || '')).slice(0, 800);
   console.log(JSON.stringify({
     hookSpecificOutput: {

@@ -52,7 +52,7 @@
     },
     {
       "rel": ".agents/hooks/check-pairing-incremental.sh",
-      "sha256": "81dcac14e081aca6c09017a12a46e21604380eb479ba4cbda69506141b4994a0"
+      "sha256": "3d382a4f9770d5ac08badd715df2877141e42860fb95a3bb84be6e4965dbc289"
     },
     {
       "rel": ".agents/hooks/check-wiki-ledger.sh",
@@ -76,11 +76,11 @@
     },
     {
       "rel": ".agents/scripts/agg-delegations.cjs",
-      "sha256": "afb4416831af45f1ec21d4959a0eb7300748077c97c9374b43cf60793e88ef59"
+      "sha256": "81ba1ae3849da67cabefe964df720237857cf8415a22637c0c633b0e87406c5b"
     },
     {
       "rel": ".agents/scripts/agg-delegations.test.mjs",
-      "sha256": "372940e2ea72ea8f1e7378ee6c2fdbcc19534d7b5dc327365a4d51775b551557"
+      "sha256": "4c4f0044785a075bc4523a6c480dae0ba683f53d2838eaf3edeb5cb16029db0b"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -108,11 +108,11 @@
     },
     {
       "rel": ".agents/scripts/gen-workflow-index.mjs",
-      "sha256": "499e4ee24f682a8dfecf84ac9c990b1cb720867de98617c1ce2392867b4bea09"
+      "sha256": "423b2afc438fe1c986390eb98f3c47f7768bf8ba098eb874ff4bdc6ae0bbcf6c"
     },
     {
       "rel": ".agents/scripts/gen-workflow-index.test.mjs",
-      "sha256": "4964b2dfb0aa5ec25019129a214ba76e08be59a8b796c7665fc9079c57ae153f"
+      "sha256": "b9117c535ae67a4bc193cc96c8a3b2ab61f41b006d863763aa35374103e9aef3"
     },
     {
       "rel": ".agents/scripts/gen-workflow-metrics.mjs",
@@ -132,7 +132,7 @@
     },
     {
       "rel": ".agents/scripts/kb-search.mjs",
-      "sha256": "ed5d617511aa395fc9a4a9f7b8949b7861438a3e1bad2100296ded0d3fa8ed30"
+      "sha256": "8d2035bad57e90cd1667994220d21ece841c9d9d6ddf36a427be00b1fbc27910"
     },
     {
       "rel": ".agents/scripts/kb-search.test.mjs",
@@ -140,11 +140,11 @@
     },
     {
       "rel": ".agents/scripts/rule-budget.sh",
-      "sha256": "6b1b2cdd6bd81691b0b238c10dbe85e71bc8746450e953e9f314f2e5e8ff7686"
+      "sha256": "e6ba0dd09a6e32b5b8bd4735f4ab5439639b43422b923a2e2aa8af9571f34a2f"
     },
     {
       "rel": ".agents/scripts/verify-wiki-consistency.mjs",
-      "sha256": "bf12864af41172690bc4359b6a67b622db83c19cfdff7c4fc56ec6a6d6ed48a5"
+      "sha256": "f21b365e1eb6488c5ec7b7f520e1c6c4ddc916bd6cd138c62d40460898a8d105"
     },
     {
       "rel": ".agents/scripts/wiki-search.mjs",
@@ -152,7 +152,7 @@
     },
     {
       "rel": ".agents/scripts/workflow-board-server.mjs",
-      "sha256": "1ec694e731a77f72f42be44655fe1a47a88d28655028a89629a616d8ad9bd058"
+      "sha256": "8d07817398677d2aef703b0e0d45d0a07b87f5013ddb4375855ef1f6f865ceec"
     },
     {
       "rel": ".agents/skills/verify-ui/SKILL.md",
@@ -164,7 +164,7 @@
     },
     {
       "rel": ".githooks/commit-msg",
-      "sha256": "7cf971b203c32af654f4cfbf8eb3dc605ed3a0489c2f63ff17cf2550c63c69f7"
+      "sha256": "3e946cbf3f59a469ec977a036ff8bfc960be7febe36318a0fd112b7adaadfc75"
     },
     {
       "rel": ".githooks/post-commit",
@@ -180,7 +180,7 @@
     },
     {
       "rel": ".githooks/pre-push",
-      "sha256": "f03526aba46764d2dc04188a1d938270172409627188384ee9f39726e389d49b"
+      "sha256": "c67e4b448c2bf5c6630b2933136cf8200a65f698b05eb66fb8c2537139d8176a"
     },
     {
       "rel": ".zcode/agents/implementer.md",

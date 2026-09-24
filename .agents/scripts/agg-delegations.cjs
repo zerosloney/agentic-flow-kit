@@ -26,8 +26,7 @@ function parseTableRows(sectionText) {
     .split(/\r?\n/)
     .filter((l) => /^\|/.test(l.trim()))
     .map((l) => l.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim()))
-    .filter((cols) => cols.length >= 2 && !/^[-: ]+$/.test(cols[1])) // 去表头分隔行
-    .filter((cols) => !/^\s*$/.test(cols[0]) && /^\d{4}-\d{2}-\d{2}$/.test(cols[0])); // 只留数据行（首列是日期）
+    .filter((cols) => !/^\s*$/.test(cols[0]) && /^\d{4}-\d{2}-\d{2}$/.test(cols[0])); // 只留数据行（首列是日期；表头/分隔行随之滤除）
 }
 
 function parseResult(raw) {
@@ -93,8 +92,11 @@ function countIncidents() {
 const GATE = { minSample: 20, minPassRate: 0.9, maxAvgRework: 0.3, minDelegated: 5, maxFallbackRate: 0.1 };
 
 function metrics(rows) {
-  const valid = rows.filter((r) => parseResult(r.result).kind !== 'pending' && parseResult(r.result).kind !== 'unknown');
-  const pending = rows.length - valid.length;
+  // 未知结果（结果列拼错/漏填）单列计数，不混进「待修」——待修=未闭环，未知=记录本身有问题（2026-09-24 口径分离）
+  const kinds = rows.map((r) => parseResult(r.result).kind);
+  const valid = rows.filter((_, i) => kinds[i] !== 'pending' && kinds[i] !== 'unknown');
+  const pending = kinds.filter((k) => k === 'pending').length;
+  const unknown = kinds.filter((k) => k === 'unknown').length;
   let pass = 0, reworkSum = 0, fallback = 0;
   for (const r of valid) {
     const p = parseResult(r.result);
@@ -106,6 +108,7 @@ function metrics(rows) {
   return {
     total: valid.length,
     pending,
+    unknown,
     pass,
     passRate: valid.length ? pass / valid.length : null,
     reworkSum,
@@ -166,16 +169,16 @@ function main() {
     const m = metrics(byMonth[ym]);
     const g = gate(m, incidents[ym] || 0);
     console.log(`## ${ym}`);
-    console.log(`  有效任务 ${m.total}（待修 ${m.pending}）｜一次通过 ${m.pass}（${fmtRate(m.passRate)}）｜返工总次数 ${m.reworkSum}（平均 ${fmtNum(m.avgRework)}）｜主兜底 ${m.fallback}/${m.delegatedValid}（${fmtRate(m.fallbackRate)}）｜incident ${incidents[ym] || 0} 起`);
+    console.log(`  有效任务 ${m.total}（待修 ${m.pending}${m.unknown ? `、未知结果 ${m.unknown}` : ''}）｜一次通过 ${m.pass}（${fmtRate(m.passRate)}）｜返工总次数 ${m.reworkSum}（平均 ${fmtNum(m.avgRework)}）｜主兜底 ${m.fallback}/${m.delegatedValid}（${fmtRate(m.fallbackRate)}）｜incident ${incidents[ym] || 0} 起`);
     for (const i of g.items) console.log(`  门${i.no} ${i.ok === null ? '[人工]' : i.ok ? '✅' : '❌'} ${i.desc}`);
     console.log(`  扩容门判定：${g.verdict}\n`);
-    snapshotRows.push(`| ${ym} | ${m.total} | ${fmtRate(m.passRate)} | ${fmtNum(m.avgRework)} | ${fmtRate(m.fallbackRate)} | ${incidents[ym] || 0} | ${g.verdict} | 样本含待修${m.pending} |`);
+    snapshotRows.push(`| ${ym} | ${m.total} | ${fmtRate(m.passRate)} | ${fmtNum(m.avgRework)} | ${fmtRate(m.fallbackRate)} | ${incidents[ym] || 0} | ${g.verdict} | 样本含待修${m.pending}${m.unknown ? `、未知${m.unknown}` : ''} |`);
   }
 
   if (!argMonth && rows.length) {
     const m = metrics(rows);
     console.log(`## 全量累计`);
-    console.log(`  有效任务 ${m.total}（待修 ${m.pending}）｜一次通过 ${fmtRate(m.passRate)}｜平均返工 ${fmtNum(m.avgRework)}｜主兜底 ${fmtRate(m.fallbackRate)}｜incident 合计 ${Object.values(incidents).reduce((a, b) => a + b, 0)} 起\n`);
+    console.log(`  有效任务 ${m.total}（待修 ${m.pending}${m.unknown ? `、未知结果 ${m.unknown}` : ''}）｜一次通过 ${fmtRate(m.passRate)}｜平均返工 ${fmtNum(m.avgRework)}｜主兜底 ${fmtRate(m.fallbackRate)}｜incident 合计 ${Object.values(incidents).reduce((a, b) => a + b, 0)} 起\n`);
   }
 
   console.log(`## 可粘贴快照行（粘到 workflow/delegations.md §月度聚合快照）`);

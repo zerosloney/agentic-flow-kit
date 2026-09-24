@@ -34,9 +34,15 @@ while IFS= read -r line; do
   case "$pat" in ''|'#'*) continue ;; esac
   case "$lim" in ''|*[!0-9]*) continue ;; esac
   case "$pat" in
-    */) # 目录合计：--staged 下仅当暂存触及该目录内文件才查
+    */) # 目录合计：--staged 下仅当暂存触及该目录内文件才查（case 字面前缀匹配——pat 含 . 时不能当正则用，2026-09-24）
       if [ "$MODE" = "--staged" ]; then
-        printf '%s\n' "$staged_list" | grep -q "^${pat}" || continue
+        found=0
+        while IFS= read -r sf; do
+          case "$sf" in "$pat"*) found=1 ;; esac
+        done <<EOF
+$staged_list
+EOF
+        [ "$found" = "1" ] || continue
       fi
       total=0
       for f in "$pat"*; do

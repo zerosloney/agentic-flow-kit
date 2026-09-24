@@ -26,7 +26,7 @@ else
 fi
 rc=$?
 if [ $rc -ne 0 ]; then
-  echo "pre-push: 闭环骨架断档（hard-block）未通过，push 已阻断。修 workflow 文档后重推——不要用 --no-verify 绕过（CI 服务端会再次兜底拦截）" >&2
+  echo "pre-push: 闭环骨架断档（hard-block）未通过，push 已阻断。修 workflow 文档后重推——不要用 --no-verify 绕过（本钩子是唯一机器门，无服务端兜底，见头部说明）" >&2
   exit $rc
 fi
 exit 0

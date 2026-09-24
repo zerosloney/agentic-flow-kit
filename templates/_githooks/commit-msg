@@ -1,11 +1,13 @@
 #!/bin/sh
 # Git commit-msg hook：提交类型枚举校验（自 pre-commit 迁入，2026-09-18 papercut 升级修复）
 # AGENTS.md「git提交」：Conventional Commits 中文，feat/fix/docs/style/refactor/perf
-# merge/revert 提交豁免（含自定义小写 merge:/revert: 前缀）；$1 为 git 传入的本次消息文件（真实待提交内容）
+# 豁免仅限真实 merge/revert 形态：git 默认消息（Merge …/Revert …）与自定义小写 merge:/revert: 前缀。
+# 2026-09-24 收紧：不再匹配任意 merge/revert 开头（如 "merged xxx"），空首行不再豁免（fail-closed）。
+# $1 为 git 传入的本次消息文件（真实待提交内容）
 
 msg=$(head -1 "$1" 2>/dev/null)
 case "$msg" in
-  [Mm]erge*|[Rr]evert*|"") ;;
+  "Merge "*|"merge:"*|"Revert "*|"revert:"*) ;;
   *)
     if ! echo "$msg" | grep -qE "^(feat|fix|docs|style|refactor|perf)(\(|:|（)"; then
       echo "commit-msg: 提交类型须为 feat/fix/docs/style/refactor/perf（AGENTS.md「git提交」），当前首行：$msg" >&2

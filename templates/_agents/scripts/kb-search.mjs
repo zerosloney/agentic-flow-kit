@@ -95,7 +95,8 @@ function parseDoc(text) {
   }
   const h1 = text.match(/^# (.+)$/m);
   let title = h1 ? h1[1] : '';
-  const dash = title.match(/\S+\s*[—–-]+\s*(.+)$/);
+  // 前缀分隔只认 em/en dash（任意间距）或带空格的 ASCII 连字符——裸连字符是 kebab-case 的一部分，不截断（2026-09-24）
+  const dash = title.match(/\S+\s*(?:[—–]+|\s-\s)\s*(.+)$/);
   if (dash) title = dash[1];
   return { meta, title };
 }

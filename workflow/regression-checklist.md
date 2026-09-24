@@ -22,3 +22,4 @@
 |----------|------|------|
 | 2026-09-23-cjs-ext-in-typemodule | 在 `"type":"module"` 的 Node 项目装包后 commit：pre-commit 链须通过（commit-check 不崩） | 本仓库真钩子常开（每份提交自动重验） |
 | 2026-09-24-review-fixes | 生成器/聚合器新增「锚点缺失」类分支必须 fail-loud 并配 fixture 用例；delegations 台账解析、wiki 生成器锚点、sync 跳过件行为随 npm test 回归 | agg-delegations.test.mjs（三场景）/ gen-wiki-board.test.mjs 场景 4-5 / sync.test.mjs S11 |
+| 2026-09-24-p4-sweep | 字面量数据（标题/预算路径/命令）当正则或裸子串匹配前先加 token 边界或字面量转义；钩子异常分支先分流（ENOENT≠违例、脚本崩溃≠无违例）再报 | gen-workflow-index.test.mjs 场景 5/6 + agg-delegations.test.mjs 场景 1（npm test 随跑）；commit-msg 随本仓库每次提交重验 |

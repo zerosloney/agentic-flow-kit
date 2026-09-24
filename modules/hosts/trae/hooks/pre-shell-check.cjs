@@ -4,7 +4,7 @@
  * 1) deny/ask 命令门禁（口径同 .agents/settings.json 的 deny/ask 策略）
  * 2) git commit / git push 前置检查：直接调 .githooks/pre-commit / pre-push
  *
- * 为什么调 .githooks/*：那是项目唯一的门禁权威（pre-commit 六项 + pre-push 闭环断档）。
+ * 为什么调 .githooks/*：那是项目唯一的门禁权威（pre-commit 门禁链 + pre-push 闭环断档）。
  * 本钩子是**宿主侧冗余**——core.hooksPath 漏配时 git 侧门禁静默失效（2026-09-16 Trae 侧缺档事故），
  * 由这里在命令执行前拦下；门禁清单只维护 .githooks/ 一份，本文件不复制。
  *
@@ -90,13 +90,23 @@ const askList = [
   { pat: 'rm -rf',        reason: '可能递归删除文件' }
 ];
 
+// gateMatch：比裸 includes 收紧两处（2026-09-24）——
+//   ① token 边界：'git push --force' 不再误拦 '--force-with-lease'、'git commit' 不再误吃 'git commit-msg'
+//   ② 剥离 git 全局参 -c <k=v> 与 -m <msg> 后以剥后文本为准——堵 'git -c x=y push --force' 绕过，
+//     也免得消息字样误触发；剥不出（norm===cmd）再按原文匹配
+function gateMatch(cmd, pat) {
+  const re = new RegExp(pat.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\w-])');
+  const norm = cmd.replace(/(^|\s)-[cm]\s+\S+(?=\s|$)/g, ' ').replace(/\s+/g, ' ').trim();
+  return norm !== cmd ? re.test(norm) : re.test(cmd);
+}
+
 for (const d of denyList) {
-  if (command.includes(d.pat)) {
+  if (gateMatch(command, d.pat)) {
     deny(`禁止执行: ${d.pat}（项目红线：${d.reason}）`);
   }
 }
 for (const a of askList) {
-  if (command.includes(a.pat)) {
+  if (gateMatch(command, a.pat)) {
     ask(`需确认: ${a.pat}（项目 ask 策略：${a.reason}）`);
   }
 }
@@ -135,7 +145,7 @@ function runGate(scriptRelPath, label, budgetMs) {
 }
 
 if (isCommit) {
-  // pre-commit 六项：架构红线 + 审计字段 + 删除拦截 + 闭环配对（增量）+ 敏感信息 + 条件编译
+  // pre-commit 门禁链（通用包口径）：闭环配对（增量）+ wiki 台账（增量）+ 常驻面预算 + 项目门禁（local-pre-commit）+ 敏感信息扫描与条件构建
   // 预算 5 分钟覆盖 dotnet build / npm run build（.githooks/pre-commit 内部无超时）
   runGate('.githooks/pre-commit', '提交前门禁', 300000);
 }
