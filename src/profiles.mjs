@@ -62,6 +62,14 @@ export const STACKS = {
   },
 };
 
+// 技术栈别名归一：ts/js 用户口径 → node 栈（init 交互与 --stack 共用；别名不进 kit.json，落盘始终是规范名）
+export const STACK_ALIASES = {
+  ts: 'node',
+  js: 'node',
+  typescript: 'node',
+  javascript: 'node',
+};
+
 // AGENTS.md「项目适配区」的命令预填变量（技术栈未知时留 <填写> 占位）
 export function pickStackVars(stackKey) {
   const s = STACKS[stackKey] || STACKS.none;

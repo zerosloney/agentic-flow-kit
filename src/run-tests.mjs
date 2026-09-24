@@ -9,6 +9,7 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 const nodeSuites = [
   'src/sync.test.mjs',
+  'src/init.test.mjs',
   ...fs.readdirSync(path.join(ROOT, 'templates/_agents/scripts'))
     .filter((f) => f.endsWith('.test.mjs'))
     .sort()

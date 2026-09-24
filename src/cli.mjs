@@ -23,7 +23,8 @@ export const HELP = `flow-kit — AI-Native 闭环工作流 + wiki 知识层脚�
   flow-kit doctor           体检：目录布局 / git 钩子 / managed 清单 / 索引漂移 / check-loop
 
 init 选项（全部可选，均有默认值）：
-  --stack <技术栈>     dotnet | node | python | go | none（默认 none）——门禁配置三处：commit-check
+  --stack <技术栈>     dotnet | node（ts/js） | python | go | none（默认 none；ts/js/typescript/javascript
+                       归一为 node）——门禁配置三处：commit-check
                        条件编译检查（builds）与质量检测（checks：lint/类型/vet 等秒级确定性检查，
                        有对应配置文件才启用）、settings.json 自检验命令权限（allow）、
                        AGENTS.md「项目适配区」命令预填

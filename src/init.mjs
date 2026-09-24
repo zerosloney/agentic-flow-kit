@@ -5,7 +5,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { execSync, spawnSync } from 'node:child_process';
 import { renderTree, sha256 } from './render.mjs';
-import { HOSTS, STACKS, settingsJson, commitCheckConfig, pickStackVars, isOwned } from './profiles.mjs';
+import { HOSTS, STACKS, STACK_ALIASES, settingsJson, commitCheckConfig, pickStackVars, isOwned } from './profiles.mjs';
 import { doctor } from './doctor.mjs';
 
 function fail(msg) {
@@ -42,21 +42,72 @@ function makePrompt() {
   };
 }
 
-// 交互确认环节：宿主多选 → 看板端口 → 显式确认（EOF / 非 y 一律取消，不装）
+// ---- TUI 风格：hand-rolled ANSI（零依赖纪律）；NO_COLOR / 非 TTY 自动降级纯文本 ----
+const RAW = !process.env.NO_COLOR && process.stdout.isTTY;
+const paint = (code, s) => (RAW ? `\x1b[${code}m${s}\x1b[0m` : String(s));
+const bold = (s) => paint('1', s);
+const dim = (s) => paint('2', s);
+const cyan = (s) => paint('36', s);
+
+// normalizeStack：ts/js 用户口径归一为 node 栈；其余小写透传（STACKS 校验兜底未知值）
+export function normalizeStack(s) {
+  const t = String(s || '').trim().toLowerCase();
+  return STACK_ALIASES[t] || t;
+}
+
+// parseChoices：序号/名称/混输多选解析（逗号/全角逗号/空白分隔，去重保序）；
+// 空输入 → [def]（EOF/直接回车安全回退默认）；含非法 token 返回 null（调用方就地重问）；
+// map 用于输入侧归一（如 ts→node），序号先于 map 解析。
+export function parseChoices(input, names, def, map = (x) => x) {
+  const text = String(input || '').trim();
+  if (!text) return [def];
+  const out = [];
+  for (const tok of text.split(/[,，\s]+/).filter(Boolean)) {
+    const i = /^\d+$/.test(tok) ? Number(tok) - 1 : names.indexOf(map(tok.toLowerCase()));
+    if (!Number.isInteger(i) || i < 0 || i >= names.length) return null;
+    if (!out.includes(names[i])) out.push(names[i]);
+  }
+  return out;
+}
+
+// 交互确认环节：序号菜单问答（宿主多选 → 技术栈 → 看板端口）→ 已选 recap → 显式确认
+// （EOF / 非 y 一律取消，不装；makePrompt 行式语义不变——管道/EOF 安全回退默认）
 async function interactive() {
   const p = makePrompt();
-  console.log('▶ flow-kit init（交互模式——裸跑无参数时进入；带参数则直接执行，见 flow-kit --help）');
-  console.log('  将在当前目录安装：.agents/ ｜ .githooks/ ｜ workflow/ ｜ wiki/ ｜ AGENTS.md（已存在的文件保守跳过）');
+  const hostNames = Object.keys(HOSTS);
+  const stackNames = Object.keys(STACKS);
+  const stackLabel = (n) => (n === 'node' ? 'node（ts/js）' : n);
+  const menu = (names) => '  ' + names.map((n, i) => dim(`${'①②③④⑤⑥'[i]} ${stackLabel(n)}`)).join(dim('   '));
+
+  console.log(bold(cyan('▶ flow-kit init')) + dim(' · AI 闭环工作流 + wiki 知识层脚手架'));
+  console.log(dim('  安装到当前目录：.agents/ · .githooks/ · workflow/ · wiki/ · AGENTS.md（已存在的文件保守跳过）'));
   try {
-    const hosts = await p.ask('1/3 选择 agent 宿主（逗号分隔：zcode / opencode / trae / omp）', 'zcode');
-    const stack = await p.ask('2/3 技术栈——决定编译检查与自检验命令初值（dotnet / node / python / go / none）', 'none');
-    const boardPort = await p.ask('3/3 workflow 看板端口', '8933');
-    const yes = await p.ask('确认安装到当前目录？(y/n)');
+    let hosts;
+    for (;;) {
+      console.log(`\n${cyan('── 1/3 · agent 宿主')} ${dim('· 可多选')}`);
+      console.log(menu(hostNames));
+      const picked = parseChoices(await p.ask(dim('  序号或名称，逗号分隔（直接回车 = zcode）')), hostNames, hostNames[0]);
+      if (picked) { hosts = picked; break; }
+      console.log(dim('  ⚠️ 没认出这个组合——序号或名称再来一次（如 1,3 或 zcode,trae）'));
+    }
+    let stack;
+    for (;;) {
+      console.log(`\n${cyan('── 2/3 · 技术栈')} ${dim('· 决定编译检查与自检验命令初值')}`);
+      console.log(menu(stackNames));
+      const picked = parseChoices(await p.ask(dim('  序号或名称（直接回车 = none；ts/js 自动归一 node）')), stackNames, 'none', normalizeStack);
+      if (picked) { stack = picked[0]; break; }
+      console.log(dim('  ⚠️ 没认出——序号或名称再来一次'));
+    }
+    console.log(`\n${cyan('── 3/3 · workflow 看板端口')}`);
+    const boardPort = (await p.ask(dim('  直接回车 = 8933'))) || '8933';
+
+    console.log(`\n  ${bold(`宿主 ${hosts.join('、')}`)}${dim(' ｜ ')}${bold(`技术栈 ${stack}`)}${dim(' ｜ ')}${bold(`端口 ${boardPort}`)}`);
+    const yes = await p.ask(dim('  确认安装到当前目录？(y/n，回车取消)'));
     if (!/^(y|yes)$/i.test(yes)) {
       console.log('已取消（未做任何改动）');
       process.exit(0);
     }
-    return { hosts, stack, boardPort, dir: process.cwd(), force: false };
+    return { hosts: hosts.join(','), stack, boardPort, dir: process.cwd(), force: false };
   } finally {
     p.close();
   }
@@ -84,7 +135,8 @@ export async function init(args, pkgRoot) {
     }
   }
 
-  if (!STACKS[opt.stack]) fail(`未知技术栈：${opt.stack}（可选 dotnet | node | python | go | none——对应编译检查与自检验命令初值）`);
+  opt.stack = normalizeStack(opt.stack);
+  if (!STACKS[opt.stack]) fail(`未知技术栈：${opt.stack}（可选 dotnet | node（ts/js） | python | go | none——对应编译检查与自检验命令初值）`);
   const hosts = opt.hosts.split(',').map((s) => s.trim()).filter(Boolean);
   for (const h of hosts) {
     if (!HOSTS[h]) fail(`未知宿主：${h}（可选 ${Object.keys(HOSTS).join(' | ')}）`);
@@ -99,7 +151,7 @@ export async function init(args, pkgRoot) {
 
   const vars = { BOARD_PORT: String(opt.boardPort), ...pickStackVars(opt.stack) };
 
-  console.log(`▶ flow-kit init → ${target}`);
+  console.log(`${bold(cyan('▶ flow-kit init'))}${dim(' → ')}${target}`);
   console.log(`  宿主：${hosts.join(', ')} ｜ 技术栈：${opt.stack} ｜ 看板端口：${opt.boardPort}`);
 
   // 1) 模板树（保守：已存在文件跳过，--force 覆盖）
