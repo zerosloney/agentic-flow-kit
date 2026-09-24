@@ -1,0 +1,26 @@
+# CI — push(main) 与全部 PR 跑全套测试；ubuntu + windows × node 18/22 四组合。
+# windows 统一走 bash（runner 自带 Git Bash）：让 check-loop bash 套件真实执行，而不是被 run-tests 的无 sh 分支跳过。
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [18, 22]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm test
