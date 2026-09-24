@@ -128,6 +128,28 @@ const runGen = (root) => spawnSync(process.execPath, [GEN], { cwd: root, encodin
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- 场景 4：映射表锚点缺失 → fail-loud（2026-09-24 审查修复：原静默跳过致映射表悄悄陈旧仍报成功）----
+{
+  const root = mkfix('\n');
+  const idx = path.join(root, 'wiki', 'INDEX.md');
+  fs.writeFileSync(idx, fs.readFileSync(idx, 'utf8').replace(/^## 文件 → 主题 → 归属目录 映射表$/m, '## 映射（锚点被改）'), 'utf8');
+  const r = runGen(root);
+  check('场景 4：映射表锚点缺失 → exit 1', r.status === 1, `exit=${r.status}\n${r.stdout}${r.stderr}`);
+  check('场景 4：报错点名映射表锚点', (r.stderr || '').includes('映射表锚点'), r.stderr);
+  check('场景 4：未写盘（INDEX 原样保留）', fs.readFileSync(idx, 'utf8').includes('## 映射（锚点被改）'), '');
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 5：drafts-archive 缺失 → 不崩栈，警告 + 归档按 0（2026-09-24 审查修复）----
+{
+  const root = mkfix('\n');
+  fs.rmSync(path.join(root, 'wiki', 'drafts-archive'), { recursive: true });
+  const r = runGen(root);
+  check('场景 5：drafts-archive 缺失 → exit 0（不崩栈）', r.status === 0, `exit=${r.status}\n${r.stdout}${r.stderr}`);
+  check('场景 5：stderr 有缺失警告', (r.stderr || '').includes('drafts-archive'), r.stderr);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 if (fail) {
   console.log(`\n${USAGE}`);

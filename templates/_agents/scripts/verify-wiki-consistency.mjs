@@ -73,7 +73,11 @@ const gitIgnoredArchive = (() => {
     return new Set();
   }
 })();
-const archiveCount = walkTree(path.join(WIKI, 'drafts-archive')).files.filter((r) => !gitIgnoredArchive.has(r)).length;
+// drafts-archive 缺失：ENOENT 崩栈改明示失败（本脚本是门禁，协议目录被删应 exit 1 而非崩栈，2026-09-24）
+const ARCHIVE_DIR = path.join(WIKI, 'drafts-archive');
+let archiveCount = 0;
+if (fs.existsSync(ARCHIVE_DIR)) archiveCount = walkTree(ARCHIVE_DIR).files.filter((r) => !gitIgnoredArchive.has(r)).length;
+else problems.push('wiki/drafts-archive/ 目录缺失（wiki 协议结构，模板自带）——归档一致性无从校验');
 
 // ---- 看板 DATA 解析 ----
 const html = fs.readFileSync(path.join(WIKI, '知识沉淀总览.html'), 'utf8');

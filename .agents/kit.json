@@ -76,7 +76,11 @@
     },
     {
       "rel": ".agents/scripts/agg-delegations.cjs",
-      "sha256": "f1b88a45cc46f5026eb518b72eb13f5d0a6d8b0b424d91fde1b5a9d6205a7fff"
+      "sha256": "afb4416831af45f1ec21d4959a0eb7300748077c97c9374b43cf60793e88ef59"
+    },
+    {
+      "rel": ".agents/scripts/agg-delegations.test.mjs",
+      "sha256": "372940e2ea72ea8f1e7378ee6c2fdbcc19534d7b5dc327365a4d51775b551557"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -96,11 +100,11 @@
     },
     {
       "rel": ".agents/scripts/gen-wiki-board.mjs",
-      "sha256": "9fd2789ddc3e7133655aaa41bffe2d67961938615925c326372491cb12d7e268"
+      "sha256": "59ecb96d3517d7c8ce5db5f80a56bdaf37e6e4f73950a6e7238882ad2a8a23df"
     },
     {
       "rel": ".agents/scripts/gen-wiki-board.test.mjs",
-      "sha256": "ed3a042c4fb33f489e157cb39a0d5eba17337f8028e6cf76efc0ebe5e09a4266"
+      "sha256": "d6735ffb28c6ebaa740b9fffa5caad4c68d2a5fdbd14bbdf334e0225073ed3f0"
     },
     {
       "rel": ".agents/scripts/gen-workflow-index.mjs",
@@ -112,7 +116,7 @@
     },
     {
       "rel": ".agents/scripts/gen-workflow-metrics.mjs",
-      "sha256": "9445987c961b6e5fb4b6d8083f2dc17545d9bafdff22cc8bc0b7df1f868d54b3"
+      "sha256": "921a23ffd440d12632ee627908ddf6abd1493f5145a484c1c5ea785f719169b7"
     },
     {
       "rel": ".agents/scripts/gen-workflow-metrics.test.mjs",
@@ -140,7 +144,7 @@
     },
     {
       "rel": ".agents/scripts/verify-wiki-consistency.mjs",
-      "sha256": "b0a58e4f02cad8a044e2bb6dd6ef091dfa91d6797bbf3657bc438bb508e90e73"
+      "sha256": "bf12864af41172690bc4359b6a67b622db83c19cfdff7c4fc56ec6a6d6ed48a5"
     },
     {
       "rel": ".agents/scripts/wiki-search.mjs",

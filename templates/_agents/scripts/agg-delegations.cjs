@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /* agg-delegations: 量化证据聚合
- * 读 workflow/delegations.md 两张结果表（委派结果 / 自做任务结果）+ 扫 workflow/incidents/ 按月计数，
+ * 读 workflow/delegations.md 两张结果表（按表头签名识别：委派表含「被委派方」列、自做表=日期+任务一句话；不依赖 ## 节标题）+ 扫 workflow/incidents/ 按月计数，
  * 输出各月指标（一次通过率 / 平均返工次数 / 主兜底占比）、并发扩容门判定、可粘贴的月度快照行。
  * 结果取值：一次通过 | 返工×N | 主兜底 | 返工待修（未闭环，不计入率）。
  * 用法：node .agents/scripts/agg-delegations.cjs [--month=YYYY-MM]（默认输出全部月份 + 全量累计）
@@ -40,29 +40,43 @@ function parseResult(raw) {
   return { kind: 'unknown', rework: 0 };
 }
 
+// splitTables：按表头签名识别两张结果表——节标题只服务人类阅读，表头才是数据边界
+// （2026-09-24 修复：曾按 `## 委派结果` 节标题定位，节结构漂移时已有记录被静默读成「台账为空」）
+function splitTables(text) {
+  const tables = { delegated: [], self: [] };
+  let cur = null;
+  for (const line of text.split(/\r?\n/)) {
+    if (!/^\s*\|/.test(line)) { cur = null; continue; } // 表体边界：连续 | 行；断开即出表
+    const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+    if (cells.some((c) => c.startsWith('被委派方'))) { cur = 'delegated'; continue; } // 委派表表头
+    if (cells[0] === '日期' && cells.some((c) => c.startsWith('任务一句话'))) { cur = 'self'; continue; } // 自做表表头（委派表已被上一行截走）
+    if (cur) tables[cur].push(line); // 表体行（含分隔行——parseTableRows 会滤掉）
+  }
+  return tables;
+}
+
 function readLedger() {
   if (!fs.existsSync(LEDGER)) fail(`找不到 ${LEDGER}`);
   const text = fs.readFileSync(LEDGER, 'utf8');
-  const sections = {};
-  let cur = null;
-  for (const line of text.split(/\r?\n/)) {
-    const h = line.match(/^## (.+)$/);
-    if (h) cur = h[1].trim();
-    if (cur) (sections[cur] = sections[cur] || []).push(line);
-  }
-  const delegated = parseTableRows((sections['委派结果'] || []).join('\n')).map((c) => ({
+  const tables = splitTables(text);
+  const delegated = parseTableRows(tables.delegated.join('\n')).map((c) => ({
     scope: '委派',
     date: c[0],
     actor: c[1],
     result: c[3] || '',
   }));
-  const selfDone = parseTableRows((sections['自做任务结果'] || []).join('\n')).map((c) => ({
+  const selfDone = parseTableRows(tables.self.join('\n')).map((c) => ({
     scope: '自做',
     date: c[0],
     actor: '主智能体',
     result: c[2] || '',
   }));
-  return delegated.concat(selfDone);
+  const rows = delegated.concat(selfDone);
+  // 零数据行时区分「台账真空」与「结构漂移」：有日期开头的数据行却识别不到表 → fail-loud，不再静默「台账为空」
+  if (!rows.length && /^\s*\|\s*\d{4}-\d{2}-\d{2}\s*\|/m.test(text)) {
+    fail(`台账结构漂移：${LEDGER} 存在日期开头的数据行但未识别到结果表（委派表表头须含「被委派方」列，自做表表头须为「日期 | 任务一句话 | 结果 | 备注」）`);
+  }
+  return rows;
 }
 
 function countIncidents() {

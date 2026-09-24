@@ -120,6 +120,13 @@ export function doctor(args, pkgRoot) {
   if (idx.status === 0) add('PASS', 'workflow/INDEX.md 无漂移');
   else add('WARN', `workflow/INDEX.md 漂移——跑 node .agents/scripts/gen-workflow-index.mjs 重生成`);
 
+  // 6.5 delegations 台账结构（量化层非门禁：结构漂移曾静默吞掉全部记录，2026-09-24）
+  if (fs.existsSync(path.join(target, '.agents/scripts/agg-delegations.cjs'))) {
+    const agg = spawnSync(process.execPath, ['.agents/scripts/agg-delegations.cjs'], { cwd: target, encoding: 'utf8' });
+    if (agg.status === 0) add('PASS', 'delegations 台账结构有效（agg 可解析）');
+    else add('WARN', `delegations 台账结构漂移——${String(agg.stderr || agg.stdout || '').split('\n')[0]}`);
+  }
+
   // 7. check-loop
   const cl = spawnSync('sh', ['.agents/scripts/check-loop.sh'], { cwd: target, encoding: 'utf8' });
   if (cl.status === 0) {

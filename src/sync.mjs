@@ -1,5 +1,6 @@
 // flow-kit sync：按 .agents/kit.json 台账升级 managed 文件。
-// 三态：未改动（磁盘 sha==台账）→ 覆盖新版；本地已改 → 跳过并报告（--force 覆盖）；
+// 三态：未改动（磁盘 sha==台账）→ 覆盖新版；本地已改 → 跳过并报告（--force 覆盖；台账保持包侧基线，
+//       每次持续报告直至 --force 或本地对齐新版——防跳过一次后下次升级被静默覆盖，2026-09-24 语义修正）；
 //       生成器目标（INDEX.md / wiki 看板）→ 不比对，收尾重跑生成器走锚点重写。
 // 附带：包内新增 managed 文件 → 安装；包内已删 → 仅报告不删盘、出台账；managed 缺失 → 恢复。
 // owned 文件永不触碰（两态模型，见 profiles.isOwned）。
@@ -86,7 +87,7 @@ export function sync(args, pkgRoot) {
       // 本地已改
       if (freshFile.sha === diskSha) { unchanged++; managedNew.push({ rel, sha256: diskSha }); continue; } // 改动恰好等于新版
       if (force) { fs.copyFileSync(freshFile.abs, disk); updated.push(`${rel}（--force 覆盖本地改动）`); managedNew.push({ rel, sha256: freshFile.sha }); }
-      else { skipped.push(rel); managedNew.push({ rel, sha256: diskSha }); } // 台账跟随磁盘，下次以当前盘面为基线
+      else { skipped.push(rel); managedNew.push({ rel, sha256: ledgerSha }); } // 台账保持包侧基线：持续报告「本地已改」，直到 --force 或本地对齐新版
     }
 
     // 台账外的新文件：managed 类安装；owned 类只对「盘上缺失」的起步文档报告（已装的不动不报）
@@ -109,7 +110,7 @@ export function sync(args, pkgRoot) {
     list('恢复缺失', restored);
     list('新增安装', added);
     list('本地已改，跳过', skipped);
-    if (skipped.some((s) => !s.includes('未入台账'))) console.log('    ↑ --force 覆盖本地改动；git diff 自查差异');
+    if (skipped.some((s) => !s.includes('未入台账'))) console.log('    ↑ --force 覆盖本地改动；git diff 自查差异；台账保持包侧基线，后续 sync 持续报告直至处理');
     list('包内已移除（文件保留在盘上，可手动删除）', removed);
     list('新增 owned 起步文档（项目自持，未自动安装）', newOwned);
     if (!updated.length && !restored.length && !added.length && !removed.length && !skipped.length && !newOwned.length) {

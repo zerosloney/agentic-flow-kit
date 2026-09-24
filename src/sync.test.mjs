@@ -94,7 +94,7 @@ else if (cmd === 'add-gate') addGate(rest, root);
   const rels = kit.managed.map((f) => f.rel);
   check('S1 台账：版本对齐包版本', kit.version === '9.9.9');
   check('S1 台账：gone 出册、new 入册', !rels.includes('.agents/scripts/gone.txt') && rels.includes('.agents/commands/new.txt'));
-  check('S1 台账：跳过文件基线化为用户版 sha', kit.managed.find((f) => f.rel === '.agents/scripts/loc.txt').sha256 === sha256(Buffer.from('loc USER\n')));
+  check('S1 台账：跳过文件保持包侧基线 sha（持续报告，不随盘面基线化）', kit.managed.find((f) => f.rel === '.agents/scripts/loc.txt').sha256 === sha256(Buffer.from('loc v1\n')));
   check('S1 台账：覆盖文件 sha 为新版', kit.managed.find((f) => f.rel === '.agents/scripts/chg.txt').sha256 === sha256(Buffer.from('chg v2 port 777\n')));
   check('S1 owned 不触碰（AGENTS.md 原样）', R(path.join(t, 'AGENTS.md')) === 'owned skeleton v2\n');
   check('S1 已装 owned 不误报新增', !out.includes('新增 owned 起步文档'), out);
@@ -212,6 +212,18 @@ else if (cmd === 'add-gate') addGate(rest, root);
   check('S10 cache 残留不被安装', !fs.existsSync(path.join(t, '.agents/cache/kb-index.json')), r.stdout + r.stderr);
   const kit = JSON.parse(R(path.join(t, '.agents/kit.json')));
   check('S10 cache 不入 managed 台账', !kit.managed.some((f) => f.rel.startsWith('.agents/cache/')), JSON.stringify(kit.managed.filter((f) => f.rel.includes('cache'))));
+}
+
+// ============ 场景 11：跳过件不被下次升级静默覆盖（台账保持包侧基线，2026-09-24 语义修正回归） ============
+{
+  const fx = mkFixture(), t = mkTarget(fx);
+  W(path.join(t, '.agents/scripts/loc.txt'), 'loc USER\n');
+  runCmd('sync', fx, t); // 第一次：本地已改 → 跳过
+  W(path.join(fx, 'templates/_agents/scripts/loc.txt'), 'loc v3\n'); // 包再出新版
+  const r = runCmd('sync', fx, t);
+  const out = r.stdout + r.stderr;
+  check('S11 二次 sync 不覆盖本地改动（loc.txt 仍为用户版）', R(path.join(t, '.agents/scripts/loc.txt')) === 'loc USER\n', out);
+  check('S11 仍按「本地已改，跳过」报告', out.includes('本地已改，跳过') && out.includes('loc.txt'), out);
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${failCount}`);

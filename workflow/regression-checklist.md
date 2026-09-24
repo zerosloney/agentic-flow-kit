@@ -21,3 +21,4 @@
 | incident | 条目 | 落点 |
 |----------|------|------|
 | 2026-09-23-cjs-ext-in-typemodule | 在 `"type":"module"` 的 Node 项目装包后 commit：pre-commit 链须通过（commit-check 不崩） | 本仓库真钩子常开（每份提交自动重验） |
+| 2026-09-24-review-fixes | 生成器/聚合器新增「锚点缺失」类分支必须 fail-loud 并配 fixture 用例；delegations 台账解析、wiki 生成器锚点、sync 跳过件行为随 npm test 回归 | agg-delegations.test.mjs（三场景）/ gen-wiki-board.test.mjs 场景 4-5 / sync.test.mjs S11 |

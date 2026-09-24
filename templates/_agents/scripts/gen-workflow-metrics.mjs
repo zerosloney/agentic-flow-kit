@@ -99,11 +99,13 @@ function scanSurface() {
     let label = pat;
     if (pat.endsWith('/')) {
       const dir = pat.slice(0, -1);
+      if (!fs.existsSync(dir)) { console.error(`⚠️ 预算目录不存在，跳过该条：${pat}`); continue; }
       for (const f of fs.readdirSync(dir)) sum += fs.statSync(path.join(dir, f)).size;
       max = sum;
       label = `${pat}（合计）`;
     } else if (pat.includes('*')) {
       const dir = path.dirname(pat);
+      if (!fs.existsSync(dir)) { console.error(`⚠️ 预算目录不存在，跳过该条：${pat}`); continue; }
       const suffix = pat.slice(pat.indexOf('*') + 1);
       for (const f of fs.readdirSync(dir)) {
         if (!f.endsWith(suffix)) continue;
@@ -113,6 +115,7 @@ function scanSurface() {
       }
       label = `${pat}（单篇最大）`;
     } else {
+      if (!fs.existsSync(pat)) { console.error(`⚠️ 预算文件不存在，跳过该条：${pat}`); continue; }
       sum = max = fs.statSync(pat).size;
     }
     entries.push({ pat, label, sum, max, lim, pct: (max / lim) * 100, isDir: pat.endsWith('/') });

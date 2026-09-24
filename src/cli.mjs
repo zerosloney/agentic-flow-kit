@@ -15,8 +15,9 @@ export const HELP = `flow-kit — AI-Native 闭环工作流 + wiki 知识层脚�
 
 用法：
   flow-kit init             安装到当前项目（裸跑无参数 → 交互确认环节；带参数直接执行）
-  flow-kit sync             升级 managed 文件（未改动→覆盖新版；本地已改→跳过并报告，--force 才覆盖；
-                            INDEX/看板等生成器目标重跑锚点重写；owned 文件永不触碰）
+  flow-kit sync             升级 managed 文件（未改动→覆盖新版；本地已改→跳过并持续报告——台账不基线化，
+                            不会被下次升级静默覆盖；--force 才覆盖；INDEX/看板等生成器目标重跑锚点重写；
+                            owned 文件永不触碰）
   flow-kit add-host <宿主>  后补宿主适配层：zcode | opencode | trae | omp
   flow-kit add-gate <门禁>  装门禁模块并接线 local-pre-commit（当前：dotnet-ca；装后归项目所有）
   flow-kit doctor           体检：目录布局 / git 钩子 / managed 清单 / 索引漂移 / check-loop

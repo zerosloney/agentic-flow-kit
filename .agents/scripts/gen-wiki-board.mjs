@@ -92,7 +92,8 @@ const archiveCount = (() => {
       else if (!gitIgnoredArchive.has(r)) n++;
     }
   };
-  walk(path.join(WIKI, 'drafts-archive'));
+  if (fs.existsSync(path.join(WIKI, 'drafts-archive'))) walk(path.join(WIKI, 'drafts-archive'));
+  else console.error('⚠️ wiki/drafts-archive/ 不存在，归档计数按 0 处理（wiki 协议目录，建议恢复）');
   return n;
 })();
 
@@ -135,8 +136,13 @@ let out = indexText;
   const fixedRows = [...overviewRows, '| drafts-archive | — | 原文档备份（按 日期-主题 分目录） |'];
   out = [...lines.slice(0, headIdx), '| 主题 | 文件数 | 用途 |', '|---|---|---|', ...fixedRows, ...lines.slice(lastData + 1)].join(eol);
 }
-// 合计行数字
-out = out.replace(/合计：\*\*\d+ 份\*\*知识文档，\*\*\d+ 个主题\*\*/, `合计：**${totalFiles} 份**知识文档，**${diskTopics.size} 个主题**`);
+// 合计行数字（锚点缺失即 fail-loud——静默 no-op 会让合计行悄悄陈旧，2026-09-24 审查修复）
+const totalRe = /合计：\*\*\d+ 份\*\*知识文档，\*\*\d+ 个主题\*\*/;
+if (!totalRe.test(out)) {
+  console.error('❌ INDEX「合计」行锚点未找到（须形如「合计：**N 份**知识文档，**M 个主题**」），未写盘');
+  process.exit(1);
+}
+out = out.replace(totalRe, `合计：**${totalFiles} 份**知识文档，**${diskTopics.size} 个主题**`);
 // 映射表区（节标题之间整段重写）
 {
   const lines = out.split(/\r?\n/);
@@ -144,6 +150,10 @@ out = out.replace(/合计：\*\*\d+ 份\*\*知识文档，\*\*\d+ 个主题\*\*/
   const e = lines.findIndex((l) => l.startsWith('## 命名规则'));
   if (s >= 0 && e > s) {
     out = [...lines.slice(0, s + 1), '', mappingSection, '', '---', '', ...lines.slice(e)].join(eol);
+  } else {
+    // 锚点缺失即 fail-loud（对齐速览表/合计行口径）——曾静默跳过致映射表悄悄陈旧仍报 ✅（2026-09-24 审查修复）
+    console.error('❌ INDEX 映射表锚点未找到（须有「## 文件 → 主题 → 归属目录 映射表」与其后的「## 命名规则」），未写盘');
+    process.exit(1);
   }
 }
 
