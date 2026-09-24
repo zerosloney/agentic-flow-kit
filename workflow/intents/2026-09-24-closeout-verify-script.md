@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-24
 模块: pipeline
@@ -36,10 +36,10 @@
 > 红线说明：新增独立脚本与 test.md 关单节的增量用法说明，不改任何既有契约 / 门禁语义，故保持 L1；若实施中发现需改动既有 hooks 或 check-loop 行为，则升级 L2 并补 spec。
 
 ## 验收标准（可测试）
-- [ ] 绿路径：`node .agents/scripts/verify.mjs` 依次执行 npm test 与 check-loop，全过时退出 0 且逐项输出 pass
-- [ ] 红路径：npm test 或 check-loop 任一失败时非零退出，失败原因原样保留不被吞
-- [ ] 双源一致：sync 后 `.agents/scripts/verify.mjs` 与 templates 包源一致，doctor 无漂移告警
-- [ ] test.md 关单节补一行 verify 用法（证据：diff）
+- [x] 绿路径：`node .agents/scripts/verify.mjs` 依次执行 npm test 与 check-loop，全过时退出 0 且逐项输出 pass（证据：实跑 exit 0，输出「✅ 1/2 测试通过 / ✅ 2/2 闭环校验通过 / 全绿——可以关单」；npm test 全套件含 check-loop bash 套件 34 PASS，实现 commit 434755e）
+- [x] 红路径：npm test 或 check-loop 任一失败时非零退出，失败原因原样保留不被吞（证据：verify.test.mjs 6/6 PASS——场景 2 步骤 1 假败 exit 1、场景 3 配对断裂夹具 exit 1；stdio inherit 直通不吞）
+- [x] 双源一致：sync 后 `.agents/scripts/verify.mjs` 与 templates 包源一致，doctor 无漂移告警（证据：flow-kit sync「新增安装 2 + 覆盖更新 1」，doctor 8 PASS 0 FAIL 无漂移）
+- [x] test.md 关单节补一行 verify 用法（证据：commit 434755e diff——templates/_agents/commands/test.md 与装副本关单节首行）
 
 > **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条勾选项后补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 冒烟脚本输出>）`。
 > done 状态仍有未勾项会被 check-loop 拦截（2026-09-12 起新建 intent 为 hard-block，存量 intent 仅 warning 提示）；勾选但缺「证据：」为 warning。
