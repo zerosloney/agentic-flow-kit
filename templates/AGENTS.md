@@ -19,7 +19,7 @@
 
 ### 子智能体
 
-公共角色契约在 `.agents/roles/`（`implementer` / `independent-reviewer` / `ui-verifier`），各宿主经薄适配层（`.opencode/agents/`、`.trae/agents/`、`.zcode/agents/` 等）注册，宿主不支持子智能体时按命令 frontmatter 的 `fallback` 执行。子智能体不跨用户确认门、不替用户批准、不自行提交。
+公共角色契约在 `.agents/roles/`（`implementer` / `independent-reviewer` / `ui-verifier`），各宿主经薄适配层（`.opencode/agents/`、`.trae/agents/`、`.zcode/agents/` 等）注册，宿主不支持子智能体时按命令 frontmatter 的 `fallback` 执行。子智能体不跨用户确认门、不替用户批准、不自行提交。多工作包并行 / 链式执行用编排 runner：`node .agents/scripts/wf-run.mjs <脚本>.mjs`——脚本随 plan 确认后方可执行，API 与 provider 见 `.agents/workflows/_TEMPLATE.md`。
 
 ### 门禁与提交
 

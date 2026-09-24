@@ -242,5 +242,15 @@ else if (cmd === 'add-gate') addGate(rest, root);
   check('S12 有刷新报告', out.includes('owned 台账哈希按盘面刷新 1 份'), out);
 }
 
+// ============ 场景 13：managed 连同父目录整目录缺失 → 恢复并重建父目录（恢复分支 mkdir，2026-09-25） ============
+{
+  const fx = mkFixture(), t = mkTarget(fx);
+  fs.rmSync(path.join(t, '.zcode'), { recursive: true, force: true });
+  const r = runCmd('sync', fx, t);
+  const out = r.stdout + r.stderr;
+  check('S13 整目录缺失的 managed 被恢复（父目录重建）', R(path.join(t, '.zcode/h.txt')) === 'host v2 777\n', out);
+  check('S13 恢复有报告标记', out.includes('恢复缺失'), out);
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${failCount}`);
 process.exit(failCount ? 1 : 0);

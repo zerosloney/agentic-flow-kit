@@ -12,27 +12,27 @@
   "managed": [
     {
       "rel": ".agents/board/index.html",
-      "sha256": "65ae6675d1cb7025ca3e2f478df1185bbdc97e37ff1bd6783856d42d626015e7"
+      "sha256": "e5003faec0d4b56c63247ce06d64b477e505abb2f9ba218b503fb1bbb822c5f8"
     },
     {
       "rel": ".agents/board/marked.min.js",
-      "sha256": "c6c72555c722bd14965949d23f18efc3436a01f751c69e6c821ed3385c1a9f1b"
+      "sha256": "15fabce5b65898b32b03f5ed25e9f891a729ad4c0d6d877110a7744aa847a894"
     },
     {
       "rel": ".agents/commands/build.md",
-      "sha256": "aaf4d00a01e40c1d5e9b72cf400164724a58486f49bdfe121bc50573178ca33f"
+      "sha256": "6a35160bda4d2ae2cb5b8f47c311fb6da5e7dd52bb1371e7108c8608206212c4"
     },
     {
       "rel": ".agents/commands/deploy.md",
-      "sha256": "92f74aae3b9c1f302f64da648cf264f527bae32d121712d07b9487050533e575"
+      "sha256": "4a881a4a01fb3850da443fe5cf03715a2fd17b971755084dfc4e1e7ee7f66721"
     },
     {
       "rel": ".agents/commands/design.md",
-      "sha256": "4b782eb2780a964fe3b360bd4a1101f232dfeb865fab1aa718bb06223d3d28a6"
+      "sha256": "0fdf251fc4bd4e6ea462032ca77b330853ce7fb868da04718bcb85d2d95645a7"
     },
     {
       "rel": ".agents/commands/maintain.md",
-      "sha256": "608903d17a90398244f185d4bcaa276585b3d038e4eada19955e89eef714cbc0"
+      "sha256": "26203f7b73d450e122c45608e896daa7cd4b86311eed903d8ddd7102d2a5593e"
     },
     {
       "rel": ".agents/commands/new-task.md",
@@ -40,19 +40,19 @@
     },
     {
       "rel": ".agents/commands/plan.md",
-      "sha256": "ca44f7f26d4814e7453c7e7b02e2bafa4855787f3f15388046f1c03d2dde8e71"
+      "sha256": "e71c17755bc2f146a2353a14c61f0bbc0b7a968ad1e9625658db40a91d0a6de3"
     },
     {
       "rel": ".agents/commands/review.md",
-      "sha256": "8be077df38b7f74fa9f170cc83f493c57a78622a9c9a324f4cf3d8723d14e725"
+      "sha256": "38a82574128bfa9fae5d65f1eef9c86430df378938f464ee650db44732e8ef86"
     },
     {
       "rel": ".agents/commands/test.md",
-      "sha256": "93643b213b0faddd8db83509081f805854dbe5463873ac2d9516210aa9cc9c9e"
+      "sha256": "12162f296882fb4b008294bce997166cdf8d51337201b18b49e1659c61e762fe"
     },
     {
       "rel": ".agents/hooks/check-pairing-incremental.sh",
-      "sha256": "3d382a4f9770d5ac08badd715df2877141e42860fb95a3bb84be6e4965dbc289"
+      "sha256": "db495076f4d35dd6443b06e6aa7bcc1bc385a297591b18ad22b8eb753eded4f2"
     },
     {
       "rel": ".agents/hooks/check-wiki-ledger.sh",
@@ -60,23 +60,23 @@
     },
     {
       "rel": ".agents/hooks/commit-check.cjs",
-      "sha256": "865b11645bcc0a6395e12188f9eff28f711cebb98fd3c5a599ad81edb9ddfc4c"
+      "sha256": "54694a721a96ef1d6d2c116d9aa79dd0bc3d50884f790c4bd0eacb30fc057c36"
     },
     {
       "rel": ".agents/roles/implementer.md",
-      "sha256": "7dae4e88fb9cc5b9ff8a9a930c5002c1383d86cbdd0bab8fa44df6bb565e59e6"
+      "sha256": "9046a24ecbf89d31761400d0406a3f35f4c0a49e0518dbfbce939581f8e3bf19"
     },
     {
       "rel": ".agents/roles/independent-reviewer.md",
-      "sha256": "b1829d6d275f27ec7897b493c42813f9fe9bb15bbd869f13cb89a656154ae649"
+      "sha256": "8f7e0d046afa78de696a3eb657083b57266d72f5212a2d404e35d3a1f0ff7297"
     },
     {
       "rel": ".agents/roles/ui-verifier.md",
-      "sha256": "99236aedab1ed001dffb196d70a44d4b8a4c457d9d0325a48f31f6a937f1716d"
+      "sha256": "9ee5efb7c0fbf37feceecdaeadd8d7d2bb2e20c7563ef361e5a66888470caf8e"
     },
     {
       "rel": ".agents/scripts/agg-delegations.cjs",
-      "sha256": "81ba1ae3849da67cabefe964df720237857cf8415a22637c0c633b0e87406c5b"
+      "sha256": "643626ed3c09b6b31f58f16eed5b2c390727660f23bd8e68fe3bae5912bae1b6"
     },
     {
       "rel": ".agents/scripts/agg-delegations.test.mjs",
@@ -88,7 +88,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.sh",
-      "sha256": "9cfd47bb26277c33ed3e616a1cd21cf87df333b009e363ec6bf47bd8bc28d013"
+      "sha256": "f19ba8b7303669e789d4db2fd7c4ca1707ad0bcc44925510318b1b8929ea1dc0"
     },
     {
       "rel": ".agents/scripts/commit-check-trigger.test.mjs",
@@ -155,20 +155,40 @@
       "sha256": "e2764c810fe6963495b2b1358d7ab7771136904f6e11996b38611ad5cdce261d"
     },
     {
+      "rel": ".agents/scripts/wf-run.mjs",
+      "sha256": "ef20d7ec4324fc83b767efe5dcc1f8b670f88052f11b499d8f3df989fab13bd2"
+    },
+    {
+      "rel": ".agents/scripts/wf-run.test.mjs",
+      "sha256": "2a880e87790d8cec416e1b869fa88aba0152da4c117513eba071f5c646a0aedc"
+    },
+    {
       "rel": ".agents/scripts/wiki-search.mjs",
       "sha256": "a493c85924644613619b83334b6f8e4db40ebf0d398960738422116d3afd3015"
     },
     {
       "rel": ".agents/scripts/workflow-board-server.mjs",
-      "sha256": "836ce6aa6b8b8a416af7954fe36e26db1d7ac3ef5656fcbb39cdd2f641b4e31b"
+      "sha256": "193cc31684fb92bafd166b17c55ef5f02ceecc7d2b7ca8a68fdc9ebb1051c51a"
     },
     {
       "rel": ".agents/skills/verify-ui/SKILL.md",
-      "sha256": "c5a9d43570e71027ae1d76b90fd59dba0ea67675c39661f35d162f768e8a9a4b"
+      "sha256": "35ff0437d4a62331f897aedd187c882dd391b01d60579044ae43861688983488"
     },
     {
       "rel": ".agents/skills/wiki/SKILL.md",
-      "sha256": "3d8d54f19478f88552253b8309dd7e85ed93243c23fa06f0c833f1d4df86876f"
+      "sha256": "9d541dfbf9c6095728d75e3639111e7f1ff6d2f58f0040e2a75da655844dba50"
+    },
+    {
+      "rel": ".agents/workflows/_TEMPLATE.md",
+      "sha256": "b14e43a34cb7141991adb5807f394aabe40e4d5c7285b6bcb7f71242a17628fd"
+    },
+    {
+      "rel": ".agents/workflows/示例-并行实现评审.mjs",
+      "sha256": "957f9e1e43bc99ee2c50b99f3319e58c7cc036a4e01fc2a1f7d9747436fd9ffe"
+    },
+    {
+      "rel": ".agents/workflows/providers.json",
+      "sha256": "8ce8ce35b27525d2c5b3136de1147ba89e9c6e24f72ef8beda9bb670ff3d9710"
     },
     {
       "rel": ".githooks/commit-msg",
@@ -188,41 +208,41 @@
     },
     {
       "rel": ".githooks/pre-push",
-      "sha256": "c67e4b448c2bf5c6630b2933136cf8200a65f698b05eb66fb8c2537139d8176a"
+      "sha256": "f90a7e7b9a9c04d3b691f9a1ee36337c7139fb9f2b49ff487de78818366a89e8"
     },
     {
       "rel": ".zcode/agents/implementer.md",
-      "sha256": "bd5b6291b33f0f87b1755fe3b4fc7aab7787690407c037ba1750686e3b1f95a9"
+      "sha256": "948823012484759f3d52b09abcbdfc7bfdf4b75395fbfb35541111ca313dad4e"
     },
     {
       "rel": ".zcode/agents/independent-reviewer.md",
-      "sha256": "a86929cd28f2c4ba2954a979437d7e9abe8418544b76a6e2545ea0fa39320985"
+      "sha256": "4850c56b387b5833844b7a8d8287403db6da8d3a9d1d37205c5fbf0464273b61"
     },
     {
       "rel": ".zcode/agents/ui-verifier.md",
-      "sha256": "3c49e0d74f369900a8d28c2143e70ffb09d0b17b542848a9d925936bd789495a"
+      "sha256": "1ba2f8e71c8c8aba6f0f4088237d213c807c83057f16e5a1af54aac3fe6fad41"
     }
   ],
   "owned": [
     {
       "rel": "AGENTS.md",
-      "sha256": "6f2fa963d127412509bb9ab9f94dcacc06271adaa96463c4cfe96a15ec6db51a"
+      "sha256": "b8cb813786c043ed1fa32531b8bd0e1617bb252c02397360df89581b552fa040"
     },
     {
       "rel": "wiki/drafts-archive/README.md",
-      "sha256": "623fe32d78312453ec593d9f8fcf677344a4f9f0c8ae8efd31303efed2d4c350"
+      "sha256": "2af6e4bc2e079c07a8114f0f849ae15f0989eaebaf574d67a00e93d2378b2c4c"
     },
     {
       "rel": "wiki/INDEX.md",
-      "sha256": "6429a96dc7064370dd274ae4558cd6ccea390889295f54fb18cc1918f8d88627"
+      "sha256": "3447802ea0b80413fe579d90fbf145f278f895e934d9d3a821a115c4c0d11b18"
     },
     {
       "rel": "wiki/知识沉淀总览.html",
-      "sha256": "a76e57acfaac329b41cbd7df54a27244e6247dfa0599f18ba95e8bf9a2be0991"
+      "sha256": "6e3bdb054654a73f38135bffec7efa093775279a5c0fcd069e7f69bae7b3e11a"
     },
     {
       "rel": "workflow/incidents/_TEMPLATE.md",
-      "sha256": "1251f74149c5abec042f1e999df05d072f23863ab191778dd6646ed372d78c97"
+      "sha256": "a85d11aaab86cf5d94320d6232977b599c530bc833bc188441012a55a09adbee"
     },
     {
       "rel": "workflow/intents/_TEMPLATE.md",
@@ -230,15 +250,15 @@
     },
     {
       "rel": "workflow/papercuts.md",
-      "sha256": "1cc91792e763126585c910e307f48fe901466674454878884d8d4bc6a1acde1d"
+      "sha256": "e2913c39d617e4f9cc4353db427f5a6d8a2baa72eb0ddb42362efc6f57851ace"
     },
     {
       "rel": "workflow/plans/_TEMPLATE.md",
-      "sha256": "ffe9824567c40d222aab9e3c9f122559bef90c4eee61ab8f88240fce5624fd62"
+      "sha256": "2d74abe9fbb68790e64dbc72be96b4117a7ed4710b27a5298d907b12d44555ba"
     },
     {
       "rel": "workflow/regression-checklist.md",
-      "sha256": "f4ad224fcc3f2234b4d9f3e41e8871c91492483197c87ecde803fa3b4a2028c9"
+      "sha256": "80d9572e00e3d41b9c2292dd35471c2ac2fa6ac8b654f81fe68c0811d1fa245e"
     },
     {
       "rel": "workflow/specs/_TEMPLATE.md",
@@ -246,27 +266,27 @@
     },
     {
       "rel": ".agents/hooks/local-pre-commit",
-      "sha256": "ca855027bd8d33535f3fa18b48a2612e4a0c76ea8633e62d73a290ff392f0537"
+      "sha256": "04b81ad6bbc80aca4308eab1ad429cc61228c21b758b6232ee369c6f9d0864b2"
     },
     {
       "rel": ".agents/notes/runtime-env.md",
-      "sha256": "5f02aa1dbe39c56d3742cab930ddeb2c49778da2c6875af7a89119d143daccc4"
+      "sha256": "ad08441ed426f504f87bc52cd81660291d9520e413c29463e81450b8dc3d59f7"
     },
     {
       "rel": ".agents/rule-budgets.txt",
-      "sha256": "3d21d9b8ab66915aac36e508d0c671dfd77304bbad56aa06e77df9cb2d707fe1"
+      "sha256": "10839cf76a9a682556b738306d4886cf401812b04da04d46aa35f1b5992b1e8d"
     },
     {
       "rel": ".agents/workflow-modules.txt",
-      "sha256": "d03593598f6b0495ebc650019c474da0d6538da06c6f58ccc00bd5a9cdc760f1"
+      "sha256": "bebbf71fb29571c258d973fc1924f72cb2a3703faa94f9dd12b34804bee37222"
     },
     {
       "rel": ".agents/settings.json",
-      "sha256": "d1be55d7f5e5f349a8bf9806209aa9e14baa0e14d901b166012e90737d404c2a"
+      "sha256": "343c5a9b11ef53f6fc6e855a16a3ab5c3fd567fc69620aecaa8dd11ea1b2a4a7"
     },
     {
       "rel": ".agents/hooks/commit-check.config.json",
-      "sha256": "c52fca656886381656865423297a8a233e3965ec98e7580cc98ec400b079fc36"
+      "sha256": "b36912bc28cc188f0171d09e90f8530a62fd361a52d917a286d6d2c0b980b926"
     }
   ]
 }

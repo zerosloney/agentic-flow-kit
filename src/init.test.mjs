@@ -1,9 +1,15 @@
 #!/usr/bin/env node
-// init.mjs 交互解析纯函数测试（normalizeStack / parseChoices）——不触真实安装与 stdin
+// init.mjs 交互解析纯函数测试（normalizeStack / parseChoices）+ 装户面断言——解析层不触真实安装与 stdin；
+// 装户面节对真实 templates/ 树跑 renderTree（init/sync 同一装户路径），断言编排 runner 与 workflows 目录在装户清单内。
 // 断言：①ts/js 别名归一 node；②序号/名称/混输/全角逗号/空白分隔解析正确（去重保序）；
-//       ③非法输入返回 null（就地重问信号）；④空输入回默认（EOF/直接回车安全回退）。
+//       ③非法输入返回 null（就地重问信号）；④空输入回默认（EOF/直接回车安全回退）；⑥装户面含 runner/workflows。
 // 用法：node src/init.test.mjs
 import { normalizeStack, parseChoices, hasAgentsSkeleton, mergeAgents } from './init.mjs';
+import { renderTree } from './render.mjs';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 let pass = 0;
 let fail = 0;
@@ -47,6 +53,19 @@ check('合并：原内容在上、空行分隔、骨架在下',
 check('合并：原内容尾部空白折叠不产生连续空行',
   mergeAgents('# A\n内容\n\n\n', '<!-- m -->\n# B') === '# A\n内容\n\n<!-- m -->\n# B\n');
 check('合并：原内容为空时骨架即全文', mergeAgents('', '<!-- m -->\n# B') === '<!-- m -->\n# B\n');
+
+// ---- ⑥ 装户面：真实模板树含编排 runner 与 workflows（init/sync 同走 renderTree，结构保证装户必有） ----
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-surface-'));
+  const pkgRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const t = renderTree(path.join(pkgRoot, 'templates'), tmp, { BOARD_PORT: '8933' }, { force: true });
+  const rels = new Set(t.written.map((w) => w.rel));
+  check('装户面含编排 runner（.agents/scripts/wf-run.mjs）', rels.has('.agents/scripts/wf-run.mjs'));
+  check('装户面含 workflows 三件（_TEMPLATE / providers.json / 示例）',
+    rels.has('.agents/workflows/_TEMPLATE.md') && rels.has('.agents/workflows/providers.json') && rels.has('.agents/workflows/示例-并行实现评审.mjs'),
+    [...rels].filter((r) => r.includes('workflows')).join('、'));
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 if (fail) {

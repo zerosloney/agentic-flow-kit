@@ -65,6 +65,7 @@ next: .agents/commands/test.md
 ## 子代理调用约定
 
 - plan 起草、风险判断、改动清单与两道确认门由主智能体负责;仅两道确认后范围明确的工作包可委派 `implementer`,公共接口 / Schema / 依赖 / 安全 / 权限 / 破坏性操作不得委派。
+- 多工作包并行 / 链式推进:编排 runner(`node .agents/scripts/wf-run.mjs <脚本>.mjs`)——workflow 脚本随 plan 草稿一并确认,确认前只可 `--dry-run`;runner 与子智能体均不 commit / push;详见 `.agents/workflows/_TEMPLATE.md`。
 - 子智能体返回后,主智能体须检查 diff 与授权文件范围、确认未覆盖既有修改并重跑相关验证;不支持子智能体时 `fallback: main`,验收标准不变。
 
 ## 确认后

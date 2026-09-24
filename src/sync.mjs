@@ -74,6 +74,7 @@ export function sync(args, pkgRoot) {
       }
       const diskSha = fs.existsSync(disk) ? sha256(fs.readFileSync(disk)) : null;
       if (diskSha === null) {
+        fs.mkdirSync(path.dirname(disk), { recursive: true }); // 父目录可能整目录缺失（如 localOnly 宿主目录被清），copyfile 不建目录
         fs.copyFileSync(freshFile.abs, disk);
         restored.push(rel);
         managedNew.push({ rel, sha256: freshFile.sha });

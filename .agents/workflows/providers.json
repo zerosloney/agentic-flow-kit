@@ -1,0 +1,6 @@
+{
+  "zcode": { "cmd": ["zcode", "exec", "{PROMPT}"] },
+  "claude": { "cmd": ["claude", "-p", "{PROMPT}"] },
+  "opencode": { "cmd": ["opencode", "run", "{PROMPT}"] },
+  "codex": { "cmd": ["codex", "exec", "{PROMPT}"] }
+}
