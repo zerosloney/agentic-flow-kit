@@ -1,6 +1,6 @@
 {
   "kit": "agentic-flow-kit",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "createdAt": "2026-09-23T15:07:19.753Z",
   "options": {
     "hosts": [
@@ -32,7 +32,7 @@
     },
     {
       "rel": ".agents/commands/maintain.md",
-      "sha256": "7d49cf3cfa0514fb1a9ab284c3b956216aa1835eaa952282fb0717963e71cfa4"
+      "sha256": "608903d17a90398244f185d4bcaa276585b3d038e4eada19955e89eef714cbc0"
     },
     {
       "rel": ".agents/commands/new-task.md",
@@ -40,7 +40,7 @@
     },
     {
       "rel": ".agents/commands/plan.md",
-      "sha256": "b7bf2ab8f44c0e1eb257ec39f2fe7394c95e6f2c45171fa520c506bd8f4c4ae1"
+      "sha256": "ca44f7f26d4814e7453c7e7b02e2bafa4855787f3f15388046f1c03d2dde8e71"
     },
     {
       "rel": ".agents/commands/review.md",
@@ -95,8 +95,8 @@
       "sha256": "5f45413b523a8e7d8d2992f513f630e6b6c73c1029e46fff812284499805176e"
     },
     {
-      "rel": ".agents/scripts/ensure-board.ps1",
-      "sha256": "9efda00dd88a2d0bbcfa569b23794d487051251f3cd00626587c0ae234ff0df8"
+      "rel": ".agents/scripts/ensure-board.mjs",
+      "sha256": "b6f3cc9b9683f479258ad3e12ed4b3ac7eba47433238af01199a30b1be3aa230"
     },
     {
       "rel": ".agents/scripts/gen-wiki-board.mjs",
@@ -160,7 +160,7 @@
     },
     {
       "rel": ".agents/scripts/workflow-board-server.mjs",
-      "sha256": "8d07817398677d2aef703b0e0d45d0a07b87f5013ddb4375855ef1f6f865ceec"
+      "sha256": "836ce6aa6b8b8a416af7954fe36e26db1d7ac3ef5656fcbb39cdd2f641b4e31b"
     },
     {
       "rel": ".agents/skills/verify-ui/SKILL.md",
@@ -206,7 +206,7 @@
   "owned": [
     {
       "rel": "AGENTS.md",
-      "sha256": "e749eeab3be5c2e9fcb8b46fb30ca3773781dd651ec288f4d715574209cc50ef"
+      "sha256": "6f2fa963d127412509bb9ab9f94dcacc06271adaa96463c4cfe96a15ec6db51a"
     },
     {
       "rel": "wiki/drafts-archive/README.md",

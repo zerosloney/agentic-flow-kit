@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // workflow 实时看板服务：本地只读 http + SSE 文件监听，可视化 AI 执行流程（intents/incidents/plans/specs）。
-// 用法：node .agents/scripts/workflow-board-server.mjs [--port 8933]
+// 用法：node .agents/scripts/workflow-board-server.mjs [--port 8933]；多项目并行请用 ensure-board.mjs 拉起（自动上探可用端口）
 // 零依赖（node:http/node:fs/node:path/node:url/node:child_process）；只读 workflow/ 与 git，仅绑 127.0.0.1。
 // API：GET /（看板页） /marked.min.js（vendor） /api/board /api/doc?file=<相对路径> /api/history?file=<相对路径> /api/events（SSE）
 // 实时边界：文档内容与状态随落盘实时（fs.watch→SSE 推送）；git 历史仅含已提交记录（git 语义）。
@@ -17,6 +17,7 @@ const DOC_TYPES = ['intents', 'incidents', 'plans', 'specs'];
 
 const portArg = process.argv.indexOf('--port');
 const PORT = portArg > 0 ? Number(process.argv[portArg + 1]) || 8933 : 8933;
+const STARTED_AT = Date.now(); // 随 /api/board 自报（startedAt），供 ensure-board.mjs 判定旧代码重启，不碰进程启动时间 API
 
 // ---- front matter + 标题解析（对照 _TEMPLATE.md 受限子集：每行 `键: 值`）----
 function parseDoc(text) {
@@ -155,7 +156,7 @@ async function scanBoard() {
   }
   detectAlerts(cards);
   cards.sort((a, b) => b.date.localeCompare(a.date) || a.type.localeCompare(b.type));
-  return { root: ROOT, counts, cards };
+  return { root: ROOT, pid: process.pid, startedAt: STARTED_AT, counts, cards };
 }
 
 // ---- 路径白名单：resolve 后必须仍在 workflow/ 内 ----
@@ -238,6 +239,12 @@ const server = http.createServer(async (req, res) => {
   } catch (e) {
     sendJson(res, 500, { error: e.message });
   }
+});
+
+// 绑定失败明确退出（EADDRINUSE 常见于直跑撞端口；ensure-board 会先探活选端口，这里兜底可读报错）
+server.on('error', (e) => {
+  console.error(`workflow 看板启动失败（端口 ${PORT}${e.code === 'EADDRINUSE' ? ' 已被占用' : ''}）：${e.code || e.message}`);
+  process.exit(1);
 });
 
 server.listen(PORT, '127.0.0.1', () => {

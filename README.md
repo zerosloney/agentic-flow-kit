@@ -63,3 +63,4 @@ modules/gates/      可选门禁模块（dotnet-ca：Clean Architecture 参考�
 - [x] v0.2.1：Shipyard 回流第二笔（模板引用去死链 + owned 台账记账策略：add-gate 接线刷新 + sync 盘面自愈）+ 全项目审查修复（量化台账 fail-loud / 生成器锚点与 ENOENT 守卫 / sync 跳过件持续报告 / P4 清账 / metrics glob 词表收口）——已发布
 - [x] v0.3.0：init 交互升级（序号菜单 + ANSI 色彩降级 + ts/js 技术栈别名归一 node）+ AGENTS.md 骨架探测补齐（已存在无标记时文末追加，原内容保留）+ wiki 模板预置 7 主题内容目录 + 关单 verify 固定编排（npm test + check-loop 一键过门，非绿不关单）+ workflow 看板纸墨视觉改版
 - [x] v0.3.1：doctor 修复——Windows 无 sh 环境（PowerShell）把 sh ENOENT 误报成 check-loop hard-block（探测分流：明示「未跑勿当作通过」，git 钩子门禁不受影响）
+- [x] v0.4.0：看板端口自动上探（基端口起探首个可用端口，多项目并行不冲突；`/api/board` 自报 pid/startedAt，root 比对识别本项目、他人进程不动手不 kill）+ 跨平台入口 `ensure-board.mjs` 取代 Windows 专属 `ensure-board.ps1`（Windows/Linux/macOS 零依赖单入口）

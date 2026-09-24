@@ -149,8 +149,8 @@ export function doctor(args, pkgRoot) {
   portInUse(port).then((inUse) => {
     print(results);
     console.log(inUse
-      ? `ℹ️  看板端口 ${port} 已有监听（ensure-board 探活复用；他人进程不 kill，见 workflow/README.md）`
-      : `ℹ️  看板端口 ${port} 空闲（看板默认不拉起；需要时手动 .agents/scripts/ensure-board.ps1 或 node .agents/scripts/workflow-board-server.mjs）`);
+      ? `ℹ️  看板端口 ${port} 已有监听（ensure-board 探活：本项目看板复用/旧代码重启，他人进程不 kill 自动上探，见 workflow/README.md）`
+      : `ℹ️  看板端口 ${port} 空闲（看板默认不拉起；需要时手动 .agents/scripts/ensure-board.mjs（跨平台）或 node .agents/scripts/workflow-board-server.mjs）`);
     process.exit(results.some((r) => r.level === 'FAIL') ? 1 : 0);
   });
 }

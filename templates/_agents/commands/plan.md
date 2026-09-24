@@ -16,7 +16,7 @@ next: L1 → .agents/commands/build.md ；L2/L3 → .agents/commands/design.md
 
 ## 执行
 
-> **看板（可选，默认不拉起）**：需要实时看板时手动跑 powershell -NoProfile -File .agents/scripts/ensure-board.ps1（幂等：探活 / 旧代码自动重启 / 全新启动才弹浏览器），链接 http://127.0.0.1:{{BOARD_PORT}} ；不开看板不影响任务流程。
+> **看板（可选，默认不拉起）**：需要实时看板时手动跑 node .agents/scripts/ensure-board.mjs（跨平台；幂等：探活 / 旧代码自动重启 / 全新启动才弹浏览器；多项目并行自动上探首个可用端口），链接以脚本输出为准（基端口 {{BOARD_PORT}}）；不开看板不影响任务流程。
 
 1. 若 `workflow/intents/` 已有目标 intent 且状态为 approved → 按级别跳 next（L1 → `build.md`，L2/L3 → `design.md`）
 2. 否则起草新 intent:

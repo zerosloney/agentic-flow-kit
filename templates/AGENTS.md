@@ -31,7 +31,7 @@
 ### 检索、看板与量化
 
 - 跨语料检索：`node .agents/scripts/kb-search.mjs "<词>"`（workflow 节级定位 + wiki 全文）；活跃流程读 `workflow/INDEX.md`（状态变更后 `node .agents/scripts/gen-workflow-index.mjs` 重生成）。
-- workflow 看板（可选，默认不拉起）：需要时手动跑 `.agents/scripts/ensure-board.ps1`，然后访问 http://127.0.0.1:{{BOARD_PORT}}（只读预警层，非门禁）。
+- workflow 看板（可选，默认不拉起）：需要时手动跑 `node .agents/scripts/ensure-board.mjs`（跨平台，Windows/Linux/macOS 通用），端口从基端口 {{BOARD_PORT}} 起自动上探首个可用（多项目并行不冲突），链接以脚本输出为准（只读预警层，非门禁）。
 - 委派 / 自做结果留痕 `workflow/delegations.md`（聚合 `node .agents/scripts/agg-delegations.cjs`）；命令 / 技能卡壳记 `workflow/papercuts.md`，不当场顺手改。
 
 ### 验证与关单
