@@ -52,6 +52,7 @@ export function addGate(args, pkgRoot) {
   if (skipped.length) console.log(`  跳过（已存在，--force 覆盖）：${skipped.join('、')}`);
 
   // 接线 local-pre-commit（幂等：挂载行已存在不重复；旧装态尾部 exit 0 会吞掉其后门禁的失败——归一化剥掉）
+  let wiredLp = false;
   if (wireLine) {
     const lpPath = path.join(hooksDir, 'local-pre-commit');
     const cur = fs.existsSync(lpPath) ? fs.readFileSync(lpPath, 'utf8') : '';
@@ -67,14 +68,20 @@ export function addGate(args, pkgRoot) {
       const body = lines.length ? `${lines.join('\n')}\n` : '#!/bin/sh\nset -e\n';
       fs.writeFileSync(lpPath, `${body}${wireLine}\n`);
       console.log(`  local-pre-commit 接线：+ ${wireLine}`);
+      wiredLp = true;
     }
   }
 
-  // owned 台账补记（归项目所有，sync 永不覆盖）
+  // owned 台账补记（归项目所有，sync 永不覆盖）。接线改写了 local-pre-commit（init 时按模板态记账）——
+  // 须同步刷新其 owned 哈希，否则台账停在模板态（Shipyard 回流发现的漂移根因，2026-09-24）
   const ownedLedger = new Map((kit.owned || []).map((f) => [f.rel, f]));
   for (const name of installed) {
     const rel = `.agents/hooks/${name}`;
     ownedLedger.set(rel, { rel, sha256: sha256(fs.readFileSync(path.join(hooksDir, name))) });
+  }
+  if (wiredLp) {
+    const lpRel = '.agents/hooks/local-pre-commit';
+    ownedLedger.set(lpRel, { rel: lpRel, sha256: sha256(fs.readFileSync(path.join(hooksDir, 'local-pre-commit'))) });
   }
   kit.owned = [...ownedLedger.values()].sort((a, b) => a.rel.localeCompare(b.rel));
   fs.writeFileSync(kitPath, `${JSON.stringify(kit, null, 2)}\n`);

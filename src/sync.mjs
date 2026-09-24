@@ -119,7 +119,22 @@ export function sync(args, pkgRoot) {
       console.log(`  无变化 ${unchanged} 份`);
     }
 
-    // 台账重写：版本对齐当前包；removed 出册；skipped 盘面基线化
+    // owned 台账按盘面自愈：owned 归项目所有，哈希只是记账不是约束——手改后无须手工刷 kit.json
+    // （Shipyard 回流策略，2026-09-24：曾在消费仓被迫手工刷新 owned 哈希，根因收敛到此处）
+    let ownedRefreshed = 0;
+    if (Array.isArray(kit.owned)) {
+      kit.owned = kit.owned.map((f) => {
+        const p = path.join(target, f.rel);
+        if (!fs.existsSync(p)) return f;
+        const disk = sha256(fs.readFileSync(p));
+        if (disk === f.sha256) return f;
+        ownedRefreshed++;
+        return { ...f, sha256: disk };
+      });
+    }
+    if (ownedRefreshed) console.log(`  owned 台账哈希按盘面刷新 ${ownedRefreshed} 份（owned 归项目所有，仅记账不约束）`);
+
+    // 台账重写：版本对齐当前包；removed 出册；skipped 保持包侧基线持续报告
     kit.managed = managedNew.sort((a, b) => a.rel.localeCompare(b.rel));
     kit.version = pkg.version;
     fs.writeFileSync(kitPath, `${JSON.stringify(kit, null, 2)}\n`);

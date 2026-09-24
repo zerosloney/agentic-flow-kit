@@ -46,7 +46,7 @@ modules/gates/      可选门禁模块（dotnet-ca：Clean Architecture 参考�
 
 **两态文件模型**：`.agents/kit.json` 记录 managed（引擎件，随包升级）与 owned（项目内容，永不覆盖）清单及 sha256；`doctor` 会校验漂移。已存在的文件 init 保守跳过（`--force` 覆盖）。
 
-**升级语义（sync）**：managed 文件三方比对（台账 sha / 磁盘 sha / 新版渲染 sha）——未改动 → 直接覆盖新版；本地已改 → 跳过并报告（`--force` 才覆盖，git diff 自查差异；跳过件的台账保持包侧基线，后续每次 sync 持续报告，不会在下次升级被静默覆盖——消除报告的办法：`--force` 覆盖，或把本地内容改回与新版一致）；改动恰好等于新版 → 视为已最新。包内新增文件自动安装；包内已删文件仅报告不删盘；缺失的 managed 文件自动恢复。INDEX / wiki 看板等生成器目标不比对 sha，收尾重跑生成器走锚点重写。门禁模块（add-gate 装入）归项目所有，sync 永不覆盖。add-host 对已存在的宿主文件保守跳过且不入台账——后续 sync 不升级（仅报告「已存在未入台账」），要纳入包管理用 `--force` 覆盖。
+**升级语义（sync）**：managed 文件三方比对（台账 sha / 磁盘 sha / 新版渲染 sha）——未改动 → 直接覆盖新版；本地已改 → 跳过并报告（`--force` 才覆盖，git diff 自查差异；跳过件的台账保持包侧基线，后续每次 sync 持续报告，不会在下次升级被静默覆盖——消除报告的办法：`--force` 覆盖，或把本地内容改回与新版一致）；改动恰好等于新版 → 视为已最新。包内新增文件自动安装；包内已删文件仅报告不删盘；缺失的 managed 文件自动恢复。INDEX / wiki 看板等生成器目标不比对 sha，收尾重跑生成器走锚点重写。门禁模块（add-gate 装入）归项目所有，sync 永不覆盖。add-host 对已存在的宿主文件保守跳过且不入台账——后续 sync 不升级（仅报告「已存在未入台账」），要纳入包管理用 `--force` 覆盖。owned 件归项目所有、sync 永不覆盖；其台账哈希仅记账不约束，sync 每次按盘面自愈刷新（手改后无须手工对账），add-gate 接线 local-pre-commit 后同步刷新其记账。
 
 ## 设计原则
 
@@ -60,3 +60,4 @@ modules/gates/      可选门禁模块（dotnet-ca：Clean Architecture 参考�
 - [x] v0.1.0：init（flags 模式）+ doctor + 4 宿主适配 + dotnet-ca 门禁模块
 - [x] v0.2.0：sync 升级（未动覆盖 / 已改跳过报告 + `--force` / 生成器锚点重写）+ add-host / add-gate
 - [x] v0.2.0 已发布：npm view agentic-flow-kit（npx agentic-flow-kit init 即用；默认镜像源用户需等 npmmirror 同步或 --registry npmjs）
+- [x] v0.2.1：Shipyard 回流第二笔（模板引用去死链 + owned 台账记账策略：add-gate 接线刷新 + sync 盘面自愈）+ 全项目审查修复（量化台账 fail-loud / 生成器锚点与 ENOENT 守卫 / sync 跳过件持续报告 / P4 清账 / metrics glob 词表收口）——npm publish 待执行

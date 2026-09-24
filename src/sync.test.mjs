@@ -182,6 +182,10 @@ else if (cmd === 'add-gate') addGate(rest, root);
   check('S8 local-pre-commit 接线（缺失则建 set -e 头）', R(path.join(t, '.agents/hooks/local-pre-commit')) === '#!/bin/sh\nset -e\nsh .agents/hooks/gate.sh\n', out);
   const kit = JSON.parse(R(path.join(t, '.agents/kit.json')));
   check('S8 owned 台账补记（归项目所有）', kit.owned.some((f) => f.rel === '.agents/hooks/gate.sh'));
+  check('S8 接线后 local-pre-commit 进 owned 且哈希=盘面（Shipyard 回流根因，2026-09-24）', (() => {
+    const e = kit.owned.find((f) => f.rel === '.agents/hooks/local-pre-commit');
+    return e && e.sha256 === sha256(Buffer.from(R(path.join(t, '.agents/hooks/local-pre-commit')), 'utf8'));
+  })(), JSON.stringify(kit.owned));
   runCmd('add-gate', fx, t, ['fakeg']); // 再跑一遍
   check('S8 幂等：接线行不重复', R(path.join(t, '.agents/hooks/local-pre-commit')) === '#!/bin/sh\nset -e\nsh .agents/hooks/gate.sh\n');
   const r3 = runCmd('add-gate', fx, t, ['nope']);
@@ -224,6 +228,18 @@ else if (cmd === 'add-gate') addGate(rest, root);
   const out = r.stdout + r.stderr;
   check('S11 二次 sync 不覆盖本地改动（loc.txt 仍为用户版）', R(path.join(t, '.agents/scripts/loc.txt')) === 'loc USER\n', out);
   check('S11 仍按「本地已改，跳过」报告', out.includes('本地已改，跳过') && out.includes('loc.txt'), out);
+}
+
+// ============ 场景 12：owned 台账哈希按盘面自愈（Shipyard 回流策略，2026-09-24） ============
+{
+  const fx = mkFixture(), t = mkTarget(fx);
+  W(path.join(t, 'AGENTS.md'), 'owned skeleton v2 EDITED BY USER\n'); // owned 件手改 → 台账停旧值
+  const r = runCmd('sync', fx, t);
+  const out = r.stdout + r.stderr;
+  check('S12 owned 文件不被触碰（AGENTS.md 保持用户版）', R(path.join(t, 'AGENTS.md')) === 'owned skeleton v2 EDITED BY USER\n', out);
+  const kit = JSON.parse(R(path.join(t, '.agents/kit.json')));
+  check('S12 owned 台账哈希自愈为盘面值', kit.owned.find((f) => f.rel === 'AGENTS.md').sha256 === sha256(Buffer.from('owned skeleton v2 EDITED BY USER\n')), JSON.stringify(kit.owned));
+  check('S12 有刷新报告', out.includes('owned 台账哈希按盘面刷新 1 份'), out);
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${failCount}`);
