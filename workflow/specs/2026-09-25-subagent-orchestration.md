@@ -1,5 +1,5 @@
 ---
-状态: draft
+状态: approved
 级别: L2
 模块: pipeline
 ---
@@ -113,5 +113,5 @@ plan（已确认）→ workflow 脚本（.mjs）→ `wf-run.mjs` 解析校验 �
 
 ## 确认与复核
 
-- 确认结果：approved（YYYY-MM-DD 用户对话内确认）——待确认
+- 确认结果：approved（2026-09-25 用户对话内确认 spec 契约——API 面 / provider 注册表 / 信任边界 / 衔接方式逐项过目无异议）
 - 确认通过后，方可执行 ../plans/2026-09-25-subagent-orchestration.md（plan 草稿已随入口文档同提，状态 draft，spec 确认后再过 plan 确认门）
