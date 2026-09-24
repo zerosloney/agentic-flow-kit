@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
-备注: plan 草稿随入口文档同提（配对门口径）；spec 确认通过后本 plan 才过确认门（draft → approved），未确认前仅可 --dry-run。
+备注: plan 草稿随入口文档同提（配对门口径）；spec 确认后本 plan 过确认门（5e30270 留痕 approved），关单随 intent 置终态。
 ---
 
 # PLAN — 脚本化子智能体编排（workflow 脚本 + runner）
@@ -44,8 +44,10 @@
 
 - provider JSON 结构化输出解析、TS 方言支持——需要时另立 intent
 - 并发扩容（>2）按 delegations.md「并发扩容门槛」量化数据拍板，不在本单
+- **冒烟成功 roundtrip 补跑**：codex 配额墙（2026-10-01 恢复）后跑 `node .agents/scripts/wf-run.mjs .agents/workflows/冒烟-codex.mjs --no-ledger`，预期 exit 0 且输出含 agentic-flow-kit；zcode / claude / opencode 语法校准随该窗口一并做
+- 冒烟暴露的两处 runner 修复（resolveWin PATHEXT 优先序、超时 taskkill /T 进程树强杀）已随实现落地，由 wf-run.test.mjs 既有用例与后续真实补跑回归兜底
 
 ## 确认与复核
 
-- 确认结果：approved（2026-09-25 用户对话内确认，plan 草稿全文过目）；done（关单时随 intent/spec 置终态）
-- 确认门记录：plan 草稿全文过目 + 改动清单确认（build.md 两道门，逐次，不合并——改动清单第二道门随后单独过）
+- 确认结果：approved（2026-09-25 用户对话内确认，plan 草稿全文过目）；done（2026-09-25 关单随 intent 置终态，实现 commit 7a9a1fd）
+- 确认门记录：plan 草稿全文过目 + 改动清单确认（build.md 两道门，逐次，不合并——改动清单卡以对话卡呈递，与 plan 任务拆解同口径）

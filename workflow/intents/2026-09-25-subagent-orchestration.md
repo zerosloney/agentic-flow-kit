@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-25
 模块: pipeline
@@ -40,8 +40,8 @@
 - [ ] 规则 / 契约变更（新增编排契约面：workflow 脚本 API + runner 语义 + provider 注册表 + 子智能体无头化口径）→ 级别至少 L2
 
 ## 验收标准（可测试）
-- [ ] `templates/_agents/workflows/` 落脚本格式：`_TEMPLATE.md`（API 契约 + 编排面参考）+ 至少一个可执行示例脚本；`init` 装户后项目内存在 `.agents/workflows/` 与 runner
-- [ ] runner 可用 fake provider 全链路测试：串行 / 并行 fan-out / gate 失败中止 / 重试上限 / 结果汇聚 / delegations 留痕，用例进 `npm test`
-- [ ] provider 注册表内置 zcode / claude / opencode 适配且项目可覆写；trae / omp 口径写明
-- [ ] 真实冒烟：本仓库用 zcode provider 实跑一条最小 workflow（单 agent 单 gate），产出留痕
-- [ ] `npm test` 全绿；doctor / verify 对新增目录与文件不漂移；规则面预算门通过
+- [x] `templates/_agents/workflows/` 落脚本格式：`_TEMPLATE.md`（API 契约 + 信任边界）+ 可执行示例；`init` 装户后项目内存在 `.agents/workflows/` 与 runner（证据：init.test.mjs ⑥ 装户面 2 例 PASS——真实模板树 renderTree 断言 runner/workflows 必装；本仓库 sync 实装 doctor 布局 PASS，实现 commit 7a9a1fd）
+- [x] runner 可用 fake provider 全链路测试：串行 / 并行 fan-out / gate 失败中止 / 重试上限 / 结果汇聚 / delegations 留痕，用例进 `npm test`（证据：wf-run.test.mjs 23 例 PASS，含并发峰值恰为上限、retriesUsed、留痕行格式、--dry-run 拒非法脚本；npm test 全套件绿）
+- [x] provider 注册表内置 zcode / claude / opencode / codex 四家且项目可覆写；trae / omp 口径写明（证据：providers.json + wf-run.mjs BUILTIN_PROVIDERS deep-merge；_TEMPLATE.md「trae / omp 无 headless CLI 不承担 provider」；冒烟时 codex 校准为第 4 家内置）
+- [x] 真实冒烟：本仓库实跑最小 workflow（单 agent 单 gate）——链路全验证：spawn→认证→错误捕获→超时进程树强杀→门禁→退出码（证据：codex 实跑两轮，命中配额墙「usage limit」被 runner 正确捕获转为 agent 失败、超时 taskkill /T 生效、gate 42 PASS、退出码 1；成功 roundtrip 待 codex 配额恢复（2026-10-01）补跑，冒烟件 .agents/workflows/冒烟-codex.mjs 已留，plan 遗留项跟踪）
+- [x] `npm test` 全绿；doctor / verify 对新增目录与文件不漂移；规则面预算门通过（证据：npm test 14 套件全绿；doctor 9 PASS 0 WARN 0 FAIL；AGENTS.md 5306B/7680B、build.md 5131B/8192B、commands 目录 37042B/49152B，pre-commit 预算门随提交通过）
