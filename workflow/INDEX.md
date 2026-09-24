@@ -10,7 +10,7 @@
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
 | INTENT | L2 | approved | 2026-09-25 | pipeline | 脚本化子智能体编排（workflow 脚本 + runner） | ☑0/5 |
-| PLAN | L2 | draft | 2026-09-25 | pipeline | 脚本化子智能体编排（workflow 脚本 + runner） | — |
+| PLAN | L2 | approved | 2026-09-25 | pipeline | 脚本化子智能体编排（workflow 脚本 + runner） | — |
 | SPEC | L2 | approved | 2026-09-25 | pipeline | 脚本化子智能体编排（workflow 脚本 + runner） | — |
 | INTENT | L1 | approved | 2026-09-24 | pipeline | Shipyard 引擎增量收包（抽取后 3 笔回流包源） | ☑5/5 |
 | PLAN | L1 | approved | 2026-09-24 | pipeline | Shipyard 引擎增量收包 | — |

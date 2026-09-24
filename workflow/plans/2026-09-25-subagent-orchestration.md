@@ -1,5 +1,5 @@
 ---
-状态: draft
+状态: approved
 级别: L2
 模块: pipeline
 备注: plan 草稿随入口文档同提（配对门口径）；spec 确认通过后本 plan 才过确认门（draft → approved），未确认前仅可 --dry-run。
@@ -47,5 +47,5 @@
 
 ## 确认与复核
 
-- 确认结果：（待——spec 确认后本 plan 草稿全文过目，approved 后方可动代码）
-- 确认门记录：plan 草稿全文过目 + 改动清单确认（build.md 两道门，逐次，不合并）
+- 确认结果：approved（2026-09-25 用户对话内确认，plan 草稿全文过目）；done（关单时随 intent/spec 置终态）
+- 确认门记录：plan 草稿全文过目 + 改动清单确认（build.md 两道门，逐次，不合并——改动清单第二道门随后单独过）
