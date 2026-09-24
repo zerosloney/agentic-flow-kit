@@ -1,5 +1,5 @@
 ---
-状态: open
+状态: closed
 级别: L1
 发现: 2026-09-24
 模块: pipeline
@@ -28,10 +28,12 @@ doctor 对 `spawnSync('sh')` 的三种结局（正常 / 真断档 / ENOENT 环�
 ## 复盘三件套（缺一不可）
 
 1. 结构性修复
-   - 修复 commit：<见销单回填——src/doctor.mjs：先 `sh -c true` 探测，不可用 → WARN（装 Git Bash / WSL 后重跑 doctor；git 钩子不受影响）；可用才跑 check-loop，真断档维持 FAIL 带原因>
+   - 修复 commit：c22ff0a（src/doctor.mjs：先 `sh -c true` 探测，不可用 → WARN（装 Git Bash / WSL 后重跑 doctor；git 钩子不受影响）；可用才跑 check-loop，真断档维持 FAIL 带原因）
    - 影响环境：dev（本仓库 npm 包，随下一版本发布；当前 0.3.0 已发布，修复进 0.3.1/0.4.0）
    - 是否需要新 intent：否（incident 即入口，同名 plan 配对）
 2. 防复发验证
-   - <见销单回填：PATH 剥离 sh 的模拟环境实测 doctor 输出 WARN 而非 hard-block；真断档夹具实测 FAIL 仍带原因>
+   - 无 sh 模拟（构造「有 git 无 sh」的精确 PATH）→ doctor 报 WARN「环境无 sh——check-loop 未跑，勿当作通过」，0 FAIL 不再出现 hard-block 字样
+   - 正常环境 → PASS「check-loop 干净」；真断档夹具（CHECK_LOOP_ROOT + done intent 缺验收节）→ FAIL 且「配对断裂」原因完整可见（此前该分支只透传 stderr，原因本就可见——本次实测反向确认）
+   - npm test 全套件绿（node .agents/scripts/verify.mjs「✅ 全绿——可以关单」）
 3. 流程/规范改进
    - 调用方解析层与被调脚本同等对待：凡 spawn 外部解释器（sh/node/python）先探测可用性再分流，模式对齐 run-tests.mjs
