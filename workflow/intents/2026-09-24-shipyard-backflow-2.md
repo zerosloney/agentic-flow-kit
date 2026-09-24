@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-24
 模块: pipeline
@@ -21,12 +21,12 @@
 - 数据库：无
 
 ## 验收标准（可测试）
-- [ ] 交接清单待回哺项 1-3 核实已在库，无须重复回流
-- [ ] add-gate 接线后 local-pre-commit 进 owned 台账且哈希=盘面（自动化断言）
-- [ ] sync 对手改 owned 件不触碰文件、台账哈希自愈为盘面值（自动化断言）
-- [ ] 6 份模板改动装副本落地，「门禁与提交」节死链引用在 templates/ 内 grep 为 0（节定义本身保留）
-- [ ] npm test 全套件全绿；doctor 全 PASS
-- [ ] package.json 版本 0.2.1，README 路线与升级语义同步
+- [x] 交接清单待回哺项 1-3 核实已在库，无须重复回流（证据：grep check-loop.sh 命中「存量确认态豁免」L769/L788-789、「恒为 advisory」L28/L768；templates/AGENTS.md:28 与 plan/design/build 的 docs(workflow) 口径齐——97a52ca 增量收包已含）
+- [x] add-gate 接线后 local-pre-commit 进 owned 台账且哈希=盘面（证据：sync.test.mjs S8 扩展断言 PASS）
+- [x] sync 对手改 owned 件不触碰文件、台账哈希自愈为盘面值（证据：sync.test.mjs S12 三断言 PASS；本仓 sync 实跑输出「owned 台账哈希按盘面刷新 7 份」）
+- [x] 6 份模板改动装副本落地，「门禁与提交」节死链引用在 templates/ 内 grep 为 0（证据：flow-kit sync 覆盖更新 5 份 .agents/{commands×4, scripts/check-loop.sh}；grep 残留 0，templates/AGENTS.md 节定义保留）
+- [x] npm test 全套件全绿；doctor 全 PASS（证据：9 套件 178 断言 ✅ 全部套件通过；doctor 8 PASS / 0 WARN）
+- [x] package.json 版本 0.2.1，README 路线与升级语义同步（证据：commit f28e93a package.json 版本行；kit.json 台账版本对齐 0.2.1；README 两处更新随同提交）
 
 ## 触达红线（对照 AGENTS.md）
 - 规则 / 契约变更：未触及——owned「永不覆盖」语义不变，新增的仅是记账自愈（README 已文档化）；模板改动为引用措辞与已定口径的操作化，无契约面变化
