@@ -93,6 +93,27 @@ const readMetrics = (root) => fs.readFileSync(path.join(root, 'workflow', 'metri
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- 场景 4：预算表 glob 词表收口——单 * 前缀+后缀匹配；多 * / 目录段 * 警告跳过（2026-09-24）----
+{
+  const root = mkfix();
+  fs.writeFileSync(path.join(root, '.agents', 'commands', 'zeta.md'), 'z'.repeat(500), 'utf8'); // 非 pl 前缀：不得被 pl*.md 吃进
+  fs.writeFileSync(path.join(root, '.agents', 'rule-budgets.txt'), [
+    '# fixture 预算表（glob 词表收口）',
+    'AGENTS.md 100',
+    '.agents/commands/pl*.md 9999',
+    '.agents/commands/**.md 9999',
+    '.agents/*/cmd.md 9999',
+    '',
+  ].join('\n'), 'utf8');
+  const r = run(root, ['--month', '2026-09']);
+  const md = fs.existsSync(path.join(root, 'workflow', 'metrics.md')) ? readMetrics(root) : '';
+  check('场景 4：exit 0（词表外条目跳过不阻断）', r.status === 0, `exit=${r.status}\n${r.stdout}${r.stderr}`);
+  check('场景 4：单 * 按前缀+后缀匹配（pl*.md 只吃 plan.md 10B，zeta.md 500B 不计入）', /\.agents\/commands\/pl\*\.md（单篇最大）\s+10\s+\/\s+9999/.test(r.stdout), r.stdout);
+  check('场景 4：常驻面合计随之正确（120+10=130B → 0.1 KB）', /0\.1 KB（峰值/.test(md) && /常驻面合计：0\.1 KB/.test(r.stdout), `${md}\n${r.stdout}`);
+  check('场景 4：多 * 与目录段 * 各警告跳过', (r.stderr || '').includes('**.md') && (r.stderr || '').includes('.agents/*/cmd.md'), r.stderr);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 if (fail) {
   console.log(`\n${USAGE}`);

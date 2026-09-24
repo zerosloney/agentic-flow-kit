@@ -42,5 +42,5 @@ next: L1 → .agents/commands/build.md ；L2/L3 → .agents/commands/design.md
 ## 确认后
 
 - intent 状态 draft → approved
-- 立即 `docs(workflow)` 单独提交留痕(根 `AGENTS.md`「门禁与提交」节;check-loop 检查 14 口径)
+- 立即 `docs(workflow)` 单独提交留痕(根 `AGENTS.md` 提交约定;check-loop 检查 14 口径)
 - L1 → `.agents/commands/build.md`；L2/L3 → `.agents/commands/design.md`

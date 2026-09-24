@@ -116,11 +116,11 @@
     },
     {
       "rel": ".agents/scripts/gen-workflow-metrics.mjs",
-      "sha256": "921a23ffd440d12632ee627908ddf6abd1493f5145a484c1c5ea785f719169b7"
+      "sha256": "b36469553f0729aa9f8806e898f400e75c6bb18c4ab33b9f5fcd9a9af59537d3"
     },
     {
       "rel": ".agents/scripts/gen-workflow-metrics.test.mjs",
-      "sha256": "31bfd55f6affc91d9cdf79395f5142e788e62398ebacf89c0d3581fc3f831a13"
+      "sha256": "d283d5eddf808cb5f35a4b1e2239e8feeb82bc4d6dde926f6e4a7fefcbdd05dd"
     },
     {
       "rel": ".agents/scripts/kb-cache-evict.mjs",

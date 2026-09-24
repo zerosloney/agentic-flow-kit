@@ -26,7 +26,7 @@
 - **发起新任务**：执行 `.agents/commands/new-task.md` 定义的流程（6 阶段总入口）
 - **看板（可选，默认不拉起）**：需要时手动跑 .agents/scripts/ensure-board.ps1（幂等：探活 / 旧代码自动重启 / 全新启动弹浏览器），实时只读 http://127.0.0.1:{{BOARD_PORT}}；**预警层，非门禁；告警口径对齐 check-loop 硬断档**。端口被占用时先探活 `/api/board`——响应不含 `cards` 即判为他人进程，打印 pid / 进程名并退出，不 kill
 - **检索**：活跃流程读 `INDEX.md`（生成物，`node .agents/scripts/gen-workflow-index.mjs` 重生成、`--check` 校验漂移）；跨语料检索 `node .agents/scripts/kb-search.mjs "<词>"`（workflow 按节级定位 + wiki 全文，`--type/--module/--status/-n` 过滤；`--status all` 显式全量）
-- **验证**：`.agents/commands/test.md`（静态门 + 实测；项目自有验证脚本/门禁如有，见 `.agents/hooks/local-pre-commit` 与 test.md 项目适配区）
+- **验证**：`.agents/commands/test.md`（静态门 + 实测；项目自有验证脚本/门禁如有，见 `.agents/hooks/local-pre-commit` 与根 `AGENTS.md`「项目适配区」）
 - **评审**：`.agents/commands/review.md`（按 P0 / P1 / P2 分级：机器兜底 + AI 自查出清单，用户决策定性与合入）
 - **上线**：`.agents/commands/deploy.md`（上线前必跑清单）
 - **量化**：委派/自做结果记 `delegations.md`，聚合跑 `node .agents/scripts/agg-delegations.cjs`（**并发扩容门槛见该文件——数字达标前不扩并发**）；语料与常驻面体积的**月度快照**跑 `node .agents/scripts/gen-workflow-metrics.mjs`（每月一行落 `metrics.md`，同月重跑即更新；明细看 stdout）

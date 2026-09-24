@@ -104,11 +104,22 @@ function scanSurface() {
       max = sum;
       label = `${pat}（合计）`;
     } else if (pat.includes('*')) {
-      const dir = path.dirname(pat);
+      // 词表约定 glob = 基名内单个 `*`（<前缀>*<后缀>），目录段不支持通配——与 rule-budget.sh 的 shell glob 同口径。
+      // 多 `*` / 目录段含 `*` 出词表：警告跳过，不做「只按后缀 endsWith」的放宽式匹配（2026-09-24 收口：
+      // 曾按首个 * 取后缀，`pl*.md` 会误吃目录内全部 .md、`a*b` 会误吃一切 b 结尾文件）
+      const stars = pat.split('*').length - 1;
+      const starIdx = pat.indexOf('*');
+      const lastSlash = pat.lastIndexOf('/');
+      if (stars !== 1 || starIdx < lastSlash) {
+        console.error(`⚠️ 预算表 glob 仅支持基名内单个 *（<前缀>*<后缀>），跳过该条：${pat}`);
+        continue;
+      }
+      const dir = lastSlash >= 0 ? pat.slice(0, lastSlash + 1) : '.';
+      const basePrefix = pat.slice(lastSlash + 1, starIdx);
+      const baseSuffix = pat.slice(starIdx + 1);
       if (!fs.existsSync(dir)) { console.error(`⚠️ 预算目录不存在，跳过该条：${pat}`); continue; }
-      const suffix = pat.slice(pat.indexOf('*') + 1);
       for (const f of fs.readdirSync(dir)) {
-        if (!f.endsWith(suffix)) continue;
+        if (!f.startsWith(basePrefix) || !f.endsWith(baseSuffix)) continue;
         const s = fs.statSync(path.join(dir, f)).size;
         sum += s;
         if (s > max) max = s;
