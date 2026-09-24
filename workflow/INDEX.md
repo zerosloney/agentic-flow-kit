@@ -5,14 +5,12 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（14）
+## 活跃（12）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
 | INTENT | L1 | approved | 2026-09-24 | pipeline | Shipyard 引擎增量收包（抽取后 3 笔回流包源） | ☑5/5 |
-| INTENT | L1 | approved | 2026-09-24 | wiki | wiki 模板预置主题内容目录骨架 | ☑0/4 |
 | PLAN | L1 | approved | 2026-09-24 | pipeline | Shipyard 引擎增量收包 | — |
-| PLAN | L1 | approved | 2026-09-24 | wiki | wiki 模板预置主题内容目录骨架 | — |
 | INTENT | L1 | approved | 2026-09-23 | pipeline | agentic-flow-kit：AI 工作流+wiki 引擎抽离为 npx 脚手架包（flow-kit init） | ☑0/6 |
 | INTENT | L1 | approved | 2026-09-23 | pipeline | M3：flow-kit sync / add-host / add-gate | ☑5/5 |
 | INTENT | L2 | approved | 2026-09-23 | pipeline | M4：agentic-flow-kit 自装 dogfooding（包仓库成为包消费者） | ☑5/5 |
@@ -24,14 +22,16 @@
 | PLAN | L1 | approved | 2026-09-23 | pipeline | M5：npm 发布 | — |
 | SPEC | L2 | approved | 2026-09-23 | pipeline | M4 自装 dogfooding | — |
 
-## 档案计数（17，不进表）
+## 档案计数（19，不进表）
 
 | 类型 | 模块 | 数量 |
 |---|---|---|
 | INCIDENT | pipeline | 4 |
 | INTENT | pipeline | 5 |
+| INTENT | wiki | 1 |
 | PLAN | pipeline | 8 |
+| PLAN | wiki | 1 |
 
-终态构成：done 13 · fixed 3 · closed 1；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
+终态构成：done 15 · fixed 3 · closed 1；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
 
 <!-- GENERATED:END -->

@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-24
 模块: wiki
@@ -35,7 +35,7 @@
 > 红线说明：纯模板骨架增补（新增文件），生成器与一致性校验口径零改动，故 L1。
 
 ## 验收标准（可测试）
-- [ ] 临时目录 init 后 wiki/ 出现 7 个主题目录且各含 README.md，INDEX 速览表 7 行用途与模板一致（证据：临时目录 init 输出 + 目录清单）
-- [ ] 临时目录内跑 gen-wiki-board.mjs 重生成 + verify-wiki-consistency.mjs 三方一致全过（证据：两脚本 exit 0 输出）
-- [ ] npm test 全绿（gen-wiki-board fixture 不回归）（证据：verify 实跑输出）
-- [ ] 临时目录首跑 doctor 干净（证据：init 输出 doctor 段 0 FAIL）
+- [x] 临时目录 init 后 wiki/ 出现 7 个主题目录且各含 README.md，INDEX 速览表 7 行用途与模板一致（证据：/tmp/fk-wiki-test init 实测目录清单在位；重生成后用途列逐字保留，commit d57d74f）
+- [x] 临时目录内跑 gen-wiki-board.mjs 重生成 + verify-wiki-consistency.mjs 三方一致全过（证据：「✅ wiki 三方一致：文件 7 份 / 主题 7 个（含占位）/ 归档 1 份」+「数据维护台账登记完整」）
+- [x] npm test 全绿（gen-wiki-board fixture 不回归）（证据：node .agents/scripts/verify.mjs 实跑「✅ 全部套件通过」）
+- [x] 临时目录首跑 doctor 干净（证据：doctor 7 PASS ｜ 1 WARN ｜ 0 FAIL——WARN 仅为临时目录非 git 仓库，环境性）
