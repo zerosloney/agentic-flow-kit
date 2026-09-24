@@ -1,9 +1,9 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-24
 模块: pipeline
-备注: 2026-09-24 用户对话内确认 CD 取「tag 触发自动发布」（npm publish --provenance，NPM_TOKEN secret 已在 GitHub 配置）。
+备注: 2026-09-24 用户对话内确认 CD 取「tag 触发自动发布」（npm publish --provenance，NPM_TOKEN secret 已在 GitHub 配置）。实施期间并行会话提交 shipyard-backflow-2（f28e93a/12b6620），version bump 与 INDEX 归其所有，本任务 diff 未混入。
 ---
 # INTENT — GitHub CI/CD（Actions 测试矩阵 + tag 自动发布）
 
@@ -28,7 +28,7 @@
 - 不触及（CI/CD 管线配置，不动规则契约、不动引擎逻辑）。
 
 ## 验收标准（可测试）
-- [ ] push 后 GitHub Actions CI 四组合全绿（含 windows 实际执行 bash 套件，日志无「跳过」提示）
-- [ ] release workflow 含版本一致性校验步骤（tag ≠ package.json version 时 fail-fast 不发布）
-- [ ] package.json 含 repository/bugs/homepage 三字段且指向 zerosloney/agentic-flow-kit
-- [ ] 本地 `npm test` 全绿
+- [x] push 后 GitHub Actions CI 四组合全绿（含 windows 实际执行 bash 套件，日志无「跳过」提示）（证据：Actions run 35949854368——ubuntu/windows × node 18/22 四 job ✓，windows 日志含「check-loop.test.sh（bash 套件）」段且无「环境无 sh」警告、终局「✅ 全部套件通过」）
+- [x] release workflow 含版本一致性校验步骤（tag ≠ package.json version 时 fail-fast 不发布）（证据：release.yml「校验 tag 与 package.json 版本一致」步骤（469ebe6）；动态验证随首次版本 tag 实跑，plan 已声明）
+- [x] package.json 含 repository/bugs/homepage 三字段且指向 zerosloney/agentic-flow-kit（证据：commit 469ebe6，diff 纯三字段新增）
+- [x] 本地 `npm test` 全绿（证据：本地实跑「合计: PASS 34 / FAIL 0 ✅ 全部套件通过」，2026-09-24）

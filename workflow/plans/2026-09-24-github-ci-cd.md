@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-24
 模块: pipeline
@@ -19,5 +19,5 @@
 
 ## 确认与复核
 > 确认 = 用户在对话内一句话通过；确认后本 plan 状态 `draft → approved` 并回填本节（确认环节的机器可见态），`done` 只在关单出现——禁从 `draft` 直跳 `done`（2026-09-22 papercut）。
-- 确认结果：approved（2026-09-24 用户对话内确认 CD 取「tag 触发自动发布」方案）
+- 确认结果：approved（2026-09-24 用户对话内确认 CD 取「tag 触发自动发布」方案）；done（2026-09-24 关单：CI run 35949854368 四组合全绿含 windows bash 套件实跑，实现 commit 469ebe6 已回填 intent）
 - 确认门记录：CD 三档（自动发布 / 手动按钮 / 仅 CI）方案过目，用户选择 tag 自动发布
