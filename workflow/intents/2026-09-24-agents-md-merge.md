@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-24
 模块: pipeline
@@ -35,7 +35,7 @@
 > 红线说明：AGENTS.md 模板加一行 HTML 注释、init 对既有文件行为从「跳过」细化为「无标记才追加」——增量放宽，原有场景（无 AGENTS.md / 带 --force）行为不变，故 L1。
 
 ## 验收标准（可测试）
-- [ ] 合并场景：预置自写 AGENTS.md 的临时目录 init 后，文件 = 原内容 + 空行 + 含标记的完整骨架，原内容逐字在位（证据：临时目录实测文件头尾 + 控制台「追加补齐」行）
-- [ ] 跳过场景：预置含标记 AGENTS.md 的临时目录 init 后文件不变，控制台报「已存在且含工作流骨架」（证据：临时目录实测输出 + 文件 sha 前后一致）
-- [ ] 纯函数测试：hasAgentsSkeleton / mergeAgents 断言（标记探测、尾部空白折叠、空原内容）入 npm test 套件（证据：init.test.mjs 新增断言全过）
-- [ ] 既有场景不回归：无 AGENTS.md 正常生成、npm test 全绿（证据：verify 实跑输出）
+- [x] 合并场景：预置自写 AGENTS.md 的临时目录 init 后，文件 = 原内容 + 空行 + 含标记的完整骨架，原内容逐字在位（证据：/tmp/fk-agents-a 实测——head 三行原文原样、tail 为骨架「项目适配区」节、控制台「文末追加补齐（原内容保留）」行，commit 446f0a2）
+- [x] 跳过场景：预置含标记 AGENTS.md 的临时目录 init 后文件不变，控制台报「已存在且含工作流骨架」（证据：/tmp/fk-agents-c 实测——专属提示单行，末尾「未覆盖」汇总不再重复列）
+- [x] 纯函数测试：hasAgentsSkeleton / mergeAgents 断言（标记探测、尾部空白折叠、空原内容）入 npm test 套件（证据：src/init.test.mjs 累计 20/20 PASS）
+- [x] 既有场景不回归：无 AGENTS.md 正常生成、npm test 全绿（证据：node .agents/scripts/verify.mjs 实跑「✅ 全部套件通过 + ✅ 全绿——可以关单」）
