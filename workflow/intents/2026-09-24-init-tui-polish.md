@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-24
 模块: pipeline
@@ -35,7 +35,7 @@
 > 红线说明：--stack 新增别名是增量放宽（原有取值行为不变），安装产物与门禁配置不因此变化，故 L1。
 
 ## 验收标准（可测试）
-- [ ] 归一与解析纯函数测试：ts/js/typescript/javascript→node；序号/名称/混输/全角逗号解析正确；非法输入返回可重问信号（证据：src/init.test.mjs 断言全过，入 npm test 套件）
-- [ ] 交互全流程管道实测：printf 喂入「序号 + ts + 端口 + y」能在临时目录完成安装，recap 显示「技术栈 node」（证据：临时目录安装成功输出）
-- [ ] 色彩降级：NO_COLOR=1 或非 TTY 下输出无 ANSI 转义残留（证据：管道实测输出为纯文本可读）
-- [ ] 既有套件不回归：npm test 全绿（含 sync.test.mjs 与 templates 脚本套件）（证据：npm test 输出）
+- [x] 归一与解析纯函数测试：ts/js/typescript/javascript→node；序号/名称/混输/全角逗号解析正确；非法输入返回可重问信号（证据：src/init.test.mjs 14/14 PASS，入 npm test 套件，commit 8eb950c）
+- [x] 交互全流程管道实测：printf 喂入「序号 + ts + 端口 + y」能在临时目录完成安装，recap 显示「技术栈 node」（证据：/tmp/fk-tui-test——2/ts/8933/y 安装成功 recap「宿主 opencode ｜ 技术栈 node」；重问流 /tmp/fk-tui-test2——9 与 zcode,bad 两轮警告后 1,3 通过）
+- [x] 色彩降级：NO_COLOR=1 或非 TTY 下输出无 ANSI 转义残留（证据：两轮管道实测均 NO_COLOR=1，输出为纯文本可读）
+- [x] 既有套件不回归：npm test 全绿（含 sync.test.mjs 与 templates 脚本套件）（证据：node .agents/scripts/verify.mjs 实跑 exit 0——「✅ 全部套件通过 + ✅ 2/2 闭环校验通过」）
