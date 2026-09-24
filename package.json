@@ -1,6 +1,6 @@
 {
   "name": "agentic-flow-kit",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "AI-Native 闭环工作流 + wiki 知识层脚手架——flow-kit init 一条命令为新项目装好 .agents 工作流引擎（阶段命令/角色契约/门禁钩子/kb 检索/看板/规则面预算）+ workflow 文档闭环 + wiki 知识库，装完自包含、零运行时依赖",
   "type": "module",
   "scripts": {
