@@ -3,7 +3,7 @@
 级别: L1
 发现: 2026-09-24
 模块: pipeline
-备注: P4 清账单（2026-09-24-p4-sweep）唯一有意跳过项的收口；顺手在探针中实证了旧口径的放宽行为。
+备注: P4 清账单（2026-09-24-p4-sweep）唯一有意跳过项的收口；顺手在探针中实证了旧口径的放宽行为。落库当日 check-loop 套件出现过 1 次瞬时 FAIL（场景 25，复跑 4 次全绿）——Windows/AV 文件锁时序类环境抖动，非代码缺陷，不作处理仅记录。
 ---
 # INCIDENT — gen-workflow-metrics 预算表 glob 解析出词表：单星后缀匹配放宽误吃文件
 
@@ -22,7 +22,7 @@
 ## 复盘三件套（缺一不可）
 
 1. 结构性修复
-   - 修复 commit：待提交回填（改动清单见 ../plans/2026-09-24-metrics-glob-vocab.md；装副本经 flow-kit sync 落地）
+   - 修复 commit：6a16a0a（改动清单见 ../plans/2026-09-24-metrics-glob-vocab.md；装副本经 flow-kit sync 落地）
    - 影响环境：dev（快照报表口径修复，不触门禁——rule-budget.sh 走 shell glob，本就无此缺陷）
    - 是否需要新 intent：
      - 否 → 理由：根因属实现缺陷（mini-glob 解析不完整），单点修复 + 词表校验已闭环；无规范缺位（词表约定本就如此）
@@ -33,4 +33,4 @@
 
 3. 规范条目（必须有可追溯的落点）
    - 落点：workflow/regression-checklist.md §防复发验证（自实现 mini 解析器必须校验词表边界，出表警告跳过而非放宽匹配）
-   - 引用：本 incident + ../plans/2026-09-24-metrics-glob-vocab.md；commit 待提交回填
+   - 引用：本 incident + ../plans/2026-09-24-metrics-glob-vocab.md；commit 6a16a0a

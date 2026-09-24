@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-24
 模块: pipeline
@@ -18,4 +18,4 @@
 - 口径对齐：修复后 metrics 与 rule-budget.sh（shell glob）对单星基名 glob 计量同文件集；本仓库现用预算表（`*.md` 空前缀）行为不变。
 
 ## 确认与复核
-- 确认结果：approved（2026-09-24 用户对话内点名「要收口 立小单」）
+- 确认结果：approved（2026-09-24 用户对话内点名「要收口 立小单」）；done（2026-09-24 关单：npm test 全绿（metrics 16 断言含场景 4）+ 本仓实跑口径不变，修复 commit 6a16a0a 已回填 incident）
