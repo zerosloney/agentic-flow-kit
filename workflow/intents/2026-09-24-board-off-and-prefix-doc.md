@@ -29,7 +29,7 @@
 - 规则 / 契约（任务入口口径变更 → L1 工具级定档依据同 2026-09-24 增量收包先例）：门禁能力只增不减；看板从「默认拉起」改「按需」，预警层属性不变。
 
 ## 验收标准（可测试）
-- [x] commit-check-trigger.test.mjs 六断言全绿并接入 run-tests（npm test 全套件 8 套 151 例绿）
-- [x] 配置示例注释含 prefix 说明与触发语义三则；引擎逻辑零改动（仅注释）
-- [x] plan/maintain/AGENTS.md/workflow README/doctor/ensure-board 头注全部改为按需口径（grep「任务入口幂等拉起」零残留）
-- [x] Shipyard 落地与对照探针（应用提交 5088cfb：wiki html 暂存 SKIP 不再起前端构建；看板进程已停；doctor 7 PASS）
+- [x] commit-check-trigger.test.mjs 六断言全绿并接入 run-tests（证据：实现 commit 96cb873——npm test 全套件 8 套 151 例全绿）
+- [x] 配置示例注释含 prefix 说明与触发语义三则；引擎逻辑零改动（证据：commit 96cb873——commit-check.cjs 仅注释增改 7 行 + 新增测试 94 行，触发逻辑未动）
+- [x] plan/maintain/AGENTS.md/workflow README/doctor/ensure-board 头注全部改为按需口径（证据：commit 96cb873——五处文档/头注改按需，grep「任务入口幂等拉起」零残留）
+- [x] Shipyard 落地与对照探针（证据：Shipyard 应用提交 5088cfb——wiki html 暂存 SKIP 不再起前端构建；看板进程已停；doctor 7 PASS）
