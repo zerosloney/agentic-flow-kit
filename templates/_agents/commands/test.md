@@ -72,6 +72,7 @@ node .agents/scripts/verify-wiki-consistency.mjs   # 触及 wiki/ 时跑(exit 1 
 - 输出测试报告(通过项 / 失败项)
 - 失败项已修复并复测通过
 - **关单**（日常闭环点，不依赖是否上 prod）:
+  - 关单前一键过门：`node .agents/scripts/verify.mjs`（npm test + check-loop 固定编排，任一失败非零退出，非绿不关单）
   - 新需求：逐条勾验入口 intent「验收标准」，每条补「证据：」，intent → done；同名 spec（若有）仍 approved → done
   - 修复：防复发验证已落地，incident → closed
   - **同族收尾**：入口置终态时，同名 plan 一并置 `done`（spec 见上条），不留 `approved` 孤儿（口径同看板「入口已 done，本 plan 未终态」告警）

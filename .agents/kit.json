@@ -12,7 +12,7 @@
   "managed": [
     {
       "rel": ".agents/board/index.html",
-      "sha256": "9e6978d602b1d85217ec4104a95f1305ee0f7e2f42cf96da25c3145a8add781e"
+      "sha256": "65ae6675d1cb7025ca3e2f478df1185bbdc97e37ff1bd6783856d42d626015e7"
     },
     {
       "rel": ".agents/board/marked.min.js",
@@ -48,7 +48,7 @@
     },
     {
       "rel": ".agents/commands/test.md",
-      "sha256": "206e574cebdc7d689e1637bddb31eafb87e3dd779404e0ded078e4045380395a"
+      "sha256": "93643b213b0faddd8db83509081f805854dbe5463873ac2d9516210aa9cc9c9e"
     },
     {
       "rel": ".agents/hooks/check-pairing-incremental.sh",
@@ -145,6 +145,14 @@
     {
       "rel": ".agents/scripts/verify-wiki-consistency.mjs",
       "sha256": "f21b365e1eb6488c5ec7b7f520e1c6c4ddc916bd6cd138c62d40460898a8d105"
+    },
+    {
+      "rel": ".agents/scripts/verify.mjs",
+      "sha256": "6d57b224a1bbfe8ec8025b82c0fca01ad00e25058286d354dc68dea2bc3859e8"
+    },
+    {
+      "rel": ".agents/scripts/verify.test.mjs",
+      "sha256": "e2764c810fe6963495b2b1358d7ab7771136904f6e11996b38611ad5cdce261d"
     },
     {
       "rel": ".agents/scripts/wiki-search.mjs",
