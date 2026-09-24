@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import { execSync, spawnSync } from 'node:child_process';
-import { renderTree, sha256 } from './render.mjs';
+import { renderTree, renderContent, sha256 } from './render.mjs';
 import { HOSTS, STACKS, STACK_ALIASES, settingsJson, commitCheckConfig, pickStackVars, isOwned } from './profiles.mjs';
 import { doctor } from './doctor.mjs';
 
@@ -70,6 +70,19 @@ export function parseChoices(input, names, def, map = (x) => x) {
   return out;
 }
 
+// ---- AGENTS.md 骨架探测与追加补齐 ----
+// 标记随模板渲染落盘：新装/补齐后的 AGENTS.md 都含它，探测以此为准（不猜标题——避免误伤项目自写的同名「AI工作流」节）
+const SKELETON_MARKER = '<!-- flow-kit:agents-skeleton -->';
+export function hasAgentsSkeleton(text) {
+  return String(text || '').includes(SKELETON_MARKER);
+}
+// mergeAgents：原内容在上（尾部空白折叠），空行分隔，含标记的完整骨架在下
+export function mergeAgents(existing, incoming) {
+  const head = String(existing || '').replace(/\s+$/, '');
+  const tail = String(incoming || '').trim();
+  return head ? `${head}\n\n${tail}\n` : `${tail}\n`;
+}
+
 // 交互确认环节：序号菜单问答（宿主多选 → 技术栈 → 看板端口）→ 已选 recap → 显式确认
 // （EOF / 非 y 一律取消，不装；makePrompt 行式语义不变——管道/EOF 安全回退默认）
 async function interactive() {
@@ -80,7 +93,7 @@ async function interactive() {
   const menu = (names) => '  ' + names.map((n, i) => dim(`${'①②③④⑤⑥'[i]} ${stackLabel(n)}`)).join(dim('   '));
 
   console.log(bold(cyan('▶ flow-kit init')) + dim(' · AI 闭环工作流 + wiki 知识层脚手架'));
-  console.log(dim('  安装到当前目录：.agents/ · .githooks/ · workflow/ · wiki/ · AGENTS.md（已存在的文件保守跳过）'));
+  console.log(dim('  安装到当前目录：.agents/ · .githooks/ · workflow/ · wiki/ · AGENTS.md（已存在的文件保守跳过；AGENTS.md 无工作流骨架时文末追加补齐）'));
   try {
     let hosts;
     for (;;) {
@@ -156,6 +169,24 @@ export async function init(args, pkgRoot) {
 
   // 1) 模板树（保守：已存在文件跳过，--force 覆盖）
   const t = renderTree(path.join(pkgRoot, 'templates'), target, vars, { force: opt.force });
+
+  // 1.5) AGENTS.md 特例：已存在且无骨架标记 → 文末追加补齐（原内容保留）；带标记 → 保守跳过
+  let agentsMergedSha = null;
+  if (t.skipped.includes('AGENTS.md')) {
+    const agentsAbs = path.join(target, 'AGENTS.md');
+    const existing = fs.readFileSync(agentsAbs, 'utf8');
+    if (hasAgentsSkeleton(existing)) {
+      t.skipped = t.skipped.filter((r) => r !== 'AGENTS.md'); // 专属提示已报，不进末尾「未覆盖」汇总重复列
+      console.log('  跳过（已存在且含工作流骨架）：AGENTS.md');
+    } else {
+      const incoming = renderContent(fs.readFileSync(path.join(pkgRoot, 'templates', 'AGENTS.md'), 'utf8'), vars);
+      fs.writeFileSync(agentsAbs, mergeAgents(existing, incoming));
+      agentsMergedSha = sha256(fs.readFileSync(agentsAbs));
+      t.skipped = t.skipped.filter((r) => r !== 'AGENTS.md');
+      console.log('  AGENTS.md 已存在但无工作流骨架——文末追加补齐（原内容保留，「项目适配区」照常自填）');
+    }
+  }
+
   // 2) 宿主适配层
   const hostResults = {};
   for (const h of hosts) {
@@ -207,6 +238,7 @@ export async function init(args, pkgRoot) {
     ...hosts.flatMap((h) => hostResults[h].written.map((f) => ({ ...f, rel: `${HOSTS[h].dir}/${f.rel}` }))),
   ];
   const owned = [...t.written.filter((f) => isOwned(f.rel)), ...ownedGenerated];
+  if (agentsMergedSha) owned.push({ rel: 'AGENTS.md', sha256: agentsMergedSha });
   const pkg = JSON.parse(fs.readFileSync(path.join(pkgRoot, 'package.json'), 'utf8'));
   fs.mkdirSync(path.dirname(kitPath), { recursive: true });
   fs.writeFileSync(kitPath, `${JSON.stringify({

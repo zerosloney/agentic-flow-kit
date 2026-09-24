@@ -14,7 +14,8 @@ const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 export const HELP = `flow-kit — AI-Native 闭环工作流 + wiki 知识层脚手架（agentic-flow-kit）
 
 用法：
-  flow-kit init             安装到当前项目（裸跑无参数 → 交互确认环节；带参数直接执行）
+  flow-kit init             安装到当前项目（裸跑无参数 → 交互确认环节；带参数直接执行；
+                            已存在的 AGENTS.md 无工作流骨架时文末追加补齐，其余已存在文件保守跳过）
   flow-kit sync             升级 managed 文件（未改动→覆盖新版；本地已改→跳过并持续报告——台账不基线化，
                             不会被下次升级静默覆盖；--force 才覆盖；INDEX/看板等生成器目标重跑锚点重写；
                             owned 文件永不触碰）

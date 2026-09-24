@@ -17,6 +17,11 @@ function relOf(absFile, srcRoot) {
   return parts.join('/');
 }
 
+// renderContent：单文件文本渲染（{{KEY}} 替换，未知占位符原样保留）——renderTree 与 init 的 AGENTS.md 追加补齐共用
+export function renderContent(text, vars) {
+  return String(text || '').replace(PH_RE, (m, key) => (Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : m));
+}
+
 export function renderTree(srcRoot, targetRoot, vars, { force = false } = {}) {
   const written = [];   // { rel, sha256 }
   const skipped = [];   // rel（已存在，保守跳过）
@@ -43,15 +48,7 @@ export function renderTree(srcRoot, targetRoot, vars, { force = false } = {}) {
       const raw = fs.readFileSync(abs);
       let out = raw;
       if (raw.length < 512 * 1024 && !raw.includes(0)) {
-        const text = raw.toString('utf8');
-        const used = new Set();
-        const replaced = text.replace(PH_RE, (m, key) => {
-          if (Object.prototype.hasOwnProperty.call(vars, key)) {
-            used.add(key);
-            return vars[key];
-          }
-          return m; // 未知占位符原样保留，doctor 会告警
-        });
+        const replaced = renderContent(raw.toString('utf8'), vars);
         if (replaced.includes('{{')) {
           for (const m of replaced.matchAll(/\{\{([A-Z][A-Z0-9_]*)\}\}/g)) {
             if (!Object.prototype.hasOwnProperty.call(vars, m[1])) warnings.push(`${rel}: 未知占位符 {{${m[1]}}}（原样保留）`);

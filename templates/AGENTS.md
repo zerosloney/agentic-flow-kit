@@ -1,3 +1,4 @@
+<!-- flow-kit:agents-skeleton -->
 # AGENTS.md — AI 工作流 + Wiki
 
 > 本文件由 agentic-flow-kit 生成：说明本仓库的 AI 工作流与 Wiki 用法。「项目适配区」由项目自行填写；工作流约定可增不可删。

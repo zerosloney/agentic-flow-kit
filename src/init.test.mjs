@@ -3,7 +3,7 @@
 // 断言：①ts/js 别名归一 node；②序号/名称/混输/全角逗号/空白分隔解析正确（去重保序）；
 //       ③非法输入返回 null（就地重问信号）；④空输入回默认（EOF/直接回车安全回退）。
 // 用法：node src/init.test.mjs
-import { normalizeStack, parseChoices } from './init.mjs';
+import { normalizeStack, parseChoices, hasAgentsSkeleton, mergeAgents } from './init.mjs';
 
 let pass = 0;
 let fail = 0;
@@ -37,6 +37,16 @@ check('栈别名未传 map 不归一（ts → null）', parseChoices('ts', STACK
 // ---- ④ 空输入回默认 ----
 check('空串 → [def]', eq(parseChoices('', HOSTS, 'zcode'), ['zcode']));
 check('undefined → [def]', eq(parseChoices(undefined, STACKS, 'none'), ['none']));
+
+// ---- ⑤ AGENTS.md 骨架探测与合并 ----
+check('标记探测：带标记 true', hasAgentsSkeleton('x\n<!-- flow-kit:agents-skeleton -->\n# y') === true);
+check('标记探测：外部自写 AGENTS.md false', hasAgentsSkeleton('# 我的项目\n\n构建: dotnet build') === false);
+check('标记探测：空值 false', hasAgentsSkeleton('') === false && hasAgentsSkeleton(undefined) === false);
+check('合并：原内容在上、空行分隔、骨架在下',
+  mergeAgents('# A\n内容', '<!-- m -->\n# B') === '# A\n内容\n\n<!-- m -->\n# B\n');
+check('合并：原内容尾部空白折叠不产生连续空行',
+  mergeAgents('# A\n内容\n\n\n', '<!-- m -->\n# B') === '# A\n内容\n\n<!-- m -->\n# B\n');
+check('合并：原内容为空时骨架即全文', mergeAgents('', '<!-- m -->\n# B') === '<!-- m -->\n# B\n');
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 if (fail) {
