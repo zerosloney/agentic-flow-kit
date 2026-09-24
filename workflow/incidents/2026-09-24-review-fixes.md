@@ -26,7 +26,7 @@
 ## 复盘三件套（缺一不可）
 
 1. 结构性修复
-   - 修复 commit：待提交回填（改动清单见 ../plans/2026-09-24-review-fixes.md；装副本经 flow-kit sync 落地）
+   - 修复 commit：ce302cd（改动清单见 ../plans/2026-09-24-review-fixes.md；装副本经 flow-kit sync 落地）
    - 影响环境：dev（v0.2.0 已发布版仍带缺陷，下次发版修复）
    - 是否需要新 intent：
      - 否 → 理由：根因属实现缺陷（静默失败分支），单点修复已完成且新增自动化用例覆盖；无规范缺位（协议文档口径本就要求报告而非静默）
@@ -38,4 +38,4 @@
 
 3. 规范条目（必须有可追溯的落点）
    - 落点：workflow/regression-checklist.md §防复发验证（生成器/聚合器新增「锚点缺失」类分支必须 fail-loud 并配 fixture 用例）
-   - 引用：本 incident + ../plans/2026-09-24-review-fixes.md；commit 待提交回填
+   - 引用：本 incident + ../plans/2026-09-24-review-fixes.md；commit ce302cd

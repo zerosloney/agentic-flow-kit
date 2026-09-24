@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-24
 模块: pipeline
@@ -26,5 +26,5 @@
 - 实跑对账：`node .agents/scripts/agg-delegations.cjs` 输出 2026-09 有效任务 2（修复前「台账为空」）；`node bin/flow-kit.mjs sync` 落地装副本；`node bin/flow-kit.mjs doctor` 全 PASS。
 
 ## 确认与复核
-- 确认结果：approved（2026-09-24 用户对话内确认「按这个优先级逐项修复」）
+- 确认结果：approved（2026-09-24 用户对话内确认「按这个优先级逐项修复」）；done（2026-09-24 关单：全套测试绿 + agg 实跑对账复活 + doctor 8 PASS，修复 commit ce302cd 已回填 incident）
 - 确认门记录：审查报告（P1/P2/P3 三档 + 建议处理顺序）过目后用户拍板按序修复
