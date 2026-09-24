@@ -127,13 +127,20 @@ export function doctor(args, pkgRoot) {
     else add('WARN', `delegations 台账结构漂移——${String(agg.stderr || agg.stdout || '').split('\n')[0]}`);
   }
 
-  // 7. check-loop
-  const cl = spawnSync('sh', ['.agents/scripts/check-loop.sh'], { cwd: target, encoding: 'utf8' });
-  if (cl.status === 0) {
-    const warnTxt = String(cl.stderr || '').trim();
-    add('PASS', `check-loop 干净${warnTxt ? `（${warnTxt.split('\n').filter((l) => l.includes('WARN')).length} 条 advisory 警告）` : ''}`);
+  // 7. check-loop——先探 sh 可用性（对齐 run-tests.mjs 先例）：Windows PowerShell 常无 sh，
+  //    ENOENT 曾被吞进 hard-block 分支报成空原因假警报（incident 2026-09-24-doctor-sh-enoent）。
+  //    git 钩子门禁不受此影响——git 以自带 sh 执行钩子，与用户 PATH 无关。
+  const shProbe = spawnSync('sh', ['-c', 'true'], { encoding: 'utf8' });
+  if (shProbe.status !== 0) {
+    add('WARN', '环境无 sh——check-loop 未跑，勿当作通过；装 Git Bash / WSL 后重跑 doctor（git 钩子门禁不受影响，git 以自带 sh 执行）');
   } else {
-    add('FAIL', `check-loop 有 hard-block：\n${String(cl.stderr || '').split('\n').slice(0, 8).join('\n')}`);
+    const cl = spawnSync('sh', ['.agents/scripts/check-loop.sh'], { cwd: target, encoding: 'utf8' });
+    if (cl.status === 0) {
+      const warnTxt = String(cl.stderr || '').trim();
+      add('PASS', `check-loop 干净${warnTxt ? `（${warnTxt.split('\n').filter((l) => l.includes('WARN')).length} 条 advisory 警告）` : ''}`);
+    } else {
+      add('FAIL', `check-loop 有 hard-block：\n${String(cl.stderr || '').split('\n').slice(0, 8).join('\n')}`);
+    }
   }
 
   // 8. 看板端口（信息级）

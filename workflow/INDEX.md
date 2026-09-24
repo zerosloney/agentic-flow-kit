@@ -5,11 +5,13 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（12）
+## 活跃（14）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
+| INCIDENT | L1 | open | 2026-09-24 | pipeline | 2026-09-24 doctor 把 sh ENOENT 误报成 check-loop hard-block（空原因） | — |
 | INTENT | L1 | approved | 2026-09-24 | pipeline | Shipyard 引擎增量收包（抽取后 3 笔回流包源） | ☑5/5 |
+| PLAN | L1 | approved | 2026-09-24 | pipeline | doctor sh ENOENT 误报 hard-block 修复 | — |
 | PLAN | L1 | approved | 2026-09-24 | pipeline | Shipyard 引擎增量收包 | — |
 | INTENT | L1 | approved | 2026-09-23 | pipeline | agentic-flow-kit：AI 工作流+wiki 引擎抽离为 npx 脚手架包（flow-kit init） | ☑0/6 |
 | INTENT | L1 | approved | 2026-09-23 | pipeline | M3：flow-kit sync / add-host / add-gate | ☑5/5 |
