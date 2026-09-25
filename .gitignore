@@ -8,3 +8,5 @@ templates/_agents/cache/
 *.tgz
 # 仓库根临时诊断/重写脚本（一次性工具，跑完即可；例：_resync-adapters.mjs、_inspect.mjs）
 _*.mjs
+# npm test 重定向输出（PowerShell | Select-Object 流式捕获不稳，改重定向文件后 grep）
+test-output.txt

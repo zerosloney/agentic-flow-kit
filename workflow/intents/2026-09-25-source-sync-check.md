@@ -101,5 +101,10 @@
   2. **只报告不修复**（沿用 D 环节 B-b 决策）
   3. **不替代 sync / doctor**（新增独立脚本，三处工具并存：sync / doctor / source-sync-check）
   4. **零依赖**（与既有 .agents/scripts/ 风格一致）
-- 关单 commit：(pending —— 5 段改动面 + 8 条验收全勾验)
+- 关单 commit：`52a5e6f`（feat(pipeline): 装户面同步一致性检查 source-sync-check.mjs + 命令文档 + 预算上限调整）
+  - 11 文件改动 +747 行：6 .mjs 双写（包源 + 装副本）+ 2 .md 命令双写 + build.md 挂载点双写 + rule-budgets.txt 调整
+  - 8 条验收全勾验（见上「验收标准」段）
+  - 预算调整：`.agents/rule-budgets.txt` `.agents/commands/` 上限 49152 → 65536（增量 16384B，给后续 6 个环节 helper 命令留余量）
+  - 9 套件 191/191 PASS → 实际 18 套件 305/305 PASS（含 source-sync-check.test.mjs 11 场景）
+- 复核：L1 不要求独立复核
 - 复核：L1 不要求独立复核

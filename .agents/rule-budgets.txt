@@ -5,4 +5,4 @@
 # 口径：预算比较用「索引 / HEAD 字节」（git cat-file，LF 归一）；禁用工作区 wc -c 核对（CRLF 膨胀）。
 AGENTS.md 7680
 .agents/commands/*.md 8192
-.agents/commands/ 49152
+.agents/commands/ 65536
