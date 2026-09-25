@@ -167,6 +167,14 @@
       "sha256": "193cc31684fb92bafd166b17c55ef5f02ceecc7d2b7ca8a68fdc9ebb1051c51a"
     },
     {
+      "rel": ".agents/scripts/workflows-check.mjs",
+      "sha256": "31cba6672cac78156b2a37e144ad889779737add69e8b7ce3b98f6d1fde09e1a"
+    },
+    {
+      "rel": ".agents/scripts/workflows-check.test.mjs",
+      "sha256": "d7b7e06728e072a0ea2c75fb1bff9c0ff7f08bf8997cec623df1044425206d11"
+    },
+    {
       "rel": ".agents/skills/verify-ui/SKILL.md",
       "sha256": "35ff0437d4a62331f897aedd187c882dd391b01d60579044ae43861688983488"
     },
@@ -176,15 +184,15 @@
     },
     {
       "rel": ".agents/workflows/_TEMPLATE.md",
-      "sha256": "d2ac3a3a6e32514c820a454723fbd0df611b083c3e3ce168291da3bdebe572d1"
+      "sha256": "0cd0d61a6583615532e55ef57d6841e326d07a67a11957d0c7e9beb43674538b"
     },
     {
       "rel": ".agents/workflows/示例-并行实现评审.md",
-      "sha256": "ec8d98f9f3116ee905c13fe62d2957908f0bb6e51632fb270a9cb8bfda934523"
+      "sha256": "8bb442932ba00c416505e82b3113c15b474403d316311f5d4e03634abaac8c71"
     },
     {
       "rel": ".agents/workflows/steps/示例-部署验证.md",
-      "sha256": "657a8e714d17f866b70d087375040466b16b68d063c9879f7c017509eb3fd430"
+      "sha256": "c2f8f8766dd6f0c37b9b578edb6c8c9f3b605bd60277ab0419e321e0643c7680"
     },
     {
       "rel": ".githooks/commit-msg",
@@ -208,15 +216,15 @@
     },
     {
       "rel": ".zcode/agents/implementer.md",
-      "sha256": "20e4cc30e5c2474ce0addae50f94b8fe242ff3a53c62df5810912a87819363cc"
+      "sha256": "b5bf34f9830f01ad62f3b491f5a2e718ea6fbc728adf21b3affceea3594b9ca1"
     },
     {
       "rel": ".zcode/agents/independent-reviewer.md",
-      "sha256": "9852a4f89bc19381ba4f38011e410ed070393583c7eb68527d707a432d14eba0"
+      "sha256": "31059b6c1c0c7a89538fdb34d855187d64e883787d9047df21bbe9e424d327b5"
     },
     {
       "rel": ".zcode/agents/ui-verifier.md",
-      "sha256": "78eacc962ce1cbc2852fa22a87deda2738ddb3b7fb620cefbfdb4891689e2521"
+      "sha256": "6fef681028a20dac08943b95aa8bb2c38d6357988c3796324af63a8279ac065b"
     }
   ],
   "owned": [

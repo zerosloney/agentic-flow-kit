@@ -52,6 +52,7 @@ export function doctor(args, pkgRoot) {
     '.agents/workflow-modules.txt',
     '.agents/rule-budgets.txt',
     '.agents/settings.json',
+    '.agents/workflows/_TEMPLATE.md',
     '.githooks/pre-commit',
     '.githooks/pre-push',
     '.githooks/commit-msg',
@@ -156,6 +157,21 @@ export function doctor(args, pkgRoot) {
     add('PASS', `跨宿主薄适配 ${adapterRes.total} 对无正文漂移（装副本引擎 vs 4 宿主薄适配，B-b 语义）`);
   } else {
     add('WARN', `跨宿主薄适配正文漂移 ${adapterRes.drift} 对——权威源与薄适配正文段 sha 不一致；按 .agents/commands/sync-hosts.md 跑 flow-kit sync-hosts --apply 单向同步薄适配正文（frontmatter 不动）；装户可在 bin/flow-kit.mjs sync 时一并修复`);
+  }
+
+  // 6.8 workflows 编排脚本 lint（stages 表解析校验：role/step/after 引用、无环、三形态互斥、数值枚举；
+  //     2026-09-25 workflows-linter 把 _TEMPLATE.md「解析校验先行」从 prose 变机器门。首次引入 WARN
+  //     （沿用 wf-runtime 复盘「先 WARN 升级 FAIL」渐进路径），装户吃过警告后可升 FAIL。
+  //     旧版装户 sync 前 .agents/scripts/workflows-check.mjs 不存在 → 自然跳过不误报）
+  if (fs.existsSync(path.join(target, '.agents/scripts/workflows-check.mjs')) && fs.existsSync(path.join(target, '.agents/workflows'))) {
+    const wf = spawnSync(process.execPath, ['.agents/scripts/workflows-check.mjs'], { cwd: target, encoding: 'utf8' });
+    if (wf.status === 0) {
+      const warnN = (String(wf.stdout || '').match(/- ⚠️ W\d/g) || []).length;
+      add('PASS', `workflows 编排脚本 lint 干净${warnN ? `（${warnN} 条 advisory 告警）` : ''}`);
+    } else {
+      const firstHit = String(wf.stdout || wf.stderr || '').split('\n').find((l) => / E\d/.test(l)) || `exit ${wf.status}`;
+      add('WARN', `workflows 编排脚本 lint 未过——${firstHit.trim()}；修 .agents/workflows/ 编排脚本（role/step/after 引用、三形态、retries）后重跑`);
+    }
   }
 
   // 7. check-loop——先探 sh 可用性（对齐 run-tests.mjs 先例）：Windows PowerShell 常无 sh，
