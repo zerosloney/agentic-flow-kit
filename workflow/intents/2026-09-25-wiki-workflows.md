@@ -1,5 +1,5 @@
 ---
-状态: draft
+状态: done
 级别: L1
 日期: 2026-09-25
 模块: pipeline
@@ -54,14 +54,14 @@
 
 ## 验收标准（可测试）
 
-- [ ] 1 个主题目录 + README.md 落盘：`wiki/工作流/README.md`（证据：`ls wiki/工作流/` 1 个 README.md）
-- [ ] README 含 4 节：主题说明 / 关键决策点 / 编排语义 / 指向 `.agents/workflows/` 原文链接（证据：grep 4 节标题命中）
-- [ ] `wiki/INDEX.md` 速览表更新：1 行主题「工作流」+「用途」列填实 + 合计 6 份 / 6 主题（证据：grep "工作流" INDEX.md + 合计行 grep）
-- [ ] 跑 `node .agents/scripts/gen-wiki-board.mjs` 重生成 `wiki/知识沉淀总览.html`（证据：commit 含看板更新）
-- [ ] `node .agents/scripts/verify-wiki-consistency.mjs` 三方一致性通过（证据：实测输出 PASS）
-- [ ] `node .agents/scripts/source-sync-check.mjs --diff` 报告 **0 差异**（证据：实测输出「无差异 ✅」）
-- [ ] `npm test` 既 18 套件仍 309/309 PASS（不回归；证据：npm test tail「✅ 全部套件通过」）
-- [ ] `flow-kit doctor` 仍 10 PASS / 0 WARN / 0 FAIL（证据：实测输出）
+- [x] 1 个主题目录 + README.md 落盘：`wiki/工作流/README.md`（证据：`ls wiki/工作流/` 1 个 README.md；commit f8ce87d）
+- [x] README 含 4 节：主题说明 / 关键决策点 / 编排语义 / 指向 `.agents/workflows/` 原文链接（证据：grep 4 节标题命中；commit f8ce87d）
+- [x] `wiki/INDEX.md` 速览表更新：1 行主题「工作流」+「用途」列填实 + 合计 6 份 / 6 主题（证据：grep "工作流" INDEX.md + 合计行「**6 份**知识文档，**6 个主题**」；commit f8ce87d）
+- [x] 跑 `node .agents/scripts/gen-wiki-board.mjs` 重生成 `wiki/知识沉淀总览.html`（证据：commit f8ce87d 含看板更新；脚本输出「文件 6 份 / 主题 6 个」）
+- [x] `node .agents/scripts/verify-wiki-consistency.mjs` 三方一致性通过（证据：实测输出「✅ wiki 三方一致：文件 6 份 / 主题 6 个（含占位）/ 归档 1 份」）
+- [x] `node .agents/scripts/source-sync-check.mjs --diff` 报告 **0 差异**（证据：实测「包源 53 份 / 装副本 53 份 / 无差异 ✅」）
+- [x] `npm test` 既 18 套件仍 309/309 PASS（不回归；证据：npm test tail「✅ 全部套件通过」）
+- [x] `flow-kit doctor` 仍 10 PASS / 0 WARN / 0 FAIL（证据：sync 后实测 doctor 输出 10/0/0）
 
 > **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条勾选项后补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 实测输出>）`。
 
@@ -70,5 +70,8 @@
 - 确认日期：2026-09-25
 - 确认人：用户（对话内一句"可以"即确认）
 - 确认范围：intent 整体 + 1 主题目录 + 中文命名
-- 关单 commit：(pending —— 1 主题 + 8 条验收全勾验)
+- 关单 commit：`f8ce87d`（feat(wiki): 工作流主题沉淀——G 环节 workflow 声明归档；5 文件 +74 行）
+  - 8 条验收全勾验（见上「验收标准」段）
+  - 18 套件 309/309 PASS；doctor 10/0/0；source-sync-check 0 差异；verify-wiki-consistency 三方一致
+- 复核：L1 不要求独立复核
 - 复核：L1 不要求独立复核

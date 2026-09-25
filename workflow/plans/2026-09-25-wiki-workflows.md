@@ -1,5 +1,5 @@
 ---
-状态: draft
+状态: done
 级别: L1
 模块: pipeline
 ---
@@ -70,6 +70,7 @@
 
 > 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节（确认环节的机器可见态），done 只在关单出现——禁从 draft 直跳 done（2026-09-22 papercut）。
 - 确认结果：approved（2026-09-25 用户对话内"把 G 环节的 pipeline-closing 实际跑一次"通过；用户对 1 主题 + 中文命名 + pipeline-closing 自举测试认可）
-- 关单 commit：(pending —— 1 主题 + 8 条验收全勾验)
+- 关单 commit：`f8ce87d`（feat(wiki): 工作流主题沉淀——G 环节 workflow 声明归档；5 文件 +74 行）
+- 8 条验收全勾验；18 套件 309/309 PASS；doctor 10/0/0；source-sync-check 0 差异
 - 确认门记录：plan 草稿全文过目 + 改动清单确认（build.md 两道门，逐次，不合并）
 - 复核：L1 不要求独立复核
