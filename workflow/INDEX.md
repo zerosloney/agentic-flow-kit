@@ -10,8 +10,8 @@
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
 | INCIDENT | L1 | open | 2026-09-25 | pipeline | 2026-09-25 doctor owned 漂移 WARN 升级 FAIL | — |
-| INTENT | L1 | draft | 2026-09-25 | pipeline | wiki 工作流主题沉淀（wiki-workflows） | ☑0/8 |
-| PLAN | L1 | draft | 2026-09-25 | pipeline | wiki 工作流主题沉淀 | — |
+| INTENT | L1 | approved | 2026-09-25 | pipeline | workflows 编排脚本机器 linter（「解析校验先行」从 prose 落地为机器门） | ☑0/7 |
+| PLAN | L1 | approved | 2026-09-25 | pipeline | workflows 编排脚本机器 linter | — |
 | INTENT | L1 | approved | 2026-09-24 | pipeline | Shipyard 引擎增量收包（抽取后 3 笔回流包源） | ☑5/5 |
 | PLAN | L1 | approved | 2026-09-24 | pipeline | Shipyard 引擎增量收包 | — |
 | INTENT | L1 | approved | 2026-09-23 | pipeline | agentic-flow-kit：AI 工作流+wiki 引擎抽离为 npx 脚手架包（flow-kit init） | ☑0/6 |
@@ -25,17 +25,17 @@
 | PLAN | L1 | approved | 2026-09-23 | pipeline | M5：npm 发布 | — |
 | SPEC | L2 | approved | 2026-09-23 | pipeline | M4 自装 dogfooding | — |
 
-## 档案计数（58，不进表）
+## 档案计数（60，不进表）
 
 | 类型 | 模块 | 数量 |
 |---|---|---|
 | INCIDENT | pipeline | 9 |
-| INTENT | pipeline | 18 |
+| INTENT | pipeline | 19 |
 | INTENT | wiki | 1 |
-| PLAN | pipeline | 26 |
+| PLAN | pipeline | 27 |
 | PLAN | wiki | 1 |
 | SPEC | pipeline | 3 |
 
-终态构成：done 49 · closed 6 · fixed 3；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
+终态构成：done 51 · closed 6 · fixed 3；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
 
 <!-- GENERATED:END -->
