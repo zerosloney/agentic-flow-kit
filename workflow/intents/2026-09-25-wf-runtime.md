@@ -3,40 +3,38 @@
 级别: L2
 日期: 2026-09-25
 模块: pipeline
-备注: 同日第三轮形态定音（runner 被否 → orchestrate 被否）。2026-09-25 用户定调：「也不是让 kit 用 CLI 执行子智能体——kit 的脚本要**支持让宿主读取**，而脚本本身带编排能力；分析可行后落文档」。AskUserQuestion 前置确认仍有效：废 orchestrate、扩展 = 宿主脚本天然自由（kit 不自建 steps 机制）。
+备注: 同日第四轮定稿。骨架经 AskUserQuestion 用户确认：「AGENTS.md 自动加载 + stages 编排脚本 + steps kit 扩展点 + 宿主 AI 原生执行，零协议适配」。取代 orchestrate-in-session（其命令载体废止，机制改目录约定）与两轮更早形态。前两轮 AskUserQuestion 结论仍有效：废 orchestrate 命令、扩展机制归 kit（steps 扩展点）。
 ---
 
-# INTENT — workflow 编排脚本宿主读取形态（kit 交付可被宿主运行时执行的编排脚本）
+# INTENT — kit 编排机制：编排脚本 + steps 扩展点（全宿主自动加载，零协议适配）
 
 ## 背景与问题
-- 两轮纠偏后的正解：kit 既不 spawn CLI 当子智能体（headless runner，废），也不让主智能体解释声明表（orchestrate.md，废）——kit 交付**宿主 workflow 运行时原生格式**的编排脚本（ZCode 即 dynamic workflows 的 TS 脚本），宿主读取后用自己的运行时与**原生子智能体**执行。编排能力（fan-out / 依赖 / 重试 / gate）以宿主 facade 的真控制流写在脚本里；确认 / 权限 / 交互 / 断点续跑全部是宿主运行时既有能力。
-- 可行性已分析（详 spec §可行性）：宿主有「读取并执行 workflow 脚本」运行时机制（ZCode dynamic workflows 即是）则成立；kit 宿主适配层已把三角色注册为宿主子智能体，接线现成；角色契约 prompt 由脚本内联 helper 经 node:fs 运行时读取（宿主允许 node 内置 import）。
-- 「自定义扩展脚本」随形态天然满足：宿主脚本本身就是代码，项目手写 / 改写即扩展，kit 不自建扩展机制。
+- 同日三轮形态演进与用户纠偏的最终定音：kit 的编排机制要**所有宿主都读到、跑起来**——不依赖某宿主的 workflow 运行时（不止 zcode），不做宿主协议适配，扩展机制是 **kit 自己的扩展点**。
+- 全宿主共有的唯一基座 = 四样本领：读 AGENTS.md、读仓库文件、跑终端命令、（可选）子智能体。机制只建在这四样上 → 天然全宿主通用、零适配：**AGENTS.md 常驻指令就是自动加载通道**（所有 kit 装户宿主本来就读 AGENTS.md），编排能力以声明语义固化（宿主 AI 按语义执行，不是自由发挥），扩展点由 kit 统一定义。
 
 ## 目标
-- **workflow 脚本模板与规范**（kit 交付物）：`.agents/workflows/` 装宿主原生格式编排脚本模板（首个 = ZCode dynamic workflows 形态 `.ts`）+ `_TEMPLATE.md` 规范——固定约定四件：①角色派单 prompt 从 `.agents/roles/` 组装（内联 helper，红线行照旧：禁 commit/push、超范围 BLOCKER）②gate 门禁用宿主命令执行设施 ③执行留痕追加 `workflow/delegations.md`（node fs，口径与 agg-delegations 对齐）④声明随 plan 确认后方可提交宿主执行。
-- **宿主互补口径成文**：kit 不依赖、不复制宿主编排机制；宿主自带 dynamic workflows 的（ZCode / Claude Code）本就是本形态的执行前提；无该机制的宿主不在本形态覆盖内（用户明确不管，其仍走阶段命令既有路径）。
-- **orchestrate.md 废止**：LLM 解释执行与「宿主读取脚本」重叠且保真度低，按拍板删除；引用行改写；测试断言同步。
+- **编排脚本**（`.agents/workflows/<主题>.md`）：frontmatter（name / concurrency）+ stages 表——真编排语义：`after` 依赖分层、同层并行批、`retries` 重派、`gate` 门禁行（终端跑命令）；stage 三形态：role 派单行（子智能体）/ step 行（引用自定义步骤）/ gate 行。
+- **kit 扩展点**（`.agents/workflows/steps/<名>.md`）：自定义步骤——统一参数约定，步骤正文可指使命令 / 子智能体 / 任意动作；编排脚本 step 行引用即用；项目把领域动作（部署 / 迁移 / 审计）注册进机制。
+- **自动加载**：AGENTS.md 常驻指令——跑编排 / plan 执行多工作包时读 `.agents/workflows/` 按语义执行；执行口径（分层 → 层内并行 fan-out 或顺序自做 → 收敛复核 → gate → 留痕 delegations.md → 汇总）固化在机制文档 `_TEMPLATE.md`，全宿主同一口径，无子智能体宿主 fallback 验收不变。
+- **orchestrate.md 废止**：执行语义并入机制文档（目录约定，不占命令面）；引用行改口径。
 
 ## 非目标
-- kit 不做任何执行体：不 spawn CLI、不自带运行时、不 LLM 解释——执行权 100% 在宿主 workflow 运行时。
-- 不做跨宿主声明翻译层 / emitter（单宿主项目直接写宿主脚本；多宿主翻译需要时另立）。
-- 不做 steps 自定义机制（宿主脚本即扩展机制）；不做 TS 编译链（脚本由宿主 typecheck）。
+- 不做任何执行体（不 spawn CLI、不自带 node 运行时）——执行者 = 宿主 AI；不做宿主协议适配；不做 emitter 翻译层。
+- steps 不做机器强制的参数 schema（md 参数约定 + 宿主 AI 执行，机制文档写清口径）。
 
 ## 约束
-- 零运行时依赖照旧（模板脚本只用 node 内置 import + 宿主 facade）。
-- 规则面预算：orchestrate.md 删除（-3.4KB）远大于引用行与模板增量，净减。
-- 宿主脚本约束（如 ZCode dynamic workflows 仅允许 node 内置与官方根 import）→ 模板必须自包含（helper 内联，不 import 项目文件）。
+- 零运行时依赖照旧（纯 md 约定 + 既有引擎面）。
+- 规则面预算：orchestrate.md 删除（-3.4KB）净减；AGENTS.md 常驻指令一行控制在余量内。
 
 ## 影响面
 - 模块：pipeline
 - 数据库：无
 
 ## 触达红线（对照 AGENTS.md）
-- [ ] 规则 / 契约变更（编排形态三定：宿主读取脚本；orchestrate 废止）→ L2
+- [ ] 规则 / 契约变更（编排机制定稿：目录约定 + 自动加载 + steps 扩展点；orchestrate 废止）→ L2
 
 ## 验收标准（可测试）
-- [ ] ZCode 形态模板脚本落地：`.agents/workflows/示例-并行实现评审.zcode.ts`（自包含：角色 prompt helper 内联读 roles、编排骨架含并行 fan-out + gate + 留痕、BLOCKER/红线约定），过宿主 typecheck 方式验证（提交前门）
-- [ ] `_TEMPLATE.md` 重写：宿主读取形态说明 + 四件固定约定 + 宿主互补口径 + 「如何扩展（直接写宿主脚本）」
-- [ ] `orchestrate.md` 删除（templates + 装副本）；AGENTS.md / build.md 引用行改「宿主读取」口径；grep 无旧口径残留
-- [ ] `npm test` 全绿（init 装户面断言改：workflow 模板在位、orchestrate 不回流）；doctor 0 WARN；预算门通过（净减）
+- [ ] 机制文档 `workflows/_TEMPLATE.md` 定稿：自动加载口径、stages 语义（三形态 stage）、steps 扩展点约定（参数 / 发现 / 执行）、纪律（随 plan 确认、留痕、不跨确认门）
+- [ ] 装户件齐：示例编排脚本（stages 表）+ `steps/` 示例步骤 + AGENTS.md 常驻指令；`init` 装户自带
+- [ ] `orchestrate.md` 删除（templates + 装副本）；build.md 引用行改口径；grep 无旧口径残留
+- [ ] `npm test` 全绿（init 装户面断言改：声明件 + steps 在位、orchestrate 不回流）；doctor 0 WARN；预算门净减
