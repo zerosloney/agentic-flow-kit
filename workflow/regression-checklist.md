@@ -26,3 +26,4 @@
 | 2026-09-24-metrics-glob-vocab | 自实现 mini 解析器（glob 等）必须校验词表边界——出表形态警告跳过，不做丢弃前缀的放宽匹配 | gen-workflow-metrics.test.mjs 场景 4（npm test 随跑） |
 | 2026-09-24-npm-pack-cache-leak | 运行时生成件 `templates/_agents/cache` 不得进 npm 发布包——files 负向排除 + prepack 清除两道防线须在位，发布前 `npm pack --dry-run` 复核包清单无 cache | pack.test.mjs P1/P2（npm test 随跑）；npm 10/11 双版本 pack 实测 |
 | 2026-09-25-wf-run-review-fixes | 跨进程传 prompt 一律 stdin 协议（Windows 批处理 shim + 多行内联必须 fail-fast 不静默截断）；fake provider 测试矩阵须含真实 .cmd/.bat shim 形态（测试环境与真实威胁形态同构）；台账列内容半角 ｜ 全角化；错误路径必须 settle 在跑任务再退；行格式正则断言必须带负例（/^|…/ 恒真教训） | wf-run.test.mjs ①负例 + ⑧-⑫（npm test 随跑） |
+| 2026-09-25-wf-runtime | 包源改 owned 文件（含 AGENTS.md 常驻指令、AGENTS.md 引擎双源纪律段等）必须手动同步仓库根装副本（sync 只动 managed，owned 走 kit.owned 跳过）；doctor 台账校验不覆盖 owned 漂移——提交前自查装副本与包源内容一致；workflow/INDEX.md 状态变更后必跑 `node .agents/scripts/gen-workflow-index.mjs` | 本仓库真钩子常开 + 每次修改 AGENTS.md 后手核对 + gen-workflow-index.mjs `--check` 验证漂移 |

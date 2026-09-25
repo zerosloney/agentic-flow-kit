@@ -3,7 +3,7 @@
 级别: L2
 日期: 2026-09-25
 模块: pipeline
-备注: 同日第四轮定稿。骨架经 AskUserQuestion 用户确认：「AGENTS.md 自动加载 + stages 编排脚本 + steps kit 扩展点 + 宿主 AI 原生执行，零协议适配」。取代 orchestrate-in-session（其命令载体废止，机制改目录约定）与两轮更早形态。前两轮 AskUserQuestion 结论仍有效：废 orchestrate 命令、扩展机制归 kit（steps 扩展点）。
+备注: 同日第四轮定稿。骨架经 AskUserQuestion 用户确认：「AGENTS.md 自动加载 + stages 编排脚本 + steps kit 扩展点 + 宿主 AI 原生执行，零协议适配」。取代 orchestrate-in-session（其命令载体废止，机制改目录约定）与两轮更早形态。前两轮 AskUserQuestion 结论仍有效：废 orchestrate 命令、扩展机制归 kit（steps 扩展点）。回溯收口见 incidents/2026-09-25-wf-runtime.md——npm test 64/0 PASS、doctor 0 WARN、orchestrate grep 9 文件命中（4 件 wf-runtime 三件+1 incident 历史留档 / 1 init.test.mjs 负向断言 / 3 orchestrate-in-session 历史件）、rule-budget 5635B<7680B 上限。
 ---
 
 # INTENT — kit 编排机制：编排脚本 + steps 扩展点（全宿主自动加载，零协议适配）
@@ -37,4 +37,4 @@
 - [x] 机制文档 `workflows/_TEMPLATE.md` 定稿：自动加载口径、stages 语义（三形态 stage）、steps 扩展点约定（参数 / 发现 / 执行）、纪律（随 plan 确认、留痕、不跨确认门）（证据：_TEMPLATE.md 重写——自动加载指令 / stage 三形态表 / steps 约定与示例 / 执行口径八条）
 - [x] 装户件齐：示例编排脚本（stages 表）+ `steps/` 示例步骤 + AGENTS.md 常驻指令；`init` 装户自带（证据：init.test.mjs ⑥ 3 例 PASS——机制文档与示例 / steps 扩展点 / orchestrate 不回流负向断言；本仓库 sync 实装 3 覆盖 1 新增）
 - [x] `orchestrate.md` 删除（templates + 装副本）；build.md 引用行改口径；grep 无旧口径残留（证据：git rm 2 处 + sync「包内已移除」出台账 + 盘上清理；grep templates/.agents/src 仅 init.test 负向断言字符串）
-- [ ] `npm test` 全绿（init 装户面断言改：声明件 + steps 在位、orchestrate 不回流）；doctor 0 WARN；预算门净减
+- [x] `npm test` 全绿（init 装户面断言改：声明件 + steps 在位、orchestrate 不回流）；doctor 0 WARN；预算门净减

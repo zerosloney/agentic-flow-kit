@@ -40,6 +40,7 @@ next: .agents/commands/test.md
    - **先拉同模块历史坑**：按入口文档 `模块:` 跑 `node .agents/scripts/kb-search.mjs --scope workflow --module <token> "<关键词>"`——命中 incident 的根因 / 防复发条目列入改动自查
    - 列改动文件清单(读后改 vs 新建)
    - 列步骤(改 X 文件做 Y → 改 Z 文件做 W)
+   - **owned 文件同步**：kit.owned 列表文件（AGENTS.md / workflow 模板等）sync 不动，须列「手动同步装副本」步骤（见 incidents/2026-09-25-wf-runtime 复盘）
    - 标注触达红线(对照根 `AGENTS.md`「Working rules」+ 改动域目录级 `AGENTS.md`（如有）)
 6. 停下,等用户确认改动清单
 

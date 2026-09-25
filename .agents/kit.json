@@ -20,7 +20,7 @@
     },
     {
       "rel": ".agents/commands/build.md",
-      "sha256": "6badfff25aeea56ade9c4059c204feba1057bd7494feff5091dddb72febf6c3f"
+      "sha256": "71ce57ac6e715797bbefb858460a890d6b97376a2bf5801178202e8c7f755320"
     },
     {
       "rel": ".agents/commands/deploy.md",
@@ -218,7 +218,7 @@
   "owned": [
     {
       "rel": "AGENTS.md",
-      "sha256": "b8cb813786c043ed1fa32531b8bd0e1617bb252c02397360df89581b552fa040"
+      "sha256": "15c275c7c26d66768d7db8ef448ca30dfb832260f80bd847ade8a35f254a3a6b"
     },
     {
       "rel": "wiki/drafts-archive/README.md",
@@ -250,7 +250,7 @@
     },
     {
       "rel": "workflow/regression-checklist.md",
-      "sha256": "67afbb882186ed3e6095da6a344f6f5793d789c33d54b64a4fa275d6749da944"
+      "sha256": "81e6d1977086171e37a50b8aa958478b19424b0cb22c99eb901c792cc1d59d6b"
     },
     {
       "rel": "workflow/specs/_TEMPLATE.md",
