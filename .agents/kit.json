@@ -28,7 +28,7 @@
     },
     {
       "rel": ".agents/commands/design.md",
-      "sha256": "0fdf251fc4bd4e6ea462032ca77b330853ce7fb868da04718bcb85d2d95645a7"
+      "sha256": "15aeb55718283356c8c537efb9cac185fcf34058656c51f26f52141d38a1a74e"
     },
     {
       "rel": ".agents/commands/maintain.md",
@@ -40,7 +40,7 @@
     },
     {
       "rel": ".agents/commands/plan.md",
-      "sha256": "e71c17755bc2f146a2353a14c61f0bbc0b7a968ad1e9625658db40a91d0a6de3"
+      "sha256": "f9152b417e21241322a22bb37866ef0a68e72dcf12d325db6e376e04331982e2"
     },
     {
       "rel": ".agents/commands/review.md",
@@ -222,7 +222,7 @@
   "owned": [
     {
       "rel": "AGENTS.md",
-      "sha256": "f1f8025f4c53a362951da9daeee327e574ce1d20c5b50494a04f4ed96c2a17d0"
+      "sha256": "79fb476c92b3d1dda6449f95f8c994c8ac6297a944632b74f63128470e921b75"
     },
     {
       "rel": "wiki/drafts-archive/README.md",

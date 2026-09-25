@@ -16,11 +16,12 @@ next: L1 → .agents/commands/build.md ；L2/L3 → .agents/commands/design.md
 
 ## 执行
 
-> **看板（可选，默认不拉起）**：需要实时看板时手动跑 node .agents/scripts/ensure-board.mjs（跨平台；幂等：探活 / 旧代码自动重启 / 全新启动才弹浏览器；多项目并行自动上探首个可用端口），链接以脚本输出为准（基端口 {{BOARD_PORT}}）；不开看板不影响任务流程。
+> **看板（可选，默认不拉起）**：需要实时看板时手动跑 node .agents/scripts/ensure-board.mjs（跨平台；幂等：探活 / 旧代码自动重启 / 全新启动才弹浏览器；多项目并行自动上探首个可用端口），链接以脚本输出为准（基端口 8933）；不开看板不影响任务流程。
 
 1. 若 `workflow/intents/` 已有目标 intent 且状态为 approved → 按级别跳 next（L1 → `build.md`，L2/L3 → `design.md`）
 2. 否则起草新 intent:
    - **先检索同类**：`node .agents/scripts/kb-search.mjs "<关键词>" --scope workflow --type intents,specs`——命中同类先读其结论与验收，新 intent 引用（防重复立项 / 重复踩坑）
+   - **填空工具先跑**：`node .agents/scripts/fill-intent.mjs --module <模块> --level <L0|L1|L2|L3> --topic <主题> --output workflow/intents/<date>-<主题>.md --notes "<备注>"`——输出含 frontmatter 5 字段 + 7 节正文（背景与问题/目标/非目标/约束/影响面/触达红线/验收标准）的草稿；AI 据此填实，模板与节标题机器保证不出错
    - 复制 `workflow/intents/_TEMPLATE.md` → `workflow/intents/YYYY-MM-DD-<主题>.md`
    - frontmatter 填 `模块:`（词表见 `.agents/workflow-modules.txt`，新建文档必填，check-loop 会警告）
    - 按 6 节填写:背景与问题 / 目标(可验证) / 非目标 / 约束 / 影响面 / 触达红线（L1 微改动可省非目标/约束两节，不硬填）

@@ -28,6 +28,7 @@ next: .agents/commands/build.md
    - **L2**(改规则 / 契约:编码权威 / 共享契约 / 既有接口语义 / 全局横切口径,闭集见 `new-task.md` §级别判断)→ 必须有 spec
    - **L3**(数据与运行时结构:schema / 迁移 SQL / DI 链 / 认证与中间件管线)→ 必须有 spec + **新会话独立复核**
 3. 起草 spec:
+   - **填空工具先跑**：`node .agents/scripts/fill-spec.mjs --level <L1|L2|L3> --topic <主题> --output workflow/specs/<date>-<主题>.md`——输出含 frontmatter 5 字段 + 5 节正文（功能行为/数据流/系统改动/约束遵守映射/风险评估）的草稿；AI 据此填实
    - 复制 `workflow/specs/_TEMPLATE.md` → `workflow/specs/YYYY-MM-DD-<主题>.md`(与入口文档同名)
    - 按 5 节填写:功能行为 / 数据流 / 系统改动 / 约束遵守映射 / 风险评估
    - 约束映射必须对照根 `AGENTS.md`「Working rules」与改动域目录级 `AGENTS.md`（如有）逐条说明如何满足
