@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-25
 模块: pipeline
@@ -35,13 +35,13 @@
 - [ ] 规则 / 契约变更 → 否（纯新增校验工具，不改既有规则语义；同 gate-checklist / source-sync-check 先例定 L1）
 
 ## 验收标准（可测试）
-- [ ] linter 落位双源：`templates/_agents/scripts/workflows-check.mjs` + `.agents/` 装副本 sha 一致（sync 入台账），本仓库自扫 `node .agents/scripts/workflows-check.mjs` exit 0、0 error 0 warning
-- [ ] error 面全覆盖（10 类）fixture 断言：frontmatter 缺失 / concurrency 非法 / 表缺失 / id 空与重复 / after 悬空 / after 成环 / 未知 role / 未知 step / 三形态全空与双填 / retries 非法
-- [ ] advisory 面 fixture 断言：gate 花括号展开告警；授权文件 token 相同且有 after 先序不告警、无先序告警；`_TEMPLATE.md` 不进扫描面
-- [ ] doctor §6.8 接线生效（自跑出现该条目且 PASS）+ §2 布局清单含 `.agents/workflows/_TEMPLATE.md`
-- [ ] `pipeline-closing.md` gate-doc 花括号修复为显式 `&&` 串联（templates + 装副本同步改），修复后自扫 0 warning
-- [ ] `npm test` 全绿（新增 workflows-check.test.mjs 套件 + 既有套件无回归）
-- [ ] `source-sync-check --diff` 双源 0 差异
+- [x] linter 落位双源：`templates/_agents/scripts/workflows-check.mjs` + `.agents/` 装副本 sha 一致（sync 入台账），本仓库自扫 `node .agents/scripts/workflows-check.mjs` exit 0、0 error 0 warning（证据：commit 474eb81；自扫输出「编排脚本 3 份 ✅ 0 error / 0 warning」；kit.json managed +2）
+- [x] error 面全覆盖（10 类）fixture 断言：frontmatter 缺失 / concurrency 非法 / 表缺失 / id 空与重复 / after 悬空 / after 成环 / 未知 role / 未知 step / 三形态全空与双填 / retries 非法（证据：workflows-check.test.mjs S2-S7/S11-S13，套件 14 场景全 PASS，npm test 随跑）
+- [x] advisory 面 fixture 断言：gate 花括号展开告警；授权文件 token 相同且有 after 先序不告警、无先序告警；`_TEMPLATE.md` 不进扫描面（证据：S8 / S9 / S10 三场景 PASS）
+- [x] doctor §6.8 接线生效（自跑出现该条目且 PASS）+ §2 布局清单含 `.agents/workflows/_TEMPLATE.md`（证据：commit 474eb81 后 doctor 输出「✅ workflows 编排脚本 lint 干净」「目录布局完整（27 个关键路径）」，整体 11 PASS / 0 FAIL）
+- [x] `pipeline-closing.md` gate-doc 花括号修复为显式 `&&` 串联（templates + 装副本同步改），修复后自扫 0 warning（证据：commit 474eb81 双源同改；source-sync-check --diff 报「无差异 ✅」，自扫 0 warning）
+- [x] `npm test` 全绿（新增 workflows-check.test.mjs 套件 + 既有套件无回归）（证据：18 个 node 套件 + bash 套件 34/0 全绿——`node .agents/scripts/verify.mjs` 1/2 全过；期间修复测试断言自身 E 码切片 bug 一次，非实现返工）
+- [x] `source-sync-check --diff` 双源 0 差异（证据：commit 474eb81 后输出「包源 55 份 | 装副本 55 份，无差异 ✅」）
 
 ## 确认与复核
 - 确认日期：2026-09-25

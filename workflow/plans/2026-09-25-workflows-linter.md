@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-25
 模块: pipeline
@@ -18,10 +18,10 @@
 
 ## 验证方式
 
-- `node .agents/scripts/workflows-check.mjs`：本仓库自扫 exit 0、0 error 0 warning（pipeline-closing 修复后）。
-- `npm test`：全部套件绿（含新增 workflows-check.test.mjs）。
-- `node bin/flow-kit.mjs doctor`：0 FAIL、§6.8 出现且 PASS、§2 布局含 workflows 模板。
-- `node .agents/scripts/source-sync-check.mjs --diff`：0 差异。
+- `node .agents/scripts/workflows-check.mjs`：本仓库自扫 exit 0、0 error 0 warning（pipeline-closing 修复后）。✅（证据：自扫输出 3 份全 ✅）
+- `npm test`：全部套件绿（含新增 workflows-check.test.mjs）。✅（证据：verify.mjs 1/2 全过，18 node 套件 + bash 34/0）
+- `node bin/flow-kit.mjs doctor`：0 FAIL、§6.8 出现且 PASS、§2 布局含 workflows 模板。✅（证据：11 PASS / 1 WARN（存量 .githooks managed 本地改动，先于本任务）/ 0 FAIL）
+- `node .agents/scripts/source-sync-check.mjs --diff`：0 差异。✅（证据：55 份对齐「无差异」）
 
 ## 确认与复核
 
