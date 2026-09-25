@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-25
 模块: pipeline
@@ -38,12 +38,12 @@
 - [ ] 规则 / 契约变更 → 否（枚举值与判定行为零变化，纯读取来源重构；沿 modules.txt 先例 L1）
 
 ## 验收标准（可测试）
-- [ ] 单源 8 键 + helper + 测试落位双源（sync 入台账 / 未入台账件手动 cp），`workflow-enums.test.mjs` 断言真实文件解析、不变量通过、坏行/重复键/缺键/缺文件 fail-loud
-- [ ] 10 处消费方改读单源且行为零回归：check-loop 4 处、看板 4 处、kb-search / gen-workflow-index 活跃集、fill-*×3 级别表——既有 34 场景 check-loop 套件 + kb-search / fill-* / gen-index 套件全绿
-- [ ] fail-loud 双路径实测：fixture 缺单源文件 → check-loop exit 1 含「枚举单源」提示；node 侧 loadEnums 对不存在路径抛错（测试断言）
-- [ ] 消费方源码机器字面量清零：`grep -n "superseded" 消费方.mjs/.sh` 仅剩注释/生成 prose，无判定逻辑字面量（词表归一的可复核证据）
-- [ ] doctor §2 布局含 `.agents/workflow-enums.txt`（28 项）且 doctor 0 FAIL
-- [ ] `npm test` 全绿 + `source-sync-check --diff` 0 差异
+- [x] 单源 8 键 + helper + 测试落位双源（sync 入台账 / 未入台账件手动 cp），`workflow-enums.test.mjs` 断言真实文件解析、不变量通过、坏行/重复键/缺键/缺文件 fail-loud（证据：commit f2f5d99——套件 12/0 全过：S1-S2 真实文件、S3-S9 坏数据 fail-loud、S12 CRLF 容忍）
+- [x] 10 处消费方改读单源且行为零回归：check-loop 4 处、看板 4 处、kb-search / gen-workflow-index 活跃集、fill-*×3 级别表——既有 34 场景 check-loop 套件 + kb-search / fill-* / gen-index 套件全绿（证据：check-loop 套件 37/0（34 既有全过 + 3 新场景）、npm test 全 20 套件绿；check-loop 真实仓库警告回基线 32 条、0 误报）
+- [x] fail-loud 双路径实测：fixture 缺单源文件 → check-loop exit 1 含「枚举单源」提示；node 侧 loadEnums 对不存在路径抛错（测试断言）（证据：check-loop.test.sh「枚举单源文件缺失 → exit 1」「缺键 → exit 1」两场景 PASS；workflow-enums.test S9 PASS）
+- [x] 消费方源码机器字面量清零：`grep -n "superseded" 消费方.mjs/.sh` 仅剩注释/生成 prose，无判定逻辑字面量（证据：实跑 grep 11 处命中全为 check-loop 告警文案与 fill-* 生成注释模板，判定逻辑（in_set/ENUMS 引用）零字面量）
+- [x] doctor §2 布局含 `.agents/workflow-enums.txt`（28 项）且 doctor 0 FAIL（证据：sync 后 doctor 输出「目录布局完整（28 个关键路径）」「11 PASS / 0 FAIL」）
+- [x] `npm test` 全绿 + `source-sync-check --diff` 0 差异（证据：npm test「✅ 全部套件通过」20 套件；source-sync-check「无差异 ✅」；verify.mjs 2/2 全绿）
 
 ## 确认与复核
 - 确认日期：2026-09-25
