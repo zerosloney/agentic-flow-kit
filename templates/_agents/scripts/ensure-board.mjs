@@ -31,7 +31,7 @@ let BASE_PORT;
 if (portArg && Number(portArg)) {
   BASE_PORT = Number(portArg);
 } else {
-  // 基端口取 kit 台账（init 询问值，与命令文档 {{BOARD_PORT}} 同源）；无台账或解析失败回落 8933
+  // 基端口取 kit 台账（init 询问值，与命令文档 8933 同源）；无台账或解析失败回落 8933
   try { BASE_PORT = Number(JSON.parse(fs.readFileSync(path.join(ROOT, '.agents', 'kit.json'), 'utf8')).options.boardPort) || 8933; }
   catch { BASE_PORT = 8933; }
 }

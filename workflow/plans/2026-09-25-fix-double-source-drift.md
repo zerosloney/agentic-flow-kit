@@ -1,5 +1,5 @@
 ---
-状态: draft
+状态: approved
 级别: L1
 模块: pipeline
 ---
@@ -16,12 +16,12 @@
 
 > 5 段改动面（4 处漂移修复 + 1 处工具白名单）；按 C 环节 source-sync-check 实测报告定向闭环。
 
-**1. 装副本 3 处占位符替换（与包源对齐）**
+**1. 包源 3 处占位符替换（与已渲染装副本对齐）**
 
-- `.agents/commands/maintain.md`：注释中 `{{BOARD_PORT}}` → `8933`。判据：grep "BOARD_PORT" .agents/commands/maintain.md 0 命中。
-- `.agents/notes/runtime-env.md`：注释中 `{{BOARD_PORT}}` → `8933`。判据：grep "BOARD_PORT" .agents/notes/runtime-env.md 0 命中。
-- `.agents/scripts/ensure-board.mjs`：注释中 `{{BOARD_PORT}}` → `8933`。判据：grep "BOARD_PORT" .agents/scripts/ensure-board.mjs 0 命中。
-- 注：包源已渲染为 `8933`（v0.4.0 跨平台升级后基线值）；装副本保留占位符是 init 渲染后的存量问题，本次按 B-b 决策向包源对齐。
+- `templates/_agents/commands/maintain.md`：注释中 `{{BOARD_PORT}}` → `8933`。判据：grep "{{BOARD_PORT}}" templates/_agents/commands/maintain.md 0 命中。
+- `templates/_agents/notes/runtime-env.md`：注释中 `{{BOARD_PORT}}` → `8933`。判据：grep "{{BOARD_PORT}}" templates/_agents/notes/runtime-env.md 0 命中。
+- `templates/_agents/scripts/ensure-board.mjs`：注释中 `{{BOARD_PORT}}` → `8933`。判据：grep "{{BOARD_PORT}}" templates/_agents/scripts/ensure-board.mjs 0 命中。
+- 注：装副本已渲染为 `8933`（基端口默认值）；包源保留占位符是 init 渲染时模板侧的存量问题，本次按 B-b 决策"包源应反映装副本实际状态"将模板基线对齐到 8933。
 
 **2. 包源 rule-budgets.txt 上限同步**
 
@@ -55,7 +55,7 @@
 ## 确认与复核
 
 > 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节（确认环节的机器可见态），done 只在关单出现——禁从 draft 直跳 done（2026-09-22 papercut）。
-- 确认结果：(pending —— 用户对话内一句"可以"通过后回填)
+- 确认结果：approved（2026-09-25 用户对话内"选 F · 装户面双源漂移修复"通过；用户对 5 段改动面 + 验证方式 + B-b 决策延续认可）
 - 关单 commit：(pending —— 5 段改动面 + 8 条验收全勾验)
 - 确认门记录：plan 草稿全文过目 + 改动清单确认（build.md 两道门，逐次，不合并）
 - 复核：L1 不要求独立复核

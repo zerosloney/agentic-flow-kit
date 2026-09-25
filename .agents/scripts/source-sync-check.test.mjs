@@ -36,7 +36,9 @@ function mkFixture() {
   fs.writeFileSync(path.join(tgtBase, 'commands', 'cmdA.md'), '# cmdA v1\n');
   // 缺失（cmdB.md）：包源有 / 装副本无
   fs.writeFileSync(path.join(pkgBase, 'commands', 'cmdB.md'), '# cmdB v1\n');
-  // 孤儿（commit-check.config.json）：装副本 hooks/ 有 / 包源无
+  // 孤儿（orphan-real.json）：装副本 hooks/ 有 / 包源无（普通孤儿，应被报告）
+  fs.writeFileSync(path.join(tgtBase, 'hooks', 'orphan-real.json'), '{}\n');
+  // 白名单孤儿（commit-check.config.json）：装副本 hooks/ 有 / 包源无，但 init 渲染产物不应报孤儿
   fs.writeFileSync(path.join(tgtBase, 'hooks', 'commit-check.config.json'), '{}\n');
   // 装副本独有（应排除）：kit.json / settings.json
   fs.writeFileSync(path.join(tgtBase, 'kit.json'), '{}\n');
@@ -55,8 +57,9 @@ function mkFixture() {
   const { pkgRoot, target } = mkFixture();
   const r = sourceSyncCheck({ pkgRoot, target });
   check('S1 fixture 缺失 1（cmdB.md）', r.missing.length === 1 && r.missing[0].rel === 'commands/cmdB.md', JSON.stringify(r.missing));
-  check('S1 fixture 孤儿 1（commit-check.config.json）', r.orphan.length === 1 && r.orphan[0].rel === 'hooks/commit-check.config.json', JSON.stringify(r.orphan));
+  check('S1 fixture 孤儿 1（orphan-real.json）', r.orphan.length === 1 && r.orphan[0].rel === 'hooks/orphan-real.json', JSON.stringify(r.orphan));
   check('S1 fixture 漂移 1（scriptX.mjs）', r.drift.length === 1 && r.drift[0].rel === 'scripts/scriptX.mjs', JSON.stringify(r.drift));
+  check('S1 fixture 白名单项（commit-check.config.json）不在孤儿', !r.orphan.some((o) => o.rel === 'hooks/commit-check.config.json'));
 }
 
 // ---- 场景 2：cache/ 目录排除 ----
@@ -110,6 +113,36 @@ function mkFixture() {
   let parsed = null;
   try { parsed = JSON.parse(jsonOut); } catch {}
   check('S6 --json 输出可解析', parsed && typeof parsed === 'object' && Array.isArray(parsed.missing));
+}
+
+// ---- 场景 8：白名单 RHO 文件过滤（hooks/commit-check.config.json + kit.json + settings.json 都不报孤儿）----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-ssc-rho-'));
+  const pkgRoot = path.join(root, 'pkg');
+  const target = path.join(root, 'target');
+  const pkgBase = path.join(pkgRoot, 'templates', '_agents');
+  const tgtBase = path.join(target, '.agents');
+  fs.mkdirSync(pkgBase, { recursive: true });
+  fs.mkdirSync(path.join(tgtBase, 'hooks'), { recursive: true });
+  fs.mkdirSync(tgtBase, { recursive: true });
+  // 3 个白名单项都装副本独有
+  fs.writeFileSync(path.join(tgtBase, 'hooks', 'commit-check.config.json'), '{}\n');
+  fs.writeFileSync(path.join(tgtBase, 'kit.json'), '{}\n');
+  fs.writeFileSync(path.join(tgtBase, 'settings.json'), '{}\n');
+  // 1 个非白名单孤儿作对照（应被报告）
+  fs.writeFileSync(path.join(tgtBase, 'hooks', 'real-orphan.json'), '{}\n');
+  const r = sourceSyncCheck({ pkgRoot, target });
+  check('S8 白名单 3 项（commit-check.config.json / kit.json / settings.json）不报孤儿',
+    !r.orphan.some((o) => o.rel === 'hooks/commit-check.config.json' || o.rel === 'kit.json' || o.rel === 'settings.json'));
+  check('S8 非白名单孤儿（real-orphan.json）仍报孤儿',
+    r.orphan.length === 1 && r.orphan[0].rel === 'hooks/real-orphan.json', JSON.stringify(r.orphan));
+}
+
+// ---- 场景 9：实际仓库 hooks/commit-check.config.json 不在孤儿 ----
+{
+  const r = sourceSyncCheck({ pkgRoot: SRC_ROOT, target: SRC_ROOT });
+  check('S9 实际仓库 hooks/commit-check.config.json 不在孤儿',
+    !r.orphan.some((o) => o.rel === 'hooks/commit-check.config.json'), JSON.stringify(r.orphan));
 }
 
 // ---- 场景 7：空目录 / 不存在的目录不崩 ----

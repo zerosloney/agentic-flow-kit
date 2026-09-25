@@ -2,7 +2,7 @@
 // 目的：包源改了 templates/_agents/ 但 .agents/ 装副本没刷新——这种"真空地带"sync.mjs 不扫、doctor.mjs §6.6 不扫
 //       本工具扫 templates/_agents/ 下所有 .md / .mjs / .json / .txt（排除 cache/）vs .agents/ 对应路径
 //       输出三类差异：缺失（包源有装副本无）/ 孤儿（包源无装副本有）/ 漂移（两者都有 sha 不一致）
-//       排除装副本独有文件：kit.json / settings.json（init 渲染产物，不属双源）
+//       排除装副本独有文件：kit.json / settings.json / hooks/commit-check.config.json（init 渲染产物，不属双源）
 // 用法：node .agents/scripts/source-sync-check.mjs --diff
 //       node .agents/scripts/source-sync-check.mjs --json
 //       node .agents/scripts/source-sync-check.mjs --pkg-root <path> --target <path>
@@ -15,7 +15,8 @@ function fail(msg) { console.error('❌ ' + msg); process.exit(1); }
 
 const VALID_EXTS = new Set(['.md', '.mjs', '.json', '.txt']);
 // 装副本独有文件（init 渲染产物，不属双源结构）
-const TARGET_EXCLUDE = new Set(['kit.json', 'settings.json']);
+const RENDER_OUTPUT_FILES = new Set(['kit.json', 'settings.json', 'hooks/commit-check.config.json']);
+const TARGET_EXCLUDE = RENDER_OUTPUT_FILES;  // 向后兼容别名
 
 function sha256(p) {
   try {

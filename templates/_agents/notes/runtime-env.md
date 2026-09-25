@@ -11,7 +11,7 @@
 
 - API：<端口 / 进程名 / 启动停止命令>
 - 前端：<端口 / 启动命令>
-- workflow 看板：{{BOARD_PORT}}（`node .agents/scripts/workflow-board-server.mjs`，只读）
+- workflow 看板：8933（`node .agents/scripts/workflow-board-server.mjs`，只读）
 
 ## 3. 数据与密钥
 

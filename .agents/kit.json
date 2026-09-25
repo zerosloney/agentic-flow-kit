@@ -20,7 +20,7 @@
     },
     {
       "rel": ".agents/commands/build.md",
-      "sha256": "ef853cb71ba3787cad6651f5f4ce2134e91d9c9bed341c6c83dfd3055d262787"
+      "sha256": "5b28ce819114bc01748fbba062e9f641e7d1f608529f3067bafb430eeb70fd2e"
     },
     {
       "rel": ".agents/commands/deploy.md",
@@ -270,7 +270,7 @@
     },
     {
       "rel": ".agents/rule-budgets.txt",
-      "sha256": "10839cf76a9a682556b738306d4886cf401812b04da04d46aa35f1b5992b1e8d"
+      "sha256": "7140ae97c5fea24a72f98bc4c15e96341496f16c2df77e753e3213e32bff348d"
     },
     {
       "rel": ".agents/workflow-modules.txt",
