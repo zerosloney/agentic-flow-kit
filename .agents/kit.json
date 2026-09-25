@@ -1,6 +1,6 @@
 {
   "kit": "agentic-flow-kit",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "createdAt": "2026-09-23T15:07:19.753Z",
   "options": {
     "hosts": [
@@ -84,7 +84,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "204639922b39a8d27601c469f8586a3c3e2874f84af33fbc3d4728248d85d2ad"
+      "sha256": "4a44aa439a9fd08f250772df086829d97abfdb8db0e039ff8991ede67cf8b2bb"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
