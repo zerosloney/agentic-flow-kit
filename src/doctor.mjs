@@ -139,8 +139,9 @@ export function doctor(args, pkgRoot) {
   } else if (ownedRes.drift === 0 && ownedRes.gone.length === 0) {
     add('PASS', `owned ${ownedRes.total} 份无漂移（装副本与台账 sha 对齐）`);
   } else {
-    if (ownedRes.drift) add('WARN', `owned 漂移 ${ownedRes.drift} 份——装副本手改未跑 sync 刷台账 / 包源改了装副本未同步；须手动同步装副本后跑 node bin/flow-kit.mjs sync 刷台账（见 incidents/2026-09-25-wf-runtime 复盘）`);
-    if (ownedRes.gone.length) add('WARN', `owned 文件缺失：${ownedRes.gone.join('、')}——sync 恢复或手动恢复`);
+    // owned 漂移已严化为 FAIL（2026-09-25 doctor-owned-drift-strict 复盘；首次引入用 WARN，installed 装户吃过警告后升级）
+    if (ownedRes.drift) add('FAIL', `owned 漂移 ${ownedRes.drift} 份——装副本手改未跑 sync 刷台账 / 包源改了装副本未同步；须手动同步装副本后跑 node bin/flow-kit.mjs sync 刷台账（见 incidents/2026-09-25-wf-runtime 复盘）`);
+    if (ownedRes.gone.length) add('FAIL', `owned 文件缺失：${ownedRes.gone.join('、')}——sync 恢复或手动恢复`);
   }
 
   // 7. check-loop——先探 sh 可用性（对齐 run-tests.mjs 先例）：Windows PowerShell 常无 sh，

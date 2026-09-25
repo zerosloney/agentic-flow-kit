@@ -147,5 +147,27 @@ const mkKit = (owned) => ({
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- 场景 8：owned 漂移 WARN 已严化为 FAIL（2026-09-25 doctor-owned-drift-strict 复盘）----
+// 源码层断言：src/doctor.mjs 第 6.6 节主流程输出必须用 add('FAIL', …) 而非 add('WARN', …)；
+// 这是规则严度参数化的最小防回归——不依赖运行时执行 doctor（避免造完整 fixture）。
+{
+  const doctorSrc = fs.readFileSync(SRC, 'utf8');
+  // 断言：owned 漂移分支必须用 'FAIL'
+  const failDrift = /ownedRes\.drift\)\s*add\('FAIL'/.test(doctorSrc);
+  check('场景 8a：src/doctor.mjs 第 6.6 节 owned 漂移分支已用 add(\'FAIL\', …)',
+    failDrift,
+    `src/doctor.mjs 第 6.6 节应为 add('FAIL', ...) 而非 add('WARN', ...)`);
+  // 断言：owned gone 分支必须用 'FAIL'
+  const failGone = /ownedRes\.gone\.length\)\s*add\('FAIL'/.test(doctorSrc);
+  check('场景 8b：src/doctor.mjs 第 6.6 节 owned gone 分支已用 add(\'FAIL\', …)',
+    failGone,
+    `src/doctor.mjs 第 6.6 节 gone 分支应为 add('FAIL', ...)`);
+  // 断言：doctor 主流程 results 含 FAIL 时 process.exit(1)（fail-loud）
+  const failLoud = /results\.some\(\(r\)\s*=>\s*r\.level\s*===\s*'FAIL'\)\s*\?\s*1\s*:\s*0/.test(doctorSrc);
+  check('场景 8c：doctor 主流程 results 含 FAIL 时 exit 1（fail-loud）',
+    failLoud,
+    `src/doctor.mjs 应保留 process.exit(1) fail-loud 行为`);
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);
