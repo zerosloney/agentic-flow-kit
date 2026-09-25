@@ -10,3 +10,7 @@ templates/_agents/cache/
 _*.mjs
 # npm test 重定向输出（PowerShell | Select-Object 流式捕获不稳，改重定向文件后 grep）
 test-output.txt
+# PowerShell Out-File 重定向输出（doctor / sync / npm test 流式捕获不稳时用）
+doctor-out.txt
+sync-out.txt
+test-out.txt

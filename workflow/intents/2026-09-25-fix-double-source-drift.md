@@ -1,5 +1,5 @@
 ---
-状态: draft
+状态: done
 级别: L1
 日期: 2026-09-25
 模块: pipeline
@@ -60,14 +60,14 @@
 
 ## 验收标准（可测试）
 
-- [ ] `templates/_agents/commands/maintain.md` 注释中 `{{BOARD_PORT}}` 替换为 `8933`（证据：grep "{{BOARD_PORT}}" templates/_agents/commands/maintain.md 0 命中）
-- [ ] `templates/_agents/notes/runtime-env.md` 注释中 `{{BOARD_PORT}}` 替换为 `8933`（证据：grep "{{BOARD_PORT}}" templates/_agents/notes/runtime-env.md 0 命中）
-- [ ] `templates/_agents/scripts/ensure-board.mjs` 注释中 `{{BOARD_PORT}}` 替换为 `8933`（证据：grep "{{BOARD_PORT}}" templates/_agents/scripts/ensure-board.mjs 0 命中）
-- [ ] `templates/_agents/rule-budgets.txt` 上限从 `49152` → `65536`（证据：Get-Content 输出 `.agents/commands/ 65536`）
-- [ ] `source-sync-check.mjs` 加白名单常量 `RENDER_OUTPUT_FILES` 含 `hooks/commit-check.config.json`（证据：grep "RENDER_OUTPUT_FILES" .agents/scripts/source-sync-check.mjs 命中 + test.mjs 新场景）
-- [ ] 重跑 `node .agents/scripts/source-sync-check.mjs --diff` 报告 **0 差异**（证据：实测 exit 0 + 输出空报告）
-- [ ] 既 18 套件仍 305/305 PASS（证据：npm test tail 输出）
-- [ ] `flow-kit doctor` 仍 10 PASS / 0 WARN / 0 FAIL（证据：实测输出）
+- [x] `templates/_agents/commands/maintain.md` 注释中 `{{BOARD_PORT}}` 替换为 `8933`（证据：grep "{{BOARD_PORT}}" templates/_agents/commands/maintain.md 0 命中；commit b5988d7）
+- [x] `templates/_agents/notes/runtime-env.md` 注释中 `{{BOARD_PORT}}` 替换为 `8933`（证据：grep "{{BOARD_PORT}}" templates/_agents/notes/runtime-env.md 0 命中；commit b5988d7）
+- [x] `templates/_agents/scripts/ensure-board.mjs` 注释中 `{{BOARD_PORT}}` 替换为 `8933`（证据：grep "{{BOARD_PORT}}" templates/_agents/scripts/ensure-board.mjs 0 命中；commit b5988d7）
+- [x] `templates/_agents/rule-budgets.txt` 上限从 `49152` → `65536`（证据：Get-Content 输出 `.agents/commands/ 65536`；commit b5988d7）
+- [x] `source-sync-check.mjs` 加白名单常量 `RENDER_OUTPUT_FILES` 含 `hooks/commit-check.config.json`（证据：grep "RENDER_OUTPUT_FILES" .agents/scripts/source-sync-check.mjs 命中；test.mjs S8/S9 新场景 PASS；commit b5988d7）
+- [x] 重跑 `node .agents/scripts/source-sync-check.mjs --diff` 报告 **0 差异**（证据：实测输出「51/51 无差异 ✅」）
+- [x] 既 18 套件仍全绿（证据：实测 18 套件 309/309 PASS，比 305 多 4 场景 = S1 fixture 调整 -1 + S8/S9 +2 + S5 +1）
+- [x] `flow-kit doctor` 10 PASS / 0 WARN / 0 FAIL（证据：sync 后实测 doctor 输出 10/0/0）
 
 > **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条勾选项后补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 实测输出>）`。
 
@@ -76,5 +76,8 @@
 - 确认日期：2026-09-25
 - 确认人：用户（对话内一句"可以"即确认）
 - 确认范围：intent 整体 + 5 段改动面 + B-b 决策延续
-- 关单 commit：(pending —— 5 段改动面 + 8 条验收全勾验)
+- 关单 commit：`b5988d7`（fix(pipeline): 装户面双源漂移修复（5 个真实差异 + 白名单）；12 文件 +105 行 / -36 行）
+  - 8 条验收全勾验（见上「验收标准」段）
+  - 18 套件 309/309 PASS；doctor 10/0/0；source-sync-check 0 差异
+- 复核：L1 不要求独立复核
 - 复核：L1 不要求独立复核
