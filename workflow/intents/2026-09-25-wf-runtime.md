@@ -1,5 +1,5 @@
 ---
-状态: draft
+状态: approved
 级别: L2
 日期: 2026-09-25
 模块: pipeline
