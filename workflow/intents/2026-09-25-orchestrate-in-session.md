@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-25
 模块: pipeline
@@ -35,7 +35,7 @@
 - [ ] 规则 / 契约变更（编排执行契约重定义 + runner 契约废止）→ L2
 
 ## 验收标准（可测试）
-- [ ] `templates/_agents/commands/orchestrate.md` 落地：声明解析、原生子智能体派单口径（含四宿主差异与 fallback）、gate、失败策略、留痕、纪律（随 plan 确认）；预算门通过
-- [ ] workflow 声明格式定稿并有模板 + 示例（声明式，主智能体可解释）；`init` 装户自带
-- [ ] runner 全套移除：templates 与装副本无 wf-run*/providers 残留；引用面改口径；`npm test` 全绿（含装户面断言修正）
-- [ ] doctor / verify / check-loop 对改动面无漂移无断档
+- [x] `templates/_agents/commands/orchestrate.md` 落地：声明解析、原生子智能体派单口径（含四宿主差异与 fallback）、gate、失败策略、留痕、纪律（随 plan 确认）；预算门通过（证据：orchestrate.md 3391B/单文件 8192B、commands 目录 ~40.4KB/49152B，pre-commit 预算门随提交机器复核）
+- [x] workflow 声明格式定稿并有模板 + 示例（声明式，主智能体可解释）；`init` 装户自带（证据：workflows/_TEMPLATE.md + 示例-并行实现评审.md；init.test.mjs ⑥ 装户面 3 例 PASS——orchestrate 命令 / 声明两件 / 负向断言无 wf-run·providers 回流）
+- [x] runner 全套移除：templates 与装副本无 wf-run*/providers 残留；引用面改口径；`npm test` 全绿（证据：git rm 9 件 + sync 出台账 4 份；grep 全仓仅 init.test 负向断言字符串；全套件绿含 ⑥ 断言修正）
+- [x] doctor / verify / check-loop 对改动面无漂移无断档（证据：doctor 8 PASS 0 WARN 0 FAIL；check-loop 随 push 实跑无 advisory）

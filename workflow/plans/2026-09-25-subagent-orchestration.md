@@ -44,8 +44,8 @@
 
 - provider JSON 结构化输出解析、TS 方言支持——需要时另立 intent
 - 并发扩容（>2）按 delegations.md「并发扩容门槛」量化数据拍板，不在本单
-- **冒烟成功 roundtrip 补跑**：codex 配额墙（2026-10-01 恢复）后跑 `node .agents/scripts/wf-run.mjs .agents/workflows/冒烟-codex.mjs --no-ledger`，预期 exit 0 且输出含 agentic-flow-kit；zcode / claude / opencode 语法校准随该窗口一并做
-- 冒烟暴露的两处 runner 修复（resolveWin PATHEXT 优先序、超时 taskkill /T 进程树强杀）已随实现落地，由 wf-run.test.mjs 既有用例与后续真实补跑回归兜底
+- ~~冒烟成功 roundtrip 补跑~~（**作废**：执行形态已由 2026-09-25-orchestrate-in-session 修正为会话内原生子智能体 fan-out，headless runner 全套废止，无 provider 可冒烟）
+- 冒烟暴露的两处 runner 修复已随 runner 废止一并退场；「测试环境与真实威胁形态同构」教训沉淀在 regression-checklist 2026-09-25-wf-run-review-fixes 条目，继续有效
 
 ## 确认与复核
 

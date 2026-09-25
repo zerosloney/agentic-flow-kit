@@ -1,6 +1,0 @@
-{
-  "zcode": { "cmd": ["zcode", "exec", "-"] },
-  "claude": { "cmd": ["claude", "-p"] },
-  "opencode": { "cmd": ["opencode", "run"] },
-  "codex": { "cmd": ["codex", "exec", "-"] }
-}

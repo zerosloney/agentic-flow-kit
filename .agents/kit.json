@@ -20,7 +20,7 @@
     },
     {
       "rel": ".agents/commands/build.md",
-      "sha256": "6a35160bda4d2ae2cb5b8f47c311fb6da5e7dd52bb1371e7108c8608206212c4"
+      "sha256": "1ada2a446893461d1f374eade09ae310e87eb0ab68f22d7a08e65fbaef8bfeb6"
     },
     {
       "rel": ".agents/commands/deploy.md",
@@ -37,6 +37,10 @@
     {
       "rel": ".agents/commands/new-task.md",
       "sha256": "7e819789dc3827f505ecd82560215bc64c83c0413dccd3bbc948d9a0e02bf3aa"
+    },
+    {
+      "rel": ".agents/commands/orchestrate.md",
+      "sha256": "b357ce0a36ebfeb0e0dfa3bb12d1fd74dfcb770f4d148de21615c5d0c2953888"
     },
     {
       "rel": ".agents/commands/plan.md",
@@ -155,14 +159,6 @@
       "sha256": "e2764c810fe6963495b2b1358d7ab7771136904f6e11996b38611ad5cdce261d"
     },
     {
-      "rel": ".agents/scripts/wf-run.mjs",
-      "sha256": "499df209d13e879d0900448f189810e563df092c79cf1aa312039e09c62f468c"
-    },
-    {
-      "rel": ".agents/scripts/wf-run.test.mjs",
-      "sha256": "45b0700fb4b7f49fe098de2313361918c04d92f29319c7027780c90ad1fb6e0f"
-    },
-    {
       "rel": ".agents/scripts/wiki-search.mjs",
       "sha256": "a493c85924644613619b83334b6f8e4db40ebf0d398960738422116d3afd3015"
     },
@@ -180,15 +176,11 @@
     },
     {
       "rel": ".agents/workflows/_TEMPLATE.md",
-      "sha256": "a8df21345f257031e06875cc3b7b27b33e5b08cc53e1d4001fef3094cce2b679"
+      "sha256": "d29b657230319474f8a3d810cdacbeae8ee8fd7eb6b3ef35061814d1b62ab030"
     },
     {
-      "rel": ".agents/workflows/示例-并行实现评审.mjs",
-      "sha256": "957f9e1e43bc99ee2c50b99f3319e58c7cc036a4e01fc2a1f7d9747436fd9ffe"
-    },
-    {
-      "rel": ".agents/workflows/providers.json",
-      "sha256": "9641a677847a36182ce14d6f1bfac73e86f0ec63ab5f9e5105d95570d6d36666"
+      "rel": ".agents/workflows/示例-并行实现评审.md",
+      "sha256": "290dc1bda2e1ab3e2ac79d49fd9a72d75e11482af04d36729835fce4835b0b1f"
     },
     {
       "rel": ".githooks/commit-msg",
