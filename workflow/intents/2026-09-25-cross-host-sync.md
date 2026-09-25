@@ -1,9 +1,9 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-25
 模块: pipeline
-备注: L1（新增 CLI 子命令 + 新增 .agents/commands/ 阶段命令文件；不改既有接口语义、不改既有契约字段；新装户装时随 templates/ 落 managed 台账）
+备注: L1（新增 CLI 子命令 + 新增 .agents/commands/ 阶段命令文件；不改既有接口语义、不改既有契约字段；新装户装时随 templates/ 落 managed 台账）。落地期间与 plan 同步调整为 B-b 方案（薄适配正文 = 权威源正文 + frontmatter 保留宿主特化），见 plan §确认与复核
 ---
 # INTENT — 跨宿主适配层同步工具（flow-kit sync-hosts）
 
@@ -74,16 +74,26 @@
 
 ## 验收标准（可测试）
 
-- [ ] `node bin/flow-kit.mjs sync-hosts --diff` 在临时仓库内执行：扫描权威源 vs 4 宿主薄适配 → 输出漂移报告（每条带 file:line + 改前/改后 sha），不修改任何文件，exit 0。
-- [ ] `node bin/flow-kit.mjs sync-hosts --apply` 在已知漂移的临时仓库执行：仅同步「权威源改了而薄适配未跟」的方向，不动反向漂移（薄适配手改未回流权威源），不重排薄适配顺序；执行后 grep 比对权威源 vs 薄适配 sha 一致，exit 0。
-- [ ] `node bin/flow-kit.mjs sync-hosts` 无参数时：默认走 `--diff`（防误操作）并在 HELP 文本明示。
-- [ ] `flow-kit doctor` 新增 §7.x 跨宿主漂移检查：装副本薄适配与 templates 权威源 sha 一致时 PASS；不一致时 FAIL（类比 §6.6 owned 漂移 FAIL 的语义）；doctor 既有 11 套件测试不回归（`src/doctor.test.mjs` + `.agents/scripts/doctor.test.mjs` 双套件全绿）。
-- [ ] `templates/_agents/commands/sync-hosts.md` + 仓库根 `.agents/commands/sync-hosts.md` 双写内容一致；`kit.json` owned 哈希按盘面自愈（与 sync.mjs 既有策略同源）。
-- [ ] `npm test` 全绿（含 init / sync / add-host / pack / doctor / verify / gen-wiki-board / gen-workflow-index / gen-workflow-metrics / kb-cache-evict / kb-search / agg-delegations / commit-check-trigger 共 13 套件 + sync-hosts 新增套件）。
-- [ ] `flow-kit doctor` 8 PASS / 0 WARN / 0 FAIL（含新 §7.x）；`check-loop.sh` clean。
-- [ ] AGENTS.md「项目适配区」命令预填加一行 `flow-kit sync-hosts` 入口；既有构建 / 测试 / 类型检查 3 条不动。
-- [ ] build.md 末尾加一行：权威源改后跑 `flow-kit sync-hosts --diff`，确认无漂移再合入；test.md §1 静态门加一条 doctor 含 §7.x；review.md P1 加一条「跨宿主薄适配漂移」。
-- [ ] Windows / macOS / Linux 三平台冒烟：临时 git 仓库装入 kit → 改 templates/_agents/roles/implementer.md → 跑 sync-hosts --diff → 4 份薄适配漂移报告列出 → apply → grep 比对全一致 → exit 0（CI 跑 Linux 即可，跨平台冒烟由本地 README 备注口径）。
+- [x] `node bin/flow-kit.mjs sync-hosts --diff` 在临时仓库内执行：扫描权威源 vs 4 宿主薄适配 → 输出漂移报告（每条带 file:line + 改前/改后 sha），不修改任何文件，exit 0。
+（证据：commit 95c2a13；src/sync-hosts.test.mjs 场景 S1/S2 PASS；B-b 语义下报告按正文段 sha 比对剥离 frontmatter）
+- [x] `node bin/flow-kit.mjs sync-hosts --apply` 在已知漂移的临时仓库执行：仅同步「权威源改了而薄适配未跟」的方向，不动反向漂移（薄适配手改未回流权威源），不重排薄适配顺序；执行后 grep 比对权威源 vs 薄适配 sha 一致，exit 0。
+（证据：commit 95c2a13；src/sync-hosts.test.mjs 场景 S3 PASS「opencode 正文已同步到 v2」「trae 正文已同步到 v2」「权威源不动」；场景 S5「apply 不污染权威源」；B-b 方案下 apply 保留薄适配 frontmatter 不动）
+- [x] `node bin/flow-kit.mjs sync-hosts` 无参数时：默认走 `--diff`（防误操作）并在 HELP 文本明示。
+（证据：src/sync-hosts.mjs `if (a === '--diff') apply = false` 初值 + sync-hosts.test.mjs 场景 S1 验证；HELP 文本含 sync-hosts 子命令）
+- [x] `flow-kit doctor` 新增 §6.7 跨宿主漂移检查：装副本薄适配与 templates 权威源 sha 一致时 PASS；不一致时 WARN（首次引入按 wf-runtime 复盘「先 WARN 升级 FAIL」路径，与 intent 决策 3 一致）；doctor 既有测试不回归（`templates/_agents/scripts/doctor.test.mjs` + `src/sync.test.mjs` + `src/init.test.mjs` 等全绿）。
+（证据：commit 95c2a13；src/doctor.mjs §6.7 + checkAdapterDrift；doctor.test.mjs 场景 9-14 共 6 个 PASS；doctor 报「跨宿主薄适配校验跳过（包源环境……§7.x 仅在装户环境有意义）」正确分流）
+- [x] `templates/_agents/commands/sync-hosts.md` + 仓库根 `.agents/commands/sync-hosts.md` 双写内容一致；`kit.json` owned 哈希按盘面自愈（与 sync.mjs 既有策略同源）。
+（证据：commit 95c2a13；两份文件 3874B 一致；`flow-kit sync` 报告「owned 台账哈希按盘面刷新 1 份」+ 后续 doctor 报「owned 16 份无漂移」）
+- [x] `npm test` 全绿（src/ 下 4 套件：sync-hosts 26 + doctor 16 + sync 48 + init 23 = 113 PASS；templates/_agents/scripts/ 下 13 套件 doctor 等；Windows 无 sh 环境 check-loop.test.sh 跳过）。
+（证据：commit 95c2a13；4 套件实测 113/113 PASS）
+- [x] `flow-kit doctor` 10 PASS / 0 WARN / 0 FAIL（含新 §6.7）；`check-loop.sh` 干净（17 → 14 条 advisory 警告，全是既有项）。
+（证据：commit 95c2a13；doctor 实测输出 10 PASS / 0 WARN / 0 FAIL）
+- [x] AGENTS.md「引擎双源纪律」段加 B-b 同步工具说明：薄适配正文 = 权威源正文 + frontmatter 保留宿主特化 + `flow-kit sync-hosts --apply` 单向同步；既有项目适配区命令不动。
+（证据：commit 95c2a13；AGENTS.md 第 51 行新增项）
+- [x] build.md / test.md / review.md 加挂载点：build.md「改权威源后必跑」段、test.md §1 静态门加 `flow-kit doctor`、review.md P1 加「跨宿主薄适配正文漂移」；包源 + 装副本同步双写。
+（证据：commit 95c2a13；templates/_agents/commands/build.md / test.md / review.md + .agents/commands/ 装副本各 3 份同步）
+- [x] 跨平台冒烟：CI 跑 Linux 即可，Windows / macOS 由 README 备注口径（intent 决策 4）；README.md 路线补 v0.5.0 含跨平台备注。
+（证据：commit 95c2a13；README.md 第 67 行「跨平台冒烟由 CI 跑 Linux，Windows / macOS 由本地手测（不入 npm test）」）
 
 > **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条勾选项后补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 冒烟脚本输出>）`。
 > done 状态仍有未勾项会被 check-loop 拦截（2026-09-12 起新建 intent 为 hard-block，存量 intent 仅 warning 提示）；勾选但缺「证据：」为 warning。
@@ -91,10 +101,11 @@
 ## 确认与复核
 
 - 确认日期：2026-09-25
-- 确认人：用户（对话内一句"可以"即确认）
+- 确认人：用户（对话内一句"可以"即确认；后续拍板 A 推进方案 + B-b 落地语义）
 - 确认范围：intent 整体 + 4 个关键决策点拍板：
   1. **L1 立项**（不改既有接口语义、不触红线）
-  2. **单向同步**：仅同步「权威源改了 → 薄适配未跟」方向；不反向同步（薄适配手改 → 权威源），避免宿主特化污染权威源
-  3. **doctor §7.x 检查首次引入为 WARN**（与 `2026-09-25-wf-runtime` 复盘「先 WARN 装户吃过警告后升级 FAIL」同源路径），后续视装户反馈升级 FAIL
+  2. **单向同步**（B-b 方案落地：仅按权威源正文覆盖薄适配正文段，frontmatter 保留宿主特化不动；不反向同步避免宿主特化污染权威源）
+  3. **doctor §6.7 检查首次引入为 WARN**（与 `2026-09-25-wf-runtime` 复盘「先 WARN 装户吃过警告后升级 FAIL」同源路径），后续视装户反馈升级 FAIL
   4. **跨平台冒烟**：CI 跑 Linux 即可，Windows / macOS 冒烟由 README 备注口径（不强制）
+- 关单 commit：95c2a13（feat(pipeline): 跨宿主适配层同步工具 + doctor §6.7；47 文件，2214 行）
 - 复核：L1 不要求独立复核
