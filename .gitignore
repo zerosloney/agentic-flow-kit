@@ -6,3 +6,5 @@ tmp/
 .zcode/
 templates/_agents/cache/
 *.tgz
+# 仓库根临时诊断/重写脚本（一次性工具，跑完即可；例：_resync-adapters.mjs、_inspect.mjs）
+_*.mjs
