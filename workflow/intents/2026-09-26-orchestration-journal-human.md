@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-26
 模块: pipeline
@@ -36,12 +36,12 @@
 - [x] 规则 / 契约变更（编排 DSL 机制契约扩展：新增 stage 形态 + journal 文件契约）→ 级别 L2（消费方：机制文档 / linter / pipeline-closing / 宿主执行口径 ≥4 处）
 
 ## 验收标准（可测试）
-- [ ] DSL 四形态定稿：`_TEMPLATE.md` 四形态表（role/step/gate/human）+ human 执行语义 + 示例表含 human 行 + 解析校验行标注机器门；AGENTS.md 常驻指令零改动（预算中性）
-- [ ] linter 四形态：`human` 列解析（表头缺列兼容）、四选一互斥 E9、human×retries 新告警 W4、导出 `parseStages` 供 wf-journal 复用；fixture ≥3 新场景 + 真实仓库自扫 0 error 0 warning
-- [ ] pipeline-closing confirm 行改 human 形态（10 列表头，双源同步），linter 通过且 prose 特判行删除；source-sync-repair / 示例 9 列脚本零改动仍全过（兼容性证据）
-- [ ] wf-journal.mjs：`add` 记行（ts/run/wf/stage/form/status/attempt/note；attempt 省略时自动 = 同 run 同 stage 既有条数+1；run 复用与 `--new-run`）；`status` 按最新 run（或 `--run`）输出 已完成/就绪（含重试就绪×N）/待定；`--journal`/`--wf-root` 可注入；≥8 场景测试全绿（含坏行容忍、多次 run、replay 末次生效）
-- [ ] journal 契约文档化：`_TEMPLATE.md` 纪律三条（记行 / 续跑先 status、已 pass 不重跑 / 汇总可粘 delegations）；`.agents/cache/` 已 gitignore 实证
-- [ ] `npm test` 全绿（21 套件）+ `source-sync-check --diff` 0 差异 + doctor 0 FAIL + `gate-checklist --diff` 登记完整（无 doctor § 变更）
+- [x] DSL 四形态定稿：`_TEMPLATE.md` 四形态表（role/step/gate/human）+ human 执行语义 + 示例表含 human 行 + 解析校验行标注机器门；AGENTS.md 常驻指令零改动（预算中性）（证据：commit 160535a——四形态表与 confirm-deploy 示例行在位、纪律末条标注 `node .agents/scripts/workflows-check.mjs` 机器门；git show --stat 无 AGENTS.md）
+- [x] linter 四形态：`human` 列解析（表头缺列兼容）、四选一互斥 E9、human×retries 新告警 W4、导出 `parseStages` 供 wf-journal 复用；fixture ≥3 新场景 + 真实仓库自扫 0 error 0 warning（证据：S14 一场景组覆盖 10 列全绿/双填 E9（gate + human）/W4/9 列兼容四断言；套件 15/0；自扫 3 份 0/0）
+- [x] pipeline-closing confirm 行改 human 形态（10 列表头，双源同步），linter 通过且 prose 特判行删除；source-sync-repair / 示例 9 列脚本零改动仍全过（兼容性证据）（证据：commit 160535a——confirm 行 human=用户确认（plan 确认门）、role 列空；自扫 pipeline-closing ✅；source-sync-repair.md / 示例-并行实现评审.md 零改动 ✅）
+- [x] wf-journal.mjs：`add` 记行（ts/run/wf/stage/form/status/attempt/note；attempt 省略自动 = 同 run 同 stage 既有条数+1；run 复用与 `--new-run`）；`status` 按最新 run（或 `--run`）输出 已完成/就绪（含重试就绪×N）/待定；`--journal`/`--wf-root` 可注入；≥8 场景测试全绿（含坏行容忍、多次 run、replay 末次生效）（证据：wf-journal.test.mjs 9/0——S1-S4 schema/末次生效/run 推断、S5-S6 分层与 blocked、S7-S8 CLI 冒烟 attempt 自动计次/坏行容忍、S9 真实 pipeline-closing human 行；端到端实跑 add×3 + status 分层正确后演示数据已清理）
+- [x] journal 契约文档化：`_TEMPLATE.md` 纪律三条（记行 / 续跑先 status、已 pass 不重跑 / 汇总可粘 delegations）；`.agents/cache/` 已 gitignore 实证（证据：_TEMPLATE.md「run journal 三条」纪律；.gitignore:5 `.agents/cache/`；git status 无 orchestration-runs 追踪）
+- [x] `npm test` 全绿（21 套件）+ `source-sync-check --diff` 0 差异 + doctor 0 FAIL + `gate-checklist --diff` 登记完整（无 doctor § 变更）（证据：npm test「✅ 全部套件通过」；source-sync-check 无差异；doctor 11 PASS / 0 FAIL；gate-checklist「登记完整（0 断档 / 0 未登记）」）
 
 ## 确认与复核
 - 确认日期：2026-09-26
