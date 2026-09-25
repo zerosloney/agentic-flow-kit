@@ -88,7 +88,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.sh",
-      "sha256": "1be754c7b73c6533957b16d54fe4777945213826e180460d18973b2fcb3546e7"
+      "sha256": "202c1080ed4dfc6de2590707171bcff13777da0620940d81c094d866081e66a3"
     },
     {
       "rel": ".agents/scripts/commit-check-trigger.test.mjs",
@@ -156,7 +156,15 @@
     },
     {
       "rel": ".agents/scripts/verify.test.mjs",
-      "sha256": "e2764c810fe6963495b2b1358d7ab7771136904f6e11996b38611ad5cdce261d"
+      "sha256": "e306cf22171509808621dfde4387f713251cd361f621e61eb0706145c57c66ef"
+    },
+    {
+      "rel": ".agents/scripts/wf-journal.mjs",
+      "sha256": "27b2a6f54a8c44627033c2bf863a69831d22bca15424221f2da7e08874b46329"
+    },
+    {
+      "rel": ".agents/scripts/wf-journal.test.mjs",
+      "sha256": "de5f0015684b755019c0563c444389ef48038b4dab3be537d67d0a92a8251552"
     },
     {
       "rel": ".agents/scripts/wiki-search.mjs",
@@ -176,11 +184,11 @@
     },
     {
       "rel": ".agents/scripts/workflows-check.mjs",
-      "sha256": "31cba6672cac78156b2a37e144ad889779737add69e8b7ce3b98f6d1fde09e1a"
+      "sha256": "7fb7f60b70668ca67a70b7fc91614c60ef9c11a047634100fda1baa5f2a2b215"
     },
     {
       "rel": ".agents/scripts/workflows-check.test.mjs",
-      "sha256": "ff382d1d2ba7e841662dc9c187fefa79ba8833d25645e2883512ec9ee219cb86"
+      "sha256": "742fd4396a742f3e441ca7e65303ccffa8d8a0ea7259c5c1851e0985b64fcd12"
     },
     {
       "rel": ".agents/skills/verify-ui/SKILL.md",
@@ -196,7 +204,7 @@
     },
     {
       "rel": ".agents/workflows/_TEMPLATE.md",
-      "sha256": "0cd0d61a6583615532e55ef57d6841e326d07a67a11957d0c7e9beb43674538b"
+      "sha256": "5dd36fd41b86535ccdf6b25e7291dd11a4f2b90fc50fe8f3f379b230955733d0"
     },
     {
       "rel": ".agents/workflows/示例-并行实现评审.md",

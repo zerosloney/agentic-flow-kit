@@ -13,12 +13,13 @@
 //   E6 after 依赖成环
 //   E7 role 不在 .agents/roles/（词表 = 目录内 *.md 文件名）
 //   E8 step 不在 .agents/workflows/steps/（文件名即步骤名——目录即注册表）
-//   E9 三形态（role/step/gate）不互斥：全空或同时 ≥2 个非空（`—`/`-`/空白 均视为空）
+//   E9 四形态（role/step/gate/human）不互斥：全空或同时 ≥2 个非空（`—`/`-`/空白 均视为空；human 列可选，缺列恒空）
 //   E10 retries 非非负整数（空 = 0，口径同 _TEMPLATE「失败且 retries > 0 → 重派」）
 // 告警（advisory，不阻断）:
 //   W1 gate 含 {a,b} 花括号展开——仅 bash 展开，PowerShell/cmd 按字面路径失败（跨宿主可移植性）
 //   W2 两个 role stage 的授权文件 token 完全相同且互相无 after 先序——并行 fan-out 同文件交叉写
 //   W3 frontmatter 缺 name（编排脚本标识）
+//   W4 human 确认门行填了 retries——用户驳回不能重派，无重试语义（视作 0）
 //
 // 排除：`_` 前缀文件（_TEMPLATE.md 是机制文档，正文含示例表——示例 step 名「部署验证」不在 steps/，
 //       机制文档不按可执行件校验）；steps/ 子目录（是扩展点注册表，非编排脚本）。
@@ -64,8 +65,9 @@ function cellName(c) {
   return m ? m[0] : '';
 }
 
-// parseStages：返回 stage 行数组（id/after/role/step/files/gate/retries + _line 行号），无表返回 null
-function parseStages(text) {
+// parseStages：返回 stage 行数组（id/after/role/step/files/gate/human/retries + _line 行号），无表返回 null。
+// human 列可选（表头缺列 = 恒空，既有 9 列脚本零改动兼容）；导出供 wf-journal.mjs 复用同一解析口径。
+export function parseStages(text) {
   const lines = String(text).split(/\r?\n/);
   let headerIdx = -1;
   let colIdx = null;
@@ -80,7 +82,7 @@ function parseStages(text) {
     }
   }
   if (headerIdx === -1) return null;
-  const COLS = ['id', 'after', 'role', 'step', 'files', 'gate', 'retries'];
+  const COLS = ['id', 'after', 'role', 'step', 'files', 'gate', 'human', 'retries'];
   const rows = [];
   for (let i = headerIdx + 1; i < lines.length; i++) {
     if (!/^\s*\|/.test(lines[i])) break;
@@ -119,13 +121,14 @@ export function lintWorkflowText({ file, text, roles, steps }) {
     if (!r.id) { errors.push(`E4 L${r._line} stage 缺 id`); continue; }
     if (byId.has(r.id)) errors.push(`E4 id 重复：${r.id}（L${byId.get(r.id)._line} 与 L${r._line}）`);
     else byId.set(r.id, r);
-    const forms = [r.role && 'role', r.step && 'step', r.gate && 'gate'].filter(Boolean);
-    if (forms.length === 0) errors.push(`E9 L${r._line} ${r.id} 三形态（role/step/gate）全空——须恰填一项`);
-    if (forms.length > 1) errors.push(`E9 L${r._line} ${r.id} 三形态互斥违例：同时填了 ${forms.join(' + ')}`);
+    const forms = [r.role && 'role', r.step && 'step', r.gate && 'gate', r.human && 'human'].filter(Boolean);
+    if (forms.length === 0) errors.push(`E9 L${r._line} ${r.id} 四形态（role/step/gate/human）全空——须恰填一项`);
+    if (forms.length > 1) errors.push(`E9 L${r._line} ${r.id} 四形态互斥违例：同时填了 ${forms.join(' + ')}`);
     if (r.role && !roles.has(r.role)) errors.push(`E7 L${r._line} ${r.id} role「${r.role}」不在 .agents/roles/（现有：${[...roles].join('、') || '无'}）`);
     if (r.step && !steps.has(r.step)) errors.push(`E8 L${r._line} ${r.id} step「${r.step}」不在 steps/（现有：${[...steps].join('、') || '无'}）`);
     if (r.retries && !/^\d+$/.test(r.retries)) errors.push(`E10 L${r._line} ${r.id} retries 须为非负整数（现「${r.retries}」，空 = 0）`);
     if (r.gate && /\{[^}]+,[^}]+\}/.test(r.gate)) warnings.push(`W1 L${r._line} ${r.id} gate 含 {a,b} 花括号展开——仅 bash 展开，PowerShell/cmd 按字面路径失败：${r.gate}`);
+    if (r.human && r.retries) warnings.push(`W4 L${r._line} ${r.id} human 确认门行填了 retries「${r.retries}」——用户驳回不能重派，无重试语义（视作 0）`);
   }
 
   // after 引用存在性 + 成环（DFS 三色）

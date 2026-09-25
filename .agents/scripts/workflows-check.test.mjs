@@ -234,5 +234,34 @@ const fm = (extra = '') => `---\nname: t\ndescription: t\n${extra}---\n\n# w\n\n
     JSON.stringify(r.files.filter((f) => f.errors.length).map((f) => ({ f: f.file, e: f.errors }))));
 }
 
+// ---- S14 human 确认门（第四形态）：单形态全绿 / 双填 E9 / ×retries W4 / 缺列兼容 ----
+{
+  const HEAD10 = '| id | after | role | step | task / params | files（授权） | accept（验收判据） | gate | human | retries |';
+  const SEP10 = '|----|-------|------|------|---------------|--------------|-------------------|------|-------|---------|';
+  const root = mkfix({
+    'human-ok.md': fm() + HEAD10 + '\n' + SEP10 + '\n' +
+      '| a | — | implementer | — | 做 A | src/a/** | 测试过 | | | 0 |\n' +
+      '| ask | a | — | — | 用户确认可继续 | — | 一句「可以」 | | 用户确认 | |\n' +
+      '| b | ask | — | — | — | — | — | npm test | | |\n',
+    'human-bad.md': fm() + HEAD10 + '\n' + SEP10 + '\n' +
+      '| both | — | — | — | 双填 | — | — | npm test | 用户确认 | |\n' +
+      '| retry | — | — | — | 确认 | — | 一句可以 | | 用户确认 | 2 |\n',
+    'no-human-col.md': fm() + HEAD + '\n' + SEP + '\n' +
+      '| a | — | — | — | — | — | — | npm test | |\n',
+  });
+  const r = lintWorkflows({ root });
+  const ok = r.files.find((f) => f.file === 'human-ok.md');
+  const bad = r.files.find((f) => f.file === 'human-bad.md');
+  const legacy = r.files.find((f) => f.file === 'no-human-col.md');
+  check('S14 human 单形态 10 列全绿；human+gate 双填 E9；human×retries W4；9 列无 human 表全过',
+    r.errorCount === 1
+      && ok.errors.length === 0 && ok.warnings.length === 0
+      && bad.errors.length === 1 && bad.errors[0].startsWith('E9') && bad.errors[0].includes('gate + human')
+      && bad.warnings.length === 1 && bad.warnings[0].startsWith('W4')
+      && legacy.errors.length === 0 && legacy.warnings.length === 0,
+    JSON.stringify(r.files.map((f) => ({ f: f.file, e: f.errors, w: f.warnings }))));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);
