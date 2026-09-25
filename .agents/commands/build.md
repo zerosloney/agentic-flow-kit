@@ -75,6 +75,12 @@ next: .agents/commands/test.md
 - 改 `.agents/scripts/check-loop.sh` 加新 § 检查项 → 同上
 - 任一处有而另一边无 → 工具报"缺点"，由用户拍板是否补齐（不自动同步，B-b 决策）；详见 `.agents/commands/gate-checklist.md`
 
+## 改包源后必跑（装户面同步一致性）
+
+- 改 `templates/_agents/*` 包源后 → 跑 `node .agents/scripts/source-sync-check.mjs --diff` 看装副本 `.agents/` 是否同步（缺失 / 孤儿 / 漂移三类差异）
+- 漂移说明包源改了装副本未跟；缺失说明新增文件 init 未执行；孤儿说明装副本独有（可能是装户配置，不删）
+- B-b 决策「只报告不修复」；详见 `.agents/commands/source-sync-check.md`
+
 ## 子代理调用约定
 
 - plan 起草、风险判断、改动清单与两道确认门由主智能体负责;仅两道确认后范围明确的工作包可委派 `implementer`,公共接口 / Schema / 依赖 / 安全 / 权限 / 破坏性操作不得委派。

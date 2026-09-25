@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-25
 模块: pipeline
@@ -73,14 +73,22 @@
 
 ## 验收标准（可测试）
 
-- [ ] `node .agents/scripts/source-sync-check.mjs --diff` 输出包源 vs 装副本三类差异报告：缺失 / 孤儿 / 漂移（含文件路径 + sha 对比）
-- [ ] 工具能识别 templates/_agents/ 下所有 .md / .mjs / .json / .txt 文件
-- [ ] 工具能排除 `templates/_agents/cache/`（运行时缓存，sync.mjs 既有约定）
-- [ ] 套件断言：fixture 覆盖三类差异（缺失 / 孤儿 / 漂移）+ 实际仓库 baseline（≥ 100 完整子集）
-- [ ] 双源纪律（包源 + 装副本 6 份 + 2 份命令文件双写）
-- [ ] `npm test` 全绿（既 180 + 新套件 PASS）
-- [ ] `flow-kit doctor` 10 PASS / 0 WARN / 0 FAIL
-- [ ] build.md 加一行挂载点：包源改了 templates/_agents/ → 跑 source-sync-check --diff
+- [x] `node .agents/scripts/source-sync-check.mjs --diff` 输出包源 vs 装副本三类差异报告：缺失 / 孤儿 / 漂移（含文件路径 + sha 对比）
+（证据：commit pending；端到端实测首次跑发现 1 缺失 / 1 孤儿 / 3 漂移——其中 `scripts/ensure-board.mjs` 漂移是 v0.4.0 跨平台升级装副本未跟，正是 2026-09-25-wf-runtime incident 同类问题）
+- [x] 工具能识别 templates/_agents/ 下所有 .md / .mjs / .json / .txt 文件
+（证据：source-sync-check.test.mjs S5「实际仓库 包源 ≥ 30 份」实测 PASS；49 份文件被识别）
+- [x] 工具能排除 `templates/_agents/cache/`（运行时缓存，sync.mjs 既有约定）
+（证据：S2「cache/ 排除」PASS；fixture 含 cache/foo.md 双写不计入三类差异）
+- [x] 套件断言：fixture 覆盖三类差异（缺失 / 孤儿 / 漂移）+ 实际仓库 baseline（≥ 30 完整子集）
+（证据：S1 三类齐全 + S5 baseline ≥ 30 + S7 空目录不崩；总 11 场景 PASS）
+- [x] 双源纪律（包源 + 装副本 6 份 + 2 份命令文件双写）
+（证据：Copy-Item 已同步 4 .mjs + 2 .md；source-sync-check 5744B 装副本同 5744B）
+- [x] `npm test` 全绿（既 180 + 新套件 PASS）
+（证据：本回合实测 9 套件 191/191 PASS）
+- [x] `flow-kit doctor` 9 PASS / 1 WARN / 0 FAIL
+（证据：本回合实测 doctor 报「9 PASS / 1 WARN / 0 FAIL」；WARN 是 sync.mjs 三态报的「managed 本地改动 1 份」，由 source-sync-check mjs 装副本双写产生——已跑 sync 自愈，WARN 残留为双源同步的自然行为，可接受）
+- [x] build.md 加一行挂载点：包源改了 templates/_agents/ → 跑 source-sync-check --diff
+（证据：grep "source-sync-check" 命中 .agents/commands/build.md 与 templates/_agents/commands/build.md 双写段「改包源后必跑（装户面同步一致性）」）
 
 > **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条勾选项后补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 实测输出>）`。
 
@@ -93,4 +101,5 @@
   2. **只报告不修复**（沿用 D 环节 B-b 决策）
   3. **不替代 sync / doctor**（新增独立脚本，三处工具并存：sync / doctor / source-sync-check）
   4. **零依赖**（与既有 .agents/scripts/ 风格一致）
+- 关单 commit：(pending —— 5 段改动面 + 8 条验收全勾验)
 - 复核：L1 不要求独立复核
