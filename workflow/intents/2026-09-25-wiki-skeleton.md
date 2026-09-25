@@ -1,5 +1,5 @@
 ---
-状态: draft
+状态: done
 级别: L1
 日期: 2026-09-25
 模块: pipeline
@@ -65,13 +65,13 @@
 
 ## 验收标准（可测试）
 
-- [ ] 5 个主题目录 + README.md 落盘：`wiki/跨宿主适配/`、`wiki/文档闭环/`、`wiki/口径一致性/`、`wiki/装户面同步/`、`wiki/双源漂移修复/`（证据：`ls wiki/` 5 个目录 + 各含 README.md）
-- [ ] 每个 README.md 含 4 节：主题说明 / 关键决策点 / 复盘 / 指向 workflow/ 原文链接（证据：grep 4 节标题各 5 文件命中）
-- [ ] `wiki/INDEX.md` 速览表更新：5 行主题 + 「用途」列填实 + 合计行 ≥ 5 份（证据：grep "用途" INDEX.md + 合计行 grep）
-- [ ] 跑 `node .agents/scripts/gen-wiki-board.mjs` 重生成 `wiki/知识沉淀总览.html`（证据：diff 显示变更；commit 含看板更新）
-- [ ] `node .agents/scripts/verify-wiki-consistency.mjs` 三方一致性通过（证据：实测输出 PASS，无失败）
-- [ ] `npm test` 既 18 套件仍全绿（309/309 PASS 不回归；证据：npm test tail）
-- [ ] `flow-kit doctor` 仍 10 PASS / 0 WARN / 0 FAIL（证据：实测输出）
+- [x] 5 个主题目录 + README.md 落盘：`wiki/跨宿主适配/`、`wiki/文档闭环/`、`wiki/口径一致性/`、`wiki/装户面同步/`、`wiki/双源漂移修复/`（证据：`ls wiki/` 5 个目录 + 各含 README.md；commit 12301af）
+- [x] 每个 README.md 含 4 节：主题说明 / 关键决策点 / 复盘 / 指向 workflow/ 原文链接（证据：grep 4 节标题各 5 文件命中；commit 12301af）
+- [x] `wiki/INDEX.md` 速览表更新：5 行主题 + 「用途」列填实 + 合计行 ≥ 5 份（证据：grep "用途" INDEX.md + 合计行「**5 份**知识文档，**5 个主题**」；commit 12301af）
+- [x] 跑 `node .agents/scripts/gen-wiki-board.mjs` 重生成 `wiki/知识沉淀总览.html`（证据：commit 12301af 含看板更新；脚本输出「文件 5 份 / 主题 5 个」）
+- [x] `node .agents/scripts/verify-wiki-consistency.mjs` 三方一致性通过（证据：实测输出「✅ wiki 三方一致：文件 5 份 / 主题 5 个（含占位）/ 归档 1 份」）
+- [x] `npm test` 既 18 套件仍全绿（309/309 PASS 不回归；证据：npm test tail「✅ 全部套件通过」）
+- [x] `flow-kit doctor` 仍 10 PASS / 0 WARN / 0 FAIL（证据：sync 后实测 doctor 输出 10/0/0）
 
 > **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条勾选项后补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 实测输出>）`。
 
@@ -80,5 +80,8 @@
 - 确认日期：2026-09-25
 - 确认人：用户（对话内一句"可以"即确认）
 - 确认范围：intent 整体 + 5 段改动面 + 中文主题命名
-- 关单 commit：(pending —— 5 段改动面 + 7 条验收全勾验)
+- 关单 commit：`12301af`（feat(wiki): 主题骨架填充——5 个推广环节沉淀进 wiki/；11 文件 +239 行）
+  - 7 条验收全勾验（见上「验收标准」段）
+  - 18 套件 309/309 PASS（不回归）；doctor 10/0/0；source-sync-check 0 差异；verify-wiki-consistency 三方一致
+- 复核：L1 不要求独立复核
 - 复核：L1 不要求独立复核

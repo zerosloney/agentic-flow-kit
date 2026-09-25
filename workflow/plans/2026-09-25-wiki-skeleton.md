@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L1
 模块: pipeline
 ---
@@ -97,6 +97,7 @@
 
 > 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节（确认环节的机器可见态），done 只在关单出现——禁从 draft 直跳 done（2026-09-22 papercut）。
 - 确认结果：approved（2026-09-25 用户对话内"走 B"通过；用户对 5 主题 + 中文命名 + 7 段改动面认可）
-- 关单 commit：(pending —— 5 段改动面 + 7 条验收全勾验)
+- 关单 commit：`12301af`（feat(wiki): 主题骨架填充——5 个推广环节沉淀进 wiki/；11 文件 +239 行）
+- 7 条验收全勾验；18 套件 309/309 PASS；doctor 10/0/0；verify-wiki-consistency 三方一致
 - 确认门记录：plan 草稿全文过目 + 改动清单确认（build.md 两道门，逐次，不合并）
 - 复核：L1 不要求独立复核
