@@ -1,5 +1,5 @@
 ---
-状态: fixed
+状态: closed
 级别: L1
 发现: 2026-09-25
 模块: pipeline
