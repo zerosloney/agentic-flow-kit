@@ -1,112 +1,199 @@
-// gate-checklist.test.mjs — gate-checklist 工具测试（2026-09-25 gate-checklist）
-// 方法：fixture mini doctor.mjs + check-loop.sh，调 gateChecklist() 拿结构化结果（不依赖真实仓库文件）
-// 判据：① fixture 场景全过  ② 真实仓库扫读 PASS（doctor ≥7 项 / check-loop ≥11 项）
-// 用法：node .agents/scripts/gate-checklist.test.mjs
+// gate-checklist.test.mjs — 显式配对登记表测试（2026-09-25 gate-checklist-registry）
+// 方法：fixture mini doctor.mjs / check-loop.sh 源码 + 注入 pairs，调 gateChecklist() 拿结构化结果；
+//       真实仓库两场景做 baseline；--json CLI spawn 冒烟回归原「字段丢失」bug。
+// 判据：① 两侧解析正确 ② 三种登记形态不误报 ③ 断档/未登记检测命中 ④ 真实仓库 0 断档 0 未登记
+// 用法：node templates/_agents/scripts/gate-checklist.test.mjs（npm test 随跑）
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { gateChecklist } from './gate-checklist.mjs';
 
-let pass = 0, failCount = 0;
+let pass = 0;
+let failCount = 0;
 function check(name, cond, detail = '') {
   if (cond) { pass++; console.log('PASS ' + name); }
   else { failCount++; console.log('FAIL ' + name + (detail ? '——' + detail : '')); }
 }
 
-const SRC_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const SRC_ROOT = path.resolve(SCRIPT_DIR, '..', '..', '..');
 
-// fixture：最小可识别 doctor 源码（3 个检查主题 × 多 level 分支）+ check-loop（3 项）
-// 设计：PASS / FAIL / WARN 分支用相同概念前缀，方便聚类算法合并
-const FIXTURE_DOCTOR = `// doctor.mjs fixture
-function fake() {
-  const r = [];
-  const add = (l, m) => r.push({ l, m });
-  // 主题 1：Node 版本（PASS / FAIL 双分支）
-  if (major >= 18) add('PASS', \`Node \${process.versions.node}（≥18）\`);
-  else add('FAIL', \`Node \${process.versions.node} 过低\`);
-  // 主题 2：目录布局（PASS / FAIL 双分支）—— PASS / FAIL 共享概念词「目录布局」
-  if (missing.length === 0) add('PASS', \`目录布局（完整：\${required.length} 个关键路径）\`);
-  else add('FAIL', \`目录布局（缺失：\${missing.join('、')}）\`);
-  // 主题 3：占位符残留（PASS / WARN 双分支）—— PASS / WARN 共享概念词「占位符」
-  if (phHits.length === 0) add('PASS', '占位符（无残留）');
-  else add('WARN', \`占位符（残留 \${phHits.length} 处）\`);
-  return r;
+// fixture：5 节 doctor（1 / 5 / 6.5 / 7 / 9）+ 2 项 check-loop（#2 / #3）
+const FIXTURE_DOCTOR = `// doctor fixture
+function f() {
+  // 1. Node 版本（装户体检独有）
+  const a = 1;
+  // 5. 占位符残留（与 check-loop #2 直接配对）
+  const b = 2;
+  // 6.5 delegations 台账结构（小节号解析）
+  const c = 3;
+  // 7. check-loop（fixture 里也有 §7，供经 §7 覆盖登记）
+  const e = 5;
+  // 9. 未登记的新检查项（应报未登记）
+  const d = 4;
+  return [a, b, c, d, e];
 }
 `;
-
 const FIXTURE_CL = `#!/bin/sh
-# 1. Node 版本检查（advisory）
-# 2. 占位符残留 [warning]
-# 3. 独有项：文件名 kebab-case [warning]
+# 2. 模板字段占位符残留 [warning]
+# 3. incidents 复盘三件套完整性
+# 7. 未登记的新检查项
+exit 0
 `;
+// fixture 登记表：5↔2 直接配对、1 声明独有、6.5 声明独有、7→#3 经 §7 覆盖；
+// §99 / #99 是登记了但两侧都不存在的 id（应报断档×2）
+const FIXTURE_PAIRS = [
+  { doctor: '5', cl: '2', note: '占位符' },
+  { doctor: '1', cl: null, note: '独有' },
+  { doctor: '6.5', cl: null, note: '独有' },
+  { doctor: '7', cl: '3', note: '经 §7' },
+  { doctor: '99', cl: null, note: '断档——doctor 侧不存在' },
+  { doctor: '1', cl: '99', note: '断档——check-loop 侧不存在' },
+];
 
-// ---- 场景 1：fixture 上识别 3 个 doctor 主题（Node / 目录布局 / 占位符残留）----
+const run = (pairs = FIXTURE_PAIRS, doctorSrc = FIXTURE_DOCTOR, clSrc = FIXTURE_CL) =>
+  gateChecklist({ doctorSrc, checkLoopSrc: clSrc, pairs });
+
+// ---- S1 解析：doctor 5 节（含 6.5 小节号、§7 与未登记的 9）----
 {
-  const r = gateChecklist({ doctorSrc: FIXTURE_DOCTOR, checkLoopSrc: FIXTURE_CL });
-  check('S1 fixture doctor 聚类后 3 个主题（PASS/FAIL 分支合并）', r.doctorCount === 3, JSON.stringify({ count: r.doctorCount, concepts: r.doctor.map((d) => d.concept) }));
+  const r = run();
+  check('S1 fixture doctor 解析 5 节且含 6.5 小节号',
+    r.doctorCount === 5 && r.doctor.some((d) => d.id === '6.5' && d.title.includes('delegations')),
+    JSON.stringify(r.doctor));
 }
 
-// ---- 场景 2：fixture check-loop 识别 3 项（#1-#3）----
+// ---- S2 解析：check-loop 3 项（#2 带 severity，#3 无）----
 {
-  const r = gateChecklist({ doctorSrc: FIXTURE_DOCTOR, checkLoopSrc: FIXTURE_CL });
-  check('S2 fixture check-loop 3 项', r.checkLoopCount === 3, JSON.stringify({ count: r.checkLoopCount }));
+  const r = run();
+  const c2 = r.checkLoop.find((c) => c.id === '2');
+  const c3 = r.checkLoop.find((c) => c.id === '3');
+  check('S2 fixture check-loop 解析 3 项且 severity 提取正确',
+    r.checkLoopCount === 3 && c2.severity === 'warning' && c3.severity === null,
+    JSON.stringify(r.checkLoop));
 }
 
-// ---- 场景 3：关键字匹配——Node 主题 ↔ #1 Node 版本检查----
+// ---- S3 直接配对：5↔2 双侧存在 → matched 命中 ----
 {
-  const r = gateChecklist({ doctorSrc: FIXTURE_DOCTOR, checkLoopSrc: FIXTURE_CL });
-  const matched = r.matched.find((m) => m.doctor.concept.includes('Node'));
-  check('S3 Node 主题与 #1 Node 检查匹配', matched !== undefined && matched.cl.id === '1', JSON.stringify(r.matched.map((m) => m.cl.id)));
+  const r = run();
+  check('S3 直接配对 §5↔#2 进入 matched',
+    r.matched.some((p) => p.doctor === '5' && p.cl === '2'),
+    JSON.stringify(r.matched.map((p) => [p.doctor, p.cl])));
 }
 
-// ---- 场景 4：关键字匹配——占位符 ↔ #2 占位符残留----
+// ---- S4 声明独有：§1 / §6.5 不产生任何 findings ----
 {
-  const r = gateChecklist({ doctorSrc: FIXTURE_DOCTOR, checkLoopSrc: FIXTURE_CL });
-  const matched = r.matched.find((m) => m.doctor.concept.includes('占位符'));
-  check('S4 占位符主题与 #2 占位符残留匹配', matched !== undefined && matched.cl.id === '2', JSON.stringify(r.matched.map((m) => m.cl.id)));
+  const r = run();
+  const hit = [...r.broken, ...r.unregistered].filter((f) => f.id === '1' || f.id === '6.5');
+  check('S4 声明独有（§1 / §6.5）不误报',
+    hit.length === 0,
+    JSON.stringify(hit));
 }
 
-// ---- 场景 5：缺点告警——fixture 目录布局 doctor 有、check-loop 无对应----
+// ---- S5 经 §7 覆盖：7→#3 不产生 findings 且进 matched ----
 {
-  const r = gateChecklist({ doctorSrc: FIXTURE_DOCTOR, checkLoopSrc: FIXTURE_CL });
-  const doctorOnlyGaps = r.gaps.filter((g) => g.kind === 'doctor-only');
-  check('S5 医生独有项报告（目录布局）', doctorOnlyGaps.some((g) => g.item.concept.includes('目录布局')));
+  const r = run();
+  check('S5 经 §7 覆盖登记不误报且进 matched',
+    r.matched.some((p) => p.doctor === '7' && p.cl === '3') && !r.unregistered.some((u) => u.id === '3'),
+    JSON.stringify(r.unregistered));
 }
 
-// ---- 场景 6：缺点告警——check-loop 独有（文件名 kebab-case）----
+// ---- S6 断档：登记 §99 / #99 两侧不存在 → broken ×2 ----
 {
-  const r = gateChecklist({ doctorSrc: FIXTURE_DOCTOR, checkLoopSrc: FIXTURE_CL });
-  const clOnlyGaps = r.gaps.filter((g) => g.kind === 'cl-only');
-  check('S6 check-loop 独有项报告（文件名 kebab-case）', clOnlyGaps.some((g) => g.item.id === '3'));
+  const r = run();
+  const bDoc = r.broken.find((b) => b.side === 'doctor' && b.id === '99');
+  const bCl = r.broken.find((b) => b.side === 'check-loop' && b.id === '99');
+  check('S6 登记断档两侧各报一条（doctor §99 / check-loop #99）',
+    r.broken.length === 2 && !!bDoc && !!bCl,
+    JSON.stringify(r.broken));
 }
 
-// ---- 场景 7：实际仓库扫描——doctor §检查项 ≥ 7（与既有 incident 复盘一致）----
+// ---- S7 未登记：doctor §9 与 check-loop #7 → unregistered ×2 ----
 {
-  const doctorSrc = fs.readFileSync(path.join(SRC_ROOT, 'src', 'doctor.mjs'), 'utf8');
-  const clSrc = fs.readFileSync(path.join(SRC_ROOT, '.agents', 'scripts', 'check-loop.sh'), 'utf8');
-  const r = gateChecklist({ doctorSrc, checkLoopSrc: clSrc });
-  check('S7 实际仓库 doctor §检查项 ≥ 7（验收 baseline）', r.doctorCount >= 7, '实际 ' + r.doctorCount);
+  const r = run();
+  const uDoc = r.unregistered.find((u) => u.side === 'doctor' && u.id === '9');
+  const uCl = r.unregistered.find((u) => u.side === 'check-loop' && u.id === '7');
+  check('S7 未登记两侧各报一条（doctor §9 / check-loop #7）',
+    r.unregistered.length === 2 && !!uDoc && !!uCl,
+    JSON.stringify(r.unregistered));
 }
 
-// ---- 场景 8：实际仓库扫描——check-loop §检查项 ≥ 11（注释 #1-#13）----
+// ---- S8 空源码 + 空登记表不崩（0 findings）----
 {
-  const doctorSrc = fs.readFileSync(path.join(SRC_ROOT, 'src', 'doctor.mjs'), 'utf8');
-  const clSrc = fs.readFileSync(path.join(SRC_ROOT, '.agents', 'scripts', 'check-loop.sh'), 'utf8');
-  const r = gateChecklist({ doctorSrc, checkLoopSrc: clSrc });
-  check('S8 实际仓库 check-loop §检查项 ≥ 11（验收 baseline）', r.checkLoopCount >= 11, '实际 ' + r.checkLoopCount);
+  const r = run([], '', '');
+  check('S8 空源码 + 空登记表不崩（0/0 且 0 findings）',
+    r.doctorCount === 0 && r.checkLoopCount === 0 && r.broken.length === 0 && r.unregistered.length === 0,
+    JSON.stringify(r));
 }
 
-// ---- 场景 9：result 结构完整（doctor / checkLoop / matched / gaps 字段）----
+// ---- S8b 整数无点注释不误判为节（doctor.mjs:257 // 4 宿主目录映射 形态）----
 {
-  const r = gateChecklist({ doctorSrc: FIXTURE_DOCTOR, checkLoopSrc: FIXTURE_CL });
-  check('S9 result 含 doctor / checkLoop / matched / gaps 字段',
-    Array.isArray(r.doctor) && Array.isArray(r.checkLoop) && Array.isArray(r.matched) && Array.isArray(r.gaps));
+  const doctorSrc = `// 4. kit.json managed 台账（真节）
+const x = 1;
+  // 4 宿主目录映射（与 profiles 同源——正文注释，非节）
+const y = 2;
+`;
+  const r = gateChecklist({ doctorSrc, checkLoopSrc: '', pairs: [{ doctor: '4', cl: null, note: '独有' }] });
+  check('S8b 整数无点的正文注释不误判（仅解析 1 节 §4 且标题为真节）',
+    r.doctorCount === 1 && r.doctor[0].title.includes('kit.json') && r.broken.length === 0 && r.unregistered.length === 0,
+    JSON.stringify(r.doctor));
 }
 
-// ---- 场景 10：边界——空字符串不崩----
+// ---- S9 重复 id 登记（同 cl 两个直接配对）不崩且均可命中 ----
 {
-  const r = gateChecklist({ doctorSrc: '', checkLoopSrc: '' });
-  check('S10 空字符串 fixture 不崩（0/0）', r.doctorCount === 0 && r.checkLoopCount === 0);
+  const pairs = [
+    { doctor: '5', cl: '2', note: 'a' },
+    { doctor: '1', cl: '2', note: 'b' },
+  ];
+  const r = run(pairs);
+  check('S9 多条目登记同一 cl 不崩（matched 2）',
+    r.matched.length === 2 && r.unregistered.some((u) => u.side === 'check-loop' && u.id === '3'),
+    JSON.stringify({ m: r.matched.length, u: r.unregistered }));
+}
+
+const realDoctor = () => fs.readFileSync(path.join(SRC_ROOT, 'src', 'doctor.mjs'), 'utf8');
+const realCl = () => fs.readFileSync(path.join(SRC_ROOT, '.agents', 'scripts', 'check-loop.sh'), 'utf8');
+const hasReal = fs.existsSync(path.join(SRC_ROOT, 'src', 'doctor.mjs'));
+
+// ---- S10 真实仓库 baseline：PAIRS 全量登记 → 0 断档 / 0 未登记 ----
+if (hasReal) {
+  const r = gateChecklist({ doctorSrc: realDoctor(), checkLoopSrc: realCl() });
+  check('S10 真实仓库登记完整（0 断档 / 0 未登记）',
+    r.broken.length === 0 && r.unregistered.length === 0,
+    JSON.stringify({ broken: r.broken, unregistered: r.unregistered }));
+}
+
+// ---- S11 真实仓库计数：doctor ≥ 12 节 / check-loop ≥ 14 项 ----
+if (hasReal) {
+  const r = gateChecklist({ doctorSrc: realDoctor(), checkLoopSrc: realCl() });
+  check('S11 真实仓库 doctor ≥ 12 节且 check-loop ≥ 14 项（baseline）',
+    r.doctorCount >= 12 && r.checkLoopCount >= 14,
+    `doctor ${r.doctorCount} / check-loop ${r.checkLoopCount}`);
+}
+
+// ---- S12 --json CLI 冒烟：键齐无 undefined（回归原 .title 字段丢失 bug）----
+if (hasReal) {
+  const p = spawnSync(process.execPath, [path.join(SCRIPT_DIR, 'gate-checklist.mjs'), '--json'], { cwd: SRC_ROOT, encoding: 'utf8' });
+  let j = null;
+  try { j = JSON.parse(p.stdout); } catch { /* fail below */ }
+  const keysOk = j && ['doctorCount', 'checkLoopCount', 'matched', 'solo', 'broken', 'unregistered'].every((k) => k in j);
+  const noHoles = j && JSON.stringify(j).includes('undefined') === false
+    && j.matched.every((m) => typeof m.doctor === 'string' && typeof m.cl === 'string' && 'note' in m);
+  check('S12 --json 可解析、键齐、条目无 undefined 丢字段、exit 0',
+    p.status === 0 && !!keysOk && !!noHoles,
+    String(p.stdout).slice(0, 200));
+}
+
+// ---- S13 doctor 多行节注释：首行即标题（6.6 形态）解析不漏 ----
+{
+  const doctorSrc = `// 6.6 owned 漂移校验（kit.owned 列表盘面 sha 不一致；
+//     漂移信号靠本校验给装户可见性）
+const x = 1;
+`;
+  const r = gateChecklist({ doctorSrc, checkLoopSrc: '', pairs: [{ doctor: '6.6', cl: null, note: '独有' }] });
+  check('S13 多行节注释（§6.6 形态）首行命中且登记不报 findings',
+    r.doctorCount === 1 && r.doctor[0].title.includes('owned') && r.broken.length === 0 && r.unregistered.length === 0,
+    JSON.stringify(r.doctor));
 }
 
 console.log('\n合计: PASS ' + pass + ' / FAIL ' + failCount);
