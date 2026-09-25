@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-25
 模块: pipeline
@@ -34,7 +34,7 @@
 - [ ] 规则 / 契约变更（编排机制定稿：目录约定 + 自动加载 + steps 扩展点；orchestrate 废止）→ L2
 
 ## 验收标准（可测试）
-- [ ] 机制文档 `workflows/_TEMPLATE.md` 定稿：自动加载口径、stages 语义（三形态 stage）、steps 扩展点约定（参数 / 发现 / 执行）、纪律（随 plan 确认、留痕、不跨确认门）
-- [ ] 装户件齐：示例编排脚本（stages 表）+ `steps/` 示例步骤 + AGENTS.md 常驻指令；`init` 装户自带
-- [ ] `orchestrate.md` 删除（templates + 装副本）；build.md 引用行改口径；grep 无旧口径残留
+- [x] 机制文档 `workflows/_TEMPLATE.md` 定稿：自动加载口径、stages 语义（三形态 stage）、steps 扩展点约定（参数 / 发现 / 执行）、纪律（随 plan 确认、留痕、不跨确认门）（证据：_TEMPLATE.md 重写——自动加载指令 / stage 三形态表 / steps 约定与示例 / 执行口径八条）
+- [x] 装户件齐：示例编排脚本（stages 表）+ `steps/` 示例步骤 + AGENTS.md 常驻指令；`init` 装户自带（证据：init.test.mjs ⑥ 3 例 PASS——机制文档与示例 / steps 扩展点 / orchestrate 不回流负向断言；本仓库 sync 实装 3 覆盖 1 新增）
+- [x] `orchestrate.md` 删除（templates + 装副本）；build.md 引用行改口径；grep 无旧口径残留（证据：git rm 2 处 + sync「包内已移除」出台账 + 盘上清理；grep templates/.agents/src 仅 init.test 负向断言字符串）
 - [ ] `npm test` 全绿（init 装户面断言改：声明件 + steps 在位、orchestrate 不回流）；doctor 0 WARN；预算门净减

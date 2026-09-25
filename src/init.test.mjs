@@ -54,19 +54,20 @@ check('合并：原内容尾部空白折叠不产生连续空行',
   mergeAgents('# A\n内容\n\n\n', '<!-- m -->\n# B') === '# A\n内容\n\n<!-- m -->\n# B\n');
 check('合并：原内容为空时骨架即全文', mergeAgents('', '<!-- m -->\n# B') === '<!-- m -->\n# B\n');
 
-// ---- ⑥ 装户面：真实模板树含编排命令与 workflow 声明面（init/sync 同走 renderTree，结构保证装户必有） ----
+// ---- ⑥ 装户面：真实模板树含编排机制件（init/sync 同走 renderTree，结构保证装户必有） ----
 {
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-surface-'));
   const pkgRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const t = renderTree(path.join(pkgRoot, 'templates'), tmp, { BOARD_PORT: '8933' }, { force: true });
   const rels = new Set(t.written.map((w) => w.rel));
-  check('装户面含编排命令（.agents/commands/orchestrate.md）', rels.has('.agents/commands/orchestrate.md'));
-  check('装户面含 workflow 声明面（_TEMPLATE + 示例 .md）',
+  check('装户面含机制文档与编排脚本示例（_TEMPLATE + 示例 .md）',
     rels.has('.agents/workflows/_TEMPLATE.md') && rels.has('.agents/workflows/示例-并行实现评审.md'),
     [...rels].filter((r) => r.includes('workflows')).join('、'));
-  check('装户面无 headless runner 残留（wf-run / providers 已废，2026-09-25-orchestrate-in-session）',
-    ![...rels].some((r) => r.includes('wf-run') || r.includes('providers')),
-    [...rels].filter((r) => r.includes('wf-run') || r.includes('providers')).join('、'));
+  check('装户面含 steps 扩展点示例', rels.has('.agents/workflows/steps/示例-部署验证.md'),
+    [...rels].filter((r) => r.includes('steps')).join('、'));
+  check('装户面无 orchestrate 命令残留（编排机制为目录约定，2026-09-25-wf-runtime）',
+    ![...rels].some((r) => r.includes('orchestrate')),
+    [...rels].filter((r) => r.includes('orchestrate')).join('、'));
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 

@@ -1,41 +1,62 @@
-# Workflow 编排 — 声明格式与会话内执行契约
+# Workflow 编排机制 — 编排脚本 + steps 扩展点
 
-> 把多个子智能体派单编成一份可审查的 workflow 声明：并行 fan-out（`after` 依赖分层）、阶段门禁（`gate`）、失败重试（`retries`），由**主智能体在宿主会话内**经原生子智能体执行（`.agents/commands/orchestrate.md`），执行留痕写 `workflow/delegations.md`。
+> kit 的跨宿主编排机制：`.agents/workflows/` 下的编排脚本承载编排语义（依赖分层 / 并行 / 重试 / gate），**宿主 AI 经 AGENTS.md 常驻指令自动加载并按语义执行**——有子智能体的宿主并行 fan-out，没有的顺序自做，验收不变。零宿主协议适配：机制只依赖所有宿主共有的四样本领（读 AGENTS.md、读仓库文件、跑终端命令、子智能体）。
 
-## 纪律（先读）
+## 自动加载（AGENTS.md 常驻指令）
 
-- **声明随 plan 确认后方可执行**：workflow 声明是 plan 任务拆解的执行器，随 plan 草稿一并全文过目；确认前只可走查校验、不得派单。
-- 编排不跨确认门；子智能体不 commit / push（提交由主智能体复核后执行）。
-- 声明式是跨宿主（zcode / opencode / trae / omp）诚实边界——主智能体解释执行任意脚本不可靠；宿主有原生脚本编排（如 ZCode dynamic workflows）且需真控制流时直接用宿主能力。
+> 多工作包编排——用户要跑编排、或 plan 执行多工作包时：读 `.agents/workflows/` 编排脚本按本文档语义执行；自定义步骤在 `steps/`。
 
-## 声明格式（`.agents/workflows/<主题>.md`）
+## 编排脚本（`.agents/workflows/<主题>.md`）
 
-frontmatter + 一张 stages 表：
+frontmatter（`name` / `description` / `concurrency` 默认 2）+ 一张 stages 表：
 
 ```md
 ---
 name: 并行修两域
-description: 后端+前端并行实现 → 汇聚过测试 → 独立评审
+description: 后端+前端并行实现 → 汇聚过测试 → 部署验证（step）→ 独立评审
 concurrency: 2
 ---
-# workflow — 并行修两域
-
-| id | after | role | task | files（授权） | accept（验收判据） | gate | retries |
-|----|-------|------|------|--------------|-------------------|------|---------|
-| backend | — | implementer | 实现后端 X | src/api/** | 项目测试过 | | 0 |
-| frontend | — | implementer | 改前端 Y | web/** | 构建过 | | 1 |
-| gate-all | backend,frontend | — | — | — | — | npm test | |
-| review | gate-all | independent-reviewer | 评审两域改动 | | 符合 plan 与判据 | | 0 |
+| id | after | role | step | task / params | files（授权） | accept（验收判据） | gate | retries |
+|----|-------|------|------|---------------|--------------|-------------------|------|---------|
+| backend | — | implementer | — | 实现后端 X | src/api/** | 项目测试过 | | 1 |
+| frontend | — | implementer | — | 改前端 Y | web/** | 构建过 | | 0 |
+| gate-all | backend,frontend | — | — | — | — | — | npm test | |
+| deploy-check | gate-all | — | 部署验证 | env=staging | | 部署命令 exit 0 | | 0 |
+| review | deploy-check | independent-reviewer | — | 评审两域改动 | | 符合 plan 与判据 | | 0 |
 ```
 
-字段语义：
+**stage 三形态**（互斥）：
 
-- `after`：依赖的 stage id（逗号分隔；`—` 或空 = 第 0 层，同层并行）；**gate 行**（role 空、gate 非空）在该行依赖全 ok 后由主智能体跑命令，非零中止。
-- `role`：必须 ∈ `.agents/roles/` 现有角色（implementer / independent-reviewer / ui-verifier 或项目自扩）。
-- `files`：授权文件清单（glob 可）；留空 = 只读侦察任务。
-- `accept`：验收判据，写进派单头；`retries`：失败重派上限（默认 0，重派 = 全新派单）。
-- `concurrency`：层内并行派单上限（默认 2）。
+| 形态 | 判据 | 执行 |
+|------|------|------|
+| role 派单行 | `role` 非空 | 派子智能体（`task` 目标 / `files` 授权清单 / `accept` 验收判据写进派单头 + 红线行） |
+| step 行 | `step` 非空 | 宿主 AI 读 `steps/<step>.md` 按指引执行，`task / params` 列传参 |
+| gate 行 | `gate` 非空（role/step 空） | 终端跑命令，非零即中止 |
 
-## 执行方式
+**编排语义**（执行口径，全宿主同一）：`after` 空 = 第 0 层；一层全 ok 才派依赖它的下一层；层内按 `concurrency` 分批——有子智能体的宿主并行 fan-out，没有的顺序自做（验收标准不变）；失败且 `retries` > 0 → 重派（全新上下文）；重试超限 / gate 非零 → 中止后续、汇总报告失败项。
 
-主智能体按 `.agents/commands/orchestrate.md` 执行：解析校验 → 分层 → 层内**原生子智能体**并行派单（zcode = Agent 工具 / opencode = agents；trae / omp 顺序自做，验收不变）→ 收敛复核 → gate → 留痕 → 汇总。派单 prompt 由角色契约 + 派单头 + 红线行组装，与各阶段命令的委派口径一致。
+## steps 扩展点（`.agents/workflows/steps/<名>.md`）
+
+kit 定义的扩展机制：文件名即步骤名（steps 目录即注册表），项目把自己的领域动作（部署 / 迁移 / 审计上报…）注册进来，编排脚本 step 行引用即用。
+
+```md
+---
+params: env（目标环境）；timeout-min（可选，默认 10）
+---
+# 步骤 — 部署验证
+
+1. 跑终端命令：`npm run deploy -- --env <env>`，非零即步骤失败并回报 stderr 尾段
+2. 跑冒烟检查：`curl -fsS https://<env>.example.com/healthz`
+3. 回报：部署版本号 + 冒烟结果
+```
+
+- frontmatter `params`：参数约定（自由文本列明名称与含义）；调用方在编排脚本 `task / params` 列传参（`k=v`，空格分隔多个）。
+- 正文：执行指引（编号步骤）——可指使命令、子智能体、检查动作；步骤失败按编排脚本行 `retries` 重试。
+
+## 纪律（先读）
+
+- **声明随 plan 确认后方可执行**：编排脚本是 plan 任务拆解的执行器，随 plan 草稿一并全文过目。
+- 子智能体不跨确认门、不 commit / push（派单红线行：只改授权文件；缺输入或需偏离 → `BLOCKER:` 停下）。
+- 收敛复核：派单返回后核对 diff 与授权文件范围（与 build.md 委派约定同口径）；BLOCKER 停住待处置。
+- 留痕：每个派单 / step stage 完成后向 `workflow/delegations.md` 委派结果表追加一行（`一次通过` / `返工×N` / `返工待修`，口径与 agg-delegations.cjs 对齐）。
+- 解析校验先行：role ∈ `.agents/roles/`、step ∈ `steps/`、after 引用存在且无环——任一不过即拒，不执行。

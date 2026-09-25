@@ -19,7 +19,7 @@
 
 ### 子智能体
 
-公共角色契约在 `.agents/roles/`（`implementer` / `independent-reviewer` / `ui-verifier`），各宿主经薄适配层（`.opencode/agents/`、`.trae/agents/`、`.zcode/agents/` 等）注册，宿主不支持子智能体时按命令 frontmatter 的 `fallback` 执行。子智能体不跨用户确认门、不替用户批准、不自行提交。多工作包并行 / 链式执行用 workflow 声明编排（`.agents/commands/orchestrate.md`）：声明随 plan 确认后由主智能体会话内 fan-out 原生子智能体执行，格式见 `.agents/workflows/_TEMPLATE.md`。
+公共角色契约在 `.agents/roles/`（`implementer` / `independent-reviewer` / `ui-verifier`），各宿主经薄适配层（`.opencode/agents/`、`.trae/agents/`、`.zcode/agents/` 等）注册，宿主不支持子智能体时按命令 frontmatter 的 `fallback` 执行。子智能体不跨用户确认门、不替用户批准、不自行提交。多工作包编排（自动加载）：跑编排 / plan 执行多工作包时，读 `.agents/workflows/` 编排脚本按机制文档执行——stages 表（依赖分层 / 并行 / 重试 / gate）+ `steps/` 自定义步骤扩展点，见 `.agents/workflows/_TEMPLATE.md`。
 
 ### 门禁与提交
 
