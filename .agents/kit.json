@@ -230,11 +230,11 @@
     },
     {
       "rel": "wiki/INDEX.md",
-      "sha256": "3447802ea0b80413fe579d90fbf145f278f895e934d9d3a821a115c4c0d11b18"
+      "sha256": "6994bf292ed2cdbadd5cc42d1f770de52b72c2ef7c551365fee75dc7e0f256ef"
     },
     {
       "rel": "wiki/知识沉淀总览.html",
-      "sha256": "6e3bdb054654a73f38135bffec7efa093775279a5c0fcd069e7f69bae7b3e11a"
+      "sha256": "f987c4a927a06afda026900af030f48a2f0c297586d2dbab70335d71d462041d"
     },
     {
       "rel": "workflow/incidents/_TEMPLATE.md",

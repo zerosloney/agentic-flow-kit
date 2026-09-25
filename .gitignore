@@ -13,4 +13,10 @@ test-output.txt
 # PowerShell Out-File 重定向输出（doctor / sync / npm test 流式捕获不稳时用）
 doctor-out.txt
 sync-out.txt
+sync2-out.txt
 test-out.txt
+# gen-wiki-board / gen-workflow-index / verify-wiki-consistency / source-sync-check 重定向输出
+gen-board-out.txt
+gen-wf-out.txt
+verify-out.txt
+ssc-out.txt
