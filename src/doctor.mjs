@@ -127,6 +127,22 @@ export function doctor(args, pkgRoot) {
     else add('WARN', `delegations 台账结构漂移——${String(agg.stderr || agg.stdout || '').split('\n')[0]}`);
   }
 
+  // 6.6 owned 漂移校验（kit.owned 列表盘面 sha 不一致；engine 双源纪律对 owned 走「项目自持 + 哈希记账不约束」，
+  //     漂移信号靠本校验给装户可见性。2026-09-25 wf-runtime 复盘：包源改了装副本未同步 = 漂移但 sync 不报。）
+  const ownedRes = checkOwnedDrift(target);
+  if (ownedRes.error) {
+    add('WARN', `owned 校验跳过（kit.json 解析失败：${ownedRes.error}）`);
+  } else if (ownedRes.skipped) {
+    add('PASS', 'owned 校验跳过（kit.json 无 owned 条目）');
+  } else if (ownedRes.total === 0) {
+    add('PASS', 'owned 校验跳过（kit.json 无 owned 条目）');
+  } else if (ownedRes.drift === 0 && ownedRes.gone.length === 0) {
+    add('PASS', `owned ${ownedRes.total} 份无漂移（装副本与台账 sha 对齐）`);
+  } else {
+    if (ownedRes.drift) add('WARN', `owned 漂移 ${ownedRes.drift} 份——装副本手改未跑 sync 刷台账 / 包源改了装副本未同步；须手动同步装副本后跑 node bin/flow-kit.mjs sync 刷台账（见 incidents/2026-09-25-wf-runtime 复盘）`);
+    if (ownedRes.gone.length) add('WARN', `owned 文件缺失：${ownedRes.gone.join('、')}——sync 恢复或手动恢复`);
+  }
+
   // 7. check-loop——先探 sh 可用性（对齐 run-tests.mjs 先例）：Windows PowerShell 常无 sh，
   //    ENOENT 曾被吞进 hard-block 分支报成空原因假警报（incident 2026-09-24-doctor-sh-enoent）。
   //    git 钩子门禁不受此影响——git 以自带 sh 执行钩子，与用户 PATH 无关。
@@ -161,4 +177,32 @@ function print(results) {
   const fails = results.filter((r) => r.level === 'FAIL').length;
   const warns = results.filter((r) => r.level === 'WARN').length;
   console.log(`\ndoctor：${results.length - fails - warns} PASS ｜ ${warns} WARN ｜ ${fails} FAIL`);
+}
+
+// owned 漂移校验（独立 export 供 doctor 主流程 + 单元测试共用；2026-09-25 wf-runtime 复盘）
+// 返回：{ drift, gone, total, skipped, error? }
+//   - skipped=true：kit.json 不存在或解析失败/无 owned 字段
+//   - drift：盘面 sha != kit.owned sha 的文件数
+//   - gone：盘面缺失的文件 rel 列表
+//   - total：kit.owned 列表总文件数
+export function checkOwnedDrift(target) {
+  const kitPath = path.join(target, '.agents', 'kit.json');
+  if (!fs.existsSync(kitPath)) return { drift: 0, gone: [], total: 0, skipped: true };
+  let kit;
+  try {
+    kit = JSON.parse(fs.readFileSync(kitPath, 'utf8'));
+  } catch (e) {
+    return { drift: 0, gone: [], total: 0, skipped: true, error: e.message };
+  }
+  const owned = Array.isArray(kit.owned) ? kit.owned : [];
+  if (owned.length === 0) return { drift: 0, gone: [], total: 0, skipped: true };
+  let drift = 0;
+  const gone = [];
+  for (const f of owned) {
+    const p = path.join(target, f.rel);
+    if (!fs.existsSync(p)) { gone.push(f.rel); continue; }
+    const h = createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+    if (h !== f.sha256) drift++;
+  }
+  return { drift, gone, total: owned.length, skipped: false };
 }

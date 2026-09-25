@@ -95,6 +95,10 @@
       "sha256": "5f45413b523a8e7d8d2992f513f630e6b6c73c1029e46fff812284499805176e"
     },
     {
+      "rel": ".agents/scripts/doctor.test.mjs",
+      "sha256": "bfaa64effb453a10b68aab09c279f04b44fbd05f4a04c551989f7e270af054ab"
+    },
+    {
       "rel": ".agents/scripts/ensure-board.mjs",
       "sha256": "b6f3cc9b9683f479258ad3e12ed4b3ac7eba47433238af01199a30b1be3aa230"
     },
@@ -250,7 +254,7 @@
     },
     {
       "rel": "workflow/regression-checklist.md",
-      "sha256": "81e6d1977086171e37a50b8aa958478b19424b0cb22c99eb901c792cc1d59d6b"
+      "sha256": "59788f471b8b56b3cd63cf744570098b60f95680a8f577493c17215ec57bd10a"
     },
     {
       "rel": "workflow/specs/_TEMPLATE.md",
