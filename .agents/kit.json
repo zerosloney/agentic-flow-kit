@@ -156,11 +156,11 @@
     },
     {
       "rel": ".agents/scripts/wf-run.mjs",
-      "sha256": "ef20d7ec4324fc83b767efe5dcc1f8b670f88052f11b499d8f3df989fab13bd2"
+      "sha256": "499df209d13e879d0900448f189810e563df092c79cf1aa312039e09c62f468c"
     },
     {
       "rel": ".agents/scripts/wf-run.test.mjs",
-      "sha256": "2a880e87790d8cec416e1b869fa88aba0152da4c117513eba071f5c646a0aedc"
+      "sha256": "45b0700fb4b7f49fe098de2313361918c04d92f29319c7027780c90ad1fb6e0f"
     },
     {
       "rel": ".agents/scripts/wiki-search.mjs",
@@ -180,7 +180,7 @@
     },
     {
       "rel": ".agents/workflows/_TEMPLATE.md",
-      "sha256": "b14e43a34cb7141991adb5807f394aabe40e4d5c7285b6bcb7f71242a17628fd"
+      "sha256": "a8df21345f257031e06875cc3b7b27b33e5b08cc53e1d4001fef3094cce2b679"
     },
     {
       "rel": ".agents/workflows/示例-并行实现评审.mjs",
@@ -188,7 +188,7 @@
     },
     {
       "rel": ".agents/workflows/providers.json",
-      "sha256": "8ce8ce35b27525d2c5b3136de1147ba89e9c6e24f72ef8beda9bb670ff3d9710"
+      "sha256": "9641a677847a36182ce14d6f1bfac73e86f0ec63ab5f9e5105d95570d6d36666"
     },
     {
       "rel": ".githooks/commit-msg",
@@ -258,7 +258,7 @@
     },
     {
       "rel": "workflow/regression-checklist.md",
-      "sha256": "80d9572e00e3d41b9c2292dd35471c2ac2fa6ac8b654f81fe68c0811d1fa245e"
+      "sha256": "67afbb882186ed3e6095da6a344f6f5793d789c33d54b64a4fa275d6749da944"
     },
     {
       "rel": "workflow/specs/_TEMPLATE.md",

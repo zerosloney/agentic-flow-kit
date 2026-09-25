@@ -1,6 +1,6 @@
 {
-  "zcode": { "cmd": ["zcode", "exec", "{PROMPT}"] },
-  "claude": { "cmd": ["claude", "-p", "{PROMPT}"] },
-  "opencode": { "cmd": ["opencode", "run", "{PROMPT}"] },
-  "codex": { "cmd": ["codex", "exec", "{PROMPT}"] }
+  "zcode": { "cmd": ["zcode", "exec", "-"] },
+  "claude": { "cmd": ["claude", "-p"] },
+  "opencode": { "cmd": ["opencode", "run"] },
+  "codex": { "cmd": ["codex", "exec", "-"] }
 }

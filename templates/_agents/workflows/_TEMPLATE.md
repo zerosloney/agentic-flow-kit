@@ -41,6 +41,7 @@ export default {
 
 `wf.agent` 的 `opts`：`files`（授权文件清单，写进派单红线）/ `accept`（验收判据）/ `context`（必读材料路径）/ `provider` / `timeoutMs`（默认 600000）/ `retries`（默认 0，重试 = 全新会话）。
 子智能体输出含「BLOCKER:」时结果标记 `blocker: true`（角色按契约停下待主智能体处置，不扩大范围）。
+不 await 的派单也会被 runner 等待收尾并写台账（fire-and-forget 安全）。
 
 ## runner 命令
 
@@ -48,23 +49,25 @@ export default {
 node .agents/scripts/wf-run.mjs <脚本.mjs> [--provider <名>] [--concurrency N] [--timeout-ms N] [--dry-run] [--quiet] [--no-ledger]
 ```
 
-- 退出码：全过 0；任一 agent 失败或脚本异常 1。
-- `--dry-run`：只加载校验脚本（default 导出形态、role 合法性），不执行——控制流是动态的，静态审不出派单全集，确认门靠人。
+- 退出码：全过 0；任一 agent 失败或脚本异常 1；参数 / 校验错误 2。
+- `--dry-run`：只加载校验脚本——已验 default 导出形态（name + run）；role 合法性与 provider 配置在派单时校验（控制流动态，dry-run 不执行派单，静态审不出派单全集，确认门靠人）。
 - `--no-ledger`：跳过 delegations.md 留痕（默认追加委派结果表行，列格式与既有台账一致，`agg-delegations.cjs` 可直接聚合）。
 
 ## provider（子智能体 = 哪家宿主 CLI 无头会话）
 
-`.agents/workflows/providers.json`（项目可覆写，与本表 deep-merge；`cmd` 用 argv 数组为标准，不走 shell）：
+注册表三层 deep-merge：**内置默认 ← `.agents/workflows/providers.json`（managed，随包更新）← `.agents/workflows/providers.local.json`（项目侧车，sync 不跟踪）**——项目覆写一律写 local 文件，不改 managed 的 providers.json（改了会被 sync 报「本地已改」）。
+
+`cmd` 用 argv 数组为标准（不走 shell）。**prompt 传输走 stdin 协议**：命令模板不含 `{PROMPT}`（推荐形态，下表内置全是），prompt 完整经子进程 stdin 传入，无命令行长度 / 换行限制；模板含 `{PROMPT}` 则内联替换（POSIX / Windows 非批处理可用）——Windows 批处理 shim（.cmd/.bat）+ 多行 prompt 会被 runner **fail-fast 拒绝**（cmd.exe 遇换行截断命令行，会静默丢失角色契约与红线）。
 
 ```json
 {
-  "zcode":    { "cmd": ["zcode", "exec", "{PROMPT}"] },
-  "claude":   { "cmd": ["claude", "-p", "{PROMPT}"] },
-  "opencode": { "cmd": ["opencode", "run", "{PROMPT}"] },
-  "codex":    { "cmd": ["codex", "exec", "{PROMPT}"] }
+  "zcode":    { "cmd": ["zcode", "exec", "-"] },
+  "claude":   { "cmd": ["claude", "-p"] },
+  "opencode": { "cmd": ["opencode", "run"] },
+  "codex":    { "cmd": ["codex", "exec", "-"] }
 }
 ```
 
-- `{PROMPT}` 替换为完整派单 prompt（角色契约 + 目标 / 授权文件 / 验收判据 + 红线行）。
-- **装好后先冒烟再投产**：各 CLI 无头语法/登录态随版本变化，先跑一条最小 workflow（单 agent 单 gate）校准，命令模板按实际输出覆写；**冒烟/校准跑加 `--no-ledger`**，不污染量化台账。
+- 字符串形式 `cmd` 兼容（`shell: true` 整串执行）——引号 / 换行由写的人自负，跨平台优先数组。
+- **装好后先冒烟再投产**：各 CLI 无头语法/登录态随版本变化，先跑一条最小 workflow（单 agent 单 gate）校准，命令模板按实际输出覆写（写 providers.local.json）；**冒烟/校准跑加 `--no-ledger`**，不污染量化台账。
 - provider 不在 PATH：派单明确报错（含覆写提示），不算 crash。

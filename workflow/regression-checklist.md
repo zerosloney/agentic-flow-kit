@@ -25,3 +25,4 @@
 | 2026-09-24-p4-sweep | 字面量数据（标题/预算路径/命令）当正则或裸子串匹配前先加 token 边界或字面量转义；钩子异常分支先分流（ENOENT≠违例、脚本崩溃≠无违例）再报 | gen-workflow-index.test.mjs 场景 5/6 + agg-delegations.test.mjs 场景 1（npm test 随跑）；commit-msg 随本仓库每次提交重验 |
 | 2026-09-24-metrics-glob-vocab | 自实现 mini 解析器（glob 等）必须校验词表边界——出表形态警告跳过，不做丢弃前缀的放宽匹配 | gen-workflow-metrics.test.mjs 场景 4（npm test 随跑） |
 | 2026-09-24-npm-pack-cache-leak | 运行时生成件 `templates/_agents/cache` 不得进 npm 发布包——files 负向排除 + prepack 清除两道防线须在位，发布前 `npm pack --dry-run` 复核包清单无 cache | pack.test.mjs P1/P2（npm test 随跑）；npm 10/11 双版本 pack 实测 |
+| 2026-09-25-wf-run-review-fixes | 跨进程传 prompt 一律 stdin 协议（Windows 批处理 shim + 多行内联必须 fail-fast 不静默截断）；fake provider 测试矩阵须含真实 .cmd/.bat shim 形态（测试环境与真实威胁形态同构）；台账列内容半角 ｜ 全角化；错误路径必须 settle 在跑任务再退；行格式正则断言必须带负例（/^|…/ 恒真教训） | wf-run.test.mjs ①负例 + ⑧-⑫（npm test 随跑） |
