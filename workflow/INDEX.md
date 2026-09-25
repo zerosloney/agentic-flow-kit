@@ -10,7 +10,7 @@
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
 | INTENT | L2 | approved | 2026-09-25 | pipeline | 编排执行形态修正：会话内原生子智能体 fan-out 取代 headless runner | ☑0/4 |
-| PLAN | L2 | draft | 2026-09-25 | pipeline | 编排执行形态修正：会话内原生子智能体 fan-out | — |
+| PLAN | L2 | approved | 2026-09-25 | pipeline | 编排执行形态修正：会话内原生子智能体 fan-out | — |
 | SPEC | L2 | approved | 2026-09-25 | pipeline | 编排执行形态修正：会话内原生子智能体 fan-out | — |
 | INTENT | L1 | approved | 2026-09-24 | pipeline | Shipyard 引擎增量收包（抽取后 3 笔回流包源） | ☑5/5 |
 | PLAN | L1 | approved | 2026-09-24 | pipeline | Shipyard 引擎增量收包 | — |
