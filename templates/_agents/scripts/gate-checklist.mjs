@@ -36,10 +36,11 @@ function parseDoctorSections(doctorSrc) {
   return out;
 }
 
-// parseCheckLoopChecks：扫 check-loop.sh 注释行 `# N. 标题 [severity]`（沿用既有正则；标题可能多行截断）
+// parseCheckLoopChecks：扫 check-loop 检查项注释（`// N. 标题 [severity]` 于 .mjs 头部清单——2026-09-26
+// check-loop-node 迁移后的主位；旧装户 sync 前只有 .sh 时按 `# N. 标题` fallback，登记表口径不变）
 function parseCheckLoopChecks(clSrc) {
   const checks = [];
-  const re = /^\s*#\s*(\d+)\.\s+(.+?)(?:\s*\[(hard-block|warning|advisory)\])?\s*$/gm;
+  const re = /^\s*(?:\/\/|#)\s*(\d+)\.\s+(.+?)(?:\s*\[(hard-block|warning|advisory)\])?\s*$/gm;
   let m;
   while ((m = re.exec(clSrc)) !== null) {
     checks.push({ id: m[1], title: m[2].trim(), severity: m[3] || null });
@@ -166,9 +167,10 @@ if (isMain) {
   const pkgRoot = process.argv[2] && !process.argv[2].startsWith('--') ? process.argv[2] : null;
   const base = pkgRoot || process.cwd();
   const doctorPath = path.join(base, 'src', 'doctor.mjs');
-  const clPath = path.join(base, '.agents', 'scripts', 'check-loop.sh');
+  const clPathMjs = path.join(base, '.agents', 'scripts', 'check-loop.mjs');
+  const clPath = fs.existsSync(clPathMjs) ? clPathMjs : path.join(base, '.agents', 'scripts', 'check-loop.sh');
   if (!fs.existsSync(doctorPath)) fail('找不到 doctor.mjs：' + doctorPath);
-  if (!fs.existsSync(clPath)) fail('找不到 check-loop.sh：' + clPath);
+  if (!fs.existsSync(clPath)) fail('找不到 check-loop（.mjs / .sh 均无）：' + clPath);
   const doctorSrc = fs.readFileSync(doctorPath, 'utf8');
   const checkLoopSrc = fs.readFileSync(clPath, 'utf8');
   const result = gateChecklist({ doctorSrc, checkLoopSrc });

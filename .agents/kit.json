@@ -48,7 +48,7 @@
     },
     {
       "rel": ".agents/commands/test.md",
-      "sha256": "3f4ae086d36a1b3ab42ea599b957e66f5d0939efdf6b6dadd7ff6f2e13842344"
+      "sha256": "14712125ec741e45e159ccc0d156f9dbb83d3619ed0fa38b909ec00a9d87390e"
     },
     {
       "rel": ".agents/hooks/check-pairing-incremental.sh",
@@ -83,12 +83,16 @@
       "sha256": "4c4f0044785a075bc4523a6c480dae0ba683f53d2838eaf3edeb5cb16029db0b"
     },
     {
-      "rel": ".agents/scripts/check-loop.sh",
-      "sha256": "613f23b9564a9554daa47480dfc7a6b9c91a843314108783483b323f107b7c5c"
+      "rel": ".agents/scripts/check-loop.mjs",
+      "sha256": "204639922b39a8d27601c469f8586a3c3e2874f84af33fbc3d4728248d85d2ad"
     },
     {
-      "rel": ".agents/scripts/check-loop.test.sh",
-      "sha256": "202c1080ed4dfc6de2590707171bcff13777da0620940d81c094d866081e66a3"
+      "rel": ".agents/scripts/check-loop.sh",
+      "sha256": "a8ff2b72a1b22ade819a83cb3da4519f7d2fa31b819c2a34e9fcc85e1751048c"
+    },
+    {
+      "rel": ".agents/scripts/check-loop.test.mjs",
+      "sha256": "a28e5011e9dbba0b9dc37651a51331949a5393aee2b577236533252341cb73d4"
     },
     {
       "rel": ".agents/scripts/commit-check-trigger.test.mjs",
@@ -152,7 +156,7 @@
     },
     {
       "rel": ".agents/scripts/verify.mjs",
-      "sha256": "6d57b224a1bbfe8ec8025b82c0fca01ad00e25058286d354dc68dea2bc3859e8"
+      "sha256": "754886b6460c4a7398f341afb6609a5c88853138feae69a30e62ec262fb02062"
     },
     {
       "rel": ".agents/scripts/verify.test.mjs",

@@ -54,6 +54,7 @@ export function doctor(args, pkgRoot) {
     '.agents/rule-budgets.txt',
     '.agents/settings.json',
     '.agents/workflows/_TEMPLATE.md',
+    '.agents/scripts/check-loop.mjs',
     '.githooks/pre-commit',
     '.githooks/pre-push',
     '.githooks/commit-msg',
@@ -175,20 +176,15 @@ export function doctor(args, pkgRoot) {
     }
   }
 
-  // 7. check-loop——先探 sh 可用性（对齐 run-tests.mjs 先例）：Windows PowerShell 常无 sh，
-  //    ENOENT 曾被吞进 hard-block 分支报成空原因假警报（incident 2026-09-24-doctor-sh-enoent）。
-  //    git 钩子门禁不受此影响——git 以自带 sh 执行钩子，与用户 PATH 无关。
-  const shProbe = spawnSync('sh', ['-c', 'true'], { encoding: 'utf8' });
-  if (shProbe.status !== 0) {
-    add('WARN', '环境无 sh——check-loop 未跑，勿当作通过；装 Git Bash / WSL 后重跑 doctor（git 钩子门禁不受影响，git 以自带 sh 执行）');
+  // 7. check-loop——2026-09-26 check-loop-node 起 node 实现直跑（sh 版曾需先探 sh 可用性：Windows
+  //    PowerShell 常无 sh，ENOENT 曾被吞进 hard-block 分支报成空原因假警报，incident 2026-09-24-doctor-sh-enoent；
+  //    迁移后无 sh 依赖，探针退役。check-loop.sh 为兼容 shim，pre-push 钩子路径照常）
+  const cl = spawnSync(process.execPath, ['.agents/scripts/check-loop.mjs'], { cwd: target, encoding: 'utf8' });
+  if (cl.status === 0) {
+    const warnTxt = String(cl.stderr || '').trim();
+    add('PASS', `check-loop 干净${warnTxt ? `（${warnTxt.split('\n').filter((l) => l.includes('WARN')).length} 条 advisory 警告）` : ''}`);
   } else {
-    const cl = spawnSync('sh', ['.agents/scripts/check-loop.sh'], { cwd: target, encoding: 'utf8' });
-    if (cl.status === 0) {
-      const warnTxt = String(cl.stderr || '').trim();
-      add('PASS', `check-loop 干净${warnTxt ? `（${warnTxt.split('\n').filter((l) => l.includes('WARN')).length} 条 advisory 警告）` : ''}`);
-    } else {
-      add('FAIL', `check-loop 有 hard-block：\n${String(cl.stderr || '').split('\n').slice(0, 8).join('\n')}`);
-    }
+    add('FAIL', `check-loop 有 hard-block：\n${String(cl.stderr || '').split('\n').slice(0, 8).join('\n')}`);
   }
 
   // 8. 看板端口（信息级）

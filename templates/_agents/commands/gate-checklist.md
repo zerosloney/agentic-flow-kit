@@ -76,7 +76,7 @@ npm test                                       # 含 gate-checklist 套件
 - 不要把「登记完整」当作强制门 —— B-b 决策「只报告不修复」：断档/未登记暴露给 follow-up，exit 恒 0
 - 不要改 doctor / check-loop 检查项来消音 —— 登记表才是该改的地方（配对 / 独有 / 经 §7 三选一）
 - 不要扩展到看板告警 —— 看板当前无告警规则（gen-wiki-board.mjs 不做判定），扩展超出范围
-- 不要绕过登记直接改解析正则 —— 解析面只认 doctor `// N.` 节注释与 check-loop `# N.` 项注释（既有稳定结构）
+- 不要绕过登记直接改解析正则 —— 解析面只认 doctor `// N.` 节注释与 check-loop `// N.` 项注释（.mjs 头部清单，fallback 旧装户 .sh `# N.`）
 
 ## 不在本次同步范围
 

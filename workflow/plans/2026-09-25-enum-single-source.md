@@ -24,7 +24,7 @@
 
 ## 验证方式
 
-- `sh .agents/scripts/check-loop.test.sh`：35 场景全绿（34 既有 + 1 新 fail-loud）。✅（证据：实跑 37/0——34 既有 + 缺文件/缺键/CRLF 3 新场景；另修实现 1 次：case 变量模式 POSIX 不成立 → in_set 内建成员测试）
+- `check-loop.test.sh`（当时为 sh 套件；2026-09-26 check-loop-node 迁移后为 `node .agents/scripts/check-loop.test.mjs`）：35 场景全绿（34 既有 + 1 新 fail-loud）。✅（证据：实跑 37/0——34 既有 + 缺文件/缺键/CRLF 3 新场景；另修实现 1 次：case 变量模式 POSIX 不成立 → in_set 内建成员测试）
 - `node templates/_agents/scripts/workflow-enums.test.mjs` 全绿；`npm test` 全套件绿。✅（证据：12/0 + npm test 20 套件「全部套件通过」）
 - 消费方字面量清零：`grep -n superseded` 仅剩注释/prose。✅（证据：11 处命中全为告警文案与生成注释模板）
 - `node bin/flow-kit.mjs sync` 后 `source-sync-check --diff` 0 差异；doctor 0 FAIL；gen-workflow-index `--check` 无漂移（INDEX 内容不变）。✅（证据：无差异 / 11 PASS 0 FAIL / INDEX 无漂移）

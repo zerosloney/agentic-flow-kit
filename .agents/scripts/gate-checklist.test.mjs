@@ -152,7 +152,11 @@ const y = 2;
 }
 
 const realDoctor = () => fs.readFileSync(path.join(SRC_ROOT, 'src', 'doctor.mjs'), 'utf8');
-const realCl = () => fs.readFileSync(path.join(SRC_ROOT, '.agents', 'scripts', 'check-loop.sh'), 'utf8');
+// check-loop 解析面与 CLI 同口径：.mjs 优先（2026-09-26 迁移后主位），fallback .sh（旧装户）
+const realCl = () => {
+  const mjs = path.join(SRC_ROOT, '.agents', 'scripts', 'check-loop.mjs');
+  return fs.readFileSync(fs.existsSync(mjs) ? mjs : path.join(SRC_ROOT, '.agents', 'scripts', 'check-loop.sh'), 'utf8');
+};
 const hasReal = fs.existsSync(path.join(SRC_ROOT, 'src', 'doctor.mjs'));
 
 // ---- S10 真实仓库 baseline：PAIRS 全量登记 → 0 断档 / 0 未登记 ----

@@ -42,7 +42,7 @@ node bin/flow-kit.mjs doctor                       # §6.5 delegations + §6.6 o
 
 任一失败 → 不进 UI 实测,回 `build.md` 修复;失败难复现(偶发/跨层)时先用 `diagnosing-bugs` 技能走诊断循环(红→最小化→假设→插桩→修复→回归),修复仍回 `build.md`。
 
-> **门禁 / 看板 / wiki 脚本改动**(`.agents/scripts/`、`.agents/hooks/`、`.agents/board/`):按改动对象跑对应 fixture 回归,须全绿——闭环门禁 `sh .agents/scripts/check-loop.test.sh`、wiki 生成器 `node .agents/scripts/gen-wiki-board.test.mjs`、提交前 hook 测试(如有);涉及看板告警规则时,用同批 workflow fixture 双跑 `check-loop.sh` 与看板 `/api/board`,断言 hard-block 集合被看板告警覆盖(防口径分叉)。
+> **门禁 / 看板 / wiki 脚本改动**(`.agents/scripts/`、`.agents/hooks/`、`.agents/board/`):按改动对象跑对应 fixture 回归,须全绿——闭环门禁 `node .agents/scripts/check-loop.test.mjs`、wiki 生成器 `node .agents/scripts/gen-wiki-board.test.mjs`、提交前 hook 测试(如有);涉及看板告警规则时,用同批 workflow fixture 双跑 `check-loop`（经 shim 或 .mjs 直跑）与看板 `/api/board`,断言 hard-block 集合被看板告警覆盖(防口径分叉)。
 
 ## 2. 切库冒烟(切换 / 新增目标库后必跑)
 
