@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-26
 模块: pipeline
@@ -37,12 +37,12 @@
 - [x] 规则 / 契约变更（门禁本体的实现载体与 5 处调用方接线变更；判定契约本身零变化，fixture 全量为证）→ 级别 L2
 
 ## 验收标准（可测试）
-- [ ] check-loop.mjs 落位（templates + 装副本，sync 入台账）：14 检查项 `// N.` 头部清单齐（gate-checklist 登记表 1-14 校验通过）；真实仓库跑 exit 0 且警告输出与 sh 版逐类一致（对照快照）
-- [ ] check-loop.test.mjs：sh 版 37 场景全量移植全绿（含枚举缺文件/缺键/CRLF、仓库模式 tracked 过滤×2、检索层接线、确认态×2、非 git 跳过）
-- [ ] check-loop.sh shim：pre-push 路径实测（真实仓库经 shim 跑 exit 0）；shim 后 sh 实现面清零（awk/fd 对齐/临时文件/trap 消失——grep 证实无 awk、无 fd 3/4）
-- [ ] 消费方接线：verify.mjs 第 2 步直连 node（无 sh 环境提示语更新，verify.test 6 场景全绿）；doctor §7 直连 node（撤 sh 探测，doctor.test 场景 8 不回归）；run-tests 撤 bash 特判（npm test 全套件绿）；gate-checklist --diff 登记完整 0/0
-- [ ] doctor §2 布局含 `.agents/scripts/check-loop.mjs`（29 项）且 doctor 0 FAIL
-- [ ] `npm test` 全绿 + `source-sync-check --diff` 0 差异 + verify 全绿 + check-loop 真实仓库 exit 0
+- [x] check-loop.mjs 落位（templates + 装副本，sync 入台账）：14 检查项 `// N.` 头部清单齐（gate-checklist 登记表 1-14 校验通过）；真实仓库跑 exit 0 且警告输出与 sh 版逐类一致（对照快照）（证据：commit bb1a8fb；迁移前 sh 基线快照 44 行存档，迁移后 diff 仅剩「.mjs 未安装时引用断档」条目的消失（迁移完成本身）与 1 处已删文件引用修复；gate-checklist --diff「登记完整（0 断档 / 0 未登记）」——清单编号曾错位一次（5 并入 1 致 #7 空缺），登记表断档告警即时抓住后对齐 sh 版 14 条修正）
+- [x] check-loop.test.mjs：sh 版 37 场景全量移植全绿（含枚举缺文件/缺键/CRLF、仓库模式 tracked 过滤×2、检索层接线、确认态×2、非 git 跳过）（证据：套件 37/0（rule-budget --staged 两场景无 sh 环境打 SKIP，本机有 sh 实跑）；移植过程实跑抓出 2 处实现缺口——检查 4 漏 workflow 根级 *.md、缺枚举文件提示缺关键词，修复后全绿）
+- [x] check-loop.sh shim：pre-push 路径实测（真实仓库经 shim 跑 exit 0）；shim 后 sh 实现面清零（awk/fd 对齐/临时文件/trap 消失——grep 证实无 awk、无 fd 3/4）（证据：`sh .agents/scripts/check-loop.sh` exit 0 且输出与直跑一致；shim 全文 6 行，grep awk/fd3 零命中；feat 净减 ~1850 行）
+- [x] 消费方接线：verify.mjs 第 2 步直连 node（无 sh 环境提示语更新，verify.test 6 场景全绿）；doctor §7 直连 node（撤 sh 探测，doctor.test 场景 8 不回归）；run-tests 撤 bash 特判（npm test 全套件绿）；gate-checklist --diff 登记完整 0/0（证据：npm test 22 套件全绿；verify.mjs 2/2；doctor.test 16/0；gate-checklist 套件 14/0 + --diff 0/0）
+- [x] doctor §2 布局含 `.agents/scripts/check-loop.mjs`（29 项）且 doctor 0 FAIL（证据：doctor 输出「目录布局完整（29 个关键路径）」「11 PASS / 0 FAIL」）
+- [x] `npm test` 全绿 + `source-sync-check --diff` 0 差异 + verify 全绿 + check-loop 真实仓库 exit 0（证据：22 套件「✅ 全部套件通过」；source-sync「无差异 ✅」；verify 2/2；check-loop exit 0）
 
 ## 确认与复核
 - 确认日期：2026-09-26
