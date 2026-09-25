@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-25
 模块: pipeline
@@ -40,13 +40,13 @@
 - [ ] 规则 / 契约变更 → 否（工具内部匹配机制重写，不改 doctor / check-loop 检查项与对外契约；同前例 L1）
 
 ## 验收标准（可测试）
-- [ ] 关键词匹配退役：KEYWORD_ALIASES / matchDoctorToCheckLoop / 概念聚类整体移除，改为 PAIRS 登记表 + 按 id 配对
-- [ ] 断档检测 fixture 断言：登记 id 侧消失（doctor 侧 / check-loop 侧各一场景）→ 报断档
-- [ ] 未登记检测 fixture 断言：两侧各新增未登记 § → 报未登记；已登记（直接配对 / 声明独有 / 经 §7）不误报
-- [ ] `--json` 修复实测：JSON.parse 成功，doctorCount / checkLoopCount / pairs / broken / unregistered 键齐，条目无 undefined 丢字段（回归原 bug）
-- [ ] 真实仓库 baseline：`--diff` 输出 0 断档 / 0 未登记（12 doctor 节 + 14 check-loop 项全量登记）；死 tie-breaker 路径不存在
-- [ ] 命令文档双源同步更新（登记纪律 + 新留痕链接，≤ 8192B 预算过门）
-- [ ] `npm test` 全绿 + `source-sync-check --diff` 0 差异 + doctor 0 FAIL
+- [x] 关键词匹配退役：KEYWORD_ALIASES / matchDoctorToCheckLoop / 概念聚类整体移除，改为 PAIRS 登记表 + 按 id 配对（证据：commit 08ffe2c——grep KEYWORD_ALIASES 零命中；PAIRS 23 条全量登记）
+- [x] 断档检测 fixture 断言：登记 id 侧消失（doctor 侧 / check-loop 侧各一场景）→ 报断档（证据：S6 PASS——fixture §99/#99 双侧断档各一条）
+- [x] 未登记检测 fixture 断言：两侧各新增未登记 § → 报未登记；已登记（直接配对 / 声明独有 / 经 §7）不误报（证据：S3-S5/S7 PASS——直接配对进 matched、独有不产 findings、经 §7 不误报、§9/#7 未登记双报）
+- [x] `--json` 修复实测：JSON.parse 成功，doctorCount / checkLoopCount / matched / solo / broken / unregistered 键齐，条目无 undefined 丢字段（证据：S12 spawn 冒烟 PASS + 实跑 `--json` 管道断言 undefined:false、matched 14）
+- [x] 真实仓库 baseline：`--diff` 输出 0 断档 / 0 未登记（12 doctor 节 + 14 check-loop 项全量登记）；死 tie-breaker 路径不存在（证据：实跑输出「✅ 登记完整（0 断档 / 0 未登记）」doctor 12 / cl 14；匹配算法按 id 无 tie-break；原 28 条噪声缺点清零）
+- [x] 命令文档双源同步更新（登记纪律 + 新留痕链接，≤ 8192B 预算过门）（证据：commit 08ffe2c 双源 4536B；rule-budget --all 无超限）
+- [x] `npm test` 全绿 + `source-sync-check --diff` 0 差异 + doctor 0 FAIL（证据：verify.mjs 2/2 全绿；source-sync-check 55 份无差异；doctor 11 PASS / 0 FAIL）
 
 ## 确认与复核
 - 确认日期：2026-09-25

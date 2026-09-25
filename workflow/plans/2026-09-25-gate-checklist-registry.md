@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-25
 模块: pipeline
@@ -17,10 +17,10 @@
 
 ## 验证方式
 
-- `node .agents/scripts/gate-checklist.mjs --diff`：真实仓库 0 断档 / 0 未登记，输出四段式。
-- `node .agents/scripts/gate-checklist.mjs --json | node -e "JSON.parse(...)"`：解析成功键齐。
-- `npm test`：全绿（gate-checklist 套件重写场景全过 + 既有无回归）。
-- `node .agents/scripts/source-sync-check.mjs --diff`：0 差异；`node bin/flow-kit.mjs doctor`：0 FAIL。
+- `node .agents/scripts/gate-checklist.mjs --diff`：真实仓库 0 断档 / 0 未登记，输出四段式。✅（证据：实跑「✅ 登记完整」，doctor 12 / cl 14）
+- `node .agents/scripts/gate-checklist.mjs --json | node -e "JSON.parse(...)"`：解析成功键齐。✅（证据：管道断言 undefined:false）
+- `npm test`：全绿（gate-checklist 套件重写场景全过 + 既有无回归）。✅（证据：套件 14/14；verify.mjs 2/2）
+- `node .agents/scripts/source-sync-check.mjs --diff`：0 差异；`node bin/flow-kit.mjs doctor`：0 FAIL。✅（证据：55 份无差异；doctor 11 PASS / 0 FAIL）
 
 ## 确认与复核
 
