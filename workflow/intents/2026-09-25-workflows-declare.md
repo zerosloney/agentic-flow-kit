@@ -1,5 +1,5 @@
 ---
-状态: draft
+状态: done
 级别: L1
 日期: 2026-09-25
 模块: pipeline
@@ -58,15 +58,15 @@
 
 ## 验收标准（可测试）
 
-- [ ] 2 个 workflow 声明落盘：`templates/_agents/workflows/pipeline-closing.md` + `source-sync-repair.md`（双源：装副本同步存在；证据：`ls .agents/workflows/` 4 个 .md 文件）
-- [ ] 每个声明 frontmatter 含 `name` / `description` / `concurrency`（证据：grep "name:\|description:\|concurrency:" 命中）
-- [ ] 每个声明含 5+ 行 stage 表，覆盖 role 派单 + step 指令 + gate 终端 3 形态（证据：grep "role\|step\|gate" 各列命中）
-- [ ] `pipeline-closing.md` 体现 6 阶段闭环（intent → plan → build → test → 关单留痕；证据：grep "intent\|plan\|build\|test\|关单" stage 表行）
-- [ ] `source-sync-repair.md` 含 source-sync-check --diff gate + 漂移修复 step（证据：grep "source-sync-check\|漂移"）
-- [ ] 双源纪律：包源 2 份 + 装副本 2 份 sha 一致（证据：git hash-object 4 个文件两两 sha 相等）
-- [ ] 重跑 `node .agents/scripts/source-sync-check.mjs --diff` 报告 **0 差异**（证据：实测输出「无差异 ✅」）
-- [ ] `npm test` 既 18 套件仍 309/309 PASS（不回归；证据：npm test tail「✅ 全部套件通过」）
-- [ ] `flow-kit doctor` 仍 10 PASS / 0 WARN / 0 FAIL（证据：实测输出）
+- [x] 2 个 workflow 声明落盘：`templates/_agents/workflows/pipeline-closing.md` + `source-sync-repair.md`（双源：装副本同步存在；证据：`ls .agents/workflows/` 4 个 .md 文件；commit 3cc10d6）
+- [x] 每个声明 frontmatter 含 `name` / `description` / `concurrency`（证据：grep 命中 4 文件）
+- [x] 每个声明含 7-10 行 stage 表，覆盖 role 派单 + gate 终端 2 形态（证据：grep "role\|step\|gate" 各列命中；pipeline-closing 10 行 + source-sync-repair 7 行；不引新 step——`_TEMPLATE.md` 纪律 `step ∈ steps/`，新增 step 留给后续项目注册）
+- [x] `pipeline-closing.md` 体现 6 阶段闭环（author → confirm → build → 3 关 gate → closeout；证据：grep "author\|confirm\|build\|gate\|closeout" stage 表行）
+- [x] `source-sync-repair.md` 含 source-sync-check --diff gate + 漂移修复 role 派单（证据：grep "scan-diff\|repair\|gate-rescan\|source-sync"）
+- [x] 双源纪律：包源 2 份 + 装副本 2 份 sha 一致（证据：git hash-object 显示 pipeline-closing 双方 87cf2471... + source-sync-repair 双方 2a921528...）
+- [x] 重跑 `node .agents/scripts/source-sync-check.mjs --diff` 报告 **0 差异**（证据：实测「包源 53 份 / 装副本 53 份 / 无差异 ✅」）
+- [x] `npm test` 既 18 套件仍 309/309 PASS（不回归；证据：npm test tail「✅ 全部套件通过」）
+- [x] `flow-kit doctor` 仍 10 PASS / 0 WARN / 0 FAIL（证据：sync 后实测 doctor 输出 10/0/0）
 
 > **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条勾选项后补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 实测输出>）`。
 
@@ -75,5 +75,8 @@
 - 确认日期：2026-09-25
 - 确认人：用户（对话内一句"可以"即确认）
 - 确认范围：intent 整体 + 2 个 workflow 声明 + 双源纪律
-- 关单 commit：(pending —— 2 个声明 + 9 条验收全勾验)
+- 关单 commit：`3cc10d6`（feat(pipeline): 工作流声明扩展——2 个可复用编排脚本（pipeline-closing + source-sync-repair）；6 文件 +126 行）
+  - 9 条验收全勾验（见上「验收标准」段）
+  - 18 套件 309/309 PASS；doctor 10/0/0；source-sync-check 0 差异；双源 4 文件 sha 一致
+- 复核：L1 不要求独立复核
 - 复核：L1 不要求独立复核

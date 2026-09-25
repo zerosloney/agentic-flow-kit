@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L1
 模块: pipeline
 ---
@@ -70,6 +70,7 @@
 
 > 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节（确认环节的机器可见态），done 只在关单出现——禁从 draft 直跳 done（2026-09-22 papercut）。
 - 确认结果：approved（2026-09-25 用户对话内"推进最后一个环节"通过；用户对 2 个 workflow 声明 + 6 阶段闭环 + 漂移修复专项认可）
-- 关单 commit：(pending —— 2 个声明 + 9 条验收全勾验)
+- 关单 commit：`3cc10d6`（feat(pipeline): 工作流声明扩展——2 个可复用编排脚本；6 文件 +126 行）
+- 9 条验收全勾验；18 套件 309/309 PASS；doctor 10/0/0；source-sync-check 0 差异
 - 确认门记录：plan 草稿全文过目 + 改动清单确认（build.md 两道门，逐次，不合并）
 - 复核：L1 不要求独立复核
