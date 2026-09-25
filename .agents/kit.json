@@ -20,7 +20,7 @@
     },
     {
       "rel": ".agents/commands/build.md",
-      "sha256": "712a26ffecf16c0e894d813dbdaf07d93d3c10642ce969ce4b425a88693b2863"
+      "sha256": "ef853cb71ba3787cad6651f5f4ce2134e91d9c9bed341c6c83dfd3055d262787"
     },
     {
       "rel": ".agents/commands/deploy.md",

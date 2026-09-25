@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-25
 模块: pipeline
@@ -67,14 +67,22 @@
 
 ## 验收标准（可测试）
 
-- [ ] `node .agents/scripts/gate-checklist.mjs --diff` 输出 doctor ↔ check-loop 对照表：行数（doctor §检查项）+ 列数（check-loop §检查项）+ 匹配条目 + 缺点告警
-- [ ] 工具能识别 doctor § 检查项标题（如「目录布局」「owned 漂移」「跨宿主薄适配」）
-- [ ] 工具能识别 check-loop § 检查项编号（#1-#13）
-- [ ] 套件断言：doctor 至少 7 项检查、check-loop 至少 11 项检查、套件全绿
-- [ ] 双源纪律（包源 + 装副本 4 份 + 2 份命令文件双写）
-- [ ] `npm test` 全绿（既 170 + 新套件 PASS）
-- [ ] `flow-kit doctor` 10 PASS / 0 WARN / 0 FAIL
-- [ ] build.md 加一行挂载点：`flow-kit gate-checklist --diff` 跑两处口径一致性
+- [x] `node .agents/scripts/gate-checklist.mjs --diff` 输出 doctor ↔ check-loop 对照表：行数（doctor §检查项）+ 列数（check-loop §检查项）+ 匹配条目 + 缺点告警
+（证据：commit pending；端到端实测输出含 10 doctor + 14 check-loop + 1 匹配 + 22 缺点；JSON 模式可解析）
+- [x] 工具能识别 doctor § 检查项标题（如「目录布局」「owned 漂移」「跨宿主薄适配」）
+（证据：gate-checklist.test.mjs S1-S5 PASS 5 项；聚类算法按"概念词 + 优先级最高 level"合并 PASS/WARN/FAIL 分支）
+- [x] 工具能识别 check-loop § 检查项编号（#1-#13）
+（证据：gate-checklist.test.mjs S2 PASS；正则 `^\s*#\s*\d+\.\s+(.+?)(?:\s*\[(hard-block|warning|advisory)\])?\s*$/gm` 提取编号与严重度）
+- [x] 套件断言：doctor 至少 7 项检查、check-loop 至少 11 项检查、套件全绿
+（证据：S7 PASS「实际仓库 doctor §检查项 ≥ 7」实测 10；S8 PASS「check-loop §检查项 ≥ 11」实测 14；套件总 10/10 PASS）
+- [x] 双源纪律（包源 + 装副本 4 份 + 2 份命令文件双写）
+（证据：templates/_agents/scripts/gate-checklist.mjs + .agents/scripts/gate-checklist.mjs 同 6351B；test.mjs 双写 5711B；commands/gate-checklist.md 双写 4061B）
+- [x] `npm test` 全绿（既 170 + 新套件 PASS）
+（证据：本回合实测 8 套件 180/180 PASS）
+- [x] `flow-kit doctor` 10 PASS / 0 WARN / 0 FAIL
+（证据：本回合实测 doctor 报「10 PASS / 0 WARN / 0 FAIL」）
+- [x] build.md 加一行挂载点：`flow-kit gate-checklist --diff` 跑两处口径一致性
+（证据：grep "gate-checklist" 命中 .agents/commands/build.md 与 templates/_agents/commands/build.md 双写段「改 doctor / check-loop 后必跑」）
 
 > **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条勾选项后补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 实测输出>）`。
 
@@ -87,4 +95,5 @@
   2. **只报告不修复**（gate-checklist 报告缺点，修复留 follow-up）
   3. **不纳入看板告警**（看板当前无告警规则，扩展超出范围）
   4. **零依赖**（与既有 .agents/scripts/ 风格一致）
+- 关单 commit：(pending —— 5 段改动面 + 8 条验收全勾验)
 - 复核：L1 不要求独立复核

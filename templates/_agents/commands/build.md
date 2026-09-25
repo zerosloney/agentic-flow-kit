@@ -69,6 +69,12 @@ next: .agents/commands/test.md
 - 改 frontmatter（薄适配特化字段如 trae `name: wf-X`）不需同步——apply 只动正文段
 - 改 trae 钩子 / 规则 / 包源其他文件不在本工具范围
 
+## 改 doctor / check-loop 后必跑（三处口径对账）
+
+- 改 `src/doctor.mjs` 加新 § 检查项 → 跑 `node .agents/scripts/gate-checklist.mjs --diff` 看 doctor ↔ check-loop 对照表
+- 改 `.agents/scripts/check-loop.sh` 加新 § 检查项 → 同上
+- 任一处有而另一边无 → 工具报"缺点"，由用户拍板是否补齐（不自动同步，B-b 决策）；详见 `.agents/commands/gate-checklist.md`
+
 ## 子代理调用约定
 
 - plan 起草、风险判断、改动清单与两道确认门由主智能体负责;仅两道确认后范围明确的工作包可委派 `implementer`,公共接口 / Schema / 依赖 / 安全 / 权限 / 破坏性操作不得委派。
