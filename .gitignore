@@ -20,3 +20,5 @@ gen-board-out.txt
 gen-wf-out.txt
 verify-out.txt
 ssc-out.txt
+# 一次性读取输出（Out-File 流式捕获不稳时用）
+wf-read.txt
