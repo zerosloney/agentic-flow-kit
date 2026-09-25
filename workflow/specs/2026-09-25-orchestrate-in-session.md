@@ -1,5 +1,5 @@
 ---
-状态: draft
+状态: approved
 级别: L2
 模块: pipeline
 ---
@@ -78,5 +78,5 @@ plan（已确认）→ workflow 声明（.md）→ orchestrate 命令（主智�
 
 ## 确认与复核
 
-- 确认结果：（待确认——含声明式格式取舍）
+- 确认结果：approved（2026-09-25 用户对话内确认——声明式 stages 表 + 会话内原生子智能体执行 + runner 全废）
 - 确认通过后起草 ../plans/2026-09-25-orchestrate-in-session.md
