@@ -43,6 +43,7 @@ next: .agents/commands/build.md（仅 P0 / P1 未清时；清零后经用户确�
 - **Create/Update 校验同口径**：Create 已有校验 Update 必须同口径；被引用的标识符字段禁改
 - **查询分页与状态语义**：分页参数范围校验 + 服务层钳制；非法状态与不存在分离(按项目统一错误口径,如 400 / 404)
 - **spec 承诺的断言落地**：spec §测试列出的用例 / 断言须真落到测试或验证脚本；「写进 spec」不等于「跑得起来」，且常驻断言禁写成随时间增长的行数常量
+- **跨宿主薄适配正文漂移**：改 `templates/_agents/{commands,roles}/*.md` 后必须跑 `flow-kit sync-hosts --apply` 单向同步 4 宿主薄适配（`modules/hosts/<h>/{agents,commands}/*.md`）；装户视角由 `flow-kit doctor` §6.7 检查（包源环境 §6.7 skipped）
 
 ## P2 建议（提醒，不拦合入）
 

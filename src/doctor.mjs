@@ -144,6 +144,20 @@ export function doctor(args, pkgRoot) {
     if (ownedRes.gone.length) add('FAIL', `owned 文件缺失：${ownedRes.gone.join('、')}——sync 恢复或手动恢复`);
   }
 
+  // 6.7 跨宿主薄适配正文段漂移校验（2026-09-25 cross-host-sync，参见 workflows/intents/2026-09-25-cross-host-sync.md）
+  //     装户侧视角：.agents/{commands,roles}/*.md 是权威源；4 宿主目录（.zcode/.omp/.opencode/.trae）下的
+  //     {agents,commands}/*.md 是薄适配。按正文段 sha 比对（B-b 语义，frontmatter 不计入漂移），
+  //     trae commands 加 wf- 前缀映射。首次引入为 WARN（沿用 wf-runtime 复盘「先 WARN 升级 FAIL」路径），
+  //     待装户升级视反馈升级 FAIL。包源侧对应工具是 flow-kit sync-hosts（src/sync-hosts.mjs）。
+  const adapterRes = checkAdapterDrift(target);
+  if (adapterRes.skipped) {
+    add('PASS', `跨宿主薄适配校验跳过（${adapterRes.note || '权威源目录不存在'}）`);
+  } else if (adapterRes.drift === 0) {
+    add('PASS', `跨宿主薄适配 ${adapterRes.total} 对无正文漂移（装副本引擎 vs 4 宿主薄适配，B-b 语义）`);
+  } else {
+    add('WARN', `跨宿主薄适配正文漂移 ${adapterRes.drift} 对——权威源与薄适配正文段 sha 不一致；按 .agents/commands/sync-hosts.md 跑 flow-kit sync-hosts --apply 单向同步薄适配正文（frontmatter 不动）；装户可在 bin/flow-kit.mjs sync 时一并修复`);
+  }
+
   // 7. check-loop——先探 sh 可用性（对齐 run-tests.mjs 先例）：Windows PowerShell 常无 sh，
   //    ENOENT 曾被吞进 hard-block 分支报成空原因假警报（incident 2026-09-24-doctor-sh-enoent）。
   //    git 钩子门禁不受此影响——git 以自带 sh 执行钩子，与用户 PATH 无关。
@@ -206,4 +220,59 @@ export function checkOwnedDrift(target) {
     if (h !== f.sha256) drift++;
   }
   return { drift, gone, total: owned.length, skipped: false };
+}
+
+// 跨宿主薄适配正文段漂移校验（独立 export 供 doctor 主流程 + 单元测试共用；2026-09-25 cross-host-sync）
+// 装户侧视角：.agents/{commands,roles}/*.md 是权威源；4 宿主目录（zcode→.zcode、omp→.omp、
+// opencode→.opencode、trae→.trae）下 {agents,commands}/*.md 是薄适配。按正文段 sha 比对
+// （B-b 语义；frontmatter 不计入漂移）；trae commands 加 wf- 前缀映射。
+// 返回：{ drift, total, skipped, note? }
+//   - skipped=true：权威源目录不存在 / 包源环境 / 无 .md 文件
+//   - drift：权威源正文段与薄适配正文段 sha 不一致的对数
+//   - total：参与比对的对数（权威源文件 × 适配数）
+export function checkAdapterDrift(target) {
+  const authorityRoot = path.join(target, '.agents');
+  if (!fs.existsSync(authorityRoot)) return { drift: 0, total: 0, skipped: true, note: '.agents 目录不存在' };
+  // 包源环境检测：包源仓库同时含 templates/ 与 modules/，装户不应有；包源下跑 doctor §7.x 永远是
+  // drift（装副本是历史 init 渲染产物，不会随包源改动而重渲），无信息价值——直接 skip
+  if (fs.existsSync(path.join(target, 'templates', '_agents')) && fs.existsSync(path.join(target, 'modules', 'hosts'))) {
+    return { drift: 0, total: 0, skipped: true, note: '包源环境（templates/ + modules/ 同时存在）——§7.x 仅在装户环境有意义' };
+  }
+  // 4 宿主目录映射（与 src/profiles.mjs#HOSTS 同源：装副本目录名前缀带点）
+  const HOST_DIR = { zcode: '.zcode', omp: '.omp', opencode: '.opencode', trae: '.trae' };
+  const splitFm = (text) => {
+    const m = String(text || '').match(/^---\r?\n([\s\S]*?\r?\n)---\r?\n?([\s\S]*)$/);
+    if (!m) return { fm: '', body: String(text || '') };
+    return { fm: `---\n${m[1]}---\n`, body: m[2] };
+  };
+  const bodySha = (p) => {
+    try { return createHash('sha256').update(splitFm(fs.readFileSync(p, 'utf8')).body).digest('hex'); } catch { return null; }
+  };
+  let total = 0;
+  let drift = 0;
+  const listMd = (dir) => fs.existsSync(dir) && fs.statSync(dir).isDirectory() ? fs.readdirSync(dir).filter((f) => f.endsWith('.md')) : [];
+  for (const sub of ['commands', 'roles']) {
+    const subAbs = path.join(authorityRoot, sub);
+    for (const f of listMd(subAbs)) {
+      const authRel = `${sub}/${f}`;
+      const authSha = bodySha(path.join(authorityRoot, authRel));
+      const name = f.slice(0, -'.md'.length);
+      // 构建映射：commands/* → opencode/commands/<name>.md + trae/commands/wf-<name>.md；roles/* → 4 宿主 agents/<name>.md
+      const targets = [];
+      if (sub === 'commands') {
+        targets.push([HOST_DIR.opencode, 'commands', `${name}.md`], [HOST_DIR.trae, 'commands', `wf-${name}.md`]);
+      } else {
+        for (const h of Object.keys(HOST_DIR)) targets.push([HOST_DIR[h], 'agents', `${name}.md`]);
+      }
+      for (const [hostDir, subDir, fileName] of targets) {
+        const adapterAbs = path.join(target, hostDir, subDir, fileName);
+        const adapterSha = bodySha(adapterAbs);
+        if (adapterSha === null) continue; // 缺失不在 drift 统计（apply 不自动创建）
+        total++;
+        if (authSha !== adapterSha) drift++;
+      }
+    }
+  }
+  if (total === 0) return { drift: 0, total: 0, skipped: true, note: '权威源无 commands/roles .md 文件' };
+  return { drift, total, skipped: false };
 }

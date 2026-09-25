@@ -20,7 +20,7 @@ if (!fs.existsSync(SRC)) {
   console.error(`doctor.test.mjs：未找到 ${SRC}——仅在包源仓库（dogfooding）跑 npm test 时调用`);
   process.exit(1);
 }
-const { checkOwnedDrift } = await import(pathToFileURL(SRC).href);
+const { checkOwnedDrift, checkAdapterDrift } = await import(pathToFileURL(SRC).href);
 
 let pass = 0;
 let fail = 0;
@@ -167,6 +167,131 @@ const mkKit = (owned) => ({
   check('场景 8c：doctor 主流程 results 含 FAIL 时 exit 1（fail-loud）',
     failLoud,
     `src/doctor.mjs 应保留 process.exit(1) fail-loud 行为`);
+}
+
+// ---- 场景 9-14：checkAdapterDrift（2026-09-25 cross-host-sync）—— 装户侧跨宿主薄适配正文段漂移 ----
+const mkfixAdapter = ({ authority, adapters, pkgMarker }) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-adapter-test-'));
+  // authorityRoot：.agents/{commands,roles}
+  if (authority) {
+    for (const [rel, content] of Object.entries(authority)) {
+      const abs = path.join(root, '.agents', rel);
+      fs.mkdirSync(path.dirname(abs), { recursive: true });
+      fs.writeFileSync(abs, content);
+    }
+  }
+  // adapters：<HOST_DIR>/<sub>/<file>
+  if (adapters) {
+    for (const [rel, content] of Object.entries(adapters)) {
+      const abs = path.join(root, rel);
+      fs.mkdirSync(path.dirname(abs), { recursive: true });
+      fs.writeFileSync(abs, content);
+    }
+  }
+  // pkgMarker：模拟包源（templates/_agents + modules/hosts）
+  if (pkgMarker) {
+    fs.mkdirSync(path.join(root, 'templates/_agents'), { recursive: true });
+    fs.mkdirSync(path.join(root, 'modules/hosts'), { recursive: true });
+  }
+  return root;
+};
+
+const ROLE_BODY = '# Implementer\n\n正文 role v1\n';
+const CMD_BODY = '# Build\n\n正文 build v1\n';
+
+// ---- 场景 9：装户侧薄适配全对齐 → drift=0 ----
+{
+  const root = mkfixAdapter({
+    authority: {
+      'commands/build.md': `---\ndesc: x\n---\n\n${CMD_BODY}`,
+      'roles/implementer.md': `---\ndesc: r\n---\n\n${ROLE_BODY}`,
+    },
+    adapters: {
+      '.opencode/commands/build.md': `---\ndesc: oc\n---\n\n${CMD_BODY}`,
+      '.trae/commands/wf-build.md': `---\nname: wf-build\ndesc: trae\n---\n\n${CMD_BODY}`,
+      '.zcode/agents/implementer.md': `---\nname: impl\ndesc: zcode\n---\n\n${ROLE_BODY}`,
+      '.opencode/agents/implementer.md': `---\nname: impl\ndesc: oc\n---\n\n${ROLE_BODY}`,
+    },
+  });
+  const r = checkAdapterDrift(root);
+  check('场景 9：装户全对齐 → drift=0 total=4 skipped=false（1 cmd×2 适配 + 1 role×2 适配 .zcode+.opencode）',
+    r.drift === 0 && r.total === 4 && r.skipped === false,
+    JSON.stringify(r));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 10：薄适配正文漂移 → drift > 0 ----
+{
+  const root = mkfixAdapter({
+    authority: {
+      'roles/implementer.md': `---\ndesc: r\n---\n\n${ROLE_BODY}`,
+    },
+    adapters: {
+      '.zcode/agents/implementer.md': `---\nname: impl\ndesc: zcode\n---\n\n# Implementer\n\n漂移正文 role v1\n`,
+    },
+  });
+  const r = checkAdapterDrift(root);
+  check('场景 10：薄适配正文漂移 → drift=1 total=1',
+    r.drift === 1 && r.total === 1 && r.skipped === false,
+    JSON.stringify(r));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 11：包源环境 → skipped=true（不参与装户比对） ----
+{
+  const root = mkfixAdapter({
+    pkgMarker: true,
+    authority: { 'commands/build.md': `---\ndesc: x\n---\n\n${CMD_BODY}` },
+    adapters: { '.opencode/commands/build.md': `---\ndesc: oc\n---\n\n漂移` },
+  });
+  const r = checkAdapterDrift(root);
+  check('场景 11：包源环境（templates/ + modules/ 同时存在）→ skipped=true',
+    r.skipped === true && typeof r.note === 'string' && r.note.includes('包源'),
+    JSON.stringify(r));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 12：.agents 目录不存在 → skipped=true ----
+{
+  const root = mkfixAdapter({});
+  const r = checkAdapterDrift(root);
+  check('场景 12：权威源目录不存在 → skipped=true 含 note',
+    r.skipped === true && typeof r.note === 'string' && r.note.includes('.agents'),
+    JSON.stringify(r));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 13：frontmatter 差异不计漂移（B-b 语义：仅正文段比对） ----
+{
+  const root = mkfixAdapter({
+    authority: { 'roles/implementer.md': `---\ndesc: r\n---\n\n${ROLE_BODY}` },
+    adapters: {
+      '.zcode/agents/implementer.md': `---\nname: impl\ndesc: 自定义 zcode 风格\n---\n\n${ROLE_BODY}`,
+    },
+  });
+  const r = checkAdapterDrift(root);
+  check('场景 13：frontmatter 差异不算正文漂移 → drift=0 total=1',
+    r.drift === 0 && r.total === 1 && r.skipped === false,
+    JSON.stringify(r));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 14：薄适配缺失不在 drift 统计（apply 不自动创建） ----
+{
+  const root = mkfixAdapter({
+    authority: {
+      'commands/build.md': `---\ndesc: x\n---\n\n${CMD_BODY}`,
+      'roles/implementer.md': `---\ndesc: r\n---\n\n${ROLE_BODY}`,
+    },
+    adapters: {
+      '.opencode/commands/build.md': `---\ndesc: oc\n---\n\n${CMD_BODY}`,
+    },
+  });
+  const r = checkAdapterDrift(root);
+  check('场景 14：薄适配缺失不在 drift 统计 → drift=0 total=1',
+    r.drift === 0 && r.total === 1 && r.skipped === false,
+    JSON.stringify(r));
+  fs.rmSync(root, { recursive: true, force: true });
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

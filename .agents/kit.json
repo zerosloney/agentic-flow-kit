@@ -20,7 +20,7 @@
     },
     {
       "rel": ".agents/commands/build.md",
-      "sha256": "71ce57ac6e715797bbefb858460a890d6b97376a2bf5801178202e8c7f755320"
+      "sha256": "712a26ffecf16c0e894d813dbdaf07d93d3c10642ce969ce4b425a88693b2863"
     },
     {
       "rel": ".agents/commands/deploy.md",
@@ -44,11 +44,11 @@
     },
     {
       "rel": ".agents/commands/review.md",
-      "sha256": "38a82574128bfa9fae5d65f1eef9c86430df378938f464ee650db44732e8ef86"
+      "sha256": "dc22906323c64f69f431cfeb7f20aa32ace9be60d8d794b32b099fd9269be39b"
     },
     {
       "rel": ".agents/commands/test.md",
-      "sha256": "12162f296882fb4b008294bce997166cdf8d51337201b18b49e1659c61e762fe"
+      "sha256": "3f4ae086d36a1b3ab42ea599b957e66f5d0939efdf6b6dadd7ff6f2e13842344"
     },
     {
       "rel": ".agents/hooks/check-pairing-incremental.sh",
@@ -96,7 +96,7 @@
     },
     {
       "rel": ".agents/scripts/doctor.test.mjs",
-      "sha256": "2d724abfadad5d1274e9250d3cd38013039f73eba8d4b85294f3797972e13f59"
+      "sha256": "e25d609eaa97de99bc89551373b4c731db7b5d21d4dde62824723cd5296426c2"
     },
     {
       "rel": ".agents/scripts/ensure-board.mjs",
@@ -208,21 +208,21 @@
     },
     {
       "rel": ".zcode/agents/implementer.md",
-      "sha256": "948823012484759f3d52b09abcbdfc7bfdf4b75395fbfb35541111ca313dad4e"
+      "sha256": "20e4cc30e5c2474ce0addae50f94b8fe242ff3a53c62df5810912a87819363cc"
     },
     {
       "rel": ".zcode/agents/independent-reviewer.md",
-      "sha256": "4850c56b387b5833844b7a8d8287403db6da8d3a9d1d37205c5fbf0464273b61"
+      "sha256": "9852a4f89bc19381ba4f38011e410ed070393583c7eb68527d707a432d14eba0"
     },
     {
       "rel": ".zcode/agents/ui-verifier.md",
-      "sha256": "1ba2f8e71c8c8aba6f0f4088237d213c807c83057f16e5a1af54aac3fe6fad41"
+      "sha256": "78eacc962ce1cbc2852fa22a87deda2738ddb3b7fb620cefbfdb4891689e2521"
     }
   ],
   "owned": [
     {
       "rel": "AGENTS.md",
-      "sha256": "15c275c7c26d66768d7db8ef448ca30dfb832260f80bd847ade8a35f254a3a6b"
+      "sha256": "f1f8025f4c53a362951da9daeee327e574ce1d20c5b50494a04f4ed96c2a17d0"
     },
     {
       "rel": "wiki/drafts-archive/README.md",

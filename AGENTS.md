@@ -48,6 +48,7 @@
 
 - **构建 / 测试 / 类型检查命令**（静态门，各阶段命令引用此处口径）：构建 = 无（纯 JS 脚手架包，node 直跑）；测试 = `npm test`（跑全部套件）；类型检查 = 无（纯 JS）
 - **引擎双源纪律（本仓库特有）**：本仓库既是包源又是装户——引擎改动一律改 `templates/`（包源），随后 `node bin/flow-kit.mjs sync` 更新 managed 装副本；owned 文件（AGENTS.md / workflow 模板等）sync 不动，须手动同步装副本（见 incidents/2026-09-25-wf-runtime 复盘）。`.agents/` 直改 managed 文件会被 doctor 台账漂移告警
+- **跨宿主适配层同步（B-b 方案）**：薄适配（`modules/hosts/<h>/{agents,commands}/*.md`）正文 = 权威源（`templates/_agents/{commands,roles}/*.md`）正文段，frontmatter 各自保留宿主特化字段（trae commands 加 `name: wf-X`、opencode/zcode/omp 各自原描述）；改权威源后跑 `node bin/flow-kit.mjs sync-hosts --apply` 单向同步薄适配正文（frontmatter 不动），详见 `.agents/commands/sync-hosts.md`
 - **运行时环境**（端口 / 进程 / 终端差异）：`.agents/notes/runtime-env.md`
 - **目录级规则**：如 `backend/AGENTS.md`、`frontend/AGENTS.md`（如有）——目录级约定不回填本文件
 - **权限与提交验证配置**：`.agents/settings.json`（allow / deny / ask）、`.agents/hooks/commit-check.config.json`（条件构建 / 质量检测命令与密钥白名单——质量检测只放秒级确定性检查（lint / 类型检查 / vet），测试不放提交门，关单在 test 阶段门）

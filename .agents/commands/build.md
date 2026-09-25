@@ -63,6 +63,12 @@ next: .agents/commands/test.md
 
 - 红线(架构 / 数据 / 安全等)正文与豁免见根与目录级 `AGENTS.md`(如有)——已由 pre-commit 机器门强制的部分以钩子为准，写代码前先过一遍目录级 AGENTS
 
+## 改权威源后必跑（薄适配同步防漏）
+
+- 改 `templates/_agents/commands/*.md` 或 `templates/_agents/roles/*.md` 正文后 → 跑 `node bin/flow-kit.mjs sync-hosts --diff` 看正文段漂移 → 用户拍板 → `node bin/flow-kit.mjs sync-hosts --apply` 单向同步（薄适配正文 = 权威源正文，frontmatter 不动）；详见 `.agents/commands/sync-hosts.md`
+- 改 frontmatter（薄适配特化字段如 trae `name: wf-X`）不需同步——apply 只动正文段
+- 改 trae 钩子 / 规则 / 包源其他文件不在本工具范围
+
 ## 子代理调用约定
 
 - plan 起草、风险判断、改动清单与两道确认门由主智能体负责;仅两道确认后范围明确的工作包可委派 `implementer`,公共接口 / Schema / 依赖 / 安全 / 权限 / 破坏性操作不得委派。

@@ -64,3 +64,4 @@ modules/gates/      可选门禁模块（dotnet-ca：Clean Architecture 参考�
 - [x] v0.3.0：init 交互升级（序号菜单 + ANSI 色彩降级 + ts/js 技术栈别名归一 node）+ AGENTS.md 骨架探测补齐（已存在无标记时文末追加，原内容保留）+ wiki 模板预置 7 主题内容目录 + 关单 verify 固定编排（npm test + check-loop 一键过门，非绿不关单）+ workflow 看板纸墨视觉改版
 - [x] v0.3.1：doctor 修复——Windows 无 sh 环境（PowerShell）把 sh ENOENT 误报成 check-loop hard-block（探测分流：明示「未跑勿当作通过」，git 钩子门禁不受影响）
 - [x] v0.4.0：看板端口自动上探（基端口起探首个可用端口，多项目并行不冲突；`/api/board` 自报 pid/startedAt，root 比对识别本项目、他人进程不动手不 kill）+ 跨平台入口 `ensure-board.mjs` 取代 Windows 专属 `ensure-board.ps1`（Windows/Linux/macOS 零依赖单入口）
+- [x] v0.5.0：跨宿主适配层同步工具 `flow-kit sync-hosts`（B-b 方案：薄适配正文 = 权威源正文段 + frontmatter 保留宿主特化 + `--apply` 单向同步不动 frontmatter）+ `flow-kit doctor` §6.7 装户侧正文漂移检查（包源环境 §6.7 skipped 避免噪音）——跨平台冒烟由 CI 跑 Linux，Windows / macOS 由本地手测（不入 npm test）

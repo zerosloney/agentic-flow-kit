@@ -33,6 +33,7 @@ next: L1 关单结束 ；L2/L3 上 prod 时 → .agents/commands/deploy.md
 项目测试命令                                       # 自动化测试
 项目类型检查命令                                  # 前端类型检查/构建(涉及前端时跑)
 node .agents/scripts/verify-wiki-consistency.mjs   # 触及 wiki/ 时跑(exit 1 即先修台账再继续:跑 gen-wiki-board.mjs 补索引/看板;pre-commit 已按增量自动拦,此行用于改完即验)
+node bin/flow-kit.mjs doctor                       # §6.5 delegations + §6.6 owned 漂移 + §6.7 跨宿主薄适配正文漂移(装户环境；包源环境 §6.7 skipped)
 ```
 
 > **环境注记**：本地服务占用构建产物导致编译失败、多会话并行时「谁跑静态门 / 提交谁先停服务」等约定——如有,见项目注记 `.agents/notes/runtime-env.md` §2,跑静态门前先过一眼。

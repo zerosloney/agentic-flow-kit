@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-// flow-kit CLI 入口：init（安装）/ sync（升级）/ add-host（补宿主）/ add-gate（装门禁）/ doctor（体检）/ help
+// flow-kit CLI 入口：init（安装）/ sync（升级）/ add-host（补宿主）/ add-gate（装门禁）/ doctor（体检）/ sync-hosts（跨宿主同步）/ help
 import { init } from './init.mjs';
 import { doctor } from './doctor.mjs';
 import { sync } from './sync.mjs';
+import { syncHosts } from './sync-hosts.mjs';
 import { addHost } from './add-host.mjs';
 import { addGate } from './add-gate.mjs';
 import { readFileSync } from 'node:fs';
@@ -21,7 +22,11 @@ export const HELP = `flow-kit — AI-Native 闭环工作流 + wiki 知识层脚�
                             owned 文件永不触碰）
   flow-kit add-host <宿主>  后补宿主适配层：zcode | opencode | trae | omp（已存在文件跳过且不入台账，--force 接管）
   flow-kit add-gate <门禁>  装门禁模块并接线 local-pre-commit（当前：dotnet-ca；装后归项目所有）
-  flow-kit doctor           体检：目录布局 / git 钩子 / managed 清单 / 索引漂移 / check-loop
+  flow-kit sync-hosts       跨宿主适配层同步：templates/_agents/{commands,roles}/*.md 权威源 vs
+                            modules/hosts/<h>/{agents,commands}/*.md 薄适配——默认 --diff 输出报告；
+                            --apply 单向同步（权威→薄适配，不反向避免污染）；
+                            改一处权威源要同步 N 份薄适配，人工 grep 易漏
+  flow-kit doctor           体检：目录布局 / git 钩子 / managed 清单 / 索引漂移 / 跨宿主漂移 / check-loop
 
 init 选项（全部可选，均有默认值）：
   --stack <技术栈>     dotnet | node（ts/js） | python | go | none（默认 none；ts/js/typescript/javascript
@@ -35,6 +40,7 @@ init 选项（全部可选，均有默认值）：
   --force              覆盖已存在的同名文件（默认保守跳过）
 
 sync / add-host 选项：--dir <目录>、--force（覆盖本地已改 / 已装内容）；add-gate 选项：--dir <目录>、--force。
+sync-hosts 选项：--diff（默认，仅报告，不修改）/ --apply（单向同步到薄适配）/ --json（机器可读输出）。
 
 示例：
   npx agentic-flow-kit init                        # 交互模式：宿主 → 技术栈 → 端口 → 确认安装
@@ -42,6 +48,8 @@ sync / add-host 选项：--dir <目录>、--force（覆盖本地已改 / 已装�
   npx agentic-flow-kit sync                        # 包出新版后升级（本地改过的 managed 文件会跳过并报告）
   npx agentic-flow-kit add-host opencode           # 后补宿主
   npx agentic-flow-kit add-gate dotnet-ca          # 装 Clean Architecture 门禁
+  npx agentic-flow-kit sync-hosts --diff           # 看权威源 vs 薄适配漂移
+  npx agentic-flow-kit sync-hosts --apply          # 单向同步到薄适配
 
 装完即自包含：项目不依赖本包运行；AGENTS.md 生成「AI工作流 + Wiki」骨架，项目细节在「项目适配区」自填。`;
 
@@ -65,6 +73,11 @@ export function run(argv) {
   }
   if (cmd === 'sync') {
     sync(argv.slice(1), PKG_ROOT);
+    return;
+  }
+  if (cmd === 'sync-hosts') {
+    const code = syncHosts(argv.slice(1), PKG_ROOT);
+    if (typeof code === 'number') process.exit(code);
     return;
   }
   if (cmd === 'add-host') {
