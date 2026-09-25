@@ -4,9 +4,10 @@
 // 零依赖；CLI 解析用最简字符串匹配；不替代 AI 起草——本工具只输出模板与提示句
 import fs from 'node:fs';
 import path from 'node:path';
+import { ENUMS } from './workflow-enums.mjs';
 
 const TODAY = new Date().toISOString().slice(0, 10);
-const LEVELS = ['L0', 'L1', 'L2', 'L3'];
+const LEVELS = ENUMS['level.all']; // 级别词表单源（.agents/workflow-enums.txt）
 
 function parseArgs(argv) {
   const out = { topic: null, module: null, level: 'L1', output: null, notes: '' };

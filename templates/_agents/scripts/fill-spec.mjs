@@ -2,9 +2,10 @@
 // 用法：node .agents/scripts/fill-spec.mjs --topic "test" --output /tmp/x.md
 import fs from 'node:fs';
 import path from 'node:path';
+import { ENUMS } from './workflow-enums.mjs';
 
 const TODAY = new Date().toISOString().slice(0, 10);
-const LEVELS = ['L0', 'L1', 'L2', 'L3'];
+const LEVELS = ENUMS['level.all']; // 级别词表单源（.agents/workflow-enums.txt）
 
 function parseArgs(argv) {
   const out = { topic: null, level: 'L2', output: null };

@@ -15,7 +15,7 @@
 
 **命名一律英文 kebab-case**（如 `2026-09-07-<主题>.md`），**禁中文文件名**——check-loop 对非 ASCII 文件名给 warning。文档内容（标题/正文）不受此限。
 
-**文档协议（frontmatter 受限子集）**：四类文档头部一律为 YAML frontmatter（每行 `键: 值`，机器字段唯一来源）——`状态`（intent/spec/plan：draft/approved/done/superseded/cancelled；incident：open/fixed/closed，**严格枚举**，附注写 `备注:` 键）、`级别`（L0-L3）、`日期`/`发现`（YYYY-MM-DD）、`模块`（**新建文档必填**，取值见 `.agents/workflow-modules.txt` 词表，单值取主导模块；存量不回填，AI 触碰时顺手补）、L3 spec 的 `确认结果`/`确认时间`、回填件 `流程: legacy`。**`状态` 迁移须经 `approved`**（确认环节的机器可见态，`done` 只在关单出现）：新建的 spec/plan 若已 done 而 git 历史中从未出现行首 `状态: approved`，check-loop 报「确认态缺失」warning。check-loop 只扫 frontmatter 取机器字段（`fm_get` 字段断言），正文不再写「状态：/级别：」行；叙述性字段（独立复核/复盘三件套/验收勾验）仍留正文按节锚定。
+**文档协议（frontmatter 受限子集）**：四类文档头部一律为 YAML frontmatter（每行 `键: 值`，机器字段唯一来源）——`状态`（intent/spec/plan：draft/approved/done/superseded/cancelled；incident：open/fixed/closed，**严格枚举，单源 `.agents/workflow-enums.txt`**——check-loop / 看板 / 检索 / fill-* 一律读它，改枚举改那边；附注写 `备注:` 键）、`级别`（L0-L3，同单源）、`日期`/`发现`（YYYY-MM-DD）、`模块`（**新建文档必填**，取值见 `.agents/workflow-modules.txt` 词表，单值取主导模块；存量不回填，AI 触碰时顺手补）、L3 spec 的 `确认结果`/`确认时间`、回填件 `流程: legacy`。**`状态` 迁移须经 `approved`**（确认环节的机器可见态，`done` 只在关单出现）：新建的 spec/plan 若已 done 而 git 历史中从未出现行首 `状态: approved`，check-loop 报「确认态缺失」warning。check-loop 只扫 frontmatter 取机器字段（`fm_get` 字段断言），正文不再写「状态：/级别：」行；叙述性字段（独立复核/复盘三件套/验收勾验）仍留正文按节锚定。
 
 各子目录内 `_TEMPLATE.md` 为起步模板，复制后填写，不直接改动模板本身。
 

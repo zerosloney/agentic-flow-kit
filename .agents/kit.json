@@ -84,11 +84,11 @@
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
-      "sha256": "303b0badc42e1afd99ca24b8f9fa67443a2c0b91d065587dc3c200e03d59e921"
+      "sha256": "613f23b9564a9554daa47480dfc7a6b9c91a843314108783483b323f107b7c5c"
     },
     {
       "rel": ".agents/scripts/check-loop.test.sh",
-      "sha256": "f19ba8b7303669e789d4db2fd7c4ca1707ad0bcc44925510318b1b8929ea1dc0"
+      "sha256": "1be754c7b73c6533957b16d54fe4777945213826e180460d18973b2fcb3546e7"
     },
     {
       "rel": ".agents/scripts/commit-check-trigger.test.mjs",
@@ -112,7 +112,7 @@
     },
     {
       "rel": ".agents/scripts/gen-workflow-index.mjs",
-      "sha256": "423b2afc438fe1c986390eb98f3c47f7768bf8ba098eb874ff4bdc6ae0bbcf6c"
+      "sha256": "fc6007b645a885d959a6e30f0c62f529273bf40bfb623435d44bd66df9967176"
     },
     {
       "rel": ".agents/scripts/gen-workflow-index.test.mjs",
@@ -136,7 +136,7 @@
     },
     {
       "rel": ".agents/scripts/kb-search.mjs",
-      "sha256": "8d2035bad57e90cd1667994220d21ece841c9d9d6ddf36a427be00b1fbc27910"
+      "sha256": "51e8842421d3c7db26034bbc9c8a38c483f676abbef05f87924a3d5ef94b5c05"
     },
     {
       "rel": ".agents/scripts/kb-search.test.mjs",
@@ -164,7 +164,15 @@
     },
     {
       "rel": ".agents/scripts/workflow-board-server.mjs",
-      "sha256": "193cc31684fb92bafd166b17c55ef5f02ceecc7d2b7ca8a68fdc9ebb1051c51a"
+      "sha256": "586c7791a05af818f3c2a61521e50bd88a599a506e8bf84487e1dca41da6851c"
+    },
+    {
+      "rel": ".agents/scripts/workflow-enums.mjs",
+      "sha256": "438575de9b792c64f57a0a2b1d8bf2c575358a43ca22e5d87d2f0222b634faa3"
+    },
+    {
+      "rel": ".agents/scripts/workflow-enums.test.mjs",
+      "sha256": "d322154561651d226576e8d04ecab51dd2c732daa5e0acc00bb0b72f44c4e7b5"
     },
     {
       "rel": ".agents/scripts/workflows-check.mjs",
@@ -172,7 +180,7 @@
     },
     {
       "rel": ".agents/scripts/workflows-check.test.mjs",
-      "sha256": "d7b7e06728e072a0ea2c75fb1bff9c0ff7f08bf8997cec623df1044425206d11"
+      "sha256": "ff382d1d2ba7e841662dc9c187fefa79ba8833d25645e2883512ec9ee219cb86"
     },
     {
       "rel": ".agents/skills/verify-ui/SKILL.md",
@@ -181,6 +189,10 @@
     {
       "rel": ".agents/skills/wiki/SKILL.md",
       "sha256": "9d541dfbf9c6095728d75e3639111e7f1ff6d2f58f0040e2a75da655844dba50"
+    },
+    {
+      "rel": ".agents/workflow-enums.txt",
+      "sha256": "224c3b4e773d511e07e36082471c2df72c3ac2bfcd98ca8bdfb392f1843d2fa0"
     },
     {
       "rel": ".agents/workflows/_TEMPLATE.md",

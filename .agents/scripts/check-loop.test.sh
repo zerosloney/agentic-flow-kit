@@ -28,10 +28,21 @@ assert_case() {
   fi
 }
 
-# mkfix:建空 fixture 根并返回路径
+# mkfix:建空 fixture 根并返回路径（.agents/workflow-enums.txt 枚举单源随 fixture 内联提供——
+#   fixture 自包含,测的是 check-loop 的消费逻辑而非当前词表值;真实文件不变量由 workflow-enums.test.mjs 把关）
 mkfix() {
   d=$(mktemp -d)
-  mkdir -p "$d/workflow/intents" "$d/workflow/specs" "$d/workflow/plans" "$d/workflow/incidents"
+  mkdir -p "$d/workflow/intents" "$d/workflow/specs" "$d/workflow/plans" "$d/workflow/incidents" "$d/.agents"
+  cat > "$d/.agents/workflow-enums.txt" <<'EOF'
+doc.status.all=draft approved done superseded cancelled
+doc.status.confirmed=approved done superseded cancelled
+doc.status.active=draft approved
+doc.status.terminal=done superseded cancelled
+doc.status.abandoned=superseded cancelled
+incident.status.all=open fixed closed
+incident.status.active=open
+level.all=L0 L1 L2 L3
+EOF
   printf '%s' "$d"
 }
 
@@ -712,10 +723,12 @@ fi
 rm -rf "$T"
 
 # ---- 场景 23:检索层——模块合法 + INDEX 一致 → exit 0 且无两条新告警 ----
-# fixture 拷入真实生成器与词表（测接线，非假桩；生成器逻辑自身由 gen-workflow-index.test.mjs 覆盖）
+# fixture 拷入真实生成器与词表（测接线，非假桩；生成器逻辑自身由 gen-workflow-index.test.mjs 覆盖；
+#   生成器依赖枚举单源读取器 workflow-enums.mjs + .agents/workflow-enums.txt——mkfix 已备 txt，此处补读取器）
 T=$(mkfix)
 mkdir -p "$T/.agents/scripts" "$T/.agents"
 cp "$SCRIPT_DIR/gen-workflow-index.mjs" "$T/.agents/scripts/"
+cp "$SCRIPT_DIR/workflow-enums.mjs" "$T/.agents/scripts/"
 cp "$SCRIPT_DIR/../workflow-modules.txt" "$T/.agents/"
 cat > "$T/workflow/intents/2026-09-22-mod-ok.md" <<'EOF'
 ---
@@ -1033,6 +1046,55 @@ if [ "$rc" -eq 0 ] && ! printf '%s' "$out" | grep -q "WARN 确认态缺失"; the
  PASS=$((PASS+1)); printf 'PASS %s\n' "非 git fixture → 检查项 14 跳过,不误报"
 else
  FAIL=$((FAIL+1)); printf 'FAIL %s（期望 exit 0 且无确认态缺失告警）\n%s\n' "非 git fixture → 检查项 14 跳过" "$out"
+fi
+rm -rf "$T"
+
+# ---- 场景:枚举单源文件缺失 → fail-loud exit 1（不静默退化;2026-09-25 enum-single-source）----
+T=$(mkfix)
+rm "$T/.agents/workflow-enums.txt"
+cat > "$T/workflow/intents/2026-09-12-ok.md" <<'EOF'
+---
+状态: done
+级别: L1
+日期: 2026-09-12
+---
+# INTENT — ok
+
+## 验收标准（可测试）
+- [x] 用例通过（证据:全绿）
+EOF
+assert_case "枚举单源文件缺失 → exit 1 fail-loud(不静默退化)" "$T" 1 "枚举单源"
+rm -rf "$T"
+
+# ---- 场景:枚举单源缺键 → fail-loud exit 1 ----
+T=$(mkfix)
+sed -i '/^doc.status.confirmed=/d' "$T/.agents/workflow-enums.txt"
+assert_case "枚举单源缺键 → exit 1 fail-loud" "$T" 1 "缺键"
+rm -rf "$T"
+
+# ---- 场景:枚举单源 CRLF 行尾 → 仍正常判定（autocrlf 检出坑,rule-budgets.txt 同约定）----
+T=$(mkfix)
+printf 'doc.status.all=draft approved done superseded cancelled\r\ndoc.status.confirmed=approved done superseded cancelled\r\ndoc.status.active=draft approved\r\ndoc.status.terminal=done superseded cancelled\r\ndoc.status.abandoned=superseded cancelled\r\nincident.status.all=open fixed closed\r\nincident.status.active=open\r\nlevel.all=L0 L1 L2 L3\r\n' > "$T/.agents/workflow-enums.txt"
+cat > "$T/workflow/intents/2026-09-12-ok.md" <<'EOF'
+---
+状态: approved
+级别: L1
+日期: 2026-09-12
+---
+# INTENT — ok
+EOF
+cat > "$T/workflow/plans/2026-09-12-ok.md" <<'EOF'
+---
+状态: approved
+级别: L1
+---
+# PLAN — ok
+EOF
+out=$(CHECK_LOOP_ROOT="$T" sh "$TARGET" 2>&1); rc=$?
+if [ "$rc" -eq 0 ] && ! printf '%s' "$out" | grep -q "状态未确认"; then
+ PASS=$((PASS+1)); printf 'PASS %s\n' "枚举单源 CRLF 行尾 → approved/done 判定不受 \r 影响"
+else
+ FAIL=$((FAIL+1)); printf 'FAIL %s（期望 exit 0 且无状态未确认误报）\n%s\n' "枚举单源 CRLF 行尾" "$out"
 fi
 rm -rf "$T"
 

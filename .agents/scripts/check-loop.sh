@@ -49,6 +49,34 @@ else
   }
 fi
 
+# 枚举单源（.agents/workflow-enums.txt；2026-09-25 enum-single-source）——改枚举改那边,别改这里。
+# 启动时一次读入预生成 case 模式串（性能纪律:不进 per-document 循环,零 per-call fork）;
+# 缺文件/缺键 fail-loud:kit 自带该文件,丢失属安装破损(doctor §2 布局门同把关),不静默退化。
+ENUMS_FILE=".agents/workflow-enums.txt"
+if [ ! -f "$ENUMS_FILE" ]; then
+  echo "check-loop: 缺 $ENUMS_FILE(枚举单源)——跑 flow-kit sync 恢复后重试" >&2
+  exit 1
+fi
+# enum_val:取键值并去 \r——本文件可能被 git autocrlf 检出为 CRLF(rule-budgets.txt 同坑,禁止依赖行尾格式)
+enum_val() { sed -n "s/^$1=//p" "$ENUMS_FILE" | head -n 1 | tr -d '\r'; }
+ENUM_DOC_CONFIRMED=$(enum_val doc.status.confirmed)
+ENUM_DOC_ABANDONED=$(enum_val doc.status.abandoned)
+ENUM_INCIDENT_STATUS=$(enum_val incident.status.all)
+ENUM_LEVEL=$(enum_val level.all)
+# in_set <值> <空格分隔集>:纯 sh 内建成员测试(枚举单源消费)。
+# 不用 case 变量模式串:POSIX 下 case 的 | 是语法层 alternation,参数展开在其后,变量里的 | 按字面字符
+# 处理(实测 approved|done… 全串匹配失败)——展开不出 alternation;本写法零 fork,符合性能纪律。
+in_set() {
+  for _v in $2; do [ "$1" = "$_v" ] && return 0; done
+  return 1
+}
+for _ek in doc.status.confirmed doc.status.abandoned incident.status.all level.all; do
+  [ -n "$(enum_val "$_ek")" ] || {
+    echo "check-loop: $ENUMS_FILE 缺键或空值:$_ek" >&2
+    exit 1
+  }
+done
+
 # fm_get <file> <key>: 读 frontmatter 受限子集键值(首行 --- 起至闭合 --- 止,行首 `键: 值`)
 # 无 frontmatter / 键不存在时输出空串
 # fm_is_delim <line>: 该行是否为 frontmatter 分隔符（--- 后仅可跟空白）
@@ -103,8 +131,8 @@ fm_get() {
   done < "$1" 2>/dev/null
 }
 
-# 状态值域:intent/spec/plan 与 incident 各一套
-st_ok_doc() { case "$1" in approved|done|superseded|cancelled) return 0 ;; *) return 1 ;; esac; }
+# 状态值域:intent/spec/plan 与 incident 各一套(枚举单源预生成模式,见文件头 ENUMS 段)
+st_ok_doc() { in_set "$1" "$ENUM_DOC_CONFIRMED"; }
 
 WF="workflow"
 blockers=""
@@ -177,19 +205,14 @@ for spec in "$WF"/specs/[0-9]*.md; do
     fi
   fi
 
-  # L3 确认三件:确认结果/确认时间读 frontmatter;独立复核为叙述性内容,按正文行锚定(放弃件 superseded/cancelled 豁免)
-  if [ "$lvl" = "L3" ]; then
-    case "$st" in
-      superseded|cancelled) ;;
-      *)
-        [ "$(fm_get "$spec" 确认结果)" = "approved" ] || blockers="$blockers
+  # L3 确认三件:确认结果/确认时间读 frontmatter;独立复核为叙述性内容,按正文行锚定(放弃件豁免=枚举单源 abandoned 集)
+  if [ "$lvl" = "L3" ] && ! in_set "$st" "$ENUM_DOC_ABANDONED"; then
+    [ "$(fm_get "$spec" 确认结果)" = "approved" ] || blockers="$blockers
 - [L3 确认缺失] $base 确认结果必须为 approved"
-        [ -n "$(fm_get "$spec" 确认时间)" ] || blockers="$blockers
+    [ -n "$(fm_get "$spec" 确认时间)" ] || blockers="$blockers
 - [L3 确认缺失] $base 必须记录确认时间"
-        grep -qE '^- 独立复核：[[:space:]]*[^<[:space:]].*$' "$spec" 2>/dev/null || blockers="$blockers
+    grep -qE '^- 独立复核：[[:space:]]*[^<[:space:]].*$' "$spec" 2>/dev/null || blockers="$blockers
 - [L3 复核缺失] $base 必须记录新会话独立复核结论"
-        ;;
-    esac
   fi
 done
 
@@ -323,16 +346,12 @@ for inc in "$WF"/incidents/[0-9]*.md; do
   inc_lvl=$(fm_get "$inc" 级别)
   inc_st=$(fm_get "$inc" 状态)
 
-  # incident 状态严格枚举（README「文档协议」对齐；2026-09-16 审查补口：此前状态零断言）
-  case "$inc_st" in
-    open|fixed|closed) ;;
-    *) warnings="$warnings
-- [WARN 状态非法] incident 状态必须为 open/fixed/closed:$name（frontmatter 状态键当前值:『${inc_st:-缺失}』）" ;;
-  esac
+  # incident 状态严格枚举（README「文档协议」对齐；2026-09-16 审查补口：此前状态零断言；枚举单源）
+  in_set "$inc_st" "$ENUM_INCIDENT_STATUS" || warnings="$warnings
+- [WARN 状态非法] incident 状态必须为 open/fixed/closed:$name（frontmatter 状态键当前值:『${inc_st:-缺失}』）"
 
   if [ "$(fm_get "$inc" 流程)" != "legacy" ]; then
-    case "$inc_lvl" in
-      L0|L1|L2|L3)
+    if in_set "$inc_lvl" "$ENUM_LEVEL"; then
         case "$inc_lvl" in
           L1|L2|L3)
             [ -f "$WF/plans/$name" ] || blockers="$blockers
@@ -345,12 +364,10 @@ for inc in "$WF"/incidents/[0-9]*.md; do
 - [配对断裂] incident 缺 spec:$name（应在 $WF/specs/ 下同名）"
             ;;
         esac
-        ;;
-      *)
-        warnings="$warnings
+    else
+      warnings="$warnings
 - [WARN 级别缺失] $name 必须填写 L0/L1/L2/L3（配对检查已跳过——补级别后重跑本脚本校验配对）"
-        ;;
-    esac
+    fi
   fi
 
   if [ "$inc_s1" = "0" ]; then

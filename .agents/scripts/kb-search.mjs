@@ -16,6 +16,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { ENUMS } from './workflow-enums.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const MODULES_FILE = path.join(SCRIPT_DIR, '..', 'workflow-modules.txt');
@@ -78,7 +79,8 @@ if (moduleFilter && !MODULES.includes(moduleFilter)) {
   process.exit(1);
 }
 
-const ACTIVE_STATUS = ['draft', 'approved', 'open']; // 与 workflow/INDEX.md 活跃口径一致（fixed 归档案，默认也可命中）
+// 活跃口径 = 单源 doc.status.active ∪ incident.status.active（与 workflow/INDEX.md 活跃层一致，fixed 归档案默认也可命中）
+const ACTIVE_STATUS = [...ENUMS['doc.status.active'], ...ENUMS['incident.status.active']];
 const WF_SECTIONS = ['背景', '目标', '根因', '复盘三件套', '验收标准', '影响面'];
 const WIKI_EXCLUDE = new Set(['INDEX.md', '知识沉淀总览.html']);
 const WIKI_MAX_KB = 180;

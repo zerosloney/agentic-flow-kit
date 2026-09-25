@@ -50,6 +50,7 @@ export function doctor(args, pkgRoot) {
     '.agents/board/index.html',
     '.agents/hooks/commit-check.cjs',
     '.agents/workflow-modules.txt',
+    '.agents/workflow-enums.txt',
     '.agents/rule-budgets.txt',
     '.agents/settings.json',
     '.agents/workflows/_TEMPLATE.md',

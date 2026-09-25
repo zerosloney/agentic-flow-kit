@@ -10,6 +10,7 @@
 // 生成区：INDEX.md 的 GENERATED:BEGIN/END 锚点注释之间整段重写，锚点外内容原样保留。
 import fs from 'node:fs';
 import path from 'node:path';
+import { ENUMS } from './workflow-enums.mjs';
 
 const USAGE = `用法：node .agents/scripts/gen-workflow-index.mjs [--dry-run] [--check] [--help]
 
@@ -32,14 +33,15 @@ const WORKFLOW = 'workflow';
 const INDEX_P = path.join(WORKFLOW, 'INDEX.md');
 const DOC_TYPES = ['intents', 'specs', 'plans', 'incidents'];
 const TYPE_LABEL = { intents: 'INTENT', specs: 'SPEC', plans: 'PLAN', incidents: 'INCIDENT' };
-const ACTIVE_STATUS = ['draft', 'approved', 'open']; // 其余（done/fixed/closed/superseded/cancelled）折叠进档案计数
+// 活跃口径 = 单源 doc.status.active ∪ incident.status.active；其余状态折叠进档案计数
+const ACTIVE_STATUS = [...ENUMS['doc.status.active'], ...ENUMS['incident.status.active']];
 
 const BEGIN = '<!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->';
 const END = '<!-- GENERATED:END -->';
 const HEADER = `# workflow 索引 — 活跃层与档案（生成物，勿手改）
 
 > 生成器 \`node .agents/scripts/gen-workflow-index.mjs\`（状态变更 / 新建文档后重跑；\`--check\` 校验漂移，check-loop 会告警）。
-> 活跃 = draft / approved / open（在跑）；其余状态折叠进档案计数，检索用 \`node .agents/scripts/kb-search.mjs "<词>"\`（默认含全部状态、活跃优先排序）。
+> 活跃 = ${ACTIVE_STATUS.join(' / ')}（在跑）；其余状态折叠进档案计数，检索用 \`node .agents/scripts/kb-search.mjs "<词>"\`（默认含全部状态、活跃优先排序）。
 > 模块词表见 \`.agents/workflow-modules.txt\`。
 `;
 

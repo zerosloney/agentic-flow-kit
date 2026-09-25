@@ -19,10 +19,22 @@ const check = (desc, cond, detail = '') => {
   else { fail++; console.log(`FAIL  ${desc}${detail ? `\n${detail}` : ''}`); }
 };
 
-// 空闭环夹具（四目录齐全、无文档 → check-loop 无断档）
+// 空闭环夹具（四目录齐全、无文档 → check-loop 无断档；枚举单源随 fixture 内联——check-loop 启动段 fail-loud 要求）
 const mkfix = () => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'verify-fix-'));
   for (const s of ['intents', 'specs', 'plans', 'incidents']) fs.mkdirSync(path.join(d, 'workflow', s), { recursive: true });
+  fs.mkdirSync(path.join(d, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(d, '.agents', 'workflow-enums.txt'), [
+    'doc.status.all=draft approved done superseded cancelled',
+    'doc.status.confirmed=approved done superseded cancelled',
+    'doc.status.active=draft approved',
+    'doc.status.terminal=done superseded cancelled',
+    'doc.status.abandoned=superseded cancelled',
+    'incident.status.all=open fixed closed',
+    'incident.status.active=open',
+    'level.all=L0 L1 L2 L3',
+    '',
+  ].join('\n'), 'utf8');
   return d;
 };
 // 配对断裂夹具（L1 intent 无同名 plan → hard-block）

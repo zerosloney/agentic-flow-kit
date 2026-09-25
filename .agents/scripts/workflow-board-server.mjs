@@ -9,6 +9,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFile } from 'node:child_process';
+import { ENUMS } from './workflow-enums.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const WORKFLOW = path.join(ROOT, 'workflow');
@@ -51,17 +52,17 @@ function parseAcceptance(text) {
 }
 
 // ---- 配对断裂检测：按 slug 聚合同族（同名 intent/incident/plan/spec），异常卡附 alerts ----
-// 规则（口径对齐 check-loop.sh 的硬断档 + 状态枚举，看板为预警层、不阻断）：
+// 规则（口径对齐 check-loop.sh 的硬断档 + 状态枚举，看板为预警层、不阻断；枚举读单源 workflow-enums.txt）：
 //   孤儿 spec / 孤儿 plan（无同名 intent·incident 入口）；入口 done 但 plan 未终态（看板启发式）；
 //   入口缺 plan（intent 一律要求；incident 需非 legacy 且级别 L1/L2/L3）；L2/L3 入口缺同名 spec；
 //   spec L3 确认三件缺失（确认结果 / 确认时间 / 正文独立复核行）；
-//   状态不在枚举内或缺失（intent·spec·plan: approved/done/superseded/cancelled；incident: open/fixed/closed）
-const PLAN_TERMINAL = ['done', 'superseded', 'cancelled'];
+//   状态不在枚举内或缺失（doc=confirmed 集；incident=all 集）
+const PLAN_TERMINAL = ENUMS['doc.status.terminal'];
 const STATUS_ENUM = {
-  intents: ['approved', 'done', 'superseded', 'cancelled'],
-  specs: ['approved', 'done', 'superseded', 'cancelled'],
-  plans: ['approved', 'done', 'superseded', 'cancelled'],
-  incidents: ['open', 'fixed', 'closed'],
+  intents: ENUMS['doc.status.confirmed'],
+  specs: ENUMS['doc.status.confirmed'],
+  plans: ENUMS['doc.status.confirmed'],
+  incidents: ENUMS['incident.status.all'],
 };
 const NO_STATUS = '（未填）';
 const L3_REVIEW = /^- 独立复核：[ \t]*[^<\s]/m; // 正文独立复核行须有实质内容（对照 check-loop 锚定）
@@ -94,7 +95,7 @@ function detectAlerts(cards) {
       alerts.push('入口缺 plan：无同名 plan');
     if (isEntry && !legacyIncident && ['L2', 'L3'].includes(c.level) && !types.has('specs'))
       alerts.push(`${c.level} 入口缺同名 spec`);
-    if (c.type === 'specs' && c.level === 'L3' && !['superseded', 'cancelled'].includes(c.status)) {
+    if (c.type === 'specs' && c.level === 'L3' && !ENUMS['doc.status.abandoned'].includes(c.status)) {
       if (c.confirm !== 'approved') alerts.push(`L3 确认缺失：确认结果须为 approved（现 ${c.confirm || '缺失'}）`);
       if (!c.confirmTime) alerts.push('L3 确认缺失：须记录确认时间');
       if (!c.hasReview) alerts.push('L3 复核缺失：须记录新会话独立复核结论');

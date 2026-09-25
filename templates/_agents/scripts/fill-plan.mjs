@@ -4,9 +4,10 @@
 // L2/L3：改动面 + 任务拆解 + 执行顺序 + 验证方式
 import fs from 'node:fs';
 import path from 'node:path';
+import { ENUMS } from './workflow-enums.mjs';
 
 const TODAY = new Date().toISOString().slice(0, 10);
-const LEVELS = ['L0', 'L1', 'L2', 'L3'];
+const LEVELS = ENUMS['level.all']; // 级别词表单源（.agents/workflow-enums.txt）
 
 function parseArgs(argv) {
   const out = { topic: null, level: 'L1', output: null };
