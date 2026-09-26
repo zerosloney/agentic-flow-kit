@@ -1,10 +1,10 @@
 ---
-状态: open
+状态: fixed
 级别: L2
 发现: 2026-09-26
 模块: pipeline
 配对: ../specs/2026-09-26-managed-ledger-adopt.md /../plans/2026-09-26-managed-ledger-adopt.md
-备注: 本单为「装户面 managed 文件未入台账」缺陷：15 份 managed 类文件在盘上存在但从未登记进 `.agents/kit.json`，sync 走「已存在未入台账」分支跳过，故包源改动不会同步到装副本。incident 即 intent 等价入口（AGENTS.md 修复类口径），L2 配对 spec/plan 收口。契约语义变更（sync 新增收养分支）→ L2。
+备注: 本单为「装户面 managed 文件未入台账」缺陷：15 份 managed 类文件在盘上存在但从未登记进 `.agents/kit.json`，sync 走「已存在未入台账」分支跳过，故包源改动不会同步到装副本。incident 即 intent 等价入口（AGENTS.md 修复类口径），L2 配对 spec/plan 收口。契约语义变更（sync 新增收养分支）→ L2。修复：03648df（三件套立项）+ 9d39413（实现，14 文件）；本仓 15 份已收养，台账 62 → 77。
 ---
 
 # INCIDENT — 2026-09-26 managed 文件未入台账（升级通道静默断裂）
@@ -57,4 +57,4 @@
    - 落点 2：`src/doctor.mjs` §4.5 节注释写明检查目的、补的是「盘上有台账无」一侧、与 §4 的互补关系、首次 WARN 理由
    - 落点 3：`templates/_agents/commands/build.md`（双源，装副本同件）双源纪律段补「禁手动双写绕过台账」（见本 incident）
    - 落点 4：`templates/_agents/scripts/gate-checklist.mjs` PAIRS 登记表补 `{ doctor: '4.5', cl: null }` 声明独有——**该登记由门禁自身抓出**（新增 §4.5 后 `npm test` 报 S10 未登记），已对账至 0 断档 / 0 未登记
-   - 引用：本次修复 commit SHA（修复完成后回填）+ `workflow/incidents/2026-09-26-managed-ledger-adopt.md`（本单）
+   - 引用：修复 commit `9d39413`（实现，14 文件）+ `03648df`（三件套立项）+ `workflow/incidents/2026-09-26-managed-ledger-adopt.md`（本单）
