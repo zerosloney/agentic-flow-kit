@@ -3,6 +3,9 @@
 //       每次持续报告直至 --force 或本地对齐新版——防跳过一次后下次升级被静默覆盖，2026-09-24 语义修正）；
 //       生成器目标（INDEX.md / wiki 看板）→ 不比对，收尾重跑生成器走锚点重写。
 // 附带：包内新增 managed 文件 → 安装；包内已删 → 仅报告不删盘、出台账；managed 缺失 → 恢复。
+// 台账外文件收养（2026-09-26 managed-ledger-adopt）：盘上存在但台账无该 rel 的 managed 类文件，
+//       若内容恰好等于新版渲染 sha（diskSha === fresh.sha）则收养登记——判据与台账内「改动恰好等于新版」
+//       分支同源，不存在本地独有信息可被破坏；内容不等（本地真改动）仍保守跳过且台账不登记（持续报告）。
 // owned 文件永不触碰（两态模型，见 profiles.isOwned）。
 import fs from 'node:fs';
 import path from 'node:path';
@@ -60,7 +63,7 @@ export function sync(args, pkgRoot) {
     }
 
     const ledger = new Map((kit.managed || []).map((f) => [f.rel, f.sha256]));
-    const updated = [], skipped = [], restored = [], added = [], removed = [], newOwned = [];
+    const updated = [], skipped = [], restored = [], added = [], removed = [], newOwned = [], adopted = [];
     let unchanged = 0;
     const managedNew = [];
 
@@ -91,7 +94,7 @@ export function sync(args, pkgRoot) {
       else { skipped.push(rel); managedNew.push({ rel, sha256: ledgerSha }); } // 台账保持包侧基线：持续报告「本地已改」，直到 --force 或本地对齐新版
     }
 
-    // 台账外的新文件：managed 类安装；owned 类只对「盘上缺失」的起步文档报告（已装的不动不报）
+    // 台账外的新文件：managed 类安装 / 收养；owned 类只对「盘上缺失」的起步文档报告（已装的不动不报）
     for (const [rel, freshFile] of fresh) {
       if (ledger.has(rel)) continue;
       if (isOwned(rel)) {
@@ -99,7 +102,16 @@ export function sync(args, pkgRoot) {
         continue;
       }
       const disk = path.join(target, rel);
-      if (fs.existsSync(disk) && !force) { skipped.push(`${rel}（已存在未入台账）`); continue; }
+      if (fs.existsSync(disk)) {
+        // 盘上有、台账无：内容恰好等于新版 → 收养登记（与台账内「改动恰好等于新版」同判据）；
+        // 内容不等 = 本地真改动 → 默认保守跳过且不登记（下次仍报「未入台账」，不会被静默覆盖）；
+        // --force 下按既有语义覆盖并登记（与台账内文件的 --force 行为一致）
+        const diskSha = sha256(fs.readFileSync(disk));
+        if (diskSha === freshFile.sha) { adopted.push(rel); managedNew.push({ rel, sha256: diskSha }); }
+        else if (force) { fs.copyFileSync(freshFile.abs, disk); added.push(rel); managedNew.push({ rel, sha256: freshFile.sha }); }
+        else skipped.push(`${rel}（已存在未入台账）`);
+        continue;
+      }
       fs.mkdirSync(path.dirname(disk), { recursive: true });
       fs.copyFileSync(freshFile.abs, disk);
       added.push(rel);
@@ -110,11 +122,12 @@ export function sync(args, pkgRoot) {
     list('覆盖更新', updated);
     list('恢复缺失', restored);
     list('新增安装', added);
+    list('收养登记', adopted);
     list('本地已改，跳过', skipped);
     if (skipped.some((s) => !s.includes('未入台账'))) console.log('    ↑ --force 覆盖本地改动；git diff 自查差异；台账保持包侧基线，后续 sync 持续报告直至处理');
     list('包内已移除（文件保留在盘上，可手动删除）', removed);
     list('新增 owned 起步文档（项目自持，未自动安装）', newOwned);
-    if (!updated.length && !restored.length && !added.length && !removed.length && !skipped.length && !newOwned.length) {
+    if (!updated.length && !restored.length && !added.length && !adopted.length && !removed.length && !skipped.length && !newOwned.length) {
       console.log(`  已是最新（${unchanged} 份 managed 无变化）`);
     } else {
       console.log(`  无变化 ${unchanged} 份`);

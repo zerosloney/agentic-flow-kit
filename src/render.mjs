@@ -64,4 +64,22 @@ export function renderTree(srcRoot, targetRoot, vars, { force = false } = {}) {
   return { written, skipped, warnings, dirs };
 }
 
+// listTree(srcRoot)：只枚举模板树的目标相对路径（rel），不落盘、不算 sha——供 doctor 台账覆盖率检查复用。
+// 与 renderTree 完全同一套 relOf 映射（顶层 _ 前缀目录转点目录）与 .agents/cache 排除，避免两处映射漂移。
+export function listTree(srcRoot) {
+  const out = [];
+  (function walk(dir) {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        if (relOf(abs, srcRoot) === '.agents/cache') continue;
+        walk(abs);
+        continue;
+      }
+      out.push(relOf(abs, srcRoot).split(path.sep).join('/'));
+    }
+  })(srcRoot);
+  return out;
+}
+
 export { sha256 };

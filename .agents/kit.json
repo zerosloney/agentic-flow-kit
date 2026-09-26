@@ -20,7 +20,7 @@
     },
     {
       "rel": ".agents/commands/build.md",
-      "sha256": "1a09ba92e906ae3c748bdcec51d83c39202b09729f3a7ddd9f35e4054e4173e8"
+      "sha256": "c6235fafe3ff77f248b742fc2d4a6c5b3444ba6ea3de5d608880489d724838ba"
     },
     {
       "rel": ".agents/commands/deploy.md",
@@ -28,7 +28,11 @@
     },
     {
       "rel": ".agents/commands/design.md",
-      "sha256": "b1dce5cab3f2bdc98a61fee51642eea618dc8cbe55b2e4afc57af60184b5254f"
+      "sha256": "c2271f990f2129c46207e121bc7d61da1359b9ba8ca3c61cba823758072900bd"
+    },
+    {
+      "rel": ".agents/commands/gate-checklist.md",
+      "sha256": "dcb81e0acef39e8de91408022c4341b006c06dd5cc5c950aa5e48b1cd8575199"
     },
     {
       "rel": ".agents/commands/maintain.md",
@@ -40,15 +44,23 @@
     },
     {
       "rel": ".agents/commands/plan.md",
-      "sha256": "b7b35fee1748c30467ea697e8b3d831fa3ec4cea4d30388819d60b9ec135bc0d"
+      "sha256": "a4db2e01374831bf54b0208dcd1c8c8e261c86d926b574bed31f23871b51e42c"
     },
     {
       "rel": ".agents/commands/review.md",
       "sha256": "dc22906323c64f69f431cfeb7f20aa32ace9be60d8d794b32b099fd9269be39b"
     },
     {
+      "rel": ".agents/commands/source-sync-check.md",
+      "sha256": "e3d6ff5090183cfb542059523abfd2bda6048e725dfbf7fe950a29cc0950fab5"
+    },
+    {
+      "rel": ".agents/commands/sync-hosts.md",
+      "sha256": "49c730ca9ab17f75f4a6081d61ed994a354425abe84feb1ca63fb64202f3e14c"
+    },
+    {
       "rel": ".agents/commands/test.md",
-      "sha256": "0c93a9cc5254d540bd9894391085866ec6b23de2eb90a8cac8fcb0c957c90846"
+      "sha256": "2181eab6113b6029c83e9a8256babea90bcf8bbaa0e2d91d4690e4042efa7884"
     },
     {
       "rel": ".agents/hooks/check-pairing-incremental.sh",
@@ -108,11 +120,43 @@
     },
     {
       "rel": ".agents/scripts/doctor.test.mjs",
-      "sha256": "e25d609eaa97de99bc89551373b4c731db7b5d21d4dde62824723cd5296426c2"
+      "sha256": "2076c47cc5b530f370d598ff53dcee8c3de56304b6665f039869c6b2f0053752"
     },
     {
       "rel": ".agents/scripts/ensure-board.mjs",
       "sha256": "b6f3cc9b9683f479258ad3e12ed4b3ac7eba47433238af01199a30b1be3aa230"
+    },
+    {
+      "rel": ".agents/scripts/fill-intent.mjs",
+      "sha256": "11cd769c252447a8c76bfd6387874c4c5d01cac191060256d4935da13413b49d"
+    },
+    {
+      "rel": ".agents/scripts/fill-intent.test.mjs",
+      "sha256": "50284d22eb23a0e32c1eba3427e0bfc4c9d27d8066c64b48d2b71366b44710eb"
+    },
+    {
+      "rel": ".agents/scripts/fill-plan.mjs",
+      "sha256": "9de8326e74e276b9cf5b8af17e917770eaed289917d3b5ddb20ac7b8c2921e75"
+    },
+    {
+      "rel": ".agents/scripts/fill-plan.test.mjs",
+      "sha256": "dff3da63ba02ca47493fd0cd1d4a4cb08f096e487c134d10aa8b67b4338a843b"
+    },
+    {
+      "rel": ".agents/scripts/fill-spec.mjs",
+      "sha256": "3b289c71f9235b68172b159f06a5f0665e46ed9935375ca6c3e95d1c76b6bb3b"
+    },
+    {
+      "rel": ".agents/scripts/fill-spec.test.mjs",
+      "sha256": "85db04875323e9eaafbbeb09dd8e235b3ae4dc07d27a5d6bb9764a97ec9b9b09"
+    },
+    {
+      "rel": ".agents/scripts/gate-checklist.mjs",
+      "sha256": "97603179bd8757b6c6472867757173f3295dcd2bd34d4481dc47afe8a7eb545e"
+    },
+    {
+      "rel": ".agents/scripts/gate-checklist.test.mjs",
+      "sha256": "588e3cabb6b5e76bf417c5c495c027f233f2924b53208f32cfa643d7b56201c7"
     },
     {
       "rel": ".agents/scripts/gen-wiki-board.mjs",
@@ -157,6 +201,14 @@
     {
       "rel": ".agents/scripts/rule-budget.sh",
       "sha256": "e6ba0dd09a6e32b5b8bd4735f4ab5439639b43422b923a2e2aa8af9571f34a2f"
+    },
+    {
+      "rel": ".agents/scripts/source-sync-check.mjs",
+      "sha256": "c50f0c2a49c553e697ab0d7773d8b784da2fa59b5e23990b6e6aec2342444367"
+    },
+    {
+      "rel": ".agents/scripts/source-sync-check.test.mjs",
+      "sha256": "59ae813409ff2908691a37f3e5520ca255aef43441082308061b88b247808b3a"
     },
     {
       "rel": ".agents/scripts/verify-wiki-consistency.mjs",
@@ -212,7 +264,7 @@
     },
     {
       "rel": ".agents/workflow-enums.txt",
-      "sha256": "224c3b4e773d511e07e36082471c2df72c3ac2bfcd98ca8bdfb392f1843d2fa0"
+      "sha256": "08430fe4bbff47863dc531742a3f9a45fda1cbc69ce69fac391424ce90c4dcc7"
     },
     {
       "rel": ".agents/workflows/_TEMPLATE.md",
@@ -220,11 +272,19 @@
     },
     {
       "rel": ".agents/workflows/示例-并行实现评审.md",
-      "sha256": "8bb442932ba00c416505e82b3113c15b474403d316311f5d4e03634abaac8c71"
+      "sha256": "ec8d98f9f3116ee905c13fe62d2957908f0bb6e51632fb270a9cb8bfda934523"
+    },
+    {
+      "rel": ".agents/workflows/pipeline-closing.md",
+      "sha256": "bf918ddb07bdcf3c0b575800bfe41f2d0d1565c9c89e69b4d9c29d184c1be8c5"
+    },
+    {
+      "rel": ".agents/workflows/source-sync-repair.md",
+      "sha256": "53f65296be904da4ae5896a3bbc651cacf24ef78d1ab29a1a9a85155243d1747"
     },
     {
       "rel": ".agents/workflows/steps/示例-部署验证.md",
-      "sha256": "c2f8f8766dd6f0c37b9b578edb6c8c9f3b605bd60277ab0419e321e0643c7680"
+      "sha256": "657a8e714d17f866b70d087375040466b16b68d063c9879f7c017509eb3fd430"
     },
     {
       "rel": ".githooks/commit-msg",
@@ -248,15 +308,15 @@
     },
     {
       "rel": ".zcode/agents/implementer.md",
-      "sha256": "b5bf34f9830f01ad62f3b491f5a2e718ea6fbc728adf21b3affceea3594b9ca1"
+      "sha256": "20e4cc30e5c2474ce0addae50f94b8fe242ff3a53c62df5810912a87819363cc"
     },
     {
       "rel": ".zcode/agents/independent-reviewer.md",
-      "sha256": "31059b6c1c0c7a89538fdb34d855187d64e883787d9047df21bbe9e424d327b5"
+      "sha256": "9852a4f89bc19381ba4f38011e410ed070393583c7eb68527d707a432d14eba0"
     },
     {
       "rel": ".zcode/agents/ui-verifier.md",
-      "sha256": "6fef681028a20dac08943b95aa8bb2c38d6357988c3796324af63a8279ac065b"
+      "sha256": "78eacc962ce1cbc2852fa22a87deda2738ddb3b7fb620cefbfdb4891689e2521"
     }
   ],
   "owned": [
@@ -286,7 +346,7 @@
     },
     {
       "rel": "workflow/papercuts.md",
-      "sha256": "e2913c39d617e4f9cc4353db427f5a6d8a2baa72eb0ddb42362efc6f57851ace"
+      "sha256": "af62dc189b07061217068b0b9b6fd97b1ec223ad55ab2f1a1320df363cbeaa46"
     },
     {
       "rel": "workflow/plans/_TEMPLATE.md",
@@ -294,7 +354,7 @@
     },
     {
       "rel": "workflow/regression-checklist.md",
-      "sha256": "99839aaa36e992b4ce9fbdea02b373eb0c28698b25b9657ecd899d4f60e43f56"
+      "sha256": "8fd520a136cf76fc4705b0a5dafa744a38fca45a8ab92aec0b6bc74bfe83b76e"
     },
     {
       "rel": "workflow/specs/_TEMPLATE.md",

@@ -1,6 +1,7 @@
 // sync.test.mjs — flow-kit sync 三态升级 + add-host / add-gate 行为验证。
 // 方法：迷你 fixture 包根（小模板树 + 假宿主 zcode + 假门禁 fakeg）+ 手工模拟 v1 安装态（kit.json 台账 + 盘面），
 // 子进程 driver 调真实 sync/add-host/add-gact（隔离 process.exit 与 doctor 尾部退出），断言盘面 + 台账 + stdout 标记。
+// 场景 14：台账外文件收养（2026-09-26 managed-ledger-adopt）——内容==新版才登记，本地真改动仍跳过。
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
@@ -250,6 +251,47 @@ else if (cmd === 'add-gate') addGate(rest, root);
   const out = r.stdout + r.stderr;
   check('S13 整目录缺失的 managed 被恢复（父目录重建）', R(path.join(t, '.zcode/h.txt')) === 'host v2 777\n', out);
   check('S13 恢复有报告标记', out.includes('恢复缺失'), out);
+}
+
+// ============ 场景 14：台账外文件收养（2026-09-26 managed-ledger-adopt） ============
+// 盘上有 managed 类文件但台账无该条目（旧版手动双写绕过 init/sync 登记）。收养判据与台账内
+// 「改动恰好等于新版」同源：diskSha === 新版渲染 sha 才登记；内容不等（本地真改动）仍保守跳过。
+{
+  // ①盘上有、台账无、内容 == 新版 → 收养登记
+  const fx = mkFixture(), t = mkTarget(fx);
+  W(path.join(t, '.agents/scripts/chg.txt'), 'chg v2 port 777\n'); // == 新版渲染
+  // 把它从台账里剔除，伪造「盘上有但未登记」
+  const k0 = JSON.parse(R(path.join(t, '.agents/kit.json')));
+  k0.managed = k0.managed.filter((f) => f.rel !== '.agents/scripts/chg.txt');
+  W(path.join(t, '.agents/kit.json'), `${JSON.stringify(k0, null, 2)}\n`);
+  const r = runCmd('sync', fx, t);
+  const out = r.stdout + r.stderr;
+  check('S14① 内容==新版 → 收养登记（报告标记）', out.includes('收养登记') && out.includes('chg.txt'), out);
+  const kit1 = JSON.parse(R(path.join(t, '.agents/kit.json')));
+  check('S14① 收养后入台账且 sha=盘面', (() => {
+    const e = kit1.managed.find((f) => f.rel === '.agents/scripts/chg.txt');
+    return e && e.sha256 === sha256(Buffer.from('chg v2 port 777\n'));
+  })(), JSON.stringify(kit1.managed));
+  check('S14① 收养不改盘面（内容原样）', R(path.join(t, '.agents/scripts/chg.txt')) === 'chg v2 port 777\n');
+
+  // ②盘上有、台账无、内容 != 新版 → 不收养、不覆盖、台账不登记
+  const fx2 = mkFixture(), t2 = mkTarget(fx2);
+  W(path.join(t2, '.agents/scripts/chg.txt'), 'chg LOCAL EDIT\n'); // 本地真改动
+  const k1 = JSON.parse(R(path.join(t2, '.agents/kit.json')));
+  k1.managed = k1.managed.filter((f) => f.rel !== '.agents/scripts/chg.txt');
+  W(path.join(t2, '.agents/kit.json'), `${JSON.stringify(k1, null, 2)}\n`);
+  const r2 = runCmd('sync', fx2, t2);
+  const out2 = r2.stdout + r2.stderr;
+  check('S14② 内容!=新版 → 不收养（不报收养登记）', !out2.includes('收养登记'), out2);
+  check('S14② 本地改动幸存未被覆盖', R(path.join(t2, '.agents/scripts/chg.txt')) === 'chg LOCAL EDIT\n', out2);
+  const kit2 = JSON.parse(R(path.join(t2, '.agents/kit.json')));
+  check('S14② 台账不登记（持续报告，防下次静默覆盖）', !kit2.managed.some((f) => f.rel === '.agents/scripts/chg.txt'));
+  check('S14② 报「已存在未入台账」跳过', out2.includes('已存在未入台账'), out2);
+
+  // ③盘上无、台账无 → 新增安装（既有行为不回归）
+  const fx3 = mkFixture(), t3 = mkTarget(fx3);
+  const r3 = runCmd('sync', fx3, t3);
+  check('S14③ 盘上无 → 新增安装（既有行为不回归）', (r3.stdout + r3.stderr).includes('新增安装') && R(path.join(t3, '.agents/commands/new.txt')) === 'new in v2\n');
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${failCount}`);

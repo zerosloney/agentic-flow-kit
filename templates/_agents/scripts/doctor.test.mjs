@@ -5,6 +5,8 @@
 //   ② 手改装副本（盘面 sha 变） → drift=1 gone=[] total=1
 //   ③ owned 文件缺失 → drift=0 gone=[rel] total=1
 //   ④ kit.json 无 owned 字段 → skipped=true total=0
+// 另测 checkAdapterDrift(target)（场景 5-14）与 checkLedgerCoverage(target, pkgRoot)（场景 15-18，
+//   2026-09-26 managed-ledger-adopt：补「盘上有、台账无」一侧）。
 // 用法：node .agents/scripts/doctor.test.mjs（在仓库根执行，需 src/doctor.mjs 存在——dogfooding 模式）
 import fs from 'node:fs';
 import os from 'node:os';
@@ -20,7 +22,7 @@ if (!fs.existsSync(SRC)) {
   console.error(`doctor.test.mjs：未找到 ${SRC}——仅在包源仓库（dogfooding）跑 npm test 时调用`);
   process.exit(1);
 }
-const { checkOwnedDrift, checkAdapterDrift } = await import(pathToFileURL(SRC).href);
+const { checkOwnedDrift, checkAdapterDrift, checkLedgerCoverage } = await import(pathToFileURL(SRC).href);
 
 let pass = 0;
 let fail = 0;
@@ -292,6 +294,77 @@ const CMD_BODY = '# Build\n\n正文 build v1\n';
     r.drift === 0 && r.total === 1 && r.skipped === false,
     JSON.stringify(r));
   fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 15：盘上（包源）有 managed 类文件但台账无 → 差集非空（本 incident 的目标形态）----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-cov-'));
+  const pkg = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-cov-pkg-'));
+  // 包源模板树：一份 managed 类（.agents/scripts/a.mjs）+ 一份 owned 类（workflow/README.md，须被排除）
+  const w = (p, c) => { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, c); };
+  w(path.join(pkg, 'templates/_agents/scripts/a.mjs'), '// a\n');
+  w(path.join(pkg, 'templates/_agents/commands/b.md'), '// b\n');
+  w(path.join(pkg, 'templates/workflow/README.md'), '// owned\n');
+  fs.mkdirSync(path.join(root, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.agents', 'kit.json'), JSON.stringify({
+    kit: 'agentic-flow-kit', version: '0.5.0', options: { hosts: [], stack: 'none', boardPort: '8933' },
+    managed: [], owned: [],
+  }, null, 2));
+  const r = checkLedgerCoverage(root, pkg);
+  check('场景 15：盘上有 managed 类文件台账无 → 差集含两者',
+    r.skipped === false && r.missing.includes('.agents/scripts/a.mjs') && r.missing.includes('.agents/commands/b.md') && r.missing.length === 2,
+    JSON.stringify(r));
+  check('场景 15：owned 类（workflow/）不入差集',
+    !r.missing.some((m) => m.startsWith('workflow/')), JSON.stringify(r.missing));
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(pkg, { recursive: true, force: true });
+}
+
+// ---- 场景 16：台账登记齐全 → 差集空 ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-cov-'));
+  const pkg = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-cov-pkg-'));
+  const w = (p, c) => { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, c); };
+  w(path.join(pkg, 'templates/_agents/scripts/a.mjs'), '// a\n');
+  fs.mkdirSync(path.join(root, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.agents', 'kit.json'), JSON.stringify({
+    kit: 'agentic-flow-kit', version: '0.5.0', options: { hosts: [], stack: 'none', boardPort: '8933' },
+    managed: [{ rel: '.agents/scripts/a.mjs', sha256: 'x' }], owned: [],
+  }, null, 2));
+  const r = checkLedgerCoverage(root, pkg);
+  check('场景 16：登记齐全 → missing=[] skipped=false',
+    r.skipped === false && r.missing.length === 0, JSON.stringify(r));
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(pkg, { recursive: true, force: true });
+}
+
+// ---- 场景 17：无包源 templates/（装户环境）→ skipped ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-cov-'));
+  const pkg = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-cov-pkg-')); // 空包根，无 templates/
+  fs.mkdirSync(path.join(root, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.agents', 'kit.json'), JSON.stringify({
+    kit: 'agentic-flow-kit', version: '0.5.0', options: { hosts: [], stack: 'none', boardPort: '8933' },
+    managed: [], owned: [],
+  }, null, 2));
+  const r = checkLedgerCoverage(root, pkg);
+  check('场景 17：无包源模板 → skipped=true missing=[]',
+    r.skipped === true && r.missing.length === 0, JSON.stringify(r));
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(pkg, { recursive: true, force: true });
+}
+
+// ---- 场景 18：无 kit.json → skipped ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-cov-'));
+  const pkg = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-cov-pkg-'));
+  fs.mkdirSync(path.join(pkg, 'templates/_agents/scripts'), { recursive: true });
+  fs.writeFileSync(path.join(pkg, 'templates/_agents/scripts/a.mjs'), '// a\n');
+  const r = checkLedgerCoverage(root, pkg);
+  check('场景 18：无 kit.json → skipped=true missing=[]',
+    r.skipped === true && r.missing.length === 0, JSON.stringify(r));
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(pkg, { recursive: true, force: true });
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

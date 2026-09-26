@@ -4,6 +4,11 @@ import path from 'node:path';
 import { execSync, spawnSync } from 'node:child_process';
 import net from 'node:net';
 import { createHash } from 'node:crypto';
+import { listTree } from './render.mjs';
+import { isOwned, HOSTS } from './profiles.mjs';
+
+// 宿主目录映射（与 src/profiles.mjs#HOSTS 同源：装副本目录名前缀带点）
+const HOST_DIR = Object.fromEntries(Object.entries(HOSTS).map(([k, v]) => [k, v.dir]));
 
 function sh(cmd, cwd) {
   try {
@@ -103,6 +108,24 @@ export function doctor(args, pkgRoot) {
       if (gone.length) add('FAIL', `managed 文件缺失：${gone.join('、')}`);
     } catch (e) {
       add('FAIL', `kit.json 解析失败：${e.message}`);
+    }
+  }
+
+  // 4.5 台账覆盖率（2026-09-26 managed-ledger-adopt）：§4 只遍历台账条目做双向校验，
+  //     从不反向问「盘上还有谁没登记」——15 份 managed 类文件曾因此长期游离台账外，sync 只报不修。
+  //     本项由 pkgRoot 包源枚举应有 managed 清单（排除 isOwned）与台账取差集，补上「盘上有、台账无」一侧。
+  //     首次引入用 WARN：doctor 的 pkgRoot 是包安装目录，装户可能落后于包版本（包内新增 managed 件
+  //     在装户 sync 前必然未登记），直接 FAIL 会让存量装户升级包后一跑 doctor 即挂。
+  //     沿用本仓库三次先例（doctor-owned-drift / workflows-check / adapter 薄适配漂移均先 WARN）。
+  {
+    const covRes = checkLedgerCoverage(target, pkgRoot);
+    if (covRes.skipped) {
+      add('PASS', `台账覆盖率检查跳过（${covRes.note || '无包源模板'}）`);
+    } else if (covRes.missing.length === 0) {
+      add('PASS', `台账覆盖率完整（${covRes.total} 份 managed 全在册）`);
+    } else {
+      const shown = covRes.missing.slice(0, 5).join('、');
+      add('WARN', `台账覆盖率缺口 ${covRes.missing.length} 份——盘上 managed 类文件未登记进 kit.json，包源改动不会同步到装副本；跑 node bin/flow-kit.mjs sync 收养（内容等于新版才登记）${covRes.missing.length > 5 ? `：${shown} …` : `：${shown}`}`);
     }
   }
 
@@ -208,6 +231,34 @@ function print(results) {
   console.log(`\ndoctor：${results.length - fails - warns} PASS ｜ ${warns} WARN ｜ ${fails} FAIL`);
 }
 
+export function checkLedgerCoverage(target, pkgRoot) {
+  const kitPath = path.join(target, '.agents', 'kit.json');
+  if (!fs.existsSync(kitPath)) return { missing: [], total: 0, skipped: true, note: 'kit.json 不存在' };
+  let kit;
+  try {
+    kit = JSON.parse(fs.readFileSync(kitPath, 'utf8'));
+  } catch (e) {
+    return { missing: [], total: 0, skipped: true, note: `kit.json 解析失败：${e.message}` };
+  }
+  if (!Array.isArray(kit.managed)) return { missing: [], total: 0, skipped: true, note: 'kit.json 无 managed 条目' };
+  // 无包源 = 装户环境：盘上没有 templates/，无法枚举应有清单，跳过
+  const tmplRoot = path.join(pkgRoot || '', 'templates');
+  if (!pkgRoot || !fs.existsSync(tmplRoot)) return { missing: [], total: 0, skipped: true, note: '无包源模板（templates/ 不存在）' };
+
+  // 应有清单 = 模板树 + 台账宿主层，排除 owned（与 src/sync.mjs 的 fresh 计算口径一致）
+  const expected = new Set(listTree(tmplRoot));
+  const hosts = Array.isArray(kit.options?.hosts) ? kit.options.hosts : [];
+  for (const h of hosts) {
+    if (!HOST_DIR[h]) continue;
+    const hostRoot = path.join(pkgRoot, 'modules', 'hosts', h);
+    if (!fs.existsSync(hostRoot)) continue;
+    for (const rel of listTree(hostRoot)) expected.add(`${HOST_DIR[h]}/${rel}`);
+  }
+  const ledger = new Set(kit.managed.map((f) => f.rel));
+  const missing = [...expected].filter((rel) => !ledger.has(rel) && !isOwned(rel)).sort();
+  return { missing, total: ledger.size, skipped: false };
+}
+
 // owned 漂移校验（独立 export 供 doctor 主流程 + 单元测试共用；2026-09-25 wf-runtime 复盘）
 // 返回：{ drift, gone, total, skipped, error? }
 //   - skipped=true：kit.json 不存在或解析失败/无 owned 字段
@@ -252,8 +303,7 @@ export function checkAdapterDrift(target) {
   if (fs.existsSync(path.join(target, 'templates', '_agents')) && fs.existsSync(path.join(target, 'modules', 'hosts'))) {
     return { drift: 0, total: 0, skipped: true, note: '包源环境（templates/ + modules/ 同时存在）——§7.x 仅在装户环境有意义' };
   }
-  // 4 宿主目录映射（与 src/profiles.mjs#HOSTS 同源：装副本目录名前缀带点）
-  const HOST_DIR = { zcode: '.zcode', omp: '.omp', opencode: '.opencode', trae: '.trae' };
+  // 4 宿主目录映射（与顶层 HOST_DIR 同源）
   const splitFm = (text) => {
     const m = String(text || '').match(/^---\r?\n([\s\S]*?\r?\n)---\r?\n?([\s\S]*)$/);
     if (!m) return { fm: '', body: String(text || '') };

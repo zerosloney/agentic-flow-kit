@@ -60,6 +60,7 @@ const PAIRS = [
   { doctor: '2', cl: null, note: '目录布局——装户体检独有' },
   { doctor: '3', cl: null, note: 'git 仓库与钩子——装户体检独有' },
   { doctor: '4', cl: null, note: 'kit.json managed 台账——装户体检独有' },
+  { doctor: '4.5', cl: null, note: '台账覆盖率——装户体检独有（盘上有 managed 类文件未登记，2026-09-26 managed-ledger-adopt）' },
   { doctor: '6.5', cl: null, note: 'delegations 台账结构——装户体检独有' },
   { doctor: '6.6', cl: null, note: 'owned 漂移——装户体检独有' },
   { doctor: '6.7', cl: null, note: '跨宿主薄适配——装户体检独有' },
