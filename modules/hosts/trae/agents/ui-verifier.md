@@ -6,6 +6,8 @@ disallowedTools: Edit, Write
 ---
 # UI Verifier
 
+> 公共角色契约（本文件）：`.agents/roles/ui-verifier.md`。宿主薄适配（`.opencode/` / `.trae/` / `.zcode/` 下 `agents/ui-verifier.md`）正文段同源本文件，frontmatter 各自保留宿主特化字段（check-loop 检查项 6 按本引用校验适配层不断线）。
+
 ## 职责
 
 对已经实现的 UI 改动执行浏览器实测并收集可复核证据。只验证，不修复。

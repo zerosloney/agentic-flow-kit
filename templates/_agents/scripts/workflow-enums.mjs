@@ -1,6 +1,8 @@
 // workflow-enums 读取器——.agents/workflow-enums.txt 单源（2026-09-25 enum-single-source）
-// 消费方：workflow-board-server.mjs / kb-search.mjs / gen-workflow-index.mjs / fill-{intent,plan,spec}.mjs
-//   （check-loop.sh 为 POSIX sh，自行 sed 读取同文件，口径同本读取器的键）。
+// 消费方：check-loop.mjs / workflow-board-server.mjs / kb-search.mjs / gen-workflow-index.mjs /
+//         fill-{intent,plan,spec}.mjs（均经本读取器）。（2026-09-26 check-loop sh→node 迁移后，
+//         原先的 sh sed 消费方已退役——全部消费方统一经本读取器，无跨语言读取口径；S11 测试仍守
+//         「空格分隔 + # 注释」格式对简单工具保持可解析）
 // fail-loud 无 fallback：kit 自带该文件，缺失/坏数据属安装破损——直接抛错崩得可见，
 //   doctor §2 布局门同时把关文件存在性。禁止在任何消费方内再抄一份枚举字面量。
 import fs from 'node:fs';

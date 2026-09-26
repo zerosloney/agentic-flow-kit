@@ -14,13 +14,14 @@
 //
 // 检查项清单（编号/标题/severity 逐条沿 sh 版头部——gate-checklist 配对登记表按 id 消费，不得增删改号）:
 //   1. 入口文档/spec/plan 同名配对(L1 必须有 plan;L2/L3 必须有 spec+plan)        [hard-block]
-//   2. 模板字段占位符残留(YYYY-MM-DD / <主题> 等未替换)                             [warning]
+//   2. 模板字段占位符残留(YYYY-MM-DD / <主题> 等未替换;<主题> 与 .md 同行 = 命名约定描述,豁免)  [warning]
 //   3. incidents 复盘三件套完整性 + 状态严格枚举 + 新 intent 回路(回路断档=hard,其他=warning)
-//   4. 引用有效性(文档/指令中引用的 .agents/ 路径必须存在)                          [warning]
+//   4. 引用有效性(文档/指令中引用的 .agents/ 路径必须存在;支持 fill-{a,b,c}.mjs 花括号展开与 fill-*.mjs 通配)  [warning]
 //   5. intent/spec/plan 状态字段 + L3 独立复核                                       [warning]
 //   6. 子智能体角色契约 + OpenCode/Trae/ZCode Adapter 一致性(含旧委派残留/钉死模型)  [warning]
 //   7. 阶段索引同步(AGENTS.md 与 new-task.md 须双向索引全部阶段指令)                [warning]
 //   8. intent 验收标准对账(2026-09-12 起新建:done 未勾验/缺节=hard,勾选缺证据=warning;存量聚合 warning,含「存量对账豁免」声明者出账)
+//      证据可写在 [x] 行的续行（仓库通写法「（证据：…）」另起一行；全/半角冒号皆认）
 //   9. 文件名英文 kebab-case(非 ASCII 文件名=warning,2026-09-11 规则)
 //  10. 级别 vs 迁移文件一致性(L1/L2 入口文档加入提交触及迁移 SQL/Migrations=疑似判低,warning)
 //  11. workflow/INDEX.md 漂移(活跃层索引与磁盘不一致=warning,2026-09-21 检索层;调生成器 --check,口径单一)
@@ -191,12 +192,16 @@ for (const plan of docFiles('plans')) {
 {
   const phRe = /YYYY-MM-DD|<主题>|<日期 主题>|L0 \/ L1 \/ L2 \/ L3|draft \/ approved \/ done|open \/ fixed \/ closed/;
   const boilerRe = /\.\.\/specs\/[A-Za-z0-9-]*\.md|写明如何满足|防复发验证|_YYYY-MM-DD\.|format\('YYYY-MM-DD'\)|value-format="YYYY-MM-DD"/;
+  // 命名约定豁免：`<主题>` 与 `.md` 同行 = 在描述文件命名规则（如 `.agents/workflows/<主题>.md`、
+  //   「复制本模板为 YYYY-MM-DD-<主题>.md」），非未填占位符；真未填的占位（标题 `# INTENT — <主题>`、
+  //   `日期: YYYY-MM-DD`）不含 .md，仍照拦（2026-09-25-wf-runtime incident 记录的误报口径）
+  const isNamingConv = (line) => line.includes('<主题>') && /\.md/.test(line);
   const groups = new Map(); // file -> [ "行号:内容" ]（首现序）
   for (const sub of DOC_DIRS) {
     for (const f of docFiles(sub)) {
       const hits = [];
       (linesOf(f) || []).forEach((line, i) => {
-        if (phRe.test(line) && !boilerRe.test(line)) hits.push(`${i + 1}:${line}`);
+        if (phRe.test(line) && !boilerRe.test(line) && !isNamingConv(line)) hits.push(`${i + 1}:${line}`);
       });
       if (hits.length) groups.set(f, hits);
     }
@@ -252,7 +257,23 @@ for (const inc of docFiles('incidents')) {
 
 // --- 4. 引用有效性 [warning]（.agents/ 路径须存在；skills 特例允许用户级 ~/.agents/skills）---
 {
-  const refRe = /\.agents\/(commands|hooks|scripts|skills|roles)\/[A-Za-z0-9_][A-Za-z0-9_./-]*/g;
+  // 引用可带 {a,b,c} 花括号展开（仓库通写法 `fill-{intent,spec,plan}.mjs`）或 `*` 通配（`fill-*.mjs`）——
+  // 花括号展开逐路查存在，任一路存在即有效；`*` 按目录枚举 glob 匹配，命中即有效；全不中才算断档
+  // （2026-09-26 审查修复：正则字符类不含 {} *，曾把 `fill-{intent,spec,plan}.mjs` / `fill-*.mjs`
+  //   截断成 `fill-` 误报引用断档）
+  const refRe = /\.agents\/(commands|hooks|scripts|skills|roles)\/[A-Za-z0-9_][A-Za-z0-9_./{},，*-]*/g;
+  const expandRef = (ref) => {
+    const m = ref.match(/^([^{]*)\{([^}]*)\}(.*)$/);
+    if (!m) return [ref];
+    return m[2].split(/[,，]/).map((v) => m[1] + v.trim() + m[3]);
+  };
+  // globExists：`*` 通配引用按目录枚举匹配（仅文件名层，`*` 不跨 /；目录不存在 = false）
+  const globExists = (ref) => {
+    const re = new RegExp('^' + path.basename(ref).replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/\\\\]*') + '$');
+    try { return fs.readdirSync(path.dirname(path.join(ROOT, ref))).some((f) => re.test(f)); } catch { return false; }
+  };
+  const refExists = (r) => (r.includes('*') ? globExists(r) : fs.existsSync(path.join(ROOT, r)));
+  const HOME_DIR = process.env.HOME || process.env.USERPROFILE || '';
   const files = [];
   if (fs.existsSync(path.join(ROOT, 'AGENTS.md'))) files.push('AGENTS.md');
   for (const e of readdirOrNull(ROOT) || []) {
@@ -281,8 +302,9 @@ for (const inc of docFiles('incidents')) {
         const ref = m[0];
         if (seen.has(ref)) continue;
         seen.add(ref);
-        if (fs.existsSync(path.join(ROOT, ref))) continue;
-        if (ref.startsWith('.agents/skills/') && fs.existsSync(path.join(process.env.HOME || process.env.USERPROFILE || '', ref))) continue;
+        const refs = expandRef(ref);
+        if (refs.some(refExists)) continue;
+        if (refs.some((r) => r.startsWith('.agents/skills/') && !r.includes('*') && fs.existsSync(path.join(HOME_DIR, r)))) continue;
         warnings.push(`- [WARN 引用断档] ${rel.split(path.sep).join('/')} 引用不存在的文件:${ref}`);
       }
     }
@@ -361,15 +383,23 @@ for (const cmd of ['plan', 'design', 'build', 'test', 'deploy', 'maintain', 'rev
     const base = path.basename(intent);
     const lines = linesOf(intent) || [];
     // 节扫描：hs=有验收节；insec 至下一个二级标题；uc=未勾项；ne=勾选缺证据；ex=存量豁免声明
+    //   证据可写在 [x] 行的续行（仓库通写法「（证据：…）」另起一行）——pendX 记「待证据项」，
+    //   遇证据行（全角「：」/半角「:」皆认）清零；遇下一条目 / 下一小节 / 节末仍无证据 → ne
     let hs = false, uc = false, ne = false;
     let insec = false, ex = false;
+    let pendX = false; // 上一 [x] 项尚无证据，证据可能在紧随的续行
+    const evRe = /证据[：:]/;
+    const closeItem = () => { if (pendX) { ne = true; pendX = false; } };
     for (const line of lines) {
       if (/存量对账豁免（/.test(line)) ex = true;
-      if (/^\s*##\s+[^#]*验收标准/.test(line)) { hs = true; insec = true; continue; }
-      if (insec && /^\s*##\s/.test(line)) insec = false;
-      if (insec && /^\s*- \[ \]/.test(line)) uc = true;
-      if (insec && /^\s*- \[x\]/.test(line) && !/证据：/.test(line)) ne = true;
+      if (/^\s*##\s+[^#]*验收标准/.test(line)) { hs = true; insec = true; closeItem(); continue; }
+      if (insec && /^\s*##\s/.test(line)) { insec = false; closeItem(); continue; }
+      if (!insec) continue;
+      if (/^\s*- \[ \]/.test(line)) { closeItem(); uc = true; continue; }
+      if (/^\s*- \[x\]/.test(line)) { closeItem(); pendX = !evRe.test(line); continue; }
+      if (pendX && evRe.test(line)) pendX = false; // 续行补上证据
     }
+    closeItem(); // 节末（或全文末）仍无证据 → 计缺证据
     const filedate = /^\d{4}-\d{2}-\d{2}$/.test(base.slice(0, 10)) ? base.slice(0, 10) : '';
     const isNew = filedate !== '' && filedate >= accCutoff;
     if (!hs) {

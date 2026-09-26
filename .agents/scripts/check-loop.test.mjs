@@ -526,5 +526,100 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   rmfix(T);
 }
 
+// ---- 场景 40:检查 8——证据写在 [x] 续行（仓库通写法「（证据：…）」另起一行）→ 不报缺证据 ----
+{
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-12-ev1.md', INTENT('ev1', '状态: done\n级别: L1\n日期: 2026-09-12',
+    '\n## 验收标准（可测试）\n- [x] 用例通过\n（证据：commit fixture；套件全绿）\n- [x] 文档补齐\n（证据：AGENTS.md 第 1 行）\n'));
+  w(T, 'workflow/plans/2026-09-12-ev1.md', PLAN('ev1', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('证据在续行（全角冒号）→ 不报验收缺证据',
+    r.status === 0 && !outOf(r).includes('验收缺证据'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+// ---- 场景 41:检查 8——[x] 无证据且续行也无 → 报验收缺证据（回归：不可把豁免放大成漏检）----
+{
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-12-ev2.md', INTENT('ev2', '状态: done\n级别: L1\n日期: 2026-09-12',
+    '\n## 验收标准（可测试）\n- [x] 用例通过\n- [x] 文档补齐\n（说明：无证据行）\n'));
+  w(T, 'workflow/plans/2026-09-12-ev2.md', PLAN('ev2', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('[x] 续行仍无证据 → 报验收缺证据',
+    r.status === 0 && outOf(r).includes('验收缺证据'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+// ---- 场景 42:检查 4——fill-{intent,spec,plan}.mjs 花括号展开，三路皆存在 → 不报引用断档 ----
+{
+  const T = mkfix();
+  w(T, 'AGENTS.md', '# AGENTS\n\n起草先跑 `node .agents/scripts/fill-{intent,spec,plan}.mjs` 拿结构化草稿。\n');
+  fs.mkdirSync(path.join(T, '.agents', 'scripts'), { recursive: true });
+  for (const n of ['fill-intent', 'fill-spec', 'fill-plan']) w(T, `.agents/scripts/${n}.mjs`, '// stub\n');
+  w(T, 'workflow/intents/2026-09-12-br1.md', INTENT('br1', '状态: done\n级别: L1\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
+  w(T, 'workflow/plans/2026-09-12-br1.md', PLAN('br1', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('花括号展开三路存在 → 不报引用断档',
+    r.status === 0 && !outOf(r).includes('引用断档'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+// ---- 场景 43:检查 4——花括号展开三路皆不存在 → 仍报引用断档（带完整展开式文案）----
+{
+  const T = mkfix();
+  w(T, 'AGENTS.md', '# AGENTS\n\n起草先跑 `node .agents/scripts/fill-{alpha,beta,gamma}.mjs` 拿结构化草稿。\n');
+  w(T, 'workflow/intents/2026-09-12-br2.md', INTENT('br2', '状态: done\n级别: L1\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
+  w(T, 'workflow/plans/2026-09-12-br2.md', PLAN('br2', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('花括号展开三路皆无 → 仍报引用断档',
+    r.status === 0 && /引用断档.*fill-\{alpha,beta,gamma\}\.mjs/.test(outOf(r)), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+// ---- 场景 44:检查 2——<主题> 与 .md 同行 = 命名约定描述 → 不报模板未填 ----
+{
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-01-nm1.md', INTENT('nm1', '状态: done\n级别: L1\n日期: 2026-09-01',
+    '\n编排脚本（`.agents/workflows/<主题>.md`）：frontmatter + stages 表。\n复制本模板为 YYYY-MM-DD-<主题>.md 后填写。\n'));
+  w(T, 'workflow/plans/2026-09-01-nm1.md', PLAN('nm1', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('<主题>+.md 命名约定行 → 不报模板未填',
+    r.status === 0 && !outOf(r).includes('模板未填'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+// ---- 场景 45:检查 2——真未填占位（标题 <主题>，无 .md）→ 仍报模板未填 ----
+{
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-01-nm2.md', INTENT('<主题>', '状态: done\n级别: L1\n日期: 2026-09-01', '\n正文无占位。\n'));
+  w(T, 'workflow/plans/2026-09-01-nm2.md', PLAN('nm2', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('标题 <主题>（无 .md）→ 仍报模板未填',
+    r.status === 0 && outOf(r).includes('模板未填'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+// ---- 场景 46:检查 6——薄适配正文含 .agents/roles/<role>.md 引用 → 不报 Adapter 断线 ----
+{
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-12-ad1.md', INTENT('ad1', '状态: done\n级别: L1\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
+  w(T, 'workflow/plans/2026-09-12-ad1.md', PLAN('ad1', '状态: done\n级别: L1'));
+  fs.mkdirSync(path.join(T, '.agents', 'roles'), { recursive: true });
+  fs.mkdirSync(path.join(T, '.zcode', 'agents'), { recursive: true });
+  w(T, '.agents/roles/implementer.md', '# role implementer\n');
+  w(T, '.zcode/agents/implementer.md', '---\nname: implementer\n---\n> 契约见 `.agents/roles/implementer.md`。\n');
+  const r = run(T);
+  check('薄适配含角色引用 → 不报 Adapter 断线',
+    r.status === 0 && !outOf(r).includes('Adapter 断线'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+// ---- 场景 47:检查 4——fill-*.mjs 星号通配，目录内有匹配文件 → 不报引用断档；无匹配 → 仍报 ----
+{
+  const T = mkfix();
+  w(T, 'AGENTS.md', '# AGENTS\n\n起草先跑 `node .agents/scripts/fill-*.mjs`；孤儿引用 `.agents/scripts/ghost-*.mjs`。\n');
+  fs.mkdirSync(path.join(T, '.agents', 'scripts'), { recursive: true });
+  for (const n of ['fill-intent', 'fill-spec', 'fill-plan']) w(T, `.agents/scripts/${n}.mjs`, '// stub\n');
+  w(T, 'workflow/intents/2026-09-12-gb1.md', INTENT('gb1', '状态: done\n级别: L1\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
+  w(T, 'workflow/plans/2026-09-12-gb1.md', PLAN('gb1', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('星号通配有匹配 → 不报；无匹配 → 仍报引用断档',
+    r.status === 0 && !/引用断档.*fill-\*/.test(outOf(r)) && /引用断档.*ghost-\*\.mjs/.test(outOf(r)), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

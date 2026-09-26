@@ -5,10 +5,11 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（13）
+## 活跃（14）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
+| PLAN | L1 | approved | 2026-09-26 | pipeline | check-loop 自查误报批修复（审查 P1×2 + P2×2 + P3×4） | — |
 | INCIDENT | L1 | open | 2026-09-25 | pipeline | 2026-09-25 doctor owned 漂移 WARN 升级 FAIL | — |
 | INTENT | L1 | approved | 2026-09-24 | pipeline | Shipyard 引擎增量收包（抽取后 3 笔回流包源） | ☑5/5 |
 | PLAN | L1 | approved | 2026-09-24 | pipeline | Shipyard 引擎增量收包 | — |
@@ -23,17 +24,17 @@
 | PLAN | L1 | approved | 2026-09-23 | pipeline | M5：npm 发布 | — |
 | SPEC | L2 | approved | 2026-09-23 | pipeline | M4 自装 dogfooding | — |
 
-## 档案计数（78，不进表）
+## 档案计数（79，不进表）
 
 | 类型 | 模块 | 数量 |
 |---|---|---|
-| INCIDENT | pipeline | 10 |
+| INCIDENT | pipeline | 11 |
 | INTENT | pipeline | 25 |
 | INTENT | wiki | 1 |
 | PLAN | pipeline | 34 |
 | PLAN | wiki | 1 |
 | SPEC | pipeline | 7 |
 
-终态构成：done 68 · closed 6 · fixed 4；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
+终态构成：done 68 · closed 6 · fixed 5；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
 
 <!-- GENERATED:END -->

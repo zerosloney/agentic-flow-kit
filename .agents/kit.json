@@ -76,15 +76,15 @@
     },
     {
       "rel": ".agents/roles/implementer.md",
-      "sha256": "9046a24ecbf89d31761400d0406a3f35f4c0a49e0518dbfbce939581f8e3bf19"
+      "sha256": "64bf9e784c4af0f38eb4274cd6196b987ad7b97fc7c8669012816063df5708d3"
     },
     {
       "rel": ".agents/roles/independent-reviewer.md",
-      "sha256": "8f7e0d046afa78de696a3eb657083b57266d72f5212a2d404e35d3a1f0ff7297"
+      "sha256": "f2c54a6384b24ebb0e87c4540d949579f158dd6d330886909cb472b368a1fd78"
     },
     {
       "rel": ".agents/roles/ui-verifier.md",
-      "sha256": "9ee5efb7c0fbf37feceecdaeadd8d7d2bb2e20c7563ef361e5a66888470caf8e"
+      "sha256": "31877fefd4629a77c34cd90f717521d89eca62b349635298f66f66e36b230e36"
     },
     {
       "rel": ".agents/scripts/agg-delegations.cjs",
@@ -96,7 +96,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "e51bc2c0d736ad01d2801ca6fcf441d89f7a77d59aac4bd64d1545fca84d1182"
+      "sha256": "c76c55ea95c7edfdc12c9a3b6a554d77791efe29dc92fd9a955adda9656144db"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -104,7 +104,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "3911c666d47ea8be41781aad8a7dfe1fee6413d2da3880c5dfe7e81d04c2b641"
+      "sha256": "1fc46147b982babfa39a3d15fe6f50c663ba9aac8fd9b0ef0f264865d5671625"
     },
     {
       "rel": ".agents/scripts/commit-check-trigger.test.mjs",
@@ -240,7 +240,7 @@
     },
     {
       "rel": ".agents/scripts/workflow-enums.mjs",
-      "sha256": "438575de9b792c64f57a0a2b1d8bf2c575358a43ca22e5d87d2f0222b634faa3"
+      "sha256": "540ce00ec954f90a67d886dcf10f2ebb0661056187f563ba55ec34bf9c0afecd"
     },
     {
       "rel": ".agents/scripts/workflow-enums.test.mjs",
@@ -264,7 +264,7 @@
     },
     {
       "rel": ".agents/workflow-enums.txt",
-      "sha256": "08430fe4bbff47863dc531742a3f9a45fda1cbc69ce69fac391424ce90c4dcc7"
+      "sha256": "c9371716f7da7b3783c8798bbeb31bea3cd280de54c0b36927a09c540eefd736"
     },
     {
       "rel": ".agents/workflows/_TEMPLATE.md",
@@ -308,15 +308,15 @@
     },
     {
       "rel": ".zcode/agents/implementer.md",
-      "sha256": "20e4cc30e5c2474ce0addae50f94b8fe242ff3a53c62df5810912a87819363cc"
+      "sha256": "db0b3685706590b7a15cdd4f956e80d87570e25273c04cb670f057171528c466"
     },
     {
       "rel": ".zcode/agents/independent-reviewer.md",
-      "sha256": "9852a4f89bc19381ba4f38011e410ed070393583c7eb68527d707a432d14eba0"
+      "sha256": "ecf1e42568253137c4be68668871d5051b3b54f078effde905b92b6fb7244885"
     },
     {
       "rel": ".zcode/agents/ui-verifier.md",
-      "sha256": "78eacc962ce1cbc2852fa22a87deda2738ddb3b7fb620cefbfdb4891689e2521"
+      "sha256": "03232dd1b2e59dd3c6943d18a831021dfabeaea8321a6472b2218e6480454191"
     }
   ],
   "owned": [
@@ -354,7 +354,7 @@
     },
     {
       "rel": "workflow/regression-checklist.md",
-      "sha256": "8fd520a136cf76fc4705b0a5dafa744a38fca45a8ab92aec0b6bc74bfe83b76e"
+      "sha256": "80b29c9fd94556326f6b3483531ed908c620e4ed3b692a8487e8add3a725ecc4"
     },
     {
       "rel": "workflow/specs/_TEMPLATE.md",

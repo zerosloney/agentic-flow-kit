@@ -1,7 +1,7 @@
 # workflow 文档枚举单源（2026-09-25 enum-single-source）
-# 本文件会被 core.autocrlf 检出为 CRLF——读取方显式去 \r（check-loop enum_val / node parseEnums），禁止依赖行尾格式（rule-budgets.txt 同约定）。
-# 消费方：check-loop.sh / workflow-board-server.mjs / kb-search.mjs / gen-workflow-index.mjs /
-#         fill-{intent,plan,spec}.mjs（经 scripts/workflow-enums.mjs 读取器）——改枚举改这里，别改消费方。
+# 本文件会被 core.autocrlf 检出为 CRLF——读取方显式去 \r（node parseEnums），禁止依赖行尾格式（rule-budgets.txt 同约定）。
+# 消费方：check-loop.mjs / workflow-board-server.mjs / kb-search.mjs / gen-workflow-index.mjs /
+#         fill-{intent,plan,spec}.mjs（均经 scripts/workflow-enums.mjs 读取器）——改枚举改这里，别改消费方。
 # 格式：key=value value value（空格分隔；# 注释行忽略；键重复 / 值重复 / 缺键 = 消费方 fail-loud）
 # 语义：doc = intent/spec/plan 三件；incident = 事故件。
 #   all       全生命周期状态
