@@ -20,7 +20,7 @@
     },
     {
       "rel": ".agents/commands/build.md",
-      "sha256": "5b28ce819114bc01748fbba062e9f641e7d1f608529f3067bafb430eeb70fd2e"
+      "sha256": "1a09ba92e906ae3c748bdcec51d83c39202b09729f3a7ddd9f35e4054e4173e8"
     },
     {
       "rel": ".agents/commands/deploy.md",
@@ -28,7 +28,7 @@
     },
     {
       "rel": ".agents/commands/design.md",
-      "sha256": "15aeb55718283356c8c537efb9cac185fcf34058656c51f26f52141d38a1a74e"
+      "sha256": "b1dce5cab3f2bdc98a61fee51642eea618dc8cbe55b2e4afc57af60184b5254f"
     },
     {
       "rel": ".agents/commands/maintain.md",
@@ -40,7 +40,7 @@
     },
     {
       "rel": ".agents/commands/plan.md",
-      "sha256": "f9152b417e21241322a22bb37866ef0a68e72dcf12d325db6e376e04331982e2"
+      "sha256": "b7b35fee1748c30467ea697e8b3d831fa3ec4cea4d30388819d60b9ec135bc0d"
     },
     {
       "rel": ".agents/commands/review.md",
@@ -48,7 +48,7 @@
     },
     {
       "rel": ".agents/commands/test.md",
-      "sha256": "14712125ec741e45e159ccc0d156f9dbb83d3619ed0fa38b909ec00a9d87390e"
+      "sha256": "0c93a9cc5254d540bd9894391085866ec6b23de2eb90a8cac8fcb0c957c90846"
     },
     {
       "rel": ".agents/hooks/check-pairing-incremental.sh",
@@ -84,7 +84,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "4a44aa439a9fd08f250772df086829d97abfdb8db0e039ff8991ede67cf8b2bb"
+      "sha256": "e51bc2c0d736ad01d2801ca6fcf441d89f7a77d59aac4bd64d1545fca84d1182"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -92,11 +92,19 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "a28e5011e9dbba0b9dc37651a51331949a5393aee2b577236533252341cb73d4"
+      "sha256": "3911c666d47ea8be41781aad8a7dfe1fee6413d2da3880c5dfe7e81d04c2b641"
     },
     {
       "rel": ".agents/scripts/commit-check-trigger.test.mjs",
       "sha256": "5f45413b523a8e7d8d2992f513f630e6b6c73c1029e46fff812284499805176e"
+    },
+    {
+      "rel": ".agents/scripts/confirm-doc.mjs",
+      "sha256": "f6d88ed393a8ff2f4add1db3691d1eb204fbdbe0963add3a26e6fb3ffad1914e"
+    },
+    {
+      "rel": ".agents/scripts/confirm-doc.test.mjs",
+      "sha256": "f971fc1388b16d57ba21d2c7e2f9aad3b584ff399cdd1506393e3e89c740f4e1"
     },
     {
       "rel": ".agents/scripts/doctor.test.mjs",
@@ -254,7 +262,7 @@
   "owned": [
     {
       "rel": "AGENTS.md",
-      "sha256": "79fb476c92b3d1dda6449f95f8c994c8ac6297a944632b74f63128470e921b75"
+      "sha256": "d28f372ea2d6c18feb5e96124c8c5ece09dbc58d0e6ea7da8c334e206ff49b6e"
     },
     {
       "rel": "wiki/drafts-archive/README.md",

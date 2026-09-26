@@ -167,11 +167,11 @@ if (hasReal) {
     JSON.stringify({ broken: r.broken, unregistered: r.unregistered }));
 }
 
-// ---- S11 真实仓库计数：doctor ≥ 12 节 / check-loop ≥ 14 项 ----
+// ---- S11 真实仓库计数：doctor ≥ 12 节 / check-loop ≥ 15 项 ----
 if (hasReal) {
   const r = gateChecklist({ doctorSrc: realDoctor(), checkLoopSrc: realCl() });
-  check('S11 真实仓库 doctor ≥ 12 节且 check-loop ≥ 14 项（baseline）',
-    r.doctorCount >= 12 && r.checkLoopCount >= 14,
+  check('S11 真实仓库 doctor ≥ 12 节且 check-loop ≥ 15 项（baseline）',
+    r.doctorCount >= 12 && r.checkLoopCount >= 15,
     `doctor ${r.doctorCount} / check-loop ${r.checkLoopCount}`);
 }
 

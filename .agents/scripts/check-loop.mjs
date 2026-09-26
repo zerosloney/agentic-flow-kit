@@ -28,6 +28,7 @@
 //  13. 常驻面体积预算(超限=warning;判定单源 rule-budget.sh——经 sh 调用,
 //      无 sh 环境静默跳过:advisory 级且 pre-commit 侧在 git 钩子 sh 环境照常硬拦)
 //  14. 新 done 的 spec/plan 须在 git 历史里出现过 `状态: approved`(确认环节留痕,2026-09-22;恒 advisory 永不升级 hard)
+//  15. 确认指纹对账(2026-09-27 起:approved/done 须 confirm-doc.mjs 用户确认指纹+台账配对,缺=hard-block;存量豁免)
 //
 // 注：清单条目 5（状态字段+L3 复核）与 1（配对）在同一遍 intents/specs/plans 循环里实现（沿 sh 版代码结构）；
 //    条目 6 的旧委派残留/钉死模型子项在「角色契约与 Adapter」代码段实现。
@@ -493,6 +494,39 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
       const hit = gitOut(['log', '-1', '--format=%H', '-G', '^状态:[[:space:]]*approved', '--', rel]);
       if (hit !== null && hit.trim() === '') {
         warnings.push(`- [WARN 确认态缺失] ${base} 状态已 done 但 git 历史中从未出现行首「状态: approved」——确认环节未留痕(draft 直跳 done)`);
+      }
+    }
+  }
+}
+
+// --- 15. 确认指纹对账 [hard-block]（2026-09-26 confirm-gate-machine；生效 2026-09-27 起，存量豁免）---
+// AI 不得代确认：intents/specs/plans 凡 approved/done（生效日起新建）须有用户经 confirm-doc.mjs
+// 产生的 frontmatter 确认指纹 + 台账（.agents/confirmations.jsonl）配对行；台账不存在视为空台账（全拦）。
+// 台账坏行容忍跳过（审计件，jsonl 追加式）；frontmatter 存 16 位、台账存 64 位，按前 16 位配对。
+{
+  const EFFECTIVE = '2026-09-27';
+  const ledgerPath = path.join(ROOT, '.agents', 'confirmations.jsonl');
+  const ledger = [];
+  if (fs.existsSync(ledgerPath)) {
+    for (const line of linesOf(ledgerPath) || []) {
+      if (!line.trim()) continue;
+      try { ledger.push(JSON.parse(line)); } catch { /* 坏行跳过 */ }
+    }
+  }
+  for (const sub of ['intents', 'specs', 'plans']) {
+    for (const doc of docFiles(sub)) {
+      const st = fmGet(doc, '状态');
+      if (st !== 'approved' && st !== 'done') continue;
+      const base = path.basename(doc);
+      let d = fmGet(doc, '日期') || fmGet(doc, '发现');
+      if (!d) d = /^\d{4}-\d{2}-\d{2}$/.test(base.slice(0, 10)) ? base.slice(0, 10) : '';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || d < EFFECTIVE) continue;
+      const rel = path.relative(ROOT, doc).split(path.sep).join('/');
+      const fp = fmGet(doc, '确认指纹');
+      const ok = !!fp && ledger.some((e) => e && e.doc === rel && e.stage === st
+        && typeof e.fingerprint === 'string' && e.fingerprint.startsWith(fp));
+      if (!ok) {
+        blockers.push(`- [确认未对账] ${base} 状态 ${st} 无用户确认记录——AI 不得代确认，用户在终端跑 node .agents/scripts/confirm-doc.mjs ${rel} 后重试`);
       }
     }
   }

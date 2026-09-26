@@ -51,5 +51,6 @@ next: .agents/commands/build.md
 ## 确认后
 
 - spec 状态 draft → approved
+**确认落态唯一入口**（2026-09-27 起）：用户在终端跑 `node .agents/scripts/confirm-doc.mjs <path>` 键入「可以」（draft→approved / approved→done；AI 不得直接改状态代确认，check-loop 15 对账拦截）。
 - 立即 `docs(workflow)` 单独提交留痕(根 `AGENTS.md` 提交约定;check-loop 检查 14 口径)
 - 进 `next: .agents/commands/build.md`

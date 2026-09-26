@@ -55,6 +55,7 @@ export function doctor(args, pkgRoot) {
     '.agents/settings.json',
     '.agents/workflows/_TEMPLATE.md',
     '.agents/scripts/check-loop.mjs',
+    '.agents/scripts/confirm-doc.mjs',
     '.githooks/pre-commit',
     '.githooks/pre-push',
     '.githooks/commit-msg',

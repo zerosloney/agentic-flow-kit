@@ -32,6 +32,7 @@ next: .agents/commands/test.md
    - L1 默认极简两节:改动面(逐条文件+做什么) / 验证方式(一行静态门+按需 UI 实测)；仅多文件多步骤时再加任务拆解/执行顺序
    - 仍须与入口文档同名落盘
 3. 停下,输出 plan 草稿全文给用户过目,一句"可以"即确认。**逐件确认**:入口文档 / spec / plan 各自的确认点不得并作一次,plan 草稿须全文过目(不接受摘要代替)
+**确认落态唯一入口**（2026-09-27 起）：用户在终端跑 `node .agents/scripts/confirm-doc.mjs <path>` 键入「可以」（draft→approved / approved→done；AI 不得直接改状态代确认，check-loop 15 对账拦截）。
 4. 确认后 → plan 状态 draft → approved,并在 plan 内补「确认与复核」节(确认结果 + 日期)。确认环节须在文档留痕:`approved` 是确认的机器可见态,`done` 只在关单出现,禁从 `draft` 直跳 `done`;确认后立即 `docs(workflow)` 单独提交留痕(根 `AGENTS.md` 提交约定;check-loop 检查 14 口径)
 
 ### 进计划模式列改动

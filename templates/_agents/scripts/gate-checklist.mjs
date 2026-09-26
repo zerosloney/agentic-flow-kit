@@ -78,6 +78,7 @@ const PAIRS = [
   { doctor: '7', cl: '12', note: '经 §7 整体运行覆盖' },
   { doctor: '7', cl: '13', note: '经 §7 整体运行覆盖' },
   { doctor: '7', cl: '14', note: '经 §7 整体运行覆盖' },
+  { doctor: '7', cl: '15', note: '经 §7 整体运行覆盖' },
 ];
 
 // gateChecklist：按登记表对照两侧检查项（pure function；pairs 可注入供测试）

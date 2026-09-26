@@ -27,6 +27,7 @@
 - **`git commit` / `git merge` / `git push` 三处一律禁 `--no-verify`**——被拦说明产出不合规，按提示修完原路重试。
 - 项目专属门禁挂 `.agents/hooks/local-pre-commit`。
 - 提交遵循 Conventional Commits 中文（feat / fix / docs / style / refactor / perf）；L1+ 入口文档 / spec / plan 随代码同一提交；确认（approved）后立即 `docs(*)` 单独提交留痕。
+- **确认门（2026-09-27 起）**：intent/spec/plan 的 approved/done 唯一入口 = 用户终端跑 `node .agents/scripts/confirm-doc.mjs <path>` 键入「可以」（AI 不得代确认，check-loop 15 指纹+台账对账拦截）。
 
 ### 检索、看板与量化
 

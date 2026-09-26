@@ -10,6 +10,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { computeFingerprint } from './confirm-doc.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
@@ -85,6 +86,19 @@ const gitCommitAll = (root, msg) => {
   spawnSync(G, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', msg], { cwd: root });
 };
 const rmfix = (root) => fs.rmSync(root, { recursive: true, force: true });
+// writeLedger：fixture 台账辅助（检查 15 配对用；行 schema 同 confirm-doc.mjs appendLedger）
+const writeLedger = (root, entries) => {
+  fs.mkdirSync(path.join(root, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.agents', 'confirmations.jsonl'),
+    entries.map((e) => JSON.stringify(e)).join('\n') + '\n');
+};
+// mkConfirmedDoc：落一份「带真实指纹 + 台账配对」的文档（复刻 confirm-doc 落态形态）
+const mkConfirmedDoc = (root, rel, fmBody) => {
+  const noFp = `---\n${fmBody}\n---\n# DOC\n`;
+  const fp = computeFingerprint(noFp);
+  fs.writeFileSync(path.join(root, rel), `---\n${fmBody}\n确认指纹: ${fp.slice(0, 16)}\n---\n# DOC\n`);
+  return { rel: rel.replace(/\\/g, '/'), fp };
+};
 
 // ---- 场景 1:全合法闭环（intent+plan,L1,done 全勾验带证据）→ exit 0 ----
 {
@@ -474,6 +488,41 @@ const rmfix = (root) => fs.rmSync(root, { recursive: true, force: true });
   w(T, 'workflow/plans/2026-09-12-ok.md', PLAN('ok', '状态: approved\n级别: L1'));
   const r = run(T);
   check('枚举单源 CRLF 行尾 → approved/done 判定不受 \\r 影响', r.status === 0 && !outOf(r).includes('状态未确认'), outOf(r));
+  rmfix(T);
+}
+
+// ---- 场景 37/38/39/40:检查 15 确认指纹对账——无指纹拦 / 配对齐过 / 指纹不符拦 / 生效日前豁免 ----
+{
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-27-cg.md', INTENT('cg', '状态: approved\n级别: L1\n日期: 2026-09-27'));
+  w(T, 'workflow/plans/2026-09-27-cg.md', PLAN('cg', '状态: draft\n级别: L1'));
+  expectHard('检查15:生效日起新档 approved 无指纹无台账 → hard 确认未对账', T, '确认未对账');
+  rmfix(T);
+}
+{
+  const T = mkfix();
+  const i1 = mkConfirmedDoc(T, 'workflow/intents/2026-09-27-ok15.md', '状态: approved\n级别: L1\n日期: 2026-09-27');
+  const p1 = mkConfirmedDoc(T, 'workflow/plans/2026-09-27-ok15.md', '状态: approved\n级别: L1');
+  writeLedger(T, [
+    { ts: 'T', doc: i1.rel, stage: 'approved', fingerprint: i1.fp, prev: 'draft' },
+    { ts: 'T', doc: p1.rel, stage: 'approved', fingerprint: p1.fp, prev: 'draft' },
+  ]);
+  expectOk('检查15:指纹+台账配对齐 → exit 0', T);
+  rmfix(T);
+}
+{
+  const T = mkfix();
+  const i1 = mkConfirmedDoc(T, 'workflow/intents/2026-09-27-bad15.md', '状态: approved\n级别: L1\n日期: 2026-09-27');
+  w(T, 'workflow/plans/2026-09-27-bad15.md', PLAN('bad15', '状态: draft\n级别: L1'));
+  writeLedger(T, [{ ts: 'T', doc: i1.rel, stage: 'approved', fingerprint: 'e'.repeat(64), prev: 'draft' }]); // 指纹不符
+  expectHard('检查15:指纹与台账不配对 → hard 确认未对账', T, '确认未对账');
+  rmfix(T);
+}
+{
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-26-old15.md', INTENT('old15', '状态: approved\n级别: L1\n日期: 2026-09-26'));
+  w(T, 'workflow/plans/2026-09-26-old15.md', PLAN('old15', '状态: draft\n级别: L1'));
+  expectOk('检查15:生效日前存量 approved 无指纹 → 豁免 exit 0', T);
   rmfix(T);
 }
 

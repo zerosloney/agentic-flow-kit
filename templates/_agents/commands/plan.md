@@ -29,6 +29,8 @@ next: L1 → .agents/commands/build.md ；L2/L3 → .agents/commands/design.md
 3. 写不出可测试判据 = 还没想清楚 → 反问澄清,不要硬填
 4. 起草后停下,输出草稿全文给用户过目,一句"可以"即确认
 
+   **确认落态唯一入口**（2026-09-27 起）：用户在终端跑 `node .agents/scripts/confirm-doc.mjs <path>` 键入「可以」（draft→approved / approved→done；AI 不得直接改状态代确认，check-loop 15 对账拦截）。
+
 ## 技能辅助(可选,宿主级 skills)
 
 - 需求模糊、判据写不出时:用 `grilling`/`grill-me` 拷问需求,答完回填 6 节
