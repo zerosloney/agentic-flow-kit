@@ -1,5 +1,5 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-26
 模块: pipeline
@@ -38,12 +38,12 @@
 - [x] 规则 / 契约变更（确认协议本身——文档协议与门禁规则）→ 级别 L2
 
 ## 验收标准（可测试）
-- [ ] confirm-doc.mjs：非 TTY spawn 拒绝（测试直接断言 AI 调用路径不可用）；全文打印；仅「可以」放行；两跳唯一合法；指纹算法（去指纹行 + CRLF 归一）与台账追加逐项断言
-- [ ] check 15：新档 approved/done 无指纹或无台账配对 → hard-block；生效日前存量豁免；fixture ≥4 场景（无指纹 / 配对齐过 / 指纹不符拦 / 生效日前豁免）全绿
-- [ ] 登记表自举：check-loop 清单含 #15 且 gate-checklist --diff 登记完整（0 断档 / 0 未登记）
-- [ ] 口径接线：4 命令文档 + AGENTS.md 预算内（AGENTS.md ≤ 7680B 过 rule-budget 门）；doctor §2 布局含 confirm-doc.mjs 且 doctor 0 FAIL
-- [ ] bootstrap 声明：本任务确认仍按对话（AI 于用户逐件"可以"后写 approved，备注注明 bootstrap）；机制落地后下一任务起 TTY 确认生效
-- [ ] npm test 全绿 + source-sync-check 0 差异 + verify 全绿
+- [x] confirm-doc.mjs：非 TTY spawn 拒绝（测试直接断言 AI 调用路径不可用）；全文打印；仅「可以」放行；两跳唯一合法；指纹算法（去指纹行 + CRLF 归一）与台账追加逐项断言（证据：commit 8bbd173——confirm-doc.test.mjs 10/0：S9 spawn 注入「可以」仍被拒且文档未改、S10 TTY 门先于参数校验、S1-S8 指纹/跳转/落态/台账逐项）
+- [x] check 15：新档 approved/done 无指纹或无台账配对 → hard-block；生效日前存量豁免；fixture ≥4 场景（无指纹 / 配对齐过 / 指纹不符拦 / 生效日前豁免）全绿（证据：check-loop.test.mjs 41/0（37 既有 + 4 新）；真实仓库实跑 exit 0、检查 15 告警 0 条——存量豁免验证）
+- [x] 登记表自举：check-loop 清单含 #15 且 gate-checklist --diff 登记完整（0 断档 / 0 未登记）（证据：--diff「登记完整」；PAIRS +{doctor:'7',cl:'15'}；gate-checklist 套件随 npm test 全绿）
+- [x] 口径接线：4 命令文档 + AGENTS.md 预算内（AGENTS.md ≤ 7680B 过 rule-budget 门）；doctor §2 布局含 confirm-doc.mjs 且 doctor 0 FAIL（证据：plan/build/design/test 四文档「确认落态唯一入口」句各 1 处；rule-budget --staged 过门；doctor 布局 30 项 / 11 PASS / 0 FAIL）
+- [x] bootstrap 声明：本任务确认仍按对话（AI 于用户逐件"可以"后写 approved，备注注明 bootstrap）；机制落地后下一任务起 TTY 确认生效（证据：intent/spec/plan 三件备注均含 bootstrap 声明；本任务三件套文件名 2026-09-26 < 生效日 2026-09-27，实测检查 15 不受管）
+- [x] npm test 全绿 + source-sync-check 0 差异 + verify 全绿（证据：npm test 23 套件「✅ 全部套件通过」；source-sync「无差异 ✅」；verify.mjs 2/2）
 
 ## 确认与复核
 - 确认日期：2026-09-26
