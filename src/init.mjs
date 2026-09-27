@@ -112,7 +112,12 @@ async function interactive() {
       console.log(dim('  ⚠️ 没认出——序号或名称再来一次'));
     }
     console.log(`\n${cyan('── 3/3 · workflow 看板端口')}`);
-    const boardPort = (await p.ask(dim('  直接回车 = 8933'))) || '8933';
+    let boardPort = '';
+    for (;;) {
+      boardPort = (await p.ask(dim('  直接回车 = 8933'))) || '8933';
+      if (/^(0|[1-9]\d*)$/.test(String(boardPort)) && Number(boardPort) >= 1 && Number(boardPort) <= 65535) break;
+      console.log(dim('  ⚠️ 端口须为 1-65535 整数——再来一次'));
+    }
 
     console.log(`\n  ${bold(`宿主 ${hosts.join('、')}`)}${dim(' ｜ ')}${bold(`技术栈 ${stack}`)}${dim(' ｜ ')}${bold(`端口 ${boardPort}`)}`);
     const yes = await p.ask(dim('  确认安装到当前目录？(y/n，回车取消)'));
@@ -182,9 +187,12 @@ export async function init(args, pkgRoot) {
     console.log(`  跳过（owned 项目自持，--force 不覆盖）：${rel}——如需重置请手动删除后重跑`);
   }
 
-  // 1.5) AGENTS.md 特例：已存在且无骨架标记 → 文末追加补齐（原内容保留）；带标记 → 保守跳过
+  // 1.5) AGENTS.md 特例：已存在且无骨架标记 → 文末追加补齐（原内容保留）；带标记 → 保守跳过。
+  //  门槛含 protectedSkipped（p2-batch1 复核 P1-2）：--force 下 owned 保护跳过也属「已存在不覆盖」，
+  //  无骨架时同样要追加（追加本就是非覆盖语义，与保护不冲突）——否则自带 AGENTS.md 的装户经
+  //  --force 重装永远拿不到工作流骨架且无感知
   let agentsMergedSha = null;
-  if (t.skipped.includes('AGENTS.md')) {
+  if (t.skipped.includes('AGENTS.md') || (t.protectedSkipped || []).includes('AGENTS.md')) {
     const agentsAbs = path.join(target, 'AGENTS.md');
     const existing = fs.readFileSync(agentsAbs, 'utf8');
     if (hasAgentsSkeleton(existing)) {
@@ -289,6 +297,13 @@ export async function init(args, pkgRoot) {
     .map((f) => (GEN_TARGETS.has(f.rel) && fs.existsSync(path.join(target, f.rel))
       ? { ...f, sha256: shaText(path.join(target, f.rel)) }
       : f));
+  // protectedSkipped 件按盘面 LF 归一 sha 补记（p2-batch1 复核 P2-3）：--force 重装受保护 owned
+  // 不补记会让 doctor §6.6 的漂移可见性静默消失（台账缺口对体检不可见）
+  for (const rel of t.protectedSkipped || []) {
+    if (!isOwned(rel) || !fs.existsSync(path.join(target, rel))) continue;
+    if (owned.some((f) => f.rel === rel)) continue;
+    owned.push({ rel, sha256: shaText(path.join(target, rel)) });
+  }
   if (agentsMergedSha) owned.push({ rel: 'AGENTS.md', sha256: agentsMergedSha });
   const pkg = JSON.parse(fs.readFileSync(path.join(pkgRoot, 'package.json'), 'utf8'));
   fs.mkdirSync(path.dirname(kitPath), { recursive: true });

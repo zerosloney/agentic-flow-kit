@@ -1,26 +1,50 @@
 #!/usr/bin/env node
-// check-pack-eol.mjs — npm publish 前的 EOL 断言（2026-09-27 p2-batch1 P2-2）
-// 背景：npm pack 从【工作树】读文件、不做 EOL 归一——autocrlf=true 工作树（Windows 常态）检出为 CRLF，
-// 从此工作树发布会把 CRLF 钩子/脚本投递给装户（Linux dash 下 fail-closed 拦死首次提交；init 审查实测）。
-// 断言口径：以【git 索引字节】为准（git cat-file，与 rule-budgets「索引字节」同族）——工作树 CRLF 是
-// autocrlf 检出态、入库即归 LF，不算失败；索引字节里含 CR 才是真问题（eol=lf 属性漏配或编辑器直写索引）。
-// 扫描面：templates/ 下 git tracked 的文本件（.sh/.mjs/.js/.cjs/.json/.md/.txt/.html/.yml/.yaml + 无扩展名）。
+// check-pack-eol.mjs — npm publish 前的 EOL 卫生（2026-09-27 p2-batch1 P2-2；同日复核 P1-1 二次收窄）
+// 背景：npm pack 从【工作树】读文件且不做 EOL 归一——autocrlf=true 工作树检出为 CRLF，pack 会把
+// CRLF 钩子/脚本投递给装户（Linux dash 下 fail-closed；init 审查实测）。git 索引侧由 .gitattributes
+// eol=lf 保证入库即 LF（git archive 实测 0 CR），缺口只在「工作树检出态字节」。
+// 做法：把 pack 面（bin/src/templates/modules）文本件的 CRLF 就地归一为 LF（与索引字节一致——
+// 归一后 git status 本来就干净，clean filter 对 LF 入库无差异；编辑器直写污染则会在 status 可见），
+// 然后断言零 CR。fail-closed：任何非文本面/大文件不动，断言不过即 pack 失败。
 // 用法：node scripts/check-pack-eol.mjs（prepack 自动跑；也可手动）
-import { execSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
+const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+const PACK_DIRS = ['bin', 'src', 'templates', 'modules'];
 const TEXT_EXTS = new Set(['.sh', '.mjs', '.js', '.cjs', '.json', '.md', '.txt', '.html', '.yml', '.yaml']);
-const files = execSync('git -c core.quotepath=off ls-files -- templates/', { encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 })
-  .split('\n').map((s) => s.trim()).filter(Boolean)
-  .filter((rel) => TEXT_EXTS.has(path.extname(rel)) || !path.extname(rel));
 
-const bad = [];
-for (const rel of files) {
-  const blob = execSync(`git cat-file blob "HEAD:${rel}"`, { maxBuffer: 8 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] });
-  if (blob.includes(13)) bad.push(rel);
+let scanned = 0;
+let normalized = 0;
+const stillBad = [];
+for (const dir of PACK_DIRS) {
+  const abs = path.join(ROOT, dir);
+  if (!fs.existsSync(abs)) continue;
+  (function walk(d) {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) {
+        if (e.name === 'cache') continue; // 运行时缓存（prepack 已清；双保险）
+        walk(p);
+        continue;
+      }
+      const st = fs.statSync(p);
+      if (st.size >= 512 * 1024) continue;
+      const buf = fs.readFileSync(p);
+      if (buf.includes(0)) continue; // 二进制不在文本断言面
+      if (!(TEXT_EXTS.has(path.extname(p)) || !path.extname(p))) continue;
+      scanned++;
+      if (buf.includes(13)) {
+        fs.writeFileSync(p, buf.toString('utf8').replace(/\r\n/g, '\n'), 'utf8'); // 就地归一（与索引字节一致）
+        normalized++;
+        if (fs.readFileSync(p).includes(13)) stillBad.push(path.relative(ROOT, p)); // 理论不可达，双保险
+      }
+    }
+  })(abs);
 }
-if (bad.length) {
-  console.error(`❌ 发布断言失败：以下 templates/ 文件在 git 索引中含 CR 字节（eol=lf 属性漏配或非检出态污染——npm pack 投递工作树字节，装户将收到 CRLF）：\n  ${bad.join('\n  ')}\n修复：核对 .gitattributes 规则后 git add --renormalize templates/ 并提交`);
+if (stillBad.length) {
+  console.error(`❌ 发布断言失败：归一后仍含 CR（非 CRLF 形态的孤立 CR，需人工核查）：\n  ${stillBad.join('\n  ')}`);
   process.exit(1);
 }
-console.log(`✅ 发布 EOL 断言通过：templates/ ${files.length} 份索引文本件零 CR`);
+console.log(`✅ 发布 EOL 卫生完成：pack 面 ${scanned} 份文本件零 CR（工作树归一 ${normalized} 份——检出态字节对齐索引，装户收到的 tarball 无 CRLF）`);
