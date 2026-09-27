@@ -225,14 +225,24 @@ export function parseLoopHardBlocks(stderrText) {
 }
 
 function loopHardBlocks() {
-  try {
-    const r = spawnSync(process.execPath, [path.join(ROOT, '.agents', 'scripts', 'check-loop.mjs')], { cwd: ROOT, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
-    if (r.error) return { blocks: null, note: `check-loop 不可执行：${r.error.message}` };
-    return { blocks: parseLoopHardBlocks(r.stderr || ''), note: '' };
-  } catch (e) {
-    return { blocks: null, note: e.message };
-  }
+  // TTL 缓存（复核 P2-2 rider）：check-loop 独跑实测 ~10.5s 且 spawnSync 阻塞事件循环——搜索击键/SSE
+  // 连发场景下每请求全跑不可用。60s 内复用上次结果（loopHardBlocks 是预警层非门禁，陈旧 60s 可接受；
+  // 前端 loopNote 均如实展示）。进程级缓存，无失效盲区风险（比照 kb 两元组口径弱化声明：预警层容忍）。
+  const NOW = Date.now();
+  if (loopCache.at && NOW - loopCache.at < 60_000) return loopCache.v;
+  const v = (() => {
+    try {
+      const r = spawnSync(process.execPath, [path.join(ROOT, '.agents', 'scripts', 'check-loop.mjs')], { cwd: ROOT, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
+      if (r.error) return { blocks: null, note: `check-loop 不可执行：${r.error.message}` };
+      return { blocks: parseLoopHardBlocks(r.stderr || ''), note: '' };
+    } catch (e) {
+      return { blocks: null, note: e.message };
+    }
+  })();
+  loopCache.at = NOW; loopCache.v = v;
+  return v;
 }
+const loopCache = { at: 0, v: null };
 
 const server = http.createServer(async (req, res) => {
   try {
@@ -271,8 +281,8 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': MIME[path.extname(abs)] || 'application/octet-stream' });
     fs.createReadStream(abs).pipe(res);
   } catch (e) {
-    if (e && (e.code === 'ERR_INVALID_URL' || e instanceof TypeError)) {
-      return sendJson(res, 400, { error: `请求行/URL 非法：${e.message}` }); // 畸形请求不杀进程（P1-3）
+    if (e && e.code === 'ERR_INVALID_URL') {
+      return sendJson(res, 400, { error: `请求行/URL 非法：${e.message}` }); // 畸形请求不杀进程（P1-3）；只认 URL 错误码——其余 TypeError 是服务端缺陷，如实 500（复核 P2-1）
     }
     sendJson(res, 500, { error: e.message });
   }

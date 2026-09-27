@@ -4,7 +4,7 @@
  * 输出各月指标（一次通过率 / 平均返工次数 / 主兜底占比）、并发扩容门判定、可粘贴的月度快照行。
  * 结果取值：一次通过 | 返工×N | 主兜底 | 返工待修（未闭环，不计入率）。
  * 用法：node .agents/scripts/agg-delegations.cjs [--month=YYYY-MM]（默认输出全部月份 + 全量累计）
- * 门槛定义见 workflow/delegations.md §并发扩容门槛，两处须同步改。
+ * 门槛定义见 workflow/delegations.md §并发扩容门槛（doc 为权威，脚本向文档对齐——2026-09-27 board-kb-p1）。
  */
 'use strict';
 const fs = require('fs');

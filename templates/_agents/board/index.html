@@ -453,7 +453,13 @@ sse.onerror = () => { $('#sse').classList.remove('on'); $('#sse span:last-child'
 setInterval(() => refreshBoard(), 60000);
 
 // 搜索过滤：本地过滤标题/slug/文件，SSE 刷新时保持关键字
-$('#q').addEventListener('input', (e) => { Q = e.target.value; refreshBoard(); });
+// 击键去抖 400ms（复核 P2-2 rider）：/api/board 服务端有 loop TTL 缓存，去抖进一步避免连发请求排队
+let qTimer = null;
+$('#q').addEventListener('input', (e) => {
+  Q = e.target.value;
+  clearTimeout(qTimer);
+  qTimer = setTimeout(refreshBoard, 400);
+});
 
 // 首次入场：列错峰上浮一次（.boot 稍后摘除，SSE / 过滤触发的重渲染不再重播）
 $('#board').classList.add('boot');

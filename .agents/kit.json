@@ -12,7 +12,7 @@
   "managed": [
     {
       "rel": ".agents/board/index.html",
-      "sha256": "aafe9cbbe67edb790f06eebe8a4d88a2568aae5b9df642753d378df081c91600"
+      "sha256": "d4006d4a0745bf4d13205eea4fcd96887f8a58a301ed05e008e5c5e2d9f750e9"
     },
     {
       "rel": ".agents/board/marked.min.js",
@@ -88,7 +88,7 @@
     },
     {
       "rel": ".agents/scripts/agg-delegations.cjs",
-      "sha256": "ddbbcf14299f3c2230313d7eddb994df29c67ca336f247ec29cbf9b4de7193c1"
+      "sha256": "13ca19219450218187b51356df3f28d1bc99c7637ed6ba404a230f9f5b6e9f48"
     },
     {
       "rel": ".agents/scripts/agg-delegations.test.mjs",
@@ -236,7 +236,7 @@
     },
     {
       "rel": ".agents/scripts/workflow-board-server.mjs",
-      "sha256": "bd3d9d250e95cf2fe292a288face05fb04975d1ae79fa726e74ed05ebc9004de"
+      "sha256": "66e4c9cbe886b0785129f6e3fbe7a38279067142bc515849ea83ccdf632f380d"
     },
     {
       "rel": ".agents/scripts/workflow-board-server.test.mjs",
