@@ -12,7 +12,7 @@
 
 audit-gate-hardening 关单后用户追问「还有哪些能力没覆盖审查」，产出四层缺口清单；用户拍板按优先级动手收前两项 + 一处 shell 实据：
 
-1. **incidents 无确认门**：confirm-doc 路径正则只认 intents/specs/plans，incident 的 open→fixed→closed 全程无机器放行、无指纹、无台账——AI 可直接改状态关掉修复单；而修复类流量占闭环近半（incidents 11 份 vs intents 27 份），恰是确认门覆盖最薄弱路径。
+1. **incidents 无确认门**：confirm-doc 路径正则只认 intents/specs/plans，incident 的 open→fixed→closed 全程无机器放行、无指纹、无台账——AI 可直接改状态关掉修复单；而修复类流量占闭环近半（incidents 13 份 vs intents 28 份，含本日新增——复核 P2-3 更正立项时 11/27 旧计数），恰是确认门覆盖最薄弱路径。
 2. **CI 无服务端兜底**：ci.yml 只跑 npm test（fixture 测试），不跑真实仓库的 check-loop / doctor / source-sync-check / workflows-check；pre-push 头部自认「本钩子是唯一机器门，无服务端兜底」——`--no-verify` 或未配 hooksPath 的克隆推 main，全部 hard-block 失效。
 3. **check-pairing 漏 quotepath**：`check-pairing-incremental.sh` 的 `git diff --cached --name-only` 管道没加 `-c core.quotepath=off`（check-wiki-ledger 加了并写明原因）——非 ASCII 文件名被 git 引号转义后静默跳过配对门，规则 9（英文名）是 advisory 拦不住。
 

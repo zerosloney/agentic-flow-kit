@@ -134,13 +134,15 @@ export function sync(args, pkgRoot) {
     }
 
     // owned 台账按盘面自愈：owned 归项目所有，哈希只是记账不是约束——手改后无须手工刷 kit.json
-    // （Shipyard 回流策略，2026-09-24：曾在消费仓被迫手工刷新 owned 哈希，根因收敛到此处）
+    // （Shipyard 回流策略，2026-09-24：曾在消费仓被迫手工刷新 owned 哈希，根因收敛到此处）。
+    // sha 按 LF 归一记（与 doctor checkOwnedDrift 同口径，2026-09-27 gate-coverage：跨 checkout 字节稳定）
+    const ownedSha = (p) => sha256(Buffer.from(fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n'), 'utf8'));
     let ownedRefreshed = 0;
     if (Array.isArray(kit.owned)) {
       kit.owned = kit.owned.map((f) => {
         const p = path.join(target, f.rel);
         if (!fs.existsSync(p)) return f;
-        const disk = sha256(fs.readFileSync(p));
+        const disk = ownedSha(p);
         if (disk === f.sha256) return f;
         ownedRefreshed++;
         return { ...f, sha256: disk };

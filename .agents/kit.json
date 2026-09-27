@@ -96,7 +96,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "47852bd506c4a8d3e9eeb22305d5f5748e948f3d28225a60000b19d74f876452"
+      "sha256": "4d8f6d02da1304e92bbfd8f3c8642c988a5b51335c4e6a622303fe81387dc4d3"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -112,11 +112,11 @@
     },
     {
       "rel": ".agents/scripts/confirm-doc.mjs",
-      "sha256": "b1710a1615e0c6ed2be290dd0e10cd2cc5eb7a35726f110575fa2fb6b50e2bf5"
+      "sha256": "41ee087cc56555ccad2fa2d45568472e79a7c06c772a304bda693b6a3b2d6ba0"
     },
     {
       "rel": ".agents/scripts/confirm-doc.test.mjs",
-      "sha256": "dd933da2ce38fbc96820426bbda0705d1fd85e77146d4ffab29cbe61a62e254d"
+      "sha256": "30cf322c4b849975feefbf9c5e114839ba9275f254591791d8dbf723ed1d4b4e"
     },
     {
       "rel": ".agents/scripts/doctor.test.mjs",
@@ -322,67 +322,67 @@
   "owned": [
     {
       "rel": "AGENTS.md",
-      "sha256": "eda04a5966b4639746672e19bb8bde29b65e4835820f2e244eae6328ef05b19c"
+      "sha256": "9554ae6d4c9822383dd236f0c37485cf324f2fc0e448351fc13cfc73488fb2b8"
     },
     {
       "rel": "wiki/drafts-archive/README.md",
-      "sha256": "2af6e4bc2e079c07a8114f0f849ae15f0989eaebaf574d67a00e93d2378b2c4c"
+      "sha256": "623fe32d78312453ec593d9f8fcf677344a4f9f0c8ae8efd31303efed2d4c350"
     },
     {
       "rel": "wiki/INDEX.md",
-      "sha256": "2321b403f3fd69c6ba85782d30fb8f1a1b360ba8dffaeb8ce421affbaf7a0718"
+      "sha256": "9078d815a8a7eb07770939dc699e4175d6f6861fd688cac2db48e3abfe917e64"
     },
     {
       "rel": "wiki/知识沉淀总览.html",
-      "sha256": "2da1a64271cbef825eee913e62f8e6508472e7c861dd1d8e6b36a21fc68c9765"
+      "sha256": "246c67b476ff1017a209112cec70cafacfef9dfde5fb96b2a028c6364f7dcd59"
     },
     {
       "rel": "workflow/incidents/_TEMPLATE.md",
-      "sha256": "a85d11aaab86cf5d94320d6232977b599c530bc833bc188441012a55a09adbee"
+      "sha256": "1251f74149c5abec042f1e999df05d072f23863ab191778dd6646ed372d78c97"
     },
     {
       "rel": "workflow/intents/_TEMPLATE.md",
-      "sha256": "638743b09d57b9d23263eaefe1c5715b275bcf0bc0e117f1226682593c9b258a"
+      "sha256": "193ab0b2bf5c3ea9112dec1530bcef23ff995d7d6060eb5699a9fe643a68236c"
     },
     {
       "rel": "workflow/papercuts.md",
-      "sha256": "af62dc189b07061217068b0b9b6fd97b1ec223ad55ab2f1a1320df363cbeaa46"
+      "sha256": "e45b150b7e730f4b941bddbc88c2a8ae3ddd12d8c5834a5cf30031d997de44b5"
     },
     {
       "rel": "workflow/plans/_TEMPLATE.md",
-      "sha256": "2d74abe9fbb68790e64dbc72be96b4117a7ed4710b27a5298d907b12d44555ba"
+      "sha256": "ffe9824567c40d222aab9e3c9f122559bef90c4eee61ab8f88240fce5624fd62"
     },
     {
       "rel": "workflow/regression-checklist.md",
-      "sha256": "80b29c9fd94556326f6b3483531ed908c620e4ed3b692a8487e8add3a725ecc4"
+      "sha256": "f9950262d6329439107029dafe2c38cc3805bd4b1234760b657d712dbcd8115d"
     },
     {
       "rel": "workflow/specs/_TEMPLATE.md",
-      "sha256": "03470a81c07239a343a100fd5415a1dad24a7a735c8d2b5bd9003ee4d452896a"
+      "sha256": "3d0e06303b174813496fa9abdf04e143eba716abce507e0d8b906d2b8acfa931"
     },
     {
       "rel": ".agents/hooks/local-pre-commit",
-      "sha256": "04b81ad6bbc80aca4308eab1ad429cc61228c21b758b6232ee369c6f9d0864b2"
+      "sha256": "ca855027bd8d33535f3fa18b48a2612e4a0c76ea8633e62d73a290ff392f0537"
     },
     {
       "rel": ".agents/notes/runtime-env.md",
-      "sha256": "ad08441ed426f504f87bc52cd81660291d9520e413c29463e81450b8dc3d59f7"
+      "sha256": "5f02aa1dbe39c56d3742cab930ddeb2c49778da2c6875af7a89119d143daccc4"
     },
     {
       "rel": ".agents/rule-budgets.txt",
-      "sha256": "7140ae97c5fea24a72f98bc4c15e96341496f16c2df77e753e3213e32bff348d"
+      "sha256": "453bfb91a9304dd056b43ece92d6fc6d3d780f2e43b5ebc1e8fd11f37de2dcad"
     },
     {
       "rel": ".agents/workflow-modules.txt",
-      "sha256": "bebbf71fb29571c258d973fc1924f72cb2a3703faa94f9dd12b34804bee37222"
+      "sha256": "d03593598f6b0495ebc650019c474da0d6538da06c6f58ccc00bd5a9cdc760f1"
     },
     {
       "rel": ".agents/settings.json",
-      "sha256": "343c5a9b11ef53f6fc6e855a16a3ab5c3fd567fc69620aecaa8dd11ea1b2a4a7"
+      "sha256": "d1be55d7f5e5f349a8bf9806209aa9e14baa0e14d901b166012e90737d404c2a"
     },
     {
       "rel": ".agents/hooks/commit-check.config.json",
-      "sha256": "b36912bc28cc188f0171d09e90f8530a62fd361a52d917a286d6d2c0b980b926"
+      "sha256": "c52fca656886381656865423297a8a233e3965ec98e7580cc98ec400b079fc36"
     }
   ]
 }

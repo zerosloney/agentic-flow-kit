@@ -159,5 +159,25 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- S15 incidents 委托代录（2026-09-27 gate-coverage）：open→fixed 落态 + 台账 stage=fixed ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-inc-'));
+  const docP = path.join(root, 'workflow', 'incidents');
+  fs.mkdirSync(docP, { recursive: true });
+  fs.writeFileSync(path.join(docP, '2026-09-28-i.md'), '---\n状态: open\n级别: L1\n---\n# I\n');
+  const before = fs.readFileSync(path.join(docP, '2026-09-28-i.md'), 'utf8');
+  const fpExpect = computeFingerprint(before);
+  const r = spawnSync(process.execPath, [CLI, 'workflow/incidents/2026-09-28-i.md', '--delegated', '修好了'], { cwd: root, encoding: 'utf8' });
+  const after = fs.readFileSync(path.join(docP, '2026-09-28-i.md'), 'utf8');
+  const led = fs.readFileSync(path.join(root, '.agents', 'confirmations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  const j = led[led.length - 1];
+  check('S15 incidents 委托代录：exit 0 + open→fixed + 指纹行 + 台账 stage=fixed / prev=open',
+    r.status === 0 && after.includes('状态: fixed') && after.includes(`确认指纹: ${fpExpect.slice(0, 16)}`)
+      && j.source === 'chat-delegated' && j.quote === '修好了' && j.stage === 'fixed' && j.prev === 'open'
+      && j.fingerprint === fpExpect,
+    JSON.stringify({ status: r.status, stderr: r.stderr, ledger: led }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

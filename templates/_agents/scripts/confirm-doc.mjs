@@ -107,7 +107,7 @@ if (isMain) {
   let confirmed = 0;
   for (const doc of docs) {
     if (!DOC_RE.test(doc)) {
-      console.error(`跳过 ${doc}：路径须匹配 workflow/{intents,specs,plans}/<文件>.md`);
+      console.error(`跳过 ${doc}：路径须匹配 workflow/{intents,specs,plans,incidents}/<文件>.md`);
       continue;
     }
     const abs = path.join(root, doc);
@@ -125,7 +125,7 @@ if (isMain) {
     }
     const target = nextStage(st);
     if (!target) {
-      console.error(`跳过 ${doc}：当前状态「${st || '缺失'}」无合法前向跳转（仅 draft→approved / approved→done）`);
+      console.error(`跳过 ${doc}：当前状态「${st || '缺失'}」无合法前向跳转（docs: draft→approved / approved→done；incidents: open→fixed / fixed→closed）`);
       continue;
     }
     const fp = computeFingerprint(text);

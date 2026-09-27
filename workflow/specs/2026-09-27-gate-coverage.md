@@ -20,7 +20,7 @@
 **check-loop.mjs 检查 15**（编号不动，覆盖面扩到 incidents）：
 - 配对判定：incident `状态: fixed` 或 `状态: closed`（生效日起，判据同现有日期门）须有确认指纹 + 台账 stage=fixed/closed 配对行，缺 → hard「确认未对账」；`open` 态不受影响（起草态，maintain.md 创建即对话确认的既有口径）；
 - 内容绑定：`closed` 与 `done` 同口径（台账行 ts ≥ 2026-09-28 锚 + prev 复原保分隔符重算比对；缺 prev 降级 warning）；`fixed` 不绑定（fixed→closed 之间要回填复盘三件套与修复 commit SHA，属合法编辑期）；
-- 生效日：docs 侧维持 2026-09-27（配对）/ ts 锚 2026-09-28（绑定）不变；incidents 侧配对与绑定均自 2026-09-28 起（存量 11 份无台账全豁免，不回填）。
+- 生效日：docs 侧维持 2026-09-27（配对）/ ts 锚 2026-09-28（绑定）不变；incidents 侧配对与绑定均自 2026-09-28 起（存量 13 份无台账全豁免，不回填——复核 P2-3 更正立项时 11 份旧计数）。
 
 **文案同步**：AGENTS.md 确认门条款、maintain.md「确认后」节（incident 状态 → fixed / closed 两跳口径）、test.md 关单 bullet（修复分支补确认门一句）。
 
@@ -68,7 +68,7 @@ test 步骤后新增「机器门（服务端兜底）」步骤，四道全跑、
 |---|---|---|
 | incident 关单多一道确认摩擦（fixed + closed 两次跑 confirm-doc） | 中 | 与 docs 双跳对称；delegated 形态免 TTY；生效日 2026-09-28 起存量零影响 |
 | CI 四道门在装户 fork 上误红（无 templates/ 时 source-sync-check fail） | 低 | ci.yml 为本仓自有件不分发；source-sync-check 对缺包源本就 fail-fast 属预期（本仓恒有包源） |
-| 15 扩面后存量 incidents 误拦 | 低 | 生效日 2026-09-28 门住：存量 11 份（无台账）全豁免；本单自身 incident 若今日关单（ts 09-27）亦豁免 |
+| 15 扩面后存量 incidents 误拦 | 低 | 生效日 2026-09-28 门住：存量 13 份（无台账）全豁免（P2-3 更正）；本单自身 incident 若今日关单（ts 09-27）亦豁免 |
 | quotepath=off 对含空格路径的行为变化 | 低 | `-z` 未用、word splitting 语义不变（空格路径本就另有问题且规则 9 禁非英文名）；与 check-wiki-ledger 实测同款 |
 
 ## 确认与复核

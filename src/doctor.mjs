@@ -281,7 +281,9 @@ export function checkOwnedDrift(target) {
   for (const f of owned) {
     const p = path.join(target, f.rel);
     if (!fs.existsSync(p)) { gone.push(f.rel); continue; }
-    const h = createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+    // sha 按 LF 归一口径（同 rule-budgets「索引/HEAD 字节」约定）：盘面 CRLF（autocrlf 检出）与克隆检出 LF
+    // 须同值，否则跨环境必漂移（CI 克隆 §6.6 必红——2026-09-27 gate-coverage 复核 P1-1 根因；owned 均为文本件）
+    const h = createHash('sha256').update(fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n'), 'utf8').digest('hex');
     if (h !== f.sha256) drift++;
   }
   return { drift, gone, total: owned.length, skipped: false };

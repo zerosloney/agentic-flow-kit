@@ -32,7 +32,7 @@
 //  14. 新 done 的 spec/plan 须在 git 历史里出现过 `状态: approved`(确认环节留痕,2026-09-22;恒 advisory 永不升级 hard)
 //  15. 确认指纹对账(2026-09-27 起:approved/done 须 confirm-doc.mjs 确认指纹+台账配对,缺=hard-block;存量豁免;
 //      两形态——TTY 亲手 / --delegated 对话委托代录,台账 source 如实区分,配对判据与 source 无关)
-//      + incidents 覆盖(2026-09-27 gate-coverage:fixed/closed 须配对,自 2026-09-28 起,存量 11 份全豁免;
+//      + incidents 覆盖(2026-09-27 gate-coverage:fixed/closed 须配对,自 2026-09-28 起,存量 13 份全豁免;
 //      open=起草态不加门;不支持 open→closed 单跳——confirm-doc 状态机强制经 fixed)
 //      + done/closed 内容绑定(2026-09-27 audit-gate-hardening;生效锚=台账行 ts≥2026-09-28——同日 p2-batch
 //      自文档自报日期改锚:旧日期文档晚关单也绑定,3 份失配存量 ts 均 09-27 天然豁免):
@@ -596,11 +596,11 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
         const doneEntries = ledger.filter((e) => e && e.doc === rel && e.stage === st && typeof e.fingerprint === 'string');
         const entry = doneEntries[doneEntries.length - 1]; // append-only 台账，末次生效（重确认场景）
         if (!entry || !entry.prev) {
-          warnings.push(`- [WARN 绑定降级] ${base} 台账 stage=done 行缺 prev 字段（schema 演进前行），内容绑定跳过——仅配对判定`);
+          warnings.push(`- [WARN 绑定降级] ${base} 台账 stage=${st} 行缺 prev 字段（schema 演进前行），内容绑定跳过——仅配对判定`);
         } else if (!(typeof entry.ts === 'string' && entry.ts >= '2026-09-28')) {
           // 该 done 确认发生在生效锚前（旧关单顺序时代）——豁免内容绑定，配对判定照常
         } else if (bindingSha256(linesOf(doc) || [], entry.prev) !== entry.fingerprint) {
-          blockers.push(`- [确认内容漂移] ${base} done 后内容与确认台账不符——已关单文档不得直接改（关单编辑先于 done 确认）；确需修订走 superseded 或新 intent 引用`);
+          blockers.push(`- [确认内容漂移] ${base} ${st} 后内容与确认台账不符——已关单文档不得直接改（关单编辑先于关单确认）；确需修订走 superseded 或新 intent 引用`);
         }
       }
     }
