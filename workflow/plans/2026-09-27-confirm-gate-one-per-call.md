@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
-确认指纹: 57e88e1773f17e16
+确认指纹: e375e302a137abe5
 ---
 # PLAN — confirm-gate-one-per-call
 
