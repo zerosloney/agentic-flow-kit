@@ -40,6 +40,8 @@
 //      按 prev 复原跳转前文本重算 sha256 与台账全量比对,不符=hard「确认内容漂移」;状态行保分隔符换值
 //      (非规范格式不误伤);台账行缺 prev 降级 warning;关单编辑顺序新约定:勾验/回填先于关单确认,
 //      confirm-doc 是最后一次写入)
+//      + 并录批次审计子检查(2026-09-27 confirm-gate-one-per-call:台账同 quote 多份 delegated 聚组
+//      可见=warning「确认并录」——存量并录如实可数,confirm-doc 现已拒绝多份并录)
 //
 // 注：清单条目 5（状态字段+L3 复核）与 1（配对）在同一遍 intents/specs/plans 循环里实现（沿 sh 版代码结构）；
 //    条目 6 的旧委派残留/钉死模型子项在「角色契约与 Adapter」代码段实现。
@@ -608,6 +610,24 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
         }
       }
     }
+  }
+  // 并录批次审计（2026-09-27 confirm-gate-one-per-call，15 原位子检查）：delegated 合法跳转行按
+  // 「quote 相同 + ts 差 < 2s」聚组，组 > 1 → warning——多文档并录曾系统性塌掉 build.md「逐件确认」
+  // 三道门（confirm-doc 现已拒绝多份 delegated，本检查让存量并录在台账上可数可见，属审计记录非新违规）。
+  // 不按日期门豁免：存量如实可见正是目的。revert-draft 注记行（stage 非合法跳转）天然被过滤。
+  {
+    const VALID_STAGES = new Set(['approved', 'done', 'fixed', 'closed', 'superseded', 'cancelled']);
+    const delegRows = ledger.filter((e) => e && e.source === 'chat-delegated' && VALID_STAGES.has(e.stage)
+      && typeof e.ts === 'string' && typeof e.quote === 'string')
+      .sort((a, b) => (a.ts < b.ts ? -1 : 1));
+    // 线性扫描聚组（同 quote 且相邻行 ts 差 < 2s 为一批；组间自然分割——Map 按 quote 索引会互相覆盖）
+    let g = [];
+    const flush = () => { if (g.length > 1) { const docs = g.map((r) => r.doc.split('/').pop()).join('、'); warnings.push(`- [WARN 确认并录] 一次 delegated 代录 ${g.length} 份（quote「${g[0].quote.slice(0, 20)}${g[0].quote.length > 20 ? '…' : ''}」）：${docs}——build.md 逐件确认口径（confirm-doc 现已拒绝多份并录；本条为存量审计可见性，不阻断）`); } g = []; };
+    for (const row of delegRows) {
+      if (g.length && (row.quote !== g[0].quote || Math.abs(new Date(row.ts) - new Date(g[g.length - 1].ts)) >= 2000)) flush();
+      g.push(row);
+    }
+    flush();
   }
 }
 

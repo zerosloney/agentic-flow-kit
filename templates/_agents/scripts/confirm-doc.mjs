@@ -19,7 +19,8 @@
 // 用法：node .agents/scripts/confirm-doc.mjs <workflow/intents|x.md> [<doc2>...] [--root <仓库根>]
 //       node .agents/scripts/confirm-doc.mjs <doc...> --delegated "<用户对话原话>"（委托代录）
 //       node .agents/scripts/confirm-doc.mjs <doc...> --to superseded|cancelled（放弃态：取代/取消，留指纹与台账）
-//   多文档一次传入：TTY 模式逐份打印全文过目、逐份键入「可以」、逐份落态记账；委托模式逐份直接落态。
+//   多文档一次传入：仅 TTY 模式（用户亲手逐份过目键入——天然逐件）；--delegated 一次仅一份
+//   （2026-09-27 confirm-gate-one-per-call：多份并录曾系统性塌掉 build.md「逐件确认」三道门）。
 // 测试：node templates/_agents/scripts/confirm-doc.test.mjs（纯函数逐项 + 非 TTY spawn 拒绝断言 + 委托场景）
 import fs from 'node:fs';
 import path from 'node:path';
@@ -125,6 +126,13 @@ if (isMain) {
   if (delegated) {
     console.error('⚠️  委托代录模式：确认语义 = 用户已在对话中明确放行；台账行将如实记 source=chat-delegated 与原话，不伪装 TTY 确认');
     console.error(`   用户原话：「${delegatedQuote}」`);
+    // 单文档强制（2026-09-27 confirm-gate-one-per-call）：delegated 没有TTY「逐份过目」的天然机制——
+    // 多文档并录曾系统性塌掉三道阶段门（build.md「逐件确认不得并作一次」）。逐件调用：一次一份、
+    // 每次带当次用户原话。TTY 形态不受限（用户亲手逐份过目键入，天然逐件）。
+    if (docs.length > 1) {
+      console.error(`❌ --delegated 一次仅接受一份文档（现 ${docs.length} 份：${docs.join(' ')}）——逐件确认口径（build.md）：每份一次调用、每次带当次用户原话`);
+      process.exit(1);
+    }
   }
   const rl = delegated ? null : readline.createInterface({ input: process.stdin, output: process.stdout });
   const ask = (q) => new Promise((res) => rl.question(q, res));

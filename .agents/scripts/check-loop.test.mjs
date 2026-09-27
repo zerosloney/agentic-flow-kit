@@ -807,5 +807,67 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   }
 }
 
+// ---- 场景 64-66:检查 15 并录批次审计（2026-09-27 confirm-gate-one-per-call）----
+//     delegated 合法跳转行按「quote 相同 + 相邻 ts 差 < 2s」聚组，组 > 1 → warning「确认并录」（存量可见性，不阻断）
+{
+  const mk2LedgerDocs = (T) => {
+    // 两份全配对绑定的 done 文档（复用 mkDoneFixture 的构造口径）
+    const mkOne = (slug, date) => {
+      const body = `\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n`;
+      const pre = `---\n状态: approved\n级别: L1\n日期: ${date}\n确认指纹: ${'a'.repeat(16)}\n---\n# INTENT — ${slug}\n${body}`;
+      const fp = computeFingerprint(pre);
+      w(T, `workflow/intents/${date}-${slug}.md`, `---\n状态: done\n级别: L1\n日期: ${date}\n确认指纹: ${fp.slice(0, 16)}\n---\n# INTENT — ${slug}\n${body}`);
+      w(T, `workflow/plans/${date}-${slug}.md`, PLAN(slug, '状态: draft\n级别: L1'));
+      return { rel: `workflow/intents/${date}-${slug}.md`, fp };
+    };
+    return [mkOne('ab1', '2026-09-28'), mkOne('ab2', '2026-09-28')];
+  };
+  {
+    // 同 quote 双份 1.5s 内 → warning 可见（exit 0 不阻断）
+    const T = mkfix();
+    const [d1, d2] = mk2LedgerDocs(T);
+    writeLedger(T, [
+      { ts: '2026-09-28T02:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'chat-delegated', quote: '两份一起' },
+      { ts: '2026-09-28T02:00:01.500Z', doc: d2.rel, stage: 'done', fingerprint: d2.fp, prev: 'approved', source: 'chat-delegated', quote: '两份一起' },
+    ]);
+    const r = run(T);
+    check('检查15:同 quote 双份 2s 内 → WARN 确认并录（exit 0 审计可见性）',
+      r.status === 0 && outOf(r).includes('确认并录') && outOf(r).includes('2 份'),
+      `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 异 quote / 间隔 > 2s / TTY 行 → 均不聚组
+    const T = mkfix();
+    const [d1, d2] = mk2LedgerDocs(T);
+    writeLedger(T, [
+      { ts: '2026-09-28T02:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'chat-delegated', quote: '第一份' },
+      { ts: '2026-09-28T02:00:01.000Z', doc: d2.rel, stage: 'done', fingerprint: d2.fp, prev: 'approved', source: 'chat-delegated', quote: '第二份' },
+      { ts: '2026-09-28T03:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'tty' },
+      { ts: '2026-09-28T03:00:01.000Z', doc: d2.rel, stage: 'done', fingerprint: d2.fp, prev: 'approved', source: 'tty' },
+    ]);
+    const r = run(T);
+    check('检查15:异 quote 分次 + TTY 多文档 → 不报确认并录',
+      r.status === 0 && !outOf(r).includes('确认并录'),
+      `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // revert-draft 注记行（stage 非法跳转）→ 不参与聚组不报
+    const T = mkfix();
+    const [d1, d2] = mk2LedgerDocs(T);
+    writeLedger(T, [
+      { ts: '2026-09-28T02:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'chat-delegated', quote: 'x' },
+      { ts: '2026-09-28T02:00:00.400Z', doc: d2.rel, stage: 'done', fingerprint: d2.fp, prev: 'approved', source: 'chat-delegated', quote: 'x' },
+      { ts: '2026-09-28T02:00:00.900Z', doc: 'workflow/plans/2026-09-28-ghost.md', stage: 'revert-draft', fingerprint: 'n/a', prev: 'approved', source: 'chat-delegated', quote: 'x' },
+    ]);
+    const r = run(T);
+    check('检查15:revert-draft 注记行不参与批次聚组（双 done 同 quote 若聚组应报 2 份——加注记行后仍恰 2 份）',
+      r.status === 0 && (outOf(r).match(/确认并录/g) || []).length === 1 && outOf(r).includes('2 份') && !outOf(r).includes('ghost'),
+      `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

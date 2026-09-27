@@ -222,5 +222,43 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- S18 delegated 单文档强制（2026-09-27 confirm-gate-one-per-call）----
+//     多文档并录曾系统性塌掉三道阶段门（build.md「逐件确认不得并作一次」）——机器层收口
+{
+  const mk2docs = () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-single-'));
+    for (const sub of ['intents', 'plans']) {
+      fs.mkdirSync(path.join(root, 'workflow', sub), { recursive: true });
+      fs.writeFileSync(path.join(root, 'workflow', sub, '2026-09-27-s.md'), `---\n状态: draft\n级别: L1\n---\n# ${sub === 'intents' ? 'I' : 'P'}\n`);
+    }
+    return root;
+  };
+  {
+    const root = mk2docs();
+    const before1 = fs.readFileSync(path.join(root, 'workflow', 'intents', '2026-09-27-s.md'), 'utf8');
+    const before2 = fs.readFileSync(path.join(root, 'workflow', 'plans', '2026-09-27-s.md'), 'utf8');
+    const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-27-s.md', 'workflow/plans/2026-09-27-s.md', '--delegated', '两份一起'], { cwd: root, encoding: 'utf8' });
+    const noLedger = !fs.existsSync(path.join(root, '.agents', 'confirmations.jsonl'));
+    const after1 = fs.readFileSync(path.join(root, 'workflow', 'intents', '2026-09-27-s.md'), 'utf8');
+    const after2 = fs.readFileSync(path.join(root, 'workflow', 'plans', '2026-09-27-s.md'), 'utf8');
+    check('S18 delegated 双文档 → exit 1 拒绝 + 逐件口径提示 + 零台账 + 文档零改动',
+      r.status === 1 && /一次仅接受一份文档/.test(r.stderr) && /逐件/.test(r.stderr)
+        && noLedger && after1 === before1 && after2 === before2,
+      JSON.stringify({ status: r.status, stderr: r.stderr }));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+  {
+    const root = mk2docs();
+    const r1 = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-27-s.md', '--delegated', '第一份可以'], { cwd: root, encoding: 'utf8' });
+    const r2 = spawnSync(process.execPath, [CLI, 'workflow/plans/2026-09-27-s.md', '--delegated', '第一份可以'], { cwd: root, encoding: 'utf8' });
+    check('S18 delegated 单文档逐次调用照常（两次各落态各记账）',
+      r1.status === 0 && r2.status === 0
+        && fs.readFileSync(path.join(root, 'workflow', 'intents', '2026-09-27-s.md'), 'utf8').includes('状态: approved')
+        && fs.readFileSync(path.join(root, 'workflow', 'plans', '2026-09-27-s.md'), 'utf8').includes('状态: approved'),
+      JSON.stringify({ r1: r1.status, r2: r2.status, stderr: r2.stderr }));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);
