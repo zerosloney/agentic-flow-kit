@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { renderTree, sha256 } from './render.mjs';
+import { renderTree, sha256, scriptTrusted } from './render.mjs';
 import { HOSTS, pickStackVars, isOwned } from './profiles.mjs';
 import { doctor } from './doctor.mjs';
 
@@ -29,6 +29,14 @@ function runNode(target, script, args = []) {
 // 字节稳定：CRLF 盘面（autocrlf 检出/Edit 工具写入）与 LF 克隆同值；renderTree 写盘本为 LF，
 // fresh sha 天然归一，故 ledger 记 fresh sha 后两侧自洽）
 const shaText = (p) => sha256(Buffer.from(fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n'), 'utf8'));
+
+// 钩子文件落盘补执行位（init-p1-batch P1-1）：copyFileSync 不携带 mode，POSIX 装户 git 对不可执行钩子
+// 静默跳过；FAT/网络盘 chmod 不支持时降级不中断安装
+const safeChmod = (p) => { try { fs.chmodSync(p, 0o755); } catch { /* 降级 */ } };
+const copyManaged = (freshFile, disk, rel) => {
+  fs.copyFileSync(freshFile.abs, disk);
+  if (rel.startsWith('.githooks/')) safeChmod(disk);
+};
 
 export function sync(args, pkgRoot) {
   let target = process.cwd();
@@ -83,19 +91,19 @@ export function sync(args, pkgRoot) {
       const diskSha = fs.existsSync(disk) ? shaText(disk) : null;
       if (diskSha === null) {
         fs.mkdirSync(path.dirname(disk), { recursive: true }); // 父目录可能整目录缺失（如 localOnly 宿主目录被清），copyfile 不建目录
-        fs.copyFileSync(freshFile.abs, disk);
+        copyManaged(freshFile, disk, rel);
         restored.push(rel);
         managedNew.push({ rel, sha256: freshFile.sha });
         continue;
       }
       if (diskSha === ledgerSha) {
         if (freshFile.sha === ledgerSha) { unchanged++; managedNew.push({ rel, sha256: ledgerSha }); }
-        else { fs.copyFileSync(freshFile.abs, disk); updated.push(rel); managedNew.push({ rel, sha256: freshFile.sha }); }
+        else { copyManaged(freshFile, disk, rel); updated.push(rel); managedNew.push({ rel, sha256: freshFile.sha }); }
         continue;
       }
       // 本地已改
       if (freshFile.sha === diskSha) { unchanged++; managedNew.push({ rel, sha256: diskSha }); continue; } // 改动恰好等于新版
-      if (force) { fs.copyFileSync(freshFile.abs, disk); updated.push(`${rel}（--force 覆盖本地改动）`); managedNew.push({ rel, sha256: freshFile.sha }); }
+      if (force) { copyManaged(freshFile, disk, rel); updated.push(`${rel}（--force 覆盖本地改动）`); managedNew.push({ rel, sha256: freshFile.sha }); }
       else { skipped.push(rel); managedNew.push({ rel, sha256: ledgerSha }); } // 台账保持包侧基线：持续报告「本地已改」，直到 --force 或本地对齐新版
     }
 
@@ -113,12 +121,12 @@ export function sync(args, pkgRoot) {
         // --force 下按既有语义覆盖并登记（与台账内文件的 --force 行为一致）
         const diskSha = shaText(disk);
         if (diskSha === freshFile.sha) { adopted.push(rel); managedNew.push({ rel, sha256: diskSha }); }
-        else if (force) { fs.copyFileSync(freshFile.abs, disk); added.push(rel); managedNew.push({ rel, sha256: freshFile.sha }); }
+        else if (force) { copyManaged(freshFile, disk, rel); added.push(rel); managedNew.push({ rel, sha256: freshFile.sha }); }
         else skipped.push(`${rel}（已存在未入台账）`);
         continue;
       }
       fs.mkdirSync(path.dirname(disk), { recursive: true });
-      fs.copyFileSync(freshFile.abs, disk);
+      copyManaged(freshFile, disk, rel);
       added.push(rel);
       managedNew.push({ rel, sha256: freshFile.sha });
     }
@@ -160,14 +168,27 @@ export function sync(args, pkgRoot) {
     kit.version = pkg.version;
     fs.writeFileSync(kitPath, `${JSON.stringify(kit, null, 2)}\n`);
 
-    // 生成器目标走锚点重写（不参与 sha 比对）
-    const genIndex = runNode(target, '.agents/scripts/gen-workflow-index.mjs');
-    if (genIndex.ok || fs.existsSync(path.join(target, '.agents/scripts/gen-workflow-index.mjs'))) {
-      console.log(genIndex.ok ? '  已重生成 workflow/INDEX.md（锚点内重写）' : `  ⚠️ gen-workflow-index 失败：${genIndex.out.split('\n')[0]}`);
+    // 生成器目标走锚点重写（不参与 sha 比对）——执行前过供应链防线（init-p1-batch P1-3）：
+    // 目标侧脚本与包源渲染值 sha 一致才执行（预置/被改动的脚本不可信，跳过并显式提示）
+    const genGuard = (rel) => {
+      const g = scriptTrusted({ pkgRoot, target, rel, vars });
+      if (!g.ok) {
+        console.log(`  ⚠️ 跳过执行 ${rel}——${g.note}（供应链防线：只执行与包源渲染值一致的目标侧脚本）`);
+        return false;
+      }
+      return true;
+    };
+    if (genGuard('.agents/scripts/gen-workflow-index.mjs')) {
+      const genIndex = runNode(target, '.agents/scripts/gen-workflow-index.mjs');
+      if (genIndex.ok || fs.existsSync(path.join(target, '.agents/scripts/gen-workflow-index.mjs'))) {
+        console.log(genIndex.ok ? '  已重生成 workflow/INDEX.md（锚点内重写）' : `  ⚠️ gen-workflow-index 失败：${genIndex.out.split('\n')[0]}`);
+      }
     }
-    const genBoard = runNode(target, '.agents/scripts/gen-wiki-board.mjs');
-    if (genBoard.ok || fs.existsSync(path.join(target, '.agents/scripts/gen-wiki-board.mjs'))) {
-      console.log(genBoard.ok ? '  已重生成 wiki 速览与看板 DATA（锚点内重写）' : `  ⚠️ gen-wiki-board 失败：${genBoard.out.split('\n')[0]}`);
+    if (genGuard('.agents/scripts/gen-wiki-board.mjs')) {
+      const genBoard = runNode(target, '.agents/scripts/gen-wiki-board.mjs');
+      if (genBoard.ok || fs.existsSync(path.join(target, '.agents/scripts/gen-wiki-board.mjs'))) {
+        console.log(genBoard.ok ? '  已重生成 wiki 速览与看板 DATA（锚点内重写）' : `  ⚠️ gen-wiki-board 失败：${genBoard.out.split('\n')[0]}`);
+      }
     }
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });

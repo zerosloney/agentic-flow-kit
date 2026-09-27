@@ -54,6 +54,7 @@ modules/gates/      可选门禁模块（dotnet-ca：Clean Architecture 参考�
 - **门禁即 git 钩子**：不依赖任何 agent 客户端自觉；项目专属门禁挂 `.agents/hooks/local-pre-commit`。
 - **中文优先**：文档协议、命令、检查输出全中文；frontmatter 受限子集供机器断言。
 - 抽取自真实项目长期运转的引擎（某真实项目），dogfooding 是后续路线（sync 升级 / add-host / add-gate / npm 发布）的一部分。
+- **威胁模型（2026-09-27 init-p1-batch）**：勿在不可信仓库运行 `init` / `doctor` / `sync`——三命令在执行目标侧 `.agents/scripts/` 脚本（生成器 / 校验器）前有供应链防线：脚本内容与包源渲染值（LF 归一 sha）一致才执行，失配即显式跳过提示，不执行不下结论；已存在文件保持「保守跳过不覆盖」语义，预置内容不会被运行。
 
 ## 路线
 
@@ -65,3 +66,4 @@ modules/gates/      可选门禁模块（dotnet-ca：Clean Architecture 参考�
 - [x] v0.3.1：doctor 修复——Windows 无 sh 环境（PowerShell）把 sh ENOENT 误报成 check-loop hard-block（探测分流：明示「未跑勿当作通过」，git 钩子门禁不受影响）
 - [x] v0.4.0：看板端口自动上探（基端口起探首个可用端口，多项目并行不冲突；`/api/board` 自报 pid/startedAt，root 比对识别本项目、他人进程不动手不 kill）+ 跨平台入口 `ensure-board.mjs` 取代 Windows 专属 `ensure-board.ps1`（Windows/Linux/macOS 零依赖单入口）
 - [x] v0.5.0：跨宿主适配层同步工具 `flow-kit sync-hosts`（B-b 方案：薄适配正文 = 权威源正文段 + frontmatter 保留宿主特化 + `--apply` 单向同步不动 frontmatter）+ `flow-kit doctor` §6.7 装户侧正文漂移检查（包源环境 §6.7 skipped 避免噪音）——跨平台冒烟由 CI 跑 Linux，Windows / macOS 由本地手测（不入 npm test）
+- [ ] v0.5.1（待发布）：init 安装器 P1×4 收口——POSIX 钩子执行位（render 落盘 0755 + sync chmod + doctor §3 失效可发现）；fresh init 生成器先跑后记账（不再必现 owned FAIL / exit 1）；目标侧脚本执行供应链防线（init/doctor/sync 只执行与包源渲染值 sha 一致的目标侧脚本，失配显式跳过）；init/add-gate 记账 LF 归一

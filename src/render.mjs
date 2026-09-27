@@ -59,12 +59,43 @@ export function renderTree(srcRoot, targetRoot, vars, { force = false } = {}) {
         }
         out = Buffer.from(replaced, 'utf8');
       }
-      fs.writeFileSync(target, out);
+      fs.writeFileSync(target, out, { mode: rel.startsWith('.githooks/') ? 0o755 : 0o644 }); // 钩子带执行位（init-p1-batch P1-1：POSIX 装户 git 对不可执行钩子静默跳过）
       written.push({ rel: rel.split(path.sep).join('/'), sha256: sha256(out) });
     }
   })(srcRoot);
 
   return { written, skipped, warnings, dirs };
+}
+
+// renderPkgText：目标侧脚本执行防线的比对基准（2026-09-27 init-p1-batch P1-3）——读包源模板
+// （templates/_agents/<rel 去掉 .agents/ 前缀>）→ LF 归一 → {{VAR}} 渲染（脚本面无占位符时即原文）。
+// 返回 null = 包源无该模板或非文本面（无从校验，调用方按不可信处理）。
+export function renderPkgText(pkgRoot, rel, vars) {
+  if (!rel.startsWith('.agents/')) return null;
+  const tmpl = path.join(pkgRoot, 'templates', '_agents', rel.slice('.agents/'.length));
+  try {
+    const raw = fs.readFileSync(tmpl);
+    if (raw.length >= 512 * 1024 || raw.includes(0)) return null;
+    return renderContent(raw.toString('utf8').replace(/\r\n/g, '\n'), vars);
+  } catch {
+    return null;
+  }
+}
+
+// scriptTrusted：目标侧脚本是否与包源渲染值一致（LF 归一双侧 sha 比对，与 closing-coverage 六处口径同族）。
+// 返回 {ok, note}——ok=false 时 note 给出原因（预置/被改动/包源无模板/不可读），调用方跳过执行并显式提示。
+export function scriptTrusted({ pkgRoot, target, rel, vars }) {
+  const expected = renderPkgText(pkgRoot, rel, vars);
+  if (expected === null) return { ok: false, note: `包源无 ${rel} 模板，无法校验` };
+  const expSha = sha256(Buffer.from(expected, 'utf8'));
+  let actual;
+  try {
+    actual = fs.readFileSync(path.join(target, rel), 'utf8').replace(/\r\n/g, '\n');
+  } catch {
+    return { ok: false, note: `${rel} 不可读` };
+  }
+  if (sha256(Buffer.from(actual, 'utf8')) === expSha) return { ok: true, note: '' };
+  return { ok: false, note: `目标侧 ${rel} 与包源渲染值不符（预置或被改动）` };
 }
 
 // listTree(srcRoot)：只枚举模板树的目标相对路径（rel），不落盘、不算 sha——供 doctor 台账覆盖率检查复用。

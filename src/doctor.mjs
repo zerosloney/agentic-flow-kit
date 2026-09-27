@@ -4,8 +4,8 @@ import path from 'node:path';
 import { execSync, spawnSync } from 'node:child_process';
 import net from 'node:net';
 import { createHash } from 'node:crypto';
-import { listTree } from './render.mjs';
-import { isOwned, HOSTS } from './profiles.mjs';
+import { listTree, scriptTrusted } from './render.mjs';
+import { isOwned, HOSTS, pickStackVars } from './profiles.mjs';
 
 // 宿主目录映射（与 src/profiles.mjs#HOSTS 同源：装副本目录名前缀带点）
 const HOST_DIR = Object.fromEntries(Object.entries(HOSTS).map(([k, v]) => [k, v.dir]));
@@ -81,7 +81,20 @@ export function doctor(args, pkgRoot) {
   const isRepo = sh('git rev-parse --git-dir', target).ok;
   if (isRepo) {
     const hp = sh('git config core.hooksPath', target);
-    if (hp.ok && hp.out.trim() === '.githooks') add('PASS', 'core.hooksPath=.githooks（钩子已挂载）');
+    if (hp.ok && hp.out.trim() === '.githooks') {
+      add('PASS', 'core.hooksPath=.githooks（钩子已挂载）');
+      // 执行位检查（init-p1-batch P1-1）：POSIX 上 git 对不可执行钩子静默跳过、全部门禁失效且原不可发现；
+      // win32 无执行位语义（mode 恒 0666 系），跳过本检查
+      if (process.platform !== 'win32') {
+        try {
+          const hookDir = path.join(target, '.githooks');
+          const noExec = fs.readdirSync(hookDir)
+            .filter((f) => fs.statSync(path.join(hookDir, f)).isFile())
+            .filter((f) => !(fs.statSync(path.join(hookDir, f)).mode & 0o111));
+          if (noExec.length) add('FAIL', `钩子缺执行位（POSIX 上 git 静默跳过不可执行钩子，门禁全部失效）：${noExec.join('、')}——执行 chmod +x .githooks/*`);
+        } catch { /* .githooks 目录缺失由 §2 布局检查覆盖 */ }
+      }
+    }
     else add('FAIL', `core.hooksPath 当前为「${(hp.ok ? hp.out : '').trim() || '未设置'}」——执行 git config core.hooksPath .githooks`);
   } else {
     add('WARN', '不在 git 仓库内——钩子未挂载（git init 后执行 git config core.hooksPath .githooks）');
@@ -129,6 +142,17 @@ export function doctor(args, pkgRoot) {
     }
   }
 
+  // scriptGuard（init-p1-batch P1-3 供应链防线）：spawn 目标侧脚本前校验其与包源渲染值（LF 归一）一致——
+  // 失配说明预置/被改动，不可信：调用方记 WARN 跳过（fail-visible，不执行也不下通过结论）。
+  // 无 pkgRoot（理论路径）不设防；vars 从 kit.json options 重建（与 sync 同源构造）。
+  const scriptGuard = (rel) => {
+    if (!pkgRoot) return { ok: true, note: '' };
+    let opts = null;
+    try { opts = JSON.parse(fs.readFileSync(kitPath, 'utf8')).options; } catch { /* 无/坏台账→用默认 vars */ }
+    const vars = { BOARD_PORT: String(opts?.boardPort || '8933'), ...pickStackVars(opts?.stack) };
+    return scriptTrusted({ pkgRoot, target, rel, vars });
+  };
+
   // 5. 占位符残留
   const phFiles = ['AGENTS.md', 'workflow/README.md', '.agents/notes/runtime-env.md']
     .concat(fs.existsSync(path.join(target, '.agents/commands')) ? fs.readdirSync(path.join(target, '.agents/commands')).filter((f) => f.endsWith('.md')).map((f) => `.agents/commands/${f}`) : []);
@@ -143,12 +167,20 @@ export function doctor(args, pkgRoot) {
   else add('WARN', `占位符残留 ${phHits.length} 处（init 变量缺失或需手改）：${phHits.slice(0, 5).join('；')}${phHits.length > 5 ? ' …' : ''}`);
 
   // 6. workflow 索引漂移
-  const idx = spawnSync(process.execPath, ['.agents/scripts/gen-workflow-index.mjs', '--check'], { cwd: target, encoding: 'utf8' });
-  if (idx.status === 0) add('PASS', 'workflow/INDEX.md 无漂移');
-  else add('WARN', `workflow/INDEX.md 漂移——跑 node .agents/scripts/gen-workflow-index.mjs 重生成`);
+  const idxGuard = scriptGuard('.agents/scripts/gen-workflow-index.mjs');
+  if (!idxGuard.ok) {
+    add('WARN', `workflow/INDEX.md 漂移检查跳过——${idxGuard.note}（供应链防线）`);
+  } else {
+    const idx = spawnSync(process.execPath, ['.agents/scripts/gen-workflow-index.mjs', '--check'], { cwd: target, encoding: 'utf8' });
+    if (idx.status === 0) add('PASS', 'workflow/INDEX.md 无漂移');
+    else add('WARN', `workflow/INDEX.md 漂移——跑 node .agents/scripts/gen-workflow-index.mjs 重生成`);
+  }
 
   // 6.5 delegations 台账结构（量化层非门禁：结构漂移曾静默吞掉全部记录，2026-09-24）
-  if (fs.existsSync(path.join(target, '.agents/scripts/agg-delegations.cjs'))) {
+  const aggGuard = scriptGuard('.agents/scripts/agg-delegations.cjs');
+  if (!aggGuard.ok) {
+    add('WARN', `delegations 台账结构检查跳过——${aggGuard.note}（供应链防线）`);
+  } else if (fs.existsSync(path.join(target, '.agents/scripts/agg-delegations.cjs'))) {
     const agg = spawnSync(process.execPath, ['.agents/scripts/agg-delegations.cjs'], { cwd: target, encoding: 'utf8' });
     if (agg.status === 0) add('PASS', 'delegations 台账结构有效（agg 可解析）');
     else add('WARN', `delegations 台账结构漂移——${String(agg.stderr || agg.stdout || '').split('\n')[0]}`);
@@ -189,7 +221,10 @@ export function doctor(args, pkgRoot) {
   //     2026-09-25 workflows-linter 把 _TEMPLATE.md「解析校验先行」从 prose 变机器门。首次引入 WARN
   //     （沿用 wf-runtime 复盘「先 WARN 升级 FAIL」渐进路径），装户吃过警告后可升 FAIL。
   //     旧版装户 sync 前 .agents/scripts/workflows-check.mjs 不存在 → 自然跳过不误报）
-  if (fs.existsSync(path.join(target, '.agents/scripts/workflows-check.mjs')) && fs.existsSync(path.join(target, '.agents/workflows'))) {
+  const wfGuard = scriptGuard('.agents/scripts/workflows-check.mjs');
+  if (!wfGuard.ok) {
+    add('WARN', `workflows 编排脚本 lint 跳过——${wfGuard.note}（供应链防线）`);
+  } else if (fs.existsSync(path.join(target, '.agents/scripts/workflows-check.mjs')) && fs.existsSync(path.join(target, '.agents/workflows'))) {
     const wf = spawnSync(process.execPath, ['.agents/scripts/workflows-check.mjs'], { cwd: target, encoding: 'utf8' });
     if (wf.status === 0) {
       const warnN = (String(wf.stdout || '').match(/- ⚠️ W\d/g) || []).length;
@@ -203,12 +238,17 @@ export function doctor(args, pkgRoot) {
   // 7. check-loop——2026-09-26 check-loop-node 起 node 实现直跑（sh 版曾需先探 sh 可用性：Windows
   //    PowerShell 常无 sh，ENOENT 曾被吞进 hard-block 分支报成空原因假警报，incident 2026-09-24-doctor-sh-enoent；
   //    迁移后无 sh 依赖，探针退役。check-loop.sh 为兼容 shim，pre-push 钩子路径照常）
-  const cl = spawnSync(process.execPath, ['.agents/scripts/check-loop.mjs'], { cwd: target, encoding: 'utf8' });
-  if (cl.status === 0) {
-    const warnTxt = String(cl.stderr || '').trim();
-    add('PASS', `check-loop 干净${warnTxt ? `（${warnTxt.split('\n').filter((l) => l.includes('WARN')).length} 条 advisory 警告）` : ''}`);
+  const clGuard = scriptGuard('.agents/scripts/check-loop.mjs');
+  if (!clGuard.ok) {
+    add('WARN', `check-loop 跳过——${clGuard.note}（供应链防线：目标侧脚本与包源渲染值不符，不执行不下结论）`);
   } else {
-    add('FAIL', `check-loop 有 hard-block：\n${String(cl.stderr || '').split('\n').slice(0, 8).join('\n')}`);
+    const cl = spawnSync(process.execPath, ['.agents/scripts/check-loop.mjs'], { cwd: target, encoding: 'utf8' });
+    if (cl.status === 0) {
+      const warnTxt = String(cl.stderr || '').trim();
+      add('PASS', `check-loop 干净${warnTxt ? `（${warnTxt.split('\n').filter((l) => l.includes('WARN')).length} 条 advisory 警告）` : ''}`);
+    } else {
+      add('FAIL', `check-loop 有 hard-block：\n${String(cl.stderr || '').split('\n').slice(0, 8).join('\n')}`);
+    }
   }
 
   // 8. 看板端口（信息级）

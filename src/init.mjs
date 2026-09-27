@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import { execSync, spawnSync } from 'node:child_process';
-import { renderTree, renderContent, sha256 } from './render.mjs';
+import { renderTree, renderContent, sha256, scriptTrusted } from './render.mjs';
 import { HOSTS, STACKS, STACK_ALIASES, settingsJson, commitCheckConfig, pickStackVars, isOwned } from './profiles.mjs';
 import { doctor } from './doctor.mjs';
 
@@ -181,7 +181,8 @@ export async function init(args, pkgRoot) {
     } else {
       const incoming = renderContent(fs.readFileSync(path.join(pkgRoot, 'templates', 'AGENTS.md'), 'utf8'), vars);
       fs.writeFileSync(agentsAbs, mergeAgents(existing, incoming));
-      agentsMergedSha = sha256(fs.readFileSync(agentsAbs));
+      // LF 归一记账（init-p1-batch P1-4）：用户 CRLF 原文 + LF 追加的混合文件与 doctor §6.6 / sync ownedSha 同口径
+      agentsMergedSha = sha256(Buffer.from(fs.readFileSync(agentsAbs, 'utf8').replace(/\r\n/g, '\n'), 'utf8'));
       t.skipped = t.skipped.filter((r) => r !== 'AGENTS.md');
       console.log('  AGENTS.md 已存在但无工作流骨架——文末追加补齐（原内容保留，「项目适配区」照常自填）');
     }
@@ -231,13 +232,41 @@ export async function init(args, pkgRoot) {
     console.log('  ⚠️ 目标不是 git 仓库——钩子未挂载；git init 后手动执行：git config core.hooksPath .githooks');
   }
 
-  // 6) kit.json：managed（模板/适配层，升级可覆盖）与 owned（基线配置+起步文档，升级不动）台账
+  // 6) 生成器首跑（幂等）：workflow/INDEX.md 活跃层索引 + wiki 速览计数与看板 DATA
+  //    先于 kit.json 记账（init-p1-batch P1-2：生成器会重写 owned 起步文档，先跑后记账则 doctor §6.6 对账即绿，
+  //    fresh init 不再必现 owned FAIL / exit 1）；执行前过供应链防线（P1-3）——目标侧脚本与包源渲染值
+  //    sha 一致才执行（目标目录预置脚本不可信，「已存在保守跳过」语义下预置件会被原样保留）
+  const guardRun = (rel) => {
+    const g = scriptTrusted({ pkgRoot, target, rel, vars });
+    if (!g.ok) {
+      console.log(`  ⚠️ 跳过执行 ${rel}——${g.note}（供应链防线：只执行与包源渲染值一致的目标侧脚本）`);
+      return false;
+    }
+    return true;
+  };
+  if (guardRun('.agents/scripts/gen-workflow-index.mjs')) {
+    const genIndex = runNode(target, '.agents/scripts/gen-workflow-index.mjs');
+    console.log(genIndex.ok ? '  已生成 workflow/INDEX.md（活跃层索引）' : `  ⚠️ gen-workflow-index 失败：${genIndex.out.split('\n')[0]}`);
+  }
+  if (guardRun('.agents/scripts/gen-wiki-board.mjs')) {
+    const genBoard = runNode(target, '.agents/scripts/gen-wiki-board.mjs');
+    console.log(genBoard.ok ? '  已生成 wiki 速览计数与知识沉淀总览 DATA' : `  ⚠️ gen-wiki-board 失败：${genBoard.out.split('\n')[0]}`);
+  }
+
+  // 7) kit.json：managed（模板/适配层，升级可覆盖）与 owned（基线配置+起步文档，升级不动）台账
+  //    owned 的生成器目标按生成后盘面重记（P1-2）；记账一律 LF 归一 sha（P1-4——render 写盘已归一，
+  //    生成器重写目标与用户合并文件两侧同口径，跨 checkout 字节稳定）
+  const shaText = (p) => sha256(Buffer.from(fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n'), 'utf8'));
+  const GEN_TARGETS = new Set(['workflow/INDEX.md', 'wiki/INDEX.md', 'wiki/知识沉淀总览.html']); // 新增生成器目标须同步本清单
   const managed = [
     ...t.written.filter((f) => !isOwned(f.rel)),
     // 宿主文件渲染时相对宿主根，入台账须还原为项目根相对路径
     ...hosts.flatMap((h) => hostResults[h].written.map((f) => ({ ...f, rel: `${HOSTS[h].dir}/${f.rel}` }))),
   ];
-  const owned = [...t.written.filter((f) => isOwned(f.rel)), ...ownedGenerated];
+  const owned = [...t.written.filter((f) => isOwned(f.rel)), ...ownedGenerated]
+    .map((f) => (GEN_TARGETS.has(f.rel) && fs.existsSync(path.join(target, f.rel))
+      ? { ...f, sha256: shaText(path.join(target, f.rel)) }
+      : f));
   if (agentsMergedSha) owned.push({ rel: 'AGENTS.md', sha256: agentsMergedSha });
   const pkg = JSON.parse(fs.readFileSync(path.join(pkgRoot, 'package.json'), 'utf8'));
   fs.mkdirSync(path.dirname(kitPath), { recursive: true });
@@ -251,13 +280,7 @@ export async function init(args, pkgRoot) {
   }, null, 2)}\n`);
   console.log(`  kit.json 台账：managed ${managed.length} 份 ｜ owned ${owned.length} 份（版本 ${pkg.version}）`);
 
-  // 7) 生成器首跑（幂等）：workflow/INDEX.md 活跃层索引 + wiki 速览计数与看板 DATA
-  const genIndex = runNode(target, '.agents/scripts/gen-workflow-index.mjs');
-  console.log(genIndex.ok ? '  已生成 workflow/INDEX.md（活跃层索引）' : `  ⚠️ gen-workflow-index 失败：${genIndex.out.split('\n')[0]}`);
-  const genBoard = runNode(target, '.agents/scripts/gen-wiki-board.mjs');
-  console.log(genBoard.ok ? '  已生成 wiki 速览计数与知识沉淀总览 DATA' : `  ⚠️ gen-wiki-board 失败：${genBoard.out.split('\n')[0]}`);
-
-  // 8) 自检
+  // 8) 自检（kit.json 已按生成后盘面记账——doctor §6.6 应全绿，fresh init 以 exit 0 收场）
   console.log('▶ flow-kit doctor');
   doctor(['--dir', target], pkgRoot);
 

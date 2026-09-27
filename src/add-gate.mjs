@@ -73,15 +73,17 @@ export function addGate(args, pkgRoot) {
   }
 
   // owned 台账补记（归项目所有，sync 永不覆盖）。接线改写了 local-pre-commit（init 时按模板态记账）——
-  // 须同步刷新其 owned 哈希，否则台账停在模板态（Shipyard 回流发现的漂移根因，2026-09-24）
+  // 须同步刷新其 owned 哈希，否则台账停在模板态（Shipyard 回流发现的漂移根因，2026-09-24）。
+  // 记账一律 LF 归一（init-p1-batch P1-4 rider）：与 doctor §6.6 / sync ownedSha 同口径，跨 checkout 字节稳定
+  const shaText = (p) => sha256(Buffer.from(fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n'), 'utf8'));
   const ownedLedger = new Map((kit.owned || []).map((f) => [f.rel, f]));
   for (const name of installed) {
     const rel = `.agents/hooks/${name}`;
-    ownedLedger.set(rel, { rel, sha256: sha256(fs.readFileSync(path.join(hooksDir, name))) });
+    ownedLedger.set(rel, { rel, sha256: shaText(path.join(hooksDir, name)) });
   }
   if (wiredLp) {
     const lpRel = '.agents/hooks/local-pre-commit';
-    ownedLedger.set(lpRel, { rel: lpRel, sha256: sha256(fs.readFileSync(path.join(hooksDir, 'local-pre-commit'))) });
+    ownedLedger.set(lpRel, { rel: lpRel, sha256: shaText(path.join(hooksDir, 'local-pre-commit')) });
   }
   kit.owned = [...ownedLedger.values()].sort((a, b) => a.rel.localeCompare(b.rel));
   fs.writeFileSync(kitPath, `${JSON.stringify(kit, null, 2)}\n`);
