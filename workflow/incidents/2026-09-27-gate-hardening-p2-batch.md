@@ -1,9 +1,9 @@
 ---
-状态: open
+状态: closed
 级别: L1
 发现: 2026-09-27
 模块: pipeline
-备注: audit-gate-hardening（0caaf4f）L2 独立复核提出的 P2×5 延后项，用户拍板「收掉」批量处理。P2-4（spec 偏差追认留痕）已随 cc97098 关单闭环，本单不重复；实修 4 项：P2-1 绑定复原的状态行分隔符保真 / P2-2 双源门禁两条边界文档点明 / P2-3 绑定生效锚改台账 ts / P2-5 source-sync-check.test 装副本路径直跑 FAIL。级别判 L1：均为当日落地检查项自身缺陷的修正（误伤边角 / 豁免漏洞 / 测试路径健壮性），检查项编号、契约面、消费方（gate-checklist PAIRS）零变化。
+备注: audit-gate-hardening（0caaf4f）L2 独立复核提出的 P2×5 延后项，用户拍板「收掉」批量处理。P2-4（spec 偏差追认留痕）已随 cc97098 关单闭环，本单不重复；实修 4 项：P2-1 绑定复原的状态行分隔符保真 / P2-2 双源门禁两条边界文档点明 / P2-3 绑定生效锚改台账 ts / P2-5 source-sync-check.test 装副本路径直跑 FAIL。级别判 L1：均为当日落地检查项自身缺陷的修正（误伤边角 / 豁免漏洞 / 测试路径健壮性），检查项编号、契约面、消费方（gate-checklist PAIRS）零变化。修复：93399c8（立项）+ c651846（实现，14 文件）。
 ---
 
 # INCIDENT — 2026-09-27 gate-hardening 复核 P2 批量收口
@@ -29,14 +29,14 @@
 ## 复盘三件套（缺一不可）
 
 1. 结构性修复
-   - 修复 commit：随本单 feat 提交落（关单时回填 SHA）
+   - 修复 commit：c651846（14 文件：check-loop.mjs 复原算法 + ts 锚 + 头注释 / check-loop.test.mjs 场景重写扩至 6 条 / source-sync-check.test.mjs SRC_ROOT 探测 + S5·S9 SKIP 守卫 / pre-commit 边界注释 / build.md 边界一行；sync 5 份覆盖更新 + sync-hosts 34 对对齐）
    - 影响环境：dev（引擎包源 + 本仓装副本，未发布版本面）
    - 是否需要新 intent：
      - 否 → 理由：实现级缺陷单点修复（复原算法保真 / 生效锚收紧 / 测试路径健壮性），已有规范条目覆盖（check-loop 检查 15 与 pre-commit 双源门禁本体），无门禁缺位类系统性根因
 
 2. 防复发验证（必须落到自动化用例或回归清单条目，禁止只写「已人工验证」）
-   - 自动化用例：templates/_agents/scripts/check-loop.test.mjs 新增 ≥3 场景（双空格状态行绑定仍过 / 台账 ts 早于生效日豁免 / ts 晚于生效日且文档日期早——篡改仍拦）；source-sync-check.test.mjs S5 改为包源探测 + 无包源 SKIP
+   - 自动化用例：templates/_agents/scripts/check-loop.test.mjs 绑定场景 6 条（一致过 / 篡改拦 / ts 锚前豁免 / 日期早 ts 锚后篡改拦 / 缺 prev 降级 / 双空格分隔符不误伤）——套件 58/0；source-sync-check.test.mjs 19/0，且装副本路径（.agents/scripts/）直跑 S5/S9 实证通过（c651846 后）
 
 3. 规范条目（必须有可追溯的落点）
-   - 落点：.githooks/pre-commit 头部注释（双源门禁「工作树比较 / 删包源退化为孤儿只报告」两条边界）+ .agents/commands/build.md「改包源后必跑」节（同两条边界一行）
-   - 引用：随本单 feat 提交（关单时回填 SHA）
+   - 落点：.githooks/pre-commit 双源门禁注释（工作树比较 / 删包源退化为孤儿只报告两条边界）+ .agents/commands/build.md「改包源后必跑」节同口径一行
+   - 引用：c651846（templates/_githooks/pre-commit 双源一致性段、templates/_agents/commands/build.md 边界行）

@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L1
 模块: pipeline
-确认指纹: 2b28e2085ab6e022
+确认指纹: 9f1f5c6baf9aca2f
 ---
 # PLAN — gate-hardening-p2-batch
 
