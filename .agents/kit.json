@@ -36,7 +36,7 @@
     },
     {
       "rel": ".agents/commands/maintain.md",
-      "sha256": "26203f7b73d450e122c45608e896daa7cd4b86311eed903d8ddd7102d2a5593e"
+      "sha256": "4c94825d3e7d3ea169cab2d073fd197e28db21b304485d238c7f678b651654b6"
     },
     {
       "rel": ".agents/commands/new-task.md",
@@ -60,11 +60,11 @@
     },
     {
       "rel": ".agents/commands/test.md",
-      "sha256": "85e551ecd5651b8f2934617b47d5032d12b81b261de45cc818091040ef711f14"
+      "sha256": "9054a32d856905ff9949e16deb43bae187a960c65cd9f6531bdc4ec4ea95e83b"
     },
     {
       "rel": ".agents/hooks/check-pairing-incremental.sh",
-      "sha256": "49a954451685c0390794dc1ea2ffad21241c473b56ff71f04faa2487dfbf57be"
+      "sha256": "8770c791a6db257cf9bd1fbd83c268dc2ff5aaa899bcff9335dc3ab53e8afd22"
     },
     {
       "rel": ".agents/hooks/check-wiki-ledger.sh",
@@ -96,7 +96,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "877b290f844ec08283f9e2c0d58d37aac51701497bc2496367866ff474005e02"
+      "sha256": "47852bd506c4a8d3e9eeb22305d5f5748e948f3d28225a60000b19d74f876452"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -104,7 +104,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "d02b8e48e998f330aa5ffb9b586bcb919558ba7f926f2cf5e827598e9876bc96"
+      "sha256": "f0b49769a703d1f42597e416f15117084aa769adf6c0fd98060fb4bc67c5a1e3"
     },
     {
       "rel": ".agents/scripts/commit-check-trigger.test.mjs",
@@ -112,11 +112,11 @@
     },
     {
       "rel": ".agents/scripts/confirm-doc.mjs",
-      "sha256": "63ea7c3f46d7a9d769c387171a5b2400fe1f78649db9e913311cd1381da1cc3b"
+      "sha256": "b1710a1615e0c6ed2be290dd0e10cd2cc5eb7a35726f110575fa2fb6b50e2bf5"
     },
     {
       "rel": ".agents/scripts/confirm-doc.test.mjs",
-      "sha256": "3d5022fbbc7ad02b592f2cae703b350d7cafb12071e91fcc94e4e7e8abb1a15b"
+      "sha256": "dd933da2ce38fbc96820426bbda0705d1fd85e77146d4ffab29cbe61a62e254d"
     },
     {
       "rel": ".agents/scripts/doctor.test.mjs",
@@ -322,7 +322,7 @@
   "owned": [
     {
       "rel": "AGENTS.md",
-      "sha256": "76f51d37d615583a011d8c09f93f0240bd089a641d8358b62b4e6ef70380ea69"
+      "sha256": "eda04a5966b4639746672e19bb8bde29b65e4835820f2e244eae6328ef05b19c"
     },
     {
       "rel": "wiki/drafts-archive/README.md",

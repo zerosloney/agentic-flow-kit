@@ -86,6 +86,5 @@ next: .agents/commands/plan.md(若复盘需要新 intent)
 
 ## 确认后
 
-- incident 状态 → fixed(三件套全落地)
-- 防复发用例通过后 → closed
+- incident 状态 → fixed(三件套全落地)；防复发用例通过后 → closed——两跳均走确认门 `node .agents/scripts/confirm-doc.mjs <path>`（open→fixed / fixed→closed，无单跳；2026-09-28 起 check-loop 15 对账，AI 不得直改状态）
 - 若需新 intent → 进 `next: .agents/commands/plan.md`

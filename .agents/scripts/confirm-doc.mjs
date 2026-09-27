@@ -1,7 +1,9 @@
 #!/usr/bin/env node
-// confirm-doc — 用户确认门（2026-09-26 confirm-gate-machine；2026-09-27 confirm-gate-delegated 加委托代录形态）
-// 唯一确认入口：workflow/{intents,specs,plans} 文档的状态确认跳转（draft→approved 起草确认 /
-//   approved→done 关单确认）。check-loop 检查 15 按「确认指纹 + 台账配对」对账，无记录即 hard-block。
+// confirm-doc — 用户确认门（2026-09-26 confirm-gate-machine；2026-09-27 confirm-gate-delegated 加委托代录形态；同日 gate-coverage 收 incidents）
+// 唯一确认入口：workflow/{intents,specs,plans} 文档（draft→approved 起草确认 / approved→done 关单确认）
+//   与 workflow/incidents 文档（open→fixed 修复落地确认 / fixed→closed 关单确认——不支持 open→closed 单跳，
+//   强制两跳留痕；2026-09-28 起 check-loop 15 对账）。check-loop 检查 15 按「确认指纹 + 台账配对」对账，
+//   无记录即 hard-block。
 // 两形态：
 //   ① TTY 模式（默认）：用户终端亲手运行、逐份过目全文、逐份键入「可以」——非交互环境直接拒绝
 //     （AI 会话的 spawnSync 无 TTY，本形态在 AI 手里跑不起来）。
@@ -30,10 +32,12 @@ export function computeFingerprint(text) {
   return createHash('sha256').update(norm, 'utf8').digest('hex');
 }
 
-// nextStage(status)：唯一合法前向跳转；其余（done/superseded/cancelled/缺失）返回 null
+// nextStage(status)：唯一合法前向跳转（docs 两跳 + incidents 两跳）；其余（done/closed/superseded/cancelled/缺失）返回 null
 export function nextStage(status) {
   if (status === 'draft') return 'approved';
   if (status === 'approved') return 'done';
+  if (status === 'open') return 'fixed'; // incidents：修复落地确认（三件套全落地）
+  if (status === 'fixed') return 'closed'; // incidents：关单确认（防复发验证已落地）
   return null;
 }
 
@@ -67,7 +71,7 @@ export function appendLedger(root, entry) {
   return p;
 }
 
-const DOC_RE = /^workflow\/(intents|specs|plans)\/[^/]+\.md$/;
+const DOC_RE = /^workflow\/(intents|specs|plans|incidents)\/[^/]+\.md$/;
 
 const isMain = process.argv[1] && process.argv[1].endsWith('confirm-doc.mjs');
 if (isMain) {

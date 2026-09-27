@@ -32,10 +32,12 @@
 //  14. 新 done 的 spec/plan 须在 git 历史里出现过 `状态: approved`(确认环节留痕,2026-09-22;恒 advisory 永不升级 hard)
 //  15. 确认指纹对账(2026-09-27 起:approved/done 须 confirm-doc.mjs 确认指纹+台账配对,缺=hard-block;存量豁免;
 //      两形态——TTY 亲手 / --delegated 对话委托代录,台账 source 如实区分,配对判据与 source 无关)
-//      + done 内容绑定(2026-09-27 audit-gate-hardening;生效锚=台账 done 行 ts≥2026-09-28——同日
-//      gate-hardening-p2-batch 自文档自报日期改锚:旧日期文档晚关单也绑定,3 份失配存量 ts 均 09-27 天然豁免):
+//      + incidents 覆盖(2026-09-27 gate-coverage:fixed/closed 须配对,自 2026-09-28 起,存量 11 份全豁免;
+//      open=起草态不加门;不支持 open→closed 单跳——confirm-doc 状态机强制经 fixed)
+//      + done/closed 内容绑定(2026-09-27 audit-gate-hardening;生效锚=台账行 ts≥2026-09-28——同日 p2-batch
+//      自文档自报日期改锚:旧日期文档晚关单也绑定,3 份失配存量 ts 均 09-27 天然豁免):
 //      按 prev 复原跳转前文本重算 sha256 与台账全量比对,不符=hard「确认内容漂移」;状态行保分隔符换值
-//      (非规范格式不误伤);台账行缺 prev 降级 warning;关单编辑顺序新约定:勾验/回填先于 done 确认,
+//      (非规范格式不误伤);台账行缺 prev 降级 warning;关单编辑顺序新约定:勾验/回填先于关单确认,
 //      confirm-doc 是最后一次写入)
 //
 // 注：清单条目 5（状态字段+L3 复核）与 1（配对）在同一遍 intents/specs/plans 循环里实现（沿 sh 版代码结构）；
@@ -558,14 +560,23 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
       try { ledger.push(JSON.parse(line)); } catch { /* 坏行跳过 */ }
     }
   }
-  for (const sub of ['intents', 'specs', 'plans']) {
+  // incidents 侧覆盖（2026-09-27 gate-coverage）：fixed/closed 为已确认态（open = 起草态不加门——
+  // maintain.md 创建即对话确认的既有口径），配对自 2026-09-28 起（存量无台账全豁免）
+  const CONFIRMED_BY_SUB = {
+    intents: ['approved', 'done'],
+    specs: ['approved', 'done'],
+    plans: ['approved', 'done'],
+    incidents: ['fixed', 'closed'],
+  };
+  for (const [sub, confirmedSet] of Object.entries(CONFIRMED_BY_SUB)) {
     for (const doc of docFiles(sub)) {
       const st = fmGet(doc, '状态');
-      if (st !== 'approved' && st !== 'done') continue;
+      if (!confirmedSet.includes(st)) continue;
       const base = path.basename(doc);
       let d = fmGet(doc, '日期') || fmGet(doc, '发现');
       if (!d) d = /^\d{4}-\d{2}-\d{2}$/.test(base.slice(0, 10)) ? base.slice(0, 10) : '';
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || d < EFFECTIVE) continue;
+      const eff = sub === 'incidents' ? '2026-09-28' : EFFECTIVE;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || d < eff) continue;
       const rel = path.relative(ROOT, doc).split(path.sep).join('/');
       const fp = fmGet(doc, '确认指纹');
       const ok = !!fp && ledger.some((e) => e && e.doc === rel && e.stage === st
@@ -581,8 +592,8 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
       // 无以复原）→ warning 不拦；entry.ts 早于 2026-09-28（UTC 字符串比较——该次确认在旧关单顺序时代完成）→
       // 豁免绑定（配对判定已过，3 份失配存量即此列）。关单编辑顺序新约定不变：confirm-doc 是最后一次写入，
       // 此后修订走 superseded 或新 intent。
-      if (ok && st === 'done') {
-        const doneEntries = ledger.filter((e) => e && e.doc === rel && e.stage === 'done' && typeof e.fingerprint === 'string');
+      if (ok && (st === 'done' || st === 'closed')) {
+        const doneEntries = ledger.filter((e) => e && e.doc === rel && e.stage === st && typeof e.fingerprint === 'string');
         const entry = doneEntries[doneEntries.length - 1]; // append-only 台账，末次生效（重确认场景）
         if (!entry || !entry.prev) {
           warnings.push(`- [WARN 绑定降级] ${base} 台账 stage=done 行缺 prev 字段（schema 演进前行），内容绑定跳过——仅配对判定`);

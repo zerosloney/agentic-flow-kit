@@ -12,7 +12,9 @@
 cd "$(git rev-parse --show-toplevel)" || exit 1
 
 fail=0
-for f in $(git diff --cached --name-only --diff-filter=ACMR | grep -E '^workflow/(intents|incidents)/[^/]+\.md$' | grep -v '_TEMPLATE\.md$'); do
+# -c core.quotepath=off：quotepath 默认 true 时非 ASCII 路径被引号转义（"workflow/\346..."），
+# ^workflow/ 前缀匹配失配 → 门禁静默跳过——教训与修法同 check-wiki-ledger.sh（2026-09-27 gate-coverage）
+for f in $(git -c core.quotepath=off diff --cached --name-only --diff-filter=ACMR | grep -E '^workflow/(intents|incidents)/[^/]+\.md$' | grep -v '_TEMPLATE\.md$'); do
   # 闭环引擎启用前的回填件带「流程: legacy」豁免配对检查（与 check-loop 同口径）
   if grep -q '^流程: legacy' "$f"; then
     continue

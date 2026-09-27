@@ -42,11 +42,14 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
   check('S3 内容敏感且为 64 位 hex', fp1 !== fp2 && /^[0-9a-f]{64}$/.test(fp1));
 }
 
-// ---- S4 nextStage：唯二合法跳转 ----
+// ---- S4 nextStage：合法前向跳转（docs 两跳 + incidents 两跳，2026-09-27 gate-coverage）----
 {
   check('S4 跳转表：draft→approved、approved→done、done/空/自造值→null',
     nextStage('draft') === 'approved' && nextStage('approved') === 'done'
       && nextStage('done') === null && nextStage('') === null && nextStage('进行中') === null);
+  check('S4 incidents 跳转表：open→fixed、fixed→closed、closed→null（无 open→closed 单跳）',
+    nextStage('open') === 'fixed' && nextStage('fixed') === 'closed'
+      && nextStage('closed') === null && nextStage('open') !== 'closed');
 }
 
 // ---- S5 applyTransition：只动状态行 + 增指纹行，正文逐字节原样 ----

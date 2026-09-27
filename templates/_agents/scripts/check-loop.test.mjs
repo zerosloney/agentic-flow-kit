@@ -699,7 +699,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   }
 }
 
-// ---- 场景 53-54:检查 4 引用扫描收窄活跃态（2026-09-27 audit-gate-hardening）----
+// ---- 场景 55-56:检查 4 引用扫描收窄活跃态（2026-09-27 audit-gate-hardening）----
 {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-28-refterm.md', INTENT('refterm', '状态: superseded\n级别: L1\n日期: 2026-09-28', '\n引用 .agents/scripts/ghost-gone.mjs\n'));
@@ -717,6 +717,54 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   check('检查4:活跃文档引用断链仍报（收窄只放终态）',
     r.status === 0 && outOf(r).includes('引用断档') && outOf(r).includes('ghost-gone.mjs'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
+}
+
+// ---- 场景 57-60:检查 15 incidents 确认门（2026-09-27 gate-coverage，配对自 2026-09-28 起）----
+//     fixed/closed 须指纹+台账配对；closed 与 done 同口径内容绑定（ts 锚 + 保分隔符）；open 起草态不加门
+{
+  const mkIncFixture = (T, st, tamper, opt = {}) => {
+    const ts = opt.ts || '2026-09-28T02:00:00.000Z';
+    const body = 三件套(false);
+    const pre = `---\n状态: fixed\n级别: L1\n发现: 2026-09-28\n确认指纹: ${'a'.repeat(16)}\n---\n# INCIDENT — inc\n${body}`;
+    const fpClosed = computeFingerprint(pre);
+    // tamper 只污染 closed 落盘文本（不进指纹底稿）——复刻「closed 确认后篡改正文」
+    const closedText = `---\n状态: ${st}\n级别: L1\n发现: 2026-09-28\n确认指纹: ${fpClosed.slice(0, 16)}\n---\n# INCIDENT — inc\n${body}${tamper || ''}`;
+    w(T, 'workflow/incidents/2026-09-28-inc.md', closedText);
+    w(T, 'workflow/plans/2026-09-28-inc.md', PLAN('inc', '状态: draft\n级别: L1'));
+    return { rel: 'workflow/incidents/2026-09-28-inc.md', fp: fpClosed, ts };
+  };
+  {
+    // incident closed（生效日起）无指纹无台账 → hard 确认未对账
+    const T = mkfix();
+    w(T, 'workflow/incidents/2026-09-28-inc15.md', `---\n状态: closed\n级别: L1\n发现: 2026-09-28\n---\n# INCIDENT — inc15\n${三件套(false)}`);
+    w(T, 'workflow/plans/2026-09-28-inc15.md', PLAN('inc15', '状态: draft\n级别: L1'));
+    expectHard('检查15:incident closed（生效日起）无指纹无台账 → hard 确认未对账', T, '确认未对账');
+    rmfix(T);
+  }
+  {
+    const T = mkfix();
+    const i1 = mkIncFixture(T, 'closed');
+    writeLedger(T, [{ ts: i1.ts, doc: i1.rel, stage: 'closed', fingerprint: i1.fp, prev: 'fixed', source: 'tty' }]);
+    expectOk('检查15:incident closed 配对+内容绑定一致 → exit 0', T);
+    rmfix(T);
+  }
+  {
+    const T = mkfix();
+    const i1 = mkIncFixture(T, 'closed', 'closed 确认后被篡改的正文行\n');
+    writeLedger(T, [{ ts: i1.ts, doc: i1.rel, stage: 'closed', fingerprint: i1.fp, prev: 'fixed', source: 'tty' }]);
+    expectHard('检查15:incident closed 后正文被篡改 → hard 确认内容漂移', T, '确认内容漂移');
+    rmfix(T);
+  }
+  {
+    // open 起草态不加门（无指纹无台账 → 不报确认未对账）
+    const T = mkfix();
+    w(T, 'workflow/incidents/2026-09-28-incopen.md', `---\n状态: open\n级别: L1\n发现: 2026-09-28\n---\n# INCIDENT — incopen\n${三件套(false)}`);
+    w(T, 'workflow/plans/2026-09-28-incopen.md', PLAN('incopen', '状态: draft\n级别: L1'));
+    const r = run(T);
+    check('检查15:incident open（起草态）不进确认门 → 不报确认未对账',
+      r.status === 0 && !outOf(r).includes('确认未对账'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
