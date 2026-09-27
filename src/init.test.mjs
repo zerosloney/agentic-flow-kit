@@ -5,7 +5,8 @@
 //       ③非法输入返回 null（就地重问信号）；④空输入回默认（EOF/直接回车安全回退）；⑥装户面含 runner/workflows。
 // 用法：node src/init.test.mjs
 import { normalizeStack, parseChoices, hasAgentsSkeleton, mergeAgents } from './init.mjs';
-import { renderTree } from './render.mjs';
+import { renderTree, scriptTrusted } from './render.mjs';
+import { sha256 } from './render.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -68,6 +69,38 @@ check('合并：原内容为空时骨架即全文', mergeAgents('', '<!-- m -->\
   check('装户面无 orchestrate 命令残留（编排机制为目录约定，2026-09-25-wf-runtime）',
     ![...rels].some((r) => r.includes('orchestrate')),
     [...rels].filter((r) => r.includes('orchestrate')).join('、'));
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+// ---- ⑦ 钩子执行位 + 供应链防线 + 记账归一（2026-09-27 init-p1-batch 复核条件①）----
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'init-p1-'));
+  const pkgRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const vars = { BOARD_PORT: '8933' };
+  const t = renderTree(path.join(pkgRoot, 'templates'), tmp, vars, { force: true });
+  // P1-1：renderTree 落盘执行位——win32 下 statSync().mode 无 0o111 语义（恒 0666 系），
+  // 断言「writeFileSync 带 mode 参数不炸 + POSIX 语义表达」；真值在 POSIX CI 腿验证
+  const hookStat = fs.statSync(path.join(tmp, '.githooks', 'pre-commit'));
+  const hookHasExecBit = (hookStat.mode & 0o111) !== 0;
+  check('钩子落盘执行位：writeFileSync mode=0755 不炸且 POSIX 语义下可执行位为真（win32 平台分支容忍）',
+    hookHasExecBit || process.platform === 'win32',
+    `mode=${(hookStat.mode & 0o777).toString(8)} platform=${process.platform}`);
+  // P1-3：scriptTrusted——一致放行 / 预置拒绝 / 包源无模板拒绝
+  const ok1 = scriptTrusted({ pkgRoot, target: tmp, rel: '.agents/scripts/gen-workflow-index.mjs', vars });
+  check('scriptTrusted：与包源渲染值一致 → ok', ok1.ok, ok1.note);
+  fs.writeFileSync(path.join(tmp, '.agents/scripts/gen-workflow-index.mjs'), 'require("fs").writeFileSync("MARKER","pwned")\n');
+  const bad1 = scriptTrusted({ pkgRoot, target: tmp, rel: '.agents/scripts/gen-workflow-index.mjs', vars });
+  check('scriptTrusted：预置/被改动 → 拒绝且 note 可见', !bad1.ok && bad1.note.includes('不符'), bad1.note);
+  const bad2 = scriptTrusted({ pkgRoot, target: tmp, rel: '.agents/scripts/not-in-pkg.mjs', vars });
+  check('scriptTrusted：包源无模板 → fail-closed 拒绝', !bad2.ok, bad2.note);
+  // P1-4：owned 记账 LF 归一——CRLF 盘面与 LF 内容同 sha（与 doctor §6.6 比较口径一致）
+  const crlfFile = path.join(tmp, 'crlf-owned.txt');
+  fs.writeFileSync(crlfFile, '行甲\r\n行乙\r\n');
+  const normSha = sha256(Buffer.from('行甲\n行乙\n', 'utf8'));
+  const rawSha = sha256(Buffer.from('行甲\r\n行乙\r\n', 'utf8'));
+  const readNorm = sha256(Buffer.from(fs.readFileSync(crlfFile, 'utf8').replace(/\r\n/g, '\n'), 'utf8'));
+  check('记账口径：LF 归一 sha == LF 内容 sha != 原始字节 sha（CRLF 盘面跨 checkout 稳定）',
+    readNorm === normSha && readNorm !== rawSha);
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 

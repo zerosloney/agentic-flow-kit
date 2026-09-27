@@ -54,7 +54,7 @@ modules/gates/      可选门禁模块（dotnet-ca：Clean Architecture 参考�
 - **门禁即 git 钩子**：不依赖任何 agent 客户端自觉；项目专属门禁挂 `.agents/hooks/local-pre-commit`。
 - **中文优先**：文档协议、命令、检查输出全中文；frontmatter 受限子集供机器断言。
 - 抽取自真实项目长期运转的引擎（某真实项目），dogfooding 是后续路线（sync 升级 / add-host / add-gate / npm 发布）的一部分。
-- **威胁模型（2026-09-27 init-p1-batch）**：勿在不可信仓库运行 `init` / `doctor` / `sync`——三命令在执行目标侧 `.agents/scripts/` 脚本（生成器 / 校验器）前有供应链防线：脚本内容与包源渲染值（LF 归一 sha）一致才执行，失配即显式跳过提示，不执行不下结论；已存在文件保持「保守跳过不覆盖」语义，预置内容不会被运行。
+- **威胁模型（2026-09-27 init-p1-batch）**：勿在不可信仓库运行 `init` / `doctor` / `sync`——三命令在执行目标侧 `.agents/scripts/` 脚本（生成器 / 校验器）前有供应链防线：脚本内容与包源渲染值（LF 归一 sha）一致才执行，失配即显式跳过提示，不执行不下结论。**防线不覆盖 git 钩子面**：预植的 `.githooks/`、`.agents/hooks/` 仍会被保留挂载，并在你自己的首次 git 操作时执行——不可信仓库请先审查/清除预置件再 init。
 
 ## 路线
 

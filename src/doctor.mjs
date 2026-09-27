@@ -177,13 +177,16 @@ export function doctor(args, pkgRoot) {
   }
 
   // 6.5 delegations 台账结构（量化层非门禁：结构漂移曾静默吞掉全部记录，2026-09-24）
-  const aggGuard = scriptGuard('.agents/scripts/agg-delegations.cjs');
-  if (!aggGuard.ok) {
-    add('WARN', `delegations 台账结构检查跳过——${aggGuard.note}（供应链防线）`);
-  } else if (fs.existsSync(path.join(target, '.agents/scripts/agg-delegations.cjs'))) {
-    const agg = spawnSync(process.execPath, ['.agents/scripts/agg-delegations.cjs'], { cwd: target, encoding: 'utf8' });
-    if (agg.status === 0) add('PASS', 'delegations 台账结构有效（agg 可解析）');
-    else add('WARN', `delegations 台账结构漂移——${String(agg.stderr || agg.stdout || '').split('\n')[0]}`);
+  // 存在性先行（复核 P2-2）：旧装户无此脚本 = 既有「静默跳过」语义，不产生防线 WARN 噪音
+  if (fs.existsSync(path.join(target, '.agents/scripts/agg-delegations.cjs'))) {
+    const aggGuard = scriptGuard('.agents/scripts/agg-delegations.cjs');
+    if (!aggGuard.ok) {
+      add('WARN', `delegations 台账结构检查跳过——${aggGuard.note}（供应链防线）`);
+    } else {
+      const agg = spawnSync(process.execPath, ['.agents/scripts/agg-delegations.cjs'], { cwd: target, encoding: 'utf8' });
+      if (agg.status === 0) add('PASS', 'delegations 台账结构有效（agg 可解析）');
+      else add('WARN', `delegations 台账结构漂移——${String(agg.stderr || agg.stdout || '').split('\n')[0]}`);
+    }
   }
 
   // 6.6 owned 漂移校验（kit.owned 列表盘面 sha 不一致；engine 双源纪律对 owned 走「项目自持 + 哈希记账不约束」，
@@ -221,10 +224,16 @@ export function doctor(args, pkgRoot) {
   //     2026-09-25 workflows-linter 把 _TEMPLATE.md「解析校验先行」从 prose 变机器门。首次引入 WARN
   //     （沿用 wf-runtime 复盘「先 WARN 升级 FAIL」渐进路径），装户吃过警告后可升 FAIL。
   //     旧版装户 sync 前 .agents/scripts/workflows-check.mjs 不存在 → 自然跳过不误报）
-  const wfGuard = scriptGuard('.agents/scripts/workflows-check.mjs');
-  if (!wfGuard.ok) {
+  // 6.8 workflows 编排脚本 lint（stages 表解析校验：role/step/after 引用、无环、三形态互斥、数值枚举；
+  //     2026-09-25 workflows-linter 把 _TEMPLATE.md「解析校验先行」从 prose 变机器门。首次引入 WARN
+  //     （沿用 wf-runtime 复盘「先 WARN 升级 FAIL」渐进路径），装户吃过警告后可升 FAIL。
+  //     旧版装户 sync 前 .agents/scripts/workflows-check.mjs 不存在 → 既有「静默跳过」语义保留（存在性先行，
+  //     复核 P2-2），防线只拦「存在但与包源不符」）
+  const wfExists = fs.existsSync(path.join(target, '.agents/scripts/workflows-check.mjs')) && fs.existsSync(path.join(target, '.agents/workflows'));
+  const wfGuard = wfExists ? scriptGuard('.agents/scripts/workflows-check.mjs') : { ok: true, note: '' };
+  if (wfExists && !wfGuard.ok) {
     add('WARN', `workflows 编排脚本 lint 跳过——${wfGuard.note}（供应链防线）`);
-  } else if (fs.existsSync(path.join(target, '.agents/scripts/workflows-check.mjs')) && fs.existsSync(path.join(target, '.agents/workflows'))) {
+  } else if (wfExists) {
     const wf = spawnSync(process.execPath, ['.agents/scripts/workflows-check.mjs'], { cwd: target, encoding: 'utf8' });
     if (wf.status === 0) {
       const warnN = (String(wf.stdout || '').match(/- ⚠️ W\d/g) || []).length;

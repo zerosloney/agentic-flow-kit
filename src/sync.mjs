@@ -97,7 +97,10 @@ export function sync(args, pkgRoot) {
         continue;
       }
       if (diskSha === ledgerSha) {
-        if (freshFile.sha === ledgerSha) { unchanged++; managedNew.push({ rel, sha256: ledgerSha }); }
+        if (freshFile.sha === ledgerSha) {
+          unchanged++; managedNew.push({ rel, sha256: ledgerSha });
+          if (rel.startsWith('.githooks/')) safeChmod(disk); // 存量装户 0644 死钩子升级修复（复核 P2-3）
+        }
         else { copyManaged(freshFile, disk, rel); updated.push(rel); managedNew.push({ rel, sha256: freshFile.sha }); }
         continue;
       }
