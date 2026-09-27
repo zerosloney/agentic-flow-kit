@@ -850,6 +850,15 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     check('检查15:异 quote 分次 + TTY 多文档 → 不报确认并录',
       r.status === 0 && !outOf(r).includes('确认并录'),
       `exit=${r.status}\n${outOf(r)}`);
+    // 同 quote 间隔 > 2s → 不聚组（P2-1：2s 阈值钉住）
+    writeLedger(T, [
+      { ts: '2026-09-28T04:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'chat-delegated', quote: '同一句' },
+      { ts: '2026-09-28T04:00:03.000Z', doc: d2.rel, stage: 'done', fingerprint: d2.fp, prev: 'approved', source: 'chat-delegated', quote: '同一句' },
+    ]);
+    const r3 = run(T);
+    check('检查15:同 quote 间隔 > 2s → 不聚组（2s 阈值钉住，P2-1）',
+      r3.status === 0 && !outOf(r3).includes('确认并录'),
+      `exit=${r3.status}\n${outOf(r3)}`);
     rmfix(T);
   }
   {

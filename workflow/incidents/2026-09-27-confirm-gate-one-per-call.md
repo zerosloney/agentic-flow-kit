@@ -9,8 +9,9 @@
 # INCIDENT — 2026-09-27 确认门「多文档一次代录」系统性违规
 
 ## 时间线
-- 2026-09-27 全天：12 个闭环单全部采用「三件套一起起草 → 一条摘要过目 → 一句『可以』confirm-doc --delegated 多文档一次代录」的节奏（audit-gate-hardening 首创后成为惯性模板，后续 11 单照抄）
+- 2026-09-27 全天：L2 单全部采用「三件套一起起草 → 一条摘要过目 → 一句『可以』confirm-doc --delegated 多文档一次代录」（audit-gate-hardening 首创后成为惯性模板）；复核台账考据修正原表述——实为 6 个 L2 单 ×（立项+关单）各一批并录 + sync-hosts 关单一批，共 13 批 41 行台账可证
 - 2026-09-27 日终：用户指出「你现在一次生成三个文档让我审，不应该是一个文档一次吗」——违规定性与本单立项
+- 同日复核考据新发现（比并录更深一层的盲区）：L1 单的 incident 态翻转（open→fixed→closed）**从未入确认台账**（全台账 0 条 fixed/closed 行）——incident 的终态翻转让旧版 incident 文档落在 frontmatter 状态： closed 但无任何台账/指纹记录，gate-coverage 扩的 15 检查对 incidents 配对要求自 2026-09-28 起才生效（本日 incident 均豁免）。该盲区随新检查生效自然关闭，历史 L1 incident 无法追认（同「draft 直跳 done」存量口径，只声明不回填）
 
 ## 影响面
 - **确认门纪律被系统性绕过**：build.md 明文「入口文档 / spec / plan 各自的确认点不得并作一次」。今日 4 次 L2 三件套并录（audit-gate-hardening / gate-coverage / closing-coverage / p2-batch1）+ 3 次 L1 双件并录（gate-hardening-p2-batch / host-gates-p1 / p2-batch2）+ 2 次 L2 双件（board-kb-p1 三件、init-p1-batch 三件）

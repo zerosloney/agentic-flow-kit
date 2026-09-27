@@ -612,17 +612,23 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
     }
   }
   // 并录批次审计（2026-09-27 confirm-gate-one-per-call，15 原位子检查）：delegated 合法跳转行按
-  // 「quote 相同 + ts 差 < 2s」聚组，组 > 1 → warning——多文档并录曾系统性塌掉 build.md「逐件确认」
-  // 三道门（confirm-doc 现已拒绝多份 delegated，本检查让存量并录在台账上可数可见，属审计记录非新违规）。
-  // 不按日期门豁免：存量如实可见正是目的。revert-draft 注记行（stage 非合法跳转）天然被过滤。
+  // 「quote 相同 + 相邻 ts 差 < 2s」聚组，组 > 1 → warning「确认并录」。文案中性口径（复核 P2-2）：
+  // 历史并录（修复前多份一次代录）与合规连跑（逐件调用 quote 同文）在此判据下不可区分——审计可见性
+  // 非违规定性。不按日期门豁免：存量如实可见正是目的。revert-draft 注记行（stage 非合法跳转）天然被过滤。
   {
     const VALID_STAGES = new Set(['approved', 'done', 'fixed', 'closed', 'superseded', 'cancelled']);
     const delegRows = ledger.filter((e) => e && e.source === 'chat-delegated' && VALID_STAGES.has(e.stage)
       && typeof e.ts === 'string' && typeof e.quote === 'string')
-      .sort((a, b) => (a.ts < b.ts ? -1 : 1));
+      .sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0)); // 复核 P2-4：相等键 0 分支
     // 线性扫描聚组（同 quote 且相邻行 ts 差 < 2s 为一批；组间自然分割——Map 按 quote 索引会互相覆盖）
     let g = [];
-    const flush = () => { if (g.length > 1) { const docs = g.map((r) => r.doc.split('/').pop()).join('、'); warnings.push(`- [WARN 确认并录] 一次 delegated 代录 ${g.length} 份（quote「${g[0].quote.slice(0, 20)}${g[0].quote.length > 20 ? '…' : ''}」）：${docs}——build.md 逐件确认口径（confirm-doc 现已拒绝多份并录；本条为存量审计可见性，不阻断）`); } g = []; };
+    const flush = () => {
+      if (g.length > 1) {
+        const docs = g.map((r) => r.doc.replace(/^workflow\//, '')).join('、'); // 复核 P2-4：保留子目录段（三件套可辨）
+        warnings.push(`- [WARN 确认并录] 同 quote 相邻落账 ${g.length} 份（quote「${g[0].quote.slice(0, 20)}${g[0].quote.length > 20 ? '…' : ''}」）：${docs}——历史并录（修复前多份一次代录）与合规连跑（逐件调用 quote 同文）不可区分，属审计可见性非违规定性（confirm-doc 已拒绝多份并录；不阻断）`);
+      }
+      g = [];
+    };
     for (const row of delegRows) {
       if (g.length && (row.quote !== g[0].quote || Math.abs(new Date(row.ts) - new Date(g[g.length - 1].ts)) >= 2000)) flush();
       g.push(row);
