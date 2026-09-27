@@ -96,7 +96,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "c76c55ea95c7edfdc12c9a3b6a554d77791efe29dc92fd9a955adda9656144db"
+      "sha256": "4fa4cf8f645984d2978613bce308825c81d1106515b008d82942962e580e37ab"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -104,7 +104,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "1fc46147b982babfa39a3d15fe6f50c663ba9aac8fd9b0ef0f264865d5671625"
+      "sha256": "ac01a25b14d911f3838d52e3e8df94584b460e9b12ff8327a914668a2df5ba29"
     },
     {
       "rel": ".agents/scripts/commit-check-trigger.test.mjs",
@@ -112,11 +112,11 @@
     },
     {
       "rel": ".agents/scripts/confirm-doc.mjs",
-      "sha256": "f6d88ed393a8ff2f4add1db3691d1eb204fbdbe0963add3a26e6fb3ffad1914e"
+      "sha256": "63ea7c3f46d7a9d769c387171a5b2400fe1f78649db9e913311cd1381da1cc3b"
     },
     {
       "rel": ".agents/scripts/confirm-doc.test.mjs",
-      "sha256": "f971fc1388b16d57ba21d2c7e2f9aad3b584ff399cdd1506393e3e89c740f4e1"
+      "sha256": "3d5022fbbc7ad02b592f2cae703b350d7cafb12071e91fcc94e4e7e8abb1a15b"
     },
     {
       "rel": ".agents/scripts/doctor.test.mjs",
@@ -322,7 +322,7 @@
   "owned": [
     {
       "rel": "AGENTS.md",
-      "sha256": "d28f372ea2d6c18feb5e96124c8c5ece09dbc58d0e6ea7da8c334e206ff49b6e"
+      "sha256": "76f51d37d615583a011d8c09f93f0240bd089a641d8358b62b4e6ef70380ea69"
     },
     {
       "rel": "wiki/drafts-archive/README.md",

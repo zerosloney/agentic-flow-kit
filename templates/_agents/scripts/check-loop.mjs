@@ -29,7 +29,8 @@
 //  13. 常驻面体积预算(超限=warning;判定单源 rule-budget.sh——经 sh 调用,
 //      无 sh 环境静默跳过:advisory 级且 pre-commit 侧在 git 钩子 sh 环境照常硬拦)
 //  14. 新 done 的 spec/plan 须在 git 历史里出现过 `状态: approved`(确认环节留痕,2026-09-22;恒 advisory 永不升级 hard)
-//  15. 确认指纹对账(2026-09-27 起:approved/done 须 confirm-doc.mjs 用户确认指纹+台账配对,缺=hard-block;存量豁免)
+//  15. 确认指纹对账(2026-09-27 起:approved/done 须 confirm-doc.mjs 确认指纹+台账配对,缺=hard-block;存量豁免;
+//      两形态——TTY 亲手 / --delegated 对话委托代录,台账 source 如实区分,配对判据与 source 无关)
 //
 // 注：清单条目 5（状态字段+L3 复核）与 1（配对）在同一遍 intents/specs/plans 循环里实现（沿 sh 版代码结构）；
 //    条目 6 的旧委派残留/钉死模型子项在「角色契约与 Adapter」代码段实现。
@@ -529,9 +530,11 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
   }
 }
 
-// --- 15. 确认指纹对账 [hard-block]（2026-09-26 confirm-gate-machine；生效 2026-09-27 起，存量豁免）---
-// AI 不得代确认：intents/specs/plans 凡 approved/done（生效日起新建）须有用户经 confirm-doc.mjs
-// 产生的 frontmatter 确认指纹 + 台账（.agents/confirmations.jsonl）配对行；台账不存在视为空台账（全拦）。
+// --- 15. 确认指纹对账 [hard-block]（2026-09-26 confirm-gate-machine；2026-09-27 confirm-gate-delegated 两形态；生效 2026-09-27 起，存量豁免）---
+// 确认两形态（confirm-doc.mjs）：TTY 亲手键入「可以」/ --delegated 对话委托代录（用户对话内明确放行后
+// AI 代录，台账行如实记 source=chat-delegated + quote 原话，永不伪装 TTY）。intents/specs/plans 凡
+// approved/done（生效日起新建）须有 confirm-doc 产生的 frontmatter 确认指纹 + 台账（.agents/confirmations.jsonl）
+// 配对行——配对判据 doc/stage/fingerprint 三键，与 source 无关；台账不存在视为空台账（全拦）。
 // 台账坏行容忍跳过（审计件，jsonl 追加式）；frontmatter 存 16 位、台账存 64 位，按前 16 位配对。
 {
   const EFFECTIVE = '2026-09-27';

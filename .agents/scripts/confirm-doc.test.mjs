@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// confirm-doc.test.mjs — 用户确认门测试（2026-09-26 confirm-gate-machine）
-// 判据：① 指纹算法（CRLF 归一 / 剔指纹行防自引用 / 内容敏感）② 跳转唯一合法性 ③ 落态只动两行
-//       ④ 台账追加 schema ⑤ 核心——非 TTY spawn（模拟 AI 调用路径）必须被拒
+// confirm-doc.test.mjs — 用户确认门测试（2026-09-26 confirm-gate-machine；2026-09-27 confirm-gate-delegated 补委托场景）
+// 判据：① 指纹算法（CRLF 归一 / 剔指纹行防自引用 / 内容敏感） ② 跳转唯一合法性 ③ 落态只动两行
+//       ④ 台账追加 schema ⑤ 核心——非 TTY spawn（模拟 AI 调用路径）无 --delegated 必须被拒
+//       ⑥ 委托代录（--delegated）：免 TTY 落态 + 台账如实记 source/quote；空原话拒跑
 // 用法：node templates/_agents/scripts/confirm-doc.test.mjs（npm test 随跑）
 import fs from 'node:fs';
 import os from 'node:os';
@@ -98,6 +99,61 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
 {
   const r = spawnSync(process.execPath, [CLI], { encoding: 'utf8' });
   check('S10 TTY 门最先（无参数也是拒绝而非用法提示）', r.status === 1 && /不可代确认/.test(r.stderr));
+}
+
+// ---- S11 委托代录：非 TTY spawn + --delegated → 免 TTY 落态 + 台账如实记 source/quote ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-del-'));
+  const docP = path.join(root, 'workflow', 'plans');
+  fs.mkdirSync(docP, { recursive: true });
+  fs.writeFileSync(path.join(docP, '2026-09-27-d.md'), '---\n状态: draft\n级别: L2\n---\n# P\n');
+  const before = fs.readFileSync(path.join(docP, '2026-09-27-d.md'), 'utf8');
+  const fpExpect = computeFingerprint(before);
+  // spawnSync 无 TTY（管道 stdin）——模拟 AI 会话内委托代录调用
+  const r = spawnSync(process.execPath, [CLI, 'workflow/plans/2026-09-27-d.md', '--delegated', '2选2'], { cwd: root, encoding: 'utf8' });
+  const after = fs.readFileSync(path.join(docP, '2026-09-27-d.md'), 'utf8');
+  const led = fs.readFileSync(path.join(root, '.agents', 'confirmations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  const j = led[led.length - 1];
+  check('S11 委托代录：exit 0 + draft→approved + 指纹行 + 台账 source=chat-delegated / quote=原话 / 指纹全量与 frontmatter 前 16 位配对',
+    r.status === 0 && after.includes('状态: approved') && after.includes(`确认指纹: ${fpExpect.slice(0, 16)}`)
+      && j.source === 'chat-delegated' && j.quote === '2选2' && j.stage === 'approved' && j.prev === 'draft'
+      && j.fingerprint === fpExpect,
+    JSON.stringify({ status: r.status, stderr: r.stderr, ledger: led }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- S12 委托代录第二跳：approved→done 换新指纹（台账行仍如实记来源）----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-del2-'));
+  const docP = path.join(root, 'workflow', 'intents');
+  fs.mkdirSync(docP, { recursive: true });
+  const fp1 = computeFingerprint('---\n状态: draft\n---\n# I\n');
+  fs.writeFileSync(path.join(docP, '2026-09-27-e.md'), `---\n状态: approved\n确认指纹: ${fp1.slice(0, 16)}\n---\n# I\n`);
+  const before = fs.readFileSync(path.join(docP, '2026-09-27-e.md'), 'utf8');
+  const fp2 = computeFingerprint(before);
+  const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-27-e.md', '--delegated', '可以'], { cwd: root, encoding: 'utf8' });
+  const after = fs.readFileSync(path.join(docP, '2026-09-27-e.md'), 'utf8');
+  const led = fs.readFileSync(path.join(root, '.agents', 'confirmations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  check('S12 委托第二跳：approved→done + 指纹行换新值 + 台账 stage=done / source 如实',
+    r.status === 0 && after.includes('状态: done') && after.includes(`确认指纹: ${fp2.slice(0, 16)}`) && !after.includes(fp1.slice(0, 16))
+      && led[led.length - 1].stage === 'done' && led[led.length - 1].source === 'chat-delegated',
+    JSON.stringify({ status: r.status, after }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- S13 委托代录：--delegated 空原话 → exit 1 用法提示，零文件改动 ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-del3-'));
+  const docP = path.join(root, 'workflow', 'plans');
+  fs.mkdirSync(docP, { recursive: true });
+  fs.writeFileSync(path.join(docP, '2026-09-27-f.md'), '---\n状态: draft\n---\n# P\n');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/plans/2026-09-27-f.md', '--delegated', '  '], { cwd: root, encoding: 'utf8' });
+  const after = fs.readFileSync(path.join(docP, '2026-09-27-f.md'), 'utf8');
+  const noLedger = !fs.existsSync(path.join(root, '.agents', 'confirmations.jsonl'));
+  check('S13 空原话拒跑：exit 1 + 用法提示 + 文档未动 + 无台账',
+    r.status === 1 && /--delegated 须带用户对话原话/.test(r.stderr) && after === '---\n状态: draft\n---\n# P\n' && noLedger,
+    JSON.stringify({ status: r.status, stderr: r.stderr }));
+  fs.rmSync(root, { recursive: true, force: true });
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

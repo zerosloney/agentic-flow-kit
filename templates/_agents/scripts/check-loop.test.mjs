@@ -620,6 +620,18 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     r.status === 0 && !/引用断档.*fill-\*/.test(outOf(r)) && /引用断档.*ghost-\*\.mjs/.test(outOf(r)), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
 }
+// ---- 场景 48:检查 15——委托代录台账行（source/quote 额外字段）照常配对放行（两形态口径，2026-09-27 confirm-gate-delegated）----
+{
+  const T = mkfix();
+  const i1 = mkConfirmedDoc(T, 'workflow/intents/2026-09-27-del15.md', '状态: approved\n级别: L1\n日期: 2026-09-27');
+  const p1 = mkConfirmedDoc(T, 'workflow/plans/2026-09-27-del15.md', '状态: approved\n级别: L1');
+  writeLedger(T, [
+    { ts: 'T', doc: i1.rel, stage: 'approved', fingerprint: i1.fp, prev: 'draft', source: 'chat-delegated', quote: '2选2' },
+    { ts: 'T', doc: p1.rel, stage: 'approved', fingerprint: p1.fp, prev: 'draft', source: 'tty' },
+  ]);
+  expectOk('检查15:委托代录台账行（source+quote）照常配对 → exit 0', T);
+  rmfix(T);
+}
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);
