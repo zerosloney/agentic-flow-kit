@@ -11,7 +11,7 @@
 |---|---|---|---|---|---|---|
 | INCIDENT | L2 | open | 2026-09-27 | pipeline | 2026-09-27 确认门「多文档一次代录」系统性违规 | — |
 | INCIDENT | L1 | open | 2026-09-27 | pipeline | 2026-09-27 P2 池批二（看板/wiki/宿主维护面收口） | — |
-| PLAN | L2 | draft | 2026-09-27 | pipeline | confirm-gate-one-per-call | — |
+| PLAN | L2 | approved | 2026-09-27 | pipeline | confirm-gate-one-per-call | — |
 | SPEC | L2 | approved | 2026-09-27 | pipeline | confirm-gate-one-per-call | — |
 | INCIDENT | L1 | open | 2026-09-25 | pipeline | 2026-09-25 doctor owned 漂移 WARN 升级 FAIL | — |
 | INTENT | L1 | approved | 2026-09-24 | pipeline | Shipyard 引擎增量收包（抽取后 3 笔回流包源） | ☑5/5 |

@@ -1,46 +1,52 @@
 ---
-状态: draft
+状态: approved
 级别: L2
 模块: pipeline
-
+确认指纹: 57e88e1773f17e16
 ---
 # PLAN — confirm-gate-one-per-call
 
-<!-- 与 intents/ 或 incidents/ 下同名入口文档配对；L2/L3 必须先有 ../specs/ 同名 spec 确认通过；AI 起草、用户对话内确认后开工 -->
-<!-- frontmatter 受限子集（2026-09-13）：状态∈draft/approved/done/superseded/cancelled；级别∈L0/L1/L2/L3；正文不再写状态/级别行 -->
-<!-- L1 极简形态（2026-09-13 瘦身，L1 默认）：单/少文件微改动只填「改动面」+「验证方式」两节——改动面逐条列改哪个文件做什么（判据细节直接写进条目），验证一行静态门 + 按需 UI 实测；任务拆解/执行顺序仅 L1 多文件多步骤时保留 -->
+对应入口：../incidents/2026-09-27-confirm-gate-one-per-call.md
+对应 spec：../specs/2026-09-27-confirm-gate-one-per-call.md
 
-对应入口：../intents/YYYY-MM-DD-<主题>.md 或 ../incidents/YYYY-MM-DD-<主题>.md（保留实际一项）
-对应 spec：../specs/YYYY-MM-DD-<主题>.md（L1 可省略）
+## 改动面
 
-## 改动面（L1 极简形态主节；L2/L3 可作任务拆解的汇总或删本节）
+- `templates/_agents/scripts/confirm-doc.mjs`：--delegated 分支参数校验层加单文档强制（docs.length > 1 → exit 1 + 逐件口径提示，先于文档处理循环、不写台账）；头注释补口径
+- `templates/_agents/scripts/confirm-doc.test.mjs`：+2 场景——delegated 双文档拒绝（exit 1 + 提示 + 台账零写入 + 文档零改动）；delegated 单文档照常（S11 既有回归确认不破）
+- `templates/_agents/scripts/check-loop.mjs`：15 新增并录批次 warning 子检查（delegated 合法行按 quote 相同 + ts 差 < 2s 聚组，组 > 1 → warning；revert-draft 注记行跳过）；头注释口径
+- `templates/_agents/scripts/check-loop.test.mjs`：+3 场景——同 quote 双份 2s 内 warning；异 quote / 间隔 > 2s 不报；TTY 多文档行不参与聚组
+- `templates/_agents/commands/{plan,design,build,test}.md`：确认门段补「逐件调用（多份并录会被拒）」一句
+- `AGENTS.md`（根 + templates/AGENTS.md）：确认门条款补「--delegated 逐件调用」
+- 装副本/薄适配：sync + sync-hosts --apply（commands 正文改）
 
-- <文件/组件>：<做什么；判据细节直接写进条目，如「L771 message.success 改『更新成功』>
+## 任务拆解
 
-## 任务拆解（L2/L3 必填；L1 仅多文件多步骤时用，单任务微改动删本节）
+1. **T1 单文档强制**（confirm-doc + 测试）
+   - 判据：confirm-doc.test 新场景绿（拒绝/照常两路）；实测 delegated 双文档 → exit 1 提示
+   - 风险：低
+2. **T2 批次 warning**（check-loop 15 子检查 + 测试）
+   - 判据：check-loop.test 新场景绿；本仓实跑——今日存量并录批次以 warning 可见（数量与台账实况一致）
+   - 风险：低（warning 级）
+3. **T3 文案四处**（commands ×4 + AGENTS ×2）+ sync 双源同步
+   - 判据：AGENTS.md 预算内（+~80B）；source-sync-check 0 差异；sync-hosts 34 对对齐
+   - 风险：低
+4. **T4 收口**：全套回归（npm test + verify.mjs）+ doctor + feat 提交
+   - 判据：全绿；check-loop 15 既有判定零回归（配对/绑定场景全绿）
+   - 风险：低
 
-1. <任务>
-   - 判据：<怎样算完成；尽量对应一个测试或可复现操作>
-   - 风险：低 / 中 / 高（<原因>）
-2. <任务>
-   - 判据：…
-   - 风险：…
+## 执行顺序
 
-## 执行顺序（L2/L3 必填；L1 单文件微改动删本节）
-
-<1 → 2 → 3；标注依赖关系>
+T1 → T2 → T3 → T4（串行，件少）。
 
 ## 验证方式
 
-- 静态门：项目构建命令（+ 项目测试命令，测试项目就绪后）
-- 前端：cd frontend && npm run build（vue-tsc）
-- UI：.agents/commands/test.md（涉及页面改动必走，headless Chrome 实测）
-- L2 追加：<契约 / 规则面比对：编码结果抽样 / 接口契约断言 / 口径对账>
-- L3 追加：<含 schema 变更：备份 + 回滚 SQL 就绪后执行；仅运行时 / 管线：回退上一 release tag + 配置开关预案>
+- 静态门：npm test 全套（confirm-doc +2 / check-loop +3 场景）；doctor 0 FAIL；check-loop advisory 变化仅新增「确认并录」存量可见项
+- L2 追加：delegated 双文档拒绝实测留证；台账批次聚组在本仓实跑对数
+- 回滚：单 feat 提交 revert 即回
 
 ## 确认与复核
 
-> 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节（确认环节的机器可见态），done 只在关单出现——禁从 draft 直跳 done（2026-09-22 papercut）。
+> 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节，done 只在关单出现。
 - 确认结果：approved（YYYY-MM-DD 用户对话内确认）；done（YYYY-MM-DD 关单，随入口文档置终态）
 - 确认门记录：plan 草稿全文过目 + 改动清单确认（build.md 两道门，逐次，不合并）
-- 复核：L1 不要求独立复核
+- 复核：L2 推荐独立复核（independent-reviewer；采纳/驳回由用户定性）
