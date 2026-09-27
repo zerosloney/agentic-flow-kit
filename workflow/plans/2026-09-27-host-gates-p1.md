@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L1
 模块: pipeline
-确认指纹: 9ea9f3367f31445b
+确认指纹: 05d3a1b2cbe06c46
 ---
 # PLAN — host-gates-p1
 

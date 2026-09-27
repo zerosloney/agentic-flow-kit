@@ -41,3 +41,4 @@
 {"ts":"2026-09-27T10:36:36.880Z","doc":"workflow/specs/2026-09-27-board-kb-p1.md","stage":"done","fingerprint":"3185440fd9a650c7f43c0a2f73ebf565d1fa9ce00e01b6d4c4cbd699e82316ca","prev":"approved","source":"chat-delegated","quote":"可以"}
 {"ts":"2026-09-27T10:36:36.882Z","doc":"workflow/plans/2026-09-27-board-kb-p1.md","stage":"done","fingerprint":"ad5823722dbd7f526116c481829ebd10ade09fb433a822a351ccaa64d3d841a5","prev":"approved","source":"chat-delegated","quote":"可以"}
 {"ts":"2026-09-27T11:15:17.691Z","doc":"workflow/plans/2026-09-27-host-gates-p1.md","stage":"approved","fingerprint":"9ea9f3367f31445b7c920d528ff387e649a5a69a0c95ce60486b766c3d32339b","prev":"draft","source":"chat-delegated","quote":"可以"}
+{"ts":"2026-09-27T11:35:45.062Z","doc":"workflow/plans/2026-09-27-host-gates-p1.md","stage":"done","fingerprint":"05d3a1b2cbe06c46a5781955b518e063aa465ff784db80d20c605e83ed622aec","prev":"approved","source":"chat-delegated","quote":"可以"}

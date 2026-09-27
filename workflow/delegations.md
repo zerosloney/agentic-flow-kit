@@ -35,6 +35,7 @@
 | 2026-09-27 | 闭环收尾批（--to 终态确认门 + managed sha 六处 LF 归一） | 返工×1 | intent 2026-09-27-closing-coverage（L2）；实现返工 1 次——首版只归一读取侧，fresh sha 仍 CRLF（sync 23 份「本地已改」暴露），补 render.mjs 写盘归一后六处口径闭合、克隆 managed WARN 13→0（复核基线对照实证）；期间误触发 soft reset 摘掉立项提交，ORIG_HEAD 即时恢复零丢失（commit-msg 门禁拦 "wip" 试提交后清理命令时序错误的连锁，全程无内容损失）；L2 独立复核判「通过」0 P0/P1，P2-1 措辞随 a526a7f 收口；confirm-doc 19/0 + check-loop 65/0 + source-sync-check 21/0 |
 | 2026-09-27 | init 安装器 P1×4 收口（执行位 / init 时序 / 供应链防线 / 记账归一） | 返工×1 | intent 2026-09-27-init-p1-batch（L2）；首提交 7903325 实测三件套全过（fresh init exit 0 / 预植恶意脚本 ×3 命令 0 标记 / CRLF 合并 owned 26 份无漂移），L2 独立复核重演实验后抓条件①（spec 承诺的测试场景未落地——实现时漏写）→ f6ffc3e 补 init.test ⑦节 5 断言 + README 威胁模型收窄（复核实测预植 .githooks 会被挂载执行，原文表述夸大）+ doctor §6.5/§6.8 存在性先行 + sync unchanged 补 chmod；init.test 28/0 + verify 全绿 |
 | 2026-09-27 | 看板+kb 审查 P1×4 收口（告警单源化 / 单包崩溃 / 扩容门对齐 / kb revive 校验） | 一次通过 | intent 2026-09-27-board-kb-p1（L2）；d8dd6d4 一次落地（看板 hard-block 单源 check-loop + 双跑断言固化 10 场景 / 畸形请求 400 实测 / Host 403 / 扩容门对齐 delegations.md 反例实测 ❌ / kb 结构损坏 30 场景 + 测试注入式缓存）；L2 独立复核判「通过」0 P0/P1，P2×2（延迟 35 倍低估）随 1f7b9ed rider（60s TTL 实测 10.8s→376ms + 击键去抖）；board/agg/kb/metrics 四套件 10+14+30+16 全绿 |
+| 2026-09-27 | 宿主门禁 P1×3 收口（dotnet-ca BRE 豁免 / CONTROLLERS_DIR fail-open / trae 强推 token 化） | 返工×1 | incident 2026-09-27-host-gates-p1（L1，修复类不重复记自做——此行为测试基建补记：两新套件 gate-dotnet-ca 5/0 + trae-hooks 19/0 进 npm test 常驻）；实现返工 1 次——测试夹具三修（CONFIG 整行正则替换 / Controllers 目录创建时序 / 断言误中提示语），门禁本体一次落对；L1 快速独立复核判「通过」0 P0/P1，P2×3（-vf 组合短旗标 / 跨 && 误并 / exempt 字符串拼接）随 a06e77d 全收 |
 
 ## 月度聚合快照
 

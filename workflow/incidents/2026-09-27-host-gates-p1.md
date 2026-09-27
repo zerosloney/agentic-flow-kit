@@ -1,9 +1,9 @@
 ---
-状态: open
+状态: closed
 级别: L1
 发现: 2026-09-27
 模块: pipeline
-备注: 宿主模块审查 P1×3 收口（用户「继续」按建议切法）：dotnet-ca 豁免清单多值 BRE 失效（P1-B1）+ CONTROLLERS_DIR fail-open（P1-B3）+ 红线 1 csproj glob 静默放行（随 B3）；trae pre-shell-check deny 强推换序绕过（P1-B2，token 化）；rider P2-B4（127 未装区分，两 hook 同修）。修复类，incident 即 intent 等价入口；L1 配 plan 不需 spec
+备注: 宿主模块审查 P1×3 收口（用户「继续」按建议切法）：dotnet-ca 豁免清单多值 BRE 失效（P1-B1）+ CONTROLLERS_DIR fail-open（P1-B3）+ 红线 1 csproj glob 静默放行（随 B3）；trae pre-shell-check deny 强推换序绕过（P1-B2，token 化）；rider P2-B4（127 未装区分，两 hook 同修）。修复类，incident 即 intent 等价入口；L1 配 plan 不需 spec。修复：681368e（立项）+ 3eeb588（实现）+ a06e77d（复核 P2×3 收口）
 ---
 
 # INCIDENT — 2026-09-27 宿主门禁模块三处判定失效（dotnet-ca / trae）
@@ -32,14 +32,14 @@
 ## 复盘三件套（缺一不可）
 
 1. 结构性修复
-   - 修复 commit：随本单 feat 提交落（关单时回填 SHA）
+   - 修复 commit：3eeb588（dotnet-ca 豁免冒号拆多 -e + CONTROLLERS_DIR/csproj fail-closed；trae isForcePush token 化 + 127 区分两 hook）+ a06e77d（复核 P2×3：组合短旗标 -vf / 跨 && 分段 / set -- 引号安全派发）
    - 影响环境：dev（包源件，未发布版本面）
    - 是否需要新 intent：
      - 否 → 理由：实现级判定缺陷单点修复（BRE 拆分 / fail-closed 补齐 / token 化），无门禁缺位类系统性根因
 
 2. 防复发验证（必须落到自动化用例，禁止只写「已人工验证」）
-   - 自动化用例：新增 `src/gate-dotnet-ca.test.mjs`（豁免多值拆分 / CONTROLLERS_DIR 缺失 fail-closed / csproj 缺失 fail-closed，fixture 临时 git 仓）+ `src/trae-hooks.test.mjs`（换序强推拦 / +refspec 拦 / --force-with-lease 放行 / 127 未装区分）；`src/run-tests.mjs` 注册两套件
+   - 自动化用例：src/gate-dotnet-ca.test.mjs（5 场景：豁免多值双向 / CONTROLLERS_DIR 缺失 fail-closed / csproj 缺失 fail-closed / 干净树 exit 0）+ src/trae-hooks.test.mjs（19 场景：换序强推 / +refspec / -f / -vf 组合短旗标 / 跨 && 分段 / --force-with-lease 放行 / 既有 deny/ask 回归 / 127 未装区分）——均注册进 npm test 常驻回归
 
 3. 规范条目（必须有可追溯的落点）
-   - 落点：两脚本头部注释（BRE 无交替约束 / token 化口径 / 127 语义）
-   - 引用：随本单 feat 提交
+   - 落点：check-architecture.sh 头部（BRE 无交替约束 + set -- 派发）、pre-shell-check.cjs（token 化口径 + 分段判定）、post-edit-check.cjs（127 语义）
+   - 引用：3eeb588 + a06e77d
