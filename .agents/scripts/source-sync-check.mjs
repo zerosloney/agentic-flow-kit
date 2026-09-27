@@ -22,7 +22,8 @@ const TARGET_EXCLUDE = RENDER_OUTPUT_FILES;  // 向后兼容别名
 
 function sha256(p) {
   try {
-    return createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+    // LF 归一（2026-09-27 closing-coverage）：CRLF 盘面与 LF 克隆同值，行尾不一致不误报缺失/漂移/孤儿外差异
+    return createHash('sha256').update(fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n'), 'utf8').digest('hex');
   } catch {
     return null;
   }

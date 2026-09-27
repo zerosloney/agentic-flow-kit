@@ -9,7 +9,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { computeFingerprint, nextStage, applyTransition, appendLedger } from './confirm-doc.mjs';
+import { computeFingerprint, nextStage, applyTransition, appendLedger, resolveTransition } from './confirm-doc.mjs';
 
 let pass = 0;
 let fail = 0;
@@ -50,6 +50,15 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
   check('S4 incidents 跳转表：open→fixed、fixed→closed、closed→null（无 open→closed 单跳）',
     nextStage('open') === 'fixed' && nextStage('fixed') === 'closed'
       && nextStage('closed') === null && nextStage('open') !== 'closed');
+  // --to 放弃态跳转表（2026-09-27 closing-coverage）：cancelled 自未确认/进行态；superseded 自已确认态
+  const cancelOk = ['draft', 'approved', 'open', 'fixed'].every((s) => resolveTransition(s, 'cancelled') === 'cancelled');
+  const supersedeOk = ['approved', 'done', 'fixed', 'closed'].every((s) => resolveTransition(s, 'superseded') === 'superseded');
+  check('S4 --to 合法表：cancelled×{draft,approved,open,fixed} / superseded×{approved,done,fixed,closed} 全通',
+    cancelOk && supersedeOk);
+  check('S4 --to 非法表：draft→superseded / open→superseded / done→cancelled / cancelled→cancelled / 非法目标值 全拒',
+    resolveTransition('draft', 'superseded') === null && resolveTransition('open', 'superseded') === null
+      && resolveTransition('done', 'cancelled') === null && resolveTransition('cancelled', 'cancelled') === null
+      && resolveTransition('approved', 'deleted') === null && resolveTransition('approved', null) === 'done');
 }
 
 // ---- S5 applyTransition：只动状态行 + 增指纹行，正文逐字节原样 ----
@@ -176,6 +185,40 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
       && j.source === 'chat-delegated' && j.quote === '修好了' && j.stage === 'fixed' && j.prev === 'open'
       && j.fingerprint === fpExpect,
     JSON.stringify({ status: r.status, stderr: r.stderr, ledger: led }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- S16 放弃态 --to（2026-09-27 closing-coverage）：draft --to cancelled 委托代录落态 + 台账 ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-to-'));
+  const docP = path.join(root, 'workflow', 'intents');
+  fs.mkdirSync(docP, { recursive: true });
+  fs.writeFileSync(path.join(docP, '2026-09-28-c.md'), '---\n状态: draft\n级别: L1\n---\n# I\n');
+  const before = fs.readFileSync(path.join(docP, '2026-09-28-c.md'), 'utf8');
+  const fpExpect = computeFingerprint(before);
+  const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-28-c.md', '--to', 'cancelled', '--delegated', '不做了'], { cwd: root, encoding: 'utf8' });
+  const after = fs.readFileSync(path.join(docP, '2026-09-28-c.md'), 'utf8');
+  const led = fs.readFileSync(path.join(root, '.agents', 'confirmations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  const j = led[led.length - 1];
+  check('S16 --to cancelled 委托代录：exit 0 + draft→cancelled + 台账 stage=cancelled / prev=draft',
+    r.status === 0 && after.includes('状态: cancelled') && after.includes(`确认指纹: ${fpExpect.slice(0, 16)}`)
+      && j.stage === 'cancelled' && j.prev === 'draft' && j.quote === '不做了' && j.fingerprint === fpExpect,
+    JSON.stringify({ status: r.status, stderr: r.stderr, ledger: led }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- S17 --to 非法组合拒跑：done --to cancelled → 跳过且不落台账 ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-to2-'));
+  const docP = path.join(root, 'workflow', 'plans');
+  fs.mkdirSync(docP, { recursive: true });
+  fs.writeFileSync(path.join(docP, '2026-09-28-d.md'), '---\n状态: done\n级别: L1\n---\n# P\n');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/plans/2026-09-28-d.md', '--to', 'cancelled', '--delegated', '试试'], { cwd: root, encoding: 'utf8' });
+  const after = fs.readFileSync(path.join(docP, '2026-09-28-d.md'), 'utf8');
+  const noLedger = !fs.existsSync(path.join(root, '.agents', 'confirmations.jsonl'));
+  check('S17 --to 非法组合（done→cancelled）：跳过不落态 + 无台账 + 文档未动',
+    /无合法跳转/.test(r.stderr || '') && after.includes('状态: done') && noLedger,
+    JSON.stringify({ stderr: r.stderr }));
   fs.rmSync(root, { recursive: true, force: true });
 }
 

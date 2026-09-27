@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-// confirm-doc — 用户确认门（2026-09-26 confirm-gate-machine；2026-09-27 confirm-gate-delegated 加委托代录形态；同日 gate-coverage 收 incidents）
+// confirm-doc — 用户确认门（2026-09-26 confirm-gate-machine；2026-09-27 confirm-gate-delegated 加委托代录形态；同日 gate-coverage 收 incidents；同日 closing-coverage 加放弃态 --to）
 // 唯一确认入口：workflow/{intents,specs,plans} 文档（draft→approved 起草确认 / approved→done 关单确认）
 //   与 workflow/incidents 文档（open→fixed 修复落地确认 / fixed→closed 关单确认——不支持 open→closed 单跳，
-//   强制两跳留痕；2026-09-28 起 check-loop 15 对账）。check-loop 检查 15 按「确认指纹 + 台账配对」对账，
-//   无记录即 hard-block。
+//   强制两跳留痕；2026-09-28 起 check-loop 15 对账）。放弃态走显式 `--to`（2026-09-27 closing-coverage）：
+//   --to cancelled 自 draft/approved/open/fixed（未确认过的东西谈不上被取代）；--to superseded 自
+//   approved/done/fixed/closed（已确认/闭环的结论被新档取代）。check-loop 检查 15 按「确认指纹 + 台账配对」
+//   对账（四终态另做内容绑定），无记录即 hard-block。
 // 两形态：
 //   ① TTY 模式（默认）：用户终端亲手运行、逐份过目全文、逐份键入「可以」——非交互环境直接拒绝
 //     （AI 会话的 spawnSync 无 TTY，本形态在 AI 手里跑不起来）。
@@ -16,6 +18,7 @@
 // 指纹：内容 CRLF 归一 → 剔除「确认指纹:」行（防自引用）→ sha256；frontmatter 存前 16 位，台账存全量。
 // 用法：node .agents/scripts/confirm-doc.mjs <workflow/intents|x.md> [<doc2>...] [--root <仓库根>]
 //       node .agents/scripts/confirm-doc.mjs <doc...> --delegated "<用户对话原话>"（委托代录）
+//       node .agents/scripts/confirm-doc.mjs <doc...> --to superseded|cancelled（放弃态：取代/取消，留指纹与台账）
 //   多文档一次传入：TTY 模式逐份打印全文过目、逐份键入「可以」、逐份落态记账；委托模式逐份直接落态。
 // 测试：node templates/_agents/scripts/confirm-doc.test.mjs（纯函数逐项 + 非 TTY spawn 拒绝断言 + 委托场景）
 import fs from 'node:fs';
@@ -38,6 +41,21 @@ export function nextStage(status) {
   if (status === 'approved') return 'done';
   if (status === 'open') return 'fixed'; // incidents：修复落地确认（三件套全落地）
   if (status === 'fixed') return 'closed'; // incidents：关单确认（防复发验证已落地）
+  return null;
+}
+
+// 放弃态跳转表（2026-09-27 closing-coverage）：cancelled 自未确认/进行态，superseded 自已确认态——
+// draft/open 未被确认过，谈不上「被取代」，只能 cancelled；终态间互跳一律拒绝
+const CANCELLABLE = new Set(['draft', 'approved', 'open', 'fixed']);
+const SUPERSEDABLE = new Set(['approved', 'done', 'fixed', 'closed']);
+export const ABANDON_TARGETS = ['superseded', 'cancelled'];
+
+// resolveTransition(status, to)：带 --to 目标的跳转裁决（pure）。to 为空 = 默认前向（nextStage）；
+// to ∈ {superseded, cancelled} 按上表判合法性；其余值或非法组合返回 null
+export function resolveTransition(status, to) {
+  if (!to) return nextStage(status);
+  if (to === 'cancelled') return CANCELLABLE.has(status) ? 'cancelled' : null;
+  if (to === 'superseded') return SUPERSEDABLE.has(status) ? 'superseded' : null;
   return null;
 }
 
@@ -78,11 +96,17 @@ if (isMain) {
   const argv = process.argv.slice(2);
   let root = process.cwd();
   let delegatedQuote = null; // null = TTY 模式；字符串 = 委托代录的用户对话原话
+  let toTarget = null; // null = 默认前向跳转；superseded|cancelled = 放弃态显式目标
   const docs = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--root') root = path.resolve(argv[++i]);
     else if (argv[i] === '--delegated') delegatedQuote = argv[++i] ?? '';
+    else if (argv[i] === '--to') toTarget = argv[++i] ?? '';
     else docs.push(argv[i].replace(/\\/g, '/'));
+  }
+  if (toTarget !== null && !ABANDON_TARGETS.includes(toTarget)) {
+    console.error(`用法：--to 仅接受 superseded|cancelled（现「${toTarget}」）——cancelled 自 draft/approved/open/fixed；superseded 自 approved/done/fixed/closed（未确认态只能 cancelled，终态间不互跳）`);
+    process.exit(1);
   }
   const delegated = delegatedQuote !== null;
   if (delegated && !String(delegatedQuote).trim()) {
@@ -123,9 +147,9 @@ if (isMain) {
         if (m) { st = m[1].trim(); break; }
       }
     }
-    const target = nextStage(st);
+    const target = resolveTransition(st, toTarget);
     if (!target) {
-      console.error(`跳过 ${doc}：当前状态「${st || '缺失'}」无合法前向跳转（docs: draft→approved / approved→done；incidents: open→fixed / fixed→closed）`);
+      console.error(`跳过 ${doc}：当前状态「${st || '缺失'}」无合法跳转（前向：docs draft→approved / approved→done；incidents open→fixed / fixed→closed；放弃 --to：cancelled 自 draft/approved/open/fixed，superseded 自 approved/done/fixed/closed）`);
       continue;
     }
     const fp = computeFingerprint(text);

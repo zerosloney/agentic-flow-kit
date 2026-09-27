@@ -34,7 +34,8 @@
 //      两形态——TTY 亲手 / --delegated 对话委托代录,台账 source 如实区分,配对判据与 source 无关)
 //      + incidents 覆盖(2026-09-27 gate-coverage:fixed/closed 须配对,自 2026-09-28 起,存量 13 份全豁免;
 //      open=起草态不加门;不支持 open→closed 单跳——confirm-doc 状态机强制经 fixed)
-//      + done/closed 内容绑定(2026-09-27 audit-gate-hardening;生效锚=台账行 ts≥2026-09-28——同日 p2-batch
+//      + 放弃态覆盖(2026-09-27 closing-coverage:superseded/cancelled 入配对集,confirm-doc --to 唯一通道)
+//      + 四终态内容绑定(2026-09-27 audit-gate-hardening;生效锚=台账行 ts≥2026-09-28——同日 p2-batch
 //      自文档自报日期改锚:旧日期文档晚关单也绑定,3 份失配存量 ts 均 09-27 天然豁免):
 //      按 prev 复原跳转前文本重算 sha256 与台账全量比对,不符=hard「确认内容漂移」;状态行保分隔符换值
 //      (非规范格式不误伤);台账行缺 prev 降级 warning;关单编辑顺序新约定:勾验/回填先于关单确认,
@@ -562,11 +563,14 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
   }
   // incidents 侧覆盖（2026-09-27 gate-coverage）：fixed/closed 为已确认态（open = 起草态不加门——
   // maintain.md 创建即对话确认的既有口径），配对自 2026-09-28 起（存量无台账全豁免）
+  // 放弃态覆盖（2026-09-27 closing-coverage）：superseded/cancelled 入配对集——confirm-doc --to 是唯一
+  // 合法产生通道（cancelled 自 draft/approved/open/fixed；superseded 自 approved/done/fixed/closed），
+  // 此前手改 frontmatter 即出账的口子收死
   const CONFIRMED_BY_SUB = {
-    intents: ['approved', 'done'],
-    specs: ['approved', 'done'],
-    plans: ['approved', 'done'],
-    incidents: ['fixed', 'closed'],
+    intents: ['approved', 'done', 'superseded', 'cancelled'],
+    specs: ['approved', 'done', 'superseded', 'cancelled'],
+    plans: ['approved', 'done', 'superseded', 'cancelled'],
+    incidents: ['fixed', 'closed', 'superseded', 'cancelled'],
   };
   for (const [sub, confirmedSet] of Object.entries(CONFIRMED_BY_SUB)) {
     for (const doc of docFiles(sub)) {
@@ -592,7 +596,7 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
       // 无以复原）→ warning 不拦；entry.ts 早于 2026-09-28（UTC 字符串比较——该次确认在旧关单顺序时代完成）→
       // 豁免绑定（配对判定已过，3 份失配存量即此列）。关单编辑顺序新约定不变：confirm-doc 是最后一次写入，
       // 此后修订走 superseded 或新 intent。
-      if (ok && (st === 'done' || st === 'closed')) {
+      if (ok && ['done', 'closed', 'superseded', 'cancelled'].includes(st)) {
         const doneEntries = ledger.filter((e) => e && e.doc === rel && e.stage === st && typeof e.fingerprint === 'string');
         const entry = doneEntries[doneEntries.length - 1]; // append-only 台账，末次生效（重确认场景）
         if (!entry || !entry.prev) {

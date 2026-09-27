@@ -100,7 +100,7 @@ export function doctor(args, pkgRoot) {
       for (const f of kit.managed || []) {
         const p = path.join(target, f.rel);
         if (!fs.existsSync(p)) { gone.push(f.rel); continue; }
-        const h = createHash('sha256').update(fs.readFileSync(p)).digest('hex');
+        const h = createHash('sha256').update(fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n'), 'utf8').digest('hex'); // LF 归一（closing-coverage：跨 checkout 稳定，同 sync shaText 口径）
         if (h === f.sha256) ok++; else modified++;
       }
       add('PASS', `kit.json v${kit.version}：managed ${ok + modified} 份校验通过`);
@@ -312,7 +312,8 @@ export function checkAdapterDrift(target) {
     return { fm: `---\n${m[1]}---\n`, body: m[2] };
   };
   const bodySha = (p) => {
-    try { return createHash('sha256').update(splitFm(fs.readFileSync(p, 'utf8')).body).digest('hex'); } catch { return null; }
+    // 正文段 LF 归一后哈希（closing-coverage：与 sync-hosts bodySha 同口径，CRLF/LF 盘面不误报漂移）
+    try { return createHash('sha256').update(splitFm(fs.readFileSync(p, 'utf8')).body.replace(/\r\n/g, '\n'), 'utf8').digest('hex'); } catch { return null; }
   };
   let total = 0;
   let drift = 0;

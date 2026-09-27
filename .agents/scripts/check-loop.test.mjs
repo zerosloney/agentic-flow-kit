@@ -702,8 +702,10 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
 // ---- 场景 55-56:检查 4 引用扫描收窄活跃态（2026-09-27 audit-gate-hardening）----
 {
   const T = mkfix();
-  w(T, 'workflow/intents/2026-09-28-refterm.md', INTENT('refterm', '状态: superseded\n级别: L1\n日期: 2026-09-28', '\n引用 .agents/scripts/ghost-gone.mjs\n'));
-  w(T, 'workflow/plans/2026-09-28-refterm.md', PLAN('refterm', '状态: superseded\n级别: L1'));
+  // 日期取生效日前（2026-09-26）：superseded 现入 15 配对集（closing-coverage），生效日前的终态档免配对，
+  // 场景焦点保持在「终态退出引用扫描」本身
+  w(T, 'workflow/intents/2026-09-26-refterm.md', INTENT('refterm', '状态: superseded\n级别: L1\n日期: 2026-09-26', '\n引用 .agents/scripts/ghost-gone.mjs\n'));
+  w(T, 'workflow/plans/2026-09-26-refterm.md', PLAN('refterm', '状态: superseded\n级别: L1'));
   const r = run(T);
   check('检查4:终态文档引用断链不再报（历史叙述退出扫描）',
     r.status === 0 && !outOf(r).includes('引用断档'), `exit=${r.status}\n${outOf(r)}`);
@@ -763,6 +765,44 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     const r = run(T);
     check('检查15:incident open（起草态）不进确认门 → 不报确认未对账',
       r.status === 0 && !outOf(r).includes('确认未对账'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+}
+
+// ---- 场景 61-63:检查 15 放弃态覆盖（2026-09-27 closing-coverage：superseded/cancelled 配对 + 四终态绑定）----
+{
+  const mkAbandonFixture = (T, st, tamper) => {
+    const ts = '2026-09-28T02:00:00.000Z';
+    const body = '\n正文行\n';
+    const pre = `---\n状态: approved\n级别: L1\n日期: 2026-09-28\n确认指纹: ${'a'.repeat(16)}\n---\n# INTENT — ab\n${body}`;
+    const fp = computeFingerprint(pre);
+    const after = `---\n状态: ${st}\n级别: L1\n日期: 2026-09-28\n确认指纹: ${fp.slice(0, 16)}\n---\n# INTENT — ab\n${body}${tamper || ''}`;
+    w(T, 'workflow/intents/2026-09-28-ab.md', after);
+    w(T, 'workflow/plans/2026-09-28-ab.md', PLAN('ab', '状态: draft\n级别: L1'));
+    return { rel: 'workflow/intents/2026-09-28-ab.md', fp, ts };
+  };
+  {
+    // superseded（生效日起）无指纹无台账 → hard 确认未对账（手改出账的口子收死）
+    const T = mkfix();
+    w(T, 'workflow/intents/2026-09-28-ab1.md', `---\n状态: superseded\n级别: L1\n日期: 2026-09-28\n---\n# INTENT — ab1\n`);
+    w(T, 'workflow/plans/2026-09-28-ab1.md', PLAN('ab1', '状态: draft\n级别: L1'));
+    expectHard('检查15:superseded（生效日起）无指纹无台账 → hard 确认未对账', T, '确认未对账');
+    rmfix(T);
+  }
+  {
+    // superseded + 配对 + 终态绑定：篡改 → hard 确认内容漂移
+    const T = mkfix();
+    const a1 = mkAbandonFixture(T, 'superseded', 'superseded 确认后被篡改的正文行\n');
+    writeLedger(T, [{ ts: a1.ts, doc: a1.rel, stage: 'superseded', fingerprint: a1.fp, prev: 'approved', source: 'tty' }]);
+    expectHard('检查15:superseded 后正文被篡改 → hard 确认内容漂移（四终态绑定）', T, '确认内容漂移');
+    rmfix(T);
+  }
+  {
+    // cancelled + 配对 + 绑定一致 → 过
+    const T = mkfix();
+    const a1 = mkAbandonFixture(T, 'cancelled');
+    writeLedger(T, [{ ts: a1.ts, doc: a1.rel, stage: 'cancelled', fingerprint: a1.fp, prev: 'approved', source: 'chat-delegated', quote: '不做了' }]);
+    expectOk('检查15:cancelled 配对+绑定一致 → exit 0', T);
     rmfix(T);
   }
 }

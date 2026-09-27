@@ -48,7 +48,10 @@ export function renderTree(srcRoot, targetRoot, vars, { force = false } = {}) {
       const raw = fs.readFileSync(abs);
       let out = raw;
       if (raw.length < 512 * 1024 && !raw.includes(0)) {
-        const replaced = renderContent(raw.toString('utf8'), vars);
+        // 文本面 LF 归一（2026-09-27 closing-coverage）：模板盘面 CRLF（autocrlf 检出 / 编辑器写入）与
+        // LF 克隆渲染出同一字节、同一 sha——fresh sha、装户落盘、kit.json 台账三方跨环境稳定；
+        // sync/doctor/source-sync-check 的读取侧归一（shaText）与本处写盘归一同口径闭合
+        const replaced = renderContent(raw.toString('utf8').replace(/\r\n/g, '\n'), vars);
         if (replaced.includes('{{')) {
           for (const m of replaced.matchAll(/\{\{([A-Z][A-Z0-9_]*)\}\}/g)) {
             if (!Object.prototype.hasOwnProperty.call(vars, m[1])) warnings.push(`${rel}: 未知占位符 {{${m[1]}}}（原样保留）`);

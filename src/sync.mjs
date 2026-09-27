@@ -25,6 +25,11 @@ function runNode(target, script, args = []) {
   return { ok: r.status === 0, out: `${r.stdout || ''}${r.stderr || ''}` };
 }
 
+// shaText：文本件 LF 归一哈希（managed 记账与比对统一口径，2026-09-27 closing-coverage——跨 checkout
+// 字节稳定：CRLF 盘面（autocrlf 检出/Edit 工具写入）与 LF 克隆同值；renderTree 写盘本为 LF，
+// fresh sha 天然归一，故 ledger 记 fresh sha 后两侧自洽）
+const shaText = (p) => sha256(Buffer.from(fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n'), 'utf8'));
+
 export function sync(args, pkgRoot) {
   let target = process.cwd();
   let force = false;
@@ -75,7 +80,7 @@ export function sync(args, pkgRoot) {
         removed.push(rel);
         continue; // 包内已删：文件留在盘上，出台账（下次不再跟踪）
       }
-      const diskSha = fs.existsSync(disk) ? sha256(fs.readFileSync(disk)) : null;
+      const diskSha = fs.existsSync(disk) ? shaText(disk) : null;
       if (diskSha === null) {
         fs.mkdirSync(path.dirname(disk), { recursive: true }); // 父目录可能整目录缺失（如 localOnly 宿主目录被清），copyfile 不建目录
         fs.copyFileSync(freshFile.abs, disk);
@@ -106,7 +111,7 @@ export function sync(args, pkgRoot) {
         // 盘上有、台账无：内容恰好等于新版 → 收养登记（与台账内「改动恰好等于新版」同判据）；
         // 内容不等 = 本地真改动 → 默认保守跳过且不登记（下次仍报「未入台账」，不会被静默覆盖）；
         // --force 下按既有语义覆盖并登记（与台账内文件的 --force 行为一致）
-        const diskSha = sha256(fs.readFileSync(disk));
+        const diskSha = shaText(disk);
         if (diskSha === freshFile.sha) { adopted.push(rel); managedNew.push({ rel, sha256: diskSha }); }
         else if (force) { fs.copyFileSync(freshFile.abs, disk); added.push(rel); managedNew.push({ rel, sha256: freshFile.sha }); }
         else skipped.push(`${rel}（已存在未入台账）`);

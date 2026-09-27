@@ -26,7 +26,7 @@
 - **`git commit` / `git merge` / `git push` 三处一律禁 `--no-verify`**——被拦说明产出不合规，按提示修完原路重试。
 - 项目专属门禁挂 `.agents/hooks/local-pre-commit`。
 - 提交遵循 Conventional Commits 中文（feat / fix / docs / style / refactor / perf）；L1+ 入口文档 / spec / plan 随代码同一提交；确认（approved）后立即 `docs(*)` 单独提交留痕。
-- **确认门（2026-09-27 起）**：intent/spec/plan 的 approved/done 与 incident 的 fixed/closed（2026-09-28 起，open→fixed / fixed→closed 两跳、无单跳）唯一入口 = `node .agents/scripts/confirm-doc.mjs <path>`，两形态：① 用户终端亲手运行键入「可以」（TTY，AI 会话内被拒）；② **对话委托代录**——用户在对话内明确确认后，AI 跑 `confirm-doc.mjs <path> --delegated "<用户原话>"` 代录，台账如实记 `source: chat-delegated` + 原话供对质，永不伪装 TTY 行（check-loop 15 指纹+台账对账拦截，与 source 无关）。
+- **确认门（2026-09-27 起）**：intent/spec/plan 的 approved/done 与 incident 的 fixed/closed（2026-09-28 起，open→fixed / fixed→closed 两跳、无单跳）唯一入口 = `node .agents/scripts/confirm-doc.mjs <path>`，放弃态走显式 `--to superseded|cancelled`（cancelled 自 draft/approved/open/fixed；superseded 自 approved/done/fixed/closed——四终态同样内容绑定），两形态：① 用户终端亲手运行键入「可以」（TTY，AI 会话内被拒）；② **对话委托代录**——用户在对话内明确确认后，AI 跑 `confirm-doc.mjs <path> --delegated "<用户原话>"` 代录，台账如实记 `source: chat-delegated` + 原话供对质，永不伪装 TTY 行（check-loop 15 指纹+台账对账拦截，与 source 无关）。
 
 ### 检索、看板与量化
 

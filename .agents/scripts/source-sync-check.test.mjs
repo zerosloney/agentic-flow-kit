@@ -208,5 +208,37 @@ if (!SRC_ROOT) {
   check('S12 --diff 差异 fixture 仍 exit 0（B-b 默认语义不变）', rDiff.status === 0, `exit=${rDiff.status}`);
 }
 
+// ---- 场景 13-14：sha LF 归一（2026-09-27 closing-coverage）——CRLF 等价不误报 / 内容差异照常抓 ----
+{
+  // S13 同内容不同行尾（包源 LF / 装副本 CRLF）→ 不报漂移
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-ssc-crlf-'));
+  const pkgRoot = path.join(root, 'pkg');
+  const target = path.join(root, 'target');
+  const pkgBase = path.join(pkgRoot, 'templates', '_agents', 'commands');
+  const tgtBase = path.join(target, '.agents', 'commands');
+  fs.mkdirSync(pkgBase, { recursive: true });
+  fs.mkdirSync(tgtBase, { recursive: true });
+  fs.writeFileSync(path.join(pkgBase, 'a.md'), '# 标题\n\n正文行\n- 项目\n');
+  fs.writeFileSync(path.join(tgtBase, 'a.md'), '# 标题\r\n\r\n正文行\r\n- 项目\r\n');
+  fs.writeFileSync(path.join(pkgBase, 'b.md'), '# B\n');
+  fs.writeFileSync(path.join(tgtBase, 'b.md'), '# B\n');
+  const r = sourceSyncCheck({ pkgRoot, target });
+  check('S13 同内容不同行尾（LF vs CRLF）→ 0 漂移（LF 归一口径）', r.drift.length === 0, JSON.stringify(r.drift));
+}
+{
+  // S14 内容真实差异（即使行尾也不同）→ 照常报漂移（归一不掩盖内容差异）
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-ssc-crlf2-'));
+  const pkgRoot = path.join(root, 'pkg');
+  const target = path.join(root, 'target');
+  const pkgBase = path.join(pkgRoot, 'templates', '_agents', 'commands');
+  const tgtBase = path.join(target, '.agents', 'commands');
+  fs.mkdirSync(pkgBase, { recursive: true });
+  fs.mkdirSync(tgtBase, { recursive: true });
+  fs.writeFileSync(path.join(pkgBase, 'a.md'), '# v1\n内容甲\n');
+  fs.writeFileSync(path.join(tgtBase, 'a.md'), '# v1\r\n内容乙\r\n');
+  const r = sourceSyncCheck({ pkgRoot, target });
+  check('S14 内容差异（甲 vs 乙）→ 报漂移（归一只认 CRLF 不吞内容）', r.drift.length === 1 && r.drift[0].rel === 'commands/a.md', JSON.stringify(r.drift));
+}
+
 console.log('\n合计: PASS ' + pass + ' / FAIL ' + failCount);
 process.exit(failCount ? 1 : 0);
