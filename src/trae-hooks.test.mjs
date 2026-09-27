@@ -47,6 +47,8 @@ const runHook = (command, cwd) => {
     ['git push origin +main', 'deny', '+refspec 变体'],
     ['git push -f', 'deny', '短旗标'],
     ['git -c x=y push origin main --force', 'deny', '全局参前缀'],
+    ['git push -vf origin main', 'deny', '组合短旗标 -vf（复核 P2-1）'],
+    ['git push origin main && dotnet build --force', 'none', '跨 && 的 --force 属他命令不误并（复核 P2-3）'],
     ['git push origin main --force-with-lease', 'none', '--force-with-lease 精确 token 不误拦'],
     ['git push origin main', 'none', '普通 push 放行'],
     ['dotnet build --force', 'none', '非 push 命令带 --force 不误拦'],

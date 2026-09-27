@@ -89,13 +89,18 @@ const askList = [
 ];
 
 // 强推检测 token 化（2026-09-27 host-gates-p1 P1-B2）：子串模式 'git push --force' 挡不住换序
-// （git push origin main --force）与 +refspec 变体（git push origin +main）——改为 token 级判定：
-// 出现 push 且带 --force / -f / +refspec 任一即拦；--force-with-lease 是精确 token（含连字符尾巴，
-// 与 --force token 不同名）不误伤。本钩子是 core.hooksPath 漏配时的主要强推执行点，语义必须完整。
+// （git push origin main --force）与 +refspec 变体（git push origin +main）——改为 token 级判定。
+// 复核 P2 收窄（同日）：①按 &&/||/;/| 分段，--force 只在 push 段内计数（dotnet build --force 不误并）；
+// ②组合短旗标（-vf）与 -f 同为 force；③--force-with-lease 是带尾巴的独立 token 不匹配。
+// 本钩子是 core.hooksPath 漏配时的主要强推执行点，语义必须完整。
 function isForcePush(cmd) {
-  const tokens = cmd.replace(/\s+/g, ' ').trim().split(' ');
-  if (!tokens.includes('push')) return false;
-  return tokens.some((t) => t === '--force' || t === '-f' || (t.startsWith('+') && t.length > 1));
+  return cmd.split(/&&|\|\||;|\|/).some((seg) => {
+    const tokens = seg.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
+    if (!tokens.includes('push')) return false;
+    return tokens.some((t) => t === '--force'
+      || (t.startsWith('-') && !t.startsWith('--') && /^-[a-zA-Z]*f/.test(t))
+      || (t.startsWith('+') && t.length > 1));
+  });
 }
 
 // gateMatch：比裸 includes 收紧两处（2026-09-24）——

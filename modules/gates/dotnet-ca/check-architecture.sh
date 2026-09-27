@@ -28,12 +28,13 @@ require_target "$APP_DIR"
 require_target "$API_DIR"
 violations=""
 # 豁免清单拆多 grep -e（2026-09-27 host-gates-p1 P1-B1）：POSIX BRE 中 | 是字面量——旧 tr ':' '|' 造的
-# "A|B" 模式永不命中，多值豁免全部失效（豁免 Controller 被误报违例）。改为逐值 -e（兼容 grep -v 多模式）
-exempt_args=""
+# "A|B" 模式永不命中，多值豁免全部失效（豁免 Controller 被误报违例）。
+# set -- + "$@" 派发（复核 P2-2 收口）：对任意值安全（含空格/glob 字符不拆宽豁免面）
+set --
 OLD_IFS="$IFS"
 IFS=':'
 for ex in $EXEMPT_CTRL; do
-  [ -n "$ex" ] && exempt_args="$exempt_args -e $ex"
+  [ -n "$ex" ] && set -- "$@" -e "$ex"
 done
 IFS="$OLD_IFS"
 
@@ -58,7 +59,7 @@ $hits"
 fi
 
 # 红线 3：API 层 Controller 禁直接注入 DbContext（豁免清单内的 Controller 除外）
-api_hits=$(grep -rn "$DBCTX_CLASS" "$API_DIR" --include="*.cs" 2>/dev/null | grep -v -e "/obj/" -e "/bin/" $exempt_args)
+api_hits=$(grep -rn "$DBCTX_CLASS" "$API_DIR" --include="*.cs" 2>/dev/null | grep -v -e "/obj/" -e "/bin/" "$@")
 if [ -n "$api_hits" ]; then
   violations="$violations
 - API 层出现 DbContext 直接引用（应走仓储/服务接口，豁免仅 $EXEMPT_CTRL）：
