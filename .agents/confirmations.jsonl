@@ -1,0 +1,5 @@
+{"ts":"2026-09-27T00:21:37.876Z","doc":"workflow/intents/2026-09-27-sync-hosts-adapter-backlog.md","stage":"approved","fingerprint":"da87f6f6d0d246a268c6601f1da5ff0cb1a872eb0fac93d24aba9de2cb80d76c","prev":"draft"}
+{"ts":"2026-09-27T00:21:41.652Z","doc":"workflow/plans/2026-09-27-sync-hosts-adapter-backlog.md","stage":"approved","fingerprint":"3acd8ad7d7a674c670ec359c81a3ae7eed731a99f8233ba485c4da530ddd51bd","prev":"draft"}
+{"ts":"2026-09-27T00:48:04.393Z","doc":"workflow/intents/2026-09-27-confirm-gate-delegated.md","stage":"approved","fingerprint":"6713ecbaf3ac049254624220c58b1406a43ba8d6e169423b55e9f9634ec16d58","prev":"draft","source":"tty"}
+{"ts":"2026-09-27T00:48:07.955Z","doc":"workflow/specs/2026-09-27-confirm-gate-delegated.md","stage":"approved","fingerprint":"6137ddaac6f50f8f3fd1c29fe8e939f7e5b44fcc8048a03592a2f30b5ca41f00","prev":"draft","source":"tty"}
+{"ts":"2026-09-27T00:48:09.523Z","doc":"workflow/plans/2026-09-27-confirm-gate-delegated.md","stage":"approved","fingerprint":"c596120a51b72831f474ebe72f0ab11a7d8066db9b32517e1f23041ac2d7a1a0","prev":"draft","source":"tty"}

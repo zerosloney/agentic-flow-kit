@@ -15,6 +15,7 @@ description: Test 阶段 · 静态门 + 切库冒烟 + UI 实测 + L2/L3 独立�
 项目测试命令                                       # 自动化测试
 项目类型检查命令                                  # 前端类型检查/构建(涉及前端时跑)
 node .agents/scripts/verify-wiki-consistency.mjs   # 触及 wiki/ 时跑(exit 1 即先修台账再继续:跑 gen-wiki-board.mjs 补索引/看板;pre-commit 已按增量自动拦,此行用于改完即验)
+node bin/flow-kit.mjs doctor                       # §6.5 delegations + §6.6 owned 漂移 + §6.7 跨宿主薄适配正文漂移(装户环境；包源环境 §6.7 skipped)
 ```
 
 > **环境注记**：本地服务占用构建产物导致编译失败、多会话并行时「谁跑静态门 / 提交谁先停服务」等约定——如有,见项目注记 `.agents/notes/runtime-env.md` §2,跑静态门前先过一眼。
@@ -23,7 +24,7 @@ node .agents/scripts/verify-wiki-consistency.mjs   # 触及 wiki/ 时跑(exit 1 
 
 任一失败 → 不进 UI 实测,回 `build.md` 修复;失败难复现(偶发/跨层)时先用 `diagnosing-bugs` 技能走诊断循环(红→最小化→假设→插桩→修复→回归),修复仍回 `build.md`。
 
-> **门禁 / 看板 / wiki 脚本改动**(`.agents/scripts/`、`.agents/hooks/`、`.agents/board/`):按改动对象跑对应 fixture 回归,须全绿——闭环门禁 `sh .agents/scripts/check-loop.test.sh`、wiki 生成器 `node .agents/scripts/gen-wiki-board.test.mjs`、提交前 hook 测试(如有);涉及看板告警规则时,用同批 workflow fixture 双跑 `check-loop.sh` 与看板 `/api/board`,断言 hard-block 集合被看板告警覆盖(防口径分叉)。
+> **门禁 / 看板 / wiki 脚本改动**(`.agents/scripts/`、`.agents/hooks/`、`.agents/board/`):按改动对象跑对应 fixture 回归,须全绿——闭环门禁 `node .agents/scripts/check-loop.test.mjs`、wiki 生成器 `node .agents/scripts/gen-wiki-board.test.mjs`、提交前 hook 测试(如有);涉及看板告警规则时,用同批 workflow fixture 双跑 `check-loop`（经 shim 或 .mjs 直跑）与看板 `/api/board`,断言 hard-block 集合被看板告警覆盖(防口径分叉)。
 
 ## 2. 切库冒烟(切换 / 新增目标库后必跑)
 
@@ -56,6 +57,7 @@ node .agents/scripts/verify-wiki-consistency.mjs   # 触及 wiki/ 时跑(exit 1 
 - **关单**（日常闭环点，不依赖是否上 prod）:
   - 关单前一键过门：`node .agents/scripts/verify.mjs`（npm test + check-loop 固定编排，任一失败非零退出，非绿不关单）
   - 新需求：逐条勾验入口 intent「验收标准」，每条补「证据：」，intent → done；同名 spec（若有）仍 approved → done
+**确认落态唯一入口**（2026-09-27 起）：用户在终端跑 `node .agents/scripts/confirm-doc.mjs <path>` 键入「可以」（draft→approved / approved→done；AI 不得直接改状态代确认，check-loop 15 对账拦截）。
   - 修复：防复发验证已落地，incident → closed
   - **同族收尾**：入口置终态时，同名 plan 一并置 `done`（spec 见上条），不留 `approved` 孤儿（口径同看板「入口已 done，本 plan 未终态」告警）
   - 主智能体自做的 L1+ 新需求在 `workflow/delegations.md`「自做任务结果表」记一行（修复类不重复记）
