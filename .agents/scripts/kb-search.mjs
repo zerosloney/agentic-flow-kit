@@ -31,6 +31,7 @@ const USAGE = `用法: node .agents/scripts/kb-search.mjs [选项] <词1> [词2 
   -n <N>                         每语料展示文件数上限，默认 10；0 = 不限
   --include-generated            wiki：纳入默认跳过的 json/csv、*.visual-check.* 与 >180KB bulk 文件（走纯扫，不吃缓存）
   --no-cache                     禁用结构缓存，全量扫（与缓存热路径输出逐字节一致）
+  --cache <文件>                 结构缓存文件路径覆盖（默认 .agents/cache/kb-index.json；测试注入用）
   --rebuild                      忽略现有缓存重建后回写
   --help                         打印本说明
 
@@ -47,6 +48,7 @@ let limit = 10;
 let limitRaw = '10';
 let includeGenerated = false;
 let noCache = false;
+let cacheFileOverride = ''; // --cache <文件>（board-kb-p1）：测试注入式缓存路径，不再直跑清真实开发缓存
 let rebuild = false;
 const words = [];
 for (let i = 0; i < args.length; i++) {
@@ -59,11 +61,16 @@ for (let i = 0; i < args.length; i++) {
   else if (a === '-n') { limitRaw = args[++i] ?? ''; limit = Number(limitRaw); }
   else if (a === '--include-generated') includeGenerated = true;
   else if (a === '--no-cache') noCache = true;
+  else if (a === '--cache') cacheFileOverride = args[++i] ?? '';
   else if (a === '--rebuild') rebuild = true;
   else if (a === '--help' || a === '-h') { console.log(USAGE); process.exit(0); }
   else words.push(a);
 }
 if (!words.length) { console.error(USAGE); process.exit(1); }
+// 空 query 校验（board-kb-p1）：空字符串词 includes('') 恒真 → 全量命中噪声（实测 109 文件命中）——参数错误
+const qWords = words.map((w) => w.trim()).filter(Boolean);
+if (!qWords.length) { console.error(`检索词不能为空（纯空白/空串）\n\n${USAGE}`); process.exit(1); }
+words.length = 0; words.push(...qWords); // 原位替换，下游 searchWorkflow/searchWiki 传参不变
 if (!Number.isFinite(limit) || limit < 0) { console.error(`-n 须为非负整数（现 ${limitRaw}）\n\n${USAGE}`); process.exit(1); }
 if (!scope) scope = topicFilter ? 'wiki' : 'all';
 if (!['workflow', 'wiki', 'all'].includes(scope)) { console.error(`--scope 须为 workflow|wiki|all（现 ${scope}）\n\n${USAGE}`); process.exit(1); }
@@ -137,12 +144,23 @@ function matchWords(lines, words) {
 // ---- 结构缓存：可检索子集预提取，[mtimeMs,size] 两元组逐文件失效，指纹变即整份作废 ----
 // 键 = <检索根 cwd>::<相对路径>（多语料根共存一文件，fixture 临时目录天然隔离）；读写任何异常静默回退全扫。
 const CACHE_DIR = path.join(SCRIPT_DIR, '..', 'cache');
-const CACHE_FILE = path.join(CACHE_DIR, 'kb-index.json');
+const CACHE_FILE = cacheFileOverride || path.join(CACHE_DIR, 'kb-index.json');
 const ROOT_NS = `${path.resolve('.')}::`;
+// WIKI_EXTS：wiki 语料扩展面（含 --include-generated 分支）——上移至 CFG_FP 之前（board-kb-p1 起纳入指纹派生）
+const WIKI_EXTS = includeGenerated ? /\.(md|sql|html|csv|json|txt)$/i : /\.(md|sql|html|txt)$/i;
+
+// 行序列化/复活（缓存 schema 的定义者——board-kb-p1 起纳入 CFG_FP 指纹：schema 演进即整份缓存作废）
+const serializeLines = (lines, kind) => lines.map((x) => (kind === 'wf' ? [x.ln, x.section, x.line] : [x.ln, x.line]));
+const reviveLines = (lines, kind) => lines.map((a) => (kind === 'wf' ? { ln: a[0], section: a[1], line: a[2] } : { ln: a[0], line: a[1] }));
+
+// linesShapeOk：缓存条目 lines 形状校验（board-kb-p1）——JSON 合法但 schema 坏（lines 非数组 / 元素非数组）
+// 一律视同 miss 走 build 重建（头注释「任何读写异常静默回退」契约恢复；此前直接 .map 抛 TypeError exit 1）
+const linesShapeOk = (lines) => Array.isArray(lines) && (lines.length === 0 || lines.every(Array.isArray));
+
 const CFG_FP = createHash('sha256').update(JSON.stringify({
   v: 1, WF_SECTIONS, ACTIVE_STATUS, WIKI_MAX_KB, excl: [...WIKI_EXCLUDE],
-  exts: ['md', 'sql', 'html', 'txt', 'gen:csv|json'],
-  fns: [parseDoc.toString(), workflowLines.toString(), matchWords.toString()],
+  exts: WIKI_EXTS.source, // schema 派生（board-kb-p1：手抄摘要曾致扩展面演进不触发指纹失效；RegExp.source 跨 includeGenerated 分支稳定）
+  fns: [parseDoc.toString(), workflowLines.toString(), matchWords.toString(), serializeLines.toString(), reviveLines.toString()],
 })).digest('hex').slice(0, 16);
 const cacheUsable = !noCache && !includeGenerated;
 let cache = null;
@@ -154,9 +172,6 @@ if (cacheUsable) {
   } catch { cache = {}; }
   if (rebuild) cache = {};
 }
-
-const serializeLines = (lines, kind) => lines.map((x) => (kind === 'wf' ? [x.ln, x.section, x.line] : [x.ln, x.line]));
-const reviveLines = (lines, kind) => lines.map((a) => (kind === 'wf' ? { ln: a[0], section: a[1], line: a[2] } : { ln: a[0], line: a[1] }));
 
 // 取一个源文件的缓存条目；miss 时 build()（读全文提取可检索子集）并登记回写。返回 {st, meta?, title?, lines}
 function cachedEntry(relPath, kind, build) {
@@ -170,7 +185,7 @@ function cachedEntry(relPath, kind, build) {
   const st = fs.statSync(abs);
   const sig = [st.mtimeMs, st.size];
   const e = cache[key];
-  if (e && e.kind === kind && Array.isArray(e.st) && e.st[0] === sig[0] && e.st[1] === sig[1]) {
+  if (e && e.kind === kind && Array.isArray(e.st) && e.st[0] === sig[0] && e.st[1] === sig[1] && linesShapeOk(e.lines)) {
     touched.add(key);
     return { st: e.st, meta: e.meta, title: e.title, lines: reviveLines(e.lines, kind) };
   }
@@ -236,7 +251,6 @@ function searchWorkflow(words) {
 }
 
 // ---- wiki 检索（口径同 2026-09-21 降噪版 wiki-search）----
-const WIKI_EXTS = includeGenerated ? /\.(md|sql|html|csv|json|txt)$/i : /\.(md|sql|html|txt)$/i;
 const walkWiki = (dir, rel) => {
   const out = [];
   for (const e of fs.readdirSync(dir)) {

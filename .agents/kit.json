@@ -12,7 +12,7 @@
   "managed": [
     {
       "rel": ".agents/board/index.html",
-      "sha256": "65ae6675d1cb7025ca3e2f478df1185bbdc97e37ff1bd6783856d42d626015e7"
+      "sha256": "aafe9cbbe67edb790f06eebe8a4d88a2568aae5b9df642753d378df081c91600"
     },
     {
       "rel": ".agents/board/marked.min.js",
@@ -88,11 +88,11 @@
     },
     {
       "rel": ".agents/scripts/agg-delegations.cjs",
-      "sha256": "81ba1ae3849da67cabefe964df720237857cf8415a22637c0c633b0e87406c5b"
+      "sha256": "ddbbcf14299f3c2230313d7eddb994df29c67ca336f247ec29cbf9b4de7193c1"
     },
     {
       "rel": ".agents/scripts/agg-delegations.test.mjs",
-      "sha256": "4c4f0044785a075bc4523a6c480dae0ba683f53d2838eaf3edeb5cb16029db0b"
+      "sha256": "5ff4b3f46fab815e6be256f010188511d558b6ce9bcb3a769325914e673c5274"
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
@@ -176,7 +176,7 @@
     },
     {
       "rel": ".agents/scripts/gen-workflow-metrics.mjs",
-      "sha256": "b36469553f0729aa9f8806e898f400e75c6bb18c4ab33b9f5fcd9a9af59537d3"
+      "sha256": "9adcd35eabda3fcc77c3c4f102eb3e521f8951c99bb22ede6aed60371de6f029"
     },
     {
       "rel": ".agents/scripts/gen-workflow-metrics.test.mjs",
@@ -192,11 +192,11 @@
     },
     {
       "rel": ".agents/scripts/kb-search.mjs",
-      "sha256": "51e8842421d3c7db26034bbc9c8a38c483f676abbef05f87924a3d5ef94b5c05"
+      "sha256": "44eafdca3342263832d640d88d29a3c583fbe969e76d512826f95f81040961ef"
     },
     {
       "rel": ".agents/scripts/kb-search.test.mjs",
-      "sha256": "ba7d60633ec772ee41329cd4a5b3436982416081f82433b20fcf15b8d96e3c8d"
+      "sha256": "814cb1b50533a91449ffb557c0f7f384fc1a3e2177c6488927833a0c49888666"
     },
     {
       "rel": ".agents/scripts/rule-budget.sh",
@@ -236,7 +236,11 @@
     },
     {
       "rel": ".agents/scripts/workflow-board-server.mjs",
-      "sha256": "586c7791a05af818f3c2a61521e50bd88a599a506e8bf84487e1dca41da6851c"
+      "sha256": "bd3d9d250e95cf2fe292a288face05fb04975d1ae79fa726e74ed05ebc9004de"
+    },
+    {
+      "rel": ".agents/scripts/workflow-board-server.test.mjs",
+      "sha256": "1f8b4febd35e64ee495f19f8720c604e1d66ae6d0541df5db42688b259d3e889"
     },
     {
       "rel": ".agents/scripts/workflow-enums.mjs",

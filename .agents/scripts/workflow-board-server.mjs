@@ -8,7 +8,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFile } from 'node:child_process';
+import { execFile, spawnSync } from 'node:child_process';
 import { ENUMS } from './workflow-enums.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -38,9 +38,10 @@ function parseDoc(text) {
   return { meta, title };
 }
 
-// ---- 验收标准 checkbox 统计：仅「## 验收标准」节内（至下一个 ## 标题），无该节返回 null ----
+// ---- 验收标准 checkbox 统计：仅「验收标准」节内（至下一个 ## 标题），无该节返回 null ----
+// 节匹配对齐 check-loop 检查 8 口径（^\s*##\s[^#]*验收标准，2026-09-27 board-kb-p1——「## 三、验收标准」类标题此前识别不到）
 function parseAcceptance(text) {
-  const h = text.match(/^## 验收标准.*$/m);
+  const h = text.match(/^\s*##\s[^#]*验收标准.*$/m);
   if (!h) return null;
   const rest = text.slice(h.index + h[0].length);
   const next = rest.match(/^## /m);
@@ -50,6 +51,7 @@ function parseAcceptance(text) {
   const done = (section.match(/^\s*[-*] \[[xX]\]/gm) || []).length;
   return { done, total };
 }
+export { parseAcceptance };
 
 // ---- 配对断裂检测：按 slug 聚合同族（同名 intent/incident/plan/spec），异常卡附 alerts ----
 // 规则（口径对齐 check-loop.sh 的硬断档 + 状态枚举，看板为预警层、不阻断；枚举读单源 workflow-enums.txt）：
@@ -157,7 +159,8 @@ async function scanBoard() {
   }
   detectAlerts(cards);
   cards.sort((a, b) => b.date.localeCompare(a.date) || a.type.localeCompare(b.type));
-  return { root: ROOT, pid: process.pid, startedAt: STARTED_AT, counts, cards };
+  const loop = loopHardBlocks(); // hard-block 全局告警（单源 check-loop；null = 校验不可用）
+  return { root: ROOT, pid: process.pid, startedAt: STARTED_AT, counts, cards, loopHardBlocks: loop.blocks, loopNote: loop.note || undefined };
 }
 
 // ---- 路径白名单：resolve 后必须仍在 workflow/ 内 ----
@@ -206,9 +209,39 @@ function sendJson(res, code, obj) {
   res.end(JSON.stringify(obj));
 }
 
-const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url, `http://127.0.0.1:${PORT}`);
+// ---- hard-block 告警单源（2026-09-27 board-kb-p1）----
+// 看板不再自建与 check-loop 平行的 hard 规则（此前四类缺失：回路断档/验收未对账/确认未对账/确认内容漂移，
+// test.md「双跑断言」曾必失败）——scanBoard 时 spawn check-loop.mjs，解析其 stderr hard-block 段为全局告警数组：
+// check-loop 未来新增 hard 项看板自动跟随，口径永不分叉。输出 banner 为稳定契约（check-loop 头注释明示
+// doctor/pre-push 按输出消费），本解析由双跑断言测试兜底格式漂移。
+export function parseLoopHardBlocks(stderrText) {
+  const text = String(stderrText || '');
+  const start = text.indexOf('HARD-BLOCK:');
+  if (start === -1) return [];
+  let seg = text.slice(start);
+  const warnIdx = seg.indexOf('WARN');
+  if (warnIdx > 0) seg = seg.slice(0, warnIdx);
+  return seg.split(/\r?\n/).map((l) => l.trim()).filter((l) => l.startsWith('- ['));
+}
+
+function loopHardBlocks() {
   try {
+    const r = spawnSync(process.execPath, [path.join(ROOT, '.agents', 'scripts', 'check-loop.mjs')], { cwd: ROOT, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024 });
+    if (r.error) return { blocks: null, note: `check-loop 不可执行：${r.error.message}` };
+    return { blocks: parseLoopHardBlocks(r.stderr || ''), note: '' };
+  } catch (e) {
+    return { blocks: null, note: e.message };
+  }
+}
+
+const server = http.createServer(async (req, res) => {
+  try {
+    // Host 校验（DNS rebinding 缓解，2026-09-27 board-kb-p1）：本地只读服务只认本机 Host
+    const host = String(req.headers.host || '');
+    if (host !== `127.0.0.1:${PORT}` && host !== `localhost:${PORT}`) {
+      return sendJson(res, 403, { error: `Host 不受信任（仅接受 127.0.0.1:${PORT} / localhost:${PORT}）` });
+    }
+    const url = new URL(req.url, `http://127.0.0.1:${PORT}`); // 畸形请求行抛错 → 400（P1-3：原在 try 外，单包可杀进程）
     if (url.pathname === '/api/events') {
       res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive' });
       res.write('retry: 3000\n\n');
@@ -238,6 +271,9 @@ const server = http.createServer(async (req, res) => {
     res.writeHead(200, { 'Content-Type': MIME[path.extname(abs)] || 'application/octet-stream' });
     fs.createReadStream(abs).pipe(res);
   } catch (e) {
+    if (e && (e.code === 'ERR_INVALID_URL' || e instanceof TypeError)) {
+      return sendJson(res, 400, { error: `请求行/URL 非法：${e.message}` }); // 畸形请求不杀进程（P1-3）
+    }
     sendJson(res, 500, { error: e.message });
   }
 });
@@ -248,6 +284,10 @@ server.on('error', (e) => {
   process.exit(1);
 });
 
-server.listen(PORT, '127.0.0.1', () => {
-  console.log(`workflow 看板: http://127.0.0.1:${PORT}  （Ctrl+C 停止；只读 workflow/，不写任何文件）`);
-});
+// isMain 守卫（board-kb-p1）：parseLoopHardBlocks 可被测试 import（import 不 listen）
+const isMain = process.argv[1] && process.argv[1].endsWith('workflow-board-server.mjs');
+if (isMain) {
+  server.listen(PORT, '127.0.0.1', () => {
+    console.log(`workflow 看板: http://127.0.0.1:${PORT}  （Ctrl+C 停止；只读 workflow/，不写任何文件）`);
+  });
+}

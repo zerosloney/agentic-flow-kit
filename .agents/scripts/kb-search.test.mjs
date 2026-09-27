@@ -14,8 +14,10 @@ import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const KB = path.join(SCRIPT_DIR, 'kb-search.mjs');
-const CACHE_FILE = path.join(SCRIPT_DIR, '..', 'cache', 'kb-index.json');
+// 注入式缓存（board-kb-p1）：--cache 指向 fixture 内路径——测试不再触碰真实 .agents/cache/kb-index.json
+// （旧 CACHE_FILE 直跑会清空真实开发缓存并遗留孤儿条目，审查 P2-2）
 const USAGE = '用法：node .agents/scripts/kb-search.test.mjs';
+const rootCache = (root) => path.join(root, 'kb-cache.json');
 
 let pass = 0;
 let fail = 0;
@@ -46,7 +48,7 @@ const mkfix = () => {
   return root;
 };
 
-const run = (root, args) => spawnSync(process.execPath, [KB, ...args], { cwd: root, encoding: 'utf8' });
+const run = (root, args) => spawnSync(process.execPath, [KB, '--cache', rootCache(root), ...args], { cwd: root, encoding: 'utf8' });
 const files = (out) => (out.match(/^📄 (workflow\/\S+)/gm) || []).map((l) => l.replace('📄 ', ''));
 
 // ---- 场景 1：主路径——AND 语义 / 节限定 / 输出字段 / 活跃优先 ----
@@ -97,7 +99,7 @@ const files = (out) => (out.match(/^📄 (workflow\/\S+)/gm) || []).map((l) => l
   const cold = run(root, ['编码模板']);                                   // 该临时根 ns 无条目 → cold
   const warm = run(root, ['编码模板']);                                   // 全命中缓存
   const nocache = run(root, ['--no-cache', '编码模板']);
-  check('场景 4：cold/warm exit 0 且 warm 确有缓存回写', cold.status === 0 && warm.status === 0 && fs.existsSync(CACHE_FILE), `cold=${cold.status} warm=${warm.status}`);
+  check('场景 4：cold/warm exit 0 且 warm 确有缓存回写', cold.status === 0 && warm.status === 0 && fs.existsSync(rootCache(root)), `cold=${cold.status} warm=${warm.status}`);
   check('场景 4：cold ≡ warm（逐字节）', cold.stdout === warm.stdout, `cold:\n${cold.stdout}\nwarm:\n${warm.stdout}`);
   check('场景 4：cold ≡ --no-cache（逐字节）', cold.stdout === nocache.stdout, `cold:\n${cold.stdout}\nnocache:\n${nocache.stdout}`);
   check('场景 4：双侧均有命中（workflow 3 + wiki 1）', files(cold.stdout).length === 3 && /wiki\/测试主题/.test(cold.stdout), cold.stdout);
@@ -121,14 +123,14 @@ const files = (out) => (out.match(/^📄 (workflow\/\S+)/gm) || []).map((l) => l
 {
   const root = mkfix();
   run(root, ['编码模板']); // 建缓存
-  const j = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
+  const j = JSON.parse(fs.readFileSync(rootCache(root), 'utf8'));
   const fpBefore = j.fp;
   j.fp = 'ffffffffffffffff';
-  fs.writeFileSync(CACHE_FILE, JSON.stringify(j), 'utf8');
+  fs.writeFileSync(rootCache(root), JSON.stringify(j), 'utf8');
   const after = run(root, ['编码模板']);
   const scan = run(root, ['--no-cache', '编码模板']);
   check('场景 6：指纹不符 → 输出仍与纯扫逐字节一致', after.status === 0 && after.stdout === scan.stdout, `after:\n${after.stdout}\nscan:\n${scan.stdout}`);
-  const j2 = JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8'));
+  const j2 = JSON.parse(fs.readFileSync(rootCache(root), 'utf8'));
   check('场景 6：回写恢复正确指纹', j2.fp === fpBefore && j2.fp !== 'ffffffffffffffff', `fp=${j2.fp}`);
   fs.rmSync(root, { recursive: true, force: true });
 }
@@ -136,12 +138,40 @@ const files = (out) => (out.match(/^📄 (workflow\/\S+)/gm) || []).map((l) => l
 // ---- 场景 7：缓存损坏 → 静默回退全扫（不报错、输出与 --no-cache 一致） ----
 {
   const root = mkfix();
-  fs.mkdirSync(path.dirname(CACHE_FILE), { recursive: true });
-  fs.writeFileSync(CACHE_FILE, 'not-json{{{', 'utf8');
+  fs.mkdirSync(path.dirname(rootCache(root)), { recursive: true });
+  fs.writeFileSync(rootCache(root), 'not-json{{{', 'utf8');
   const r = run(root, ['编码模板']);
   const scan = run(root, ['--no-cache', '编码模板']);
   check('场景 7：损坏缓存 exit 0（stderr 无泄漏）', r.status === 0 && !r.stderr, `exit=${r.status}\n${r.stderr}`);
   check('场景 7：损坏后输出与纯扫逐字节一致', r.stdout === scan.stdout, `r:\n${r.stdout}\nscan:\n${scan.stdout}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 8：结构损坏（JSON 合法但 lines 非数组 / 元素非数组）→ 静默回退（board-kb-p1 P1-1）----
+//     此前 reviveLines 直接 .map 抛 TypeError exit 1，违背「任何读写异常静默回退」声明契约
+{
+  for (const [tag, lines] of [['lines-字符串', 'corrupted'], ['lines-元素非数组', ['not-array']]]) {
+    const root = mkfix();
+    run(root, ['编码模板']); // 建缓存
+    const j = JSON.parse(fs.readFileSync(rootCache(root), 'utf8'));
+    const key = Object.keys(j.files).find((k) => k.endsWith('2026-09-01-aaa.md'));
+    j.files[key].lines = lines;
+    fs.writeFileSync(rootCache(root), JSON.stringify(j), 'utf8');
+    const r = run(root, ['编码模板']);
+    const scan = run(root, ['--no-cache', '编码模板']);
+    check(`场景 8：结构损坏（${tag}）exit 0 静默回退`, r.status === 0 && !r.stderr, `exit=${r.status}\n${r.stderr}`);
+    check(`场景 8：结构损坏（${tag}）输出与纯扫一致`, r.stdout === scan.stdout, `r:\n${r.stdout}\nscan:\n${scan.stdout}`);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+// ---- 场景 9：空 query（空串 / 纯空白）→ 参数错误 exit 1（board-kb-p1：includes('') 恒真曾全量命中）----
+{
+  const root = mkfix();
+  const r1 = run(root, ['']);
+  const r2 = run(root, ['  ', ' ']);
+  check('场景 9：空串 query exit 1', r1.status === 1 && /检索词不能为空/.test(r1.stderr), `exit=${r1.status}\n${r1.stderr}`);
+  check('场景 9：纯空白 query exit 1', r2.status === 1 && /检索词不能为空/.test(r2.stderr), `exit=${r2.status}\n${r2.stderr}`);
   fs.rmSync(root, { recursive: true, force: true });
 }
 

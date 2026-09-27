@@ -289,6 +289,21 @@ async function refreshBoard() {
   const ca = $('#c-alerts');
   ca.style.display = nAlerts ? '' : 'none';
   if (nAlerts) { ca.textContent = `⚠ 断档 ${nAlerts}`; ca.style.color = 'var(--bad)'; }
+  // hard-block 全局告警条（单源 check-loop，2026-09-27 board-kb-p1）：check-loop hard 项自动跟随
+  let loopBar = $('#loop-alerts');
+  if (!loopBar) {
+    loopBar = document.createElement('div');
+    loopBar.id = 'loop-alerts';
+    loopBar.style.cssText = 'display:none;background:var(--bad);color:#fff;padding:6px 14px;font-size:12px;line-height:1.7;white-space:pre-wrap;';
+    document.body.insertBefore(loopBar, document.body.firstChild);
+  }
+  if (data.loopHardBlocks === null) {
+    loopBar.style.display = ''; loopBar.textContent = `⚠ 闭环校验不可用（${data.loopNote || '未知原因'}）——hard-block 面暂不可见`;
+  } else if (data.loopHardBlocks.length) {
+    loopBar.style.display = ''; loopBar.textContent = `⛔ 闭环 hard-block ${data.loopHardBlocks.length} 项（单源 check-loop）：\n` + data.loopHardBlocks.join('\n');
+  } else {
+    loopBar.style.display = 'none';
+  }
   const cardHtml = (fam, extra = '') => {
     const h = fam.head;
     return `<div class="card ${ageClass(h)}${EXPANDED.has(fam.slug) || q ? ' open' : ''}" data-slug="${esc(fam.slug)}" style="border-left-color:${TYPE_COLOR[h.type]}">` +

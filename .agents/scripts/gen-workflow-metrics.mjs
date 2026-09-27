@@ -9,6 +9,8 @@
 // 测试：node .agents/scripts/gen-workflow-metrics.test.mjs（fixture 回归，须全绿）
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { loadEnums } from './workflow-enums.mjs';
 
 const USAGE = `用法：node .agents/scripts/gen-workflow-metrics.mjs [--month YYYY-MM] [--dry-run] [--help]
 
@@ -39,7 +41,10 @@ const WORKFLOW = 'workflow';
 const METRICS_P = path.join(WORKFLOW, 'metrics.md');
 const BUDGETS = path.join('.agents', 'rule-budgets.txt');
 const DOC_TYPES = ['intents', 'specs', 'plans', 'incidents'];
-const ACTIVE_STATUS = ['draft', 'approved', 'open'];
+// 活跃口径单源（board-kb-p1：枚举字面量硬编码退役——workflow-enums.txt 是唯一源）；
+// 枚举路径锚定脚本位置（fixture 测试 cwd 在临时目录，按 cwd 解析会 ENOENT）
+const ENUMS = loadEnums(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '.agents', 'workflow-enums.txt'));
+const ACTIVE_STATUS = [...ENUMS['doc.status.active'], ...ENUMS['incident.status.active']];
 const BEGIN = '<!-- GENERATED:BEGIN — gen-workflow-metrics.mjs 整段重写，手工说明写在本行之前 -->';
 const END = '<!-- GENERATED:END -->';
 
@@ -51,6 +56,7 @@ function scanDocs() {
   let files = 0;
   let bytes = 0;
   let active = 0;
+  let invalid = 0;
   let withModule = 0;
   for (const type of DOC_TYPES) {
     let n = 0;
@@ -72,6 +78,7 @@ function scanDocs() {
         }
       }
       if (ACTIVE_STATUS.includes(status)) active++;
+      else if (!status || ![...ENUMS['doc.status.all'], ...ENUMS['incident.status.all']].includes(status)) invalid++; // 状态缺失/非法单列（board-kb-p1：不再吞进终态桶）
       if (mod) withModule++;
       n++;
       b += fs.statSync(p).size;
@@ -80,7 +87,7 @@ function scanDocs() {
     files += n;
     bytes += b;
   }
-  return { perType, files, bytes, active, terminal: files - active, withModule };
+  return { perType, files, bytes, active, terminal: files - active - invalid, invalid, withModule };
 }
 
 // ---- 常驻面：按预算表逐条实测（<glob|dir/> <上限>）----
@@ -146,7 +153,7 @@ const row = `| ${month} | ${docs.files}（活跃 ${docs.active} / 终态 ${docs.
 
 // ---- 明细（stdout，不落表）：类型分布 + 逐条预算占用 ----
 console.log(`📅 ${month} 快照`);
-console.log(`  文档：${docs.files} 篇 / ${kb(docs.bytes)}（活跃 ${docs.active} / 终态 ${docs.terminal}）；模块已填 ${docs.withModule}/${docs.files}`);
+console.log(`  文档：${docs.files} 篇 / ${kb(docs.bytes)}（活跃 ${docs.active} / 终态 ${docs.terminal}${docs.invalid ? ` / 状态缺失或非法 ${docs.invalid}` : ''}）；模块已填 ${docs.withModule}/${docs.files}`);
 for (const [t, v] of Object.entries(docs.perType)) console.log(`    ${t.padEnd(10)} ${String(v.n).padStart(3)} 篇 / ${kb(v.b)}`);
 console.log(`  索引：workflow/INDEX.md ${kb(idxBytes)}（活跃 ${Number.isNaN(idxActive) ? '—' : idxActive} 行）`);
 for (const e of surf.entries) console.log(`    ${e.label.padEnd(44)} ${String(e.max).padStart(6)} / ${String(e.lim).padStart(6)} B（${e.pct.toFixed(1)}%）`);

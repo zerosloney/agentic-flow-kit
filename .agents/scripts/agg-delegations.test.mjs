@@ -87,6 +87,38 @@ const runAgg = (root) => spawnSync(process.execPath, [path.join(root, '.agents',
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- 场景 4-5：扩容门口径（2026-09-27 board-kb-p1 对齐 delegations.md：返工 0 / 无主兜底 / 连续两月）----
+//     纯函数经 module.exports require（isMain 守卫后 import 不执行 main）
+import { createRequire } from 'node:module';
+const requireCjs = createRequire(import.meta.url);
+const { metrics, gateMonth, expansionVerdict } = requireCjs(path.join(SCRIPT_DIR, 'agg-delegations.cjs'));
+
+// 场景 4：审查反例——30 任务、2 主兜底、平均返工 0.25（旧口径四门全过，声明口径下必须 ❌）
+{
+  const rows = [
+    ...Array.from({ length: 22 }, (_, i) => ({ scope: '委派', result: '一次通过' })),
+    ...Array.from({ length: 6 }, (_, i) => ({ scope: '委派', result: '返工×1' })),
+    { scope: '委派', result: '主兜底' }, { scope: '委派', result: '主兜底' },
+  ];
+  const m = metrics(rows);
+  const g = gateMonth(m);
+  check('场景 4：反例（2 主兜底 + 平均返工 0.25）门3 返工=0 ❌', g.items.find((i) => i.no === 3).ok === false, JSON.stringify(g.items));
+  check('场景 4：反例门4 主兜底=0 ❌ 且 monthOk=false（声明口径下不达标）',
+    g.items.find((i) => i.no === 4).ok === false && g.monthOk === false, `monthOk=${g.monthOk}`);
+  const good = metrics([{ scope: '自做', result: '一次通过' }, { scope: '委派', result: '一次通过' }]);
+  const g2 = gateMonth(good);
+  check('场景 4：返工 0 + 无主兜底月 → 口径项全 ✅（样本护栏项单独列出）',
+    g2.items.filter((i) => i.kind === '口径').every((i) => i.ok === true) && g2.items.find((i) => i.no === 1).ok === false,
+    JSON.stringify(g2.items));
+}
+// 场景 5：连续两月判定四态
+{
+  check('场景 5：本月+上月均达标 → ✅ 可扩容', expansionVerdict(true, true, false, []).includes('✅'));
+  check('场景 5：本月达标、上月无数据 → ⚠️ 1/2', expansionVerdict(true, undefined, true, []).includes('⚠️'));
+  check('场景 5：本月达标、上月未达标 → ⚠️ 1/2', expansionVerdict(true, false, false, []).includes('⚠️'));
+  check('场景 5：本月未达标 → ❌ 且列出未达标项号', expansionVerdict(false, true, false, [{ no: 3, ok: false }, { no: 4, ok: false }]).match(/❌.*3\+4/));
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 if (fail) {
   console.log(`\n${USAGE}`);

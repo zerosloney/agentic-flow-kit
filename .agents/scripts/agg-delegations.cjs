@@ -88,8 +88,11 @@ function countIncidents() {
   return byMonth;
 }
 
-// 门槛（与 workflow/delegations.md §并发扩容门槛 同步）
-const GATE = { minSample: 20, minPassRate: 0.9, maxAvgRework: 0.3, minDelegated: 5, maxFallbackRate: 0.1 };
+// 门槛（2026-09-27 board-kb-p1 对齐 workflow/delegations.md §并发扩容门槛声明——doc 为权威）：
+//   月度口径项：一次完成率 ≥90% ｜ 月度返工次数 = 0 ｜ 无主兜底信号（=0）（旧「平均返工≤0.3 / 兜底≤10%」为宽松分叉，退役）
+//   样本护栏项（脚本侧统计可信度门槛，非口径分叉）：月样本量 ≥20 ｜ 委派样本 ≥5
+//   连续性：扩容需「本月 + 上一自然月」连续两月月度口径全达标（delegations.md「连续两个月」）
+const GATE = { minSample: 20, minPassRate: 0.9, minDelegated: 5 };
 
 function metrics(rows) {
   // 未知结果（结果列拼错/漏填）单列计数，不混进「待修」——待修=未闭环，未知=记录本身有问题（2026-09-24 口径分离）
@@ -126,29 +129,26 @@ function fmtNum(x) {
   return x == null ? '—' : x.toFixed(2);
 }
 
-function gate(m, incidents) {
+// gateMonth：单月门槛判定（pure，供测试）——口径项 + 样本护栏项分开列
+function gateMonth(m) {
   const items = [];
-  items.push({ no: 1, ok: m.total >= GATE.minSample, desc: `样本量 ${m.total}/${GATE.minSample}` });
-  items.push({
-    no: 2,
-    ok: m.passRate != null && m.passRate >= GATE.minPassRate,
-    desc: `一次通过率 ${fmtRate(m.passRate)}≥90%`,
-  });
-  items.push({
-    no: 3,
-    ok: m.avgRework != null && m.avgRework <= GATE.maxAvgRework,
-    desc: `平均返工 ${fmtNum(m.avgRework)}≤0.3`,
-  });
-  const delegOk = m.delegatedValid >= GATE.minDelegated && m.fallbackRate != null && m.fallbackRate <= GATE.maxFallbackRate;
-  items.push({
-    no: 4,
-    ok: delegOk,
-    desc: `委派样本 ${m.delegatedValid}≥5 且主兜底 ${fmtRate(m.fallbackRate)}≤10%`,
-  });
-  items.push({ no: 5, ok: null, desc: '门禁不失守（人工对照当月 incident 定性）' });
-  const hardOk = items.filter((i) => i.ok !== null).every((i) => i.ok);
-  const bad = items.filter((i) => i.ok === false).map((i) => i.no).join('+');
-  return { items, verdict: hardOk ? '✅（待人工确认门5）' : `❌ 未达标项:${bad}` };
+  items.push({ no: 1, ok: m.total >= GATE.minSample, desc: `样本量 ${m.total}/${GATE.minSample}`, kind: '样本护栏' });
+  items.push({ no: 2, ok: m.passRate != null && m.passRate >= GATE.minPassRate, desc: `一次完成率 ${fmtRate(m.passRate)}≥90%`, kind: '口径' });
+  items.push({ no: 3, ok: m.reworkSum === 0, desc: `月度返工次数 ${m.reworkSum}=0`, kind: '口径' });
+  items.push({ no: 4, ok: m.fallback === 0, desc: `主兜底 ${m.fallback}=0（无主兜底信号）`, kind: '口径' });
+  items.push({ no: 5, ok: m.delegatedValid >= GATE.minDelegated, desc: `委派样本 ${m.delegatedValid}≥5`, kind: '样本护栏' });
+  items.push({ no: 6, ok: null, desc: '门禁不失守（人工对照当月 incident 定性）', kind: '人工' });
+  return { items, monthOk: items.filter((i) => i.ok !== null).every((i) => i.ok) };
+}
+
+// expansionVerdict：连续两个月扩容判定（pure，供测试）——本月与上一自然月 monthOk 均真才「可扩容」；
+// prevMissing = 无上月数据（首月/断档）；items 供未达标项列出
+function expansionVerdict(monthOk, prevOk, prevMissing, items) {
+  if (monthOk && prevOk) return '✅ 连续两月达标（可扩容，待人工确认门6）';
+  if (monthOk && prevMissing) return '⚠️ 本月达标（连续性 1/2——上月无数据）';
+  if (monthOk) return '⚠️ 本月达标（连续性 1/2——上月未达标）';
+  const bad = (items || []).filter((i) => i.ok === false).map((i) => i.no).join('+');
+  return `❌ 未达标（连续性中断）：${bad || '月度口径项未全过'}`;
 }
 
 function main() {
@@ -165,14 +165,18 @@ function main() {
   console.log(`# 量化证据聚合（${argMonth || '全部月份'}） 生成于 ${new Date().toISOString().slice(0, 10)}\n`);
 
   const snapshotRows = [];
+  const monthResults = new Map(); // ym → { monthOk }（连续两月判定用）
   for (const ym of months) {
     const m = metrics(byMonth[ym]);
-    const g = gate(m, incidents[ym] || 0);
+    const { items, monthOk } = gateMonth(m);
+    monthResults.set(ym, monthOk);
+    const prevYm = (() => { const [y, mo] = ym.split('-').map(Number); const d = new Date(Date.UTC(y, mo - 2, 1)); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; })();
+    const verdict = expansionVerdict(monthOk, monthResults.get(prevYm), !months.includes(prevYm), items);
     console.log(`## ${ym}`);
     console.log(`  有效任务 ${m.total}（待修 ${m.pending}${m.unknown ? `、未知结果 ${m.unknown}` : ''}）｜一次通过 ${m.pass}（${fmtRate(m.passRate)}）｜返工总次数 ${m.reworkSum}（平均 ${fmtNum(m.avgRework)}）｜主兜底 ${m.fallback}/${m.delegatedValid}（${fmtRate(m.fallbackRate)}）｜incident ${incidents[ym] || 0} 起`);
-    for (const i of g.items) console.log(`  门${i.no} ${i.ok === null ? '[人工]' : i.ok ? '✅' : '❌'} ${i.desc}`);
-    console.log(`  扩容门判定：${g.verdict}\n`);
-    snapshotRows.push(`| ${ym} | ${m.total} | ${fmtRate(m.passRate)} | ${fmtNum(m.avgRework)} | ${fmtRate(m.fallbackRate)} | ${incidents[ym] || 0} | ${g.verdict} | 样本含待修${m.pending}${m.unknown ? `、未知${m.unknown}` : ''} |`);
+    for (const i of items) console.log(`  门${i.no}[${i.kind}] ${i.ok === null ? '[人工]' : i.ok ? '✅' : '❌'} ${i.desc}`);
+    console.log(`  扩容门判定：${verdict}\n`);
+    snapshotRows.push(`| ${ym} | ${m.total} | ${fmtRate(m.passRate)} | ${fmtNum(m.avgRework)} | ${fmtRate(m.fallbackRate)} | ${incidents[ym] || 0} | ${verdict} | 样本含待修${m.pending}${m.unknown ? `、未知${m.unknown}` : ''} |`);
   }
 
   if (!argMonth && rows.length) {
@@ -189,4 +193,9 @@ function main() {
   }
 }
 
-main();
+// isMain 守卫 + 纯函数导出（board-kb-p1：gateMonth / expansionVerdict 供测试 import，import 不执行 main）
+if (require.main === module) {
+  main();
+} else {
+  module.exports = { parseResult, metrics, gateMonth, expansionVerdict, GATE };
+}
