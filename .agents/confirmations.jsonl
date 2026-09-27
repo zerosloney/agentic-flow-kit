@@ -48,3 +48,4 @@
 {"ts":"2026-09-27T12:44:42.920Z","doc":"workflow/intents/2026-09-27-p2-batch1.md","stage":"done","fingerprint":"178bf2d9c9dea950442363ec700d68ff375809430b20b15792287e342f016144","prev":"approved","source":"chat-delegated","quote":"可以"}
 {"ts":"2026-09-27T12:44:42.924Z","doc":"workflow/specs/2026-09-27-p2-batch1.md","stage":"done","fingerprint":"cc6e11f85594f9b2f44e92ff9ffcd279aa4737af085ed397d813fcd7e5ae7bc5","prev":"approved","source":"chat-delegated","quote":"可以"}
 {"ts":"2026-09-27T12:44:42.928Z","doc":"workflow/plans/2026-09-27-p2-batch1.md","stage":"done","fingerprint":"02cc9417bb5d8fe84b18443f7d72e1e7b062e74f310119b81c6f462c49abca50","prev":"approved","source":"chat-delegated","quote":"可以"}
+{"ts":"2026-09-27T12:54:44.636Z","doc":"workflow/plans/2026-09-27-p2-batch2.md","stage":"approved","fingerprint":"0e7d01875b9c07030447641ba5be999bb91878d584d08f9a27fdee2f0be83462","prev":"draft","source":"chat-delegated","quote":"可以"}
