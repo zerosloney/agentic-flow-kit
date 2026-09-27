@@ -31,39 +31,14 @@ const walkTree = (dir, rel = '') => {
 
 // ---- 磁盘枚举（登记口径与 gen-wiki-board.mjs 一致）----
 const isKnowledgeDoc = (f) => /\.(md|html)$/i.test(f) && !/\.visual-check\./i.test(f);
-const diskFiles = new Set(); // "主题/文件名"（子目录文件名带 子目录/ 前缀）
-const diskTopics = new Set();
-const activeTree = { files: [], dirs: [] }; // 递归视图（断链守卫 / 台账登记断言用）
-for (const d of fs.readdirSync(WIKI)) {
-  const p = path.join(WIKI, d);
-  if (!fs.statSync(p).isDirectory()) continue;
-  if (d === 'drafts-archive') continue;
-  diskTopics.add(d);
-  for (const f of fs.readdirSync(p)) {
-    if (fs.statSync(path.join(p, f)).isFile()) diskFiles.add(`${d}/${f}`);
-  }
-  if (d !== '数据维护') {
-    for (const sub of fs.readdirSync(p)) {
-      const sp = path.join(p, sub);
-      if (!fs.statSync(sp).isDirectory()) continue;
-      for (const f of fs.readdirSync(sp)) {
-        if (fs.statSync(path.join(sp, f)).isFile() && isKnowledgeDoc(f)) diskFiles.add(`${d}/${sub}/${f}`);
-      }
-    }
-  }
-  const sub = walkTree(p, d);
-  activeTree.files.push(...sub.files);
-  activeTree.dirs.push(...sub.dirs);
-}
-
 // gitignore 豁免（F4，incident 2026-09-23-code-review-f3-f4-closeout）：drafts-archive 含
 // .gitignore 忽略的本机文件（如 *.xlsx），计入会使生成物计数在 fresh clone 必然漂移；
 // 口径 = 排除忽略文件（git 不可用/非仓库时退化为全量计数，fixture 环境不受影响）
 const gitIgnoredArchive = (() => {
   try {
-    const out = execSync('git -c core.quotepath=false status --ignored=matching --porcelain -uall -- wiki/drafts-archive',
+    const out = execSync('git -c core.quotepath=false status --ignored=matching --porcelain -uall -- wiki',
       { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-    const prefix = 'wiki/drafts-archive/';
+    const prefix = 'wiki/';
     return new Set(out.split(/\r?\n/)
       .filter((l) => l.startsWith('!! '))
       .map((l) => l.slice(3).trim().replace(/\/$/, ''))
@@ -73,6 +48,35 @@ const gitIgnoredArchive = (() => {
     return new Set();
   }
 })();
+const diskFiles = new Set(); // "主题/文件名"（子目录文件名带 子目录/ 前缀）
+const diskTopics = new Set();
+const activeTree = { files: [], dirs: [] }; // 递归视图（断链守卫 / 台账登记断言用）
+for (const d of fs.readdirSync(WIKI)) {
+  const p = path.join(WIKI, d);
+  if (!fs.statSync(p).isDirectory()) continue;
+  if (d === 'drafts-archive') continue;
+  diskTopics.add(d);
+  // gitignore 豁免消费（p2-batch2 复核 P1-3）：gen 侧排除 ignored 本机件，verify 须同口径——
+  // 否则「gen 恒写 N、verify 恒数 N+1」门禁死锁且自愈指引（重跑 gen）无效
+  const isIgnored = (rel) => gitIgnoredArchive.has(`${d}/${rel}`) || gitIgnoredArchive.has(`${d}/${rel}/`);
+  for (const f of fs.readdirSync(p)) {
+    if (fs.statSync(path.join(p, f)).isFile() && !isIgnored(f)) diskFiles.add(`${d}/${f}`);
+  }
+  if (d !== '数据维护') {
+    for (const sub of fs.readdirSync(p)) {
+      const sp = path.join(p, sub);
+      if (!fs.statSync(sp).isDirectory()) continue;
+      for (const f of fs.readdirSync(sp)) {
+        if (fs.statSync(path.join(sp, f)).isFile() && isKnowledgeDoc(f) && !isIgnored(`${sub}/${f}`)) diskFiles.add(`${d}/${sub}/${f}`);
+      }
+    }
+  }
+  const sub = walkTree(p, d);
+  activeTree.files.push(...sub.files);
+  activeTree.dirs.push(...sub.dirs);
+}
+
+
 // drafts-archive 缺失：ENOENT 崩栈改明示失败（本脚本是门禁，协议目录被删应 exit 1 而非崩栈，2026-09-24）
 const ARCHIVE_DIR = path.join(WIKI, 'drafts-archive');
 let archiveCount = 0;

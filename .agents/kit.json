@@ -212,7 +212,7 @@
     },
     {
       "rel": ".agents/scripts/verify-wiki-consistency.mjs",
-      "sha256": "d47276925351d4f30580bb366691e0839fbb04d520f46b5e03c28fef7baba027"
+      "sha256": "ef666789ef76c7269bbc09ec1aab308aca3626807cc1567a75b8602243e56ad5"
     },
     {
       "rel": ".agents/scripts/verify.mjs",
