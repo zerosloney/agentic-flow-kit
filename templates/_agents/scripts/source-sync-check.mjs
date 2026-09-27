@@ -5,8 +5,10 @@
 //       排除装副本独有文件：kit.json / settings.json / hooks/commit-check.config.json（init 渲染产物，不属双源）
 // 用法：node .agents/scripts/source-sync-check.mjs --diff
 //       node .agents/scripts/source-sync-check.mjs --json
+//       node .agents/scripts/source-sync-check.mjs --gate（门禁模式：缺失/漂移 exit 1，孤儿只报告不计失败
+//             ——pre-commit 双源一致性门禁用，2026-09-27 audit-gate-hardening；--diff/--json 仍恒 exit 0）
 //       node .agents/scripts/source-sync-check.mjs --pkg-root <path> --target <path>
-// 零依赖；B-b 决策「只报告不修复」
+// 零依赖；B-b 决策「只报告不修复」（--gate 只加 exit 码裁决，不改默认行为）
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -98,12 +100,13 @@ function printDiff(result) {
 
 const isMain = process.argv[1] && process.argv[1].endsWith('source-sync-check.mjs');
 if (isMain) {
-  let jsonMode = false, diffMode = false;
+  let jsonMode = false, diffMode = false, gateMode = false;
   let pkgRoot = null, target = null;
   for (let i = 0; i < process.argv.length - 2; i++) {
     const a = process.argv[2 + i];
     if (a === '--json') jsonMode = true;
     else if (a === '--diff') diffMode = true;
+    else if (a === '--gate') gateMode = true;
     else if (a === '--pkg-root') pkgRoot = process.argv[2 + i + 1];
     else if (a === '--target') target = process.argv[2 + i + 1];
   }
@@ -124,6 +127,16 @@ if (isMain) {
     }, null, 2) + '\n');
   } else {
     printDiff(result);
+  }
+  if (gateMode) {
+    // 门禁模式（pre-commit 双源一致性用）：缺失/漂移非零阻断——正是「包源改了装副本没跟」的故障模式
+    // （doctor §4 台账 sha 对此静默：盘面=台账即 PASS；§4.5 只抓未登记）。孤儿只报告不计失败：
+    // 孤儿 = 装副本独有（装户自持内容如本地 skills），删留由人拍板，不入机器门。
+    if (result.missing.length || result.drift.length) {
+      console.error('❌ 双源不一致（缺失 ' + result.missing.length + ' / 漂移 ' + result.drift.length + '）——包源与装副本须同提交成对（双源纪律）；跑 node bin/flow-kit.mjs sync 后原路重试（孤儿只报告不计失败）');
+      process.exit(1);
+    }
+    process.exit(0);
   }
   // diff/json 模式总 exit 0；差异存在不视作错误（人类阅读用；B-b 决策「只报告不修复」）
   process.exit(0);

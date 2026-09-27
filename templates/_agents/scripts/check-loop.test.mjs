@@ -633,5 +633,70 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   rmfix(T);
 }
 
+// ---- 场景 49-52:检查 15 done 内容绑定（2026-09-27 audit-gate-hardening，生效 2026-09-28）----
+//     done 形态复刻真实时序：approved 内容（含 approved 指纹）→ done 指纹在其上计算 → 落 done 文档 + 台账 done 行
+{
+  const mkDoneFixture = (T, date, tamper) => {
+    const body = `\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n`;
+    const pre = `---\n状态: approved\n级别: L1\n日期: ${date}\n确认指纹: ${'a'.repeat(16)}\n---\n# INTENT — bind\n${body}`;
+    const fpDone = computeFingerprint(pre);
+    // tamper 只污染 done 落盘文本（不进指纹底稿）——复刻「done 确认后篡改正文」
+    const doneText = `---\n状态: done\n级别: L1\n日期: ${date}\n确认指纹: ${fpDone.slice(0, 16)}\n---\n# INTENT — bind\n${body}${tamper || ''}`;
+    w(T, 'workflow/intents/' + date + '-bind.md', doneText);
+    w(T, 'workflow/plans/' + date + '-bind.md', PLAN('bind', '状态: draft\n级别: L1'));
+    return { rel: 'workflow/intents/' + date + '-bind.md', fp: fpDone };
+  };
+  {
+    const T = mkfix();
+    const d1 = mkDoneFixture(T, '2026-09-28');
+    writeLedger(T, [{ ts: 'T', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'tty' }]);
+    expectOk('检查15:done 内容与台账一致（复原重算=台账指纹）→ exit 0', T);
+    rmfix(T);
+  }
+  {
+    const T = mkfix();
+    const d1 = mkDoneFixture(T, '2026-09-28', '确认后被篡改的正文行\n');
+    writeLedger(T, [{ ts: 'T', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'tty' }]);
+    expectHard('检查15:done 后正文被篡改 → hard 确认内容漂移', T, '确认内容漂移');
+    rmfix(T);
+  }
+  {
+    const T = mkfix();
+    const d1 = mkDoneFixture(T, '2026-09-27'); // 生效日前（旧关单顺序完成的 done 不回改）
+    writeLedger(T, [{ ts: 'T', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'tty' }]);
+    expectOk('检查15:绑定生效日前的 done 不做内容绑定 → exit 0', T);
+    rmfix(T);
+  }
+  {
+    const T = mkfix();
+    const d1 = mkDoneFixture(T, '2026-09-28');
+    writeLedger(T, [{ ts: 'T', doc: d1.rel, stage: 'done', fingerprint: d1.fp }]); // 无 prev（schema 演进前行）
+    const r = run(T);
+    check('检查15:台账 done 行缺 prev → 降级 WARN 绑定跳过（exit 0 不拦）',
+      r.status === 0 && outOf(r).includes('绑定降级'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+}
+
+// ---- 场景 53-54:检查 4 引用扫描收窄活跃态（2026-09-27 audit-gate-hardening）----
+{
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-28-refterm.md', INTENT('refterm', '状态: superseded\n级别: L1\n日期: 2026-09-28', '\n引用 .agents/scripts/ghost-gone.mjs\n'));
+  w(T, 'workflow/plans/2026-09-28-refterm.md', PLAN('refterm', '状态: superseded\n级别: L1'));
+  const r = run(T);
+  check('检查4:终态文档引用断链不再报（历史叙述退出扫描）',
+    r.status === 0 && !outOf(r).includes('引用断档'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+{
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-26-reflive.md', INTENT('reflive', '状态: approved\n级别: L1\n日期: 2026-09-26', '\n引用 .agents/scripts/ghost-gone.mjs\n'));
+  w(T, 'workflow/plans/2026-09-26-reflive.md', PLAN('reflive', '状态: draft\n级别: L1'));
+  const r = run(T);
+  check('检查4:活跃文档引用断链仍报（收窄只放终态）',
+    r.status === 0 && outOf(r).includes('引用断档') && outOf(r).includes('ghost-gone.mjs'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

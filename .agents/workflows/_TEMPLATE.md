@@ -70,5 +70,6 @@ params: env（目标环境）；timeout-min（可选，默认 10）
 - 子智能体不跨确认门、不 commit / push（派单红线行：只改授权文件；缺输入或需偏离 → `BLOCKER:` 停下）。确认门一律用 human 形态行表达，不得派子智能体代行。
 - 收敛复核：派单返回后核对 diff 与授权文件范围（与 build.md 委派约定同口径）；BLOCKER 停住待处置。
 - **run journal 三条**：① 每个 stage 每次尝试出结果即 `wf-journal.mjs add` 记一行（含重试与 human 门结论）；② 中止后重跑先 `status`——已 pass 不重跑，从就绪层续；③ 收尾可把本 run 的 status 汇总粘 `workflow/delegations.md` 留痕（聚合脚本不读 journal）。
+- **journal 是自报态，非验证态**：run journal 由执行者（宿主 AI）自己记——concurrency / retry / 断点续跑语义的保证取决于记账纪律，编排层无运行时派发器强制（wf-run 已废，执行按本机制文档语义）；中止续跑时对「已 pass」结论保留人工核对权（2026-09-27 audit-gate-hardening 边界声明）。
 - 留痕：每个派单 / step stage 完成后向 `workflow/delegations.md` 委派结果表追加一行（`一次通过` / `返工×N` / `返工待修`，口径与 agg-delegations.cjs 对齐）。
 - 解析校验先行（机器门）：`node .agents/scripts/workflows-check.mjs`——role ∈ `.agents/roles/`、step ∈ `steps/`、after 引用存在且无环、四形态恰填一项、retries/concurrency 数值合法；任一不过即拒，不执行。

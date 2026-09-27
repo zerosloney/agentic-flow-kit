@@ -16,7 +16,8 @@
 //   1. 入口文档/spec/plan 同名配对(L1 必须有 plan;L2/L3 必须有 spec+plan)        [hard-block]
 //   2. 模板字段占位符残留(YYYY-MM-DD / <主题> 等未替换;<主题> 与 .md 同行 = 命名约定描述,豁免)  [warning]
 //   3. incidents 复盘三件套完整性 + 状态严格枚举 + 新 intent 回路(回路断档=hard,其他=warning)
-//   4. 引用有效性(文档/指令中引用的 .agents/ 路径必须存在;支持 fill-{a,b,c}.mjs 花括号展开与 fill-*.mjs 通配)  [warning]
+//   4. 引用有效性(文档/指令中引用的 .agents/ 路径必须存在;支持 fill-{a,b,c}.mjs 花括号展开与 fill-*.mjs 通配;
+//      workflow 文档仅扫活跃态——终态件的引用是历史叙述,不扫,2026-09-27 audit-gate-hardening)  [warning]
 //   5. intent/spec/plan 状态字段 + L3 独立复核                                       [warning]
 //   6. 子智能体角色契约 + OpenCode/Trae/ZCode Adapter 一致性(含旧委派残留/钉死模型)  [warning]
 //   7. 阶段索引同步(AGENTS.md 与 new-task.md 须双向索引全部阶段指令)                [warning]
@@ -31,6 +32,9 @@
 //  14. 新 done 的 spec/plan 须在 git 历史里出现过 `状态: approved`(确认环节留痕,2026-09-22;恒 advisory 永不升级 hard)
 //  15. 确认指纹对账(2026-09-27 起:approved/done 须 confirm-doc.mjs 确认指纹+台账配对,缺=hard-block;存量豁免;
 //      两形态——TTY 亲手 / --delegated 对话委托代录,台账 source 如实区分,配对判据与 source 无关)
+//      + done 内容绑定(2026-09-28 起:done 文档按台账 prev 复原跳转前文本重算 sha256 与台账全量比对,
+//      不符=hard「确认内容漂移」;台账行缺 prev 降级 warning;2026-09-27 audit-gate-hardening——
+//      关单编辑顺序新约定:勾验/回填先于 done 确认,confirm-doc 是最后一次写入)
 //
 // 注：清单条目 5（状态字段+L3 复核）与 1（配对）在同一遍 intents/specs/plans 循环里实现（沿 sh 版代码结构）；
 //    条目 6 的旧委派残留/钉死模型子项在「角色契约与 Adapter」代码段实现。
@@ -47,6 +51,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { loadEnums } from './workflow-enums.mjs';
 
@@ -286,8 +291,13 @@ for (const inc of docFiles('incidents')) {
   }
   for (const sub of DOC_DIRS) {
     const dir = path.join(ROOT, WF, sub);
+    // 仅扫活跃态（draft/approved/open）——终态件的引用是历史叙述（提及已改名/已废文件属常态），
+    // 扫了只会产生不可消除的 advisory 噪声，真漏点被淹没（2026-09-27 audit-gate-hardening）
+    const activeSet = sub === 'incidents' ? ENUMS['incident.status.active'] : ENUMS['doc.status.active'];
     for (const f of readdirOrNull(dir) || []) {
-      if (f.endsWith('.md') && (f === '_TEMPLATE.md' || /^\d/.test(f))) files.push(`${WF}/${sub}/${f}`);
+      if (!f.endsWith('.md') || !(f === '_TEMPLATE.md' || /^\d/.test(f))) continue;
+      if (f !== '_TEMPLATE.md' && !inSet(fmGet(path.join(dir, f), '状态'), activeSet)) continue;
+      files.push(`${WF}/${sub}/${f}`);
     }
   }
   const cmdDir = path.join(ROOT, '.agents', 'commands');
@@ -561,6 +571,21 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
       if (!ok) {
         blockers.push(`- [确认未对账] ${base} 状态 ${st} 无用户确认记录——AI 不得代确认，用户在终端跑 node .agents/scripts/confirm-doc.mjs ${rel} 后重试`);
       }
+      // 内容绑定（2026-09-28 起生效；2026-09-27 audit-gate-hardening）：done 文档当前内容须与台账 done 行
+      // 确认时的内容一致——按 prev 复原跳转前文本重算比对，防「确认后篡改」（改验收标准/正文均触发）。
+      // 复原口径 = confirm-doc computeFingerprint 的逆推：CRLF 归一 → frontmatter 首个「状态:」行值替换为
+      // 台账 prev → 剔「确认指纹:」行。台账行缺 prev（schema 演进前存量）无以复原 → 降级 warning 不拦。
+      // 发布日（2026-09-27）当天按旧关单顺序完成的 done 不回改不豁免——次日起遵守新约定：
+      // 关单编辑（勾验/回填确认结果）先于 done 确认，confirm-doc 是最后一次写入；此后修订走 superseded 或新 intent。
+      if (ok && st === 'done' && d >= '2026-09-28') {
+        const doneEntries = ledger.filter((e) => e && e.doc === rel && e.stage === 'done' && typeof e.fingerprint === 'string');
+        const entry = doneEntries[doneEntries.length - 1]; // append-only 台账，末次生效（重确认场景）
+        if (!entry || !entry.prev) {
+          warnings.push(`- [WARN 绑定降级] ${base} 台账 stage=done 行缺 prev 字段（schema 演进前行），内容绑定跳过——仅配对判定`);
+        } else if (bindingSha256(linesOf(doc) || [], entry.prev) !== entry.fingerprint) {
+          blockers.push(`- [确认内容漂移] ${base} done 后内容与确认台账不符——已关单文档不得直接改（关单编辑先于 done 确认）；确需修订走 superseded 或新 intent 引用`);
+        }
+      }
     }
   }
 }
@@ -575,6 +600,26 @@ if (warnings.length) {
   process.stderr.write(`check-loop.sh WARN（advisory,不阻断）:\n\n${warnings.join('\n')}\n`);
 }
 process.exit(0);
+
+// bindingSha256：done 内容绑定的复原重算（检查 15 专用）——confirm-doc.mjs computeFingerprint 的逆推：
+// lines 已 CRLF 归一（split(/\r?\n/)），frontmatter 区内首个「状态:」行值替换为 prev，全文剔「确认指纹:」行
+// 后 join('\n') 再 sha256。与 computeFingerprint 对跳转前文本的计算逐字节同口径。
+function bindingSha256(lines, prevStatus) {
+  const isDelim = (l) => /^---\s*$/.test(l);
+  const out = [];
+  let i = 0;
+  if (isDelim(lines[0] || '')) {
+    out.push(lines[0]);
+    let replaced = false;
+    for (i = 1; i < lines.length; i++) {
+      if (isDelim(lines[i])) { out.push(lines[i]); i++; break; }
+      if (!replaced && /^状态:/.test(lines[i])) { out.push(`状态: ${prevStatus}`); replaced = true; }
+      else out.push(lines[i]);
+    }
+  }
+  for (; i < lines.length; i++) out.push(lines[i]);
+  return createHash('sha256').update(out.filter((l) => !/^确认指纹:/.test(l)).join('\n'), 'utf8').digest('hex');
+}
 
 function readdirOrNull(dir) {
   try { return fs.readdirSync(dir); } catch { return null; }

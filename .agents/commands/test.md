@@ -75,7 +75,7 @@ node bin/flow-kit.mjs doctor                       # §6.5 delegations + §6.6 o
 - **关单**（日常闭环点，不依赖是否上 prod）:
   - 关单前一键过门：`node .agents/scripts/verify.mjs`（npm test + check-loop 固定编排，任一失败非零退出，非绿不关单）
   - 新需求：逐条勾验入口 intent「验收标准」，每条补「证据：」，intent → done；同名 spec（若有）仍 approved → done
-**确认落态唯一入口**（2026-09-27 起）：用户在终端跑 `node .agents/scripts/confirm-doc.mjs <path>` 键入「可以」（draft→approved / approved→done；AI 不得直接改状态代确认，check-loop 15 对账拦截）。
+**确认落态唯一入口**（2026-09-27 起）：用户在终端跑 `node .agents/scripts/confirm-doc.mjs <path>` 键入「可以」（draft→approved / approved→done；对话内明确确认后 AI 可 `--delegated "<原话>"` 代录，台账如实记 source/quote）。check-loop 15 如实口径：缺记录/指纹不配对 → hard-block 拦截；伪造台账本地不可机器防，留痕供事后对质；done 内容绑定（2026-09-28 起）——**关单编辑（勾验/回填确认结果）先于 done 确认、confirm-doc 是最后一次写入**，此后修订走 superseded 或新 intent。
   - 修复：防复发验证已落地，incident → closed
   - **同族收尾**：入口置终态时，同名 plan 一并置 `done`（spec 见上条），不留 `approved` 孤儿（口径同看板「入口已 done，本 plan 未终态」告警）
   - 主智能体自做的 L1+ 新需求在 `workflow/delegations.md`「自做任务结果表」记一行（修复类不重复记）

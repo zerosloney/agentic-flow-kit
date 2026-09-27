@@ -1,6 +1,6 @@
 #!/bin/sh
 # Git 原生 pre-commit hook（经 core.hooksPath 挂载，git 执行、不依赖 agent 客户端）— agentic-flow-kit 通用编排
-# 通用门禁序：闭环配对(增量) → wiki 台账(增量) → 常驻面体积预算(增量) → 项目门禁(local-pre-commit) → 敏感信息扫描+条件构建(commit-check.cjs)
+# 通用门禁序：闭环配对(增量) → wiki 台账(增量) → 常驻面体积预算(增量) → 双源一致性(增量) → 项目门禁(local-pre-commit) → 敏感信息扫描+条件构建(commit-check.cjs)
 # 项目专属门禁（架构红线/业务守卫等）放 .agents/hooks/local-pre-commit——存在即在本钩子内执行，返回非零即阻断提交
 # 合并提交场景由 .githooks/pre-merge-commit 原样转发到本脚本（合并时 git 调的是 pre-merge-commit，
 # 不是 pre-commit）——门禁清单只此一份，避免两处分叉
@@ -29,6 +29,19 @@ run_gate "wiki 台账（增量）" .agents/hooks/check-wiki-ledger.sh
 # 超限即阻断——常驻面只增不减，须先删除或下沉一条被取代条目再增）
 if [ -f .agents/scripts/rule-budget.sh ] && [ -f .agents/rule-budgets.txt ]; then
   run_gate "常驻面体积预算" .agents/scripts/rule-budget.sh --staged
+fi
+
+# 双源一致性（增量，2026-09-27 audit-gate-hardening）：包源 templates/_agents/ 与装副本 .agents/ 须同提交成对。
+# 暂存触及任一侧时跑 source-sync-check --gate（缺失/漂移 exit 1，孤儿只报告）——拦「包源改了装副本没跟」
+# （doctor §4 台账 sha 对此静默：盘面=台账即 PASS；该故障模式曾两次真实发生，见 incidents/2026-09-25-wf-runtime）。
+# 比较工作树而非暂存区（口径沿 check-pairing-incremental 先例）：两侧都已改好、分两笔提交时不拦——最终一致即可。
+# 装户环境（无 templates/_agents/ 包源）自然跳过。
+if [ -d templates/_agents ] && [ -f .agents/scripts/source-sync-check.mjs ] \
+  && git -c core.quotepath=off diff --cached --name-only | grep -qE '^(templates/_agents/|\.agents/)'; then
+  if ! node .agents/scripts/source-sync-check.mjs --gate; then
+    echo "pre-commit: 双源一致性（增量）未通过，提交已阻止——单边改动先跑 node bin/flow-kit.mjs sync 成对后原路重试" >&2
+    exit 1
+  fi
 fi
 
 # 项目门禁挂载点：.agents/hooks/local-pre-commit（项目自建门禁/门禁模块接线处，存在即执行）

@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { sourceSyncCheck } from './source-sync-check.mjs';
 
@@ -16,6 +17,8 @@ function check(name, cond, detail = '') {
 }
 
 const SRC_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'source-sync-check.mjs');
+const runGate = (args) => spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8' });
 
 // ---- fixture：mini 包源 + 装副本，3 类差异各造 1 个 ----
 function mkFixture() {
@@ -150,6 +153,46 @@ function mkFixture() {
   const empty = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-ssc-empty-'));
   const r = sourceSyncCheck({ pkgRoot: empty, target: empty });
   check('S7 空目录 fixture 不崩（0/0）', r.pkgCount === 0 && r.tgtCount === 0);
+}
+
+// ---- 场景 10-12：--gate 门禁模式（2026-09-27 audit-gate-hardening，pre-commit 双源门禁用）----
+{
+  // S10 差异 fixture（缺失 1 / 漂移 1 / 孤儿 1）→ --gate exit 1（缺失/漂移阻断）
+  const { pkgRoot, target } = mkFixture();
+  const r = runGate(['--gate', '--pkg-root', pkgRoot, '--target', target]);
+  check('S10 --gate 差异 fixture（缺失+漂移）→ exit 1', r.status === 1, `exit=${r.status}\n${r.stdout || ''}${r.stderr || ''}`);
+}
+{
+  // S11 孤儿-only fixture → --gate exit 0（孤儿只报告不计失败——装户自持内容不入机器门）
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-ssc-gate-orphan-'));
+  const pkgRoot = path.join(root, 'pkg');
+  const target = path.join(root, 'target');
+  const pkgBase = path.join(pkgRoot, 'templates', '_agents');
+  const tgtBase = path.join(target, '.agents');
+  fs.mkdirSync(path.join(pkgBase, 'commands'), { recursive: true });
+  fs.mkdirSync(path.join(tgtBase, 'commands'), { recursive: true });
+  fs.writeFileSync(path.join(pkgBase, 'commands', 'same.md'), '# v1\n');
+  fs.writeFileSync(path.join(tgtBase, 'commands', 'same.md'), '# v1\n');
+  fs.writeFileSync(path.join(tgtBase, 'local-only.md'), '# 装户自持\n');
+  const r = runGate(['--gate', '--pkg-root', pkgRoot, '--target', target]);
+  check('S11 --gate 孤儿-only → exit 0（孤儿不计失败）', r.status === 0, `exit=${r.status}\n${r.stdout || ''}${r.stderr || ''}`);
+}
+{
+  // S12 干净 fixture --gate → exit 0；差异 fixture --diff → 仍 exit 0（B-b「只报告不修复」默认语义不变）
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-ssc-gate-clean-'));
+  const pkgRoot = path.join(root, 'pkg');
+  const target = path.join(root, 'target');
+  const pkgBase = path.join(pkgRoot, 'templates', '_agents');
+  const tgtBase = path.join(target, '.agents');
+  fs.mkdirSync(path.join(pkgBase, 'commands'), { recursive: true });
+  fs.mkdirSync(path.join(tgtBase, 'commands'), { recursive: true });
+  fs.writeFileSync(path.join(pkgBase, 'commands', 'same.md'), '# v1\n');
+  fs.writeFileSync(path.join(tgtBase, 'commands', 'same.md'), '# v1\n');
+  const rClean = runGate(['--gate', '--pkg-root', pkgRoot, '--target', target]);
+  check('S12 --gate 干净 fixture → exit 0', rClean.status === 0, `exit=${rClean.status}`);
+  const { pkgRoot: dp, target: dt } = mkFixture();
+  const rDiff = runGate(['--diff', '--pkg-root', dp, '--target', dt]);
+  check('S12 --diff 差异 fixture 仍 exit 0（B-b 默认语义不变）', rDiff.status === 0, `exit=${rDiff.status}`);
 }
 
 console.log('\n合计: PASS ' + pass + ' / FAIL ' + failCount);

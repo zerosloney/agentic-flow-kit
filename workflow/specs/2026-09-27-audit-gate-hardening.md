@@ -90,5 +90,5 @@
 
 ## 确认与复核
 
-- 确认日期：
+- 确认日期：2026-09-27
 - 复核：L2 推荐独立复核（independent-reviewer 读 intent+spec+diff；复核意见采纳/驳回由用户定性）

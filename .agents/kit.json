@@ -20,7 +20,7 @@
     },
     {
       "rel": ".agents/commands/build.md",
-      "sha256": "c6235fafe3ff77f248b742fc2d4a6c5b3444ba6ea3de5d608880489d724838ba"
+      "sha256": "762f57b72fe094d9f410eb39e6dd8bd69c42ee8b936d8a4037b80a10945f0b16"
     },
     {
       "rel": ".agents/commands/deploy.md",
@@ -28,7 +28,7 @@
     },
     {
       "rel": ".agents/commands/design.md",
-      "sha256": "c2271f990f2129c46207e121bc7d61da1359b9ba8ca3c61cba823758072900bd"
+      "sha256": "4585c3e4f13633bac6bfe85f321b030d9b181584d1c877a2ea6dcefd1ce6abb7"
     },
     {
       "rel": ".agents/commands/gate-checklist.md",
@@ -44,7 +44,7 @@
     },
     {
       "rel": ".agents/commands/plan.md",
-      "sha256": "a4db2e01374831bf54b0208dcd1c8c8e261c86d926b574bed31f23871b51e42c"
+      "sha256": "fd253a0adefe2f8c6421bd0e2e43811a335d127d6d840a8aca57ec9d17aed135"
     },
     {
       "rel": ".agents/commands/review.md",
@@ -60,11 +60,11 @@
     },
     {
       "rel": ".agents/commands/test.md",
-      "sha256": "2181eab6113b6029c83e9a8256babea90bcf8bbaa0e2d91d4690e4042efa7884"
+      "sha256": "85e551ecd5651b8f2934617b47d5032d12b81b261de45cc818091040ef711f14"
     },
     {
       "rel": ".agents/hooks/check-pairing-incremental.sh",
-      "sha256": "db495076f4d35dd6443b06e6aa7bcc1bc385a297591b18ad22b8eb753eded4f2"
+      "sha256": "49a954451685c0390794dc1ea2ffad21241c473b56ff71f04faa2487dfbf57be"
     },
     {
       "rel": ".agents/hooks/check-wiki-ledger.sh",
@@ -96,7 +96,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "4fa4cf8f645984d2978613bce308825c81d1106515b008d82942962e580e37ab"
+      "sha256": "7912f24ce19f1b93d9586a03e9e256958219b99b992a48ba6016af8955536598"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -104,7 +104,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "ac01a25b14d911f3838d52e3e8df94584b460e9b12ff8327a914668a2df5ba29"
+      "sha256": "0fd34930bd0ad7de7dba48e59b0f68f1241f05f1fad2a250c6e243f0cdabbc6a"
     },
     {
       "rel": ".agents/scripts/commit-check-trigger.test.mjs",
@@ -204,11 +204,11 @@
     },
     {
       "rel": ".agents/scripts/source-sync-check.mjs",
-      "sha256": "c50f0c2a49c553e697ab0d7773d8b784da2fa59b5e23990b6e6aec2342444367"
+      "sha256": "3afbba711982549d8a0c48f82641dd4a3e8163215fa199812650acfea9bee87e"
     },
     {
       "rel": ".agents/scripts/source-sync-check.test.mjs",
-      "sha256": "59ae813409ff2908691a37f3e5520ca255aef43441082308061b88b247808b3a"
+      "sha256": "2313b674bffff7f7f5a4ccc406f5c6747d14f92f3b6a2d8e2e6500efffd36ee0"
     },
     {
       "rel": ".agents/scripts/verify-wiki-consistency.mjs",
@@ -268,7 +268,7 @@
     },
     {
       "rel": ".agents/workflows/_TEMPLATE.md",
-      "sha256": "5dd36fd41b86535ccdf6b25e7291dd11a4f2b90fc50fe8f3f379b230955733d0"
+      "sha256": "509e1e430a31636684fcb620593e31ee7050a28dc37fffe77ce0dfbc1dc7ae1c"
     },
     {
       "rel": ".agents/workflows/示例-并行实现评审.md",
@@ -296,7 +296,7 @@
     },
     {
       "rel": ".githooks/pre-commit",
-      "sha256": "21b11546e3bc6739df167b23b649b26bcf201235b7c79742b63766ca15e46eac"
+      "sha256": "7f41ec74fc9900c52961732a9fdf21a8ebbade23b916eb16aa3cb1464270c3f5"
     },
     {
       "rel": ".githooks/pre-merge-commit",
