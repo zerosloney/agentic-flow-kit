@@ -40,7 +40,7 @@ T1 → T2 → T3 → T4（串行，件少）。
 
 ## 验证方式
 
-- 静态门：npm test 全套（confirm-doc +2 / check-loop +3 场景）；doctor 0 FAIL；check-loop advisory 变化仅新增「确认并录」存量可见项
+- 静态门：npm test 全套（confirm-doc 21/0 +2 / check-loop 69/0 +4 场景）；doctor 0 FAIL；advisory +13 条「确认并录」存量可见（6 L2 单×2 批 + sync-hosts×1，与台账 47 行 delegated 实况对数）——全绿达成
 - L2 追加：delegated 双文档拒绝实测留证；台账批次聚组在本仓实跑对数
 - 回滚：单 feat 提交 revert 即回
 
