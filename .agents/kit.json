@@ -160,7 +160,7 @@
     },
     {
       "rel": ".agents/scripts/gen-wiki-board.mjs",
-      "sha256": "66e6531a13c8df5af4e5cb4d65518b0e916bd88167085175210b34a9bdde3285"
+      "sha256": "0bfa4bbb2d2546533232e257fcf2460f561001893e036ad3022b641dbb2cc31c"
     },
     {
       "rel": ".agents/scripts/gen-wiki-board.test.mjs",
@@ -212,7 +212,7 @@
     },
     {
       "rel": ".agents/scripts/verify-wiki-consistency.mjs",
-      "sha256": "ef666789ef76c7269bbc09ec1aab308aca3626807cc1567a75b8602243e56ad5"
+      "sha256": "ef6e8ac1bc19b2b51a9a6bab4260daf78068086ba3de3b55ad06198a6cb1a266"
     },
     {
       "rel": ".agents/scripts/verify.mjs",

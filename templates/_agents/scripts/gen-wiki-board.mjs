@@ -68,7 +68,7 @@ for (const d of fs.readdirSync(WIKI)) {
   if (!fs.statSync(p).isDirectory() || d === 'drafts-archive') continue;
   // gitignore 豁免消费（p2-batch2 扩面落点）：gitIgnoredArchive 集合现为全 wiki/ 的忽略件相对路径——
   // 活跃区 entries 构建处按「主题/文件」与「主题/子目录/文件」过滤（复核 P1-2：扩面集合此前无消费点=死代码）
-  const isIgnored = (rel) => gitIgnoredArchive.has(`${d}/${rel}`) || gitIgnoredArchive.has(`${d}/${rel}/`);
+  const isIgnored = (rel) => { const k = rel.endsWith('/') ? rel.slice(0, -1) : rel; return gitIgnoredArchive.has(`${d}/${k}`) || gitIgnoredArchive.has(`${d}/${k}/`); }; // 尾斜杠归一（复核 P2-a；endsWith 替代正则——此文件转义层过于嘈杂）
   const entries = fs.readdirSync(p)
     .filter((f) => fs.statSync(path.join(p, f)).isFile() && !isIgnored(f))
     .map((f) => ({ name: f, dir: `wiki/${d}/` }));
@@ -92,8 +92,9 @@ const archiveCount = (() => {
   const walk = (dir, rel = '') => {
     for (const e of fs.readdirSync(dir)) {
       const p = path.join(dir, e);
-      const r = rel ? `${rel}/${e}` : e;
-      if (fs.statSync(p).isDirectory()) walk(p, r);
+      // 集合键带 drafts-archive/ 前缀（扫描面扩全 wiki/ 后），walk rel 须拼前缀比对（复核 P2-b）
+      const r = rel ? `drafts-archive/${rel}/${e}` : `drafts-archive/${e}`;
+      if (fs.statSync(p).isDirectory()) walk(p, rel ? `${rel}/${e}` : e);
       else if (!gitIgnoredArchive.has(r)) n++;
     }
   };

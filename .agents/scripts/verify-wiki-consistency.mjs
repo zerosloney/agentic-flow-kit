@@ -58,7 +58,7 @@ for (const d of fs.readdirSync(WIKI)) {
   diskTopics.add(d);
   // gitignore 豁免消费（p2-batch2 复核 P1-3）：gen 侧排除 ignored 本机件，verify 须同口径——
   // 否则「gen 恒写 N、verify 恒数 N+1」门禁死锁且自愈指引（重跑 gen）无效
-  const isIgnored = (rel) => gitIgnoredArchive.has(`${d}/${rel}`) || gitIgnoredArchive.has(`${d}/${rel}/`);
+  const isIgnored = (rel) => { const k = rel.replace(/\/$/, ''); return gitIgnoredArchive.has(`${d}/${k}`) || gitIgnoredArchive.has(`${d}/${k}/`); }; // 尾斜杠归一（复核 P2-a）
   for (const f of fs.readdirSync(p)) {
     if (fs.statSync(path.join(p, f)).isFile() && !isIgnored(f)) diskFiles.add(`${d}/${f}`);
   }
@@ -80,7 +80,7 @@ for (const d of fs.readdirSync(WIKI)) {
 // drafts-archive 缺失：ENOENT 崩栈改明示失败（本脚本是门禁，协议目录被删应 exit 1 而非崩栈，2026-09-24）
 const ARCHIVE_DIR = path.join(WIKI, 'drafts-archive');
 let archiveCount = 0;
-if (fs.existsSync(ARCHIVE_DIR)) archiveCount = walkTree(ARCHIVE_DIR).files.filter((r) => !gitIgnoredArchive.has(r)).length;
+if (fs.existsSync(ARCHIVE_DIR)) archiveCount = walkTree(ARCHIVE_DIR).files.filter((r) => !gitIgnoredArchive.has(`drafts-archive/${r}`)).length; // 集合键带 drafts-archive/ 前缀（复核 P2-b）
 else problems.push('wiki/drafts-archive/ 目录缺失（wiki 协议结构，模板自带）——归档一致性无从校验');
 
 // ---- 看板 DATA 解析 ----
