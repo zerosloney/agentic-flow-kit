@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-27
 模块: pipeline
 备注: 同名 intent：../intents/2026-09-27-init-p1-batch.md（init 审查 P1×4 收口）
-确认指纹: 493c9c90c0989df2
+确认指纹: fe50ecc36e81b295
 ---
 # SPEC — init-p1-batch
 

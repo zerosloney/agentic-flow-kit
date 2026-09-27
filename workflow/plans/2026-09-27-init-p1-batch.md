@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
-确认指纹: a2720f6ed6672722
+确认指纹: eda4c4065cef0622
 ---
 # PLAN — init-p1-batch
 
@@ -48,6 +48,6 @@ T1 → T2 → T3 → T4（T1/T2/T3 部分共享 render.mjs，串行最稳）。
 ## 确认与复核
 
 > 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节，done 只在关单出现。
-- 确认结果：approved（YYYY-MM-DD 用户对话内确认）；done（YYYY-MM-DD 关单，随入口文档置终态）
+- 确认结果：approved（2026-09-27 用户对话内确认，confirm-doc --delegated 代录「可以」）；done（2026-09-27 关单，随入口文档置终态）
 - 确认门记录：plan 草稿全文过目 + 改动清单确认（build.md 两道门，逐次，不合并）
 - 复核：L2 推荐独立复核（independent-reviewer；采纳/驳回由用户定性）

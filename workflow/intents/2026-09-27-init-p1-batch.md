@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-27
 模块: pipeline
 备注: init 安装器审查 P1×4 收口（用户拍板「init 的 4 个 P1 优先」）：①POSIX 钩子执行位 ②全新 init 必现 owned FAIL exit 1 ③目标侧预置脚本被执行（供应链）④init 记账 raw sha 口径分叉（+add-gate 同口径 rider）。其余审查发现（看板/kb/宿主模块 P1×7 与 P2 池）留待后续批
-确认指纹: 9fe8c3da82b3de24
+确认指纹: a24d187c1c147031
 ---
 # INTENT — init-p1-batch
 
@@ -51,18 +51,18 @@ init 安装器能力审查（independent-reviewer，线上 tarball + 本地重�
 
 ## 验收标准（可测试）
 
-- [ ] P1-1：renderTree 对 `.githooks/*` 以 0755 落盘、sync 恢复/更新路径补 chmod、本仓 `git ls-files -s .githooks/` 全 100755；doctor §3 在非 win32 校验执行位（缺失=FAIL），win32 跳过（测试：mode 落盘断言 + 平台分支）
-- [ ] P1-2：临时目录全新 init（线上同构流程）→ doctor 0 FAIL、进程 exit 0（实测留证）
-- [ ] P1-3：预植恶意 `.agents/scripts/gen-workflow-index.mjs` 的目标目录跑 init/doctor/sync → 脚本不被执行（无标记文件）+ 可见跳过提示（实测留证 ×3）
-- [ ] P1-4：目标目录预置 CRLF 的 AGENTS.md 跑 init → 合并记账 LF 归一，doctor §6.6 0 FAIL（实测留证）；add-gate 记账同口径（断言）
-- [ ] 回归：npm test 全绿、本仓 doctor 0 FAIL / check-loop advisory 不增、临时克隆四道门绿
-- [ ] README 威胁模型一行（勿在不可信仓库运行 init/doctor/sync）+ P1-3 防线说明
+- [x] P1-1：renderTree 对 `.githooks/*` 以 0755 落盘、sync 恢复/更新路径补 chmod、本仓 `git ls-files -s .githooks/` 全 100755；doctor §3 在非 win32 校验执行位（缺失=FAIL），win32 跳过（测试：mode 落盘断言 + 平台分支）（证据：commit 7903325——git ls-files -s 五钩全 100755；init.test ⑦节 mode 断言（win32 平台分支容忍，POSIX 真值留 ubuntu CI 腿）；sync unchanged 路径补 chmod 随 f6ffc3e（复核 P2-3：存量 0644 死钩子升级修复）；fresh init 实测 hook-mode win32 下 666 常态、doctor §3 平台分支跳过）
+- [x] P1-2：临时目录全新 init（线上同构流程）→ doctor 0 FAIL、进程 exit 0（实测留证）（证据：实测 INIT-EXIT=0 + doctor 12 PASS / 0 WARN / 0 FAIL（P1-2 的生成器重写 owned → doctor FAIL → exit 1 链路消除）；独立复核重演同结论 + owned 26 份无漂移证明 GEN_TARGETS 重刷有效）
+- [x] P1-3：预植恶意 `.agents/scripts/gen-workflow-index.mjs` 的目标目录跑 init/doctor/sync → 脚本不被执行（无标记文件）+ 可见跳过提示（实测留证 ×3）（证据：实测三命令 INIT/DOCTOR/SYNC exit 均 0、MARKER 均未产生、三处均打印「供应链防线」跳过提示；独立复核重演（预植 5 个恶意脚本）同结论 + sync 未把预植件收养进台账；复核确认接线完整：init runNode×2 / doctor spawnSync×4 / sync runNode×2 全部设防，无绕过面）
+- [x] P1-4：目标目录预置 CRLF 的 AGENTS.md 跑 init → 合并记账 LF 归一，doctor §6.6 0 FAIL（实测留证）；add-gate 记账同口径（断言）（证据：实测预置 CRLF AGENTS.md → 追加补齐原内容保留 + doctor 12 PASS / 0 WARN / 0 FAIL + owned 26 份无漂移；init.test ⑦节记账口径断言（归一 sha == LF 内容 sha != 原始字节 sha）；add-gate shaText 两处随 7903325 rider）
+- [x] 回归：npm test 全绿、本仓 doctor 0 FAIL / check-loop advisory 不增、临时克隆四道门绿（证据：verify.mjs 全绿（init.test 28/0 含 ⑦节 5 断言 + 全套 23 套件）；doctor 12 PASS / 0 WARN / 0 FAIL 且防线四节全放行（无误伤实证）；check-loop 绿；init.test ⑥节装户面结构断言随套件守护）
+- [x] README 威胁模型一行（勿在不可信仓库运行 init/doctor/sync）+ P1-3 防线说明（证据：commit 7903325 README 设计原则节；复核 P2-1 指出「预置内容不会被运行」超出防线实际范围（.githooks 预植件会被挂载并在首次 git 操作执行，复核实测）——随 f6ffc3e 收窄为「防线不覆盖 git 钩子面」如实表述）
 
 > **闭环对账**：关单在 test 阶段。intent 置 done 前逐条勾验，每条勾选项后补证据。
 
 ## 确认与复核
 
-- 确认日期：
+- 确认日期：2026-09-27
 - 确认人：用户（对话内一句"可以"即确认）
 - 确认范围：三件套全文
-- 复核：L2 推荐独立复核（independent-reviewer，diff 固定后执行；POSIX 行为以代码+index 位实证，实机 Linux 标注未验证范围）
+- 复核：L2 独立复核已执行（2026-09-27，independent-reviewer 子代理，基准 13b4a35 → 7903325，含临时目录实验重演：恶意预植 5 脚本 ×3 命令 0 标记 / CRLF fresh init sha 断言 / 预植 git 钩子挂载行为）——初判「有条件通过」：0 P0，条件①补测试场景（P1-1 复核指出 spec 承诺未落地）②README 表述收窄（P2-1）+ 建议 P2-2/P2-3 rider——全部随 f6ffc3e 收口（init.test ⑦节 5 断言 / README「防线不覆盖 git 钩子面」/ doctor §6.5·§6.8 存在性先行 / sync unchanged 补 chmod）。诚实边界：POSIX 实机行为未验证（本机 Windows），实证到代码路径 + git index 位 + 复核重演为止，真值由 ci.yml ubuntu 腿在推送后首次真实覆盖
