@@ -9,7 +9,7 @@
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
-| INTENT | L2 | approved | 2026-09-27 | pipeline | p2-batch1 | ☑0/6 |
+| INTENT | L2 | approved | 2026-09-27 | pipeline | p2-batch1 | ☑6/6 |
 | PLAN | L2 | approved | 2026-09-27 | pipeline | p2-batch1 | — |
 | SPEC | L2 | approved | 2026-09-27 | pipeline | p2-batch1 | — |
 | INCIDENT | L1 | open | 2026-09-25 | pipeline | 2026-09-25 doctor owned 漂移 WARN 升级 FAIL | — |
