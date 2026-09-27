@@ -22,9 +22,13 @@ export function renderContent(text, vars) {
   return String(text || '').replace(PH_RE, (m, key) => (Object.prototype.hasOwnProperty.call(vars, key) ? vars[key] : m));
 }
 
-export function renderTree(srcRoot, targetRoot, vars, { force = false } = {}) {
+// renderTree：模板树渲染。opts.protectOwned=true 时（init --force 路径，2026-09-27 p2-batch1），
+// rel 命中 protectSet 且目标已存在 → 跳过覆盖并计入 protected 清单（owned「永不触碰」两态模型
+// 在 --force 路径的对齐；此前 force 覆盖一切同名文件曾实测静默丢用户自定义内容）
+export function renderTree(srcRoot, targetRoot, vars, { force = false, protectSet = null } = {}) {
   const written = [];   // { rel, sha256 }
   const skipped = [];   // rel（已存在，保守跳过）
+  const protectedSkipped = []; // rel（--force 下 owned 保护跳过）
   const warnings = [];  // 未知占位符等
   const dirs = [];
 
@@ -43,6 +47,10 @@ export function renderTree(srcRoot, targetRoot, vars, { force = false } = {}) {
       fs.mkdirSync(path.dirname(target), { recursive: true });
       if (fs.existsSync(target) && !force) {
         skipped.push(rel);
+        continue;
+      }
+      if (protectSet && protectSet.has(rel) && fs.existsSync(target)) {
+        protectedSkipped.push(rel);
         continue;
       }
       const raw = fs.readFileSync(abs);
@@ -64,7 +72,7 @@ export function renderTree(srcRoot, targetRoot, vars, { force = false } = {}) {
     }
   })(srcRoot);
 
-  return { written, skipped, warnings, dirs };
+  return { written, skipped, protectedSkipped, warnings, dirs };
 }
 
 // renderPkgText：目标侧脚本执行防线的比对基准（2026-09-27 init-p1-batch P1-3）——读包源模板

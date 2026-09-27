@@ -3,4 +3,7 @@
 *.sh text eol=lf
 *.mjs text eol=lf
 *.js text eol=lf
+*.cjs text eol=lf
 templates/_githooks/* text eol=lf
+templates/_agents/hooks/local-pre-commit text eol=lf
+templates/_agents/hooks/check-pairing-incremental.sh text eol=lf

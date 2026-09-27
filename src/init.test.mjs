@@ -5,7 +5,7 @@
 //       ③非法输入返回 null（就地重问信号）；④空输入回默认（EOF/直接回车安全回退）；⑥装户面含 runner/workflows。
 // 用法：node src/init.test.mjs
 import { normalizeStack, parseChoices, hasAgentsSkeleton, mergeAgents } from './init.mjs';
-import { renderTree, scriptTrusted } from './render.mjs';
+import { renderTree, scriptTrusted, listTree } from './render.mjs';
 import { sha256 } from './render.mjs';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -101,6 +101,32 @@ check('合并：原内容为空时骨架即全文', mergeAgents('', '<!-- m -->\
   const readNorm = sha256(Buffer.from(fs.readFileSync(crlfFile, 'utf8').replace(/\r\n/g, '\n'), 'utf8'));
   check('记账口径：LF 归一 sha == LF 内容 sha != 原始字节 sha（CRLF 盘面跨 checkout 稳定）',
     readNorm === normSha && readNorm !== rawSha);
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
+// ---- ⑧ --force owned 保护 + 端口校验（2026-09-27 p2-batch1）----
+{
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'init-protect-'));
+  const pkgRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+  const vars = { BOARD_PORT: '8933' };
+  // 预置「用户已自定义」的 owned 文件（内容 != 模板渲染值）
+  const agPath = path.join(tmp, 'AGENTS.md');
+  fs.writeFileSync(agPath, '# 我的项目\n\n自定义适配区命令行，p2b1-marker-keep。\n');
+  const lpPath = path.join(tmp, '.agents', 'hooks', 'local-pre-commit');
+  fs.mkdirSync(path.dirname(lpPath), { recursive: true });
+  fs.writeFileSync(lpPath, '#!/bin/sh\nset -e\nsh .agents/hooks/check-architecture.sh  # add-gate 接线行 p2b1-marker-keep\n');
+  const t = renderTree(path.join(pkgRoot, 'templates'), tmp, vars, { force: true, protectSet: new Set([...listTree(path.join(pkgRoot, 'templates')).filter((rel) => rel === 'AGENTS.md' || rel === '.agents/hooks/local-pre-commit')]) });
+  check('⑧--force owned 保护：自定义 AGENTS.md 不被覆盖（marker 保留 + protectedSkipped 记录）',
+    fs.readFileSync(agPath, 'utf8').includes('p2b1-marker-keep') && (t.protectedSkipped || []).includes('AGENTS.md'),
+    JSON.stringify({ ps: t.protectedSkipped }));
+  check('⑧--force owned 保护：local-pre-commit 接线行保留',
+    fs.readFileSync(lpPath, 'utf8').includes('p2b1-marker-keep') && (t.protectedSkipped || []).includes('.agents/hooks/local-pre-commit'),
+    JSON.stringify({ ps: t.protectedSkipped }));
+  // managed 文件不受保护（--force 照常覆盖）
+  const cmd = path.join(tmp, '.agents', 'commands', 'plan.md');
+  check('⑧managed 文件 --force 照常覆盖（不在 protectedSkipped）',
+    fs.existsSync(cmd) && !(t.protectedSkipped || []).includes('.agents/commands/plan.md'),
+    JSON.stringify({ ps: t.protectedSkipped }));
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 

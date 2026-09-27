@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import { execSync, spawnSync } from 'node:child_process';
-import { renderTree, renderContent, sha256, scriptTrusted } from './render.mjs';
+import { renderTree, renderContent, sha256, scriptTrusted, listTree } from './render.mjs';
 import { HOSTS, STACKS, STACK_ALIASES, settingsJson, commitCheckConfig, pickStackVars, isOwned } from './profiles.mjs';
 import { doctor } from './doctor.mjs';
 
@@ -150,6 +150,10 @@ export async function init(args, pkgRoot) {
 
   opt.stack = normalizeStack(opt.stack);
   if (!STACKS[opt.stack]) fail(`未知技术栈：${opt.stack}（可选 dotnet | node（ts/js） | python | go | none——对应编译检查与自检验命令初值）`);
+  // 端口校验（2026-09-27 p2-batch1）：任意字符串曾直进 vars 渲染进 AGENTS.md（AI 每会话必读面）——1-65535 整数 fail-fast
+  if (!/^(0|[1-9]\d*)$/.test(String(opt.boardPort)) || Number(opt.boardPort) < 1 || Number(opt.boardPort) > 65535) {
+    fail(`--board-port 须为 1-65535 整数（现「${opt.boardPort}」）`);
+  }
   const hosts = opt.hosts.split(',').map((s) => s.trim()).filter(Boolean);
   for (const h of hosts) {
     if (!HOSTS[h]) fail(`未知宿主：${h}（可选 ${Object.keys(HOSTS).join(' | ')}）`);
@@ -167,8 +171,16 @@ export async function init(args, pkgRoot) {
   console.log(`${bold(cyan('▶ flow-kit init'))}${dim(' → ')}${target}`);
   console.log(`  宿主：${hosts.join(', ')} ｜ 技术栈：${opt.stack} ｜ 看板端口：${opt.boardPort}`);
 
-  // 1) 模板树（保守：已存在文件跳过，--force 覆盖）
-  const t = renderTree(path.join(pkgRoot, 'templates'), target, vars, { force: opt.force });
+  // 1) 模板树（保守：已存在文件跳过，--force 覆盖；p2-batch1：--force 下已存在 owned 仍跳过——
+  //    「项目自持」两态模型在重装路径的对齐，实测曾静默丢用户自定义「项目适配区」内容。
+  //    保护集 = 包源模板树内 isOwned 为真的 rel，现场枚举单源不另抄清单）
+  const protectSet = opt.force
+    ? new Set(listTree(path.join(pkgRoot, 'templates')).filter((rel) => isOwned(rel)))
+    : null;
+  const t = renderTree(path.join(pkgRoot, 'templates'), target, vars, { force: opt.force, protectSet });
+  for (const rel of t.protectedSkipped || []) {
+    console.log(`  跳过（owned 项目自持，--force 不覆盖）：${rel}——如需重置请手动删除后重跑`);
+  }
 
   // 1.5) AGENTS.md 特例：已存在且无骨架标记 → 文末追加补齐（原内容保留）；带标记 → 保守跳过
   let agentsMergedSha = null;
@@ -192,6 +204,16 @@ export async function init(args, pkgRoot) {
   const hostResults = {};
   for (const h of hosts) {
     hostResults[h] = renderTree(path.join(pkgRoot, 'modules', 'hosts', h), path.join(target, HOSTS[h].dir), vars, { force: opt.force });
+  }
+  // 换 --hosts 重装：旧宿主目录脱账提示（kit.json 只记新宿主，孤儿对 doctor §4.5 不可见——审查 P2-1 附带）
+  if (fs.existsSync(kitPath)) {
+    try {
+      const oldHosts = (JSON.parse(fs.readFileSync(kitPath, 'utf8')).options?.hosts) || [];
+      const removed = oldHosts.filter((h) => HOSTS[h] && !hosts.includes(h));
+      for (const h of removed) {
+        console.log(`  ⚠️ 旧宿主 ${HOSTS[h].dir}/ 不在新 --hosts 清单——其文件已脱账（成静默孤儿），如弃用请手动删除目录`);
+      }
+    } catch { /* 旧台账不可读（--force 重装修复场景），跳过提示 */ }
   }
 
   // 3) 生成的 owned 基线配置（引擎按固定路径读取；存在则跳过，永不覆盖；技术栈命令由项目在文件内自填）
@@ -281,7 +303,8 @@ export async function init(args, pkgRoot) {
   console.log(`  kit.json 台账：managed ${managed.length} 份 ｜ owned ${owned.length} 份（版本 ${pkg.version}）`);
 
   // 8) 自检（kit.json 已按生成后盘面记账——doctor §6.6 应全绿，fresh init 以 exit 0 收场）
-  console.log('▶ flow-kit doctor');
+  // 输出语义（p2-batch1 P2-4）：doctor 打印在异步端口回调里、晚于本横幅——脚本化消费方按退出码判定
+  console.log('▶ flow-kit doctor（安装产物已就位；体检 FAIL 时本命令 exit 1，产物无损——按 FAIL 项处置）');
   doctor(['--dir', target], pkgRoot);
 
   if (t.skipped.length) console.log(`  跳过（已存在，未覆盖）：${t.skipped.join('、')}`);

@@ -5,7 +5,7 @@
   "type": "module",
   "scripts": {
     "test": "node src/run-tests.mjs",
-    "prepack": "node -e \"require('fs').rmSync('templates/_agents/cache',{recursive:true,force:true})\""
+    "prepack": "node -e \"require('fs').rmSync('templates/_agents/cache',{recursive:true,force:true})\" && node scripts/check-pack-eol.mjs"
   },
   "bin": {
     "flow-kit": "bin/flow-kit.mjs"
