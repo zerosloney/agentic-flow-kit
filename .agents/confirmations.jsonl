@@ -52,3 +52,4 @@
 {"ts":"2026-09-27T15:01:50.501Z","doc":"workflow/plans/2026-09-27-p2-batch2.md","stage":"done","fingerprint":"b7339eb7a6cf2cc877e89a93d8e75b1ced00b84c963269927eeb162ec5a49610","prev":"approved","source":"chat-delegated","quote":"可以"}
 {"ts":"2026-09-27T15:42:20.842Z","doc":"workflow/plans/2026-09-27-confirm-gate-one-per-call.md","stage":"approved","fingerprint":"cae48a855d59fdce3bd7847830bb6748a1e17f4604f2ef68100a6709a9badf02","prev":"draft","source":"chat-delegated","quote":"确认"}
 {"ts":"2026-09-27T15:42:42.265Z","doc":"workflow/plans/2026-09-27-confirm-gate-one-per-call.md","stage":"revert-draft","fingerprint":"n/a","prev":"approved","source":"chat-delegated","quote":"方向确认被误当代录到未起草的 plan 骨架——回退 draft；spec 起草后走真正逐件门"}
+{"ts":"2026-09-27T15:46:48.852Z","doc":"workflow/specs/2026-09-27-confirm-gate-one-per-call.md","stage":"approved","fingerprint":"c0241fd4215dde2a680657c3baaf50860c1756bb8bff1e51bd9ddec9f26a1503","prev":"draft","source":"chat-delegated","quote":"确认"}
