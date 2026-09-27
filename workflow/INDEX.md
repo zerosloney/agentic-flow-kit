@@ -9,9 +9,9 @@
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
-| INTENT | L2 | draft | 2026-09-27 | pipeline | gate-coverage | ☑0/6 |
-| PLAN | L2 | draft | 2026-09-27 | pipeline | gate-coverage | — |
-| SPEC | L2 | draft | 2026-09-27 | pipeline | gate-coverage | — |
+| INTENT | L2 | approved | 2026-09-27 | pipeline | gate-coverage | ☑0/6 |
+| PLAN | L2 | approved | 2026-09-27 | pipeline | gate-coverage | — |
+| SPEC | L2 | approved | 2026-09-27 | pipeline | gate-coverage | — |
 | INCIDENT | L1 | open | 2026-09-25 | pipeline | 2026-09-25 doctor owned 漂移 WARN 升级 FAIL | — |
 | INTENT | L1 | approved | 2026-09-24 | pipeline | Shipyard 引擎增量收包（抽取后 3 笔回流包源） | ☑5/5 |
 | PLAN | L1 | approved | 2026-09-24 | pipeline | Shipyard 引擎增量收包 | — |
