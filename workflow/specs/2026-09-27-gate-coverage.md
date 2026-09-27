@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-27
 模块: pipeline
 备注: 同名 intent：../intents/2026-09-27-gate-coverage.md（机器门覆盖面补齐——incidents 确认门 + CI 服务端门 + quotepatch）
-确认指纹: 0c0c136ee82a9334
+确认指纹: 1340967bee8b293b
 ---
 # SPEC — gate-coverage
 
