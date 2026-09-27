@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-27
 模块: pipeline
 配对: ../intents/2026-09-27-sync-hosts-adapter-backlog.md
 备注: 随报随修回溯单：方向分析 → 修复 → 验证已按 intent 约束完成，本单为提交前闭环收口。2026-09-27 起 TTY 确认门生效（check 15）——approved / done 须经用户终端 confirm-doc.mjs 键入「可以」。
-确认指纹: 3acd8ad7d7a674c6
+确认指纹: f6c1986505d02093
 ---
 
 # PLAN — sync-hosts 适配层欠账清零（12 对 apply + 6 份新建）
@@ -26,6 +26,6 @@
 
 ## 确认与复核
 
-- 确认结果：approved（2026-09-27 00:21 用户终端 TTY 确认——.agents/confirmations.jsonl 台账行 + 指纹配对）；done（关单时回填）
+- 确认结果：approved（2026-09-27 00:21 用户终端 TTY 确认——.agents/confirmations.jsonl 台账行 + 指纹配对）；done（2026-09-27 对话委托代录「好了」——confirm-doc --delegated 正式首用，台账 source=chat-delegated + 原话）
 - 确认门记录：欠账由 2026-09-26 双轴审查发现并记 incident 备注「另行立项」→ 用户指令「收口」授权执行 → 方向分析安全后修复 → 用户终端 TTY 确认
 - 复核：L1 不要求独立复核（方向分析即安全复核——12/12 历史命中排除手改覆盖风险）

@@ -6,3 +6,5 @@
 {"ts":"2026-09-27T00:50:46.553Z","doc":"workflow/intents/2026-09-27-confirm-gate-delegated.md","stage":"done","fingerprint":"dda141abdba12144fab0033dfda1b316ee416a9db389ae844cc74e54b6f626bb","prev":"approved","source":"tty"}
 {"ts":"2026-09-27T00:50:48.472Z","doc":"workflow/specs/2026-09-27-confirm-gate-delegated.md","stage":"done","fingerprint":"95848c0f51fcf81e277385bb1af7222362b238e8ffa9865dfcf65974e071dade","prev":"approved","source":"tty"}
 {"ts":"2026-09-27T00:50:49.952Z","doc":"workflow/plans/2026-09-27-confirm-gate-delegated.md","stage":"done","fingerprint":"72b57732df4428a5bab47a3b27b8a26f2887cdd3287a108b8669defc62e7c396","prev":"approved","source":"tty"}
+{"ts":"2026-09-27T00:53:15.656Z","doc":"workflow/intents/2026-09-27-sync-hosts-adapter-backlog.md","stage":"done","fingerprint":"6fbf8abf3b6448f3d09a9b9fb24279481046ca663763b432d6fd7cca0923b5e6","prev":"approved","source":"chat-delegated","quote":"好了"}
+{"ts":"2026-09-27T00:53:15.662Z","doc":"workflow/plans/2026-09-27-sync-hosts-adapter-backlog.md","stage":"done","fingerprint":"f6c1986505d02093bfd9fa650ef2c4cc07703e0d6dc532cc8bc404b3fb778d81","prev":"approved","source":"chat-delegated","quote":"好了"}

@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-27
 模块: pipeline
 备注: 随报随修回溯单（先例 2026-09-25-fix-double-source-drift）：欠账由 2026-09-26 审查发现、记于 incident 2026-09-26-check-loop-review-fixes 备注「另行立项」，本单即该立项。用户指令「收口」授权执行；2026-09-27 起 TTY 确认门生效，本单按 check 15 走 confirm-doc.mjs 用户终端确认。
-确认指纹: da87f6f6d0d246a2
+确认指纹: 6fbf8abf3b6448f3
 ---
 
 # INTENT — sync-hosts 适配层欠账清零（12 对命令漂移 + 6 份缺失适配）

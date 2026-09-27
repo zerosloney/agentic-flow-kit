@@ -5,12 +5,10 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（15）
+## 活跃（13）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
-| INTENT | L1 | approved | 2026-09-27 | pipeline | sync-hosts 适配层欠账清零（12 对命令漂移 + 6 份缺失适配） | ☑5/5 |
-| PLAN | L1 | approved | 2026-09-27 | pipeline | sync-hosts 适配层欠账清零（12 对 apply + 6 份新建） | — |
 | INCIDENT | L1 | open | 2026-09-25 | pipeline | 2026-09-25 doctor owned 漂移 WARN 升级 FAIL | — |
 | INTENT | L1 | approved | 2026-09-24 | pipeline | Shipyard 引擎增量收包（抽取后 3 笔回流包源） | ☑5/5 |
 | PLAN | L1 | approved | 2026-09-24 | pipeline | Shipyard 引擎增量收包 | — |
@@ -25,17 +23,17 @@
 | PLAN | L1 | approved | 2026-09-23 | pipeline | M5：npm 发布 | — |
 | SPEC | L2 | approved | 2026-09-23 | pipeline | M4 自装 dogfooding | — |
 
-## 档案计数（83，不进表）
+## 档案计数（85，不进表）
 
 | 类型 | 模块 | 数量 |
 |---|---|---|
 | INCIDENT | pipeline | 11 |
-| INTENT | pipeline | 26 |
+| INTENT | pipeline | 27 |
 | INTENT | wiki | 1 |
-| PLAN | pipeline | 36 |
+| PLAN | pipeline | 37 |
 | PLAN | wiki | 1 |
 | SPEC | pipeline | 8 |
 
-终态构成：done 72 · closed 6 · fixed 5；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
+终态构成：done 74 · closed 6 · fixed 5；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
 
 <!-- GENERATED:END -->
