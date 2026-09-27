@@ -44,28 +44,6 @@ const BOARD_P = path.join(WIKI, '知识沉淀总览.html');
 //   主题目录顶层：全量文件登记（现状不变）；
 //   直属子目录：仅登记 md/html 知识文档（排除 *.visual-check.* 工具产物；.json/.png 不计入）；
 //   数据维护主题例外——其子目录（schema变更/<批次>/ 等）走 README.md 台账，不参与登记。
-const isKnowledgeDoc = (f) => /\.(md|html)$/i.test(f) && !/\.visual-check\./i.test(f);
-const diskTopics = new Map(); // name -> [{ name: '文件名或 子目录/文件名', dir: 'wiki/主题[/子目录]/' }]
-for (const d of fs.readdirSync(WIKI)) {
-  const p = path.join(WIKI, d);
-  if (!fs.statSync(p).isDirectory() || d === 'drafts-archive') continue;
-  const entries = fs.readdirSync(p)
-    .filter((f) => fs.statSync(path.join(p, f)).isFile())
-    .map((f) => ({ name: f, dir: `wiki/${d}/` }));
-  if (d !== '数据维护') {
-    for (const sub of fs.readdirSync(p)) {
-      const sp = path.join(p, sub);
-      if (!fs.statSync(sp).isDirectory()) continue;
-      for (const f of fs.readdirSync(sp)) {
-        if (fs.statSync(path.join(sp, f)).isFile() && isKnowledgeDoc(f)) {
-          entries.push({ name: `${sub}/${f}`, dir: `wiki/${d}/${sub}/` });
-        }
-      }
-    }
-  }
-  entries.sort((a, b) => a.name.localeCompare(b.name, 'zh'));
-  diskTopics.set(d, entries);
-}
 // gitignore 豁免（F4，incident 2026-09-23-code-review-f3-f4-closeout；p2-batch2 扩面到全 wiki/——
 // 活跃主题目录内的本机文件（如 *.xlsx）同样会造成生成物计数在 fresh clone 漂移）：
 // 排除 .gitignore 忽略的本机文件，git 不可用时退化为全量计数
@@ -83,6 +61,32 @@ const gitIgnoredArchive = (() => {
     return new Set();
   }
 })();
+const isKnowledgeDoc = (f) => /\.(md|html)$/i.test(f) && !/\.visual-check\./i.test(f);
+const diskTopics = new Map(); // name -> [{ name: '文件名或 子目录/文件名', dir: 'wiki/主题[/子目录]/' }]
+for (const d of fs.readdirSync(WIKI)) {
+  const p = path.join(WIKI, d);
+  if (!fs.statSync(p).isDirectory() || d === 'drafts-archive') continue;
+  // gitignore 豁免消费（p2-batch2 扩面落点）：gitIgnoredArchive 集合现为全 wiki/ 的忽略件相对路径——
+  // 活跃区 entries 构建处按「主题/文件」与「主题/子目录/文件」过滤（复核 P1-2：扩面集合此前无消费点=死代码）
+  const isIgnored = (rel) => gitIgnoredArchive.has(`${d}/${rel}`) || gitIgnoredArchive.has(`${d}/${rel}/`);
+  const entries = fs.readdirSync(p)
+    .filter((f) => fs.statSync(path.join(p, f)).isFile() && !isIgnored(f))
+    .map((f) => ({ name: f, dir: `wiki/${d}/` }));
+  if (d !== '数据维护') {
+    for (const sub of fs.readdirSync(p)) {
+      const sp = path.join(p, sub);
+      if (!fs.statSync(sp).isDirectory() || isIgnored(`${sub}/`)) continue;
+      for (const f of fs.readdirSync(sp)) {
+        if (fs.statSync(path.join(sp, f)).isFile() && isKnowledgeDoc(f) && !isIgnored(`${sub}/${f}`)) {
+          entries.push({ name: `${sub}/${f}`, dir: `wiki/${d}/${sub}/` });
+        }
+      }
+    }
+  }
+  entries.sort((a, b) => a.name.localeCompare(b.name, 'zh'));
+  diskTopics.set(d, entries);
+}
+
 const archiveCount = (() => {
   let n = 0;
   const walk = (dir, rel = '') => {

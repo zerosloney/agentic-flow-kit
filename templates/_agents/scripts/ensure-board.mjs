@@ -156,12 +156,25 @@ async function main() {
     console.log(`board: FAILED to start on ${port}`);
     return 1;
   }
-  // 竞态复验（2026-09-27 p2-batch2）：waitListen 只见「端口有人听」——spawn 与 listen 之间他人进程
-  // 抢先绑定同端口时自家子进程已 EADDRINUSE 退出，误报成功且用户打开他人服务。复验 /api/board
-  // 自报 pid 与自家子进程一致；不一致按他人服务如实报告（不 kill，继续换端口语义交还用户）。
-  const mine = await probeBoard(port);
-  if (!mine.ours || mine.pid !== child.pid) {
-    console.log(`board: 端口 ${port} 在启动窗口被他人进程抢占（自报 pid ${mine.pid ?? '未知'} ≠ 本项目 ${child.pid}）——本轮未拉起本项目看板，可重跑 ensure-board 自动上探下一端口`);
+  // 竞态复验（2026-09-27 p2-batch2；同日复核 P1-1 收窄）：waitListen 只见「端口有人听」——spawn 与
+  // listen 之间他人进程抢先绑定同端口时自家子进程已 EADDRINUSE 退出。复验 /api/board 自报 pid 与
+  // 自家子进程一致。判定顺序（复核实测教训：冷启动首包可达 12s，2s 硬超时会误杀 fresh start 主路径）：
+  //   ① 子进程已退出（EADDRINUSE 自杀）→ 端口确被抢占，如实报告；
+  //   ② 15s 内轮询 probeBoard 直到自报 pid === 自家 pid（长超时容忍冷启动）；
+  //   ③ 轮询超时仍不一致 → 如实报告未确认为本项目（不误称他人抢占）。
+  const deadline = Date.now() + 15000;
+  let mine = null;
+  while (Date.now() < deadline) {
+    if (child.exitCode !== null) {
+      console.log(`board: 端口 ${port} 在启动窗口被他人进程抢占（本项目进程已退出 exitCode=${child.exitCode}）——本轮未拉起本项目看板，可重跑 ensure-board 自动上探下一端口`);
+      return 1;
+    }
+    mine = await probeBoard(port);
+    if (mine.ours && mine.pid === child.pid) break;
+    await sleep(400);
+  }
+  if (!mine || !mine.ours || mine.pid !== child.pid) {
+    console.log(`board: 端口 ${port} 上的服务未能确认为本项目（pid ${child.pid}，自报 ${mine?.pid ?? '未知'}）——冷启动超时或被抢占；可重跑 ensure-board`);
     return 1;
   }
   console.log(`board: ${action} -> ${url}`);

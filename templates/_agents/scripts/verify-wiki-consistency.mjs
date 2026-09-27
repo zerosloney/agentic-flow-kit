@@ -115,8 +115,9 @@ const indexTopicCounts = new Map(); // 速览表 topic → 文件数
 for (const line of fs.readFileSync(path.join(WIKI, 'INDEX.md'), 'utf8').split(/\r?\n/)) {
   const mm = line.match(/^\| ([^|]+) \| ([^|]+) \| wiki\/([^/]+)\/[^|]*\|$/);
   if (mm) indexFiles.add(`${mm[3].trim()}/${mm[1].trim()}`);
-  const ov = line.match(/^\| ([^|]+) \| (\d+) \|[^|]*\|$/);
-  if (ov && ov[1].trim() !== '主题') indexTopicCounts.set(ov[1].trim(), Number(ov[2]));
+  // 速览行用途列容忍转义管道（p2-batch2 复核 P2-4：gen 侧转义写入后本解析须同款，否则该主题计数核对静默跳过）
+  const ov = line.match(/^\| ([^|]+) \| (\d+) \|((?:\\.|[^|])*)\|$/);
+  if (ov && ov[1].trim() !== '主题') indexTopicCounts.set(ov[1].trim().replace(/\\\|/g, '|'), Number(ov[2]));
 }
 
 const diff = (a, b) => [...a].filter((x) => !b.has(x));

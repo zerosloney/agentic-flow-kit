@@ -107,7 +107,11 @@ const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
   check('④无验收节 → null', parseAcceptance('---\n状态: done\n---\n# I\n') === null);
 }
 
-// ---- ⑤XSS 剥离口径（p2-batch2）：前端剥内嵌 HTML 的正则与 loadDoc 同款——纯函数抽验 ----
+// ---- ⑤XSS 剥离口径（p2-batch2；复核 P2-3 备注）----
+// 注意：strip 与 board/index.html loadDoc 的剥离正则是【同款拷贝、非同源】——改 loadDoc 正则时本场景
+// 须同步（防回归能力受限为已知取舍：抽共享模块需前端打包链路，暂不做）。
+// activeStatuses 载荷断言未入本套件（server 侧 scanBoard 非纯函数不可直调）——
+// 以 /api/board 手工探活留证（复核已实测枚举贯通 + X-Frame-Options DENY）。
 {
   const strip = (s) => s.replace(/<[^>]*>/g, '');
   const evil = '正常文字 <img src=x onerror=alert(1)> 更多 <script>alert(2)</script> 结束';

@@ -12,7 +12,7 @@
   "managed": [
     {
       "rel": ".agents/board/index.html",
-      "sha256": "24b54e1d0bd416b9b77507ce0717bc44d995f889ba23f10d0139bdc0c97f210c"
+      "sha256": "bb252ae6211a4d3a675c7b97e5e994c1d5de150b0201f94f750228f209045097"
     },
     {
       "rel": ".agents/board/marked.min.js",
@@ -124,7 +124,7 @@
     },
     {
       "rel": ".agents/scripts/ensure-board.mjs",
-      "sha256": "c4b8744fe61e34b952bf4783f347414f176b47309a264840a5a523c37f7118c4"
+      "sha256": "5b8110df85c065142a81c70f6470adcf78fc552dfd0badccc5eb96223444530d"
     },
     {
       "rel": ".agents/scripts/fill-intent.mjs",
@@ -160,7 +160,7 @@
     },
     {
       "rel": ".agents/scripts/gen-wiki-board.mjs",
-      "sha256": "f4885913756b90da639baddb9c4ada659c249a9ce151672d671febbb9cee790e"
+      "sha256": "66e6531a13c8df5af4e5cb4d65518b0e916bd88167085175210b34a9bdde3285"
     },
     {
       "rel": ".agents/scripts/gen-wiki-board.test.mjs",
@@ -212,7 +212,7 @@
     },
     {
       "rel": ".agents/scripts/verify-wiki-consistency.mjs",
-      "sha256": "57a126f936d4d7bb325d2aa96975d5dff0a6c14ed10082c854b6a2d4304de2c3"
+      "sha256": "d47276925351d4f30580bb366691e0839fbb04d520f46b5e03c28fef7baba027"
     },
     {
       "rel": ".agents/scripts/verify.mjs",
@@ -240,7 +240,7 @@
     },
     {
       "rel": ".agents/scripts/workflow-board-server.test.mjs",
-      "sha256": "81decff77c392216b84383ad893639d4363e44d7ec2d233c5f3dfd40f2c2f210"
+      "sha256": "31595bba81118554d84fb6f1eee895a66d0e10fa39822883aee6c617d8e036c4"
     },
     {
       "rel": ".agents/scripts/workflow-enums.mjs",

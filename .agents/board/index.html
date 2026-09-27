@@ -359,6 +359,9 @@ async function loadDoc() {
   );
   // XSS 防线（2026-09-27 p2-batch2）：vendored marked v12 默认放行内嵌 HTML，文档由 AI 起草
   // （外部内容可经 prompt 注入落盘）——渲染前剥全部裸 HTML 标签，markdown 语法不受影响
+  // （已知误伤：代码块内联 HTML 与散文 `<...>` 跨度会被剥，只读预览可接受——源文件不损）。
+  // 残余面：markdown 链接 href（javascript:/data:）不经本剥离，靠 onDocLink 对 #d-body a 一律
+  // preventDefault + 非 http(s) 转 vscode://file 中和——改 onDocLink 拦截链路前先读本注释。
   linked = linked.replace(/<[^>]*>/g, '');
   $('#d-body').innerHTML = `<div class="md">${marked.parse(linked)}</div>`;
 }
