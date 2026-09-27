@@ -16,7 +16,18 @@ function check(name, cond, detail = '') {
   else { failCount++; console.log('FAIL ' + name + (detail ? '——' + detail : '')); }
 }
 
-const SRC_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
+// SRC_ROOT：自测试文件位置向上探测包源（templates/_agents）——包源路径（templates/_agents/scripts/）与
+// 装副本路径（.agents/scripts/）直跑都解析到仓库根；无包源（装户环境）返回 null，S5/S9 baseline 记 SKIP
+// 不算失败（2026-09-27 gate-hardening-p2-batch：旧 `../../..` 硬编码层级从装副本直跑必 FAIL）
+const findSrcRoot = () => {
+  let d = path.dirname(fileURLToPath(import.meta.url));
+  for (let i = 0; i < 5; i++) {
+    if (fs.existsSync(path.join(d, 'templates', '_agents'))) return d;
+    d = path.dirname(d);
+  }
+  return null;
+};
+const SRC_ROOT = findSrcRoot();
 const SCRIPT = path.join(path.dirname(fileURLToPath(import.meta.url)), 'source-sync-check.mjs');
 const runGate = (args) => spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8' });
 
@@ -90,11 +101,11 @@ function mkFixture() {
   check('S4 一致文件 cmdA.md 不在漂移', !r.drift.some((d) => d.rel === 'commands/cmdA.md'));
 }
 
-// ---- 场景 5：实际仓库扫描 baseline（包源 ≥ 30 份 / 装副本 ≥ 30 份）----
-{
-  const pkgRoot = SRC_ROOT;
-  const target = SRC_ROOT;
-  const r = sourceSyncCheck({ pkgRoot, target });
+// ---- 场景 5：实际仓库扫描 baseline（包源 ≥ 30 份 / 装副本 ≥ 30 份；装户环境无包源 → SKIP）----
+if (!SRC_ROOT) {
+  check('S5 baseline SKIP（未探测到包源 templates/_agents——装户环境直跑，不算失败）', true);
+} else {
+  const r = sourceSyncCheck({ pkgRoot: SRC_ROOT, target: SRC_ROOT });
   check('S5 实际仓库 包源 ≥ 30 份', r.pkgCount >= 30, '实际 ' + r.pkgCount);
   check('S5 实际仓库 装副本 ≥ 30 份', r.tgtCount >= 30, '实际 ' + r.tgtCount);
   // 装副本 kit.json / settings.json 不应在孤儿
@@ -141,8 +152,10 @@ function mkFixture() {
     r.orphan.length === 1 && r.orphan[0].rel === 'hooks/real-orphan.json', JSON.stringify(r.orphan));
 }
 
-// ---- 场景 9：实际仓库 hooks/commit-check.config.json 不在孤儿 ----
-{
+// ---- 场景 9：实际仓库 hooks/commit-check.config.json 不在孤儿（装户环境随 S5 一并 SKIP）----
+if (!SRC_ROOT) {
+  check('S9 baseline SKIP（装户环境，随 S5）', true);
+} else {
   const r = sourceSyncCheck({ pkgRoot: SRC_ROOT, target: SRC_ROOT });
   check('S9 实际仓库 hooks/commit-check.config.json 不在孤儿',
     !r.orphan.some((o) => o.rel === 'hooks/commit-check.config.json'), JSON.stringify(r.orphan));

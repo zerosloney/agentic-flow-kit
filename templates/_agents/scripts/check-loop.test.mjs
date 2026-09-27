@@ -633,47 +633,68 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   rmfix(T);
 }
 
-// ---- 场景 49-52:检查 15 done 内容绑定（2026-09-27 audit-gate-hardening，生效 2026-09-28）----
+// ---- 场景 49-54:检查 15 done 内容绑定（2026-09-27 audit-gate-hardening；同日 p2-batch 改锚台账 ts + 保分隔符复原）----
 //     done 形态复刻真实时序：approved 内容（含 approved 指纹）→ done 指纹在其上计算 → 落 done 文档 + 台账 done 行
+//     opt.ts：台账 done 行 ts（默认 2026-09-28T02:00Z——生效锚后）；opt.sep：状态行键值分隔符（默认单空格，
+//     '  ' 复刻两跳间手工改成双空格的非规范格式）
 {
-  const mkDoneFixture = (T, date, tamper) => {
+  const mkDoneFixture = (T, date, tamper, opt = {}) => {
+    const sep = opt.sep || ' ';
+    const ts = opt.ts || '2026-09-28T02:00:00.000Z';
     const body = `\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n`;
-    const pre = `---\n状态: approved\n级别: L1\n日期: ${date}\n确认指纹: ${'a'.repeat(16)}\n---\n# INTENT — bind\n${body}`;
+    const pre = `---\n状态:${sep}approved\n级别: L1\n日期: ${date}\n确认指纹: ${'a'.repeat(16)}\n---\n# INTENT — bind\n${body}`;
     const fpDone = computeFingerprint(pre);
     // tamper 只污染 done 落盘文本（不进指纹底稿）——复刻「done 确认后篡改正文」
-    const doneText = `---\n状态: done\n级别: L1\n日期: ${date}\n确认指纹: ${fpDone.slice(0, 16)}\n---\n# INTENT — bind\n${body}${tamper || ''}`;
+    const doneText = `---\n状态:${sep}done\n级别: L1\n日期: ${date}\n确认指纹: ${fpDone.slice(0, 16)}\n---\n# INTENT — bind\n${body}${tamper || ''}`;
     w(T, 'workflow/intents/' + date + '-bind.md', doneText);
     w(T, 'workflow/plans/' + date + '-bind.md', PLAN('bind', '状态: draft\n级别: L1'));
-    return { rel: 'workflow/intents/' + date + '-bind.md', fp: fpDone };
+    return { rel: 'workflow/intents/' + date + '-bind.md', fp: fpDone, ts };
   };
   {
     const T = mkfix();
     const d1 = mkDoneFixture(T, '2026-09-28');
-    writeLedger(T, [{ ts: 'T', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'tty' }]);
+    writeLedger(T, [{ ts: d1.ts, doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'tty' }]);
     expectOk('检查15:done 内容与台账一致（复原重算=台账指纹）→ exit 0', T);
     rmfix(T);
   }
   {
     const T = mkfix();
     const d1 = mkDoneFixture(T, '2026-09-28', '确认后被篡改的正文行\n');
-    writeLedger(T, [{ ts: 'T', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'tty' }]);
+    writeLedger(T, [{ ts: d1.ts, doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'tty' }]);
     expectHard('检查15:done 后正文被篡改 → hard 确认内容漂移', T, '确认内容漂移');
     rmfix(T);
   }
   {
     const T = mkfix();
-    const d1 = mkDoneFixture(T, '2026-09-27'); // 生效日前（旧关单顺序完成的 done 不回改）
-    writeLedger(T, [{ ts: 'T', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'tty' }]);
-    expectOk('检查15:绑定生效日前的 done 不做内容绑定 → exit 0', T);
+    // 生效锚 = 台账 ts：文档日期晚、但确认发生在锚前（旧关单顺序时代）→ 豁免绑定
+    const d1 = mkDoneFixture(T, '2026-09-28', '锚前确认的文档即便日后改了也不绑\n', { ts: '2026-09-27T10:00:00.000Z' });
+    writeLedger(T, [{ ts: d1.ts, doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'tty' }]);
+    expectOk('检查15:台账 ts 早于生效锚（2026-09-28）→ 豁免内容绑定', T);
+    rmfix(T);
+  }
+  {
+    const T = mkfix();
+    // 锚后确认 + 文档日期早（旧日期文档晚关单）+ 篡改 → 绑定照拦（p2-batch 改锚的核心收益）
+    const d1 = mkDoneFixture(T, '2026-09-27', '确认后被篡改的正文行\n');
+    writeLedger(T, [{ ts: d1.ts, doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'tty' }]);
+    expectHard('检查15:文档日期早但台账 ts 锚后 + 篡改 → hard 确认内容漂移', T, '确认内容漂移');
     rmfix(T);
   }
   {
     const T = mkfix();
     const d1 = mkDoneFixture(T, '2026-09-28');
-    writeLedger(T, [{ ts: 'T', doc: d1.rel, stage: 'done', fingerprint: d1.fp }]); // 无 prev（schema 演进前行）
+    writeLedger(T, [{ ts: d1.ts, doc: d1.rel, stage: 'done', fingerprint: d1.fp }]); // 无 prev（schema 演进前行）
     const r = run(T);
     check('检查15:台账 done 行缺 prev → 降级 WARN 绑定跳过（exit 0 不拦）',
       r.status === 0 && outOf(r).includes('绑定降级'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    const T = mkfix();
+    // 两跳间状态行被手工改成双空格（非规范分隔符）——保分隔符复原不误伤（p2-batch P2-1）
+    const d1 = mkDoneFixture(T, '2026-09-28', '', { sep: '  ' });
+    writeLedger(T, [{ ts: d1.ts, doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'tty' }]);
+    expectOk('检查15:状态行双空格（非规范分隔符）绑定仍过——保分隔符复原不误伤', T);
     rmfix(T);
   }
 }

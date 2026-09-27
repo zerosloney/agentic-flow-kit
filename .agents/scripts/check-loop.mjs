@@ -32,9 +32,11 @@
 //  14. 新 done 的 spec/plan 须在 git 历史里出现过 `状态: approved`(确认环节留痕,2026-09-22;恒 advisory 永不升级 hard)
 //  15. 确认指纹对账(2026-09-27 起:approved/done 须 confirm-doc.mjs 确认指纹+台账配对,缺=hard-block;存量豁免;
 //      两形态——TTY 亲手 / --delegated 对话委托代录,台账 source 如实区分,配对判据与 source 无关)
-//      + done 内容绑定(2026-09-28 起:done 文档按台账 prev 复原跳转前文本重算 sha256 与台账全量比对,
-//      不符=hard「确认内容漂移」;台账行缺 prev 降级 warning;2026-09-27 audit-gate-hardening——
-//      关单编辑顺序新约定:勾验/回填先于 done 确认,confirm-doc 是最后一次写入)
+//      + done 内容绑定(2026-09-27 audit-gate-hardening;生效锚=台账 done 行 ts≥2026-09-28——同日
+//      gate-hardening-p2-batch 自文档自报日期改锚:旧日期文档晚关单也绑定,3 份失配存量 ts 均 09-27 天然豁免):
+//      按 prev 复原跳转前文本重算 sha256 与台账全量比对,不符=hard「确认内容漂移」;状态行保分隔符换值
+//      (非规范格式不误伤);台账行缺 prev 降级 warning;关单编辑顺序新约定:勾验/回填先于 done 确认,
+//      confirm-doc 是最后一次写入)
 //
 // 注：清单条目 5（状态字段+L3 复核）与 1（配对）在同一遍 intents/specs/plans 循环里实现（沿 sh 版代码结构）；
 //    条目 6 的旧委派残留/钉死模型子项在「角色契约与 Adapter」代码段实现。
@@ -571,17 +573,21 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
       if (!ok) {
         blockers.push(`- [确认未对账] ${base} 状态 ${st} 无用户确认记录——AI 不得代确认，用户在终端跑 node .agents/scripts/confirm-doc.mjs ${rel} 后重试`);
       }
-      // 内容绑定（2026-09-28 起生效；2026-09-27 audit-gate-hardening）：done 文档当前内容须与台账 done 行
-      // 确认时的内容一致——按 prev 复原跳转前文本重算比对，防「确认后篡改」（改验收标准/正文均触发）。
-      // 复原口径 = confirm-doc computeFingerprint 的逆推：CRLF 归一 → frontmatter 首个「状态:」行值替换为
-      // 台账 prev → 剔「确认指纹:」行。台账行缺 prev（schema 演进前存量）无以复原 → 降级 warning 不拦。
-      // 发布日（2026-09-27）当天按旧关单顺序完成的 done 不回改不豁免——次日起遵守新约定：
-      // 关单编辑（勾验/回填确认结果）先于 done 确认，confirm-doc 是最后一次写入；此后修订走 superseded 或新 intent。
-      if (ok && st === 'done' && d >= '2026-09-28') {
+      // 内容绑定（2026-09-27 audit-gate-hardening；生效锚 2026-09-27 gate-hardening-p2-batch 自文档自报日期
+      // 改为台账 done 行 ts）：done 文档当前内容须与台账 done 行确认时的内容一致——按 prev 复原跳转前文本
+      // 重算比对，防「确认后篡改」（改验收标准/正文均触发）。复原口径 = confirm-doc computeFingerprint 的
+      // 逆推：CRLF 归一 → frontmatter 首个「状态:」行保分隔符换值为台账 prev（双空格等非规范分隔符不误伤，
+      // 与前向按原行字面计算对称）→ 剔「确认指纹:」行。两条降级路径：台账行缺 prev（schema 演进前存量，
+      // 无以复原）→ warning 不拦；entry.ts 早于 2026-09-28（UTC 字符串比较——该次确认在旧关单顺序时代完成）→
+      // 豁免绑定（配对判定已过，3 份失配存量即此列）。关单编辑顺序新约定不变：confirm-doc 是最后一次写入，
+      // 此后修订走 superseded 或新 intent。
+      if (ok && st === 'done') {
         const doneEntries = ledger.filter((e) => e && e.doc === rel && e.stage === 'done' && typeof e.fingerprint === 'string');
         const entry = doneEntries[doneEntries.length - 1]; // append-only 台账，末次生效（重确认场景）
         if (!entry || !entry.prev) {
           warnings.push(`- [WARN 绑定降级] ${base} 台账 stage=done 行缺 prev 字段（schema 演进前行），内容绑定跳过——仅配对判定`);
+        } else if (!(typeof entry.ts === 'string' && entry.ts >= '2026-09-28')) {
+          // 该 done 确认发生在生效锚前（旧关单顺序时代）——豁免内容绑定，配对判定照常
         } else if (bindingSha256(linesOf(doc) || [], entry.prev) !== entry.fingerprint) {
           blockers.push(`- [确认内容漂移] ${base} done 后内容与确认台账不符——已关单文档不得直接改（关单编辑先于 done 确认）；确需修订走 superseded 或新 intent 引用`);
         }
@@ -602,8 +608,9 @@ if (warnings.length) {
 process.exit(0);
 
 // bindingSha256：done 内容绑定的复原重算（检查 15 专用）——confirm-doc.mjs computeFingerprint 的逆推：
-// lines 已 CRLF 归一（split(/\r?\n/)），frontmatter 区内首个「状态:」行值替换为 prev，全文剔「确认指纹:」行
-// 后 join('\n') 再 sha256。与 computeFingerprint 对跳转前文本的计算逐字节同口径。
+// lines 已 CRLF 归一（split(/\r?\n/)），frontmatter 区内首个「状态:」行保分隔符换值为 prev（`状态:  done`
+// 双空格 → `状态:  approved`——与前向按原行字面计算对称，非规范分隔符不误伤；行尾空白等更奇异格式仍会
+// 失配，触发前提本身已违反「确认落态唯一入口」约定，接受），全文剔「确认指纹:」行后 join('\n') 再 sha256。
 function bindingSha256(lines, prevStatus) {
   const isDelim = (l) => /^---\s*$/.test(l);
   const out = [];
@@ -613,8 +620,10 @@ function bindingSha256(lines, prevStatus) {
     let replaced = false;
     for (i = 1; i < lines.length; i++) {
       if (isDelim(lines[i])) { out.push(lines[i]); i++; break; }
-      if (!replaced && /^状态:/.test(lines[i])) { out.push(`状态: ${prevStatus}`); replaced = true; }
-      else out.push(lines[i]);
+      if (!replaced && /^状态:/.test(lines[i])) {
+        out.push(lines[i].replace(/^(\s*状态:\s*)\S.*$/, `$1${prevStatus}`));
+        replaced = true;
+      } else out.push(lines[i]);
     }
   }
   for (; i < lines.length; i++) out.push(lines[i]);

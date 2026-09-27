@@ -11,4 +11,4 @@
 - **确认台账起算**：`.agents/confirmations.jsonl` 自 2026-09-27 入账；此前 2026-09-23~26 的 6 份文档经「draft 直跳 done」关单（check-loop 检查 14 恒 advisory，不追认、不回填）——该段历史不可机器审计，为已接受事实。
 - **台账 schema 演进**：首批 2 行（sync-hosts-adapter-backlog 的 approved 行）无 `source` 字段，当日才引入；check-loop 配对判据（doc/stage/fingerprint）与 source 无关，仅阅读时需知。
 - **生效日判定信任自报日期**：各门禁生效日以文件名前缀 / frontmatter `日期:` 为准——把文档日期写成生效日之前可整体绕过当日门禁，属本地信任边界内（与「伪造台账本地不可机器防」同一边界），事后对质靠台账与 git 历史。
-- **done 内容绑定自 2026-09-28 起**：绑定要求 confirm-doc done 是关单最后一次写入；2026-09-27 当天按旧顺序（done 落态后再回填确认结果行）完成关单的 3 份文档（sync-hosts-adapter-backlog 的 plan、confirm-gate-delegated 的 intent+plan）内容与台账指纹不符——不回改、不逐份豁免，以生效日切换吸收；自 2026-09-28 起遵守新约定：关单编辑（勾验/回填确认结果）先于 done 确认。
+- **done 内容绑定自 2026-09-28 起**（生效锚 = 台账 done 行确认时刻 `ts`，UTC——2026-09-27 gate-hardening-p2-batch 自文档自报日期改锚，旧日期文档晚关单也纳入绑定）：绑定要求 confirm-doc done 是关单最后一次写入；2026-09-27 当天按旧顺序（done 落态后再回填确认结果行）完成关单的 3 份文档（sync-hosts-adapter-backlog 的 plan、confirm-gate-delegated 的 intent+plan）内容与台账指纹不符——不回改、不逐份豁免，以生效锚切换吸收（3 份 ts 均为 2026-09-27，天然豁免）；自生效锚起遵守新约定：关单编辑（勾验/回填确认结果）先于 done 确认。

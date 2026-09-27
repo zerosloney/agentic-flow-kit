@@ -35,6 +35,8 @@ fi
 # 暂存触及任一侧时跑 source-sync-check --gate（缺失/漂移 exit 1，孤儿只报告）——拦「包源改了装副本没跟」
 # （doctor §4 台账 sha 对此静默：盘面=台账即 PASS；该故障模式曾两次真实发生，见 incidents/2026-09-25-wf-runtime）。
 # 比较工作树而非暂存区（口径沿 check-pairing-incremental 先例）：两侧都已改好、分两笔提交时不拦——最终一致即可。
+# 已知边界（复核 P2-2 声明，2026-09-27 gate-hardening-p2-batch）：包源删除文件不触发缺失/漂移——装副本残件
+# 退化为「孤儿」只报告不计失败，删包源时须手动同步清理装副本（sync 对 removed 同样仅报告不删盘）。
 # 装户环境（无 templates/_agents/ 包源）自然跳过。
 if [ -d templates/_agents ] && [ -f .agents/scripts/source-sync-check.mjs ] \
   && git -c core.quotepath=off diff --cached --name-only | grep -qE '^(templates/_agents/|\.agents/)'; then

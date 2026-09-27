@@ -20,7 +20,7 @@
     },
     {
       "rel": ".agents/commands/build.md",
-      "sha256": "762f57b72fe094d9f410eb39e6dd8bd69c42ee8b936d8a4037b80a10945f0b16"
+      "sha256": "5a5f0d036fa496aaebd484c10977361529428b014dff6c1131e7c1ae6475ee1e"
     },
     {
       "rel": ".agents/commands/deploy.md",
@@ -96,7 +96,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "7912f24ce19f1b93d9586a03e9e256958219b99b992a48ba6016af8955536598"
+      "sha256": "877b290f844ec08283f9e2c0d58d37aac51701497bc2496367866ff474005e02"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -104,7 +104,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "0fd34930bd0ad7de7dba48e59b0f68f1241f05f1fad2a250c6e243f0cdabbc6a"
+      "sha256": "d02b8e48e998f330aa5ffb9b586bcb919558ba7f926f2cf5e827598e9876bc96"
     },
     {
       "rel": ".agents/scripts/commit-check-trigger.test.mjs",
@@ -208,7 +208,7 @@
     },
     {
       "rel": ".agents/scripts/source-sync-check.test.mjs",
-      "sha256": "2313b674bffff7f7f5a4ccc406f5c6747d14f92f3b6a2d8e2e6500efffd36ee0"
+      "sha256": "995e6750ea2453a5f920a43feb75c61a677927c839261cb3be1762000329fa90"
     },
     {
       "rel": ".agents/scripts/verify-wiki-consistency.mjs",
@@ -296,7 +296,7 @@
     },
     {
       "rel": ".githooks/pre-commit",
-      "sha256": "7f41ec74fc9900c52961732a9fdf21a8ebbade23b916eb16aa3cb1464270c3f5"
+      "sha256": "49fba2f0eb697ee9e3f2e2ca3524c550d28c8ec942827f7728939ca78a94d585"
     },
     {
       "rel": ".githooks/pre-merge-commit",

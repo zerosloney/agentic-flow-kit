@@ -66,6 +66,7 @@ description: Build 阶段 · 起 plan + 实现代码 + 自验（两道确认门�
 - 改 `templates/_agents/*` 包源后 → 跑 `node .agents/scripts/source-sync-check.mjs --diff` 看装副本 `.agents/` 是否同步（缺失 / 孤儿 / 漂移三类差异）
 - 漂移说明包源改了装副本未跟；缺失说明新增文件 init 未执行；孤儿说明装副本独有（可能是装户配置，不删）
 - **新增 managed 类文件须经 init/sync 登记，禁手动双写绕过台账**——手工同时写 `templates/_agents/` 与 `.agents/` 会绕过台账登记，使该文件永远不被 sync 升级（`doctor` 台账覆盖率检查会拦；见 incidents/2026-09-26-managed-ledger-adopt 复盘）
+- 门禁边界（pre-commit 双源一致性）：比较工作树非暂存区——两侧改好、分两笔提交不拦（最终一致即可）；包源删除文件退化为「孤儿」只报告不拦，删包源须手动清理装副本残件（复核 P2-2 声明，2026-09-27 gate-hardening-p2-batch）
 - B-b 决策「只报告不修复」；详见 `.agents/commands/source-sync-check.md`
 
 ## 子代理调用约定
