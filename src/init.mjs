@@ -301,6 +301,7 @@ export async function init(args, pkgRoot) {
   // 不补记会让 doctor §6.6 的漂移可见性静默消失（台账缺口对体检不可见）
   for (const rel of t.protectedSkipped || []) {
     if (!isOwned(rel) || !fs.existsSync(path.join(target, rel))) continue;
+    if (rel === 'AGENTS.md' && agentsMergedSha) continue; // 追加特例已记（agentsMergedSha），避免台账重复条目（复核收口 P2）
     if (owned.some((f) => f.rel === rel)) continue;
     owned.push({ rel, sha256: shaText(path.join(target, rel)) });
   }
