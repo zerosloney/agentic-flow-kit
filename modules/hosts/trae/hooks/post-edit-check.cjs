@@ -75,8 +75,9 @@ try {
     }));
     process.exit(0);
   }
-  // 门禁脚本未装（未跑 add-gate dotnet-ca）≠ 发现违例——区分口径，对齐 pre-shell-check 的 ENOENT 处理（2026-09-24）
-  if (e.code === 'ENOENT') {
+  // 门禁脚本未装（未跑 add-gate dotnet-ca）≠ 发现违例——区分口径，对齐 pre-shell-check 的 ENOENT 处理（2026-09-24）；
+  // status 127 同义（2026-09-27 host-gates-p1 P2-B4：存在的 bash 跑缺失脚本返回 127 而非 ENOENT，实测原分支不可达）
+  if (e.code === 'ENOENT' || e.status === 127) {
     console.log(JSON.stringify({
       hookSpecificOutput: {
         hookEventName: 'PostToolUse',

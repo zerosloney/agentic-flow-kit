@@ -12,6 +12,9 @@ const nodeSuites = [
   'src/sync.test.mjs',
   'src/init.test.mjs',
   'src/pack.test.mjs',
+  // 宿主门禁模块回归（2026-09-27 host-gates-p1：dotnet-ca BRE 豁免/fail-closed + trae 强推 token 化）
+  'src/gate-dotnet-ca.test.mjs',
+  'src/trae-hooks.test.mjs',
   ...fs.readdirSync(path.join(ROOT, 'templates/_agents/scripts'))
     .filter((f) => f.endsWith('.test.mjs'))
     .sort()

@@ -27,13 +27,27 @@ require_target() {
 require_target "$APP_DIR"
 require_target "$API_DIR"
 violations=""
-exempt_grep=$(printf '%s' "$EXEMPT_CTRL" | tr ':' '|')
+# 豁免清单拆多 grep -e（2026-09-27 host-gates-p1 P1-B1）：POSIX BRE 中 | 是字面量——旧 tr ':' '|' 造的
+# "A|B" 模式永不命中，多值豁免全部失效（豁免 Controller 被误报违例）。改为逐值 -e（兼容 grep -v 多模式）
+exempt_args=""
+OLD_IFS="$IFS"
+IFS=':'
+for ex in $EXEMPT_CTRL; do
+  [ -n "$ex" ] && exempt_args="$exempt_args -e $ex"
+done
+IFS="$OLD_IFS"
 
 # 红线 1：Application csproj 不得引用 Infrastructure 项目
-if grep -q "Infrastructure" "$APP_DIR"/*.csproj 2>/dev/null; then
-  violations="$violations
+# csproj 存在性 fail-closed（2026-09-27 host-gates-p1 随 P1-B3）：glob 展开失败时旧代码静默放行
+csproj_found=0
+for cs in "$APP_DIR"/*.csproj; do
+  [ -f "$cs" ] && csproj_found=1
+  if grep -q "Infrastructure" "$cs" 2>/dev/null; then
+    violations="$violations
 - csproj 引用了 Infrastructure 项目（Application 只允许依赖 Domain 与共享层）"
-fi
+  fi
+done
+[ "$csproj_found" -eq 1 ] || { echo "check-architecture: 门禁目标缺失（$APP_DIR/*.csproj）——fail-closed,不静默放行" >&2; exit 1; }
 
 # 红线 2：Application 代码不得出现 DbContext / Infrastructure 命名空间
 hits=$(grep -rn -e "$DBCTX_CLASS" -e "$INFRA_USING" "$APP_DIR" --include="*.cs" 2>/dev/null | grep -v -e "/obj/" -e "/bin/")
@@ -44,7 +58,7 @@ $hits"
 fi
 
 # 红线 3：API 层 Controller 禁直接注入 DbContext（豁免清单内的 Controller 除外）
-api_hits=$(grep -rn "$DBCTX_CLASS" "$API_DIR" --include="*.cs" 2>/dev/null | grep -v -e "/obj/" -e "/bin/" -e "$exempt_grep")
+api_hits=$(grep -rn "$DBCTX_CLASS" "$API_DIR" --include="*.cs" 2>/dev/null | grep -v -e "/obj/" -e "/bin/" $exempt_args)
 if [ -n "$api_hits" ]; then
   violations="$violations
 - API 层出现 DbContext 直接引用（应走仓储/服务接口，豁免仅 $EXEMPT_CTRL）：
@@ -115,6 +129,9 @@ $nav_hits"
 fi
 
 # 红线 5：Controller 禁把 InnerException 原文透传进响应体（详情只许进日志）
+# CONTROLLERS_DIR fail-closed（2026-09-27 host-gates-p1 P1-B3）：旧代码 2>/dev/null 吞目录缺失——
+# Controllers 改名/改 minimal API 时本红线静默失效，违反脚本自述「目标缺失 fail-closed」硬约束
+require_target "$CONTROLLERS_DIR"
 # 已知天花板：grep 按整行排除 Log 调用——透传与 Log 写在同一行可绕过；语义级排除需 AST 工具，参考实现门禁按接受记录（2026-09-24）
 inner_hits=$(grep -rn "InnerException" "$CONTROLLERS_DIR" --include="*.cs" 2>/dev/null \
   | grep -v -e "/obj/" -e "/bin/" \

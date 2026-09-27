@@ -79,8 +79,6 @@ function ask(reason) {
 const denyList = [
   { pat: 'dotnet ef',         reason: '禁 EF Migrations，Schema 由人工 SQL 维护' },
   { pat: 'git reset --hard',  reason: '禁破坏性重置' },
-  { pat: 'git push --force',  reason: '禁强制推送' },
-  { pat: 'git push -f',       reason: '禁强制推送' },
   { pat: 'drop database',     reason: '禁删库' }
 ];
 const askList = [
@@ -90,9 +88,19 @@ const askList = [
   { pat: 'rm -rf',        reason: '可能递归删除文件' }
 ];
 
+// 强推检测 token 化（2026-09-27 host-gates-p1 P1-B2）：子串模式 'git push --force' 挡不住换序
+// （git push origin main --force）与 +refspec 变体（git push origin +main）——改为 token 级判定：
+// 出现 push 且带 --force / -f / +refspec 任一即拦；--force-with-lease 是精确 token（含连字符尾巴，
+// 与 --force token 不同名）不误伤。本钩子是 core.hooksPath 漏配时的主要强推执行点，语义必须完整。
+function isForcePush(cmd) {
+  const tokens = cmd.replace(/\s+/g, ' ').trim().split(' ');
+  if (!tokens.includes('push')) return false;
+  return tokens.some((t) => t === '--force' || t === '-f' || (t.startsWith('+') && t.length > 1));
+}
+
 // gateMatch：比裸 includes 收紧两处（2026-09-24）——
-//   ① token 边界：'git push --force' 不再误拦 '--force-with-lease'、'git commit' 不再误吃 'git commit-msg'
-//   ② 剥离 git 全局参 -c <k=v> 与 -m <msg> 后以剥后文本为准——堵 'git -c x=y push --force' 绕过，
+//   ① token 边界：'git checkout' 不再误吃 'git commit-msg'
+//   ② 剥离 git 全局参 -c <k=v> 与 -m <msg> 后以剥后文本为准——堵 'git -c x=y reset --hard' 绕过，
 //     也免得消息字样误触发；剥不出（norm===cmd）再按原文匹配
 function gateMatch(cmd, pat) {
   const re = new RegExp(pat.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\w-])');
@@ -100,6 +108,9 @@ function gateMatch(cmd, pat) {
   return norm !== cmd ? re.test(norm) : re.test(cmd);
 }
 
+if (isForcePush(command)) {
+  deny('禁止执行: git push 强制推送（--force / -f / +refspec；项目红线：禁强制推送）');
+}
 for (const d of denyList) {
   if (gateMatch(command, d.pat)) {
     deny(`禁止执行: ${d.pat}（项目红线：${d.reason}）`);
@@ -125,6 +136,8 @@ if (!shellBin) {
 }
 
 // runGate：把 .githooks/ 门禁原始输出透传给 AI；未执行（脚本缺失）与判定失败分开报，避免把 ENOENT 误报成代码违例
+// 127 分支（2026-09-27 host-gates-p1 P2-B4）：shell 报 127 = 脚本未装（二进制已在 resolveShell 预检排除）——
+// 实测 ENOENT 分支不可达（execFileSync 对存在的 bash 跑缺失脚本返回 status 127 而非 e.code ENOENT）
 function runGate(scriptRelPath, label, budgetMs) {
   try {
     execFileSync(shellBin, [scriptRelPath], {
@@ -136,7 +149,7 @@ function runGate(scriptRelPath, label, budgetMs) {
     if (e.code === 'ETIMEDOUT') {
       deny(`${label}超时（${scriptRelPath}，${Math.round(budgetMs / 1000)} 秒未完成）——检查 dotnet build / npm run build 是否卡住`);
     }
-    if (e.code === 'ENOENT') {
+    if (e.code === 'ENOENT' || e.status === 127) {
       deny(`门禁未执行（${label}）：${scriptRelPath} 不可达——确认仓库完整后重试`);
     }
     const err = String((e.stdout || '') + (e.stderr || '')).slice(0, 1200);
