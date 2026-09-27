@@ -12,7 +12,7 @@
   "managed": [
     {
       "rel": ".agents/board/index.html",
-      "sha256": "d4006d4a0745bf4d13205eea4fcd96887f8a58a301ed05e008e5c5e2d9f750e9"
+      "sha256": "24b54e1d0bd416b9b77507ce0717bc44d995f889ba23f10d0139bdc0c97f210c"
     },
     {
       "rel": ".agents/board/marked.min.js",
@@ -124,7 +124,7 @@
     },
     {
       "rel": ".agents/scripts/ensure-board.mjs",
-      "sha256": "b6f3cc9b9683f479258ad3e12ed4b3ac7eba47433238af01199a30b1be3aa230"
+      "sha256": "c4b8744fe61e34b952bf4783f347414f176b47309a264840a5a523c37f7118c4"
     },
     {
       "rel": ".agents/scripts/fill-intent.mjs",
@@ -160,11 +160,11 @@
     },
     {
       "rel": ".agents/scripts/gen-wiki-board.mjs",
-      "sha256": "59ecb96d3517d7c8ce5db5f80a56bdaf37e6e4f73950a6e7238882ad2a8a23df"
+      "sha256": "f4885913756b90da639baddb9c4ada659c249a9ce151672d671febbb9cee790e"
     },
     {
       "rel": ".agents/scripts/gen-wiki-board.test.mjs",
-      "sha256": "d6735ffb28c6ebaa740b9fffa5caad4c68d2a5fdbd14bbdf334e0225073ed3f0"
+      "sha256": "2eaf639b0ff77b0966c273e62edac3cb64f988f0d9ee4bef31f661945d4bfc58"
     },
     {
       "rel": ".agents/scripts/gen-workflow-index.mjs",
@@ -176,7 +176,7 @@
     },
     {
       "rel": ".agents/scripts/gen-workflow-metrics.mjs",
-      "sha256": "9adcd35eabda3fcc77c3c4f102eb3e521f8951c99bb22ede6aed60371de6f029"
+      "sha256": "4eec7bcaccfb8d00b8803f6c8cc7fc5fc9ed4718fb068cdfead1266b839b1554"
     },
     {
       "rel": ".agents/scripts/gen-workflow-metrics.test.mjs",
@@ -212,7 +212,7 @@
     },
     {
       "rel": ".agents/scripts/verify-wiki-consistency.mjs",
-      "sha256": "f21b365e1eb6488c5ec7b7f520e1c6c4ddc916bd6cd138c62d40460898a8d105"
+      "sha256": "57a126f936d4d7bb325d2aa96975d5dff0a6c14ed10082c854b6a2d4304de2c3"
     },
     {
       "rel": ".agents/scripts/verify.mjs",
@@ -236,11 +236,11 @@
     },
     {
       "rel": ".agents/scripts/workflow-board-server.mjs",
-      "sha256": "66e4c9cbe886b0785129f6e3fbe7a38279067142bc515849ea83ccdf632f380d"
+      "sha256": "1c7b6c5876148e83f7dd4f7f3de7f4cccbe9887eed286676b0cc0fb1f9ad1b72"
     },
     {
       "rel": ".agents/scripts/workflow-board-server.test.mjs",
-      "sha256": "1f8b4febd35e64ee495f19f8720c604e1d66ae6d0541df5db42688b259d3e889"
+      "sha256": "81decff77c392216b84383ad893639d4363e44d7ec2d233c5f3dfd40f2c2f210"
     },
     {
       "rel": ".agents/scripts/workflow-enums.mjs",
@@ -326,7 +326,7 @@
   "owned": [
     {
       "rel": "AGENTS.md",
-      "sha256": "d26d2e149bf1de32261b779125e88e442afb109e23c2048c22519ed1232347a8"
+      "sha256": "ebb019a100981e402c53f5430cee1593d0401a3d44103ff0c8d0abaa71400286"
     },
     {
       "rel": "wiki/drafts-archive/README.md",

@@ -150,6 +150,24 @@ const runGen = (root) => spawnSync(process.execPath, [GEN], { cwd: root, encodin
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- 场景 6：用途列含管道符 → 转义保 round-trip（p2-batch2：含管道的用途描述曾切坏表格行、
+//      下次生成把人工文本静默重置为 <待补>）----
+{
+  const root = mkfix('\n');
+  const BS = String.fromCharCode(92); // 反斜杠字符（JS 字符串 '\|' 中 \| 就是裸管道无转义语义——须显式拼）
+  const USAGE_WITH_PIPE = '用于 A' + BS + '|B 两类（含竖线）'; // 转义形态输入（反斜杠+管道）
+  const idx = path.join(root, 'wiki', 'INDEX.md');
+  fs.writeFileSync(idx, fs.readFileSync(idx, 'utf8').replace(USAGE_COL, USAGE_WITH_PIPE), 'utf8');
+  const r1 = runGen(root);
+  const out1 = fs.readFileSync(idx, 'utf8');
+  check('场景 6：含转义管道用途生成 exit 0 且原样保留', r1.status === 0 && out1.includes(USAGE_WITH_PIPE), `exit=${r1.status}\n${out1.split('\n').slice(0, 8).join('\n')}`);
+  const r2 = runGen(root);
+  const out2 = fs.readFileSync(idx, 'utf8');
+  check('场景 6：二次生成用途文本保持（round-trip 不重置为 <待补>）',
+    r2.status === 0 && out2.includes(USAGE_WITH_PIPE) && !out2.includes('<待补'), out2.split('\n').slice(0, 8).join('\n'));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 if (fail) {
   console.log(`\n${USAGE}`);

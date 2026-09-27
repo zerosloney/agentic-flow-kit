@@ -40,7 +40,7 @@
 
 ## Wiki
 
-`wiki/` 是项目知识沉淀，按主题目录归位；原始 / 一次性文档归档 `wiki/drafts-archive/<日期-主题>/`（只读不增量）。
+`wiki/` 是项目知识沉淀，按主题目录归位；原始 / 一次性文档归档 `wiki/drafts-archive/<日期-主题>/`（只读不增量——此为人工约定非门禁强制，机器校验仅覆盖登记一致性）。
 
 - 人工只维护两样：**磁盘文件本身 + `wiki/INDEX.md` 速览表「用途」列**；计数 / 映射表 / 看板 DATA 均为生成区，勿手改——`node .agents/scripts/gen-wiki-board.mjs` 重生成，`node .agents/scripts/verify-wiki-consistency.mjs` 三方一致性验证（触及 `wiki/` 的提交会被 pre-commit 台账门禁校验）。
 - wiki 看板：`wiki/知识沉淀总览.html`。

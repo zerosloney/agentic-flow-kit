@@ -107,5 +107,16 @@ const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
   check('④无验收节 → null', parseAcceptance('---\n状态: done\n---\n# I\n') === null);
 }
 
+// ---- ⑤XSS 剥离口径（p2-batch2）：前端剥内嵌 HTML 的正则与 loadDoc 同款——纯函数抽验 ----
+{
+  const strip = (s) => s.replace(/<[^>]*>/g, '');
+  const evil = '正常文字 <img src=x onerror=alert(1)> 更多 <script>alert(2)</script> 结束';
+  check('⑤剥标签：img/script 标签清零，正文文字保留',
+    !/<(img|script)/.test(strip(evil)) && strip(evil).includes('正常文字') && strip(evil).includes('结束'),
+    strip(evil));
+  const md = '## 标题\n\n- 列表 **粗体** `code`\n\n[链接](intents/x.md)';
+  check('⑤markdown 语法不受剥标签影响', strip(md) === md);
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

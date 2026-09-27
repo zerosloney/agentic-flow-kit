@@ -66,13 +66,14 @@ for (const d of fs.readdirSync(WIKI)) {
   entries.sort((a, b) => a.name.localeCompare(b.name, 'zh'));
   diskTopics.set(d, entries);
 }
-// gitignore 豁免（F4，incident 2026-09-23-code-review-f3-f4-closeout）：与 verify-wiki-consistency.mjs 同口径——
-// 排除 .gitignore 忽略的本机文件（如 *.xlsx），防止生成物计数在 fresh clone 漂移；git 不可用时退化为全量计数
+// gitignore 豁免（F4，incident 2026-09-23-code-review-f3-f4-closeout；p2-batch2 扩面到全 wiki/——
+// 活跃主题目录内的本机文件（如 *.xlsx）同样会造成生成物计数在 fresh clone 漂移）：
+// 排除 .gitignore 忽略的本机文件，git 不可用时退化为全量计数
 const gitIgnoredArchive = (() => {
   try {
-    const out = execSync('git -c core.quotepath=false status --ignored=matching --porcelain -uall -- wiki/drafts-archive',
+    const out = execSync('git -c core.quotepath=false status --ignored=matching --porcelain -uall -- wiki',
       { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
-    const prefix = 'wiki/drafts-archive/';
+    const prefix = 'wiki/';
     return new Set(out.split(/\r?\n/)
       .filter((l) => l.startsWith('!! '))
       .map((l) => l.slice(3).trim().replace(/\/$/, ''))
@@ -100,11 +101,19 @@ const archiveCount = (() => {
 // ---- 读 INDEX 现速览表：主题顺序 + 用途列（人工，不覆盖）----
 // 切行须容忍 CRLF：按 '\n' 切会在行尾留 '\r'，速览表行锚定正则（\|$）整表失配 →
 // 「用途」列（唯一人工维护位）被静默重置为 <待补>（papercut 2026-09-17；fixture 见 gen-wiki-board.test.mjs 场景 1）
+// 用途列管道转义（p2-batch2）：生成侧对单元格 `|` → `\|`（行内码 \`|\`），解析侧容忍转义——
+// 否则含管道的用途描述会切坏表格行、下次生成该行解析失配走「新主题追加」把人工文本静默重置
+const BS = String.fromCharCode(92); // 反斜杠字符（转义写法在此文件里反复出错，用 charCode 表达）
+const PIPE_CH = '|';
+const escCell = (s) => String(s).split(PIPE_CH).join(BS + PIPE_CH);
+const unescCell = (s) => String(s).split(BS + PIPE_CH).join(PIPE_CH);
 const indexText = fs.readFileSync(INDEX_P, 'utf8');
 const overview = []; // {name, usage}
+// 解析正则（p2-batch2）：用途列允许转义管道 \|--`(?:\\.|[^|])*` 吃掉「转义字符+任一字符」或普通字符，
+// 裸管道才是列分隔。unescCell 还原人工原文。
 for (const line of indexText.split(/\r?\n/)) {
-  const m = line.match(/^\| ([^|]+) \| (\d+) \|([^|]*)\|$/);
-  if (m && m[1].trim() !== '主题') overview.push({ name: m[1].trim(), usage: m[3].trim() });
+  const m = line.match(/^\| ([^|]+) \| (\d+) \|((?:\\.|[^|])*)\|$/);
+  if (m && m[1].trim() !== '主题') overview.push({ name: m[1].trim(), usage: unescCell(m[3].trim()) });
 }
 // 主题顺序 = 速览表现顺序在前，磁盘新主题按中文排序追加
 const ordered = [...overview.filter((o) => diskTopics.has(o.name))];
@@ -116,7 +125,7 @@ const totalFiles = [...diskTopics.values()].reduce((n, f) => n + f.length, 0);
 
 // ---- 生成 INDEX 三段 ----
 const eol = indexText.includes('\r\n') ? '\r\n' : '\n';
-const overviewRows = ordered.map((o) => `| ${o.name} | ${diskTopics.get(o.name).length} | ${o.usage} |`);
+const overviewRows = ordered.map((o) => `| ${o.name} | ${diskTopics.get(o.name).length} | ${escCell(o.usage)} |`);
 const mappingSection = ordered.map((o) => {
   const rows = diskTopics.get(o.name).map((e) => `| ${e.name} | ${o.name} | ${e.dir} |`);
   return [`### ${o.name}（${diskTopics.get(o.name).length}）`, '', '| 文件名 | 主题 | 归属目录 |', '|---|---|---|', ...rows].join(eol);

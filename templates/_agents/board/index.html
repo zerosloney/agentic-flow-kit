@@ -202,7 +202,8 @@ let Q = '';                // 搜索过滤关键字
 const $ = (s) => document.querySelector(s);
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // —— 精细化徽标：验收进度 / 配对断裂 ⚠ / 进行中老化 ——
-const ACTIVE_STATUSES = ['draft', 'approved', 'open'];
+// 活跃集默认值仅在 /api/board 首包前兜底；首包后由载荷 activeStatuses 覆盖（枚举单源贯通，p2-batch2）
+let ACTIVE_STATUSES = ['draft', 'approved', 'open'];
 const ageClass = (c) => {
   if (!ACTIVE_STATUSES.includes(c.status)) return '';
   const d = new Date(c.date);
@@ -273,6 +274,7 @@ async function refreshBoard() {
   }
   CARDS = data.cards;
   ROOT = data.root || ROOT;
+  if (Array.isArray(data.activeStatuses) && data.activeStatuses.length) ACTIVE_STATUSES = data.activeStatuses;
   CURRENT = CARDS.find((c) => c.file === CURRENT?.file) ?? CURRENT; // 重定位抽屉卡片，避免刷新后徽标/状态陈旧
   for (const t of Object.keys(TYPE_LABEL)) $(`#c-${t}`).textContent = `${TYPE_LABEL[t]} ${data.counts[t] ?? 0}`;
   const groups = Object.fromEntries(COLS.map((c) => [c.key, []]));
@@ -351,10 +353,13 @@ async function loadDoc() {
   if (error) { $('#d-body').innerHTML = `<div class="none">${esc(error)}</div>`; return; }
   // 裸 .md 相对路径引用 → 可点链接（workflow 文档互引多为纯文本路径而非 md 链接语法；
   // 已有 ](path) 链接语法因前缀为 ] 不会被重复包裹）
-  const linked = text.replace(
+  let linked = text.replace(
     /(^|[\s（(【>])((?:\.\.\/|\.\/)?(?:intents|incidents|plans|specs)\/[A-Za-z0-9_\-./]+\.md)/g,
     '$1[$2]($2)'
   );
+  // XSS 防线（2026-09-27 p2-batch2）：vendored marked v12 默认放行内嵌 HTML，文档由 AI 起草
+  // （外部内容可经 prompt 注入落盘）——渲染前剥全部裸 HTML 标签，markdown 语法不受影响
+  linked = linked.replace(/<[^>]*>/g, '');
   $('#d-body').innerHTML = `<div class="md">${marked.parse(linked)}</div>`;
 }
 

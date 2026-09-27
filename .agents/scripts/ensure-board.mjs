@@ -16,7 +16,12 @@ import { spawn } from 'node:child_process';
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(SCRIPT_DIR, '../..'); // 与 server 的 ROOT 同口径
 const SERVER = path.join(SCRIPT_DIR, 'workflow-board-server.mjs');
-const CODE_FILES = [path.join(ROOT, '.agents', 'board', 'index.html'), SERVER]; // 前端 + 服务端：任一更新都算「旧代码」
+const CODE_FILES = [
+  path.join(ROOT, '.agents', 'board', 'index.html'),
+  SERVER,
+  path.join(SCRIPT_DIR, 'workflow-enums.mjs'),   // server import 即加载（p2-batch2：枚举更新不触发重启的盲区）
+  path.join(ROOT, '.agents', 'board', 'marked.min.js'), // 前端运行时依赖（同盲区）
+]; // 任一更新都算「旧代码」
 const WINDOW = 10;
 
 // ---- 参数与基端口 ----
@@ -83,6 +88,7 @@ function staleCode(startedAt) {
 function startServer(port) {
   const c = spawn(process.execPath, [SERVER, '--port', String(port)], { detached: true, stdio: 'ignore', windowsHide: true });
   c.unref();
+  return c; // 返回 child 供竞态复验比对 pid（p2-batch2）
 }
 
 async function waitListen(port) {
@@ -145,9 +151,17 @@ async function main() {
   }
   if (skipped.length) console.log(`board: 基端口段他人进程已跳过：${skipped.join('；')}`);
 
-  startServer(port);
+  const child = startServer(port);
   if (!(await waitListen(port))) {
     console.log(`board: FAILED to start on ${port}`);
+    return 1;
+  }
+  // 竞态复验（2026-09-27 p2-batch2）：waitListen 只见「端口有人听」——spawn 与 listen 之间他人进程
+  // 抢先绑定同端口时自家子进程已 EADDRINUSE 退出，误报成功且用户打开他人服务。复验 /api/board
+  // 自报 pid 与自家子进程一致；不一致按他人服务如实报告（不 kill，继续换端口语义交还用户）。
+  const mine = await probeBoard(port);
+  if (!mine.ours || mine.pid !== child.pid) {
+    console.log(`board: 端口 ${port} 在启动窗口被他人进程抢占（自报 pid ${mine.pid ?? '未知'} ≠ 本项目 ${child.pid}）——本轮未拉起本项目看板，可重跑 ensure-board 自动上探下一端口`);
     return 1;
   }
   console.log(`board: ${action} -> ${url}`);

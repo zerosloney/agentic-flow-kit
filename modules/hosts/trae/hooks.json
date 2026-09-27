@@ -8,7 +8,7 @@
           {
             "type": "command",
             "command": "node .trae/hooks/pre-shell-check.cjs",
-            "timeout": 480
+            "timeout": 800
           }
         ]
       }

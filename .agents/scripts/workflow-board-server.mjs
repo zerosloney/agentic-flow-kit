@@ -160,7 +160,11 @@ async function scanBoard() {
   detectAlerts(cards);
   cards.sort((a, b) => b.date.localeCompare(a.date) || a.type.localeCompare(b.type));
   const loop = loopHardBlocks(); // hard-block 全局告警（单源 check-loop；null = 校验不可用）
-  return { root: ROOT, pid: process.pid, startedAt: STARTED_AT, counts, cards, loopHardBlocks: loop.blocks, loopNote: loop.note || undefined };
+  return {
+    root: ROOT, pid: process.pid, startedAt: STARTED_AT, counts, cards,
+    loopHardBlocks: loop.blocks, loopNote: loop.note || undefined,
+    activeStatuses: [...ENUMS['doc.status.active'], ...ENUMS['incident.status.active']], // 枚举单源贯通前端（p2-batch2）
+  };
 }
 
 // ---- 路径白名单：resolve 后必须仍在 workflow/ 内 ----
@@ -205,7 +209,8 @@ setInterval(() => { for (const res of sseClients) { if (res.destroyed) sseClient
 const MIME = { '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.css': 'text/css; charset=utf-8' };
 
 function sendJson(res, code, obj) {
-  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8' });
+  // X-Frame-Options（p2-batch2）：本地只读服务拒绝被外站 iframe 嵌套（配合 Host 校验收敛攻击面）
+  res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'X-Frame-Options': 'DENY' });
   res.end(JSON.stringify(obj));
 }
 

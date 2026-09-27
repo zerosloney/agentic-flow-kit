@@ -71,7 +71,8 @@ const runHook = (command, cwd) => {
   const cases = [
     ['git reset --hard HEAD~1', 'deny'],
     ['drop database MyDb', 'deny'],
-    ['dotnet ef database update', 'deny'],
+    // 'dotnet ef' 已从 deny 清单移除（p2-batch2：对齐 settings.json 权威清单——settings.json 无此项）
+    ['dotnet ef database update', 'none'],
     ['git checkout main', 'ask'],
     ['rm -rf tmp/', 'ask'],
     ['git status', 'none'],
@@ -80,6 +81,21 @@ const runHook = (command, cwd) => {
   for (const [cmd, expect] of cases) {
     const r = runHook(cmd, PKG_ROOT); // cwd=本仓：git commit 场景能找到 .githooks
     check(`②${cmd} → ${expect === 'none' ? '不因 deny/ask 门拦' : expect}`,
+      r.decision === expect,
+      `decision=${r.decision} reason=${r.reason}`);
+  }
+}
+
+// ---- ②附 消息字样误触（p2-batch2）：带引号多词消息内含禁词 → 剥引号整段后不再误 deny/ask ----
+{
+  const cases = [
+    ['git commit -m "fix: 修 git push --force 误拦"', 'none', 'deny 词在引号消息内'],
+    ['git commit -m "docs: 补 git clean 说明"', 'none', 'ask 词在引号消息内'],
+    ['git commit -m "真正要拦的消息"', 'none', '普通消息照常'],
+  ];
+  for (const [cmd, expect, label] of cases) {
+    const r = runHook(cmd, PKG_ROOT);
+    check(`②附 ${label} → ${expect === 'none' ? '不误拦' : expect}`,
       r.decision === expect,
       `decision=${r.decision} reason=${r.reason}`);
   }

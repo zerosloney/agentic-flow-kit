@@ -4,6 +4,8 @@
 // 目的：把「语料膨胀 + 常驻面体积」变成可观测趋势——每月（或按需）跑一次，往 workflow/metrics.md 追加/更新一行。
 // 口径：文档 = 磁盘（对照 gen-workflow-index / 看板，排除 _TEMPLATE.md）；常驻面 = `.agents/rule-budgets.txt`
 //   各条实测（单源，含预算上限），括号内给「预算占用峰值项」。
+//   字节口径声明（p2-batch2）：本脚本用工作区 statSync 字节（CRLF 检出态会偏高），rule-budget.sh 用
+//   索引 LF 归一字节——趋势观测可对比，但与门禁判定数值存在系统性差异，勿互相替用。
 // 不做 --check / 不挂门禁：快照是历史记录——任何文档改动都会让「当前值」漂移，拿它做漂移校验只会常红；
 //   规则面的机器约束由 pre-commit 的 rule-budget.sh 负责，本脚本只负责「看见趋势」。
 // 测试：node .agents/scripts/gen-workflow-metrics.test.mjs（fixture 回归，须全绿）

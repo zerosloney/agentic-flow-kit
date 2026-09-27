@@ -76,8 +76,9 @@ function ask(reason) {
 }
 
 // ── 1) deny/ask 命令门禁 ──────────────────────────────
+// 清单权威源 = .agents/settings.json（p2-batch2 对齐：旧清单多抄了一项 'dotnet ef' 造成双源漂移——
+// settings.json 无此项；EF Migrations 禁令属 dotnet-ca 门禁域，如需恢复请先加进 settings.json 再同步此处）
 const denyList = [
-  { pat: 'dotnet ef',         reason: '禁 EF Migrations，Schema 由人工 SQL 维护' },
   { pat: 'git reset --hard',  reason: '禁破坏性重置' },
   { pat: 'drop database',     reason: '禁删库' }
 ];
@@ -88,13 +89,24 @@ const askList = [
   { pat: 'rm -rf',        reason: '可能递归删除文件' }
 ];
 
+// stripMessages：剥 -c/-m 的值（含引号整段）——deny/ask 门与强推检测共用，防 commit 消息字样误触发
+function stripMessages(cmd) {
+  return cmd
+    .replace(/(^|\s)-[cm]\s+"[^"]*"(?=\s|$)/g, ' ')
+    .replace(/(^|\s)-[cm]\s+'[^']*'(?=\s|$)/g, ' ')
+    .replace(/(^|\s)-[cm]\s+\S+(?=\s|$)/g, ' ')
+    .replace(/\s+/g, ' ').trim();
+}
+
 // 强推检测 token 化（2026-09-27 host-gates-p1 P1-B2）：子串模式 'git push --force' 挡不住换序
 // （git push origin main --force）与 +refspec 变体（git push origin +main）——改为 token 级判定。
 // 复核 P2 收窄（同日）：①按 &&/||/;/| 分段，--force 只在 push 段内计数（dotnet build --force 不误并）；
 // ②组合短旗标（-vf）与 -f 同为 force；③--force-with-lease 是带尾巴的独立 token 不匹配。
+// p2-batch2 补：先剥 commit 消息（引号感知）再分段——"git commit -m "修 push --force"" 曾被误拦。
 // 本钩子是 core.hooksPath 漏配时的主要强推执行点，语义必须完整。
 function isForcePush(cmd) {
-  return cmd.split(/&&|\|\||;|\|/).some((seg) => {
+  const stripped = stripMessages(cmd);
+  return stripped.split(/&&|\|\||;|\|/).some((seg) => {
     const tokens = seg.replace(/\s+/g, ' ').trim().split(' ').filter(Boolean);
     if (!tokens.includes('push')) return false;
     return tokens.some((t) => t === '--force'
@@ -103,13 +115,14 @@ function isForcePush(cmd) {
   });
 }
 
-// gateMatch：比裸 includes 收紧两处（2026-09-24）——
+// gateMatch：比裸 includes 收紧三处（2026-09-24；p2-batch2 补 ③）——
 //   ① token 边界：'git checkout' 不再误吃 'git commit-msg'
-//   ② 剥离 git 全局参 -c <k=v> 与 -m <msg> 后以剥后文本为准——堵 'git -c x=y reset --hard' 绕过，
-//     也免得消息字样误触发；剥不出（norm===cmd）再按原文匹配
+//   ② 剥离 git 全局参 -c <k=v> 与 -m <msg> 后以剥后文本为准——堵 'git -c x=y reset --hard' 绕过
+//   ③ 消息字样误触（p2-batch2）：带引号多词消息（-m "修 git push --force 误拦"）单 token 剥不净——
+//     剥离逻辑收敛到 stripMessages 单源（引号感知）
 function gateMatch(cmd, pat) {
   const re = new RegExp(pat.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\w-])');
-  const norm = cmd.replace(/(^|\s)-[cm]\s+\S+(?=\s|$)/g, ' ').replace(/\s+/g, ' ').trim();
+  const norm = stripMessages(cmd);
   return norm !== cmd ? re.test(norm) : re.test(cmd);
 }
 

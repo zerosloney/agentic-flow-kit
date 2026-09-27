@@ -86,7 +86,25 @@ if (!m) {
   console.error('❌ 看板 DATA 解析失败：知识沉淀总览.html 中找不到 `const DATA = {...}`');
   process.exit(1);
 }
-const DATA = eval('(' + m[1] + ')');
+// JSON.parse（p2-batch2）：DATA 由 gen-wiki-board 经 JSON.stringify 生成、必为合法 JSON——
+// eval 换 JSON.parse 消除门禁脚本对 repo 内文件执行任意 JS 的面；解析失败即 fail-loud 门禁失败
+let DATA;
+try {
+  DATA = JSON.parse(m[1]);
+} catch (e) {
+  console.error(`❌ 看板 DATA 不是合法 JSON（应跑 gen-wiki-board.mjs 重生成）：${e.message}`);
+  process.exit(1);
+}
+// 合计行比对（p2-batch2）：合计行有生成（fail-loud 锚点）无验证——手改/陈旧此前不可见
+{
+  const totalM = fs.readFileSync(path.join(WIKI, 'INDEX.md'), 'utf8').match(/合计：\*\*(\d+) 份\*\*知识文档，\*\*(\d+) 个主题\*\*/);
+  if (totalM) {
+    if (Number(totalM[1]) !== diskFiles.size || Number(totalM[2]) !== diskTopics.size) {
+      console.error(`❌ INDEX 合计行与磁盘不一致：合计 ${totalM[1]} 份/${totalM[2]} 主题 vs 磁盘 ${diskFiles.size} 份/${diskTopics.size} 主题——跑 gen-wiki-board.mjs 重生成`);
+      process.exit(1);
+    }
+  }
+}
 const boardFiles = new Set();
 for (const t of DATA.topics) for (const f of t.files) boardFiles.add(`${t.name}/${f.file}`);
 const boardTopics = new Set(DATA.topics.map((t) => t.name));
