@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-27
 模块: pipeline
 配对: ../intents/2026-09-27-confirm-gate-delegated.md
 备注: 契约语义：确认事件的两形态与台账来源标记。指纹对账与 frontmatter 机制零变更——本 spec 只加「对话委托代录」这一来源形态。
-确认指纹: 6137ddaac6f50f8f
+确认指纹: 95848c0f51fcf81e
 ---
 
 # SPEC — 确认门对话委托代录模式

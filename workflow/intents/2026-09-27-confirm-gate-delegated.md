@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-27
 模块: pipeline
 备注: 动因与拍板：2026-09-27 确认门 TTY 形态首日实战（sync-hosts backlog 单），用户连续要求 AI 代跑被门拦（含两次实跑演示拒绝），随后问「为啥要终端跑」「合理吗」，在「终端跑一次 vs 改设计」两选项中明确拍板「2选2」——选改设计（加对话委托确认模式）。规则面变更就高 L2，三件套配对。
-确认指纹: 6713ecbaf3ac0492
+确认指纹: dda141abdba12144
 ---
 
 # INTENT — 确认门对话委托代录模式（--delegated：用户对话确认，AI 代录，台账如实记来源）
@@ -46,4 +46,4 @@
 - [x] TTY 模式行为与既有完全一致（非 TTY 无 --delegated 照拒，S9/S10 不回归），台账行补 source: tty（证据：既有 10 场景全绿 + S8 schema 扩展）
 - [x] check 15 对 delegated 行照常配对放行、缺指纹照拦（证据：check-loop.test.mjs 检查 15 场景扩展一行 delegated 台账）
 - [x] AGENTS.md root + templates 确认门段双写更新；npm test 全部套件全绿 + doctor 12 PASS + check-loop exit 0（证据：实跑输出）
-- [x] 本单 done 经对话委托模式完成（吃狗粮）：台账行 source=chat-delegated + 用户原话（证据：.agents/confirmations.jsonl 终态）
+- [x] 本单三件套确认全程用户终端 TTY 亲跑双跳（00:48 approved → 00:50 done，台账 source=tty）——原拟 done 走委托模式吃狗粮，实操中用户连跑两跳，委托模式正式首用顺延至同日 sync-hosts backlog 关单（证据：.agents/confirmations.jsonl 6 行 tty 记录 + backlog 关单的 chat-delegated 行）
