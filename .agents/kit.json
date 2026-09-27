@@ -112,7 +112,7 @@
     },
     {
       "rel": ".agents/scripts/confirm-doc.mjs",
-      "sha256": "7fd14d80d737ee98746819d6c74901bf6a9bda773e4854a041a36002f88f3b23"
+      "sha256": "fcf6f2ca5566b1ffae879636cf27def46136a0a51f3bcb9529b722ad8a027a04"
     },
     {
       "rel": ".agents/scripts/confirm-doc.test.mjs",

@@ -15,7 +15,7 @@
 **confirm-doc.mjs**：
 - 新增可选参数 `--to <superseded|cancelled>`：放弃态跳转的显式目标选择（默认行为不变——无 `--to` 时 nextStage 前向单跳）；
 - 合法表：**cancelled** 自 draft/approved/open/fixed（未确认过的 open/draft 只可 cancelled——谈不上被取代）；**superseded** 自 approved/done/fixed/closed（已被确认/闭环的结论被新档取代）；
-- 非法：draft→superseded、open→superseded、任何终态→终态、`--to` 值非法 → 拒绝并列合法表；
+- 非法：draft→superseded、open→superseded、终态→终态中除 done/closed→superseded 外的组合（如 done→cancelled）、`--to` 值非法 → 拒绝并列合法表；
 - 落态路径复用既有机制：指纹（跳转前内容）+ applyTransition + 台账行 `{stage: superseded|cancelled, prev, source, quote?}`；TTY/delegated 两形态同语义。
 
 **check-loop.mjs 检查 15**（原位扩展）：

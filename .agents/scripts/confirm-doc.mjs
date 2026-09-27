@@ -45,7 +45,7 @@ export function nextStage(status) {
 }
 
 // 放弃态跳转表（2026-09-27 closing-coverage）：cancelled 自未确认/进行态，superseded 自已确认态——
-// draft/open 未被确认过，谈不上「被取代」，只能 cancelled；终态间互跳一律拒绝
+// draft/open 未被确认过，谈不上「被取代」，只能 cancelled；终态间仅允许 done/closed→superseded（结论被新档取代），其余互跳拒绝
 const CANCELLABLE = new Set(['draft', 'approved', 'open', 'fixed']);
 const SUPERSEDABLE = new Set(['approved', 'done', 'fixed', 'closed']);
 export const ABANDON_TARGETS = ['superseded', 'cancelled'];
@@ -105,7 +105,7 @@ if (isMain) {
     else docs.push(argv[i].replace(/\\/g, '/'));
   }
   if (toTarget !== null && !ABANDON_TARGETS.includes(toTarget)) {
-    console.error(`用法：--to 仅接受 superseded|cancelled（现「${toTarget}」）——cancelled 自 draft/approved/open/fixed；superseded 自 approved/done/fixed/closed（未确认态只能 cancelled，终态间不互跳）`);
+    console.error(`用法：--to 仅接受 superseded|cancelled（现「${toTarget}」）——cancelled 自 draft/approved/open/fixed；superseded 自 approved/done/fixed/closed（未确认态只能 cancelled；终态间仅允许 done/closed→superseded）`);
     process.exit(1);
   }
   const delegated = delegatedQuote !== null;
