@@ -5,12 +5,14 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（15）
+## 活跃（17）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
+| INCIDENT | L2 | open | 2026-09-27 | pipeline | 2026-09-27 确认门「多文档一次代录」系统性违规 | — |
 | INCIDENT | L1 | open | 2026-09-27 | pipeline | 2026-09-27 P2 池批二（看板/wiki/宿主维护面收口） | — |
-| PLAN | L1 | approved | 2026-09-27 | pipeline | p2-batch2 | — |
+| PLAN | L2 | draft | 2026-09-27 | pipeline | confirm-gate-one-per-call | — |
+| SPEC | L2 | draft | 2026-09-27 | pipeline | confirm-gate-one-per-call | — |
 | INCIDENT | L1 | open | 2026-09-25 | pipeline | 2026-09-25 doctor owned 漂移 WARN 升级 FAIL | — |
 | INTENT | L1 | approved | 2026-09-24 | pipeline | Shipyard 引擎增量收包（抽取后 3 笔回流包源） | ☑5/5 |
 | PLAN | L1 | approved | 2026-09-24 | pipeline | Shipyard 引擎增量收包 | — |
@@ -25,17 +27,17 @@
 | PLAN | L1 | approved | 2026-09-23 | pipeline | M5：npm 发布 | — |
 | SPEC | L2 | approved | 2026-09-23 | pipeline | M4 自装 dogfooding | — |
 
-## 档案计数（107，不进表）
+## 档案计数（108，不进表）
 
 | 类型 | 模块 | 数量 |
 |---|---|---|
 | INCIDENT | pipeline | 13 |
 | INTENT | pipeline | 33 |
 | INTENT | wiki | 1 |
-| PLAN | pipeline | 45 |
+| PLAN | pipeline | 46 |
 | PLAN | wiki | 1 |
 | SPEC | pipeline | 14 |
 
-终态构成：done 94 · closed 8 · fixed 5；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
+终态构成：done 95 · closed 8 · fixed 5；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
 
 <!-- GENERATED:END -->
