@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-27
 模块: pipeline
 备注: 同名 intent：../intents/2026-09-27-closing-coverage.md（终态确认门补全 + managed sha LF 归一）
-确认指纹: 4ccf08c91a0c03f5
+确认指纹: 8d6753bd157d36dd
 ---
 # SPEC — closing-coverage
 
