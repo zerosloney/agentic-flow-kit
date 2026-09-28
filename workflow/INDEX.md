@@ -5,18 +5,15 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（25）
+## 活跃（22）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
-| INTENT | L2 | approved | 2026-09-28 | pipeline | ledger-precommit-gate | ☑0/5 |
 | INTENT | L2 | draft | 2026-09-28 | pipeline | opencode-cmd-wf-prefix | ☑7/7 |
 | PLAN | L2 | approved | 2026-09-28 | pipeline | 装户侧 derivers 动态载入 | — |
 | PLAN | L1 | approved | 2026-09-28 | pipeline | 结论文档断言强于实际的窄修与纪律固化 | — |
-| PLAN | L2 | approved | 2026-09-28 | pipeline | ledger-precommit-gate | — |
 | PLAN | L2 | approved | 2026-09-28 | pipeline | 量化断言指标签名机器门 | — |
 | PLAN | L2 | draft | 2026-09-28 | pipeline | opencode-cmd-wf-prefix | — |
-| SPEC | L2 | approved | 2026-09-28 | pipeline | ledger-precommit-gate | — |
 | SPEC | L2 | approved | 2026-09-28 | pipeline | 量化断言指标签名机器门（check-loop 检查 16） | — |
 | SPEC | L2 | draft | 2026-09-28 | pipeline | opencode-cmd-wf-prefix | — |
 | INCIDENT | L1 | open | 2026-09-27 | pipeline | 2026-09-27 P2 池批二（看板/wiki/宿主维护面收口） | — |
@@ -35,17 +32,17 @@
 | PLAN | L1 | approved | 2026-09-23 | pipeline | M5：npm 发布 | — |
 | SPEC | L2 | approved | 2026-09-23 | pipeline | M4 自装 dogfooding | — |
 
-## 档案计数（123，不进表）
+## 档案计数（126，不进表）
 
 | 类型 | 模块 | 数量 |
 |---|---|---|
 | INCIDENT | pipeline | 20 |
-| INTENT | pipeline | 33 |
+| INTENT | pipeline | 34 |
 | INTENT | wiki | 1 |
-| PLAN | pipeline | 50 |
+| PLAN | pipeline | 51 |
 | PLAN | wiki | 1 |
-| SPEC | pipeline | 18 |
+| SPEC | pipeline | 19 |
 
-终态构成：done 103 · closed 12 · fixed 8；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
+终态构成：done 106 · closed 12 · fixed 8；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
 
 <!-- GENERATED:END -->

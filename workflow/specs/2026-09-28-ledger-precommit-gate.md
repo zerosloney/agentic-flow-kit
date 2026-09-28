@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-28
 模块: pipeline
 备注: 对应 intent/plan 同名主题 ledger-precommit-gate
-确认指纹: 09f72f8c8944bca4
+确认指纹: 06fd240839a65e54
 ---
 # SPEC — ledger-precommit-gate
 
@@ -56,5 +56,6 @@
 
 ## 确认与复核
 
-- 确认日期：
-- 复核：L2 推荐独立复核
+- 确认日期：2026-09-28（用户对话内确认，委托代录三件套逐件）
+- 复核：独立复核**已执行**（independent-reviewer，独立上下文，基准 a6f3d1b → 9894de7）——spec 逐条保真（触发/检查/边界与本文 15-26 一一对应）、sha 三处口径闭环（check-ledger ↔ doctor §4 ↔ render.mjs shaText 逐字同式）、触发条件与双源门禁同款、S1-S9 真断言（非恒真）；变异实测 3 项：触发臂收窄 → 漏放实证（templates 臂 load-bearing）、去 CRLF 归一 → 假拦实证（归一 load-bearing）、附带抓手改 .githooks/pre-commit 未随台账 → 快检抓到。verdict 通过，0 P0 / 0 P1 / P2×3：P2-2 / P2-3 采纳修复（9894de7），P2-1（只暂存 kit.json、工作树一致时中间态不一致树落库）为本文「比较工作树」已声明取舍，登记不放
+- 未验证范围（据实声明）：POSIX（Linux/macOS）实机 pre-commit 行为——仅 Windows 实跑（sh 门禁与既有各门同环境同机制，风险低）

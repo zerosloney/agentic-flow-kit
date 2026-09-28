@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-28
 模块: pipeline
 备注: pre-commit 补 managed 台账快检——根治 kit.json sha 预 landing 三连发的提交时刻盲区
-确认指纹: 63555193c45d57ac
+确认指纹: cc1215024ebfcb08
 ---
 # INTENT — ledger-precommit-gate
 
@@ -53,18 +53,18 @@
 
 ## 验收标准（可测试）
 
-- [ ] `check-ledger.mjs`：全对齐 exit 0；内容漂移 / 缺失 exit 1 且逐份列出 rel
-- [ ] CRLF 盘面 × LF 台账不误报（LF 归一口径）
-- [ ] 无 kit.json → skip exit 0（非 flow-kit 安装兼容）；kit.json 解析失败 → exit 1
-- [ ] pre-commit 负例实测：临时弄脏 managed 件（仅工作树）→ commit 被拦且提示 sync；还原后放行
-- [ ] `npm test` 全部套件通过；`flow-kit sync` 后 doctor 12 PASS / 0 WARN / 0 FAIL
+- [x] `check-ledger.mjs`：全对齐 exit 0；内容漂移 / 缺失 exit 1 且逐份列出 rel（证据：check-ledger.test.mjs S1/S2/S3 + CLI S7/S8 全 PASS，10 场景套件随 npm test；实现 ec8b825、P2 采纳 9894de7）
+- [x] CRLF 盘面 × LF 台账不误报（LF 归一口径）（证据：S4 PASS；独立复核变异实测——去归一即假拦，归一 load-bearing）
+- [x] 无 kit.json → skip exit 0（非 flow-kit 安装兼容）；kit.json 解析失败 → exit 1（证据：S5/S6 PASS；S6b managed 非数组 fatal（复核 P2-3 采纳）PASS）
+- [x] pre-commit 负例实测：临时弄脏 managed 件（仅工作树）→ commit 被拦且提示 sync；还原后放行（证据：ec8b825 提交前实测——弄脏 .agents/scripts/agg-delegations.cjs → 提交被拦点名 rel、还原后全对齐放行；双源门禁同场景静默，盲区闭合实证）
+- [x] `npm test` 全部套件通过；`flow-kit sync` 后 doctor 12 PASS / 0 WARN / 0 FAIL（证据：9894de7 提交流水——npm test 全部套件通过、doctor 12 PASS/0 WARN/0 FAIL；check-loop 仅存量 2 条 2026-09-25 旧单 advisory，与本单无关）
 
 > **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条勾选项后补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 冒烟脚本输出>）`。
 > done 状态仍有未勾项会被 check-loop 拦截（2026-09-12 起新建 intent 为 hard-block，存量 intent 仅 warning 提示）；勾选但缺「证据：」为 warning。
 
 ## 确认与复核
 
-- 确认日期：
-- 确认人：用户（对话内确认后经 confirm-doc 留痕）
-- 确认范围：
-- 复核：L2 推荐独立复核
+- 确认日期：2026-09-28
+- 确认人：用户（对话内原话「接下来做test三件套 确认 你继续执行」；confirmations.jsonl source=chat-delegated，三件逐次调用）
+- 确认范围：三件套逐件确认（intent / spec / plan 各一次调用，台账 of=1/行）
+- 复核：独立复核已执行（independent-reviewer，独立上下文，基准 a6f3d1b → 9894de7）——verdict 通过，0 P0 / 0 P1 / P2×3：P2-2（触发改包源恒跑）/ P2-3（managed 非数组 fail-loud）已采纳修复（9894de7），P2-1（工作树口径分两笔提交缝隙）为 spec 已声明取舍，登记不放
