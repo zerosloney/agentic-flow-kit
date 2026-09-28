@@ -43,6 +43,6 @@
 | PLAN | wiki | 1 |
 | SPEC | pipeline | 18 |
 
-终态构成：done 103 · closed 11 · fixed 9；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
+终态构成：done 103 · closed 12 · fixed 8；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
 
 <!-- GENERATED:END -->
