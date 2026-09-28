@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-28
 模块: pipeline
 备注: 同名入口：../incidents/2026-09-28-confirm-gate-effective-date-anchor.md；同名 spec：../specs/2026-09-28-confirm-gate-effective-date-anchor.md。L2 四节。
-确认指纹: 1c8116ed2b9d92ab
+确认指纹: efe895fd56066dfa
 ---
 # PLAN — 确认门生效日锚改台账 ts
 

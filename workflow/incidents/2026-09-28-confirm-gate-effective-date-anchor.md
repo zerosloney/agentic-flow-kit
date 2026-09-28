@@ -1,10 +1,10 @@
 ---
-状态: open
+状态: closed
 级别: L2
 发现: 2026-09-28
 模块: pipeline
 备注: 架构审查发现：检查项 15 的生效日锚取自文档自报的「日期/发现」字段，新立 incident 只要把发现日期写早即整段跳过判定——确认门静默不生效。修法镜像 audit-gate-hardening P2-3（内容绑定锚改台账 ts），推及生效日判定本身。L2：改门禁判据，检查项编号与契约面零变化。同名 spec/plan 与本文件配对。**落态注记**：起草时误照抄 spec/plan 模板起始态 `draft`（incident 起始态应为模板规定的 `open`），致首行台账 stage=approved prev=draft；已改回 `open` 并在台账追加 revert-open 注记行（注记行 stage 非合法跳转，不参与检查 15 判定与并录聚组）。
-确认指纹: 2eb66587d3a4650b
+确认指纹: 685af4480e5db3cd
 ---
 # INCIDENT — 2026-09-28 检查项 15 生效日锚信任自报日期
 

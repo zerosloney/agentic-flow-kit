@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-28
 模块: pipeline
 备注: 同名 incident：../incidents/2026-09-28-confirm-gate-effective-date-anchor.md（检查 15 生效日锚：自报日期 → 台账 ts）。L2：改门禁判据，检查项编号与契约面零变化。
-确认指纹: 1979deaf021dd408
+确认指纹: e11521dcbb53fd77
 ---
 # SPEC — 确认门生效日锚改台账 ts
 
