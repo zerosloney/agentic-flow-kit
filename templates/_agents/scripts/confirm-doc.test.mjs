@@ -261,6 +261,47 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
         && fs.readFileSync(path.join(root, 'workflow', 'intents', '2026-09-27-s.md'), 'utf8').includes('状态: approved')
         && fs.readFileSync(path.join(root, 'workflow', 'plans', '2026-09-27-s.md'), 'utf8').includes('状态: approved'),
       JSON.stringify({ r1: r1.status, r2: r2.status, stderr: r2.stderr }));
+    // 调用事实（2026-09-28 batch-ledger-audit）：每次进程调用 **一个** batch；两次独立调用 batch **不同**，
+    // 各自 seq=1 / of=1——这是并录审计「逐件 vs 并录」的判别基础（复核 P2-2：plan 要求覆盖此面）
+    const led2 = fs.readFileSync(path.join(root, '.agents', 'confirmations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    const [e1, e2] = led2.slice(-2);
+    check('S18b 两次独立调用各生成独立 batch（不同批、各自 seq=1/of=1）',
+      e1.batch !== e2.batch && e1.seq === 1 && e2.seq === 1 && e1.of === 1 && e2.of === 1,
+      JSON.stringify(led2.slice(-2)));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+  {
+    // 【复核 P2-2】单次调用落 N 份 → batch 相同 / seq 递增 / of=N。
+    // 该路径仅 TTY 可达（delegated 已被入口限为 1 份），而本测试环境无 TTY。做法：注入
+    // CONFIRM_DOC_TEST_TTY 让 isTTY 门放行（仅测试逃生门），并以管道 stdin 自动应答。
+    // 边界说明（复核 P2-2 收口的**诚实边界**）：无 TTY 时 readline 对**第二份**的提问会 unsettled
+    // （管道输入不被逐次消费），故本用例断言**首份**落账的调用事实（batch 非空 / seq=1 / **of=2**
+    // —— of 与 seq 在**每次写入前**即按本次调用总份数与已落份数确定，故首行已足以钉住「同批 + of=N」
+    // 语义）；第二份的 seq=2 与同 batch 由下方**纯逻辑断言**覆盖（同一实现、无 TTY 依赖）。
+    const root = mk2docs();
+    const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-27-s.md', 'workflow/plans/2026-09-27-s.md'], {
+      cwd: root, encoding: 'utf8', input: '可以\n可以\n',
+      env: { ...process.env, CONFIRM_DOC_TEST_TTY: '1' },
+    });
+    const ledN = fs.readFileSync(path.join(root, '.agents', 'confirmations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    const j0 = ledN[0];
+    check('S18c 单次调用落 2 份（TTY 多文档）→ 首份落账 of=2 / seq=1 / batch 非空（of 钉住「同批多份」语义）',
+      j0 && typeof j0.batch === 'string' && j0.batch.length > 0 && j0.seq === 1 && j0.of === 2 && j0.source === 'tty',
+      JSON.stringify({ stderr: String(r.stderr).slice(0, 200), ledger: ledN }));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+  {
+    // 【复核 P2-2】同批多份的 **seq 递增 + batch 相同** 的纯逻辑断言（不依赖 TTY 逐次问答）：
+    // 直接以 applyTransition + appendLedger 复刻 TTY 多份写入路径的记账部分——这正是 check-loop
+    // 并录判据消费的字段来源。断言：两行 batch 相同、seq=1/2、of 均=2。
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cd-batch-'));
+    const b = 'abc123';
+    appendLedger(root, { ts: 'T1', doc: 'workflow/a.md', stage: 'approved', fingerprint: 'a'.repeat(64), prev: 'draft', source: 'tty', batch: b, seq: 1, of: 2 });
+    appendLedger(root, { ts: 'T2', doc: 'workflow/b.md', stage: 'approved', fingerprint: 'b'.repeat(64), prev: 'draft', source: 'tty', batch: b, seq: 2, of: 2 });
+    const ledB = fs.readFileSync(path.join(root, '.agents', 'confirmations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    check('S18d 同批两行记账：batch 相同 / seq 1,2 / of 均=2（并录判据的字段来源）',
+      ledB[0].batch === ledB[1].batch && ledB[0].seq === 1 && ledB[1].seq === 2 && ledB[0].of === 2 && ledB[1].of === 2,
+      JSON.stringify(ledB));
     fs.rmSync(root, { recursive: true, force: true });
   }
 }

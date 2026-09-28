@@ -57,7 +57,7 @@
 //      判据 = 台账行按 batch 分组、组内 of>1(delegated 行) → warning「确认并录」;batch/seq/of 由
 //      confirm-doc 写入时记录(那才是"本次调用落几份"确定已知的时刻)。旧判据「同 quote + 相邻 ts<2s」
 //      整段退役——已实证四类失效:假阳性(合规逐件复用同句必然误报)/假阴性(换 quote 即零告警,
-//      等于引导伪装)/噪声不可消退(不按日期门豁免,一度占本仓 advisory 62% 且自认不可区分)/
+//      等于引导伪装)/噪声不可消退(不按日期门豁免,退役前本仓 22 条 advisory 中 14 条为该告警)/
 //      quote 字段职责冲突(对质凭据 vs 并录指纹,现归还单一职责)。无 batch 的历史行静默跳过
 //      (无判定依据的行不产出不可消除噪声——沿 audit-gate-hardening P3 教训)
 //
@@ -652,10 +652,10 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
   // 旧判据「同 quote + 相邻 ts 差 < 2s」是拿两个间接信号反推该事实，已实证四类失效并**整段退役**：
   //   ① 假阳性：合规逐件调用复用同句（用户两次都说「可以」）→ 必然误报；
   //   ② 假阴性：并录时给每份换不同 quote → 零告警（判据的实际效果是引导伪装者改 quote）；
-  //   ③ 噪声不可消退：不按日期门豁免，本仓一度 13/23 条 advisory 皆为该告警，且文案自认「不可区分」；
+  //   ③ 噪声不可消退：不按日期门豁免，退役前本仓 22 条 advisory 中 14 条为该告警，且文案自认「不可区分」；
   //   ④ 字段职责冲突：`quote` 同时当「对质凭据」与「并录指纹」——现归还单一职责，只记用户原话。
-  // 无 `batch` 字段的历史行（schema 演进前，本仓 61 行）→ **静默跳过**，不降级出账、不回溯：按
-  // audit-gate-hardening P3 教训（「扫了只产生不可消除的 advisory 噪声，真漏点被淹没」），无判定依据
+  // 无 `batch` 字段的历史行（schema 演进前，本仓全部 67 行均无该字段）→ **静默跳过**，不降级出账、不回溯：
+  // 按 audit-gate-hardening P3 教训（「扫了只产生不可消除的 advisory 噪声，真漏点被淹没」），无判定依据
   // 的行不该产出告警。VALID_STAGES 复用外层声明（复核 P2-3 更正：此前本块内另有一份同名声明遮蔽外层）。
   {
     const byBatch = new Map(); // batch → 该批的台账行（仅计合法跳转 stage）
@@ -666,11 +666,14 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
       byBatch.get(e.batch).push(e);
     }
     for (const [b, rows] of byBatch) {
-      const of = rows[0].of;
+      // 判据取组内**任一行** of>1（复核 P2-3 更正：原取 rows[0].of 使结论依赖行序——同批首行 of=1、
+      // 次行 of=2 会漏报。confirm-doc 对同批所有行写同一个 of=docs.length，故正常批次组内一致；
+      // 改用 some 消除该顺序脆弱性，并对 craft 出来的不一致批次按「最大值」报，方向偏严不偏松）
+      if (!rows.some((r) => typeof r.of === 'number' && r.of > 1)) continue;
       // of > 1 = 一次调用落多份态。delegated 形态下这正是「并录」（入口已拒多份，此处抓历史/绕行）；
       // TTY 形态天然逐份过目（用户亲手键入），of>1 不构成违规——故只对 delegated 行报。
-      if (!(typeof of === 'number' && of > 1)) continue;
       if (!rows.some((r) => r.source === 'chat-delegated')) continue;
+      const of = Math.max(...rows.map((r) => (typeof r.of === 'number' ? r.of : 0)));
       const docs = rows.map((r) => String(r.doc).replace(/^workflow\//, '')).join('、');
       warnings.push(`- [WARN 确认并录] 单次调用落账 ${rows.length} 份（batch ${b}，of=${of}）：${docs}——同一次 --delegated 调用放行多份，塌掉「逐件确认」门（build.md）；口径见 workflow/papercuts.md 2026-09-28 与 incidents/2026-09-28-batch-ledger-audit.md`);
     }

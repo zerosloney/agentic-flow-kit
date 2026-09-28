@@ -919,6 +919,55 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
       `exit=${r.status}\n${outOf(r)}`);
     rmfix(T);
   }
+  {
+    // 【复核 P2-3】组内 `of` 不一致（人为构造）时判据不得因**行序**而改变结论：
+    // 原实现取 rows[0].of —— 首行 of=1、次行 of=2 会漏报；现取组内 some(of>1)，两个方向都报。
+    // 正常批次由 confirm-doc 写同一个 of=docs.length，组内恒一致；本用例专门钉住顺序无关性。
+    const T = mkfix();
+    const [d1, d2] = mk2LedgerDocs(T);
+    writeLedger(T, [
+      { ts: '2026-09-28T02:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'chat-delegated', quote: '甲', batch: 'd1', seq: 1, of: 1 },
+      { ts: '2026-09-28T02:00:01.000Z', doc: d2.rel, stage: 'done', fingerprint: d2.fp, prev: 'approved', source: 'chat-delegated', quote: '乙', batch: 'd1', seq: 2, of: 2 },
+    ]);
+    const r = run(T);
+    check('检查15:组内 of 不一致（首行 of=1 / 次行 of=2）→ 仍报（判据顺序无关，复核 P2-3）',
+      r.status === 0 && outOf(r).includes('确认并录'),
+      `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 反向：首行 of=2 / 次行 of=1 —— 与上条同批、仅行序相反，结论必须一致（都报）
+    const T = mkfix();
+    const [d1, d2] = mk2LedgerDocs(T);
+    writeLedger(T, [
+      { ts: '2026-09-28T02:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'chat-delegated', quote: '甲', batch: 'd2', seq: 1, of: 2 },
+      { ts: '2026-09-28T02:00:01.000Z', doc: d2.rel, stage: 'done', fingerprint: d2.fp, prev: 'approved', source: 'chat-delegated', quote: '乙', batch: 'd2', seq: 2, of: 1 },
+    ]);
+    const r2 = run(T);
+    check('检查15:组内 of 不一致（首行 of=2 / 次行 of=1）→ 仍报（与上条对称，顺序无关）',
+      r2.status === 0 && outOf(r2).includes('确认并录'),
+      `exit=${r2.status}\n${outOf(r2)}`);
+    rmfix(T);
+  }
+  {
+    // 【复核 P2-3 收口】「可报组与 revert-draft 注记行并存 → 恰报 1 次、注记行不参与」
+    // 上一版场景把两行改成异 batch of=1 后，fixture 里已无可报组，只验证了「无可报组时零报」——
+    // 本用例恢复旧版被覆盖的组合（旧断言为 `length===1 && includes('2 份')`，此处以新机制等价重建）。
+    const T = mkfix();
+    const [d1, d2] = mk2LedgerDocs(T);
+    writeLedger(T, [
+      { ts: '2026-09-28T02:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'chat-delegated', quote: '两份一起', batch: 'p1', seq: 1, of: 2 },
+      { ts: '2026-09-28T02:00:00.400Z', doc: d2.rel, stage: 'done', fingerprint: d2.fp, prev: 'approved', source: 'chat-delegated', quote: '两份一起', batch: 'p1', seq: 2, of: 2 },
+      // 注记行：与上批**同 batch id 但 stage 非法**——若 VALID_STAGES 过滤失效，它会被并入该批
+      { ts: '2026-09-28T02:00:00.900Z', doc: 'workflow/plans/2026-09-28-ghost.md', stage: 'revert-draft', fingerprint: 'n/a', prev: 'approved', source: 'chat-delegated', quote: '两份一起', batch: 'p1', seq: 3, of: 3 },
+    ]);
+    const r = run(T);
+    check('检查15:可报组与 revert-draft 注记行并存 → 恰报 1 次且注记行不参与（复核 P2-4 补回）',
+      r.status === 0 && (outOf(r).match(/确认并录/g) || []).length === 1
+        && outOf(r).includes('2 份') && !outOf(r).includes('ghost'),
+      `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
 }
 
 // ---- 场景 67-71:检查 15 受管准入两条件取或（2026-09-28 incident confirm-gate-effective-date-anchor）----

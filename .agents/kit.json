@@ -96,7 +96,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "c8cb320522add507e602cdae10494757457d48549697b7b03c6f98baeb5a9e5c"
+      "sha256": "4a24db43da24eb5beebffc80b8cd354922a7ad77d8c0fc1a01003da0699afc01"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -104,7 +104,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "2591980f3f1ee469e9b99c3b251fa205554db4a47d834ea17c43f0bab0f0a198"
+      "sha256": "f91e6129c1fc7ae4dfbceaab86cd53bc4e270ec073b55b461de33c2a578911c6"
     },
     {
       "rel": ".agents/scripts/commit-check-trigger.test.mjs",
@@ -112,11 +112,11 @@
     },
     {
       "rel": ".agents/scripts/confirm-doc.mjs",
-      "sha256": "d72457cb22abec6f1c1d343bf30f9f72422110f7db94de89b4a32ebe12314d40"
+      "sha256": "e81f87ddef57cd75e44a8dd3f41f6af3ad583771431351bb0f4167bb9fc6d5b2"
     },
     {
       "rel": ".agents/scripts/confirm-doc.test.mjs",
-      "sha256": "6073bd68a465b4a32b774396ded470b23a23e2491bfb913df11f00342b3ab3e5"
+      "sha256": "9c67c1b7386224d334d0bb102590c7c4e9621fee06c31aae93c74e45fe2b4283"
     },
     {
       "rel": ".agents/scripts/doctor.test.mjs",
@@ -350,7 +350,7 @@
     },
     {
       "rel": "workflow/papercuts.md",
-      "sha256": "e1636055040092aa534c2cf7b54947b9f70d99fdebba80de0454664c08ac0bc4"
+      "sha256": "4cc757312f6984b842b188cd99089b67d6332d114d3608fd64bd1e987b31fa22"
     },
     {
       "rel": "workflow/plans/_TEMPLATE.md",
