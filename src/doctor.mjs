@@ -211,7 +211,8 @@ export function doctor(args, pkgRoot) {
   // 6.7 跨宿主薄适配正文段漂移校验（2026-09-25 cross-host-sync，参见 workflows/intents/2026-09-25-cross-host-sync.md）
   //     装户侧视角：.agents/{commands,roles}/*.md 是权威源；4 宿主目录（.zcode/.omp/.opencode/.trae）下的
   //     {agents,commands}/*.md 是薄适配。按正文段 sha 比对（B-b 语义，frontmatter 不计入漂移），
-  //     trae commands 加 wf- 前缀映射。首次引入为 WARN（沿用 wf-runtime 复盘「先 WARN 升级 FAIL」路径），
+  //     commands 层按 profiles.mjs#HOSTS.commandPrefix 前缀映射（2026-09-28 起 opencode/trae 同 wf-）。
+  //     首次引入为 WARN（沿用 wf-runtime 复盘「先 WARN 升级 FAIL」路径），
   //     待装户升级视反馈升级 FAIL。包源侧对应工具是 flow-kit sync-hosts（src/sync-hosts.mjs）。
   const adapterRes = checkAdapterDrift(target);
   if (adapterRes.skipped) {
