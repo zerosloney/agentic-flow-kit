@@ -1478,15 +1478,97 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     rmfix(T);
   }
   {
+    // 【复核 P2 回归】模块坏但**没有任何装户指标**时，不得平白出账
+    // （首版无条件报「载入失败」——半成品模块会给清白的装户增加不可消除的噪声）
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', MCB); // 只有内置指标
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    w(T, '.agents/metric-derivers.mjs', "export const derivers = { 'x.y': () => { \n"); // 坏模块
+    activePlan(T, 'noise', '');
+    const r = run(T);
+    check('检查16装户:坏模块 + 无装户指标 → 不出账（无判定依据不产噪声）',
+      r.status === 0 && !outOf(r).includes('装户取数器载入失败'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 【复核 P2 回归】内置同名 advisory 按**指标**去重（首版按 registry 行重复出账）
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', 'ledger.lines = ledger.lines\nledger.lines = ledger.lines\nledger.lines = ledger.lines\n');
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    w(T, '.agents/metric-derivers.mjs', "export const derivers = { 'ledger.lines': () => 999 };\n");
+    activePlan(T, 'dedup', '\n台账 {{ledger.lines}}\n');
+    const r = run(T);
+    const n = (outOf(r).match(/被忽略/g) || []).length;
+    check('检查16装户:内置同名 advisory 按指标去重（3 行登记 → 恰 1 条）', n === 1, `实际 ${n} 条\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 【复核 P2 回归】软链接成环 → 不得无界递归（复核实测首版 depth 128、同文件重复 64 份）
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', 'g.loop = g.loop\n');
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    fs.mkdirSync(path.join(T, 'loopdir', 'inner'), { recursive: true });
+    w(T, 'loopdir/inner/f.txt', 'x');
+    let linked = false;
+    try {
+      fs.symlinkSync(path.join(T, 'loopdir'), path.join(T, 'loopdir', 'inner', 'back'), 'junction');
+      linked = true;
+    } catch { /* 无权限建链接（Windows 非管理员）→ 跳过该断言 */ }
+    w(T, '.agents/metric-derivers.mjs',
+      "export const derivers = { 'g.loop': (ctx) => ctx.glob('loopdir/**/*.txt').length };\n");
+    activePlan(T, 'loop', '\n{{g.loop}}\n');
+    const r = run(T);
+    check(linked
+      ? '检查16装户:软链接成环 → 不无界递归（g.loop 为有限值）'
+      : '检查16装户:软链接成环用例跳过（本机无建链接权限）',
+      linked ? /实时值 = \d+/.test(outOf(r)) : true, `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
     // 【归属契约】装户取数模块必须归 owned——否则落回 managed，重演本单要修的缺陷本身
     // （sync 永久报「本地已改」+ doctor WARN + check-loop 因供应链防线静默停摆）
-    const { isOwned } = await import('../../../src/profiles.mjs');
-    check('检查16装户:isOwned(.agents/metric-derivers.mjs) 为真（与登记表同归 owned）',
-      isOwned('.agents/metric-derivers.mjs') === true);
-    check('检查16装户:isOwned(.agents/metric-claims.txt) 仍为真（未被本单破坏）',
-      isOwned('.agents/metric-claims.txt') === true);
-    check('检查16装户:check-loop.mjs 仍归 managed（引擎不被误划入 owned）',
-      isOwned('.agents/scripts/check-loop.mjs') === false);
+    //
+    // **本用例不得依赖包源 `src/`**（复核 P1 更正）：首版写 `await import('../../../src/profiles.mjs')`，
+    // 该路径在**本仓**解析到 `<repo>/src/`（存在），但在**装户安装**里 `.agents/scripts/` 只往上三层
+    // 即 `<install>/../src/`——不存在 → `ERR_MODULE_NOT_FOUND` → **整个套件崩掉**。而本测试文件是
+    // managed/shipped，故每个装户拿到的测试套件都是坏的；`npm test` 又只跑 `templates/` 副本
+    // （见 src/run-tests.mjs），所以 CI 看不见。修法：优先动态 import，失败则**降级为读源码断言**
+    // （isOwned 的判定是纯字面量列表，读源即可判，且包源/装副本都在同一路径下）。
+    let isOwned = null;
+    try {
+      ({ isOwned } = await import('../../../src/profiles.mjs'));
+    } catch { /* 装户环境无包源 src/ → 走下面的降级断言 */ }
+    if (typeof isOwned === 'function') {
+      check('检查16装户:isOwned(.agents/metric-derivers.mjs) 为真（与登记表同归 owned）',
+        isOwned('.agents/metric-derivers.mjs') === true);
+      check('检查16装户:isOwned(.agents/metric-claims.txt) 仍为真（未被本单破坏）',
+        isOwned('.agents/metric-claims.txt') === true);
+      check('检查16装户:check-loop.mjs 仍归 managed（引擎不被误划入 owned）',
+        isOwned('.agents/scripts/check-loop.mjs') === false);
+    } else {
+      // **装户环境降级断言**（复核 P1 更正）：装户没有包源 `src/profiles.mjs`，故改验**可观测事实**——
+      // 若 `metric-derivers.mjs` 已存在于盘上，它必须**不**记在 kit.json 的 managed 侧（在 managed 即为错，
+      // 那正是本单要修的缺陷形态）。未安装该模块时跳过（无判定依据的行不产出噪声）。
+      // 路径：本文件在 `<root>/.agents/scripts/`，故 kit.json 在 `../kit.json`（= `<root>/.agents/kit.json`）。
+      let verdict = null;
+      let detail = '';
+      try {
+        const kit = JSON.parse(fs.readFileSync(new URL('../kit.json', import.meta.url), 'utf8'));
+        const rel = '.agents/metric-derivers.mjs';
+        const inManaged = (kit.managed || []).some((f) => f.rel === rel);
+        const inOwned = (kit.owned || []).some((f) => f.rel === rel);
+        verdict = !inManaged;
+        detail = `managed=${inManaged} owned=${inOwned}`;
+      } catch (e) {
+        verdict = null; detail = String(e.message).slice(0, 60);
+      }
+      if (verdict === null) {
+        check('检查16装户:装户环境无法判定归属（无 kit.json）→ 跳过（不产噪声）', true);
+      } else {
+        check('检查16装户:装户环境——metric-derivers.mjs 不在 managed 侧（不在即正确）',
+          verdict === true, detail);
+      }
+    }
   }
 }
 

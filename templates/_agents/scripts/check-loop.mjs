@@ -824,18 +824,24 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
       }
       return new RegExp('^' + re + '$');
     };
-    // 遍历时**跳过重目录**（自查修正）：无忽略逻辑时 `ctx.glob('**/*')` 会走进 node_modules / .git，
-    // 既慢又会把依赖树的文件算进取数（对「我项目有多少个 X」这类指标是错的）。故默认剪枝：
-    // node_modules / .git / .agents/cache（本仓运行时缓存）。装户若确需数这些目录，请自行用 node:fs。
+    // 遍历时**跳过重目录 + 防环**（自查 + 复核 P2 修正）：
+    // · 剪枝 node_modules / .git / cache——无剪枝时 `ctx.glob('**/*')` 会走进依赖树，既慢又会把
+    //   依赖文件算进取数（对「我项目有多少个 X」是错的数）。
+    // · **visited 集合防环**：复核实测软链接/junction 成环时递归到 depth 128、同一文件重复 64 份
+    //   才被 statSync 的 ELOOP 拦下；POSIX 无 MAX_PATH 时该递归无界。故按**真实路径**去重。
     const WALK_SKIP = new Set(['node_modules', '.git', 'cache']);
-    const walkFiles = (dir, out = [], rel = '') => {
+    const walkFiles = (dir, out = [], rel = '', visited = new Set()) => {
+      let real = dir;
+      try { real = fs.realpathSync(dir); } catch { /* 不可解析则按原路径处理 */ }
+      if (visited.has(real)) return out; // 环 → 剪枝
+      visited.add(real);
       for (const e of readdirOrNull(dir) || []) {
         if (WALK_SKIP.has(e)) continue;
         const abs = path.join(dir, e);
         const r = rel ? `${rel}/${e}` : e;
         let st = null;
         try { st = fs.statSync(abs); } catch { continue; }
-        if (st.isDirectory()) walkFiles(abs, out, r);
+        if (st.isDirectory()) walkFiles(abs, out, r, visited);
         else out.push(r);
       }
       return out;
@@ -858,19 +864,27 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
       }
       return { fn, builtin: false };
     };
-    // 装户模块载入失败：**先报一次、独立成条**（2026-09-28 adopter-derivers）。
+    // 装户模块载入失败：**独立成条**（2026-09-28 adopter-derivers）。
     // 关键设计（真绿 vs 假绿的分界）：载入失败若只表现为「该指标无取数器」，装户会看到
     // 「引用了 my.metric → 未登记」，看起来像**自己忘了登记**，而真因是模块坏了——他会去 registry
     // 反复核对，永远查不到。故此处单独出一条，明示文件与错误，与「真的没登记」可区分。
+    //
+    // **仅在真的需要装户指标时才报**（复核 P2 更正）：首版在解析登记表前无条件出账——若登记表只有
+    // 内置指标、而装户留了个半成品模块（或模块坏掉但没人用），会平白多一条不可消除的 advisory。
+    // 沿本仓红线「无判定依据的行不产出噪声」：先看登记表是否真的有**非内置**指标，再决定报不报。
+    const mcLines = (linesOf(mcFile) || []).map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+    const hasAdopterMetric = mcLines.some((l) => {
+      const mm = /^([A-Za-z][\w.]*)\s*=\s*([A-Za-z][\w.]*)$/.exec(l);
+      return mm && !derivers[mm[1]];
+    });
     const adopterLoad = loadAdopterDerivers();
-    if (!adopterLoad.ok) {
+    if (!adopterLoad.ok && hasAdopterMetric) {
       for (const e of adopterLoad.errors) warnings.push(`- [WARN 装户取数器载入失败] ${e}`);
     }
     // 解析登记表：`<指标名> = <取数表达式>`（表达式须与指标名同形，二者不一致即登记笔误）
     const declared = new Map();
-    for (const raw of linesOf(mcFile) || []) {
-      const line = raw.trim();
-      if (!line || line.startsWith('#')) continue;
+    const precedenceWarned = new Set(); // 同名 advisory 按指标去重（复核 P2 更正：首版按行重复出账）
+    for (const line of mcLines) {
       const m = /^([A-Za-z][\w.]*)\s*=\s*([A-Za-z][\w.]*)$/.exec(line);
       if (!m) { warnings.push(`- [WARN 指标登记] .agents/metric-claims.txt 行格式非法（应为 \`指标名 = 取数表达式\`）：${line}`); continue; }
       if (m[1] !== m[2]) { warnings.push(`- [WARN 指标登记] 登记名与取数表达式不一致：${m[1]} ≠ ${m[2]}`); continue; }
@@ -884,8 +898,9 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
         // **不 continue**：该指标在 registry 里确实登记过，故仍计入 declared——
         // 否则引用它的文档会被误报为「未登记」（把「模块坏了」伪装成「忘了登记」，正是本单要防的假绿）。
         // 取数失败在扫描阶段以「指标取数失败」单独出账，两条信息不互相掩盖。
-      } else if (r.builtin && adopterLoad.ok && typeof adopterLoad.derivers[m[1]] === 'function') {
-        // 内置与装户同名：内置优先（保持本仓/存量行为稳定），并明示装户定义被忽略
+      } else if (r.builtin && adopterLoad.ok && typeof adopterLoad.derivers[m[1]] === 'function' && !precedenceWarned.has(m[1])) {
+        // 内置与装户同名：内置优先（保持本仓/存量行为稳定），并明示装户定义被忽略（**按指标去重**）
+        precedenceWarned.add(m[1]);
         warnings.push(`- [WARN 指标登记] 指标「${m[1]}」由引擎内置提供，${adopterModRel} 中的同名定义**被忽略**（内置优先）——如需改用自有实现，请换一个指标名`);
       }
       declared.set(m[1], true);

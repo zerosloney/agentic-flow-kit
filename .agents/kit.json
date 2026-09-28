@@ -96,7 +96,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "9993ea341125ffe26119fc9229365d542f112b2f7911f3e61353410cad502f28"
+      "sha256": "ddc5ab5bd737dc5069e891d15b8eee27f255901fc123710c3a5f5985a50dfc90"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -104,7 +104,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "046e49ed7f1d4118a1ac78b0be30b8c3b1ddd1e735cefa74859ebf73a2d67d2e"
+      "sha256": "24a17fb3c30fb1f82749b8c29ced0038b4c9f24cb8e6d639195907822f662caf"
     },
     {
       "rel": ".agents/scripts/commit-check-trigger.test.mjs",
@@ -334,7 +334,7 @@
     },
     {
       "rel": ".agents/metric-claims.txt",
-      "sha256": "f6e0329bbb6e4d0c9cd30924c393c7950fb7fcc1893b3ed4573fcb9025c5d3f0"
+      "sha256": "06ed50765c65221d3a441834fac37a773343b6302f3f25eee3d6f532f55c38ed"
     },
     {
       "rel": ".agents/notes/runtime-env.md",

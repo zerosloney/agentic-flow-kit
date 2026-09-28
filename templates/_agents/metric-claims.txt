@@ -35,6 +35,8 @@
 #   ① 引擎内置 8 个指标（下表）——装户零配置即用，不需要做任何事。
 #   ② 项目自有指标——写 `.agents/metric-derivers.mjs`（**owned**，sync 永不覆盖），
 #      导出 `derivers` 对象（指标名 → 取数函数），并在此表加同名一行。
+#      **后缀必须是 `.mjs`**（引擎只认这一个路径；写 `.cjs` 会被当作不存在，
+#      且 `.cjs` 不归 owned——若被误用会重演「登记表 owned 配引擎 managed」那类缺陷）。
 #
 # 示例 `.agents/metric-derivers.mjs`：
 #     export const derivers = {
