@@ -1,9 +1,10 @@
 ---
-状态: draft
+状态: approved
 级别: L2
 日期: 2026-09-28
 模块: pipeline
 备注: 对应 intent/plan 同名主题 opencode-cmd-wf-prefix
+确认指纹: 6b0a3da53a5239b5
 ---
 # SPEC — opencode-cmd-wf-prefix
 
