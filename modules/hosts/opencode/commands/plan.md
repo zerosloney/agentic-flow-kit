@@ -21,7 +21,7 @@ description: Plan 阶段 · 立 intent（AI 起草、用户确认；本阶段不
 3. 写不出可测试判据 = 还没想清楚 → 反问澄清,不要硬填
 4. 起草后停下,输出草稿全文给用户过目,一句"可以"即确认
 
-   **确认落态唯一入口**（2026-09-27 起）：用户在终端跑 `node .agents/scripts/confirm-doc.mjs <path>` 键入「可以」（draft→approved / approved→done；对话内明确确认后 AI 可 `--delegated "<原话>"` 代录，台账如实记 source/quote——**逐件调用**（一次一份，build.md「逐件确认」口径；多份并录被 confirm-doc 拒绝））。check-loop 15 如实口径：缺记录/指纹不配对 → hard-block 拦截；伪造台账本地不可机器防，留痕供事后对质；done 内容绑定（2026-09-28 起）——关单编辑（勾验/回填）先于 done 确认、confirm-doc 是最后一次写入，此后修订走 superseded 或新 intent。
+   **确认落态唯一入口**（2026-09-27 起）：用户在终端跑 `node .agents/scripts/confirm-doc.mjs <path>` 键入「可以」（draft→approved / approved→done；对话内明确确认后 AI 可 `--delegated "<原话>"` 代录，台账如实记 source/quote——**逐件调用 + 逐件原话**（一次一份，build.md「逐件确认」口径；多份并录被 confirm-doc 拒绝。--delegated 每次传当次实际放行的措辞，不复用同句——复用同句使台账 quote 失去分辨力，且相邻同 quote 连跑会触发并录告警））。check-loop 15 如实口径：缺记录/指纹不配对 → hard-block 拦截；伪造台账本地不可机器防，留痕供事后对质；done 内容绑定（2026-09-28 起）——关单编辑（勾验/回填）先于 done 确认、confirm-doc 是最后一次写入，此后修订走 superseded 或新 intent。
 
 ## 技能辅助(可选,宿主级 skills)
 

@@ -20,7 +20,7 @@
     },
     {
       "rel": ".agents/commands/build.md",
-      "sha256": "3548df3fd9c6331c6f67a8f4e0d7c49a517793a8a8f2fbb164c0aa88f2d2ec96"
+      "sha256": "efa17c718876d5b2a00cc14861d4ced2e339a8850b2576ee8cf0ca7dce7cf849"
     },
     {
       "rel": ".agents/commands/deploy.md",
@@ -28,7 +28,7 @@
     },
     {
       "rel": ".agents/commands/design.md",
-      "sha256": "9352f7d8c3a7b37f7d6712a2c9c8a2a30fb6b252feb18c7061f50eae76e36a32"
+      "sha256": "69aa0373d65824068a559ed3aaf0098bd21a845585ffbc8fadb5fd0e9738f9bd"
     },
     {
       "rel": ".agents/commands/gate-checklist.md",
@@ -44,7 +44,7 @@
     },
     {
       "rel": ".agents/commands/plan.md",
-      "sha256": "488702c874e302e5539ff59bb55b7bbd802680868afe06e6d82f43cda80468b5"
+      "sha256": "99c3b0ec3b225e2b1dc611fa82fa5c97e24b5f95d880e931209425e56f35582c"
     },
     {
       "rel": ".agents/commands/review.md",
@@ -60,7 +60,7 @@
     },
     {
       "rel": ".agents/commands/test.md",
-      "sha256": "cb2ac2ab5a0f5ba4b8820574a4962e5da194bfe85426f6bb62c75b895c5e04b5"
+      "sha256": "cdd1d18c37cfb03645a05880cf2f1fd8e440ec31c1d9a6c84e548371b06ce802"
     },
     {
       "rel": ".agents/hooks/check-pairing-incremental.sh",
@@ -350,7 +350,7 @@
     },
     {
       "rel": "workflow/papercuts.md",
-      "sha256": "9c7d6cc4a5085c4862328c64072cf2998d7b4f9a4c957e261681f8e790028837"
+      "sha256": "a72cfdf63a05bad4f4925c9101036375ec53b4562737deb37cce09b9f5f49aea"
     },
     {
       "rel": "workflow/plans/_TEMPLATE.md",
