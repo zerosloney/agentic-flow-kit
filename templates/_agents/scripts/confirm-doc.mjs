@@ -147,8 +147,22 @@ if (isMain) {
   // 供 check-loop 检查 15 的并录审计直读（替代「同 quote + ts 接近」的反推）。
   const batch = randomBytes(3).toString('hex');
   let seq = 1;
-  const rl = delegated ? null : readline.createInterface({ input: process.stdin, output: process.stdout });
-  const ask = (q) => new Promise((res) => rl.question(q, res));
+  // 应答来源（**仅测试用**注入，见 CONFIRM_DOC_TEST_ANSWERS）：TTY 多文档路径的 batch/seq/of 是并录
+  // 审计的判别基础，必须可端到端验证；而 spawnSync 的管道 stdin 是「写完即关」，readline 会在第二个
+  // question 注册前吞掉后续行、且 stdin 已 EOF → 第 2 份必然挂住（**不是无 TTY 的限制**，是管道 EOF；
+  // 2026-09-28 复核 P2-2 更正：此前测试注释把根因误记为「管道输入不被逐次消费」）。
+  // 故提供问答注入：按序取预置应答，绕开 stdin/EOF 时序，不改动任何落态与记账语义。
+  const injected = process.env.CONFIRM_DOC_TEST_ANSWERS !== undefined
+    ? String(process.env.CONFIRM_DOC_TEST_ANSWERS).split(',').map((s) => s.trim())
+    : null;
+  const rl = delegated || injected ? null : readline.createInterface({ input: process.stdin, output: process.stdout });
+  const ask = (q) => new Promise((res) => {
+    if (injected) {
+      process.stdout.write(q);
+      return res(injected.shift() ?? '');
+    }
+    return rl.question(q, res);
+  });
   let confirmed = 0;
   for (const doc of docs) {
     if (!DOC_RE.test(doc)) {

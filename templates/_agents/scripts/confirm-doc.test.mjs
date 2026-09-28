@@ -271,37 +271,48 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
     fs.rmSync(root, { recursive: true, force: true });
   }
   {
-    // 【复核 P2-2】单次调用落 N 份 → batch 相同 / seq 递增 / of=N。
-    // 该路径仅 TTY 可达（delegated 已被入口限为 1 份），而本测试环境无 TTY。做法：注入
-    // CONFIRM_DOC_TEST_TTY 让 isTTY 门放行（仅测试逃生门），并以管道 stdin 自动应答。
-    // 边界说明（复核 P2-2 收口的**诚实边界**）：无 TTY 时 readline 对**第二份**的提问会 unsettled
-    // （管道输入不被逐次消费），故本用例断言**首份**落账的调用事实（batch 非空 / seq=1 / **of=2**
-    // —— of 与 seq 在**每次写入前**即按本次调用总份数与已落份数确定，故首行已足以钉住「同批 + of=N」
-    // 语义）；第二份的 seq=2 与同 batch 由下方**纯逻辑断言**覆盖（同一实现、无 TTY 依赖）。
+    // 【复核 P2-2】单次调用落 N 份 → batch 相同 / seq 递增 1,2 / of=2 —— **端到端**验证 TTY 多文档路径。
+    // 该路径仅 TTY 可达（delegated 已被入口限为 1 份），故注入两个**仅测试用**逃生门：
+    //   CONFIRM_DOC_TEST_TTY=1      —— 放行 isTTY 判定（本环境无 TTY）
+    //   CONFIRM_DOC_TEST_ANSWERS    —— 按序注入问答应答（见下「为什么不能用管道 stdin」）
+    // 两者均不改动任何落态/记账语义。
+    //
+    // **为什么不能用 spawnSync 的 input 管道（2026-09-28 更正）**：此前本用例用 `input:'可以\n可以\n'`
+    // 并断言「首份」了事，注释把根因误记为「readline 对第二份提问会 unsettled / 管道输入不被逐次消费」。
+    // 经复现，真实机制是：spawnSync 的管道**一次性写完即关闭写端**，readline 在第一个 question 注册前
+    // 就已把第二行读入并丢弃，且 stdin 随即 EOF —— 第二个 question 永远等不到输入。**与「有无 TTY」无关**，
+    // 是「管道 EOF + 跨 await 边界的 question 注册时序」所致（嵌套回调版同样两问两答可用，加 await 即挂）。
     const root = mk2docs();
     const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-27-s.md', 'workflow/plans/2026-09-27-s.md'], {
-      cwd: root, encoding: 'utf8', input: '可以\n可以\n',
-      env: { ...process.env, CONFIRM_DOC_TEST_TTY: '1' },
+      cwd: root, encoding: 'utf8',
+      env: { ...process.env, CONFIRM_DOC_TEST_TTY: '1', CONFIRM_DOC_TEST_ANSWERS: '可以,可以' },
     });
     const ledN = fs.readFileSync(path.join(root, '.agents', 'confirmations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
-    const j0 = ledN[0];
-    check('S18c 单次调用落 2 份（TTY 多文档）→ 首份落账 of=2 / seq=1 / batch 非空（of 钉住「同批多份」语义）',
-      j0 && typeof j0.batch === 'string' && j0.batch.length > 0 && j0.seq === 1 && j0.of === 2 && j0.source === 'tty',
-      JSON.stringify({ stderr: String(r.stderr).slice(0, 200), ledger: ledN }));
+    const stI = fs.readFileSync(path.join(root, 'workflow', 'intents', '2026-09-27-s.md'), 'utf8');
+    const stP = fs.readFileSync(path.join(root, 'workflow', 'plans', '2026-09-27-s.md'), 'utf8');
+    check('S18c 单次调用落 2 份（TTY 多文档）端到端 → batch 相同 / seq 1,2 / of 均=2 / 两份都落态',
+      r.status === 0 && ledN.length === 2
+        && ledN[0].batch === ledN[1].batch && typeof ledN[0].batch === 'string' && ledN[0].batch.length > 0
+        && ledN[0].seq === 1 && ledN[1].seq === 2
+        && ledN[0].of === 2 && ledN[1].of === 2
+        && ledN[0].source === 'tty' && ledN[1].source === 'tty'
+        && stI.includes('状态: approved') && stP.includes('状态: approved'),
+      JSON.stringify({ status: r.status, stderr: String(r.stderr).slice(0, 300), ledger: ledN }));
     fs.rmSync(root, { recursive: true, force: true });
   }
   {
-    // 【复核 P2-2】同批多份的 **seq 递增 + batch 相同** 的纯逻辑断言（不依赖 TTY 逐次问答）：
-    // 直接以 applyTransition + appendLedger 复刻 TTY 多份写入路径的记账部分——这正是 check-loop
-    // 并录判据消费的字段来源。断言：两行 batch 相同、seq=1/2、of 均=2。
-    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'cd-batch-'));
-    const b = 'abc123';
-    appendLedger(root, { ts: 'T1', doc: 'workflow/a.md', stage: 'approved', fingerprint: 'a'.repeat(64), prev: 'draft', source: 'tty', batch: b, seq: 1, of: 2 });
-    appendLedger(root, { ts: 'T2', doc: 'workflow/b.md', stage: 'approved', fingerprint: 'b'.repeat(64), prev: 'draft', source: 'tty', batch: b, seq: 2, of: 2 });
-    const ledB = fs.readFileSync(path.join(root, '.agents', 'confirmations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
-    check('S18d 同批两行记账：batch 相同 / seq 1,2 / of 均=2（并录判据的字段来源）',
-      ledB[0].batch === ledB[1].batch && ledB[0].seq === 1 && ledB[1].seq === 2 && ledB[0].of === 2 && ledB[1].of === 2,
-      JSON.stringify(ledB));
+    // 【复核 P2-2】注入应答不足时，剩余文档按「未确认」跳过（不落态、不记账）——钉住注入语义的边界，
+    // 避免测试逃生门被误用成「无条件放行」。
+    const root = mk2docs();
+    const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-27-s.md', 'workflow/plans/2026-09-27-s.md'], {
+      cwd: root, encoding: 'utf8',
+      env: { ...process.env, CONFIRM_DOC_TEST_TTY: '1', CONFIRM_DOC_TEST_ANSWERS: '可以' }, // 只给一份应答
+    });
+    const led1 = fs.readFileSync(path.join(root, '.agents', 'confirmations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    const stP1 = fs.readFileSync(path.join(root, 'workflow', 'plans', '2026-09-27-s.md'), 'utf8');
+    check('S18d 注入应答不足 → 仅首份落态，次份按跳过处理（不落态不记账）',
+      led1.length === 1 && led1[0].seq === 1 && led1[0].of === 2 && stP1.includes('状态: draft'),
+      JSON.stringify({ status: r.status, ledger: led1 }));
     fs.rmSync(root, { recursive: true, force: true });
   }
 }

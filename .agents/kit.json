@@ -112,11 +112,11 @@
     },
     {
       "rel": ".agents/scripts/confirm-doc.mjs",
-      "sha256": "e81f87ddef57cd75e44a8dd3f41f6af3ad583771431351bb0f4167bb9fc6d5b2"
+      "sha256": "afc471783de03fdb9aa0e9f434b6861ac7ab73ad2147b7de8bf65373de5293a3"
     },
     {
       "rel": ".agents/scripts/confirm-doc.test.mjs",
-      "sha256": "9c67c1b7386224d334d0bb102590c7c4e9621fee06c31aae93c74e45fe2b4283"
+      "sha256": "79e320bdbf9bc007e1ec3edd9a6d1dad7beadcea8c58903a584ee50c28344f3e"
     },
     {
       "rel": ".agents/scripts/doctor.test.mjs",
