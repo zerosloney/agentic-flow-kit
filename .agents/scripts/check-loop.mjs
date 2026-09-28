@@ -804,12 +804,33 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
       return adopterState;
     };
     // ctx：注入给装户取数器的同步辅助（免其重复造轮子）
+    // **glob 逐字符转义**（自查修正）：首版用「先整体转义特殊字符、再 replace 星号」的写法，
+    // 实测 `src/**/*.ts` 匹配不到 `src/a/b/c.ts`、「**/*.md」匹配不到 `a/b/c.md`——因为 `**/`
+    // 在被替换前已被字符类转义破坏。改为逐字符状态机，语义明确：
+    //   `**/` → 任意层级（含零层）；`**` → 任意（可跨 /）；`*` → 段内任意（不跨 /）；`?` → 段内单字符
+    //   其余一律字面转义（故 `a.b.sql` 的点是字面点、`[`/`{` 也按字面处理——本 helper 不承诺
+    //   字符类 / 花括号展开，避免装户误以为支持完整 glob 语法；不支持即按字面匹配，行为可预测）
     const globToRegExp = (p) => {
-      const esc = String(p).replace(/[.+^${}()|[\]\\]/g, '\\$&');
-      return new RegExp('^' + esc.replace(/\*\*\//g, '(?:.*/)?').replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]') + '$');
+      const s = String(p);
+      let re = '';
+      for (let i = 0; i < s.length; i++) {
+        const c = s[i];
+        if (c === '*' && s[i + 1] === '*') {
+          if (s[i + 2] === '/') { re += '(?:.*/)?'; i += 2; } // `**/` 含零层
+          else { re += '.*'; i += 1; }                        // `**` 跨段
+        } else if (c === '*') re += '[^/]*';
+        else if (c === '?') re += '[^/]';
+        else re += c.replace(/[.+^${}()|[\]\\]/, '\\$&');
+      }
+      return new RegExp('^' + re + '$');
     };
+    // 遍历时**跳过重目录**（自查修正）：无忽略逻辑时 `ctx.glob('**/*')` 会走进 node_modules / .git，
+    // 既慢又会把依赖树的文件算进取数（对「我项目有多少个 X」这类指标是错的）。故默认剪枝：
+    // node_modules / .git / .agents/cache（本仓运行时缓存）。装户若确需数这些目录，请自行用 node:fs。
+    const WALK_SKIP = new Set(['node_modules', '.git', 'cache']);
     const walkFiles = (dir, out = [], rel = '') => {
       for (const e of readdirOrNull(dir) || []) {
+        if (WALK_SKIP.has(e)) continue;
         const abs = path.join(dir, e);
         const r = rel ? `${rel}/${e}` : e;
         let st = null;

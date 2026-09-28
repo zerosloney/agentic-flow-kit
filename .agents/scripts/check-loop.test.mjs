@@ -1431,6 +1431,53 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     rmfix(T);
   }
   {
+    // 【ctx.glob 语义】自查修正回归：`**/` 须含零层、可跨段；`*` 不跨 `/`
+    // （首版实现用「先转义后 replace 星号」，实测 `src/**/*.ts` 匹配不到 `src/a/b/c.ts`）
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', 'g.deep = g.deep\ng.flat = g.flat\ng.skip = g.skip\n');
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    fs.mkdirSync(path.join(T, 'src', 'a', 'b'), { recursive: true });
+    fs.mkdirSync(path.join(T, 'src', 'nested'), { recursive: true });
+    w(T, 'src/a/b/c.ts', 'x');
+    w(T, 'src/top.ts', 'x');
+    w(T, 'src/nested/deep.ts', 'x');
+    fs.mkdirSync(path.join(T, 'node_modules', 'pkg'), { recursive: true });
+    w(T, 'node_modules/pkg/dep.ts', 'x');
+    w(T, '.agents/metric-derivers.mjs', [
+      "export const derivers = {",
+      "  'g.deep': (ctx) => ctx.glob('src/**/*.ts').length,",
+      "  'g.flat': (ctx) => ctx.glob('src/*.ts').length,",
+      "  'g.skip': (ctx) => ctx.glob('**/*.ts').length,",
+      "};",
+      '',
+    ].join('\n'));
+    activePlan(T, 'glob', '\n{{g.deep}} {{g.flat}} {{g.skip}}\n');
+    const r = run(T);
+    const o = outOf(r);
+    check('检查16装户:ctx.glob 的 `**/` 含零层且跨段（src/**/*.ts 计 3）',
+      o.includes('g.deep') && o.includes('实时值 = 3'), `exit=${r.status}\n${o}`);
+    check('检查16装户:ctx.glob 的 `*` 不跨 /（src/*.ts 计 1）',
+      o.includes('g.flat') && o.includes('实时值 = 1'), `exit=${r.status}\n${o}`);
+    check('检查16装户:ctx.glob 剪枝 node_modules（**/*.ts 计 3，非 4）',
+      o.includes('g.skip') && o.includes('实时值 = 3'), `exit=${r.status}\n${o}`);
+    rmfix(T);
+  }
+  {
+    // 【ctx.glob 字面转义】点号须为字面（首版漏转义会误匹配）
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', 'g.lit = g.lit\n');
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    w(T, 'a.b.sql', 'x');
+    w(T, 'axb.sql', 'x');
+    w(T, '.agents/metric-derivers.mjs',
+      "export const derivers = { 'g.lit': (ctx) => ctx.glob('a.b.sql').length };\n");
+    activePlan(T, 'lit', '\n{{g.lit}}\n');
+    const r = run(T);
+    check('检查16装户:ctx.glob 点号按字面（a.b.sql 计 1，不含 axb.sql）',
+      outOf(r).includes('实时值 = 1'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
     // 【归属契约】装户取数模块必须归 owned——否则落回 managed，重演本单要修的缺陷本身
     // （sync 永久报「本地已改」+ doctor WARN + check-loop 因供应链防线静默停摆）
     const { isOwned } = await import('../../../src/profiles.mjs');
