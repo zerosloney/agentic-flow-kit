@@ -33,17 +33,23 @@
 # ── 新增指标（2026-09-28 adopter-derivers 起）────────────────────────────────
 # 分两层取数，**内置优先**：
 #   ① 引擎内置 8 个指标（下表）——装户零配置即用，不需要做任何事。
-#   ② 项目自有指标——写 `.agents/metric-derivers.mjs`（**owned**，sync 永不覆盖），
-#      导出 `derivers` 对象（指标名 → 取数函数），并在此表加同名一行。
-#      **后缀必须是 `.mjs`**（引擎只认这一个路径；写 `.cjs` 会被当作不存在，
-#      且 `.cjs` 不归 owned——若被误用会重演「登记表 owned 配引擎 managed」那类缺陷）。
+#   ② 项目自有指标——写 `.agents/metric-derivers.cjs`（**owned**，sync 永不覆盖），
+#      用 CommonJS 导出 `derivers` 对象（指标名 → 取数函数），并在此表加同名一行。
+#      **后缀必须是 `.cjs`、写法必须是 CommonJS**（`module.exports`）。
+#      为什么不用 `.mjs`：引擎用 `require()` 同步载入，而 `require(esm)` 仅在
+#      Node ≥20.19 / ≥22.12 可用——**实测 Node 18.20 / 20.18 / 22.11 全部
+#      ERR_REQUIRE_ESM**，而本仓 engines 声明 `>=18.0.0`。故 `.cjs` 是唯一
+#      全版本可用的形态（同步、零版本依赖）。
+#      旧的 `.mjs` 路径已弃用：若残留在盘上，检查 16 会**明确提示迁移**。
 #
-# 示例 `.agents/metric-derivers.mjs`：
-#     export const derivers = {
-#       'my.migrations': (ctx) => ctx.glob('backend/migrations/*.sql').length,
-#       'my.apiCount':   (ctx) => ctx.countFiles('src/api', (f) => f.endsWith('.controller.ts')),
+# 示例 `.agents/metric-derivers.cjs`：
+#     module.exports = {
+#       derivers: {
+#         'my.migrations': (ctx) => ctx.glob('backend/migrations/*.sql').length,
+#         'my.apiCount':   (ctx) => ctx.countFiles('src/api', (f) => f.endsWith('.controller.ts')),
+#       },
 #     };
-# ctx 提供（同步，免你重复造轮子；其余请自行 `import fs from 'node:fs'`）：
+# ctx 提供（同步，免你重复造轮子；其余请自行 `require('node:fs')`）：
 #     ctx.root                    仓库根绝对路径
 #     ctx.read(rel)               读文本文件（LF 归一），不存在返回 ''
 #     ctx.glob(pattern)           极简 glob（* / **），返回相对路径数组
@@ -60,7 +66,7 @@
 # 指标名与内置同名时：**内置优先**，你的定义被忽略（会出 advisory 明示）。
 #
 # 注：本检查**不设取数超时**——请让取数器保持轻量（秒级）。死循环会拖慢门禁。
-# 另：装户模块的「取数器」在引擎侧（check-loop.mjs，managed）；本表与 derivers.mjs 同归 owned。
+# 另：装户模块的「取数器」在引擎侧（check-loop.mjs，managed）；本表与 derivers.cjs 同归 owned。
 #
 # 注意：不登记 advisory 总数类指标——它由 check-loop 自身产出（检查 16 是其一部分），
 # 自引用会让「报告本身改变被报告的数」，产生不可稳定对账的循环。

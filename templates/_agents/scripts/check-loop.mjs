@@ -776,30 +776,51 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
     // 背景：登记表是 owned（装户自增指标），取数器却曾硬编码在本文件（managed）——装户一新增指标
     // 就报「无取数器」，唯一出路是改本文件，而那是 managed：sync 永久报「本地已改」+ doctor WARN
     // + 本脚本因供应链防线**跳过执行**（门禁静默停摆）。故改为分层：
-    //   ① 内置优先（行为与今完全一致，装户零配置可用）；② 未命中则查装户模块 `.agents/metric-derivers.mjs`
-    // **载入用 createRequire 同步**（实测：可同步载入 .mjs、返回非 Promise；语法错抛可捕获 SyntaxError），
-    // 故本脚本**无须改成 async 主线**——装户用 fs.readFileSync 即可读任意本地文件。契约要求同步函数
-    // 也与本检查「零网络、本地确定性」的前提一致（异步的唯一真实收益是网络/并发 IO，此处都不允许）。
+    //   ① 内置优先（行为与今完全一致，装户零配置可用）；② 未命中则查装户模块 `.agents/metric-derivers.cjs`
+    // **必须是 CJS（`.cjs` + module.exports）**（2026-09-28 跨版本实测修正）：
+    //   首版约定 `.mjs` 并用 `createRequire` 载入，在 Node v24.12 上实测可用（**故本机没暴露问题**）；
+    //   但跨版本实测（真下 18.20.5 / 20.18.0 / 22.11.0 二进制跑）**三者全部 `ERR_REQUIRE_ESM`**——
+    //   `require(esm)` 只在 Node ≥20.19 / ≥22.12 默认可用，Node 18 从未支持。而本仓 engines 写
+    //   `>=18.0.0`、CI 矩阵跑 18/22 → **装户取数功能在 CI 目标版本上完全不可用**（fail-loud 正常、
+    //   不崩，但功能不工作）。故改用 CJS：`createRequire` 载入 `.cjs` 在 18/20/22/24 全线可用，
+    //   且**仍是同步**（无须把本脚本改成 async 主线）。契约要求同步函数也与本检查「零网络、
+    //   本地确定性」的前提一致（异步的唯一真实收益是网络/并发 IO，此处都不允许）。
     // **失败一律响亮、绝不静默降级**（沿 claim-exceeds-fix「假绿比红危险」与本检查自身语法错教训）：
     // 若载入失败就「只用内置指标」，装户会看到「引用了 my.metric → 未登记」，看起来像**自己忘了登记**，
     // 而真因是模块坏了——他会去 registry 反复核对，问题永远查不到。故载入/调用失败均出明确 WARN。
-    const adopterModRel = '.agents/metric-derivers.mjs';
+    const adopterModRel = '.agents/metric-derivers.cjs';
+    // 旧路径（首版 .mjs）：若存在则**明确提示已改用 .cjs**，避免装户对着「无取数器」查不出所以然
+    const adopterLegacyRel = '.agents/metric-derivers.mjs';
     let adopterState = null; // { ok:true, derivers } | { ok:false, errors:[...] } —— 懒载入 + 单次运行内缓存
     const loadAdopterDerivers = () => {
       if (adopterState) return adopterState;
       const abs = path.join(ROOT, adopterModRel);
-      if (!fs.existsSync(abs)) { adopterState = { ok: true, derivers: {} }; return adopterState; } // 缺失=正常态，零告警
+      if (!fs.existsSync(abs)) {
+        // 常见误写：仍用首版的 .mjs 路径 → 给出可操作的迁移指引（而非任其对着「无取数器」猜）
+        if (fs.existsSync(path.join(ROOT, adopterLegacyRel))) {
+          adopterState = {
+            ok: false,
+            errors: [`${adopterModRel} 不存在，但发现旧版路径 ${adopterLegacyRel}——该路径已于 2026-09-28 弃用（\`require(esm)\` 在 Node 18/22 不可用，实测 ERR_REQUIRE_ESM）。请改名为 ${adopterModRel} 并把写法改为 CommonJS：\`module.exports = { derivers: { ... } }\``],
+          };
+          return adopterState;
+        }
+        adopterState = { ok: true, derivers: {} }; // 缺失=正常态，零告警
+        return adopterState;
+      }
       try {
         const req = createRequire(import.meta.url);
         const mod = req(abs);
-        const d = mod && mod.derivers;
+        // CJS / ESM 双兼容取导出：CJS 走 module.exports.derivers；若装户误用了 ESM 语法而环境恰好
+        // 支持（新 Node 的 require(esm)），default 里也可能挂 derivers——两处都认，避免假阴性。
+        const d = (mod && mod.derivers) || (mod && mod.default && mod.default.derivers);
         if (!d || typeof d !== 'object' || Array.isArray(d)) {
-          adopterState = { ok: false, errors: [`${adopterModRel} 未导出 \`derivers\` 对象（实际导出形态：${d === undefined ? '无 derivers 键' : Array.isArray(d) ? 'array' : typeof d}）——载入失败不降级，请修正模块`] };
+          adopterState = { ok: false, errors: [`${adopterModRel} 未导出 \`derivers\` 对象（实际导出形态：${d === undefined ? '无 derivers 键' : Array.isArray(d) ? 'array' : typeof d}）——载入失败不降级，请用 \`module.exports = { derivers: { ... } }\``] };
           return adopterState;
         }
         adopterState = { ok: true, derivers: d };
       } catch (e) {
-        adopterState = { ok: false, errors: [`${adopterModRel} 载入失败：${String(e && e.message ? e.message : e).split('\n')[0]}——载入失败不降级（静默降级会让你误以为「忘了登记」而非「模块坏了」）`] };
+        const hint = /ERR_REQUIRE_ESM/.test(String(e && e.code)) ? `（该错误表示模块被当成了 ESM——本契约要求 CommonJS：文件后缀 .cjs 且用 \`module.exports = { derivers: {...} }\`）` : '';
+        adopterState = { ok: false, errors: [`${adopterModRel} 载入失败：${String(e && e.message ? e.message : e).split('\n')[0]}${hint}——载入失败不降级（静默降级会让你误以为「忘了登记」而非「模块坏了」）`] };
       }
       return adopterState;
     };

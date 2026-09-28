@@ -1284,7 +1284,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     const T = mkfix();
     w(T, '.agents/metric-claims.txt', MC2);
     seedLedger(T, ['{"doc":"a","stage":"done"}']);
-    w(T, '.agents/metric-derivers.mjs', "export const derivers = { 'my.custom': () => 7 };\n");
+    w(T, '.agents/metric-derivers.cjs', "module.exports = { derivers: { 'my.custom': () => 7  } };\n");
     activePlan(T, 'ok', '\n值 {{my.custom}}\n');
     const r = run(T);
     check('检查16装户:模块存在 + 自定义指标 → 实时值 = 7（取数正确）',
@@ -1296,7 +1296,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     const T = mkfix();
     w(T, '.agents/metric-claims.txt', MC2);
     seedLedger(T, ['{"doc":"a","stage":"done"}']);
-    w(T, '.agents/metric-derivers.mjs', "export const derivers = { 'my.custom': () => { \n"); // 故意不闭合
+    w(T, '.agents/metric-derivers.cjs', "module.exports = { derivers: { 'my.custom': () => { \n"); // 故意不闭合
     activePlan(T, 'syn', '\n值 {{my.custom}}\n');
     const r = run(T);
     const o = outOf(r);
@@ -1304,7 +1304,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     // 「无对应取数器」那条的提示语里（「见上方「…载入失败」条目」），只用它匹配会**在真实条目
     // 消失时仍然通过**（变异自验实测：静默吞掉 emit 行后该断言不翻红）。故用 `- [WARN 装户取数器载入失败]`。
     check('检查16装户:模块语法错 → 响亮出账「装户取数器载入失败」（独立成条，明示文件）',
-      o.includes('- [WARN 装户取数器载入失败]') && o.includes('metric-derivers.mjs') && !o.includes('未登记该指标'),
+      o.includes('- [WARN 装户取数器载入失败]') && o.includes('metric-derivers.cjs') && !o.includes('未登记该指标'),
       `exit=${r.status}\n${o}`);
     check('检查16装户:模块语法错 → 引擎自身不因装户代码崩溃（无裸 SyntaxError 崩栈）',
       r.status === 0 && !/Illegal|at ModuleLoader|at compileSourceTextModule/.test(o),
@@ -1316,7 +1316,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     const T = mkfix();
     w(T, '.agents/metric-claims.txt', MC2);
     seedLedger(T, ['{"doc":"a","stage":"done"}']);
-    w(T, '.agents/metric-derivers.mjs', "export const derivers = { 'my.custom': () => { throw new Error('boom-xyz'); } };\n");
+    w(T, '.agents/metric-derivers.cjs', "module.exports = { derivers: { 'my.custom': () => { throw new Error('boom-xyz'); } }  };\n");
     activePlan(T, 'thr', '\n值 {{my.custom}}\n');
     const r = run(T);
     check('检查16装户:取数器抛异常 → 响亮出账且明示错误',
@@ -1328,12 +1328,12 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     const T = mkfix();
     w(T, '.agents/metric-claims.txt', 'my.str = my.str\nmy.nan = my.nan\nmy.prom = my.prom\n');
     seedLedger(T, ['{"doc":"a","stage":"done"}']);
-    w(T, '.agents/metric-derivers.mjs', [
-      "export const derivers = {",
+    w(T, '.agents/metric-derivers.cjs', [
+      "module.exports = { derivers: {",
       "  'my.str': () => 'not-a-number',",
       "  'my.nan': () => NaN,",
       "  'my.prom': () => Promise.resolve(1),",
-      "};",
+      "} };",
       '',
     ].join('\n'));
     activePlan(T, 'types', '\n{{my.str}} {{my.nan}} {{my.prom}}\n');
@@ -1362,7 +1362,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     const T = mkfix();
     w(T, '.agents/metric-claims.txt', 'ledger.lines = ledger.lines\n');
     seedLedger(T, ['{"doc":"a","stage":"done"}', '{"doc":"b","stage":"done"}']);
-    w(T, '.agents/metric-derivers.mjs', "export const derivers = { 'ledger.lines': () => 999 };\n");
+    w(T, '.agents/metric-derivers.cjs', "module.exports = { derivers: { 'ledger.lines': () => 999  } };\n");
     activePlan(T, 'prio', '\n台账 {{ledger.lines}}\n');
     const r = run(T);
     const o = outOf(r);
@@ -1377,7 +1377,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     const T = mkfix();
     w(T, '.agents/metric-claims.txt', MC2);
     seedLedger(T, ['{"doc":"a","stage":"done"}']);
-    w(T, '.agents/metric-derivers.mjs', "export const other = {};\n");
+    w(T, '.agents/metric-derivers.cjs', "module.exports = {};\n");
     activePlan(T, 'noexp', '\n{{my.custom}}\n');
     const r = run(T);
     check('检查16装户:模块无 derivers 导出 → 响亮出账「载入失败」（独立成条，不静默）',
@@ -1385,11 +1385,27 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     rmfix(T);
   }
   {
+    // 【旧路径迁移提示】残留首版 .mjs 文件时，须明示「已改用 .cjs」——
+    // 否则装户对着「无取数器」查不出所以然（跨版本实测：require(esm) 在 Node 18/22 不可用，
+    // 故首版 .mjs 契约在 CI 目标版本上根本不工作，必须给出可操作的迁移指引）
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', MC2);
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    w(T, '.agents/metric-derivers.mjs', "export const derivers = { 'my.custom': () => 7 };\n"); // 旧路径
+    activePlan(T, 'legacy', '\n{{my.custom}}\n');
+    const r = run(T);
+    const o = outOf(r);
+    check('检查16装户:残留旧 .mjs → 明示「已改用 .cjs」并给出 CJS 写法',
+      o.includes('装户取数器载入失败') && o.includes('metric-derivers.mjs') && o.includes('.cjs') && o.includes('module.exports'),
+      `exit=${r.status}\n${o}`);
+    rmfix(T);
+  }
+  {
     // 【未登记指标仍走原路】装户定义了函数但没在 registry 登记 → 报「未登记」
     const T = mkfix();
     w(T, '.agents/metric-claims.txt', 'ledger.lines = ledger.lines\n');
     seedLedger(T, ['{"doc":"a","stage":"done"}']);
-    w(T, '.agents/metric-derivers.mjs', "export const derivers = { 'my.custom': () => 7 };\n");
+    w(T, '.agents/metric-derivers.cjs', "module.exports = { derivers: { 'my.custom': () => 7  } };\n");
     activePlan(T, 'unreg', '\n{{my.custom}}\n');
     const r = run(T);
     check('检查16装户:函数有但 registry 未登记 → 报「未登记」（两处都要）',
@@ -1405,11 +1421,11 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     w(T, 'backend/migrations/001.sql', 'x');
     w(T, 'backend/migrations/002.sql', 'x');
     w(T, 'backend/other.txt', 'x');
-    w(T, '.agents/metric-derivers.mjs', [
-      "export const derivers = {",
+    w(T, '.agents/metric-derivers.cjs', [
+      "module.exports = { derivers: {",
       "  'my.sql': (ctx) => ctx.glob('backend/migrations/*.sql').length,",
       "  'my.read': (ctx) => ctx.read('backend/migrations/001.sql').length,",
-      "};",
+      "} };",
       '',
     ].join('\n'));
     activePlan(T, 'ctx', '\n{{my.sql}} {{my.read}}\n');
@@ -1443,12 +1459,12 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     w(T, 'src/nested/deep.ts', 'x');
     fs.mkdirSync(path.join(T, 'node_modules', 'pkg'), { recursive: true });
     w(T, 'node_modules/pkg/dep.ts', 'x');
-    w(T, '.agents/metric-derivers.mjs', [
-      "export const derivers = {",
+    w(T, '.agents/metric-derivers.cjs', [
+      "module.exports = { derivers: {",
       "  'g.deep': (ctx) => ctx.glob('src/**/*.ts').length,",
       "  'g.flat': (ctx) => ctx.glob('src/*.ts').length,",
       "  'g.skip': (ctx) => ctx.glob('**/*.ts').length,",
-      "};",
+      "} };",
       '',
     ].join('\n'));
     activePlan(T, 'glob', '\n{{g.deep}} {{g.flat}} {{g.skip}}\n');
@@ -1469,8 +1485,8 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     seedLedger(T, ['{"doc":"a","stage":"done"}']);
     w(T, 'a.b.sql', 'x');
     w(T, 'axb.sql', 'x');
-    w(T, '.agents/metric-derivers.mjs',
-      "export const derivers = { 'g.lit': (ctx) => ctx.glob('a.b.sql').length };\n");
+    w(T, '.agents/metric-derivers.cjs',
+      "module.exports = { derivers: { 'g.lit': (ctx) => ctx.glob('a.b.sql').length  } };\n");
     activePlan(T, 'lit', '\n{{g.lit}}\n');
     const r = run(T);
     check('检查16装户:ctx.glob 点号按字面（a.b.sql 计 1，不含 axb.sql）',
@@ -1483,7 +1499,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     const T = mkfix();
     w(T, '.agents/metric-claims.txt', MCB); // 只有内置指标
     seedLedger(T, ['{"doc":"a","stage":"done"}']);
-    w(T, '.agents/metric-derivers.mjs', "export const derivers = { 'x.y': () => { \n"); // 坏模块
+    w(T, '.agents/metric-derivers.cjs', "module.exports = { derivers: { 'x.y': () => { \n"); // 坏模块
     activePlan(T, 'noise', '');
     const r = run(T);
     check('检查16装户:坏模块 + 无装户指标 → 不出账（无判定依据不产噪声）',
@@ -1495,7 +1511,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     const T = mkfix();
     w(T, '.agents/metric-claims.txt', 'ledger.lines = ledger.lines\nledger.lines = ledger.lines\nledger.lines = ledger.lines\n');
     seedLedger(T, ['{"doc":"a","stage":"done"}']);
-    w(T, '.agents/metric-derivers.mjs', "export const derivers = { 'ledger.lines': () => 999 };\n");
+    w(T, '.agents/metric-derivers.cjs', "module.exports = { derivers: { 'ledger.lines': () => 999  } };\n");
     activePlan(T, 'dedup', '\n台账 {{ledger.lines}}\n');
     const r = run(T);
     const n = (outOf(r).match(/被忽略/g) || []).length;
@@ -1517,8 +1533,8 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
       fs.symlinkSync(path.join(T, 'loopdir'), path.join(T, 'loopdir', 'inner', 'back'), 'dir');
       linked = true;
     } catch { /* 无建链接权限（未开开发者模式）→ 跳过该断言 */ }
-    w(T, '.agents/metric-derivers.mjs',
-      "export const derivers = { 'g.loop': (ctx) => ctx.glob('loopdir/**/*.txt').length };\n");
+    w(T, '.agents/metric-derivers.cjs',
+      "module.exports = { derivers: { 'g.loop': (ctx) => ctx.glob('loopdir/**/*.txt').length  } };\n");
     activePlan(T, 'loop', '\n{{g.loop}}\n');
     const r = run(T);
     const o16 = outOf(r);
@@ -1544,22 +1560,22 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
       ({ isOwned } = await import('../../../src/profiles.mjs'));
     } catch { /* 装户环境无包源 src/ → 走下面的降级断言 */ }
     if (typeof isOwned === 'function') {
-      check('检查16装户:isOwned(.agents/metric-derivers.mjs) 为真（与登记表同归 owned）',
-        isOwned('.agents/metric-derivers.mjs') === true);
+      check('检查16装户:isOwned(.agents/metric-derivers.cjs) 为真（与登记表同归 owned）',
+        isOwned('.agents/metric-derivers.cjs') === true);
       check('检查16装户:isOwned(.agents/metric-claims.txt) 仍为真（未被本单破坏）',
         isOwned('.agents/metric-claims.txt') === true);
       check('检查16装户:check-loop.mjs 仍归 managed（引擎不被误划入 owned）',
         isOwned('.agents/scripts/check-loop.mjs') === false);
     } else {
       // **装户环境降级断言**（复核 P1 更正）：装户没有包源 `src/profiles.mjs`，故改验**可观测事实**——
-      // 若 `metric-derivers.mjs` 已存在于盘上，它必须**不**记在 kit.json 的 managed 侧（在 managed 即为错，
+      // 若 `metric-derivers.cjs` 已存在于盘上，它必须**不**记在 kit.json 的 managed 侧（在 managed 即为错，
       // 那正是本单要修的缺陷形态）。未安装该模块时跳过（无判定依据的行不产出噪声）。
       // 路径：本文件在 `<root>/.agents/scripts/`，故 kit.json 在 `../kit.json`（= `<root>/.agents/kit.json`）。
       let verdict = null;
       let detail = '';
       try {
         const kit = JSON.parse(fs.readFileSync(new URL('../kit.json', import.meta.url), 'utf8'));
-        const rel = '.agents/metric-derivers.mjs';
+        const rel = '.agents/metric-derivers.cjs';
         const inManaged = (kit.managed || []).some((f) => f.rel === rel);
         const inOwned = (kit.owned || []).some((f) => f.rel === rel);
         verdict = !inManaged;
@@ -1570,7 +1586,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
       if (verdict === null) {
         check('检查16装户:装户环境无法判定归属（无 kit.json）→ 跳过（不产噪声）', true);
       } else {
-        check('检查16装户:装户环境——metric-derivers.mjs 不在 managed 侧（不在即正确）',
+        check('检查16装户:装户环境——metric-derivers.cjs 不在 managed 侧（不在即正确）',
           verdict === true, detail);
       }
     }

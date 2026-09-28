@@ -96,7 +96,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "ddc5ab5bd737dc5069e891d15b8eee27f255901fc123710c3a5f5985a50dfc90"
+      "sha256": "3f20112b1ab8fbb17a7846c025cb37e1c50a50f37fffc94b1e6a04829acc3ed0"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -104,7 +104,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "5cb3c597450ced1e7d335f3b5c790158f152742c62b8c9fce363440f9fce1844"
+      "sha256": "db18e901dc6843345d30ba370a331363b7ef1a1ee198a232c47ef1f309d59c9b"
     },
     {
       "rel": ".agents/scripts/commit-check-trigger.test.mjs",
@@ -334,7 +334,7 @@
     },
     {
       "rel": ".agents/metric-claims.txt",
-      "sha256": "06ed50765c65221d3a441834fac37a773343b6302f3f25eee3d6f532f55c38ed"
+      "sha256": "e668589d817d589b9f81ba73460c0bd024d6d34203c9f1fa36bb9019d5e8b3ce"
     },
     {
       "rel": ".agents/notes/runtime-env.md",
@@ -386,7 +386,7 @@
     },
     {
       "rel": "workflow/regression-checklist.md",
-      "sha256": "3b19edbcca1034eda75ebad691a12d9c692d03c88055129824e929ab8533b942"
+      "sha256": "9a6735baf222adf5415d893929a18774d8ab1bdaa83d0907428d76a124703d9f"
     },
     {
       "rel": "workflow/specs/_TEMPLATE.md",
