@@ -334,7 +334,7 @@
     },
     {
       "rel": ".agents/metric-claims.txt",
-      "sha256": "9c4f5526248265389b004a84ea036d9f1436c78532c83046c8863190c25a9385"
+      "sha256": "46251ad36ad40e86f32c92e22c1d5a67da536452cdc822126246e029e55f3f03"
     },
     {
       "rel": ".agents/notes/runtime-env.md",
