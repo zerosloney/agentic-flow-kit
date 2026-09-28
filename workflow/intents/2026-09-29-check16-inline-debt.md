@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-29
 模块: pipeline
 备注: 2026-09-28 双轴审查 4 条判断性 smell 收口：检查 16 内联债（Divergent Change / countDocs 重复 / scanFiles16 口径分裂）+ confirm-doc TTY 测试逃生门信任边界声明
-确认指纹: ef03e8b890a7f3b6
+确认指纹: c174a298050708ff
 ---
 # INTENT — check16-inline-debt
 
@@ -52,16 +52,22 @@
 
 ## 验收标准（可测试）
 
-- [ ] 口径单源：签名扫描与取数共享同一文档集定义（或差异显式声明并有理由），测试钉住「未跟踪档不进（或进）签名扫描」——git 仓库模式用例（证据：测试用例名 + 输出）
-- [ ] `countDocs` 重复消除：过滤链一处定义或派生，源码检索无第二份 `.md ∧ 数字前缀 ∧ tracked` 实现（证据：检索 0 处 + 取数既有用例全绿）
-- [ ] 检查 16 拆出后 `npm test` 全绿 + 真装环境 shipped 套件全绿（证据：两处运行输出）
-- [ ] sync 后双源一致：`source-sync-check --diff` 0 差异、`check-ledger` 全对齐（含新 managed 件入账）（证据：命令输出）
-- [ ] TTY 逃生门处置有书面结论（spec 专节 + 代码注释同步），与 AGENTS「永不伪装 TTY 行」表述一致（证据：spec 节引用）
-- [ ] `check-loop` exit 0 无新增告警；检查 1-15 输出与迁移前逐字节一致（证据：前后输出 diff 为空）
+- [x] 口径单源：签名扫描与取数共享同一文档集定义（或差异显式声明并有理由），测试钉住「未跟踪档不进（或进）签名扫描」——git 仓库模式用例（证据：`check-loop.test.mjs` 场景 91 双向用例（子目录 + 根级双侧，P2-1 收口后变异自验恰 1 红）；根级无数字前缀约束的差异在 spec §2 显式声明）
+- [x] `countDocs` 重复消除：过滤链一处定义或派生，源码检索无第二份 `.md ∧ 数字前缀 ∧ tracked` 实现（证据：复核 #3 CONFIRMED——全仓仅 `check-loop.mjs` `docFiles` 一处，`countDocs` 仅余 1 条历史注释；取数用例全绿）
+- [x] 检查 16 拆出后 `npm test` 全绿 + 真装环境 shipped 套件全绿（证据：`npm test` 557/0（7fc02da）+ 收口后全部套件通过（ad2117a）；真装 `/tmp/tmp.CSJjraTdbm`（临时 `flow-kit init`）：`check-loop.test` 121/0、`confirm-doc.test` 26/0、check-loop 实跑 exit 0）
+- [x] sync 后双源一致：`source-sync-check --diff` 0 差异、`check-ledger` 全对齐（含新 managed 件入账）（证据：包源/装副本 68 对无差异；`managed 81 份 全对齐`，新件 `.agents/scripts/check-metric-claims.mjs` 入账 kit.json:118）
+- [x] TTY 逃生门处置有书面结论（spec 专节 + 代码注释同步），与 AGENTS「永不伪装 TTY 行」表述一致（证据：spec §3「成本位移」论证 + `confirm-doc.mjs` 信任边界注释（沿 check8 口径）；复核 #4 CONFIRMED）
+- [x] `check-loop` exit 0 无新增告警；检查 1-15 输出与迁移前逐字节一致（证据：复核 #1/#2/#7 CONFIRMED——迁移等价门 diff 空（初跑 1 行差异归因 worktree CRLF 环境伪影）、check-loop.mjs 仅 2 hunk（import + 检查 16 块替换））
 
 ## 确认与复核
 
 - 确认日期：2026-09-29（对话委托代录，用户原话「可以」）
 - 确认人：用户（对话内一句「可以」即确认）
 - 确认范围：三件套全文逐件（intent / spec / plan）
-- 复核：L2 推荐独立复核（结构迁移 + 口径变更，回归面大）
+- 复核：L2 独立复核**已执行**（`independent-reviewer` 子代理，独立上下文，detached worktree、未动主工作区；基准 `e18d28e` → `7fc02da`）——**7 项全部 CONFIRMED**，verdict **0 P0 / 0 P1 / P2×2（全部采纳并修复，`ad2117a`）**：
+  - P2-1 根级 tracked-only 无测试承重（变异去除后全绿）→ 场景 91 扩根级用例，修复后变异自验恰 1 红（122/1→还原 123/0）
+  - P2-2 spec ctx 符号计数 8→9（漏 `inSet`）→ 已修正并留痕
+  - 复核者变异自验：子目录 tracked 去除 → 1 红；`ttyForced` 还原单条件 → 1 红（S18e）
+  - 迁移等价性的复核确认：内联块与新模块逐段相同，仅 countDocs 删除 / scanFiles16 改造（T2 声明内）/ `ctx`→`deriverCtx` 纯改名三类差异；子目录迭代 readdir 序改 `docFiles` `.sort()` 为输出序确定化（等价门实测无差）
+- 关单复验（2026-09-29）：`npm test` 全部套件通过；sync 后 `doctor` 12 PASS / 0 WARN / 0 FAIL；`check-ledger` 81 份全对齐；check-loop exit 0 且输出与实现提交时点逐字节一致
+- 未验证范围（据实声明）：① Node 18/20/22 真机重跑 shipped 套件（依赖 CI 矩阵覆盖——新模块仅 import `node:*` 且无版本敏感 API，`createRequire` 装户载入沿用 adopter-derivers 已跨版本验过的写法）；② POSIX 实机（仅 Windows 实跑；新增代码无平台分支）
