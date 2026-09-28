@@ -1,14 +1,18 @@
 # 量化断言「指标签名」单源登记表（check-loop 检查 16 共读）
 #
 # 背景（2026-09-28 claim-exceeds-fix）：结论文档里跨文档引用的量化值若各自手写，
-# 极易在事实变更后不同步——本仓已实证：「台账 67 行」在 A 处改了、B 处没改，
+# 极易在事实变更后不同步——本仓已实证：同一指标在一处改了、另一处没改，
 # 而「五处文件同步」这句话本身无人核对（该单真正被门禁抓住的方式，是事后人工复核）。
 # 本表把「哪个指标、当前取值多少」收敛为单源，供 check-loop 检查 16 对账。
 #
 # 用法：活跃态文档（draft/approved/open）引用某个已登记指标时，按**签名形态**书写，
-# 检查 16 会实时取数比对。签名形态：{{指标名}}（双花括号包裹指标名）。
-#   例：本仓台账共 {{ledger.total}} 行，其中无 batch 字段 {{ledger.noBatch}} 行。
+# 检查 16 会实时取数比对。签名形态：\{\{指标名\}\}（双花括号包裹指标名，小写点分）。
+#   例（下面是「讲语法」，故加反斜杠转义；**写真断言时不加反斜杠**）：
+#     本仓台账共 \{\{ledger.lines\}\} 行，其中无 batch 字段 \{\{ledger.linesWithoutBatch\}\} 行。
 # 写作时**不要手写数字**——写完跑 check-loop，工具会把实时值填进提示里供你替换。
+# 转义按「逐个出现」生效：同一行里 \{\{x\}\} 是示意、\{\{y\}\} 是真断言时，只豁免前者。
+# （本例的指标名曾写成 ledger.total / ledger.noBatch 两个**并不存在**的名字——本表不被
+#   检查 16 扫描（它是 .txt 非 .md），故这类笔误不会被自动抓到，只能靠复核。已据实更正。）
 #
 # 为什么用显式签名而非全文数字扫描（据实说明，非偷懒）：
 #   本仓活跃文档中「N 行 / N 条 / N 份」类表述有数十处，绝大多数是**历史叙述**
@@ -22,7 +26,9 @@
 #   ledger.lines          台账 .agents/confirmations.jsonl 的非空行数
 #   ledger.linesWithoutBatch   台账中不含 "batch" 字段的行数（schema 演进前历史行）
 #   ledger.linesWithBatch      台账中含 "batch" 字段的行数
-#   docs.count.<sub>      workflow/<sub> 下文档份数（排除 _TEMPLATE.md）；sub ∈ intents/specs/plans/incidents
+#   docs.count.<sub>      workflow/<sub> 下文档份数——**与文档扫描同口径**：以数字开头的
+#                         .md、排除 _TEMPLATE.md、且仓库模式下只计 HEAD 已跟踪件
+#                         （故并行会话的未跟踪新档不计入）；sub ∈ intents/specs/plans/incidents
 #   docs.count.all        上述四类合计
 # 新增指标：在此加一行 + 在 check-loop 检查 16 的 `derivers` 里加同名实现（缺实现 = fail-loud）
 #

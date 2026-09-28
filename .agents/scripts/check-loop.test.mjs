@@ -1213,16 +1213,56 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   }
   {
     // 【取数正确性】docs.count.plans 应计活跃+终态全部 plans（排除 _TEMPLATE）
+    // 注：取数器与 docFiles() 同口径——须**以数字开头**（命名规范强制 `YYYY-MM-DD-` 前缀），
+    // 故 fixture 文件名必须合规（首版用 a.md/b.md 使取数为 0，暴露的是用例不合规而非判据错）。
     const T = mkfix();
     w(T, '.agents/metric-claims.txt', 'docs.count.plans = docs.count.plans\n');
     seedLedger(T, ['{"doc":"a","stage":"done"}']);
-    w(T, 'workflow/plans/a.md', PLAN('a', '状态: draft\n级别: L1'));
-    w(T, 'workflow/plans/b.md', PLAN('b', '状态: done\n级别: L1'));
+    w(T, 'workflow/plans/2026-09-01-a.md', PLAN('a', '状态: draft\n级别: L1'));
+    w(T, 'workflow/plans/2026-09-02-b.md', PLAN('b', '状态: done\n级别: L1'));
     w(T, 'workflow/plans/_TEMPLATE.md', PLAN('t', '状态: draft\n级别: L1'));
-    w(T, 'workflow/plans/c.md', PLAN('c', '状态: draft\n级别: L1', '\n共 {{docs.count.plans}} 份\n'));
+    w(T, 'workflow/plans/2026-09-03-c.md', PLAN('c', '状态: draft\n级别: L1', '\n共 {{docs.count.plans}} 份\n'));
     const r = run(T);
     check('检查16:取数正确——docs.count.plans 计 3 份（排除 _TEMPLATE，含终态）',
       outOf(r).includes('实时值 = 3'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 【复核 P1 回归】转义按「逐个出现」而非整行——同一行的真签名不得被转义位藏住
+    // 复核实证：首版「行内任一 `\{{` 即整行跳过」可被这样绕过：
+    //   `… \{{a.b}} 示意… {{ledger.lines}} 未回填` → 整行静默放过（0 告警）。
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', MC);
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    w(T, 'workflow/plans/p9.md', PLAN('p9', '状态: draft\n级别: L1',
+      '\n讲语法 \\{{a.b}} 示意，但本行也有真断言 {{ledger.lines}} 未回填\n'));
+    const r = run(T);
+    check('检查16:同行「转义示意 + 真未回填」→ 真签名仍报（转义按逐个出现，不按整行）',
+      outOf(r).includes('指标待回填'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 【复核 P2 回归】形态不符的签名不得静默漏过（首版只认严格小写点分 → 笔误零告警）
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', MC);
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    w(T, 'workflow/plans/p10.md', PLAN('p10', '状态: draft\n级别: L1', '\n引用 {{Ledger.Lines}} 笔误\n'));
+    const r = run(T);
+    check('检查16:形态不符（大写点分笔误）→ 出账「指标形态」（不静默漏过）',
+      outOf(r).includes('指标形态'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 【复核 P2 回归】形态检查不得误伤装户模板占位符（全大写 SCREAMING_CASE 仍豁免）
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', MC);
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    const S = (n) => '{{' + n + '}}';
+    w(T, 'workflow/plans/p11.md', PLAN('p11', '状态: draft\n级别: L1',
+      '\n模板 ' + S('BUILD_CMD') + ' 与 ' + S('BOARD_PORT') + '\n'));
+    const r = run(T);
+    check('检查16:形态检查不误伤装户模板占位符（全大写仍豁免）',
+      r.status === 0 && !outOf(r).includes('指标'), `exit=${r.status}\n${outOf(r)}`);
     rmfix(T);
   }
 }

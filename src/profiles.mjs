@@ -6,10 +6,14 @@
 // 配置的项目自动跳过，不 fail-closed 误拦。none = 不配置（项目日后自填）。
 export const HOSTS = {
   zcode: { dir: '.zcode', localOnly: true },
-  opencode: { dir: '.opencode', localOnly: false },
-  trae: { dir: '.trae', localOnly: false },
+  opencode: { dir: '.opencode', localOnly: false, commandPrefix: 'wf-' },
+  trae: { dir: '.trae', localOnly: false, commandPrefix: 'wf-' },
   omp: { dir: '.omp', localOnly: true },
 };
+// commandPrefix = 该宿主的命令层薄适配文件名（= 宿主命令名）统一前缀，2026-09-28 opencode-cmd-wf-prefix
+// 与 trae 对齐后单源：命令名不再裸占宿主顶层命名空间（撞宿主内置/第三方命令无从规避）；缺该字段的宿主
+// 表示只有角色层适配、不参与 commands 权威源映射（zcode/omp）。sync-hosts（包源侧）与 doctor §7.x
+// （装户侧）两份实现均从本表派生，新增命令层宿主只改这一处。
 
 const ESLINT_CONFIGS = [
   'eslint.config.js', 'eslint.config.mjs', 'eslint.config.cjs',
@@ -78,10 +82,14 @@ export function pickStackVars(stackKey) {
 
 // 两态文件模型的归属判定：managed（随包升级）之外皆 owned（项目内容，sync 永不覆盖）
 // local-pre-commit 是项目门禁挂载点——一旦接线即含项目内容，按 owned 起步（旧台账里若在 managed，改动后 sync 也会保守跳过）
+// metric-claims.txt 是**项目自持的指标登记表**（2026-09-28 metric-claim-gate 复核 P2 更正）：装户按
+// 设计要在其中新增自有指标，若按 managed 记账则 sync 每次都报「本地已改、升级时需合并」，且将来包侧
+// 新增内置指标**永远下不来**（台账停在包侧基线）。故归 owned——随包附带一份起步内容，此后归项目。
 export function isOwned(rel) {
   return rel === 'AGENTS.md' || rel === '.gitattributes' || rel.startsWith('workflow/') || rel.startsWith('wiki/')
     || rel.startsWith('.agents/notes/')
     || rel === '.agents/workflow-modules.txt' || rel === '.agents/rule-budgets.txt'
+    || rel === '.agents/metric-claims.txt'
     || rel === '.agents/hooks/local-pre-commit';
 }
 

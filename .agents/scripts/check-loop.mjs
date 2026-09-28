@@ -743,9 +743,17 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
   const mcFile = path.join(ROOT, '.agents', 'metric-claims.txt');
   if (fs.existsSync(mcFile)) {
     // 取数器闭集：全部本地确定性、零网络。新增指标须同时改本表与 metric-claims.txt（缺一 fail-loud）
+    // **取数须与扫描面同口径（复核 P2 更正）**：文档扫描走 `docFiles()`（仓库模式只取 HEAD **tracked**
+    // 内容，见 isTracked），首版 `countDocs` 却直接 readdir 数盘面——实测本仓 `docs.count.plans` 会
+    // 把并行会话的**未跟踪**新档算进去（盘面 60 / HEAD 59），于是「签名填对了」却是别的读者复现不出的
+    // 数。故此处同样以 isTracked 过滤，保证「扫描看得到的文档集 == 取数统计的文档集」。
     const countDocs = (sub) => {
       const dir = path.join(ROOT, 'workflow', sub);
-      return (readdirOrNull(dir) || []).filter((f) => f.endsWith('.md') && f !== '_TEMPLATE.md').length;
+      return (readdirOrNull(dir) || []).filter((f) => {
+        // 与 docFiles() 同口径：.md + 以数字开头（排除 _TEMPLATE.md 等非实例件）+ tracked
+        if (!f.endsWith('.md') || !/^\d/.test(f)) return false;
+        return isTracked(path.relative(ROOT, path.join(dir, f)).split(path.sep).join('/'));
+      }).length;
     };
     const ledgerLines = () => {
       const p = path.join(ROOT, '.agents', 'confirmations.jsonl');
@@ -794,11 +802,13 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
         // （构建命令 / 看板端口 / 项目名三类，由 init 渲染替换，非本检查对象）
         // ——不收窄会对这些合法的模板占位符产生大量假阳性（实测：本仓 plans 内 11 处）。
         // **转义（2026-09-28，本检查在自己的文档上抓到该需求）**：讲语法 / 举例 / 引用告警原文的
-        // 文档必须在签名前加反斜杠（`\{{ledger.lines}}`）表示「此处是示意、非断言」——否则本检查
+        // 文档在签名前加反斜杠（`\{{ledger.lines}}`）表示「此处是示意、非断言」——否则本检查
         // 会把「文档在教怎么用签名」误判为「作者忘了回填」。选显式转义而非「同句含『如/例』等标记词
         // 即豁免」的启发式：后者会按措辞松紧漂移，且作者能无意中触发豁免而漏过真断言。
-        if (/\\\{\{/.test(line)) return; // 该行声明了转义 → 整行不作签名扫描（callback 内用 return 退出本行）
-        for (const m of line.matchAll(/\{\{([a-z][a-z0-9]*(?:\.[a-z0-9]+)+)\}\}/g)) {
+        // **转义按「逐个出现」生效、不按整行**（复核自查 P1 更正）：首版实现是「行内出现任一 `\{{`
+        // 即整行跳过」，实测可被这样藏住真断言——`… \{{a.b}} 示意… {{ledger.lines}} 未回填` 整行静默
+        // 放过。故改为用带后顾的否匹配排除转义位，同行的真签名照常出账。
+        for (const m of line.matchAll(/(?<!\\)\{\{([a-z][a-z0-9]*(?:\.[a-z0-9]+)+)\}\}/g)) {
           const name = m[1];
           if (!declared.has(name)) {
             warnings.push(`- [WARN 指标未登记] ${rel}:${i + 1} 引用 {{${name}}} 但 .agents/metric-claims.txt 未登记该指标（未登记＝无从对账）`);
@@ -807,6 +817,17 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
           const real = derivers[name]();
           // 判据：签名**必须**被替换为实时值——留有 `{{...}}` 即视为未回填（写作期占位，关单前须落实）
           warnings.push(`- [WARN 指标待回填] ${rel}:${i + 1} {{${name}}} 实时值 = ${real}——请把签名替换为该数字（留签名＝未回填）`);
+        }
+        // **形态不符的签名也不静默放过（复核 P2 更正）**：首版只认严格小写点分形态，于是
+        // `{{Ledger.Lines}}` / `{{ ledger.lines }}`（含空格）这类**明显本意是签名**的写法
+        // 既不匹配、也不出账——静默漏过，且绕开了「未登记」的 fail-loud。此处补一道：
+        // 非转义的 `{{...}}` 中，凡**不是**严格形态、且**不是**装户模板占位符（全大写 SCREAMING_CASE）
+        // 的，一律提示形态不符（作者才能立刻发现笔误）。
+        for (const m of line.matchAll(/(?<!\\)\{\{([^{}]+)\}\}/g)) {
+          const raw = m[1];
+          if (/^[a-z][a-z0-9]*(?:\.[a-z0-9]+)+$/.test(raw)) continue; // 严格形态，上面已处理
+          if (/^[A-Z][A-Z0-9_]*$/.test(raw)) continue; // 装户模板占位符（init 渲染对象，非本检查面）
+          warnings.push(`- [WARN 指标形态] ${rel}:${i + 1} \`{{${raw}}}\` 不是合法签名形态（应为小写点分，如 {{ledger.lines}}）——若本意是量化断言，请改正形态；若只是举例，请加反斜杠转义`);
         }
       });
     }

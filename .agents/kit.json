@@ -75,10 +75,6 @@
       "sha256": "865b11645bcc0a6395e12188f9eff28f711cebb98fd3c5a599ad81edb9ddfc4c"
     },
     {
-      "rel": ".agents/metric-claims.txt",
-      "sha256": "bcdb199c4ebe61c1a69243c176405089bb516b73571b0b40ca6cb39864f79bea"
-    },
-    {
       "rel": ".agents/roles/implementer.md",
       "sha256": "6b679949a2b3d5ca7f1ed9d6dbeb2af5e899b4443c11d87fd31a1e83a14eb904"
     },
@@ -100,7 +96,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "e4656e157a9e7a0629d1827c836d733e2a94e4e3c4803a1d943e4021ae809535"
+      "sha256": "81edf1fd00c0eff573aff072e654f0bfcbf0c5e2a2647be794d23a6087feb14e"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -108,7 +104,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "7219cd53d9921345f9bbc73d083a88db82f7a3a7ea52d94c6b4871b3ad1289d8"
+      "sha256": "71a552e828c239065d618ed59d52de8c7a754641f7033b994b93befebb4400e8"
     },
     {
       "rel": ".agents/scripts/commit-check-trigger.test.mjs",
@@ -329,8 +325,40 @@
   ],
   "owned": [
     {
+      "rel": ".agents/hooks/commit-check.config.json",
+      "sha256": "c52fca656886381656865423297a8a233e3965ec98e7580cc98ec400b079fc36"
+    },
+    {
+      "rel": ".agents/hooks/local-pre-commit",
+      "sha256": "ca855027bd8d33535f3fa18b48a2612e4a0c76ea8633e62d73a290ff392f0537"
+    },
+    {
+      "rel": ".agents/metric-claims.txt",
+      "sha256": "9c4f5526248265389b004a84ea036d9f1436c78532c83046c8863190c25a9385"
+    },
+    {
+      "rel": ".agents/notes/runtime-env.md",
+      "sha256": "5f02aa1dbe39c56d3742cab930ddeb2c49778da2c6875af7a89119d143daccc4"
+    },
+    {
+      "rel": ".agents/rule-budgets.txt",
+      "sha256": "453bfb91a9304dd056b43ece92d6fc6d3d780f2e43b5ebc1e8fd11f37de2dcad"
+    },
+    {
+      "rel": ".agents/settings.json",
+      "sha256": "d1be55d7f5e5f349a8bf9806209aa9e14baa0e14d901b166012e90737d404c2a"
+    },
+    {
+      "rel": ".agents/workflow-modules.txt",
+      "sha256": "d03593598f6b0495ebc650019c474da0d6538da06c6f58ccc00bd5a9cdc760f1"
+    },
+    {
       "rel": "AGENTS.md",
       "sha256": "faf8f54e96d7fce7f0ff924b8681ebc4f2f1ea65e6437a742259964035cd3313"
+    },
+    {
+      "rel": "wiki/知识沉淀总览.html",
+      "sha256": "246c67b476ff1017a209112cec70cafacfef9dfde5fb96b2a028c6364f7dcd59"
     },
     {
       "rel": "wiki/drafts-archive/README.md",
@@ -339,10 +367,6 @@
     {
       "rel": "wiki/INDEX.md",
       "sha256": "9078d815a8a7eb07770939dc699e4175d6f6861fd688cac2db48e3abfe917e64"
-    },
-    {
-      "rel": "wiki/知识沉淀总览.html",
-      "sha256": "246c67b476ff1017a209112cec70cafacfef9dfde5fb96b2a028c6364f7dcd59"
     },
     {
       "rel": "workflow/incidents/_TEMPLATE.md",
@@ -362,35 +386,11 @@
     },
     {
       "rel": "workflow/regression-checklist.md",
-      "sha256": "db64356b328507b13afd96cc54a4f9bd792726670240f39d497c2155f08fec43"
+      "sha256": "d45b607f25fc89a0e197cd2c6f569d20263325b09c4db09254258d92e93d4e10"
     },
     {
       "rel": "workflow/specs/_TEMPLATE.md",
       "sha256": "3d0e06303b174813496fa9abdf04e143eba716abce507e0d8b906d2b8acfa931"
-    },
-    {
-      "rel": ".agents/hooks/local-pre-commit",
-      "sha256": "ca855027bd8d33535f3fa18b48a2612e4a0c76ea8633e62d73a290ff392f0537"
-    },
-    {
-      "rel": ".agents/notes/runtime-env.md",
-      "sha256": "5f02aa1dbe39c56d3742cab930ddeb2c49778da2c6875af7a89119d143daccc4"
-    },
-    {
-      "rel": ".agents/rule-budgets.txt",
-      "sha256": "453bfb91a9304dd056b43ece92d6fc6d3d780f2e43b5ebc1e8fd11f37de2dcad"
-    },
-    {
-      "rel": ".agents/workflow-modules.txt",
-      "sha256": "d03593598f6b0495ebc650019c474da0d6538da06c6f58ccc00bd5a9cdc760f1"
-    },
-    {
-      "rel": ".agents/settings.json",
-      "sha256": "d1be55d7f5e5f349a8bf9806209aa9e14baa0e14d901b166012e90737d404c2a"
-    },
-    {
-      "rel": ".agents/hooks/commit-check.config.json",
-      "sha256": "c52fca656886381656865423297a8a233e3965ec98e7580cc98ec400b079fc36"
     }
   ]
 }
