@@ -96,7 +96,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "376456bd7b0ea7713a97785b3ddfe0054f3f93d9d43d494fcb0c2935a3a6d641"
+      "sha256": "8de4ce12352c14413971ef7703f1425b7c7f22580fa0355b3db4c235938857e7"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -104,7 +104,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "a1858af97339022b0375f9769407941f321b68646e27c7a9fa8fadb94870e89f"
+      "sha256": "e12302af9c9266bc4fba7d89ffc7efc340c160747e2bfddb36f928342770fe74"
     },
     {
       "rel": ".agents/scripts/commit-check-trigger.test.mjs",

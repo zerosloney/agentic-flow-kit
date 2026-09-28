@@ -30,16 +30,27 @@
 //  13. 常驻面体积预算(超限=warning;判定单源 rule-budget.sh——经 sh 调用,
 //      无 sh 环境静默跳过:advisory 级且 pre-commit 侧在 git 钩子 sh 环境照常硬拦)
 //  14. 新 done 的 spec/plan 须在 git 历史里出现过 `状态: approved`(确认环节留痕,2026-09-22;恒 advisory 永不升级 hard)
-//  15. 确认指纹对账(2026-09-27 起:approved/done 须 confirm-doc.mjs 确认指纹+台账配对,缺=hard-block;存量豁免;
+//  15. 确认指纹对账(2026-09-27 起:approved/done 须 confirm-doc.mjs 确认指纹+台账配对,缺=hard-block;
 //      两形态——TTY 亲手 / --delegated 对话委托代录,台账 source 如实区分,配对判据与 source 无关)
-//      + incidents 覆盖(2026-09-27 gate-coverage:fixed/closed 须配对,自 2026-09-28 起,存量 13 份全豁免;
-//      open=起草态不加门;不支持 open→closed 单跳——confirm-doc 状态机强制经 fixed)
+//      **受管准入 = 两条件取或(2026-09-28 改锚;此前仅「自报日期 ≥ 生效日」单条件——
+//      新档只要把日期写早即整段跳过判定,incident 2026-09-28-confirm-gate-effective-date-anchor 实证)**:
+//      ① 该 doc 在台账中有合法跳转行(stage∈approved/done/fixed/closed/superseded/cancelled,append-only
+//         取末次)——「确认确实发生过」的机器事实,作者不可手填;
+//      ② 自报日期(日期/发现/文件名兜底)≥ 生效日——覆盖「新档完全没跑 confirm-doc」的漏网面
+//         (此类文档无台账行,仅靠 ① 会误判为存量豁免)。
+//      两条件皆不满足 = 存量豁免(生效日前既有、从未走过确认门,不追溯)。
+//      改锚收益:把「确认过却把日期写早以逃掉对账」这条攻破路径堵死(条件 ① 独立于自报日期成立);
+//      生效日:docs 2026-09-27 / incidents 2026-09-28(两档其余判据共用)。
+//      + incidents 覆盖(2026-09-27 gate-coverage:fixed/closed 须配对;open=起草态不加门;
+//      不支持 open→closed 单跳——confirm-doc 状态机强制经 fixed)
 //      + 放弃态覆盖(2026-09-27 closing-coverage:superseded/cancelled 入配对集,confirm-doc --to 唯一通道)
 //      + 四终态内容绑定(2026-09-27 audit-gate-hardening;生效锚=台账行 ts≥2026-09-28——同日 p2-batch
 //      自文档自报日期改锚:旧日期文档晚关单也绑定,3 份失配存量 ts 均 09-27 天然豁免):
 //      按 prev 复原跳转前文本重算 sha256 与台账全量比对,不符=hard「确认内容漂移」;状态行保分隔符换值
 //      (非规范格式不误伤);台账行缺 prev 降级 warning;关单编辑顺序新约定:勾验/回填先于关单确认,
 //      confirm-doc 是最后一次写入)
+//      + 并录批次审计子检查(2026-09-27 confirm-gate-one-per-call:台账同 quote 多份 delegated 聚组
+//      可见=warning「确认并录」——存量并录如实可数,confirm-doc 现已拒绝多份并录)
 //      + 并录批次审计子检查(2026-09-27 confirm-gate-one-per-call:台账同 quote 多份 delegated 聚组
 //      可见=warning「确认并录」——存量并录如实可数,confirm-doc 现已拒绝多份并录)
 //
@@ -547,11 +558,18 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
   }
 }
 
-// --- 15. 确认指纹对账 [hard-block]（2026-09-26 confirm-gate-machine；2026-09-27 confirm-gate-delegated 两形态；生效 2026-09-27 起，存量豁免）---
+// --- 15. 确认指纹对账 [hard-block]（2026-09-26 confirm-gate-machine；2026-09-27 confirm-gate-delegated 两形态；
+//     生效日锚 2026-09-28 改台账 ts——此前锚取自文档自报「日期/发现」，新档只要把日期写早即整段跳过判定，
+//     incident 2026-09-28-confirm-gate-effective-date-anchor 实证）---
 // 确认两形态（confirm-doc.mjs）：TTY 亲手键入「可以」/ --delegated 对话委托代录（用户对话内明确放行后
 // AI 代录，台账行如实记 source=chat-delegated + quote 原话，永不伪装 TTY）。intents/specs/plans 凡
-// approved/done（生效日起新建）须有 confirm-doc 产生的 frontmatter 确认指纹 + 台账（.agents/confirmations.jsonl）
-// 配对行——配对判据 doc/stage/fingerprint 三键，与 source 无关；台账不存在视为空台账（全拦）。
+// approved/done 须有 confirm-doc 产生的 frontmatter 确认指纹 + 台账（.agents/confirmations.jsonl）
+// 配对行——配对判据 doc/stage/fingerprint 三键，与 source 无关。
+// **生效日锚 = 台账 ts（2026-09-28 起）**：受管准入 = 该 doc 在台账中有合法跳转行（stage ∈ approved/done/
+// fixed/closed/superseded/cancelled，append-only 取末次）；无台账行 = 存量豁免（不追溯）。自报日期
+// （日期/发现/文件名）不再参与门禁判定——它可被作者手填，把「门是否生效」的决定权交给被约束对象本身
+// 是自举漏洞；台账行是「确认确实发生过」的唯一机器事实。docs 与 incidents 共用同一锚（原 incidents
+// 独立生效日 2026-09-28 常量退役：台账起算日 = docs 生效日，两档等价）。
 // 台账坏行容忍跳过（审计件，jsonl 追加式）；frontmatter 存 16 位、台账存 64 位，按前 16 位配对。
 {
   const EFFECTIVE = '2026-09-27';
@@ -564,7 +582,7 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
     }
   }
   // incidents 侧覆盖（2026-09-27 gate-coverage）：fixed/closed 为已确认态（open = 起草态不加门——
-  // maintain.md 创建即对话确认的既有口径），配对自 2026-09-28 起（存量无台账全豁免）
+  // maintain.md 创建即对话确认的既有口径）
   // 放弃态覆盖（2026-09-27 closing-coverage）：superseded/cancelled 入配对集——confirm-doc --to 是唯一
   // 合法产生通道（cancelled 自 draft/approved/open/fixed；superseded 自 approved/done/fixed/closed），
   // 此前手改 frontmatter 即出账的口子收死
@@ -574,18 +592,28 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
     plans: ['approved', 'done', 'superseded', 'cancelled'],
     incidents: ['fixed', 'closed', 'superseded', 'cancelled'],
   };
+  // 合法跳转 stage 集（台账行「确认确实发生过」的判据；revert-draft / revert-open 类回退注记行不算）
+  const VALID_STAGES = new Set(['approved', 'done', 'fixed', 'closed', 'superseded', 'cancelled']);
   for (const [sub, confirmedSet] of Object.entries(CONFIRMED_BY_SUB)) {
     for (const doc of docFiles(sub)) {
       const st = fmGet(doc, '状态');
       if (!confirmedSet.includes(st)) continue;
       const base = path.basename(doc);
+      const rel = path.relative(ROOT, doc).split(path.sep).join('/');
+      // 受管准入 = 两条件取或（2026-09-28 改锚）：
+      //   ① 台账中有该 doc 的合法跳转行——「确认确实发生过」的机器事实；它独立于自报日期成立，
+      //      故堵死「确认过却把日期写早以逃掉对账」这条攻破路径（本 incident 的核心缺陷）；
+      //   ② 自报日期 ≥ 生效日——覆盖「新档完全没跑 confirm-doc」的漏网面（此类无台账行，
+      //      仅靠 ① 会被误判为存量豁免而静默放行）。
+      // 两条件皆不满足 = 存量豁免（生效日前既有、从未走确认门，不追溯）。
+      const docEntries = ledger.filter((e) => e && e.doc === rel && VALID_STAGES.has(e.stage));
+      const eff = sub === 'incidents' ? '2026-09-28' : EFFECTIVE;
       let d = fmGet(doc, '日期') || fmGet(doc, '发现');
       if (!d) d = /^\d{4}-\d{2}-\d{2}$/.test(base.slice(0, 10)) ? base.slice(0, 10) : '';
-      const eff = sub === 'incidents' ? '2026-09-28' : EFFECTIVE;
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || d < eff) continue;
-      const rel = path.relative(ROOT, doc).split(path.sep).join('/');
+      const dateManaged = /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= eff;
+      if (!docEntries.length && !dateManaged) continue; // 存量豁免
       const fp = fmGet(doc, '确认指纹');
-      const ok = !!fp && ledger.some((e) => e && e.doc === rel && e.stage === st
+      const ok = !!fp && docEntries.some((e) => e.stage === st
         && typeof e.fingerprint === 'string' && e.fingerprint.startsWith(fp));
       if (!ok) {
         blockers.push(`- [确认未对账] ${base} 状态 ${st} 无用户确认记录——AI 不得代确认，用户在终端跑 node .agents/scripts/confirm-doc.mjs ${rel} 后重试`);

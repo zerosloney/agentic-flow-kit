@@ -520,9 +520,11 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
 }
 {
   const T = mkfix();
+  // 豁免理由（2026-09-28 锚改台账 ts 后）：**台账无行** ⇒ 存量未受管，与文档自报日期无关。
+  // 本场景构造的正是「日期早 + 无台账」——换锚前后结论一致，但理由已从「日期早于生效日」变为「无台账行」。
   w(T, 'workflow/intents/2026-09-26-old15.md', INTENT('old15', '状态: approved\n级别: L1\n日期: 2026-09-26'));
   w(T, 'workflow/plans/2026-09-26-old15.md', PLAN('old15', '状态: draft\n级别: L1'));
-  expectOk('检查15:生效日前存量 approved 无指纹 → 豁免 exit 0', T);
+  expectOk('检查15:存量 approved 无台账行 → 豁免 exit 0', T);
   rmfix(T);
 }
 
@@ -702,8 +704,8 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
 // ---- 场景 55-56:检查 4 引用扫描收窄活跃态（2026-09-27 audit-gate-hardening）----
 {
   const T = mkfix();
-  // 日期取生效日前（2026-09-26）：superseded 现入 15 配对集（closing-coverage），生效日前的终态档免配对，
-  // 场景焦点保持在「终态退出引用扫描」本身
+  // 日期取生效日前（2026-09-26）：superseded 现入 15 配对集（closing-coverage），无台账行 ⇒ 免配对
+  // （2026-09-28 锚改台账 ts 后，豁免理由 = 无台账行），场景焦点保持在「终态退出引用扫描」本身
   w(T, 'workflow/intents/2026-09-26-refterm.md', INTENT('refterm', '状态: superseded\n级别: L1\n日期: 2026-09-26', '\n引用 .agents/scripts/ghost-gone.mjs\n'));
   w(T, 'workflow/plans/2026-09-26-refterm.md', PLAN('refterm', '状态: superseded\n级别: L1'));
   const r = run(T);
@@ -874,6 +876,80 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     check('检查15:revert-draft 注记行不参与批次聚组（双 done 同 quote 若聚组应报 2 份——加注记行后仍恰 2 份）',
       r.status === 0 && (outOf(r).match(/确认并录/g) || []).length === 1 && outOf(r).includes('2 份') && !outOf(r).includes('ghost'),
       `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+}
+
+// ---- 场景 67-71:检查 15 受管准入两条件取或（2026-09-28 incident confirm-gate-effective-date-anchor）----
+// 换锚前：受管准入仅「自报日期 ≥ 生效日」——新档把日期写早即整段跳过判定（确认门静默不开）。
+// 换锚后：受管 = ①台账有合法跳转行 ∨ ②自报日期 ≥ 生效日；两者皆不满足才豁免（存量）。
+// ①独立于自报日期成立 → 堵死「确认过却写早日期逃掉对账」；②保留 → 兜住「新档完全没跑 confirm-doc」。
+// 本块自包含构造（不复用他块作用域内的 mkDoneFixture，避免跨块引用）。
+{
+  const mkAnchorFixture = (T, date, tamper, opt = {}) => {
+    const ts = opt.ts || '2026-09-28T02:00:00.000Z';
+    const body = `\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n`;
+    const pre = `---\n状态: approved\n级别: L1\n日期: ${date}\n确认指纹: ${'a'.repeat(16)}\n---\n# INTENT — anchor\n${body}`;
+    const fp = computeFingerprint(pre);
+    // tamper 只污染 done 落盘文本（不进指纹底稿）——复刻「done 确认后篡改正文」
+    w(T, `workflow/intents/${date}-anchor.md`,
+      `---\n状态: done\n级别: L1\n日期: ${date}\n确认指纹: ${fp.slice(0, 16)}\n---\n# INTENT — anchor\n${body}${tamper || ''}`);
+    w(T, `workflow/plans/${date}-anchor.md`, PLAN('anchor', '状态: draft\n级别: L1'));
+    return { rel: `workflow/intents/${date}-anchor.md`, fp, ts };
+  };
+
+  {
+    // 核心回归（本 incident 的触发条件）：自报日期早于生效日，但台账 ts 在生效日之后 → 仍须 hard 拦。
+    // 换锚前此场景被 `d < eff` 跳过判定（静默放行）；换锚后按台账事实纳入受管。
+    const T = mkfix();
+    const d1 = mkAnchorFixture(T, '2026-09-20'); // 自报日期 2026-09-20（早于任何生效日）
+    writeLedger(T, [{ ts: d1.ts, doc: d1.rel, stage: 'done', fingerprint: 'e'.repeat(64), prev: 'approved', source: 'tty' }]); // 指纹不符
+    expectHard('检查15:自报日期早但台账 ts 锚后 + 指纹不符 → hard 确认未对账（换锚前被静默跳过）', T, '确认未对账');
+    rmfix(T);
+  }
+  {
+    // 存量豁免须**两条件皆不满足**：日期早（2026-09-26 < 生效日）且台账无行 → 免配对。
+    // 注意「日期新但无台账」**不**豁免（那是新档漏走确认门，见上一条核心回归的反面）——
+    // 两条件取或的语义即：任一条命中即受管，故豁免档必须两条都不命中。
+    const T = mkfix();
+    w(T, 'workflow/intents/2026-09-26-noledge.md', INTENT('noledge', '状态: approved\n级别: L1\n日期: 2026-09-26'));
+    w(T, 'workflow/plans/2026-09-26-noledge.md', PLAN('noledge', '状态: draft\n级别: L1'));
+    expectOk('检查15:日期早于生效日且台账无行 → 存量豁免（两条件皆不满足）', T);
+    rmfix(T);
+  }
+  {
+    // 两条件取或的**幂等性**：日期早（本会被日期条件豁免）但台账有行 → 台账条件独立成立 → 仍受管。
+    // 这是本 incident 的核心收益：确认过就逃不掉对账，与自报日期无关。
+    const T = mkfix();
+    const d1 = mkAnchorFixture(T, '2026-09-20');
+    writeLedger(T, [{ ts: '2026-09-28T02:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'tty' }]);
+    expectOk('检查15:日期早但台账行齐（指纹配对+绑定一致）→ 受管且通过（台账条件独立成立）', T);
+    rmfix(T);
+  }
+  {
+    // 重确认：同一 doc+stage 台账多行 → 取末次 ts 判锚（append-only 末次生效；不能因首行早于锚而误豁免）
+    const T = mkfix();
+    const d1 = mkAnchorFixture(T, '2026-09-28', '确认后被篡改的正文行\n');
+    writeLedger(T, [
+      { ts: '2026-09-27T10:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'tty' }, // 早期行（锚前）
+      { ts: '2026-09-28T02:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'tty' }, // 末次行（锚后）
+    ]);
+    expectHard('检查15:同 doc+stage 台账多行取末次 ts → 篡改仍 hard 确认内容漂移（重确认场景）', T, '确认内容漂移');
+    rmfix(T);
+  }
+  {
+    // 非合法跳转行（revert-open / revert-draft 类回退注记）**不构成本 incident 的核心命题**——
+    // 为把该属性与日期条件隔离，此处取日期早于生效日（条件②不命中），使受管准入**只**取决于台账条件：
+    //   · 若注记行被判为「合法跳转行」→ 台账条件命中 → 受管 → 无指纹 → hard 拦（期望：不拦，故失败）
+    //   · 期望：注记行被 VALID_STAGES 过滤 → 台账条件不命中 → 两条件皆不满足 → 存量豁免
+    // 注记行不是「确认确实发生过」的证据，不能被当成台账行把文档拖进受管面
+    // （否则回退操作反而制造 hard 拦——本 incident 自己就吃过这个亏，见 incident 备注「落态注记」）。
+    const T = mkfix();
+    const d1 = mkAnchorFixture(T, '2026-09-26');
+    writeLedger(T, [
+      { ts: '2026-09-28T02:00:00.000Z', doc: d1.rel, stage: 'revert-open', fingerprint: 'n/a', prev: 'approved', source: 'chat-delegated', quote: '回退注记' },
+    ]);
+    expectOk('检查15:仅 revert-open 注记行（非合法跳转 stage）→ 不构成台账条件，日期早 → 存量豁免 exit 0', T);
     rmfix(T);
   }
 }
