@@ -95,6 +95,14 @@
       "sha256": "5ff4b3f46fab815e6be256f010188511d558b6ce9bcb3a769325914e673c5274"
     },
     {
+      "rel": ".agents/scripts/check-ledger.mjs",
+      "sha256": "36b62f473d96868c6153717afce84c66c3a313267d68556eba09a3f0b1201cdb"
+    },
+    {
+      "rel": ".agents/scripts/check-ledger.test.mjs",
+      "sha256": "c7d8b1586615ce983e58add841b551e5c7ac1135986b494b517651b3af6378bc"
+    },
+    {
       "rel": ".agents/scripts/check-loop.mjs",
       "sha256": "3f20112b1ab8fbb17a7846c025cb37e1c50a50f37fffc94b1e6a04829acc3ed0"
     },
@@ -300,7 +308,7 @@
     },
     {
       "rel": ".githooks/pre-commit",
-      "sha256": "49fba2f0eb697ee9e3f2e2ca3524c550d28c8ec942827f7728939ca78a94d585"
+      "sha256": "606fffe225f7bfd2284dde9da321135e9be3855ad8baf247f7cea09caa90555c"
     },
     {
       "rel": ".githooks/pre-merge-commit",
@@ -354,7 +362,7 @@
     },
     {
       "rel": "AGENTS.md",
-      "sha256": "faf8f54e96d7fce7f0ff924b8681ebc4f2f1ea65e6437a742259964035cd3313"
+      "sha256": "c5e5a4a47378a4c08a6ebdf412508932d8c10f9f295d136d4c7fdbdc924bd679"
     },
     {
       "rel": "wiki/知识沉淀总览.html",
