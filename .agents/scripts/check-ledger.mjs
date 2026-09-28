@@ -21,9 +21,14 @@ export function ledgerDrift(target = process.cwd()) {
   } catch (e) {
     return { skipped: false, fatal: `kit.json 解析失败：${e.message}`, modified: [], gone: [], total: 0, version: '?' };
   }
+  if (!Array.isArray(kit.managed)) {
+    // fail-loud（独立复核 P2-3，2026-09-28）：JSON 合法但 managed 缺失/非数组时静默「全对齐」= 假放，
+    // 同 doctor §4 的 Array.isArray 显式判口径，台账结构坏了必须响
+    return { skipped: false, fatal: 'kit.json managed 缺失或非数组', modified: [], gone: [], total: 0, version: kit.version };
+  }
   const modified = [];
   const gone = [];
-  const managed = kit.managed || [];
+  const managed = kit.managed;
   for (const f of managed) {
     const p = path.join(target, f.rel);
     if (!fs.existsSync(p)) { gone.push(f.rel); continue; }

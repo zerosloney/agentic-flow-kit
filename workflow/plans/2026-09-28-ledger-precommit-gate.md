@@ -11,9 +11,9 @@
 
 ## 改动面
 
-- `templates/_agents/scripts/check-ledger.mjs`（新增）：`ledgerDrift(target)` 读 `.agents/kit.json` managed 列表，LF 归一 sha256（同 doctor §4 口径）逐份比对盘面工作树，返回 `{skipped|fatal|modified[]|gone[]|total|version}`；CLI（isMain 探测）skip/fatal/漂移/缺失分行输出，非零即阻断
-- `templates/_agents/scripts/check-ledger.test.mjs`（新增）：S1 全对齐 / S2 内容漂移 / S3 缺失 / S4 CRLF×LF 归一 / S5 无 kit.json skip / S6 解析失败 fatal / S7-S8 CLI 出口码（spawnSync fixture cwd）/ S9 真实仓 baseline（装户环境 SKIP 不计失败）
-- `templates/_githooks/pre-commit`：头部门禁序注释补「managed 台账快检(增量)」；双源一致性块后插入台账快检块（同触发条件 grep，node 直调 + 失败提示 sync，沿双源块先例）
+- `templates/_agents/scripts/check-ledger.mjs`（新增）：`ledgerDrift(target)` 读 `.agents/kit.json` managed 列表，LF 归一 sha256（同 doctor §4 口径）逐份比对盘面工作树，返回 `{skipped|fatal|modified[]|gone[]|total|version}`；CLI（isMain 探测）skip/fatal/漂移/缺失分行输出，非零即阻断；独立复核 P2-3 采纳：managed 缺失/非数组 fatal（fail-loud）
+- `templates/_agents/scripts/check-ledger.test.mjs`（新增）：S1 全对齐 / S2 内容漂移 / S3 缺失 / S4 CRLF×LF 归一 / S5 无 kit.json skip / S6 解析失败 fatal / S6b managed 非数组 fatal（P2-3）/ S7-S8 CLI 出口码（spawnSync fixture cwd）/ S9 真实仓 baseline（装户环境 SKIP 不计失败）
+- `templates/_githooks/pre-commit`：头部门禁序注释补「managed 台账快检」；双源一致性块后插入台账快检块（node 直调 + 失败提示 sync，沿双源块先例；独立复核 P2-2 采纳后改包源环境恒跑，不设暂存 grep）
 - 装副本（`node bin/flow-kit.mjs sync` 刷新）：`.agents/scripts/check-ledger{,.test}.mjs`、`.githooks/pre-commit`、`.agents/kit.json`
 - 根 `AGENTS.md` + `templates/AGENTS.md`：门禁序括注补「双源一致性 / managed 台账快检」
 

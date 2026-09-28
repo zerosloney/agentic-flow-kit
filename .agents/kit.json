@@ -96,11 +96,11 @@
     },
     {
       "rel": ".agents/scripts/check-ledger.mjs",
-      "sha256": "36b62f473d96868c6153717afce84c66c3a313267d68556eba09a3f0b1201cdb"
+      "sha256": "6088f04a32ac779cbcbe61bdf1c9798756c7f6eb83c9508471814f0008d6e0df"
     },
     {
       "rel": ".agents/scripts/check-ledger.test.mjs",
-      "sha256": "c7d8b1586615ce983e58add841b551e5c7ac1135986b494b517651b3af6378bc"
+      "sha256": "f867d94644c8db83dd807cada921f3d800718320793c026ab4eb68bf897922f3"
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
@@ -308,7 +308,7 @@
     },
     {
       "rel": ".githooks/pre-commit",
-      "sha256": "606fffe225f7bfd2284dde9da321135e9be3855ad8baf247f7cea09caa90555c"
+      "sha256": "9e471ae976225b10649c1f28fc19f5da33b20e615b09ea227fe8bf11d5f0a999"
     },
     {
       "rel": ".githooks/pre-merge-commit",

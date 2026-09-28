@@ -14,7 +14,7 @@
 
 **变更后**：双源一致性之后插入「managed 台账快检」增量门禁：
 
-- 触发：包源环境（`templates/_agents/` 存在）且暂存触及 `templates/_agents/` 或 `.agents/`（与双源门禁同款 grep）；装户环境自然跳过
+- 触发：包源环境（`templates/_agents/` 存在）即恒跑，不设暂存触发；装户环境自然跳过（2026-09-28 独立复核 P2-2 采纳：预 landing 是仓态而非暂存态，暂存 grep 有前缀缝——如 `.githooks/*` managed 件单边漂移不命中——恒跑仅毫秒级 80 份 hash）
 - 检查：`node .agents/scripts/check-ledger.mjs`——遍历 `.agents/kit.json` `managed` 列表，逐份以 LF 归一 sha256（同 doctor §4 口径）比对盘面工作树；漂移（盘面≠台账）与缺失逐份列出 rel，非零出口阻断提交，提示跑 sync 成对后原路重试
 - 比较工作树而非暂存区（沿双源门禁口径）：分两笔提交但最终一致时不拦
 
@@ -22,6 +22,7 @@
 
 - 无 `.agents/kit.json`（非 flow-kit 安装）→ skip、exit 0
 - kit.json 解析失败 → fatal、exit 1（与 doctor §4 同为 FAIL）
+- kit.json JSON 合法但 `managed` 缺失/非数组 → fatal、exit 1（独立复核 P2-3 采纳：fail-loud 不静默「全对齐」，同 doctor Array.isArray 口径）
 - 装户环境 managed 手改不触发本门禁（走 doctor WARN 口径，不硬拦）
 - managed 删除即拦：sync 对 removed 只报不删——删包源 managed 件须手动同步装副本并重跑 sync 刷台账，否则持续拦截（有意为之：缺失比漂移更危险）
 

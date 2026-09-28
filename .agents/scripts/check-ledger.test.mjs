@@ -84,6 +84,14 @@ const runCli = (cwd) => spawnSync(process.execPath, [SCRIPT], { encoding: 'utf8'
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- S6b JSON 合法但 managed 缺失/非数组 → fatal（不静默全对齐；独立复核 P2-3） ----
+{
+  const root = mkFixture({}, [], JSON.stringify({ kit: 't', version: '0.0.0-test' }));
+  const r = ledgerDrift(root);
+  check('S6b managed 非数组 → fatal 非空（fail-loud）', !r.skipped && typeof r.fatal === 'string' && r.fatal.includes('managed'), JSON.stringify(r));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 // ---- S7 CLI 干净 fixture → exit 0 + 全对齐 ----
 {
   const root = mkFixture({ '.agents/scripts/a.mjs': 'A v1\n' }, [{ rel: '.agents/scripts/a.mjs', sha256: lfSha('A v1\n') }]);

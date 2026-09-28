@@ -1,6 +1,6 @@
 #!/bin/sh
 # Git 原生 pre-commit hook（经 core.hooksPath 挂载，git 执行、不依赖 agent 客户端）— agentic-flow-kit 通用编排
-# 通用门禁序：闭环配对(增量) → wiki 台账(增量) → 常驻面体积预算(增量) → 双源一致性(增量) → managed 台账快检(增量) → 项目门禁(local-pre-commit) → 敏感信息扫描+条件构建(commit-check.cjs)
+# 通用门禁序：闭环配对(增量) → wiki 台账(增量) → 常驻面体积预算(增量) → 双源一致性(增量) → managed 台账快检(包源恒跑) → 项目门禁(local-pre-commit) → 敏感信息扫描+条件构建(commit-check.cjs)
 # 项目专属门禁（架构红线/业务守卫等）放 .agents/hooks/local-pre-commit——存在即在本钩子内执行，返回非零即阻断提交
 # 合并提交场景由 .githooks/pre-merge-commit 原样转发到本脚本（合并时 git 调的是 pre-merge-commit，
 # 不是 pre-commit）——门禁清单只此一份，避免两处分叉
@@ -46,15 +46,16 @@ if [ -d templates/_agents ] && [ -f .agents/scripts/source-sync-check.mjs ] \
   fi
 fi
 
-# managed 台账快检（增量，2026-09-28 ledger-precommit-gate）：kit.json 台账 sha ↔ 盘面工作树（LF 归一，
-# 同 doctor §4 口径）——拦「台账 sha 预 landing」：台账记了盘面尚不存在的内容 sha。双源门禁对此静默
-# （templates↔.agents 成对回退时两侧一致），doctor §4 只在手动全量跑——该故障模式三次真实发生
-# （0272a1c 预入 / ff3c721 还原窗口 / 537df18 闭合），本块补齐提交时刻的第三边。比较工作树而非暂存区
-# （沿双源门禁口径）。装户环境（无 templates/_agents/ 包源）自然跳过——装户 managed 手改走 doctor §4
-# WARN 口径，不硬拦。已知边界：managed 删除即拦（sync 对 removed 只报不删，删件须手动同步装副本并
-# 重跑 sync 刷台账）。
-if [ -d templates/_agents ] && [ -f .agents/scripts/check-ledger.mjs ] \
-  && git -c core.quotepath=off diff --cached --name-only | grep -qE '^(templates/_agents/|\.agents/)'; then
+# managed 台账快检（包源环境恒跑，2026-09-28 ledger-precommit-gate；同日独立复核 P2-2 采纳）：
+# kit.json 台账 sha ↔ 盘面工作树（LF 归一，同 doctor §4 口径）——拦「台账 sha 预 landing」：台账记了
+# 盘面尚不存在的内容 sha。双源门禁对此静默（templates↔.agents 成对回退时两侧一致），doctor §4 只在
+# 手动全量跑——该故障模式三次真实发生（0272a1c 预入 / ff3c721 还原窗口 / 537df18 闭合），本块补齐
+# 提交时刻的第三边。恒跑不作暂存触发：预 landing 是仓态而非暂存态，暂存 grep 有前缀缝（如 .githooks/*
+# managed 件单边漂移不命中），毫秒级 80 份 hash 不构成开销理由。比较工作树而非暂存区（沿双源门禁
+# 口径）。装户环境（无 templates/_agents/ 包源）自然跳过——装户 managed 手改走 doctor §4 WARN 口径，
+# 不硬拦。已知边界：managed 删除即拦（sync 对 removed 只报不删，删件须手动同步装副本并重跑 sync 刷
+# 台账）。
+if [ -d templates/_agents ] && [ -f .agents/scripts/check-ledger.mjs ]; then
   if ! node .agents/scripts/check-ledger.mjs; then
     echo "pre-commit: managed 台账快检未通过，提交已阻止——kit.json 与盘面不一致，跑 node bin/flow-kit.mjs sync 成对后原路重试" >&2
     exit 1
