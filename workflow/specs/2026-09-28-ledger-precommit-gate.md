@@ -1,9 +1,10 @@
 ---
-状态: draft
+状态: approved
 级别: L2
 日期: 2026-09-28
 模块: pipeline
 备注: 对应 intent/plan 同名主题 ledger-precommit-gate
+确认指纹: 09f72f8c8944bca4
 ---
 # SPEC — ledger-precommit-gate
 

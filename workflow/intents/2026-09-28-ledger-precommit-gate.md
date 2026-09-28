@@ -1,9 +1,10 @@
 ---
-状态: draft
+状态: approved
 级别: L2
 日期: 2026-09-28
 模块: pipeline
 备注: pre-commit 补 managed 台账快检——根治 kit.json sha 预 landing 三连发的提交时刻盲区
+确认指纹: 63555193c45d57ac
 ---
 # INTENT — ledger-precommit-gate
 

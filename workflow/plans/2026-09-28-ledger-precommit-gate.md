@@ -1,7 +1,8 @@
 ---
-状态: draft
+状态: approved
 级别: L2
 模块: pipeline
+确认指纹: 3c49f5e4195460a2
 ---
 # PLAN — ledger-precommit-gate
 
