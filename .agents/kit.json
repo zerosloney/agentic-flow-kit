@@ -112,7 +112,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "59d0eb6adc59a06c58a7016a1ddec7d82af22ceeecf4c75c2bce810e820992ad"
+      "sha256": "c849fbc70007879ab0108261e15472da5c03a107c47c6e928dd17f61de7d4eef"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -398,7 +398,7 @@
     },
     {
       "rel": "workflow/regression-checklist.md",
-      "sha256": "2d666af19c19c21dc0844db1d30b822756c57a8cc38f6eb95befaea6136d8349"
+      "sha256": "8f4f5ced01a151fc5f0fbb8dd46e932c678be68bbb120e9c0cd2c0d5485d86bd"
     },
     {
       "rel": "workflow/specs/_TEMPLATE.md",

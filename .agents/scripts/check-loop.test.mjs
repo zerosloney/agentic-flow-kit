@@ -1615,14 +1615,16 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   // 未跟踪半成品：留签名未回填 → 不出账（tracked-only：不进扫描面）
   w(T, 'workflow/intents/2026-09-28-wip16.md', INTENT('wip16', '状态: draft\n级别: L1\n日期: 2026-09-28'));
   w(T, 'workflow/plans/2026-09-28-wip16.md', PLAN('wip16', '状态: draft\n级别: L1', '\n台账共 {{ledger.lines}} 行\n'));
+  // 根级 workflow/*.md 同口径钉住（2026-09-29 复核 P2-1：根级 tracked 过滤曾无测试承重——变异去除后全绿）
+  w(T, 'workflow/root-wip16.md', '---\n状态: draft\n级别: L1\n日期: 2026-09-28\n---\n# ROOT-WIP16\n\n根级草稿台账 {{ledger.lines}} 行\n');
   let r = run(T, { git: true });
-  check('检查16 tracked-only:未跟踪档含未回填签名 → 不出账（并行半成品不进扫描面）',
-    r.status === 0 && !outOf(r).includes('指标待回填') && !outOf(r).includes('wip16'),
+  check('检查16 tracked-only:未跟踪档含未回填签名 → 不出账（并行半成品不进扫描面；含根级）',
+    r.status === 0 && !outOf(r).includes('指标待回填') && !outOf(r).includes('wip16') && !outOf(r).includes('root-wip16'),
     `exit=${r.status}\n${outOf(r)}`);
   gitCommitAll(T, 'wip');
   r = run(T, { git: true });
-  check('检查16 tracked-only:提交进 HEAD 后 → 照常出账（WARN 指标待回填）',
-    r.status === 0 && outOf(r).includes('指标待回填') && outOf(r).includes('wip16'),
+  check('检查16 tracked-only:提交进 HEAD 后 → 照常出账（WARN 指标待回填；含根级）',
+    r.status === 0 && outOf(r).includes('指标待回填') && outOf(r).includes('wip16') && outOf(r).includes('root-wip16'),
     `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
 }

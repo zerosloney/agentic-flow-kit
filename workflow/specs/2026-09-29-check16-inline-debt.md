@@ -14,7 +14,7 @@
 
 **变更前**：检查 16（264 行：glob 状态机、walkFiles 防环遍历、装户 CJS 模块加载、签名扫描、对账）整体内联于 `check-loop.mjs`（约 1050 行），与检查 1-15 同文件；指标子系统的每次演进（6 提交 / 4 天）都在门禁主脚本里手术。
 
-**变更后**：全部逻辑迁入新文件 `check-metric-claims.mjs`（与 `workflow-enums.mjs` 同层的 managed 脚本），导出单入口 `runCheck16(ctx)`。`check-loop.mjs` 检查 16 块缩为：头注释（判据摘要 + 指向模块）+ `import` + 一次调用。`ctx` 显式注入外层依赖闭包符号（`ROOT` / `ENUMS` / `docFiles` / `fmGet` / `isTracked` / `linesOf` / `readdirOrNull` / `warnings`，共 8 个）——依赖全部显式，无隐式全局耦合。
+**变更后**：全部逻辑迁入新文件 `check-metric-claims.mjs`（与 `workflow-enums.mjs` 同层的 managed 脚本），导出单入口 `runCheck16(ctx)`。`check-loop.mjs` 检查 16 块缩为：头注释（判据摘要 + 指向模块）+ `import` + 一次调用。`ctx` 显式注入外层依赖闭包符号（`ROOT` / `ENUMS` / `docFiles` / `fmGet` / `inSet` / `isTracked` / `linesOf` / `readdirOrNull` / `warnings`，共 9 个——实现期修正：起草按预 grep 计 8 个，迁移时以实际引用集为准补入 `inSet`，复核 P2-2 采纳）——依赖全部显式，无隐式全局耦合。
 
 **对外判据语义零变化**：签名形态（小写点分）、转义约定（逐个出现豁免）、失败语义档位（登记表缺失静默跳过 / 取数器缺失与取数非法 fail-loud）、装户分层契约（内置优先 → `.cjs` 装户模块）、检查项编号 16——均不动。
 
