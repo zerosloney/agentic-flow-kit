@@ -1,7 +1,8 @@
 ---
-状态: draft
+状态: approved
 级别: L2
 模块: pipeline
+确认指纹: c7a66efd22e96d38
 ---
 # PLAN — check16-inline-debt
 
@@ -51,6 +52,6 @@
 ## 确认与复核
 
 > 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节，done 只在关单出现——禁从 draft 直跳 done。
-- 确认结果：approved（YYYY-MM-DD 用户对话内确认）；done（YYYY-MM-DD 关单，随入口文档置终态）
+- 确认结果：approved（2026-09-29 用户对话内确认「可以」）；done（YYYY-MM-DD 关单，随入口文档置终态）
 - 确认门记录：plan 草稿全文过目 + 改动清单确认（两道门，逐次，不合并）
 - 复核：L2 推荐独立复核（结构迁移等价性 + 口径行为变更），以「迁移前后输出 diff 为空 + 双向口径用例 + 真装 shipped 全绿」为证据集

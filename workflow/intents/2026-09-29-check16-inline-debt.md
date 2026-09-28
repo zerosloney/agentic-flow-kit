@@ -1,9 +1,10 @@
 ---
-状态: draft
+状态: approved
 级别: L2
 日期: 2026-09-29
 模块: pipeline
 备注: 2026-09-28 双轴审查 4 条判断性 smell 收口：检查 16 内联债（Divergent Change / countDocs 重复 / scanFiles16 口径分裂）+ confirm-doc TTY 测试逃生门信任边界声明
+确认指纹: ef03e8b890a7f3b6
 ---
 # INTENT — check16-inline-debt
 
@@ -60,7 +61,7 @@
 
 ## 确认与复核
 
-- 确认日期：
+- 确认日期：2026-09-29（对话委托代录，用户原话「可以」）
 - 确认人：用户（对话内一句「可以」即确认）
-- 确认范围：
+- 确认范围：三件套全文逐件（intent / spec / plan）
 - 复核：L2 推荐独立复核（结构迁移 + 口径变更，回归面大）

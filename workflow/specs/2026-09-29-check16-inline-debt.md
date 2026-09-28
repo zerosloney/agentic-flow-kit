@@ -1,9 +1,10 @@
 ---
-状态: draft
+状态: approved
 级别: L2
 日期: 2026-09-29
 模块: pipeline
 备注: 对应 intent / plan 同名主题 check16-inline-debt（2026-09-28 双轴审查 4 条判断性 smell 收口）
+确认指纹: 59bb20cb8ccaf199
 ---
 # SPEC — check16-inline-debt
 
