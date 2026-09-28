@@ -17,7 +17,7 @@ next: .agents/commands/build.md（漂移属 build 改权威源未同步导致的
 
 # Sync-Hosts · 跨宿主适配层正文段同步
 
-> 改权威源（`templates/_agents/{commands,roles}/*.md`）后薄适配（`modules/hosts/<h>/{agents,commands}/*.md`）要同步——薄适配正文 = 权威源正文，frontmatter 各自保留宿主特化（trae commands 加 `name: wf-X`、opencode/zcode/omp 各自原描述）。
+> 改权威源（`templates/_agents/{commands,roles}/*.md`）后薄适配（`modules/hosts/<h>/{agents,commands}/*.md`）要同步——薄适配正文 = 权威源正文，frontmatter 各自保留宿主特化（commands 层文件名 = 宿主命令名，opencode / trae 同用 `wf-` 前缀，单源见 `src/profiles.mjs#HOSTS.commandPrefix`；trae 另有 `name: wf-X`，zcode/omp 各自原描述）。
 > 装户视角：`flow-kit doctor` §7.x 跑同名检查（仅装户，包源环境跳过——包源下永远是 drift）。
 
 ## 何时跑

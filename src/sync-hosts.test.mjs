@@ -31,12 +31,12 @@ function mkFixture() {
     `---\ndescription: Test 阶段\nstage: Test\n---\n\n# Test · v1\n\n权威源正文 test v1\n`);
   W(path.join(root, 'templates/_agents/roles/implementer.md'),
     `---\ndescription: Implementer 角色契约\n---\n\n# Implementer · v1\n\n权威源正文 implementer v1\n`);
-  // 薄适配：commands 权威源 → opencode + trae（trae 加 wf- 前缀 + name）
-  W(path.join(root, 'modules/hosts/opencode/commands/build.md'),
+  // 薄适配：commands 权威源 → opencode + trae（两宿主同为 wf- 前缀；trae 另有 name 字段）
+  W(path.join(root, 'modules/hosts/opencode/commands/wf-build.md'),
     `---\ndescription: Build · opencode 风格\n---\n\n# Build · v1\n\n权威源正文 build v1\n`);
   W(path.join(root, 'modules/hosts/trae/commands/wf-build.md'),
     `---\nname: wf-build\ndescription: Build · trae 风格\n---\n\n# Build · v1\n\n权威源正文 build v1\n`);
-  W(path.join(root, 'modules/hosts/opencode/commands/test.md'),
+  W(path.join(root, 'modules/hosts/opencode/commands/wf-test.md'),
     `---\ndescription: Test · opencode 风格\n---\n\n# Test · v1\n\n权威源正文 test v1\n`);
   W(path.join(root, 'modules/hosts/trae/commands/wf-test.md'),
     `---\nname: wf-test\ndescription: Test · trae 风格\n---\n\n# Test · v1\n\n权威源正文 test v1\n`);
@@ -49,8 +49,9 @@ function mkFixture() {
     `---\nname: implementer\ndescription: opencode 英文风格\n---\n\n# Implementer · v1\n\n权威源正文 implementer v1\n`);
   W(path.join(root, 'modules/hosts/trae/agents/implementer.md'),
     `---\nname: implementer\ndescription: trae 英文风格\n---\n\n# Implementer · v1\n\n权威源正文 implementer v1\n`);
-  // 孤儿薄适配：权威源无对应文件
+  // 孤儿薄适配：权威源无对应文件（两种形态——带 wf- 前缀与不带前缀）
   W(path.join(root, 'modules/hosts/opencode/commands/orphan.md'), '# orphan\n');
+  W(path.join(root, 'modules/hosts/opencode/commands/wf-legacy.md'), '# legacy\n');
   return root;
 }
 
@@ -84,7 +85,7 @@ syncHosts(process.argv.slice(2), root);
   const r = runSyncHosts(fx, ['--diff']);
   const out = r.stdout + r.stderr;
   check('S2 权威源改了 → 正文漂移 4（build×2 + test×2）', /正文段漂移（4/.test(out), out);
-  check('S2 列出 opencode/commands/build.md', out.includes('commands/build.md → opencode/commands/build.md'), out);
+  check('S2 列出 opencode/commands/wf-build.md（opencode wf- 前缀映射）', out.includes('commands/build.md → opencode/commands/wf-build.md'), out);
   check('S2 列出 trae/commands/wf-build.md（trae wf- 前缀映射）', out.includes('commands/build.md → trae/commands/wf-build.md'), out);
   check('S2 正文对齐 = 4（1 role × 4 宿主 implementer 未改）', /正文对齐：\s*4\s*对/.test(out), out);
   check('S2 exit 0（diff 模式不阻断）', r.status === 0);
@@ -98,9 +99,9 @@ syncHosts(process.argv.slice(2), root);
   const r = runSyncHosts(fx, ['--apply']);
   const out = r.stdout + r.stderr;
   check('S3 apply：报告同步 2 份（opencode + trae）', /按权威源正文覆盖薄适配正文段\s*2\s*份/.test(out), out);
-  check('S3 apply：opencode 正文已同步到 v2', R(path.join(fx, 'modules/hosts/opencode/commands/build.md')).includes('权威源正文 build v2'));
+  check('S3 apply：opencode 正文已同步到 v2', R(path.join(fx, 'modules/hosts/opencode/commands/wf-build.md')).includes('权威源正文 build v2'));
   check('S3 apply：trae 正文已同步到 v2', R(path.join(fx, 'modules/hosts/trae/commands/wf-build.md')).includes('权威源正文 build v2'));
-  check('S3 apply：opencode frontmatter 保留（仍无 name 字段）', !R(path.join(fx, 'modules/hosts/opencode/commands/build.md')).match(/^name:/m));
+  check('S3 apply：opencode frontmatter 保留（仍无 name 字段——前缀由文件名承载）', !R(path.join(fx, 'modules/hosts/opencode/commands/wf-build.md')).match(/^name:/m));
   check('S3 apply：trae frontmatter 保留（仍含 name: wf-build）', R(path.join(fx, 'modules/hosts/trae/commands/wf-build.md')).match(/^name:\s*wf-build/m) !== null);
   check('S3 apply：权威源不动', R(path.join(fx, 'templates/_agents/commands/build.md')).includes('权威源正文 build v2'));
   check('S3 apply：再次 diff 应显示对齐 8', true); // 二次扫描由 sync-hosts 内部做
@@ -136,12 +137,12 @@ syncHosts(process.argv.slice(2), root);
 // ============ 场景 6：薄适配文件不存在 → authorityMissing 列出，apply 不创建 ============
 {
   const fx = mkFixture();
-  fs.rmSync(path.join(fx, 'modules/hosts/opencode/commands/build.md'));
+  fs.rmSync(path.join(fx, 'modules/hosts/opencode/commands/wf-build.md'));
   const r = runSyncHosts(fx, ['--diff']);
   const out = r.stdout + r.stderr;
-  check('S6 薄适配缺失 → authorityMissing 列', /权威源声明但薄适配缺失（/.test(out) && out.includes('opencode/commands/build.md'), out);
+  check('S6 薄适配缺失 → authorityMissing 列', /权威源声明但薄适配缺失（/.test(out) && out.includes('opencode/commands/wf-build.md'), out);
   const r2 = runSyncHosts(fx, ['--apply']);
-  check('S6 apply 不自动创建薄适配（仍缺失）', !fs.existsSync(path.join(fx, 'modules/hosts/opencode/commands/build.md')));
+  check('S6 apply 不自动创建薄适配（仍缺失）', !fs.existsSync(path.join(fx, 'modules/hosts/opencode/commands/wf-build.md')));
 }
 
 // ============ 场景 7：--json 机器可读输出 ============
@@ -162,8 +163,10 @@ syncHosts(process.argv.slice(2), root);
   const r = runSyncHosts(fx, ['--diff']);
   const out = r.stdout + r.stderr;
   check('S8 孤儿薄适配 → adapterOrphans 列', /孤儿薄适配（/.test(out) && out.includes('opencode/commands/orphan.md'), out);
+  check('S8 opencode 孤儿带 wf- 前缀 → 反推权威源去掉前缀', out.includes('opencode/commands/wf-legacy.md（推测权威源：commands/legacy.md）'), out);
+  check('S8 opencode 孤儿不带前缀 → 原样反推 commands/<file>', out.includes('opencode/commands/orphan.md（推测权威源：commands/orphan.md）'), out);
   const r2 = runSyncHosts(fx, ['--apply']);
-  check('S8 apply 不删孤儿薄适配', fs.existsSync(path.join(fx, 'modules/hosts/opencode/commands/orphan.md')));
+  check('S8 apply 不删孤儿薄适配', fs.existsSync(path.join(fx, 'modules/hosts/opencode/commands/orphan.md')) && fs.existsSync(path.join(fx, 'modules/hosts/opencode/commands/wf-legacy.md')));
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${failCount}`);

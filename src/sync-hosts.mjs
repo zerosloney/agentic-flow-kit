@@ -1,8 +1,9 @@
 // flow-kit sync-hosts：跨宿主适配层正文段漂移检查 + 单向同步（B-b 方案，2026-09-25）
 // 目的：改权威源（templates/_agents/{commands,roles}/*.md）正文要同步到 N 份薄适配
 // （modules/hosts/<h>/{agents,commands}/*.md）的对应正文段；薄适配 frontmatter 保留宿主特化字段
-// （trae commands 加 name: wf-X、opencode/zcode/omp 各自原描述），不在同步范围。
+// （commands 层 trae 侧另有 name: wf-X，opencode/zcode/omp 各自原描述），不在同步范围。
 // B-b 语义：sha 比对与 apply 只动正文段，frontmatter 双方各自维护。
+// 映射单源在 profiles.mjs#HOSTS.commandPrefix（命令层薄适配文件名前缀；2026-09-28 opencode 对齐 trae 的 wf- 前缀）。
 // 算法：diffHosts 抽为 pure function（authorityRoot + adaptersRoot 两个根）；
 //       sync-hosts CLI 在 pkgRoot 跑（包源视角）；doctor §7.x 在 target 跑（装户视角）——同源逻辑。
 import fs from 'node:fs';
@@ -41,14 +42,17 @@ function listMd(dir) {
   return fs.readdirSync(dir).filter((f) => f.endsWith('.md'));
 }
 
-// pairsFor：权威源文件 → 薄适配 rel 列表（与 sync-hosts 早版同映射；trae commands 加 wf- 前缀）
+// pairsFor：权威源文件 → 薄适配 rel 列表（映射单源见 profiles.mjs#HOSTS.commandPrefix）
+//   commands 权威源 → 带 commandPrefix 的宿主各一份（<dir>/commands/<prefix><name>.md）
+//   roles    权威源 → 全部宿主 agents 各一份
 function pairsFor(authRel) {
   const out = [];
   const norm = authRel.split(path.sep).join('/');
   if (norm.startsWith('commands/') && norm.endsWith('.md')) {
     const name = norm.slice('commands/'.length, -'.md'.length);
-    out.push({ adapterRel: `opencode/commands/${name}.md` });
-    out.push({ adapterRel: `trae/commands/wf-${name}.md` });
+    for (const [h, v] of Object.entries(HOSTS)) {
+      if (v.commandPrefix) out.push({ adapterRel: `${h}/commands/${v.commandPrefix}${name}.md` });
+    }
   } else if (norm.startsWith('roles/') && norm.endsWith('.md')) {
     const name = norm.slice('roles/'.length, -'.md'.length);
     for (const h of Object.keys(HOSTS)) out.push({ adapterRel: `${h}/agents/${name}.md` });
@@ -104,8 +108,10 @@ export function diffHosts({ authorityRoot, adaptersRoot }) {
         const adapterRel = `${h}/${sub}/${f}`;
         if (adapterSeen.has(adapterRel)) continue;
         let authGuess;
-        if (h === 'trae' && sub === 'commands' && f.startsWith('wf-')) {
-          authGuess = `commands/${f.slice('wf-'.length)}`;
+        const prefix = HOSTS[h] && HOSTS[h].commandPrefix;
+        if (sub === 'commands' && prefix && f.startsWith(prefix)) {
+          // 命令层薄适配带宿主 commandPrefix（2026-09-28：opencode 对齐 trae 后两宿主同口径）
+          authGuess = `commands/${f.slice(prefix.length)}`;
         } else if (sub === 'agents') {
           authGuess = `roles/${f}`;
         } else {

@@ -120,7 +120,7 @@
     },
     {
       "rel": ".agents/scripts/doctor.test.mjs",
-      "sha256": "d7a47095a082564c13a264b07d2bd988c4aa387a563dfd9724a7fefbaea4c4cc"
+      "sha256": "a7377fecfa69af704217a960ef0d31cbbde52fdd1942a6a79167c06295cb82d9"
     },
     {
       "rel": ".agents/scripts/ensure-board.mjs",
@@ -354,7 +354,7 @@
     },
     {
       "rel": "AGENTS.md",
-      "sha256": "7663793fd6fd0eeffa580fd0f547cd2fc4ff6a655569bd31370a72a32a41ceeb"
+      "sha256": "faf8f54e96d7fce7f0ff924b8681ebc4f2f1ea65e6437a742259964035cd3313"
     },
     {
       "rel": "wiki/知识沉淀总览.html",

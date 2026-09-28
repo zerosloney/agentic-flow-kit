@@ -214,7 +214,7 @@ const CMD_BODY = '# Build\n\n正文 build v1\n';
       'roles/implementer.md': `---\ndesc: r\n---\n\n${ROLE_BODY}`,
     },
     adapters: {
-      '.opencode/commands/build.md': `---\ndesc: oc\n---\n\n${CMD_BODY}`,
+      '.opencode/commands/wf-build.md': `---\ndesc: oc\n---\n\n${CMD_BODY}`,
       '.trae/commands/wf-build.md': `---\nname: wf-build\ndesc: trae\n---\n\n${CMD_BODY}`,
       '.zcode/agents/implementer.md': `---\nname: impl\ndesc: zcode\n---\n\n${ROLE_BODY}`,
       '.opencode/agents/implementer.md': `---\nname: impl\ndesc: oc\n---\n\n${ROLE_BODY}`,
@@ -249,7 +249,7 @@ const CMD_BODY = '# Build\n\n正文 build v1\n';
   const root = mkfixAdapter({
     pkgMarker: true,
     authority: { 'commands/build.md': `---\ndesc: x\n---\n\n${CMD_BODY}` },
-    adapters: { '.opencode/commands/build.md': `---\ndesc: oc\n---\n\n漂移` },
+    adapters: { '.opencode/commands/wf-build.md': `---\ndesc: oc\n---\n\n漂移` },
   });
   const r = checkAdapterDrift(root);
   check('场景 11：包源环境（templates/ + modules/ 同时存在）→ skipped=true',
@@ -291,7 +291,7 @@ const CMD_BODY = '# Build\n\n正文 build v1\n';
       'roles/implementer.md': `---\ndesc: r\n---\n\n${ROLE_BODY}`,
     },
     adapters: {
-      '.opencode/commands/build.md': `---\ndesc: oc\n---\n\n${CMD_BODY}`,
+      '.opencode/commands/wf-build.md': `---\ndesc: oc\n---\n\n${CMD_BODY}`,
     },
   });
   const r = checkAdapterDrift(root);

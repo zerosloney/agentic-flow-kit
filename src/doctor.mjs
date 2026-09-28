@@ -9,6 +9,8 @@ import { isOwned, HOSTS, pickStackVars } from './profiles.mjs';
 
 // 宿主目录映射（与 src/profiles.mjs#HOSTS 同源：装副本目录名前缀带点）
 const HOST_DIR = Object.fromEntries(Object.entries(HOSTS).map(([k, v]) => [k, v.dir]));
+// 命令层薄适配宿主：[装副本目录名, 文件名前缀]（单源 profiles.mjs#HOSTS.commandPrefix；与 sync-hosts pairsFor 同口径）
+const HOST_CMD_DIR = Object.entries(HOSTS).filter(([, v]) => v.commandPrefix).map(([k, v]) => [v.dir, v.commandPrefix]);
 
 function sh(cmd, cwd) {
   try {
@@ -341,7 +343,8 @@ export function checkOwnedDrift(target) {
 // 跨宿主薄适配正文段漂移校验（独立 export 供 doctor 主流程 + 单元测试共用；2026-09-25 cross-host-sync）
 // 装户侧视角：.agents/{commands,roles}/*.md 是权威源；4 宿主目录（zcode→.zcode、omp→.omp、
 // opencode→.opencode、trae→.trae）下 {agents,commands}/*.md 是薄适配。按正文段 sha 比对
-// （B-b 语义；frontmatter 不计入漂移）；trae commands 加 wf- 前缀映射。
+// （B-b 语义；frontmatter 不计入漂移）；commands 层映射走 HOSTS.commandPrefix 前缀（2026-09-28 起
+// opencode 与 trae 同为 wf- 前缀，单源见 profiles.mjs；roles 层映射全宿主无前缀）。
 // 返回：{ drift, total, skipped, note? }
 //   - skipped=true：权威源目录不存在 / 包源环境 / 无 .md 文件
 //   - drift：权威源正文段与薄适配正文段 sha 不一致的对数
@@ -373,10 +376,11 @@ export function checkAdapterDrift(target) {
       const authRel = `${sub}/${f}`;
       const authSha = bodySha(path.join(authorityRoot, authRel));
       const name = f.slice(0, -'.md'.length);
-      // 构建映射：commands/* → opencode/commands/<name>.md + trae/commands/wf-<name>.md；roles/* → 4 宿主 agents/<name>.md
+      // 构建映射：commands/* → 每个带 commandPrefix 的宿主 commands/<prefix><name>.md（单源 profiles.mjs#HOSTS）；
+      //             roles/*    → 4 宿主 agents/<name>.md（无前缀）
       const targets = [];
       if (sub === 'commands') {
-        targets.push([HOST_DIR.opencode, 'commands', `${name}.md`], [HOST_DIR.trae, 'commands', `wf-${name}.md`]);
+        for (const [dir, prefix] of HOST_CMD_DIR) targets.push([dir, 'commands', `${prefix}${name}.md`]);
       } else {
         for (const h of Object.keys(HOST_DIR)) targets.push([HOST_DIR[h], 'agents', `${name}.md`]);
       }
