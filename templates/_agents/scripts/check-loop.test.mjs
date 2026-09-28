@@ -1267,5 +1267,181 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   }
 }
 
+// ---- 场景 80-90:检查 16 装户侧 derivers 动态载入（2026-09-28 adopter-derivers）----
+// 本组核心是**三条假绿防线**：装户模块坏掉时必须响亮出账，绝不静默降级成「只用内置指标」。
+// 对照：模块**缺失**是正常态（零告警）——两组行为必须可区分，否则装户无法判断自己错在哪。
+{
+  const MC2 = 'ledger.lines = ledger.lines\nmy.custom = my.custom\n';
+  const MCB = 'ledger.lines = ledger.lines\ndocs.count.plans = docs.count.plans\n'; // 仅内置指标
+  const seedLedger = (T, lines) => w(T, '.agents/confirmations.jsonl', lines.join('\n') + '\n');
+  const activePlan = (T, name, body) => {
+    // 同时写同名 intent：否则「配对断裂」hard-block 会干扰本组断言（本组只测取数器分层）
+    w(T, `workflow/intents/2026-09-01-${name}.md`, INTENT(name, '状态: draft\n级别: L1'));
+    w(T, `workflow/plans/2026-09-01-${name}.md`, PLAN(name, '状态: draft\n级别: L1', body));
+  };
+  {
+    // 【正向】装户模块存在 + 自定义指标 → 取数正确
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', MC2);
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    w(T, '.agents/metric-derivers.mjs', "export const derivers = { 'my.custom': () => 7 };\n");
+    activePlan(T, 'ok', '\n值 {{my.custom}}\n');
+    const r = run(T);
+    check('检查16装户:模块存在 + 自定义指标 → 实时值 = 7（取数正确）',
+      outOf(r).includes('my.custom') && outOf(r).includes('实时值 = 7'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 【假绿防线 ①】模块语法错 → 响亮出账 + check-loop 仍正常退出（不崩）
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', MC2);
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    w(T, '.agents/metric-derivers.mjs', "export const derivers = { 'my.custom': () => { \n"); // 故意不闭合
+    activePlan(T, 'syn', '\n值 {{my.custom}}\n');
+    const r = run(T);
+    const o = outOf(r);
+    // 断言必须用**唯一的 warning 前缀**匹配——「装户取数器载入失败」这串字也出现在
+    // 「无对应取数器」那条的提示语里（「见上方「…载入失败」条目」），只用它匹配会**在真实条目
+    // 消失时仍然通过**（变异自验实测：静默吞掉 emit 行后该断言不翻红）。故用 `- [WARN 装户取数器载入失败]`。
+    check('检查16装户:模块语法错 → 响亮出账「装户取数器载入失败」（独立成条，明示文件）',
+      o.includes('- [WARN 装户取数器载入失败]') && o.includes('metric-derivers.mjs') && !o.includes('未登记该指标'),
+      `exit=${r.status}\n${o}`);
+    check('检查16装户:模块语法错 → 引擎自身不因装户代码崩溃（无裸 SyntaxError 崩栈）',
+      r.status === 0 && !/Illegal|at ModuleLoader|at compileSourceTextModule/.test(o),
+      `exit=${r.status}\n${o}`);
+    rmfix(T);
+  }
+  {
+    // 【假绿防线 ②】取数器抛异常 → 响亮出账（明示错误）
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', MC2);
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    w(T, '.agents/metric-derivers.mjs', "export const derivers = { 'my.custom': () => { throw new Error('boom-xyz'); } };\n");
+    activePlan(T, 'thr', '\n值 {{my.custom}}\n');
+    const r = run(T);
+    check('检查16装户:取数器抛异常 → 响亮出账且明示错误',
+      outOf(r).includes('指标取数失败') && outOf(r).includes('boom-xyz'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 【假绿防线 ③】返回非有限数字（字符串 / NaN / Promise）→ 拦下并明示类型
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', 'my.str = my.str\nmy.nan = my.nan\nmy.prom = my.prom\n');
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    w(T, '.agents/metric-derivers.mjs', [
+      "export const derivers = {",
+      "  'my.str': () => 'not-a-number',",
+      "  'my.nan': () => NaN,",
+      "  'my.prom': () => Promise.resolve(1),",
+      "};",
+      '',
+    ].join('\n'));
+    activePlan(T, 'types', '\n{{my.str}} {{my.nan}} {{my.prom}}\n');
+    const r = run(T);
+    const o = outOf(r);
+    check('检查16装户:返回字符串 → 取数失败（明示类型 string）',
+      o.includes('不是有限数字') && o.includes('string'), `exit=${r.status}\n${o}`);
+    check('检查16装户:返回 NaN → 取数失败', o.includes('number（NaN）'), `exit=${r.status}\n${o}`);
+    check('检查16装户:返回 Promise（误写 async）→ 取数失败并提示须同步',
+      o.includes('Promise') && o.includes('同步'), `exit=${r.status}\n${o}`);
+    rmfix(T);
+  }
+  {
+    // 【区分性】模块缺失 → 零告警（与「模块坏」必须行为可区分）
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', MCB);
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    activePlan(T, 'none', '');
+    const r = run(T);
+    check('检查16装户:模块缺失 → 零告警（正常态，与「模块坏」可区分）',
+      r.status === 0 && !outOf(r).includes('指标'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 【优先级】装户定义内置同名 → 内置生效 + advisory 明示被忽略
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', 'ledger.lines = ledger.lines\n');
+    seedLedger(T, ['{"doc":"a","stage":"done"}', '{"doc":"b","stage":"done"}']);
+    w(T, '.agents/metric-derivers.mjs', "export const derivers = { 'ledger.lines': () => 999 };\n");
+    activePlan(T, 'prio', '\n台账 {{ledger.lines}}\n');
+    const r = run(T);
+    const o = outOf(r);
+    check('检查16装户:内置同名 → 内置值生效（2，非装户的 999）',
+      o.includes('实时值 = 2'), `exit=${r.status}\n${o}`);
+    check('检查16装户:内置同名 → advisory 明示装户定义被忽略',
+      o.includes('被忽略'), `exit=${r.status}\n${o}`);
+    rmfix(T);
+  }
+  {
+    // 【未导出】模块存在但无 derivers 导出 → fail-loud
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', MC2);
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    w(T, '.agents/metric-derivers.mjs', "export const other = {};\n");
+    activePlan(T, 'noexp', '\n{{my.custom}}\n');
+    const r = run(T);
+    check('检查16装户:模块无 derivers 导出 → 响亮出账「载入失败」（独立成条，不静默）',
+      outOf(r).includes('- [WARN 装户取数器载入失败]') && outOf(r).includes('未导出'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 【未登记指标仍走原路】装户定义了函数但没在 registry 登记 → 报「未登记」
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', 'ledger.lines = ledger.lines\n');
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    w(T, '.agents/metric-derivers.mjs', "export const derivers = { 'my.custom': () => 7 };\n");
+    activePlan(T, 'unreg', '\n{{my.custom}}\n');
+    const r = run(T);
+    check('检查16装户:函数有但 registry 未登记 → 报「未登记」（两处都要）',
+      outOf(r).includes('指标未登记'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 【ctx 能力】glob / read 取数正确
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', 'my.sql = my.sql\nmy.read = my.read\n');
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    fs.mkdirSync(path.join(T, 'backend', 'migrations'), { recursive: true }); // w() 不建父目录
+    w(T, 'backend/migrations/001.sql', 'x');
+    w(T, 'backend/migrations/002.sql', 'x');
+    w(T, 'backend/other.txt', 'x');
+    w(T, '.agents/metric-derivers.mjs', [
+      "export const derivers = {",
+      "  'my.sql': (ctx) => ctx.glob('backend/migrations/*.sql').length,",
+      "  'my.read': (ctx) => ctx.read('backend/migrations/001.sql').length,",
+      "};",
+      '',
+    ].join('\n'));
+    activePlan(T, 'ctx', '\n{{my.sql}} {{my.read}}\n');
+    const r = run(T);
+    const o = outOf(r);
+    check('检查16装户:ctx.glob 计数正确（2 个 sql）', o.includes('my.sql') && o.includes('实时值 = 2'), `exit=${r.status}\n${o}`);
+    check('检查16装户:ctx.read 读取正确（内容 1 字符）', o.includes('my.read') && o.includes('实时值 = 1'), `exit=${r.status}\n${o}`);
+    rmfix(T);
+  }
+  {
+    // 【存量零差异】无装户模块时，内置指标行为与改前一致
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', MCB);
+    seedLedger(T, ['{"doc":"a","stage":"done"}', '{"doc":"b","stage":"done"}']);
+    activePlan(T, 'base', '\n台账 {{ledger.lines}}；plans {{docs.count.plans}}\n');
+    const r = run(T);
+    check('检查16装户:无模块时内置指标照常取数（零差异）',
+      outOf(r).includes('实时值 = 2') && outOf(r).includes('实时值 = 1'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 【归属契约】装户取数模块必须归 owned——否则落回 managed，重演本单要修的缺陷本身
+    // （sync 永久报「本地已改」+ doctor WARN + check-loop 因供应链防线静默停摆）
+    const { isOwned } = await import('../../../src/profiles.mjs');
+    check('检查16装户:isOwned(.agents/metric-derivers.mjs) 为真（与登记表同归 owned）',
+      isOwned('.agents/metric-derivers.mjs') === true);
+    check('检查16装户:isOwned(.agents/metric-claims.txt) 仍为真（未被本单破坏）',
+      isOwned('.agents/metric-claims.txt') === true);
+    check('检查16装户:check-loop.mjs 仍归 managed（引擎不被误划入 owned）',
+      isOwned('.agents/scripts/check-loop.mjs') === false);
+  }
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

@@ -85,11 +85,15 @@ export function pickStackVars(stackKey) {
 // metric-claims.txt 是**项目自持的指标登记表**（2026-09-28 metric-claim-gate 复核 P2 更正）：装户按
 // 设计要在其中新增自有指标，若按 managed 记账则 sync 每次都报「本地已改、升级时需合并」，且将来包侧
 // 新增内置指标**永远下不来**（台账停在包侧基线）。故归 owned——随包附带一份起步内容，此后归项目。
+// metric-derivers.mjs 是**项目自持的取数器模块**（2026-09-28 adopter-derivers）：它正是上面那份登记表的
+// 扩展点——装户在此实现自有指标的取数逻辑。**必须与 metric-claims.txt 同归 owned**：若落 managed，
+// 装户一用该功能就会让 sync 永久报「本地已改」、doctor WARN，并因供应链防线使 check-loop 跳过执行
+// （门禁静默停摆）——那正是本单要修的缺陷本身（同名 incident 有实测链路）。
 export function isOwned(rel) {
   return rel === 'AGENTS.md' || rel === '.gitattributes' || rel.startsWith('workflow/') || rel.startsWith('wiki/')
     || rel.startsWith('.agents/notes/')
     || rel === '.agents/workflow-modules.txt' || rel === '.agents/rule-budgets.txt'
-    || rel === '.agents/metric-claims.txt'
+    || rel === '.agents/metric-claims.txt' || rel === '.agents/metric-derivers.mjs'
     || rel === '.agents/hooks/local-pre-commit';
 }
 

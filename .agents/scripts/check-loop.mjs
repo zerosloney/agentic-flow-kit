@@ -90,6 +90,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { loadEnums } from './workflow-enums.mjs';
 
@@ -760,6 +761,7 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
       const ls = (linesOf(p) || []).filter((l) => l.trim());
       return { total: ls.length, withBatch: ls.filter((l) => /"batch"/.test(l)).length };
     };
+    // 内置取数器：全部本地确定性、零网络。**装户零配置即用**（不依赖任何装户文件）。
     const derivers = {
       'ledger.lines': () => ledgerLines().total,
       'ledger.linesWithBatch': () => ledgerLines().withBatch,
@@ -770,6 +772,79 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
       'docs.count.incidents': () => countDocs('incidents'),
       'docs.count.all': () => countDocs('intents') + countDocs('specs') + countDocs('plans') + countDocs('incidents'),
     };
+    // ---- 装户侧取数器（2026-09-28 adopter-derivers；修「owned 登记表配 managed 取数器」P1）----
+    // 背景：登记表是 owned（装户自增指标），取数器却曾硬编码在本文件（managed）——装户一新增指标
+    // 就报「无取数器」，唯一出路是改本文件，而那是 managed：sync 永久报「本地已改」+ doctor WARN
+    // + 本脚本因供应链防线**跳过执行**（门禁静默停摆）。故改为分层：
+    //   ① 内置优先（行为与今完全一致，装户零配置可用）；② 未命中则查装户模块 `.agents/metric-derivers.mjs`
+    // **载入用 createRequire 同步**（实测：可同步载入 .mjs、返回非 Promise；语法错抛可捕获 SyntaxError），
+    // 故本脚本**无须改成 async 主线**——装户用 fs.readFileSync 即可读任意本地文件。契约要求同步函数
+    // 也与本检查「零网络、本地确定性」的前提一致（异步的唯一真实收益是网络/并发 IO，此处都不允许）。
+    // **失败一律响亮、绝不静默降级**（沿 claim-exceeds-fix「假绿比红危险」与本检查自身语法错教训）：
+    // 若载入失败就「只用内置指标」，装户会看到「引用了 my.metric → 未登记」，看起来像**自己忘了登记**，
+    // 而真因是模块坏了——他会去 registry 反复核对，问题永远查不到。故载入/调用失败均出明确 WARN。
+    const adopterModRel = '.agents/metric-derivers.mjs';
+    let adopterState = null; // { ok:true, derivers } | { ok:false, errors:[...] } —— 懒载入 + 单次运行内缓存
+    const loadAdopterDerivers = () => {
+      if (adopterState) return adopterState;
+      const abs = path.join(ROOT, adopterModRel);
+      if (!fs.existsSync(abs)) { adopterState = { ok: true, derivers: {} }; return adopterState; } // 缺失=正常态，零告警
+      try {
+        const req = createRequire(import.meta.url);
+        const mod = req(abs);
+        const d = mod && mod.derivers;
+        if (!d || typeof d !== 'object' || Array.isArray(d)) {
+          adopterState = { ok: false, errors: [`${adopterModRel} 未导出 \`derivers\` 对象（实际导出形态：${d === undefined ? '无 derivers 键' : Array.isArray(d) ? 'array' : typeof d}）——载入失败不降级，请修正模块`] };
+          return adopterState;
+        }
+        adopterState = { ok: true, derivers: d };
+      } catch (e) {
+        adopterState = { ok: false, errors: [`${adopterModRel} 载入失败：${String(e && e.message ? e.message : e).split('\n')[0]}——载入失败不降级（静默降级会让你误以为「忘了登记」而非「模块坏了」）`] };
+      }
+      return adopterState;
+    };
+    // ctx：注入给装户取数器的同步辅助（免其重复造轮子）
+    const globToRegExp = (p) => {
+      const esc = String(p).replace(/[.+^${}()|[\]\\]/g, '\\$&');
+      return new RegExp('^' + esc.replace(/\*\*\//g, '(?:.*/)?').replace(/\*\*/g, '.*').replace(/\*/g, '[^/]*').replace(/\?/g, '[^/]') + '$');
+    };
+    const walkFiles = (dir, out = [], rel = '') => {
+      for (const e of readdirOrNull(dir) || []) {
+        const abs = path.join(dir, e);
+        const r = rel ? `${rel}/${e}` : e;
+        let st = null;
+        try { st = fs.statSync(abs); } catch { continue; }
+        if (st.isDirectory()) walkFiles(abs, out, r);
+        else out.push(r);
+      }
+      return out;
+    };
+    const ctx = {
+      root: ROOT,
+      read: (rel) => { try { return fs.readFileSync(path.join(ROOT, rel), 'utf8').replace(/\r\n/g, '\n'); } catch { return ''; } },
+      glob: (pattern) => { const re = globToRegExp(pattern); return walkFiles(ROOT).filter((r) => re.test(r)); },
+      countFiles: (dir, pred) => walkFiles(path.join(ROOT, dir)).filter((r) => (typeof pred === 'function' ? pred(r) : true)).length,
+    };
+    // resolveDeriver(name) → { fn } | { error }（**绝不抛出**：引擎不因装户代码崩溃）
+    const resolveDeriver = (name) => {
+      if (derivers[name]) return { fn: derivers[name], builtin: true };
+      const st = loadAdopterDerivers();
+      if (!st.ok) return { error: st.errors.join('；') };
+      const fn = st.derivers[name];
+      if (typeof fn !== 'function') {
+        if (fn !== undefined) return { error: `${adopterModRel} 的「${name}」不是函数（实际类型：${typeof fn}）` };
+        return { error: `无对应取数器——内置 8 个指标均不含该名，${adopterModRel} 亦未定义（登记了却没实现＝其实没查）` };
+      }
+      return { fn, builtin: false };
+    };
+    // 装户模块载入失败：**先报一次、独立成条**（2026-09-28 adopter-derivers）。
+    // 关键设计（真绿 vs 假绿的分界）：载入失败若只表现为「该指标无取数器」，装户会看到
+    // 「引用了 my.metric → 未登记」，看起来像**自己忘了登记**，而真因是模块坏了——他会去 registry
+    // 反复核对，永远查不到。故此处单独出一条，明示文件与错误，与「真的没登记」可区分。
+    const adopterLoad = loadAdopterDerivers();
+    if (!adopterLoad.ok) {
+      for (const e of adopterLoad.errors) warnings.push(`- [WARN 装户取数器载入失败] ${e}`);
+    }
     // 解析登记表：`<指标名> = <取数表达式>`（表达式须与指标名同形，二者不一致即登记笔误）
     const declared = new Map();
     for (const raw of linesOf(mcFile) || []) {
@@ -778,7 +853,20 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
       const m = /^([A-Za-z][\w.]*)\s*=\s*([A-Za-z][\w.]*)$/.exec(line);
       if (!m) { warnings.push(`- [WARN 指标登记] .agents/metric-claims.txt 行格式非法（应为 \`指标名 = 取数表达式\`）：${line}`); continue; }
       if (m[1] !== m[2]) { warnings.push(`- [WARN 指标登记] 登记名与取数表达式不一致：${m[1]} ≠ ${m[2]}`); continue; }
-      if (!derivers[m[1]]) { warnings.push(`- [WARN 指标登记] 指标「${m[1]}」无对应取数器（fail-loud：登记了却没实现＝其实没查）——请在 check-loop 检查 16 的 derivers 中补实现`); continue; }
+      const r = resolveDeriver(m[1]);
+      if (r.error) {
+        // 无取数器（内置无 + 装户模块无同名）或装户模块载入失败 → 明示可操作方向
+        const hint = adopterLoad.ok
+          ? `若为项目自有指标，请在 ${adopterModRel} 的 derivers 中实现（契约见 .agents/metric-claims.txt 头部）`
+          : `且 ${adopterModRel} 载入失败（见上方「装户取数器载入失败」条目——**这不是「忘了登记」**）`;
+        warnings.push(`- [WARN 指标登记] 指标「${m[1]}」无对应取数器（fail-loud：登记了却没实现＝其实没查）——内置 8 指标不含该名，${hint}`);
+        // **不 continue**：该指标在 registry 里确实登记过，故仍计入 declared——
+        // 否则引用它的文档会被误报为「未登记」（把「模块坏了」伪装成「忘了登记」，正是本单要防的假绿）。
+        // 取数失败在扫描阶段以「指标取数失败」单独出账，两条信息不互相掩盖。
+      } else if (r.builtin && adopterLoad.ok && typeof adopterLoad.derivers[m[1]] === 'function') {
+        // 内置与装户同名：内置优先（保持本仓/存量行为稳定），并明示装户定义被忽略
+        warnings.push(`- [WARN 指标登记] 指标「${m[1]}」由引擎内置提供，${adopterModRel} 中的同名定义**被忽略**（内置优先）——如需改用自有实现，请换一个指标名`);
+      }
       declared.set(m[1], true);
     }
     // 扫活跃态文档（沿检查 4 现有尺度：终态件的历史数字是历史叙述，不扫）
@@ -814,7 +902,25 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
             warnings.push(`- [WARN 指标未登记] ${rel}:${i + 1} 引用 {{${name}}} 但 .agents/metric-claims.txt 未登记该指标（未登记＝无从对账）`);
             continue;
           }
-          const real = derivers[name]();
+          const r = resolveDeriver(name);
+          if (r.error) {
+            // 取数器不可用（含装户模块载入失败 / 无该名 / 定义非法）——**响亮出账，绝不静默跳过**
+            warnings.push(`- [WARN 指标取数失败] ${rel}:${i + 1} {{${name}}} 无法取数：${r.error}`);
+            continue;
+          }
+          let real;
+          try {
+            real = r.fn(ctx);
+          } catch (e) {
+            warnings.push(`- [WARN 指标取数失败] ${rel}:${i + 1} {{${name}}} 取数器抛异常：${String(e && e.message ? e.message : e).split('\n')[0]}`);
+            continue;
+          }
+          // 返回值必须是有限数字：Promise（误写 async）/ NaN / 字符串 / undefined 一律拦下并明示类型
+          if (typeof real !== 'number' || !Number.isFinite(real)) {
+            const kind = real && typeof real.then === 'function' ? 'Promise（本检查要求**同步**函数，请去掉 async/await）' : `${typeof real}${typeof real === 'number' ? `（${real}）` : ''}`;
+            warnings.push(`- [WARN 指标取数失败] ${rel}:${i + 1} {{${name}}} 取数器返回值不是有限数字：${kind}`);
+            continue;
+          }
           // 判据：签名**必须**被替换为实时值——留有 `{{...}}` 即视为未回填（写作期占位，关单前须落实）
           warnings.push(`- [WARN 指标待回填] ${rel}:${i + 1} {{${name}}} 实时值 = ${real}——请把签名替换为该数字（留签名＝未回填）`);
         }

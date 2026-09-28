@@ -30,17 +30,35 @@
 #                         .md、排除 _TEMPLATE.md、且仓库模式下只计 HEAD 已跟踪件
 #                         （故并行会话的未跟踪新档不计入）；sub ∈ intents/specs/plans/incidents
 #   docs.count.all        上述四类合计
-# 新增指标：在此加一行 + 在 check-loop 检查 16 的 `derivers` 里加同名实现（缺实现 = fail-loud）
+# ── 新增指标（2026-09-28 adopter-derivers 起）────────────────────────────────
+# 分两层取数，**内置优先**：
+#   ① 引擎内置 8 个指标（下表）——装户零配置即用，不需要做任何事。
+#   ② 项目自有指标——写 `.agents/metric-derivers.mjs`（**owned**，sync 永不覆盖），
+#      导出 `derivers` 对象（指标名 → 取数函数），并在此表加同名一行。
 #
-# ⚠️ **已知限制（2026-09-28 真装实测发现，未修）——装户目前无法新增自有指标**：
-#   本表是 owned（项目自持，可自由改），但 `derivers` 硬编码在 check-loop.mjs 里，而那是
-#   **managed**（随包升级、装户不应改）。故装户在此加一行只会得到「无对应取数器」fail-loud，
-#   而唯一的出路（改引擎）代价是：sync 永久报「本地已改」+ doctor WARN +
-#   **check-loop 因供应链防线直接跳过执行（门禁静默停摆）**。
-#   结论：**当前只有本表已列出的引擎内置指标可用**。装户若需自定义指标，请先等机制设计
-#   （候选：受限表达式 / 装户侧 derivers 动态载入 / 明确 dev 面限定）——见 spec
-#   workflow/specs/2026-09-28-metric-claim-gate.md「确认与复核」⑤。
-#   **本仓（包源）不受此限**：改 templates/ 后 sync 即生效。
+# 示例 `.agents/metric-derivers.mjs`：
+#     export const derivers = {
+#       'my.migrations': (ctx) => ctx.glob('backend/migrations/*.sql').length,
+#       'my.apiCount':   (ctx) => ctx.countFiles('src/api', (f) => f.endsWith('.controller.ts')),
+#     };
+# ctx 提供（同步，免你重复造轮子；其余请自行 `import fs from 'node:fs'`）：
+#     ctx.root                    仓库根绝对路径
+#     ctx.read(rel)               读文本文件（LF 归一），不存在返回 ''
+#     ctx.glob(pattern)           极简 glob（* / **），返回相对路径数组
+#     ctx.countFiles(dir, pred)   递归计数（可传谓词）
+#
+# 三条硬约定（违反即 fail-loud）：
+#   1. **必须是同步函数**（返回 number，不得 async/Promise）——本检查零网络、要求本地确定性
+#   2. 必须**确定性**：不得依赖网络、不得依赖当前时间
+#   3. 返回值须为**有限数字**（Number.isFinite）
+#
+# 失败语义（**绝不静默降级**）：模块语法错 / 抛异常 / 未导出 derivers / 返回值非法
+#   → 一律出 `[WARN 装户取数器载入失败]` 或 `[WARN 指标取数失败]`，**不会**退化成
+#   「只用内置指标」——否则你会误以为「忘了登记」而查不到真因。
+# 指标名与内置同名时：**内置优先**，你的定义被忽略（会出 advisory 明示）。
+#
+# 注：本检查**不设取数超时**——请让取数器保持轻量（秒级）。死循环会拖慢门禁。
+# 另：装户模块的「取数器」在引擎侧（check-loop.mjs，managed）；本表与 derivers.mjs 同归 owned。
 #
 # 注意：不登记 advisory 总数类指标——它由 check-loop 自身产出（检查 16 是其一部分），
 # 自引用会让「报告本身改变被报告的数」，产生不可稳定对账的循环。
