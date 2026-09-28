@@ -1,9 +1,10 @@
 ---
-状态: draft
+状态: approved
 级别: L1
 日期: 2026-09-28
 模块: pipeline
 备注: 同名入口：../incidents/2026-09-28-claim-exceeds-fix.md。L1 极简形态（改动面 + 验证方式）；无同名 spec（L1 可省，且本单不改契约面）。
+确认指纹: 39e040f7b0813de2
 ---
 # PLAN — 结论文档断言强于实际的窄修与纪律固化
 
@@ -34,5 +35,8 @@
 
 > 确认 = 用户在对话内一句话通过；确认后本 plan 状态 `draft → approved` 并回填本节，`done` 只在关单出现。
 
-- 确认结果：<待填>
-- 确认门记录：plan 草稿全文过目 + 改动清单确认
+- 确认结果：approved（2026-09-28 用户对话内确认——「incident 草稿 可用，plan 可用，确认之后回填看看」）
+- 确认门记录：plan 草稿全文过目 + 改动清单确认（**用户对「spec 两处数字残留」的处置亦一并拍板**：不改旧单，由 incident 登记遗留面）
+- 执行记录：实现 `37b3c05`（10 文件）——三处措辞窄修（`check-loop.mjs` :41 / `check-loop.test.mjs` :1065 及装副本）+ README 纪律节 + regression-checklist 条目
+- 验证结果：`check-loop` exit 0 ｜ `doctor` 12 PASS / 0 WARN / 0 FAIL ｜ `source-sync-check --diff` 0 差异 ｜ `check-loop.test.mjs` **79/1 与 HEAD 基线逐位相同**（该 1 项「常驻面预算:超限」依赖 `sh`/`rule-budget.sh`，为环境预存失败；`gate-dotnet-ca` 5 项同理——**均非本单引入**，已在 incident 据实声明）
+- **偏离（据实记录）**：改动面由 2 文件扩为 4 项——实现中发现**第三处**同类残留（`check-loop.mjs:41` 条件①「作者不可手填」，而台账为本地可写、检查不验签），经用户确认后纳入本单
