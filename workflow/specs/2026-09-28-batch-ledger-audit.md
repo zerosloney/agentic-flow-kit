@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-28
 模块: pipeline
 备注: 同名 incident：../incidents/2026-09-28-batch-ledger-audit.md（并录审计判据方向性失效）。L2：改判据 + 台账 schema 纯增字段（向后兼容）。
-确认指纹: 398d45a9a0adaa65
+确认指纹: da6834b4c8ad198a
 ---
 # SPEC — 并录审计改读 batch 事实
 

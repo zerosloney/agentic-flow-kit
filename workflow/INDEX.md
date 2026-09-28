@@ -5,13 +5,10 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（18）
+## 活跃（15）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
-| INCIDENT | L2 | open | 2026-09-28 | pipeline | 2026-09-28 并录审计判据方向性失效（从时间戳反推调用次数） | — |
-| PLAN | L2 | approved | 2026-09-28 | pipeline | 并录审计改读 batch 事实 | — |
-| SPEC | L2 | approved | 2026-09-28 | pipeline | 并录审计改读 batch 事实 | — |
 | INCIDENT | L1 | open | 2026-09-27 | pipeline | 2026-09-27 P2 池批二（看板/wiki/宿主维护面收口） | — |
 | SPEC | L2 | approved | 2026-09-27 | pipeline | confirm-gate-one-per-call | — |
 | INCIDENT | L1 | open | 2026-09-25 | pipeline | 2026-09-25 doctor owned 漂移 WARN 升级 FAIL | — |
@@ -28,17 +25,17 @@
 | PLAN | L1 | approved | 2026-09-23 | pipeline | M5：npm 发布 | — |
 | SPEC | L2 | approved | 2026-09-23 | pipeline | M4 自装 dogfooding | — |
 
-## 档案计数（113，不进表）
+## 档案计数（116，不进表）
 
 | 类型 | 模块 | 数量 |
 |---|---|---|
-| INCIDENT | pipeline | 15 |
+| INCIDENT | pipeline | 16 |
 | INTENT | pipeline | 33 |
 | INTENT | wiki | 1 |
-| PLAN | pipeline | 48 |
+| PLAN | pipeline | 49 |
 | PLAN | wiki | 1 |
-| SPEC | pipeline | 15 |
+| SPEC | pipeline | 16 |
 
-终态构成：done 98 · closed 9 · fixed 6；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
+终态构成：done 100 · closed 10 · fixed 6；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
 
 <!-- GENERATED:END -->

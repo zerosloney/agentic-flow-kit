@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-28
 模块: pipeline
 备注: 同名入口：../incidents/2026-09-28-batch-ledger-audit.md；同名 spec：../specs/2026-09-28-batch-ledger-audit.md。L2 四节。
-确认指纹: 60f576072e148387
+确认指纹: c9cd0dc8bcb18105
 ---
 # PLAN — 并录审计改读 batch 事实
 
