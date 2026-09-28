@@ -204,6 +204,11 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
     r.status === 0 && after.includes('状态: cancelled') && after.includes(`确认指纹: ${fpExpect.slice(0, 16)}`)
       && j.stage === 'cancelled' && j.prev === 'draft' && j.quote === '不做了' && j.fingerprint === fpExpect,
     JSON.stringify({ status: r.status, stderr: r.stderr, ledger: led }));
+  // 调用事实（2026-09-28 batch-ledger-audit）：委托单份 → of=1、seq=1、batch 为非空字符串
+  // （check-loop 检查 15 的并录审计据此判「是否一次调用落多份」——不再从 quote/ts 反推）
+  check('S16b 台账行含调用事实 batch/seq/of 且单份 = of=1 / seq=1',
+    typeof j.batch === 'string' && j.batch.length > 0 && j.seq === 1 && j.of === 1,
+    JSON.stringify({ batch: j.batch, seq: j.seq, of: j.of }));
   fs.rmSync(root, { recursive: true, force: true });
 }
 

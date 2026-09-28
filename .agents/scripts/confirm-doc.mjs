@@ -14,7 +14,12 @@
 //     永不伪装 TTY 行。调用纪律（AI 须先取得用户对话内明确确认）由 AGENTS.md 确认门条款承载，
 //     quote 原话入账供事后对质。
 // 台账：.agents/confirmations.jsonl（入 git、追加式）——每行 {ts, doc, stage, fingerprint(64位), prev,
-//   source:"tty"|"chat-delegated", quote?(仅委托行)}。
+//   source:"tty"|"chat-delegated", quote?(仅委托行), batch, seq, of}。
+//   batch/seq/of（2026-09-28 batch-ledger-audit 新增，纯增字段、向后兼容、历史行不回填）：
+//   记「本次进程调用落了几份态」这一**写入时确定已知的事实**——batch 为本次调用生成的短随机串
+//   （无时间语义、无全局唯一要求，仅需单台账内不碰撞），seq 为该次调用内件序（从 1），of 为本次
+//   调用总份数。check-loop 检查 15 的并录审计据此直读事实判定，不再从 quote 相等 + ts 接近反推
+//   （旧判据可被「换 quote」平凡规避、且合规逐件复用同句必然误报——见同名 incident）。
 // 指纹：内容 CRLF 归一 → 剔除「确认指纹:」行（防自引用）→ sha256；frontmatter 存前 16 位，台账存全量。
 // 用法：node .agents/scripts/confirm-doc.mjs <workflow/intents|x.md> [<doc2>...] [--root <仓库根>]
 //       node .agents/scripts/confirm-doc.mjs <doc...> --delegated "<用户对话原话>"（委托代录）
@@ -25,7 +30,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
-import { createHash } from 'node:crypto';
+import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 
 // computeFingerprint(text)：CRLF 归一 → 剔指纹行 → sha256 hex（64 位）
@@ -134,6 +139,10 @@ if (isMain) {
       process.exit(1);
     }
   }
+  // 调用事实（2026-09-28 batch-ledger-audit）：本次进程调用的批次标识与件序——
+  // 供 check-loop 检查 15 的并录审计直读（替代「同 quote + ts 接近」的反推）。
+  const batch = randomBytes(3).toString('hex');
+  let seq = 1;
   const rl = delegated ? null : readline.createInterface({ input: process.stdin, output: process.stdout });
   const ask = (q) => new Promise((res) => rl.question(q, res));
   let confirmed = 0;
@@ -166,9 +175,12 @@ if (isMain) {
       appendLedger(root, {
         ts: new Date().toISOString(), doc, stage: target, fingerprint: fp, prev: st,
         source: 'chat-delegated', quote: String(delegatedQuote),
+        // 调用事实（batch-ledger-audit）：seq=本次调用内件序（从 1），of=本次调用总份数
+        batch, seq, of: docs.length,
       });
       console.log(`✓ ${doc} ${st} → ${target}（指纹 ${fp.slice(0, 16)}，代录已记账：source=chat-delegated）`);
       confirmed++;
+      seq++;
       continue;
     }
     console.log('\n'.repeat(3) + '='.repeat(72));
@@ -185,9 +197,11 @@ if (isMain) {
     appendLedger(root, {
       ts: new Date().toISOString(), doc, stage: target, fingerprint: fp, prev: st,
       source: 'tty',
+      batch, seq, of: docs.length, // 调用事实（形态无关：TTY 多文档天然逐件过目，of>1 不构成违规）
     });
     console.log(`✓ ${doc} → ${target}（指纹 ${fp.slice(0, 16)}，台账已记）`);
     confirmed++;
+    seq++;
   }
   if (rl) rl.close();
   console.log(`\n完成：确认 ${confirmed} 份 / 跳过 ${docs.length - confirmed} 份${delegated ? '（委托代录）' : ''}`);

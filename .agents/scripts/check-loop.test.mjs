@@ -809,8 +809,14 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   }
 }
 
-// ---- 场景 64-66:检查 15 并录批次审计（2026-09-27 confirm-gate-one-per-call）----
-//     delegated 合法跳转行按「quote 相同 + 相邻 ts 差 < 2s」聚组，组 > 1 → warning「确认并录」（存量可见性，不阻断）
+// ---- 场景 64-66:检查 15 并录批次审计（2026-09-28 batch-ledger-audit 改判据：读 batch/of 事实）----
+// 判据演进：原「同 quote + 相邻 ts 差 < 2s」反推调用次数（已被实证假阳性+假阴性，整段退役）；
+// 现「台账行按 batch 分组、组内 of>1 且含 delegated 行 → warning」。本块场景随之改判定依据，
+// **断言强度不放宽、场景不删**（同一意图换了机制）：
+//   · 原「同 quote 双份 2s 内」→ 现「同 batch、of=2、delegated」→ 报（机制换、意图同：一次调用落两份）
+//   · 原「异 quote / >2s 不聚组」→ 现「不同 batch（或 of=1）→ 不报」；且**新增反向场景**：同 batch
+//     但换 quote、或人为延迟跨 2s，仍须被拦——这正是旧判据的盲区（旧判据下会漏报）
+//   · 原「revert-draft 注记行不参与」→ 现由 VALID_STAGES 过滤承接（同意图）
 {
   const mk2LedgerDocs = (T) => {
     // 两份全配对绑定的 done 文档（复用 mkDoneFixture 的构造口径）
@@ -825,7 +831,67 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     return [mkOne('ab1', '2026-09-28'), mkOne('ab2', '2026-09-28')];
   };
   {
-    // 同 quote 双份 1.5s 内 → warning 可见（exit 0 不阻断）
+    // 同一批（batch 同、of=2）delegated → warning 可见（exit 0 不阻断）——原「同 quote 双份」的新机制等价物
+    const T = mkfix();
+    const [d1, d2] = mk2LedgerDocs(T);
+    writeLedger(T, [
+      { ts: '2026-09-28T02:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'chat-delegated', quote: '两份一起', batch: 'b1', seq: 1, of: 2 },
+      { ts: '2026-09-28T02:00:00.100Z', doc: d2.rel, stage: 'done', fingerprint: d2.fp, prev: 'approved', source: 'chat-delegated', quote: '两份一起', batch: 'b1', seq: 2, of: 2 },
+    ]);
+    const r = run(T);
+    check('检查15:同 batch 且 of=2（delegated）→ WARN 确认并录（exit 0 审计可见性）',
+      r.status === 0 && outOf(r).includes('确认并录') && outOf(r).includes('2 份'),
+      `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 【核心回归·旧判据盲区】同一批但**换 quote**（"甲"/"乙"）且 ts 相差 5s：
+    //   旧判据（同 quote + 差 < 2s）→ 两个信号都不命中 → **零告警**（漏报真实并录）
+    //   新判据读 batch/of（与 quote、ts 无关）→ 仍须报。此场景在旧判据下必然变红。
+    const T = mkfix();
+    const [d1, d2] = mk2LedgerDocs(T);
+    writeLedger(T, [
+      { ts: '2026-09-28T02:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'chat-delegated', quote: '甲', batch: 'b2', seq: 1, of: 2 },
+      { ts: '2026-09-28T02:00:05.000Z', doc: d2.rel, stage: 'done', fingerprint: d2.fp, prev: 'approved', source: 'chat-delegated', quote: '乙', batch: 'b2', seq: 2, of: 2 },
+    ]);
+    const r = run(T);
+    check('检查15:同 batch 但换 quote + 隔 5s → 仍报并录（旧判据盲区，本单核心回归）',
+      r.status === 0 && outOf(r).includes('确认并录') && outOf(r).includes('2 份'),
+      `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // of=1（逐件调用）复用**同一句** quote 且 ts 极近 → **不报**。
+    // 这是旧判据的假阳性面：用户两次都说「可以」+ 快速连跑，旧判据必然误报；新判据读 of=1 正确放过。
+    const T = mkfix();
+    const [d1, d2] = mk2LedgerDocs(T);
+    writeLedger(T, [
+      { ts: '2026-09-28T02:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'chat-delegated', quote: '可以', batch: 'b3', seq: 1, of: 1 },
+      { ts: '2026-09-28T02:00:00.050Z', doc: d2.rel, stage: 'done', fingerprint: d2.fp, prev: 'approved', source: 'chat-delegated', quote: '可以', batch: 'b4', seq: 1, of: 1 },
+    ]);
+    const r = run(T);
+    check('检查15:两次逐件调用（of=1）复用同一句 quote 且 ts 极近 → 不报（修旧判据假阳性）',
+      r.status === 0 && !outOf(r).includes('确认并录'),
+      `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // TTY 形态 of>1：用户亲手逐份过目键入（天然逐件），不构成违规 → 不报
+    const T = mkfix();
+    const [d1, d2] = mk2LedgerDocs(T);
+    writeLedger(T, [
+      { ts: '2026-09-28T03:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'tty', batch: 't1', seq: 1, of: 2 },
+      { ts: '2026-09-28T03:00:01.000Z', doc: d2.rel, stage: 'done', fingerprint: d2.fp, prev: 'approved', source: 'tty', batch: 't1', seq: 2, of: 2 },
+    ]);
+    const r = run(T);
+    check('检查15:TTY 形态 of=2（亲手逐份过目）→ 不报并录',
+      r.status === 0 && !outOf(r).includes('确认并录'),
+      `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 无 batch 字段的历史行（schema 演进前）→ 静默跳过，不报、不降级出账
+    // （沿 audit-gate-hardening P3：无判定依据的行不产出不可消除噪声）
     const T = mkfix();
     const [d1, d2] = mk2LedgerDocs(T);
     writeLedger(T, [
@@ -833,48 +899,23 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
       { ts: '2026-09-28T02:00:01.500Z', doc: d2.rel, stage: 'done', fingerprint: d2.fp, prev: 'approved', source: 'chat-delegated', quote: '两份一起' },
     ]);
     const r = run(T);
-    check('检查15:同 quote 双份 2s 内 → WARN 确认并录（exit 0 审计可见性）',
-      r.status === 0 && outOf(r).includes('确认并录') && outOf(r).includes('2 份'),
-      `exit=${r.status}\n${outOf(r)}`);
-    rmfix(T);
-  }
-  {
-    // 异 quote / 间隔 > 2s / TTY 行 → 均不聚组
-    const T = mkfix();
-    const [d1, d2] = mk2LedgerDocs(T);
-    writeLedger(T, [
-      { ts: '2026-09-28T02:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'chat-delegated', quote: '第一份' },
-      { ts: '2026-09-28T02:00:01.000Z', doc: d2.rel, stage: 'done', fingerprint: d2.fp, prev: 'approved', source: 'chat-delegated', quote: '第二份' },
-      { ts: '2026-09-28T03:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'tty' },
-      { ts: '2026-09-28T03:00:01.000Z', doc: d2.rel, stage: 'done', fingerprint: d2.fp, prev: 'approved', source: 'tty' },
-    ]);
-    const r = run(T);
-    check('检查15:异 quote 分次 + TTY 多文档 → 不报确认并录',
+    check('检查15:无 batch 的历史行 → 静默跳过（不报、不降级出账）',
       r.status === 0 && !outOf(r).includes('确认并录'),
       `exit=${r.status}\n${outOf(r)}`);
-    // 同 quote 间隔 > 2s → 不聚组（P2-1：2s 阈值钉住）
-    writeLedger(T, [
-      { ts: '2026-09-28T04:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'chat-delegated', quote: '同一句' },
-      { ts: '2026-09-28T04:00:03.000Z', doc: d2.rel, stage: 'done', fingerprint: d2.fp, prev: 'approved', source: 'chat-delegated', quote: '同一句' },
-    ]);
-    const r3 = run(T);
-    check('检查15:同 quote 间隔 > 2s → 不聚组（2s 阈值钉住，P2-1）',
-      r3.status === 0 && !outOf(r3).includes('确认并录'),
-      `exit=${r3.status}\n${outOf(r3)}`);
     rmfix(T);
   }
   {
-    // revert-draft 注记行（stage 非法跳转）→ 不参与聚组不报
+    // 不同 batch 各自 of=1；revert-draft 注记行（stage 非法）不参与 → 一条都不报
     const T = mkfix();
     const [d1, d2] = mk2LedgerDocs(T);
     writeLedger(T, [
-      { ts: '2026-09-28T02:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'chat-delegated', quote: 'x' },
-      { ts: '2026-09-28T02:00:00.400Z', doc: d2.rel, stage: 'done', fingerprint: d2.fp, prev: 'approved', source: 'chat-delegated', quote: 'x' },
-      { ts: '2026-09-28T02:00:00.900Z', doc: 'workflow/plans/2026-09-28-ghost.md', stage: 'revert-draft', fingerprint: 'n/a', prev: 'approved', source: 'chat-delegated', quote: 'x' },
+      { ts: '2026-09-28T02:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'chat-delegated', quote: 'x', batch: 'c1', seq: 1, of: 1 },
+      { ts: '2026-09-28T02:00:00.400Z', doc: d2.rel, stage: 'done', fingerprint: d2.fp, prev: 'approved', source: 'chat-delegated', quote: 'x', batch: 'c2', seq: 1, of: 1 },
+      { ts: '2026-09-28T02:00:00.900Z', doc: 'workflow/plans/2026-09-28-ghost.md', stage: 'revert-draft', fingerprint: 'n/a', prev: 'approved', source: 'chat-delegated', quote: 'x', batch: 'c3', seq: 1, of: 3 },
     ]);
     const r = run(T);
-    check('检查15:revert-draft 注记行不参与批次聚组（双 done 同 quote 若聚组应报 2 份——加注记行后仍恰 2 份）',
-      r.status === 0 && (outOf(r).match(/确认并录/g) || []).length === 1 && outOf(r).includes('2 份') && !outOf(r).includes('ghost'),
+    check('检查15:异 batch 各自 of=1 + revert-draft 注记行 → 不报并录（注记行由 VALID_STAGES 过滤）',
+      r.status === 0 && !outOf(r).includes('确认并录') && !outOf(r).includes('ghost'),
       `exit=${r.status}\n${outOf(r)}`);
     rmfix(T);
   }

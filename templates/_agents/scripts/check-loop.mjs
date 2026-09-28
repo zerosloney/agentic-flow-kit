@@ -53,8 +53,13 @@
 //      按 prev 复原跳转前文本重算 sha256 与台账全量比对,不符=hard「确认内容漂移」;状态行保分隔符换值
 //      (非规范格式不误伤);台账行缺 prev 降级 warning;关单编辑顺序新约定:勾验/回填先于关单确认,
 //      confirm-doc 是最后一次写入)
-//      + 并录批次审计子检查(2026-09-27 confirm-gate-one-per-call:台账同 quote 多份 delegated 聚组
-//      可见=warning「确认并录」——存量并录如实可数,confirm-doc 现已拒绝多份并录)
+//      + 并录批次审计子检查(2026-09-28 batch-ledger-audit 改判据;**读调用事实,不猜时间戳模式**):
+//      判据 = 台账行按 batch 分组、组内 of>1(delegated 行) → warning「确认并录」;batch/seq/of 由
+//      confirm-doc 写入时记录(那才是"本次调用落几份"确定已知的时刻)。旧判据「同 quote + 相邻 ts<2s」
+//      整段退役——已实证四类失效:假阳性(合规逐件复用同句必然误报)/假阴性(换 quote 即零告警,
+//      等于引导伪装)/噪声不可消退(不按日期门豁免,一度占本仓 advisory 62% 且自认不可区分)/
+//      quote 字段职责冲突(对质凭据 vs 并录指纹,现归还单一职责)。无 batch 的历史行静默跳过
+//      (无判定依据的行不产出不可消除噪声——沿 audit-gate-hardening P3 教训)
 //
 // 注：清单条目 5（状态字段+L3 复核）与 1（配对）在同一遍 intents/specs/plans 循环里实现（沿 sh 版代码结构）；
 //    条目 6 的旧委派残留/钉死模型子项在「角色契约与 Adapter」代码段实现。
@@ -641,30 +646,34 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
       }
     }
   }
-  // 并录批次审计（2026-09-27 confirm-gate-one-per-call，15 原位子检查）：delegated 合法跳转行按
-  // 「quote 相同 + 相邻 ts 差 < 2s」聚组，组 > 1 → warning「确认并录」。文案中性口径（复核 P2-2）：
-  // 历史并录（修复前多份一次代录）与合规连跑（逐件调用 quote 同文）在此判据下不可区分——审计可见性
-  // 非违规定性。不按日期门豁免：存量如实可见正是目的。revert-draft 注记行（stage 非合法跳转）天然被过滤。
-  // VALID_STAGES 复用外层声明（复核 P2-3 更正：此前本块内另有一份同名声明，遮蔽外层——两处字面相同、
-  // 行为等价但无链接，未来只改一处即静默分叉；同 incident「相邻两处只修一处」的同类风险，已删内层）。
+  // 并录批次审计（2026-09-28 batch-ledger-audit 改判据；原 2026-09-27 confirm-gate-one-per-call 引入）：
+  // **读调用事实，不猜时间戳模式**。判据 = 台账行按 `batch` 分组，组内 `of > 1` → warning「确认并录」。
+  // batch/seq/of 由 confirm-doc 在**写入时**记录（那才是「本次调用落了几份」确定已知的时刻）；
+  // 旧判据「同 quote + 相邻 ts 差 < 2s」是拿两个间接信号反推该事实，已实证四类失效并**整段退役**：
+  //   ① 假阳性：合规逐件调用复用同句（用户两次都说「可以」）→ 必然误报；
+  //   ② 假阴性：并录时给每份换不同 quote → 零告警（判据的实际效果是引导伪装者改 quote）；
+  //   ③ 噪声不可消退：不按日期门豁免，本仓一度 13/23 条 advisory 皆为该告警，且文案自认「不可区分」；
+  //   ④ 字段职责冲突：`quote` 同时当「对质凭据」与「并录指纹」——现归还单一职责，只记用户原话。
+  // 无 `batch` 字段的历史行（schema 演进前，本仓 61 行）→ **静默跳过**，不降级出账、不回溯：按
+  // audit-gate-hardening P3 教训（「扫了只产生不可消除的 advisory 噪声，真漏点被淹没」），无判定依据
+  // 的行不该产出告警。VALID_STAGES 复用外层声明（复核 P2-3 更正：此前本块内另有一份同名声明遮蔽外层）。
   {
-    const delegRows = ledger.filter((e) => e && e.source === 'chat-delegated' && VALID_STAGES.has(e.stage)
-      && typeof e.ts === 'string' && typeof e.quote === 'string')
-      .sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0)); // 复核 P2-4：相等键 0 分支
-    // 线性扫描聚组（同 quote 且相邻行 ts 差 < 2s 为一批；组间自然分割——Map 按 quote 索引会互相覆盖）
-    let g = [];
-    const flush = () => {
-      if (g.length > 1) {
-        const docs = g.map((r) => r.doc.replace(/^workflow\//, '')).join('、'); // 复核 P2-4：保留子目录段（三件套可辨）
-        warnings.push(`- [WARN 确认并录] 同 quote 相邻落账 ${g.length} 份（quote「${g[0].quote.slice(0, 20)}${g[0].quote.length > 20 ? '…' : ''}」）：${docs}——历史并录（修复前多份一次代录）与合规连跑（逐件调用 quote 同文）不可区分，属审计可见性非违规定性（confirm-doc 已拒绝多份并录；不阻断）`);
-      }
-      g = [];
-    };
-    for (const row of delegRows) {
-      if (g.length && (row.quote !== g[0].quote || Math.abs(new Date(row.ts) - new Date(g[g.length - 1].ts)) >= 2000)) flush();
-      g.push(row);
+    const byBatch = new Map(); // batch → 该批的台账行（仅计合法跳转 stage）
+    for (const e of ledger) {
+      if (!e || !VALID_STAGES.has(e.stage)) continue;
+      if (typeof e.batch !== 'string' || !e.batch) continue; // 历史行无 batch → 无判定依据，跳过
+      if (!byBatch.has(e.batch)) byBatch.set(e.batch, []);
+      byBatch.get(e.batch).push(e);
     }
-    flush();
+    for (const [b, rows] of byBatch) {
+      const of = rows[0].of;
+      // of > 1 = 一次调用落多份态。delegated 形态下这正是「并录」（入口已拒多份，此处抓历史/绕行）；
+      // TTY 形态天然逐份过目（用户亲手键入），of>1 不构成违规——故只对 delegated 行报。
+      if (!(typeof of === 'number' && of > 1)) continue;
+      if (!rows.some((r) => r.source === 'chat-delegated')) continue;
+      const docs = rows.map((r) => String(r.doc).replace(/^workflow\//, '')).join('、');
+      warnings.push(`- [WARN 确认并录] 单次调用落账 ${rows.length} 份（batch ${b}，of=${of}）：${docs}——同一次 --delegated 调用放行多份，塌掉「逐件确认」门（build.md）；口径见 workflow/papercuts.md 2026-09-28 与 incidents/2026-09-28-batch-ledger-audit.md`);
+    }
   }
 }
 
