@@ -240,5 +240,42 @@ if (!SRC_ROOT) {
   check('S14 内容差异（甲 vs 乙）→ 报漂移（归一只认 CRLF 不吞内容）', r.drift.length === 1 && r.drift[0].rel === 'commands/a.md', JSON.stringify(r.drift));
 }
 
+// ---- 场景 15-16：项目自持架子文件排除（2026-09-28 runtime-env 双源冲突）----
+{
+  // S15 notes/runtime-env.md **两侧都被排除**——包源只发骨架、装户填实况，两处本就该不同。
+  // 回归：首版只过滤装副本一侧 → 排除件变成「包源有/装副本无」的**缺失**，--gate 仍 exit 1
+  // （实测：漂移 1 → 缺失 1）。故断言 missing/drift 皆为空。
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-ssc-owned-'));
+  const pkgRoot = path.join(root, 'pkg');
+  const target = path.join(root, 'target');
+  const pkgBase = path.join(pkgRoot, 'templates', '_agents', 'notes');
+  const tgtBase = path.join(target, '.agents', 'notes');
+  fs.mkdirSync(pkgBase, { recursive: true });
+  fs.mkdirSync(tgtBase, { recursive: true });
+  fs.writeFileSync(path.join(pkgBase, 'runtime-env.md'), '# 骨架\n> 项目按实际填写\n');
+  fs.writeFileSync(path.join(tgtBase, 'runtime-env.md'), '# 实况\n> 本机 sh 路径已接\n');
+  const r = sourceSyncCheck({ pkgRoot, target });
+  check('S15 项目自持 runtime-env.md 两侧内容不同 → 既不报缺失也不报漂移（双侧排除）',
+    r.missing.length === 0 && r.drift.length === 0,
+    JSON.stringify({ missing: r.missing, drift: r.drift }));
+}
+{
+  // S16 排除**只针对该文件**——同目录其他 .md 仍受双源门禁约束（防排除范围被误放大）
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-ssc-owned2-'));
+  const pkgRoot = path.join(root, 'pkg');
+  const target = path.join(root, 'target');
+  const pkgBase = path.join(pkgRoot, 'templates', '_agents', 'notes');
+  const tgtBase = path.join(target, '.agents', 'notes');
+  fs.mkdirSync(pkgBase, { recursive: true });
+  fs.mkdirSync(tgtBase, { recursive: true });
+  fs.writeFileSync(path.join(pkgBase, 'runtime-env.md'), '# 骨架\n');
+  fs.writeFileSync(path.join(tgtBase, 'runtime-env.md'), '# 实况\n');
+  fs.writeFileSync(path.join(pkgBase, 'other.md'), '# v1\n');
+  fs.writeFileSync(path.join(tgtBase, 'other.md'), '# v2\n');
+  const r = sourceSyncCheck({ pkgRoot, target });
+  check('S16 排除不放大——同目录 other.md 内容不同仍报漂移',
+    r.drift.length === 1 && r.drift[0].rel === 'notes/other.md', JSON.stringify(r.drift));
+}
+
 console.log('\n合计: PASS ' + pass + ' / FAIL ' + failCount);
 process.exit(failCount ? 1 : 0);

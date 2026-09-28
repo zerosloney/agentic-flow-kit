@@ -204,11 +204,11 @@
     },
     {
       "rel": ".agents/scripts/source-sync-check.mjs",
-      "sha256": "6b2ec3180f5ca1cb02113b4e036c31fc612cfe4669535c01a872ab104e7afff9"
+      "sha256": "e041af858a249cfee04962fdb5646f342d48b6188aa67257f044c120a17db51c"
     },
     {
       "rel": ".agents/scripts/source-sync-check.test.mjs",
-      "sha256": "175b3942d3e0274e919cff610fd1300759f90d5568e23ca85d6f3c72ab5c054e"
+      "sha256": "acba421c9b1e6cf16bb6d9f3fd95d5755ea951db3501006c2e918647cb4c6cca"
     },
     {
       "rel": ".agents/scripts/verify-wiki-consistency.mjs",
@@ -338,7 +338,7 @@
     },
     {
       "rel": ".agents/notes/runtime-env.md",
-      "sha256": "5f02aa1dbe39c56d3742cab930ddeb2c49778da2c6875af7a89119d143daccc4"
+      "sha256": "204832524029ba572e6a1af600bb4645fd28d0698bed763822b0cbfb769316b2"
     },
     {
       "rel": ".agents/rule-budgets.txt",

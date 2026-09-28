@@ -18,7 +18,15 @@ function fail(msg) { console.error('❌ ' + msg); process.exit(1); }
 const VALID_EXTS = new Set(['.md', '.mjs', '.json', '.txt']);
 // 装副本独有文件（init 渲染产物，不属双源结构）
 const RENDER_OUTPUT_FILES = new Set(['kit.json', 'settings.json', 'hooks/commit-check.config.json']);
-const TARGET_EXCLUDE = RENDER_OUTPUT_FILES;  // 向后兼容别名
+// **项目自持、按设计就该与包源骨架不同**的架子文件（2026-09-28 追加）：
+// `notes/runtime-env.md` 自述「记录本机/本项目的运行时差异……**本文件是骨架：项目按实际填写，
+// 不随 flow-kit 升级覆盖**」——即包源只发骨架、装户填实况，**两处本就应当不同**。
+// 但本工具此前按 `.md` 全量比对，导致装户一旦按文件自述填写，`--gate` 即 exit 1（CI 红）：
+// 实测（本仓自装）填写后 --gate 报 `漂移 1: notes/runtime-env.md`，回滚即恢复 0。
+// 这属「门禁范围与文件自述冲突」，非真漂移——故按渲染产物同类处理（排除）。
+// 判据：该文件是**项目内容**而非**引擎件**；引擎件（.mjs 脚本等）不在排除内，仍受双源门禁约束。
+const PROJECT_OWNED_FILES = new Set(['notes/runtime-env.md']);
+const TARGET_EXCLUDE = new Set([...RENDER_OUTPUT_FILES, ...PROJECT_OWNED_FILES]);  // 向后兼容别名（原为 RENDER_OUTPUT_FILES）
 
 function sha256(p) {
   try {
@@ -50,7 +58,10 @@ function walkMd(root) {
 export function sourceSyncCheck({ pkgRoot, target }) {
   const authorityRoot = path.join(pkgRoot, 'templates', '_agents');
   const adapterRoot = path.join(target, '.agents');
-  const pkgFiles = walkMd(authorityRoot);
+  // **两侧都要按 TARGET_EXCLUDE 过滤**（2026-09-28 修正）：只过滤装副本一侧会把排除件
+  // 变成「包源有 / 装副本无」的**缺失**（实测：加排除后 --gate 从「漂移 1」变成「缺失 1」，
+  // 仍 exit 1）。排除的语义是「不参与双源比对」，故包源侧同样滤掉。
+  const pkgFiles = walkMd(authorityRoot).filter((f) => !TARGET_EXCLUDE.has(f));
   const tgtFiles = walkMd(adapterRoot).filter((f) => !TARGET_EXCLUDE.has(f));
   const pkgSet = new Set(pkgFiles);
   const tgtSet = new Set(tgtFiles);
