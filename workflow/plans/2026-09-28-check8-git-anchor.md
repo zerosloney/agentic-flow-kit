@@ -8,6 +8,18 @@
 ---
 # PLAN — 检查 8 生效日锚改 git 首次加入日期
 
+## 执行记录与验证结果
+
+- **T1 判据换锚**：`check-loop.mjs` 新增模块级 `addedDates`（`git log --diff-filter=A --format=@%aI --name-only`，一次全量）+ `addedDateOf()`；检查 8 的 `isNew` 锚由 `base.slice(0,10)` 改为 `addedDateOf(intent)`；头注释同步。**检查 10 未动**（需求不同构）。
+  - **自查**：本仓实跑 advisory **改前改后逐条零差异**（独立复核亦复现：同一工作区改前/改后**逐条一致**）；`exit 0` 无新增 hard。（口径：既有归档 8 条；工作区含本单新增 2 份文档的「模板未填」后为 10 条）
+- **T2 测试**：`check-loop.test.mjs` **82/0**（改前 79/0）——新增核心回归 / 非 git 退化 / 对照 3 条；既有 4 条改造为真 git fixture（独立复核逐条比对：**调用数 / 条件运算符 / 断言文案均一致，未放宽**）。
+- **T3 文档**：`workflow/README.md` 审计边界节——检查 8 移出「未收窄」清单并写明新锚；12/14 两条 advisory 与 hard 门**分档表述**。
+- **T4 同步回归**：`sync` ✅ / `source-sync-check --diff` 0 差异 ✅ / `gate-checklist --diff` 0 断档 0 未登记 ✅ / `verify.mjs` 25 套件 **503 断言 0 FAIL** ✅ / `doctor` 12 PASS 0 WARN 0 FAIL ✅
+- **变异自验**：锚换回 `base.slice(0,10)` → **恰 2 条变红**（核心回归 + 非 git 退化语义），与预期吻合；独立复核复现同一结果。
+- **实现期偏离（据实记录）**：`workflow-board-server.test.mjs` 的双跑断言场景**不在原 spec 系统改动表内**——换锚后其非 git fixture 使「验收未对账」hard 不再产出、四类覆盖少一类，致 `verify.mjs` 红。经用户拍板**方案 A**（补 git 前置，不改断言）纳入本单，改动集由 3 文件扩为 4 文件。
+- **L2 独立复核**：`verifier` 子代理，判 **0 P0**；P1×1 + P2×2 全部采纳并修复（`87bb788`）。
+- **提交**：`2fe605c`（实现）+ `87bb788`（复核 P1+P2 收口）
+
 ## 任务拆解
 
 ### T1 判据换锚：`templates/_agents/scripts/check-loop.mjs`

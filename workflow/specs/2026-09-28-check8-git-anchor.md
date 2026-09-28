@@ -91,7 +91,8 @@ git log --diff-filter=A --format=@%aI --name-only      （一次，模块级）
 | `templates/_agents/scripts/check-loop.mjs` | 新增模块级 `addedDates` + `addedDateOf`；检查 8 的 `isNew` 锚改为 `addedDateOf`；头注释检查 8 段改写（**不改编号**）；检查 10 **保持原样** | T1 |
 | `templates/_agents/scripts/check-loop.test.mjs` | 既有 4 条检查 8 场景改造为真 git fixture（意图与断言强度不变）；新增 3 条：核心回归 / 非 git 退化 / 对照 | T2 |
 | `workflow/README.md`（owned，手改即权威） | 「审计边界」节：检查 8 移出「未收窄」清单并写明新锚；12/14 两条 **advisory** 与 hard 门**分档表述** | T3 |
-| 装副本 `.agents/scripts/check-loop.mjs`、`.agents/scripts/check-loop.test.mjs`、`.agents/kit.json` | 经 `flow-kit sync` 下发，无手改 | T4 |
+| `templates/_agents/scripts/workflow-board-server.test.mjs` | **实现期新增**（原表未列）：双跑断言场景补 `gitInit`+`gitCommitAll` 前置——换锚后其非 git fixture 使「验收未对账」hard 不再产出、四类覆盖少一类。**断言文案与强度未变**（用户拍板方案 A） | T2 |
+| 装副本 `.agents/scripts/check-loop.mjs`、`.agents/scripts/check-loop.test.mjs`、`.agents/scripts/workflow-board-server.test.mjs`、`.agents/kit.json` | 经 `flow-kit sync` 下发，无手改 | T4 |
 
 > 注：本次**不涉及** commands / roles 正文，故**不需要** `sync-hosts --apply`。
 
@@ -118,5 +119,9 @@ git log --diff-filter=A --format=@%aI --name-only      （一次，模块级）
 
 ## 确认与复核
 
-- 确认日期：（待回填）
-- 复核：L2 强制独立复核（`verifier` 子代理，独立上下文，读 incident + spec + diff；**重点复核核心回归用例是否真能证伪旧锚**，以及换锚是否引入存量误拦）
+- 确认日期：2026-09-28（用户对话内逐件确认：incident / spec / plan 各自「可以」）
+- 复核：L2 独立复核**已执行**（`verifier` 子代理，独立上下文，基准 `66cb220` → `2fe605c`；含绕过对照实验 / 锚值全量比对 / 存量零差异复现 / 变异测试 / 性能与退化实测 / 双源与编号核对）——判 **0 P0**，核心修复成立。提出 **P1×1 + P2×2**，**全部采纳并修复**（`87bb788`）：
+  - **P1** 原称「锚不可手填／通道关闭」为**不实陈述**（锚取 `%aI` = author date，`git commit --date=` 可伪造）→ 更正为「关掉『改文件名』零成本通道，成本抬到『主动伪造时间戳』，属本地信任边界内」，不宣称通道关闭；原则表述同步更正为「锚须取**日常不可顺手改动**的事实」
+  - **P2** rename 取向（取决 git 重命名检测，未识别时记 D+A、偏严）；advisory「8 条」口径未写明（既有归档 8 / 工作区含本单新增 2 份文档实跑 10）
+- 复核者的独立实证：① 同 fixture **NEW=exit 1 / OLD=exit 0 静默放行**（绕过确已关闭）；② 本仓 **138 份文档**锚值 100% 一致；③ 同工作区改前/改后 advisory **逐条零差异**（无存量误拦）；④ 检查 15 段**逐字节未动**；⑤ 非 git 仅 +1 次 `rev-parse`，**不跑 `git log`**
+- **未验证范围（据实声明）**：① **跨时区团队**场景（本仓 177 commit 作者时区全为 `+08:00`，该边界在本仓不可达，未实测多时区暴露面）；② 同一路径 **3+ 次 `A`**（含 merge）未穷举；③ 经 sync 下发到其它宿主/装户环境的行为（本仓为包源环境，§7.x 检查被 doctor 跳过）
