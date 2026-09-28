@@ -1509,19 +1509,24 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     seedLedger(T, ['{"doc":"a","stage":"done"}']);
     fs.mkdirSync(path.join(T, 'loopdir', 'inner'), { recursive: true });
     w(T, 'loopdir/inner/f.txt', 'x');
+    // 用 **dir 型 symlink**（POSIX 语义的目录软链接），而非 junction（Windows 特有、不具代表性）。
+    // 用户 2026-09-28 追问「这里用到 sh 了吗」促使追验：防环走 fs.realpathSync（Node 原生跨平台），
+    // **与 sh 无关**——故本断言在两种链接语义下都应成立。
     let linked = false;
     try {
-      fs.symlinkSync(path.join(T, 'loopdir'), path.join(T, 'loopdir', 'inner', 'back'), 'junction');
+      fs.symlinkSync(path.join(T, 'loopdir'), path.join(T, 'loopdir', 'inner', 'back'), 'dir');
       linked = true;
-    } catch { /* 无权限建链接（Windows 非管理员）→ 跳过该断言 */ }
+    } catch { /* 无建链接权限（未开开发者模式）→ 跳过该断言 */ }
     w(T, '.agents/metric-derivers.mjs',
       "export const derivers = { 'g.loop': (ctx) => ctx.glob('loopdir/**/*.txt').length };\n");
     activePlan(T, 'loop', '\n{{g.loop}}\n');
     const r = run(T);
+    const o16 = outOf(r);
     check(linked
-      ? '检查16装户:软链接成环 → 不无界递归（g.loop 为有限值）'
+      // 防环生效 ⇒ 计数为 1（只有 inner/f.txt）；无防环会沿环重复到 64
+      ? '检查16装户:dir 型 symlink 成环（POSIX 语义）→ 防环生效，计数恰 1'
       : '检查16装户:软链接成环用例跳过（本机无建链接权限）',
-      linked ? /实时值 = \d+/.test(outOf(r)) : true, `exit=${r.status}\n${outOf(r)}`);
+      linked ? o16.includes('实时值 = 1') : true, `exit=${r.status}\n${o16}`);
     rmfix(T);
   }
   {

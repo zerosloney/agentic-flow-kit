@@ -104,7 +104,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "24a17fb3c30fb1f82749b8c29ced0038b4c9f24cb8e6d639195907822f662caf"
+      "sha256": "5cb3c597450ced1e7d335f3b5c790158f152742c62b8c9fce363440f9fce1844"
     },
     {
       "rel": ".agents/scripts/commit-check-trigger.test.mjs",
@@ -386,7 +386,7 @@
     },
     {
       "rel": "workflow/regression-checklist.md",
-      "sha256": "e9de2713ccb6be4e7a42b276913329facbffdc2559f965f519b7413a3361c29d"
+      "sha256": "3b19edbcca1034eda75ebad691a12d9c692d03c88055129824e929ab8533b942"
     },
     {
       "rel": "workflow/specs/_TEMPLATE.md",
