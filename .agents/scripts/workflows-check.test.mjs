@@ -226,12 +226,23 @@ const fm = (extra = '') => `---\nname: t\ndescription: t\n${extra}---\n\n# w\n\n
 
 // ---- S14 真实仓库自扫 baseline：0 error（_TEMPLATE 排除后三份可执行件全过）----
 {
+  // **本场景是包源仓库的 baseline 断言，装户环境应 SKIP**（2026-09-28 修正）：
+  // 它上溯三级定位「真实仓库」，从 `templates/_agents/scripts/` 出发正确落在包源根；
+  // 但从装户的 `.agents/scripts/` 出发会落到 `<install>/..`，扫不到可执行编排件 →
+  // `files.length >= 3` 必假。首版没区分这两种上下文，导致**装户径下该套件恒红**——
+  // 实测：CI 新增「shipped 套件」步骤后，`.agents/scripts/workflows-check.test.mjs`
+  // 报 `FAIL S14（扫描面：）`（空扫描面），而包源侧同字节跑出 15/0。
+  // 判据：扫不到任何可执行件 = 本环境不适用 → SKIP（沿 doctor.test.mjs 同口径）。
   const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..');
   const r = lintWorkflows({ root: ROOT });
   const names = r.files.map((f) => f.file).join('、');
-  check('S14 真实仓库 .agents/workflows/ 自扫 0 error（扫描面：' + names + '）',
-    r.errorCount === 0 && r.files.length >= 3,
-    JSON.stringify(r.files.filter((f) => f.errors.length).map((f) => ({ f: f.file, e: f.errors }))));
+  if (r.files.length === 0) {
+    check('S14 真实仓库自扫 SKIP（本环境无 .agents/workflows/ 可执行件——装户径，沿 doctor.test 同口径）', true);
+  } else {
+    check('S14 真实仓库 .agents/workflows/ 自扫 0 error（扫描面：' + names + '）',
+      r.errorCount === 0 && r.files.length >= 3,
+      JSON.stringify(r.files.filter((f) => f.errors.length).map((f) => ({ f: f.file, e: f.errors }))));
+  }
 }
 
 // ---- S14 human 确认门（第四形态）：单形态全绿 / 双填 E9 / ×retries W4 / 缺列兼容 ----

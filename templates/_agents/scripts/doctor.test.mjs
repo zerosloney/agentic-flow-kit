@@ -19,8 +19,13 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(SCRIPT_DIR, '..', '..', '..');
 const SRC = path.join(ROOT, 'src', 'doctor.mjs');
 if (!fs.existsSync(SRC)) {
-  console.error(`doctor.test.mjs：未找到 ${SRC}——仅在包源仓库（dogfooding）跑 npm test 时调用`);
-  process.exit(1);
+  // **环境不适用 ≠ 失败**（2026-09-28 修正）：本套件测的是包源 `src/doctor.mjs` 的内部函数，
+  // 装户环境没有 `src/`（那是包源）——故此处应 **SKIP 并以 0 退出**，与 check-loop.test.mjs 的
+  // 「无 sh 环境打印 SKIP 不算失败」同一口径（既有先例）。
+  // 首版 exit(1) 的代价是实测出来的：CI 新增「shipped 套件」步骤后，装户径下逐套件批量跑会把
+  // 这条 SKIP 当成真失败（doctor.test 单独 exit 1），使批量结果不可用。
+  console.error(`doctor.test.mjs：SKIP——未找到 ${SRC}（装户环境无包源 src/；本套件仅在包源仓库/dogfooding 跑 npm test 时有意义）`);
+  process.exit(0);
 }
 const { checkOwnedDrift, checkAdapterDrift, checkLedgerCoverage } = await import(pathToFileURL(SRC).href);
 
@@ -209,7 +214,7 @@ const CMD_BODY = '# Build\n\n正文 build v1\n';
       'roles/implementer.md': `---\ndesc: r\n---\n\n${ROLE_BODY}`,
     },
     adapters: {
-      '.opencode/commands/build.md': `---\ndesc: oc\n---\n\n${CMD_BODY}`,
+      '.opencode/commands/wf-build.md': `---\ndesc: oc\n---\n\n${CMD_BODY}`,
       '.trae/commands/wf-build.md': `---\nname: wf-build\ndesc: trae\n---\n\n${CMD_BODY}`,
       '.zcode/agents/implementer.md': `---\nname: impl\ndesc: zcode\n---\n\n${ROLE_BODY}`,
       '.opencode/agents/implementer.md': `---\nname: impl\ndesc: oc\n---\n\n${ROLE_BODY}`,
@@ -244,7 +249,7 @@ const CMD_BODY = '# Build\n\n正文 build v1\n';
   const root = mkfixAdapter({
     pkgMarker: true,
     authority: { 'commands/build.md': `---\ndesc: x\n---\n\n${CMD_BODY}` },
-    adapters: { '.opencode/commands/build.md': `---\ndesc: oc\n---\n\n漂移` },
+    adapters: { '.opencode/commands/wf-build.md': `---\ndesc: oc\n---\n\n漂移` },
   });
   const r = checkAdapterDrift(root);
   check('场景 11：包源环境（templates/ + modules/ 同时存在）→ skipped=true',
@@ -286,7 +291,7 @@ const CMD_BODY = '# Build\n\n正文 build v1\n';
       'roles/implementer.md': `---\ndesc: r\n---\n\n${ROLE_BODY}`,
     },
     adapters: {
-      '.opencode/commands/build.md': `---\ndesc: oc\n---\n\n${CMD_BODY}`,
+      '.opencode/commands/wf-build.md': `---\ndesc: oc\n---\n\n${CMD_BODY}`,
     },
   });
   const r = checkAdapterDrift(root);

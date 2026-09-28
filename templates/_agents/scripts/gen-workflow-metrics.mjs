@@ -44,8 +44,27 @@ const METRICS_P = path.join(WORKFLOW, 'metrics.md');
 const BUDGETS = path.join('.agents', 'rule-budgets.txt');
 const DOC_TYPES = ['intents', 'specs', 'plans', 'incidents'];
 // 活跃口径单源（board-kb-p1：枚举字面量硬编码退役——workflow-enums.txt 是唯一源）；
-// 枚举路径锚定脚本位置（fixture 测试 cwd 在临时目录，按 cwd 解析会 ENOENT）
-const ENUMS = loadEnums(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '..', '.agents', 'workflow-enums.txt'));
+// 枚举路径锚定脚本位置（fixture 测试 cwd 在临时目录，按 cwd 解析会 ENOENT）。
+// **不能用固定上溯级数**（2026-09-28 修正）：本脚本在两处运行、深度不同——
+//   包源 `templates/_agents/scripts/` → 上溯 3 级到仓库根
+//   装户 `.agents/scripts/`          → 上溯 2 级到安装根
+// 首版硬编码 3 级，故**在每个装户安装里都解析不到枚举文件**（报错路径 `<install>/..​/.agents/…`）。
+// 实测暴露路径：CI 新增「shipped 套件」步骤后，`.agents/scripts/gen-workflow-metrics.test.mjs`
+// 场景 1 即 exit 1（workflow-enums 单源文件不可读），而包源侧同字节跑出全绿。
+// 改为**逐级上溯探测**：找到含 `.agents/workflow-enums.txt` 的那一级即用，找不到则回退标准位置让
+// loadEnums fail-loud（保持「缺失即响亮」的既有纪律，不静默兜底）。
+const resolveEnumsPath = () => {
+  let dir = path.dirname(fileURLToPath(import.meta.url));
+  for (let i = 0; i < 6; i++) {
+    const cand = path.join(dir, '.agents', 'workflow-enums.txt');
+    if (fs.existsSync(cand)) return cand;
+    const parent = path.dirname(dir);
+    if (parent === dir) break; // 到根
+    dir = parent;
+  }
+  return path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '.agents', 'workflow-enums.txt');
+};
+const ENUMS = loadEnums(resolveEnumsPath());
 const ACTIVE_STATUS = [...ENUMS['doc.status.active'], ...ENUMS['incident.status.active']];
 const BEGIN = '<!-- GENERATED:BEGIN — gen-workflow-metrics.mjs 整段重写，手工说明写在本行之前 -->';
 const END = '<!-- GENERATED:END -->';

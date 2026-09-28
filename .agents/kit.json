@@ -120,7 +120,7 @@
     },
     {
       "rel": ".agents/scripts/doctor.test.mjs",
-      "sha256": "081c605e313882ff269b97325e224ad6da78beb626e4087b7a64db481e977e25"
+      "sha256": "a7377fecfa69af704217a960ef0d31cbbde52fdd1942a6a79167c06295cb82d9"
     },
     {
       "rel": ".agents/scripts/ensure-board.mjs",
@@ -176,7 +176,7 @@
     },
     {
       "rel": ".agents/scripts/gen-workflow-metrics.mjs",
-      "sha256": "4eec7bcaccfb8d00b8803f6c8cc7fc5fc9ed4718fb068cdfead1266b839b1554"
+      "sha256": "9a2fa35ec1b72316e6fd8ce370035c8ca619c3a8fe45a465e479cf3045b55845"
     },
     {
       "rel": ".agents/scripts/gen-workflow-metrics.test.mjs",
@@ -256,7 +256,7 @@
     },
     {
       "rel": ".agents/scripts/workflows-check.test.mjs",
-      "sha256": "742fd4396a742f3e441ca7e65303ccffa8d8a0ea7259c5c1851e0985b64fcd12"
+      "sha256": "9c482c6975e007d8c1276ea9ae263cff4e70def443acac5d9c88095b89b89ff0"
     },
     {
       "rel": ".agents/skills/verify-ui/SKILL.md",
@@ -386,7 +386,7 @@
     },
     {
       "rel": "workflow/regression-checklist.md",
-      "sha256": "9a6735baf222adf5415d893929a18774d8ab1bdaa83d0907428d76a124703d9f"
+      "sha256": "2d666af19c19c21dc0844db1d30b822756c57a8cc38f6eb95befaea6136d8349"
     },
     {
       "rel": "workflow/specs/_TEMPLATE.md",
