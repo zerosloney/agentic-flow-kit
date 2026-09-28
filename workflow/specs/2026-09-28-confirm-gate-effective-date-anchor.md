@@ -82,7 +82,7 @@ workflow/{intents,specs,plans,incidents}/*.md ──(状态字段)──┐
 
 | 件 | 改动 | 对应 plan 任务 |
 |---|---|---|
-| `templates/_agents/scripts/check-loop.mjs` | 检查 15 生效日判定段：自报日期锚 → 台账行准入；incidents 独立生效日常量退役；头注释检查项 15 说明同步口径（**不改编号**） | T1 |
+| `templates/_agents/scripts/check-loop.mjs` | 检查 15 受管准入改**两条件取或**（台账行 ∨ 自报日期≥生效日）；头注释检查项 15 说明同步口径（**不改编号**）。**复核 P2 更正**：incidents 的独立生效日常量**未退役**——状态键 `eff` 仍分档（docs 2026-09-27 / incidents 2026-09-28），台账锚两档共用与条件②阈值分档是两回事，头注释已按实际改写 | T1 |
 | `templates/_agents/scripts/check-loop.test.mjs` | 新增场景 ≥4（自报日期早 + 台账 ts 晚 → 仍拦 / 自报日期早 + 无台账 → 豁免 / 重确认取末次 / 注记行不参与）；复核既有 4 条生效日豁免场景语义 | T2 |
 | `workflow/README.md`（owned，手改即权威） | 「审计边界」节：把「生效日判定信任自报日期」改写为「生效日以台账 ts 为准；自报日期不参与门禁判定，仅作排序/展示」 | T3 |
 | 装副本 `.agents/scripts/check-loop.mjs`、`.agents/scripts/check-loop.test.mjs` | 经 `flow-kit sync` 下发，无手改 | T4 |

@@ -918,12 +918,15 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     rmfix(T);
   }
   {
-    // 两条件取或的**幂等性**：日期早（本会被日期条件豁免）但台账有行 → 台账条件独立成立 → 仍受管。
-    // 这是本 incident 的核心收益：确认过就逃不掉对账，与自报日期无关。
+    // 条件①的**独立判别力**（复核 P2-2 更正）：日期早（条件②不命中，本会被日期条件豁免）
+    // + 台账有行但**指纹不匹配** → 条件①独立成立 ⇒ 受管 ⇒ 配对失败 ⇒ hard 拦。
+    // 断言必须用 expectHard 而非 expectOk：旧单条件下该 doc 因日期早被整段跳过（exit 0），
+    // 用 expectOk 会「新旧门都通过」而无法证伪条件①被移除（上一版即此缺陷，属无效测试）。
+    // 现版本在忠实变异（还原旧单条件）下会变红——与核心回归场景同向锁定条件①的独立成立。
     const T = mkfix();
     const d1 = mkAnchorFixture(T, '2026-09-20');
-    writeLedger(T, [{ ts: '2026-09-28T02:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: d1.fp, prev: 'approved', source: 'tty' }]);
-    expectOk('检查15:日期早但台账行齐（指纹配对+绑定一致）→ 受管且通过（台账条件独立成立）', T);
+    writeLedger(T, [{ ts: '2026-09-28T02:00:00.000Z', doc: d1.rel, stage: 'done', fingerprint: 'e'.repeat(64), prev: 'approved', source: 'tty' }]); // 指纹不符
+    expectHard('检查15:日期早但台账有行（指纹不匹配）→ 受管并 hard 拦（条件①独立于日期成立）', T, '确认未对账');
     rmfix(T);
   }
   {

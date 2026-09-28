@@ -39,8 +39,12 @@
 //      ② 自报日期(日期/发现/文件名兜底)≥ 生效日——覆盖「新档完全没跑 confirm-doc」的漏网面
 //         (此类文档无台账行,仅靠 ① 会误判为存量豁免)。
 //      两条件皆不满足 = 存量豁免(生效日前既有、从未走过确认门,不追溯)。
-//      改锚收益:把「确认过却把日期写早以逃掉对账」这条攻破路径堵死(条件 ① 独立于自报日期成立);
-//      生效日:docs 2026-09-27 / incidents 2026-09-28(两档其余判据共用)。
+//      改锚收益:把「确认过却把日期写早以逃掉对账」这条攻破路径堵死(条件 ① 独立于自报日期成立)。
+//      **注意条件②的日期阈值仍分档、且不等价**:docs 2026-09-27 / incidents 2026-09-28——本仓现役
+//      incident 的「发现」均 ≤2026-09-27,故该档差异当前不显;新 incident 若把「发现」写成 09-27 且
+//      无台账行,会因 incidents 阈值(09-28)被豁免,而同日期文档在 docs 档则受管。
+//      (复核 P2-1 更正:此前本注释误称「incidents 常量退役 / 两档等价」,与代码 :eff 实际保留分档不符;
+//       台账锚两档共用为真,条件②阈值分档亦为真,二者不是一回事——README 遣词为准确口径)
 //      + incidents 覆盖(2026-09-27 gate-coverage:fixed/closed 须配对;open=起草态不加门;
 //      不支持 open→closed 单跳——confirm-doc 状态机强制经 fixed)
 //      + 放弃态覆盖(2026-09-27 closing-coverage:superseded/cancelled 入配对集,confirm-doc --to 唯一通道)
@@ -49,8 +53,6 @@
 //      按 prev 复原跳转前文本重算 sha256 与台账全量比对,不符=hard「确认内容漂移」;状态行保分隔符换值
 //      (非规范格式不误伤);台账行缺 prev 降级 warning;关单编辑顺序新约定:勾验/回填先于关单确认,
 //      confirm-doc 是最后一次写入)
-//      + 并录批次审计子检查(2026-09-27 confirm-gate-one-per-call:台账同 quote 多份 delegated 聚组
-//      可见=warning「确认并录」——存量并录如实可数,confirm-doc 现已拒绝多份并录)
 //      + 并录批次审计子检查(2026-09-27 confirm-gate-one-per-call:台账同 quote 多份 delegated 聚组
 //      可见=warning「确认并录」——存量并录如实可数,confirm-doc 现已拒绝多份并录)
 //
@@ -643,8 +645,9 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
   // 「quote 相同 + 相邻 ts 差 < 2s」聚组，组 > 1 → warning「确认并录」。文案中性口径（复核 P2-2）：
   // 历史并录（修复前多份一次代录）与合规连跑（逐件调用 quote 同文）在此判据下不可区分——审计可见性
   // 非违规定性。不按日期门豁免：存量如实可见正是目的。revert-draft 注记行（stage 非合法跳转）天然被过滤。
+  // VALID_STAGES 复用外层声明（复核 P2-3 更正：此前本块内另有一份同名声明，遮蔽外层——两处字面相同、
+  // 行为等价但无链接，未来只改一处即静默分叉；同 incident「相邻两处只修一处」的同类风险，已删内层）。
   {
-    const VALID_STAGES = new Set(['approved', 'done', 'fixed', 'closed', 'superseded', 'cancelled']);
     const delegRows = ledger.filter((e) => e && e.source === 'chat-delegated' && VALID_STAGES.has(e.stage)
       && typeof e.ts === 'string' && typeof e.quote === 'string')
       .sort((a, b) => (a.ts < b.ts ? -1 : a.ts > b.ts ? 1 : 0)); // 复核 P2-4：相等键 0 分支
