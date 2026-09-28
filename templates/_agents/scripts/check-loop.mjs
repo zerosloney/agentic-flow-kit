@@ -415,7 +415,12 @@ for (const cmd of ['plan', 'design', 'build', 'test', 'deploy', 'maintain', 'rev
 
 // --- 共享：文件「首次加入 git」的日期索引（2026-09-28 check8-git-anchor）---
 // 用途：检查 8 的生效日锚从**可手填的文件名前缀**（项目命名规范本身即 `YYYY-MM-DD-<主题>`，作者
-// 日常手写该前缀，「写早」零成本、顺手即发生——一条 hard 门可被平凡绕过）改为**不可手填的 git 事实**。
+// 日常手写该前缀，「写早」零成本、顺手即发生——一条 hard 门可被平凡绕过）改为**首次加入 git 的日期**。
+// **诚实边界（复核 P1 更正）**：该锚取 `git log --diff-filter=A --format=@%aI`，即 **author date
+// （作者自报时间戳）**，**不是** commit 时刻——`git commit --date=<过去>` 一条参数即可伪造，故
+// 「锚不可手填」的说法**不成立**。本改动的确切收益是：关掉「改文件名（日常必写、零成本）」这条通道，
+// 把伪造成本抬到「主动加参数伪造时间戳」——后者与「伪造台账」同属**本地信任边界内不可机器防**的范畴
+// （事后对质靠 git 历史与台账）。此处如实声明，不宣称「通道已关闭」。
 // 口径：git 按时间新→旧遍历，同一文件首遇即最早那次加入（与检查 10 的 addpath 同款判据）。
 // 非 git / 命令失败 → null，调用方按既有「非 git 跳过」语义退化（不 fail-loud）。
 // 注：检查 10 需要的是「文件→加入 commit」+「commit→文件清单」两份映射（判断同提交是否触及迁移 SQL），
@@ -468,9 +473,10 @@ const addedDateOf = (absDoc) => {
       if (pendX && evRe.test(line)) pendX = false; // 续行补上证据
     }
     closeItem(); // 节末（或全文末）仍无证据 → 计缺证据
-    // 生效日锚 = git 首次加入日期（2026-09-28 改；此前取文件名前 10 字符）。git 事实不可手填，
-    // 「把文件名日期写早以整段跳过 hard 门」这条通道关闭。非 git / 查不到 → '' → isNew=false
-    // → 走存量口径（与既有语义一致：不可判定时不误报 hard）。
+    // 生效日锚 = git 首次加入日期（2026-09-28 改；此前取文件名前 10 字符）。**准确收益**：关掉
+    // 「改文件名日期（日常必写、零成本）即整段跳过 hard 门」这条通道；锚取 author date(%aI)，
+    // 刻意伪造（`git commit --date=`）仍可绕过——与伪造台账同属本地信任边界内，不宣称"通道已关闭"。
+    // 非 git / 查不到 → '' → isNew=false → 走存量口径（与既有语义一致：不可判定时不误报 hard）。
     const adddate = addedDateOf(intent);
     const isNew = adddate !== '' && adddate >= accCutoff;
     if (!hs) {
@@ -487,7 +493,7 @@ const addedDateOf = (absDoc) => {
     }
   }
   if (legacyUnaccounted > 0) {
-    warnings.push(`- [WARN 验收对账存量] ${legacyUnaccounted} 个存量 done intent 验收标准未对账（2026-09-12 前创建，豁免 hard，不回填）`);
+    warnings.push(`- [WARN 验收对账存量] ${legacyUnaccounted} 个存量 done intent 验收标准未对账（生效日锚之前加入仓库，豁免 hard，不回填）`);
   }
 }
 

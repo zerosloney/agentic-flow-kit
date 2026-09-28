@@ -96,7 +96,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "d2cb4ba09569aec51a97e4b8dc60429e8dcc8c855989479e9a1f5c045472b1e7"
+      "sha256": "7095e43d71591cdcf14424500a91cd37bb9e4d177018895e3391fa207186564d"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
