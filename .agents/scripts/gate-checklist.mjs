@@ -80,6 +80,7 @@ const PAIRS = [
   { doctor: '7', cl: '13', note: '经 §7 整体运行覆盖' },
   { doctor: '7', cl: '14', note: '经 §7 整体运行覆盖' },
   { doctor: '7', cl: '15', note: '经 §7 整体运行覆盖' },
+  { doctor: '7', cl: '16', note: '经 §7 整体运行覆盖（量化断言指标签名对账，2026-09-28 claim-exceeds-fix）' },
 ];
 
 // gateChecklist：按登记表对照两侧检查项（pure function；pairs 可注入供测试）

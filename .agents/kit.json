@@ -75,6 +75,10 @@
       "sha256": "865b11645bcc0a6395e12188f9eff28f711cebb98fd3c5a599ad81edb9ddfc4c"
     },
     {
+      "rel": ".agents/metric-claims.txt",
+      "sha256": "bcdb199c4ebe61c1a69243c176405089bb516b73571b0b40ca6cb39864f79bea"
+    },
+    {
       "rel": ".agents/roles/implementer.md",
       "sha256": "6b679949a2b3d5ca7f1ed9d6dbeb2af5e899b4443c11d87fd31a1e83a14eb904"
     },
@@ -96,7 +100,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "b69cfe78ef6dad338093b7e0afa4c42dd19afd330648bb253f89086c5f479dce"
+      "sha256": "e4656e157a9e7a0629d1827c836d733e2a94e4e3c4803a1d943e4021ae809535"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -104,7 +108,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "38497a680303c2a5fcb32c1cc67cbc6ba54ad6157bb638d3222af4fc5ef91e43"
+      "sha256": "7219cd53d9921345f9bbc73d083a88db82f7a3a7ea52d94c6b4871b3ad1289d8"
     },
     {
       "rel": ".agents/scripts/commit-check-trigger.test.mjs",
@@ -152,7 +156,7 @@
     },
     {
       "rel": ".agents/scripts/gate-checklist.mjs",
-      "sha256": "97603179bd8757b6c6472867757173f3295dcd2bd34d4481dc47afe8a7eb545e"
+      "sha256": "4119e1f39edbcbd857befcc9e4a22fed8ed975bd41bc4bdc810b784ff168ae2c"
     },
     {
       "rel": ".agents/scripts/gate-checklist.test.mjs",
@@ -358,7 +362,7 @@
     },
     {
       "rel": "workflow/regression-checklist.md",
-      "sha256": "4f140df1e1567c77c0f6904bfde1b6d6727c2fd8013b4e26c1df61b741c765e6"
+      "sha256": "db64356b328507b13afd96cc54a4f9bd792726670240f39d497c2155f08fec43"
     },
     {
       "rel": "workflow/specs/_TEMPLATE.md",

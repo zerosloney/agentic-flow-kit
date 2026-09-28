@@ -65,6 +65,14 @@
 //      等于引导伪装)/噪声不可消退(不按日期门豁免,退役前本仓 22 条 advisory 中 14 条为该告警)/
 //      quote 字段职责冲突(对质凭据 vs 并录指纹,现归还单一职责)。无 batch 的历史行静默跳过
 //      (无判定依据的行不产出不可消除噪声——沿 audit-gate-hardening P3 教训)
+// 16. 量化断言指标签名对账 [warning](2026-09-28 起;登记表单源 .agents/metric-claims.txt):
+// 判据 = 活跃态文档(draft/approved/open)中的 `{{指标名}}` 签名须替换为实时值,留签名=未回填=warning。
+// **只查显式签名、不全文扫数字**(据实说明):本仓活跃文档「N 行/N 条/N 份」类表述数十处,绝大多数是
+// 历史叙述(描述某次提交当时的规模,天然不随当前事实变化)——全文扫描对这些正确表述产生大量假阳性,
+// 而本脚本已立红线「无判定依据的行不产出不可消除噪声」(P3:噪声淹没真漏点)。故本检查**假阳性恒 0**,
+// 代价是覆盖面依赖作者登记。签名收窄为小写点分形态——装户模板占位符走全大写 SCREAMING_CASE
+// (由 init 渲染替换,如构建/端口/项目名三类,不属本检查面)。未登记签名 / 取数器缺失 → fail-loud 出账
+// (静默会让「登记了却没查」不可见);登记表不存在 → 静默跳过(未启用该检查的装户不应被噪声打扰)。
 //
 // 注：清单条目 5（状态字段+L3 复核）与 1（配对）在同一遍 intents/specs/plans 循环里实现（沿 sh 版代码结构）；
 //    条目 6 的旧委派残留/钉死模型子项在「角色契约与 Adapter」代码段实现。
@@ -719,6 +727,88 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
       const of = Math.max(...rows.map((r) => (typeof r.of === 'number' ? r.of : 0)));
       const docs = rows.map((r) => String(r.doc).replace(/^workflow\//, '')).join('、');
       warnings.push(`- [WARN 确认并录] 单次调用落账 ${rows.length} 份（batch ${b}，of=${of}）：${docs}——同一次 --delegated 调用放行多份，塌掉「逐件确认」门（build.md）；口径见 workflow/papercuts.md 2026-09-28 与 incidents/2026-09-28-batch-ledger-audit.md`);
+    }
+  }
+}
+
+// --- 16. 量化断言指标签名对账 [warning]（2026-09-28 claim-exceeds-fix；登记表单源 .agents/metric-claims.txt）---
+// 判据：活跃态文档（draft/approved/open）中出现的 `{{指标名}}` 签名，实时取数比对。
+// **为什么只查显式签名、不全文扫数字**（据实说明）：本仓活跃文档「N 行/N 条/N 份」类表述数十处，
+// 绝大多数是**历史叙述**（描述某次提交当时的规模，天然不随当前事实变化）——全文扫描会对这些
+// 正确表述产生大量假阳性，而本脚本已把「无判定依据的行不产出不可消除噪声」立为红线
+// （沿 audit-gate-hardening P3：噪声淹没真漏点）。故本检查假阳性恒为 0，代价是覆盖面靠登记。
+// 未登记签名 / 取数器缺失 → fail-loud（不静默跳过：静默会让「登记了但其实没查」不可见）。
+// 登记表缺失 → 静默跳过（未启用该检查的装户不应被噪声打扰）。
+{
+  const mcFile = path.join(ROOT, '.agents', 'metric-claims.txt');
+  if (fs.existsSync(mcFile)) {
+    // 取数器闭集：全部本地确定性、零网络。新增指标须同时改本表与 metric-claims.txt（缺一 fail-loud）
+    const countDocs = (sub) => {
+      const dir = path.join(ROOT, 'workflow', sub);
+      return (readdirOrNull(dir) || []).filter((f) => f.endsWith('.md') && f !== '_TEMPLATE.md').length;
+    };
+    const ledgerLines = () => {
+      const p = path.join(ROOT, '.agents', 'confirmations.jsonl');
+      const ls = (linesOf(p) || []).filter((l) => l.trim());
+      return { total: ls.length, withBatch: ls.filter((l) => /"batch"/.test(l)).length };
+    };
+    const derivers = {
+      'ledger.lines': () => ledgerLines().total,
+      'ledger.linesWithBatch': () => ledgerLines().withBatch,
+      'ledger.linesWithoutBatch': () => ledgerLines().total - ledgerLines().withBatch,
+      'docs.count.intents': () => countDocs('intents'),
+      'docs.count.specs': () => countDocs('specs'),
+      'docs.count.plans': () => countDocs('plans'),
+      'docs.count.incidents': () => countDocs('incidents'),
+      'docs.count.all': () => countDocs('intents') + countDocs('specs') + countDocs('plans') + countDocs('incidents'),
+    };
+    // 解析登记表：`<指标名> = <取数表达式>`（表达式须与指标名同形，二者不一致即登记笔误）
+    const declared = new Map();
+    for (const raw of linesOf(mcFile) || []) {
+      const line = raw.trim();
+      if (!line || line.startsWith('#')) continue;
+      const m = /^([A-Za-z][\w.]*)\s*=\s*([A-Za-z][\w.]*)$/.exec(line);
+      if (!m) { warnings.push(`- [WARN 指标登记] .agents/metric-claims.txt 行格式非法（应为 \`指标名 = 取数表达式\`）：${line}`); continue; }
+      if (m[1] !== m[2]) { warnings.push(`- [WARN 指标登记] 登记名与取数表达式不一致：${m[1]} ≠ ${m[2]}`); continue; }
+      if (!derivers[m[1]]) { warnings.push(`- [WARN 指标登记] 指标「${m[1]}」无对应取数器（fail-loud：登记了却没实现＝其实没查）——请在 check-loop 检查 16 的 derivers 中补实现`); continue; }
+      declared.set(m[1], true);
+    }
+    // 扫活跃态文档（沿检查 4 现有尺度：终态件的历史数字是历史叙述，不扫）
+    const activeSet16 = (sub) => (sub === 'incidents' ? ENUMS['incident.status.active'] : ENUMS['doc.status.active']);
+    const scanFiles16 = [];
+    for (const sub of ['intents', 'specs', 'plans', 'incidents']) {
+      const dir = path.join(ROOT, 'workflow', sub);
+      for (const f of readdirOrNull(dir) || []) {
+        if (!f.endsWith('.md') || f === '_TEMPLATE.md') continue;
+        if (!inSet(fmGet(path.join(dir, f), '状态'), activeSet16(sub))) continue;
+        scanFiles16.push({ rel: `workflow/${sub}/${f}`, abs: path.join(dir, f) });
+      }
+    }
+    for (const f of readdirOrNull(path.join(ROOT, 'workflow')) || []) {
+      if (f.endsWith('.md')) scanFiles16.push({ rel: `workflow/${f}`, abs: path.join(ROOT, 'workflow', f) });
+    }
+    for (const { rel, abs } of scanFiles16) {
+      const ls = linesOf(abs) || [];
+      ls.forEach((line, i) => {
+        // 签名形态收窄为**小写点分**（如 `{{ledger.lines}}`）：装户模板占位符是全大写 SCREAMING_CASE
+        // （构建命令 / 看板端口 / 项目名三类，由 init 渲染替换，非本检查对象）
+        // ——不收窄会对这些合法的模板占位符产生大量假阳性（实测：本仓 plans 内 11 处）。
+        // **转义（2026-09-28，本检查在自己的文档上抓到该需求）**：讲语法 / 举例 / 引用告警原文的
+        // 文档必须在签名前加反斜杠（`\{{ledger.lines}}`）表示「此处是示意、非断言」——否则本检查
+        // 会把「文档在教怎么用签名」误判为「作者忘了回填」。选显式转义而非「同句含『如/例』等标记词
+        // 即豁免」的启发式：后者会按措辞松紧漂移，且作者能无意中触发豁免而漏过真断言。
+        if (/\\\{\{/.test(line)) return; // 该行声明了转义 → 整行不作签名扫描（callback 内用 return 退出本行）
+        for (const m of line.matchAll(/\{\{([a-z][a-z0-9]*(?:\.[a-z0-9]+)+)\}\}/g)) {
+          const name = m[1];
+          if (!declared.has(name)) {
+            warnings.push(`- [WARN 指标未登记] ${rel}:${i + 1} 引用 {{${name}}} 但 .agents/metric-claims.txt 未登记该指标（未登记＝无从对账）`);
+            continue;
+          }
+          const real = derivers[name]();
+          // 判据：签名**必须**被替换为实时值——留有 `{{...}}` 即视为未回填（写作期占位，关单前须落实）
+          warnings.push(`- [WARN 指标待回填] ${rel}:${i + 1} {{${name}}} 实时值 = ${real}——请把签名替换为该数字（留签名＝未回填）`);
+        }
+      });
     }
   }
 }

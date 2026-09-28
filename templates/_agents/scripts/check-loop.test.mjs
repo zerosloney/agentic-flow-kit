@@ -1100,5 +1100,132 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   }
 }
 
+// ---- 场景 75-79:检查 16 量化断言指标签名对账（2026-09-28 claim-exceeds-fix）----
+// 设计要点：本检查**只查显式签名**（`{{小写.点分}}`），不全文扫数字——理由是本仓「N 行/N 条/N 份」
+// 类表述多为历史叙述（描述某次提交当时的规模），全文扫描会产生不可消退的假阳性（P3 红线）。
+// 故本组用例的核心断言是**假阳性恒 0**：无签名时零告警；装户模板占位符（全大写）不误报。
+{
+  const MC = 'ledger.lines = ledger.lines\ndocs.count.plans = docs.count.plans\n';
+  const seedLedger = (T, lines) => w(T, '.agents/confirmations.jsonl', lines.join('\n') + '\n');
+  {
+    // 【核心回归】活跃文档留签名未回填 → warning 且提示实时值
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', MC);
+    seedLedger(T, ['{"doc":"a","stage":"done"}', '{"doc":"b","stage":"done"}', '{"doc":"c","stage":"done"}']);
+    w(T, 'workflow/plans/p1.md', PLAN('p1', '状态: draft\n级别: L1', '\n台账共 {{ledger.lines}} 行\n'));
+    const r = run(T);
+    const o = outOf(r);
+    check('检查16:活跃文档留签名未回填 → WARN 且给出实时值 3（advisory 不阻断）',
+      r.status === 0 && o.includes('指标待回填') && o.includes('实时值 = 3'), `exit=${r.status}\n${o}`);
+    rmfix(T);
+  }
+  {
+    // 【假阳性恒 0 · 核心】无签名 → 零告警（历史叙述里的裸数字不得被扫）
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', MC);
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    w(T, 'workflow/plans/p2.md', PLAN('p2', '状态: draft\n级别: L1', '\n台账共 47 行，其中 13 条并录（历史叙述，非签名）\n'));
+    const r = run(T);
+    check('检查16:无签名 → 零告警（裸数字是历史叙述，不得产生假阳性）',
+      r.status === 0 && !outOf(r).includes('指标'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 【假阳性恒 0 · 关键边界】装户模板占位符（全大写 SCREAMING_CASE）不误报
+    // ——不收窄形态会对本仓 plans 内 11 处合法模板占位符全部误报（实测量级）。
+    // 注：占位符**运行时拼装**而非字面写入——本仓的占位符残留门禁（doctor §5）会把字面
+    // 全大写 `{{X}}` 判为残留并改写包源副本，导致本用例在包源侧退化为测「<填写> 不误报」
+    // （仍绿但不再证明 SCREAMING_CASE 被排除）。拼装后两侧语义一致、断言强度不退。
+    const SCREAMING = (n) => '{{' + n + '}}';
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', MC);
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    w(T, 'workflow/plans/p3.md', PLAN('p3', '状态: draft\n级别: L1',
+      '\n构建 = ' + SCREAMING('BUILD_CMD') + '；端口 ' + SCREAMING('BOARD_PORT') + '；项目 ' + SCREAMING('PROJECT_NAME') + '\n'));
+    const r = run(T);
+    check('检查16:装户模板占位符（全大写 SCREAMING_CASE）→ 不误报（形态收窄）',
+      r.status === 0 && !outOf(r).includes('指标'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 【fail-loud】引用未登记指标 → 明示（未登记＝无从对账，不静默放过）
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', MC);
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    w(T, 'workflow/plans/p4.md', PLAN('p4', '状态: draft\n级别: L1', '\n引用 {{nope.metric}}\n'));
+    const r = run(T);
+    check('检查16:引用未登记指标 → fail-loud 出账（不静默跳过）',
+      outOf(r).includes('指标未登记'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 【转义】讲语法 / 举例的行加反斜杠 → 不报（否则「文档教怎么用签名」被误判为「忘了回填」）
+    // 该需求由本检查在自己的 spec 上抓到（实现后立刻 5 处误报）。
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', MC);
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    w(T, 'workflow/plans/p8.md', PLAN('p8', '状态: draft\n级别: L1',
+      '\n写法示例如 `\\{{ledger.lines}}`（本行是讲语法，非断言）\n'));
+    const r = run(T);
+    check('检查16:转义 \\{{...}} 的行为示意 → 不报（区分「讲语法」与「真断言」）',
+      r.status === 0 && !outOf(r).includes('指标'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 【守卫】check-loop 自身可加载（防语法错致整条门禁静默失效）
+    // 实证教训：本次实现期把 `continue` 误用在 forEach 回调内 → 模块 SyntaxError →
+    // check-loop 崩溃退出，而「指标告警 0 条」看起来像通过。**假绿比红更危险**，故钉死。
+    const r = run(mkfix());
+    check('检查16:check-loop 可正常加载运行（防语法错致门禁静默失效——假绿比红危险）',
+      r.status === 0 && !/SyntaxError|Illegal continue/.test(outOf(r)), `exit=${r.status}\n${outOf(r)}`);
+  }
+  {
+    // 【fail-loud】登记了指标但无取数器 → 明示「登记了却没查」（防假阴性：登记表写了却不实现）
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', MC + 'ghost.metric = ghost.metric\n');
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    w(T, 'workflow/plans/p5.md', PLAN('p5', '状态: draft\n级别: L1'));
+    const r = run(T);
+    check('检查16:登记无取数器 → fail-loud（登记了却没实现＝其实没查）',
+      outOf(r).includes('无对应取数器'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 【退化语义】登记表不存在 → 静默跳过（未启用该检查的装户不应被噪声打扰）
+    const T = mkfix();
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    w(T, 'workflow/plans/p6.md', PLAN('p6', '状态: draft\n级别: L1', '\n台账共 {{ledger.lines}} 行\n'));
+    const r = run(T);
+    check('检查16:登记表缺失 → 静默跳过（不误报，未启用装户零噪声）',
+      r.status === 0 && !outOf(r).includes('指标'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 【活跃态尺度】终态文档不扫（沿检查 4 现有尺度：历史数字是历史叙述）
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', MC);
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    w(T, 'workflow/plans/p7.md', PLAN('p7', '状态: done\n级别: L1', '\n台账共 {{ledger.lines}} 行\n'));
+    const r = run(T);
+    check('检查16:终态文档不扫（历史叙述豁免，沿检查 4 尺度）',
+      r.status === 0 && !outOf(r).includes('指标待回填'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 【取数正确性】docs.count.plans 应计活跃+终态全部 plans（排除 _TEMPLATE）
+    const T = mkfix();
+    w(T, '.agents/metric-claims.txt', 'docs.count.plans = docs.count.plans\n');
+    seedLedger(T, ['{"doc":"a","stage":"done"}']);
+    w(T, 'workflow/plans/a.md', PLAN('a', '状态: draft\n级别: L1'));
+    w(T, 'workflow/plans/b.md', PLAN('b', '状态: done\n级别: L1'));
+    w(T, 'workflow/plans/_TEMPLATE.md', PLAN('t', '状态: draft\n级别: L1'));
+    w(T, 'workflow/plans/c.md', PLAN('c', '状态: draft\n级别: L1', '\n共 {{docs.count.plans}} 份\n'));
+    const r = run(T);
+    check('检查16:取数正确——docs.count.plans 计 3 份（排除 _TEMPLATE，含终态）',
+      outOf(r).includes('实时值 = 3'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);
