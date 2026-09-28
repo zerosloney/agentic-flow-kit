@@ -8,6 +8,20 @@
 ---
 # PLAN — 并录审计改读 batch 事实
 
+## 执行记录与验证结果
+
+- **T1 写入端**：`confirm-doc.mjs` 调用开始生成 `batch`（`randomBytes(3)`），`appendLedger` 落 `batch/seq/of`；TTY 与 delegated 两形态同记。入口 `docs.length > 1` 拒绝不动（故正常路径 `of=1`）。
+- **T2 判据换锚**：`check-loop.mjs` 并录段旧聚组逻辑（排序 + 线性扫描 + 2s 阈值）**整段退役**，改按 `batch` 分组、组内 `of>1` 且含 delegated 行 → warning；无 `batch` 历史行静默跳过。
+  - **自查（数字已按复核 P2-1 更正）**：本仓实跑 advisory 由 **22 条变为 8 条**——退役的 14 条并录告警全部消失（逐条对账：8 条非并录项未变，无新增、无隐藏）。
+- **T3 测试**：
+  - `check-loop.test.mjs` **79/0**（改前 74/0）：新增核心回归「换 quote 隔 5s 仍报」、同 batch of=2 报、of=1 复用同句不报、TTY of=2 不报、无 batch 静默跳过、异 batch + 注记行不报、组内 of 不一致 ×2（顺序无关）、可报组与注记行并存 ×1。
+  - `confirm-doc.test.mjs` **25/0**（改前 21/0）：S16b 单份 of=1；S18b 两次独立调用 batch 不同；**S18c 端到端**（TTY 多文档 batch 相同 / seq 1,2 / of 均=2 / 两份均 approved）；S18d 应答不足仅首份落态。
+- **T4 文档**：`workflow/README.md` 审计边界节增台账 schema 演进声明（纯增、向后兼容、历史行静默跳过）。
+- **T5 同步回归**：`sync` ✅ / `source-sync-check --diff` 0 差异 ✅ / `gate-checklist --diff` 0 断档 0 未登记 ✅ / `verify.mjs` 25 套件 **500 断言 0 FAIL** ✅ / `doctor` 12 PASS 0 WARN 0 FAIL ✅
+- **变异自验**（4 变异体全部有效）：MUT1 换回旧判据 → 3 红（含核心回归）/ MUT2 永不报 → 5 红 / MUT3 移除 delegated 守卫 → 1 红 / MUT4 移除 VALID_STAGES → 2 红；另移除 TTY 分支 `seq++` → S18c 变红
+- **L2 独立复核**：`verifier` 子代理，判 **0 P0 / 0 P1 / P2×4**（全采纳并修复）；复核者独立对照新旧判据得 **NEW=1 / OLD=0**，证实盲区关闭
+- **提交**：`f194428`（实现）+ `acf93b6`（P2 收口）+ `583f31a`（S18c/d 端到端）
+
 ## 任务拆解
 
 ### T1 confirm-doc 记调用事实：`templates/_agents/scripts/confirm-doc.mjs`

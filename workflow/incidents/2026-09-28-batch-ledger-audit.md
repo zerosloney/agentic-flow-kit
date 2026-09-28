@@ -39,21 +39,22 @@
 ## 复盘三件套（缺一不可）
 
 1. 结构性修复
-   - 修复 commit：（待实现后回填：SHA + 改动文件清单）
+   - 修复 commit：`f194428`（实现，15 文件）+ `acf93b6`（复核 P2×4 收口，13 文件）+ `583f31a`（S18c/d 改应答注入端到端，5 文件）。改动清单：`templates/_agents/scripts/confirm-doc.mjs`（调用开始生成 `batch`，台账落 `batch/seq/of`；仅测试用应答注入逃生门）、`templates/_agents/scripts/check-loop.mjs`（并录段旧判据整段退役，改读 batch/of）、两个 `.test.mjs`（新判据 + 端到端场景）、`workflow/README.md`（台账 schema 演进声明）、装副本经 sync 下发
    - 影响环境：dev（引擎包源 + 本仓装副本；纪律面影响所有装户）
    - 是否需要新 intent：
      - 否 → 理由：判据缺陷单点修复，根因由本 incident 承载；检查项编号 15 不变、配对与内容绑定两段判据零变化；台账 schema 演进为**纯增字段且向后兼容**（历史行无新字段走降级），不属契约破坏
 
 2. 防复发验证（必须落到自动化用例，禁止只写「已人工验证」）
-   - 自动化用例（`check-loop.test.mjs`）**必须含当前判据的盲区场景**：
-     - **换 quote 的并录仍须被拦**（现判据漏报；这是本 incident 的核心回归，必须在旧判据下变红）
-     - 同 batch 且 of > 1 → 报并录
-     - 逐件调用（of = 1）复用同句 quote → **不报**（修正现判据的假阳性）
-     - 人为延迟跨 2s 边界的并录仍须被拦（现判据的另一漏报面）
-     - 历史行无 batch 字段 → 降级路径（不误伤、不回溯）
-   - `confirm-doc.test.mjs`：单次调用落 N 份时 batch 相同、seq 递增、of = N；单份调用 of = 1
-   - **反向保护**：既有并录测试场景语义复核——现判据退役后，不得因"判据变了"就顺手放宽既有断言
+   - 自动化用例（`check-loop.test.mjs`，套件 **79/0**）——盲区场景与判别力均已落地：
+     - **换 quote 的并录仍须被拦**（核心回归）：`同 batch 但换 quote + 隔 5s → 仍报`（证据：变异自验 MUT1 下变红；独立复核以同 fixture 对照新旧判据 实测 NEW=1 / OLD=0）
+     - 同 batch 且 of > 1 → 报并录；逐件调用（of=1）复用同句 quote → 不报（修假阳性）；TTY of=2 → 不报
+     - 组内 of 不一致（首行 1/次行 2，及反向）→ 均报（判据顺序无关，复核 P2-3 收口）
+     - 可报组与 revert-draft 注记行并存 → 恰报 1 次（复核 P2-4 补回）
+     - 无 batch 历史行 → 静默跳过（不误伤、不回溯）
+     - 判别力矩阵（4 变异体，全部有效）：MUT1 换回旧判据→3 红 / MUT2 永不报→5 红 / MUT3 移除 delegated 守卫→1 红 / MUT4 移除 VALID_STAGES→2 红
+   - `confirm-doc.test.mjs`（套件 **25/0**）：S18b 两次独立调用 batch 不同；**S18c 单次调用落 2 份端到端**（batch 相同 / seq 1,2 / of 均=2 / 两份均落 approved，经 `CONFIRM_DOC_TEST_ANSWERS` 注入应答绕开管道 EOF）；S18d 应答不足仅首份落态；S16b 单份 of=1（证据：变异自验——移除 TTY 分支 `seq++` 后 S18c 变红）
+   - **反向保护**：既有并录场景改写时**只改判定依据与注释，未放宽断言强度**（复核逐条比对确认无 `expectHard→expectOk`、无删场景）
 
 3. 规范条目（必须有可追溯的落点）
-   - 落点：`check-loop.mjs` 头注释检查项 15「并录批次审计」段（判据改为读 batch/of 的口径 + 旧判据退役说明）＋ `confirm-doc.mjs` 头注释（台账 schema 新增 batch/seq/of）＋ `workflow/README.md` 审计边界节（台账 schema 演进：新增字段向后兼容、历史行降级口径）
-   - 引用：（待实现后回填 commit SHA / 文件:路径#L行）
+   - 落点：`check-loop.mjs` 头注释检查项 15「并录批次审计」段（读 batch/of 口径 + 旧判据退役说明）＋ `confirm-doc.mjs` 头注释（台账 schema 新增 batch/seq/of）＋ `workflow/README.md` 审计边界节（schema 演进：纯增向后兼容、历史行静默跳过口径）
+   - 引用：`f194428`（check-loop.mjs 头注释 :52-56、confirm-doc.mjs 头注释 :16-22、README 审计边界节）／`acf93b6`（P2 收口与数字更正）／`583f31a`（S18c/d）
