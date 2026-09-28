@@ -1,9 +1,10 @@
 ---
-状态: draft
+状态: done
 级别: L2
 日期: 2026-09-28
 模块: pipeline
 备注: 承接 `2026-09-28-metric-claim-gate` 真装端到端暴露的 P1（装户无法新增指标）。同名入口：../incidents/2026-09-28-adopter-derivers.md。同名 plan：../plans/2026-09-28-adopter-derivers.md。方案已由用户拍板：**分层（内置硬编码 + 装户模块可选）**。
+确认指纹: 4a20cdfa269ca2fd
 ---
 # SPEC — 装户侧 derivers 动态载入（检查 16 扩展契约）
 
@@ -146,7 +147,7 @@ export const derivers = {
 ## 确认与复核
 
 - 确认日期：2026-09-28（用户对话内确认「确认」；级别 L2 经用户确认）
-- 复核：L2 独立复核**已执行**（`independent-reviewer` 子代理，独立上下文，全程 detached worktree、**未改动主工作区**；基准 `1fb200c` → `9b57d70`，并在 `4204093` 后复验）——**6 项断言全部 CONFIRMED**，另提 **P1×1 + P2×4，全部采纳并修复**（修复 commit：`<待填>`）
+- 复核：L2 独立复核**已执行**（`independent-reviewer` 子代理，独立上下文，全程 detached worktree、**未改动主工作区**；基准 `1fb200c` → `9b57d70`，并在 `4204093` 后复验）——**6 项断言全部 CONFIRMED**，另提 **P1×1 + P2×4，全部采纳并修复**（修复 commit：`9b57d70` 实现 + `4204093` glob 自查修正 + `08768eb` 复核收口）
 - **复核确认成立**：① 本仓行为逐条零差异（仅本单新增文档带来的 2 条文档性 advisory）；② 失败**皆响亮且独立成条**——复核实测「载入失败」确为独立的 `- [WARN 装户取数器载入失败]` 条目而非仅提示语引用；③ 引擎不崩（exit 0，含 `.cjs` / 零字节 / 目录名 / `module.exports` / default export / array 形态）；④ `isOwned` 三态正确；⑤ **测试承重**——复核自做变异：静默化载入失败 → **恰 2 条红**、弱化 `Number.isFinite` → 1 条红、反转内置优先 → **12 条红**；⑥ **真装端到端**通过，且复核在父提交上**原样复现了 P1**（`本地已改，跳过` + `check-loop 跳过——供应链防线` + 11 PASS/2 WARN）——证明缺陷与修复都真实
 - **复核 P1（已修，本单最重发现）——shipped 测试套件在每个装户里崩溃**：
   - 现象：新增用例 `await import('../../../src/profiles.mjs')` 在**本仓**解析到 `<repo>/src/`（存在），但在**装户安装**里 `.agents/scripts/` 往上三层 = `<install>/../src/` → `ERR_MODULE_NOT_FOUND` → **整个套件崩掉**（父提交的 shipped 套件在同装户跑得好好的 92/1）

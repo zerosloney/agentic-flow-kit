@@ -1,9 +1,10 @@
 ---
-状态: draft
+状态: approved
 级别: L2
 日期: 2026-09-28
 模块: pipeline
 备注: 同名入口：../incidents/2026-09-28-adopter-derivers.md；同名 spec：../specs/2026-09-28-adopter-derivers.md。L2 四节。
+确认指纹: 04001e1bbb915445
 ---
 # PLAN — 装户侧 derivers 动态载入
 
@@ -95,5 +96,5 @@
 
 > 确认 = 用户在对话内一句话通过；确认后本 plan 状态 `draft → approved` 并回填本节，`done` 只在关单出现。
 
-- 确认结果：<待填>
+- 确认结果：approved（2026-09-28 用户对话内确认「确认」）
 - 确认门记录：spec 草稿全文过目 + plan 草稿全文过目（两道门，逐次，不合并）

@@ -1,9 +1,10 @@
 ---
-状态: open
+状态: fixed
 级别: L2
 发现: 2026-09-28
 模块: pipeline
 备注: 承接 `2026-09-28-metric-claim-gate` 真装端到端暴露的 P1（该单「真装发现」节已登记，未修）。根因：registry 归 owned（装户自持）但取数器闭集硬编码在 managed 引擎里——装户新增指标无路可走，硬改引擎会让自己的门禁静默停摆。本单把「装户如何声明取数逻辑」落成契约。同名 spec/plan 与本文件配对。
+确认指纹: 984572c71a8fc4b0
 ---
 # INCIDENT — 2026-09-28 装户无法新增指标：owned 登记表配 managed 取数器，用即自断门禁
 
@@ -41,7 +42,7 @@
 ## 复盘三件套（缺一不可）
 
 1. 结构性修复
-   - 修复 commit：`<待填>`
+   - 修复 commit：`9b57d70`（实现，14 文件）+ `4204093`（ctx.glob 自查修正，5 文件）+ `08768eb`（复核 P1×1+P2×4 收口，9 文件）
    - 改动清单（详见同名 spec §系统改动）：
      - `templates/_agents/scripts/check-loop.mjs`：检查 16 取数解析改**分层**——内置 `derivers`（引擎硬编码，行为不变）优先，未命中则查装户模块；`createRequire` **同步**载入 `.agents/metric-derivers.mjs`（实测非 Promise），载入/执行失败 **fail-loud** 且不产出假绿
      - `templates/_agents/metric-claims.txt` + 装副本：头部限制说明改为新契约（装户可自增）+ 写法示例 + 边界
@@ -59,7 +60,7 @@
 
 3. 规范条目（必须有可追溯的落点）
    - 落点：`.agents/metric-claims.txt` 头部（扩展契约单源：写法 / 优先级 / 失败语义 / 边界）+ `check-loop.mjs` 检查 16 段注释（载入机制与 fail-loud 理由）
-   - 引用：`<待填>` / 文件:`.agents/metric-claims.txt`、文件:`templates/_agents/scripts/check-loop.mjs`
+   - 引用：`9b57d70` / `08768eb` / 文件:`.agents/metric-claims.txt`、文件:`templates/_agents/scripts/check-loop.mjs`
 
 ## 复核与更正（据实留痕）
 
