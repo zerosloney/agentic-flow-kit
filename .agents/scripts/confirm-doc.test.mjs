@@ -275,7 +275,9 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
     // 该路径仅 TTY 可达（delegated 已被入口限为 1 份），故注入两个**仅测试用**逃生门：
     //   CONFIRM_DOC_TEST_TTY=1      —— 放行 isTTY 判定（本环境无 TTY）
     //   CONFIRM_DOC_TEST_ANSWERS    —— 按序注入问答应答（见下「为什么不能用管道 stdin」）
-    // 两者均不改动任何落态/记账语义。
+    //   NODE_ENV=test               —— TTY 逃生门双条件的第二键（2026-09-28 check16-inline-debt：
+    //                                 单变量可被生产会话顺手设置绕过 TTY 门，收紧为双条件）
+    // 三者均不改动任何落态/记账语义。
     //
     // **为什么不能用 spawnSync 的 input 管道（2026-09-28 更正）**：此前本用例用 `input:'可以\n可以\n'`
     // 并断言「首份」了事，注释把根因误记为「readline 对第二份提问会 unsettled / 管道输入不被逐次消费」。
@@ -285,7 +287,7 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
     const root = mk2docs();
     const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-27-s.md', 'workflow/plans/2026-09-27-s.md'], {
       cwd: root, encoding: 'utf8',
-      env: { ...process.env, CONFIRM_DOC_TEST_TTY: '1', CONFIRM_DOC_TEST_ANSWERS: '可以,可以' },
+      env: { ...process.env, CONFIRM_DOC_TEST_TTY: '1', CONFIRM_DOC_TEST_ANSWERS: '可以,可以', NODE_ENV: 'test' },
     });
     const ledN = fs.readFileSync(path.join(root, '.agents', 'confirmations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
     const stI = fs.readFileSync(path.join(root, 'workflow', 'intents', '2026-09-27-s.md'), 'utf8');
@@ -306,13 +308,30 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
     const root = mk2docs();
     const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-27-s.md', 'workflow/plans/2026-09-27-s.md'], {
       cwd: root, encoding: 'utf8',
-      env: { ...process.env, CONFIRM_DOC_TEST_TTY: '1', CONFIRM_DOC_TEST_ANSWERS: '可以' }, // 只给一份应答
+      env: { ...process.env, CONFIRM_DOC_TEST_TTY: '1', CONFIRM_DOC_TEST_ANSWERS: '可以', NODE_ENV: 'test' }, // 只给一份应答
     });
     const led1 = fs.readFileSync(path.join(root, '.agents', 'confirmations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
     const stP1 = fs.readFileSync(path.join(root, 'workflow', 'plans', '2026-09-27-s.md'), 'utf8');
     check('S18d 注入应答不足 → 仅首份落态，次份按跳过处理（不落态不记账）',
       led1.length === 1 && led1[0].seq === 1 && led1[0].of === 2 && stP1.includes('状态: draft'),
       JSON.stringify({ status: r.status, ledger: led1 }));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+  {
+    // 【T3 双条件】仅设 CONFIRM_DOC_TEST_TTY=1 而未设 NODE_ENV=test → 逃生门不生效，仍按非 TTY 拒绝
+    // （2026-09-28 check16-inline-debt：单变量可被生产会话顺手设置绕过 TTY 门，收紧为双条件——
+    //   本用例钉住「缺第二键即不放行」，与 S18c/S18d 的「双键齐 → 放行」构成双向覆盖）
+    const root = mk2docs();
+    const env1 = { ...process.env, CONFIRM_DOC_TEST_TTY: '1', CONFIRM_DOC_TEST_ANSWERS: '可以' };
+    delete env1.NODE_ENV; // 显式剔除——防宿主环境恰好携带 NODE_ENV 时用例失真
+    const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-27-s.md'], {
+      cwd: root, encoding: 'utf8', env: env1,
+    });
+    const noLedger = !fs.existsSync(path.join(root, '.agents', 'confirmations.jsonl'));
+    const afterI = fs.readFileSync(path.join(root, 'workflow', 'intents', '2026-09-27-s.md'), 'utf8');
+    check('S18e 仅 CONFIRM_DOC_TEST_TTY=1 无 NODE_ENV=test → 仍非 TTY 拒绝（exit 1 + 零台账 + 文档未动）',
+      r.status === 1 && /不可代确认/.test(r.stderr) && noLedger && afterI.includes('状态: draft'),
+      JSON.stringify({ status: r.status, stderr: String(r.stderr).slice(0, 200) }));
     fs.rmSync(root, { recursive: true, force: true });
   }
 }

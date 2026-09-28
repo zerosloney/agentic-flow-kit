@@ -25,7 +25,7 @@
    - 判据：迁移后 `node .agents/scripts/check-loop.mjs` 全量输出与迁移前逐字节一致（本仓当前 exit 0 / 存量告警集不变）；`grep -c '数字前缀.*tracked\|/^\d/' check-loop.mjs` 中过滤链实现仅 `docFiles` 一处
    - 风险：中（迁移漂移）——以输出 diff 为空作门，不为绿而放宽
 2. **T2 口径统一 + 用例**
-   - 判据：`scanFiles16` 复用 `ctx.docFiles`；新增 git 仓库模式双向用例（未跟踪档含未回填签名 → 不出账；`git add` 后 → 出账）均按预期断言
+   - 判据：`scanFiles16` 复用 `ctx.docFiles`；新增 git 仓库模式双向用例（未跟踪档含未回填签名 → 不出账；**提交进 HEAD 后 → 出账**——实现期修正：`isTracked` 判据为 `ls-tree HEAD`，仅 `git add` 不 commit 不进 HEAD，原判据句「git add 后」不准确，沿场景 23/24 先例取 `gitCommitAll` 口径）均按预期断言
    - 风险：低（行为变化已在 spec 声明并双向钉住）
 3. **T3 TTY 双条件 + 用例**
    - 判据：先 grep 复核 `NODE_ENV` 无其他读者；双条件落地后 `confirm-doc.test.mjs` 全绿（含新用例：只设 TTY 变量 → 非委托非 TTY 仍拒绝）

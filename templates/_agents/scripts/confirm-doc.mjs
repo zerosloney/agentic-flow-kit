@@ -122,8 +122,15 @@ if (isMain) {
   // TTY 门（仅 TTY 模式；先于文档参数校验）：AI 会话内非委托调用一律拒绝
   // CONFIRM_DOC_TEST_TTY：**仅测试用**逃生门——本测试环境无 TTY，而 TTY 多文档分支
   // （batch 相同 / seq 递增 / of=N）是并录审计的判别基础，必须可测（复核 P2-2）。
-  // 该变量只影响 isTTY 判定，不改动任何落态/记账语义；生产路径不设置该变量。
-  const ttyForced = process.env.CONFIRM_DOC_TEST_TTY === '1';
+  // 双条件（2026-09-28 check16-inline-debt）：须同时 NODE_ENV === 'test' 才放行——单看
+  // 「TEST」字样的变量名不构成机器约束，AI 会话可能「顺手」在生产路径设置它绕过 TTY 门；
+  // 加 NODE_ENV 双条件后，生产路径（不设 NODE_ENV=test）即便误设 CONFIRM_DOC_TEST_TTY 也不生效。
+  // **信任边界声明（沿 check8-git-anchor 口径）**：本地信任边界内不可机器防——环境变量终究可被
+  // 本机进程任意设置，刻意伪造 `NODE_ENV=test CONFIRM_DOC_TEST_TTY=1` 仍可绕过，与伪造 git 时间戳 /
+  // 手改台账同属事后对质（git 历史与台账）兜底的范畴；此处只把「顺手设置单变量」的成本抬到
+  // 「主动伪造双变量组合」，不宣称「通道已关闭」。
+  // 两变量只影响 isTTY 判定，不改动任何落态/记账语义；生产路径不设置这两个变量。
+  const ttyForced = process.env.CONFIRM_DOC_TEST_TTY === '1' && process.env.NODE_ENV === 'test';
   if (!delegated && !ttyForced && (!process.stdin.isTTY || !process.stdout.isTTY)) {
     console.error('确认门须由用户在终端亲手运行（node .agents/scripts/confirm-doc.mjs <workflow/文档>...）——AI 会话内不可代确认；用户对话内明确确认后可用 --delegated "<用户原话>" 委托代录（台账如实记来源）');
     process.exit(1);

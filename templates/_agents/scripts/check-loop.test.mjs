@@ -1107,12 +1107,19 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
 {
   const MC = 'ledger.lines = ledger.lines\ndocs.count.plans = docs.count.plans\n';
   const seedLedger = (T, lines) => w(T, '.agents/confirmations.jsonl', lines.join('\n') + '\n');
+  // T2 口径适配（2026-09-28 check16-inline-debt）：scanFiles16 统一走 docFiles（.md ∧ 数字前缀 ∧ tracked），
+  // 非数字前缀件不再进检查 16 扫描面——原 p1/p2/… 无前缀文件名曾靠「旧扫描面收非前缀件」成立。改为
+  // 数字前缀 + 同名 intent（沿场景 80-90 activePlan 先例：缺 intent 会被「配对断裂」hard-block 干扰断言）。
+  const activePlan16 = (T, name, body) => {
+    w(T, `workflow/intents/2026-09-01-${name}.md`, INTENT(name, '状态: draft\n级别: L1'));
+    w(T, `workflow/plans/2026-09-01-${name}.md`, PLAN(name, '状态: draft\n级别: L1', body));
+  };
   {
     // 【核心回归】活跃文档留签名未回填 → warning 且提示实时值
     const T = mkfix();
     w(T, '.agents/metric-claims.txt', MC);
     seedLedger(T, ['{"doc":"a","stage":"done"}', '{"doc":"b","stage":"done"}', '{"doc":"c","stage":"done"}']);
-    w(T, 'workflow/plans/p1.md', PLAN('p1', '状态: draft\n级别: L1', '\n台账共 {{ledger.lines}} 行\n'));
+    activePlan16(T, 'p1', '\n台账共 {{ledger.lines}} 行\n');
     const r = run(T);
     const o = outOf(r);
     check('检查16:活跃文档留签名未回填 → WARN 且给出实时值 3（advisory 不阻断）',
@@ -1124,7 +1131,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     const T = mkfix();
     w(T, '.agents/metric-claims.txt', MC);
     seedLedger(T, ['{"doc":"a","stage":"done"}']);
-    w(T, 'workflow/plans/p2.md', PLAN('p2', '状态: draft\n级别: L1', '\n台账共 47 行，其中 13 条并录（历史叙述，非签名）\n'));
+    activePlan16(T, 'p2', '\n台账共 47 行，其中 13 条并录（历史叙述，非签名）\n');
     const r = run(T);
     check('检查16:无签名 → 零告警（裸数字是历史叙述，不得产生假阳性）',
       r.status === 0 && !outOf(r).includes('指标'), `exit=${r.status}\n${outOf(r)}`);
@@ -1140,8 +1147,8 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     const T = mkfix();
     w(T, '.agents/metric-claims.txt', MC);
     seedLedger(T, ['{"doc":"a","stage":"done"}']);
-    w(T, 'workflow/plans/p3.md', PLAN('p3', '状态: draft\n级别: L1',
-      '\n构建 = ' + SCREAMING('BUILD_CMD') + '；端口 ' + SCREAMING('BOARD_PORT') + '；项目 ' + SCREAMING('PROJECT_NAME') + '\n'));
+    activePlan16(T, 'p3',
+      '\n构建 = ' + SCREAMING('BUILD_CMD') + '；端口 ' + SCREAMING('BOARD_PORT') + '；项目 ' + SCREAMING('PROJECT_NAME') + '\n');
     const r = run(T);
     check('检查16:装户模板占位符（全大写 SCREAMING_CASE）→ 不误报（形态收窄）',
       r.status === 0 && !outOf(r).includes('指标'), `exit=${r.status}\n${outOf(r)}`);
@@ -1152,7 +1159,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     const T = mkfix();
     w(T, '.agents/metric-claims.txt', MC);
     seedLedger(T, ['{"doc":"a","stage":"done"}']);
-    w(T, 'workflow/plans/p4.md', PLAN('p4', '状态: draft\n级别: L1', '\n引用 {{nope.metric}}\n'));
+    activePlan16(T, 'p4', '\n引用 {{nope.metric}}\n');
     const r = run(T);
     check('检查16:引用未登记指标 → fail-loud 出账（不静默跳过）',
       outOf(r).includes('指标未登记'), `exit=${r.status}\n${outOf(r)}`);
@@ -1164,8 +1171,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     const T = mkfix();
     w(T, '.agents/metric-claims.txt', MC);
     seedLedger(T, ['{"doc":"a","stage":"done"}']);
-    w(T, 'workflow/plans/p8.md', PLAN('p8', '状态: draft\n级别: L1',
-      '\n写法示例如 `\\{{ledger.lines}}`（本行是讲语法，非断言）\n'));
+    activePlan16(T, 'p8', '\n写法示例如 `\\{{ledger.lines}}`（本行是讲语法，非断言）\n');
     const r = run(T);
     check('检查16:转义 \\{{...}} 的行为示意 → 不报（区分「讲语法」与「真断言」）',
       r.status === 0 && !outOf(r).includes('指标'), `exit=${r.status}\n${outOf(r)}`);
@@ -1205,7 +1211,9 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     const T = mkfix();
     w(T, '.agents/metric-claims.txt', MC);
     seedLedger(T, ['{"doc":"a","stage":"done"}']);
-    w(T, 'workflow/plans/p7.md', PLAN('p7', '状态: done\n级别: L1', '\n台账共 {{ledger.lines}} 行\n'));
+    // 终态件（plan done + 同名 intent，数字前缀使其确在 docFiles 扫描面内——断言才针对「终态豁免」而非「无前缀豁免」）
+    w(T, 'workflow/intents/2026-09-01-p7.md', INTENT('p7', '状态: draft\n级别: L1'));
+    w(T, 'workflow/plans/2026-09-01-p7.md', PLAN('p7', '状态: done\n级别: L1', '\n台账共 {{ledger.lines}} 行\n'));
     const r = run(T);
     check('检查16:终态文档不扫（历史叙述豁免，沿检查 4 尺度）',
       r.status === 0 && !outOf(r).includes('指标待回填'), `exit=${r.status}\n${outOf(r)}`);
@@ -1234,8 +1242,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     const T = mkfix();
     w(T, '.agents/metric-claims.txt', MC);
     seedLedger(T, ['{"doc":"a","stage":"done"}']);
-    w(T, 'workflow/plans/p9.md', PLAN('p9', '状态: draft\n级别: L1',
-      '\n讲语法 \\{{a.b}} 示意，但本行也有真断言 {{ledger.lines}} 未回填\n'));
+    activePlan16(T, 'p9', '\n讲语法 \\{{a.b}} 示意，但本行也有真断言 {{ledger.lines}} 未回填\n');
     const r = run(T);
     check('检查16:同行「转义示意 + 真未回填」→ 真签名仍报（转义按逐个出现，不按整行）',
       outOf(r).includes('指标待回填'), `exit=${r.status}\n${outOf(r)}`);
@@ -1246,7 +1253,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     const T = mkfix();
     w(T, '.agents/metric-claims.txt', MC);
     seedLedger(T, ['{"doc":"a","stage":"done"}']);
-    w(T, 'workflow/plans/p10.md', PLAN('p10', '状态: draft\n级别: L1', '\n引用 {{Ledger.Lines}} 笔误\n'));
+    activePlan16(T, 'p10', '\n引用 {{Ledger.Lines}} 笔误\n');
     const r = run(T);
     check('检查16:形态不符（大写点分笔误）→ 出账「指标形态」（不静默漏过）',
       outOf(r).includes('指标形态'), `exit=${r.status}\n${outOf(r)}`);
@@ -1591,6 +1598,33 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
       }
     }
   }
+}
+
+// ---- 场景 91:检查 16 tracked-only 口径双向（2026-09-28 check16-inline-debt T2）----
+// scanFiles16 与取数器统一走 docFiles（.md ∧ 数字前缀 ∧ tracked）：并行会话的未跟踪半成品即便含
+// 未回填签名也不进扫描面（别人的草稿不拦我的 push，沿检查 1-15 仓库模式「只扫已提交(HEAD)」口径）；
+// 提交进 HEAD 后照常出账。跑法沿场景 23/24 先例（{git:true} + cwd 注入真 git 模式）。
+{
+  const T = mkfix();
+  gitInit(T);
+  w(T, '.agents/metric-claims.txt', 'ledger.lines = ledger.lines\n');
+  w(T, '.agents/confirmations.jsonl', '{"doc":"a","stage":"done"}\n');
+  w(T, 'workflow/intents/2026-09-12-base16.md', INTENT('base16', '状态: done\n级别: L1\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
+  w(T, 'workflow/plans/2026-09-12-base16.md', PLAN('base16', '状态: done\n级别: L1'));
+  gitCommitAll(T, 'base');
+  // 未跟踪半成品：留签名未回填 → 不出账（tracked-only：不进扫描面）
+  w(T, 'workflow/intents/2026-09-28-wip16.md', INTENT('wip16', '状态: draft\n级别: L1\n日期: 2026-09-28'));
+  w(T, 'workflow/plans/2026-09-28-wip16.md', PLAN('wip16', '状态: draft\n级别: L1', '\n台账共 {{ledger.lines}} 行\n'));
+  let r = run(T, { git: true });
+  check('检查16 tracked-only:未跟踪档含未回填签名 → 不出账（并行半成品不进扫描面）',
+    r.status === 0 && !outOf(r).includes('指标待回填') && !outOf(r).includes('wip16'),
+    `exit=${r.status}\n${outOf(r)}`);
+  gitCommitAll(T, 'wip');
+  r = run(T, { git: true });
+  check('检查16 tracked-only:提交进 HEAD 后 → 照常出账（WARN 指标待回填）',
+    r.status === 0 && outOf(r).includes('指标待回填') && outOf(r).includes('wip16'),
+    `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
