@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-28
 模块: pipeline
 备注: 同名入口：../incidents/2026-09-28-check8-git-anchor.md；同名 spec：../specs/2026-09-28-check8-git-anchor.md。L2 四节。
-确认指纹: d3f304842fbdb0fc
+确认指纹: 4a5d1baa5af41724
 ---
 # PLAN — 检查 8 生效日锚改 git 首次加入日期
 

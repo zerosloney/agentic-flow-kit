@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-28
 模块: pipeline
 备注: 同名 incident：../incidents/2026-09-28-check8-git-anchor.md（检查 8 生效日锚取文件名，hard 门可被平凡绕过）。L2：改 hard 门判据 + 新增共享 git 索引；检查项编号不变。
-确认指纹: b00f9253ee288079
+确认指纹: 3d2d644be92898fb
 ---
 # SPEC — 检查 8 生效日锚改 git 首次加入日期
 

@@ -1,9 +1,10 @@
 ---
-状态: open
+状态: closed
 级别: L2
 发现: 2026-09-28
 模块: pipeline
 备注: 上一单（2026-09-28-confirm-gate-effective-date-anchor）登记的遗留面「检查 8/12/14 三处自报日期锚」中，**检查 8 是唯一 hard-block 门**且锚恰是命名规范强制的文件名前缀——写早零成本、顺手即发生。用户拍板方案②：只修检查 8，12/14 两条 advisory 登记不动。修法沿检查 10 先例（git log --diff-filter=A）。同名 spec/plan 与本文件配对。
+确认指纹: f10e0f032b3a415c
 ---
 # INCIDENT — 2026-09-28 检查 8 生效日锚取文件名，hard 门可被平凡绕过
 
