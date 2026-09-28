@@ -15,7 +15,7 @@
 
 ### T1 登记表单源：`.agents/metric-claims.txt` + `templates/_agents/metric-claims.txt`
 
-**判据**：8 个指标（`ledger.lines` / `ledger.linesWithBatch` / `ledger.linesWithoutBatch` / `docs.count.{intents,specs,plans,incidents,all}`）在册；文件头写明用法、格式、取数表达式闭集，以及**为什么只查显式签名**（附本仓 65 处数字断言的实测依据）。
+**判据**：8 个指标（`ledger.lines` / `ledger.linesWithBatch` / `ledger.linesWithoutBatch` / `docs.count.{intents,specs,plans,incidents,all}`）在册；文件头写明用法、格式、取数表达式闭集，以及**为什么只查显式签名**（附本仓 49 处数字断言的实测依据）。
 
 - T1.1 两处同步落盘（包源 + 装副本），`source-sync-check --diff` 0 差异
 - T1.2 文件内**只出现小写点分形态**（`\\{{指标名}}`）——写 `\\{{全大写}}` 会被 `doctor` §5 判占位符残留
@@ -38,7 +38,7 @@
 
 - T3.1 留签名未回填 → WARN 含实时值（核心回归）
 - T3.2 **无签名 → 零告警**（假阳性恒 0 · 核心）
-- T3.3 **装户模板占位符全大写 → 不误报**（假阳性恒 0 · 边界，实测不收窄会误报本仓 11 处）
+- T3.3 **装户模板占位符全大写 → 不误报**（假阳性恒 0 · 边界，实测不收窄会对活跃态文档多报 15 处）
 - T3.4 未登记指标 → fail-loud；T3.5 无取数器 → fail-loud；T3.6 登记表缺失 → 静默跳过
 - T3.7 终态文档不扫；T3.8 取数正确性；**T3.9 转义不报**；**T3.10 可加载守卫（假绿比红危险）**（`docs.count.plans` 排除 `_TEMPLATE`、含终态）
 
@@ -96,7 +96,7 @@
 
 ## 执行记录与验证结果
 
-- **T1 登记表**：`.agents/metric-claims.txt` + `templates/_agents/metric-claims.txt`（8 指标；取数器全为本地确定性闭集）；文件头写明用法 / 格式 / 以及**为什么只查显式签名**（附本仓 65 处数字断言的实测依据）
+- **T1 登记表**：`.agents/metric-claims.txt` + `templates/_agents/metric-claims.txt`（8 指标；取数器全为本地确定性闭集）；文件头写明用法 / 格式 / 以及**为什么只查显式签名**（附本仓 49 处数字断言的实测依据）
 - **T2 检查 16**：`templates/_agents/scripts/check-loop.mjs` 新增检查段（登记表解析 + 活跃态扫描 + 签名对账 + 4 类 fail-loud）；头注释清单加第 16 项
 - **T3 测试**：`check-loop.test.mjs` 由 79 → **92 PASS**（+13 场景，含复核 P1/P2 的 4 条回归）
 - **T4 口径登记**：`gate-checklist.mjs` `PAIRS` 加 `{ doctor: '7', cl: '16' }` → `--diff` **0 断档 / 0 未登记**
