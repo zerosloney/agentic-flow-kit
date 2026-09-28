@@ -96,7 +96,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "4a24db43da24eb5beebffc80b8cd354922a7ad77d8c0fc1a01003da0699afc01"
+      "sha256": "d2cb4ba09569aec51a97e4b8dc60429e8dcc8c855989479e9a1f5c045472b1e7"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -104,7 +104,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "f91e6129c1fc7ae4dfbceaab86cd53bc4e270ec073b55b461de33c2a578911c6"
+      "sha256": "3fbb28b40189f02de800b6689de088558579287504667488b44381c59bad645d"
     },
     {
       "rel": ".agents/scripts/commit-check-trigger.test.mjs",
@@ -240,7 +240,7 @@
     },
     {
       "rel": ".agents/scripts/workflow-board-server.test.mjs",
-      "sha256": "31595bba81118554d84fb6f1eee895a66d0e10fa39822883aee6c617d8e036c4"
+      "sha256": "172beb8dcd6f4fbbc1ec3050f7a02e651f2bba642abcf2e951ba05d7fe564113"
     },
     {
       "rel": ".agents/scripts/workflow-enums.mjs",

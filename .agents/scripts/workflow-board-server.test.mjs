@@ -47,7 +47,11 @@ const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
     JSON.stringify(parsed));
 }
 
-// ---- ②双跑断言（真 fixture）：spawn check-loop → parseLoopHardBlocks 覆盖四类 ----
+// ---- ②双跑（真 fixture）：spawn check-loop → parseLoopHardBlocks 覆盖四类 ----
+// **检查 8 换锚后的前置条件（2026-09-28 check8-git-anchor）**：检查 8 的生效日锚已从文件名前缀
+// 改为「文件首次加入 git 的日期」，故「验收未对账」这条 hard 的产出**需要 git 首次加入日期可判定**；
+// 非 git 仓会走存量口径、不再产出该 hard（有意语义，见 spec）。因此本场景需为**真 git 仓**——
+// 这不是放宽断言，而是补上使原断言（四类 hard-block 全覆盖）成立的前置；**断言强度与文案均未变**。
 {
   const T = fs.mkdtempSync(path.join(os.tmpdir(), 'board-loop-test-'));
   for (const s of ['intents', 'specs', 'plans', 'incidents']) fs.mkdirSync(path.join(T, 'workflow', s), { recursive: true });
@@ -64,8 +68,8 @@ const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
   ].join('\n') + '\n');
   const w = (rel, c) => fs.writeFileSync(path.join(T, rel), c);
   // 回路断档：incident 三件套选「是」但引用 intent 不存在
-  w('workflow/incidents/2026-09-27-loop.md', '---\n状态: open\n级别: L1\n发现: 2026-09-27\n模块: pipeline\n---\n# INCIDENT — loop\n\n## 复盘三件套\n\n1. 结构性修复\n - 是否需要新 intent:\n     - 是 → ../intents/2026-09-12-ghost.md\n2. 防复发验证\n3. 规范条目\n');
-  // 验收未对账：done intent（2026-09-27 起）无验收标准节
+  w('workflow/incidents/2026-09-27-loop.md', '---\n状态: open\n级别: L1\n发现: 2026-09-27\n模块: pipeline\n---\n# INCIDENT — loop\n\n## 复盘三件套\n\n1. 结构性修复\n - 是否需要新 intent:\n - 是 → ../intents/2026-09-12-ghost.md\n2. 防复发验证\n3. 规范条目\n');
+  // 验收未对账：done intent 无验收标准节（锚 = git 首次加入日期 → 见上）
   w('workflow/intents/2026-09-27-acc.md', '---\n状态: done\n级别: L1\n日期: 2026-09-27\n模块: pipeline\n---\n# INTENT — acc\n');
   // 确认未对账：done 无指纹无台账
   w('workflow/plans/2026-09-27-cg.md', '---\n状态: done\n级别: L1\n日期: 2026-09-27\n---\n# PLAN — cg\n');
@@ -81,6 +85,12 @@ const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
   // 配对齐 plan（避免无关阻断干扰可读性——配对断裂也会在 hard 段，不影响四类断言）
   w('workflow/plans/2026-09-27-loop.md', '---\n状态: draft\n级别: L1\n---\n# PLAN — loop\n');
   w('workflow/plans/2026-09-27-acc.md', '---\n状态: draft\n级别: L1\n---\n# PLAN — acc\n');
+
+  // 真 git 仓（使检查 8 的 git 锚可判定）——本地提交，不入任何远端
+  const G = process.platform === 'win32' ? 'git.exe' : 'git';
+  spawnSync(G, ['init', '-q'], { cwd: T });
+  spawnSync(G, ['add', '-A'], { cwd: T });
+  spawnSync(G, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'fixture'], { cwd: T });
 
   const r = spawnSync(process.execPath, [CHECK_LOOP], { cwd: T, encoding: 'utf8', env: { ...process.env, CHECK_LOOP_ROOT: T } });
   const parsed = parseLoopHardBlocks(r.stderr || '');

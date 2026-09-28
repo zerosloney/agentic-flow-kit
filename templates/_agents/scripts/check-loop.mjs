@@ -21,7 +21,10 @@
 //   5. intent/spec/plan 状态字段 + L3 独立复核                                       [warning]
 //   6. 子智能体角色契约 + OpenCode/Trae/ZCode Adapter 一致性(含旧委派残留/钉死模型)  [warning]
 //   7. 阶段索引同步(AGENTS.md 与 new-task.md 须双向索引全部阶段指令)                [warning]
-//   8. intent 验收标准对账(2026-09-12 起新建:done 未勾验/缺节=hard,勾选缺证据=warning;存量聚合 warning,含「存量对账豁免」声明者出账)
+//   8. intent 验收标准对账(新建:done 未勾验/缺节=hard,勾选缺证据=warning;存量聚合 warning,含「存量对账豁免」声明者出账)
+//      **生效日锚=git 首次加入日期(2026-09-28 改;此前取文件名前 10 字符——命名规范强制的字段、
+//      写早零成本,一条 hard 门可被平凡绕过;incident 2026-09-28-check8-git-anchor 实证)**:
+//      非 git / 查不到加入记录 → 不可判定 → 走存量口径(不误报 hard)
 //      证据可写在 [x] 行的续行（仓库通写法「（证据：…）」另起一行；全/半角冒号皆认）
 //   9. 文件名英文 kebab-case(非 ASCII 文件名=warning,2026-09-11 规则)
 //  10. 级别 vs 迁移文件一致性(L1/L2 入口文档加入提交触及迁移 SQL/Migrations=疑似判低,warning)
@@ -410,7 +413,36 @@ for (const cmd of ['plan', 'design', 'build', 'test', 'deploy', 'maintain', 'rev
   }
 }
 
-// --- 8. intent 验收标准对账（done 须逐条勾验并补证据；2026-09-12 起新建 hard，存量聚合 warning）---
+// --- 共享：文件「首次加入 git」的日期索引（2026-09-28 check8-git-anchor）---
+// 用途：检查 8 的生效日锚从**可手填的文件名前缀**（项目命名规范本身即 `YYYY-MM-DD-<主题>`，作者
+// 日常手写该前缀，「写早」零成本、顺手即发生——一条 hard 门可被平凡绕过）改为**不可手填的 git 事实**。
+// 口径：git 按时间新→旧遍历，同一文件首遇即最早那次加入（与检查 10 的 addpath 同款判据）。
+// 非 git / 命令失败 → null，调用方按既有「非 git 跳过」语义退化（不 fail-loud）。
+// 注：检查 10 需要的是「文件→加入 commit」+「commit→文件清单」两份映射（判断同提交是否触及迁移 SQL），
+// 与本索引「文件→日期」不同构，故**不合并**——避免把两处判据耦死。
+const addedDates = (() => {
+  if (gitOut(['rev-parse', '--git-dir']) === null) return null;
+  const log = gitOut(['log', '--diff-filter=A', '--format=@%aI', '--name-only']);
+  if (log === null) return null;
+  const m = new Map();
+  let cur = null;
+  for (const line of log.split('\n')) {
+    if (line.startsWith('@')) { cur = line.slice(1); continue; }
+    if (line.trim() && cur && !m.has(line.trim())) m.set(line.trim(), cur); // 新→旧序首遇 = 最早
+  }
+  return m;
+})();
+// 某文档「首次加入日期」（YYYY-MM-DD）；不可判定（非 git / 查不到）返回 ''
+const addedDateOf = (absDoc) => {
+  if (!addedDates) return '';
+  const rel = path.relative(ROOT, absDoc).split(path.sep).join('/');
+  const iso = addedDates.get(rel);
+  return iso ? iso.slice(0, 10) : '';
+};
+
+// --- 8. intent 验收标准对账（done 须逐条勾验并补证据；新建 hard，存量聚合 warning）---
+// 生效日锚 2026-09-28 改「git 首次加入日期」（此前取文件名前 10 字符——命名规范强制的字段、
+// 写早零成本，见 incidents/2026-09-28-check8-git-anchor）。非 git → 不可判定 → 走存量口径（不误报 hard）。
 {
   const accCutoff = '2026-09-12';
   let legacyUnaccounted = 0;
@@ -436,8 +468,11 @@ for (const cmd of ['plan', 'design', 'build', 'test', 'deploy', 'maintain', 'rev
       if (pendX && evRe.test(line)) pendX = false; // 续行补上证据
     }
     closeItem(); // 节末（或全文末）仍无证据 → 计缺证据
-    const filedate = /^\d{4}-\d{2}-\d{2}$/.test(base.slice(0, 10)) ? base.slice(0, 10) : '';
-    const isNew = filedate !== '' && filedate >= accCutoff;
+    // 生效日锚 = git 首次加入日期（2026-09-28 改；此前取文件名前 10 字符）。git 事实不可手填，
+    // 「把文件名日期写早以整段跳过 hard 门」这条通道关闭。非 git / 查不到 → '' → isNew=false
+    // → 走存量口径（与既有语义一致：不可判定时不误报 hard）。
+    const adddate = addedDateOf(intent);
+    const isNew = adddate !== '' && adddate >= accCutoff;
     if (!hs) {
       if (isNew) blockers.push(`- [验收未对账] done intent 缺「## 验收标准」节(勾验无从核对):${base}`);
       else if (!ex) legacyUnaccounted++;

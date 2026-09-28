@@ -147,10 +147,14 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
 }
 
 // ---- 场景 6:新建 done intent 验收未勾验 → hard;带附注不影响判定（papercut #4 回归）----
+// 换锚（2026-09-28 check8-git-anchor）后「新建」由 **git 首次加入日期**判定（文件名字段不再作锚），
+// 故本场景须为真 git 仓——否则不可判定、走存量口径而不再 hard。**意图与断言强度均不变**。
 {
   const T = mkfix();
+  gitInit(T);
   w(T, 'workflow/intents/2026-09-13-e.md', INTENT('e', '状态: done\n级别: L1\n日期: 2026-09-13\n备注: 回溯补档,原工作 2026-09-12 完成', '\n## 验收标准（可测试）\n- [ ] 用例通过\n'));
   w(T, 'workflow/plans/2026-09-13-e.md', PLAN('e', '状态: done\n级别: L1'));
+  gitCommitAll(T, 'add');
   expectHard('新建 done 未勾验(附注在备注键) → hard 验收未对账', T, '验收未对账');
   rmfix(T);
 }
@@ -282,8 +286,10 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
 // ---- 场景 18:新建 done intent 缺「## 验收标准」节 → hard（2026-09-16 补口回归）----
 {
   const T = mkfix();
+  gitInit(T);
   w(T, 'workflow/intents/2026-09-13-r.md', INTENT('r', '状态: done\n级别: L1\n日期: 2026-09-13', '\n## 目标\n关单前未写验收标准节。\n'));
   w(T, 'workflow/plans/2026-09-13-r.md', PLAN('r', '状态: done\n级别: L1'));
+  gitCommitAll(T, 'add');
   expectHard('新建 done 缺验收标准节 → hard 验收未对账', T, '缺「## 验收标准」节');
   rmfix(T);
 }
@@ -291,8 +297,10 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
 // ---- 场景 19:新建 done 勾选项缩进写法 → hard（口径放宽后仍拦）----
 {
   const T = mkfix();
+  gitInit(T);
   w(T, 'workflow/intents/2026-09-13-s.md', INTENT('s', '状态: done\n级别: L1\n日期: 2026-09-13', '\n## 验收标准（可测试）\n  - [ ] 缩进未勾项（此前后静默通过）\n'));
   w(T, 'workflow/plans/2026-09-13-s.md', PLAN('s', '状态: done\n级别: L1'));
+  gitCommitAll(T, 'add');
   expectHard('新建 done 勾选项缩进 → hard 验收未对账', T, '验收未对账');
   rmfix(T);
 }
@@ -540,11 +548,14 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   rmfix(T);
 }
 // ---- 场景 41:检查 8——[x] 无证据且续行也无 → 报验收缺证据（回归：不可把豁免放大成漏检）----
+// 换锚后须真 git 仓：否则不可判定 → 走存量口径，「验收缺证据」这条 warning 也不再产出。
 {
   const T = mkfix();
+  gitInit(T);
   w(T, 'workflow/intents/2026-09-12-ev2.md', INTENT('ev2', '状态: done\n级别: L1\n日期: 2026-09-12',
     '\n## 验收标准（可测试）\n- [x] 用例通过\n- [x] 文档补齐\n（说明：无证据行）\n'));
   w(T, 'workflow/plans/2026-09-12-ev2.md', PLAN('ev2', '状态: done\n级别: L1'));
+  gitCommitAll(T, 'add');
   const r = run(T);
   check('[x] 续行仍无证据 → 报验收缺证据',
     r.status === 0 && outOf(r).includes('验收缺证据'), `exit=${r.status}\n${outOf(r)}`);
@@ -1043,6 +1054,46 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
       { ts: '2026-09-28T02:00:00.000Z', doc: d1.rel, stage: 'revert-open', fingerprint: 'n/a', prev: 'approved', source: 'chat-delegated', quote: '回退注记' },
     ]);
     expectOk('检查15:仅 revert-open 注记行（非合法跳转 stage）→ 不构成台账条件，日期早 → 存量豁免 exit 0', T);
+    rmfix(T);
+  }
+}
+
+// ---- 场景 72-74:检查 8 生效日锚改 git 首次加入日期（2026-09-28 check8-git-anchor）----
+// 换锚前锚取**文件名前 10 字符**——项目命名规范本身即 YYYY-MM-DD-<主题>，作者日常手写该前缀，
+// 「写早」无需任何额外动作、顺手即发生 → 一条 hard 门可被平凡绕过（有未勾验项却 exit 0）。
+// 换锚后锚取 git 首次加入日期（不可手填）→ 该通道关闭。
+{
+  {
+    // 【核心回归】文件名日期写早（2026-09-01 < accCutoff 2026-09-12），但**实际是新建档**
+    // （git 首次加入在生效日之后）→ 仍须 hard 拦。换锚前此场景被 `filedate >= accCutoff` 跳过（静默放行）。
+    const T = mkfix();
+    gitInit(T);
+    w(T, 'workflow/intents/2026-09-01-early.md', INTENT('early', '状态: done\n级别: L1\n日期: 2026-09-01', '\n## 验收标准\n- [ ] 未勾项\n'));
+    w(T, 'workflow/plans/2026-09-01-early.md', PLAN('early', '状态: done\n级别: L1'));
+    gitCommitAll(T, 'add'); // 加入时间 = 今天（≥ accCutoff）→ git 事实：新建档
+    expectHard('检查8:文件名日期写早但 git 首次加入够新 + 未勾验 → hard 拦（换锚前被静默跳过）', T, '验收未对账');
+    rmfix(T);
+  }
+  {
+    // 【退化语义】非 git 仓（fixture 常态）→ 不可判定 → 走存量口径，**不误报 hard**。
+    // 钉住「换锚不引入新的误拦」：不可判定时宁可放过（advisory 层），不放 hard。
+    const T = mkfix();
+    w(T, 'workflow/intents/2026-09-15-nogit.md', INTENT('nogit', '状态: done\n级别: L1\n日期: 2026-09-15', '\n## 验收标准\n- [ ] 未勾项\n'));
+    w(T, 'workflow/plans/2026-09-15-nogit.md', PLAN('nogit', '状态: done\n级别: L1'));
+    const r = run(T);
+    check('检查8:非 git 仓 → 不可判定走存量口径（不误报 hard）',
+      r.status === 0 && !outOf(r).includes('验收未对账'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T);
+  }
+  {
+    // 【对照】同一内容、仅把**文件名**改为够新（09-15）→ 两锚下都应 hard 拦。
+    // 与核心回归并置，说明「拦不拦由 git 事实决定，不由文件名字段决定」。
+    const T = mkfix();
+    gitInit(T);
+    w(T, 'workflow/intents/2026-09-15-newer.md', INTENT('newer', '状态: done\n级别: L1\n日期: 2026-09-15', '\n## 验收标准\n- [ ] 未勾项\n'));
+    w(T, 'workflow/plans/2026-09-15-newer.md', PLAN('newer', '状态: done\n级别: L1'));
+    gitCommitAll(T, 'add');
+    expectHard('检查8:文件名日期够新 + git 加入够新 + 未勾验 → hard 拦（对照）', T, '验收未对账');
     rmfix(T);
   }
 }
