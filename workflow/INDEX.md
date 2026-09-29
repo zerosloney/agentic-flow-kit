@@ -5,14 +5,16 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（23）
+## 活跃（25）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
 | INTENT | L2 | approved | 2026-09-29 | pipeline | 装户表面收口 | ☑0/8 |
 | INTENT | L2 | approved | 2026-09-29 | pipeline | 发版树上的未收口文档 | ☑0/7 |
 | PLAN | L2 | approved | 2026-09-29 | pipeline | 装户表面收口 | — |
+| PLAN | L2 | approved | 2026-09-29 | pipeline | 发版树上的未收口文档 | — |
 | SPEC | L2 | approved | 2026-09-29 | pipeline | 装户表面收口 | — |
+| SPEC | L2 | approved | 2026-09-29 | pipeline | 发版树上的未收口文档 | — |
 | PLAN | L2 | approved | 2026-09-28 | pipeline | 装户侧 derivers 动态载入 | — |
 | PLAN | L1 | approved | 2026-09-28 | pipeline | 结论文档断言强于实际的窄修与纪律固化 | — |
 | PLAN | L2 | approved | 2026-09-28 | pipeline | 量化断言指标签名机器门 | — |
