@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-29
 模块: pipeline
 备注: 用户 2026-09-29 对话「可以」确认本 intent。开工句是「WP-E 立项」。
-确认指纹: 883c5b92b451761d
+确认指纹: 52e37f2ffd46f27d
 ---
 # INTENT — 委派台账对账
 
@@ -56,14 +56,15 @@ check-loop 增加一条不阻断的委派台账警告，`wf-journal` 增加只�
 
 ## 验收标准（可测试）
 
-- [ ] 一份 L2、状态 done 的文档，委派结果表没有该文件名：出现警告，退出码 0
-- [ ] 补上一行含该文件名、日期不早于文档日期的委派记录：该警告消失
-- [ ] 一份 L1、状态 done 的文档不触发这条警告
-- [ ] `audit: false` 时这条警告不输出，退出码 0；配对断裂仍阻断
-- [ ] journal 有一条 pass，对应阶段 role 为 implementer 或 independent-reviewer，委派表为空：对账输出含该阶段 id
-- [ ] `check-loop.test.mjs` 与 `wf-journal.test.mjs` 的既有用例保持通过
+- [x] 一份 L2、状态 done 的文档，委派结果表没有该文件名：出现警告，退出码 0（证据：`templates/_agents/scripts/check-loop.test.mjs`「检查18 委派表不存在：L2 done 警告且 exit 0；L1 done 与 L2 approved 不警告」；`check-loop-rev.test.mjs`「委派行只在工作区：--rev 旧提交仍输出委派台账」。实现 `47b0a53`。`verify.mjs` 退出码 0，两套件 146/146、24/24）
+- [x] 补上一行含该文件名、日期不早于文档日期的委派记录：该警告消失（证据：同套件「检查18 补上不早于文档日期且含文件名的一行：该警告消失」。早于文档日期、只有去掉扩展名的主题名、文件名只在自做任务结果，三条警告仍在。`check-loop-rev.test.mjs`「同一工作区不带 --rev：后补的委派行消掉警告」。`47b0a53`）
+- [x] 一份 L1、状态 done 的文档不触发这条警告（证据：同套件「检查18 委派表不存在：L2 done 警告且 exit 0；L1 done 与 L2 approved 不警告」断言 `low.md` 不出现在委派台账行。`47b0a53`）
+- [x] `audit: false` 时这条警告不输出，退出码 0；配对断裂仍阻断（证据：同套件「检查18 audit false：委派台账不输出且 exit 0」；既有「audit false：缺 plan 仍阻断」仍通过。`47b0a53`，该套件 146/146）
+- [x] journal 有一条 pass，对应阶段 role 为 implementer 或 independent-reviewer，委派表为空：对账输出含该阶段 id（证据：`templates/_agents/scripts/wf-journal.test.mjs`「委派表为空且 role=implementer 的 pass：列出阶段 id」「role=independent-reviewer 的 pass：同样列出」。正例要求某一整行等于「委派台账未记录（1）：<阶段 id>」，锁在 `7e8ee74`。该套件 18/18）
+- [x] `check-loop.test.mjs` 与 `wf-journal.test.mjs` 的既有用例保持通过（证据：`verify.mjs` 退出码 0。`check-loop.test.mjs` 146/146，含「audit false：缺 plan 仍阻断」。`wf-journal.test.mjs` 18/18，含「add 缺 --wf 仍失败」与 S1 至 S9）
 
 ## 确认与复核
 
 - 确认结果：approved（2026-09-29 用户对话原话「可以」，仅本份）
-- 复核：L2，独立复核留到关单前
+- 复核：L2 独立复核已执行（独立上下文，基准 `ff091ef` → `7e8ee74`）。未发现阻断问题，无 P0/P1/P2。此前对 `47b0a53` 的一条 P2（正例未锁对账整行）已由 `7e8ee74` 收紧，本次复核确认该洞已关上。
+- 关单：done（2026-09-29 用户对话原话「可以」，仅本份）

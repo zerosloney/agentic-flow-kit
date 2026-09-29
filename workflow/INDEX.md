@@ -5,12 +5,11 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（25）
+## 活跃（24）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
 | INTENT | L2 | approved | 2026-09-29 | pipeline | 装户表面收口 | ☑0/8 |
-| INTENT | L2 | approved | 2026-09-29 | pipeline | 委派台账对账 | ☑0/6 |
 | PLAN | L2 | approved | 2026-09-29 | pipeline | 装户表面收口 | — |
 | PLAN | L2 | approved | 2026-09-29 | pipeline | 委派台账对账 | — |
 | SPEC | L2 | approved | 2026-09-29 | pipeline | 装户表面收口 | — |
@@ -35,17 +34,17 @@
 | PLAN | L1 | approved | 2026-09-23 | pipeline | M5：npm 发布 | — |
 | SPEC | L2 | approved | 2026-09-23 | pipeline | M4 自装 dogfooding | — |
 
-## 档案计数（143，不进表）
+## 档案计数（144，不进表）
 
 | 类型 | 模块 | 数量 |
 |---|---|---|
 | INCIDENT | pipeline | 20 |
-| INTENT | pipeline | 40 |
+| INTENT | pipeline | 41 |
 | INTENT | wiki | 1 |
 | PLAN | pipeline | 57 |
 | PLAN | wiki | 1 |
 | SPEC | pipeline | 24 |
 
-终态构成：done 123 · closed 12 · fixed 8；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
+终态构成：done 124 · closed 12 · fixed 8；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
 
 <!-- GENERATED:END -->
