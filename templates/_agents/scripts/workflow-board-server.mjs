@@ -53,37 +53,40 @@ function parseAcceptance(text) {
 }
 export { parseAcceptance };
 
-// ---- 配对断裂检测：按 slug 聚合同族（同名 intent/incident/plan/spec），异常卡附 alerts ----
-// 规则（口径对齐 check-loop.sh 的硬断档 + 状态枚举，看板为预警层、不阻断；枚举读单源 workflow-enums.txt）：
+// ---- 配对断裂检测：按完整文件名（含日期）聚合同族，异常卡附 alerts ----
+// 与 check-loop 检查 1 的 basename 同一口径。slug（去掉日期）只给界面分组，不参与配对。
+// 规则（看板为预警层、不阻断；枚举读单源 workflow-enums.txt）：
 //   孤儿 spec / 孤儿 plan（无同名 intent·incident 入口）；入口 done 但 plan 未终态（看板启发式）；
 //   入口缺 plan（intent 一律要求；incident 需非 legacy 且级别 L1/L2/L3）；L2/L3 入口缺同名 spec；
 //   spec L3 确认三件缺失（确认结果 / 确认时间 / 正文独立复核行）；
-//   状态不在枚举内或缺失（doc=confirmed 集；incident=all 集）
+//   状态不在全量枚举内或缺失；draft 是合法起点，提示「尚未确认」
 const PLAN_TERMINAL = ENUMS['doc.status.terminal'];
-const STATUS_ENUM = {
-  intents: ENUMS['doc.status.confirmed'],
-  specs: ENUMS['doc.status.confirmed'],
-  plans: ENUMS['doc.status.confirmed'],
+const STATUS_ALL = {
+  intents: ENUMS['doc.status.all'],
+  specs: ENUMS['doc.status.all'],
+  plans: ENUMS['doc.status.all'],
   incidents: ENUMS['incident.status.all'],
 };
 const NO_STATUS = '（未填）';
 const L3_REVIEW = /^- 独立复核：[ \t]*[^<\s]/m; // 正文独立复核行须有实质内容（对照 check-loop 锚定）
 
-function detectAlerts(cards) {
-  const bySlug = new Map();
+export function detectAlerts(cards) {
+  const byName = new Map();
   for (const c of cards) {
-    if (!bySlug.has(c.slug)) bySlug.set(c.slug, []);
-    bySlug.get(c.slug).push(c);
+    if (!byName.has(c.name)) byName.set(c.name, []);
+    byName.get(c.name).push(c);
   }
   for (const c of cards) {
-    const fam = bySlug.get(c.slug) || [];
+    const fam = byName.get(c.name) || [];
     const types = new Set(fam.map((x) => x.type));
     const alerts = [];
     const isEntry = c.type === 'intents' || c.type === 'incidents';
     // legacy 复盘件免配对类告警（口径同 check-loop）；孤儿 spec / 孤儿 plan 两条仍按 spec·plan 自身判定
     const legacyIncident = c.type === 'incidents' && c.flow === 'legacy';
-    if (!STATUS_ENUM[c.type].includes(c.status))
-      alerts.push(`状态不在枚举内：须为 ${STATUS_ENUM[c.type].join('/')}（现 ${c.status === NO_STATUS ? '缺失' : c.status}）`);
+    if (!STATUS_ALL[c.type].includes(c.status))
+      alerts.push(`状态不在枚举内：须为 ${STATUS_ALL[c.type].join('/')}（现 ${c.status === NO_STATUS ? '缺失' : c.status}）`);
+    else if (c.status === 'draft')
+      alerts.push('尚未确认');
     if (c.type === 'specs' && !types.has('intents') && !types.has('incidents'))
       alerts.push('孤儿 spec：无同名 intent/incident 入口');
     if (c.type === 'plans' && !types.has('intents') && !types.has('incidents'))
@@ -97,7 +100,7 @@ function detectAlerts(cards) {
       alerts.push('入口缺 plan：无同名 plan');
     if (isEntry && !legacyIncident && ['L2', 'L3'].includes(c.level) && !types.has('specs'))
       alerts.push(`${c.level} 入口缺同名 spec`);
-    if (c.type === 'specs' && c.level === 'L3' && !ENUMS['doc.status.abandoned'].includes(c.status)) {
+    if (c.type === 'specs' && c.level === 'L3' && c.status !== 'draft' && !ENUMS['doc.status.abandoned'].includes(c.status)) {
       if (c.confirm !== 'approved') alerts.push(`L3 确认缺失：确认结果须为 approved（现 ${c.confirm || '缺失'}）`);
       if (!c.confirmTime) alerts.push('L3 确认缺失：须记录确认时间');
       if (!c.hasReview) alerts.push('L3 复核缺失：须记录新会话独立复核结论');

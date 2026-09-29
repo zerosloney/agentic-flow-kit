@@ -6,11 +6,22 @@ import { sync } from './sync.mjs';
 import { syncHosts } from './sync-hosts.mjs';
 import { addHost } from './add-host.mjs';
 import { addGate } from './add-gate.mjs';
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
 const PKG_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+
+function gateNames(pkgRoot) {
+  const dir = path.join(pkgRoot, 'modules', 'gates');
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true })
+    .filter((d) => d.isDirectory())
+    .map((d) => d.name)
+    .sort();
+}
+
+const GATE_LIST = gateNames(PKG_ROOT).join(' | ') || '无';
 
 export const HELP = `flow-kit — AI-Native 闭环工作流 + wiki 知识层脚手架（agentic-flow-kit）
 
@@ -22,7 +33,7 @@ export const HELP = `flow-kit — AI-Native 闭环工作流 + wiki 知识层脚�
                             owned 文件永不触碰）
   flow-kit add-host <宿主>  后补宿主适配层：zcode | opencode | trae | omp | claude | cursor | codex
                             （已存在文件跳过且不入台账，--force 接管）
-  flow-kit add-gate <门禁>  装门禁模块并接线 local-pre-commit（当前：dotnet-ca；装后归项目所有）
+  flow-kit add-gate <门禁>  装门禁模块并接线 local-pre-commit（当前：${GATE_LIST}；装后归项目所有）
   flow-kit sync-hosts       跨宿主适配层同步：templates/_agents/{commands,roles}/*.md 权威源 vs
                             modules/hosts/<h>/{agents,commands}/*.md 薄适配——默认 --diff 输出报告；
                             --apply 单向同步（权威→薄适配，不反向避免污染）；

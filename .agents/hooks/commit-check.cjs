@@ -23,8 +23,11 @@
 //   - 只有 ext：按扩展名全局触发（跨目录，适合语言型触发——仓库里该扩展名基本只属于该构建）；
 //   - 只有 prefix：该前缀下任何文件触发（目录型触发——如 monorepo 子包，仓库其他位置的相同扩展名不触发）；
 //   - 两者同配为 OR 并集而非 AND 交集——要「前缀内的特定扩展名」请只配 prefix（目录内文档变更多跑一次构建，方向安全）。
-// checks.when：路径数组，任一存在才启用（元素支持尾部 * 一层通配，如 "*.sln"）——
-//   没有对应配置的项目自动跳过并提示，不 fail-closed 误拦；无 when 字段 = 无条件启用。
+// when（builds 与 checks 共用）：数组任一满足才启用，无 when 字段 = 无条件启用。
+//   - 路径或尾部 * 一层通配（如 "*.sln"）：相对仓库根做存在性判断；
+//   - pkg:<点分路径>（如 pkg:scripts.build）：读该项 cwd（缺省仓库根）的 package.json，
+//     沿路径取值，非空字符串才算满足。
+//   没有对应配置的项目自动跳过并提示，不 fail-closed 误拦。--full 同样尊重 when。
 const { execSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -82,13 +85,46 @@ if (hits.length) {
 // 引擎自身文件（.agents/、.githooks/）不参与构建匹配——工作流引擎不是项目构建产物。
 const FULL = process.argv.includes('--full');
 const stagedForBuild = staged.filter(f => !f.startsWith('.agents/') && !f.startsWith('.githooks/'));
-let ranAny = false;
+
+// whenSatisfied：任一谓词满足即启用。pkg: 读 cwd 下的 package.json；其余谓词相对仓库根。
+function whenItem(w, cwd) {
+  if (typeof w === 'string' && w.startsWith('pkg:')) {
+    const keys = w.slice(4).split('.').filter(Boolean);
+    if (!keys.length) return false;
+    const pkgPath = path.join(cwd || '.', 'package.json');
+    let pkg;
+    try { pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')); } catch (e) { return false; }
+    let cur = pkg;
+    for (const k of keys) {
+      if (cur == null || typeof cur !== 'object' || !Object.prototype.hasOwnProperty.call(cur, k)) return false;
+      cur = cur[k];
+    }
+    return typeof cur === 'string' && cur.trim() !== '';
+  }
+  const star = String(w).indexOf('*');
+  if (star < 0) return fs.existsSync(w);
+  const suffix = w.slice(star + 1);
+  const dir = path.dirname(w.slice(0, star)) || '.';
+  try { return fs.readdirSync(dir).some((f) => f.endsWith(suffix)); } catch (e) { return false; }
+}
+function whenSatisfied(when, cwd) {
+  if (!when) return true;
+  const list = Array.isArray(when) ? when : [when];
+  return list.some((w) => whenItem(w, cwd));
+}
+function skipWhen(kind, item) {
+  const shown = Array.isArray(item.when) ? item.when.join(' / ') : item.when;
+  console.log(`SKIP: ${item.name}（未找到 ${shown}，跳过${kind}——配置好后自动启用）`);
+}
+
+let consideredBuild = false;
 for (const b of (config.builds || [])) {
   if (!b || !b.command) continue;
   const exts = Array.isArray(b.ext) ? b.ext : [];
   const match = FULL || stagedForBuild.some(f => exts.some(e => f.endsWith(e)) || (b.prefix ? f.startsWith(b.prefix) : false));
   if (!match) continue;
-  ranAny = true;
+  consideredBuild = true;
+  if (!whenSatisfied(b.when, b.cwd)) { skipWhen('构建', b); continue; }
   const r = sh(b.command, b.cwd);
   if (!r.ok) {
     if (b.lockPattern && new RegExp(b.lockPattern).test(r.out)) {
@@ -101,25 +137,13 @@ for (const b of (config.builds || [])) {
   }
   console.log(`OK: ${b.name} 构建通过（${b.command}）`);
 }
-if (!ranAny) {
+if (!consideredBuild) {
   console.log(config.builds && config.builds.length
     ? 'SKIP: 无匹配的源码变更，跳过构建验证'
     : 'SKIP: 未配置 builds（.agents/hooks/commit-check.config.json），跳过构建验证');
 }
 
 // --- 3) 质量检测（checks：lint / 类型检查 / vet 等秒级确定性检查；测试不放这里——关单在 test.md 阶段门） ---
-// whenSatisfied：任一路径存在即启用；元素支持尾部 * 一层通配（如 *.sln = 仓库根存在 .sln 结尾文件）
-function whenSatisfied(when) {
-  if (!when) return true;
-  const list = Array.isArray(when) ? when : [when];
-  return list.some((w) => {
-    const star = w.indexOf('*');
-    if (star < 0) return fs.existsSync(w);
-    const suffix = w.slice(star + 1);
-    const dir = path.dirname(w.slice(0, star)) || '.';
-    try { return fs.readdirSync(dir).some((f) => f.endsWith(suffix)); } catch (e) { return false; }
-  });
-}
 let ranCheck = false;
 for (const c of (config.checks || [])) {
   if (!c || !c.command) continue;
@@ -127,10 +151,7 @@ for (const c of (config.checks || [])) {
   const match = FULL || stagedForBuild.some(f => exts.some(e => f.endsWith(e)) || (c.prefix ? f.startsWith(c.prefix) : false));
   if (!match) continue;
   ranCheck = true;
-  if (!whenSatisfied(c.when)) {
-    console.log(`SKIP: ${c.name}（未找到 ${Array.isArray(c.when) ? c.when.join(' / ') : c.when}，跳过质量检查——配置好后自动启用）`);
-    continue;
-  }
+  if (!whenSatisfied(c.when, c.cwd)) { skipWhen('质量检查', c); continue; }
   const r = sh(c.command, c.cwd);
   if (!r.ok) {
     console.log(`BLOCK: ${c.name} 质量检查未通过（${c.command}）\n` + r.out.slice(0, 1200));

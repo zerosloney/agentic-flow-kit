@@ -14,6 +14,7 @@ const nodeSuites = [
   'src/pack.test.mjs',
   'src/gates.test.mjs',
   'src/fresh-init.test.mjs',
+  'src/stack-profile.test.mjs',
   // 宿主门禁模块回归（2026-09-27 host-gates-p1：dotnet-ca BRE 豁免/fail-closed + trae 强推 token 化）
   'src/gate-dotnet-ca.test.mjs',
   'src/trae-hooks.test.mjs',

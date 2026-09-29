@@ -14,7 +14,7 @@
   "managed": [
     {
       "rel": ".agents/board/index.html",
-      "sha256": "bb252ae6211a4d3a675c7b97e5e994c1d5de150b0201f94f750228f209045097"
+      "sha256": "e0bb8bb7d462860136ec9bc7a7cb2dce1bdf55a2cf0d47d4f77aa436c443e879"
     },
     {
       "rel": ".agents/board/marked.min.js",
@@ -74,7 +74,7 @@
     },
     {
       "rel": ".agents/hooks/commit-check.cjs",
-      "sha256": "865b11645bcc0a6395e12188f9eff28f711cebb98fd3c5a599ad81edb9ddfc4c"
+      "sha256": "9c97fc2a5c83d5ac5ddd5fec19622b978f69fb62f03c2d394bdc9bc88e8b9850"
     },
     {
       "rel": ".agents/roles/implementer.md",
@@ -122,7 +122,7 @@
     },
     {
       "rel": ".agents/scripts/commit-check-trigger.test.mjs",
-      "sha256": "5f45413b523a8e7d8d2992f513f630e6b6c73c1029e46fff812284499805176e"
+      "sha256": "d1022b30f6cbd3a5d683f6aa593ff2de974a690f14a0c2f9ebdc8914f2641b26"
     },
     {
       "rel": ".agents/scripts/confirm-doc.mjs",
@@ -254,11 +254,11 @@
     },
     {
       "rel": ".agents/scripts/workflow-board-server.mjs",
-      "sha256": "1c7b6c5876148e83f7dd4f7f3de7f4cccbe9887eed286676b0cc0fb1f9ad1b72"
+      "sha256": "5ca6c770b21dac111591a0b444837986194612bc3cd43529085359c67bfc71af"
     },
     {
       "rel": ".agents/scripts/workflow-board-server.test.mjs",
-      "sha256": "172beb8dcd6f4fbbc1ec3050f7a02e651f2bba642abcf2e951ba05d7fe564113"
+      "sha256": "74b09ceaeade22513f14a06d57f790e2327891daec7497e1ab6013ebacda7a43"
     },
     {
       "rel": ".agents/scripts/workflow-enums.mjs",

@@ -12,7 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { parseLoopHardBlocks, parseAcceptance } from './workflow-board-server.mjs';
+import { parseLoopHardBlocks, parseAcceptance, detectAlerts } from './workflow-board-server.mjs';
 import { computeFingerprint } from './confirm-doc.mjs';
 
 let pass = 0;
@@ -130,6 +130,35 @@ const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
     strip(evil));
   const md = '## 标题\n\n- 列表 **粗体** `code`\n\n[链接](intents/x.md)';
   check('⑤markdown 语法不受剥标签影响', strip(md) === md);
+}
+
+// ---- ⑥按完整文件名配对；draft 是合法起点 ----
+{
+  const has = (card, text) => (card.alerts || []).some((a) => a.includes(text));
+  const card = (over) => ({
+    type: 'intents', name: '2026-09-01-topic', slug: 'topic', status: 'approved', level: 'L1',
+    ...over,
+  });
+  const paired = card();
+  const plan = card({ type: 'plans', status: 'approved' });
+  const other = card({ name: '2026-09-02-topic', status: 'draft' });
+  detectAlerts([paired, plan, other]);
+  check('⑥同 slug 不同日期：有同名 plan 的 intent 不报缺 plan', !has(paired, '入口缺 plan'));
+  check('⑥同 slug 不同日期：没有同名 plan 的 intent 报缺 plan', has(other, '入口缺 plan'), JSON.stringify(other.alerts));
+  check('⑥draft 提示尚未确认，不报非法枚举', has(other, '尚未确认') && !has(other, '状态不在枚举内'), JSON.stringify(other.alerts));
+  const okIntent = card({ name: '2026-09-03-keep', status: 'approved' });
+  const okPlan = card({ type: 'plans', name: '2026-09-03-keep', status: 'approved' });
+  detectAlerts([okIntent, okPlan]);
+  check('⑥approved 同名配对：无非法枚举、无尚未确认、无缺 plan',
+    !has(okIntent, '状态不在枚举内') && !has(okIntent, '尚未确认') && !has(okIntent, '入口缺 plan'),
+    JSON.stringify(okIntent.alerts));
+  const doneIntent = card({ name: '2026-09-04-done', status: 'done' });
+  const draftPlan = card({ type: 'plans', name: '2026-09-04-done', status: 'draft' });
+  detectAlerts([doneIntent, draftPlan]);
+  check('⑥入口 done 而同名 plan 仍是 draft：plan 报未终态', has(draftPlan, '未终态'), JSON.stringify(draftPlan.alerts));
+  const bogus = card({ name: '2026-09-05-bad', status: 'nope' });
+  detectAlerts([bogus]);
+  check('⑥未知状态仍报不在枚举内', has(bogus, '状态不在枚举内'), JSON.stringify(bogus.alerts));
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

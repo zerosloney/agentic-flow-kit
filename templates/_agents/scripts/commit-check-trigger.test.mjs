@@ -37,7 +37,7 @@ const mkfix = () => {
     ],
     checks: [],
   }));
-  return { root, marks };
+  return { root, marks, cmd };
 };
 
 // stage：写文件并暂存，跑 hook（extraArgs 透传如 --full），返回 { status, out, ran }
@@ -86,6 +86,46 @@ f = mkfix();
 stage(f.root, 'unrelated.txt', 'x');
 r = runHook(f.root, ['--full']);
 check('S5 --full 无条件全跑全部 builds', ran(f.marks, 'extbuild') && ran(f.marks, 'prefixbuild') && r.status === 0, r.out);
+
+// 场景 6：builds.when = pkg:scripts.build。无脚本则 SKIP 且不执行；文件型 when 缺失仍跳过。
+f = mkfix();
+fs.writeFileSync(path.join(f.root, '.agents', 'hooks', 'commit-check.config.json'), JSON.stringify({
+  knownPatterns: [],
+  builds: [{ name: 'build', command: f.cmd('build'), ext: ['.js'], when: ['pkg:scripts.build'] }],
+  checks: [{ name: 'lint', command: f.cmd('lint'), ext: ['.js'], when: ['eslint.config.js'] }],
+}));
+fs.writeFileSync(path.join(f.root, 'package.json'), JSON.stringify({ name: 't', scripts: {} }));
+stage(f.root, 'src/a.js', 'console.log(1)\n');
+r = runHook(f.root);
+check('S6 无 scripts.build → 构建 SKIP、命令不跑、退出 0',
+  r.status === 0 && !ran(f.marks, 'build') && r.out.includes('pkg:scripts.build') && r.out.includes('SKIP'), r.out);
+check('S6 文件型 when 缺失仍跳过（eslint.config.js）', !ran(f.marks, 'lint') && r.out.includes('eslint.config.js'), r.out);
+
+// 场景 7：scripts.build 为非空字符串 → 构建命令执行；补上 eslint 配置后质量检查也执行。
+f = mkfix();
+fs.writeFileSync(path.join(f.root, '.agents', 'hooks', 'commit-check.config.json'), JSON.stringify({
+  knownPatterns: [],
+  builds: [{ name: 'build', command: f.cmd('build'), ext: ['.js'], when: ['pkg:scripts.build'] }],
+  checks: [{ name: 'lint', command: f.cmd('lint'), ext: ['.js'], when: ['eslint.config.js'] }],
+}));
+fs.writeFileSync(path.join(f.root, 'package.json'), JSON.stringify({ name: 't', scripts: { build: 'node -e 0' } }));
+fs.writeFileSync(path.join(f.root, 'eslint.config.js'), 'export default [];\n');
+stage(f.root, 'src/a.js', 'console.log(1)\n');
+r = runHook(f.root);
+check('S7 有 scripts.build 且 eslint 配置存在 → 构建与质量检查都执行',
+  r.status === 0 && ran(f.marks, 'build') && ran(f.marks, 'lint'), r.out);
+
+// 场景 8：--full 也不越过 pkg: when（没有脚本就不跑）
+f = mkfix();
+fs.writeFileSync(path.join(f.root, '.agents', 'hooks', 'commit-check.config.json'), JSON.stringify({
+  knownPatterns: [],
+  builds: [{ name: 'build', command: f.cmd('build'), ext: ['.js'], when: ['pkg:scripts.build'] }],
+  checks: [],
+}));
+fs.writeFileSync(path.join(f.root, 'package.json'), JSON.stringify({ name: 't' }));
+stage(f.root, 'src/a.js', 'console.log(1)\n');
+r = runHook(f.root, ['--full']);
+check('S8 --full 仍尊重 pkg:scripts.build', r.status === 0 && !ran(f.marks, 'build') && r.out.includes('SKIP'), r.out);
 
 for (const d of fs.readdirSync(os.tmpdir()).filter((x) => x.startsWith('cc-trigger-test-'))) {
   fs.rmSync(path.join(os.tmpdir(), d), { recursive: true, force: true });

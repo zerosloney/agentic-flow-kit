@@ -232,7 +232,7 @@ const badge = (c) =>
   acceptBadge(c) + alertBadge(c) + ageBadge(c) +
   `<span class="date">${esc(c.date)}</span>`;
 
-// —— 任务族聚合：同 slug 一卡；head 取入口文档（intent 优先、其次 incident），孤儿用首文档 ——
+// —— 任务族聚合：同 slug 一卡（只用于展示；告警配对在服务端按完整文件名）。head 取入口文档（intent 优先、其次 incident），孤儿用首文档 ——
 const TYPE_ORDER = { intents: 0, incidents: 1, plans: 2, specs: 3 };
 const TYPE_ABBR = { intents: 'IN', incidents: 'IC', plans: 'PL', specs: 'SP' };
 const EXPANDED = new Set();   // 展开中的任务 slug（SSE 刷新后保持）
@@ -319,7 +319,7 @@ async function refreshBoard() {
         `<div class="doc-item" data-file="${esc(d.file)}" title="打开文档">` +
         `<span class="type" style="background:${TYPE_COLOR[d.type]}">${TYPE_LABEL[d.type]}</span>` +
         `<span class="chip">${esc(d.status)}</span>${alertBadge(d)}` +
-        `<span class="doc-title">${esc(d.title)}</span></div>`).join('')}</div></div>`;
+        `<span class="doc-title">${esc(d.date)} · ${esc(d.title)}</span></div>`).join('')}</div></div>`;
   };
   let html = COLS.map((c) => {
     const items = groups[c.key].map((fam) => cardHtml(fam)).join('');
@@ -342,7 +342,7 @@ function renderDrawer() {
   $('#d-title').textContent = CURRENT.title;
   const related = CARDS.filter((c) => c.slug === CURRENT.slug && c.file !== CURRENT.file);
   $('#d-related').innerHTML = related.map((c) =>
-    `<a data-file="${esc(c.file)}">${TYPE_LABEL[c.type]}${c.status !== CURRENT.status ? ' · ' + esc(c.status) : ''}</a>`).join('');
+    `<a data-file="${esc(c.file)}">${TYPE_LABEL[c.type]} · ${esc(c.date)}${c.status !== CURRENT.status ? ' · ' + esc(c.status) : ''}</a>`).join('');
   document.querySelectorAll('#d-tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === TAB));
   if (TAB === 'doc') loadDoc(); else loadHist();
 }

@@ -2,8 +2,9 @@
 // stack 决定门禁配置三处：commit-check 的条件构建（builds）与质量检测（checks，秒级确定性
 // 检查——lint/类型/vet；测试不放提交门，关单在 test.md 阶段门）、settings.json 的自检验
 // 命令权限（allow）、AGENTS.md「项目适配区」命令预填；不改工作流流程本身。
-// checks.when = 配置文件存在才启用（如 tsconfig.json / go.mod / ruff.toml）——没有对应
-// 配置的项目自动跳过，不 fail-closed 误拦。none = 不配置（项目日后自填）。
+// checks.when / builds.when = 条件才启用。文件路径或尾部 * 通配表示配置文件存在；
+// pkg:scripts.build 表示 package.json 里该脚本为非空字符串。没有对应配置的项目自动跳过，
+// 不 fail-closed 误拦。none = 不配置（项目日后自填）。
 export const HOSTS = {
   zcode: { dir: '.zcode', localOnly: true },
   opencode: { dir: '.opencode', localOnly: false, commandPrefix: 'wf-' },
@@ -38,7 +39,7 @@ export const STACKS = {
     build: 'npm run build',
     test: 'npm test',
     typecheck: 'npx tsc --noEmit（或 npm run typecheck）',
-    builds: [{ name: 'build', command: 'npm run build', ext: ['.ts', '.tsx', '.vue', '.js', '.jsx', '.mjs', '.cjs'] }],
+    builds: [{ name: 'build', command: 'npm run build', ext: ['.ts', '.tsx', '.vue', '.js', '.jsx', '.mjs', '.cjs'], when: ['pkg:scripts.build'] }],
     checks: [
       { name: 'typecheck', command: 'npx tsc --noEmit', ext: ['.ts', '.tsx'], when: ['tsconfig.json'] },
       { name: 'lint', command: 'npx eslint .', ext: ['.ts', '.tsx', '.js', '.jsx', '.vue'], when: ESLINT_CONFIGS },
@@ -49,7 +50,7 @@ export const STACKS = {
     build: '（Python 无统一构建命令，按项目填）',
     test: 'python -m pytest',
     typecheck: '（可选：mypy）',
-    builds: [{ name: 'tests', command: 'python -m pytest', ext: ['.py'] }],
+    builds: [],
     checks: [{ name: 'lint', command: 'ruff check .', ext: ['.py'], when: ['ruff.toml', '.ruff.toml'] }],
     allow: ['python -m pytest', 'pytest', 'ruff check'],
   },
