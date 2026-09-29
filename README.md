@@ -4,6 +4,34 @@ AI-Native 闭环工作流 + wiki 知识层脚手架。`flow-kit init` 一条命�
 
 **装完即自包含**：引擎文件拷贝进项目（零 npm 运行时依赖，Node ≥ 18 即可跑），clone 后只差 `git config core.hooksPath .githooks`——init 会自动挂好。
 
+## English
+
+agentic-flow-kit installs a self-contained AI workflow into a repository: stage commands, role contracts, git hooks, and an intent → spec → plan → incident trail. After `init`, the project does not need this package at runtime. Node ≥ 18 is enough.
+
+The product is the hook, not another prompt pack. Five rules always block a bad push: paired docs, checked acceptance, a confirmation ledger, secret scanning, and the managed/owned ledger. Other hygiene checks are warnings, and a fresh install sets `audit: false` so only those five stay in the way. Omit `audit` on an older ledger and the full check set stays on.
+
+Hosts: `zcode`, `opencode`, `trae`, `omp`, `claude`, `cursor`, `codex`. Claude Code loads `.claude/commands` and `.claude/agents`. Cursor loads `.cursor/commands`. Codex reads the repo `AGENTS.md` and `.codex/skills/flow-kit`; the `.codex/commands` files are the same thin forwards for explicit reference.
+
+```bash
+npx agentic-flow-kit init --stack node --hosts claude,cursor
+npx agentic-flow-kit doctor
+```
+
+## 60 秒路径
+
+```bash
+npx agentic-flow-kit init --stack node --hosts claude
+# 按 .agents/commands/plan.md 写一份 L1 intent 与同名 plan（状态先保持 draft）
+node .agents/scripts/confirm-doc.mjs workflow/intents/<文件>.md   # 终端里键入「可以」
+# 改代码，git add，然后提交。配对没齐、验收没勾、确认指纹对不上，钩子会拒绝这次提交。
+```
+
+## 五条硬规则
+
+新装的 `kit.json` 写 `audit: false`：check-loop 只阻断配对、验收勾验、确认留痕，外加发版提交树上仍为 draft 的文档。敏感信息在 pre-commit，双源和台账在 doctor / sync。`audit` 缺省（升级来的旧台账）保持全量卫生警告。本仓库显式 `audit: true`。豁免日期只在 `.agents/scripts/policy.mjs` 的 `policyVersion` 表里改。
+
+可选红线用 `add-gate`：`dotnet-ca`、`node-layer`、`py-import`、`generated-readonly`。约定见 `modules/gates/README.md`。
+
 ## 快速开始
 
 ```bash
@@ -26,7 +54,7 @@ npx agentic-flow-kit add-gate dotnet-ca
 | 选项 | 说明 |
 |------|------|
 | `--stack` | `dotnet` / `node` / `python` / `go` / `none`（默认 none）——**门禁配置三处**：commit-check 条件编译检查（暂存对应扩展名时 commit 前自动构建）+ **质量检测**（`checks`：lint / 类型检查 / vet 等秒级确定性检查，存在对应配置文件（tsconfig / eslint / ruff / go.mod 等）才启用，没有则自动跳过；测试不放提交门——关单在 test.md 阶段门）、settings.json 自检验命令权限、AGENTS.md「项目适配区」命令预填 |
-| `--hosts` | `zcode` / `opencode` / `trae` / `omp` 逗号多选（默认 zcode）——生成对应宿主薄适配层；zcode/omp 为本地配置自动进 .gitignore |
+| `--hosts` | `zcode` / `opencode` / `trae` / `omp` / `claude` / `cursor` / `codex` 逗号多选（默认 zcode）。zcode/omp 为本地配置，自动进 .gitignore。Claude Code 加载 `.claude/commands` 与 `.claude/agents`；Cursor 加载 `.cursor/commands`；Codex 读仓库根 `AGENTS.md` 与 `.codex/skills/`，`.codex/commands` 是同形薄转发 |
 | `--board-port` | workflow 看板端口（默认 8933） |
 | `--dir` | 目标项目根（默认当前目录） |
 | `--force` | 覆盖已存在的同名文件（默认保守跳过） |
@@ -56,14 +84,10 @@ modules/gates/      可选门禁模块（dotnet-ca：Clean Architecture 参考�
 - 抽取自真实项目长期运转的引擎（某真实项目），dogfooding 是后续路线（sync 升级 / add-host / add-gate / npm 发布）的一部分。
 - **威胁模型（2026-09-27 init-p1-batch）**：勿在不可信仓库运行 `init` / `doctor` / `sync`——三命令在执行目标侧 `.agents/scripts/` 脚本（生成器 / 校验器）前有供应链防线：脚本内容与包源渲染值（LF 归一 sha）一致才执行，失配即显式跳过提示，不执行不下结论。**防线不覆盖 git 钩子面**：预植的 `.githooks/`、`.agents/hooks/` 仍会被保留挂载，并在你自己的首次 git 操作时执行——不可信仓库请先审查/清除预置件再 init。
 
-## 路线
+## 当前能力（已发布 0.8.0）
 
-- [x] v0.1.0：init（flags 模式）+ doctor + 4 宿主适配 + dotnet-ca 门禁模块
-- [x] v0.2.0：sync 升级（未动覆盖 / 已改跳过报告 + `--force` / 生成器锚点重写）+ add-host / add-gate
-- [x] v0.2.0 已发布：npm view agentic-flow-kit（npx agentic-flow-kit init 即用；默认镜像源用户需等 npmmirror 同步或 --registry npmjs）
-- [x] v0.2.1：Shipyard 回流第二笔（模板引用去死链 + owned 台账记账策略：add-gate 接线刷新 + sync 盘面自愈）+ 全项目审查修复（量化台账 fail-loud / 生成器锚点与 ENOENT 守卫 / sync 跳过件持续报告 / P4 清账 / metrics glob 词表收口）——已发布
-- [x] v0.3.0：init 交互升级（序号菜单 + ANSI 色彩降级 + ts/js 技术栈别名归一 node）+ AGENTS.md 骨架探测补齐（已存在无标记时文末追加，原内容保留）+ wiki 模板预置 7 主题内容目录 + 关单 verify 固定编排（npm test + check-loop 一键过门，非绿不关单）+ workflow 看板纸墨视觉改版
-- [x] v0.3.1：doctor 修复——Windows 无 sh 环境（PowerShell）把 sh ENOENT 误报成 check-loop hard-block（探测分流：明示「未跑勿当作通过」，git 钩子门禁不受影响）
-- [x] v0.4.0：看板端口自动上探（基端口起探首个可用端口，多项目并行不冲突；`/api/board` 自报 pid/startedAt，root 比对识别本项目、他人进程不动手不 kill）+ 跨平台入口 `ensure-board.mjs` 取代 Windows 专属 `ensure-board.ps1`（Windows/Linux/macOS 零依赖单入口）
-- [x] v0.5.0：跨宿主适配层同步工具 `flow-kit sync-hosts`（B-b 方案：薄适配正文 = 权威源正文段 + frontmatter 保留宿主特化 + `--apply` 单向同步不动 frontmatter）+ `flow-kit doctor` §6.7 装户侧正文漂移检查（包源环境 §6.7 skipped 避免噪音）——跨平台冒烟由 CI 跑 Linux，Windows / macOS 由本地手测（不入 npm test）
-- [ ] v0.5.1（待发布）：init 安装器 P1×4 收口——POSIX 钩子执行位（render 落盘 0755 + sync chmod + doctor §3 失效可发现）；fresh init 生成器先跑后记账（不再必现 owned FAIL / exit 1）；目标侧脚本执行供应链防线（init/doctor/sync 只执行与包源渲染值 sha 一致的目标侧脚本，失配显式跳过）；init/add-gate 记账 LF 归一
+版本沿革写在 `CHANGELOG.md`。0.8.0 已包含：init / doctor / sync / add-host / add-gate、四套技术栈门禁初值、宿主薄适配、确认门、check-loop 16 项、看板端口上探、opencode 命令 `wf-` 前缀、pre-commit managed 台账快检。
+
+仓库里还没打进版本号的增量：`audit` 档（新装默认 false）、`policyVersion`、检查 17（发版树上的 draft）、claude / cursor / codex 薄适配、`node-layer` / `py-import` / `generated-readonly` 三个可选门禁、fresh init 冒烟。效果数字等有外部仓库跑过再记，不在这次。
+
+活跃层里 2026-09-23 至 09-28 的 approved / open 文档没有在这次改成 done 或 closed。那些文件的确认指纹绑着当时的正文，关单要逐份 `confirm-doc`。

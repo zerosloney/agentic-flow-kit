@@ -1,6 +1,8 @@
 {
   "kit": "agentic-flow-kit",
   "version": "0.8.0",
+  "policyVersion": 1,
+  "audit": true,
   "createdAt": "2026-09-23T15:07:19.753Z",
   "options": {
     "hosts": [
@@ -48,11 +50,11 @@
     },
     {
       "rel": ".agents/commands/review.md",
-      "sha256": "57ebd29880f023b554fd6da70310b605514f380a72d2b0a84808cfe522c075da"
+      "sha256": "30836987c30a56ac6c7dcade545b9c0a6fb4e2e8d441f27c39e56edf6c0e1bb7"
     },
     {
       "rel": ".agents/commands/source-sync-check.md",
-      "sha256": "e3d6ff5090183cfb542059523abfd2bda6048e725dfbf7fe950a29cc0950fab5"
+      "sha256": "5baa903e690f7ded911c1259581f80f43eacafed4eb424868b2bd6e0a9fa58db"
     },
     {
       "rel": ".agents/commands/sync-hosts.md",
@@ -76,15 +78,15 @@
     },
     {
       "rel": ".agents/roles/implementer.md",
-      "sha256": "6b679949a2b3d5ca7f1ed9d6dbeb2af5e899b4443c11d87fd31a1e83a14eb904"
+      "sha256": "e01581201193911349c80e133a6110a63ca0ce296149a0e09406af35c7a03ccc"
     },
     {
       "rel": ".agents/roles/independent-reviewer.md",
-      "sha256": "fcdca6fee248a9573d357336a735aaaa4ead229a68c9435219e0e802e654e0a9"
+      "sha256": "d030f3581f92335cc1b1edb67517e70f65adf96426ff60412871827dbe2ee645"
     },
     {
       "rel": ".agents/roles/ui-verifier.md",
-      "sha256": "e2137add6d7c65530af505fcd22ebea3c8596c3811196916dcd609ac6d313dbc"
+      "sha256": "5c4a210fc684d02501bed78e6aec9f5a5d3d0ce34f22640e97a5e3db6386b9f1"
     },
     {
       "rel": ".agents/scripts/agg-delegations.cjs",
@@ -104,7 +106,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "3cd1022132ebd9321b302adabc5cc4f7ebb0d572157e5027eecf75c506acc4a7"
+      "sha256": "c5fdad4994ef4e07cb68c56cb383017ff6122297c76f8ba7811878b338fce074"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -112,7 +114,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "c849fbc70007879ab0108261e15472da5c03a107c47c6e928dd17f61de7d4eef"
+      "sha256": "5184c1d65bf52a12268664303dbfeb0cb0e206c4de32cb06fed5709adb500860"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -164,7 +166,7 @@
     },
     {
       "rel": ".agents/scripts/gate-checklist.mjs",
-      "sha256": "4119e1f39edbcbd857befcc9e4a22fed8ed975bd41bc4bdc810b784ff168ae2c"
+      "sha256": "deb93159e5e016b608bddc9d231afbab76bd727b3b089538be5155382dbc2380"
     },
     {
       "rel": ".agents/scripts/gate-checklist.test.mjs",
@@ -209,6 +211,10 @@
     {
       "rel": ".agents/scripts/kb-search.test.mjs",
       "sha256": "814cb1b50533a91449ffb557c0f7f384fc1a3e2177c6488927833a0c49888666"
+    },
+    {
+      "rel": ".agents/scripts/policy.mjs",
+      "sha256": "914d033841ed2013a5a021582a341e26e0a9322101eb5eb5be5d721e43ac2c87"
     },
     {
       "rel": ".agents/scripts/rule-budget.sh",
@@ -324,15 +330,15 @@
     },
     {
       "rel": ".zcode/agents/implementer.md",
-      "sha256": "34b221b812e030e64b9932efbf199900df50863356596ff4abeb70115d07a3ac"
+      "sha256": "79f9bbd22051a38734f59c03ac2f8685d3277c0643d5b0cd1c557bb906a21cc6"
     },
     {
       "rel": ".zcode/agents/independent-reviewer.md",
-      "sha256": "21c43a84ae7ac1c0880a23df1bb45178187b8c9b800f9eceb4155ea5755e90a5"
+      "sha256": "d97d830eb1a5d2021e59386fd7a1bb8874a37f1a53cc6c72253638c17366d0f9"
     },
     {
       "rel": ".zcode/agents/ui-verifier.md",
-      "sha256": "46215d381599e8d05df28eeee6d1cd4a2774aad9fd06aae264ee59317c27f647"
+      "sha256": "49dc1214d22a4635b6be2556c1327dce13b4240279726eb933791cfac1840756"
     }
   ],
   "owned": [
@@ -370,7 +376,7 @@
     },
     {
       "rel": "wiki/知识沉淀总览.html",
-      "sha256": "246c67b476ff1017a209112cec70cafacfef9dfde5fb96b2a028c6364f7dcd59"
+      "sha256": "02a32962ef097e13185e220e719b0b1d40efecb1f046457669c1871c2bc02e01"
     },
     {
       "rel": "wiki/drafts-archive/README.md",
@@ -390,7 +396,7 @@
     },
     {
       "rel": "workflow/papercuts.md",
-      "sha256": "ae9f36c49cbc602b9b9db0be18b6b7baff3071ec2d44264ba4490f43a54f80cf"
+      "sha256": "a6554464e22da544bb101707a264f2ecbcb64efa0ad3e28907281726c94db041"
     },
     {
       "rel": "workflow/plans/_TEMPLATE.md",

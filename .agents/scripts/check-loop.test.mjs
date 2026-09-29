@@ -1629,5 +1629,53 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   rmfix(T);
 }
 
+// ---- audit 档：false 只留阻断；缺省仍出卫生警告 ----
+{
+  const T = mkfix();
+  w(T, '.agents/kit.json', '{"audit":false,"policyVersion":1}\n');
+  w(T, 'workflow/intents/2026-09-12-ph.md', INTENT('ph', '状态: draft\n级别: L1\n日期: YYYY-MM-DD'));
+  w(T, 'workflow/plans/2026-09-12-ph.md', PLAN('ph', '状态: draft\n级别: L1'));
+  const r = run(T);
+  check('audit false：占位符不出账且 exit 0', r.status === 0 && !outOf(r).includes('模板未填'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+{
+  const T = mkfix();
+  w(T, '.agents/kit.json', '{"audit":false,"policyVersion":1}\n');
+  w(T, 'workflow/intents/2026-09-12-np.md', INTENT('np', '状态: approved\n级别: L1\n日期: 2026-09-12'));
+  expectHard('audit false：缺 plan 仍阻断', T, '配对断裂');
+  rmfix(T);
+}
+{
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-12-ph2.md', INTENT('ph2', '状态: draft\n级别: L1\n日期: YYYY-MM-DD'));
+  w(T, 'workflow/plans/2026-09-12-ph2.md', PLAN('ph2', '状态: draft\n级别: L1'));
+  const r = run(T);
+  check('audit 缺省：占位符仍警告', r.status === 0 && outOf(r).includes('模板未填'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+
+// ---- 检查 17：发版提交树上的 draft 仍 draft 才阻断；发版之后新建的不拦 ----
+{
+  const T = mkfix();
+  gitInit(T);
+  w(T, 'package.json', '{"name":"t","version":"0.1.0"}\n');
+  w(T, 'workflow/intents/2026-09-12-old.md', INTENT('old', '状态: draft\n级别: L1\n日期: 2026-09-12'));
+  w(T, 'workflow/plans/2026-09-12-old.md', PLAN('old', '状态: draft\n级别: L1'));
+  gitCommitAll(T, 'v0.1.0');
+  let r = run(T, { git: true });
+  check('检查17 发版树上的 draft 仍为 draft → hard', r.status === 1 && outOf(r).includes('发版草稿'), `exit=${r.status}\n${outOf(r)}`);
+  w(T, 'workflow/intents/2026-09-12-old.md', INTENT('old', '状态: approved\n级别: L1\n日期: 2026-09-12'));
+  w(T, 'workflow/plans/2026-09-12-old.md', PLAN('old', '状态: approved\n级别: L1'));
+  w(T, 'package.json', '{"name":"t","version":"0.2.0"}\n');
+  gitCommitAll(T, 'v0.2.0');
+  w(T, 'workflow/intents/2026-09-29-after.md', INTENT('after', '状态: draft\n级别: L1\n日期: 2026-09-29'));
+  w(T, 'workflow/plans/2026-09-29-after.md', PLAN('after', '状态: draft\n级别: L1'));
+  gitCommitAll(T, 'draft after release');
+  r = run(T, { git: true });
+  check('检查17 发版之后新建的 draft 不拦', r.status === 0 && !outOf(r).includes('发版草稿'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

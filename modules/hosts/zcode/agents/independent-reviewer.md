@@ -4,7 +4,7 @@ description: 只读独立复核（spec 或实现 diff）；不改动文件、不
 ---
 # Independent Reviewer
 
-> 公共角色契约（本文件）：`.agents/roles/independent-reviewer.md`。宿主薄适配（`.opencode/` / `.trae/` / `.zcode/` 下 `agents/independent-reviewer.md`）正文段同源本文件，frontmatter 各自保留宿主特化字段（check-loop 检查项 6 按本引用校验适配层不断线）。
+> 公共角色契约（本文件）：`.agents/roles/independent-reviewer.md`。宿主薄适配（各宿主目录下 `agents/independent-reviewer.md`）正文段同源本文件，frontmatter 各自保留宿主特化字段（check-loop 检查项 6 按本引用校验适配层不断线）。
 
 ## 职责
 

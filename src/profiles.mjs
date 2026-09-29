@@ -9,6 +9,11 @@ export const HOSTS = {
   opencode: { dir: '.opencode', localOnly: false, commandPrefix: 'wf-' },
   trae: { dir: '.trae', localOnly: false, commandPrefix: 'wf-' },
   omp: { dir: '.omp', localOnly: true },
+  // 2026-09-29 店面：序号仍把 zcode 放第一（交互菜单 1–4 不变）。claude / cursor 的 commands 由宿主自动加载；
+  // codex 自动读仓库根 AGENTS.md 与 .codex/skills/，commands 与 agents 是同形薄转发，供显式引用。
+  claude: { dir: '.claude', localOnly: false, commandPrefix: 'wf-' },
+  cursor: { dir: '.cursor', localOnly: false, commandPrefix: 'wf-' },
+  codex: { dir: '.codex', localOnly: false, commandPrefix: 'wf-' },
 };
 // commandPrefix = 该宿主的命令层薄适配文件名（= 宿主命令名）统一前缀，2026-09-28 opencode-cmd-wf-prefix
 // 与 trae 对齐后单源：命令名不再裸占宿主顶层命名空间（撞宿主内置/第三方命令无从规避）；缺该字段的宿主

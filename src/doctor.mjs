@@ -218,7 +218,7 @@ export function doctor(args, pkgRoot) {
   if (adapterRes.skipped) {
     add('PASS', `跨宿主薄适配校验跳过（${adapterRes.note || '权威源目录不存在'}）`);
   } else if (adapterRes.drift === 0) {
-    add('PASS', `跨宿主薄适配 ${adapterRes.total} 对无正文漂移（装副本引擎 vs 4 宿主薄适配，B-b 语义）`);
+    add('PASS', `跨宿主薄适配 ${adapterRes.total} 对无正文漂移（装副本引擎 vs 注册表内宿主薄适配，B-b 语义）`);
   } else {
     add('WARN', `跨宿主薄适配正文漂移 ${adapterRes.drift} 对——权威源与薄适配正文段 sha 不一致；按 .agents/commands/sync-hosts.md 跑 flow-kit sync-hosts --apply 单向同步薄适配正文（frontmatter 不动）；装户可在 bin/flow-kit.mjs sync 时一并修复`);
   }

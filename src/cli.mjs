@@ -20,7 +20,8 @@ export const HELP = `flow-kit — AI-Native 闭环工作流 + wiki 知识层脚�
   flow-kit sync             升级 managed 文件（未改动→覆盖新版；本地已改→跳过并持续报告——台账不基线化，
                             不会被下次升级静默覆盖；--force 才覆盖；INDEX/看板等生成器目标重跑锚点重写；
                             owned 文件永不触碰）
-  flow-kit add-host <宿主>  后补宿主适配层：zcode | opencode | trae | omp（已存在文件跳过且不入台账，--force 接管）
+  flow-kit add-host <宿主>  后补宿主适配层：zcode | opencode | trae | omp | claude | cursor | codex
+                            （已存在文件跳过且不入台账，--force 接管）
   flow-kit add-gate <门禁>  装门禁模块并接线 local-pre-commit（当前：dotnet-ca；装后归项目所有）
   flow-kit sync-hosts       跨宿主适配层同步：templates/_agents/{commands,roles}/*.md 权威源 vs
                             modules/hosts/<h>/{agents,commands}/*.md 薄适配——默认 --diff 输出报告；
@@ -34,7 +35,7 @@ init 选项（全部可选，均有默认值）：
                        条件编译检查（builds）与质量检测（checks：lint/类型/vet 等秒级确定性检查，
                        有对应配置文件才启用）、settings.json 自检验命令权限（allow）、
                        AGENTS.md「项目适配区」命令预填
-  --hosts <宿主列表>   逗号分隔：zcode,opencode,trae,omp（默认 zcode；zcode/omp 为本地配置，自动进 .gitignore）
+  --hosts <宿主列表>   逗号分隔：zcode,opencode,trae,omp,claude,cursor,codex（默认 zcode；zcode/omp 为本地配置，自动进 .gitignore）
   --board-port <端口>  workflow 看板端口（默认 8933）
   --dir <目录>         目标项目根（默认当前目录）
   --force              覆盖已存在的同名文件（默认保守跳过）

@@ -37,9 +37,23 @@
 
 - 默认宿主主智能体负责阶段路由、用户确认、关键判断和最终验收，不注册为额外角色。
 - 阶段命令仅在边界明确时委派 `.agents/roles/implementer.md`、`.agents/roles/independent-reviewer.md`、`.agents/roles/ui-verifier.md`。
-- 各 agent 宿主（OpenCode / Trae / ZCode 等）通过其适配目录（`.opencode/agents/`、`.trae/agents/`、`.zcode/agents/` 等）下的薄 Adapter 注册角色；角色行为只维护在 `.agents/roles/`。
+- 各 agent 宿主通过其适配目录下的薄 Adapter 注册角色（`.claude/`、`.cursor/`、`.codex/`、`.opencode/`、`.trae/`、`.zcode/`、`.omp/`）。角色行为只维护在 `.agents/roles/`。Codex 自动读取的是仓库根 `AGENTS.md` 与 `.codex/skills/`；`.codex/commands` 与 `.codex/agents` 是同形薄转发，供显式引用。Cursor 自动加载 `.cursor/commands/`。Claude Code 自动加载 `.claude/commands/` 与 `.claude/agents/`。
 - 宿主不支持子智能体时按命令 frontmatter 的 `fallback` 执行；L2 / L3 独立复核不得回退为原主智能体自查。
 - 子智能体不得跨越用户确认门，也不得自行提交、合入或上线；所有结果由主智能体复核后交用户决策。
+
+## 硬规则
+
+`kit.json` 的 `audit: false`（`init` 新装的默认值）时，check-loop 只阻断下面与文档闭环直接相关的项。`audit` 字段缺省时保持全量检查，已装仓库升级不会突然丢掉卫生警告。本字段设为 `true` 时卫生检查照常打印。豁免日期的唯一表是 `.agents/scripts/policy.mjs` 的 `policyVersion`（`kit.json` 同名字段；未知版本回退到 1）。
+
+1. **同名配对**：L1 有 plan；L2/L3 有 spec 与 plan。incident 的回路断档同样阻断。
+2. **验收勾验**：新建 intent 关到 done 时，验收标准未勾则阻断。
+3. **确认留痕**：approved / done / fixed / closed 须经 `confirm-doc.mjs`，指纹与台账一致。
+4. **敏感信息**：pre-commit 的 commit-check 扫描密钥。
+5. **双源与台账**：doctor 核对 managed / owned 的 sha；引擎改动改包源 `templates/` 再 `sync`。
+
+其余检查（占位符、引用、模块字段、常驻面预算、量化签名、阶段索引、适配器断线）只在 `audit` 不是 `false` 时出警告。
+
+**发版草稿**：最近一次改动 `package.json` 的 `version` 的那次提交里，当时已经是 draft 的 intent / spec / plan，若工作区里仍是 draft，则阻断。那次提交之后新建的草稿不在范围内。状态为 open 的 incident 不在此列。
 
 ## 闭环规则
 

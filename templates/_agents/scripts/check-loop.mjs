@@ -65,6 +65,7 @@
 //      等于引导伪装)/噪声不可消退(不按日期门豁免,退役前本仓 22 条 advisory 中 14 条为该告警)/
 //      quote 字段职责冲突(对质凭据 vs 并录指纹,现归还单一职责)。无 batch 的历史行静默跳过
 //      (无判定依据的行不产出不可消除噪声——沿 audit-gate-hardening P3 教训)
+//  17. 发版提交树上仍为 draft 的 intent/spec/plan [hard-block]
 // 16. 量化断言指标签名对账 [warning](2026-09-28 起;登记表单源 .agents/metric-claims.txt):
 // 判据 = 活跃态文档(draft/approved/open)中的 `{{指标名}}` 签名须替换为实时值,留签名=未回填=warning。
 // **只查显式签名、不全文扫数字**(据实说明):本仓活跃文档「N 行/N 条/N 份」类表述数十处,绝大多数是
@@ -94,6 +95,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { loadEnums } from './workflow-enums.mjs';
 import { runCheck16 } from './check-metric-claims.mjs';
+import { auditEnabled, loadKitPolicy } from './policy.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 
@@ -162,6 +164,12 @@ const WF = 'workflow';
 const DOC_DIRS = ['intents', 'specs', 'plans', 'incidents'];
 const blockers = [];
 const warnings = [];
+// audit:false（init 新装）只保留 blockers。缺省与 audit:true 保持全量警告。
+// 硬规则：配对 / 验收勾验的阻断 / 确认留痕 / 发版草稿。卫生项走 warnings。
+const kitPolicy = loadKitPolicy(ROOT);
+if (!auditEnabled(kitPolicy)) {
+  warnings.push = () => warnings.length;
+}
 
 // ---- 已提交(HEAD)过滤：仓库模式只扫 tracked（fixture 模式恒真；ls-tree 失败退化全扫）----
 let trackedSet = null; // null = 不过滤
@@ -577,8 +585,8 @@ if (gitOut(['rev-parse', '--git-dir']) !== null) {
         if (!d) d = /^\d{4}-\d{2}-\d{2}$/.test(base.slice(0, 10)) ? base.slice(0, 10) : '';
         if (mod) {
           if (!vocab.has(mod)) warnings.push(`- [WARN 模块元数据] ${base}「模块: ${mod}」不在词表(见 .agents/workflow-modules.txt)`);
-        } else if (/^\d{4}-\d{2}-\d{2}$/.test(d) && d >= '2026-09-22') {
-          warnings.push(`- [WARN 模块元数据] ${base} 缺「模块:」字段(2026-09-22 起新建文档必填)`);
+        } else if (/^\d{4}-\d{2}-\d{2}$/.test(d) && d >= kitPolicy.moduleSince) {
+          warnings.push(`- [WARN 模块元数据] ${base} 缺「模块:」字段(${kitPolicy.moduleSince} 起新建文档必填)`);
         }
       }
     }
@@ -606,7 +614,7 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
       const base = path.basename(doc);
       let d = fmGet(doc, '日期') || fmGet(doc, '发现');
       if (!d) d = /^\d{4}-\d{2}-\d{2}$/.test(base.slice(0, 10)) ? base.slice(0, 10) : '';
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || d < '2026-09-23') continue; // 生效 2026-09-23 起（规则发布次日）
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || d < kitPolicy.check14Since) continue; // policy.mjs check14Since
       const lines = linesOf(doc) || [];
       if (lines.some((l) => l.includes('存量确认态豁免（'))) continue;
       const rel = path.relative(ROOT, doc).split(path.sep).join('/');
@@ -632,7 +640,7 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
 // 独立生效日 2026-09-28 常量退役：台账起算日 = docs 生效日，两档等价）。
 // 台账坏行容忍跳过（审计件，jsonl 追加式）；frontmatter 存 16 位、台账存 64 位，按前 16 位配对。
 {
-  const EFFECTIVE = '2026-09-27';
+  const EFFECTIVE = kitPolicy.confirmDocsEffective;
   const ledgerPath = path.join(ROOT, '.agents', 'confirmations.jsonl');
   const ledger = [];
   if (fs.existsSync(ledgerPath)) {
@@ -667,7 +675,7 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
       //      仅靠 ① 会被误判为存量豁免而静默放行）。
       // 两条件皆不满足 = 存量豁免（生效日前既有、从未走确认门，不追溯）。
       const docEntries = ledger.filter((e) => e && e.doc === rel && VALID_STAGES.has(e.stage));
-      const eff = sub === 'incidents' ? '2026-09-28' : EFFECTIVE;
+      const eff = sub === 'incidents' ? kitPolicy.confirmIncidentsEffective : EFFECTIVE;
       let d = fmGet(doc, '日期') || fmGet(doc, '发现');
       if (!d) d = /^\d{4}-\d{2}-\d{2}$/.test(base.slice(0, 10)) ? base.slice(0, 10) : '';
       const dateManaged = /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= eff;
@@ -691,7 +699,7 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
         const entry = doneEntries[doneEntries.length - 1]; // append-only 台账，末次生效（重确认场景）
         if (!entry || !entry.prev) {
           warnings.push(`- [WARN 绑定降级] ${base} 台账 stage=${st} 行缺 prev 字段（schema 演进前行），内容绑定跳过——仅配对判定`);
-        } else if (!(typeof entry.ts === 'string' && entry.ts >= '2026-09-28')) {
+        } else if (!(typeof entry.ts === 'string' && entry.ts >= kitPolicy.bindingTs)) {
           // 该 done 确认发生在生效锚前（旧关单顺序时代）——豁免内容绑定，配对判定照常
         } else if (bindingSha256(linesOf(doc) || [], entry.prev) !== entry.fingerprint) {
           blockers.push(`- [确认内容漂移] ${base} ${st} 后内容与确认台账不符——已关单文档不得直接改（关单编辑先于关单确认）；确需修订走 superseded 或新 intent 引用`);
@@ -742,6 +750,49 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
 //   （ROOT/ENUMS/docFiles/fmGet/inSet/isTracked/linesOf/readdirOrNull/warnings，以代码实际引用集为准）；
 //   调用位置须保持在检查 15 之后、输出段之前——warnings 按插入序输出，位置变化会改变输出行序。
 runCheck16({ ROOT, ENUMS, docFiles, fmGet, inSet, isTracked, linesOf, readdirOrNull, warnings });
+
+// --- 17. 发版提交树上仍为 draft 的 intent/spec/plan [hard-block] ---
+// 最近一次 package.json version 发生变化的提交里，当时状态已是 draft 的 intent/spec/plan，
+// 工作区里若仍是 draft 则阻断。该提交之后新建的草稿不在范围内。open 的 incident 不在此列。
+{
+  const log = gitOut(['log', '-n', '40', '--format=%H', '--', 'package.json']);
+  if (log) {
+    let release = null;
+    let releaseVer = '';
+    for (const sha of log.split('\n').map((s) => s.trim()).filter(Boolean)) {
+      const curTxt = gitOut(['show', `${sha}:package.json`]);
+      if (!curTxt) continue;
+      let cur = null;
+      try { cur = JSON.parse(curTxt).version; } catch { continue; }
+      const prevTxt = gitOut(['show', `${sha}^:package.json`]);
+      let prev = null;
+      if (prevTxt) { try { prev = JSON.parse(prevTxt).version; } catch { prev = null; } }
+      if (cur && cur !== prev) { release = sha; releaseVer = cur; break; }
+    }
+    const tree = release && gitOut(['ls-tree', '-r', '--name-only', release, '--', `${WF}/intents`, `${WF}/specs`, `${WF}/plans`]);
+    if (release && tree) {
+      for (const rel of tree.split('\n').map((s) => s.trim()).filter(Boolean)) {
+        if (!rel.endsWith('.md') || rel.endsWith('_TEMPLATE.md')) continue;
+        const thenTxt = gitOut(['show', `${release}:${rel}`]);
+        if (!thenTxt || fmStatus(thenTxt) !== 'draft') continue;
+        const abs = path.join(ROOT, rel);
+        if (fmGet(abs, '状态') === 'draft') {
+          blockers.push(`- [发版草稿] ${rel} 在 version=${releaseVer} 的提交 ${release.slice(0, 7)} 上已是 draft，工作区仍是 draft。发版提交树上的草稿须先离开 draft。覆盖面只含该提交当时已在树上的 intent/spec/plan；其后新建的草稿不在此列`);
+        }
+      }
+    }
+  }
+}
+
+function fmStatus(text) {
+  const lines = String(text || '').split(/\r?\n/);
+  if (!/^---\s*$/.test(lines[0] || '')) return '';
+  for (let i = 1; i < lines.length; i++) {
+    if (/^---\s*$/.test(lines[i])) return '';
+    if (lines[i].startsWith('状态:')) return lines[i].slice('状态:'.length).trim();
+  }
+  return '';
+}
 
 // --- 输出（banner 沿 sh 版字样与格式 = 稳定输出契约：banner 后空行、条目 '- ' 前缀）---
 if (blockers.length) {

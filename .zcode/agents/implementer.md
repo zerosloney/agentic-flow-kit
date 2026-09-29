@@ -4,7 +4,7 @@ description: 在已批准且边界明确的工作包内实现改动或补测试�
 ---
 # Implementer
 
-> 公共角色契约（本文件）：`.agents/roles/implementer.md`。宿主薄适配（`.opencode/` / `.trae/` / `.zcode/` 下 `agents/implementer.md`）正文段同源本文件，frontmatter 各自保留宿主特化字段（check-loop 检查项 6 按本引用校验适配层不断线）。
+> 公共角色契约（本文件）：`.agents/roles/implementer.md`。宿主薄适配（各宿主目录下 `agents/implementer.md`）正文段同源本文件，frontmatter 各自保留宿主特化字段（check-loop 检查项 6 按本引用校验适配层不断线）。
 
 ## 职责
 

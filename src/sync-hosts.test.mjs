@@ -10,6 +10,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { diffHosts } from './sync-hosts.mjs';
 
 const SRC_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)));
 
@@ -49,6 +50,15 @@ function mkFixture() {
     `---\nname: implementer\ndescription: opencode 英文风格\n---\n\n# Implementer · v1\n\n权威源正文 implementer v1\n`);
   W(path.join(root, 'modules/hosts/trae/agents/implementer.md'),
     `---\nname: implementer\ndescription: trae 英文风格\n---\n\n# Implementer · v1\n\n权威源正文 implementer v1\n`);
+  for (const h of ['claude', 'cursor', 'codex']) {
+    for (const cmd of ['build', 'test']) {
+      const title = cmd === 'build' ? 'Build' : 'Test';
+      W(path.join(root, 'modules/hosts', h, 'commands', `wf-${cmd}.md`),
+        `---\ndescription: ${title} · ${h}\n---\n\n# ${title} · v1\n\n权威源正文 ${cmd} v1\n`);
+    }
+    W(path.join(root, 'modules/hosts', h, 'agents/implementer.md'),
+      `---\nname: implementer\ndescription: ${h}\n---\n\n# Implementer · v1\n\n权威源正文 implementer v1\n`);
+  }
   // 孤儿薄适配：权威源无对应文件（两种形态——带 wf- 前缀与不带前缀）
   W(path.join(root, 'modules/hosts/opencode/commands/orphan.md'), '# orphan\n');
   W(path.join(root, 'modules/hosts/opencode/commands/wf-legacy.md'), '# legacy\n');
@@ -70,7 +80,7 @@ syncHosts(process.argv.slice(2), root);
   const fx = mkFixture();
   const r = runSyncHosts(fx, ['--diff']);
   const out = r.stdout + r.stderr;
-  check('S1 全对齐：正文对齐 8 对（2 commands×2 适配 + 1 role×4 宿主）', /正文对齐：\s*8\s*对/.test(out), out);
+  check('S1 全对齐：正文对齐 17 对（2 commands×5 适配 + 1 role×7 宿主）', /正文对齐：\s*17\s*对/.test(out), out);
   check('S1 全对齐：报告无漂移', /无漂移/.test(out), out);
   check('S1 全对齐：exit 0', r.status === 0, `status=${r.status}`);
 }
@@ -84,10 +94,10 @@ syncHosts(process.argv.slice(2), root);
     `---\ndescription: Test 阶段\nstage: Test\n---\n\n# Test · v2\n\n权威源正文 test v2\n`);
   const r = runSyncHosts(fx, ['--diff']);
   const out = r.stdout + r.stderr;
-  check('S2 权威源改了 → 正文漂移 4（build×2 + test×2）', /正文段漂移（4/.test(out), out);
+  check('S2 权威源改了 → 正文漂移 10（build×5 + test×5）', /正文段漂移（10/.test(out), out);
   check('S2 列出 opencode/commands/wf-build.md（opencode wf- 前缀映射）', out.includes('commands/build.md → opencode/commands/wf-build.md'), out);
   check('S2 列出 trae/commands/wf-build.md（trae wf- 前缀映射）', out.includes('commands/build.md → trae/commands/wf-build.md'), out);
-  check('S2 正文对齐 = 4（1 role × 4 宿主 implementer 未改）', /正文对齐：\s*4\s*对/.test(out), out);
+  check('S2 正文对齐 = 7（1 role × 7 宿主 implementer 未改）', /正文对齐：\s*7\s*对/.test(out), out);
   check('S2 exit 0（diff 模式不阻断）', r.status === 0);
 }
 
@@ -98,7 +108,7 @@ syncHosts(process.argv.slice(2), root);
     `---\ndescription: Build 阶段\nstage: Build\n---\n\n# Build · v2\n\n权威源正文 build v2\n`);
   const r = runSyncHosts(fx, ['--apply']);
   const out = r.stdout + r.stderr;
-  check('S3 apply：报告同步 2 份（opencode + trae）', /按权威源正文覆盖薄适配正文段\s*2\s*份/.test(out), out);
+  check('S3 apply：报告同步 5 份（带 commandPrefix 的宿主）', /按权威源正文覆盖薄适配正文段\s*5\s*份/.test(out), out);
   check('S3 apply：opencode 正文已同步到 v2', R(path.join(fx, 'modules/hosts/opencode/commands/wf-build.md')).includes('权威源正文 build v2'));
   check('S3 apply：trae 正文已同步到 v2', R(path.join(fx, 'modules/hosts/trae/commands/wf-build.md')).includes('权威源正文 build v2'));
   check('S3 apply：opencode frontmatter 保留（仍无 name 字段——前缀由文件名承载）', !R(path.join(fx, 'modules/hosts/opencode/commands/wf-build.md')).match(/^name:/m));
@@ -115,7 +125,7 @@ syncHosts(process.argv.slice(2), root);
     `---\nname: wf-build\ndescription: trae 自定义描述\n---\n\n# Build · v1\n\n权威源正文 build v1\n`);
   const r = runSyncHosts(fx, ['--diff']);
   const out = r.stdout + r.stderr;
-  check('S4 frontmatter 差异不计正文段漂移', /正文对齐：\s*8\s*对/.test(out) && /无漂移/.test(out), out);
+  check('S4 frontmatter 差异不计正文段漂移', /正文对齐：\s*17\s*对/.test(out) && /无漂移/.test(out), out);
 }
 
 // ============ 场景 5：薄适配正文手改 → drift 列出，apply 覆盖（不污染权威源）============
@@ -153,7 +163,7 @@ syncHosts(process.argv.slice(2), root);
   let parsed = null;
   try { parsed = JSON.parse(out); } catch {}
   check('S7 --json 输出可解析', parsed && typeof parsed === 'object' && Array.isArray(parsed.drift));
-  check('S7 --json 含 inSync = 8', parsed && parsed.inSync === 8, parsed ? JSON.stringify(parsed) : 'null');
+  check('S7 --json 含 inSync = 17', parsed && parsed.inSync === 17, parsed ? JSON.stringify({ inSync: parsed && parsed.inSync, missing: parsed && parsed.authorityMissing }) : 'null');
 }
 
 // ============ 场景 8：孤儿薄适配（权威源无对应文件）→ adapterOrphans 列，apply 不删 ============
@@ -167,6 +177,16 @@ syncHosts(process.argv.slice(2), root);
   check('S8 opencode 孤儿不带前缀 → 原样反推 commands/<file>', out.includes('opencode/commands/orphan.md（推测权威源：commands/orphan.md）'), out);
   const r2 = runSyncHosts(fx, ['--apply']);
   check('S8 apply 不删孤儿薄适配', fs.existsSync(path.join(fx, 'modules/hosts/opencode/commands/orphan.md')) && fs.existsSync(path.join(fx, 'modules/hosts/opencode/commands/wf-legacy.md')));
+}
+
+{
+  const pkg = path.resolve(SRC_ROOT, '..');
+  const r = diffHosts({
+    authorityRoot: path.join(pkg, 'templates', '_agents'),
+    adaptersRoot: path.join(pkg, 'modules', 'hosts'),
+  });
+  const sample = r.authorityMissing.slice(0, 3).map((x) => x.adapterRel).concat(r.drift.slice(0, 3).map((x) => x.adapterRel)).join('、');
+  check('实仓薄适配无缺失无正文漂移', r.authorityMissing.length === 0 && r.drift.length === 0, `missing=${r.authorityMissing.length} drift=${r.drift.length} ${sample}`);
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${failCount}`);

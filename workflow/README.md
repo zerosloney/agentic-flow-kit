@@ -1,36 +1,68 @@
-# workflow — agentic-flow-kit 自身开发闭环留痕
+# workflow — AI 驱动闭环流程（唯一真相源）
 
-本目录用包所承载的同一套闭环协议（intents → specs → plans → incidents）管理 agentic-flow-kit 自身的开发任务（M3 sync / M4 dogfooding / M5 发布等后续任务在此立档）。
+本目录是个人 AI 工作流引擎的唯一载体：**intents（为什么做）→ specs（怎么设计）→ plans（怎么做）→ incidents（学到了什么）**。单人 + AI 协作：唯一决策人与授权人是用户本人，多人评审暂缓，确认都在对话内一句话完成，追溯靠 git（commit + release tag）。
 
-> 移驻说明：M1+M2 首个任务（`2026-09-23-agentic-flow-kit-npx-package`）于 2026-09-23 经用户拍板自任务发起仓库 Shipyard.Material 迁入——该仓库不留此任务留痕。文档内「本仓库」如无特别说明均指发起仓库 Shipyard.Material。
+> 本仓的生效日、台账字段与措辞纪律过程记录在 `wiki/drafts-archive/2026-09-29-protocol-archaeology/README.md`。现行规则以本文为准。本仓 `kit.json` 为 `audit: true`、`policyVersion: 1`。
 
-> 已完成（2026-09-24）：Shipyard.Material 引擎增量已收包（intent `2026-09-24-shipyard-increment-port`，commit 97a52ca）；回流迁移已完成（Shipyard 侧 L2 三件套 `2026-09-24-flow-kit-backflow`，迁移提交 908bbfc + 关单 0b9b85d——kit.json 台账 76 份 managed、4 项目门禁经 local-pre-commit 接线、前置双备份 tag `pre-flow-kit-backflow` + 171MB 文件快照）。遗留：builds 按扩展名全局触发会因 wiki html 跑前端构建（Shipyard papercuts 在案，包侧 path 过滤增强待立）。
+> 闭环新增记录一律写在本目录。
 
-## 审计边界（2026-09-27 audit-gate-hardening 声明）
+## 目录结构
 
-- **确认台账起算**：`.agents/confirmations.jsonl` 自 2026-09-27 入账；此前 2026-09-23~26 的 6 份文档经「draft 直跳 done」关单（check-loop 检查 14 恒 advisory，不追认、不回填）——该段历史不可机器审计，为已接受事实。
-- **台账 schema 演进**：首批 2 行（sync-hosts-adapter-backlog 的 approved 行）无 `source` 字段，当日才引入；check-loop 配对判据（doc/stage/fingerprint）与 source 无关，仅阅读时需知。
-- **生效日判定与确认门准入（2026-09-28 收窄）**：检查 15 的**受管准入**改为两条件取或——① 台账（`.agents/confirmations.jsonl`）中该 doc 有合法跳转行；② 文档自报日期 ≥ 生效日（docs 2026-09-27 / incidents 2026-09-28）。① 独立于自报日期成立，故「确认过却把日期写早以逃掉对账」这条路径已被堵死（此前仅靠 ②，写早即整段跳过判定——incident `2026-09-28-confirm-gate-effective-date-anchor` 实证）；② 保留以兜住「新档完全没跑 confirm-doc」的漏网面。两条件皆不满足 = 存量豁免（生效日前既有、从未走确认门，不追溯）。
-  **检查 8 生效日锚已收窄（2026-09-28 check8-git-anchor）**：检查 8（验收标准对账，**hard-block**）的锚从**文件名前 10 字符**改为 **「文件首次加入 git 的日期」**（`git log --diff-filter=A --format=@%aI`，模块级索引 `addedDates`）。此前锚恰是命名规范强制的 `YYYY-MM-DD-` 前缀——作者每次建档都在写它，「写早」零成本、顺手即发生，等于一条 hard 门可被平凡绕过（有未勾验项却 exit 0，实证见 incident）。**准确收益**：关掉「改文件名即绕过」这条零成本通道。**诚实边界**：该锚取的是 **author date（作者自报时间戳）**，`git commit --date=<过去>` 仍可伪造 → **不宣称"通道已关闭"**；该残余通道与「伪造台账」同属本地信任边界内不可机器防。另：**非 git / 查不到加入记录 → 不可判定 → 走存量口径（不误报 hard）**。
-  **仍未收窄的面（按危害分档，已登记未动）**：检查 **12**（模块字段，frontmatter 日期）与 **14**（确认态留痕，frontmatter 日期）两处仍以自报日期为锚——二者均为 **advisory（不阻断）**，危害面远小于检查 8 的 hard 门，故本次按「只修真正会被利用的那条」处置（用户 2026-09-28 拍板方案②）。**注**：上一版本节曾把 8/12/14 并列为「同类面」，掩盖了 hard / advisory 的分档差异，已更正。另 **检查 11**（INDEX 漂移）与生效日无关，不在此列。
-- **台账 schema 演进：新增调用事实字段（2026-09-28 batch-ledger-audit）**：`confirmations.jsonl` 每行新增 `batch` / `seq` / `of` —— 记「本次 `confirm-doc` 调用落了几份态」这一**写入时确定已知的事实**（`batch` = 本次调用生成的短随机串，无时间语义；`seq` = 该次调用内件序，从 1；`of` = 本次调用总份数）。检查 15 的**并录审计**据此直读判定（同 batch 且 `of > 1` 的 delegated 行 → warning「确认并录」），**不再**用旧判据「同 quote + 相邻 ts 差 < 2s」——后者是拿两个间接信号反推调用次数，已实证假阳性（合规逐件调用复用同句必然误报）与假阴性（并录时换不同 quote 即零告警，等于引导伪装），已整段退役。
-  **历史行（本仓全部 67 行均无 `batch` 字段）→ 静默跳过**（无判定依据的行不产出不可消除的噪声，沿 audit-gate-hardening P3 教训）；台账为 append-only、check-loop 对坏行容忍跳过、配对判据与新增字段无关，故**纯增字段向后兼容、不回填、不改写**。`quote` 字段归还单一职责：只记用户原话供事后对质。详见 incidents/2026-09-28-batch-ledger-audit.md。
-  **spec 判据表述遗留（2026-09-29 双轴审查登记）**：同名 spec `:21` / `:56` / `:87` 及系统改动表 T3/T4 仍写「降级出账（如实可见）」——实现自 `f194428` 起即静默跳过（本条与实现同步，spec 未及修订即关单）；spec 为终态受内容绑定，不追溯改写，以本条为判据事实源。
-- **done 内容绑定自 2026-09-28 起**（生效锚 = 台账 done 行确认时刻 `ts`，UTC——2026-09-27 gate-hardening-p2-batch 自文档自报日期改锚，旧日期文档晚关单也纳入绑定）：绑定要求 confirm-doc done 是关单最后一次写入；2026-09-27 当天按旧顺序（done 落态后再回填确认结果行）完成关单的 3 份文档（sync-hosts-adapter-backlog 的 plan、confirm-gate-delegated 的 intent+plan）内容与台账指纹不符——不回改、不逐份豁免，以生效锚切换吸收（3 份 ts 均为 2026-09-27，天然豁免）；自生效锚起遵守新约定：关单编辑（勾验/回填确认结果）先于 done 确认。
+| 目录 | 放什么 | 命名 |
+|------|--------|------|
+| `intents/` | 意图文档：背景、目标/非目标、验收标准、级别、触达红线 | `YYYY-MM-DD-<主题>.md` |
+| `specs/` | 设计规格：功能行为、数据流、系统改动、约束遵守映射 | 与入口文档（intent / incident）同名 |
+| `plans/` | 计划文档：与入口文档同名配对，任务拆解 + 判据 + 风险 | 与入口文档（intent / incident）同名 |
+| `incidents/` | 事故复盘：时间线、根因、为什么没拦住、复盘三件套 | `YYYY-MM-DD-<主题>.md` |
 
-## 结论文档表述纪律（2026-09-28 claim-exceeds-fix 声明）
+**命名一律英文 kebab-case**（如 `2026-09-07-<主题>.md`），**禁中文文件名**——check-loop 对非 ASCII 文件名给 warning。文档内容（标题/正文）不受此限。
 
-> 三次同型复发（`confirm-gate-effective-date-anchor` 的「常量退役」/ `batch-ledger-audit` 的「五处同步」/ `check8-git-anchor` 的「通道关闭」）后固化。**这不是偶发失误**——三处都朝「把改进了写成解决了」的同一方向偏，故上升为跨单纪律。
+**文档协议（frontmatter 受限子集）**：四类文档头部一律为 YAML frontmatter（每行 `键: 值`，机器字段唯一来源）——`状态`（intent/spec/plan：draft/approved/done/superseded/cancelled；incident：open/fixed/closed，**严格枚举，单源 `.agents/workflow-enums.txt`**——check-loop / 看板 / 检索 / fill-* 一律读它，改枚举改那边；附注写 `备注:` 键）、`级别`（L0-L3，同单源）、`日期`/`发现`（YYYY-MM-DD）、`模块`（**新建文档必填**，取值见 `.agents/workflow-modules.txt` 词表，单值取主导模块；存量不回填，AI 触碰时顺手补）、L3 spec 的 `确认结果`/`确认时间`、回填件 `流程: legacy`。**`状态` 迁移须经 `approved`**（确认环节的机器可见态，`done` 只在关单出现）：新建的 spec/plan 若已 done 而 git 历史中从未出现行首 `状态: approved`，check-loop 报「确认态缺失」warning。check-loop 只扫 frontmatter 取机器字段（`fm_get` 字段断言），正文不再写「状态：/级别：」行；叙述性字段（独立复核/复盘三件套/验收勾验）仍留正文按节锚定。
 
-**1. 量化断言单源**：跨文档引用的量化值（台账行数 / advisory 数 / 文档份数等）**只允许一处定义**，其余处引用该处（或显式标注时点）。
-- **凡写「N 处同步」「已全部更正」须附一条可重跑的取值命令**——无命令的「已同步」不视为已完成。
-- 取数须**标明时点**：同一指标在退役前后取值不同（如并录告警 14 条 → 0、台账 65 行 → 77 行），两个时点的值**不构成「文档 vs 实况」对照**，混用即出假指控。
-- 教训实例：`2026-09-28-batch-ledger-audit` spec 声称「五处文件同步」，实际该 spec 内两处（`:87`/`:39`）未同步——已登记为遗留面，不追溯改写（见同名 incident 复盘三件套 1）。
-- **已机器化（2026-09-28 metric-claim-gate，check-loop 检查 16）**：写量化断言时可用**签名** `\{{指标名}}`（小写点分，如 `\{{ledger.lines}}`）代替手敲数字——check-loop 对账登记表 `.agents/metric-claims.txt` 并**给出实时值**供替换；留签名未回填 = warning。**这是可选强化手段、非强制**：本检查只查显式签名、**不全文扫数字**（本仓「N 行/N 条/N 份」多为历史叙述，全文扫描会产生不可消退的假阳性——违 P3 红线），故覆盖面取决于是否登记签名。
-- **装户可扩展指标（2026-09-28 adopter-derivers）**：自有指标的取数逻辑写在 `.agents/metric-derivers.cjs`（**owned**，sync 永不覆盖）——写法 / `ctx` 能力 / 三条硬约定（同步 · 确定性 · 有限数字）/ 失败语义见 `.agents/metric-claims.txt` 头部契约（**此处只留指针，不复述**）。载入或取数失败**绝不静默降级**。
-  **契约后缀修订（`b30a409`，2026-09-29 补记）**：装户模块后缀由同名 spec 立项的 `.mjs` 改为 `.cjs`——CI 矩阵实测 `require(esm)` 跨 Node 版本不可用，`.cjs` 为唯一合法后缀（CommonJS `module.exports` 写法，缘由见 registry 头部契约）。spec `:27` / `:31` 契约原文未及修订即关单，终态不追溯改写；旧 `.mjs` 路径已弃用，盘上残留时检查 16 明确提示迁移。
+各子目录内 `_TEMPLATE.md` 为起步模板，复制后填写，不直接改动模板本身。
 
-**2. 修复收益的措辞须回到事实源重取**：描述收益时**不得沿用立项时的目标措辞**（「关闭」「退役」「不可」），必须按实测重述。
-- **用连续量（成本高低），不用离散态（开关）**：把绕过成本从「改文件名（零成本）」抬到「主动伪造时间戳（需刻意加参数）」是**成本位移**，不是「通道关闭」。
-- 判据：凡写「已解决 / 不可 / 通道关闭」，须能指出**实测证据**；做不到就写「已收窄 / 成本抬高 / 仍可被 X 绕过」。
+根目录 `regression-checklist.md` 为**活文档回归清单**：deploy 回归必过条目与 incident 防复发验证的统一落点，随模块上线补充、随 incident 追加。
 
+## 使用方式
+
+- **发起新任务**：执行 `.agents/commands/new-task.md` 定义的流程（6 阶段总入口）
+- **看板（可选，默认不拉起）**：需要时手动跑 node .agents/scripts/ensure-board.mjs（跨平台单入口；幂等：探活 / 旧代码自动重启 / 全新启动弹浏览器），端口从基端口 8933 起自动上探首个可用，链接以脚本输出为准；**预警层，非门禁；告警口径对齐 check-loop 硬断档**。端口被占时探活 `/api/board` 并比对 `root`——本项目看板才复用 / 旧代码重启；他人进程（含其他项目看板）不动手不 kill，自动跳过试下一端口
+- **检索**：活跃流程读 `INDEX.md`（生成物，`node .agents/scripts/gen-workflow-index.mjs` 重生成、`--check` 校验漂移）；跨语料检索 `node .agents/scripts/kb-search.mjs "<词>"`（workflow 按节级定位 + wiki 全文，`--type/--module/--status/-n` 过滤；`--status all` 显式全量）
+- **验证**：`.agents/commands/test.md`（静态门 + 实测；项目自有验证脚本/门禁如有，见 `.agents/hooks/local-pre-commit` 与根 `AGENTS.md`「项目适配区」）
+- **评审**：`.agents/commands/review.md`（按 P0 / P1 / P2 分级：机器兜底 + AI 自查出清单，用户决策定性与合入）
+- **上线**：`.agents/commands/deploy.md`（上线前必跑清单）
+- **量化**：委派/自做结果记 `delegations.md`，聚合跑 `node .agents/scripts/agg-delegations.cjs`（**并发扩容门槛见该文件——数字达标前不扩并发**）；语料与常驻面体积的**月度快照**跑 `node .agents/scripts/gen-workflow-metrics.mjs`（每月一行落 `metrics.md`，同月重跑即更新；明细看 stdout）
+- **追溯**：git 即审计——文档随代码同 commit、上线打 `release/<日期>` tag，`git log` 全链路可查；多人评审暂缓，git 历史即评审记录
+- **级别**：L0 例行 ｜ L1 实现级（页面 / 交互 / 样式等，未命中 L2/L3）｜ L2 规则 / 契约（编码权威 / 共享契约 / 既有接口语义 / 全局横切口径，触达面闭集见 `.agents/commands/new-task.md` §级别判断）｜ L3 数据与运行时结构（schema / 迁移 SQL / DI 链 / 认证与中间件管线）；混合改动就高不就低
+
+## 执行模型
+
+- 默认宿主主智能体负责阶段路由、用户确认、关键判断和最终验收，不注册为额外角色。
+- 阶段命令仅在边界明确时委派 `.agents/roles/implementer.md`、`.agents/roles/independent-reviewer.md`、`.agents/roles/ui-verifier.md`。
+- 各 agent 宿主通过其适配目录下的薄 Adapter 注册角色（`.claude/`、`.cursor/`、`.codex/`、`.opencode/`、`.trae/`、`.zcode/`、`.omp/`）。角色行为只维护在 `.agents/roles/`。Codex 自动读取的是仓库根 `AGENTS.md` 与 `.codex/skills/`；`.codex/commands` 与 `.codex/agents` 是同形薄转发，供显式引用。Cursor 自动加载 `.cursor/commands/`。Claude Code 自动加载 `.claude/commands/` 与 `.claude/agents/`。
+- 宿主不支持子智能体时按命令 frontmatter 的 `fallback` 执行；L2 / L3 独立复核不得回退为原主智能体自查。
+- 子智能体不得跨越用户确认门，也不得自行提交、合入或上线；所有结果由主智能体复核后交用户决策。
+
+## 硬规则
+
+`kit.json` 的 `audit: false`（`init` 新装的默认值）时，check-loop 只阻断下面与文档闭环直接相关的项。`audit` 字段缺省时保持全量检查，已装仓库升级不会突然丢掉卫生警告。本字段设为 `true` 时卫生检查照常打印。豁免日期的唯一表是 `.agents/scripts/policy.mjs` 的 `policyVersion`（`kit.json` 同名字段；未知版本回退到 1）。
+
+1. **同名配对**：L1 有 plan；L2/L3 有 spec 与 plan。incident 的回路断档同样阻断。
+2. **验收勾验**：新建 intent 关到 done 时，验收标准未勾则阻断。
+3. **确认留痕**：approved / done / fixed / closed 须经 `confirm-doc.mjs`，指纹与台账一致。
+4. **敏感信息**：pre-commit 的 commit-check 扫描密钥。
+5. **双源与台账**：doctor 核对 managed / owned 的 sha；引擎改动改包源 `templates/` 再 `sync`。
+
+其余检查（占位符、引用、模块字段、常驻面预算、量化签名、阶段索引、适配器断线）只在 `audit` 不是 `false` 时出警告。
+
+**发版草稿**：最近一次改动 `package.json` 的 `version` 的那次提交里，当时已经是 draft 的 intent / spec / plan，若工作区里仍是 draft，则阻断。那次提交之后新建的草稿不在范围内。状态为 open 的 incident 不在此列。
+
+## 闭环规则
+
+1. L1 以上新需求始于已确认的 intent；L1 以上修复始于已确认的 incident 草稿（作为 intent 等价入口）
+2. L2 / L3 变更必须先有与入口文档同名的 spec 确认通过（L3 加新会话独立复核），方可起草 plan；L1 用极简 plan——改动面 + 验证方式两节起步，多文件多步骤再加任务拆解/执行顺序
+3. 实现产物必须通过静态门（构建 + 测试 + 项目门禁）
+4. 线上 / 实测缺陷回落到 `incidents/`，复盘三件套（新 intent、防复发验证、规范条目）缺一不可；**根因属「门禁缺位 / 规范未落地 / 系统性问题」时，即使结构性修复已完成也必须立新 intent** 追踪系统性改进，禁止以「修复已完成」为由绕过 intent 回路
+5. 关单在 test：逐条勾验入口文档「验收标准」并补证据后 intent → done（不依赖是否上 prod）。done 仍有未勾项会被 check-loop 拦（新建 intent hard-block）。上 prod 另走 deploy（tag / 回滚 / 观察）
+6. 放弃留档：方案曾确认后不做 → `superseded`；未完成即取消 → `cancelled`。二者均为已确认终态，check-loop 不按「状态未确认」拦截；L3 放弃件豁免「确认结果必须为 approved」
+7. 后续回归清单与周检清单也归档本目录

@@ -62,7 +62,7 @@ flow-kit doctor                                     # 10/0/0
 - 不改 managed 台账跟踪逻辑（`sync.mjs` 不动）
 - 不改 owned 漂移校验（`doctor.mjs` §6.6 不动）
 - 不反向同步——装副本独自有文件（如 hooks/commit-check.config.json）可能是装户配置，不应被删
-- 不检查 4 宿主 `modules/hosts/` 薄适配漂移（那是 `flow-kit sync-hosts` 范围）
+- 不检查注册表内宿主 `modules/hosts/` 薄适配漂移（那是 `flow-kit sync-hosts` 范围）
 
 ## 当前已识别的真实漂点（首次实测，2026-09-25）
 
