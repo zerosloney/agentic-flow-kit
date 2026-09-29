@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-29
 模块: pipeline
 备注: 用户 2026-09-29 对话「可以」确认本 intent。开工句「WP-A 与 WP-B 开干」只授权实现。
-确认指纹: 7faa3b22693164ce
+确认指纹: cead648e2b84a0b1
 ---
 # INTENT — 看板按完整文件名配对
 
@@ -43,8 +43,8 @@
 
 ## 验收标准（可测试）
 
-- [ ] 两份不同日期、同一 slug 的 intent，只给其中一份配同名 plan：有 plan 的无「入口缺 plan」，另一份有
-- [ ] draft 的告警含「尚未确认」，不含「状态不在枚举内」
-- [ ] approved 的 intent 加同名 approved plan：无非法枚举、无「尚未确认」、无「入口缺 plan」
-- [ ] 入口 done、同名 plan 仍是 draft：plan 仍报未终态
-- [ ] 现有看板套件（双跑四类 hard-block、验收节解析）保持通过
+- [x] 两份不同日期、同一 slug 的 intent，只给其中一份配同名 plan：有 plan 的无「入口缺 plan」，另一份有（证据：`workflow-board-server.test.mjs` ⑥「有同名 plan 的 intent 不报缺 plan」「没有同名 plan 的 intent 报缺 plan」；实现 `0176eab`；`7045ea8` 后 `verify.mjs` 中该套件 18/18）
+- [x] draft 的告警含「尚未确认」，不含「状态不在枚举内」（证据：同套件 ⑥「draft 提示尚未确认，不报非法枚举」；`0176eab`）
+- [x] approved 的 intent 加同名 approved plan：无非法枚举、无「尚未确认」、无「入口缺 plan」（证据：同套件 ⑥「approved 同名配对：无非法枚举、无尚未确认、无缺 plan」；`0176eab`）
+- [x] 入口 done、同名 plan 仍是 draft：plan 仍报未终态（证据：同套件 ⑥「入口 done 而同名 plan 仍是 draft：plan 报未终态」；`0176eab`）
+- [x] 现有看板套件（双跑四类 hard-block、验收节解析）保持通过（证据：同套件 ①② 四类 hard-block 双跑、④ 验收节解析，均在上述 18/18 内）
