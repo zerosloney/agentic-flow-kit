@@ -5,13 +5,18 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（22）
+## 活跃（27）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
 | INTENT | L2 | approved | 2026-09-29 | pipeline | 装户表面收口 | ☑0/8 |
+| INTENT | L1 | approved | 2026-09-29 | pipeline | 看板按完整文件名配对 | ☑0/5 |
+| INTENT | L2 | approved | 2026-09-29 | pipeline | 技术栈构建门认脚本、帮助文本列全门禁 | ☑0/5 |
 | PLAN | L2 | approved | 2026-09-29 | pipeline | 装户表面收口 | — |
+| PLAN | L1 | approved | 2026-09-29 | pipeline | 看板按完整文件名配对 | — |
+| PLAN | L2 | approved | 2026-09-29 | pipeline | 技术栈构建门认脚本、帮助文本列全门禁 | — |
 | SPEC | L2 | approved | 2026-09-29 | pipeline | 装户表面收口 | — |
+| SPEC | L2 | approved | 2026-09-29 | pipeline | 技术栈构建门认脚本、帮助文本列全门禁 | — |
 | PLAN | L2 | approved | 2026-09-28 | pipeline | 装户侧 derivers 动态载入 | — |
 | PLAN | L1 | approved | 2026-09-28 | pipeline | 结论文档断言强于实际的窄修与纪律固化 | — |
 | PLAN | L2 | approved | 2026-09-28 | pipeline | 量化断言指标签名机器门 | — |
