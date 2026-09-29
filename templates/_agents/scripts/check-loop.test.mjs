@@ -1793,5 +1793,97 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   rmfix(T);
 }
 
+// ---- 检查 18：委派台账对账 [warning]，退出码仍为 0 ----
+{
+  const T = mkfix();
+  const gap = '2026-09-12-gap.md';
+  w(T, `workflow/intents/${gap}`, INTENT('gap', '状态: done\n级别: L2\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
+  w(T, `workflow/specs/${gap}`, SPEC('gap', '状态: approved\n级别: L2\n日期: 2026-09-12'));
+  w(T, `workflow/plans/${gap}`, PLAN('gap', '状态: approved\n级别: L2\n日期: 2026-09-12'));
+  w(T, 'workflow/intents/2026-09-12-low.md', INTENT('low', '状态: done\n级别: L1\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
+  w(T, 'workflow/plans/2026-09-12-low.md', PLAN('low', '状态: done\n级别: L1\n日期: 2026-09-12'));
+  w(T, 'workflow/intents/2026-09-12-stay.md', INTENT('stay', '状态: approved\n级别: L2\n日期: 2026-09-12'));
+  w(T, 'workflow/specs/2026-09-12-stay.md', SPEC('stay', '状态: approved\n级别: L2\n日期: 2026-09-12'));
+  w(T, 'workflow/plans/2026-09-12-stay.md', PLAN('stay', '状态: approved\n级别: L2\n日期: 2026-09-12'));
+  const ledgerOf = (r) => outOf(r).split('\n').filter((l) => l.includes('委派台账'));
+  let r = run(T);
+  let lines = ledgerOf(r);
+  check('检查18 委派表不存在：L2 done 警告且 exit 0；L1 done 与 L2 approved 不警告',
+    r.status === 0
+      && lines.some((l) => l.includes(`intents/${gap}`) && l.includes('2026-09-12'))
+      && lines.every((l) => !l.includes('low.md') && !l.includes('stay.md')),
+    `exit=${r.status}\n${outOf(r)}`);
+
+  const head = '## 委派结果\n\n| 日期 | 被委派方 | 任务一句话 | 结果 | 备注 |\n|------|----------|------------|------|------|\n';
+  w(T, 'workflow/delegations.md', `${head}| 2026-09-11 | x | y | 一次通过 | ${gap} |\n`);
+  r = run(T);
+  check('检查18 行日期早于文档日期：警告仍在',
+    r.status === 0 && ledgerOf(r).some((l) => l.includes(`intents/${gap}`)),
+    `exit=${r.status}\n${outOf(r)}`);
+
+  w(T, 'workflow/delegations.md', `${head}| 2026-09-12 | x | y | 一次通过 | 2026-09-12-gap |\n`);
+  r = run(T);
+  check('检查18 只有去掉扩展名的主题名：警告仍在',
+    r.status === 0 && ledgerOf(r).some((l) => l.includes(`intents/${gap}`)),
+    `exit=${r.status}\n${outOf(r)}`);
+
+  w(T, 'workflow/delegations.md', `${head}\n## 自做任务结果\n\n| 日期 | 任务一句话 | 结果 | 备注 |\n|------|------------|------|------|\n| 2026-09-12 | x | 一次通过 | ${gap} |\n`);
+  r = run(T);
+  check('检查18 文件名只在自做任务结果：警告仍在',
+    r.status === 0 && ledgerOf(r).some((l) => l.includes(`intents/${gap}`)),
+    `exit=${r.status}\n${outOf(r)}`);
+
+  w(T, 'workflow/delegations.md', `${head}| 2026-09-12 | x | y | 一次通过 | ${gap} |\n`);
+  r = run(T);
+  lines = ledgerOf(r);
+  check('检查18 补上不早于文档日期且含文件名的一行：该警告消失',
+    r.status === 0 && !lines.some((l) => l.includes(gap)),
+    `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+{
+  const T = mkfix();
+  const body = 三件套(false);
+  w(T, 'workflow/incidents/2026-09-12-closed.md', `---\n状态: closed\n级别: L2\n发现: 2026-09-12\n---\n# INCIDENT — closed\n\n${body}`);
+  w(T, 'workflow/specs/2026-09-12-closed.md', SPEC('closed', '状态: approved\n级别: L2\n日期: 2026-09-12'));
+  w(T, 'workflow/plans/2026-09-12-closed.md', PLAN('closed', '状态: approved\n级别: L2\n日期: 2026-09-12'));
+  w(T, 'workflow/incidents/2026-09-12-l1c.md', `---\n状态: closed\n级别: L1\n发现: 2026-09-12\n---\n# INCIDENT — l1c\n\n${body}`);
+  w(T, 'workflow/plans/2026-09-12-l1c.md', PLAN('l1c', '状态: approved\n级别: L1\n日期: 2026-09-12'));
+  w(T, 'workflow/incidents/2026-09-12-open.md', `---\n状态: open\n级别: L2\n发现: 2026-09-12\n---\n# INCIDENT — open\n\n${body}`);
+  w(T, 'workflow/specs/2026-09-12-open.md', SPEC('open', '状态: approved\n级别: L2\n日期: 2026-09-12'));
+  w(T, 'workflow/plans/2026-09-12-open.md', PLAN('open', '状态: approved\n级别: L2\n日期: 2026-09-12'));
+  const r = run(T);
+  const lines = outOf(r).split('\n').filter((l) => l.includes('委派台账'));
+  check('检查18 L2 closed 出警告且 exit 0；L1 closed 与 L2 open 不出',
+    r.status === 0
+      && lines.some((l) => l.includes('incidents/2026-09-12-closed.md'))
+      && lines.every((l) => !l.includes('l1c.md') && !l.includes('open.md')),
+    `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+{
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-12-nodate.md', INTENT('nodate', '状态: done\n级别: L2'));
+  w(T, 'workflow/specs/2026-09-12-nodate.md', SPEC('nodate', '状态: approved\n级别: L2'));
+  w(T, 'workflow/plans/2026-09-12-nodate.md', PLAN('nodate', '状态: approved\n级别: L2'));
+  const r = run(T);
+  check('检查18 范围内但缺日期：不警告',
+    r.status === 0 && !outOf(r).includes('委派台账'),
+    `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+{
+  const T = mkfix();
+  w(T, '.agents/kit.json', '{"audit":false,"policyVersion":1}\n');
+  w(T, 'workflow/intents/2026-09-12-quiet.md', INTENT('quiet', '状态: done\n级别: L2\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
+  w(T, 'workflow/specs/2026-09-12-quiet.md', SPEC('quiet', '状态: done\n级别: L2\n日期: 2026-09-12'));
+  w(T, 'workflow/plans/2026-09-12-quiet.md', PLAN('quiet', '状态: done\n级别: L2\n日期: 2026-09-12'));
+  const r = run(T);
+  check('检查18 audit false：委派台账不输出且 exit 0',
+    r.status === 0 && !outOf(r).includes('委派台账'),
+    `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

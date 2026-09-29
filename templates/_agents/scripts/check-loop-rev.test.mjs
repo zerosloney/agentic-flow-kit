@@ -230,5 +230,70 @@ try {
   }
 }
 
+// 委派表随 ROOT 读：--rev 看不到工作区后补的行。
+{
+  const repo = fs.mkdtempSync(path.join(os.tmpdir(), 'ck-rev-del-'));
+  try {
+    gitRun(repo, ['init', '-q']);
+    gitRun(repo, ['config', 'user.email', 't@example.com']);
+    gitRun(repo, ['config', 'user.name', 't']);
+    fs.mkdirSync(path.join(repo, '.agents'), { recursive: true });
+    fs.copyFileSync(ENUMS, path.join(repo, '.agents', 'workflow-enums.txt'));
+    for (const sub of ['intents', 'specs', 'plans']) fs.mkdirSync(path.join(repo, 'workflow', sub), { recursive: true });
+    const name = '2026-09-12-gap.md';
+    fs.writeFileSync(path.join(repo, 'workflow', 'intents', name), `---
+状态: done
+级别: L2
+日期: 2026-09-12
+---
+# INTENT — gap
+
+## 验收标准（可测试）
+
+- [x] 用例通过（证据:fixture）
+`);
+    fs.writeFileSync(path.join(repo, 'workflow', 'specs', name), `---
+状态: approved
+级别: L2
+日期: 2026-09-12
+---
+# SPEC — gap
+`);
+    fs.writeFileSync(path.join(repo, 'workflow', 'plans', name), `---
+状态: approved
+级别: L2
+日期: 2026-09-12
+---
+# PLAN — gap
+`);
+    gitRun(repo, ['add', '--', '.']);
+    gitRun(repo, ['commit', '-q', '-m', 'gap']);
+    const sha = gitRun(repo, ['rev-parse', 'HEAD']);
+    fs.writeFileSync(path.join(repo, 'workflow', 'delegations.md'), `## 委派结果
+
+| 日期 | 被委派方 | 任务一句话 | 结果 | 备注 |
+|------|----------|------------|------|------|
+| 2026-09-12 | x | y | 一次通过 | ${name} |
+`);
+    const atOld = loop(repo, ['--rev', sha]);
+    check('委派行只在工作区：--rev 旧提交仍输出委派台账',
+      outOf(atOld).includes('委派台账') && outOf(atOld).includes(`intents/${name}`),
+      outOf(atOld));
+    const dirty = loop(repo, []);
+    check('同一工作区不带 --rev：后补的委派行消掉警告',
+      dirty.status === 0 && !outOf(dirty).includes('委派台账'),
+      outOf(dirty));
+  } catch (e) {
+    check('委派 --rev 仓库准备', false, e.stack || e.message);
+  } finally {
+    const listed = spawnSync(git, ['worktree', 'list', '--porcelain'], { cwd: repo, encoding: 'utf8' });
+    for (const line of (listed.stdout || '').split('\n')) {
+      const m = line.startsWith('worktree ') ? line.slice(9).trim() : '';
+      if (m && path.resolve(m) !== path.resolve(repo)) spawnSync(git, ['worktree', 'remove', '--force', m], { cwd: repo });
+    }
+    fs.rmSync(repo, { recursive: true, force: true });
+  }
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

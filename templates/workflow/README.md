@@ -55,6 +55,8 @@
 
 **发版草稿**：最近一次改动 `package.json` 的 `version` 的那次提交里，当时已经是 draft 或 approved 的 intent、spec、plan，若被扫描的树上仍是 draft 或 approved，则阻断。当时已是 draft 的不看版本锚。当时已是 approved 的，只在发版版本大于 `policy.mjs` 的 `check17UnclosedAfter` 时阻断；版本 1 没有该键。不带 `--rev` 时现在的状态读工作区，带 `--rev` 时读被推送的那棵树。那次提交之后新建的文件不在范围内。状态为 open 的 incident 不在此列。
 
+**委派台账**：L2 或 L3 的 intent、spec、plan 状态为 done，或同级别 incident 状态为 fixed 或 closed 时，若 `workflow/delegations.md` 的「委派结果」表里没有日期不早于该文档日期、且含该文件名（带 `.md`）的一行，check-loop 打出警告。incident 的日期取 frontmatter「发现」。`audit: false` 时这条警告与其他卫生警告一起被吞掉。退出码仍由阻断项决定。
+
 ## 闭环规则
 
 1. L1 以上新需求始于已确认的 intent；L1 以上修复始于已确认的 incident 草稿（作为 intent 等价入口）

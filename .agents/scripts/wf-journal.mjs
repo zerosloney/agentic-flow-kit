@@ -10,7 +10,7 @@
 //   node .agents/scripts/wf-journal.mjs add --wf <编排名> --stage <id> --status <pass|fail|blocked>
 //        [--form role|step|gate|human] [--attempt N] [--note <文本>] [--run <runId>] [--new-run]
 //        [--journal <文件>]（默认 .agents/cache/orchestration-runs.jsonl，按 cwd）
-//   node .agents/scripts/wf-journal.mjs status --wf <编排名> [--run <runId>] [--journal <文件>] [--wf-root <目录>]
+//   node .agents/scripts/wf-journal.mjs status --wf <编排名> [--run <runId>] [--journal <文件>] [--wf-root <目录>] [--delegations <文件>]
 // 测试：node templates/_agents/scripts/wf-journal.test.mjs（fixture + 真实仓库场景）
 import fs from 'node:fs';
 import path from 'node:path';
@@ -151,8 +151,77 @@ if (isMain) {
     console.log(`  ▶ 就绪（${plan.ready.length}）：${plan.ready.map((s) => (s.retry ? `${s.id}（重试就绪×${s.retry}）` : s.id)).join('、') || '无'}`);
     console.log(`  ⏸ 待定（${plan.pending.length}）：${plan.pending.map((s) => s.id + (s.depBlocked ? '（依赖中止）' : '')).join('、') || '无'}`);
     console.log(`  ⛔ 中止（${plan.blocked.length}）：${plan.blocked.map((s) => `${s.id}${s.note ? `（${s.note}）` : ''}`).join('、') || '无'}`);
+    const wfLines = fs.readFileSync(wfFile, 'utf8').split(/\r?\n/);
+    const gaps = unmatchedPasses({
+      stages, state, wfLines,
+      delegationsText: readDelegationsText(typeof a.delegations === 'string' ? a.delegations : null),
+    });
+    if (gaps.length) console.log(`  委派台账未记录（${gaps.length}）：${gaps.join('、')}`);
     process.exit(0);
   }
   fail(`未知命令：${a.cmd ?? ''}（add | status，用法见文件头注释）`);
 }
-export default { replayRun, planStages, latestRun, readJournalLines };
+function readDelegationsText(file) {
+  const p = file || path.join(process.cwd(), 'workflow', 'delegations.md');
+  try { return fs.readFileSync(p, 'utf8'); } catch { return ''; }
+}
+
+function delegationSectionRows(text) {
+  const lines = String(text || '').split(/\r?\n/);
+  let inSec = false;
+  const rows = [];
+  for (const line of lines) {
+    if (/^##\s+/.test(line)) {
+      if (inSec) break;
+      if (/^##\s+委派结果\s*$/.test(line)) inSec = true;
+      continue;
+    }
+    if (!inSec || !/^\s*\|/.test(line)) continue;
+    const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+    if (!cells.length || cells.every((c) => /^[-: ]*$/.test(c))) continue;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(cells[0])) continue;
+    rows.push({ date: cells[0], line });
+  }
+  return rows;
+}
+
+function mdBasenames(text) {
+  const out = [];
+  const re = /[^\s|`]+?\.md/g;
+  let m;
+  while ((m = re.exec(String(text || '')))) {
+    const base = m[0].replace(/\\/g, '/').split('/').pop();
+    if (base && !out.includes(base)) out.push(base);
+  }
+  return out;
+}
+
+function idInRow(id, line) {
+  const escaped = String(id).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^A-Za-z0-9_-])${escaped}([^A-Za-z0-9_-]|$)`).test(line);
+}
+
+// unmatchedPasses：末次 pass 且 role 为 implementer 或 independent-reviewer、
+// 委派结果表没有与 pass 的 UTC 日相同、且含阶段 id 或阶段上 .md 文件名的一行。
+export function unmatchedPasses({ stages, state, wfLines, delegationsText }) {
+  const rows = delegationSectionRows(delegationsText);
+  const gaps = [];
+  for (const s of stages) {
+    if (s.role !== 'implementer' && s.role !== 'independent-reviewer') continue;
+    const st = state[s.id];
+    if (st?.status !== 'pass') continue;
+    const day = String(st.ts || '').slice(0, 10);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(day)) continue;
+    const raw = wfLines[(s._line || 0) - 1] || '';
+    const names = [...mdBasenames(s.files), ...mdBasenames(st.note), ...mdBasenames(raw)];
+    const hit = rows.some((r) => {
+      if (r.date !== day) return false;
+      if (idInRow(s.id, r.line)) return true;
+      return names.some((name) => r.line.includes(name));
+    });
+    if (!hit) gaps.push(s.id);
+  }
+  return gaps;
+}
+
+export default { replayRun, planStages, latestRun, readJournalLines, unmatchedPasses };

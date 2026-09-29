@@ -146,5 +146,70 @@ const STAGES = parseStages(`| id | after | role | step | task | files | accept |
   }
 }
 
+// ---- 委派台账只读对账（status；不改 add 必填）----
+{
+  const missing = spawnSync(process.execPath, [JOURNAL_CLI, 'add', '--stage', 'a', '--status', 'pass'], { encoding: 'utf8' });
+  check('add 缺 --wf 仍失败', missing.status !== 0 && /必填/.test(missing.stderr || ''), missing.stderr || missing.stdout);
+
+  const wfOf = (id, role, files = '—') =>
+    '---\nname: demo\ndescription: d\n---\n\n'
+    + '| id | after | role | step | task | files | accept | gate | retries |\n'
+    + '|----|-------|------|------|------|-------|--------|------|---------|\n'
+    + `| ${id} | — | ${role} | — | — | ${files} | — | npm test | |\n`;
+  const row = (date, note) =>
+    `## 委派结果\n\n| 日期 | 被委派方 | 任务一句话 | 结果 | 备注 |\n|------|----------|------------|------|------|\n| ${date} | x | y | 一次通过 | ${note} |\n`;
+  const passLine = (stage, over = {}) => JSON.stringify({
+    ts: '2026-09-26T10:00:00Z', run: 'demo@1', wf: 'demo', stage, status: 'pass', attempt: 1, ...over,
+  }) + '\n';
+  const statusOf = ({ body, journal, delegations }) => {
+    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'wfj-del-'));
+    const wfRoot = path.join(tmp, 'workflows');
+    fs.mkdirSync(wfRoot);
+    fs.writeFileSync(path.join(wfRoot, 'demo.md'), body);
+    const j = path.join(tmp, 'j.jsonl');
+    if (journal != null) fs.writeFileSync(j, journal);
+    const d = path.join(tmp, 'delegations.md');
+    const args = ['status', '--wf', 'demo', '--wf-root', wfRoot, '--journal', j, '--delegations', d];
+    if (delegations != null) fs.writeFileSync(d, delegations);
+    const r = spawnSync(process.execPath, [JOURNAL_CLI, ...args], { encoding: 'utf8' });
+    fs.rmSync(tmp, { recursive: true, force: true });
+    return r;
+  };
+  const listed = (r, id) => r.status === 0 && (r.stdout || '').includes('委派台账未记录') && (r.stdout || '').includes(id);
+
+  let r = statusOf({ body: wfOf('build', 'implementer'), journal: passLine('build'), delegations: null });
+  check('委派表为空且 role=implementer 的 pass：列出阶段 id', listed(r, 'build'), r.stdout);
+
+  r = statusOf({ body: wfOf('review', 'independent-reviewer'), journal: passLine('review'), delegations: '' });
+  check('role=independent-reviewer 的 pass：同样列出', listed(r, 'review'), r.stdout);
+
+  r = statusOf({ body: wfOf('ui', 'ui-verifier'), journal: passLine('ui'), delegations: '' });
+  check('role=ui-verifier：不打印委派台账未记录', r.status === 0 && !(r.stdout || '').includes('委派台账未记录'), r.stdout);
+
+  r = statusOf({ body: wfOf('build', 'implementer'), journal: passLine('build'), delegations: row('2026-09-26', 'build') });
+  check('同日行含阶段 id：该阶段不列出', r.status === 0 && !(r.stdout || '').includes('委派台账未记录'), r.stdout);
+
+  r = statusOf({
+    body: wfOf('impl', 'implementer', 'workflow/intents/2026-09-26-foo.md'),
+    journal: passLine('impl'),
+    delegations: row('2026-09-26', '2026-09-26-foo.md'),
+  });
+  check('同日行含 files 里的 .md 文件名：该阶段不列出', r.status === 0 && !(r.stdout || '').includes('委派台账未记录'), r.stdout);
+
+  r = statusOf({ body: wfOf('build', 'implementer'), journal: passLine('build'), delegations: row('2026-09-25', 'build') });
+  check('行日期与 pass 的 UTC 日不同：该阶段仍列出', listed(r, 'build'), r.stdout);
+
+  r = statusOf({ body: wfOf('build', 'implementer'), journal: passLine('build'), delegations: row('2026-09-26', 'rebuild') });
+  check('阶段 id 只是更长词的一段：仍列出', listed(r, 'build'), r.stdout);
+
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'wfj-norun-'));
+  const wfRoot = path.join(tmp, 'workflows');
+  fs.mkdirSync(wfRoot);
+  fs.writeFileSync(path.join(wfRoot, 'demo.md'), wfOf('build', 'implementer'));
+  r = spawnSync(process.execPath, [JOURNAL_CLI, 'status', '--wf', 'demo', '--wf-root', wfRoot, '--journal', path.join(tmp, 'none.jsonl')], { encoding: 'utf8' });
+  check('无 journal run：不打印委派台账未记录', r.status === 0 && /就绪/.test(r.stdout || '') && !(r.stdout || '').includes('委派台账未记录'), r.stdout);
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

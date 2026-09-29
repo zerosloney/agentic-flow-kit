@@ -106,11 +106,11 @@
     },
     {
       "rel": ".agents/scripts/check-loop-rev.test.mjs",
-      "sha256": "528ff6e06dbf4bff359f9184ae1d3e52ade3ad3efa36e2bd58e7b2996a4301f2"
+      "sha256": "40d3b7a662fee2fac193caf39b09d5024e1b0138b2d86b7b9913a1a865be4f90"
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "bfe68e5d0a7d3454d99188652b92eb4992fb7b80f311ea02f772f1d5cdb30087"
+      "sha256": "55151a50744b07e5184c4fcc070e25bad772a060f2b16c74f67db4cac5330920"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -118,7 +118,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "62c53f04e3ae1d64b5de366915d709128514e3c4b6f45a9c8d0d9826d14ba84f"
+      "sha256": "79a8109d8def80315130baf700e6fa149dad3407646bfbc203185b625ac5ec81"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -170,7 +170,7 @@
     },
     {
       "rel": ".agents/scripts/gate-checklist.mjs",
-      "sha256": "50cc8621a70a4a05ebfd9dd9abf8cedaf03901f976ec0d70cb63bae609cc67a5"
+      "sha256": "6be969cf383ab39dc941473e0fe39b6cd9fbe6148c95a4a69c88d513506421f6"
     },
     {
       "rel": ".agents/scripts/gate-checklist.test.mjs",
@@ -246,11 +246,11 @@
     },
     {
       "rel": ".agents/scripts/wf-journal.mjs",
-      "sha256": "27b2a6f54a8c44627033c2bf863a69831d22bca15424221f2da7e08874b46329"
+      "sha256": "b14620e5c9f9c930f4a916084543ce190a135216f11bc4150dcb246c8cdb0e83"
     },
     {
       "rel": ".agents/scripts/wf-journal.test.mjs",
-      "sha256": "de5f0015684b755019c0563c444389ef48038b4dab3be537d67d0a92a8251552"
+      "sha256": "d21f3f3ec5d33cbf7d45a4f20e7493c40223f0c946d1574e7d7b5ceaaf587aad"
     },
     {
       "rel": ".agents/scripts/wiki-search.mjs",

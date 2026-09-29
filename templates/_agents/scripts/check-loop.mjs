@@ -66,6 +66,7 @@
 //      quote 字段职责冲突(对质凭据 vs 并录指纹,现归还单一职责)。无 batch 的历史行静默跳过
 //      (无判定依据的行不产出不可消除噪声——沿 audit-gate-hardening P3 教训)
 //  17. 发版提交树上仍未收口的 intent/spec/plan [hard-block]
+//  18. 委派台账对账 [warning]
 // 16. 量化断言指标签名对账 [warning](2026-09-28 起;登记表单源 .agents/metric-claims.txt):
 // 判据 = 活跃态文档(draft/approved/open)中的 `{{指标名}}` 签名须替换为实时值,留签名=未回填=warning。
 // **只查显式签名、不全文扫数字**(据实说明):本仓活跃文档「N 行/N 条/N 份」类表述数十处,绝大多数是
@@ -838,6 +839,50 @@ runCheck16({ ROOT, ENUMS, docFiles, fmGet, inSet, isTracked, linesOf, readdirOrN
       }
     }
   }
+}
+
+// --- 18. 委派台账对账 [warning] ---
+// L2/L3 的 intent、spec、plan 状态为 done，或同级别 incident 状态为 fixed 或 closed 时，
+// 「委派结果」表没有日期不早于文档日期、且含该 .md 文件名的一行，则警告。
+// 缺级别、缺日期、以及其他状态不警告。audit:false 时 warnings.push 已被换成空函数。
+{
+  const rows = delegationResultRows(path.join(ROOT, WF, 'delegations.md'));
+  for (const sub of ['intents', 'specs', 'plans', 'incidents']) {
+    for (const abs of docFiles(sub)) {
+      const lvl = fmGet(abs, '级别');
+      if (lvl !== 'L2' && lvl !== 'L3') continue;
+      const st = fmGet(abs, '状态');
+      const inScope = sub === 'incidents' ? (st === 'fixed' || st === 'closed') : st === 'done';
+      if (!inScope) continue;
+      const date = sub === 'incidents' ? (fmGet(abs, '发现') || fmGet(abs, '日期')) : fmGet(abs, '日期');
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+      const base = path.basename(abs);
+      if (rows.some((r) => r.date >= date && r.line.includes(base))) continue;
+      const rel = path.relative(ROOT, abs).split(path.sep).join('/');
+      warnings.push(`- [WARN 委派台账] ${rel} 在 ${date} 及之后的委派结果表中没有该文件名`);
+    }
+  }
+}
+
+function delegationResultRows(file) {
+  let text = '';
+  try { text = fs.readFileSync(file, 'utf8'); } catch { return []; }
+  const lines = text.split(/\r?\n/);
+  let inSec = false;
+  const rows = [];
+  for (const line of lines) {
+    if (/^##\s+/.test(line)) {
+      if (inSec) break;
+      if (/^##\s+委派结果\s*$/.test(line)) inSec = true;
+      continue;
+    }
+    if (!inSec || !/^\s*\|/.test(line)) continue;
+    const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+    if (!cells.length || cells.every((c) => /^[-: ]*$/.test(c))) continue;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(cells[0])) continue;
+    rows.push({ date: cells[0], line });
+  }
+  return rows;
 }
 
 function versionGreater(a, b) {
