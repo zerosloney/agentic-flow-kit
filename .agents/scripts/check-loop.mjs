@@ -753,9 +753,10 @@ runCheck16({ ROOT, ENUMS, docFiles, fmGet, inSet, isTracked, linesOf, readdirOrN
 
 // --- 17. 发版提交树上仍为 draft 的 intent/spec/plan [hard-block] ---
 // 最近一次 package.json version 发生变化的提交里，当时状态已是 draft 的 intent/spec/plan，
-// 工作区里若仍是 draft 则阻断。该提交之后新建的草稿不在范围内。open 的 incident 不在此列。
+// 工作区里若仍是 draft 则阻断。沿 package.json 的全部历史查找，不设次数上限。
+// 该提交之后新建的草稿不在范围内。open 的 incident 不在此列。
 {
-  const log = gitOut(['log', '-n', '40', '--format=%H', '--', 'package.json']);
+  const log = gitOut(['log', '--format=%H', '--', 'package.json']);
   if (log) {
     let release = null;
     let releaseVer = '';

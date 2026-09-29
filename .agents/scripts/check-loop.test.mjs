@@ -1676,6 +1676,21 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   check('检查17 发版之后新建的 draft 不拦', r.status === 0 && !outOf(r).includes('发版草稿'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
 }
+{
+  const T = mkfix();
+  gitInit(T);
+  w(T, 'package.json', '{"name":"t","version":"0.1.0"}\n');
+  w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级别: L1\n日期: 2026-09-12'));
+  w(T, 'workflow/plans/2026-09-12-deep.md', PLAN('deep', '状态: draft\n级别: L1'));
+  gitCommitAll(T, 'v0.1.0');
+  for (let i = 1; i <= 41; i++) {
+    w(T, 'package.json', `{"name":"t","version":"0.1.0","n":${i}}\n`);
+    gitCommitAll(T, `touch ${i}`);
+  }
+  const r = run(T, { git: true });
+  check('检查17 版本变更早于 40 次 package.json 触碰仍阻断', r.status === 1 && outOf(r).includes('发版草稿'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

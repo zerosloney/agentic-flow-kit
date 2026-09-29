@@ -106,7 +106,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "c5fdad4994ef4e07cb68c56cb383017ff6122297c76f8ba7811878b338fce074"
+      "sha256": "0c82577203c32259e3f4b1ffe92ae207d7c1e8d12b9126abe4071b75688bb057"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -114,7 +114,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "5184c1d65bf52a12268664303dbfeb0cb0e206c4de32cb06fed5709adb500860"
+      "sha256": "2e0afadfa3110d3e2cb2ad4baf36c5392add924cebeb9b794efe4555b75d0361"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -372,7 +372,7 @@
     },
     {
       "rel": "AGENTS.md",
-      "sha256": "c5e5a4a47378a4c08a6ebdf412508932d8c10f9f295d136d4c7fdbdc924bd679"
+      "sha256": "186f7cec0fc6ebbb77baa97872cfa3f9e92a93f2e892eb425b4f240f2463db8a"
     },
     {
       "rel": "wiki/知识沉淀总览.html",

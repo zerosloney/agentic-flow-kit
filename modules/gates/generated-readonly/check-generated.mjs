@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // 暂存 diff 不得改写 GENERATED:BEGIN / GENERATED:END 之间的行。
+// 区间按索引里的文件计算（git show :path），不读工作区。
 // 生成器重写该区域时设 FLOW_KIT_ALLOW_GENERATED=1。
 import { spawnSync } from 'node:child_process';
-import fs from 'node:fs';
 
 if (process.env.FLOW_KIT_ALLOW_GENERATED === '1') process.exit(0);
 
@@ -40,8 +40,13 @@ for (const line of String(diff.stdout).split(/\n/)) {
 let bad = 0;
 for (const rel of listed.stdout.split(/\n/).map((s) => s.trim()).filter(Boolean)) {
   const norm = rel.split('\\').join('/');
-  let text = '';
-  try { text = fs.readFileSync(rel, 'utf8'); } catch { continue; }
+  const shown = spawnSync(git, ['show', `:${norm}`], { encoding: 'utf8' });
+  if (shown.status !== 0) {
+    console.error(`${norm}: 读不到暂存内容`);
+    bad += 1;
+    continue;
+  }
+  const text = shown.stdout;
   const ranges = rangesOf(text);
   if (!ranges.length) continue;
   for (const [start, len] of files.get(norm) || []) {

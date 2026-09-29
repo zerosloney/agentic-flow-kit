@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // 暂存区内 src/ 下的脚本不得引用 tests/、test/ 或 __tests__/。
+// 正文只读索引（git show :path），不读工作区。
 import { spawnSync } from 'node:child_process';
-import fs from 'node:fs';
 
 const git = process.platform === 'win32' ? 'git.exe' : 'git';
 const listed = spawnSync(git, ['diff', '--cached', '--name-only', '--diff-filter=ACMR'], { encoding: 'utf8' });
@@ -14,9 +14,13 @@ let bad = 0;
 for (const rel of listed.stdout.split(/\n/).map((s) => s.trim()).filter(Boolean)) {
   const norm = rel.split('\\').join('/');
   if (!norm.startsWith('src/') || !/\.(?:[cm]?js|jsx|tsx?)$/.test(norm)) continue;
-  let text = '';
-  try { text = fs.readFileSync(rel, 'utf8'); } catch { continue; }
-  text.split(/\n/).forEach((line, i) => {
+  const shown = spawnSync(git, ['show', `:${norm}`], { encoding: 'utf8' });
+  if (shown.status !== 0) {
+    console.error(`${norm}: 读不到暂存内容`);
+    bad += 1;
+    continue;
+  }
+  shown.stdout.split(/\n/).forEach((line, i) => {
     if (!re.test(line)) return;
     console.error(`${norm}:${i + 1}: src 不得引用 tests/、test/ 或 __tests__/`);
     bad += 1;

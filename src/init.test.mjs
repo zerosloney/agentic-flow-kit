@@ -4,7 +4,8 @@
 // 断言：①ts/js 别名归一 node；②序号/名称/混输/全角逗号/空白分隔解析正确（去重保序）；
 //       ③非法输入返回 null（就地重问信号）；④空输入回默认（EOF/直接回车安全回退）；⑥装户面含 runner/workflows。
 // 用法：node src/init.test.mjs
-import { normalizeStack, parseChoices, hasAgentsSkeleton, mergeAgents } from './init.mjs';
+import { normalizeStack, parseChoices, hasAgentsSkeleton, mergeAgents, menuMark } from './init.mjs';
+import { HOSTS as HOST_REG } from './profiles.mjs';
 import { renderTree, scriptTrusted, listTree } from './render.mjs';
 import { sha256 } from './render.mjs';
 import fs from 'node:fs';
@@ -38,6 +39,11 @@ check('栈别名 ts + map 归一 → node', eq(parseChoices('ts', STACKS, 'none'
 
 // ---- ③ 非法输入 → null（就地重问） ----
 check('越界序号 9 → null', parseChoices('9', HOSTS, 'zcode') === null);
+{
+  const realHosts = Object.keys(HOST_REG);
+  const n = String(realHosts.length);
+  check('菜单号覆盖全部宿主，序号 7 选中最后一项', menuMark(realHosts.length - 1) === n && eq(parseChoices(n, realHosts, 'zcode'), [realHosts[realHosts.length - 1]]));
+}
 check('未知名称 bad → null', parseChoices('zcode,bad', HOSTS, 'zcode') === null);
 check('栈别名未传 map 不归一（ts → null）', parseChoices('ts', STACKS, 'none') === null);
 

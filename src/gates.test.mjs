@@ -50,6 +50,22 @@ function run(script, dir, env = {}) {
 }
 {
   const dir = repo();
+  stage(dir, 'src/app.mjs', "import { x } from '../tests/helper.mjs';\n");
+  fs.writeFileSync(path.join(dir, 'src/app.mjs'), "import { x } from './util.mjs';\n");
+  const bad = run('modules/gates/node-layer/check-node-layer.mjs', dir);
+  check('node-layer 暂存违规、工作区已改回 → exit 1', bad.status === 1 && bad.stderr.includes('src/app.mjs'), bad.stderr);
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+{
+  const dir = repo();
+  stage(dir, 'src/app.mjs', "import { x } from './util.mjs';\n");
+  fs.writeFileSync(path.join(dir, 'src/app.mjs'), "import { x } from '../tests/helper.mjs';\n");
+  const ok = run('modules/gates/node-layer/check-node-layer.mjs', dir);
+  check('node-layer 暂存干净、工作区违规 → exit 0', ok.status === 0, ok.stderr);
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+{
+  const dir = repo();
   stage(dir, 'pkg/mod.py', 'from tests.unit import helper\n');
   const bad = run('modules/gates/py-import/check-py-import.mjs', dir);
   check('py-import 业务文件 import tests → exit 1', bad.status === 1 && bad.stderr.includes('pkg/mod.py'), bad.stderr);
@@ -64,6 +80,22 @@ function run(script, dir, env = {}) {
 }
 {
   const dir = repo();
+  stage(dir, 'pkg/mod.py', 'from tests.unit import helper\n');
+  fs.writeFileSync(path.join(dir, 'pkg/mod.py'), 'import pkg.local\n');
+  const bad = run('modules/gates/py-import/check-py-import.mjs', dir);
+  check('py-import 暂存违规、工作区已改回 → exit 1', bad.status === 1 && bad.stderr.includes('pkg/mod.py'), bad.stderr);
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+{
+  const dir = repo();
+  stage(dir, 'pkg/mod.py', 'import pkg.local\n');
+  fs.writeFileSync(path.join(dir, 'pkg/mod.py'), 'from tests.unit import helper\n');
+  const ok = run('modules/gates/py-import/check-py-import.mjs', dir);
+  check('py-import 暂存干净、工作区违规 → exit 0', ok.status === 0, ok.stderr);
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+{
+  const dir = repo();
   const body = 'before\n<!-- GENERATED:BEGIN -->\nsecret\n<!-- GENERATED:END -->\nafter\n';
   stage(dir, 'doc.md', body);
   spawnSync(git, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'base'], { cwd: dir });
@@ -73,6 +105,20 @@ function run(script, dir, env = {}) {
   check('generated 区被改 → exit 1', bad.status === 1 && bad.stderr.includes('GENERATED'), bad.stderr);
   const allowed = run('modules/gates/generated-readonly/check-generated.mjs', dir, { FLOW_KIT_ALLOW_GENERATED: '1' });
   check('FLOW_KIT_ALLOW_GENERATED=1 → exit 0', allowed.status === 0, allowed.stderr);
+  fs.writeFileSync(path.join(dir, 'doc.md'), 'before\nafter\n');
+  const still = run('modules/gates/generated-readonly/check-generated.mjs', dir);
+  check('generated 暂存改区、工作区删掉标记 → exit 1', still.status === 1 && still.stderr.includes('GENERATED'), still.stderr);
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+{
+  const dir = repo();
+  const body = 'before\n<!-- GENERATED:BEGIN -->\nsecret\n<!-- GENERATED:END -->\nafter\n';
+  stage(dir, 'doc.md', body);
+  spawnSync(git, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', 'base'], { cwd: dir });
+  stage(dir, 'doc.md', body.replace('before', 'before2'));
+  fs.writeFileSync(path.join(dir, 'doc.md'), body.replace('secret', 'edited'));
+  const ok = run('modules/gates/generated-readonly/check-generated.mjs', dir);
+  check('generated 暂存改区外、工作区改区内 → exit 0', ok.status === 0, ok.stderr);
   fs.rmSync(dir, { recursive: true, force: true });
 }
 

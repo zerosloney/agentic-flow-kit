@@ -77,6 +77,10 @@ export function hasAgentsSkeleton(text) {
   return String(text || '').includes(SKELETON_MARKER);
 }
 // mergeAgents：原内容在上（尾部空白折叠），空行分隔，含标记的完整骨架在下
+export function menuMark(i) {
+  return String(i + 1);
+}
+
 export function mergeAgents(existing, incoming) {
   const head = String(existing || '').replace(/\s+$/, '');
   const tail = String(incoming || '').trim();
@@ -90,7 +94,7 @@ async function interactive() {
   const hostNames = Object.keys(HOSTS);
   const stackNames = Object.keys(STACKS);
   const stackLabel = (n) => (n === 'node' ? 'node（ts/js）' : n);
-  const menu = (names) => '  ' + names.map((n, i) => dim(`${'①②③④⑤⑥'[i]} ${stackLabel(n)}`)).join(dim('   '));
+  const menu = (names) => '  ' + names.map((n, i) => dim(`${menuMark(i)} ${stackLabel(n)}`)).join(dim('   '));
 
   console.log(bold(cyan('▶ flow-kit init')) + dim(' · AI 闭环工作流 + wiki 知识层脚手架'));
   console.log(dim('  安装到当前目录：.agents/ · .githooks/ · workflow/ · wiki/ · AGENTS.md（已存在的文件保守跳过；AGENTS.md 无工作流骨架时文末追加补齐）'));

@@ -24,7 +24,7 @@
 
 - `.githooks/`（经 `core.hooksPath` 挂载，本地 clone 后执行 `git config core.hooksPath .githooks`）：pre-commit（闭环配对 / wiki 台账 / 规则面预算 / 双源一致性 / managed 台账快检 / 敏感信息扫描与条件构建）、pre-push（闭环断档扫描）、commit-msg、post-commit、pre-merge-commit。
 - **`git commit` / `git merge` / `git push` 三处一律禁 `--no-verify`**——被拦说明产出不合规，按提示修完原路重试。
-- 项目专属门禁挂 `.agents/hooks/local-pre-commit`。
+- 项目专属门禁挂 `.agents/hooks/local-pre-commit`。装户五条硬规则（配对、验收、确认留痕、敏感信息、双源台账）与 `audit` 档见 `workflow/README.md`「硬规则」。
 - 提交遵循 Conventional Commits 中文（feat / fix / docs / style / refactor / perf）；L1+ 入口文档 / spec / plan 随代码同一提交；确认（approved）后立即 `docs(*)` 单独提交留痕。
 - **确认门（2026-09-27 起）**：intent/spec/plan 的 approved/done 与 incident 的 fixed/closed（2026-09-28 起，open→fixed / fixed→closed 两跳、无单跳）唯一入口 = `node .agents/scripts/confirm-doc.mjs <path>`，放弃态走显式 `--to superseded|cancelled`（cancelled 自 draft/approved/open/fixed；superseded 自 approved/done/fixed/closed——四终态同样内容绑定），两形态：① 用户终端亲手运行键入「可以」（TTY，AI 会话内被拒）；② **对话委托代录**——用户在对话内明确确认后，AI 跑 `confirm-doc.mjs <path> --delegated "<用户原话>"` 逐件代录（一次一份，「逐件确认」口径——多份并录被拒），台账如实记 `source: chat-delegated` + 原话供对质，永不伪装 TTY 行（check-loop 15 指纹+台账对账拦截，与 source 无关）。
 
@@ -49,7 +49,7 @@
 
 - **构建 / 测试 / 类型检查命令**（静态门，各阶段命令引用此处口径）：构建 = 无（纯 JS 脚手架包，node 直跑）；测试 = `npm test`（跑全部套件）；类型检查 = 无（纯 JS）
 - **引擎双源纪律（本仓库特有）**：本仓库既是包源又是装户——引擎改动一律改 `templates/`（包源），随后 `node bin/flow-kit.mjs sync` 更新 managed 装副本；owned 文件（AGENTS.md / workflow 模板等）sync 不动，须手动同步装副本（见 incidents/2026-09-25-wf-runtime 复盘）。`.agents/` 直改 managed 文件会被 doctor 台账漂移告警
-- **跨宿主适配层同步（B-b 方案）**：薄适配（`modules/hosts/<h>/{agents,commands}/*.md`）正文 = 权威源（`templates/_agents/{commands,roles}/*.md`）正文段，frontmatter 各自保留宿主特化字段（commands 层文件名 = 宿主命令名，opencode / trae 同用 `wf-` 前缀，单源见 `src/profiles.mjs#HOSTS.commandPrefix`；trae 另有 `name: wf-X`；zcode/omp 各自原描述）；改权威源后跑 `node bin/flow-kit.mjs sync-hosts --apply` 单向同步薄适配正文（frontmatter 不动），详见 `.agents/commands/sync-hosts.md`
+- **跨宿主适配层同步（B-b 方案）**：薄适配正文对齐 `templates/_agents/{commands,roles}`，frontmatter 保留宿主字段。改权威源后跑 `node bin/flow-kit.mjs sync-hosts --apply`。详见 `.agents/commands/sync-hosts.md`。
 - **文档闭环填空工具**：起草 intent / spec / plan 时先跑 `node .agents/scripts/fill-{intent,spec,plan}.mjs` 拿结构化草稿（frontmatter 5 字段 + 7/5/4 节标题 + 模板句），AI 据此填实——机器保证模板与节标题不出错，AI 专注于内容本身；详见 `.agents/commands/plan.md` / `design.md` 嵌入步骤
 - **运行时环境**（端口 / 进程 / 终端差异）：`.agents/notes/runtime-env.md`
 - **目录级规则**：如 `backend/AGENTS.md`、`frontend/AGENTS.md`（如有）——目录级约定不回填本文件
