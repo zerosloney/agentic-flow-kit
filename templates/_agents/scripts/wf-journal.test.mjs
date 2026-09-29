@@ -175,7 +175,8 @@ const STAGES = parseStages(`| id | after | role | step | task | files | accept |
     fs.rmSync(tmp, { recursive: true, force: true });
     return r;
   };
-  const listed = (r, id) => r.status === 0 && (r.stdout || '').includes('委派台账未记录') && (r.stdout || '').includes(id);
+  const listed = (r, id) => r.status === 0
+    && (r.stdout || '').split(/\r?\n/).some((line) => line.trim() === `委派台账未记录（1）：${id}`);
 
   let r = statusOf({ body: wfOf('build', 'implementer'), journal: passLine('build'), delegations: null });
   check('委派表为空且 role=implementer 的 pass：列出阶段 id', listed(r, 'build'), r.stdout);

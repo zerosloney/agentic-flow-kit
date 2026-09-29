@@ -250,7 +250,7 @@
     },
     {
       "rel": ".agents/scripts/wf-journal.test.mjs",
-      "sha256": "d21f3f3ec5d33cbf7d45a4f20e7493c40223f0c946d1574e7d7b5ceaaf587aad"
+      "sha256": "34a5b207b40df04b10437f55248aced8523508db035331bdb3e0facdbb1b6039"
     },
     {
       "rel": ".agents/scripts/wiki-search.mjs",
