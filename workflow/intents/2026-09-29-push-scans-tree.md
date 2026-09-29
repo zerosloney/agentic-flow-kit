@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-29
 模块: pipeline
 备注: 用户 2026-09-29 对话「可以」确认本 intent。开工句是按一个 WP-C 开发包处理。
-确认指纹: 05597bb87402e1eb
+确认指纹: 8c3ea7c7f3b1c1d1
 ---
 # INTENT — push 扫描被推送的那棵树
 
@@ -53,9 +53,9 @@ pre-push 判定的树从「工作区」改为「被推送的 sha」。判据条�
 
 ## 验收标准（可测试）
 
-- [ ] 工作区把已跟踪文档改出配对断裂，被推送 sha 的树没有断裂：按该 sha 扫描退出码 0
-- [ ] 工作区无断裂，被推送 sha 的树有配对断裂：按该 sha 扫描退出码 1
-- [ ] 不带修订参数时，HEAD 提交干净、工作区把已跟踪文档改断：仍报 hard-block
-- [ ] stdin 本地 sha 全 0 的删除行不阻断；一次 push 里另一行的树有断裂则整次失败
-- [ ] `check-loop.test.mjs` 的既有 fixture 用例保持通过
-- [ ] doctor 调用闭环扫描时仍不传修订参数
+- [x] 工作区把已跟踪文档改出配对断裂，被推送 sha 的树没有断裂：按该 sha 扫描退出码 0（证据：`templates/_agents/scripts/check-loop-rev.test.mjs`「同一脏工作区：--rev tip 仍退出 0」；实现 `2841d4d`；`fcf82c7` 后该套件 22/22，`verify.mjs` 退出码 0）
+- [x] 工作区无断裂，被推送 sha 的树有配对断裂：按该 sha 扫描退出码 1（证据：同套件「断档提交：--rev 退出 1」「断档文件不在当前 HEAD：--rev 仍退出 1」；`2841d4d`，后者 `fcf82c7`）
+- [x] 不带修订参数时，HEAD 提交干净、工作区把已跟踪文档改断：仍报 hard-block（证据：同套件「不带 --rev：工作区改断已跟踪文档仍 hard-block」；`2841d4d`）
+- [x] stdin 本地 sha 全 0 的删除行不阻断；一次 push 里另一行的树有断裂则整次失败（证据：同套件「stdin 只有删除行：不阻断」「删除行加断档 sha：整次失败」「stdin 先好后坏：整次失败」；前两条 `2841d4d`，先好后坏 `fcf82c7`）
+- [x] `check-loop.test.mjs` 的既有 fixture 用例保持通过（证据：`fcf82c7` 后 `verify.mjs` 中 `templates/_agents/scripts/check-loop.test.mjs` 129/129，全部套件通过）
+- [x] doctor 调用闭环扫描时仍不传修订参数（证据：同套件「doctor 调用闭环扫描时不传 --rev」，断言 `src/doctor.mjs` 的调用不含 `--rev`；`2841d4d`）
