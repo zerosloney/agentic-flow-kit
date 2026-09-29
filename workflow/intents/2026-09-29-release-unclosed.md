@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-29
 模块: pipeline
 备注: 用户 2026-09-29 对话「可以」确认本 intent。开工句是「WP-D 立项」。
-确认指纹: fac5eb45bd758e35
+确认指纹: 226d5d9ab10d2978
 ---
 # INTENT — 发版树上的未收口文档
 
@@ -60,15 +60,16 @@
 
 ## 验收标准（可测试）
 
-- [ ] 锚之后的发版树上有 approved，目标树仍是 approved：按该树扫描退出码 1
-- [ ] 同一文件在目标树已是 done：退出码 0
-- [ ] 锚之前的发版树即使全是 approved：退出码 0
-- [ ] 发版树上是 draft、目标树已改成 approved：退出码 1
-- [ ] `check-loop.test.mjs` 里「发版树上的 draft 仍为 draft」仍 hard-block；发版之后新建的 draft 仍不拦
-- [ ] `init` 新装的 `kit.json` 中 `policyVersion` 为 2，且 `audit` 仍为 false
-- [ ] 同名 spec 里 0.6.0、0.7.0、0.8.0 的回放列表，与对这三次 version 提交重跑的命中文件一致，且都在锚之前
+- [x] 锚之后的发版树上有 approved，目标树仍是 approved：按该树扫描退出码 1（证据：`templates/_agents/scripts/check-loop.test.mjs`「检查17 锚之后 approved 仍是 approved → hard」，断言含 `version=0.9.0`；实现 `fc1ceff`；`verify.mjs` 退出码 0，该套件 138/138）
+- [x] 同一文件在目标树已是 done：退出码 0（证据：同套件「检查17 同一文件已是 done → 不拦」；`fc1ceff`）
+- [x] 锚之前的发版树即使全是 approved：退出码 0（证据：同套件「检查17 锚之前 approved 仍是 approved → 不拦」，发版版本 `0.8.0`；`fc1ceff`）
+- [x] 发版树上是 draft、目标树已改成 approved：退出码 1（证据：同套件「检查17 发版树上是 draft、现在是 approved → hard」；`fc1ceff`）
+- [x] `check-loop.test.mjs` 里「发版树上的 draft 仍为 draft」仍 hard-block；发版之后新建的 draft 仍不拦（证据：同套件「检查17 发版树上的 draft 仍为 draft → hard」「检查17 发版之后新建的 draft 不拦」；`fc1ceff` 后 138/138）
+- [x] `init` 新装的 `kit.json` 中 `policyVersion` 为 2，且 `audit` 仍为 false（证据：`src/fresh-init.test.mjs`「新装 audit 为 false 且 policyVersion 为 2」；`verify.mjs` 中该套件 4/4；`fc1ceff`）
+- [x] 同名 spec 里 0.6.0、0.7.0、0.8.0 的回放列表，与对这三次 version 提交重跑的命中文件一致，且都在锚之前（证据：2026-09-29 重放 `80042e9`、`0272a1c`、`3df1756`，approved 17/17/13、draft 3/0/0、done 106/103/102，与 spec 回放段一致；三版都不大于 `0.8.0`）
 
 ## 确认与复核
 
 - 确认结果：approved（2026-09-29 用户对话原话「可以」，仅本份）
-- 复核：L2，独立复核留到关单前
+- 复核：L2 独立复核已执行（独立上下文，基准 `894cf8c` → `fc1ceff`）。未发现阻断问题，无 P0/P1/P2。
+- 关单：done（2026-09-29 用户对话原话「可以」，仅本份）
