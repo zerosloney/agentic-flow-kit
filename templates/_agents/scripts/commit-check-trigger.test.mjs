@@ -98,7 +98,8 @@ fs.writeFileSync(path.join(f.root, 'package.json'), JSON.stringify({ name: 't', 
 stage(f.root, 'src/a.js', 'console.log(1)\n');
 r = runHook(f.root);
 check('S6 无 scripts.build → 构建 SKIP、命令不跑、退出 0',
-  r.status === 0 && !ran(f.marks, 'build') && r.out.includes('pkg:scripts.build') && r.out.includes('SKIP'), r.out);
+  r.status === 0 && !ran(f.marks, 'build') && r.out.includes('pkg:scripts.build') && r.out.includes('SKIP')
+  && !r.out.includes('无匹配的源码变更'), r.out);
 check('S6 文件型 when 缺失仍跳过（eslint.config.js）', !ran(f.marks, 'lint') && r.out.includes('eslint.config.js'), r.out);
 
 // 场景 7：scripts.build 为非空字符串 → 构建命令执行；补上 eslint 配置后质量检查也执行。
@@ -125,7 +126,29 @@ fs.writeFileSync(path.join(f.root, '.agents', 'hooks', 'commit-check.config.json
 fs.writeFileSync(path.join(f.root, 'package.json'), JSON.stringify({ name: 't' }));
 stage(f.root, 'src/a.js', 'console.log(1)\n');
 r = runHook(f.root, ['--full']);
-check('S8 --full 仍尊重 pkg:scripts.build', r.status === 0 && !ran(f.marks, 'build') && r.out.includes('SKIP'), r.out);
+check('S8 --full 仍尊重 pkg:scripts.build',
+  r.status === 0 && !ran(f.marks, 'build') && r.out.includes('SKIP') && !r.out.includes('无匹配的源码变更'), r.out);
+
+// 场景 9：pkg:scripts.build 四种不满足都不执行（空白、非字符串、非法 JSON、没有 package.json）
+const unsatisfied = [
+  ['空白字符串', (root) => fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 't', scripts: { build: '   ' } }))],
+  ['非字符串', (root) => fs.writeFileSync(path.join(root, 'package.json'), JSON.stringify({ name: 't', scripts: { build: 1 } }))],
+  ['非法 JSON', (root) => fs.writeFileSync(path.join(root, 'package.json'), '{')],
+  ['缺少 package.json', () => {}],
+];
+for (const [label, writePkg] of unsatisfied) {
+  f = mkfix();
+  fs.writeFileSync(path.join(f.root, '.agents', 'hooks', 'commit-check.config.json'), JSON.stringify({
+    knownPatterns: [],
+    builds: [{ name: 'build', command: f.cmd('build'), ext: ['.js'], when: ['pkg:scripts.build'] }],
+    checks: [],
+  }));
+  writePkg(f.root);
+  stage(f.root, 'src/a.js', 'console.log(1)\n');
+  r = runHook(f.root);
+  check(`S9 ${label} → SKIP、命令不跑、不报无匹配`,
+    r.status === 0 && !ran(f.marks, 'build') && r.out.includes('pkg:scripts.build') && !r.out.includes('无匹配的源码变更'), r.out);
+}
 
 for (const d of fs.readdirSync(os.tmpdir()).filter((x) => x.startsWith('cc-trigger-test-'))) {
   fs.rmSync(path.join(os.tmpdir(), d), { recursive: true, force: true });

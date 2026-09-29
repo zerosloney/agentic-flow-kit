@@ -74,7 +74,7 @@
     },
     {
       "rel": ".agents/hooks/commit-check.cjs",
-      "sha256": "9c97fc2a5c83d5ac5ddd5fec19622b978f69fb62f03c2d394bdc9bc88e8b9850"
+      "sha256": "96602ca75068e745d2788de961c550947802cbd793d4b362217249a1a80dd85e"
     },
     {
       "rel": ".agents/roles/implementer.md",
@@ -122,7 +122,7 @@
     },
     {
       "rel": ".agents/scripts/commit-check-trigger.test.mjs",
-      "sha256": "d1022b30f6cbd3a5d683f6aa593ff2de974a690f14a0c2f9ebdc8914f2641b26"
+      "sha256": "58175c23dfe2ff425712c3d7616ff38cf81419de55c22e232d513ed1dddb11ef"
     },
     {
       "rel": ".agents/scripts/confirm-doc.mjs",

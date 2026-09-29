@@ -1,7 +1,7 @@
 // commit-check: git commit 前置验证（agentic-flow-kit 通用版）
 // 1) 敏感信息扫描（暂存区新增行含疑似密钥 -> BLOCK）
-// 2) 条件构建验证（按 .agents/hooks/commit-check.config.json 的 builds 配置；--full 全跑）
-// 3) 质量检测（config.checks：lint / 类型检查 / vet 等秒级确定性检查；--full 全跑）
+// 2) 条件构建验证（按 .agents/hooks/commit-check.config.json 的 builds 配置；--full 不做 ext/prefix 裁剪，仍尊重 when）
+// 3) 质量检测（config.checks：lint / 类型检查 / vet 等秒级确定性检查；--full 不做 ext/prefix 裁剪，仍尊重 when）
 // config 由 flow-kit init 按技术栈生成初值，项目可自行增改；缺失或无 builds/checks 时跳过对应段。
 // 配置示例（.agents/hooks/commit-check.config.json）：
 //   {
@@ -81,7 +81,7 @@ if (hits.length) {
 
 // --- 2) 条件构建验证 ---
 // --full：合并提交（pre-merge-commit / 冲突解决后手动 commit）使用——合并结果是没人验证过的新状态，
-// 按 ext/prefix 裁剪可能漏掉需要重跑的一侧，故不做条件选择、全部 builds 都跑。
+// 按 ext/prefix 裁剪可能漏掉需要重跑的一侧，故不做路径裁剪。when 仍生效：没有对应能力就不跑。
 // 引擎自身文件（.agents/、.githooks/）不参与构建匹配——工作流引擎不是项目构建产物。
 const FULL = process.argv.includes('--full');
 const stagedForBuild = staged.filter(f => !f.startsWith('.agents/') && !f.startsWith('.githooks/'));
