@@ -132,6 +132,10 @@ if (process.env.CHECK_LOOP_ROOT) {
 } else {
   const top = gitOut(['rev-parse', '--show-toplevel']);
   if (top === null) {
+    if (REV_ARG) {
+      console.error(`check-loop: --rev 剥不到提交 ${REV_ARG}`);
+      process.exit(1);
+    }
     console.error('check-loop: 不在 git 仓库内,跳过扫描');
     process.exit(0);
   }

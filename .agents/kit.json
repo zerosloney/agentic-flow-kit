@@ -106,11 +106,11 @@
     },
     {
       "rel": ".agents/scripts/check-loop-rev.test.mjs",
-      "sha256": "e312c09ee8a0c50ca9dfc2f4871761cae479199db172b20a059009d9bdae0c1a"
+      "sha256": "528ff6e06dbf4bff359f9184ae1d3e52ade3ad3efa36e2bd58e7b2996a4301f2"
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "cf0a8ab14b32753259bafcd399df3723f2180dd6fa7a4b4c9f5d285893d435d8"
+      "sha256": "7e60a7c4193a8f062ecd665cce70fc4fda8ac501c453809b5b123c66c86abe1d"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",

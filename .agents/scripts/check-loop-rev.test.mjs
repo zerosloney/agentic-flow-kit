@@ -69,6 +69,7 @@ const plan = `---
 `;
 
 const root = fs.mkdtempSync(path.join(os.tmpdir(), 'ck-rev-repo-'));
+const roots = [root];
 const planPath = path.join(root, 'workflow', 'plans', '2026-09-01-ok.md');
 try {
   gitRun(root, ['init', '-q']);
@@ -143,18 +144,90 @@ try {
     check('删除行加断档 sha：整次失败', mixed.status !== 0 && outOf(mixed).includes('配对断裂'), outOf(mixed));
     const empty = push('');
     check('没有 stdin 行：扫工作区，脏树被拦住', empty.status !== 0 && outOf(empty).includes('配对断裂'), outOf(empty));
+    const goodThenBad = push(
+      `refs/heads/ok ${good} refs/heads/ok ${Z}\nrefs/heads/bad ${bad} refs/heads/bad ${Z}\n`,
+    );
+    check('stdin 先好后坏：整次失败', goodThenBad.status !== 0 && outOf(goodThenBad).includes('配对断裂'), outOf(goodThenBad));
   }
+
+  const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'ck-rev-outside-'));
+  roots.push(outside);
+  const absent = 'a'.repeat(40);
+  const outsideRev = loop(outside, ['--rev', absent]);
+  check('仓库外 --rev：exit 1 并打印 sha', outsideRev.status === 1 && outOf(outsideRev).includes(absent), outOf(outsideRev));
+  const outsidePlain = loop(outside, []);
+  check('仓库外且不带 --rev：仍跳过且退出 0', outsidePlain.status === 0 && outOf(outsidePlain).includes('跳过扫描'), outOf(outsidePlain));
+
+  fs.writeFileSync(planPath, plan);
+  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-09-02-extra.md'), intent.replace('# INTENT — ok', '# INTENT — extra'));
+  gitRun(root, ['add', '--', '.']);
+  gitRun(root, ['commit', '-q', '-m', 'extra']);
+  const extra = gitRun(root, ['rev-parse', 'HEAD']);
+  fs.rmSync(path.join(root, 'workflow', 'intents', '2026-09-02-extra.md'));
+  gitRun(root, ['add', '--', '.']);
+  gitRun(root, ['commit', '-q', '-m', 'drop-extra']);
+  const atExtra = loop(root, ['--rev', extra]);
+  check('断档文件不在当前 HEAD：--rev 仍退出 1', atExtra.status === 1 && outOf(atExtra).includes('2026-09-02-extra.md'), outOf(atExtra));
+  const headNow = loop(root, []);
+  check('当前 HEAD 没有该断档文件：不带 --rev 不点名它', headNow.status === 0 && !outOf(headNow).includes('2026-09-02-extra.md'), outOf(headNow));
+
+  const tree = fs.mkdtempSync(path.join(os.tmpdir(), 'ck-rev-tree-'));
+  roots.push(tree);
+  gitRun(tree, ['init', '-q']);
+  gitRun(tree, ['config', 'user.email', 't@example.com']);
+  gitRun(tree, ['config', 'user.name', 't']);
+  fs.mkdirSync(path.join(tree, '.agents', 'scripts'), { recursive: true });
+  fs.copyFileSync(ENUMS, path.join(tree, '.agents', 'workflow-enums.txt'));
+  fs.copyFileSync(path.join(HERE, 'gen-workflow-index.mjs'), path.join(tree, '.agents', 'scripts', 'gen-workflow-index.mjs'));
+  fs.copyFileSync(path.join(HERE, 'workflow-enums.mjs'), path.join(tree, '.agents', 'scripts', 'workflow-enums.mjs'));
+  fs.copyFileSync(path.join(HERE, 'rule-budget.sh'), path.join(tree, '.agents', 'scripts', 'rule-budget.sh'));
+  fs.writeFileSync(path.join(tree, '.agents', 'rule-budgets.txt'), 'big.txt 10\n');
+  fs.writeFileSync(path.join(tree, 'big.txt'), 'ok\n');
+  for (const sub of ['intents', 'specs', 'plans', 'incidents']) {
+    fs.mkdirSync(path.join(tree, 'workflow', sub), { recursive: true });
+  }
+  fs.writeFileSync(path.join(tree, 'workflow', 'intents', '2026-09-01-ok.md'), intent);
+  fs.writeFileSync(path.join(tree, 'workflow', 'plans', '2026-09-01-ok.md'), plan);
+  const gen = spawnSync(process.execPath, [path.join(tree, '.agents', 'scripts', 'gen-workflow-index.mjs')], { cwd: tree, encoding: 'utf8' });
+  if (gen.status !== 0) throw new Error(outOf(gen));
+  gitRun(tree, ['add', '--', '.']);
+  gitRun(tree, ['commit', '-q', '-m', 'aligned']);
+  const indexPath = path.join(tree, 'workflow', 'INDEX.md');
+  const indexBefore = fs.readFileSync(indexPath, 'utf8');
+  if (!indexBefore.includes('☑1/1')) throw new Error('INDEX 里没有 ☑1/1，无法制造漂移');
+  fs.writeFileSync(indexPath, indexBefore.replace('☑1/1', '☑0/1'));
+  gitRun(tree, ['add', '--', '.']);
+  gitRun(tree, ['commit', '-q', '-m', 'drift']);
+  const drift = gitRun(tree, ['rev-parse', 'HEAD']);
+  const drifted = loop(tree, ['--rev', drift]);
+  check('被推送提交索引损坏：--rev 报索引漂移', outOf(drifted).includes('索引漂移'), outOf(drifted));
+  fs.writeFileSync(path.join(tree, 'big.txt'), 'x'.repeat(100));
+  const restored = spawnSync(process.execPath, [path.join(tree, '.agents', 'scripts', 'gen-workflow-index.mjs')], { cwd: tree, encoding: 'utf8' });
+  if (restored.status !== 0) throw new Error(outOf(restored));
+  gitRun(tree, ['add', '--', '.']);
+  gitRun(tree, ['commit', '-q', '-m', 'fat']);
+  const fat = gitRun(tree, ['rev-parse', 'HEAD']);
+  fs.writeFileSync(path.join(tree, 'big.txt'), 'ok\n');
+  gitRun(tree, ['add', '--', '.']);
+  gitRun(tree, ['commit', '-q', '-m', 'slim']);
+  const atFat = loop(tree, ['--rev', fat]);
+  const atSlim = loop(tree, []);
+  check('预算只在被推送提交里超限：--rev 报 100B', outOf(atFat).includes('常驻面超限') && outOf(atFat).includes('100B'), outOf(atFat));
+  check('工作区预算未超限：不带 --rev 不报常驻面超限，也不报索引漂移',
+    !outOf(atSlim).includes('常驻面超限') && !outOf(atSlim).includes('索引漂移'), outOf(atSlim));
 } catch (e) {
   check('仓库准备', false, e.stack || e.message);
 } finally {
-  const listed = spawnSync(git, ['worktree', 'list', '--porcelain'], { cwd: root, encoding: 'utf8' });
-  for (const line of (listed.stdout || '').split('\n')) {
-    const m = line.startsWith('worktree ') ? line.slice(9).trim() : '';
-    if (m && path.resolve(m) !== path.resolve(root)) {
-      spawnSync(git, ['worktree', 'remove', '--force', m], { cwd: root });
+  for (const dir of roots) {
+    const listed = spawnSync(git, ['worktree', 'list', '--porcelain'], { cwd: dir, encoding: 'utf8' });
+    for (const line of (listed.stdout || '').split('\n')) {
+      const m = line.startsWith('worktree ') ? line.slice(9).trim() : '';
+      if (m && path.resolve(m) !== path.resolve(dir)) {
+        spawnSync(git, ['worktree', 'remove', '--force', m], { cwd: dir });
+      }
     }
+    fs.rmSync(dir, { recursive: true, force: true });
   }
-  fs.rmSync(root, { recursive: true, force: true });
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
