@@ -315,7 +315,7 @@ export async function init(args, pkgRoot) {
   fs.writeFileSync(kitPath, `${JSON.stringify({
     kit: 'agentic-flow-kit',
     version: pkg.version,
-    policyVersion: 1,
+    policyVersion: 2,
     // 新装默认只跑硬规则。缺省（旧台账无此字段）在 check-loop 里仍是全量，避免升级后卫生检查突然消失。
     audit: false,
     createdAt: new Date().toISOString(),

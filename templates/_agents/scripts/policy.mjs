@@ -1,6 +1,6 @@
 // policy.mjs — check-loop 豁免锚的单源（policyVersion）
 // 新豁免改 POLICIES 并升版本，不在 check-loop 里再写散落日期。
-// kit.json 缺 policyVersion、或版本不在表内：回退版本 1（当前装户行为）。
+// kit.json 缺 policyVersion、或版本不在表内：回退版本 1（不启用版本 2 的 approved 锚）。
 // audit 不在本表：缺省视为全量检查（已装仓库与无 kit 的测试夹具）；init 新装显式写 false。
 import fs from 'node:fs';
 import path from 'node:path';
@@ -12,6 +12,15 @@ export const POLICIES = {
     confirmDocsEffective: '2026-09-27',
     confirmIncidentsEffective: '2026-09-28',
     bindingTs: '2026-09-28',
+  },
+  // 版本 2 = 版本 1 的五个日期 + 检查 17 的 approved 锚。漏抄日期键会改动其他检查的生效日。
+  2: {
+    moduleSince: '2026-09-22',
+    check14Since: '2026-09-23',
+    confirmDocsEffective: '2026-09-27',
+    confirmIncidentsEffective: '2026-09-28',
+    bindingTs: '2026-09-28',
+    check17UnclosedAfter: '0.8.0',
   },
 };
 

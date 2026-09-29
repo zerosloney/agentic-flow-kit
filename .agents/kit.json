@@ -1,7 +1,7 @@
 {
   "kit": "agentic-flow-kit",
   "version": "0.8.0",
-  "policyVersion": 1,
+  "policyVersion": 2,
   "audit": true,
   "createdAt": "2026-09-23T15:07:19.753Z",
   "options": {
@@ -110,7 +110,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "7e60a7c4193a8f062ecd665cce70fc4fda8ac501c453809b5b123c66c86abe1d"
+      "sha256": "bfe68e5d0a7d3454d99188652b92eb4992fb7b80f311ea02f772f1d5cdb30087"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -118,7 +118,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "2e0afadfa3110d3e2cb2ad4baf36c5392add924cebeb9b794efe4555b75d0361"
+      "sha256": "62c53f04e3ae1d64b5de366915d709128514e3c4b6f45a9c8d0d9826d14ba84f"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -170,7 +170,7 @@
     },
     {
       "rel": ".agents/scripts/gate-checklist.mjs",
-      "sha256": "deb93159e5e016b608bddc9d231afbab76bd727b3b089538be5155382dbc2380"
+      "sha256": "50cc8621a70a4a05ebfd9dd9abf8cedaf03901f976ec0d70cb63bae609cc67a5"
     },
     {
       "rel": ".agents/scripts/gate-checklist.test.mjs",
@@ -218,7 +218,7 @@
     },
     {
       "rel": ".agents/scripts/policy.mjs",
-      "sha256": "914d033841ed2013a5a021582a341e26e0a9322101eb5eb5be5d721e43ac2c87"
+      "sha256": "401e0f4e900b38fc874fa232f0b5619aceb08c366e465f13a52d4f4c515a5c9b"
     },
     {
       "rel": ".agents/scripts/rule-budget.sh",

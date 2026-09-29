@@ -11,6 +11,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { computeFingerprint } from './confirm-doc.mjs';
+import { POLICIES, loadKitPolicy } from './policy.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
@@ -1689,6 +1690,106 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   }
   const r = run(T, { git: true });
   check('检查17 版本变更早于 40 次 package.json 触碰仍阻断', r.status === 1 && outOf(r).includes('发版草稿'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+
+// ---- 检查 17：approved 锚在 policy 版本 2；draft 改为 approved 不看锚 ----
+{
+  const keys = ['moduleSince', 'check14Since', 'confirmDocsEffective', 'confirmIncidentsEffective', 'bindingTs'];
+  check('policy 版本 2 的五个日期与版本 1 相同',
+    keys.every((k) => POLICIES[1][k] === POLICIES[2][k]) && POLICIES[2].check17UnclosedAfter === '0.8.0' && POLICIES[1].check17UnclosedAfter === undefined);
+  const T = mkfix();
+  w(T, '.agents/kit.json', '{"policyVersion":99}\n');
+  const p = loadKitPolicy(T);
+  check('未知 policyVersion 回退版本 1', p.policyVersion === 1 && p.check17UnclosedAfter === undefined);
+  rmfix(T);
+}
+{
+  const T = mkfix();
+  gitInit(T);
+  w(T, 'package.json', '{"name":"t","version":"0.1.0"}\n');
+  w(T, 'workflow/intents/2026-09-12-move.md', INTENT('move', '状态: draft\n级别: L1\n日期: 2026-09-12'));
+  w(T, 'workflow/plans/2026-09-12-move.md', PLAN('move', '状态: draft\n级别: L1'));
+  gitCommitAll(T, 'v0.1.0');
+  w(T, 'workflow/intents/2026-09-12-move.md', INTENT('move', '状态: approved\n级别: L1\n日期: 2026-09-12'));
+  w(T, 'workflow/plans/2026-09-12-move.md', PLAN('move', '状态: approved\n级别: L1'));
+  gitCommitAll(T, 'leave draft');
+  const r = run(T, { git: true });
+  check('检查17 发版树上是 draft、现在是 approved → hard',
+    r.status === 1 && outOf(r).includes('发版草稿') && outOf(r).includes('已是 draft') && outOf(r).includes('仍是 approved'),
+    `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+{
+  const doneBody = '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n';
+  const T = mkfix();
+  gitInit(T);
+  w(T, '.agents/kit.json', '{"policyVersion":2}\n');
+  w(T, 'package.json', '{"name":"t","version":"0.8.0"}\n');
+  gitCommitAll(T, 'v0.8.0');
+  w(T, 'package.json', '{"name":"t","version":"0.9.0"}\n');
+  w(T, 'workflow/intents/2026-09-12-stay.md', INTENT('stay', '状态: approved\n级别: L1\n日期: 2026-09-12'));
+  w(T, 'workflow/plans/2026-09-12-stay.md', PLAN('stay', '状态: approved\n级别: L1'));
+  gitCommitAll(T, 'v0.9.0');
+  let r = run(T, { git: true });
+  check('检查17 锚之后 approved 仍是 approved → hard',
+    r.status === 1 && outOf(r).includes('发版草稿') && outOf(r).includes('version=0.9.0'),
+    `exit=${r.status}\n${outOf(r)}`);
+  w(T, 'workflow/intents/2026-09-12-stay.md', INTENT('stay', '状态: done\n级别: L1\n日期: 2026-09-12', doneBody));
+  w(T, 'workflow/plans/2026-09-12-stay.md', PLAN('stay', '状态: done\n级别: L1'));
+  gitCommitAll(T, 'close');
+  r = run(T, { git: true });
+  check('检查17 同一文件已是 done → 不拦', r.status === 0 && !outOf(r).includes('发版草稿'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+{
+  const T = mkfix();
+  gitInit(T);
+  w(T, '.agents/kit.json', '{"policyVersion":2}\n');
+  w(T, 'package.json', '{"name":"t","version":"0.8.0"}\n');
+  w(T, 'workflow/intents/2026-09-12-oldrel.md', INTENT('oldrel', '状态: approved\n级别: L1\n日期: 2026-09-12'));
+  w(T, 'workflow/plans/2026-09-12-oldrel.md', PLAN('oldrel', '状态: approved\n级别: L1'));
+  gitCommitAll(T, 'v0.8.0');
+  const r = run(T, { git: true });
+  check('检查17 锚之前 approved 仍是 approved → 不拦', r.status === 0 && !outOf(r).includes('发版草稿'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+{
+  const T = mkfix();
+  gitInit(T);
+  w(T, '.agents/kit.json', '{"policyVersion":2}\n');
+  w(T, 'package.json', '{"name":"t","version":"0.10.0"}\n');
+  w(T, 'workflow/intents/2026-09-12-ten.md', INTENT('ten', '状态: approved\n级别: L1\n日期: 2026-09-12'));
+  w(T, 'workflow/plans/2026-09-12-ten.md', PLAN('ten', '状态: approved\n级别: L1'));
+  gitCommitAll(T, 'v0.10.0');
+  const r = run(T, { git: true });
+  check('检查17 0.10.0 按整数比较大于 0.8.0 → hard',
+    r.status === 1 && outOf(r).includes('发版草稿'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+{
+  const T = mkfix();
+  gitInit(T);
+  w(T, '.agents/kit.json', '{"policyVersion":1}\n');
+  w(T, 'package.json', '{"name":"t","version":"0.9.0"}\n');
+  w(T, 'workflow/intents/2026-09-12-v1.md', INTENT('v1', '状态: approved\n级别: L1\n日期: 2026-09-12'));
+  w(T, 'workflow/plans/2026-09-12-v1.md', PLAN('v1', '状态: approved\n级别: L1'));
+  gitCommitAll(T, 'v0.9.0');
+  const r = run(T, { git: true });
+  check('检查17 版本 1 不启用 approved 锚', r.status === 0 && !outOf(r).includes('发版草稿'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+{
+  const T = mkfix();
+  gitInit(T);
+  w(T, '.agents/kit.json', '{"policyVersion":2}\n');
+  w(T, 'package.json', '{"name":"t","version":"0.9"}\n');
+  w(T, 'workflow/intents/2026-09-12-badver.md', INTENT('badver', '状态: approved\n级别: L1\n日期: 2026-09-12'));
+  w(T, 'workflow/plans/2026-09-12-badver.md', PLAN('badver', '状态: approved\n级别: L1'));
+  gitCommitAll(T, 'badver');
+  const r = run(T, { git: true });
+  check('检查17 发版版本拆不成三段整数时不触发 approved 规则',
+    r.status === 0 && !outOf(r).includes('发版草稿'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
 }
 

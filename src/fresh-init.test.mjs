@@ -24,7 +24,7 @@ const r = spawnSync(process.execPath, [
 const out = `${r.stdout || ''}${r.stderr || ''}`;
 check('fresh init exit 0', r.status === 0, `exit=${r.status}\n${out.split('\n').slice(-30).join('\n')}`);
 const kit = JSON.parse(fs.readFileSync(path.join(dir, '.agents', 'kit.json'), 'utf8'));
-check('新装 audit 为 false 且 policyVersion 为 1', kit.audit === false && kit.policyVersion === 1, JSON.stringify({ audit: kit.audit, policyVersion: kit.policyVersion }));
+check('新装 audit 为 false 且 policyVersion 为 2', kit.audit === false && kit.policyVersion === 2, JSON.stringify({ audit: kit.audit, policyVersion: kit.policyVersion }));
 check('claude 命令与角色薄适配落盘',
   fs.existsSync(path.join(dir, '.claude', 'commands', 'wf-plan.md'))
   && fs.existsSync(path.join(dir, '.claude', 'agents', 'implementer.md')));

@@ -2,7 +2,7 @@
 
 本目录是个人 AI 工作流引擎的唯一载体：**intents（为什么做）→ specs（怎么设计）→ plans（怎么做）→ incidents（学到了什么）**。单人 + AI 协作：唯一决策人与授权人是用户本人，多人评审暂缓，确认都在对话内一句话完成，追溯靠 git（commit + release tag）。
 
-> 本仓的生效日、台账字段与措辞纪律过程记录在 `wiki/drafts-archive/2026-09-29-protocol-archaeology/README.md`。现行规则以本文为准。本仓 `kit.json` 为 `audit: true`、`policyVersion: 1`。
+> 本仓的生效日、台账字段与措辞纪律过程记录在 `wiki/drafts-archive/2026-09-29-protocol-archaeology/README.md`。现行规则以本文为准。本仓 `kit.json` 为 `audit: true`、`policyVersion: 2`。
 
 > 闭环新增记录一律写在本目录。
 
@@ -55,7 +55,7 @@
 
 其余检查（占位符、引用、模块字段、常驻面预算、量化签名、阶段索引、适配器断线）只在 `audit` 不是 `false` 时出警告。
 
-**发版草稿**：最近一次改动 `package.json` 的 `version` 的那次提交里，当时已经是 draft 的 intent / spec / plan，若工作区里仍是 draft，则阻断。那次提交之后新建的草稿不在范围内。状态为 open 的 incident 不在此列。
+**发版草稿**：最近一次改动 `package.json` 的 `version` 的那次提交里，当时已经是 draft 或 approved 的 intent、spec、plan，若被扫描的树上仍是 draft 或 approved，则阻断。当时已是 draft 的不看版本锚。当时已是 approved 的，只在发版版本大于 `policy.mjs` 的 `check17UnclosedAfter` 时阻断；版本 1 没有该键。不带 `--rev` 时现在的状态读工作区，带 `--rev` 时读被推送的那棵树。那次提交之后新建的文件不在范围内。状态为 open 的 incident 不在此列。
 
 ## 闭环规则
 

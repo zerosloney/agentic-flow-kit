@@ -65,7 +65,7 @@
 //      等于引导伪装)/噪声不可消退(不按日期门豁免,退役前本仓 22 条 advisory 中 14 条为该告警)/
 //      quote 字段职责冲突(对质凭据 vs 并录指纹,现归还单一职责)。无 batch 的历史行静默跳过
 //      (无判定依据的行不产出不可消除噪声——沿 audit-gate-hardening P3 教训)
-//  17. 发版提交树上仍为 draft 的 intent/spec/plan [hard-block]
+//  17. 发版提交树上仍未收口的 intent/spec/plan [hard-block]
 // 16. 量化断言指标签名对账 [warning](2026-09-28 起;登记表单源 .agents/metric-claims.txt):
 // 判据 = 活跃态文档(draft/approved/open)中的 `{{指标名}}` 签名须替换为实时值,留签名=未回填=warning。
 // **只查显式签名、不全文扫数字**(据实说明):本仓活跃文档「N 行/N 条/N 份」类表述数十处,绝大多数是
@@ -801,10 +801,13 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
 //   调用位置须保持在检查 15 之后、输出段之前——warnings 按插入序输出，位置变化会改变输出行序。
 runCheck16({ ROOT, ENUMS, docFiles, fmGet, inSet, isTracked, linesOf, readdirOrNull, warnings });
 
-// --- 17. 发版提交树上仍为 draft 的 intent/spec/plan [hard-block] ---
-// 最近一次 package.json version 发生变化的提交里，当时状态已是 draft 的 intent/spec/plan，
-// 工作区里若仍是 draft 则阻断。沿 package.json 的全部历史查找，不设次数上限。
-// 该提交之后新建的草稿不在范围内。open 的 incident 不在此列。
+// --- 17. 发版提交树上仍未收口的 intent/spec/plan [hard-block] ---
+// 最近一次 package.json version 发生变化的提交里，当时状态已是 draft 或 approved 的
+// intent/spec/plan，被扫描的树上仍是 draft 或 approved 则阻断。
+// 当时已是 draft：不看版本锚。当时已是 approved：只在发版版本大于
+// policy.check17UnclosedAfter 时阻断。版本 1 没有该键，因此不启用后两格。
+// 版本按主、次、修订三段整数比较。沿 package.json 的全部历史查找，不设次数上限。
+// 该提交之后新建的文件不在范围内。open 的 incident 不在此列。
 {
   const log = gitOut(['log', '--format=%H', '--', 'package.json']);
   if (log) {
@@ -825,15 +828,30 @@ runCheck16({ ROOT, ENUMS, docFiles, fmGet, inSet, isTracked, linesOf, readdirOrN
       for (const rel of tree.split('\n').map((s) => s.trim()).filter(Boolean)) {
         if (!rel.endsWith('.md') || rel.endsWith('_TEMPLATE.md')) continue;
         const thenTxt = gitOut(['show', `${release}:${rel}`]);
-        if (!thenTxt || fmStatus(thenTxt) !== 'draft') continue;
-        const abs = path.join(ROOT, rel);
-        if (fmGet(abs, '状态') === 'draft') {
-          const here = REV ? `提交 ${REV.slice(0, 7)}` : '工作区';
-          blockers.push(`- [发版草稿] ${rel} 在 version=${releaseVer} 的提交 ${release.slice(0, 7)} 上已是 draft，${here}仍是 draft。发版提交树上的草稿须先离开 draft。覆盖面只含该提交当时已在树上的 intent/spec/plan；其后新建的草稿不在此列`);
-        }
+        if (!thenTxt) continue;
+        const thenSt = fmStatus(thenTxt);
+        const nowSt = fmGet(path.join(ROOT, rel), '状态');
+        if ((thenSt !== 'draft' && thenSt !== 'approved') || (nowSt !== 'draft' && nowSt !== 'approved')) continue;
+        if (thenSt === 'approved' && !versionGreater(releaseVer, kitPolicy.check17UnclosedAfter)) continue;
+        const here = REV ? `提交 ${REV.slice(0, 7)}` : '工作区';
+        blockers.push(`- [发版草稿] ${rel} 在 version=${releaseVer} 的提交 ${release.slice(0, 7)} 上已是 ${thenSt}，${here}仍是 ${nowSt}。发版提交树上未收口的 intent/spec/plan 须先离开 draft 与 approved。覆盖面只含该提交当时已在树上的 intent/spec/plan；其后新建的文件不在此列`);
       }
     }
   }
+}
+
+function versionGreater(a, b) {
+  const parse = (v) => {
+    const m = /^(\d+)\.(\d+)\.(\d+)$/.exec(String(v ?? ''));
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
+  };
+  const x = parse(a);
+  const y = parse(b);
+  if (!x || !y) return false;
+  for (let i = 0; i < 3; i++) {
+    if (x[i] !== y[i]) return x[i] > y[i];
+  }
+  return false;
 }
 
 function fmStatus(text) {
