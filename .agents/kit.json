@@ -105,8 +105,12 @@
       "sha256": "f867d94644c8db83dd807cada921f3d800718320793c026ab4eb68bf897922f3"
     },
     {
+      "rel": ".agents/scripts/check-loop-rev.test.mjs",
+      "sha256": "e312c09ee8a0c50ca9dfc2f4871761cae479199db172b20a059009d9bdae0c1a"
+    },
+    {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "0c82577203c32259e3f4b1ffe92ae207d7c1e8d12b9126abe4071b75688bb057"
+      "sha256": "cf0a8ab14b32753259bafcd399df3723f2180dd6fa7a4b4c9f5d285893d435d8"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -326,7 +330,7 @@
     },
     {
       "rel": ".githooks/pre-push",
-      "sha256": "f90a7e7b9a9c04d3b691f9a1ee36337c7139fb9f2b49ff487de78818366a89e8"
+      "sha256": "ae5279c347a509febd90b1b4b75245c1db9edefa9ef8df8dc0072ec792c083f9"
     },
     {
       "rel": ".zcode/agents/implementer.md",

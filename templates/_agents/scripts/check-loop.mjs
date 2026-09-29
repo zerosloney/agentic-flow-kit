@@ -81,13 +81,16 @@
 // 运行模式:CHECK_LOOP_ROOT 注入 fixture 根(全扫不过滤,非 git 时检查 10/14 跳过);
 //   缺省 = git 仓库根(不在 git 仓库内 stderr 提示后 exit 0 跳过);仓库模式只扫已提交(HEAD)内容
 //   (并行会话未跟踪半成品不拦别人的 push;ls-tree 失败退化为全扫,门禁不失效)。
+//   --rev <sha>：把该提交剥到 commit 后挂到临时 detached worktree，ROOT 改到那里再扫。
+//   原工作区的未提交改动不进入这次扫描。与 CHECK_LOOP_ROOT 同时出现则 exit 1。全 0 sha exit 1。
 // 文档协议:机器字段一律由文件头 YAML frontmatter(受限子集:每行 `键: 值`)承载,本脚本只扫 frontmatter 取字段;
 //   叙述性字段(独立复核/复盘三件套/验收勾验)按正文行锚定。枚举单源 .agents/workflow-enums.txt
 //   (缺文件/缺键 fail-loud exit 1;经 workflow-enums.mjs 读取,CRLF 天然容忍)。
 // 已确认状态: approved/done=已批或闭环; superseded/cancelled=放弃留档(仍算确认,不挡 push); incident: fixed/closed
-// 用法:node .agents/scripts/check-loop.mjs   （或经 check-loop.sh shim）
+// 用法:node .agents/scripts/check-loop.mjs [--rev <sha>]   （或经 check-loop.sh shim）
 // 测试:node templates/_agents/scripts/check-loop.test.mjs（fixture 注入 CHECK_LOOP_ROOT）
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -98,6 +101,25 @@ import { runCheck16 } from './check-metric-claims.mjs';
 import { auditEnabled, loadKitPolicy } from './policy.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const GIT = process.platform === 'win32' ? 'git.exe' : 'git';
+
+function takeRev() {
+  const args = process.argv.slice(2);
+  if (args.length === 0) return null;
+  if (args.length === 2 && args[0] === '--rev' && args[1]) return args[1];
+  console.error('check-loop: 用法 node check-loop.mjs [--rev <sha>]');
+  process.exit(1);
+}
+const REV_ARG = takeRev();
+if (REV_ARG && process.env.CHECK_LOOP_ROOT) {
+  console.error('check-loop: CHECK_LOOP_ROOT 与 --rev 不能同时使用');
+  process.exit(1);
+}
+if (REV_ARG && /^0+$/.test(REV_ARG)) {
+  console.error(`check-loop: --rev 不是提交 ${REV_ARG}`);
+  process.exit(1);
+}
+let REV = null;
 
 // ---- 根目录与枚举单源 ----
 let ROOT;
@@ -114,6 +136,30 @@ if (process.env.CHECK_LOOP_ROOT) {
     process.exit(0);
   }
   ROOT = top.trim();
+  if (REV_ARG) {
+    const peeled = gitOut(['rev-parse', '--verify', `${REV_ARG}^{commit}`]);
+    if (!peeled) {
+      console.error(`check-loop: --rev 剥不到提交 ${REV_ARG}`);
+      process.exit(1);
+    }
+    REV = peeled.trim();
+    const parent = fs.mkdtempSync(path.join(os.tmpdir(), 'ck-rev-'));
+    const wt = path.join(parent, 'wt');
+    const main = ROOT;
+    const add = spawnSync(GIT, ['worktree', 'add', '--detach', '--quiet', wt, REV], {
+      cwd: main, encoding: 'utf8',
+    });
+    if (add.status !== 0) {
+      fs.rmSync(parent, { recursive: true, force: true });
+      console.error(`check-loop: 导出提交失败 ${REV_ARG}\n${add.stderr || add.stdout || ''}`);
+      process.exit(1);
+    }
+    process.on('exit', () => {
+      spawnSync(GIT, ['worktree', 'remove', '--force', wt], { cwd: main });
+      fs.rmSync(parent, { recursive: true, force: true });
+    });
+    ROOT = wt;
+  }
 }
 // 枚举单源（<root>/.agents/workflow-enums.txt——fixture 契约：缺文件/缺键 fail-loud）
 let ENUMS;
@@ -133,7 +179,7 @@ const stOkDoc = (st) => inSet(st, ENUMS['doc.status.confirmed']);
 
 // git 调用（参数数组形式不走 shell——Windows cmd 不认单引号；git.exe 显式解析沿 doctor 先例）
 function gitOut(args, { ok = () => true } = {}) {
-  const r = spawnSync(process.platform === 'win32' ? 'git.exe' : 'git', args,
+  const r = spawnSync(GIT, args,
     { cwd: ROOT, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
   if (r.error || r.status !== 0 || !ok(r)) return null;
   return r.stdout || '';
@@ -778,7 +824,8 @@ runCheck16({ ROOT, ENUMS, docFiles, fmGet, inSet, isTracked, linesOf, readdirOrN
         if (!thenTxt || fmStatus(thenTxt) !== 'draft') continue;
         const abs = path.join(ROOT, rel);
         if (fmGet(abs, '状态') === 'draft') {
-          blockers.push(`- [发版草稿] ${rel} 在 version=${releaseVer} 的提交 ${release.slice(0, 7)} 上已是 draft，工作区仍是 draft。发版提交树上的草稿须先离开 draft。覆盖面只含该提交当时已在树上的 intent/spec/plan；其后新建的草稿不在此列`);
+          const here = REV ? `提交 ${REV.slice(0, 7)}` : '工作区';
+          blockers.push(`- [发版草稿] ${rel} 在 version=${releaseVer} 的提交 ${release.slice(0, 7)} 上已是 draft，${here}仍是 draft。发版提交树上的草稿须先离开 draft。覆盖面只含该提交当时已在树上的 intent/spec/plan；其后新建的草稿不在此列`);
         }
       }
     }
