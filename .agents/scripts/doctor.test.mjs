@@ -27,7 +27,7 @@ if (!fs.existsSync(SRC)) {
   console.error(`doctor.test.mjs：SKIP——未找到 ${SRC}（装户环境无包源 src/；本套件仅在包源仓库/dogfooding 跑 npm test 时有意义）`);
   process.exit(0);
 }
-const { checkOwnedDrift, checkAdapterDrift, checkLedgerCoverage } = await import(pathToFileURL(SRC).href);
+const { checkOwnedDrift, checkAdapterDrift, checkLedgerCoverage, checkDelegationSnapshotFreshness } = await import(pathToFileURL(SRC).href);
 
 let pass = 0;
 let fail = 0;
@@ -370,6 +370,107 @@ const CMD_BODY = '# Build\n\n正文 build v1\n';
     r.skipped === true && r.missing.length === 0, JSON.stringify(r));
   fs.rmSync(root, { recursive: true, force: true });
   fs.rmSync(pkg, { recursive: true, force: true });
+}
+
+// ---- 场景 19：快照最新（snapshotMonth >= ledgerMonth）→ stale=false ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-snap-'));
+  fs.mkdirSync(path.join(root, 'workflow'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'workflow', 'delegations.md'), [
+    '## 委派结果',
+    '',
+    '| 日期 | 被委派方 | 任务一句话 | 结果 | 备注 |',
+    '|------|----------|------------|------|------|',
+    '| 2026-09-20 | x | y | 一次通过 | z |',
+    '| 2026-09-26 | x | y | 一次通过 | z |',
+    '',
+    '## 月度聚合快照',
+    '',
+    '| 月份 | 有效任务 | 一次通过率 | 返工次数 |',
+    '|------|----------|------------|----------|',
+    '| 2026-09 | 2 | 100% | 0 |',
+    '',
+  ].join('\n'));
+  const r = checkDelegationSnapshotFreshness(root);
+  check('场景 19：快照最新 → stale=false skipped=false',
+    r.stale === false && r.skipped === false && r.ledgerMonth === '2026-09' && r.snapshotMonth === '2026-09',
+    JSON.stringify(r));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 20：快照陈旧（snapshotMonth < ledgerMonth）→ stale=true ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-snap-'));
+  fs.mkdirSync(path.join(root, 'workflow'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'workflow', 'delegations.md'), [
+    '## 委派结果',
+    '',
+    '| 日期 | 被委派方 | 任务一句话 | 结果 | 备注 |',
+    '|------|----------|------------|------|------|',
+    '| 2026-09-10 | x | y | 一次通过 | z |',
+    '',
+    '## 月度聚合快照',
+    '',
+    '| 月份 | 有效任务 | 一次通过率 | 返工次数 |',
+    '|------|----------|------------|----------|',
+    '| 2026-08 | 1 | 100% | 0 |',
+    '',
+  ].join('\n'));
+  const r = checkDelegationSnapshotFreshness(root);
+  check('场景 20：快照陈旧（08 < 09）→ stale=true',
+    r.stale === true && r.skipped === false && r.ledgerMonth === '2026-09' && r.snapshotMonth === '2026-08',
+    JSON.stringify(r));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 21：有数据行但无快照行 → stale=true snapshotMonth=null ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-snap-'));
+  fs.mkdirSync(path.join(root, 'workflow'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'workflow', 'delegations.md'), [
+    '## 委派结果',
+    '',
+    '| 日期 | 被委派方 | 任务一句话 | 结果 | 备注 |',
+    '|------|----------|------------|------|------|',
+    '| 2026-09-25 | x | y | 一次通过 | z |',
+    '',
+  ].join('\n'));
+  const r = checkDelegationSnapshotFreshness(root);
+  check('场景 21：无快照行 → stale=true snapshotMonth=null',
+    r.stale === true && r.skipped === false && r.snapshotMonth === null,
+    JSON.stringify(r));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 22：无台账数据行 → skipped=true ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-snap-'));
+  fs.mkdirSync(path.join(root, 'workflow'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'workflow', 'delegations.md'), [
+    '# delegations',
+    '',
+    '## 月度聚合快照',
+    '',
+    '| 月份 | 有效任务 |',
+    '|------|----------|',
+    '| 2026-09 | 0 |',
+    '',
+  ].join('\n'));
+  const r = checkDelegationSnapshotFreshness(root);
+  check('场景 22：无数据行 → skipped=true',
+    r.skipped === true && r.stale === false,
+    JSON.stringify(r));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 23：delegations.md 不存在 → skipped=true ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-snap-'));
+  const r = checkDelegationSnapshotFreshness(root);
+  check('场景 23：文件不存在 → skipped=true',
+    r.skipped === true && r.stale === false,
+    JSON.stringify(r));
+  fs.rmSync(root, { recursive: true, force: true });
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

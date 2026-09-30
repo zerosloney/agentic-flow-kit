@@ -191,6 +191,16 @@ export function doctor(args, pkgRoot) {
     }
   }
 
+  // 6.5b delegations 月度聚合快照新鲜度（p0-gate-noise-batch：回写无门致快照 3 周未更新）
+  const snapFresh = checkDelegationSnapshotFreshness(target);
+  if (snapFresh.skipped) {
+    add('PASS', `delegations 快照新鲜度检查跳过（${snapFresh.note}）`);
+  } else if (snapFresh.stale) {
+    add('WARN', `delegations 月度快照陈旧（台账至 ${snapFresh.ledgerMonth}，快照至 ${snapFresh.snapshotMonth || '缺失'}）——跑 agg-delegations.cjs 更新 §月度聚合快照`);
+  } else {
+    add('PASS', `delegations 月度快照最新（${snapFresh.snapshotMonth}）`);
+  }
+
   // 6.6 owned 漂移校验（kit.owned 列表盘面 sha 不一致；engine 双源纪律对 owned 走「项目自持 + 哈希记账不约束」，
   //     漂移信号靠本校验给装户可见性。2026-09-25 wf-runtime 复盘：包源改了装副本未同步 = 漂移但 sync 不报。）
   const ownedRes = checkOwnedDrift(target);
@@ -396,4 +406,42 @@ export function checkAdapterDrift(target) {
   }
   if (total === 0) return { drift: 0, total: 0, skipped: true, note: '权威源无 commands/roles .md 文件' };
   return { drift, total, skipped: false };
+}
+
+// delegations 月度聚合快照新鲜度（独立 export 供 doctor 主流程 + 单元测试共用；2026-09-29 p0-gate-noise-batch）
+// 返回：{ stale, ledgerMonth, snapshotMonth, skipped, note? }
+//   - skipped=true：delegations.md 不存在 / 无台账数据行 → doctor 记 PASS（跳过），不误报 fresh 装户
+//   - stale=true：快照行缺失 或 快照最新月 < 台账数据行最新月
+//   - ledgerMonth：台账数据行首列（YYYY-MM-DD）中最大 YYYY-MM
+//   - snapshotMonth：快照行首列（YYYY-MM）中最大 YYYY-MM（无快照行则 null）
+export function checkDelegationSnapshotFreshness(target) {
+  const file = path.join(target, 'workflow', 'delegations.md');
+  if (!fs.existsSync(file)) return { stale: false, ledgerMonth: null, snapshotMonth: null, skipped: true, note: 'delegations.md 不存在' };
+  let text;
+  try { text = fs.readFileSync(file, 'utf8'); } catch { return { stale: false, ledgerMonth: null, snapshotMonth: null, skipped: true, note: 'delegations.md 不可读' }; }
+  const lines = text.split(/\r?\n/);
+  let ledgerMonth = null;
+  let snapshotMonth = null;
+  let hasDataRows = false;
+  for (const line of lines) {
+    if (!/^\s*\|/.test(line)) continue;
+    const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+    if (!cells.length) continue;
+    // 台账数据行：首列 = YYYY-MM-DD
+    if (/^\d{4}-\d{2}-\d{2}$/.test(cells[0])) {
+      hasDataRows = true;
+      const m = cells[0].slice(0, 7);
+      if (!ledgerMonth || m > ledgerMonth) ledgerMonth = m;
+      continue;
+    }
+    // 快照行：首列 = YYYY-MM（与数据行正则互斥）
+    if (/^\d{4}-\d{2}$/.test(cells[0])) {
+      const m = cells[0];
+      if (!snapshotMonth || m > snapshotMonth) snapshotMonth = m;
+    }
+  }
+  if (!hasDataRows) return { stale: false, ledgerMonth: null, snapshotMonth: null, skipped: true, note: '台账无数据行' };
+  if (!snapshotMonth) return { stale: true, ledgerMonth, snapshotMonth: null, skipped: false };
+  if (snapshotMonth < ledgerMonth) return { stale: true, ledgerMonth, snapshotMonth, skipped: false };
+  return { stale: false, ledgerMonth, snapshotMonth, skipped: false };
 }

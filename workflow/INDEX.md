@@ -5,16 +5,13 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（25）
+## 活跃（22）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
 | INTENT | L2 | approved | 2026-09-29 | pipeline | 装户表面收口 | ☑0/8 |
-| INTENT | L2 | approved | 2026-09-29 | pipeline | p0-gate-noise-batch | ☑9/9 |
 | PLAN | L2 | approved | 2026-09-29 | pipeline | 装户表面收口 | — |
-| PLAN | L2 | approved | 2026-09-29 | pipeline | p0-gate-noise-batch | — |
 | SPEC | L2 | approved | 2026-09-29 | pipeline | 装户表面收口 | — |
-| SPEC | L2 | approved | 2026-09-29 | pipeline | p0-gate-noise-batch | — |
 | PLAN | L2 | approved | 2026-09-28 | pipeline | 装户侧 derivers 动态载入 | — |
 | PLAN | L1 | approved | 2026-09-28 | pipeline | 结论文档断言强于实际的窄修与纪律固化 | — |
 | PLAN | L2 | approved | 2026-09-28 | pipeline | 量化断言指标签名机器门 | — |
@@ -35,17 +32,17 @@
 | PLAN | L1 | approved | 2026-09-23 | pipeline | M5：npm 发布 | — |
 | SPEC | L2 | approved | 2026-09-23 | pipeline | M4 自装 dogfooding | — |
 
-## 档案计数（152，不进表）
+## 档案计数（155，不进表）
 
 | 类型 | 模块 | 数量 |
 |---|---|---|
 | INCIDENT | pipeline | 20 |
-| INTENT | pipeline | 43 |
+| INTENT | pipeline | 44 |
 | INTENT | wiki | 1 |
-| PLAN | pipeline | 60 |
+| PLAN | pipeline | 61 |
 | PLAN | wiki | 1 |
-| SPEC | pipeline | 27 |
+| SPEC | pipeline | 28 |
 
-终态构成：done 132 · closed 12 · fixed 8；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
+终态构成：done 135 · closed 12 · fixed 8；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
 
 <!-- GENERATED:END -->

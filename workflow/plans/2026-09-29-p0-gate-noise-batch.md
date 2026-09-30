@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
-确认指纹: 38a4f22996d6ad98
+确认指纹: b251adfd4839d9f1
 ---
 # PLAN — p0-gate-noise-batch
 
@@ -14,7 +14,7 @@
 ## 任务拆解
 
 1. **C1 check18 判据对齐**（templates/_agents/scripts/check-loop.mjs + check-loop.test.mjs）
-   - `delegationResultRows`：识别 `## 委派结果` 与 `## 自做任务结果` 两节（遇其他 `## ` 停止），数据行首列 YYYY-MM-DD 过滤不变
+   - `delegationResultRows`：识别 `## 委派结果` 与 `## 自做任务结果` 两节（遇其他 `## ` 停止），数据行首列「形如 2026-09-30 的日期」过滤不变
    - check18 匹配：`r.line.includes(base) || r.line.includes(base 去 .md)`；告警文案与文件头 check18 判据注释同步更新
    - 头注释加口径互引：「两表解析口径与 agg-delegations.cjs splitTables 一致，一边改另一边须跟」
    - 测试新增 3 场景：① L2 done 文档名只出现于自做表（不带 .md）→ 不告警 ② 两表均无该文件名 → 仍告警 ③ 旧误报形态（行仅在委派表且不带 .md）→ 不告警
@@ -78,3 +78,4 @@
 - 确认结果：approved（2026-09-30 用户对话内确认，chat-delegated 原话「三件都通过」，台账 ts 2026-09-29T16:07:36Z，batch 39f2b2）；done（2026-09-30 关单，随入口文档置终态）
 - 确认门记录：plan 草稿全文过目 + 改动清单确认（build.md 两道门，逐次，不合并）
 - 复核：L2 独立复核已执行（independent-reviewer，独立上下文，2026-09-30）——0 P0 / 0 P1 / P2×5，须落实项关单前已落地（papercuts ×2 + scratch 处置），判「建议关单」
+- 增量复核（2026-09-30，independent-reviewer「砚迟」）：0 P0 / 1 P1 / P2×5——P1-1（提交树 kit.json 预 landing）处置 = 关单完整提交 + clone 复验；P2 全处置（词表误报改写 / 日志清理 / F2-F3 留痕），详见同名 spec「确认与复核」节

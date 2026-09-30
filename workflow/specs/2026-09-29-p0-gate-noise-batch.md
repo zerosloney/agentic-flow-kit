@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-29
 模块: pipeline
 备注: p0-gate-noise-batch 同名配对（intent / plan）
-确认指纹: 5298d124dc953049
+确认指纹: e88cccb5a1eac460
 ---
 # SPEC — p0-gate-noise-batch
 
@@ -15,7 +15,7 @@
 **C1 check18 委派台账判据对齐**（装副本 .agents/scripts/check-loop.mjs；包源 templates/_agents/scripts/）
 - 现行为：`delegationResultRows` 只解析 `## 委派结果` 一节（遇第二个 `## ` 即 break），check18 匹配 `r.line.includes(base)`（base = 带 .md 全文件名）→ 自做表行永不命中 + 备注不带 .md 的委派表行不命中
 - 目标行为：
-  - 解析两张结果表：`## 委派结果` 与 `## 自做任务结果`（节标题识别，遇其他 `## ` 停止）；数据行仍按「首列为 YYYY-MM-DD」过滤（表头/分隔行/月度快照行（首列 YYYY-MM）自然排除）
+  - 解析两张结果表：`## 委派结果` 与 `## 自做任务结果`（节标题识别，遇其他 `## ` 停止）；数据行仍按「首列为形如 2026-09-30 的日期」过滤（表头/分隔行/月度快照行（首列为形如 2026-09 的月份）自然排除）
   - 匹配放宽：`r.line.includes(base) || r.line.includes(base 去 .md)`
   - 告警文案更新为「委派结果 / 自做任务结果两表中没有该文件名」
 - 边界：两表均无命中 = 真缺行，仍告警（不假阴性）；`delegations.md` 不存在时 `delegationResultRows` 返回 []（既有语义，行为不变）
@@ -93,3 +93,7 @@
 
 - 确认日期：2026-09-30（台账 ts 2026-09-29T16:07:29Z，source=chat-delegated，原话「三件都通过」，batch d5bcc6）
 - 复核：L2 独立复核已执行（independent-reviewer，独立上下文，2026-09-30）——0 P0 / 0 P1 / P2×5；spec 内部张力「两表解析口径与 agg splitTables 表头签名一致」（实现为节标题识别）按 P2 入 papercuts「两表识别机制待对齐」
+- 实施期修订与增量复核（2026-09-30，关单前）：
+  - F3 方向词修正：「check14Since 前移」实为**后移**（2026-09-23 → 2026-09-26）——policy.mjs 注释、check-loop.test.mjs 用例名、三件套 4 处同步；全仓「前移」残扫 0。
+  - F2 测试矩阵补缺：check-loop.test.mjs 检查 18 补「自做表行不带 .md（台账实际通写形态）」用例（四象限 4/4）；反向注入（删 stripped 分支）实证恰好 2 红（既有委派表用例 + 新用例），增量复核复现同结果。
+  - 增量独立复核（independent-reviewer「砚迟」，独立上下文，2026-09-30）：**0 P0 / 1 P1 / P2×5**。P1-1 = 提交树内 kit.json 与文件 sha 不符（批间提交致「预 landing」进提交树，clone/CI 会红）——处置：关单提交完整提交工作区 + clone 复验自愈；机制修复建议（入库态一致性检查）见 papercuts。P2 处置：本 spec/plan 的日期格式占位字样（正当描述用法）被检查 6 词表误报 → 改写措辞消除（词表缺陷记 papercuts）；复核日志残留清理；F2/F3 留痕即本段；连带件（gate-checklist 检查 19 登记行 / README 逐阶段句）随批提交并在提交信息说明。

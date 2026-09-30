@@ -55,12 +55,12 @@
 
 **发版草稿**：最近一次改动 `package.json` 的 `version` 的那次提交里，当时已经是 draft 或 approved 的 intent、spec、plan，若被扫描的树上仍是 draft 或 approved，则阻断。当时已是 draft 的不看版本锚。当时已是 approved 的，只在发版版本大于 `policy.mjs` 的 `check17UnclosedAfter` 时阻断；版本 1 没有该键。不带 `--rev` 时现在的状态读工作区，带 `--rev` 时读被推送的那棵树。那次提交之后新建的文件不在范围内。状态为 open 的 incident 不在此列。
 
-**委派台账**：L2 或 L3 的 intent、spec、plan 状态为 done，或同级别 incident 状态为 fixed 或 closed 时，若 `workflow/delegations.md` 的「委派结果」表里没有日期不早于该文档日期、且含该文件名（带 `.md`）的一行，check-loop 打出警告。incident 的日期取 frontmatter「发现」。`audit: false` 时这条警告与其他卫生警告一起被吞掉。退出码仍由阻断项决定。
+**委派台账**：L2 或 L3 的 intent、spec、plan 状态为 done，或同级别 incident 状态为 fixed 或 closed 时，若 `workflow/delegations.md` 的「委派结果」表与「自做任务结果」表中均没有日期不早于该文档日期、且含该文件名（带 / 不带 `.md` 均匹配）的一行，check-loop 打出警告。incident 的日期取 frontmatter「发现」。`audit: false` 时这条警告与其他卫生警告一起被吞掉。退出码仍由阻断项决定。
 
 ## 闭环规则
 
 1. L1 以上新需求始于已确认的 intent；L1 以上修复始于已确认的 incident 草稿（作为 intent 等价入口）
-2. L2 / L3 变更必须先有与入口文档同名的 spec 确认通过（L3 加新会话独立复核），方可起草 plan；L1 用极简 plan——改动面 + 验证方式两节起步，多文件多步骤再加任务拆解/执行顺序
+2. L2 / L3 变更必须先有与入口文档同名的 spec 确认通过（L3 加新会话独立复核），方可起草 plan；L1 用极简 plan——改动面 + 验证方式两节起步，多文件多步骤再加任务拆解/执行顺序。**逐阶段前置已机器强制**（2026-09-30 stage-gate-machine）：fill-spec / fill-plan / confirm-doc 校验入口与 spec 前置未过即拒；顺序审计 = check-loop 检查 19
 3. 实现产物必须通过静态门（构建 + 测试 + 项目门禁）
 4. 线上 / 实测缺陷回落到 `incidents/`，复盘三件套（新 intent、防复发验证、规范条目）缺一不可；**根因属「门禁缺位 / 规范未落地 / 系统性问题」时，即使结构性修复已完成也必须立新 intent** 追踪系统性改进，禁止以「修复已完成」为由绕过 intent 回路
 5. 关单在 test：逐条勾验入口文档「验收标准」并补证据后 intent → done（不依赖是否上 prod）。done 仍有未勾项会被 check-loop 拦（新建 intent hard-block）。上 prod 另走 deploy（tag / 回滚 / 观察）

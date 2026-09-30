@@ -61,7 +61,7 @@ const PAIRS = [
   { doctor: '3', cl: null, note: 'git 仓库与钩子——装户体检独有' },
   { doctor: '4', cl: null, note: 'kit.json managed 台账——装户体检独有' },
   { doctor: '4.5', cl: null, note: '台账覆盖率——装户体检独有（盘上有 managed 类文件未登记，2026-09-26 managed-ledger-adopt）' },
-  { doctor: '6.5', cl: null, note: 'delegations 台账结构——装户体检独有' },
+  { doctor: '6.5', cl: null, note: 'delegations 台账结构 + 快照新鲜度——装户体检独有' },
   { doctor: '6.6', cl: null, note: 'owned 漂移——装户体检独有' },
   { doctor: '6.7', cl: null, note: '跨宿主薄适配——装户体检独有' },
   { doctor: '6.8', cl: null, note: 'workflows 编排脚本 lint——装户体检独有' },
@@ -83,6 +83,7 @@ const PAIRS = [
   { doctor: '7', cl: '16', note: '经 §7 整体运行覆盖（量化断言指标签名对账，2026-09-28 claim-exceeds-fix）' },
   { doctor: '7', cl: '17', note: '经 §7 整体运行覆盖（发版提交树上仍未收口的 intent/spec/plan）' },
   { doctor: '7', cl: '18', note: '经 §7 整体运行覆盖（委派台账对账）' },
+  { doctor: '7', cl: '19', note: '经 §7 整体运行覆盖（逐阶段审计——起草先于入口确认 / 台账审批顺序倒置）' },
 ];
 
 // gateChecklist：按登记表对照两侧检查项（pure function；pairs 可注入供测试）

@@ -13,7 +13,7 @@ export const POLICIES = {
     confirmIncidentsEffective: '2026-09-28',
     bindingTs: '2026-09-28',
   },
-  // 版本 2 = 版本 1 的五个日期 + 检查 17 的 approved 锚 + 检查 19 的 stageGateSince + check14Since 前移至确认门实际上线日。
+  // 版本 2 = 版本 1 的五个日期 + 检查 17 的 approved 锚 + 检查 19 的 stageGateSince + check14Since 后移至确认门实际上线日（2026-09-23 → 2026-09-26）。
   // 漏抄日期键会改动其他检查的生效日。
   2: {
     moduleSince: '2026-09-22',

@@ -38,6 +38,25 @@
 | 2026-09-27 | 宿主门禁 P1×3 收口（dotnet-ca BRE 豁免 / CONTROLLERS_DIR fail-open / trae 强推 token 化） | 返工×1 | incident 2026-09-27-host-gates-p1（L1，修复类不重复记自做——此行为测试基建补记：两新套件 gate-dotnet-ca 5/0 + trae-hooks 19/0 进 npm test 常驻）；实现返工 1 次——测试夹具三修（CONFIG 整行正则替换 / Controllers 目录创建时序 / 断言误中提示语），门禁本体一次落对；L1 快速独立复核判「通过」0 P0/P1，P2×3（-vf 组合短旗标 / 跨 && 误并 / exempt 字符串拼接）随 a06e77d 全收 |
 | 2026-09-27 | P2 池批一（init 装户安全 + managed sha 收尾） | 返工×2 | intent 2026-09-27-p2-batch1（L2）；c2c6316 后 L2 独立复核初判「不建议关单」——P1×3（EOL 断言读 HEAD 与 pack 读工作树错位被本提交自身证伪 / --force 追加特例缺口 / papercuts 编辑后未 sync 致 doctor FAIL）+ P2×3 → 57760ce 全收（EOL 改工作树就地归一 159 份零 CR / 追加特例端到端实测 / 台账刷齐 + protectedSkipped 补记）；教训：EOL 断言口径两轮才对（HEAD→工作树→就地归一）；init.test 31/0 + 全套 24 套件绿 |
 | 2026-09-28 | 量化断言机器门 L2 独立复核（check-loop 检查 16，基准 c96a250 → c9e7ce3） | 返工×1 | incident 2026-09-28-metric-claim-gate（L2）；复核者在 detached worktree 内独立验证、**未改动主工作区**——确认 5 项断言中 4 项成立（零假阳性 / 形态收窄承重 / **检查 1-15 逐字节未动** / 测试该 1 项为 sh 环境预存 / 语法错守卫有牙），并抓出**实现方未自知的 P1×1 + P2×4**：① 转义按整行生效可藏真断言（实证：同行带反斜杠 0 告警 / 不带 2 告警）② 形态不符静默漏过 ③ `docs.count.*` 与扫描面口径不一（盘面 60 vs HEAD 59）④ 登记表误按 managed 记账（与其项目自持设计矛盾，装户加行即永久漂移）⑤ 登记表示例引用不存在的指标名——全部采纳修复 + 4 条回归场景（89→92）；**复核方法论价值**：其独立发现「c9e7ce3 自身 hard-block 自己的门」（新 spec/plan 缺同名入口文档），暴露实现方当时以「续作」为由跳过 incident 的判断错误 |
+| 2026-09-25 | 会话内原生子智能体 fan-out 取代 headless runner（orchestrate 命令） | 返工×1 | intent 2026-09-25-orchestrate-in-session（回填 2026-09-29）；08f6207 落地关单后用户对话纠偏改形态为目录约定（d9a7620）；无独立复核记录（09-25 早于复核模板） |
+| 2026-09-25 | 脚本化子智能体编排（workflow 脚本 + headless runner） | 返工×1 | intent 2026-09-25-subagent-orchestration（回填 2026-09-29）；3ce4ef9 关单后独立复核抓 P0×1（Windows 批处理 prompt 截断）+ P1×4，6d6e239 全修（incident 2026-09-25-wf-run-review-fixes）；runner 形态整体废止（08f6207）计入 orchestrate-in-session 行，不重复计 |
+| 2026-09-25 | 编排脚本 + steps 扩展点，AGENTS.md 全宿主自动加载零适配 | 返工×1 | incident 2026-09-25-wf-runtime（回填 2026-09-29）；d9a7620 关单后回溯收口 27da05c（装副本 AGENTS.md 双源漂移 + 验收未勾 + INDEX 未刷新）；doctor owned 漂移校验（7ccc7b9/75707c3）为未立项后续加固不计返工 |
+| 2026-09-26 | managed 文件台账收养分支 + doctor 台账覆盖率检查 | 一次通过 | incident 2026-09-26-managed-ledger-adopt（回填 2026-09-29）；03648df 立项 → 9d39413 实现 → 942c03f 关单；无独立复核（当时 L2 不强制，spec 节载明）；关单后无同主题修复提交 |
+| 2026-09-27 | 确认门逐件化：--delegated 单文档强制 + 并录审计 | 一次通过 | incident 2026-09-27-confirm-gate-one-per-call（回填 2026-09-29）；独立复核 0 P0/P1，P2×4 关单前全采纳（0abb57d）；并录判据方向性替换另立 batch-ledger-audit 单不计本单；关单后无同主题修复提交 |
+| 2026-09-28 | 装户可扩展指标取数器（内置硬编码 + 模块可选载入，fail-loud） | 返工×1 | incident 2026-09-28-adopter-derivers（回填 2026-09-29）；independent-reviewer 复核 P1×1（shipped 套件 src/ 路径在装户崩）+ P2×4 全采纳（08768eb 收口）；关单后无同主题修复提交 |
+| 2026-09-28 | 并录审计改读调用事实 batch/seq/of（弃时间戳猜测） | 一次通过 | incident 2026-09-28-batch-ledger-audit（回填 2026-09-29）；verifier 复核 0 P0/P1，P2×4 关单前全采纳（acf93b6 + 583f31a）；关单后无同主题修复提交 |
+| 2026-09-28 | 检查 8 生效日锚改 git 首次加入日期 | 返工×1 | incident 2026-09-28-check8-git-anchor（回填 2026-09-29）；verifier 复核 P1×1（「锚不可手填」表述不实——git commit --date= 可伪造 author date）+ P2×2 采纳（87bb788 表述更正）；关单后无同主题修复提交 |
+| 2026-09-28 | 检查 15 生效日锚由自报日期改台账 ts | 一次通过 | incident 2026-09-28-confirm-gate-effective-date-anchor（回填 2026-09-29）；verifier 复核 0 P0/P1，P2×4 关单前全采纳（92cdf03）；关单后无同主题修复提交 |
+| 2026-09-28 | pre-commit 补 managed 台账快检（拦 sha 预 landing） | 一次通过 | intent 2026-09-28-ledger-precommit-gate（回填 2026-09-29）；independent-reviewer 复核 0 P0/P1，P2-2/P2-3 关单前采纳（9894de7）、P2-1 为 spec 已声明取舍；关单后无同主题修复提交 |
+| 2026-09-28 | opencode 命令薄适配统一 wf- 前缀（与 trae 对齐） | 返工×1 | intent 2026-09-28-opencode-cmd-wf-prefix（回填 2026-09-29）；ff3c721 还原误带入 doctor.test 的 opencode rename 预期（main CI 红）；无独立复核记录（spec 仅推荐）；关单复验为主智能体自抽 7 条证据 |
+| 2026-09-29 | 检查 16 内联债拆出 check-metric-claims + 扫描口径 tracked-only + TTY 逃生门声明 | 一次通过 | intent 2026-09-29-check16-inline-debt（回填 2026-09-29）；independent-reviewer 复核 7 项全 CONFIRMED 0 P0/P1，P2×2 关单前采纳（ad2117a）；关单后无同主题修复提交 |
+| 2026-09-29 | 委派台账对账检查（L2/L3 done 无台账行 → 警告） | 一次通过 | intent 2026-09-29-delegation-ledger（回填 2026-09-29）；初复核 P2×1（正例未锁整行）关单前收紧（7e8ee74），终复核 0 P0/P1/P2；关单后无同主题修复提交 |
+| 2026-09-29 | pre-push 扫描被推送 sha 的 workflow 树 | 一次通过 | intent 2026-09-29-push-scans-tree（回填 2026-09-29）；复核 0 P0/P1，P2×2 关单前采纳（fcf82c7）；关单后无同主题修复提交 |
+| 2026-09-29 | 发版树上 approved 未收口 hard-block（policy v2 版本锚） | 一次通过 | intent 2026-09-29-release-unclosed（回填 2026-09-29）；复核（基准 894cf8c→fc1ceff）0 P0/P1/P2；实现至关单间无修复提交 |
+| 2026-09-29 | node 构建门认 scripts.build、--help 列全门禁目录 | 一次通过 | intent 2026-09-29-stack-build-when（回填 2026-09-29）；复核 0 P0/P1，P2×2 关单前采纳（7045ea8）；关单后无同主题修复提交 |
+| 2026-09-30 | stage-gate-machine：流程闭环逐阶段机器化（起草门 / 确认门 / 检查19 审计） | 返工×3 | intent 2026-09-30-stage-gate-machine（回填 2026-09-30）；七轮独立复核 R2/R4/R5 各 1 项 P1（均「修上一条时引入」）→ 形态矩阵 13 例 + 反向注入验承重收口，终轮 0 P0 / 0 P1 / 0 P2；主智能体自做 |
+| 2026-09-30 | confirm-gate-approved-history：done 前置门（approved 态须已进 git 历史） | 一次通过 | intent 2026-09-30-confirm-gate-approved-history（回填 2026-09-30）；独立复核 0 P0 / 0 P1，P2×6 全处置（S26 崩溃保护 + 统一台账 helper / test.md 措辞 / git 封装登记 / 两项信任边界声明）；本单为首个实践——approved 留痕提交 0189631 先于 done，关单经自建门放行；主智能体自做 |
+| 2026-09-30 | p0-gate-noise-batch：门禁噪声修复批（check18 判据对齐 / check14 生效日后移 / 快照回写门禁化 / pre-push 注释对齐 / 台账补缺） | 返工×1 | intent 2026-09-29-p0-gate-noise-batch（回填 2026-09-30）；初复核 0 P0 / 0 P1 / P2×5 + 增量复核 0 P0 / 1 P1 / P2×5（F2/F3 修订后）——P1-1 提交树 kit.json 预 landing 属提交态边界（非实现缺陷），处置 = 完整提交 + clone 复验；修订轮含 F2 测试矩阵补缺（注入验承重）+ F3 方向词 + 词表误报改写；主智能体自做 |
 
 ## 月度聚合快照
 
@@ -45,7 +64,7 @@
 
 | 月份 | 有效任务 | 一次通过率 | 平均返工 | 主兜底 | incident | 扩容门 | 备注 |
 |------|----------|-----------|----------|--------|----------|--------|------|
-| 2026-09 | 2 | 100% | 0.00 | 0% | 2 | ❌ 未达标项:1+4 | 样本含待修0 |
+| 2026-09 | 39 | 54% | 0.59 | 0% | 22 | ❌ 未达标（连续性中断）：2+3+5 | 样本含待修0 |
 
 ## 并发扩容门槛
 

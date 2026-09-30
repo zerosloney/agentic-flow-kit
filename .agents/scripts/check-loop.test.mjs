@@ -1699,7 +1699,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   const sameKeys = ['moduleSince', 'confirmDocsEffective', 'confirmIncidentsEffective', 'bindingTs'];
   check('policy 版本 2 的四个共享日期与版本 1 相同',
     sameKeys.every((k) => POLICIES[1][k] === POLICIES[2][k]));
-  check('policy 版本 2 check14Since 前移至 2026-09-26（确认门实际上线日）',
+  check('policy 版本 2 check14Since 后移至 2026-09-26（确认门实际上线日）',
     POLICIES[2].check14Since === '2026-09-26' && POLICIES[1].check14Since === '2026-09-23');
   check('policy 版本 2 新增 check17UnclosedAfter，版本 1 无此键',
     POLICIES[2].check17UnclosedAfter === '0.8.0' && POLICIES[1].check17UnclosedAfter === undefined);
@@ -1835,6 +1835,15 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   w(T, 'workflow/delegations.md', `${head}\n## 自做任务结果\n\n| 日期 | 任务一句话 | 结果 | 备注 |\n|------|------------|------|------|\n| 2026-09-12 | x | 一次通过 | ${gap} |\n`);
   r = run(T);
   check('检查18 文件名在自做任务结果表：警告消失',
+    r.status === 0 && !ledgerOf(r).some((l) => l.includes(`intents/${gap}`)),
+    `exit=${r.status}\n${outOf(r)}`);
+
+  // 补缺（2026-09-30 F2）：自做表行**不带 .md**（台账自做表实际通写形态）——此前矩阵只覆盖三格：
+  // 委派表带/不带 .md、自做表带 .md 均有例，唯独「自做表 + 不带 .md」从未穿越（夹具 gap 恒带 .md，
+  // 走的是 includes(base) 分支）。本用例专走 includes(stripped) 分支，矩阵补成 4/4。
+  w(T, 'workflow/delegations.md', `${head}\n## 自做任务结果\n\n| 日期 | 任务一句话 | 结果 | 备注 |\n|------|------------|------|------|\n| 2026-09-12 | x | 一次通过 | 2026-09-12-gap |\n`);
+  r = run(T);
+  check('检查18 自做表行不带 .md（台账实际通写形态）：警告消失',
     r.status === 0 && !ledgerOf(r).some((l) => l.includes(`intents/${gap}`)),
     `exit=${r.status}\n${outOf(r)}`);
 
