@@ -42,7 +42,7 @@ export function renderIntent({ topic, module, level, notes, date = TODAY }) {
   for (const { title, hint } of SECTIONS) {
     body += '## ' + title + '\n\n' + hint + '\n\n';
   }
-  body += '## 确认与复核\n\n- 确认日期：\n- 确认人：用户（对话内一句"可以"即确认）\n- 确认范围：\n- 复核：L1 不要求独立复核\n';
+  body += '## 确认与复核\n\n- 确认日期：\n- 确认人：用户（对话内明确放行即确认）\n- 确认范围：\n- 复核：L1 不要求独立复核\n';
   return { frontmatter: fm, body: fm + body, sections: SECTIONS.map((s) => s.title) };
 }
 

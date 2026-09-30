@@ -22,7 +22,7 @@
     },
     {
       "rel": ".agents/commands/build.md",
-      "sha256": "3740c89a63b8c2fd14a50265321af54da09ad9a4709b6de056f63291d0712d3d"
+      "sha256": "cb2a3de631a192b7a0d05f2ebf7bd5c3422d5b82aa6c113432587ff6234bc333"
     },
     {
       "rel": ".agents/commands/deploy.md",
@@ -30,7 +30,7 @@
     },
     {
       "rel": ".agents/commands/design.md",
-      "sha256": "43de3f68a4f7c7f6664cb66ef18751825e7a425c099cdcb08ab3dc91769b0d71"
+      "sha256": "2e69079eef29d4c44f880103a3905cb26a3a2305bd8ac3511f01d91623c465ad"
     },
     {
       "rel": ".agents/commands/gate-checklist.md",
@@ -46,7 +46,7 @@
     },
     {
       "rel": ".agents/commands/plan.md",
-      "sha256": "f94ea404013f02b648cdf0dd3b8d0ace2ccc8e6aa7affd80bb60243556a4575b"
+      "sha256": "2e4cd98394689d388e46ca9691c6022c8193b6d2077c71ce35cd57f360439dc9"
     },
     {
       "rel": ".agents/commands/review.md",
@@ -62,7 +62,7 @@
     },
     {
       "rel": ".agents/commands/test.md",
-      "sha256": "20036adb22a09d96b8f3e29fa67d3ee15f7991b7950c845a2fda898fe5faa574"
+      "sha256": "a5ef29a158db2323d8b0997ca261f75a39d7a6bfdd07fe00888a5f60ece3801a"
     },
     {
       "rel": ".agents/hooks/check-pairing-incremental.sh",
@@ -146,7 +146,7 @@
     },
     {
       "rel": ".agents/scripts/fill-intent.mjs",
-      "sha256": "11cd769c252447a8c76bfd6387874c4c5d01cac191060256d4935da13413b49d"
+      "sha256": "8cbdb522d8c5955a44e84aad99e17684f08d73db2fe2fb702a5bd58f2b14ec59"
     },
     {
       "rel": ".agents/scripts/fill-intent.test.mjs",
@@ -404,7 +404,7 @@
     },
     {
       "rel": "workflow/papercuts.md",
-      "sha256": "bb393adc3721ad59830baceb64cf8f0327fb4bfba440cfd9ff17f9a7198afd8e"
+      "sha256": "9f3ab785eb69f278ec1446eede3a20ce96289c21c896307a45cdb43ad9b4b52c"
     },
     {
       "rel": "workflow/plans/_TEMPLATE.md",
