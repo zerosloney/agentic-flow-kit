@@ -186,11 +186,11 @@
     },
     {
       "rel": ".agents/scripts/gen-workflow-index.mjs",
-      "sha256": "fc6007b645a885d959a6e30f0c62f529273bf40bfb623435d44bd66df9967176"
+      "sha256": "5e8bcab656c056d2e07b3286b9869705bff3deebbc97a131f731c360236fe9dd"
     },
     {
       "rel": ".agents/scripts/gen-workflow-index.test.mjs",
-      "sha256": "b9117c535ae67a4bc193cc96c8a3b2ab61f41b006d863763aa35374103e9aef3"
+      "sha256": "6a4db606a25d230bd8f998079d559d431b5f058efdeacc97b72fd47a23333700"
     },
     {
       "rel": ".agents/scripts/gen-workflow-metrics.mjs",
@@ -404,7 +404,7 @@
     },
     {
       "rel": "workflow/papercuts.md",
-      "sha256": "9f3ab785eb69f278ec1446eede3a20ce96289c21c896307a45cdb43ad9b4b52c"
+      "sha256": "8aa3532539f36e92024ff786fb8775ff134d800331052f86242f24c5d369f5eb"
     },
     {
       "rel": "workflow/plans/_TEMPLATE.md",

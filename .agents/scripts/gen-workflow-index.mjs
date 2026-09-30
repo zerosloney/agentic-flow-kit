@@ -177,8 +177,12 @@ function previewDiff(before, after) {
   if (added.length > 10) console.log(`    + …（其余 ${added.length - 10} 行略）`);
 }
 
+// 行尾归一比较（2026-09-30：fresh clone 检出 CRLF、生成段恒 LF——直接字符串相等会在克隆环境假阳性
+// 「漂移」（doctor §6 与 check-loop 检查 11 均经 --check 判定）；仅内容差异才算漂移）
+const normEol = (s) => String(s).replace(/\r\n/g, '\n');
+
 if (CHECK) {
-  if (out === existing) {
+  if (normEol(out) === normEol(existing)) {
     console.log(`✅ workflow/INDEX.md 与磁盘一致（${summary}）`);
     process.exit(0);
   }
@@ -189,7 +193,7 @@ if (CHECK) {
 
 if (DRY) {
   console.log(`🔎 --dry-run：未写盘（${summary}）`);
-  if (out === existing) console.log('• workflow/INDEX.md：无变化');
+  if (normEol(out) === normEol(existing)) console.log('• workflow/INDEX.md：无变化');
   else previewDiff(existing, out);
 } else {
   fs.writeFileSync(INDEX_P, out, 'utf8');

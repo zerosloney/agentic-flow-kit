@@ -85,6 +85,18 @@ const run = (root, args = []) => spawnSync(process.execPath, [GEN, ...args], { c
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- 场景 2b：CRLF 检出形态（fresh clone）--check 不误报（2026-09-30 行尾归一）----
+{
+  const root = mkfix();
+  run(root);
+  const ip = path.join(root, 'workflow', 'INDEX.md');
+  fs.writeFileSync(ip, fs.readFileSync(ip, 'utf8').replace(/\r\n/g, '\n').replace(/\n/g, '\r\n'), 'utf8');
+  const crlf = run(root, ['--check']);
+  check('场景 2b：INDEX 为 CRLF 检出形态 → --check exit 0（行尾归一，不假阳性）',
+    crlf.status === 0, `exit=${crlf.status}\n${crlf.stdout}${crlf.stderr}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 // ---- 场景 3：缺 `模块:` 容忍显示 —（不报错、不阻断）----
 {
   const root = mkfix();
