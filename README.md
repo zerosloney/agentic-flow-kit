@@ -88,6 +88,6 @@ modules/gates/      可选门禁模块（dotnet-ca：Clean Architecture 参考�
 
 版本沿革写在 `CHANGELOG.md`。0.8.0 已包含：init / doctor / sync / add-host / add-gate、四套技术栈门禁初值、宿主薄适配、确认门、check-loop 16 项、看板端口上探、opencode 命令 `wf-` 前缀、pre-commit managed 台账快检。
 
-仓库里还没打进版本号的增量：`audit` 档（新装默认 false）、`policyVersion`、检查 17（发版树上的未收口文档）、claude / cursor / codex 薄适配、`node-layer` / `py-import` / `generated-readonly` 三个可选门禁、fresh init 冒烟。效果数字等有外部仓库跑过再记，不在这次。
+仓库里还没打进版本号的增量：`audit` 档（新装默认 false）、`policyVersion`、检查 17（发版树上的未收口文档）、检查 18（委派台账对账）、检查 19（逐阶段审计）、逐阶段前置门（起草门 / 确认门 / done 前置门）、claude / cursor / codex 薄适配、`node-layer` / `py-import` / `generated-readonly` 三个可选门禁、fresh init 冒烟。效果数字等有外部仓库跑过再记，不在这次。
 
 活跃层里 2026-09-23 至 09-28 的 approved / open 文档没有在这次改成 done 或 closed。那些文件的确认指纹绑着当时的正文，关单要逐份 `confirm-doc`。

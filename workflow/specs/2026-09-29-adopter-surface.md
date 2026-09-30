@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-29
 模块: pipeline
 备注: 同名 intent：../intents/2026-09-29-adopter-surface.md
-确认指纹: e15f661ece3254b5
+确认指纹: 19c2a346186e6ea7
 ---
 # SPEC — 装户表面收口
 
@@ -48,4 +48,7 @@
 ## 确认与复核
 
 - 独立复核：L2，不强制另开会话
-- 用户确认前三件套保持 draft
+- 用户确认前三件套保持 draft（起草期口径——2026-09-29 逐件确认后已 approved）
+- 确认结果：approved（2026-09-29，台账 ts 2026-09-29T01:00:27Z，source=chat-delegated，原话「spec已审完」，batch c7daf7）；done（待关单，随入口文档置终态）
+- 独立复核（2026-09-30 关单前补做，independent-reviewer「衡之」，独立上下文，只读）：**0 P0 / 0 P1 / P2×4**——8 项验收标准逐条复核成立（README / CHANGELOG / 归档 / audit 三场景 / 检查 17 / 实仓断言 / fresh init / 三门禁），6 组反向注入验证测试承重（audit 吞警告 / 检查 17 范围 / node-layer 暂存语义 / sync-hosts 实仓 / init audit / 检查 17 approved 分支）；实施提交 2c83677（107 文件）
+- P2 处置：P2-1 勾验证据按实际结构写实（「硬规则开头」=规则先行）；P2-2 spec 清单未列同期落地的 modules/hosts/{claude,cursor,codex}、modules/gates/* 与 src/*.test——功能由「功能行为」段覆盖，终态不追溯改写、此处登记；P2-3 policyVersion 历史值（1→2，由 2026-09-30-stage-gate-machine 升级）不追溯；P2-4 README 增量列表已补检查 18/19 与逐阶段门
