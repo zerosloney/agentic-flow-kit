@@ -35,7 +35,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { confirmGateFor } from './stage-gates.mjs';
+import { confirmGateFor, doneGateFor } from './stage-gates.mjs';
 
 // computeFingerprint(text)：CRLF 归一 → 剔指纹行 → sha256 hex（64 位）
 export function computeFingerprint(text) {
@@ -205,6 +205,17 @@ if (isMain) {
       const gate = confirmGateFor(root, doc);
       if (!gate.ok) {
         console.error(`❌ ${doc} 未过逐阶段前置门（stage-gates）：${gate.reason}`);
+        console.error(`   ${gate.hint}（本份未落账、未写盘）`);
+        refused++;
+        continue;
+      }
+    }
+    // done 前置门（2026-09-30 confirm-gate-approved-history）：→done 须 git 历史已留 approved 态
+    // （先 done 后提交 / 两跳同批提交 → 拒绝；防「确认态缺失」缺陷复发；判据单源见 stage-gates.doneGateFor）。
+    if (target === 'done') {
+      const gate = doneGateFor(root, abs, doc);
+      if (!gate.ok) {
+        console.error(`❌ ${doc} 未过 done 前置门（approved 历史）：${gate.reason}`);
         console.error(`   ${gate.hint}（本份未落账、未写盘）`);
         refused++;
         continue;

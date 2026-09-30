@@ -106,7 +106,7 @@ import { runCheck16 } from './check-metric-claims.mjs';
 import { auditEnabled, loadKitPolicy } from './policy.mjs';
 // MARK_RE：incident 留痕形态的单源（第七轮复核 N3——此前 check-loop 内联复制一份同口径字面量，
 // 两处靠注释与人工同步；改为复用 stage-gates.mjs 的导出，从结构上消除漂移可能）
-import { MARK_RE } from './stage-gates.mjs';
+import { MARK_RE, approvedTraceHit } from './stage-gates.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const GIT = process.platform === 'win32' ? 'git.exe' : 'git';
@@ -676,8 +676,10 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
       const lines = linesOf(doc) || [];
       if (lines.some((l) => l.includes('存量确认态豁免（'))) continue;
       const rel = path.relative(ROOT, doc).split(path.sep).join('/');
-      const hit = gitOut(['log', '-1', '--format=%H', '-G', '^状态:[[:space:]]*approved', '--', rel]);
-      if (hit !== null && hit.trim() === '') {
+      // 命中判据单源（stage-gates.approvedTraceHit，2026-09-30 confirm-gate-approved-history）：
+      // 返回 ''=从未出现 / <sha>=命中 / null=git 调用失败（不报，沿本段 fail-open 口径）
+      const hit = approvedTraceHit(ROOT, rel);
+      if (hit !== null && hit === '') {
         warnings.push(`- [WARN 确认态缺失] ${base} 状态已 done 但 git 历史中从未出现行首「状态: approved」——确认环节未留痕(draft 直跳 done)`);
       }
     }

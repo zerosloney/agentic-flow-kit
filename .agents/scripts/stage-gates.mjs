@@ -18,6 +18,7 @@
 // 设计先例：fill-* 已 import 同目录 workflow-enums.mjs；check-loop 检查 19 内联同口径（门禁脚本自包含、防兄弟依赖）。
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { loadKitPolicy } from './policy.mjs';
 
 export const ENTRY_STATUSES = ['approved', 'done'];
@@ -175,6 +176,59 @@ export function confirmGateFor(root, docRel) {
   return draftGateFor(kind, root, base);
 }
 
+// ---- done 前置门族（2026-09-30 confirm-gate-approved-history）----
+// 背景：stage-gate-machine 关单后检查 14 报「确认态缺失」×2——approved→done 期间从未提交、首次提交即
+// done 态（先 done 后提交），git 历史无 approved 中间态；检查 14 是事后审计（发现即定局），本族把
+// 校验收口到 confirm-doc 的「→done」跳转——「approved 态还在工作区」的最后一刻，即唯一可拦截窗口。
+// 命中判据单源：approvedTraceHit 命令行与 check-loop 检查 14 逐字一致（-G '^状态:[[:space:]]*approved'），
+// 本模块为唯一实现、两调用方共享（2026-09-30 复核 N3 教训：双份字面量靠注释同步必漂移）。
+// 注（2026-09-30 复核 P2-2 登记）：gitRun 的 GIT 解析 / maxBuffer / 失败语义与 check-loop.mjs 的
+// gitOut、gitReady 与检查 14 段级两条 rev-parse 为**同口径的两份实现**（未合并——检查 14 段结构不动
+// 属本单非目标）——任一侧调整（如加 --no-pager）须同步另一侧，防段级门与文档级判据分叉。
+const GIT = process.platform === 'win32' ? 'git.exe' : 'git';
+
+function gitRun(root, args) {
+  const r = spawnSync(GIT, args, { cwd: root, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+  if (r.error || r.status !== 0) return null;
+  return r.stdout || '';
+}
+
+// gitReady：git 环境可用（在仓库内且已有 HEAD）——与检查 14 段级两条 rev-parse 同口径
+export function gitReady(root) {
+  return gitRun(root, ['rev-parse', '--git-dir']) !== null
+    && gitRun(root, ['rev-parse', '-q', '--verify', 'HEAD']) !== null;
+}
+
+// approvedTraceHit：命中判定单源——git 历史是否出现过行首「状态: approved」（经提交进入历史才算，
+// 当前工作区未提交的 approved 不算——这正是「留痕」语义）。rel = 仓库根相对路径。
+// 返回：'' = 从未出现；<sha> = 命中；null = git 调用失败（调用方按各自容错口径处理——检查 14 不报、
+// done 门跳过，均沿 fail-open 边界；诚实边界声明见 spec）。
+export function approvedTraceHit(root, rel) {
+  const r = gitRun(root, ['log', '-1', '--format=%H', '-G', '^状态:[[:space:]]*approved', '--', rel]);
+  return r === null ? null : r.trim();
+}
+
+// doneGateFor：confirm-doc「→done」前置门（三件套 intent/spec/plan 均适用；incidents 的 fixed/closed 不在本门）。
+// 豁免与顺序：① 行首 `流程: legacy` ② 行含「存量确认态豁免（」声明（与检查 14 同标记，显式逃生口）
+// ③ 非 git 环境 ④ git 调用失败 → 均跳过（不误拦）。未豁免且未命中 → 拒绝（调用方负责非零退出 +
+// 零落账 + 零写盘 + 回退指引）。
+export function doneGateFor(root, abs, rel) {
+  const body = readBody(abs);
+  if (body.split(/\r?\n/).some((l) => /^流程: legacy/.test(l))) return { ok: true, skipped: 'legacy' };
+  if (body.split(/\r?\n/).some((l) => l.includes('存量确认态豁免（'))) return { ok: true, skipped: 'declared' };
+  if (!gitReady(root)) return { ok: true, skipped: 'no-git' };
+  const hit = approvedTraceHit(root, rel);
+  if (hit === null) return { ok: true, skipped: 'git-error' };
+  if (hit === '') {
+    return {
+      ok: false,
+      reason: 'git 历史中从未出现行首「状态: approved」——确认态未留痕（先 done 后提交 / 两跳同批提交）',
+      hint: '先把该文档的 approved 态提交（git add 该文件并 commit）后再重试关单',
+    };
+  }
+  return { ok: true, hit };
+}
+
 // resolveWorkspace：从输出路径推导工作区根与主题名；output 路径不含 workflow 段 → null（仓外草稿，不校验）
 export function resolveWorkspace(outputPath, rootOverride) {
   const abs = path.resolve(outputPath);
@@ -187,4 +241,4 @@ export function resolveWorkspace(outputPath, rootOverride) {
   return null;
 }
 
-export default { entryConfirmed, specConfirmed, draftGateFor, confirmGateFor, resolveWorkspace, readFm, readLedger };
+export default { entryConfirmed, specConfirmed, draftGateFor, confirmGateFor, doneGateFor, gitReady, approvedTraceHit, resolveWorkspace, readFm, readLedger };

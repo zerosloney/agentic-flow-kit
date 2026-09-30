@@ -5,13 +5,10 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（28）
+## 活跃（25）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
-| INTENT | L2 | approved | 2026-09-30 | pipeline | confirm-gate-approved-history | ☑0/5 |
-| PLAN | L2 | approved | 2026-09-30 | pipeline | confirm-gate-approved-history | — |
-| SPEC | L2 | approved | 2026-09-30 | pipeline | confirm-gate-approved-history | — |
 | INTENT | L2 | approved | 2026-09-29 | pipeline | 装户表面收口 | ☑0/8 |
 | INTENT | L2 | approved | 2026-09-29 | pipeline | p0-gate-noise-batch | ☑9/9 |
 | PLAN | L2 | approved | 2026-09-29 | pipeline | 装户表面收口 | — |
@@ -38,17 +35,17 @@
 | PLAN | L1 | approved | 2026-09-23 | pipeline | M5：npm 发布 | — |
 | SPEC | L2 | approved | 2026-09-23 | pipeline | M4 自装 dogfooding | — |
 
-## 档案计数（149，不进表）
+## 档案计数（152，不进表）
 
 | 类型 | 模块 | 数量 |
 |---|---|---|
 | INCIDENT | pipeline | 20 |
-| INTENT | pipeline | 42 |
+| INTENT | pipeline | 43 |
 | INTENT | wiki | 1 |
-| PLAN | pipeline | 59 |
+| PLAN | pipeline | 60 |
 | PLAN | wiki | 1 |
-| SPEC | pipeline | 26 |
+| SPEC | pipeline | 27 |
 
-终态构成：done 129 · closed 12 · fixed 8；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
+终态构成：done 132 · closed 12 · fixed 8；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
 
 <!-- GENERATED:END -->

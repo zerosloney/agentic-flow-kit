@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-30
 模块: pipeline
 备注: 来源：stage-gate-machine 关单后「确认态缺失」×2 复盘（对话 2026-09-30）——把「approved 态须已进 git 历史」从事后审计升级为 done 前置硬门
-确认指纹: 93a841478b30f8d8
+确认指纹: 0b7009d163c37ddd
 ---
 # INTENT — confirm-gate-approved-history
 
@@ -58,18 +58,18 @@
 
 ## 验收标准（可测试）
 
-- [ ] G1a：confirm-doc「→done」前置校验双向——历史含 approved 行 → 放行落账；历史不含 → 拒（exit 非零 + 台账零新增 + 状态不变 + 提示先提交）。confirm-doc.test.mjs 双向场景。
-- [ ] G1b：三件套范围（intent / spec / plan）+ TTY / --delegated 两形态同校验。测试覆盖。
-- [ ] G2：无 git 环境跳过、draft→approved 不受影响。测试覆盖。
-- [ ] G3：test.md 顺序写明；sync-hosts --diff 0 漂移、source-sync-check --gate 0 差异。
-- [ ] G4：npm test 全量 + doctor + check-loop / 四门全绿；confirm-doc 既有场景零回归。
+- [x] G1a：confirm-doc「→done」前置校验双向——历史含 approved 行 → 放行落账；历史不含 → 拒（exit 非零 + 台账零新增 + 状态不变 + 提示先提交）。confirm-doc.test.mjs 双向场景。（证据：confirm-doc.test **37/0**——S25 历史无 approved → exit 2 + 零落账 + 零写盘 + 含「从未出现」文案；S26 已提交 approved → 放行落态 + 台账 stage=done/prev=approved；独立复核影子仓四形态实证同结论）
+- [x] G1b：三件套范围（intent / spec / plan）+ TTY / --delegated 两形态同校验。测试覆盖。（证据：S25 plan / S28 intent / S29 spec 覆盖三件套；门位于 confirm-doc.mjs 的 delegated 与 TTY 分支之前（confirm-doc.mjs:213-223），复核实测 TTY 注入形态未留痕 → exit 2 且拦截先于提问）
+- [x] G2：无 git 环境跳过、draft→approved 不受影响。测试覆盖。（证据：S27 非 git → 跳过放行；复核影子实测「git init 无 HEAD」「git 不在 PATH」→ 均跳过；既有 S11–S18（draft→approved 等）在 37/0 中零回归）
+- [x] G3：test.md 顺序写明；sync-hosts --diff 0 漂移、source-sync-check --gate 0 差异。（证据：test.md 新增「approved 留痕提交」步骤（含复核 P2-5 措辞修正「本次关单文档」）；`sync-hosts --diff` 正文对齐 76 对 / 0 漂移；`source-sync-check --gate` 无差异）
+- [x] G4：npm test 全量 + doctor + check-loop / 四门全绿；confirm-doc 既有场景零回归。（证据：`npm test` **30 套件 0 FAIL**；`doctor` 13 PASS / 0 WARN / 0 FAIL；check-loop 实跑 WARN 7 条**全为存量**（本单零新增）；四门全绿；confirm-doc 既有 S1–S24 在 37/0 中零回归）
 
 > **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条勾选项后补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 冒烟脚本输出>）`。
 > done 状态仍有未勾项会被 check-loop 拦截（2026-09-12 起新建 intent 为 hard-block，存量 intent 仅 warning 提示）；勾选但缺「证据：」为 warning。
 
 ## 确认与复核
 
-- 确认日期：
+- 确认日期：2026-09-30（台账 ts 2026-09-30T06:45:28Z，source=chat-delegated，原话「确认」，batch aab20f）
 - 确认人：用户（对话内一句"可以"即确认）
-- 确认范围：
-- 复核：L2 推荐独立复核（独立上下文执行；结论回填本节）
+- 确认范围：intent 全文（背景根因链 / 目标 G1–G4 / 非目标 / 约束 / 验收标准 5 条）
+- 复核：见同名 spec「确认与复核」节（单一真相源）——L2 独立复核 0 P0 / 0 P1 / P2×6（2026-09-30）

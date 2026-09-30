@@ -62,7 +62,7 @@
     },
     {
       "rel": ".agents/commands/test.md",
-      "sha256": "40061d4ce15b4bfa828d9e868193de5eb95b9daa4098b209ce4e1c6eccbadbce"
+      "sha256": "20036adb22a09d96b8f3e29fa67d3ee15f7991b7950c845a2fda898fe5faa574"
     },
     {
       "rel": ".agents/hooks/check-pairing-incremental.sh",
@@ -110,7 +110,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "4746b52d329ae1d4a9a3eba3ecebb2e9075ecab0eb44845306bf140b368299f0"
+      "sha256": "539cd22b0fc9a774e48492813a39b1297f9562779ee0e8d0d5315149c1e91a63"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -118,7 +118,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "9778a280cdfdf86ae7aabaccd8e8f4df51100bd87df3344519cfaec3a127e806"
+      "sha256": "18a3c1533fe2b49002238ca50feeda611d2eb964f53a9bb7e9f43b122800c423"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -130,11 +130,11 @@
     },
     {
       "rel": ".agents/scripts/confirm-doc.mjs",
-      "sha256": "8ef195cca0d3b1c900229238b26167000dc6477170b943468978a6089e84c189"
+      "sha256": "8802e3e7f5ce4b397251bd5da83f8e278a56c0cc4790fbbc995fc77849c3d5a7"
     },
     {
       "rel": ".agents/scripts/confirm-doc.test.mjs",
-      "sha256": "a1f5fb29b42760e76c6b6a7db4a13f04c4e7e0cb80dd4ba5ff48764898912fab"
+      "sha256": "01a6c9410391e429dc81a19ded80ac74989ca786f225ed4f21a97d6917f496aa"
     },
     {
       "rel": ".agents/scripts/doctor.test.mjs",
@@ -218,7 +218,7 @@
     },
     {
       "rel": ".agents/scripts/policy.mjs",
-      "sha256": "3de262bc2ebf2a9a577c6cb1dc0cac621d4df77e6c2681e3da1b0bfdfac37aa7"
+      "sha256": "e1d9d36e3fe41abb429cc6f6e37d325e7a4b5043a0a5de15e4b037b87a955c22"
     },
     {
       "rel": ".agents/scripts/rule-budget.sh",
@@ -234,7 +234,7 @@
     },
     {
       "rel": ".agents/scripts/stage-gates.mjs",
-      "sha256": "e4668bd9fc5f6f6638ac327ff0bcb19fffa3c414029e1c505742276b2fbf41e6"
+      "sha256": "3048d14acc7f79e1fa4a6f2c21c631ece80031da4398c19dbbd8e60476449064"
     },
     {
       "rel": ".agents/scripts/verify-wiki-consistency.mjs",

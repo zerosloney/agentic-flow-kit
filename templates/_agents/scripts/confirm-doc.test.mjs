@@ -5,6 +5,8 @@
 //       ⑥ 委托代录（--delegated）：免 TTY 落态 + 台账如实记 source/quote；空原话拒跑
 //       ⑦ 逐阶段前置门（2026-09-30 stage-gate-machine）：specs/plans 的 draft→approved 须入口（plan 另须
 //          L2/L3 时同名 spec）已确认；未过 → exit 2 + 未落盘未记账（S19-S22）
+//       ⑧ done 前置门（2026-09-30 confirm-gate-approved-history）：→done 须 git 历史已留 approved 态
+//          （先 done 后提交 / 两跳同批提交 → 拒绝）；非 git / legacy / 存量豁免声明 → 跳过（S25-S29）
 // 用法：node templates/_agents/scripts/confirm-doc.test.mjs（npm test 随跑）
 import fs from 'node:fs';
 import os from 'node:os';
@@ -22,6 +24,14 @@ const check = (desc, cond, detail = '') => {
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
+
+// 台账读取 helper（2026-09-30 复核 P2-1）：缺失/空行 → 安全返回（[]）——防「门拒路径下台账未生成」时
+// 未捕获 ENOENT 截断后续用例（注入验证实证：原裸读在门失效时崩溃、无「合计」行）
+const readLedgerOf = (root) => {
+  const p = path.join(root, '.agents', 'confirmations.jsonl');
+  if (!fs.existsSync(p)) return [];
+  return fs.readFileSync(p, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+};
 
 // ---- S1 指纹：CRLF 归一（同内容不同行尾同指纹）----
 {
@@ -130,7 +140,7 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
   // spawnSync 无 TTY（管道 stdin）——模拟 AI 会话内委托代录调用
   const r = spawnSync(process.execPath, [CLI, 'workflow/plans/2026-09-27-d.md', '--delegated', '2选2'], { cwd: root, encoding: 'utf8' });
   const after = fs.readFileSync(path.join(docP, '2026-09-27-d.md'), 'utf8');
-  const led = fs.readFileSync(path.join(root, '.agents', 'confirmations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  const led = readLedgerOf(root);
   const j = led[led.length - 1];
   check('S11 委托代录：exit 0 + draft→approved + 指纹行 + 台账 source=chat-delegated / quote=原话 / 指纹全量与 frontmatter 前 16 位配对',
     r.status === 0 && after.includes('状态: approved') && after.includes(`确认指纹: ${fpExpect.slice(0, 16)}`)
@@ -151,7 +161,7 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
   const fp2 = computeFingerprint(before);
   const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-27-e.md', '--delegated', '可以'], { cwd: root, encoding: 'utf8' });
   const after = fs.readFileSync(path.join(docP, '2026-09-27-e.md'), 'utf8');
-  const led = fs.readFileSync(path.join(root, '.agents', 'confirmations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  const led = readLedgerOf(root);
   check('S12 委托第二跳：approved→done + 指纹行换新值 + 台账 stage=done / source 如实',
     r.status === 0 && after.includes('状态: done') && after.includes(`确认指纹: ${fp2.slice(0, 16)}`) && !after.includes(fp1.slice(0, 16))
       && led[led.length - 1].stage === 'done' && led[led.length - 1].source === 'chat-delegated',
@@ -184,7 +194,7 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
   const fpExpect = computeFingerprint(before);
   const r = spawnSync(process.execPath, [CLI, 'workflow/incidents/2026-09-28-i.md', '--delegated', '修好了'], { cwd: root, encoding: 'utf8' });
   const after = fs.readFileSync(path.join(docP, '2026-09-28-i.md'), 'utf8');
-  const led = fs.readFileSync(path.join(root, '.agents', 'confirmations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  const led = readLedgerOf(root);
   const j = led[led.length - 1];
   check('S15 incidents 委托代录：exit 0 + open→fixed + 指纹行 + 台账 stage=fixed / prev=open',
     r.status === 0 && after.includes('状态: fixed') && after.includes(`确认指纹: ${fpExpect.slice(0, 16)}`)
@@ -204,7 +214,7 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
   const fpExpect = computeFingerprint(before);
   const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-28-c.md', '--to', 'cancelled', '--delegated', '不做了'], { cwd: root, encoding: 'utf8' });
   const after = fs.readFileSync(path.join(docP, '2026-09-28-c.md'), 'utf8');
-  const led = fs.readFileSync(path.join(root, '.agents', 'confirmations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  const led = readLedgerOf(root);
   const j = led[led.length - 1];
   check('S16 --to cancelled 委托代录：exit 0 + draft→cancelled + 台账 stage=cancelled / prev=draft',
     r.status === 0 && after.includes('状态: cancelled') && after.includes(`确认指纹: ${fpExpect.slice(0, 16)}`)
@@ -269,7 +279,7 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
       JSON.stringify({ r1: r1.status, r2: r2.status, stderr: r2.stderr }));
     // 调用事实（2026-09-28 batch-ledger-audit）：每次进程调用 **一个** batch；两次独立调用 batch **不同**，
     // 各自 seq=1 / of=1——这是并录审计「逐件 vs 并录」的判别基础（复核 P2-2：plan 要求覆盖此面）
-    const led2 = fs.readFileSync(path.join(root, '.agents', 'confirmations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    const led2 = readLedgerOf(root);
     const [e1, e2] = led2.slice(-2);
     check('S18b 两次独立调用各生成独立 batch（不同批、各自 seq=1/of=1）',
       e1.batch !== e2.batch && e1.seq === 1 && e2.seq === 1 && e1.of === 1 && e2.of === 1,
@@ -295,7 +305,7 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
       cwd: root, encoding: 'utf8',
       env: { ...process.env, CONFIRM_DOC_TEST_TTY: '1', CONFIRM_DOC_TEST_ANSWERS: '可以,可以', NODE_ENV: 'test' },
     });
-    const ledN = fs.readFileSync(path.join(root, '.agents', 'confirmations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    const ledN = readLedgerOf(root);
     const stI = fs.readFileSync(path.join(root, 'workflow', 'intents', '2026-09-27-s.md'), 'utf8');
     const stP = fs.readFileSync(path.join(root, 'workflow', 'plans', '2026-09-27-s.md'), 'utf8');
     check('S18c 单次调用落 2 份（TTY 多文档）端到端 → batch 相同 / seq 1,2 / of 均=2 / 两份都落态',
@@ -316,7 +326,7 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
       cwd: root, encoding: 'utf8',
       env: { ...process.env, CONFIRM_DOC_TEST_TTY: '1', CONFIRM_DOC_TEST_ANSWERS: '可以', NODE_ENV: 'test' }, // 只给一份应答
     });
-    const led1 = fs.readFileSync(path.join(root, '.agents', 'confirmations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+    const led1 = readLedgerOf(root);
     const stP1 = fs.readFileSync(path.join(root, 'workflow', 'plans', '2026-09-27-s.md'), 'utf8');
     check('S18d 注入应答不足 → 仅首份落态，次份按跳过处理（不落态不记账）',
       led1.length === 1 && led1[0].seq === 1 && led1[0].of === 2 && stP1.includes('状态: draft'),
@@ -437,6 +447,94 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
   check('S24 N1 存量短路：legacy 入口无级别 → confirm-doc 放行（不锁死确认）',
     r.status === 0 && after.includes('状态: approved'),
     JSON.stringify({ status: r.status, stderr: r.stderr }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- S25–S29【done 前置门】approved 历史留痕（2026-09-30 confirm-gate-approved-history）----
+// git helper：与 check-loop.test 同口径（win32 → git.exe；-c 注入 user 免全局 config 依赖）
+const GITBIN = process.platform === 'win32' ? 'git.exe' : 'git';
+const gitAt = (root, ...args) => spawnSync(GITBIN, args, { cwd: root, encoding: 'utf8' });
+const gitHead = (root) => {
+  gitAt(root, 'init', '-q');
+  gitAt(root, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--allow-empty', '-m', 'init');
+};
+
+// S25：有 HEAD 但文档从未提交（先 done 后提交形态）→ done 拒绝
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-dh1-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'plans'), { recursive: true });
+  const p = path.join(root, 'workflow', 'plans', '2026-09-30-d1.md');
+  fs.writeFileSync(p, '---\n状态: approved\n级别: L2\n日期: 2026-09-30\n---\n# P\n');
+  const before = fs.readFileSync(p, 'utf8');
+  gitHead(root);
+  const r = spawnSync(process.execPath, [CLI, 'workflow/plans/2026-09-30-d1.md', '--delegated', '关单'], { cwd: root, encoding: 'utf8' });
+  const after = fs.readFileSync(p, 'utf8');
+  const noLedger = !fs.existsSync(path.join(root, '.agents', 'confirmations.jsonl'));
+  check('S25 done 门：历史无 approved（先 done 后提交形态）→ exit 2 + 零落账 + 零写盘',
+    r.status === 2 && /done 前置门/.test(r.stderr) && /从未出现/.test(r.stderr) && after === before && noLedger,
+    JSON.stringify({ status: r.status, stderr: String(r.stderr).slice(0, 260) }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// S26：approved 态已提交（留痕）→ done 放行落账
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-dh2-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'plans'), { recursive: true });
+  const p = path.join(root, 'workflow', 'plans', '2026-09-30-d2.md');
+  fs.writeFileSync(p, '---\n状态: approved\n级别: L2\n日期: 2026-09-30\n---\n# P\n');
+  gitHead(root);
+  gitAt(root, 'add', '-A');
+  gitAt(root, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'approved');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/plans/2026-09-30-d2.md', '--delegated', '关单'], { cwd: root, encoding: 'utf8' });
+  const after = fs.readFileSync(p, 'utf8');
+  const ledger = readLedgerOf(root); // 复核 P2-1：统一 helper（缺失 → []，不崩溃）
+  check('S26 done 门：approved 态已提交（留痕）→ 放行落态 + 台账 stage=done',
+    r.status === 0 && after.includes('状态: done') && ledger.some((e) => e.stage === 'done' && e.prev === 'approved'),
+    JSON.stringify({ status: r.status, stderr: String(r.stderr).slice(0, 200) }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// S27：非 git 环境 → 跳过（不误拦；沿检查 14 口径）
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-dh3-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'plans'), { recursive: true });
+  const p = path.join(root, 'workflow', 'plans', '2026-09-30-d3.md');
+  fs.writeFileSync(p, '---\n状态: approved\n级别: L2\n---\n# P\n');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/plans/2026-09-30-d3.md', '--delegated', '关单'], { cwd: root, encoding: 'utf8' });
+  const after = fs.readFileSync(p, 'utf8');
+  check('S27 done 门：非 git 环境 → 跳过放行',
+    r.status === 0 && after.includes('状态: done'),
+    JSON.stringify({ status: r.status, stderr: String(r.stderr).slice(0, 200) }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// S28：legacy 标记 → 跳过（存量口径；intent 文档承载——spec/plan 不产生 legacy 标记）
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-dh4-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
+  const p = path.join(root, 'workflow', 'intents', '2026-09-30-d4.md');
+  fs.writeFileSync(p, '---\n状态: approved\n级别: L1\n日期: 2026-01-01\n流程: legacy\n---\n# I\n');
+  gitHead(root);
+  const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-30-d4.md', '--delegated', '关单'], { cwd: root, encoding: 'utf8' });
+  const after = fs.readFileSync(p, 'utf8');
+  check('S28 done 门：legacy 标记 → 跳过放行',
+    r.status === 0 && after.includes('状态: done'),
+    JSON.stringify({ status: r.status, stderr: String(r.stderr).slice(0, 200) }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// S29：正文「存量确认态豁免（」声明 → 跳过（显式逃生口；与检查 14 同标记）
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-dh5-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'specs'), { recursive: true });
+  const p = path.join(root, 'workflow', 'specs', '2026-09-30-d5.md');
+  fs.writeFileSync(p, '---\n状态: approved\n级别: L2\n---\n# S\n\n存量确认态豁免（S29 构造：声明式逃生口覆盖）\n');
+  gitHead(root);
+  const r = spawnSync(process.execPath, [CLI, 'workflow/specs/2026-09-30-d5.md', '--delegated', '关单'], { cwd: root, encoding: 'utf8' });
+  const after = fs.readFileSync(p, 'utf8');
+  check('S29 done 门：存量豁免声明 → 跳过放行',
+    r.status === 0 && after.includes('状态: done'),
+    JSON.stringify({ status: r.status, stderr: String(r.stderr).slice(0, 200) }));
   fs.rmSync(root, { recursive: true, force: true });
 }
 

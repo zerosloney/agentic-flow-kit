@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
-确认指纹: bbbb1429c86bfc75
+确认指纹: a3bc98f1c4441d86
 ---
 # PLAN — confirm-gate-approved-history
 
@@ -59,6 +59,6 @@
 ## 确认与复核
 
 > 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节（确认环节的机器可见态），done 只在关单出现——禁从 draft 直跳 done（2026-09-22 papercut）。
-- 确认结果：approved（YYYY-MM-DD 用户对话内确认）；done（YYYY-MM-DD 关单，随入口文档置终态）
+- 确认结果：approved（2026-09-30 用户对话内确认，原话「我已确认」，代录 batch 35b4be；台账 ts 2026-09-30T06:55:46Z）；done（待关单，随入口文档置终态）
 - 确认门记录：plan 草稿全文过目 + 改动清单确认（build.md 两道门，逐次，不合并）
-- 复核：L2 推荐独立复核（独立上下文执行；结论回填本节）
+- 复核：L2 独立复核已执行（**0 P0 / 0 P1 / P2×6**，independent-reviewer「临舟」，2026-09-30）；处置与声明见同名 spec「确认与复核」与「约束遵守映射」节
