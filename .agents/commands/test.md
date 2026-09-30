@@ -79,5 +79,6 @@ node bin/flow-kit.mjs doctor                       # §6.5 delegations + §6.6 o
   - 修复：防复发验证已落地，incident → closed（经确认门 confirm-doc：open→fixed / fixed→closed 两跳、无单跳；2026-09-28 起 check-loop 15 对账——关单编辑先于 closed 确认，口径同 done 内容绑定）
   - **同族收尾**：入口置终态时，同名 plan 一并置 `done`（spec 见上条），不留 `approved` 孤儿（口径同看板「入口已 done，本 plan 未终态」告警）
   - 主智能体自做的 L1+ 新需求在 `workflow/delegations.md`「自做任务结果表」记一行（修复类不重复记）
+  - **委派快照回写**：关单后若 `workflow/delegations.md` §月度聚合快照缺当月行或 doctor §6.5 报陈旧 → 跑 `node .agents/scripts/agg-delegations.cjs` 并回贴当月快照行
 - L1：本阶段结束，不进 deploy
 - L2/L3：仅当用户确认要上 prod 时进 `.agents/commands/deploy.md`

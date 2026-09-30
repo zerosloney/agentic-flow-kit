@@ -3,6 +3,8 @@
 // 判据：① 指纹算法（CRLF 归一 / 剔指纹行防自引用 / 内容敏感） ② 跳转唯一合法性 ③ 落态只动两行
 //       ④ 台账追加 schema ⑤ 核心——非 TTY spawn（模拟 AI 调用路径）无 --delegated 必须被拒
 //       ⑥ 委托代录（--delegated）：免 TTY 落态 + 台账如实记 source/quote；空原话拒跑
+//       ⑦ 逐阶段前置门（2026-09-30 stage-gate-machine）：specs/plans 的 draft→approved 须入口（plan 另须
+//          L2/L3 时同名 spec）已确认；未过 → exit 2 + 未落盘未记账（S19-S22）
 // 用法：node templates/_agents/scripts/confirm-doc.test.mjs（npm test 随跑）
 import fs from 'node:fs';
 import os from 'node:os';
@@ -119,6 +121,10 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
   const docP = path.join(root, 'workflow', 'plans');
   fs.mkdirSync(docP, { recursive: true });
   fs.writeFileSync(path.join(docP, '2026-09-27-d.md'), '---\n状态: draft\n级别: L2\n---\n# P\n');
+  // 逐阶段门夹具（2026-09-30 stage-gate-machine）：plan 批准须先有已确认入口——
+  // 入口用存量口径（日期早于 confirmDocsEffective）免台账；级别 L1 免 spec 档
+  fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-09-27-d.md'), '---\n状态: approved\n级别: L1\n日期: 2026-01-01\n---\n# I（S11 入口夹具）\n');
   const before = fs.readFileSync(path.join(docP, '2026-09-27-d.md'), 'utf8');
   const fpExpect = computeFingerprint(before);
   // spawnSync 无 TTY（管道 stdin）——模拟 AI 会话内委托代录调用
@@ -334,6 +340,104 @@ const CLI = path.join(SCRIPT_DIR, 'confirm-doc.mjs');
       JSON.stringify({ status: r.status, stderr: String(r.stderr).slice(0, 200) }));
     fs.rmSync(root, { recursive: true, force: true });
   }
+}
+
+// ---- S19【逐阶段门】spec 无同名入口 → 拒绝落账（2026-09-30 stage-gate-machine）----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-sg1-'));
+  const docP = path.join(root, 'workflow', 'specs');
+  fs.mkdirSync(docP, { recursive: true });
+  fs.writeFileSync(path.join(docP, '2026-09-30-g.md'), '---\n状态: draft\n级别: L2\n---\n# S\n');
+  const before = fs.readFileSync(path.join(docP, '2026-09-30-g.md'), 'utf8');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/specs/2026-09-30-g.md', '--delegated', '可以'], { cwd: root, encoding: 'utf8' });
+  const after = fs.readFileSync(path.join(docP, '2026-09-30-g.md'), 'utf8');
+  const noLedger = !fs.existsSync(path.join(root, '.agents', 'confirmations.jsonl'));
+  check('S19 逐阶段门：spec 无同名入口 → exit 2 + 未落盘未记账 + 回退提示',
+    r.status === 2 && /逐阶段前置门/.test(r.stderr) && /未找到同名入口/.test(r.stderr) && after === before && noLedger,
+    JSON.stringify({ status: r.status, stderr: r.stderr }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- S20【逐阶段门】入口存在但未确认（draft）→ 拒绝 ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-sg2-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'workflow', 'specs'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-h.md'), '---\n状态: draft\n级别: L2\n日期: 2026-09-30\n---\n# I\n');
+  fs.writeFileSync(path.join(root, 'workflow', 'specs', '2026-09-30-h.md'), '---\n状态: draft\n级别: L2\n---\n# S\n');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/specs/2026-09-30-h.md', '--delegated', '可以'], { cwd: root, encoding: 'utf8' });
+  const noLedger = !fs.existsSync(path.join(root, '.agents', 'confirmations.jsonl'));
+  check('S20 逐阶段门：入口未确认（draft）→ exit 2 + 提示状态、零落账',
+    r.status === 2 && /状态「draft」/.test(r.stderr) && noLedger,
+    JSON.stringify({ status: r.status, stderr: r.stderr }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- S21【逐阶段门】L1 入口已确认 → plan 放行（存量口径免台账；级别 L1 免 spec 档）----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-sg3-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'workflow', 'plans'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-j.md'), '---\n状态: approved\n级别: L1\n日期: 2026-01-01\n---\n# I\n');
+  fs.writeFileSync(path.join(root, 'workflow', 'plans', '2026-09-30-j.md'), '---\n状态: draft\n级别: L1\n---\n# P\n');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/plans/2026-09-30-j.md', '--delegated', '继续'], { cwd: root, encoding: 'utf8' });
+  const after = fs.readFileSync(path.join(root, 'workflow', 'plans', '2026-09-30-j.md'), 'utf8');
+  check('S21 逐阶段门：L1 入口 approved（存量口径）→ plan 放行落态',
+    r.status === 0 && after.includes('状态: approved'),
+    JSON.stringify({ status: r.status, stderr: r.stderr }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- S22【逐阶段门】L2 入口已确认但缺 spec → plan 拒绝 ----
+{
+  // 入口须有**台账行**（不复用存量日期短路路径）——夹具写 confirmed 行使前置成立，仅缺 spec
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-sg4-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'workflow', 'plans'), { recursive: true });
+  fs.mkdirSync(path.join(root, '.agents'), { recursive: true });
+  const fp4 = '4'.repeat(64);
+  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-k.md'), `---\n状态: approved\n级别: L2\n日期: 2026-09-30\n确认指纹: ${fp4.slice(0, 16)}\n---\n# I\n`);
+  fs.writeFileSync(path.join(root, '.agents', 'confirmations.jsonl'), JSON.stringify({ ts: '2026-09-30T04:00:00.000Z', doc: 'workflow/intents/2026-09-30-k.md', stage: 'approved', fingerprint: fp4, prev: 'draft', source: 'chat-delegated', batch: 'k4', seq: 1, of: 1 }) + '\n');
+  fs.writeFileSync(path.join(root, 'workflow', 'plans', '2026-09-30-k.md'), '---\n状态: draft\n级别: L2\n---\n# P\n');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/plans/2026-09-30-k.md', '--delegated', '可以'], { cwd: root, encoding: 'utf8' });
+  const after = fs.readFileSync(path.join(root, 'workflow', 'plans', '2026-09-30-k.md'), 'utf8');
+  check('S22 逐阶段门：L2 入口（台账行）缺同名 spec → plan 拒绝（exit 2 + 未落态）',
+    r.status === 2 && /缺同名 spec/.test(r.stderr) && after.includes('状态: draft'),
+    JSON.stringify({ status: r.status, stderr: r.stderr }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- S23【逐阶段门】入口「台账行」正路放行（非存量口径；复核 P2-4④）----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-sg5-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'workflow', 'specs'), { recursive: true });
+  fs.mkdirSync(path.join(root, '.agents'), { recursive: true });
+  const fp = 'b'.repeat(64);
+  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-m.md'), `---\n状态: approved\n级别: L2\n日期: 2026-09-30\n确认指纹: ${fp.slice(0, 16)}\n---\n# I\n`);
+  fs.writeFileSync(path.join(root, '.agents', 'confirmations.jsonl'), JSON.stringify({ ts: '2026-09-30T02:00:00.000Z', doc: 'workflow/intents/2026-09-30-m.md', stage: 'approved', fingerprint: fp, prev: 'draft', source: 'chat-delegated', batch: 't9', seq: 1, of: 1 }) + '\n');
+  fs.writeFileSync(path.join(root, 'workflow', 'specs', '2026-09-30-m.md'), '---\n状态: draft\n级别: L2\n---\n# S\n');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/specs/2026-09-30-m.md', '--delegated', '继续'], { cwd: root, encoding: 'utf8' });
+  const after = fs.readFileSync(path.join(root, 'workflow', 'specs', '2026-09-30-m.md'), 'utf8');
+  check('S23 逐阶段门：入口状态 approved + 台账行（正路）→ spec 放行',
+    r.status === 0 && after.includes('状态: approved'),
+    JSON.stringify({ status: r.status, stderr: r.stderr }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+{
+  // N1：存量短路（confirm-doc 侧）——legacy 入口无级别 → spec 放行
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-n1-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'workflow', 'specs'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-n1.md'), '---\n状态: approved\n日期: 2026-01-01\n流程: legacy\n---\n# I（存量、无级别）\n');
+  fs.writeFileSync(path.join(root, 'workflow', 'specs', '2026-09-30-n1.md'), '---\n状态: draft\n级别: L2\n---\n# S\n');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/specs/2026-09-30-n1.md', '--delegated', 'n1 回归'], { cwd: root, encoding: 'utf8' });
+  const after = fs.readFileSync(path.join(root, 'workflow', 'specs', '2026-09-30-n1.md'), 'utf8');
+  check('S24 N1 存量短路：legacy 入口无级别 → confirm-doc 放行（不锁死确认）',
+    r.status === 0 && after.includes('状态: approved'),
+    JSON.stringify({ status: r.status, stderr: r.stderr }));
+  fs.rmSync(root, { recursive: true, force: true });
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

@@ -50,7 +50,7 @@ description: Maintain 阶段 · 立 incident + 复盘三件套（incident 在 L1
 
 ### 3. 起草后停下
 
-输出草稿全文给用户过目;确认后才执行三件套落地。**确认点不合并**：incident 草稿、spec、plan 各自过目确认（plan 的两道门见 `build.md`）；确认后立即留痕（spec/plan 状态 `approved` + 「确认与复核」节，incident 时间线补「用户确认」条目），`done` 只在关单出现。
+输出草稿全文给用户过目;确认后才执行三件套落地。**确认点不合并**：incident 草稿、spec、plan 各自过目确认（plan 的两道门见 `build.md`）；确认后立即留痕（spec/plan 状态 `approved` + 「确认与复核」节，incident 时间线补「用户确认」条目），`done` 只在关单出现。**L2/L3 机器前置**：起草 spec 时 fill-spec / confirm-doc 校验「时间线含『用户确认』留痕」，未过即拒（exit 2）——被拒回本流程补留痕。
 
 ### 4. 确认后落地
 

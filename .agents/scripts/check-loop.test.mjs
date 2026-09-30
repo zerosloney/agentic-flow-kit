@@ -12,6 +12,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { computeFingerprint } from './confirm-doc.mjs';
 import { POLICIES, loadKitPolicy } from './policy.mjs';
+import { entryConfirmed, MARK_RE } from './stage-gates.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
@@ -1695,9 +1696,13 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
 
 // ---- 检查 17：approved 锚在 policy 版本 2；draft 改为 approved 不看锚 ----
 {
-  const keys = ['moduleSince', 'check14Since', 'confirmDocsEffective', 'confirmIncidentsEffective', 'bindingTs'];
-  check('policy 版本 2 的五个日期与版本 1 相同',
-    keys.every((k) => POLICIES[1][k] === POLICIES[2][k]) && POLICIES[2].check17UnclosedAfter === '0.8.0' && POLICIES[1].check17UnclosedAfter === undefined);
+  const sameKeys = ['moduleSince', 'confirmDocsEffective', 'confirmIncidentsEffective', 'bindingTs'];
+  check('policy 版本 2 的四个共享日期与版本 1 相同',
+    sameKeys.every((k) => POLICIES[1][k] === POLICIES[2][k]));
+  check('policy 版本 2 check14Since 前移至 2026-09-26（确认门实际上线日）',
+    POLICIES[2].check14Since === '2026-09-26' && POLICIES[1].check14Since === '2026-09-23');
+  check('policy 版本 2 新增 check17UnclosedAfter，版本 1 无此键',
+    POLICIES[2].check17UnclosedAfter === '0.8.0' && POLICIES[1].check17UnclosedAfter === undefined);
   const T = mkfix();
   w(T, '.agents/kit.json', '{"policyVersion":99}\n');
   const p = loadKitPolicy(T);
@@ -1823,14 +1828,14 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
 
   w(T, 'workflow/delegations.md', `${head}| 2026-09-12 | x | y | 一次通过 | 2026-09-12-gap |\n`);
   r = run(T);
-  check('检查18 只有去掉扩展名的主题名：警告仍在',
-    r.status === 0 && ledgerOf(r).some((l) => l.includes(`intents/${gap}`)),
+  check('检查18 去掉扩展名的主题名也命中：警告消失',
+    r.status === 0 && !ledgerOf(r).some((l) => l.includes(`intents/${gap}`)),
     `exit=${r.status}\n${outOf(r)}`);
 
   w(T, 'workflow/delegations.md', `${head}\n## 自做任务结果\n\n| 日期 | 任务一句话 | 结果 | 备注 |\n|------|------------|------|------|\n| 2026-09-12 | x | 一次通过 | ${gap} |\n`);
   r = run(T);
-  check('检查18 文件名只在自做任务结果：警告仍在',
-    r.status === 0 && ledgerOf(r).some((l) => l.includes(`intents/${gap}`)),
+  check('检查18 文件名在自做任务结果表：警告消失',
+    r.status === 0 && !ledgerOf(r).some((l) => l.includes(`intents/${gap}`)),
     `exit=${r.status}\n${outOf(r)}`);
 
   w(T, 'workflow/delegations.md', `${head}| 2026-09-12 | x | y | 一次通过 | ${gap} |\n`);
@@ -1838,6 +1843,13 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   lines = ledgerOf(r);
   check('检查18 补上不早于文档日期且含文件名的一行：该警告消失',
     r.status === 0 && !lines.some((l) => l.includes(gap)),
+    `exit=${r.status}\n${outOf(r)}`);
+
+  // 文件名仅出现在非台账节（既非委派结果也非自做任务结果）：不命中
+  w(T, 'workflow/delegations.md', `${head}| 2026-09-12 | x | y | 一次通过 | 其他任务 |\n\n## 历史记录\n| ${gap} 已关单 |\n`);
+  r = run(T);
+  check('检查18 文件名仅出现在非台账节：警告仍在',
+    r.status === 0 && ledgerOf(r).some((l) => l.includes(`intents/${gap}`)),
     `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
 }
@@ -1883,6 +1895,194 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     r.status === 0 && !outOf(r).includes('委派台账'),
     `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
+}
+
+// ---- 检查 19：逐阶段审计 [warning]（2026-09-30 stage-gate-machine）----
+{
+  // 判据 A：spec/plan 为 draft 且日期 ≥ stageGateSince，入口未确认 → 告警（spec 与 plan 各一条）
+  const T = mkfix();
+  w(T, '.agents/kit.json', '{"policyVersion":2}\n');
+  w(T, 'workflow/intents/2026-09-30-pair.md', INTENT('pair', '状态: draft\n级别: L2\n日期: 2026-09-30\n模块: pipeline'));
+  w(T, 'workflow/specs/2026-09-30-pair.md', SPEC('pair', '状态: draft\n级别: L2\n日期: 2026-09-30\n模块: pipeline'));
+  w(T, 'workflow/plans/2026-09-30-pair.md', PLAN('pair', '状态: draft\n级别: L2\n模块: pipeline'));
+  const r = run(T);
+  const lines = outOf(r).split('\n').filter((l) => l.includes('逐阶段'));
+  check('检查19-A 入口未确认：spec 出「起草先于入口确认」、plan 同步告警，exit 0',
+    r.status === 0
+      && lines.some((l) => l.includes('specs/2026-09-30-pair.md') && l.includes('起草先于入口确认'))
+      && lines.some((l) => l.includes('plans/2026-09-30-pair.md')),
+    `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+{
+  // 判据 A 日期门：draft 日期早于 stageGateSince → 静默（历史豁免）
+  const T = mkfix();
+  w(T, '.agents/kit.json', '{"policyVersion":2}\n');
+  w(T, 'workflow/intents/2026-09-20-old.md', INTENT('old', '状态: draft\n级别: L1\n日期: 2026-09-20'));
+  w(T, 'workflow/plans/2026-09-20-old.md', PLAN('old', '状态: draft\n级别: L1'));
+  const r = run(T);
+  check('检查19-A 日期门：早于 stageGateSince 的 draft → 零逐阶段告警',
+    r.status === 0 && !outOf(r).includes('逐阶段'),
+    `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+{
+  // 判据 A 放行侧：入口已确认（台账行 + 指纹配对）→ plan draft 静默（L1 免 spec 档）
+  const T = mkfix();
+  w(T, '.agents/kit.json', '{"policyVersion":2}\n');
+  const fp = 'a'.repeat(64);
+  w(T, 'workflow/intents/2026-09-30-ok.md', INTENT('ok', `状态: approved\n级别: L1\n日期: 2026-09-30\n确认指纹: ${fp.slice(0, 16)}`));
+  w(T, 'workflow/plans/2026-09-30-ok.md', PLAN('ok', '状态: draft\n级别: L1'));
+  w(T, '.agents/confirmations.jsonl', JSON.stringify({ ts: '2026-09-30T01:00:00.000Z', doc: 'workflow/intents/2026-09-30-ok.md', stage: 'approved', fingerprint: fp, prev: 'draft', source: 'chat-delegated', batch: 't1', seq: 1, of: 1 }) + '\n');
+  const r = run(T);
+  check('检查19-A 放行侧：入口 approved + 台账行 → plan draft 静默（L1）',
+    r.status === 0 && !outOf(r).includes('逐阶段'),
+    `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+{
+  // 判据 B：台账顺序倒置（spec 早于 intent）→ 告警；行无对应文件也可判（读台账事实）
+  const T = mkfix();
+  w(T, '.agents/kit.json', '{"policyVersion":2}\n');
+  const row = (doc, ts) => JSON.stringify({ ts, doc, stage: 'approved', fingerprint: 'b'.repeat(64), prev: 'draft' }) + '\n';
+  w(T, '.agents/confirmations.jsonl',
+    row('workflow/intents/2026-09-29-ord.md', '2026-09-29T10:00:00.000Z')
+    + row('workflow/specs/2026-09-29-ord.md', '2026-09-29T09:00:00.000Z')
+    + row('workflow/plans/2026-09-29-ord.md', '2026-09-29T11:00:00.000Z'));
+  const r = run(T);
+  check('检查19-B 顺序倒置 → 告警且 exit 0',
+    r.status === 0 && outOf(r).includes('逐阶段') && outOf(r).includes('倒置') && outOf(r).includes('2026-09-29-ord'),
+    `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+{
+  // 判据 B：顺序合规 → 静默；组内最早 ts 早于 stageGateSince → 整组跳过
+  const T1 = mkfix();
+  w(T1, '.agents/kit.json', '{"policyVersion":2}\n');
+  const row1 = (doc, ts) => JSON.stringify({ ts, doc, stage: 'approved', fingerprint: 'c'.repeat(64), prev: 'draft' }) + '\n';
+  w(T1, '.agents/confirmations.jsonl',
+    row1('workflow/intents/2026-09-29-ok2.md', '2026-09-29T09:00:00.000Z')
+    + row1('workflow/specs/2026-09-29-ok2.md', '2026-09-29T10:00:00.000Z')
+    + row1('workflow/plans/2026-09-29-ok2.md', '2026-09-29T11:00:00.000Z'));
+  const r1 = run(T1);
+  check('检查19-B 顺序合规 → 静默',
+    r1.status === 0 && !outOf(r1).includes('逐阶段'),
+    `exit=${r1.status}\n${outOf(r1)}`);
+  rmfix(T1);
+
+  const T2 = mkfix();
+  w(T2, '.agents/kit.json', '{"policyVersion":2}\n');
+  const row2 = (doc, ts) => JSON.stringify({ ts, doc, stage: 'approved', fingerprint: 'd'.repeat(64), prev: 'draft' }) + '\n';
+  w(T2, '.agents/confirmations.jsonl',
+    row2('workflow/intents/2026-09-01-h.md', '2026-09-01T10:00:00.000Z')
+    + row2('workflow/specs/2026-09-01-h.md', '2026-09-01T09:00:00.000Z'));
+  const r2 = run(T2);
+  check('检查19-B 日期门：组内最早 ts 早于 stageGateSince → 整组静默（历史豁免）',
+    r2.status === 0 && !outOf(r2).includes('逐阶段'),
+    `exit=${r2.status}\n${outOf(r2)}`);
+  rmfix(T2);
+}
+{
+  // policy v1（无 stageGateSince 键）→ 检查 19 整体跳过
+  const T = mkfix();
+  w(T, '.agents/kit.json', '{"policyVersion":1}\n');
+  const fp = 'e'.repeat(64);
+  w(T, 'workflow/intents/2026-09-30-v1.md', INTENT('v1', '状态: draft\n级别: L1\n日期: 2026-09-30'));
+  w(T, 'workflow/plans/2026-09-30-v1.md', PLAN('v1', '状态: draft\n级别: L1'));
+  w(T, '.agents/confirmations.jsonl', JSON.stringify({ ts: '2026-09-29T10:00:00.000Z', doc: 'workflow/specs/2026-09-30-v1.md', stage: 'approved', fingerprint: fp, prev: 'draft' }) + '\n');
+  const r = run(T);
+  check('检查19 policy v1（无键）→ 整体跳过（零逐阶段告警）',
+    r.status === 0 && !outOf(r).includes('逐阶段'),
+    `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+
+{
+  // 判据 A 的 plan→spec 分支（复核 P2-4②）：入口 L2 已确认 + spec 为 draft → plan 出「起草先于 spec 确认」
+  const T = mkfix();
+  w(T, '.agents/kit.json', '{"policyVersion":2}\n');
+  const fp3 = '9'.repeat(64);
+  w(T, 'workflow/intents/2026-09-30-ps.md', INTENT('ps', `状态: approved\n级别: L2\n日期: 2026-09-30\n确认指纹: ${fp3.slice(0, 16)}`));
+  w(T, 'workflow/specs/2026-09-30-ps.md', SPEC('ps', '状态: draft\n级别: L2\n日期: 2026-09-30'));
+  w(T, 'workflow/plans/2026-09-30-ps.md', PLAN('ps', '状态: draft\n级别: L2\n日期: 2026-09-30'));
+  w(T, '.agents/confirmations.jsonl', JSON.stringify({ ts: '2026-09-30T03:00:00.000Z', doc: 'workflow/intents/2026-09-30-ps.md', stage: 'approved', fingerprint: fp3, prev: 'draft', source: 'chat-delegated', batch: 'ps', seq: 1, of: 1 }) + '\n');
+  const r = run(T);
+  check('检查19-A plan→spec 分支：入口确认但 spec 未确认 → 「起草先于 spec 确认」',
+    r.status === 0 && outOf(r).includes('起草先于 spec 确认'),
+    `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+{
+  // 交叉一致性（复核 P2-8）：stage-gates.entryConfirmed 与检查 19 内联判据同口径——反例：
+  // approved 但无台账行且日期 ≥ 生效日 → 两处皆判「未确认」（check15 亦会 hard-block，断言只取逐阶段警示）
+  const T = mkfix();
+  w(T, '.agents/kit.json', '{"policyVersion":2}\n');
+  w(T, 'workflow/intents/2026-09-30-x1.md', INTENT('x1', '状态: approved\n级别: L1\n日期: 2026-09-30'));
+  w(T, 'workflow/plans/2026-09-30-x1.md', PLAN('x1', '状态: draft\n级别: L1\n日期: 2026-09-30'));
+  const e1 = entryConfirmed(T, '2026-09-30-x1');
+  const r1 = run(T);
+  check('交叉一致性①：入口 approved 无台账行 → stage-gates 判未确认 ∧ 检查 19 出「起草先于入口确认」',
+    e1.ok === false && outOf(r1).includes('起草先于入口确认'),
+    `sg.ok=${e1.ok}\n${outOf(r1)}`);
+  rmfix(T);
+
+  // 正例：approved + 台账行 → 两处皆判「已确认」（检查 19 零「逐阶段」）
+  const T2 = mkfix();
+  w(T2, '.agents/kit.json', '{"policyVersion":2}\n');
+  const fp2 = 'f'.repeat(64);
+  w(T2, 'workflow/intents/2026-09-30-x2.md', INTENT('x2', `状态: approved\n级别: L1\n日期: 2026-09-30\n确认指纹: ${fp2.slice(0, 16)}`));
+  w(T2, 'workflow/plans/2026-09-30-x2.md', PLAN('x2', '状态: draft\n级别: L1\n日期: 2026-09-30'));
+  w(T2, '.agents/confirmations.jsonl', JSON.stringify({ ts: '2026-09-30T02:30:00.000Z', doc: 'workflow/intents/2026-09-30-x2.md', stage: 'approved', fingerprint: fp2, prev: 'draft', source: 'chat-delegated', batch: 'x2', seq: 1, of: 1 }) + '\n');
+  const e2 = entryConfirmed(T2, '2026-09-30-x2');
+  const r2 = run(T2);
+  check('交叉一致性②：入口 approved + 台账行 → stage-gates 判已确认 ∧ 检查 19 零「逐阶段」',
+    e2.ok === true && !outOf(r2).includes('逐阶段'),
+    `sg.ok=${e2.ok}\n${outOf(r2)}`);
+  rmfix(T2);
+}
+
+{
+  // N1 存量短路（检查 19 同口径）：legacy 入口（无级别）+ plan draft → 零「逐阶段」告警
+  const T = mkfix();
+  w(T, '.agents/kit.json', '{"policyVersion":2}\n');
+  w(T, 'workflow/intents/2026-09-30-leg19.md', INTENT('leg19', '状态: approved\n日期: 2026-01-01\n流程: legacy'));
+  w(T, 'workflow/plans/2026-09-30-leg19.md', PLAN('leg19', '状态: draft\n流程: legacy'));
+  const r = run(T);
+  check('检查19 存量短路：legacy 入口无级别 → plan draft 零「逐阶段」告警',
+    r.status === 0 && !outOf(r).includes('逐阶段'),
+    `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+
+{
+  // 检查 19 判据 A 的 **incident 入口**分支（第五轮复核 P2：该分支此前零形态覆盖——
+  // 注入验证证明：把 MARK_RE19 改为恒 false，套件仍全绿 → 正则改动不会被拦下）
+  {
+    const T = mkfix();
+    w(T, '.agents/kit.json', '{"policyVersion":2}\n');
+    // 正例：incident（open + 时间线「用户确认」条目）+ spec draft → 零「逐阶段」告警
+    // 注：incident 亦受配对门约束（须有同名 plan），故夹具须补 plan，否则 exit 1 遮住本判据
+    w(T, 'workflow/incidents/2026-09-30-ic.md', '---\n状态: open\n级别: L2\n发现: 2026-09-30\n---\n# INCIDENT\n\n## 时间线\n- 用户确认：草稿过目通过（2026-09-30）\n');
+    w(T, 'workflow/specs/2026-09-30-ic.md', SPEC('ic', '状态: draft\n级别: L2\n日期: 2026-09-30'));
+    w(T, 'workflow/plans/2026-09-30-ic.md', PLAN('ic', '状态: draft\n级别: L2\n日期: 2026-09-30'));
+    const r1 = run(T);
+    check('检查19-A incident 入口（时间线留痕）→ 不告警「起草先于入口确认」',
+      r1.status === 0 && !outOf(r1).includes('起草先于入口确认'),
+      `exit=${r1.status}\n${outOf(r1)}`);
+    rmfix(T);
+
+    // 负例：叙述句不算留痕 → 出「起草先于入口确认」
+    const T2 = mkfix();
+    w(T2, '.agents/kit.json', '{"policyVersion":2}\n');
+    w(T2, 'workflow/incidents/2026-09-30-ic2.md', '---\n状态: open\n级别: L2\n发现: 2026-09-30\n---\n# INCIDENT\n\n## 时间线\n- 2026-09-30 用户确认了方案（叙述）\n');
+    w(T2, 'workflow/specs/2026-09-30-ic2.md', SPEC('ic2', '状态: draft\n级别: L2\n日期: 2026-09-30'));
+    w(T2, 'workflow/plans/2026-09-30-ic2.md', PLAN('ic2', '状态: draft\n级别: L2\n日期: 2026-09-30'));
+    const r2 = run(T2);
+    check('检查19-A incident 入口（叙述句不算）→ 出「起草先于入口确认」',
+      r2.status === 0 && outOf(r2).includes('起草先于入口确认'),
+      `exit=${r2.status}\n${outOf(r2)}`);
+    rmfix(T2);
+  }
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

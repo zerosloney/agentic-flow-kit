@@ -7,10 +7,21 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const REPO = path.resolve(HERE, '../../..');
+// REPO：仅服务于「doctor 契约核对」一项（src/ 为包源独有）。包源位置 HERE=…/templates/_agents/scripts
+// 与装副本位置 HERE=…/.agents/scripts 双兼容（2026-09-30 复核：旧式固定 ../../.. 在装副本位置解析出仓外，
+// src/doctor.mjs 必然 ENOENT——shipped 扫掠必败）。
+const REPO = fs.existsSync(path.join(HERE, '..', '..', 'src', 'doctor.mjs'))
+  ? path.resolve(HERE, '..', '..')
+  : path.resolve(HERE, '..', '..', '..');
 const LOOP = path.join(HERE, 'check-loop.mjs');
-const ENUMS = path.join(REPO, 'templates', '_agents', 'workflow-enums.txt');
-const HOOK = path.join(REPO, 'templates', '_githooks', 'pre-push');
+// ENUMS：与脚本位置相对解析（包源、装副本、装户三处均成立）
+const ENUMS = path.join(HERE, '..', 'workflow-enums.txt');
+// HOOK：包源侧为 templates/_githooks、装副本 / 装户侧为 .githooks——段名不同，双候选探测；
+// 均缺 → 相关场景 SKIP（2026-09-30 复核：旧式单一路径在两侧打不中）
+const HOOK = [
+  path.join(HERE, '..', '..', '_githooks', 'pre-push'),
+  path.join(HERE, '..', '..', '.githooks', 'pre-push'),
+].find((p) => fs.existsSync(p)) || null;
 const git = process.platform === 'win32' ? 'git.exe' : 'git';
 const Z = '0'.repeat(40);
 
@@ -122,13 +133,19 @@ try {
   const both = loop(root, ['--rev', tip], { CHECK_LOOP_ROOT: root });
   check('CHECK_LOOP_ROOT 与 --rev 同时出现 exit 1', both.status === 1 && outOf(both).includes('不能同时使用'), outOf(both));
 
-  const doctor = fs.readFileSync(path.join(REPO, 'src', 'doctor.mjs'), 'utf8');
-  check('doctor 调用闭环扫描时不传 --rev',
-    doctor.includes("'.agents/scripts/check-loop.mjs'") && !doctor.includes('check-loop.mjs\', \'--rev\''));
+  const doctorPath = path.join(REPO, 'src', 'doctor.mjs');
+  if (fs.existsSync(doctorPath)) {
+    const doctor = fs.readFileSync(doctorPath, 'utf8');
+    check('doctor 调用闭环扫描时不传 --rev',
+      doctor.includes("'.agents/scripts/check-loop.mjs'") && !doctor.includes('check-loop.mjs\', \'--rev\''));
+  } else {
+    console.log('SKIP doctor 契约核对（装户位置无包源 src/）');
+  }
 
   const sh = shBin();
   check('找到 sh 以跑 pre-push', !!sh);
-  if (sh) {
+  if (sh && !HOOK) console.log('SKIP pre-push 相关场景（未找到 _githooks / .githooks 下的 pre-push）');
+  if (sh && HOOK) {
     fs.mkdirSync(path.join(root, '.agents', 'scripts'), { recursive: true });
     const node = process.execPath.replace(/\\/g, '/');
     const loopSh = LOOP.replace(/\\/g, '/');

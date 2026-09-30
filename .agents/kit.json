@@ -22,7 +22,7 @@
     },
     {
       "rel": ".agents/commands/build.md",
-      "sha256": "efa17c718876d5b2a00cc14861d4ced2e339a8850b2576ee8cf0ca7dce7cf849"
+      "sha256": "3740c89a63b8c2fd14a50265321af54da09ad9a4709b6de056f63291d0712d3d"
     },
     {
       "rel": ".agents/commands/deploy.md",
@@ -30,7 +30,7 @@
     },
     {
       "rel": ".agents/commands/design.md",
-      "sha256": "69aa0373d65824068a559ed3aaf0098bd21a845585ffbc8fadb5fd0e9738f9bd"
+      "sha256": "43de3f68a4f7c7f6664cb66ef18751825e7a425c099cdcb08ab3dc91769b0d71"
     },
     {
       "rel": ".agents/commands/gate-checklist.md",
@@ -38,7 +38,7 @@
     },
     {
       "rel": ".agents/commands/maintain.md",
-      "sha256": "83b6ce71dfe2a88fd4dcd9e25a60fb9286786acdf1dda89ea56c83ccafdf9d06"
+      "sha256": "356cc02c06201c346f45e535d06b114829776033afb180a491b936459c263161"
     },
     {
       "rel": ".agents/commands/new-task.md",
@@ -46,7 +46,7 @@
     },
     {
       "rel": ".agents/commands/plan.md",
-      "sha256": "99c3b0ec3b225e2b1dc611fa82fa5c97e24b5f95d880e931209425e56f35582c"
+      "sha256": "f94ea404013f02b648cdf0dd3b8d0ace2ccc8e6aa7affd80bb60243556a4575b"
     },
     {
       "rel": ".agents/commands/review.md",
@@ -62,7 +62,7 @@
     },
     {
       "rel": ".agents/commands/test.md",
-      "sha256": "cdd1d18c37cfb03645a05880cf2f1fd8e440ec31c1d9a6c84e548371b06ce802"
+      "sha256": "40061d4ce15b4bfa828d9e868193de5eb95b9daa4098b209ce4e1c6eccbadbce"
     },
     {
       "rel": ".agents/hooks/check-pairing-incremental.sh",
@@ -106,11 +106,11 @@
     },
     {
       "rel": ".agents/scripts/check-loop-rev.test.mjs",
-      "sha256": "40d3b7a662fee2fac193caf39b09d5024e1b0138b2d86b7b9913a1a865be4f90"
+      "sha256": "f9cc02686bf89e6f26a318c5b26504749d1347040947ba1a52522ade096f5444"
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "55151a50744b07e5184c4fcc070e25bad772a060f2b16c74f67db4cac5330920"
+      "sha256": "4746b52d329ae1d4a9a3eba3ecebb2e9075ecab0eb44845306bf140b368299f0"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -118,7 +118,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "79a8109d8def80315130baf700e6fa149dad3407646bfbc203185b625ac5ec81"
+      "sha256": "9778a280cdfdf86ae7aabaccd8e8f4df51100bd87df3344519cfaec3a127e806"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -130,15 +130,15 @@
     },
     {
       "rel": ".agents/scripts/confirm-doc.mjs",
-      "sha256": "42c17f6bba66fcdc45648e721929a2c6827eae0cdac09bd82136542b8327749a"
+      "sha256": "8ef195cca0d3b1c900229238b26167000dc6477170b943468978a6089e84c189"
     },
     {
       "rel": ".agents/scripts/confirm-doc.test.mjs",
-      "sha256": "d58b2d3bc5b550b6192f1586e07be2fd6e4a4a9a96a3ca446a0772095d5b94a6"
+      "sha256": "a1f5fb29b42760e76c6b6a7db4a13f04c4e7e0cb80dd4ba5ff48764898912fab"
     },
     {
       "rel": ".agents/scripts/doctor.test.mjs",
-      "sha256": "a7377fecfa69af704217a960ef0d31cbbde52fdd1942a6a79167c06295cb82d9"
+      "sha256": "8f68e0b3e3db615bc8a22cc9fcd957db184d548a7021d1716f3513aaed227fb0"
     },
     {
       "rel": ".agents/scripts/ensure-board.mjs",
@@ -154,23 +154,23 @@
     },
     {
       "rel": ".agents/scripts/fill-plan.mjs",
-      "sha256": "9de8326e74e276b9cf5b8af17e917770eaed289917d3b5ddb20ac7b8c2921e75"
+      "sha256": "565dc90504c34631fa1e9d564d44d1becc0bceff5bb98336f8691b901b666506"
     },
     {
       "rel": ".agents/scripts/fill-plan.test.mjs",
-      "sha256": "dff3da63ba02ca47493fd0cd1d4a4cb08f096e487c134d10aa8b67b4338a843b"
+      "sha256": "9f88037ca2b254291ded597d48878fb540d363c5abb143820cd7ddf26c2b3f0e"
     },
     {
       "rel": ".agents/scripts/fill-spec.mjs",
-      "sha256": "3b289c71f9235b68172b159f06a5f0665e46ed9935375ca6c3e95d1c76b6bb3b"
+      "sha256": "27aa4d55a9c17be40b8c3a89191b3336661340ca975cf04397dd62afe4ec2431"
     },
     {
       "rel": ".agents/scripts/fill-spec.test.mjs",
-      "sha256": "85db04875323e9eaafbbeb09dd8e235b3ae4dc07d27a5d6bb9764a97ec9b9b09"
+      "sha256": "10661fad4ba47c36395d7a127215181d0afe015d90bdcb93bfe2cd5ace2249ca"
     },
     {
       "rel": ".agents/scripts/gate-checklist.mjs",
-      "sha256": "6be969cf383ab39dc941473e0fe39b6cd9fbe6148c95a4a69c88d513506421f6"
+      "sha256": "589eadeb39b92280af862ef248349d1730b87219edee9eff7c8ab1c5302cebbc"
     },
     {
       "rel": ".agents/scripts/gate-checklist.test.mjs",
@@ -218,7 +218,7 @@
     },
     {
       "rel": ".agents/scripts/policy.mjs",
-      "sha256": "401e0f4e900b38fc874fa232f0b5619aceb08c366e465f13a52d4f4c515a5c9b"
+      "sha256": "3de262bc2ebf2a9a577c6cb1dc0cac621d4df77e6c2681e3da1b0bfdfac37aa7"
     },
     {
       "rel": ".agents/scripts/rule-budget.sh",
@@ -231,6 +231,10 @@
     {
       "rel": ".agents/scripts/source-sync-check.test.mjs",
       "sha256": "acba421c9b1e6cf16bb6d9f3fd95d5755ea951db3501006c2e918647cb4c6cca"
+    },
+    {
+      "rel": ".agents/scripts/stage-gates.mjs",
+      "sha256": "e4668bd9fc5f6f6638ac327ff0bcb19fffa3c414029e1c505742276b2fbf41e6"
     },
     {
       "rel": ".agents/scripts/verify-wiki-consistency.mjs",
@@ -330,7 +334,7 @@
     },
     {
       "rel": ".githooks/pre-push",
-      "sha256": "ae5279c347a509febd90b1b4b75245c1db9edefa9ef8df8dc0072ec792c083f9"
+      "sha256": "58b69659bb2968aa76e143bcc06ec9b9d6d6f903a5a98b6839619e8d688934f3"
     },
     {
       "rel": ".zcode/agents/implementer.md",
@@ -380,7 +384,7 @@
     },
     {
       "rel": "wiki/知识沉淀总览.html",
-      "sha256": "02a32962ef097e13185e220e719b0b1d40efecb1f046457669c1871c2bc02e01"
+      "sha256": "7e0782207652c7952d624f7e80be3f65e8db64fb8d80177710ecffd14e6c6be1"
     },
     {
       "rel": "wiki/drafts-archive/README.md",
@@ -392,7 +396,7 @@
     },
     {
       "rel": "workflow/incidents/_TEMPLATE.md",
-      "sha256": "1251f74149c5abec042f1e999df05d072f23863ab191778dd6646ed372d78c97"
+      "sha256": "d21138a48f88308d01eec45f7e1f269d45bee5f6065f0d35bd93228741b58df1"
     },
     {
       "rel": "workflow/intents/_TEMPLATE.md",
@@ -400,7 +404,7 @@
     },
     {
       "rel": "workflow/papercuts.md",
-      "sha256": "a6554464e22da544bb101707a264f2ecbcb64efa0ad3e28907281726c94db041"
+      "sha256": "dce7bf72694ce029c167f7ab908a7dc22278e5e1851bb62e65ced6bca5dd6094"
     },
     {
       "rel": "workflow/plans/_TEMPLATE.md",

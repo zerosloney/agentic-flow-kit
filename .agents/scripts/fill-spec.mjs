@@ -1,20 +1,24 @@
 // flow-kit fill-spec：起草 spec 草稿（功能行为 / 数据流 / 系统改动 / 约束遵守映射 / 风险评估 共 5 节）
-// 用法：node .agents/scripts/fill-spec.mjs --topic "test" --output /tmp/x.md
+// 用法：node .agents/scripts/fill-spec.mjs --topic "test" --output /tmp/x.md [--root <仓库根>]
+// 起草门（2026-09-30 stage-gate-machine）：output 落于工作区（路径含 workflow 段）时，须同主题入口已确认
+// （判定口径见 stage-gates.mjs）；未过 → 拒绝生成（exit 2）；仓外草稿（无 workflow 段）不校验。
 import fs from 'node:fs';
 import path from 'node:path';
 import { ENUMS } from './workflow-enums.mjs';
+import { draftGateFor, resolveWorkspace } from './stage-gates.mjs';
 
 const TODAY = new Date().toISOString().slice(0, 10);
 const LEVELS = ENUMS['level.all']; // 级别词表单源（.agents/workflow-enums.txt）
 
 function parseArgs(argv) {
-  const out = { topic: null, level: 'L2', output: null };
+  const out = { topic: null, level: 'L2', output: null, root: null };
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     const next = () => { const v = argv[++i]; if (v === undefined) return null; return v; };
     if (a === '--topic') out.topic = next();
     else if (a === '--level') out.level = next();
     else if (a === '--output') out.output = next();
+    else if (a === '--root') out.root = next();
   }
   return out;
 }
@@ -43,8 +47,19 @@ export function renderSpec({ topic, level = 'L2', date = TODAY }) {
 const isMain = import.meta.url === `file:///${process.argv[1]}` || process.argv[1]?.endsWith('fill-spec.mjs');
 if (isMain) {
   const a = parseArgs(process.argv.slice(2));
-  if (!a.topic || !a.output) fail('必填：--topic / --output；选填：--level（默认 L2）');
+  if (!a.topic || !a.output) fail('必填：--topic / --output；选填：--level（默认 L2）/ --root');
   if (!LEVELS.includes(a.level)) fail(`level 必须在 ${LEVELS.join('|')}：${a.level}`);
+  const ws = resolveWorkspace(a.output, a.root);
+  if (ws) {
+    const gate = draftGateFor('spec', ws.root, ws.base);
+    if (!gate.ok) {
+      console.error(`❌ 起草门未过（stage-gates）：${gate.reason}`);
+      console.error(`   ${gate.hint}——本份未生成（确认入口后重跑本命令）`);
+      process.exit(2);
+    }
+  } else {
+    console.error('ℹ️  未定位到工作区（output 路径不含 workflow/ 段）——按仓外草稿处理，跳过起草门前置校验');
+  }
   const { body } = renderSpec(a);
   fs.mkdirSync(path.dirname(a.output), { recursive: true });
   fs.writeFileSync(a.output, body);

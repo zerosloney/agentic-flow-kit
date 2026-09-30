@@ -5,7 +5,8 @@
 #   - 警告（advisory）= 状态未确认 / 模板占位残留 / 引用漂移 等卫生项 → 仅打印提示
 # stdin 有行时，每个非删除的本地 sha 用 --rev 扫那棵树。没有行时（手跑钩子）仍无参数扫工作区。
 #
-# 机器门：本地钩子（唯一本地机器门）——CI 配置为本地未入库件（.gitignore 排除），不构成跨环境保证。
+# 机器门：本地钩子（唯一本地机器门）——服务端兜底（如有）= 项目自有 CI；本 kit 不附带 CI 配置，裸装无跨环境保证。
+# 本仓：.github/workflows/ci.yml 于 push main / 全部 PR 复跑 check-loop / doctor / source-sync-check --gate / workflows-check 四道门。
 # 不要用 `git push --no-verify` 绕开——发现 hard-block 应先修 workflow 文档再推。
 
 cd "$(git rev-parse --show-toplevel)" || exit 1

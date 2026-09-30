@@ -26,12 +26,16 @@
 //       node .agents/scripts/confirm-doc.mjs <doc...> --to superseded|cancelled（放弃态：取代/取消，留指纹与台账）
 //   多文档一次传入：仅 TTY 模式（用户亲手逐份过目键入——天然逐件）；--delegated 一次仅一份
 //   （2026-09-27 confirm-gate-one-per-call：多份并录曾系统性塌掉 build.md「逐件确认」三道门）。
+// 逐阶段前置门（2026-09-30 stage-gate-machine）：specs/plans 的 draft→approved 须同主题入口已确认
+//   （plan 另须入口级别 L2/L3 时同名 spec 已确认；判定口径见 stage-gates.mjs）——未过拒绝落账：
+//   不写盘、不 append 台账、该份计为「拒绝」，任一被拒进程 exit 2。
 // 测试：node templates/_agents/scripts/confirm-doc.test.mjs（纯函数逐项 + 非 TTY spawn 拒绝断言 + 委托场景）
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { confirmGateFor } from './stage-gates.mjs';
 
 // computeFingerprint(text)：CRLF 归一 → 剔指纹行 → sha256 hex（64 位）
 export function computeFingerprint(text) {
@@ -171,6 +175,7 @@ if (isMain) {
     return rl.question(q, res);
   });
   let confirmed = 0;
+  let refused = 0; // 逐阶段前置门拒绝数（exit 2 信号；2026-09-30 stage-gate-machine）
   for (const doc of docs) {
     if (!DOC_RE.test(doc)) {
       console.error(`跳过 ${doc}：路径须匹配 workflow/{intents,specs,plans,incidents}/<文件>.md`);
@@ -193,6 +198,17 @@ if (isMain) {
     if (!target) {
       console.error(`跳过 ${doc}：当前状态「${st || '缺失'}」无合法跳转（前向：docs draft→approved / approved→done；incidents open→fixed / fixed→closed；放弃 --to：cancelled 自 draft/approved/open/fixed，superseded 自 approved/done/fixed/closed）`);
       continue;
+    }
+    // 逐阶段前置门（2026-09-30 stage-gate-machine）：specs/plans 的 draft→approved 须前置已确认
+    // （plan 另须入口级别 L2/L3 时同名 spec 已确认）——未过拒绝落账（不写盘、不 append 台账）。
+    if (target === 'approved' && (doc.startsWith('workflow/specs/') || doc.startsWith('workflow/plans/'))) {
+      const gate = confirmGateFor(root, doc);
+      if (!gate.ok) {
+        console.error(`❌ ${doc} 未过逐阶段前置门（stage-gates）：${gate.reason}`);
+        console.error(`   ${gate.hint}（本份未落账、未写盘）`);
+        refused++;
+        continue;
+      }
     }
     const fp = computeFingerprint(text);
     if (delegated) {
@@ -229,7 +245,7 @@ if (isMain) {
     seq++;
   }
   if (rl) rl.close();
-  console.log(`\n完成：确认 ${confirmed} 份 / 跳过 ${docs.length - confirmed} 份${delegated ? '（委托代录）' : ''}`);
-  process.exit(0);
+  console.log(`\n完成：确认 ${confirmed} 份 / 跳过 ${docs.length - confirmed - refused} 份 / 拒绝 ${refused} 份${delegated ? '（委托代录）' : ''}`);
+  process.exit(refused ? 2 : 0);
 }
 export default { computeFingerprint, nextStage, applyTransition, appendLedger };

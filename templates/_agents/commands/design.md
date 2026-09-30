@@ -22,7 +22,7 @@ next: .agents/commands/build.md
 
 ## 执行
 
-1. 确认同名入口文档已批准：新需求为 approved intent，修复为已确认的 incident 草稿；否则拒绝，分别回 `plan.md` / `maintain.md`
+1. 确认同名入口文档已批准：新需求为 approved intent，修复为已确认的 incident 草稿；否则拒绝，分别回 `plan.md` / `maintain.md`（2026-09-30 起机器强制：fill-spec / confirm-doc 对前置未过直接拒绝 exit 2、不落盘不记账）
 2. 级别判断(对照 AGENTS.md 第 3 条):
    - **L1**(实现级改动,未命中 L2/L3)→ 可省略 spec,直接跳 `next: build.md`
    - **L2**(改规则 / 契约:编码权威 / 共享契约 / 既有接口语义 / 全局横切口径,闭集见 `new-task.md` §级别判断)→ 必须有 spec

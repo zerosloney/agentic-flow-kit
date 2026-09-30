@@ -67,6 +67,10 @@
 //      (无判定依据的行不产出不可消除噪声——沿 audit-gate-hardening P3 教训)
 //  17. 发版提交树上仍未收口的 intent/spec/plan [hard-block]
 //  18. 委派台账对账 [warning]
+//  19. 逐阶段审计（起草先于入口确认 / 台账审批顺序倒置） [warning]
+//      判据 A=在途扫描(同名 spec/plan 为 draft 且日期≥stageGateSince 时判入口确认;plan 另判 L2/L3 的 spec);
+//      判据 B=台账 approved 行按主题校验 intents≤specs≤plans 顺序(组内最早 ts 日期≥stageGateSince 才判);
+//      stageGateSince 缺键(v1) → 本检查整体跳过;口径与 stage-gates.mjs / fill-* / confirm-doc 前置门互引
 // 16. 量化断言指标签名对账 [warning](2026-09-28 起;登记表单源 .agents/metric-claims.txt):
 // 判据 = 活跃态文档(draft/approved/open)中的 `{{指标名}}` 签名须替换为实时值,留签名=未回填=warning。
 // **只查显式签名、不全文扫数字**(据实说明):本仓活跃文档「N 行/N 条/N 份」类表述数十处,绝大多数是
@@ -100,6 +104,9 @@ import { fileURLToPath } from 'node:url';
 import { loadEnums } from './workflow-enums.mjs';
 import { runCheck16 } from './check-metric-claims.mjs';
 import { auditEnabled, loadKitPolicy } from './policy.mjs';
+// MARK_RE：incident 留痕形态的单源（第七轮复核 N3——此前 check-loop 内联复制一份同口径字面量，
+// 两处靠注释与人工同步；改为复用 stage-gates.mjs 的导出，从结构上消除漂移可能）
+import { MARK_RE } from './stage-gates.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const GIT = process.platform === 'win32' ? 'git.exe' : 'git';
@@ -843,8 +850,9 @@ runCheck16({ ROOT, ENUMS, docFiles, fmGet, inSet, isTracked, linesOf, readdirOrN
 
 // --- 18. 委派台账对账 [warning] ---
 // L2/L3 的 intent、spec、plan 状态为 done，或同级别 incident 状态为 fixed 或 closed 时，
-// 「委派结果」表没有日期不早于文档日期、且含该 .md 文件名的一行，则警告。
+// 「委派结果」表与「自做任务结果」表均没有日期不早于文档日期、且含该文件名（带/不带 .md 均匹配）的一行，则警告。
 // 缺级别、缺日期、以及其他状态不警告。audit:false 时 warnings.push 已被换成空函数。
+// 两表解析口径与 agg-delegations.cjs splitTables 保持一致，一边改另一边须跟。
 {
   const rows = delegationResultRows(path.join(ROOT, WF, 'delegations.md'));
   for (const sub of ['intents', 'specs', 'plans', 'incidents']) {
@@ -857,9 +865,117 @@ runCheck16({ ROOT, ENUMS, docFiles, fmGet, inSet, isTracked, linesOf, readdirOrN
       const date = sub === 'incidents' ? (fmGet(abs, '发现') || fmGet(abs, '日期')) : fmGet(abs, '日期');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
       const base = path.basename(abs);
-      if (rows.some((r) => r.date >= date && r.line.includes(base))) continue;
+      const stripped = base.replace(/\.md$/, '');
+      if (rows.some((r) => r.date >= date && (r.line.includes(base) || r.line.includes(stripped)))) continue;
       const rel = path.relative(ROOT, abs).split(path.sep).join('/');
-      warnings.push(`- [WARN 委派台账] ${rel} 在 ${date} 及之后的委派结果表中没有该文件名`);
+      warnings.push(`- [WARN 委派台账] ${rel} 在 ${date} 及之后的委派结果/自做任务结果表中没有该文件名`);
+    }
+  }
+}
+
+// --- 19. 逐阶段审计 [warning]（2026-09-30 stage-gate-machine；口径与 stage-gates.mjs / fill-* / confirm-doc 前置门互引） ---
+// 判据 A（在途扫描）：同名 spec/plan 为 draft 且其日期 ≥ stageGateSince 时——入口未确认（intent：状态非
+//   approved/done、或缺台账行且非存量；incident：「时间线」小节缺行首「用户确认」条目）→ warning；
+//   入口缺合法「级别」→ warning（与起草门 fail-closed 同口径，2026-09-30 复核 P2-7）；
+//   plan 另判（入口级别 L2/L3 且 spec 未确认或缺失）→ warning。
+// 判据 B（台账顺序）：同主题 {intents,specs,plans} 的 approved 行（每 doc 取最早）时间须非降序；仅对
+//   组内最早 ts 日期 ≥ stageGateSince 的主题判定；含更早 ts 的主题整组跳过（历史豁免）。
+// stageGateSince 缺键（policy v1）→ 本检查整体跳过；全部 warning、不 hard-block。
+{
+  const since = kitPolicy.stageGateSince;
+  if (typeof since === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(since)) {
+    const ledgerRows = [];
+    {
+      const lp = path.join(ROOT, '.agents', 'confirmations.jsonl');
+      if (fs.existsSync(lp)) {
+        for (const line of linesOf(lp) || []) {
+          if (!line.trim()) continue;
+          try { ledgerRows.push(JSON.parse(line)); } catch { /* 坏行跳过（同检查 15 口径） */ }
+        }
+      }
+    }
+    const hasRow = (rel) => ledgerRows.some((e) => e && e.doc === rel && (e.stage === 'approved' || e.stage === 'done'));
+    const docConfirmed = (rel, abs) => {
+      const st = fmGet(abs, '状态');
+      if (st !== 'approved' && st !== 'done') return { ok: false, legacy: false, why: `状态「${st || '缺失'}」` };
+      if (hasRow(rel)) return { ok: true, level: fmGet(abs, '级别'), legacy: false };
+      const d = fmGet(abs, '日期') || fmGet(abs, '发现');
+      const legacy = (linesOf(abs) || []).some((l) => /^流程: legacy/.test(l))
+        || (/^\d{4}-\d{2}-\d{2}$/.test(d) && d < kitPolicy.confirmDocsEffective);
+      if (legacy) return { ok: true, level: fmGet(abs, '级别'), legacy: true };
+      return { ok: false, legacy: false, why: '无确认台账行' };
+    };
+    // incident 留痕判定：**直接复用 stage-gates.mjs 的 MARK_RE**（第七轮复核 N3：此前此处内联复制
+    // 一份同口径字面量，两处靠注释人工同步、无测试钉住——改为单源复用，从结构上消除漂移可能）。
+    // 判据同源：「## 时间线」小节内、行首列表条目含「用户确认」（词边界见 MARK_RE）。
+    const incidentMarked19 = (lines) => {
+      let inTimeline = false;
+      for (const l of lines || []) {
+        if (/^##\s/.test(l)) { inTimeline = /^##\s*时间线/.test(l); continue; }
+        if (inTimeline && MARK_RE.test(l)) return true;
+      }
+      return false;
+    };
+    const entryConfirmed19 = (base) => {
+      const irel = `${WF}/intents/${base}.md`;
+      const iabs = path.join(ROOT, irel);
+      if (fs.existsSync(iabs)) {
+        const r = docConfirmed(irel, iabs);
+        const body = (linesOf(iabs) || []).join('\n');
+        const d19 = fmGet(iabs, '日期') || fmGet(iabs, '发现');
+        const storLegacy = /^流程: legacy/m.test(body) || (/^\d{4}-\d{2}-\d{2}$/.test(d19) && d19 < kitPolicy.confirmDocsEffective);
+        return { ...r, storageLegacy: storLegacy };
+      }
+      const crel = `${WF}/incidents/${base}.md`;
+      const cabs = path.join(ROOT, crel);
+      if (fs.existsSync(cabs)) {
+        const st = fmGet(cabs, '状态');
+        if ((st === 'open' || st === 'fixed' || st === 'closed') && incidentMarked19(linesOf(cabs))) {
+          return { ok: true, level: fmGet(cabs, '级别'), legacy: false, storageLegacy: false };
+        }
+        return { ok: false, legacy: false, storageLegacy: false, why: 'incident 未见过目留痕（时间线条目缺失）' };
+      }
+      return { ok: false, legacy: false, storageLegacy: false, why: '无同名入口' };
+    };
+    for (const sub of ['specs', 'plans']) {
+      for (const abs of docFiles(sub)) {
+        if (fmGet(abs, '状态') !== 'draft') continue;
+        const base = path.basename(abs).replace(/\.md$/, '');
+        // 日期：frontmatter 优先，缺则回落文件名前缀（plan 无「日期」字段；沿检查 15 口径）
+        let d = fmGet(abs, '日期');
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) d = /^\d{4}-\d{2}-\d{2}$/.test(base.slice(0, 10)) ? base.slice(0, 10) : '';
+        if (!(/^\d{4}-\d{2}-\d{2}$/.test(d) && d >= since)) continue;
+        const rel = path.relative(ROOT, abs).split(path.sep).join('/');
+        const ent = entryConfirmed19(base);
+        if (!ent.ok) { warnings.push(`- [WARN 逐阶段] ${rel} 起草先于入口确认（${ent.why}）`); continue; }
+        // 库存量形态（标记 / 日期早于生效日）短路 level 校验与 spec 档（与起草门同口径，N1）
+        const storLegacy = ent.storageLegacy === true;
+        if (!storLegacy && !/^L[0-3]$/.test(ent.level)) { warnings.push(`- [WARN 逐阶段] ${rel} 入口缺合法「级别」字段（无法判定前置深度；与起草门 fail-closed 同口径，库存量形态除外）`); continue; }
+        if (sub === 'plans' && !storLegacy && (ent.level === 'L2' || ent.level === 'L3')) {
+          const srel = `${WF}/specs/${base}.md`;
+          const sabs = path.join(ROOT, srel);
+          const sp = fs.existsSync(sabs) ? docConfirmed(srel, sabs) : { ok: false, why: '缺同名 spec' };
+          if (!sp.ok) warnings.push(`- [WARN 逐阶段] ${rel} 起草先于 spec 确认（${sp.why}）`);
+        }
+      }
+    }
+    const firstApproved = new Map(); // base -> { intents?, specs?, plans? } 最早 approved ts
+    for (const e of ledgerRows) {
+      if (!e || e.stage !== 'approved' || typeof e.doc !== 'string') continue;
+      const m = /^workflow\/(intents|specs|plans)\/(.+)\.md$/.exec(e.doc);
+      if (!m) continue;
+      const rec = firstApproved.get(m[2]) || {};
+      if (!rec[m[1]] && typeof e.ts === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(e.ts)) rec[m[1]] = e.ts;
+      firstApproved.set(m[2], rec);
+    }
+    for (const [base, rec] of firstApproved) {
+      const seq = ['intents', 'specs', 'plans'].filter((k) => rec[k]);
+      if (seq.length < 2) continue;
+      const earliest = seq.map((k) => rec[k]).sort()[0];
+      if (!(earliest.slice(0, 10) >= since)) continue;
+      let ordered = true;
+      for (let i = 1; i < seq.length; i++) if (rec[seq[i]] < rec[seq[i - 1]]) ordered = false;
+      if (!ordered) warnings.push(`- [WARN 逐阶段] 台账审批顺序倒置：${base}（${seq.map((k) => `${k}=${rec[k].slice(0, 19)}`).join(' / ')}）`);
     }
   }
 }
@@ -868,12 +984,12 @@ function delegationResultRows(file) {
   let text = '';
   try { text = fs.readFileSync(file, 'utf8'); } catch { return []; }
   const lines = text.split(/\r?\n/);
+  const targetSec = (line) => /^##\s+(委派结果|自做任务结果)\s*$/.test(line);
   let inSec = false;
   const rows = [];
   for (const line of lines) {
     if (/^##\s+/.test(line)) {
-      if (inSec) break;
-      if (/^##\s+委派结果\s*$/.test(line)) inSec = true;
+      inSec = targetSec(line);
       continue;
     }
     if (!inSec || !/^\s*\|/.test(line)) continue;

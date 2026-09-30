@@ -37,5 +37,5 @@ description: Plan 阶段 · 立 intent（AI 起草、用户确认；本阶段不
 ## 确认后
 
 - intent 状态 draft → approved
-- 立即 `docs(workflow)` 单独提交留痕(根 `AGENTS.md` 提交约定;check-loop 检查 14 口径)
+- 立即 `docs(workflow)` 单独提交留痕(根 `AGENTS.md` 提交约定;check-loop 检查 14 口径)——**提交最早可行点**：入口文档受 pre-commit 闭环配对（增量）门约束，同名 spec / plan 须已在工作区（先例 61ec130）
 - L1 → `.agents/commands/build.md`；L2/L3 → `.agents/commands/design.md`
