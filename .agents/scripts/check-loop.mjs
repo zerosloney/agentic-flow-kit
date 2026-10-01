@@ -70,6 +70,8 @@
 //  17. 发版提交树上仍未收口的 intent/spec/plan [hard-block]
 //  18. 委派台账对账 [warning]
 //  19. 逐阶段审计（起草先于入口确认 / 台账审批顺序倒置） [warning]
+//  20. 引擎脚本测试覆盖（包源环境：templates/_agents/scripts/ 下每个非 *.test.mjs 引擎脚本须有同名兄弟
+//      .test.mjs，或在 .agents/scripts-test-exempt.txt 登记豁免；2026-10-01 gate-script-test-coverage） [warning]
 //      判据 A=在途扫描(同名 spec/plan 为 draft 且日期≥stageGateSince 时判入口确认;plan 另判 L2/L3 的 spec);
 //      判据 B=台账 approved 行按主题校验 intents≤specs≤plans 顺序(组内最早 ts 日期≥stageGateSince 才判);
 //      stageGateSince 缺键(v1) → 本检查整体跳过;口径与 stage-gates.mjs / fill-* / confirm-doc 前置门互引
@@ -1187,6 +1189,25 @@ function fmStatus(text) {
     if (lines[i].startsWith('状态:')) return lines[i].slice('状态:'.length).trim();
   }
   return '';
+}
+
+// --- 20. 引擎脚本测试覆盖 [warning]（2026-10-01 gate-script-test-coverage；仅包源环境） ---
+// 包源开发纪律：templates/_agents/scripts/ 下每个非 *.test.mjs 引擎脚本须有同名兄弟 .test.mjs，
+// 或在 .agents/scripts-test-exempt.txt 登记豁免（managed 下发）。装户（无 templates/）整体跳过。
+{
+  const scriptsDir = path.join(ROOT, 'templates', '_agents', 'scripts');
+  if (fs.existsSync(scriptsDir)) {
+    const exemptFile = path.join(ROOT, '.agents', 'scripts-test-exempt.txt');
+    const exempt = fs.existsSync(exemptFile)
+      ? fs.readFileSync(exemptFile, 'utf8').split(/\r?\n/).map((l) => l.split('|')[0].trim()).filter(Boolean)
+      : [];
+    const orphans = fs.readdirSync(scriptsDir)
+      .filter((f) => f.endsWith('.mjs') && !f.endsWith('.test.mjs') && !exempt.includes(f))
+      .filter((f) => !fs.existsSync(path.join(scriptsDir, f.replace(/\.mjs$/, '.test.mjs'))));
+    for (const f of orphans.sort()) {
+      warnings.push(`- [WARN 脚本测试缺失] ${f} 缺同名 .test.mjs——新增引擎脚本默认必须带测试；库件/工具可在 .agents/scripts-test-exempt.txt 登记豁免`);
+    }
+  }
 }
 
 // --- 输出（banner 沿 sh 版字样与格式 = 稳定输出契约：banner 后空行、条目 '- ' 前缀）---

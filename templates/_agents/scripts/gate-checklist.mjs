@@ -84,6 +84,7 @@ const PAIRS = [
   { doctor: '7', cl: '17', note: '经 §7 整体运行覆盖（发版提交树上仍未收口的 intent/spec/plan）' },
   { doctor: '7', cl: '18', note: '经 §7 整体运行覆盖（委派台账对账）' },
   { doctor: '7', cl: '19', note: '经 §7 整体运行覆盖（逐阶段审计——起草先于入口确认 / 台账审批顺序倒置）' },
+ { doctor: '7', cl: '20', note: '经 §7 整体运行覆盖（引擎脚本测试覆盖，2026-10-01 gate-script-test-coverage）' },
 ];
 
 // gateChecklist：按登记表对照两侧检查项（pure function；pairs 可注入供测试）

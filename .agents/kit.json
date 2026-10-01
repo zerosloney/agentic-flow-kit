@@ -93,6 +93,10 @@
       "sha256": "5c4a210fc684d02501bed78e6aec9f5a5d3d0ce34f22640e97a5e3db6386b9f1"
     },
     {
+      "rel": ".agents/scripts-test-exempt.txt",
+      "sha256": "6f4e9cde9d688bba739246e5bb28720f1d9b8d896dfbcecadb306d44c07baf41"
+    },
+    {
       "rel": ".agents/scripts/agg-delegations.cjs",
       "sha256": "13ca19219450218187b51356df3f28d1bc99c7637ed6ba404a230f9f5b6e9f48"
     },
@@ -122,7 +126,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "5402a7db580fdc11ed4be01bbe40fd91534742fcab05987ba5a8679015cedd26"
+      "sha256": "6e987672fb21be446d033e09cec20e5f538db0077fa6238a0920657fe75769c9"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -130,7 +134,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "55bd88033904a85dbe451329726ad5c052073bdc32b9a96e6b5f2b0e59cbb6ac"
+      "sha256": "e2bfce8218fac68bff41fe5b84f9493d40b30b76dab556e70f4b295a9cb2d411"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -182,7 +186,7 @@
     },
     {
       "rel": ".agents/scripts/gate-checklist.mjs",
-      "sha256": "589eadeb39b92280af862ef248349d1730b87219edee9eff7c8ab1c5302cebbc"
+      "sha256": "b831709f64756b4b298be94d5c026b06e263dc98a110b86aab50c26245411ada"
     },
     {
       "rel": ".agents/scripts/gate-checklist.test.mjs",
@@ -263,6 +267,10 @@
     {
       "rel": ".agents/scripts/trust-mode.mjs",
       "sha256": "5800b52af787d6b3fd9a8ea314b36466e19a3adc90f70e93c5054cd530c68bff"
+    },
+    {
+      "rel": ".agents/scripts/trust-mode.test.mjs",
+      "sha256": "e10cca676c26f0fbc857a40e86d2e61aa167c46daed566698c4a0b5242cd2edb"
     },
     {
       "rel": ".agents/scripts/verify-wiki-consistency.mjs",

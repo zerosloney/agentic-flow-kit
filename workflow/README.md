@@ -56,7 +56,7 @@
 4. **敏感信息**：pre-commit 的 commit-check 扫描密钥。
 5. **双源与台账**：doctor 核对 managed / owned 的 sha；引擎改动改包源 `templates/` 再 `sync`。
 
-其余检查（占位符、引用、模块字段、常驻面预算、量化签名、阶段索引、适配器断线）只在 `audit` 不是 `false` 时出警告。
+其余检查（占位符、引用、模块字段、常驻面预算、量化签名、阶段索引、适配器断线、引擎脚本测试覆盖（检查 20，包源环境——新增引擎脚本默认必须带 `.test.mjs`，库件/工具须登记 `.agents/scripts-test-exempt.txt`，2026-10-01 gate-script-test-coverage））只在 `audit` 不是 `false` 时出警告。
 
 **发版草稿**：最近一次改动 `package.json` 的 `version` 的那次提交里，当时已经是 draft 或 approved 的 intent、spec、plan，若被扫描的树上仍是 draft 或 approved，则阻断。当时已是 draft 的不看版本锚。当时已是 approved 的，只在发版版本大于 `policy.mjs` 的 `check17UnclosedAfter` 时阻断；版本 1 没有该键。不带 `--rev` 时现在的状态读工作区，带 `--rev` 时读被推送的那棵树。那次提交之后新建的文件不在范围内。状态为 open 的 incident 不在此列。
 

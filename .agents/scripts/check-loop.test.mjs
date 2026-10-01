@@ -2253,5 +2253,40 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   rmfix(T);
 }
 
+// --- 20. 引擎脚本测试覆盖 [warning]（2026-10-01 gate-script-test-coverage） ---
+{
+  // C20-1：缺测试报 warning、有测试与豁免登记不报（包源环境）
+  const T = mkfix();
+  const sd = path.join(T, 'templates', '_agents', 'scripts');
+  fs.mkdirSync(sd, { recursive: true });
+  fs.writeFileSync(path.join(sd, 'foo.mjs'), 'export {};\n');
+  fs.writeFileSync(path.join(sd, 'foo.test.mjs'), '// ok\n');
+  fs.writeFileSync(path.join(sd, 'bar.mjs'), 'export {};\n');
+  fs.writeFileSync(path.join(sd, 'baz.mjs'), 'export {};\n');
+  fs.writeFileSync(path.join(T, '.agents', 'scripts-test-exempt.txt'), 'baz.mjs | 库件 | 无\n');
+  const r1 = run(T);
+  const o1 = outOf(r1);
+  check('检查20 C20-1 缺测试报 warning、有测试与豁免不报',
+    r1.status === 0 && o1.includes('[WARN 脚本测试缺失] bar.mjs') && !o1.includes('foo.mjs') && !o1.includes('baz.mjs'), o1);
+  rmfix(T);
+}
+{
+  // C20-2：装户环境（无 templates/）整体跳过
+  const T = mkfix();
+  const r2 = run(T);
+  check('检查20 C20-2 装户（无 templates/）跳过', !outOf(r2).includes('[WARN 脚本测试缺失]'), outOf(r2));
+  rmfix(T);
+}
+{
+  // C20-3：豁免文件缺失时全量列出（无豁免兜底）
+  const T = mkfix();
+  const sd = path.join(T, 'templates', '_agents', 'scripts');
+  fs.mkdirSync(sd, { recursive: true });
+  fs.writeFileSync(path.join(sd, 'zeta.mjs'), 'export {};\n');
+  const r3 = run(T);
+  check('检查20 C20-3 无豁免文件时缺测试脚本被列出', outOf(r3).includes('[WARN 脚本测试缺失] zeta.mjs'), outOf(r3));
+  rmfix(T);
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);
