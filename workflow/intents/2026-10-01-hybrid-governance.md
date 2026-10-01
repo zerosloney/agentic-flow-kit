@@ -1,17 +1,17 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-01
 模块: pipeline
-备注: 混合治理批补档（回填）——实现已随 20490ad 整体落地（用户授权免档直提），本批补三件套作如实记录；drift-hardening intent 关单留痕所指「须补三件套」由此件兑现
-确认指纹: fe798caba773a625
+备注: 混合治理批补档（回填）——实现已落地（20490ad 为主；pre-commit advisory / kit.json 台账 / owned 规则文本经 e6816e5 捆带先行入树，用户授权免档直提），本批补三件套作如实记录；drift-hardening intent 关单留痕所指「须补三件套」由此件兑现
+确认指纹: bd16542074fbc2c4
 ---
 # INTENT — hybrid-governance
 
 ## 背景与问题
 
-上一会话（2026-09-30）实现「混合治理」四特性：45 个 tracked 修改（全部成对）+ 新增 solidify-task / trust-mode 脚本，实现完成、测试全绿，但三件套从未落盘。2026-10-01 drift-hardening 批独立复核 P1-1 揭示其存在（整文件暂存捆带事件），用户随后授权**免档直接提交**（20490ad，50 文件；提交信息明记授权），落地瑕疵同步收口（solidify-task 文件名反引号笔误改正、gitignore 补 `.zcode/plans/` 与 `trust-mode.json`），fresh-clone 终验全绿（check-ledger 归零，kit.json 预 landing 自愈）。
+上一会话（2026-09-30）实现「混合治理」四特性：46 个 tracked 修改 + 4 新增（scripts/commands/hooks/模板面成对；ci.yml、.gitignore、modules/hosts×5、kit.json 为单侧），实现完成、测试全绿，但三件套从未落盘。2026-10-01 drift-hardening 批独立复核 P1-1 揭示其存在（整文件暂存捆带事件），用户随后授权**免档直接提交**（20490ad，50 文件；提交信息明记授权；pre-commit advisory / kit.json 台账登记 / 四份 owned 规则文本则经 e6816e5 捆带先行入树——落地归属注记见同名 spec 前言），落地瑕疵同步收口（solidify-task 文件名反引号笔误改正、gitignore 补 `.zcode/plans/` 与 `trust-mode.json`），fresh-clone 终验全绿（check-ledger 归零，kit.json 预 landing 自愈）。
 
 本批为**补档回填单**：实现与验证均已完成，缺的只是档。补齐三件套使闭环记录完整——这是 drift-hardening 关单留痕「该批须补三件套」的兑现件，也堵住「已落地特性无档可考」的检索断点。
 
@@ -62,18 +62,18 @@ risk_level: L2
 
 ## 验收标准（可测试）
 
-- [ ] 三件套逐件确认落账（draft→approved→done，approved 态先进 git 历史后 done）
-- [ ] spec 四特性判据与 20490ad 落地代码逐条对齐（抽样核对点 ≥8 处，含红线判低触发条件 / 加固门收口判据 / trust 三级语义 / solidify 用法）（证据：spec §功能行为 + 抽样核对清单）
-- [ ] plan 落地清单与 20490ad 文件清单一致（50 文件含 4 新增），收口三项（反引号改名 / gitignore / trust-mode 本地化）有记录（证据：git show 20490ad --stat + plan 清单）
-- [ ] 补档提交后 check-loop 全绿无新增告警（证据：check-loop 输出）
-- [ ] drift-hardening 关单留痕所指「须补三件套」断点兑现——本批 intent 与其呼应（证据：两档互引）
+- [x] 三件套逐件确认落账（draft→approved→done，approved 态先进 git 历史后 done）（证据：approved 指纹 fe798caba773a625 / dcd24a1656845833 / 809f4ad1a38addd7；approved 态随补档提交 ddd6a07 进 git 历史，done 于其后落账）
+- [x] spec 四特性判据与 20490ad 落地代码逐条对齐（抽样核对点 ≥8 处，含红线判低触发条件 / 加固门收口判据 / trust 三级语义 / solidify 用法）（证据：独立复核报告 A 节——实际核 12 锚点全部一致；唯一偏差 P1 归属口径已随关单编辑收口，判据本身零偏差）
+- [x] plan 落地清单与 20490ad 文件清单一致（50 文件含 4 新增），收口三项（反引号改名 / gitignore / trust-mode 本地化）有记录（证据：独立复核报告 B 节 49→50 收口——kit.json 补行入 spec 系统改动表；三项收口复核确认属实）
+- [x] 补档提交后 check-loop 全绿无新增告警（证据：INDEX 重生成后 check-loop exit=0，告警均为存量项——见关单提交前实录）
+- [x] drift-hardening 关单留痕所指「须补三件套」断点兑现——本批 intent 与其呼应（证据：drift-hardening intent 关单留痕节 ↔ 本 intent 备注与背景互引，复核 C 节确认成立）
 
 > **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 冒烟脚本输出>）`。
 > done 状态仍有未勾项会被 check-loop 拦截（2026-09-12 起新建 intent 为 hard-block，存量 intent 仅 warning 提示）；勾选但缺「证据：」为 hard-block。
 
 ## 确认与复核
 
-- 确认日期：
+- 确认日期：2026-10-01（用户对话内「确认」代录，台账 source=chat-delegated）
 - 确认人：用户（对话内明确放行即确认）
 - 确认范围：hybrid-governance 补档回填（三件套如实记录已落地四特性）
-- 复核：L2 口径——independent-reviewer 复核 spec 与 20490ad 落地行为的一致性（防补档失真）
+- 复核：已完成（2026-10-01，independent-reviewer 新上下文）——12 锚点判据全一致 / 叙事真实 / 零代码改动属实；1 P1（落地归属口径）+ 3 P2 用户定性**全收**，随关单编辑收口

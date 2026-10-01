@@ -1,14 +1,14 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-01
 模块: pipeline
 备注: 混合治理批补档（回填）——按 20490ad 落地行为如实落档；入口 intents/2026-10-01-hybrid-governance.md
-确认指纹: dcd24a1656845833
+确认指纹: bf740c4fcddfbcba
 ---
 # SPEC — hybrid-governance（补档：四特性按落地行为落档）
 
-> 本 spec 为**回填档**：实现已随 20490ad 落地并全量测试通过，本文按落地代码如实记录判据，不引入未落地的设计。判据锚点以 20490ad 文件与行号为准。
+> 本 spec 为**回填档**：实现已落地并全量测试通过，本文按落地代码如实记录判据，不引入未落地的设计。**落地归属（复核 P1 收口）**：四特性 footprint 横跨两笔提交——pre-commit experiment advisory 块、kit.json 台账登记与四份 owned 文档规则文本经 e6816e5 捆带先行入树（见 drift-hardening 关单留痕 P1-1），20490ad 承载其余 50 文件；判据锚点除特别标注外以 20490ad 文件与行号为准。
 
 ## 功能行为
 
@@ -26,7 +26,7 @@
 
 | 场景 | 落地行为 |
 |------|---------|
-| experiment/* 提交 | pre-commit 闭环配对门降级 advisory（报告不阻断；detached HEAD 走严格模式）；双源/台账/常驻面/敏感信息门不豁免 |
+| experiment/* 提交 | pre-commit 闭环配对门降级 advisory（报告不阻断；detached HEAD 走严格模式）；双源/台账/常驻面/敏感信息门不豁免（**落地归属：e6816e5 捆带**） |
 | experiment/* 推送 | pre-push 闭环扫描降级 advisory；**加固门**——推送目标为 refs/heads/main 时以 `check-loop --hardening` 运行 |
 | 加固门判据 | 标记件（frontmatter `阶段: exploring` 或 `状态: exploring`）入 main 须：intent 状态 approved/done + 同名 plan 在场且 approved/done + L2/L3 另须同名 spec approved/done——任一未收口 hard 阻断（check-loop.mjs 加固门段 :1105-1141） |
 | 漏标记 | experiment/* 分支暂存 intent 缺标记由 pre-commit「泳道完整性」门禁拦截（2026-10-01 drift-hardening 批增补，本批诚实边界的机器关闭）；残余暴露面仅剩绕过本地钩子的提交 |
@@ -71,12 +71,13 @@
 | 命令文档 | new-task/plan/design/build/test.md（成对）+ modules/hosts/*/commands/wf-plan.md（5 宿主适配） | 风险泳道选道 / 快车道 / 5→6 字段口径 |
 | 编排与模板 | pipeline-closing.md、workflow/intents/_TEMPLATE.md（成对） | risk_level 模板行 |
 | 环境 | ci.yml（机器门步骤重排）、.gitignore（.zcode 两目录 + trust-mode.json） | |
+| 台账 | .agents/kit.json（单侧，无对侧） | sync 纳管 4 新件 + solidify-task 反引号 rel 修正（「收口三项」之一的落点；复核 P2-1 补行） |
 
 落地收口三项（同提交）：solidify-task 文件名反引号改正（sync 收养登记）、gitignore 补齐、trust-mode.json 本地化。
 
 ## 约束遵守映射
 
-- **双源纪律**：50 文件全部 templates/↔装副本 成对提交，solidify/trust-mode 新件经 sync 登记入台账（kit.json managed 89 份校验通过）✓
+- **双源纪律**：scripts/commands/hooks/模板面成对提交（ci.yml、.gitignore、modules/hosts×5、kit.json 为单侧自有文件，复核 P2-2 收口口径）；solidify/trust-mode 新件经 sync 登记入台账（kit.json managed 89 份校验通过）✓
 - **判据一手事实（batch-ledger-audit 判准）**：--batch 以 batch/seq/of 记写入时已知事实，不做 quote/时间戳反推 ✓
 - **fail-closed**：trust 缺文件回落 Strict；stage-gates L2/L3 不回落；加固门未收口即拦 ✓
 - **只增不松**：既有检查 1-18 判据未放宽（check-loop 套件全量回归绿）✓
@@ -86,7 +87,7 @@
 
 | # | 边界 | 定性 |
 |---|------|------|
-| 1 | 归因歧义/豁免被蹭（协作道判低防线依赖自报红线 + drift-hardening 触达面判低补强） | 已知边界，双层防线声明于 README 与 drift-hardening spec |
+| 1 | 归因歧义/豁免被蹭（协作道判低防线依赖自报红线 + drift-hardening 触达面判低补强） | 已知边界，双层防线声明于 drift-hardening spec（README 覆盖第一层红线判低口径——复核 P2-3 收口） |
 | 2 | 探索标记绕过（--no-verify 绕本地钩子） | 残余暴露面 = 禁令纪律覆盖；CI 复跑不识别未标记件 |
 | 3 | Trusted fail-open（level 2 时 L0/L1 免旗标） | 用户显式配置才生效；本仓 Strict；判级错误会放大（依赖判级准确） |
 | 4 | 液态草稿仅 .zcode 生命周期内（跨会话依赖 solidify 及时固化） | 快车道纪律项，无机器强制 |
@@ -94,4 +95,4 @@
 ## 确认与复核
 
 - 确认日期：2026-10-01（用户对话内「确认」代录，台账 source=chat-delegated）
-- 复核：L2——independent-reviewer 复核本 spec 与 20490ad 落地行为一致性（防补档失真；抽样核对 ≥8 处判据锚点）
+- 复核：已完成（2026-10-01，independent-reviewer 新上下文）——12 锚点判据全部与代码一致、回填叙事真实、零代码改动属实；1 P1（落地归属口径）+ 3 P2（kit.json 漏列 / 成对数字 / 防线引用精度）用户定性**全收**，随关单编辑收口（前言注记 / §2 归属标注 / 系统改动补行 / 约束与风险措辞）
