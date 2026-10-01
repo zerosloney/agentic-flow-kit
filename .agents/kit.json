@@ -126,7 +126,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "6e987672fb21be446d033e09cec20e5f538db0077fa6238a0920657fe75769c9"
+      "sha256": "6d9e2e0bda9cbc5d15eda3fee0c8b486fb1ed2511e0b5cc883d79ebe54dec6b8"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",

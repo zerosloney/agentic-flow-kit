@@ -1199,7 +1199,11 @@ function fmStatus(text) {
   if (fs.existsSync(scriptsDir)) {
     const exemptFile = path.join(ROOT, '.agents', 'scripts-test-exempt.txt');
     const exempt = fs.existsSync(exemptFile)
-      ? fs.readFileSync(exemptFile, 'utf8').split(/\r?\n/).map((l) => l.split('|')[0].trim()).filter(Boolean)
+      ? fs.readFileSync(exemptFile, 'utf8').split(/\r?\n/)
+          .map((l) => l.trim())
+          .filter((l) => l && !l.startsWith('#'))
+          .map((l) => l.split('|')[0].trim())
+          .filter(Boolean)
       : [];
     const orphans = fs.readdirSync(scriptsDir)
       .filter((f) => f.endsWith('.mjs') && !f.endsWith('.test.mjs') && !exempt.includes(f))
