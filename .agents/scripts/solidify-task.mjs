@@ -84,9 +84,10 @@ function run() {
     }
     console.log(`确认汇总：${solidified.length - failed}/${solidified.length} 成功${failed ? `，${failed} 失败` : ''}`);
   } else {
-    console.log('⏭️ 未提供确认来源（--delegated "<用户原话>" 或 --auto），仅迁移不落账。');
+    console.log('⏭️ 未提供确认来源，仅迁移不落账。');
     for (const item of solidified) {
-      console.log(`  → 确认指引: node .agents/scripts/confirm-doc.mjs ${item.rel} --delegated "<用户原话>"`);
+      console.log(`  → 确认指引: node .agents/scripts/confirm-doc.mjs ${item.rel}（TTY 键入「可以」）`);
+      console.log(`    或（用户对话内明确确认后）: node .agents/scripts/confirm-doc.mjs ${item.rel} --delegated "<用户原话>"`);
     }
   }
 

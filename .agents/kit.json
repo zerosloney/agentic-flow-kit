@@ -242,11 +242,11 @@
     },
     {
       "rel": ".agents/scripts/solidify-task.mjs",
-      "sha256": "7dcd098f86dac09564ba9ed12e484ed90c3dc6a8eaa4db5ccf5426de7d71b735"
+      "sha256": "491d10a242ba279fa67eec96e73783db6ad43cf6506e6ca9c604f9ac819dee3f"
     },
     {
       "rel": ".agents/scripts/solidify-task.test.mjs",
-      "sha256": "f488bfc14cf89ed4e95929def63db8797fe5f609423faedb03ed8d3ad34e7dfc"
+      "sha256": "39c0616f95eba6f33fe95fc903ad681dbb47b6b68d5f84231a36420c46724206"
     },
     {
       "rel": ".agents/scripts/source-sync-check.mjs",

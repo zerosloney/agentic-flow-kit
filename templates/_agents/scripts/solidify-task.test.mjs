@@ -109,10 +109,17 @@ const ledgerLines = (root) => {
 {
   const d = mkfix();
   fs.writeFileSync(path.join(d, '.zcode', 'drafts', 'demo-task.md'), DRAFT('demo'));
-  // 让确认失败：给 confirm-doc 一个不存在目标——用 --delegated 但把文档删掉不可行（脚本先迁移），
-  // 改用 --auto 触发 Strict 拒绝（即 T3 场景）；此处补充验证失败后脚本仍更新索引且返回 1。
+  // 让确认失败：用 --auto 触发 Strict 拒绝（缺 trust-mode.json 即 Strict）。
   const r = run(d, ['--topic', 'demo', '--root', d, '--auto']);
   check('T7 失败后 exit 1 且索引仍生成', r.code === 1 && fs.existsSync(path.join(d, 'workflow', 'INDEX.md')), r.out);
+}
+// T8：索引更新失败传播退出码（独立于确认失败路径——删除 workflow/plans 目录使 gen-workflow-index 失败）
+{
+  const d = mkfix();
+  fs.writeFileSync(path.join(d, '.zcode', 'drafts', 'demo-task.md'), DRAFT('demo'));
+  fs.rmSync(path.join(d, 'workflow', 'plans'), { recursive: true });
+  const r = run(d, ['--topic', 'demo', '--root', d]);
+  check('T8 索引更新失败 exit 1 且输出指明', r.code === 1 && r.out.includes('索引更新失败'), r.out);
 }
 
 console.log(`\n${fail ? `❌ ${fail} failed` : '✅ all passed'}（${pass} passed）`);
