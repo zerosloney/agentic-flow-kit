@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-28
 模块: pipeline
 备注: 同名入口：../incidents/2026-09-28-adopter-derivers.md；同名 spec：../specs/2026-09-28-adopter-derivers.md。L2 四节。
-确认指纹: 04001e1bbb915445
+确认指纹: b827b3a8ec39d99f
 ---
 # PLAN — 装户侧 derivers 动态载入
 

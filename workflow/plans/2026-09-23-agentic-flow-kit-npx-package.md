@@ -1,9 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-23
 模块: pipeline
 备注: L1 极简 plan（改动面 + 验证方式两节起步）；方案全文（切分清单 / 两态文件模型 / M1-M5 分期）见 2026-09-23 对话确认稿
+确认指纹: f15b22aabfda73a2
 ---
 # PLAN — agentic-flow-kit M1+M2
 

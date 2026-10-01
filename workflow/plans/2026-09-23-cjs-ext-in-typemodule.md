@@ -1,9 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-23
 模块: pipeline
 备注: 同名 incident 的配对 plan（闭环配对门禁要求）；方案与验证详见 incident 文档。
+确认指纹: 2a05701c0563a9d0
 ---
 # PLAN — CJS 扩展名消歧（.js → .cjs）
 

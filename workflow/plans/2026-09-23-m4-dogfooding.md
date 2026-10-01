@@ -1,9 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-23
 模块: pipeline
 备注: M4 实现计划；与同名 intent 一同确认后开工。
+确认指纹: da935f49b26b07ee
 ---
 # PLAN — M4：自装 dogfooding
 

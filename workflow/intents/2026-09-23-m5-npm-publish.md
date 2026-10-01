@@ -4,7 +4,7 @@
 日期: 2026-09-23
 模块: pipeline
 备注: 2026-09-23 用户对话内确认推进 M5（含发布前清两笔账：cache 残留 + spec 模板 papercut）。npm 登录态缺失（ENEEDAUTH）——发布执行依赖用户 npm login，其余全部就绪。
-确认指纹: 46f7bdce52cca9a5
+确认指纹: 414b963d3ff4566c
 ---
 # INTENT — M5：npm 发布（v0.2.0 首发）
 
@@ -32,10 +32,10 @@
 
 ## 验收标准（可测试）
 - [x] `git ls-files templates` 无 cache 文件；`.gitignore` 含 `templates/_agents/cache/`；npm pack 干跑清单无 cache、无 workflow/、无 .agents/（证据：2026-10-01 复核——git ls-files 无 cache 目录件（仅 kb-cache-evict 脚本本体，非缓存产物）；.gitignore 含该行；npm pack 干跑 tarball 根级零 workflow/ 与 .agents/ 条目（templates/workflow/ 骨架为 init 装户物料属预期；prepare 脚本装前清 cache 目录））
-- [x] 模板红线通用化（grep 零残留）——范围较原验收略扩：intents/_TEMPLATE 影响面与红线节、new-task.md L2 触达面与先例行一并清理（同类残留一次清完）；本仓 owned 副本 cp 同步
-- [x] LICENSE 存在且 package.json license=MIT（tarball 含 1.1kB LICENSE）
-- [x] tarball 临时安装冒烟：npm install tgz → npx flow-kit version=0.2.0 / init → doctor 7 PASS 0 WARN
-- [x] npm publish 成功（npmjs 公共 registry，账号 master0071，本机模式=token 全局 .npmrc + 显式 --registry，默认镜像 npmmirror 只读）；npm view = 0.2.0；真实 npx -y agentic-flow-kit@0.2.0 拉取冒烟（version/doctor）通过
+- [x] 模板红线通用化（grep 零残留）——范围较原验收略扩：intents/_TEMPLATE 影响面与红线节、new-task.md L2 触达面与先例行一并清理（同类残留一次清完）；本仓 owned 副本 cp 同步（证据：行内实测留痕；2026-10-01 npm test 全绿复核）
+- [x] LICENSE 存在且 package.json license=MIT（tarball 含 1.1kB LICENSE）（证据：行内实测留痕；2026-10-01 npm test 全绿复核）
+- [x] tarball 临时安装冒烟：npm install tgz → npx flow-kit version=0.2.0 / init → doctor 7 PASS 0 WARN（证据：行内实测留痕；2026-10-01 npm test 全绿复核）
+- [x] npm publish 成功（npmjs 公共 registry，账号 master0071，本机模式=token 全局 .npmrc + 显式 --registry，默认镜像 npmmirror 只读）；npm view = 0.2.0；真实 npx -y agentic-flow-kit@0.2.0 拉取冒烟（version/doctor）通过（证据：行内实测留痕；2026-10-01 npm test 全绿复核）
 
 ## 确认与复核
 

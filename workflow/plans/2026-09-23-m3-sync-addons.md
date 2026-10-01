@@ -1,9 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-23
 模块: pipeline
 备注: 2026-09-23 与同名 intent 一同确认后当日完成。完成注记：① 测试合并为 src/sync.test.mjs 单文件 38 例（原计划拆 sync/add 两个文件，场景可共用 fixture，合并更省）；② 实现中发现 M1 遗留缺陷并连带修复——local-pre-commit 模板尾部 exit 0 吞门禁失败，改 set -e + 挂载点归 owned + add-gate 旧装态归一化（改动超出原列改动面，为 add-gate 接线正确性必需，经 e2e 拦截验证）；③ templates/_agents/cache/kb-index.json 为 v0.1.0 误提交的测试残留（kb-search 按指纹自愈），M4/M5 清理候选，本次未动。
+确认指纹: aa8395aad6d541a9
 ---
 # PLAN — M3：sync / add-host / add-gate
 

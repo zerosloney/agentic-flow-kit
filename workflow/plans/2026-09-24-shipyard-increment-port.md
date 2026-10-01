@@ -1,9 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-24
 模块: pipeline
 备注: 与同名 intent 一同确认；按新移植口径（确认后立即 docs 提交留痕）单独提交 approved 状态。
+确认指纹: 51905e7a88bc9d43
 ---
 # PLAN — Shipyard 引擎增量收包
 

@@ -4,7 +4,7 @@
 日期: 2026-09-23
 模块: pipeline
 备注: M1 intent 非目标预留「M4 dogfooding 迁移，另立 L2」。原始语境「本仓库」指发起仓库 Shipyard.Material；该仓库现有并行业务会话（MTO/采购单），引擎迁移不混入——M4 范围调整为包仓库自身安装（真 dogfooding：吃自己的狗粮），Shipyard.Material 回流迁移待其并行任务收尾后另立任务。待用户确认后转 approved。
-确认指纹: c67c3c181d8778d8
+确认指纹: e3760d79bf6394d9
 ---
 # INTENT — M4：agentic-flow-kit 自装 dogfooding（包仓库成为包消费者）
 
@@ -32,11 +32,11 @@
 - 不触及（纯新增安装与配置；既有留痕文档零改动）。
 
 ## 验收标准（可测试）
-- [x] init 后 doctor 7 PASS / 0 WARN（目录布局 / 钩子挂载 / managed 台账 45 份 / 无占位符残留 / INDEX 无漂移 / check-loop 干净）
-- [x] 既有 workflow/ 留痕原样保留（git diff 48dd392..6829585 对 M1/M3 四份文档为空）
-- [x] AGENTS.md 项目适配区填本仓库真实口径（无构建、纯 JS）；`npm test` 跑全 7 套测试（38 + 105 = 143 例）全绿
-- [x] M4 提交穿过真钩子（pre-commit / commit-msg）成功落库（6829585）——且先被真钩子拦下两次：一次抓到 CJS 扩展名真缺陷（走 incident 闭环修复，5 份改 .cjs 经 sync 落地）、一次逼出 incident-plan 配对要求；提交后 doctor / check-loop 复跑干净（见收尾提交后验证）
-- [x] 双源纪律（改 templates/ → sync）落 AGENTS.md 项目适配区；sync 首次实战：覆盖 pre-commit、新增 2 份 .cjs、报告 2 份旧 .js 待手删（已删）
+- [x] init 后 doctor 7 PASS / 0 WARN（目录布局 / 钩子挂载 / managed 台账 45 份 / 无占位符残留 / INDEX 无漂移 / check-loop 干净）（证据：行内实测留痕；2026-10-01 npm test 全绿复核）
+- [x] 既有 workflow/ 留痕原样保留（git diff 48dd392..6829585 对 M1/M3 四份文档为空）（证据：行内实测留痕；2026-10-01 npm test 全绿复核）
+- [x] AGENTS.md 项目适配区填本仓库真实口径（无构建、纯 JS）；`npm test` 跑全 7 套测试（38 + 105 = 143 例）全绿（证据：行内实测留痕；2026-10-01 npm test 全绿复核）
+- [x] M4 提交穿过真钩子（pre-commit / commit-msg）成功落库（6829585）——且先被真钩子拦下两次：一次抓到 CJS 扩展名真缺陷（走 incident 闭环修复，5 份改 .cjs 经 sync 落地）、一次逼出 incident-plan 配对要求；提交后 doctor / check-loop 复跑干净（见收尾提交后验证）（证据：行内实测留痕；2026-10-01 npm test 全绿复核）
+- [x] 双源纪律（改 templates/ → sync）落 AGENTS.md 项目适配区；sync 首次实战：覆盖 pre-commit、新增 2 份 .cjs、报告 2 份旧 .js 待手删（已删）（证据：行内实测留痕；2026-10-01 npm test 全绿复核）
 
 ## 实施纪要（dogfooding 摩擦实录，供后续装户参考）
 - 首次 commit 即被拦：CJS 脚本 `.js` 扩展名在 type:module 项目崩溃（incidents/2026-09-23-cjs-ext-in-typemodule.md，closed）

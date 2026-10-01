@@ -1,9 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-23
 模块: pipeline
 备注: M5 极简 plan；范围与同名 intent 一同于对话内确认。
+确认指纹: 8283b73f7cd8d58a
 ---
 # PLAN — M5：npm 发布
 

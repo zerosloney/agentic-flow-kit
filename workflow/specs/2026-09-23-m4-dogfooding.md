@@ -1,9 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-23
 模块: pipeline
 备注: M4 范围经用户对话内确认（包仓库自装；Shipyard.Material 回流另立）。时序说明：plan 先于本 spec 起草（dogfooding 首轮对 L2 配对要求感知不足，由 check-loop 逼出补齐）——内容无冲突，spec 为设计权威回填。
+确认指纹: e872a33d35f18e00
 ---
 # SPEC — M4 自装 dogfooding
 

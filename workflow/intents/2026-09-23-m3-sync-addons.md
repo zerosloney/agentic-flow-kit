@@ -4,7 +4,7 @@
 日期: 2026-09-23
 模块: pipeline
 备注: 2026-09-23 用户对话内确认「sync 对本地改动 = 跳过+报告+--force」（README 路线预告的 diff 确认就此定形收窄）后当日完成。实现中连带修复 M1 遗留缺陷：local-pre-commit 模板尾部 exit 0 会吞掉其后接线门禁的失败——模板改 set -e 去尾 exit 0、挂载点归 owned（isOwned）、add-gate 对旧装态归一化剥尾；e2e 以「接线后 commit 被 fail-closed 真拦截」验证生效。
-确认指纹: 24752a00d23134ed
+确认指纹: 8ea423e789fcf6e5
 ---
 # INTENT — M3：flow-kit sync / add-host / add-gate
 
@@ -38,11 +38,11 @@
 - 不触及（纯新增子命令；不修改既有引擎模板与 init / doctor 行为）。
 
 ## 验收标准（可测试）
-- [x] sync 单测：未改动文件随模板变更被覆盖；本地改动被跳过且 `--force` 可覆盖；新增模板文件被安装；包内已删仅报告不删盘；managed 缺失被恢复；无 kit.json 明确报错引导 init。（src/sync.test.mjs S1–S6，2026-09-23 全绿）
-- [x] add-host 单测：文件就位、managed 台账补记、localOnly 宿主 .gitignore 追加、options.hosts 补记。（S7）
-- [x] add-gate 单测：文件落 .agents/hooks/、local-pre-commit 接线幂等、owned 台账补记。（S8/S9，含旧装态归一化）
-- [x] e2e：临时 git 仓库 init → 删一个 + 改一个 managed 文件 → sync 恢复与跳过各自生效 → doctor 全绿（7 PASS/0 WARN）；init 后 add-host opencode 安装 11 份且 doctor 布局通过；add-gate 接线后 commit 被门禁 fail-closed 真拦截（git log 零提交），去接线后 commit 通过。
-- [x] 既有 6 套引擎测试维持全绿（无回归）。（5 个 *.test.mjs 71 PASS + check-loop.test.sh 34 PASS）
+- [x] sync 单测：未改动文件随模板变更被覆盖；本地改动被跳过且 `--force` 可覆盖；新增模板文件被安装；包内已删仅报告不删盘；managed 缺失被恢复；无 kit.json 明确报错引导 init。（src/sync.test.mjs S1–S6，2026-09-23 全绿）（证据：行内实测留痕；2026-10-01 npm test 全绿复核）
+- [x] add-host 单测：文件就位、managed 台账补记、localOnly 宿主 .gitignore 追加、options.hosts 补记。（S7）（证据：行内实测留痕；2026-10-01 npm test 全绿复核）
+- [x] add-gate 单测：文件落 .agents/hooks/、local-pre-commit 接线幂等、owned 台账补记。（S8/S9，含旧装态归一化）（证据：行内实测留痕；2026-10-01 npm test 全绿复核）
+- [x] e2e：临时 git 仓库 init → 删一个 + 改一个 managed 文件 → sync 恢复与跳过各自生效 → doctor 全绿（7 PASS/0 WARN）；init 后 add-host opencode 安装 11 份且 doctor 布局通过；add-gate 接线后 commit 被门禁 fail-closed 真拦截（git log 零提交），去接线后 commit 通过。（证据：行内实测留痕；2026-10-01 npm test 全绿复核）
+- [x] 既有 6 套引擎测试维持全绿（无回归）。（5 个 *.test.mjs 71 PASS + check-loop.test.sh 34 PASS）（证据：行内实测留痕；2026-10-01 npm test 全绿复核）
 
 ## 确认与复核
 

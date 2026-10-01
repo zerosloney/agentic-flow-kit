@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-27
 模块: pipeline
 备注: 同名 incident：../incidents/2026-09-27-confirm-gate-one-per-call.md（确认门 delegated 逐件化——方向已于对话内确认）
-确认指纹: c0241fd4215dde2a
+确认指纹: 090186f151a496ac
 ---
 # SPEC — confirm-gate-one-per-call
 

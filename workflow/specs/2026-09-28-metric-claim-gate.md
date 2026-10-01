@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-28
 模块: pipeline
 备注: 承接 2026-09-28-claim-exceeds-fix（该单把「量化断言单源」立为纪律条目，首版靠人工遵守、未机器化）。本 spec 把它落成 check-loop 检查 16。同名 plan：../plans/2026-09-28-metric-claim-gate.md。本单为**引擎能力增强**（改门禁判据面），故 L2。
-确认指纹: 92e22f64e2a51b17
+确认指纹: 1b737ba6de7de833
 ---
 # SPEC — 量化断言指标签名机器门（check-loop 检查 16）
 

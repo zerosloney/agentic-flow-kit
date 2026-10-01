@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-28
 模块: pipeline
 备注: 同名入口：../incidents/2026-09-28-claim-exceeds-fix.md。L1 极简形态（改动面 + 验证方式）；无同名 spec（L1 可省，且本单不改契约面）。
-确认指纹: 39e040f7b0813de2
+确认指纹: a79cfd38172b4ccc
 ---
 # PLAN — 结论文档断言强于实际的窄修与纪律固化
 
