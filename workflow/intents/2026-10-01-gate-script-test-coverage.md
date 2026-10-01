@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-01
 模块: pipeline
 备注: 门禁缺位追踪（v09-review-defects 复盘三件套第①项「是否需要新 intent=是」的兑现）——引擎脚本测试覆盖机器门 + trust-mode 补测 + 库件豁免机制
-确认指纹: 18771bb3bebfba5d
+确认指纹: 47cdfa93aa403af9
 ---
 # INTENT — gate-script-test-coverage（引擎脚本测试覆盖门）
 
@@ -57,18 +57,18 @@ risk_level: L2
 
 ## 验收标准（可测试）
 
-- [ ] 新增检查项运行后：7 个无兄弟测试脚本中，`trust-mode.mjs` 已补测试、6 个库件/工具已登记豁免，warning 清单与豁免登记一致（证据：check-loop 输出 + 豁免文件内容）
-- [ ] `trust-mode.test.mjs` 用例覆盖：三级语义（Strict/Standard/Trusted 名称与数值）、缺文件 fail-closed 回落 Strict、`--auto` 在 Strict 下被 confirm-doc 拒绝路径；npm test 全绿（证据：用例名 + 测试输出）
-- [ ] 豁免文件含 `policy.mjs`、`stage-gates.mjs` 等库件，理由注明实际覆盖套件名（证据：文件内容 + 对应套件存在性 grep）
-- [ ] README/AGENTS.md 含「新增引擎脚本默认必须带测试，缺失由机器门列出」规范条目（证据：文件行）
-- [ ] 全量回归：npm test + verify.mjs 全绿；check-loop 无新增 hard-block（证据：命令输出）
+- [x] 新增检查项运行后：7 个无兄弟测试脚本中，`trust-mode.mjs` 已补测试、6 个库件/工具已登记豁免，warning 清单与豁免登记一致（证据：check-loop 真仓 exit 0、零「脚本测试缺失」告警；`.agents/scripts-test-exempt.txt` 恰 6 行——独立复核实测 orphans=[]）
+- [x] `trust-mode.test.mjs` 用例覆盖：三级语义（Strict/Standard/Trusted 名称与数值）、缺文件 fail-closed 回落 Strict、`--auto` 在 Strict 下被 confirm-doc 拒绝路径；npm test 全绿（证据：trust-mode.test.mjs T1-T8 全过 8/8（T7 Strict 拒/零台账、T8 Trusted 放行 source=ai-auto-trust-L2）；npm test 全部套件通过）
+- [x] 豁免文件含 `policy.mjs`、`stage-gates.mjs` 等库件，理由注明实际覆盖套件名（证据：豁免文件 6 行 + check-loop.test.mjs 对 policy/stage-gates 的 import 行；check-metric-claims 经 check-loop.mjs 消费——复核 grep 实据）
+- [x] README/AGENTS.md 含「新增引擎脚本默认必须带测试，缺失由机器门列出」规范条目（证据：workflow/README.md 与 templates/workflow/README.md「其余检查」枚举含「引擎脚本测试覆盖（检查 20，包源环境——新增引擎脚本默认必须带 `.test.mjs`，库件/工具须登记 `.agents/scripts-test-exempt.txt`）」）
+- [x] 全量回归：npm test + verify.mjs 全绿；check-loop 无新增 hard-block（证据：npm test「✅ 全部套件通过」、verify 2/2、check-loop exit 0、gate-checklist 0 断档 0 未登记——2026-10-01/02 实录）
 
 > **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 冒烟脚本输出>）`。
 > done 状态仍有未勾项会被 check-loop 拦截（2026-09-12 起新建 intent 为 hard-block，存量 intent 仅 warning 提示）；勾选但缺「证据：」为 hard-block。
 
 ## 确认与复核
 
-- 确认日期：
+- 确认日期：2026-10-01（用户对话内「确认」代录，台账 source=chat-delegated）
 - 确认人：用户（对话内明确放行即确认）
 - 确认范围：gate-script-test-coverage（测试覆盖机器门 + trust-mode 补测 + 豁免机制）
-- 复核：L2 口径——落地后 independent-reviewer 复核检查判据、豁免真实性、测试覆盖有效性
+- 复核：已完成（independent-reviewer 新上下文两轮——首轮代理空返回，重派紧凑复核）——0 P0 / 0 P1 / 2 P2；检查 20 判据、豁免真实性、trust-mode.test 有效性、范围纪律均核实；P2-1（豁免解析忽略 # 注释行）用户定性顺手收口随 `2fd70ae` 落地，P2-2 留后续

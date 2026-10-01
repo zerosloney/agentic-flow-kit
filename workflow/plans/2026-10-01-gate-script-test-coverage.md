@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
-确认指纹: 1eed3783ce3b10d3
+确认指纹: 99f4c227ecfa0f23
 ---
 # PLAN — gate-script-test-coverage（引擎脚本测试覆盖门）
 
@@ -53,6 +53,6 @@
 ## 确认与复核
 
 > 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节（确认环节的机器可见态），done 只在关单出现——禁从 draft 直跳 done。
-- 确认结果：approved（2026-10-01 用户对话内确认，原话「确认」——plan 全文过目）；done（关单时随入口文档置终态）
+- 确认结果：approved（2026-10-01 用户对话内确认，原话「确认」——plan 全文过目）；done（2026-10-02 关单，随入口文档置终态；复核 0 P0/0 P1/2 P2，P2-1 收口 2fd70ae）
 - 确认门记录：plan 草稿全文过目 + 改动清单确认（改动方案节随 plan 全文一并过目确认）
-- 复核：L2——independent-reviewer 复核检查 20 判据、豁免真实性、trust-mode.test 有效性
+- 复核：已完成——0 P0 / 0 P1 / 2 P2；P2-1 收口、P2-2 留后续

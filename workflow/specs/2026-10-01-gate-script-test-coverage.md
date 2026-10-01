@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-01
 模块: pipeline
 备注: 引擎脚本测试覆盖门（v09-review-defects 门禁缺位追踪）；入口 intents/2026-10-01-gate-script-test-coverage.md
-确认指纹: 7c56fb72ec4ba066
+确认指纹: e1394ffbab9d3e2b
 ---
 # SPEC — gate-script-test-coverage（引擎脚本测试覆盖门）
 
@@ -87,4 +87,4 @@ npm test → run-tests.mjs glob 自动收集 trust-mode.test.mjs
 ## 确认与复核
 
 - 确认日期：2026-10-01（用户对话内「确认」代录，台账 source=chat-delegated）
-- 复核：L2——independent-reviewer 复核检查 20 判据、豁免真实性（grep 覆盖证据）、trust-mode.test 有效性
+- 复核：已完成（independent-reviewer 新上下文两轮）——0 P0 / 0 P1 / 2 P2；检查 20 判据（gate-checklist 0 断档/0 未登记、真仓零告警）、豁免真实性（grep 实据）、trust-mode.test 有效性（8/8 行为断言）、范围纪律（13 文件全在 spec 清单）均核实；P2-1 随 `2fd70ae` 收口，P2-2 留后续
