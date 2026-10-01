@@ -29,17 +29,17 @@
 | PLAN | L1 | approved | 2026-09-23 | pipeline | M5：npm 发布 | — |
 | SPEC | L2 | approved | 2026-09-23 | pipeline | M4 自装 dogfooding | — |
 
-## 档案计数（158，不进表）
+## 档案计数（161，不进表）
 
 | 类型 | 模块 | 数量 |
 |---|---|---|
 | INCIDENT | pipeline | 20 |
-| INTENT | pipeline | 45 |
+| INTENT | pipeline | 46 |
 | INTENT | wiki | 1 |
-| PLAN | pipeline | 62 |
+| PLAN | pipeline | 63 |
 | PLAN | wiki | 1 |
-| SPEC | pipeline | 29 |
+| SPEC | pipeline | 30 |
 
-终态构成：done 138 · closed 12 · fixed 8；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
+终态构成：done 141 · closed 12 · fixed 8；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
 
 <!-- GENERATED:END -->
