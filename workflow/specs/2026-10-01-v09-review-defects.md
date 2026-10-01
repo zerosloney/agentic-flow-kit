@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-01
 模块: pipeline
 备注: v0.9.0 审查缺陷批修复——确认门契约防自动伪造 + 加固门目标分支判定；入口 incidents/2026-10-01-v09-review-defects.md
-确认指纹: bd8515a757685dc2
+确认指纹: 4d541a8551210f0c
 ---
 # SPEC — v09-review-defects（审查缺陷批修复）
 
@@ -73,4 +73,4 @@
 ## 确认与复核
 
 - 确认日期：2026-10-01（用户对话内「确认」代录，台账 source=chat-delegated）
-- 复核：L2——independent-reviewer 复核两项修复与 spec/incident 判据一致（含防复发用例真实性）
+- 复核：已完成（2026-10-01，independent-reviewer 新上下文）——0 P0 / 0 P1 / 3 P2；确认门契约修复完整、加固门三态分派正确、测试真实性达标；P2-2（TTY 指引）与 P2-3（索引失败独立用例）用户定性顺手收口随 `b1237ce` 落地，P2-1（README 对存量占位符差异）留后续

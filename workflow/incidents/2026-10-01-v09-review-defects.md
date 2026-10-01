@@ -1,9 +1,10 @@
 ---
-状态: open
+状态: closed
 级别: L2
 发现: 2026-10-01
 模块: pipeline
 备注: v0.9.0 代码审查缺陷批——①solidify-task.mjs 自动伪造 --delegated 用户原话（确认门契约破坏，Critical）②pre-push experiment→main 直推绕过 --hardening 加固门（Major）；修复走 L2 三件套
+确认指纹: 6fce819e7529a265
 ---
 # INCIDENT — v0.9.0 代码审查缺陷批（确认门伪造 + 加固门直推绕过）
 
@@ -36,17 +37,17 @@
 ## 复盘三件套（修复时补齐，缺一不可）
 
 1. 结构性修复
-   - 修复 commit：（修复后回填）
-   - 修复 ①：solidify-task.mjs 移除自动 `--delegated`——改为拒绝在无用户对话确认时落账（读 trust-mode 或强制 TTY/提示），或整段批量确认改为用户显式操作；清理死代码（targetName / 空 if / targetKebab 恒等函数）与失败计数；补 `.test.mjs` 纳入 npm test
-   - 修复 ②：pre-push 分支顺序调整——main 目标先判加固门，experiment advisory 不覆盖 main 目标（或 advisory 分支在 remote 为 main 时改走加固门）
+   - 修复 commit：`7e6bc39`（实现：solidify 重写 + pre-push 判定重写 + 两套件 + owned 双改）+ `b1237ce`（P2-2/P2-3 收口：TTY 指引 + 索引失败独立用例）
+   - 修复 ①：solidify-task.mjs 移除自动 `--delegated`——无确认来源只迁移不落账并打印 TTY/`--delegated` 双指引；`--delegated "<原话>"` quote 由调用方显式传入、原样转发；`--auto` 显式旗标（Strict 下被拒并计数失败）；失败计数 + 索引失败退出码传播；死代码清理
+   - 修复 ②：pre-push 判定键从 `$local_ref` 改为 `$remote_ref` 三态分派——目标 main 必跑 `--hardening`（experiment→main 直推亦覆盖）；experiment 目标 advisory；其余全量
    - 影响环境：dev（引擎包源）+ 装户（sync 下发）
-   - 是否需要新 intent：待修复后按根因定（门禁缺位类系统性根因需立新 intent 追踪——本次根因含「无测试/无复核」，结构性修复后仍建议立 intent 补门禁缺位，禁以「修复已完成」绕过回路）
+   - 是否需要新 intent：是——本次根因含「门禁缺位/无测试/无独立复核」系统性缺口（L1 快车道当年无三件套、solidify 无测试即发布），需另立 intent 补门禁缺位（防复发验证落地后按 2026-10-01 复盘流程立档）
 
 2. 防复发验证（必须落到自动化用例，禁止只写「已人工验证」）
-   - solidify-task：新增 `.test.mjs` 断言无用户确认时拒绝写台账 / 无 quote 伪造路径；`run-tests.mjs` 全量绿
-   - pre-push：端到端/直跑用例覆盖 `experiment/* → main` 目标时加固门必执行（含 `--hardening` 调用断言）；正常 experiment→experiment advisory 仍放行
-   - 回归：`npm test` 全套件 + `verify.mjs` + fresh-clone 门禁复跑
+   - solidify-task.test.mjs：**16/16**——T1 默认不落账、T2 quote 原样（`"quote":"固化了可以"`）、T3/T7 `--auto` Strict 拒绝失败退出码、T8 索引失败传播；跑真实 confirm-doc + 真实 gen-workflow-index
+   - pre-push.test.mjs：**6/6** 真仓端到端——桩 check-loop 记录 argv，断言 `experiment/x→main` 含 `--hardening`（回归漏口）、`experiment→experiment` 不含、`main→main` 含
+   - 全量回归：`npm test` 全部套件通过 + `verify.mjs` 2/2 + `source-sync-check --diff` 无漂移 + `check-ledger` 对齐 + 台账 191 行零伪造 quote（独立复核实测）
 
 3. 规范条目（必须有可追溯的落点）
-   - 落点：`workflow/README.md` 或 AGENTS.md 增补「确认门不得被自动化脚本隐式调用——`--delegated` 仅限对话内用户原话」；`templates/_githooks/pre-push` 头注更新分支判定顺序说明；L1 快车道命令文档同步
-   - 引用：（修复后回填 commit SHA）
+   - 落点：`workflow/README.md` + `templates/workflow/README.md` 硬规则 3 增补「`--delegated` 原话仅限用户对话内明确确认的当次措辞——官方脚本/门禁不得自动代录或编造 quote」；`.agents/commands/new-task.md` + `templates/_agents/commands/new-task.md` L1 行更新固化需显式确认后带参执行
+   - 引用：`7e6bc39`（README 硬规则 3 / new-task L1 行 + 脚本头注）＋ `b1237ce`（指引细化）

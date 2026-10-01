@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
-确认指纹: 5257a389642e6175
+确认指纹: 16a82aa78af554ae
 ---
 # PLAN — v09-review-defects（审查缺陷批修复）
 
@@ -51,6 +51,6 @@
 ## 确认与复核
 
 > 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节（确认环节的机器可见态），done 只在关单出现——禁从 draft 直跳 done。
-- 确认结果：approved（2026-10-01 用户对话内确认，原话「确认」——plan 全文过目）；done（关单时随入口文档置终态）
+- 确认结果：approved（2026-10-01 用户对话内确认，原话「确认」——plan 全文过目）；done（2026-10-01 关单，随入口文档置终态；修复 7e6bc39 + P2 收口 b1237ce，复核 0 P0/0 P1/3 P2）
 - 确认门记录：plan 草稿全文过目 + 改动清单确认（build.md 两道门，逐次，不合并）
-- 复核：L2——independent-reviewer 复核两项修复与 spec 判据一致（防复发用例真实性）
+- 复核：已完成（2026-10-01，independent-reviewer 新上下文）——0 P0 / 0 P1 / 3 P2 全绿；P2-2/P2-3 收口，P2-1 留后续
