@@ -62,19 +62,20 @@ risk_level: L2
 
 ## 验收标准（可测试）
 
-- [ ] 暂存 diff 命中 L2 面模式且关联 draft L0/L1 intent → pre-commit 阻断，消息含命中文件与关联 intent 名（证据：fixture 测试用例名 + 本仓一次实录拦截输出）
-- [ ] 同样 diff 但关联 intent 为 L2/L3 → 放行；无任何可关联 L0/L1 intent → 放行（证据：fixture 用例名）
-- [ ] experiment/* 分支暂存无「阶段: exploring」的 intent → 阻断并给出补标记指引；补标记后放行；非 experiment 分支不触发本检查（证据：fixture 用例名）
-- [ ] 装户无 L2 面配置时检查自然跳过，无新增告警/阻断（证据：fixture 用例名）
-- [ ] `npm test` 全绿（含新增用例）；check-loop.test.mjs 既有套件不回退（证据：测试输出）
-- [ ] 引擎改动经 `templates/` + sync 下发，`node bin/flow-kit.mjs doctor` 无新增漂移告警（证据：doctor 输出）
+- [x] 暂存 diff 命中 L2 面模式且关联 draft L0/L1 intent → pre-commit 阻断，消息含命中文件与关联 intent 名（证据：check-lane-surface.test.mjs 用例「S2 命中面+仅活跃 L1 → 阻断且消息含标签/命中文件/入口名/修法」「S2b 多活跃 L0/L1 → 关联入口取最新日期件」+ git 真仓端到端用例「git 端到端：真实暂存非 ASCII 路径 → 阻断」（套件 19/19）；本仓 S2 实录无法构造——本仓自身恒有活跃 L2 入口（即豁免判据按设计工作，e6816e5 提交经真实 pre-commit 放行即 S1 实录）；检查 B 本仓实录见下一条）
+- [x] 同样 diff 但关联 intent 为 L2/L3 → 放行；无任何可关联 L0/L1 intent → 放行（证据：用例「S1 命中面+活跃 L2 入口 → 放行」「S3 命中+无活跃（done 不算活跃）→ advisory 放行」+ e6816e5 提交实录：暂存命中 ^templates/ 与 ^\.agents/(scripts|hooks)/ 而活跃 L2（本 intent）在田 → 静默放行）
+- [x] experiment/* 分支暂存无「阶段: exploring」的 intent → 阻断并给出补标记指引；补标记后放行；非 experiment 分支不触发本检查（证据：用例 S4b-1/S4b-2/S4b-c/S6 + 本仓实录 2026-10-01——experiment/zz-demo 分支暂存无标记 intent 直跑生产路径阻断 exit=1（输出含修法指引）→ 补「阶段: exploring」后 exit=0 → 演示后分支删除/文件清理无残留）
+- [x] 装户无 L2 面配置时检查自然跳过，无新增告警/阻断（证据：用例「S5 无 lane-surfaces.txt → 静默跳过」断言输出为空）
+- [x] `npm test` 全绿（含新增用例）；check-loop.test.mjs 既有套件不回退（证据：npm test 输出「✅ 全部套件通过」，含 check-lane-surface.test.mjs 19/19 与 check-loop.test.mjs 79 用例；verify.mjs「✅ 2/2 闭环校验通过 / 全绿」2026-10-01）
+- [x] 引擎改动经 `templates/` + sync 下发，`node bin/flow-kit.mjs doctor` 无新增漂移告警（证据：doctor 输出「13 PASS ｜ 0 WARN ｜ 0 FAIL」2026-10-01；source-sync-check 孤儿仅既有 trust-mode.json）
 
 > **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 冒烟脚本输出>）`。
 > done 状态仍有未勾项会被 check-loop 拦截（2026-09-12 起新建 intent 为 hard-block，存量 intent 仅 warning 提示）；勾选但缺「证据：」为 hard-block。
 
 ## 确认与复核
 
-- 确认日期：
+- 确认日期：2026-10-01（用户对话内「确认」代录，台账 source=chat-delegated）
 - 确认人：用户（对话内明确放行即确认）
 - 确认范围：drift-hardening 批（触达面判低拦截 + 探索标记拦截；quote 复用检测否决）
-- 复核：L2 不强制独立会话复核（L3 才要求）；test 阶段 check-loop + 独立复核按 L2 口径执行
+- 复核：L2 独立复核已完成（2026-10-01，independent-reviewer 新上下文）——0 P0 / 3 P1 / 5 P2，门禁本体合格；P1×3 用户定性全采纳
+- **关单留痕（复核 P1-1，fix-forward 口径）**：实现提交 e6816e5 整文件暂存时捆带了工作区既有 in-flight hybrid-governance 批内容（四份 owned 文档的规则文本 + kit.json 台账记录了未提交内容 sha 的「预 landing」错位），drift-hardening 的检查 B 亦语义依赖该批的探索泳道——该批须补三件套并在 **push 前整体落地**（中间提交树内不一致，禁单独 push）；已提交树 kit.json 错位随该批落地自愈

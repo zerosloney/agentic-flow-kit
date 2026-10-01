@@ -57,8 +57,8 @@ git commit → .githooks/pre-commit（门禁编排）
 |---|------|------|------|
 | 1 | `templates/_agents/scripts/check-lane-surface.mjs` | 新增 | 两段检查本体；头注释写判据、教训引用（batch-ledger-audit 判准 / quotepath / CRLF）与已知边界 |
 | 2 | `templates/_agents/scripts/check-lane-surface.test.mjs` | 新增 | fixture 用例：S1–S6 全场景正反例 + 平台边界（CRLF frontmatter、quotepath） |
-| 3 | `templates/_agents/lane-surfaces.txt` | 新增 | 配置模板：格式说明注释 + 本仓默认面清单（`templates/`、`.agents/(scripts\|hooks\|commands\|roles)/`、`.githooks/`、`bin/`、`modules/`——本仓的引擎/契约面） |
-| 4 | `templates/_githooks/pre-commit` | 修改 | 泳道完整性门禁接线（pairing 门之后）：guard `[ -f .agents/scripts/check-lane-surface.mjs ]`，存在即 `run_gate` 调 node；装副本经 sync 下发 |
+| 3 | `templates/_agents/lane-surfaces.txt` | 新增 | 配置模板：格式说明注释 + 本仓默认面清单（`^templates/`、`^\.agents/(scripts\|hooks)/`、`^\.githooks/`、`^bin/`、`^modules/`）。commands/roles 为纯提示文本（docs 级，intent 豁免面）不单列——其改动经双源一致性门禁强制与 `templates/_agents/` 成对提交，`^templates/` 已覆盖，漏拦面≈0（独立复核 P1-3 收口：实现时收窄未回写 spec，本行即对齐口径） |
+| 4 | `templates/_githooks/pre-commit` | 修改 | 泳道完整性门禁接线（pairing 门之后）：guard + 直接 `node` 调用（不经 `run_gate`——其实现为 `sh "$@"` 会把 node 当脚本解释，trae-hooks 套件曾抓到该 bug）；装副本经 sync 下发 |
 | 5 | 根 `AGENTS.md` + `templates/AGENTS.md`（owned 对，手动双改） | 修改 | 「门禁与提交」pre-commit 括号枚举补「泳道完整性」；措辞受 7680 字节预算约束 |
 | 6 | `workflow/README.md` + `templates/workflow/README.md`（owned 对，手动双改） | 修改 | 「探索泳道」节：删「漏标记不被加固门覆盖」诚实边界的"裸奔"表述，改为已由 pre-commit 拦截的口径；「使用方式·验证」提及新门禁 |
 | 7 | `.agents/kit.json`（managed 台账） | 自动 | sync 纳管新增文件（sha 注册），非手改 |
@@ -91,5 +91,5 @@ git commit → .githooks/pre-commit（门禁编排）
 
 ## 确认与复核
 
-- 确认日期：
-- 复核：L2 推荐独立复核；本 spec 关键判据（关联规则 / 豁免边界）建议 test 阶段由 independent-reviewer 按 L2 口径复核 diff 与判据一致性
+- 确认日期：2026-10-01（用户对话内「确认可以」代录，台账 source=chat-delegated）
+- 复核：L2 独立复核已完成（2026-10-01，independent-reviewer 新上下文）——结论 0 P0 / 3 P1 / 5 P2，门禁本体（脚本/测试/接线/台账）合格、S1-S6 判据与实现逐条一致无需返工；P1×3 用户定性**全采纳**（P1-1 走 fix-forward：hybrid 批 push 前整体落地；P1-2 owned 对拉齐 + P1-3 面清单口径回写本 spec #3，fix commit 收口）；P2×5 留后续（P2-2 随 hybrid 批落地自愈）

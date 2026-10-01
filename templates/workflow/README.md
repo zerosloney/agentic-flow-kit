@@ -48,7 +48,7 @@
 
 `kit.json` 的 `audit: false`（`init` 新装的默认值）时，check-loop 只阻断下面与文档闭环直接相关的项。`audit` 字段缺省时保持全量检查，已装仓库升级不会突然丢掉卫生警告。本字段设为 `true` 时卫生检查照常打印。豁免日期的唯一表是 `.agents/scripts/policy.mjs` 的 `policyVersion`（`kit.json` 同名字段；未知版本回退到 1）。
 
-1. **同名配对**：L1 有 Quick-Plan（合并 Spec+Plan）；L2/L3 有 spec 与 plan。incident 的回路断档同样阻断。
+1. **同名配对**：L1 有 plan；L2/L3 有 spec 与 plan。incident 的回路断档同样阻断。
 2. **验收勾验**：新建 intent 关到 done 时，验收标准未勾则阻断。
 3. **确认留痕**：approved / done / fixed / closed 须经 `confirm-doc.mjs`，指纹与台账一致。
 4. **敏感信息**：pre-commit 的 commit-check 扫描密钥。
