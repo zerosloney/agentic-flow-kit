@@ -1,9 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-23
 模块: pipeline
 备注: M1 intent 非目标预留「M4 dogfooding 迁移，另立 L2」。原始语境「本仓库」指发起仓库 Shipyard.Material；该仓库现有并行业务会话（MTO/采购单），引擎迁移不混入——M4 范围调整为包仓库自身安装（真 dogfooding：吃自己的狗粮），Shipyard.Material 回流迁移待其并行任务收尾后另立任务。待用户确认后转 approved。
+确认指纹: c67c3c181d8778d8
 ---
 # INTENT — M4：agentic-flow-kit 自装 dogfooding（包仓库成为包消费者）
 
@@ -41,3 +42,10 @@
 - 首次 commit 即被拦：CJS 脚本 `.js` 扩展名在 type:module 项目崩溃（incidents/2026-09-23-cjs-ext-in-typemodule.md，closed）
 - 闭环配对门禁逼出协议要求：incident 须配同名 plan；L2 intent 须配 spec（本 intent 的 spec 为事后回填）
 - spec 模板红线表残留 Shipyard 项目行 → 记 papercuts.md（不当场顺手改）
+
+## 确认与复核
+
+- 确认日期：2026-10-01（用户对话内「按上表证据关单 并继续推送」批量授权代录，台账 source=chat-delegated）
+- 确认人：用户
+- 确认范围：M4 关单（当年完成未关档，2026-10-01 复核证据后补关）
+- 复核：验收 5 条当年已全勾验；本仓即 init 装户（managed 89 份、钩子挂载、双源纪律入 AGENTS.md），2026-10-01 本会话两个 L2 批完整走闭环即 dogfooding 持续验证；由 v0.9.0 发版门（check-loop 检查 17）触发收口

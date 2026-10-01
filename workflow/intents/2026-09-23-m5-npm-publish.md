@@ -1,9 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-23
 模块: pipeline
 备注: 2026-09-23 用户对话内确认推进 M5（含发布前清两笔账：cache 残留 + spec 模板 papercut）。npm 登录态缺失（ENEEDAUTH）——发布执行依赖用户 npm login，其余全部就绪。
+确认指纹: 46f7bdce52cca9a5
 ---
 # INTENT — M5：npm 发布（v0.2.0 首发）
 
@@ -30,8 +31,15 @@
 - 不触及（模板文档内容修复走 papercut 升级路径；引擎逻辑零改动）。
 
 ## 验收标准（可测试）
-- [ ] `git ls-files templates` 无 cache 文件；`.gitignore` 含 `templates/_agents/cache/`；npm pack 干跑清单无 cache、无 workflow/、无 .agents/
+- [x] `git ls-files templates` 无 cache 文件；`.gitignore` 含 `templates/_agents/cache/`；npm pack 干跑清单无 cache、无 workflow/、无 .agents/（证据：2026-10-01 复核——git ls-files 无 cache 目录件（仅 kb-cache-evict 脚本本体，非缓存产物）；.gitignore 含该行；npm pack 干跑 tarball 根级零 workflow/ 与 .agents/ 条目（templates/workflow/ 骨架为 init 装户物料属预期；prepare 脚本装前清 cache 目录））
 - [x] 模板红线通用化（grep 零残留）——范围较原验收略扩：intents/_TEMPLATE 影响面与红线节、new-task.md L2 触达面与先例行一并清理（同类残留一次清完）；本仓 owned 副本 cp 同步
 - [x] LICENSE 存在且 package.json license=MIT（tarball 含 1.1kB LICENSE）
 - [x] tarball 临时安装冒烟：npm install tgz → npx flow-kit version=0.2.0 / init → doctor 7 PASS 0 WARN
 - [x] npm publish 成功（npmjs 公共 registry，账号 master0071，本机模式=token 全局 .npmrc + 显式 --registry，默认镜像 npmmirror 只读）；npm view = 0.2.0；真实 npx -y agentic-flow-kit@0.2.0 拉取冒烟（version/doctor）通过
+
+## 确认与复核
+
+- 确认日期：2026-10-01（用户对话内「按上表证据关单 并继续推送」批量授权代录，台账 source=chat-delegated）
+- 确认人：用户
+- 确认范围：M5 关单（当年完成未关档，2026-10-01 复核证据后补关）
+- 复核：验收 5 条全勾（第 1 条 2026-10-01 复核补勾——tarball 根级零泄漏）；npm registry 实证 0.2.0→0.8.0 共 8 版；由 v0.9.0 发版门（check-loop 检查 17）触发收口

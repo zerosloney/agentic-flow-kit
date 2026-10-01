@@ -1,9 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L1
 日期: 2026-09-23
 模块: pipeline
 备注: 2026-09-23 用户对话内确认「sync 对本地改动 = 跳过+报告+--force」（README 路线预告的 diff 确认就此定形收窄）后当日完成。实现中连带修复 M1 遗留缺陷：local-pre-commit 模板尾部 exit 0 会吞掉其后接线门禁的失败——模板改 set -e 去尾 exit 0、挂载点归 owned（isOwned）、add-gate 对旧装态归一化剥尾；e2e 以「接线后 commit 被 fail-closed 真拦截」验证生效。
+确认指纹: 24752a00d23134ed
 ---
 # INTENT — M3：flow-kit sync / add-host / add-gate
 
@@ -42,3 +43,10 @@
 - [x] add-gate 单测：文件落 .agents/hooks/、local-pre-commit 接线幂等、owned 台账补记。（S8/S9，含旧装态归一化）
 - [x] e2e：临时 git 仓库 init → 删一个 + 改一个 managed 文件 → sync 恢复与跳过各自生效 → doctor 全绿（7 PASS/0 WARN）；init 后 add-host opencode 安装 11 份且 doctor 布局通过；add-gate 接线后 commit 被门禁 fail-closed 真拦截（git log 零提交），去接线后 commit 通过。
 - [x] 既有 6 套引擎测试维持全绿（无回归）。（5 个 *.test.mjs 71 PASS + check-loop.test.sh 34 PASS）
+
+## 确认与复核
+
+- 确认日期：2026-10-01（用户对话内「按上表证据关单 并继续推送」批量授权代录，台账 source=chat-delegated）
+- 确认人：用户
+- 确认范围：M3 关单（当年完成未关档，2026-10-01 复核证据后补关）
+- 复核：验收 5 条当年已全勾验（备注亦明记当日完成）；sync/gates 套件常驻回归全绿，2026-10-01 当日 6 次 sync 实跑（收养登记/台账刷新）为活体复现；由 v0.9.0 发版门（check-loop 检查 17）触发收口
