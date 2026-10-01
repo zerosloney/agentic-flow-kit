@@ -237,7 +237,7 @@
       "sha256": "e6ba0dd09a6e32b5b8bd4735f4ab5439639b43422b923a2e2aa8af9571f34a2f"
     },
     {
-      "rel": ".agents/scripts/solidify-task.mjs`",
+      "rel": ".agents/scripts/solidify-task.mjs",
       "sha256": "fe07b8fac298207df2866ccd5f1949cc388ae84308e787f84aca1a0a9c533b7a"
     },
     {

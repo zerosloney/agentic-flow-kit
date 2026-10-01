@@ -13,6 +13,11 @@
 //     配对门的既有口径一致——早于确认门生效日的自报日期即存量豁免，不要求另有台账行）；此处「短路」
 //     只额外豁免**级别前置与 spec 档**，不是对台账要求的二次豁免（P2-1：原注释把二者写反，已订正）。
 //   plan 门追加：入口级别（取入口 frontmatter 级别，不取工具 --level）为 L2/L3 时，同名 spec 须已确认（同口径）。
+//   探索泳道豁免（2026-09-30 hybrid-governance-explore-hardening）：同名 intent 仍为 draft 且风险泳道为
+//     L0/L1（级别优先；级别缺失或非法时回落 risk_level——fill-intent 双写同值）→「先起草后确认」是协作道
+//     语义（check-loop 检查 19 同款豁免口径），放行 spec/plan 起草与确认；L2/L3 防御道维持入口确认前置。
+//     incident 入口不豁免（过目留痕本就轻量）。收口由 check-loop --hardening 加固门兜底（入 main 前须
+//     intent approved/done + spec/plan 在场）。
 // 信任边界声明（沿 2026-09-28 audit-gate-hardening 口径）：本地可写台账 / 手改状态仍可伪造——本模块只把
 //   「顺手绕过」抬到「主动伪造」，不宣称通道关闭；事后对质靠 git 历史与台账。
 // 设计先例：fill-* 已 import 同目录 workflow-enums.mjs；check-loop 检查 19 内联同口径（门禁脚本自包含、防兄弟依赖）。
@@ -114,7 +119,7 @@ export function entryConfirmed(root, base) {
   const intentAbs = path.join(root, intentRel);
   if (fs.existsSync(intentAbs)) {
     const r = judgeDoc(root, intentAbs, intentRel, ENTRY_STATUSES);
-    return { ...r, kind: 'intent', rel: intentRel, level: readFm(intentAbs, '级别'), storageLegacy: entryStorageLegacy(root, intentAbs) };
+    return { ...r, kind: 'intent', rel: intentRel, level: readFm(intentAbs, '级别'), risk: readFm(intentAbs, 'risk_level'), storageLegacy: entryStorageLegacy(root, intentAbs) };
   }
   const incRel = `workflow/incidents/${base}.md`;
   const incAbs = path.join(root, incRel);
@@ -138,10 +143,17 @@ export function specConfirmed(root, base) {
   return judgeDoc(root, abs, rel, ENTRY_STATUSES);
 }
 
-// draftGateFor：起草门总判（kind = 'spec' | 'plan'，fill 工具用）
+// draftGateFor：起草门总判（kind = 'spec' | 'plan'，fill 工具与 confirm-doc 逐阶段门共用）
 export function draftGateFor(kind, root, base) {
   const entry = entryConfirmed(root, base);
   if (!entry.ok) {
+    // 探索泳道豁免（2026-09-30 hybrid-governance-explore-hardening，口径见头部注释）：L0/L1 draft intent
+    // 放行起草——「先动手后确认」；泳道取级别优先、缺失/非法回落 risk_level（与 fill-intent 双写兼容，
+    // 级别合法但为 L2/L3 时不回落——fail-closed 就严）。
+    const lane = /^L[0-3]$/.test(entry.level || '') ? entry.level : entry.risk;
+    if (entry.kind === 'intent' && entry.status === 'draft' && (lane === 'L0' || lane === 'L1')) {
+      return { ok: true, entry, laneBypass: true };
+    }
     return {
       ok: false,
       reason: `同主题入口未确认——${entry.reason}`,

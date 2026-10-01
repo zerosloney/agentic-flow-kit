@@ -13,7 +13,9 @@
 // 违例输出到 stderr 并 exit 1；只剩警告时 exit 0。
 //
 // 检查项清单（编号/标题/severity 逐条沿 sh 版头部——gate-checklist 配对登记表按 id 消费，不得增删改号）:
-//   1. 入口文档/spec/plan 同名配对(L1 必须有 plan;L2/L3 必须有 spec+plan)        [hard-block]
+//   1. 入口文档/spec/plan 同名配对(L1 必须有 plan;L2/L3 必须有 spec+plan;L0 协作道豁免 plan;
+//      L0/L1 勾触达红线 → 「红线判低」hard——协作道不受理 STOP 级改动,就高不就低,
+//      2026-09-30 hybrid-governance-risk-lanes)                                        [hard-block]
 //   2. 模板字段占位符残留(YYYY-MM-DD / <主题> 等未替换;<主题> 与 .md 同行 = 命名约定描述,豁免)  [warning]
 //   3. incidents 复盘三件套完整性 + 状态严格枚举 + 新 intent 回路(回路断档=hard,其他=warning)
 //   4. 引用有效性(文档/指令中引用的 .agents/ 路径必须存在;支持 fill-{a,b,c}.mjs 花括号展开与 fill-*.mjs 通配;
@@ -92,7 +94,10 @@
 //   叙述性字段(独立复核/复盘三件套/验收勾验)按正文行锚定。枚举单源 .agents/workflow-enums.txt
 //   (缺文件/缺键 fail-loud exit 1;经 workflow-enums.mjs 读取,CRLF 天然容忍)。
 // 已确认状态: approved/done=已批或闭环; superseded/cancelled=放弃留档(仍算确认,不挡 push); incident: fixed/closed
-// 用法:node .agents/scripts/check-loop.mjs [--rev <sha>]   （或经 check-loop.sh shim）
+// 用法:node .agents/scripts/check-loop.mjs [--rev <sha>] [--hardening]   （或经 check-loop.sh shim）
+//   --hardening：追加「加固门」（experiment 泳道 exploring 任务入 main 的转正门槛，hard-block；
+//     .githooks/pre-push 对 remote=refs/heads/main 的推送传入；不占 1-19 编号，gate-checklist 登记表
+//     按号配对面不变，门体说明见加固门段注释）
 // 测试:node templates/_agents/scripts/check-loop.test.mjs（fixture 注入 CHECK_LOOP_ROOT）
 import fs from 'node:fs';
 import os from 'node:os';
@@ -111,14 +116,26 @@ import { MARK_RE, approvedTraceHit } from './stage-gates.mjs';
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const GIT = process.platform === 'win32' ? 'git.exe' : 'git';
 
-function takeRev() {
+function takeOpts() {
   const args = process.argv.slice(2);
-  if (args.length === 0) return null;
-  if (args.length === 2 && args[0] === '--rev' && args[1]) return args[1];
-  console.error('check-loop: 用法 node check-loop.mjs [--rev <sha>]');
-  process.exit(1);
+  const opts = { rev: null, hardening: false };
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === '--rev') {
+      opts.rev = args[++i] ?? '';
+      if (!opts.rev) {
+        console.error('check-loop: 用法 node check-loop.mjs [--rev <sha>] [--hardening]');
+        process.exit(1);
+      }
+    } else if (args[i] === '--hardening') {
+      opts.hardening = true; // 加固门（2026-09-30 hybrid-governance-explore-hardening）：pre-push 对 main 目标传入
+    } else {
+      console.error('check-loop: 用法 node check-loop.mjs [--rev <sha>] [--hardening]');
+      process.exit(1);
+    }
+  }
+  return opts;
 }
-const REV_ARG = takeRev();
+const { rev: REV_ARG, hardening: HARDENING } = takeOpts();
 if (REV_ARG && process.env.CHECK_LOOP_ROOT) {
   console.error('check-loop: CHECK_LOOP_ROOT 与 --rev 不能同时使用');
   process.exit(1);
@@ -246,11 +263,12 @@ const docFiles = (sub) => {
     .sort();
 };
 
-// --- 1. intent/spec/plan 同名配对 + 状态确认 + L3 确认三件 [hard-block] ---
+// --- 1. intent/spec/plan 同名配对 + 状态确认 + L3 确认三件 + 风险泳道一致性 [hard-block] ---
 for (const intent of docFiles('intents')) {
   const base = path.basename(intent);
   const st = fmGet(intent, '状态');
   const lvl = fmGet(intent, '级别');
+  const risk = fmGet(intent, 'risk_level'); // 风险泳道字段（fill-intent 落，=级别；2026-09-30 hybrid-governance-risk-lanes）
   if (!stOkDoc(st)) {
     const msg = `${base}（frontmatter 状态键当前值:『${st || '缺失'}』）`;
     if (lvl === 'L3') blockers.push(`- [状态未确认] L3 intent 必须为 approved/done/superseded/cancelled:${msg}`);
@@ -261,8 +279,18 @@ for (const intent of docFiles('intents')) {
       blockers.push(`- [配对断裂] intent 缺 spec:${base}（应在 ${WF}/specs/ 下同名）`);
     }
   }
-  if (!fs.existsSync(path.join(ROOT, WF, 'plans', base))) {
+  // 协作道（L0）豁免 plan 配对——异步审计兜底（hybrid-governance-risk-lanes）；L1 仍须 plan，L2/L3 须 spec+plan
+  if (lvl !== 'L0' && !fs.existsSync(path.join(ROOT, WF, 'plans', base))) {
     blockers.push(`- [配对断裂] intent 缺 plan:${base}（应在 ${WF}/plans/ 下同名）`);
+  }
+  // 风险泳道一致性：L0/L1（级别或 risk_level 任一判定）勾选触达红线 = 自认触及规则/契约或数据/运行时
+  // 结构面——就高不就低，协作道不受理 → hard 判低，须升级 L2/L3 并补同名 spec
+  if (['L0', 'L1'].includes(lvl) || ['L0', 'L1'].includes(risk)) {
+    const redlineTouched = (linesOf(intent) || [])
+      .some((l) => /^- \[x\]/.test(l) && /(\$\\rightarrow\$|→)\s*级别|级别至少\s*L[23]/.test(l));
+    if (redlineTouched) {
+      blockers.push(`- [红线判低] ${base} 级别/风险泳道为 ${[lvl, risk].filter(Boolean).join('/')} 但触达红线已勾选（规则/契约或 schema/结构面）——协作道不受理 STOP 级改动：就高不就低，先把「级别/risk_level」升到 L2/L3 并补同名 spec`);
+    }
   }
 }
 
@@ -523,6 +551,53 @@ const addedDateOf = (absDoc) => {
   return iso ? iso.slice(0, 10) : '';
 };
 
+// 证据真相校验：检查证据字符串是否包含合法的 commit SHA，且该 commit 触及了 plan 声明的文件
+function verifyEvidenceTruth(evidenceStr, planBase, root) {
+  const shaMatch = evidenceStr.match(/\b([a-f0-9]{7,40})\b/i);
+  // 排除纯数字串（时间戳/ID），必须是包含字母的 hex 串才疑似 SHA
+  if (!shaMatch || /^\d+$/.test(shaMatch[1])) return { ok: true, type: 'text' };
+
+  const sha = shaMatch[1];
+  const revParse = spawnSync(GIT, ['rev-parse', sha], { cwd: ROOT, encoding: 'utf8' });
+  if (revParse.status !== 0) {
+    // 区分本地伪造与外部仓库引用：
+    // 剔除 SHA 与泛指词后仍有其他内容（如项目名、路径描述）→ 视为外部仓库引用，不硬拦（本地无法核验他仓哈希）；
+    // 剔除后为空（如纯「commit a1b2c3d」「提交 a1b2c3d」）→ 视为本地引用伪造，硬拦。
+    const residue = evidenceStr.replace(sha, '')
+      .replace(/证据[：:]|commit|提交|[（）()。—-]/gi, '')
+      .trim();
+    if (residue.length > 0) return { ok: true, type: 'external' };
+    return { ok: false, type: 'forged', msg: `提交 ${sha} 不存在` };
+  }
+
+  // 语义核验：该 commit 必须触及 plan 中声明的任何一个文件
+  const planPath = path.join(ROOT, WF, 'plans', planBase + '.md');
+  if (!fs.existsSync(planPath)) return { ok: true, type: 'no-plan' }; // 缺 plan 走 Check 1 拦截
+
+  const planLines = linesOf(planPath) || [];
+  const declaredFiles = [];
+  // 扫描「改动面」或「任务拆解」节
+  let inDeclaredSec = false;
+  for (const line of planLines) {
+    if (/^##\s+(改动面|任务拆解)/.test(line)) { inDeclaredSec = true; continue; }
+    if (inDeclaredSec && /^##\s+/.test(line)) { inDeclaredSec = false; continue; }
+    if (inDeclaredSec) {
+      const fileMatch = line.match(/([a-zA-Z0-9._\/-]+\.[a-zA-Z0-9]+)/);
+      if (fileMatch) declaredFiles.push(fileMatch[1]);
+    }
+  }
+
+  const show = spawnSync(GIT, ['show', '--name-only', sha], { cwd: ROOT, encoding: 'utf8' });
+  if (show.status !== 0) return { ok: false, type: 'error', msg: `无法读取提交 ${sha} 的文件列表` };
+  
+  const changedFiles = show.stdout.split(/\r?\n/).filter(Boolean);
+  const hasIntersection = changedFiles.some(f => declaredFiles.some(df => f.includes(df) || df.includes(f)));
+  
+  if (!hasIntersection) return { ok: false, type: 'irrelevant', msg: `提交 ${sha} 未触及 plan 声明的任何文件` };
+  
+  return { ok: true, type: 'sha' };
+}
+
 // --- 8. intent 验收标准对账（done 须逐条勾验并补证据；新建 hard，存量聚合 warning）---
 // 生效日锚 2026-09-28 改「git 首次加入日期」（此前取文件名前 10 字符——命名规范强制的字段、
 // 写早零成本，见 incidents/2026-09-28-check8-git-anchor）。非 git → 不可判定 → 走存量口径（不误报 hard）。
@@ -539,16 +614,40 @@ const addedDateOf = (absDoc) => {
     let hs = false, uc = false, ne = false;
     let insec = false, ex = false;
     let pendX = false; // 上一 [x] 项尚无证据，证据可能在紧随的续行
+    let currentEvidence = ''; // 当前条目的证据内容，用于语义校验
     const evRe = /证据[：:]/;
-    const closeItem = () => { if (pendX) { ne = true; pendX = false; } };
+    const closeItem = () => { 
+      if (pendX) { 
+        ne = true; 
+        pendX = false; 
+      } 
+      if (currentEvidence && !ex) {
+        const truth = verifyEvidenceTruth(currentEvidence, base.replace(/\.md$/, ''), ROOT);
+        if (!truth.ok) {
+          blockers.push(`- [证据${truth.type === 'forged' ? '伪造' : '无关'}] ${base} 验收证据校验失败: ${truth.msg}`);
+        }
+      }
+      currentEvidence = '';
+    };
     for (const line of lines) {
       if (/存量对账豁免（/.test(line)) ex = true;
       if (/^\s*##\s+[^#]*验收标准/.test(line)) { hs = true; insec = true; closeItem(); continue; }
       if (insec && /^\s*##\s/.test(line)) { insec = false; closeItem(); continue; }
       if (!insec) continue;
       if (/^\s*- \[ \]/.test(line)) { closeItem(); uc = true; continue; }
-      if (/^\s*- \[x\]/.test(line)) { closeItem(); pendX = !evRe.test(line); continue; }
-      if (pendX && evRe.test(line)) pendX = false; // 续行补上证据
+      if (/^\s*- \[x\]/.test(line)) { 
+        closeItem(); 
+        pendX = !evRe.test(line); 
+        if (evRe.test(line)) currentEvidence = line.split(/证据[：:]/)[1].trim();
+        continue; 
+      }
+      if (pendX && evRe.test(line)) { 
+        pendX = false; 
+        currentEvidence = line.split(/证据[：:]/)[1].trim();
+      } else if (currentEvidence && line.trim() && !/^\s*- /.test(line)) {
+        // 简单累加续行证据
+        currentEvidence += ' ' + line.trim();
+      }
     }
     closeItem(); // 节末（或全文末）仍无证据 → 计缺证据
     // 生效日锚 = git 首次加入日期（2026-09-28 改；此前取文件名前 10 字符）。**准确收益**：关掉
@@ -563,12 +662,12 @@ const addedDateOf = (absDoc) => {
       continue;
     }
     if (!uc && !ne) continue;
-    if (isNew) {
-      if (uc) blockers.push(`- [验收未对账] done intent 验收标准有未勾验项:${base}（逐条勾验并补证据：commit/用例/冒烟输出）`);
-      if (ne) warnings.push(`- [WARN 验收缺证据] ${base} 验收标准勾选项缺「证据：」标注`);
-    } else if (!ex) {
-      legacyUnaccounted++;
-    }
+      if (isNew) {
+        if (uc) blockers.push(`- [验收未对账] done intent 验收标准有未勾验项:${base}（逐条勾验并补证据：commit/用例/冒烟输出）`);
+        if (ne) blockers.push(`- [验收缺证据] ${base} 验收标准勾选项缺「证据：」标注——证据是闭环准确性的唯一机器事实`);
+      } else if (!ex) {
+        legacyUnaccounted++;
+      }
   }
   if (legacyUnaccounted > 0) {
     warnings.push(`- [WARN 验收对账存量] ${legacyUnaccounted} 个存量 done intent 验收标准未对账（生效日锚之前加入仓库，豁免 hard，不回填）`);
@@ -794,6 +893,10 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
       // of > 1 = 一次调用落多份态。delegated 形态下这正是「并录」（入口已拒多份，此处抓历史/绕行）；
       // TTY 形态天然逐份过目（用户亲手键入），of>1 不构成违规——故只对 delegated 行报。
       if (!rows.some((r) => r.source === 'chat-delegated')) continue;
+      // 协作道批量豁免（2026-09-30 hybrid-governance-risk-lanes）：confirm-doc --batch 仅受理 L0/L1
+      // （逐份读级别，L2/L3 逐份拒绝），台账行带 brief:true——全行带标记的批次是 sanctioned 泳道行为
+      // （异步审计兜底），不出「确认并录」；缺标记（旧版脚本/手造台账）照旧告警，判据偏严不偏松。
+      if (rows.every((r) => r.brief === true)) continue;
       const of = Math.max(...rows.map((r) => (typeof r.of === 'number' ? r.of : 0)));
       const docs = rows.map((r) => String(r.doc).replace(/^workflow\//, '')).join('、');
       warnings.push(`- [WARN 确认并录] 单次调用落账 ${rows.length} 份（batch ${b}，of=${of}）：${docs}——同一次 --delegated 调用放行多份，塌掉「逐件确认」门（build.md）；口径见 workflow/papercuts.md 2026-09-28 与 incidents/2026-09-28-batch-ledger-audit.md`);
@@ -882,6 +985,9 @@ runCheck16({ ROOT, ENUMS, docFiles, fmGet, inSet, isTracked, linesOf, readdirOrN
 //   plan 另判（入口级别 L2/L3 且 spec 未确认或缺失）→ warning。
 // 判据 B（台账顺序）：同主题 {intents,specs,plans} 的 approved 行（每 doc 取最早）时间须非降序；仅对
 //   组内最早 ts 日期 ≥ stageGateSince 的主题判定；含更早 ts 的主题整组跳过（历史豁免）。
+// 协作道豁免（2026-09-30 hybrid-governance-risk-lanes）：入口 intent 为 draft 且级别 L0/L1 → 判据 A 静默
+//   （「先动手后确认」是泳道语义；approved/done 无台账行仍照报）；判据 B 对入口 L0/L1 的主题豁免顺序
+//   倒置判定（入口文件缺失不豁免）。
 // stageGateSince 缺键（policy v1）→ 本检查整体跳过；全部 warning、不 hard-block。
 {
   const since = kitPolicy.stageGateSince;
@@ -922,11 +1028,13 @@ runCheck16({ ROOT, ENUMS, docFiles, fmGet, inSet, isTracked, linesOf, readdirOrN
       const irel = `${WF}/intents/${base}.md`;
       const iabs = path.join(ROOT, irel);
       if (fs.existsSync(iabs)) {
+        const st19 = fmGet(iabs, '状态');
+        const lvl19 = fmGet(iabs, '级别');
         const r = docConfirmed(irel, iabs);
         const body = (linesOf(iabs) || []).join('\n');
         const d19 = fmGet(iabs, '日期') || fmGet(iabs, '发现');
         const storLegacy = /^流程: legacy/m.test(body) || (/^\d{4}-\d{2}-\d{2}$/.test(d19) && d19 < kitPolicy.confirmDocsEffective);
-        return { ...r, storageLegacy: storLegacy };
+        return { ...r, level: lvl19, entryDraft: st19 === 'draft', storageLegacy: storLegacy };
       }
       const crel = `${WF}/incidents/${base}.md`;
       const cabs = path.join(ROOT, crel);
@@ -949,7 +1057,13 @@ runCheck16({ ROOT, ENUMS, docFiles, fmGet, inSet, isTracked, linesOf, readdirOrN
         if (!(/^\d{4}-\d{2}-\d{2}$/.test(d) && d >= since)) continue;
         const rel = path.relative(ROOT, abs).split(path.sep).join('/');
         const ent = entryConfirmed19(base);
-        if (!ent.ok) { warnings.push(`- [WARN 逐阶段] ${rel} 起草先于入口确认（${ent.why}）`); continue; }
+        if (!ent.ok) {
+          // 协作道异步审计豁免（2026-09-30 hybrid-governance-risk-lanes）：入口 intent 仍为 draft 且
+          // 级别 L0/L1 → 「先动手后确认」是泳道语义，不告警；approved/done 却无台账行仍照报（防手改
+          // 状态冒充确认，与交叉一致性口径一致）；incident 入口不豁免（过目留痕本就轻量）。
+          if (ent.entryDraft && (ent.level === 'L0' || ent.level === 'L1')) continue;
+          warnings.push(`- [WARN 逐阶段] ${rel} 起草先于入口确认（${ent.why}）`); continue;
+        }
         // 库存量形态（标记 / 日期早于生效日）短路 level 校验与 spec 档（与起草门同口径，N1）
         const storLegacy = ent.storageLegacy === true;
         if (!storLegacy && !/^L[0-3]$/.test(ent.level)) { warnings.push(`- [WARN 逐阶段] ${rel} 入口缺合法「级别」字段（无法判定前置深度；与起草门 fail-closed 同口径，库存量形态除外）`); continue; }
@@ -973,11 +1087,59 @@ runCheck16({ ROOT, ENUMS, docFiles, fmGet, inSet, isTracked, linesOf, readdirOrN
     for (const [base, rec] of firstApproved) {
       const seq = ['intents', 'specs', 'plans'].filter((k) => rec[k]);
       if (seq.length < 2) continue;
+      // 协作道豁免（2026-09-30 hybrid-governance-risk-lanes）：入口 L0/L1 的审批顺序倒置（如 plan 先于
+      // intent approved——「动手后确认」）是异步审计泳道语义，非流程违规；入口文件缺失（纯台账历史行 /
+      // incident 侧）不豁免，维持既有判据。
+      const ilvlB = fmGet(path.join(ROOT, WF, 'intents', `${base}.md`), '级别');
+      if (ilvlB === 'L0' || ilvlB === 'L1') continue;
       const earliest = seq.map((k) => rec[k]).sort()[0];
       if (!(earliest.slice(0, 10) >= since)) continue;
       let ordered = true;
       for (let i = 1; i < seq.length; i++) if (rec[seq[i]] < rec[seq[i - 1]]) ordered = false;
       if (!ordered) warnings.push(`- [WARN 逐阶段] 台账审批顺序倒置：${base}（${seq.map((k) => `${k}=${rec[k].slice(0, 19)}`).join(' / ')}）`);
+    }
+  }
+}
+
+// --- 加固门（仅 --hardening 启用；2026-09-30 hybrid-governance-explore-hardening）[hard-block] ---
+// 探索泳道（experiment/* 分支 + intent frontmatter「阶段: exploring」标记；「状态: exploring」亦认——
+// 非法状态本就会在检查 5 出账）允许「先动手后确认」快速 PoC；成果转正（合入 main）前必须完成加固：
+//   ① intent 状态离开 draft → approved/done（探索作废走显式放弃态 superseded/cancelled——留档即出列，
+//      不加固：放弃态无代码应随行）；
+//   ② 同名 plan 在场且状态收口（∈ doc.status.confirmed；L0 亦不豁免——本门是转正门槛，不是配对门）；
+//   ③ 泳道 L2/L3（级别优先、缺失/非法回落 risk_level，与 stage-gates 起草门同款取法）另须同名 spec
+//      在场且收口。
+// 触发面：.githooks/pre-push 对 remote=refs/heads/main 的推送以 --hardening 运行本脚本（hard 失败即阻断
+// push）；手跑 `node check-loop.mjs --hardening` 可转正前预检。诚实边界：分支名不进 commit，扫描树无法
+// 机械判定「曾在 experiment/* 上」——标记靠泳道纪律写入（intent 模板 / workflow README 口径），漏标记的
+// 探索件不被本门覆盖；本门拦的是「已标记未收口」。
+if (HARDENING) {
+  for (const intent of docFiles('intents')) {
+    if (fmGet(intent, '阶段') !== 'exploring' && fmGet(intent, '状态') !== 'exploring') continue;
+    const base = path.basename(intent);
+    const st = fmGet(intent, '状态');
+    if (st === 'superseded' || st === 'cancelled') continue; // 放弃态：探索作废留档，不加固
+    const lvl = fmGet(intent, '级别');
+    const lane = /^L[0-3]$/.test(lvl) ? lvl : fmGet(intent, 'risk_level');
+    if (st !== 'approved' && st !== 'done') {
+      blockers.push(`- [加固未过] exploring 任务入 main 须先收口:${base} intent 状态仍为『${st || '缺失'}』——先确认至 approved/done 并补齐同名 spec+plan，或显式放弃（superseded/cancelled）`);
+      continue;
+    }
+    const planAbs = path.join(ROOT, WF, 'plans', base);
+    const planSt = fs.existsSync(planAbs) ? fmGet(planAbs, '状态') : '';
+    if (!fs.existsSync(planAbs)) {
+      blockers.push(`- [加固未过] exploring 任务入 main 缺同名 plan:${base}（应在 ${WF}/plans/ 下同名）`);
+    } else if (!stOkDoc(planSt)) {
+      blockers.push(`- [加固未过] exploring 任务入 main 的 plan 未收口:${base}（plan 状态『${planSt || '缺失'}』须为 approved/done）`);
+    }
+    if (lane === 'L2' || lane === 'L3') {
+      const specAbs = path.join(ROOT, WF, 'specs', base);
+      const specSt = fs.existsSync(specAbs) ? fmGet(specAbs, '状态') : '';
+      if (!fs.existsSync(specAbs)) {
+        blockers.push(`- [加固未过] exploring 任务入 main 缺同名 spec:${base}（级别 ${lane}，应在 ${WF}/specs/ 下同名）`);
+      } else if (!stOkDoc(specSt)) {
+        blockers.push(`- [加固未过] exploring 任务入 main 的 spec 未收口:${base}（spec 状态『${specSt || '缺失'}』须为 approved/done）`);
+      }
     }
   }
 }

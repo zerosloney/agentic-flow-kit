@@ -1,7 +1,7 @@
-// flow-kit fill-plan：起草 plan 草稿（L1 极简 2 节 / L2-L3 完整 4 节）
+// flow-kit fill-plan：起草 plan 草稿（L1 Quick-Plan 三节 / L2-L3 完整 4 节）
 // 用法：node .agents/scripts/fill-plan.mjs --level L1 --topic "test" --output /tmp/x.md [--root <仓库根>]
-// L1：改动面（必填）+ 验证方式（必填）
-// L2/L3：改动面 + 任务拆解 + 执行顺序 + 验证方式
+// L1：改动方案 + 约束与风险 + 验证计划（Quick-Plan 必填三节）
+// L2/L3：改动方案 + 任务拆解 + 执行顺序 + 验证计划
 // 起草门（2026-09-30 stage-gate-machine）：output 落于工作区（路径含 workflow 段）时，须同主题入口已确认，
 // 且入口级别（取入口 frontmatter，非 --level）为 L2/L3 时同名 spec 已确认；未过 → 拒绝生成（exit 2）。
 import fs from 'node:fs';
@@ -28,22 +28,23 @@ function parseArgs(argv) {
 function fail(msg) { console.error('❌ ' + msg); process.exit(1); }
 
 const L1_SECTIONS = [
-  { title: '改动面（L1 极简形态主节；L2/L3 可作任务拆解的汇总或删本节）', hint: '- <文件/组件>：<做什么；判据细节直接写进条目，如「L771 message.success 改『更新成功』>' },
-  { title: '验证方式', hint: '- 静态门：项目构建命令（+ 项目测试命令，测试项目就绪后）\n- 前端：cd frontend && npm run build（vue-tsc）\n- UI：.agents/commands/test.md（涉及页面改动必走，headless Chrome 实测）\n- L2 追加：<契约 / 规则面比对：编码结果抽样 / 接口契约断言 / 口径对账>\n- L3 追加：<含 schema 变更：备份 + 回滚 SQL 就绪后执行；仅运行时 / 管线：回退上一 release tag + 配置开关预案>' },
+  { title: '改动方案', hint: '- <文件/组件>：<做什么；判据细节直接写进条目，如「L771 message.success 改『更新成功』」>' },
+  { title: '约束与风险', hint: '- 约束：<对照 AGENTS.md 红线，说明如何满足；不许动什么>\n- 风险：<潜在影响 / 破坏性风险>' },
+  { title: '验证计划', hint: '- 静态门：项目构建命令（+ 项目测试命令，测试项目就绪后）\n- 前端：cd frontend && npm run build（vue-tsc）\n- UI：.agents/commands/test.md（涉及页面改动必走，headless Chrome 实测）\n- L2 追加：<契约 / 规则面比对：编码结果抽样 / 接口契约断言 / 口径对账>\n- L3 追加：<含 schema 变更：备份 + 回滚 SQL 就绪后执行；仅运行时 / 管线：回退上一 release tag + 配置开关预案>' },
 ];
 
 const FULL_SECTIONS = [
   L1_SECTIONS[0],
   { title: '任务拆解（L2/L3 必填；L1 仅多文件多步骤时用，单任务微改动删本节）', hint: '1. <任务>\n   - 判据：<怎样算完成；尽量对应一个测试或可复现操作>\n   - 风险：低 / 中 / 高（<原因>）\n2. <任务>\n   - 判据：…\n   - 风险：…' },
   { title: '执行顺序（L2/L3 必填；L1 单文件微改动删本节）', hint: '<1 → 2 → 3；标注依赖关系>' },
-  L1_SECTIONS[1],
+  L1_SECTIONS[2],
 ];
 
 export function renderPlan({ topic, level = 'L1', date = TODAY }) {
   if (!LEVELS.includes(level)) throw new Error('level 不在枚举 ' + LEVELS.join('|') + '：' + level);
   const sections = level === 'L1' ? L1_SECTIONS : FULL_SECTIONS;
   const fm = '---\n状态: draft\n级别: ' + level + '\n模块: pipeline\n---\n';
-  let body = '# PLAN — ' + topic + '\n\n<!-- 与 intents/ 或 incidents/ 下同名入口文档配对；L2/L3 必须先有 ../specs/ 同名 spec 确认通过；AI 起草、用户对话内确认后开工 -->\n<!-- frontmatter 受限子集（2026-09-13）：状态∈draft/approved/done/superseded/cancelled；级别∈L0/L1/L2/L3；正文不再写状态/级别行 -->\n<!-- L1 极简形态（2026-09-13 瘦身，L1 默认）：单/少文件微改动只填「改动面」+「验证方式」两节——改动面逐条列改哪个文件做什么（判据细节直接写进条目），验证一行静态门 + 按需 UI 实测；任务拆解/执行顺序仅 L1 多文件多步骤时保留 -->\n\n对应入口：../intents/YYYY-MM-DD-<主题>.md 或 ../incidents/YYYY-MM-DD-<主题>.md（保留实际一项）\n对应 spec：../specs/YYYY-MM-DD-<主题>.md（L1 可省略）\n\n';
+  let body = '# PLAN — ' + topic + '\n\n<!-- 与 intents/ 或 incidents/ 下同名入口文档配对；L2/L3 必须先有 ../specs/ 同名 spec 确认通过；AI 起草、用户对话内确认后开工 -->\n<!-- frontmatter 受限子集（2026-09-13）：状态∈draft/approved/done/superseded/cancelled；级别∈L0/L1/L2/L3；正文不再写状态/级别行 -->\n<!-- L1 快车道 (Quick-Plan)（2026-09-30 更新）：合并 Spec 与 Plan 核心。必填三节：[改动方案, 约束与风险, 验证计划]。仅多文件多步骤时保留任务拆解/执行顺序 -->\n\n对应入口：../intents/YYYY-MM-DD-<主题>.md 或 ../incidents/YYYY-MM-DD-<主题>.md（保留实际一项）\n对应 spec：../specs/YYYY-MM-DD-<主题>.md（L1 走快车道则省略）\n\n';
   for (const { title, hint } of sections) {
     body += '## ' + title + '\n\n' + hint + '\n\n';
   }
@@ -70,6 +71,6 @@ if (isMain) {
   const { body } = renderPlan(a);
   fs.mkdirSync(path.dirname(a.output), { recursive: true });
   fs.writeFileSync(a.output, body);
-  console.log('✅ 已生成 plan 草稿：' + a.output + '（状态 draft / 级别 ' + a.level + ' / ' + (a.level === 'L1' ? '极简 2 节' : '完整 4 节') + '）');
+  console.log('✅ 已生成 plan 草稿：' + a.output + '（状态 draft / 级别 ' + a.level + ' / ' + (a.level === 'L1' ? 'Quick-Plan 三节' : '完整 4 节') + '）');
 }
 export default renderPlan;

@@ -94,6 +94,17 @@ const runTool = (root, base) => spawnSync(process.execPath,
   fs.rmSync(root, { recursive: true, force: true });
 }
 {
+  // S9b 探索泳道（2026-09-30 hybrid-governance-explore-hardening）：L0/L1 draft intent → 放行 spec 起草
+  // （「先起草后确认」；L2/L3 防御道维持入口确认前置——S9 照旧）
+  const root = mkws({ entryFile: 'intents/2026-09-30-exp.md', entryBody: '---\n状态: draft\n级别: L1\nrisk_level: L1\n日期: 2026-09-30\n---\n# I\n' });
+  const r = runTool(root, '2026-09-30-exp');
+  const f = path.join(root, 'workflow', 'specs', '2026-09-30-exp.md');
+  check('S9b 探索泳道：L1 入口 draft → 放行 spec 起草（先起草后确认）',
+    r.status === 0 && fs.existsSync(f) && fs.readFileSync(f, 'utf8').includes('状态: draft'),
+    JSON.stringify({ status: r.status, stderr: r.stderr }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+{
   const root = mkws({ entryFile: 'intents/2026-09-30-ok.md', entryBody: '---\n状态: approved\n级别: L1\n日期: 2026-01-01\n---\n# I\n' });
   const r = runTool(root, '2026-09-30-ok');
   const f = path.join(root, 'workflow', 'specs', '2026-09-30-ok.md');

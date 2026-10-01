@@ -1,5 +1,5 @@
 // flow-kit fill-intent：起草 intent 草稿（背景与问题/目标/非目标/约束/影响面/触达红线/验收标准 共 7 节）
-// 读 workflow/intents/_TEMPLATE.md 的节标题 → 输出符合 frontmatter 受限子集（5 字段）的草稿到指定文件
+// 读 workflow/intents/_TEMPLATE.md 的节标题 → 输出符合 frontmatter 受限子集（6 字段，含 risk_level 风险泳道）的草稿到指定文件
 // 用法：node .agents/scripts/fill-intent.mjs --module pipeline --level L1 --topic "test" --output /tmp/x.md
 // 零依赖；CLI 解析用最简字符串匹配；不替代 AI 起草——本工具只输出模板与提示句
 import fs from 'node:fs';
@@ -27,18 +27,19 @@ function fail(msg) { console.error('❌ ' + msg); process.exit(1); }
 
 const SECTIONS = [
   { title: '背景与问题', hint: '<为什么做；写明需求来源（工单 / 沟通记录 / 待办事项）>' },
+  { title: '历史教训/防复发', hint: '- 检索结果：`node .agents/scripts/kb-search.mjs "<关键词>" --type incidents` 命中结果\n- 避坑指南：<针对历史根因，本次如何预防/规避>' },
   { title: '目标', hint: '- <可验证的目标>' },
   { title: '非目标（L1 微改动无实质内容可删本节，不硬填）', hint: '- <明确不做的，防止范围蔓延>' },
   { title: '约束（L1 微改动无实质内容可删本节，不硬填）', hint: '- <复用什么、不许动什么>' },
-  { title: '影响面', hint: '- 模块：<词表之一，见 .agents/workflow-modules.txt>\n- 数据库：无 / <表名>（涉及 schema 变更 → L3；无 schema 的运行时 / 管线结构面亦为 L3，判据见 .agents/commands/new-task.md §级别判断）\n- 前端页面：<路由或组件，无则删本行>' },
-  { title: '触达红线（对照 AGENTS.md，勾选仅标记触及范围；具体如何满足在同名 spec 中说明）', hint: '- [ ] <按本项目 AGENTS.md 红线逐行补；无则删本行>\n- [ ] 规则 / 契约变更（编码权威 / 共享契约 / 接口签名 / 既有参数语义 / 全局口径）→ 级别至少 L2\n- [ ] schema / 迁移 SQL / DI 链 / 认证与中间件管线 → 级别 L3\n\n> 触及任一红线即为 L2 / L3，必须立 ../specs/YYYY-MM-DD-<主题>.md 写明如何满足，方可起草 plan。' },
-  { title: '验收标准（可测试）', hint: '- [ ] <逐条可测试；写不出可测试判据 = 还没想清楚>\n\n> **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条勾选项后补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 冒烟脚本输出>）`。\n> done 状态仍有未勾项会被 check-loop 拦截（2026-09-12 起新建 intent 为 hard-block，存量 intent 仅 warning 提示）；勾选但缺「证据：」为 warning。' },
+  { title: '影响面', hint: '- 模块：<词表之一，见 .agents/workflow-modules.txt>\n- 数据库：无 / <表名>（涉及 schema 变更 $\rightarrow$ L3；无 schema 的运行时 / 管线结构面亦为 L3，判据见 .agents/commands/new-task.md §级别判断）\n- 前端页面：<路由或组件，无则删本行>' },
+  { title: '触达红线（对照 AGENTS.md，勾选仅标记触及范围；具体如何满足在同名 spec 或 Quick-Plan 中说明）', hint: '- [ ] <按本项目 AGENTS.md 红线逐行补；无则删本行>\n- [ ] 规则 / 契约变更（编码权威 / 共享契约 / 接口签名 / 既有参数语义 / 全局口径）$\rightarrow$ 级别至少 L2\n- [ ] schema / 迁移 SQL / DI 链 / 认证与中间件管线 $\rightarrow$ 级别 L3\n\n> 触及任一红线即为 L2 / L3，必须立 ../specs/YYYY-MM-DD-<主题>.md 写明如何满足，方可起草 plan。' },
+  { title: '验收标准（可测试）', hint: '- [ ] <逐条可测试；写不出可测试判据 = 还没想清楚>\n\n> **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 冒烟脚本输出>）`。\n> done 状态仍有未勾项会被 check-loop 拦截（2026-09-12 起新建 intent 为 hard-block，存量 intent 仅 warning 提示）；勾选但缺「证据：」为 hard-block。' },
 ];
 
 export function renderIntent({ topic, module, level, notes, date = TODAY }) {
   if (!LEVELS.includes(level)) throw new Error('level 不在枚举 ' + LEVELS.join('|') + '：' + level);
-  const fm = '---\n状态: draft\n级别: ' + level + '\n日期: ' + date + '\n模块: ' + module + '\n备注: ' + (notes || '<可选：附注自由文本，check-loop 不解析>') + '\n---\n';
-  let body = '# INTENT — ' + topic + '\n\n<!-- 复制本模板为 YYYY-MM-DD-<主题>.md 后填写；plans/ 下同名文件与本文件配对 -->\n<!-- frontmatter 受限子集（2026-09-13）：每行 键: 值；状态∈draft/approved/done/superseded/cancelled（严格枚举，附注写备注键）；级别∈L0/L1/L2/L3；check-loop 只扫 frontmatter 取机器字段，正文不再写状态/级别行 -->\n\n';
+  const fm = '---\n状态: draft\n级别: ' + level + '\nrisk_level: ' + level + '\n日期: ' + date + '\n模块: ' + module + '\n备注: ' + (notes || '<可选：附注自由文本，check-loop 不解析>') + '\n---\n';
+  let body = '# INTENT — ' + topic + '\n\n<!-- 复制本模板为 YYYY-MM-DD-<主题>.md 后填写；plans/ 下同名文件与本文件配对 -->\n<!-- frontmatter 受限子集（2026-09-13）：每行 键: 值；状态∈draft/approved/done/superseded/cancelled（严格枚举，附注写备注键）；级别∈L0/L1/L2/L3；risk_level=级别（混合治理风险泳道选道：L0/L1 协作道异步审计 / L2/L3 防御道同步确认）；check-loop 只扫 frontmatter 取机器字段，正文不再写状态/级别行 -->\n\n';
   for (const { title, hint } of SECTIONS) {
     body += '## ' + title + '\n\n' + hint + '\n\n';
   }

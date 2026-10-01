@@ -165,6 +165,27 @@ try {
       `refs/heads/ok ${good} refs/heads/ok ${Z}\nrefs/heads/bad ${bad} refs/heads/bad ${Z}\n`,
     );
     check('stdin 先好后坏：整次失败', goodThenBad.status !== 0 && outOf(goodThenBad).includes('配对断裂'), outOf(goodThenBad));
+
+    // experiment 泳道 advisory + main 加固门（2026-09-30 hybrid-governance-explore-hardening）
+    const laneAdv = push(`refs/heads/experiment/poc ${bad} refs/heads/experiment/poc ${Z}\n`);
+    check('pre-push experiment/* 泳道：断档 sha 降级 advisory 不阻断', laneAdv.status === 0 && /advisory/.test(outOf(laneAdv)), outOf(laneAdv));
+    const toMainBad = push(`refs/heads/main ${bad} refs/heads/main ${Z}\n`);
+    check('pre-push 推 main：断档照拦（hard-block 语义不变）', toMainBad.status !== 0 && outOf(toMainBad).includes('配对断裂'), outOf(toMainBad));
+    // exploring 标记件：同一 sha 推 main → 加固门 hard 拦；推 experiment/* → advisory 放行
+    fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-exp.md'), intent
+      .replace('状态: approved', '状态: draft')
+      .replace('级别: L1', '级别: L1\nrisk_level: L1\n阶段: exploring')
+      .replace('# INTENT — ok', '# INTENT — exp'));
+    fs.writeFileSync(planPath, plan);
+    fs.writeFileSync(path.join(root, 'workflow', 'plans', '2026-09-30-exp.md'), plan);
+    gitRun(root, ['add', '--', '.']);
+    gitRun(root, ['commit', '-q', '-m', 'exploring']);
+    const expSha = gitRun(root, ['rev-parse', 'HEAD']);
+    const expToMain = push(`refs/heads/main ${expSha} refs/heads/main ${Z}\n`);
+    check('pre-push 推 main：exploring 未收口 → 加固门 hard 拦（--hardening 已传）',
+      expToMain.status !== 0 && /加固未过/.test(outOf(expToMain)), outOf(expToMain));
+    const expToLane = push(`refs/heads/experiment/poc2 ${expSha} refs/heads/experiment/poc2 ${Z}\n`);
+    check('pre-push 推 experiment/*：同一 exploring sha → advisory 放行', expToLane.status === 0, outOf(expToLane));
   }
 
   const outside = fs.mkdtempSync(path.join(os.tmpdir(), 'ck-rev-outside-'));

@@ -9,7 +9,7 @@ concurrency: 2
 
 | id | after | role | step | task / params | files（授权） | accept（验收判据） | gate | human | retries |
 |----|-------|------|------|---------------|--------------|-------------------|------|-------|---------|
-| author | — | implementer | — | 起草 intent + plan（双写 fill-{intent,plan}.mjs 生成草稿 + AI 填实），状态 draft | workflow/intents/<date>-<topic>.md, workflow/plans/<date>-<topic>.md | intent frontmatter 5 字段齐 + 状态 draft + 验收标准 ≥ 5 条；plan L1 极简 2 节齐 | | | 1 |
+| author | — | implementer | — | 起草 intent + plan（双写 fill-{intent,plan}.mjs 生成草稿 + AI 填实），状态 draft | workflow/intents/<date>-<topic>.md, workflow/plans/<date>-<topic>.md | intent frontmatter 6 字段齐（含 risk_level）+ 状态 draft + 验收标准 ≥ 5 条；plan L1 极简 2 节齐 | | | 1 |
 | gate-doc | author | — | — | — | — | — | node .agents/scripts/fill-intent.test.mjs && node .agents/scripts/fill-plan.test.mjs | | |
 | confirm | gate-doc | — | — | plan 草稿全文过目，用户对话内一句"可以" → plan 状态 draft → approved + 回填「确认与复核」节 | — | plan 状态 approved + 「确认结果：approved（YYYY-MM-DD 用户对话内确认）」 | | 用户确认（plan 确认门） | |
 | plan-commit | confirm | implementer | — | 提交 plan 立项 commit（docs(workflow)） | workflow/intents/, workflow/plans/, workflow/INDEX.md | pre-commit 钩子全过；commit message 含 plan 改动面摘要 | | | 0 |

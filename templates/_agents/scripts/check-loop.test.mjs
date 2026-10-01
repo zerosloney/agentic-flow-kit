@@ -64,8 +64,9 @@ ${refs ? '     - 是 → ../intents/2026-09-12-ghost.md\n' : ' - 否 → 理由:
  - AGENTS.md 某节
 `;
 
-// run：默认 CHECK_LOOP_ROOT 注入（fixture 模式）；{git:true} 时 cwd 注入（真 git 模式，测 tracked 过滤）
-const run = (root, opts = {}) => spawnSync(process.execPath, [CHECK_LOOP], {
+// run：默认 CHECK_LOOP_ROOT 注入（fixture 模式）；{git:true} 时 cwd 注入（真 git 模式，测 tracked 过滤）；
+// opts.args 追加 CLI 参数（--hardening 等加固门场景用，2026-09-30 hybrid-governance-explore-hardening）
+const run = (root, opts = {}) => spawnSync(process.execPath, [CHECK_LOOP, ...(opts.args || [])], {
   ...(opts.git ? { cwd: root } : { cwd: ROOT_CWD, env: { ...process.env, CHECK_LOOP_ROOT: root } }),
   encoding: 'utf8',
 });
@@ -549,8 +550,8 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     r.status === 0 && !outOf(r).includes('验收缺证据'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
 }
-// ---- 场景 41:检查 8——[x] 无证据且续行也无 → 报验收缺证据（回归：不可把豁免放大成漏检）----
-// 换锚后须真 git 仓：否则不可判定 → 走存量口径，「验收缺证据」这条 warning 也不再产出。
+// ---- 场景 41:检查 8——[x] 无证据且续行也无 → 报验收缺证据（hard 拦；回归：不可把豁免放大成漏检）----
+// 换锚后须真 git 仓：否则不可判定 → 走存量口径，「验收缺证据」这条 blocker 也不再产出。
 {
   const T = mkfix();
   gitInit(T);
@@ -559,8 +560,8 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   w(T, 'workflow/plans/2026-09-12-ev2.md', PLAN('ev2', '状态: done\n级别: L1'));
   gitCommitAll(T, 'add');
   const r = run(T);
-  check('[x] 续行仍无证据 → 报验收缺证据',
-    r.status === 0 && outOf(r).includes('验收缺证据'), `exit=${r.status}\n${outOf(r)}`);
+  check('[x] 续行仍无证据 → 报验收缺证据（hard 拦 exit 1）',
+    r.status === 1 && outOf(r).includes('验收缺证据'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
 }
 // ---- 场景 42:检查 4——fill-{intent,spec,plan}.mjs 花括号展开，三路皆存在 → 不报引用断档 ----
@@ -2092,6 +2093,164 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
       `exit=${r2.status}\n${outOf(r2)}`);
     rmfix(T2);
   }
+}
+
+// ---- 风险泳道（2026-09-30 hybrid-governance-risk-lanes）：L0 配对豁免 + 红线判低 ----
+{
+  // L0 intent 无 plan 无 spec → 协作道配对豁免（异步审计兜底）
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-12-l0.md', INTENT('l0', '状态: approved\n级别: L0\nrisk_level: L0\n日期: 2026-09-12'));
+  const r = run(T);
+  check('风险泳道：L0 intent 缺 plan/spec → 配对豁免 exit 0',
+    r.status === 0 && !outOf(r).includes('配对断裂'),
+    `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+{
+  // L1 intent 仍须 plan（协作道不豁免 L1——防倒退回归）
+  const T1 = mkfix();
+  w(T1, 'workflow/intents/2026-09-12-l1.md', INTENT('l1', '状态: approved\n级别: L1\nrisk_level: L1\n日期: 2026-09-12'));
+  expectHard('风险泳道：L1 intent 缺 plan 仍 hard 配对断裂', T1, '配对断裂');
+  rmfix(T1);
+
+  // L0/L1 勾触达红线 → hard「红线判低」（级别与 risk_level 任一判定皆拦）
+  const T2 = mkfix();
+  w(T2, 'workflow/intents/2026-09-12-rl.md', INTENT('rl', '状态: approved\n级别: L1\nrisk_level: L1\n日期: 2026-09-12',
+    '\n## 触达红线（对照 AGENTS.md）\n- [x] 规则 / 契约变更（接口签名）→ 级别至少 L2\n'));
+  const r2 = run(T2);
+  check('风险泳道：L1 勾触达红线 → hard 红线判低',
+    r2.status === 1 && outOf(r2).includes('红线判低'),
+    `exit=${r2.status}\n${outOf(r2)}`);
+  rmfix(T2);
+
+  const T3 = mkfix();
+  w(T3, 'workflow/intents/2026-09-12-rl2.md', INTENT('rl2', '状态: approved\n级别: L2\nrisk_level: L2\n日期: 2026-09-12',
+    '\n## 触达红线（对照 AGENTS.md）\n- [x] 规则 / 契约变更（接口签名）→ 级别至少 L2\n'));
+  w(T3, 'workflow/specs/2026-09-12-rl2.md', SPEC('rl2', '状态: approved\n级别: L2'));
+  w(T3, 'workflow/plans/2026-09-12-rl2.md', PLAN('rl2', '状态: approved\n级别: L2'));
+  const r3 = run(T3);
+  check('风险泳道：L2 勾红线不判低（防御道受理）',
+    r3.status === 0 && !outOf(r3).includes('红线判低'),
+    `exit=${r3.status}\n${outOf(r3)}`);
+  rmfix(T3);
+}
+
+// ---- 检查 15 并录豁免：--batch sanctioned 批次（delegated of>1 + 全行 brief:true）→ 零「确认并录」----
+{
+  const T = mkfix();
+  const fpI = 'a'.repeat(64);
+  const fpP = 'b'.repeat(64);
+  w(T, 'workflow/intents/2026-09-12-b1.md', INTENT('b1', `状态: approved\n级别: L1\n日期: 2026-09-12\n确认指纹: ${fpI.slice(0, 16)}`));
+  w(T, 'workflow/plans/2026-09-12-b1.md', PLAN('b1', `状态: approved\n级别: L1\n日期: 2026-09-12\n确认指纹: ${fpP.slice(0, 16)}`));
+  const row = (doc, fp, seq) => JSON.stringify({ ts: '2026-09-29T02:00:00.000Z', doc, stage: 'approved', fingerprint: fp, prev: 'draft', source: 'chat-delegated', quote: '批量放行', batch: 'bt1', seq, of: 2, brief: true }) + '\n';
+  w(T, '.agents/confirmations.jsonl',
+    row('workflow/intents/2026-09-12-b1.md', fpI, 1)
+    + row('workflow/plans/2026-09-12-b1.md', fpP, 2));
+  const r = run(T);
+  check('检查15 --batch sanctioned：全 brief 批次 → 零「确认并录」告警',
+    r.status === 0 && !outOf(r).includes('确认并录'),
+    `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+
+// ---- 检查 19 协作道豁免（2026-09-30 hybrid-governance-risk-lanes）----
+{
+  // L1 intent draft + plan draft（日期 ≥ stageGateSince）→ 「先动手后确认」是泳道语义，零告警
+  const T = mkfix();
+  w(T, '.agents/kit.json', '{"policyVersion":2}\n');
+  w(T, 'workflow/intents/2026-09-30-lane.md', INTENT('lane', '状态: draft\n级别: L1\n日期: 2026-09-30'));
+  w(T, 'workflow/plans/2026-09-30-lane.md', PLAN('lane', '状态: draft\n级别: L1'));
+  const r = run(T);
+  check('检查19 协作道豁免：L1 intent draft + plan draft → 零「起草先于入口确认」',
+    r.status === 0 && !outOf(r).includes('起草先于入口确认'),
+    `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+{
+  // 防倒退：L1 intent approved 却无台账行（非 draft）→ 仍告警（豁免仅限 draft 态，防手改状态冒充确认）
+  const T = mkfix();
+  w(T, '.agents/kit.json', '{"policyVersion":2}\n');
+  w(T, 'workflow/intents/2026-09-30-lane2.md', INTENT('lane2', '状态: approved\n级别: L1\n日期: 2026-09-30'));
+  w(T, 'workflow/plans/2026-09-30-lane2.md', PLAN('lane2', '状态: draft\n级别: L1'));
+  const r = run(T);
+  check('检查19 L1 approved 无台账行 → 仍出「起草先于入口确认」（豁免仅限 draft）',
+    outOf(r).includes('起草先于入口确认'),
+    outOf(r));
+  rmfix(T);
+}
+
+// ---- 加固门（2026-09-30 hybrid-governance-explore-hardening；仅 --hardening 启用，不占 1-19 编号）----
+{
+  // H1：未标记 exploring 的 draft 件 → 带/不带 --hardening 均不拦（本门只管「已标记未收口」，
+  //  常规流程的 draft 中间态不受影响——intent approved 后 plan 起草属正常在途）
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-30-h0.md', INTENT('h0', '状态: draft\n级别: L1\n日期: 2026-09-30'));
+  w(T, 'workflow/plans/2026-09-30-h0.md', PLAN('h0', '状态: draft\n级别: L1'));
+  const rOff = run(T);
+  const rOn = run(T, { args: ['--hardening'] });
+  check('加固门 H1：未标记 exploring 的 draft 件 → 带/不带 --hardening 均 exit 0',
+    rOff.status === 0 && rOn.status === 0, `off=${rOff.status}\non=${outOf(rOn)}`);
+  rmfix(T);
+}
+{
+  // H2：已标记 exploring、intent 仍 draft（配同名 plan 防 check 1 配对拦）→ --hardening hard 拦；
+  //  不带旗标 exit 0（泳道内推送/日常扫描不受影响）
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-30-h1.md', INTENT('h1', '状态: draft\n级别: L1\nrisk_level: L1\n阶段: exploring\n日期: 2026-09-30'));
+  w(T, 'workflow/plans/2026-09-30-h1.md', PLAN('h1', '状态: draft\n级别: L1'));
+  const rOn = run(T, { args: ['--hardening'] });
+  const rOff = run(T);
+  check('加固门 H2：exploring 件 intent 仍 draft → --hardening exit 1「加固未过」；不带旗标 exit 0',
+    rOn.status === 1 && outOf(rOn).includes('加固未过') && rOff.status === 0, outOf(rOn));
+  rmfix(T);
+}
+{
+  // H3：已收口（intent approved + plan approved，均带真实指纹 + 台账配对防检查 15 先拦）→ 放行；L1 不索 spec
+  const T = mkfix();
+  const ent = mkConfirmedDoc(T, 'workflow/intents/2026-09-30-h2.md', '状态: approved\n级别: L1\nrisk_level: L1\n阶段: exploring\n日期: 2026-09-30');
+  const plan = mkConfirmedDoc(T, 'workflow/plans/2026-09-30-h2.md', '状态: approved\n级别: L1\n阶段: exploring');
+  writeLedger(T, [
+    { ts: '2026-09-30T01:00:00.000Z', doc: ent.rel, stage: 'approved', fingerprint: ent.fp, prev: 'draft', source: 'tty' },
+    { ts: '2026-09-30T02:00:00.000Z', doc: plan.rel, stage: 'approved', fingerprint: plan.fp, prev: 'draft', source: 'tty' },
+  ]);
+  const r = run(T, { args: ['--hardening'] });
+  check('加固门 H3：exploring 件已收口（intent/plan approved + 台账配对）→ --hardening exit 0',
+    r.status === 0, outOf(r));
+  rmfix(T);
+}
+{
+  // H4：intent 已收口但 plan 仍 draft → hard「加固未过」（plan 未收口；L2 缺 spec 由检查 1 同步出账）
+  const T = mkfix();
+  const ent = mkConfirmedDoc(T, 'workflow/intents/2026-09-30-h3.md', '状态: approved\n级别: L2\n阶段: exploring\n日期: 2026-09-30');
+  writeLedger(T, [{ ts: '2026-09-30T01:00:00.000Z', doc: ent.rel, stage: 'approved', fingerprint: ent.fp, prev: 'draft', source: 'tty' }]);
+  w(T, 'workflow/plans/2026-09-30-h3.md', PLAN('h3', '状态: draft\n级别: L2'));
+  const r = run(T, { args: ['--hardening'] });
+  check('加固门 H4：exploring 件 plan 未收口（draft）→ --hardening exit 1「加固未过」',
+    r.status === 1 && outOf(r).includes('加固未过'), outOf(r));
+  rmfix(T);
+}
+{
+  // H5：放弃态出列——intent 已 superseded 的 exploring 件 → --hardening 不拦（探索作废留档，无代码随行）。
+  //  台账指纹按 confirm-doc 前向语义复刻：fp = 跳转前（approved 态）内容的指纹，当前盘面 superseded + 指纹行
+  //  ——检查 15 的内容绑定（superseded 受绑）按 prev=approved 复原重算须能对上。
+  const T = mkfix();
+  const rel = 'workflow/intents/2026-09-30-h4.md';
+  const prevText = '---\n状态: approved\n级别: L1\n阶段: exploring\n日期: 2026-09-30\n---\n# DOC\n';
+  const fp = computeFingerprint(prevText);
+  fs.writeFileSync(path.join(T, rel), `---\n状态: superseded\n级别: L1\n阶段: exploring\n日期: 2026-09-30\n确认指纹: ${fp.slice(0, 16)}\n---\n# DOC\n`);
+  w(T, 'workflow/plans/2026-09-30-h4.md', PLAN('h4', '状态: draft\n级别: L1')); // 防 check 1 配对拦（L1 须 plan；draft 仅 warning 不碍 exit 0）
+  writeLedger(T, [{ ts: '2026-09-30T03:00:00.000Z', doc: rel, stage: 'superseded', fingerprint: fp, prev: 'approved', source: 'tty' }]);
+  const r = run(T, { args: ['--hardening'] });
+  check('加固门 H5：exploring 件显式放弃（superseded + 台账绑定）→ --hardening exit 0（出列不加固）',
+    r.status === 0, outOf(r));
+  rmfix(T);
+}
+{
+  // H6：未知参数 → 用法提示 exit 1（arg 解析收紧后的防倒退）
+  const T = mkfix();
+  const r = run(T, { args: ['--bogus'] });
+  check('加固门 H6：未知 CLI 参数 → exit 1 用法提示', r.status === 1 && /用法/.test(outOf(r)), outOf(r));
+  rmfix(T);
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

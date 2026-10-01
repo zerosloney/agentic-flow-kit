@@ -538,5 +538,136 @@ const gitHead = (root) => {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- S30【协作道批量】--batch：delegated 多份 L0/L1 一次代录 → 全部落态 + 台账 brief:true（2026-09-30 hybrid-governance-risk-lanes）----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-bt1-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-bt1.md'), '---\n状态: draft\n级别: L1\n日期: 2026-09-30\n---\n# I1\n');
+  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-bt2.md'), '---\n状态: draft\n级别: L0\n日期: 2026-09-30\n---\n# I2\n');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-30-bt1.md', 'workflow/intents/2026-09-30-bt2.md', '--delegated', '批量放行', '--batch'], { cwd: root, encoding: 'utf8' });
+  const led = readLedgerOf(root);
+  const st1 = fs.readFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-bt1.md'), 'utf8');
+  const st2 = fs.readFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-bt2.md'), 'utf8');
+  check('S30 --batch：2 份 L0/L1 一次代录 → 全部 approved + 台账 brief:true / of=2 / seq 递增',
+    r.status === 0 && led.length === 2
+      && led.every((e) => e.brief === true && e.source === 'chat-delegated' && e.of === 2 && e.stage === 'approved')
+      && led[0].seq === 1 && led[1].seq === 2
+      && st1.includes('状态: approved') && st2.includes('状态: approved'),
+    JSON.stringify({ status: r.status, stderr: String(r.stderr).slice(0, 300), led }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- S31【协作道批量】--batch 混入 L2 → 该份逐份拒绝（exit 2 + 未落盘未记账），L1 份照常落态 ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-bt2-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-bt3.md'), '---\n状态: draft\n级别: L1\n日期: 2026-09-30\n---\n# I3\n');
+  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-bt4.md'), '---\n状态: draft\n级别: L2\n日期: 2026-09-30\n---\n# I4\n');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-30-bt3.md', 'workflow/intents/2026-09-30-bt4.md', '--delegated', '批量放行', '--batch'], { cwd: root, encoding: 'utf8' });
+  const led = readLedgerOf(root);
+  const st4 = fs.readFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-bt4.md'), 'utf8');
+  check('S31 --batch 混入 L2 → L2 拒绝（exit 2 + 未落盘未记账）+ L1 落态',
+    r.status === 2 && /不在协作道/.test(r.stderr) && led.length === 1 && led[0].doc.endsWith('bt3.md') && st4.includes('状态: draft'),
+    JSON.stringify({ status: r.status, stderr: String(r.stderr).slice(0, 300), led }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- S32 --batch 组合约束：与 --auto / --to 互斥（exit 1，零落账）----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-bt3-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-bt5.md'), '---\n状态: draft\n级别: L1\n日期: 2026-09-30\n---\n# I5\n');
+  const r1 = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-30-bt5.md', '--delegated', 'x', '--batch', '--auto'], { cwd: root, encoding: 'utf8' });
+  const r2 = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-30-bt5.md', '--delegated', 'x', '--batch', '--to', 'cancelled'], { cwd: root, encoding: 'utf8' });
+  const noLedger = !fs.existsSync(path.join(root, '.agents', 'confirmations.jsonl'));
+  check('S32 --batch 与 --auto / --to 互斥 → 均 exit 1 + 零台账',
+    r1.status === 1 && r2.status === 1 && noLedger,
+    JSON.stringify({ r1: r1.status, r2: r2.status }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- S33 简洁审计：单份 delegated L0/L1（无 --batch）→ 台账 brief:true + 紧凑输出；L2 份不带 brief ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-bt4-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-bt6.md'), '---\n状态: draft\n级别: L1\n日期: 2026-09-30\n---\n# I6\n');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-30-bt6.md', '--delegated', '单份放行'], { cwd: root, encoding: 'utf8' });
+  const led = readLedgerOf(root);
+  check('S33 单份 L1 代录 → brief:true + 紧凑输出（协作道/异步审计标记）',
+    r.status === 0 && led.length === 1 && led[0].brief === true && /协作道\/异步审计/.test(r.stdout),
+    JSON.stringify({ status: r.status, stdout: String(r.stdout).slice(0, 200), led }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- S34–S37【Trusted 自动泳道】trust-mode.json = Trusted（level 2）→ 非 TTY 免旗标隐式自治（2026-09-30 hybrid-governance-explore-hardening）----
+const writeTrust = (root, cfg) => {
+  fs.mkdirSync(path.join(root, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.agents', 'trust-mode.json'), JSON.stringify(cfg));
+};
+// S34：Trusted + L1 intent 免旗标 → draft→approved 落态 + 台账 source=ai-auto-trust-L2；第二跳 → done（全闭环）
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-tr1-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
+  writeTrust(root, { enabled: true, level: 2, name: 'Trusted', enabledAt: '2026-09-30T00:00:00.000Z' });
+  const p = path.join(root, 'workflow', 'intents', '2026-09-30-tr1.md');
+  fs.writeFileSync(p, '---\n状态: draft\n级别: L1\n日期: 2026-09-30\n---\n# I\n');
+  const r1 = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-30-tr1.md'], { cwd: root, encoding: 'utf8' });
+  const led1 = readLedgerOf(root);
+  check('S34 Trusted 隐式：非 TTY 无旗标 L1 draft→approved + 台账 source=ai-auto-trust-L2',
+    r1.status === 0 && fs.readFileSync(p, 'utf8').includes('状态: approved')
+      && led1.length === 1 && led1[0].source === 'ai-auto-trust-L2' && led1[0].stage === 'approved' && led1[0].prev === 'draft',
+    JSON.stringify({ status: r1.status, stderr: String(r1.stderr).slice(0, 300), led: led1 }));
+  // 第二跳：非 git 环境 done 门跳过（S27 同口径）→ Level 2 全闭环直达 done
+  const r2 = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-30-tr1.md'], { cwd: root, encoding: 'utf8' });
+  const led2 = readLedgerOf(root);
+  check('S34b Trusted 隐式第二跳：approved→done（Level 2 全闭环）',
+    r2.status === 0 && fs.readFileSync(p, 'utf8').includes('状态: done')
+      && led2.length === 2 && led2[1].stage === 'done' && led2[1].prev === 'approved',
+    JSON.stringify({ status: r2.status, stderr: String(r2.stderr).slice(0, 300), led: led2 }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+// S35：Trusted 隐式边界——L2 文档与 incidents 均不过自治门（exit 2 未落账）
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-tr2-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'workflow', 'incidents'), { recursive: true });
+  writeTrust(root, { enabled: true, level: 2, name: 'Trusted' });
+  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-tr2.md'), '---\n状态: draft\n级别: L2\n日期: 2026-09-30\n---\n# I\n');
+  fs.writeFileSync(path.join(root, 'workflow', 'incidents', '2026-09-30-tr3.md'), '---\n状态: open\n级别: L1\n---\n# I\n');
+  const r1 = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-30-tr2.md'], { cwd: root, encoding: 'utf8' });
+  const r2 = spawnSync(process.execPath, [CLI, 'workflow/incidents/2026-09-30-tr3.md'], { cwd: root, encoding: 'utf8' });
+  check('S35 Trusted 隐式边界：L2 文档与 incidents 均拒绝（exit 2 未过自治门）+ 零台账',
+    r1.status === 2 && r2.status === 2 && readLedgerOf(root).length === 0,
+    JSON.stringify({ r1: r1.status, r2: r2.status, stderr1: String(r1.stderr).slice(0, 200) }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+// S36：Standard（level 1）不隐式——非 TTY 无旗标仍拒（隐式泳道仅 Trusted；fail-closed）
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-tr3-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
+  writeTrust(root, { enabled: true, level: 1, name: 'Standard' });
+  const p = path.join(root, 'workflow', 'intents', '2026-09-30-tr4.md');
+  fs.writeFileSync(p, '---\n状态: draft\n级别: L1\n日期: 2026-09-30\n---\n# I\n');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-30-tr4.md'], { cwd: root, encoding: 'utf8' });
+  check('S36 Standard 不隐式：非 TTY 无旗标 → 仍 exit 1 拒绝 + 零写盘',
+    r.status === 1 && /不可代确认/.test(r.stderr) && fs.readFileSync(p, 'utf8').includes('状态: draft'),
+    JSON.stringify({ status: r.status, stderr: String(r.stderr).slice(0, 200) }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+// S37：Trusted 隐式边界——多份 / --to 放弃态 → 不隐式，仍拒（exit 1）
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-tr4-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
+  writeTrust(root, { enabled: true, level: 2, name: 'Trusted' });
+  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-tr5.md'), '---\n状态: draft\n级别: L1\n日期: 2026-09-30\n---\n# I\n');
+  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-tr6.md'), '---\n状态: draft\n级别: L1\n日期: 2026-09-30\n---\n# I\n');
+  const r1 = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-30-tr5.md', 'workflow/intents/2026-09-30-tr6.md'], { cwd: root, encoding: 'utf8' });
+  const r2 = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-30-tr5.md', '--to', 'cancelled'], { cwd: root, encoding: 'utf8' });
+  check('S37 Trusted 隐式边界：多份 / --to 放弃态 → 不隐式仍拒（exit 1 + 零台账）',
+    r1.status === 1 && r2.status === 1 && /不可代确认/.test(r1.stderr) && readLedgerOf(root).length === 0,
+    JSON.stringify({ r1: r1.status, r2: r2.status, stderr1: String(r1.stderr).slice(0, 160), stderr2: String(r2.stderr).slice(0, 160) }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

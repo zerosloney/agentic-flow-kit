@@ -2,6 +2,9 @@ node_modules/
 *.log
 tmp/
 # agentic-flow-kit
+.zcode/drafts/
+.zcode/plans/
+.agents/trust-mode.json
 .agents/cache/
 templates/_agents/cache/
 *.tgz

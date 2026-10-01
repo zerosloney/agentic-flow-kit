@@ -34,6 +34,13 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node }}
+      - name: 机器门（服务端兜底——本地钩子可被绕过，此处复跑真实仓库门）
+        run: |
+          git config core.hooksPath .githooks # 克隆无本地钩子配置（AGENTS.md 要求的本地手工步骤），runner 侧补上
+          node .agents/scripts/check-loop.mjs
+          node bin/flow-kit.mjs doctor
+          node .agents/scripts/source-sync-check.mjs --gate
+          node .agents/scripts/workflows-check.mjs
       - run: npm test
       - name: shipped 套件（.agents/ 装副本——npm test 只跑 templates/，此处补装户视角）
         run: |
@@ -45,10 +52,3 @@ jobs:
             node "$f" || fail=1
           done
           exit $fail
-      - name: 机器门（服务端兜底——本地钩子可被绕过，此处复跑真实仓库门）
-        run: |
-          git config core.hooksPath .githooks # 克隆无本地钩子配置（AGENTS.md 要求的本地手工步骤），runner 侧补上
-          node .agents/scripts/check-loop.mjs
-          node bin/flow-kit.mjs doctor
-          node .agents/scripts/source-sync-check.mjs --gate
-          node .agents/scripts/workflows-check.mjs

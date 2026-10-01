@@ -8,6 +8,7 @@
 # INTENT — <主题>
 <!-- 复制本模板为 YYYY-MM-DD-<主题>.md 后填写；plans/ 下同名文件与本文件配对 -->
 <!-- frontmatter 受限子集（2026-09-13）：每行 `键: 值`；状态∈draft/approved/done/superseded/cancelled（严格枚举，附注写备注键）；级别∈L0/L1/L2/L3；check-loop 只扫 frontmatter 取机器字段，正文不再写状态/级别行 -->
+<!-- 探索泳道（可选，2026-09-30 hybrid-governance-explore-hardening）：experiment/ 前缀分支上的 PoC 任务在 frontmatter 加「阶段: exploring」——提交/推送门降级 advisory，spec/plan 可先于本入口确认起草（限 L0/L1）；转正合入 main 前须收口（本档 approved/done + 同名 plan/spec 在场，check-loop --hardening 加固门），或显式放弃（superseded/cancelled） -->
 
 ## 背景与问题
 <为什么做；写明需求来源（工单 / 沟通记录 / 待办事项）>

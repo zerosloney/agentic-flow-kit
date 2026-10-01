@@ -12,31 +12,33 @@ function check(name, cond, detail = '') {
   else { failCount++; console.log('FAIL ' + name + (detail ? '——' + detail : '')); }
 }
 
-// ---- 场景 1：L1 极简 2 节 ----
+// ---- 场景 1：L1 Quick-Plan 三节 ----
 {
   const { body } = renderPlan({ topic: 't', level: 'L1' });
   const sections = body.match(/^##\s.+$/gm) || [];
-  check('S1 L1 含节 ## 改动面', body.includes('## 改动面'));
-  check('S1 L1 含节 ## 验证方式', body.includes('## 验证方式'));
-  check('S1 L1 共 3 节（改动面 + 验证方式 + 确认与复核）', sections.length === 3, '实际 ' + sections.length + ' 节');
+  check('S1 L1 含节 ## 改动方案', body.includes('## 改动方案'));
+  check('S1 L1 含节 ## 约束与风险', body.includes('## 约束与风险'));
+  check('S1 L1 含节 ## 验证计划', body.includes('## 验证计划'));
+  check('S1 L1 共 4 节（Quick-Plan 三节 + 确认与复核）', sections.length === 4, '实际 ' + sections.length + ' 节');
 }
 
 // ---- 场景 2：L2 完整 4 节 ----
 {
   const { body } = renderPlan({ topic: 't', level: 'L2' });
   const sections = body.match(/^##\s.+$/gm) || [];
-  check('S2 L2 含节 ## 改动面', body.includes('## 改动面'));
+  check('S2 L2 含节 ## 改动方案', body.includes('## 改动方案'));
   check('S2 L2 含节 ## 任务拆解', body.includes('## 任务拆解'));
   check('S2 L2 含节 ## 执行顺序', body.includes('## 执行顺序'));
-  check('S2 L2 含节 ## 验证方式', body.includes('## 验证方式'));
+  check('S2 L2 含节 ## 验证计划', body.includes('## 验证计划'));
   check('S2 L2 共 5 节（4 节 + 确认与复核）', sections.length === 5, '实际 ' + sections.length + ' 节');
 }
 
 // ---- 场景 3：L3 与 L2 同结构 ----
 {
   const { body } = renderPlan({ topic: 't', level: 'L3' });
-  check('S3 L3 含节 ## 改动面', body.includes('## 改动面'));
+  check('S3 L3 含节 ## 改动方案', body.includes('## 改动方案'));
   check('S3 L3 含节 ## 任务拆解', body.includes('## 任务拆解'));
+  check('S3 L3 含节 ## 验证计划', body.includes('## 验证计划'));
 }
 
 // ---- 场景 4：非法 level 抛错 ----
@@ -101,9 +103,40 @@ const runTool = (root, base, level) => spawnSync(process.execPath,
   fs.rmSync(root, { recursive: true, force: true });
 }
 {
-  const root = mkws({ 'workflow/intents/2026-09-30-draft.md': '---\n状态: draft\n级别: L1\n日期: 2026-09-30\n---\n# I\n' });
+  // S10（2026-09-30 hybrid-governance-explore-hardening 更新）：draft 且 L2 → 仍拒（防御道维持入口确认
+  // 前置）；原 L1 draft 夹具转入 S10b（探索泳道放行）
+  const root = mkws({ 'workflow/intents/2026-09-30-draft.md': '---\n状态: draft\n级别: L2\n日期: 2026-09-30\n---\n# I\n' });
   const r = runTool(root, '2026-09-30-draft', 'L1');
-  check('S10 起草门：入口 draft → exit 2 + 提示状态',
+  check('S10 起草门：入口 draft 且 L2 → exit 2 + 提示状态（防御道不变）',
+    r.status === 2 && /状态「draft」/.test(r.stderr),
+    JSON.stringify({ status: r.status, stderr: r.stderr }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+{
+  // S10b 探索泳道（2026-09-30 hybrid-governance-explore-hardening）：L0/L1 draft intent → 放行 plan 起草
+  // （「先起草后确认」；收口由 check-loop --hardening 加固门兜底）
+  const root = mkws({ 'workflow/intents/2026-09-30-exp.md': '---\n状态: draft\n级别: L1\nrisk_level: L1\n日期: 2026-09-30\n---\n# I\n' });
+  const r = runTool(root, '2026-09-30-exp', 'L1');
+  const f = path.join(root, 'workflow', 'plans', '2026-09-30-exp.md');
+  check('S10b 探索泳道：L1 入口 draft → 放行生成（先起草后确认）',
+    r.status === 0 && fs.existsSync(f) && fs.readFileSync(f, 'utf8').includes('状态: draft'),
+    JSON.stringify({ status: r.status, stderr: r.stderr }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+{
+  // S10c 探索泳道回落：级别缺失、risk_level=L0 → 放行（risk_level 兜底判道）
+  const root = mkws({ 'workflow/intents/2026-09-30-exp0.md': '---\n状态: draft\nrisk_level: L0\n日期: 2026-09-30\n---\n# I\n' });
+  const r = runTool(root, '2026-09-30-exp0', 'L1');
+  check('S10c 探索泳道回落：级别缺失 + risk_level L0 → 放行',
+    r.status === 0 && fs.existsSync(path.join(root, 'workflow', 'plans', '2026-09-30-exp0.md')),
+    JSON.stringify({ status: r.status, stderr: r.stderr }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+{
+  // S10d 探索泳道边界：级别 L2 合法时 risk_level L0 不回落 → 仍拒（fail-closed 就严）
+  const root = mkws({ 'workflow/intents/2026-09-30-expd.md': '---\n状态: draft\n级别: L2\nrisk_level: L0\n日期: 2026-09-30\n---\n# I\n' });
+  const r = runTool(root, '2026-09-30-expd', 'L1');
+  check('S10d 探索泳道边界：级别 L2（risk_level L0 不回落）→ 仍拒',
     r.status === 2 && /状态「draft」/.test(r.stderr),
     JSON.stringify({ status: r.status, stderr: r.stderr }));
   fs.rmSync(root, { recursive: true, force: true });

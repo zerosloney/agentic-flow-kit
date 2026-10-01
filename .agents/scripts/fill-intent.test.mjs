@@ -36,12 +36,12 @@ function check(name, cond, detail = '') {
   check('S3 非法 level 抛错', threw);
 }
 
-// ---- 场景 4：7 节正文齐 ----
+// ---- 场景 4：9 节正文齐 ----
 {
   const { body } = renderIntent({ topic: 't', module: 'pipeline', level: 'L1' });
-  const expectedSections = ['背景与问题', '目标', '非目标', '约束', '影响面', '触达红线', '验收标准', '确认与复核'];
+  const expectedSections = ['背景与问题', '历史教训/防复发', '目标', '非目标', '约束', '影响面', '触达红线', '验收标准', '确认与复核'];
   for (const s of expectedSections) check('S4 含节 ## ' + s, body.includes('## ' + s));
-  check('S4 共 8 节标题', (body.match(/^##\s/gm) || []).length === 8);
+  check('S4 共 9 节标题', (body.match(/^##\s/gm) || []).length === 9);
 }
 
 // ---- 场景 5：备注字段透传 ----
@@ -67,6 +67,15 @@ function check(name, cond, detail = '') {
   // 边界：缺 topic 应返回字符串（渲染时缺 topic → topic 是 undefined 字符串，不抛错——按 design 透传）
   const r = renderIntent({ module: 'pipeline', level: 'L1' });
   check('S7 缺 topic 仍可渲染（透传设计）', typeof r.body === 'string' && r.body.includes('INTENT — undefined'));
+}
+
+// ---- 场景 8：risk_level 风险泳道字段（混合治理，= 级别，全枚举落 frontmatter）----
+{
+  for (const level of ['L0', 'L1', 'L2', 'L3']) {
+    const { body } = renderIntent({ topic: 't', module: 'pipeline', level });
+    const fm = body.match(/^---([\s\S]*?)---/)[1];
+    check('S8 risk_level=' + level + ' 写入 frontmatter', new RegExp('^risk_level:\\s*' + level + '$', 'm').test(fm));
+  }
 }
 
 console.log('\n合计: PASS ' + pass + ' / FAIL ' + failCount);
