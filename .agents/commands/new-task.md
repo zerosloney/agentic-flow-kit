@@ -53,7 +53,7 @@ next: 按阶段路由
 | 级别 | 改什么 | 流程 |
 |------|--------|------|
 | L0 | 文档/样式微调(无行为影响) | 直接 commit,豁免 intent |
-| L1 | **实现级改动**(未命中 L2/L3) | 快车道:液态草稿(.zcode/drafts) $\rightarrow$ 实现 $\rightarrow$ 一键固化(`solidify-task.mjs`) |
+| L1 | **实现级改动**(未命中 L2/L3) | 快车道:液态草稿(.zcode/drafts) $\rightarrow$ 实现 $\rightarrow$ 固化(`solidify-task.mjs`)——用户确认后带 `--delegated "<原话>"` 执行；无确认来源只迁移不落账 |
 | L2 | **规则 / 契约**(一处改、多处依赖) | 入口文档(intent / incident) + spec + plan 三件套 |
 | L3 | **数据与运行时结构**(schema / 迁移 SQL / DI 链 / 认证与中间件管线) | 同 L2 + spec 新会话独立复核 |
 

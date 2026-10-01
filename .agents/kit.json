@@ -42,7 +42,7 @@
     },
     {
       "rel": ".agents/commands/new-task.md",
-      "sha256": "702c8e6ad2cc97ca8d96fd1e439ee9ea44675976664e6088fdffce62b4a06591"
+      "sha256": "59c56a271d24a344afffac097a678b23b0eeb2d71f9158097217148863ec6928"
     },
     {
       "rel": ".agents/commands/plan.md",
@@ -233,12 +233,20 @@
       "sha256": "e1d9d36e3fe41abb429cc6f6e37d325e7a4b5043a0a5de15e4b037b87a955c22"
     },
     {
+      "rel": ".agents/scripts/pre-push.test.mjs",
+      "sha256": "d9a8b8683462600cb65fc8898817e84ae7972232c606a3e15033e7b61ffa5417"
+    },
+    {
       "rel": ".agents/scripts/rule-budget.sh",
       "sha256": "e6ba0dd09a6e32b5b8bd4735f4ab5439639b43422b923a2e2aa8af9571f34a2f"
     },
     {
       "rel": ".agents/scripts/solidify-task.mjs",
-      "sha256": "fe07b8fac298207df2866ccd5f1949cc388ae84308e787f84aca1a0a9c533b7a"
+      "sha256": "7dcd098f86dac09564ba9ed12e484ed90c3dc6a8eaa4db5ccf5426de7d71b735"
+    },
+    {
+      "rel": ".agents/scripts/solidify-task.test.mjs",
+      "sha256": "f488bfc14cf89ed4e95929def63db8797fe5f609423faedb03ed8d3ad34e7dfc"
     },
     {
       "rel": ".agents/scripts/source-sync-check.mjs",
@@ -354,7 +362,7 @@
     },
     {
       "rel": ".githooks/pre-push",
-      "sha256": "4ca58f2390629cdfda402a0ecd96056e4d73199c4b63de9d7fc82b21ed23d52a"
+      "sha256": "37be577cc1c1f4ceba1f545bd7bbbd69441da8e96fc359a79fa56b190472f5c3"
     },
     {
       "rel": ".zcode/agents/implementer.md",

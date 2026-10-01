@@ -1,99 +1,104 @@
 #!/usr/bin/env node
-// solidify-task: 将 L1 液态草稿一次性固化为正式 workflow 文档（迁移 + 批量确认 + 索引更新）
-// 用法：node .agents/scripts/solidify-task.mjs --topic "主题" [--root <仓库根>]
+// solidify-task: 将 L1 液态草稿固化为正式 workflow 文档（迁移 + 可选确认 + 索引更新）
+// 用法：
+//   node .agents/scripts/solidify-task.mjs --topic <主题> [--root <仓库根>]
+//       # 只迁移 + 更新索引，绝不写确认台账；末尾打印确认指引
+//   node .agents/scripts/solidify-task.mjs --topic <主题> --delegated "<用户原话>"
+//       # 迁移后，以调用方显式传入的用户原话逐份 confirm-doc --delegated（quote 原样转发）
+//   node .agents/scripts/solidify-task.mjs --topic <主题> --auto
+//       # 迁移后，逐份 confirm-doc --auto（trust-mode=Trusted 才放行；Strict 下被拒并计数失败）
+// 确认门契约（incidents/2026-10-01-v09-review-defects）：--delegated 的 quote 必须来自用户在对话内的
+//   明确原话，由调用方显式传入——本脚本永不编造用户话术。无确认来源时只迁移不落账，末尾打印指引。
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = process.argv.includes('--root') ? 
-  process.argv[process.argv.indexOf('--root') + 1] : 
-  process.cwd();
-const DRAFTS_DIR = path.join(ROOT, '.zcode', 'drafts');
-const WF_ROOT = path.join(ROOT, 'workflow');
 
-function fail(msg) { console.error('❌ ' + msg); process.exit(1); }
+function fail(msg) {
+  console.error(`❌ ${msg}`);
+  process.exit(1);
+}
 
 function parseArgs() {
   const topicIdx = process.argv.indexOf('--topic');
-  if (topicIdx === -1 || !process.argv[topicIdx + 1]) {
-    console.error('用法: node .agents/scripts/solidify-task.mjs --topic "主题"');
-    process.exit(1);
-  }
-  return process.argv[topicIdx + 1];
+  const topic = topicIdx !== -1 ? process.argv[topicIdx + 1] : '';
+  if (!topic) fail('用法: node .agents/scripts/solidify-task.mjs --topic "主题" [--root <仓库根>] [--delegated "<用户原话>" | --auto]');
+  let root = process.cwd();
+  const rootIdx = process.argv.indexOf('--root');
+  if (rootIdx !== -1 && process.argv[rootIdx + 1]) root = process.argv[rootIdx + 1];
+  const delegatedIdx = process.argv.indexOf('--delegated');
+  const delegated = delegatedIdx !== -1 ? String(process.argv[delegatedIdx + 1] ?? '') : '';
+  const auto = process.argv.includes('--auto');
+  if (delegated && auto) fail('--delegated 与 --auto 互斥，只能选其一');
+  return { topic, root, delegated, auto };
 }
 
-async function run() {
-  const topic = parseArgs();
-  console.log(`🚀 开始固化 L1 任务: ${topic}...`);
+const classify = (content) => {
+  if (content.includes('# INTENT')) return 'intents';
+  if (content.includes('# PLAN')) return 'plans';
+  if (content.includes('# SPEC')) return 'specs';
+  if (content.includes('# INCIDENT')) return 'incidents';
+  return null;
+};
 
-  if (!fs.existsSync(DRAFTS_DIR)) fail('草稿目录 .zcode/drafts/ 不存在');
-
-  // 1. 搜寻草稿
-  const files = fs.readdirSync(DRAFTS_DIR).filter(f => f.includes(topic) && f.endsWith('.md'));
-  if (!files.length) fail(`在 ${DRAFTS_DIR} 中未找到主题为 ${topic} 的草稿文件`);
+function run() {
+  const { topic, root, delegated, auto } = parseArgs();
+  const draftsDir = path.join(root, '.zcode', 'drafts');
+  if (!fs.existsSync(draftsDir)) fail(`草稿目录 ${draftsDir} 不存在`);
+  const files = fs.readdirSync(draftsDir).filter((f) => f.includes(topic) && f.endsWith('.md'));
+  if (!files.length) fail(`在 ${draftsDir} 中未找到主题为 ${topic} 的草稿文件`);
 
   const today = new Date().toISOString().slice(0, 10);
   const solidified = [];
-
-  // 2. 迁移并规范化命名
   for (const file of files) {
-    const content = fs.readFileSync(path.join(DRAFTS_DIR, file), 'utf8');
-    let targetDir = '';
-    
-    // 简单启发式判定类型
-    if (content.includes('# INTENT')) targetDir = 'intents';
-    else if (content.includes('# PLAN')) targetDir = 'plans';
-    else if (content.includes('# SPEC')) targetDir = 'specs';
-    else if (content.includes('# INCIDENT')) targetDir = 'incidents';
-    else continue;
-
-    const targetName = `${today}-${file.replace(/.*-/, '').replace('.md', '.md')}`;
-    if (!targetName.startsWith('20')) {
-       // 如果文件名没日期前缀，强制加上
-       // 假设文件名为 <topic>.md
-    }
-    
-    // 统一处理：强制 YYYY-MM-DD- 前缀
+    const content = fs.readFileSync(path.join(draftsDir, file), 'utf8');
+    const targetDir = classify(content);
+    if (!targetDir) continue;
+    // 统一强制 YYYY-MM-DD- 前缀；已有前缀的文件名原样保留
     const finalName = /^\d{4}-\d{2}-\d{2}-/.test(file) ? file : `${today}-${file}`;
-    const targetPath = path.join(WF_ROOT, targetDir, finalName);
-
+    const targetPath = path.join(root, 'workflow', targetDir, finalName);
     fs.mkdirSync(path.dirname(targetPath), { recursive: true });
-    fs.copyFileSync(path.join(DRAFTS_DIR, file), targetPath);
-    
-    solidified.push({
-      rel: `workflow/${targetDir}/${finalName}`,
-      abs: targetPath,
-      type: targetDir
-    });
-    console.log(`  📦 迁移: ${file} -> ${targetKebab(targetDir)}/${finalName}`);
+    fs.copyFileSync(path.join(draftsDir, file), targetPath);
+    solidified.push({ rel: `workflow/${targetDir}/${finalName}`, abs: targetPath, type: targetDir });
+    console.log(` 📦 迁移: ${file} -> ${targetDir}/${finalName}`);
   }
+  if (!solidified.length) fail(`草稿中未找到可识别的 INTENT/PLAN/SPEC/INCIDENT 文档（主题 ${topic}）`);
 
-  function targetKebab(dir) { return dir; }
-
-  // 3. 批量确认 (Delegated)
-  console.log('🛡️  执行批量确认...');
-  for (const item of solidified) {
-    const res = spawnSync('node', [
-      path.join(SCRIPT_DIR, 'confirm-doc.mjs'), 
-      item.rel, 
-      '--delegated', 
-      `固化 L1 任务 ${topic}：用户确认草稿无误，执行固化归档`
-    ], { encoding: 'utf8' });
-    
-    if (res.status !== 0) {
-      console.error(`  ❌ 确认失败 [${item.rel}]: ${res.stderr}`);
-      // 此时不 exit，尝试继续其他文件的确认
-    } else {
-      console.log(`  ✅ 已确认: ${item.rel}`);
+  // 确认：仅当调用方显式提供确认来源时执行；否则只迁移，绝不落账。
+  let failed = 0;
+  if (delegated || auto) {
+    console.log('🛡️ 执行逐份确认...');
+    for (const item of solidified) {
+      const args = [path.join(SCRIPT_DIR, 'confirm-doc.mjs'), item.rel, '--root', root];
+      if (delegated) args.push('--delegated', delegated);
+      else args.push('--auto');
+      const res = spawnSync('node', args, { cwd: root, encoding: 'utf8' });
+      if (res.status !== 0) {
+        failed++;
+        console.error(` ❌ 确认失败 [${item.rel}]: ${(res.stderr || '').trim()}`);
+      } else {
+        console.log(` ✅ 已确认: ${item.rel}`);
+      }
+    }
+    console.log(`确认汇总：${solidified.length - failed}/${solidified.length} 成功${failed ? `，${failed} 失败` : ''}`);
+  } else {
+    console.log('⏭️ 未提供确认来源（--delegated "<用户原话>" 或 --auto），仅迁移不落账。');
+    for (const item of solidified) {
+      console.log(`  → 确认指引: node .agents/scripts/confirm-doc.mjs ${item.rel} --delegated "<用户原话>"`);
     }
   }
 
-  // 4. 更新索引
+  // 更新索引；失败同样传播退出码。
   console.log('📖 更新工作流索引...');
-  spawnSync('node', [path.join(SCRIPT_DIR, 'gen-workflow-index.mjs')], { stdio: 'inherit' });
+  const idx = spawnSync('node', [path.join(SCRIPT_DIR, 'gen-workflow-index.mjs')], { cwd: root, stdio: 'inherit' });
+  if (idx.status !== 0) {
+    console.error(' ❌ 索引更新失败');
+    process.exit(1);
+  }
 
+  if (failed) process.exit(1);
   console.log(`\n✨ 任务 ${topic} 已成功固化！`);
   console.log(`👉 建议执行: git add workflow/ .agents/confirmations.jsonl && git commit -m "docs(workflow): solidify L1 task ${topic}"`);
 }

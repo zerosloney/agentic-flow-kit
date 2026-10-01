@@ -50,7 +50,7 @@
 
 1. **同名配对**：L1 有 plan；L2/L3 有 spec 与 plan。incident 的回路断档同样阻断。
 2. **验收勾验**：新建 intent 关到 done 时，验收标准未勾则阻断。
-3. **确认留痕**：approved / done / fixed / closed 须经 `confirm-doc.mjs`，指纹与台账一致。
+3. **确认留痕**：approved / done / fixed / closed 须经 `confirm-doc.mjs`，指纹与台账一致。`--delegated` 原话仅限用户对话内明确确认的当次措辞——官方脚本/门禁不得自动代录或编造 quote（2026-10-01 v09-review-defects：solidify-task 曾自动伪造原话，已修复并纳入回归）。
 4. **敏感信息**：pre-commit 的 commit-check 扫描密钥。
 5. **双源与台账**：doctor 核对 managed / owned 的 sha；引擎改动改包源 `templates/` 再 `sync`。
 
