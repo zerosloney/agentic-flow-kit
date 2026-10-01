@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-01
 模块: pipeline
 备注: 自报制漂移加固批：判级触达面机器校验 / 探索泳道漏标记本地拦截；quote 复用检测经 incident 复盘否决（见非目标）
-确认指纹: 95dcd3cf1837cb69
+确认指纹: 95a4e3535dcfa725
 ---
 # INTENT — drift-hardening
 

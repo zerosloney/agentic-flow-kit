@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
-确认指纹: 9fc30d840ddb7544
+确认指纹: 199536a09a8a01c4
 ---
 # PLAN — drift-hardening
 
@@ -61,6 +61,6 @@
 ## 确认与复核
 
 > 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节（确认环节的机器可见态），done 只在关单出现——禁从 draft 直跳 done（2026-09-22 papercut）。
-- 确认结果：approved（2026-10-01 用户对话内确认，原话「确认」——plan 全文与改动方案节一并过目）；done（关单时随入口文档置终态）
+- 确认结果：approved（2026-10-01 用户对话内确认，原话「确认」——plan 全文与改动方案节一并过目）；done（2026-10-01 关单，随入口文档置终态；实现 e6816e5 + 复核 P1 收口 c51555e）
 - 确认门记录：plan 草稿全文过目 + 改动清单确认（改动方案节随 plan 全文一并过目确认）
-- 复核：L2 推荐独立复核——test 阶段 independent-reviewer 复核 diff 与 spec 判据一致性
+- 复核：L2 独立复核已完成（2026-10-01，independent-reviewer 新上下文）——0 P0 / 3 P1 / 5 P2；P1×3 用户定性全采纳（收口 c51555e + fix-forward 留痕），P2×5 留后续；判据一致性 S1-S6 逐条核对无偏离（除 P1-3 已收口）

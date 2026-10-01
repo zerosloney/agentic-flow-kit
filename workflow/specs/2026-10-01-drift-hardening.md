@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-01
 模块: pipeline
 备注: 自报制漂移加固批——触达面判低拦截 + 探索泳道漏标记拦截；入口 intents/2026-10-01-drift-hardening.md
-确认指纹: d9427ff3709b40d2
+确认指纹: b3b7b475e87aaaa4
 ---
 # SPEC — drift-hardening
 
