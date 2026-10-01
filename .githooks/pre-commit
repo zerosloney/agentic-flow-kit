@@ -1,6 +1,6 @@
 #!/bin/sh
 # Git 原生 pre-commit hook（经 core.hooksPath 挂载，git 执行、不依赖 agent 客户端）— agentic-flow-kit 通用编排
-# 通用门禁序：闭环配对(增量) → wiki 台账(增量) → 常驻面体积预算(增量) → 双源一致性(增量) → managed 台账快检(包源恒跑) → 项目门禁(local-pre-commit) → 敏感信息扫描+条件构建(commit-check.cjs)
+# 通用门禁序：闭环配对(增量) → 泳道完整性(增量) → wiki 台账(增量) → 常驻面体积预算(增量) → 双源一致性(增量) → managed 台账快检(包源恒跑) → 项目门禁(local-pre-commit) → 敏感信息扫描+条件构建(commit-check.cjs)
 # 项目专属门禁（架构红线/业务守卫等）放 .agents/hooks/local-pre-commit——存在即在本钩子内执行，返回非零即阻断提交
 # 合并提交场景由 .githooks/pre-merge-commit 原样转发到本脚本（合并时 git 调的是 pre-merge-commit，
 # 不是 pre-commit）——门禁清单只此一份，避免两处分叉
@@ -19,7 +19,38 @@ run_gate() {
 }
 
 # 闭环配对门禁（增量版，check-pairing-incremental.sh：本次暂存的 intents/incidents 入口须已有同名 plan）
-run_gate "闭环配对（增量）" .agents/hooks/check-pairing-incremental.sh
+# experiment/* 泳道分支（2026-09-30 hybrid-governance-explore-hardening）：降级为 advisory——快速 PoC
+# 迭代不因闭环文档断档被拦（断档报告照出），转正合入 main 由 pre-push 加固门（check-loop --hardening）兜底。
+# 仅降级闭环文档面：双源 / 台账 / 常驻面 / 敏感信息扫描等门禁不豁免。分支不可判（detached HEAD 等）走严格模式。
+pairing_gate_mode=strict
+case "$(git rev-parse --abbrev-ref HEAD 2>/dev/null)" in
+  experiment/*) pairing_gate_mode=advisory ;;
+esac
+if [ "$pairing_gate_mode" = "advisory" ]; then
+  echo "pre-commit: experiment/* 泳道分支——闭环配对门禁降级为 advisory（报告不阻断；转正入 main 须过加固门）" >&2
+  if command -v sh >/dev/null 2>&1; then
+    sh .agents/hooks/check-pairing-incremental.sh || echo "pre-commit: （advisory）闭环配对断档已在上方列出——experiment 泳道不阻断提交" >&2
+  else
+    bash .agents/hooks/check-pairing-incremental.sh || echo "pre-commit: （advisory）闭环配对断档已在上方列出——experiment 泳道不阻断提交" >&2
+  fi
+else
+  run_gate "闭环配对（增量）" .agents/hooks/check-pairing-incremental.sh
+fi
+
+# 泳道完整性（增量，check-lane-surface.mjs——2026-10-01 drift-hardening）：
+#   检查 A「触达面判低」——暂存命中项目 L2 触达面（.agents/lane-surfaces.txt，ERE 逐行；缺失/空=跳过，
+#   装户无感）且活跃入口（draft/approved / open/fixed）全为 L0/L1 → 拦；有活跃 L2/L3 → 放行；无活跃入口 →
+#   仅 advisory（docs/bootstrap 豁免类）。experiment/* 分支降级 advisory（转正由 pre-push 加固门兜底）。
+#   检查 B「探索标记缺失」——experiment/* 分支暂存 intent 缺「阶段: exploring」→ 拦（标记零成本，
+#   advisory 免纪律不免标记——标记是加固门覆盖率的前提）。
+#   旧装副本无脚本自然跳过；node 缺失时本门跳过（其后 commit-check 节点检查仍会拦提交，无空洞）。
+#   注意：不经 run_gate（其实现为 sh "$@"，会把 node 当脚本解释——直接 node 调用，模式同双源门禁块）。
+if [ -f .agents/scripts/check-lane-surface.mjs ] && command -v node >/dev/null 2>&1; then
+  if ! node .agents/scripts/check-lane-surface.mjs; then
+    echo "pre-commit: 泳道完整性（增量）未通过，提交已阻止" >&2
+    exit 1
+  fi
+fi
 
 # wiki 台账门禁（增量，check-wiki-ledger.sh：暂存区触及 wiki/ 时跑 verify-wiki-consistency 三方一致性；
 # 无 wiki/ 变更即跳过）

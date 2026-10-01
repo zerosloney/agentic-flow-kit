@@ -22,7 +22,7 @@
     },
     {
       "rel": ".agents/commands/build.md",
-      "sha256": "cb2a3de631a192b7a0d05f2ebf7bd5c3422d5b82aa6c113432587ff6234bc333"
+      "sha256": "886289e81161109354d02bf00ca26ef3896dae8d68ad62fd9472785d7d8da4ea"
     },
     {
       "rel": ".agents/commands/deploy.md",
@@ -30,7 +30,7 @@
     },
     {
       "rel": ".agents/commands/design.md",
-      "sha256": "2e69079eef29d4c44f880103a3905cb26a3a2305bd8ac3511f01d91623c465ad"
+      "sha256": "7d9bbbf0cd2a01be13773ffb2b4e493c961b376e80d261d34bafcae7687e9528"
     },
     {
       "rel": ".agents/commands/gate-checklist.md",
@@ -42,11 +42,11 @@
     },
     {
       "rel": ".agents/commands/new-task.md",
-      "sha256": "ece3e904a24bc3f94eee216a477cb5e63bde6dbc24c29e4149f545788ab42b60"
+      "sha256": "702c8e6ad2cc97ca8d96fd1e439ee9ea44675976664e6088fdffce62b4a06591"
     },
     {
       "rel": ".agents/commands/plan.md",
-      "sha256": "2e4cd98394689d388e46ca9691c6022c8193b6d2077c71ce35cd57f360439dc9"
+      "sha256": "1420c2cb97148049b9702a7d55f472de370887c86e4e24808c1369abf1b34205"
     },
     {
       "rel": ".agents/commands/review.md",
@@ -62,7 +62,7 @@
     },
     {
       "rel": ".agents/commands/test.md",
-      "sha256": "a5ef29a158db2323d8b0997ca261f75a39d7a6bfdd07fe00888a5f60ece3801a"
+      "sha256": "b5413df13e101a290e273c7f2dd3e86a33c12c67c3e5658608aa1769977828d7"
     },
     {
       "rel": ".agents/hooks/check-pairing-incremental.sh",
@@ -75,6 +75,10 @@
     {
       "rel": ".agents/hooks/commit-check.cjs",
       "sha256": "96602ca75068e745d2788de961c550947802cbd793d4b362217249a1a80dd85e"
+    },
+    {
+      "rel": ".agents/lane-surfaces.txt",
+      "sha256": "1085003f7fa48c951d90ca3f6d57fbf7ac0af4240b95558eff33c16b7eff9099"
     },
     {
       "rel": ".agents/roles/implementer.md",
@@ -97,6 +101,14 @@
       "sha256": "5ff4b3f46fab815e6be256f010188511d558b6ce9bcb3a769325914e673c5274"
     },
     {
+      "rel": ".agents/scripts/check-lane-surface.mjs",
+      "sha256": "8297596e97bba96c939cdc8969ac77bf0065d41fcc81ecb3302b1419b0411ec3"
+    },
+    {
+      "rel": ".agents/scripts/check-lane-surface.test.mjs",
+      "sha256": "594873bb3a0cc497088dffa2ac63d442d1cbab70f72eda5d4f9ea07a18af0b76"
+    },
+    {
       "rel": ".agents/scripts/check-ledger.mjs",
       "sha256": "6088f04a32ac779cbcbe61bdf1c9798756c7f6eb83c9508471814f0008d6e0df"
     },
@@ -106,11 +118,11 @@
     },
     {
       "rel": ".agents/scripts/check-loop-rev.test.mjs",
-      "sha256": "f9cc02686bf89e6f26a318c5b26504749d1347040947ba1a52522ade096f5444"
+      "sha256": "05c89b717c94fc113b1b1ca1f790a7bb64d7544a51b92cad16ea4dfa42d8daa9"
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "539cd22b0fc9a774e48492813a39b1297f9562779ee0e8d0d5315149c1e91a63"
+      "sha256": "5402a7db580fdc11ed4be01bbe40fd91534742fcab05987ba5a8679015cedd26"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -118,7 +130,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "18a3c1533fe2b49002238ca50feeda611d2eb964f53a9bb7e9f43b122800c423"
+      "sha256": "55bd88033904a85dbe451329726ad5c052073bdc32b9a96e6b5f2b0e59cbb6ac"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -130,11 +142,11 @@
     },
     {
       "rel": ".agents/scripts/confirm-doc.mjs",
-      "sha256": "8802e3e7f5ce4b397251bd5da83f8e278a56c0cc4790fbbc995fc77849c3d5a7"
+      "sha256": "d02268eda4a06b3a040ce70286ce8b9ac527594cfaf4cb908875f3d4ae7c6bbd"
     },
     {
       "rel": ".agents/scripts/confirm-doc.test.mjs",
-      "sha256": "01a6c9410391e429dc81a19ded80ac74989ca786f225ed4f21a97d6917f496aa"
+      "sha256": "346a407fe640ff59da566a5d8e4d9a505a435387152a20419337d8eecbe21d7c"
     },
     {
       "rel": ".agents/scripts/doctor.test.mjs",
@@ -146,19 +158,19 @@
     },
     {
       "rel": ".agents/scripts/fill-intent.mjs",
-      "sha256": "8cbdb522d8c5955a44e84aad99e17684f08d73db2fe2fb702a5bd58f2b14ec59"
+      "sha256": "26ab9fbb94e2848fddd00f10f98387101ffe88b8b2ad9dc4ca68fe40a7814798"
     },
     {
       "rel": ".agents/scripts/fill-intent.test.mjs",
-      "sha256": "50284d22eb23a0e32c1eba3427e0bfc4c9d27d8066c64b48d2b71366b44710eb"
+      "sha256": "6a40b1fec7fb9ae77680b4d49ee4af87dda5192b0df565f529bda34cb2dc222b"
     },
     {
       "rel": ".agents/scripts/fill-plan.mjs",
-      "sha256": "565dc90504c34631fa1e9d564d44d1becc0bceff5bb98336f8691b901b666506"
+      "sha256": "76c455baffde0e5c5ebea1decb73b88e5475a6fc8b7051f0b9766ff9b6ad42a1"
     },
     {
       "rel": ".agents/scripts/fill-plan.test.mjs",
-      "sha256": "9f88037ca2b254291ded597d48878fb540d363c5abb143820cd7ddf26c2b3f0e"
+      "sha256": "d9e5e0768735d93018b150dacec492a2266135581ba73cec64bf8224e63a80b1"
     },
     {
       "rel": ".agents/scripts/fill-spec.mjs",
@@ -166,7 +178,7 @@
     },
     {
       "rel": ".agents/scripts/fill-spec.test.mjs",
-      "sha256": "10661fad4ba47c36395d7a127215181d0afe015d90bdcb93bfe2cd5ace2249ca"
+      "sha256": "8afadcf05bdb4b2af487f35a30b78d05d2104ac98f2fb6bb0402b6eff90d9655"
     },
     {
       "rel": ".agents/scripts/gate-checklist.mjs",
@@ -225,6 +237,10 @@
       "sha256": "e6ba0dd09a6e32b5b8bd4735f4ab5439639b43422b923a2e2aa8af9571f34a2f"
     },
     {
+      "rel": ".agents/scripts/solidify-task.mjs`",
+      "sha256": "fe07b8fac298207df2866ccd5f1949cc388ae84308e787f84aca1a0a9c533b7a"
+    },
+    {
       "rel": ".agents/scripts/source-sync-check.mjs",
       "sha256": "e041af858a249cfee04962fdb5646f342d48b6188aa67257f044c120a17db51c"
     },
@@ -234,7 +250,11 @@
     },
     {
       "rel": ".agents/scripts/stage-gates.mjs",
-      "sha256": "3048d14acc7f79e1fa4a6f2c21c631ece80031da4398c19dbbd8e60476449064"
+      "sha256": "58704152455ea6ac5fa24aefcc2e2b76c396d2a8e8f52e3c8a2c90bdc8ce566b"
+    },
+    {
+      "rel": ".agents/scripts/trust-mode.mjs",
+      "sha256": "5800b52af787d6b3fd9a8ea314b36466e19a3adc90f70e93c5054cd530c68bff"
     },
     {
       "rel": ".agents/scripts/verify-wiki-consistency.mjs",
@@ -306,7 +326,7 @@
     },
     {
       "rel": ".agents/workflows/pipeline-closing.md",
-      "sha256": "f99d49c4c22d53877b9ab5d607503ef48a75547b1b302605fdde33ce3ff40020"
+      "sha256": "0e9fe17fe9e1450967c07a9866608ee8f211bf249d35b1e881eab930119f7e16"
     },
     {
       "rel": ".agents/workflows/source-sync-repair.md",
@@ -326,7 +346,7 @@
     },
     {
       "rel": ".githooks/pre-commit",
-      "sha256": "9e471ae976225b10649c1f28fc19f5da33b20e615b09ea227fe8bf11d5f0a999"
+      "sha256": "420bf548282660a4dbf003aebc0fe5095c387a006e01f5efc03454291a39011c"
     },
     {
       "rel": ".githooks/pre-merge-commit",
@@ -334,7 +354,7 @@
     },
     {
       "rel": ".githooks/pre-push",
-      "sha256": "58b69659bb2968aa76e143bcc06ec9b9d6d6f903a5a98b6839619e8d688934f3"
+      "sha256": "4ca58f2390629cdfda402a0ecd96056e4d73199c4b63de9d7fc82b21ed23d52a"
     },
     {
       "rel": ".zcode/agents/implementer.md",
@@ -380,7 +400,7 @@
     },
     {
       "rel": "AGENTS.md",
-      "sha256": "186f7cec0fc6ebbb77baa97872cfa3f9e92a93f2e892eb425b4f240f2463db8a"
+      "sha256": "d888897b043928a4e1e02a087eb59d7b57676fd5adb0089f2f9b7babc752c5f8"
     },
     {
       "rel": "wiki/知识沉淀总览.html",
@@ -400,7 +420,7 @@
     },
     {
       "rel": "workflow/intents/_TEMPLATE.md",
-      "sha256": "193ab0b2bf5c3ea9112dec1530bcef23ff995d7d6060eb5699a9fe643a68236c"
+      "sha256": "d93f0fea337a60ac822c35e2efbd322a35f1303baf1afb88a9c153ced2f7443a"
     },
     {
       "rel": "workflow/papercuts.md",

@@ -10,7 +10,7 @@
 
 1. **新需求 / 功能**：先立 `workflow/intents/` intent（复制 `_TEMPLATE.md`），对话内与用户确认后开工。
 2. **修复类任务**：先查 `workflow/incidents/` 同类历史；L1 以上立 incident（修复中即 intent 等价入口，L2/L3 与 spec/plan 同名配对）。
-3. **级别判断**（就高不就低）：实现级（页面 / 交互 / 样式）→ L1；改「规则 / 契约」→ L2；改「数据与运行时结构」（schema / 迁移 SQL / DI 链 / 认证与中间件管线）→ L3。细则见 `.agents/commands/new-task.md`。
+3. **级别判断与风险泳道**（就高不就低）：L0 例行；L1 实现级；L2 规则/契约；L3 数据与运行时结构。L0/L1 协作道（轻确认+异步审计）；L2/L3 防御道（同步确认门：spec/plan 确认后方可动手，L3 加独立复核）。见 `.agents/commands/new-task.md`。
 
 ### 阶段路由
 
@@ -22,11 +22,11 @@
 
 ### 门禁与提交
 
-- `.githooks/`（经 `core.hooksPath` 挂载，本地 clone 后执行 `git config core.hooksPath .githooks`）：pre-commit（闭环配对 / wiki 台账 / 规则面预算 / 双源一致性 / managed 台账快检 / 敏感信息扫描与条件构建）、pre-push（闭环断档扫描）、commit-msg、post-commit、pre-merge-commit。
-- **`git commit` / `git merge` / `git push` 三处一律禁 `--no-verify`**——被拦说明产出不合规，按提示修完原路重试。
+- `.githooks/`（经 `core.hooksPath` 挂载，本地 clone 后执行 `git config core.hooksPath .githooks`）：pre-commit（闭环配对 / 泳道完整性 / wiki 台账 / 规则面预算 / 双源一致性 / managed 台账快检 / 敏感信息扫描与条件构建）、pre-push（闭环断档扫描）、commit-msg、post-commit、pre-merge-commit。
+- **`git commit` / `git merge` / `git push` 三处一律禁 `--no-verify`**——本地钩子可被绕过，但 CI 端的「机器门」会复跑所有治理校验（check-loop 等）。任何绕过本地门禁的行为都会在 PR 阶段被服务端拦截并标红，导致合并失败，此操作纯属浪费时间。
 - 项目专属门禁挂 `.agents/hooks/local-pre-commit`。装户五条硬规则（配对、验收、确认留痕、敏感信息、双源台账）与 `audit` 档见 `workflow/README.md`「硬规则」。
 - 提交遵循 Conventional Commits 中文（feat / fix / docs / style / refactor / perf）；L1+ 入口文档 / spec / plan 随代码同一提交；确认（approved）后立即 `docs(*)` 单独提交留痕。
-- **确认门（2026-09-27 起）**：intent/spec/plan 的 approved/done 与 incident 的 fixed/closed（2026-09-28 起，open→fixed / fixed→closed 两跳、无单跳）唯一入口 = `node .agents/scripts/confirm-doc.mjs <path>`，放弃态走显式 `--to superseded|cancelled`（cancelled 自 draft/approved/open/fixed；superseded 自 approved/done/fixed/closed——四终态同样内容绑定），两形态：① 用户终端亲手运行键入「可以」（TTY，AI 会话内被拒）；② **对话委托代录**——用户在对话内明确确认后，AI 跑 `confirm-doc.mjs <path> --delegated "<用户原话>"` 逐件代录（一次一份，「逐件确认」口径——多份并录被拒），台账如实记 `source: chat-delegated` + 原话供对质，永不伪装 TTY 行（check-loop 15 指纹+台账对账拦截，与 source 无关）。
+- **确认门（2026-09-27 起）**：intent/spec/plan 的 approved/done 与 incident 的 fixed/closed（两跳、无单跳）唯一入口 = `node .agents/scripts/confirm-doc.mjs <path>`，放弃态走显式 `--to superseded|cancelled`（合法前态见脚本提示；四终态同样内容绑定），两形态：① 用户终端亲手运行键入「可以」（TTY，AI 会话内被拒）；② **对话委托代录**——用户在对话内明确确认后，AI 跑 `confirm-doc.mjs <path> --delegated "<用户原话>"` 逐件代录（默认一次一份，多份并录被拒），台账如实记 `source: chat-delegated` + 原话供对质，永不伪装 TTY 行（check-loop 15 指纹+台账对账拦截，与 source 无关）；L0/L1 协作道可 `--batch` 多份一次代录（台账 `brief:true`，15 并录告警豁免；L2/L3 仍逐份）。
 
 ### 检索、看板与量化
 
@@ -50,7 +50,7 @@
 - **构建 / 测试 / 类型检查命令**（静态门，各阶段命令引用此处口径）：构建 = 无（纯 JS 脚手架包，node 直跑）；测试 = `npm test`（跑全部套件）；类型检查 = 无（纯 JS）
 - **引擎双源纪律（本仓库特有）**：本仓库既是包源又是装户——引擎改动一律改 `templates/`（包源），随后 `node bin/flow-kit.mjs sync` 更新 managed 装副本；owned 文件（AGENTS.md / workflow 模板等）sync 不动，须手动同步装副本（见 incidents/2026-09-25-wf-runtime 复盘）。`.agents/` 直改 managed 文件会被 doctor 台账漂移告警
 - **跨宿主适配层同步（B-b 方案）**：薄适配正文对齐 `templates/_agents/{commands,roles}`，frontmatter 保留宿主字段。改权威源后跑 `node bin/flow-kit.mjs sync-hosts --apply`。详见 `.agents/commands/sync-hosts.md`。
-- **文档闭环填空工具**：起草 intent / spec / plan 时先跑 `node .agents/scripts/fill-{intent,spec,plan}.mjs` 拿结构化草稿（frontmatter 5 字段 + 7/5/4 节标题 + 模板句），AI 据此填实——机器保证模板与节标题不出错，AI 专注于内容本身；详见 `.agents/commands/plan.md` / `design.md` 嵌入步骤
+- **文档闭环填空工具**：起草 intent / spec / plan 时先跑 `node .agents/scripts/fill-{intent,spec,plan}.mjs` 拿结构化草稿（frontmatter 6 字段 + 7/5/4 节标题 + 模板句），AI 据此填实——机器保证模板与节标题不出错，AI 专注于内容本身；详见 `.agents/commands/plan.md` / `design.md` 嵌入步骤
 - **运行时环境**（端口 / 进程 / 终端差异）：`.agents/notes/runtime-env.md`
 - **目录级规则**：如 `backend/AGENTS.md`、`frontend/AGENTS.md`（如有）——目录级约定不回填本文件
 - **权限与提交验证配置**：`.agents/settings.json`（allow / deny / ask）、`.agents/hooks/commit-check.config.json`（条件构建 / 质量检测命令与密钥白名单——质量检测只放秒级确定性检查（lint / 类型检查 / vet），测试不放提交门，关单在 test 阶段门）
