@@ -98,7 +98,7 @@
 // 已确认状态: approved/done=已批或闭环; superseded/cancelled=放弃留档(仍算确认,不挡 push); incident: fixed/closed
 // 用法:node .agents/scripts/check-loop.mjs [--rev <sha>] [--hardening]   （或经 check-loop.sh shim）
 //   --hardening：追加「加固门」（experiment 泳道 exploring 任务入 main 的转正门槛，hard-block；
-//     .githooks/pre-push 对 remote=refs/heads/main 的推送传入；不占 1-19 编号，gate-checklist 登记表
+//     .githooks/pre-push 对 remote=refs/heads/main 的推送传入；不占 1-20 编号，gate-checklist 登记表
 //     按号配对面不变，门体说明见加固门段注释）
 // 测试:node templates/_agents/scripts/check-loop.test.mjs（fixture 注入 CHECK_LOOP_ROOT）
 import fs from 'node:fs';
@@ -111,6 +111,7 @@ import { fileURLToPath } from 'node:url';
 import { loadEnums } from './workflow-enums.mjs';
 import { runCheck16 } from './check-metric-claims.mjs';
 import { auditEnabled, loadKitPolicy } from './policy.mjs';
+import { laneOfEntry } from './stage-gates.mjs';
 // MARK_RE：incident 留痕形态的单源（第七轮复核 N3——此前 check-loop 内联复制一份同口径字面量，
 // 两处靠注释与人工同步；改为复用 stage-gates.mjs 的导出，从结构上消除漂移可能）
 import { MARK_RE, approvedTraceHit } from './stage-gates.mjs';
@@ -285,13 +286,14 @@ for (const intent of docFiles('intents')) {
   if (lvl !== 'L0' && !fs.existsSync(path.join(ROOT, WF, 'plans', base))) {
     blockers.push(`- [配对断裂] intent 缺 plan:${base}（应在 ${WF}/plans/ 下同名）`);
   }
-  // 风险泳道一致性：L0/L1（级别或 risk_level 任一判定）勾选触达红线 = 自认触及规则/契约或数据/运行时
-  // 结构面——就高不就低，协作道不受理 → hard 判低，须升级 L2/L3 并补同名 spec
-  if (['L0', 'L1'].includes(lvl) || ['L0', 'L1'].includes(risk)) {
+  // 风险泳道一致性（2026-10-02 caliber-convergence 起单源 laneOfEntry·方案 C 分歧双严）：非 high
+  // （low 或 suspect——级别/risk_level 缺失、非法、分歧）勾选触达红线 = 自认触及规则/契约或数据/运行时
+  // 结构面——就高不就低，协作道不受理 → hard 判低，须对齐两字段至 L2/L3 并补同名 spec
+  if (laneOfEntry(lvl, risk, kitPolicy.riskLevelSince, fmGet(intent, '日期')) !== 'high') {
     const redlineTouched = (linesOf(intent) || [])
       .some((l) => /^- \[x\]/.test(l) && /(\$\\rightarrow\$|→)\s*级别|级别至少\s*L[23]/.test(l));
     if (redlineTouched) {
-      blockers.push(`- [红线判低] ${base} 级别/风险泳道为 ${[lvl, risk].filter(Boolean).join('/')} 但触达红线已勾选（规则/契约或 schema/结构面）——协作道不受理 STOP 级改动：就高不就低，先把「级别/risk_level」升到 L2/L3 并补同名 spec`);
+      blockers.push(`- [红线判低] ${base} 级别/风险泳道为 ${[lvl, risk].filter(Boolean).join('/')} 但触达红线已勾选（规则/契约或 schema/结构面）——协作道不受理 STOP 级改动：就高不就低，把「级别」与「risk_level」两字段对齐到 L2/L3（fill-intent 双写口径）并补同名 spec`);
     }
   }
 }
@@ -338,12 +340,24 @@ for (const plan of docFiles('plans')) {
   //   「复制本模板为 YYYY-MM-DD-<主题>.md」），非未填占位符；真未填的占位（标题 `# INTENT — <主题>`、
   //   `日期: YYYY-MM-DD`）不含 .md，仍照拦（2026-09-25-wf-runtime incident 记录的误报口径）
   const isNamingConv = (line) => line.includes('<主题>') && /\.md/.test(line);
+  // 样例引用豁免（2026-10-02 caliber-convergence 假阳性消除，先例=检查 18 行尾归一）：命中位于行内代码
+  // （反引号包裹）或围栏代码块内 = 引用样例而非未填占位符，不报；正文裸占位符照报——真占位符均为
+  // 裸文本（模板正文无反引号包裹），检测面不缩。
+  const stripSamples = (lines) => {
+    let inFence = false;
+    return lines.map((line) => {
+      if (/^\s*(```|~~~)/.test(line)) { inFence = !inFence; return ''; }
+      if (inFence) return '';
+      return line.replace(/`[^`]*`/g, '');
+    });
+  };
   const groups = new Map(); // file -> [ "行号:内容" ]（首现序）
   for (const sub of DOC_DIRS) {
     for (const f of docFiles(sub)) {
+      const lines = linesOf(f) || [];
       const hits = [];
-      (linesOf(f) || []).forEach((line, i) => {
-        if (phRe.test(line) && !boilerRe.test(line) && !isNamingConv(line)) hits.push(`${i + 1}:${line}`);
+      stripSamples(lines).forEach((line, i) => {
+        if (phRe.test(line) && !boilerRe.test(line) && !isNamingConv(line)) hits.push(`${i + 1}:${lines[i]}`);
       });
       if (hits.length) groups.set(f, hits);
     }
@@ -1036,7 +1050,7 @@ runCheck16({ ROOT, ENUMS, docFiles, fmGet, inSet, isTracked, linesOf, readdirOrN
         const body = (linesOf(iabs) || []).join('\n');
         const d19 = fmGet(iabs, '日期') || fmGet(iabs, '发现');
         const storLegacy = /^流程: legacy/m.test(body) || (/^\d{4}-\d{2}-\d{2}$/.test(d19) && d19 < kitPolicy.confirmDocsEffective);
-        return { ...r, level: lvl19, entryDraft: st19 === 'draft', storageLegacy: storLegacy };
+        return { ...r, level: lvl19, risk: fmGet(iabs, 'risk_level'), date: d19, entryDraft: st19 === 'draft', storageLegacy: storLegacy };
       }
       const crel = `${WF}/incidents/${base}.md`;
       const cabs = path.join(ROOT, crel);
@@ -1060,10 +1074,11 @@ runCheck16({ ROOT, ENUMS, docFiles, fmGet, inSet, isTracked, linesOf, readdirOrN
         const rel = path.relative(ROOT, abs).split(path.sep).join('/');
         const ent = entryConfirmed19(base);
         if (!ent.ok) {
-          // 协作道异步审计豁免（2026-09-30 hybrid-governance-risk-lanes）：入口 intent 仍为 draft 且
-          // 级别 L0/L1 → 「先动手后确认」是泳道语义，不告警；approved/done 却无台账行仍照报（防手改
-          // 状态冒充确认，与交叉一致性口径一致）；incident 入口不豁免（过目留痕本就轻量）。
-          if (ent.entryDraft && (ent.level === 'L0' || ent.level === 'L1')) continue;
+          // 协作道异步审计豁免（2026-09-30 hybrid-governance-risk-lanes；2026-10-02 caliber-convergence
+          // 起单源 laneOfEntry·方案 C）：入口 intent 仍为 draft 且泳道 low（两字段一致 L0/L1）→「先动手后
+          // 确认」是泳道语义，不告警；suspect（缺失/非法/分歧）不豁免；approved/done 却无台账行仍照报
+          // （防手改状态冒充确认，与交叉一致性口径同）；incident 入口不豁免（过目留痕本就轻量）。
+          if (ent.entryDraft && laneOfEntry(ent.level, ent.risk, kitPolicy.riskLevelSince, ent.date) === 'low') continue;
           warnings.push(`- [WARN 逐阶段] ${rel} 起草先于入口确认（${ent.why}）`); continue;
         }
         // 库存量形态（标记 / 日期早于生效日）短路 level 校验与 spec 档（与起草门同口径，N1）
@@ -1122,7 +1137,8 @@ if (HARDENING) {
     const st = fmGet(intent, '状态');
     if (st === 'superseded' || st === 'cancelled') continue; // 放弃态：探索作废留档，不加固
     const lvl = fmGet(intent, '级别');
-    const lane = /^L[0-3]$/.test(lvl) ? lvl : fmGet(intent, 'risk_level');
+    // 泳道单源（2026-10-02 caliber-convergence 方案 C）：suspect（缺失/非法/分歧）按 high——L2/L3 另须 spec
+    const lane = laneOfEntry(lvl, fmGet(intent, 'risk_level'), kitPolicy.riskLevelSince, fmGet(intent, '日期'));
     if (st !== 'approved' && st !== 'done') {
       blockers.push(`- [加固未过] exploring 任务入 main 须先收口:${base} intent 状态仍为『${st || '缺失'}』——先确认至 approved/done 并补齐同名 spec+plan，或显式放弃（superseded/cancelled）`);
       continue;
@@ -1134,11 +1150,11 @@ if (HARDENING) {
     } else if (!stOkDoc(planSt)) {
       blockers.push(`- [加固未过] exploring 任务入 main 的 plan 未收口:${base}（plan 状态『${planSt || '缺失'}』须为 approved/done）`);
     }
-    if (lane === 'L2' || lane === 'L3') {
+    if (lane === 'high') {
       const specAbs = path.join(ROOT, WF, 'specs', base);
       const specSt = fs.existsSync(specAbs) ? fmGet(specAbs, '状态') : '';
       if (!fs.existsSync(specAbs)) {
-        blockers.push(`- [加固未过] exploring 任务入 main 缺同名 spec:${base}（级别 ${lane}，应在 ${WF}/specs/ 下同名）`);
+        blockers.push(`- [加固未过] exploring 任务入 main 缺同名 spec:${base}（级别 ${lvl}/risk ${fmGet(intent, 'risk_level') || '缺失'}，应在 ${WF}/specs/ 下同名）`);
       } else if (!stOkDoc(specSt)) {
         blockers.push(`- [加固未过] exploring 任务入 main 的 spec 未收口:${base}（spec 状态『${specSt || '缺失'}』须为 approved/done）`);
       }

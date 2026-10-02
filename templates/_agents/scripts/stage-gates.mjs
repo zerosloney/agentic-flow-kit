@@ -119,7 +119,7 @@ export function entryConfirmed(root, base) {
   const intentAbs = path.join(root, intentRel);
   if (fs.existsSync(intentAbs)) {
     const r = judgeDoc(root, intentAbs, intentRel, ENTRY_STATUSES);
-    return { ...r, kind: 'intent', rel: intentRel, level: readFm(intentAbs, '级别'), risk: readFm(intentAbs, 'risk_level'), storageLegacy: entryStorageLegacy(root, intentAbs) };
+    return { ...r, kind: 'intent', rel: intentRel, level: readFm(intentAbs, '级别'), risk: readFm(intentAbs, 'risk_level'), date: readFm(intentAbs, '日期'), storageLegacy: entryStorageLegacy(root, intentAbs) };
   }
   const incRel = `workflow/incidents/${base}.md`;
   const incAbs = path.join(root, incRel);
@@ -143,15 +143,38 @@ export function specConfirmed(root, base) {
   return judgeDoc(root, abs, rel, ENTRY_STATUSES);
 }
 
+// laneOfEntry / laneOfDoc：泳道单源取法（2026-10-02 caliber-convergence 方案 C「分歧双严」）
+// risk_level 为 intent 专属协议字段（fill-intent 双写），生效锚 policy.riskLevelSince：
+//   级别非法/缺失 → suspect（fail-closed 就严）；
+//   日期 ≥ 锚（双字段协议期）：risk 合法且与级别一致 → 按值判 low/high，否则（缺失/非法/分歧）→ suspect；
+//   日期 < 锚（协议前存量）：两值俱在且分歧 → suspect，否则按级别单字段判（risk 缺席不惩罚——字段协议尚不存在）。
+// suspect 消费规则（双严）：红线类检查按 low 执行（拦红线）；豁免类门（起草豁免/--batch/--auto/加固门
+// lane/泳道豁免/逐阶段深度）按 high 执行（不豁免）。取代原三处并存语义（任一低即低 / 级别优先回落 / 仅级别）。
+export function laneOfEntry(level, risk, riskLevelSince, date) {
+  const L = /^L[0-3]$/.test(level || '') ? level : '';
+  if (!L) return 'suspect';
+  const R = /^L[0-3]$/.test(risk || '') ? risk : '';
+  const dualProtocol = !!riskLevelSince && /^\d{4}-\d{2}-\d{2}$/.test(date || '') && date >= riskLevelSince;
+  if (dualProtocol) return (R && R === L) ? ((L === 'L0' || L === 'L1') ? 'low' : 'high') : 'suspect';
+  if (R && R !== L) return 'suspect';
+  return (L === 'L0' || L === 'L1') ? 'low' : 'high';
+}
+
+// laneOfDoc：非 intent 件（spec/plan/incident——级别单字段协议）：合法按值判，非法 → suspect。
+export function laneOfDoc(level) {
+  if (!/^L[0-3]$/.test(level || '')) return 'suspect';
+  return (level === 'L0' || level === 'L1') ? 'low' : 'high';
+}
+
 // draftGateFor：起草门总判（kind = 'spec' | 'plan'，fill 工具与 confirm-doc 逐阶段门共用）
 export function draftGateFor(kind, root, base) {
   const entry = entryConfirmed(root, base);
   if (!entry.ok) {
-    // 探索泳道豁免（2026-09-30 hybrid-governance-explore-hardening，口径见头部注释）：L0/L1 draft intent
-    // 放行起草——「先动手后确认」；泳道取级别优先、缺失/非法回落 risk_level（与 fill-intent 双写兼容，
-    // 级别合法但为 L2/L3 时不回落——fail-closed 就严）。
-    const lane = /^L[0-3]$/.test(entry.level || '') ? entry.level : entry.risk;
-    if (entry.kind === 'intent' && entry.status === 'draft' && (lane === 'L0' || lane === 'L1')) {
+    // 探索泳道豁免（2026-09-30 hybrid-governance-explore-hardening）：L0/L1 draft intent 放行起草
+    // ——「先动手后确认」；泳道取法自 2026-10-02 caliber-convergence 起单源 laneOfEntry（方案 C 分歧
+    // 双严：suspect 不豁免——级别/risk_level 缺失、非法或分歧均按防御道走入口确认）。
+    const lane = laneOfEntry(entry.level, entry.risk, loadKitPolicy(root).riskLevelSince, entry.date);
+    if (entry.kind === 'intent' && entry.status === 'draft' && lane === 'low') {
       return { ok: true, entry, laneBypass: true };
     }
     return {

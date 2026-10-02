@@ -39,7 +39,8 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { confirmGateFor, doneGateFor } from './stage-gates.mjs';
+import { confirmGateFor, doneGateFor, laneOfEntry, laneOfDoc } from './stage-gates.mjs';
+import { loadKitPolicy } from './policy.mjs';
 
 // computeFingerprint(text)：CRLF 归一 → 剔指纹行 → sha256 hex（64 位）
 export function computeFingerprint(text) {
@@ -267,6 +268,16 @@ if (isMain) {
     }
     const target = resolveTransition(st, toTarget);
     const lvl = fmLevel(nl); // 级别（AI 自治门 / 协作道批量门共用；缺 = ''）
+    // 泳道单源（2026-10-02 caliber-convergence 方案 C 分歧双严）：intent 双字段（级别+risk_level，协议
+    // 锚 policy.riskLevelSince）三态判定；其余件级别单字段。suspect（缺失/非法/分歧）按 high——--auto
+    // 与 --batch 均不受理，须先两字段对齐（fill-intent 双写口径）。
+    const fmOf = (key) => {
+      const m = nl.find((l) => l.startsWith(`${key}:`));
+      return m ? m.slice(key.length + 1).trim() : '';
+    };
+    const lane = doc.includes('/intents/')
+      ? laneOfEntry(lvl, fmOf('risk_level'), loadKitPolicy(root).riskLevelSince, fmOf('日期'))
+      : laneOfDoc(lvl);
     if (!target) {
       console.error(`跳过 ${doc}：当前状态「${st || '缺失'}」无合法跳转（前向：docs draft→approved / approved→done；incidents open→fixed / fixed→closed；放弃 --to：cancelled 自 draft/approved/open/fixed，superseded 自 approved/done/fixed/closed）`);
       continue;
@@ -299,12 +310,12 @@ if (isMain) {
     // ② Level 1：仅 draft→approved；Level 2：draft→approved 与 approved→done；
     // ③ incidents 永不自治（open→fixed/fixed→closed 必须人工）。
     if (autoMode) {
-      const isLowLevel = lvl === 'L0' || lvl === 'L1';
+      const isLowLevel = lane === 'low';
       const stageAllowed = trustConfig.level === 2
         ? (target === 'approved' || target === 'done')
         : target === 'approved';
       if (!isLowLevel || !stageAllowed || doc.startsWith('workflow/incidents/')) {
-        console.error(`❌ ${doc} 未过 AI 自治门（级别「${lvl || '缺失'}」/ 目标态「${target}」/ 类型）：Level ${trustConfig.level} 仅授权 L0/L1 的 ${trustConfig.level === 2 ? 'approved/done' : 'approved'} 且不含 incidents`);
+        console.error(`❌ ${doc} 未过 AI 自治门（级别「${lvl || '缺失'}」/ 泳道「${lane}」/ 目标态「${target}」/ 类型）：Level ${trustConfig.level} 仅授权泳道 low（intent 两字段一致 L0/L1；suspect 须先对齐「级别/risk_level」）的 ${trustConfig.level === 2 ? 'approved/done' : 'approved'} 且不含 incidents`);
         refused++;
         continue;
       }
@@ -320,11 +331,12 @@ if (isMain) {
       continue;
     }
     if (delegated) {
-      // 协作道门（2026-09-30 hybrid-governance-risk-lanes）：--batch 批量仅受理 L0/L1——L2/L3（或缺级别，
-      // fail-closed）逐份拒绝落账；不带 --batch 的单份代录不限级别（既有口径不变）。
-      const low = lvl === 'L0' || lvl === 'L1';
+      // 协作道门（2026-09-30 hybrid-governance-risk-lanes；2026-10-02 caliber-convergence 起单源泳道）：
+      // --batch 批量仅受理泳道 low（intent 两字段一致 L0/L1；suspect 拒）——high/suspect 逐份拒绝落账；
+      // 不带 --batch 的单份代录不限级别（既有口径不变）。
+      const low = lane === 'low';
       if (batchMode && !low) {
-        console.error(`❌ ${doc} 级别「${lvl || '缺失'}」不在协作道（L0/L1）——--batch 批量代录仅限 L0/L1，L2/L3 防御道须逐份确认（本份未落账、未写盘）`);
+        console.error(`❌ ${doc} 泳道「${lane}」（级别「${lvl || '缺失'}」）不在协作道——--batch 批量代录仅限两字段一致的 L0/L1；suspect（级别/risk_level 缺失、非法或分歧）须先对齐两字段，L2/L3 防御道须逐份确认（本份未落账、未写盘）`);
         refused++;
         continue;
       }

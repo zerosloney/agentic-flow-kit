@@ -5,10 +5,13 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（2）
+## 活跃（5）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
+| INTENT | L2 | approved | 2026-10-02 | pipeline | caliber-convergence（口径收敛批） | ☑0/5 |
+| PLAN | L2 | approved | 2026-10-02 | pipeline | caliber-convergence（口径收敛批） | — |
+| SPEC | L2 | approved | 2026-10-02 | pipeline | caliber-convergence（口径收敛批） | — |
 | INCIDENT | L1 | open | 2026-09-27 | pipeline | 2026-09-27 P2 池批二（看板/wiki/宿主维护面收口） | — |
 | INCIDENT | L1 | open | 2026-09-25 | pipeline | 2026-09-25 doctor owned 漂移 WARN 升级 FAIL | — |
 

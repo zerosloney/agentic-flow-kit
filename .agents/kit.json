@@ -22,7 +22,7 @@
     },
     {
       "rel": ".agents/commands/build.md",
-      "sha256": "886289e81161109354d02bf00ca26ef3896dae8d68ad62fd9472785d7d8da4ea"
+      "sha256": "7223ae9cf520f68a6acc052e240937ac4df0eb700104ceb6612b86dfb242b281"
     },
     {
       "rel": ".agents/commands/deploy.md",
@@ -30,7 +30,7 @@
     },
     {
       "rel": ".agents/commands/design.md",
-      "sha256": "7d9bbbf0cd2a01be13773ffb2b4e493c961b376e80d261d34bafcae7687e9528"
+      "sha256": "9ec941d16bdf1564ebe5a7b37bea1274a26fab755b1bb2490c120687c875ee28"
     },
     {
       "rel": ".agents/commands/gate-checklist.md",
@@ -46,7 +46,7 @@
     },
     {
       "rel": ".agents/commands/plan.md",
-      "sha256": "1420c2cb97148049b9702a7d55f472de370887c86e4e24808c1369abf1b34205"
+      "sha256": "f55798f2fd3d008c05f5cd62f9861fe46d53ddc617fcd1199ad7913f1127c041"
     },
     {
       "rel": ".agents/commands/review.md",
@@ -58,7 +58,7 @@
     },
     {
       "rel": ".agents/commands/sync-hosts.md",
-      "sha256": "67233036986652a43702a18a7f5c6cf0976c25b502f650e8e162f0e5851a7981"
+      "sha256": "9d67980b0a144d9d07bdb2e9019ad1a3c2e503e01e19816686a1b98ed0885f3f"
     },
     {
       "rel": ".agents/commands/test.md",
@@ -106,11 +106,11 @@
     },
     {
       "rel": ".agents/scripts/check-lane-surface.mjs",
-      "sha256": "8297596e97bba96c939cdc8969ac77bf0065d41fcc81ecb3302b1419b0411ec3"
+      "sha256": "98b6ee0c2006c233f2b04b54756af5b9cbabef904f011e351035db1504e1f035"
     },
     {
       "rel": ".agents/scripts/check-lane-surface.test.mjs",
-      "sha256": "594873bb3a0cc497088dffa2ac63d442d1cbab70f72eda5d4f9ea07a18af0b76"
+      "sha256": "29ffd3a1a4996b74d25a3fd31140a92f2e12c452f8101cd21cf8c87584c12ad2"
     },
     {
       "rel": ".agents/scripts/check-ledger.mjs",
@@ -126,7 +126,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "6d9e2e0bda9cbc5d15eda3fee0c8b486fb1ed2511e0b5cc883d79ebe54dec6b8"
+      "sha256": "4015710fff6c38b51bd25f72f581420474780fa9b4dcf2888b9ec97b704ba43e"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -134,7 +134,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "e2bfce8218fac68bff41fe5b84f9493d40b30b76dab556e70f4b295a9cb2d411"
+      "sha256": "c3067e1e4a9fdf059daafde302c334c7bcb3faf6a44d6dc3c9e18c1afbff0a9d"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -146,7 +146,7 @@
     },
     {
       "rel": ".agents/scripts/confirm-doc.mjs",
-      "sha256": "d02268eda4a06b3a040ce70286ce8b9ac527594cfaf4cb908875f3d4ae7c6bbd"
+      "sha256": "12d5306461d4b93474511c9a1189617237817ddba005c5d9334f2a55517c1c42"
     },
     {
       "rel": ".agents/scripts/confirm-doc.test.mjs",
@@ -162,7 +162,7 @@
     },
     {
       "rel": ".agents/scripts/fill-intent.mjs",
-      "sha256": "26ab9fbb94e2848fddd00f10f98387101ffe88b8b2ad9dc4ca68fe40a7814798"
+      "sha256": "8bd0d59c1b4628e72ecf73a51765307b0db5d076c128a09f339002a04c440a4f"
     },
     {
       "rel": ".agents/scripts/fill-intent.test.mjs",
@@ -174,7 +174,7 @@
     },
     {
       "rel": ".agents/scripts/fill-plan.test.mjs",
-      "sha256": "d9e5e0768735d93018b150dacec492a2266135581ba73cec64bf8224e63a80b1"
+      "sha256": "6ccd6a922ebb3c6c260bb6afba93068a7a4b92d5a83245a8aeca1ed35d1ca1e5"
     },
     {
       "rel": ".agents/scripts/fill-spec.mjs",
@@ -234,7 +234,7 @@
     },
     {
       "rel": ".agents/scripts/policy.mjs",
-      "sha256": "e1d9d36e3fe41abb429cc6f6e37d325e7a4b5043a0a5de15e4b037b87a955c22"
+      "sha256": "f5c49aeb5c3cc10b8a1415fd3b8482d4a018385cd524800c4f5e45a9ead4e9b1"
     },
     {
       "rel": ".agents/scripts/pre-push.test.mjs",
@@ -250,7 +250,7 @@
     },
     {
       "rel": ".agents/scripts/solidify-task.test.mjs",
-      "sha256": "39c0616f95eba6f33fe95fc903ad681dbb47b6b68d5f84231a36420c46724206"
+      "sha256": "0d9682d97b6061c2eb5eec3f0ba39f0a74fff60f43d3ded610ab5e2765234744"
     },
     {
       "rel": ".agents/scripts/source-sync-check.mjs",
@@ -262,7 +262,7 @@
     },
     {
       "rel": ".agents/scripts/stage-gates.mjs",
-      "sha256": "58704152455ea6ac5fa24aefcc2e2b76c396d2a8e8f52e3c8a2c90bdc8ce566b"
+      "sha256": "dbeae476ac89b37e09ae362afbfef6edf2a7824bcb2fdfc88e501d51e450e396"
     },
     {
       "rel": ".agents/scripts/trust-mode.mjs",
@@ -416,7 +416,7 @@
     },
     {
       "rel": "AGENTS.md",
-      "sha256": "f327d75195c8b82ef5bcffee161ceb091664730403c5ad73f39e31926d640dbd"
+      "sha256": "f8ebdb3613ee7a4e6c876f95c9588b46bf7899af148eccace3a1306258f4572f"
     },
     {
       "rel": "wiki/知识沉淀总览.html",
@@ -444,7 +444,7 @@
     },
     {
       "rel": "workflow/plans/_TEMPLATE.md",
-      "sha256": "ffe9824567c40d222aab9e3c9f122559bef90c4eee61ab8f88240fce5624fd62"
+      "sha256": "e98cbe5dd8518b6697bfb5575655ed70ddfb8dd9dca420c6a3aeceb59d84f77d"
     },
     {
       "rel": "workflow/regression-checklist.md",

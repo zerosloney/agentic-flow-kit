@@ -133,12 +133,34 @@ const FM_L0_NEW = '状态: draft\n级别: L0\n日期: 2026-10-01\n模块: ui';
   check('incident 等价：fixed L1 算活跃低级入口 → 阻断',
     r.code === 1 && r.out.includes('[触达面判低]') && r.out.includes('incidents/2026-09-30-inc.md'), r.out);
 }
-// --- 级别缺失：按低级计（不能自证 L2+ 即拦）---
+// --- 级别缺失：suspect 拦截（方案 C：不能自证 high 即拦，消息给两字段对齐指引）---
 {
   const d = mkfix();
   base(d, { level: '', status: 'draft' });
   const r = run(d, { staged: ['templates/t.md'] });
-  check('级别缺失的活跃入口按低级计 → 阻断且消息含「级别缺失」', r.code === 1 && r.out.includes('级别缺失'), r.out);
+  check('级别缺失 → 泳道 suspect 拦断且消息含两字段对齐指引',
+    r.code === 1 && r.out.includes('suspect') && r.out.includes('对齐'), r.out);
+}
+// --- 方案 C：级别与 risk_level 分歧 → suspect 拦截（两字段协议期）---
+{
+  const d = mkfix();
+  w(d, '.agents/lane-surfaces.txt', '^templates/\n');
+  w(d, '.agents/kit.json', JSON.stringify({ policyVersion: 2 }));
+  w(d, 'workflow/intents/2026-10-02-divergent.md',
+    intent('x', '状态: approved\n级别: L2\nrisk_level: L1\n日期: 2026-10-02\n模块: pipeline'));
+  const r = run(d, { staged: ['templates/t.md'] });
+  check('分歧（L2/L1）→ suspect 拦断（不作豁免依据）',
+    r.code === 1 && r.out.includes('suspect') && r.out.includes('2026-10-02-divergent'), r.out);
+}
+// --- 方案 C：两字段一致 high → 豁免（对照）---
+{
+  const d = mkfix();
+  w(d, '.agents/lane-surfaces.txt', '^templates/\n');
+  w(d, '.agents/kit.json', JSON.stringify({ policyVersion: 2 }));
+  w(d, 'workflow/intents/2026-10-02-aligned.md',
+    intent('x', '状态: approved\n级别: L2\nrisk_level: L2\n日期: 2026-10-02\n模块: pipeline'));
+  const r = run(d, { staged: ['templates/t.md'] });
+  check('两字段一致 L2 → 豁免放行', r.code === 0 && !r.out.includes('触达面判低'), r.out);
 }
 // --- 平台边界：CRLF frontmatter ---
 {

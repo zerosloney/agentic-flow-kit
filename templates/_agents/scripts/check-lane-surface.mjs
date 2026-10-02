@@ -23,6 +23,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { laneOfEntry, laneOfDoc } from './stage-gates.mjs';
+import { loadKitPolicy } from './policy.mjs';
 
 const argv = process.argv.slice(2);
 const argOf = (k) => {
@@ -44,6 +46,8 @@ const STAGED = stagedArg
   : gitOut(ROOT, ['diff', '--cached', '--name-only', '--diff-filter=ACMR']).split(/\r?\n/).filter(Boolean);
 
 const isExperiment = /^experiment\//.test(BRANCH);
+// 泳道协议锚（单源 policy.mjs）：无 kit.json 的测试夹具回落 v1（无键=双字段协议从未生效，单字段判）
+const RISK_LEVEL_SINCE = loadKitPolicy(ROOT).riskLevelSince;
 
 // frontmatter 读取（CRLF 容忍；口径同 check-loop fmGet：--- 包夹、键行前缀匹配）
 const fmOf = (file) => {
@@ -88,7 +92,10 @@ const loadPatterns = () => {
   return pats;
 };
 
-// 活跃入口收集（incident≡intent 等价；日期键 intent=日期 / incident=发现）
+// 活跃入口收集（incident≡intent 等价；日期键 intent=日期 / incident=发现）。
+// 泳道单源（2026-10-02 caliber-convergence 方案 C 分歧双严）：intent 走 laneOfEntry（双字段三态，
+// 协议锚 policy.riskLevelSince），其余走 laneOfDoc（级别单字段）——suspect（缺失/非法/分歧）不计
+// high（不作豁免依据）、计入拦截集（消息按 suspect 给「两字段对齐」指引）。
 const ACTIVE = {
   intent: new Set(['draft', 'approved']),
   incident: new Set(['open', 'fixed']),
@@ -102,7 +109,10 @@ const collectActive = () => {
       if (!f.endsWith('.md') || f === '_TEMPLATE.md') continue;
       const fm = fmOf(path.join(dirPath, f));
       if (!ACTIVE[kind].has(fm['状态'] || '')) continue;
-      out.push({ rel: `workflow/${dir}/${f}`, base: f.replace(/\.md$/, ''), level: fm['级别'] || '', date: fm[dateKey] || '', kind });
+      const lane = kind === 'intent'
+        ? laneOfEntry(fm['级别'] || '', fm['risk_level'] || '', RISK_LEVEL_SINCE, fm['日期'] || '')
+        : laneOfDoc(fm['级别'] || '');
+      out.push({ rel: `workflow/${dir}/${f}`, base: f.replace(/\.md$/, ''), level: fm['级别'] || '', risk: fm['risk_level'] || '', lane, date: fm[dateKey] || '', kind });
     }
   }
   return out;
@@ -116,16 +126,19 @@ const patterns = loadPatterns();
 const hits = patterns.length ? STAGED.filter((p) => patterns.some((re) => re.test(p))) : [];
 if (hits.length) {
   const active = collectActive();
-  const hasHigh = active.some((e) => e.level === 'L2' || e.level === 'L3');
+  const hasHigh = active.some((e) => e.lane === 'high');
   if (!hasHigh) {
-    const low = active.filter((e) => e.level !== 'L2' && e.level !== 'L3');
+    const low = active.filter((e) => e.lane !== 'high'); // low + suspect 均拦（suspect 不作豁免依据）
     if (low.length) {
       const newest = [...low].sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.rel.localeCompare(a.rel))[0];
+      const fixVerb = newest.lane === 'suspect'
+        ? '① 对齐该入口「级别」与「risk_level」两字段至一致的 L2/L3（fill-intent 双写口径；现两值缺失/非法/分歧）并补同名 spec（.agents/commands/design.md）'
+        : '① 升级该入口「级别」与「risk_level」两字段至 L2/L3 并补同名 spec（.agents/commands/design.md）';
       const text = [
-        `[触达面判低] 暂存命中 L2 触达面，但活跃入口全为 L0/L1（含级别缺失）：`,
+        `[触达面判低] 暂存命中 L2 触达面，但活跃入口无泳道 high（存在 low/suspect）：`,
         `  命中: ${hits.join(' ')}`,
-        `  关联入口: ${newest.rel}（${newest.level || '级别缺失'}${newest.date ? `，${newest.date}` : ''}；活跃 L0/L1 共 ${low.length} 件）`,
-        `  修法（三选一）: ① 升级该入口「级别/risk_level」至 L2/L3 并补同名 spec（.agents/commands/design.md）`,
+        `  关联入口: ${newest.rel}（级别 ${newest.level || '缺失'}/risk_level ${newest.risk || '缺失'}→ 泳道 ${newest.lane}${newest.date ? `，${newest.date}` : ''}；活跃非 high 共 ${low.length} 件）`,
+        `  修法（三选一）: ${fixVerb}`,
         `    ② 该入口已完成则关单（done）或显式放弃（superseded/cancelled）——不留活跃残留`,
         `    ③ 面清单误配则修 .agents/lane-surfaces.txt`,
       ].join('\n');

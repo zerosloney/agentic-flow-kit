@@ -31,7 +31,7 @@ next: .agents/commands/build.md
    - **填空工具先跑**：`node .agents/scripts/fill-spec.mjs --level <L1|L2|L3> --topic <主题> --output workflow/specs/<date>-<主题>.md`——输出含 frontmatter 5 字段 + 5 节正文（功能行为/数据流/系统改动/约束遵守映射/风险评估）的草稿；AI 据此填实
    - 复制 `workflow/specs/_TEMPLATE.md` → `workflow/specs/YYYY-MM-DD-<主题>.md`(与入口文档同名)
    - 按 5 节填写:功能行为 / 数据流 / 系统改动 / 约束遵守映射 / 风险评估
-   - 约束映射必须对照根 `AGENTS.md`「Working rules」与改动域目录级 `AGENTS.md`（如有）逐条说明如何满足
+   - 约束映射必须对照根 `AGENTS.md` 红线/约束相关节（如「项目适配区」「门禁与提交」）与改动域目录级 `AGENTS.md`（如有）逐条说明如何满足
    - 存在多个可行方案时,在 spec 中列出各方案取舍与 AI 建议项,由用户选定后方可确认
    - **页面/交互入口形态必须用户确认**:spec 须写明入口是「表单（字段清单）」还是「选择器/弹窗」，禁止自行推定交互形态
 4. 起草后停下,输出草稿全文给用户过目

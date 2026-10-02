@@ -124,11 +124,12 @@ const runTool = (root, base, level) => spawnSync(process.execPath,
   fs.rmSync(root, { recursive: true, force: true });
 }
 {
-  // S10c 探索泳道回落：级别缺失、risk_level=L0 → 放行（risk_level 兜底判道）
+  // S10c（2026-10-02 caliber-convergence 方案 C 改判）：级别缺失 → suspect，不再回落 risk_level——
+  // 豁免仅认两字段一致的 low；缺失须先补「级别」再走起草（fail-closed 就严）。
   const root = mkws({ 'workflow/intents/2026-09-30-exp0.md': '---\n状态: draft\nrisk_level: L0\n日期: 2026-09-30\n---\n# I\n' });
   const r = runTool(root, '2026-09-30-exp0', 'L1');
-  check('S10c 探索泳道回落：级别缺失 + risk_level L0 → 放行',
-    r.status === 0 && fs.existsSync(path.join(root, 'workflow', 'plans', '2026-09-30-exp0.md')),
+  check('S10c 方案 C：级别缺失 + risk_level L0 → suspect 拒（不回落，先补级别）',
+    r.status === 2 && !fs.existsSync(path.join(root, 'workflow', 'plans', '2026-09-30-exp0.md')),
     JSON.stringify({ status: r.status, stderr: r.stderr }));
   fs.rmSync(root, { recursive: true, force: true });
 }

@@ -50,6 +50,9 @@ const ledgerLines = (root) => {
   const p = path.join(root, '.agents', 'confirmations.jsonl');
   return fs.existsSync(p) ? fs.readFileSync(p, 'utf8').split(/\n/).filter(Boolean) : [];
 };
+// 迁移目标名含当天日期前缀（solidify 以 toISOString 生成）——动态取值防跨天脆断
+const TODAY = new Date().toISOString().slice(0, 10);
+const migratedPath = (root) => path.join(root, 'workflow', 'intents', `${TODAY}-demo-task.md`);
 
 // T1：默认只迁移不落账
 {
@@ -58,7 +61,7 @@ const ledgerLines = (root) => {
   const r = run(d, ['--topic', 'demo', '--root', d]);
   check('T1 默认迁移成功 exit 0', r.code === 0, r.out);
   check('T1 草稿已迁移到 intents 且日期前缀正确',
-    fs.existsSync(path.join(d, 'workflow', 'intents', '2026-10-01-demo-task.md')), '');
+    fs.existsSync(migratedPath(d)), '');
   check('T1 零台账新增（无确认来源绝不落账）', ledgerLines(d).length === 0, JSON.stringify(ledgerLines(d)));
   check('T1 输出含确认指引', r.out.includes('确认指引') && r.out.includes('--delegated'), r.out);
 }
@@ -73,7 +76,7 @@ const ledgerLines = (root) => {
   check('T2 quote 原样（脚本不编造话术）',
     lines[0].includes('"quote":"固化了可以"') && lines[0].includes('chat-delegated'), lines[0]);
   check('T2 目标文档状态已 approved',
-    fs.readFileSync(path.join(d, 'workflow', 'intents', '2026-10-01-demo-task.md'), 'utf8').includes('状态: approved'), '');
+    fs.readFileSync(migratedPath(d), 'utf8').includes('状态: approved'), '');
 }
 // T3：--auto 在 Strict（缺 trust-mode.json）下被拒 → 失败计数并 exit 1
 {

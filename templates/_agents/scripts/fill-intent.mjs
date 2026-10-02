@@ -1,4 +1,4 @@
-// flow-kit fill-intent：起草 intent 草稿（背景与问题/目标/非目标/约束/影响面/触达红线/验收标准 共 7 节）
+// flow-kit fill-intent：起草 intent 草稿（背景与问题/历史教训防复发/目标/非目标/约束/影响面/触达红线/验收标准 8 节正文 + 确认与复核 共 9 节）
 // 读 workflow/intents/_TEMPLATE.md 的节标题 → 输出符合 frontmatter 受限子集（6 字段，含 risk_level 风险泳道）的草稿到指定文件
 // 用法：node .agents/scripts/fill-intent.mjs --module pipeline --level L1 --topic "test" --output /tmp/x.md
 // 零依赖；CLI 解析用最简字符串匹配；不替代 AI 起草——本工具只输出模板与提示句

@@ -12,7 +12,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { computeFingerprint } from './confirm-doc.mjs';
 import { POLICIES, loadKitPolicy } from './policy.mjs';
-import { entryConfirmed, MARK_RE } from './stage-gates.mjs';
+import { entryConfirmed, MARK_RE, laneOfEntry, laneOfDoc } from './stage-gates.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
@@ -2285,6 +2285,56 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   fs.writeFileSync(path.join(sd, 'zeta.mjs'), 'export {};\n');
   const r3 = run(T);
   check('检查20 C20-3 无豁免文件时缺测试脚本被列出', outOf(r3).includes('[WARN 脚本测试缺失] zeta.mjs'), outOf(r3));
+  rmfix(T);
+}
+
+// --- 方案 C：laneOfEntry 单源三态 + 检查 1 suspect 红线 + 检查 2 样例豁免（2026-10-02 caliber-convergence） ---
+{
+  check('laneOfEntry 一致 low / 一致 high',
+    laneOfEntry('L1', 'L1', '2026-10-01', '2026-10-02') === 'low' && laneOfEntry('L2', 'L2', '2026-10-01', '2026-10-02') === 'high');
+  check('laneOfEntry 协议期：分歧 / risk 缺失 / 级别缺失 → suspect',
+    laneOfEntry('L2', 'L1', '2026-10-01', '2026-10-02') === 'suspect'
+    && laneOfEntry('L2', '', '2026-10-01', '2026-10-02') === 'suspect'
+    && laneOfEntry('', 'L2', '2026-10-01', '2026-10-02') === 'suspect');
+  check('laneOfEntry 协议前：单字段按级别 / 两值俱在分歧仍 suspect',
+    laneOfEntry('L2', '', '2026-10-01', '2026-09-28') === 'high'
+    && laneOfEntry('L2', 'L1', '2026-10-01', '2026-09-28') === 'suspect');
+  check('laneOfDoc 单字段三态', laneOfDoc('L1') === 'low' && laneOfDoc('L3') === 'high' && laneOfDoc('') === 'suspect');
+}
+{
+  // 检查 1：协议期分歧件（L2/L1）勾红线 → suspect 按 low 拦红线（hard）
+  const T = mkfix();
+  fs.writeFileSync(path.join(T, 'workflow', 'intents', '2026-10-02-x.md'),
+    INTENT('x', '状态: approved\n级别: L2\nrisk_level: L1\n日期: 2026-10-02\n模块: pipeline',
+      '\n## 触达红线\n- [x] 规则 / 契约变更（→ 级别至少 L2）\n'));
+  fs.writeFileSync(path.join(T, 'workflow', 'plans', '2026-10-02-x.md'), '# PLAN\n');
+  const r = run(T);
+  check('检查1 分歧件勾红线 → hard-block（suspect 拦红线）', r.status === 1 && outOf(r).includes('[红线判低]') && outOf(r).includes('两字段对齐'), outOf(r));
+  rmfix(T);
+}
+{
+  // 检查 1 对照：协议前存量（级别 L2 无 risk_level）勾红线 → 不拦（单字段 high）
+  const T = mkfix();
+  fs.writeFileSync(path.join(T, 'workflow', 'intents', '2026-09-28-y.md'),
+    INTENT('y', '状态: approved\n级别: L2\n日期: 2026-09-28\n模块: pipeline',
+      '\n## 触达红线\n- [x] 规则 / 契约变更（→ 级别至少 L2）\n'));
+  fs.writeFileSync(path.join(T, 'workflow', 'plans', '2026-09-28-y.md'), '# PLAN\n');
+  const r = run(T);
+  check('检查1 协议前 L2 单字段勾红线 → 不拦（存量零新增损害）', !outOf(r).includes('[红线判低]'), outOf(r));
+  rmfix(T);
+}
+{
+  // 检查 2：样例豁免三态——反引号/围栏块内不报，正文裸占位符照报
+  const T = mkfix();
+  fs.writeFileSync(path.join(T, 'workflow', 'intents', '2026-10-02-z.md'),
+    INTENT('z', '状态: approved\n级别: L2\nrisk_level: L2\n日期: 2026-10-02\n模块: pipeline',
+      '\n行内样例 `YYYY-MM-DD` 与 `<主题>` 不报。\n\n```\n日期: YYYY-MM-DD\n```\n\n裸占位：日期: YYYY-MM-DD\n'));
+  fs.writeFileSync(path.join(T, 'workflow', 'plans', '2026-10-02-z.md'), '# PLAN\n');
+  const r = run(T);
+  const o = outOf(r);
+  const zWarn = (o.match(/2026-10-02-z\.md 含模板占位符:[\s\S]*?(?=\n- |\n\n|$)/) || [''])[0];
+  check('检查2 反引号/围栏样例不报、裸占位符照报',
+    zWarn.includes('裸占位') && !zWarn.includes('行内样例') && !zWarn.includes('```'), o);
   rmfix(T);
 }
 
