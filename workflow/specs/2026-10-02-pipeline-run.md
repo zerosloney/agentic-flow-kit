@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-02
 模块: pipeline
 备注: 关联 intents/2026-10-02-pipeline-run.md（已 approved）；工单协议与 run 事件流两张新宿主面契约在本 spec 定稿
-确认指纹: b961632b8a600b6e
+确认指纹: 0fe9ec219d62da9f
 ---
 # SPEC — pipeline-run
 
