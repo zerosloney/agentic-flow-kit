@@ -232,7 +232,7 @@ function stageBar(run) {
   const mk = (name, pos) => (pos === 'cur' ? '[●' + name + ']' : pos === 'past' ? '[✓' + name + ']' : '[…' + name + ']');
   const seq = run.triage?.kind === 'verify' ? [['Verify', s === 'verify' || s === 'done']]
     : run.triage?.kind === 'review' ? [['Review', s === 'review-only' || s === 'done']]
-      : run.triage?.kind === 'deploy' ? [['Checklist', ['deploy-check'].includes(s)], ['Authorize', s === 'deploy-await' || s === 'done']]
+      : run.triage?.kind === 'deploy' ? [['Checklist', ['deploy-check', 'deploy-prep'].includes(s)], ['Authorize', s === 'deploy-await' || s === 'done']]
         : [['Plan', ['intent-fill', 'intent-draft', 'intent-confirm', 'incident-fill', 'incident-draft', 'incident-confirm', 'triage'].includes(s)],
           ['Design', ['spec-fill', 'spec-draft', 'spec-review', 'spec-confirm'].includes(s)],
           ['Build', ['plan-fill', 'plan-draft', 'plan-confirm', 'changes-confirm', 'implement', 'fix', 'changes-verify'].includes(s)],
@@ -361,6 +361,32 @@ function checkAuthorized(ctx, run, filesCsv) {
   if (beyond.length) return { ok: false, problems: [`git 改动超出回填清单（偏离即停）：${beyond.join('、')}`] };
   run.lastFiles = listed;
   return { ok: true };
+}
+
+// locateDeployTarget：deploy 对象定位——--triage topic 显式优先，否则取 workflow/{intents,incidents}
+// 最新终态入口（文件名日期序）；同名 spec 存在才纳入（L1 无 spec 合法），plan 恒须同名在位。
+function locateDeployTarget(ctx, run) {
+  const all = [];
+  for (const dir of ['intents', 'incidents']) {
+    const d = path.join(ctx.root, 'workflow', dir);
+    if (!fs.existsSync(d)) continue;
+    for (const f of fs.readdirSync(d)) {
+      if (!f.endsWith('.md') || f.startsWith('_')) continue;
+      const rel = `workflow/${dir}/${f}`;
+      if (['done', 'closed'].includes(docState(ctx, rel))) all.push({ rel, base: f.replace(/\.md$/, '') });
+    }
+  }
+  if (!all.length) return { entry: null };
+  all.sort((a, b) => b.base.localeCompare(a.base));
+  const topic = run.triage?.topic && run.triage.topic !== 'task' ? run.triage.topic : null;
+  const hit = topic ? all.find((x) => x.base.includes(topic)) : all[0];
+  if (!hit) return { entry: null };
+  const specRel = `workflow/specs/${hit.base}.md`;
+  return {
+    entry: hit.rel,
+    spec: fs.existsSync(path.join(ctx.root, specRel)) ? specRel : null,
+    plan: `workflow/plans/${hit.base}.md`,
+  };
 }
 
 function briefReq(run) { return run.requirement.replace(/\s+/g, ' ').slice(0, 40); }
@@ -746,13 +772,44 @@ function advance(ctx, run, opt) {
     }
 
     if (s === 'deploy-check') {
+      // 复核 P1-2 补实现（2026-10-02 用户拍板）：deploy-prep 工单 + 三件 done 机器校验（spec §功能行为 deploy-prep 变体）
+      const target = locateDeployTarget(ctx, run);
+      if (!target.entry) stopGateFail(ctx, run, s, ['找不到可上线的对象——workflow/{intents,incidents} 无终态（done/closed）入口；或以 --triage topic=<主题> 显式指定']);
+      run.deployTarget = target;
+      issueWO(ctx, run, wo(run, {
+        kind: 'deploy-prep', title: `上线清单核对：${target.entry}`, goal: '回归清单人工核对 + 三件同名 done 机器校验，全过到授权点',
+        instructions: [
+          '1. 核对 workflow/regression-checklist.md 回归必过条目（活文档）',
+          '2. 抽查最近历史 incident 的防复发条目',
+          '3. 完成后回跑 next——脚本机器校验：check-loop 门 + 三件同名 done',
+          '4. 全过停授权点；打 tag 由宿主按 git 纪律执行（脚本不代办）',
+        ],
+        context: { docPath: 'workflow/regression-checklist.md', kbHits: [], stderrTail: '', relatedDocs: [target.entry, target.spec, target.plan].filter(Boolean) },
+        constraints: ['只读核对；发现缺口停机上报，不带病上线'],
+        acceptance: ['check-loop 门 exit 0（脚本执行）', '三件同名 done：入口+spec（如有）+plan 全终态（脚本执行）'],
+      }), 'deploy-prep');
+    }
+
+    if (s === 'deploy-prep') {
+      const t = run.deployTarget;
       const r = runNode(ctx, run, 'check-loop.mjs', []);
       if (r.exit !== 0) stopGateFail(ctx, run, s, ['check-loop 未过——文档闭环有断档，先补齐再谈上线']);
+      const gaps = [];
+      const entrySt = docState(ctx, t.entry);
+      if (!['done', 'closed'].includes(entrySt)) gaps.push(`${t.entry}（${entrySt || '缺失'}——须 done/closed）`);
+      if (t.spec) {
+        const st = docState(ctx, t.spec);
+        if (st !== 'done') gaps.push(`${t.spec}（${st || '缺失'}——须 done）`);
+      }
+      const planSt = docState(ctx, t.plan);
+      if (planSt !== 'done') gaps.push(`${t.plan}（${planSt || '缺失'}——须 done）`);
+      if (gaps.length) stopGateFail(ctx, run, s, [`三件同名 done 未满足（spec §校验规则 deploy-prep 行）：${gaps.join('；')}`]);
       run.stage = 'deploy-await';
-      stopConfirm(ctx, run, '', '上线授权（仅用户本人；tag 由宿主按 git 纪律执行，脚本不代办）', false);
+      stopConfirm(ctx, run, '', `上线授权——对象 ${t.entry}（仅用户本人；tag 由宿主按 git 纪律执行，脚本不代办）`, false);
     }
+
     if (s === 'deploy-await') {
-      if (!opt.delegated) stopConfirm(ctx, run, '', '上线授权——用户明确说「上」后回跑 next --delegated "<原话>"；打 tag 由宿主执行', false);
+      if (!opt.delegated) stopConfirm(ctx, run, '', `上线授权——对象 ${run.deployTarget?.entry || ''}：用户明确说「上」后回跑 next --delegated "<原话>"；打 tag 由宿主执行`, false);
       emit(run, { type: 'confirm', doc: 'deploy', to: 'authorized', source: 'conversation', quote: opt.delegated });
       stopDone(ctx, run);
     }

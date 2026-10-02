@@ -67,7 +67,7 @@ risk_level: L2
 
 ## 验收标准（可测试）
 
-- [x] pipeline-run.test.mjs 全绿并纳入 npm test 与 CI shipped 套件——覆盖状态机主路径（L0/L1/L2/incident/verify-only/review-only——L3 spec-review 与 deploy-prep 未在本批用例，待定性）、门退出码路径（confirm-doc exit 1/2 正确停不绕）、工单 schema、观测输出（证据：双侧各 22 组断言全绿（复核后增 4 组回归）——templates 侧与 .agents 装副本侧同跑；npm test 全套件通过；d176321）
+- [x] pipeline-run.test.mjs 全绿并纳入 npm test 与 CI shipped 套件——覆盖状态机主路径（L0/L1/L2/incident/verify-only/review-only/deploy——仅 L3 spec-review 未在本批用例）、门退出码路径（confirm-doc exit 1/2 正确停不绕）、工单 schema、观测输出（证据：双侧各 24 组断言全绿（复核后增 4 组回归 + deploy 2 组）——templates 侧与 .agents 装副本侧同跑；npm test 全套件通过；d176321）
 - [x] 演练矩阵每路径≥1 次真实穿越（L0 docs / L1 小改 / L2 含 spec / incident / verify-only），每次核对四件事：文档状态迁移正确、confirmations.jsonl 台账行存在、git 提交链完整（docs 提交+代码提交）、verify.mjs 全绿（证据：L0 本仓真实穿越提交 37b552a；verify-only 本仓 run 20261002-1814-task-ulev 真实 verify.mjs exit 0；L1/L2/incident 于沙箱以真实 fill-*/confirm-doc/git 完整穿越——L2 与 L1 各成三笔链（approved→feat→关单，如沙箱 2fb1021→559bcfa→18be202）、incident 两跳至 closed（fe3c6df）；沙箱确认 quote 均明示演练性质）
 - [x] 跨宿主演练：ZCode 会话经命令文档自驱一轮 + 人工终端裸 CLI 手驱一轮（模拟无宿主 AI 场景），协议一致（证据：全程会话内自驱；L0/verify-only/负例均以裸 CLI 直跑（无命令文档加载）达成 done/拦截，输出协议一致（PIPELINE-STOP 末行）——同一脚本同一协议）
 - [x] 负例：前置未过正确停（如入口未确认时 fill-spec exit 2 被拦截透传）；确认驳回走 abort --to 显式放弃留档（证据：本仓 run 20261002-1814-task-8c45——跳级 --delegated 被挡仍停 triage 工单、无效枚举 gate-fail exit 2、abort 收尾；沙箱实证 spec 备注占位/intent 模块占位/越权 diff/勾验时序各拦截一次；测试套件钉住 confirm exit 1/2 透传）

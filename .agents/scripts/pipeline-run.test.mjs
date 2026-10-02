@@ -319,6 +319,43 @@ test('review-only：工单 → --done 收尾可达（复核 P1-1 回归）', () 
   assert.match(out(pd), /PIPELINE-STOP done/);
 });
 
+// deploy 夹具：预置终态/非终态三件套
+function seedDeployDocs(f, { intentState, planState, specState, topic = 'dep1' }) {
+  const w = (rel, fm) => fs.writeFileSync(path.join(f.root, rel), `---\n${fm}\n---\n# DOC — ${topic}\n\n## 正文\n\n内容。\n`);
+  w(`workflow/intents/2026-10-02-${topic}.md`, `状态: ${intentState}\n级别: L1\n日期: 2026-10-02\n模块: pipeline`);
+  w(`workflow/plans/2026-10-02-${topic}.md`, `状态: ${planState}\n级别: L1\n模块: pipeline`);
+  if (specState) w(`workflow/specs/2026-10-02-${topic}.md`, `状态: ${specState}\n级别: L2\n日期: 2026-10-02\n模块: pipeline`);
+}
+
+test('deploy 路径：三件 done → prep 工单 → 机器校验 → 授权 → done（复核 P1-2 补实现）', () => {
+  const f = buildFixture();
+  seedDeployDocs(f, { intentState: 'done', planState: 'done' });
+  prun(f, ['start', '可以上了']);
+  const pw = prun(f, ['next', '--triage', 'kind=deploy level=L0 module=pipeline topic=dep1']);
+  assert.equal(pw.status, 0, out(pw));
+  assert.match(out(pw), /deploy-prep/);
+  assert.match(out(pw), /PIPELINE-STOP work-order/);
+  const pv = prun(f, ['next']);
+  assert.equal(pv.status, 0, out(pv));
+  assert.match(out(pv), /await-confirm/); // 三件校验过 → 停授权点
+  const pd = prun(f, ['next', '--delegated', '上']);
+  assert.equal(pd.status, 0, out(pd));
+  assert.match(out(pd), /PIPELINE-STOP done/);
+  const run = runFile(f, latestId(f));
+  assert.equal(run.deployTarget.plan, 'workflow/plans/2026-10-02-dep1.md');
+});
+
+test('deploy 三件缺口 → gate-fail 列缺口 exit 2（P1-2）', () => {
+  const f = buildFixture();
+  seedDeployDocs(f, { intentState: 'done', planState: 'approved' }); // plan 未关单
+  prun(f, ['start', '可以上了']);
+  prun(f, ['next', '--triage', 'kind=deploy level=L0 module=pipeline topic=dep1']);
+  const p = prun(f, ['next']);
+  assert.equal(p.status, 2);
+  assert.match(out(p), /须 done/);
+  assert.match(out(p), /2026-10-02-dep1\.md（approved/);
+});
+
 test('rename 行 old+new 双收录防逃逸（复核 P2-2 回归）', () => {
   const f = buildFixture();
   driveToImplement(f, 'L1', 'rn1');
