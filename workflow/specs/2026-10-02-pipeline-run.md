@@ -112,7 +112,7 @@ run 文件 `.agents/cache/pipeline-runs/<runId>.json`（gitignored；非权威�
 
 ### 测试注入契约
 
-引擎脚本须可测（check 20）：`PIPELINE_RUN_ROOT`（仓库根重定向，对齐 CHECK_LOOP_ROOT 惯例）+ `PIPELINE_RUN_BIN`（脚本目录覆写，默认 `<root>/.agents/scripts`）+ `PIPELINE_RUN_GIT_BIN`（默认 git）+ `PIPELINE_RUN_NPM_BIN`（默认 npm）——夹具目录放假 fill-*/confirm-doc/git/npm，状态机全分支与退出码路径在夹具上跑通；所有子进程调用经单一 `runGate()` 收口。
+引擎脚本须可测（check 20）：`PIPELINE_RUN_ROOT`（仓库根重定向，对齐 CHECK_LOOP_ROOT 惯例）+ `PIPELINE_RUN_BIN`（脚本目录覆写，默认 `<root>/.agents/scripts`）+ `PIPELINE_RUN_GIT_BIN`（默认 git）——夹具目录放假 fill-*/confirm-doc/git，状态机全分支与退出码路径在夹具上跑通；所有子进程调用经单一 `runGate()` 收口。（实现披露 2026-10-02：npm 不设独立注入点——测试门统一走 verify.mjs、其内部自跑 npm test，原方案 `PIPELINE_RUN_NPM_BIN` 裁撤。）
 
 ## 数据流
 

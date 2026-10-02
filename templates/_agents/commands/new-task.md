@@ -39,6 +39,7 @@ next: 按阶段路由
 
 ## 路由判断
 
+- **自动化驱动（并列入口,可选）**:一句话全程走 [pipeline-run.md](pipeline-run.md)——状态机驱动+工单协议+原话代录,与下述手动路由二选一,同一任务不混用
 - **新需求 / 功能**:从 `plan.md` 进,立 **intent**(`workflow/intents/`)
 - **修复类任务 / 事故**:从 `maintain.md` 进,立 **incident**(`workflow/incidents/`);incident 在 L1+ 即 **intent 等价物**(check-loop 认 incident≡intent),不必另立 intent。先检索同类历史(`node .agents/scripts/kb-search.mjs "<关键词>" --scope workflow --type incidents,plans`),有同类先读其历史三件套;再按级别走:
   - L0 → 直接修复;L1 → 立 incident 后进 `build.md` 起草并确认同名 Quick-Plan → `test.md`

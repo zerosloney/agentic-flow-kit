@@ -42,7 +42,11 @@
     },
     {
       "rel": ".agents/commands/new-task.md",
-      "sha256": "59c56a271d24a344afffac097a678b23b0eeb2d71f9158097217148863ec6928"
+      "sha256": "bf969d9cd7f55d6e50bce6e7aaab2c175d02b1dbe0542335691be3e27d0951d1"
+    },
+    {
+      "rel": ".agents/commands/pipeline-run.md",
+      "sha256": "1cbc1f9ff7bafe56bce6fa6d9485cf4e4a14c24aca325615e698d0ad498c69d0"
     },
     {
       "rel": ".agents/commands/plan.md",
@@ -241,6 +245,14 @@
       "sha256": "814cb1b50533a91449ffb557c0f7f384fc1a3e2177c6488927833a0c49888666"
     },
     {
+      "rel": ".agents/scripts/pipeline-run.mjs",
+      "sha256": "03b73bc241bcc2a729b3f2b1c564acabccef0993e59cc2dd5b05bd440718fac7"
+    },
+    {
+      "rel": ".agents/scripts/pipeline-run.test.mjs",
+      "sha256": "9fd73c541cb21649ff6630e16d3af6bdbe3dcaa2352a6d0b4818fb5e89ffc9ad"
+    },
+    {
       "rel": ".agents/scripts/policy.mjs",
       "sha256": "f5c49aeb5c3cc10b8a1415fd3b8482d4a018385cd524800c4f5e45a9ead4e9b1"
     },
@@ -424,7 +436,7 @@
     },
     {
       "rel": "AGENTS.md",
-      "sha256": "f8ebdb3613ee7a4e6c876f95c9588b46bf7899af148eccace3a1306258f4572f"
+      "sha256": "b9a8c7f93f6357752b8cd9ee8cb555a7471ad1d5018be8f4d81469dba12cbc60"
     },
     {
       "rel": "wiki/知识沉淀总览.html",
