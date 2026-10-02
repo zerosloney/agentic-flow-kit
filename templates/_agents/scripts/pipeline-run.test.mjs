@@ -180,7 +180,7 @@ test('占位符残留 → gate-fail exit 2；填实 → 等确认', () => {
   assert.equal(p1.status, 2);
   assert.match(out(p1), /占位符/);
   assert.match(out(p1), /PIPELINE-STOP gate-fail/);
-  editDoc(f, 'workflow/intents/2026-10-02-demo.md', (t) => fillValid(t) + '\n用法备注：回跑 `next --delegated "<原话>"`（命令语法占位在 code span 内，不属模板占位符——复核 P1-3 回归）\n');
+  editDoc(f, 'workflow/intents/2026-10-02-demo.md', (t) => fillValid(t) + '\n用法备注：回跑 `next --delegated "<原话>"`（命令语法占位在 code span 内，不属模板占位符——复核 P1-3 回归）\n\n```\nnext --delegated <原话>\nnext --files <清单>\n```\n（上行围栏块内裸尖括号命令示例——复核 P2-B 回归，整块剔除不误拦）\n');
   const p2 = prun(f, ['next']);
   assert.equal(p2.status, 0, out(p2));
   assert.match(out(p2), /PIPELINE-STOP await-confirm [\w-]+ workflow\/intents\/2026-10-02-demo\.md/);
@@ -356,6 +356,26 @@ test('deploy 三件缺口 → gate-fail 列缺口 exit 2（P1-2）', () => {
   assert.match(out(p), /2026-10-02-dep1\.md（approved/);
 });
 
+test('deploy 边界：incident closed 但 plan 缺失 → gate-fail（复核 P2-C 回归）', () => {
+  const f = buildFixture();
+  fs.writeFileSync(path.join(f.root, 'workflow', 'incidents', '2026-10-02-incd.md'),
+    '---\n状态: closed\n发现: 2026-10-02\n模块: pipeline\n---\n# INCIDENT — incd\n\n## 时间线\n\n- x\n\n## 根因\n\nx\n\n## 复盘三件套\n\nx\n');
+  prun(f, ['start', '可以上了']);
+  prun(f, ['next', '--triage', 'kind=deploy level=L0 module=pipeline topic=incd']);
+  const p = prun(f, ['next']);
+  assert.equal(p.status, 2);
+  assert.match(out(p), /plans\/2026-10-02-incd\.md（缺失——须 done）/);
+});
+
+test('deploy 边界：topic 子串不再误匹配（复核 P2-C 收紧回归）', () => {
+  const f = buildFixture();
+  seedDeployDocs(f, { intentState: 'done', planState: 'done', topic: 'dep1' });
+  prun(f, ['start', '可以上了']);
+  const p = prun(f, ['next', '--triage', 'kind=deploy level=L0 module=pipeline topic=dep']); // 旧版 includes 会误命中 dep1
+  assert.equal(p.status, 2);
+  assert.match(out(p), /找不到可上线的对象/);
+});
+
 // P2-4 A′：提交命中 managed 面的处理（装户降级 WARN / 包源自愈 sync）
 test('P2-4 A′：命中台账件且无 flow-kit → 装户降级 WARN + 台账随提交（复核回归）', () => {
   const f = buildFixture();
@@ -368,7 +388,8 @@ test('P2-4 A′：命中台账件且无 flow-kit → 装户降级 WARN + 台账�
   const p = prun(f, ['next', '--files', '.agents/notes/runtime-env.md'], { FIXTURE_GIT_STATUS: ' M .agents/notes/runtime-env.md' });
   assert.equal(p.status, 0, out(p));
   assert.match(out(p), /⚠️ 触及 managed 面/);
-  assert.match(fs.readFileSync(f.gitLog, 'utf8'), /add \.agents\/notes\/runtime-env\.md \.agents\/kit\.json/);
+  const addLine = fs.readFileSync(f.gitLog, 'utf8').split('\n').find((l) => l.startsWith('add '));
+  assert.equal(addLine, 'add .agents/notes/runtime-env.md', '装户降级只 WARN：add 面不含 kit.json（复核 P2-D 断言改实）');
 });
 
 test('P2-4 A′：包源环境自动 sync——flow-kit 假件被调 + 产物入提交（复核回归）', () => {

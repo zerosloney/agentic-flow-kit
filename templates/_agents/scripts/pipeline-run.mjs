@@ -121,7 +121,10 @@ function docState(ctx, rel) { const t = readDoc(ctx, rel); return t ? fmGet(t, '
 // 正文合法的命令语法占位（如 `next --delegated "<原话>"`）几乎总在 code span 内，
 // 模板实占位符（如 <为什么做；写明需求来源…>）从不包 code span；再匹配剩余裸尖括号。
 export function placeholdersIn(text) {
-  const stripped = String(text).replace(/`[^`\n]*`/g, '').replace(/"[^"\n]*"/g, '');
+  const stripped = String(text)
+    .replace(/^```[\s\S]*?^```$/gm, '') // 复核 P2-B：跨行 code fence 整块剔除（围栏内命令示例占位不属模板占位符）
+    .replace(/`[^`\n]*`/g, '')
+    .replace(/"[^"\n]*"/g, '');
   const hits = [];
   for (const re of [/<[^>\n]{1,60}>/g, /YYYY-MM-DD 用户/g]) {
     let m; while ((m = re.exec(stripped))) hits.push(m[0]);
@@ -334,7 +337,7 @@ function managedFaceCheck(ctx, run, files) {
     const msg = '触及 managed 面（kit.json 台账）——装户环境无 flow-kit：提交后须手动跑 flow-kit sync 刷新台账，否则克隆/CI doctor 报漂移';
     console.log('⚠️ ' + msg);
     emit(run, { type: 'warn', note: msg });
-    return ['.agents/kit.json']; // 台账仍随提交（尽力保持可见）
+    return []; // 复核 P2-D：装户无刷新路径，把未刷新的 kit.json 卷入提交是 no-op 甚至带入中间态——只 WARN 不扩大提交面
   }
   const cmd = 'node bin/flow-kit.mjs sync';
   const t0 = Date.now();
@@ -415,7 +418,8 @@ function locateDeployTarget(ctx, run) {
   if (!all.length) return { entry: null };
   all.sort((a, b) => b.base.localeCompare(a.base));
   const topic = run.triage?.topic && run.triage.topic !== 'task' ? run.triage.topic : null;
-  const hit = topic ? all.find((x) => x.base.includes(topic)) : all[0];
+  // 复核 P2-C 收紧：topic 须与去日期前缀后的主题段等值——子串匹配会误命中（topic=run 命中 pipeline-run）
+  const hit = topic ? all.find((x) => x.base.replace(/^\d{4}-\d{2}-\d{2}-/, '') === topic) : all[0];
   if (!hit) return { entry: null };
   const specRel = `workflow/specs/${hit.base}.md`;
   return {
