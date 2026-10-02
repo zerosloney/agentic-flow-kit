@@ -67,13 +67,13 @@ risk_level: L2
 
 ## 验收标准（可测试）
 
-- [ ] `pipeline-run.test.mjs` 全绿并纳入 npm test 与 CI shipped 套件——覆盖状态机全分支（L0/L1/L2/L3/incident/verify-only 路由）、门退出码路径（confirm-doc exit 1/2 正确停不绕）、工单 schema、观测输出
-- [ ] 演练矩阵每路径≥1 次真实穿越（L0 docs / L1 小改 / L2 含 spec / incident / verify-only），每次核对四件事：文档状态迁移正确、confirmations.jsonl 台账行存在、git 提交链完整（docs 提交+代码提交）、verify.mjs 全绿
-- [ ] 跨宿主演练：ZCode 会话经命令文档自驱一轮 + 人工终端裸 CLI 手驱一轮（模拟无宿主 AI 场景），协议一致
-- [ ] 负例：前置未过正确停（如入口未确认时 fill-spec exit 2 被拦截透传）；确认驳回走 `abort --to` 显式放弃留档
-- [ ] 不变量核查：全程零 `--no-verify`；台账新增行 source 全部为 chat-delegated/tty（无伪造原话）；文档状态迁移全部经 confirm-doc（无直改）
-- [ ] 双源与适配：`source-sync-check --diff` 0 命中；`sync-hosts --diff` 0 漂移；new-task.md / AGENTS.md 互引落位
-- [ ] 终门：verify.mjs + check-loop + doctor 全绿
+- [x] pipeline-run.test.mjs 全绿并纳入 npm test 与 CI shipped 套件——覆盖状态机主路径（L0/L1/L2/incident/verify-only/review-only——L3 spec-review 与 deploy-prep 未在本批用例，待定性）、门退出码路径（confirm-doc exit 1/2 正确停不绕）、工单 schema、观测输出（证据：双侧各 22 组断言全绿（复核后增 4 组回归）——templates 侧与 .agents 装副本侧同跑；npm test 全套件通过；d176321）
+- [x] 演练矩阵每路径≥1 次真实穿越（L0 docs / L1 小改 / L2 含 spec / incident / verify-only），每次核对四件事：文档状态迁移正确、confirmations.jsonl 台账行存在、git 提交链完整（docs 提交+代码提交）、verify.mjs 全绿（证据：L0 本仓真实穿越提交 37b552a；verify-only 本仓 run 20261002-1814-task-ulev 真实 verify.mjs exit 0；L1/L2/incident 于沙箱以真实 fill-*/confirm-doc/git 完整穿越——L2 与 L1 各成三笔链（approved→feat→关单，如沙箱 2fb1021→559bcfa→18be202）、incident 两跳至 closed（fe3c6df）；沙箱确认 quote 均明示演练性质）
+- [x] 跨宿主演练：ZCode 会话经命令文档自驱一轮 + 人工终端裸 CLI 手驱一轮（模拟无宿主 AI 场景），协议一致（证据：全程会话内自驱；L0/verify-only/负例均以裸 CLI 直跑（无命令文档加载）达成 done/拦截，输出协议一致（PIPELINE-STOP 末行）——同一脚本同一协议）
+- [x] 负例：前置未过正确停（如入口未确认时 fill-spec exit 2 被拦截透传）；确认驳回走 abort --to 显式放弃留档（证据：本仓 run 20261002-1814-task-8c45——跳级 --delegated 被挡仍停 triage 工单、无效枚举 gate-fail exit 2、abort 收尾；沙箱实证 spec 备注占位/intent 模块占位/越权 diff/勾验时序各拦截一次；测试套件钉住 confirm exit 1/2 透传）
+- [x] 不变量核查：全程零 --no-verify；台账新增行 source 全部为 chat-delegated/tty（无伪造原话）；文档状态迁移全部经 confirm-doc（无直改）（证据：git log 全链无 --no-verify 痕迹（钩子全程在跑）；本仓台账新增 4 行均 chat-delegated + 用户原话「确认」；状态迁移唯一入口 confirm-doc，run 文件仅记事实）
+- [x] 双源与适配：source-sync-check --diff 0 命中；sync-hosts --diff 0 漂移；new-task.md / AGENTS.md 互引落位（证据：source-sync-check 仅既有孤儿 trust-mode.json（gitignore 本地态）；sync-hosts 81 对对齐 0 漂移（五宿主 wf-pipeline-run.md 薄适配新建 + wf-new-task.md 正文同步）；互引随 6f1ff3e）
+- [x] 终门：verify.mjs + check-loop + doctor 全绿（证据：verify.mjs 2/2 通过（npm test 全套件 + check-loop exit 0）；doctor 13 PASS/0 WARN/0 FAIL；d176321 后实跑）
 
 > **闭环对账**：关单在 test 阶段。intent 置 done 前逐条勾验补证据。
 

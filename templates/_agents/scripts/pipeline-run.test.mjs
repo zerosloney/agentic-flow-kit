@@ -180,7 +180,7 @@ test('占位符残留 → gate-fail exit 2；填实 → 等确认', () => {
   assert.equal(p1.status, 2);
   assert.match(out(p1), /占位符/);
   assert.match(out(p1), /PIPELINE-STOP gate-fail/);
-  editDoc(f, 'workflow/intents/2026-10-02-demo.md', fillValid);
+  editDoc(f, 'workflow/intents/2026-10-02-demo.md', (t) => fillValid(t) + '\n用法备注：回跑 `next --delegated "<原话>"`（命令语法占位在 code span 内，不属模板占位符——复核 P1-3 回归）\n');
   const p2 = prun(f, ['next']);
   assert.equal(p2.status, 0, out(p2));
   assert.match(out(p2), /PIPELINE-STOP await-confirm [\w-]+ workflow\/intents\/2026-10-02-demo\.md/);
@@ -307,6 +307,45 @@ test('verify-only 短路径直达 done', () => {
   assert.equal(p.status, 0, out(p));
   assert.match(out(p), /PIPELINE-STOP done/);
   assert.ok(runFile(f, latestId(f)).events.some((e) => e.type === 'gate' && e.cmd.includes('verify.mjs') && e.exit === 0));
+});
+
+test('review-only：工单 → --done 收尾可达（复核 P1-1 回归）', () => {
+  const f = buildFixture();
+  prun(f, ['start', '评审一下']);
+  const pw = prun(f, ['next', '--triage', 'kind=review level=L0 module=pipeline topic=rv1']);
+  assert.match(out(pw), /PIPELINE-STOP work-order/);
+  const pd = prun(f, ['next', '--done']);
+  assert.equal(pd.status, 0, out(pd));
+  assert.match(out(pd), /PIPELINE-STOP done/);
+});
+
+test('rename 行 old+new 双收录防逃逸（复核 P2-2 回归）', () => {
+  const f = buildFixture();
+  driveToImplement(f, 'L1', 'rn1');
+  const p = prun(f, ['next', '--files', 'src/app.mjs'], { FIXTURE_GIT_STATUS: 'R  old.mjs -> src/app.mjs' });
+  assert.equal(p.status, 2);
+  assert.match(out(p), /old\.mjs/); // 旧路径删除计入改动面 → 越权拦截
+});
+
+test('布尔旗标不吞参：status --json --run <id>（复核 P2-5 回归）', () => {
+  const f = buildFixture();
+  prun(f, ['start', '给 wiki 加主题']);
+  prun(f, ['next', '--triage', 'kind=require level=L2 module=wiki topic=demo']); // 建第二个可辨 run 前，确保 latest 唯一
+  const id = latestId(f);
+  const p = prun(f, ['status', '--json', '--run', id]);
+  assert.equal(p.status, 0);
+  assert.match(out(p), new RegExp('"runId": "' + id + '"')); // --run 生效（未被 --json 吞掉）
+});
+
+test('空「证据：」不过勾验（复核 P2-6 回归）', () => {
+  const f = buildFixture();
+  driveToImplement(f, 'L1', 'ev1');
+  prun(f, ['next', '--files', 'src/app.mjs'], { FIXTURE_GIT_STATUS: ' M src/app.mjs' }); // verify 绿 → closeout WO
+  editDoc(f, 'workflow/intents/2026-10-02-ev1.md', (t) => t.replace(/- \[ \] 项一（证据：）/, '- [x] 项一（证据：）').replace(/- \[ \] 项二（证据：）/, '- [x] 项二（证据：t1）'));
+  const p = prun(f, ['next'], { FIXTURE_GIT_STATUS: ' M src/app.mjs' });
+  assert.equal(p.status, 0);
+  assert.match(out(p), /PIPELINE-STOP work-order/); // 空证据 → 重发 closeout 工单，不进关单
+  assert.match(out(p), /（closeout）勾验收补证据/);
 });
 
 test('incident 路径：模板复制→两跳 fixed/closed→plan 不可免', () => {

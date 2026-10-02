@@ -9,7 +9,7 @@
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
-| INTENT | L2 | approved | 2026-10-02 | pipeline | pipeline-run | ☑0/7 |
+| INTENT | L2 | approved | 2026-10-02 | pipeline | pipeline-run | ☑7/7 |
 | PLAN | L2 | approved | 2026-10-02 | pipeline | pipeline-run | — |
 | SPEC | L2 | approved | 2026-10-02 | pipeline | pipeline-run | — |
 | INCIDENT | L1 | open | 2026-09-27 | pipeline | 2026-09-27 P2 池批二（看板/wiki/宿主维护面收口） | — |

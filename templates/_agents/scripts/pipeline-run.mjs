@@ -117,10 +117,14 @@ function fmGet(text, key) {
 }
 function docState(ctx, rel) { const t = readDoc(ctx, rel); return t ? fmGet(t, '状态') : null; }
 
-function placeholdersIn(text) {
+// 占位符判定（复核 P1-3 收窄，2026-10-02）：先剔除 code span（`…`）与引号串（"…"）——
+// 正文合法的命令语法占位（如 `next --delegated "<原话>"`）几乎总在 code span 内，
+// 模板实占位符（如 <为什么做；写明需求来源…>）从不包 code span；再匹配剩余裸尖括号。
+export function placeholdersIn(text) {
+  const stripped = String(text).replace(/`[^`\n]*`/g, '').replace(/"[^"\n]*"/g, '');
   const hits = [];
-  for (const re of [/<[^>\n]{1,60}>/g, /YYYY-MM-DD 用户/g, /<主题>/g]) {
-    let m; while ((m = re.exec(text))) hits.push(m[0]);
+  for (const re of [/<[^>\n]{1,60}>/g, /YYYY-MM-DD 用户/g]) {
+    let m; while ((m = re.exec(stripped))) hits.push(m[0]);
   }
   return [...new Set(hits)].slice(0, 5);
 }
@@ -164,7 +168,8 @@ export function closeoutComplete(text) {
   if (body === null) return { ok: false, problems: ['缺「## 验收标准」节'] };
   const lines = body.split(/\r?\n/);
   const open = lines.filter((l) => /^\s*-\s\[\s\]\s/.test(l));
-  const checkedNoEv = lines.filter((l) => /^\s*-\s\[x\]\s/.test(l) && !/证据[:：]/.test(l));
+  // 复核 P2-6：证据冒号后须直接跟内容（非空白、非收括号）——「（证据：）」空值不算过
+  const checkedNoEv = lines.filter((l) => /^\s*-\s\[x\]\s/.test(l) && !/证据[:：][^）\s]/.test(l));
   const problems = [];
   if (open.length) problems.push(`未勾验收 ${open.length} 条`);
   if (checkedNoEv.length) problems.push(`已勾缺证据 ${checkedNoEv.length} 条`);
@@ -329,7 +334,14 @@ function changedFiles(ctx, run) {
   const out = [];
   for (const line of r.stdout.split(/\r?\n/).filter(Boolean)) {
     let p = line.slice(3).trim();
-    if (p.includes(' -> ')) p = p.split(' -> ').pop();
+    if (p.includes(' -> ')) {
+      // 复核 P2-2：rename 行收录 old+new 两路径——旧路径的删除同样属改动面（防改名逃逸越权）
+      for (const q of p.split(' -> ')) {
+        const n = q.trim().replace(/^"|"$/g, '').replace(/\\/g, '/');
+        if (n) out.push(n);
+      }
+      continue;
+    }
     p = p.replace(/^"|"$/g, '').replace(/\\/g, '/');
     out.push(p);
   }
@@ -510,7 +522,7 @@ function advance(ctx, run, opt) {
 
     if (s === 'spec-review') {
       const body = sectionBody(readDoc(ctx, run.docs.spec) || '', '确认与复核') || '';
-      if (!/P0|P1|无/.test(body)) stopGateFail(ctx, run, s, ['spec「确认与复核」节缺复核结论（须含 P0/P1 清单或「无」）']);
+      if (!(/P0\s*\/\s*P1/.test(body) || /P0/.test(body) || /P1/.test(body))) stopGateFail(ctx, run, s, ['spec「确认与复核」节缺复核结论（须含 P0/P1 清单或「无 P0/P1」）']);
       run.stage = 'spec-confirm';
       stopConfirm(ctx, run, run.docs.spec, summarizeDoc(readDoc(ctx, run.docs.spec)), true);
     }
@@ -632,7 +644,7 @@ function advance(ctx, run, opt) {
     if (s === 'review') {
       const target = run.docs.spec || entry();
       const body = sectionBody(readDoc(ctx, target) || '', '确认与复核') || '';
-      if (!/P0|P1|无/.test(body)) {
+      if (!(/P0\s*\/\s*P1/.test(body) || /P0/.test(body) || /P1/.test(body))) {
         issueWO(ctx, run, wo(run, {
           kind: 'review', title: `独立复核（L2/L3）：实现与文档对照`, goal: '读入口+spec+plan+diff，产出 P0/P1/P2 清单并把结论写入 spec「确认与复核」节',
           instructions: [
@@ -751,12 +763,15 @@ function advance(ctx, run, opt) {
 }
 
 // ── 子命令 ─────────────────────────────────────────────────────────────
+const BOOL_FLAGS = new Set(['adopt', 'json', 'done']); // 复核 P2-5：布尔旗标不吞下一参
 function parseArgs(argv) {
   const out = { cmd: argv[0], positional: [] };
   for (let i = 1; i < argv.length; i++) {
     const a = argv[i];
-    if (a.startsWith('--')) out[a.slice(2)] = argv[++i] ?? true;
-    else out.positional.push(a);
+    if (a.startsWith('--')) {
+      const k = a.slice(2);
+      if (BOOL_FLAGS.has(k)) out[k] = true; else out[k] = argv[++i] ?? true;
+    } else out.positional.push(a);
   }
   return out;
 }
@@ -791,7 +806,7 @@ if (isMain) {
   } else if (cmd === 'next') {
     const run = resolveRun(ctx, a);
     if (run.stopType === 'done' || run.stopType === 'aborted') { printRun(ctx, run); process.exit(0); }
-    advance(ctx, run, { triage: typeof a.triage === 'string' ? a.triage : undefined, delegated: typeof a.delegated === 'string' ? a.delegated : undefined, files: typeof a.files === 'string' ? a.files : undefined });
+    advance(ctx, run, { triage: typeof a.triage === 'string' ? a.triage : undefined, delegated: typeof a.delegated === 'string' ? a.delegated : undefined, files: typeof a.files === 'string' ? a.files : undefined, done: a.done === true });
   } else if (cmd === 'status') {
     if (a.adopt) { adoptRun(ctx, a); process.exit(0); }
     const run = resolveRun(ctx, a);
@@ -840,6 +855,7 @@ if (isMain) {
       }
     }
     if (flipped.length) {
+      runNode(ctx, run, 'gen-workflow-index.mjs', []); // 复核 P2-3：提交前重生成，防陈旧索引入库
       const c = docsCommit(ctx, run, [...flipped, 'workflow/INDEX.md'], `docs(workflow): ${run.triage?.topic || 'task'} 放弃——${to}`);
       if (!c.ok) console.log('⚠️ 放弃态 docs 提交失败（可手工补交）');
     }
