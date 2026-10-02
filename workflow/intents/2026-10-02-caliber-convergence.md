@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-02
 模块: pipeline
 备注: 三轴审查改进 3——plan 口径收敛（2 P1）+ 泳道判定单源化 + advisory 占位符噪声豁免 + 7 项口径 P2；消除「文档与机器分叉」这一准确性最大来源
-确认指纹: 6576971c657ae54f
+确认指纹: b55f856e62f940cc
 ---
 # INTENT — caliber-convergence（口径收敛批）
 
@@ -64,18 +64,19 @@ risk_level: L2
 
 ## 验收标准（可测试）
 
-- [ ] plan 口径四处一致：fill-plan.mjs / build.md（含模板源）/ workflow/README.md 对 / plans/_TEMPLATE.md 对——L1 三节、L2/L3 四节单套命名，grep 无「两节起步」残留（证据：grep 输出 + 四文件节名对照）
-- [ ] 泳道取法单源：全库泳道判定实现收敛为 1 个共享函数（或各点显式 import 单源）；check-lane-surface 消息与判定一致（fixture：按 spec 定案语义构造「仅改 risk_level / 仅改级别」两态断言）（证据：grep 实现点数 + fixture 用例）
-- [ ] check 2 噪声下降：真实仓库 advisory 中占位符误报清零（引用块内日期样例不再报）（证据：check-loop 输出前后对照 + fixture 用例）
-- [ ] 7 项口径 P2 逐项可 grep 验证修复（头注 1-20 / fill-intent 9 节 / plan.md 节数一致 / _TEMPLATE 三节口径 / sync-hosts 11 / Working rules 引用改实节名 / 6 字段限定 intent）（证据：逐项 grep）
-- [ ] 全量回归：npm test 全绿（fill-plan/check-loop 等既有断言不回退）+ verify.mjs 全绿 + check-loop 无新增 hard-block（证据：命令输出）
+- [x] plan 口径四处一致：fill-plan.mjs / build.md（含模板源）/ workflow/README.md 对 / plans/_TEMPLATE.md 对——L1 三节、L2/L3 四节单套命名，grep 无「两节起步」残留（证据：fill-plan.mjs 零改动（机器基准）；源面 grep「两节起步/旧四节节名」清零——余量仅 .agents/cache 生成缓存与本批三件套自引；复核者逐字比对四文件节名与 L1_SECTIONS/FULL_SECTIONS 一致）
+- [x] 泳道取法单源：全库泳道判定实现收敛为 1 个共享函数（或各点显式 import 单源）；check-lane-surface 消息与判定一致（证据：stage-gates.mjs 导出 laneOfEntry/laneOfDoc（协议锚 policy.riskLevelSince=2026-10-01），六消费点（check-loop 检查1/加固门/逐阶段、stage-gates draftGateFor、confirm-doc --auto与--batch、check-lane-surface）全部 import 单源；fixture：lane-surface「分歧→suspect 拦 + 两字段对齐指引」与「两字段一致 high→豁免」、检查1「分歧勾红线拦/协议前 L2 单字段不拦」、加固门 H7、confirm-doc S31b/S31c；存量 15 个协议前 done L2 件零追溯（预检实证 + 复核确认））
+- [x] check 2 噪声下降：真实仓库 advisory 中占位符误报清零（引用块内日期样例不再报）（证据：真仓「模板未填」8→2——余 2 为 2026-09-27 旧 plan 真未填日期（真阳性，正确保留）；check-loop.test 检查2 三态 fixture（反引号/围栏不报、裸占位照报））
+- [x] 7 项口径 P2 逐项可 grep 验证修复（证据：源面 grep「不占 1-19 / 8 个 commands / Working rules」清零（含 5 宿主适配 76 对 sync-hosts --apply 与 trae rules）；fill-intent 头注 9 节、plan.md 8 节清单、_TEMPLATE 三节口径、AGENTS 6 字段限定 intent 均落盘可查）
+- [x] 全量回归：npm test 全绿（fill-plan/check-loop 等既有断言不回退）+ verify.mjs 全绿 + check-loop 无新增 hard-block（证据：npm test「✅ 全部套件通过」（check-loop 187/0 含 H7、confirm-doc 48/0 含 S31b/c、fill-plan 30/0、lane-surface 21/21）；verify 2/2；gate-checklist 0 断档 0 未登记；check-loop exit 0；S10c/lane-surface 断言更新均属 spec 授权语义变更、无 expectHard→expectOk 回退——复核确认）
 
 > **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 冒烟脚本输出>）`。
 > done 状态仍有未勾项会被 check-loop 拦截（2026-09-12 起新建 intent 为 hard-block，存量 intent 仅 warning 提示）；勾选但缺「证据：」为 hard-block。
 
 ## 确认与复核
 
-- 确认日期：
+- 确认日期：2026-10-02（用户对话内「确认」/「确认方案C」/「执行」代录，台账 source=chat-delegated）
 - 确认人：用户（对话内明确放行即确认）
-- 确认范围：caliber-convergence（plan 口径单源 + 泳道判定单源 + advisory 豁免 + 7 项 P2）
-- 复核：L2——落地后 independent-reviewer 复核口径一致性与判据不回退
+- 确认范围：caliber-convergence（plan 口径单源 + 泳道判定单源方案 C + advisory 豁免 + 7 项 P2）
+- 复核：已完成（independent-reviewer 新上下文）——初判「修复后放行」：P1×2（加固门 suspect 逃逸 spec 前置 / 5 宿主交付面旧口径未 sync）+ P2×2（测试注释残留 / confirm-doc suspect 断言未兑现），用户定性**全收**，随 `2989d9c` 收口（加固门 `!== 'low'` + H7 fixture + sync-hosts 76 对对齐含 trae rules + S31b/S31c）；口径与判据维度（plan 单源 / 方案 C 六消费点 / check 2 豁免 / 断言不回退）初轮即核实
+- **实现口径细化声明**：laneOfEntry 的「分歧」判定按字段协议生效边界落地（锚 `policy.riskLevelSince=2026-10-01`——此前建档的 intent 无 risk_level 不判 suspect，按级别单字段；此后双字段须一致）——spec §2 字面未预设该边界，系实现预检发现字面语义会追溯硬拦 15 个存量 done L2 件后的必要细化，符合 intent 非目标「存量不回填」约束，在此明示留痕

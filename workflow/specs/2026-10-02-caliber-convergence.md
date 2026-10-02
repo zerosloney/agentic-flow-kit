@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-02
 模块: pipeline
 备注: 口径收敛批——plan 节数/节名单源 + 泳道判定单源（分歧双严）+ check 2 样例豁免 + 7 项 P2；入口 intents/2026-10-02-caliber-convergence.md
-确认指纹: ddc93806d099a23b
+确认指纹: a8c32493930b2a37
 ---
 # SPEC — caliber-convergence（口径收敛批）
 
@@ -114,4 +114,4 @@ check-loop 检查 2：phRe 命中前剥行内代码与围栏块
 ## 确认与复核
 
 - 确认日期：2026-10-02（用户对话内「确认方案C」代录，台账 source=chat-delegated）——**泳道方案 C（分歧双严）定案生效**
-- 复核：L2——independent-reviewer 复核四处口径逐字一致、laneOf 三态消费映射与 spec 表一致、check 2 豁免不缩检测面、fixture 断言无回退
+- 复核：已完成（independent-reviewer 新上下文）——初判「修复后放行」：P1×2 + P2×2 用户定性全收随 `2989d9c` 收口（加固门 suspect 补 spec 前置 / sync-hosts 76 对 / S31b/S31c 断言 / 注释残留）；plan 口径单源、方案 C 六消费点映射、check 2 豁免不缩检测面、断言无回退均核实。**实现细化**：laneOfEntry 分歧判定按 riskLevelSince=2026-10-01 协议锚分界（存量单字段不追溯，见 intent 确认节声明）
