@@ -12,7 +12,12 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const PRE_PUSH = path.join(SCRIPT_DIR, '..', '..', '_githooks', 'pre-push');
+// 钩子双布局探测：templates 布局（../../_githooks）与装户布局（../../.githooks）——本测试随 sync
+// 落到 .agents/scripts 后 ../../_githooks 不存在（装户钩子在仓库根 .githooks/），2026-10-02 ci-red-batch
+const PRE_PUSH = [
+  path.join(SCRIPT_DIR, '..', '..', '_githooks', 'pre-push'),
+  path.join(SCRIPT_DIR, '..', '..', '.githooks', 'pre-push'),
+].find((p) => fs.existsSync(p));
 
 let pass = 0;
 let fail = 0;
@@ -31,6 +36,8 @@ const setup = () => {
   fs.mkdirSync(path.join(root, '.agents', 'scripts'), { recursive: true });
   // 挂载真实 pre-push（装户同款），stub 替换 check-loop 记录 argv
   fs.copyFileSync(PRE_PUSH, path.join(root, '.githooks', 'pre-push'));
+  // Linux：git 静默跳过不可执行钩子（推送照常成功、桩无记录）——挂载后必须设执行位；桩经 sh 调用无须 +x
+  fs.chmodSync(path.join(root, '.githooks', 'pre-push'), 0o755);
   fs.writeFileSync(path.join(root, '.agents', 'scripts', 'check-loop.sh'), '#!/bin/sh\necho "$@" >> .stub-args\nexit 0\n');
   fs.writeFileSync(path.join(root, 'a.txt'), 'a\n');
   git(root, ['init', '-q']);

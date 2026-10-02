@@ -246,7 +246,7 @@
     },
     {
       "rel": ".agents/scripts/pre-push.test.mjs",
-      "sha256": "d9a8b8683462600cb65fc8898817e84ae7972232c606a3e15033e7b61ffa5417"
+      "sha256": "e032478aeca0a0727f093f93f49d154188ffe12b8adb565948d97c82c31b1cb8"
     },
     {
       "rel": ".agents/scripts/rule-budget.sh",
@@ -416,7 +416,7 @@
     },
     {
       "rel": ".agents/settings.json",
-      "sha256": "d1be55d7f5e5f349a8bf9806209aa9e14baa0e14d901b166012e90737d404c2a"
+      "sha256": "957a8429e92c3589c7f3dd2d5e06d10fb7654cd1248d85c1d9636e05157d7dac"
     },
     {
       "rel": ".agents/workflow-modules.txt",
