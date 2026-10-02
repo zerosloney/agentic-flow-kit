@@ -16,7 +16,11 @@
       "git reset --hard",
       "git push --force",
       "git push -f",
-      "drop database"
+      "drop database",
+      "git commit --no-verify",
+      "git commit -n",
+      "git merge --no-verify",
+      "git push --no-verify"
     ],
     "ask": [
       "git checkout",
