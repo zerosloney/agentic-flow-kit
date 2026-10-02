@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-02
 模块: pipeline
 备注: 三轴审查改进 2——confirmations.jsonl 提交不变量：CI 历史全扫（append-only 前缀单调 + 行级校验）+ pre-commit --staged 前置，本地伪造从「事后对质级」升为「机器可检出级」
-确认指纹: fe41c87ec2278887
+确认指纹: e41be6b3d28907cd
 ---
 # INTENT — ledger-ci-invariant（台账提交不变量）
 
@@ -62,19 +62,19 @@ risk_level: L2
 
 ## 验收标准（可测试）
 
-- [ ] 真仓历史全扫通过：台账全部提交历史前缀单调、行级校验零违例（证据：脚本输出 + 行数/提交数）
-- [ ] 篡改注入 fixture 全部检出：删历史行 / 改历史行内容 / 非前缀改写 → 历史模式 exit 1 并指明违规提交；ts 乱序 / 伪造指纹（非 64-hex）/ chat-delegated 空 quote / doc 路径不存在 → 行级校验 exit 1（证据：测试用例名）
-- [ ] --staged 模式：暂存为 HEAD 前缀扩展 → 过；删改历史行 → 拦（证据：测试用例名）
-- [ ] ci.yml 机器门含该步且克隆深度满足全扫；pre-commit 接线 guard 存在性（证据：两文件 diff）
-- [ ] 合法追加回归：模拟一次合法 confirm-doc 追加提交 → 历史全扫与 --staged 均放行（防误拦）（证据：测试用例名）
-- [ ] 全量回归：npm test 全绿（含新套件，检查 20 合规）+ verify.mjs 全绿（证据：命令输出）
+- [x] 真仓历史全扫通过：台账全部提交历史前缀单调、行级校验零违例（证据：`node .agents/scripts/check-ledger-invariant.mjs` exit 0——预检实证 90 个台账相关提交 / 现 207 行；真阳性回退注记行兼容后全绿）
+- [x] 篡改注入 fixture 全部检出：删历史行 / 改历史行内容 / 非前缀改写 → 历史模式 exit 1 并指明违规提交；ts 乱序 / 伪造指纹（非 64-hex）/ chat-delegated 空 quote / doc 路径不存在 → 行级校验 exit 1（证据：check-ledger-invariant.test.mjs S2/S3/S4/S5/S6/S7/S8——真 git 仓注入，12/12 全过）
+- [x] --staged 模式：暂存为 HEAD 前缀扩展 → 过；删改历史行 → 拦（证据：S9 合法过 / S10 删行拦「台账重写」；本批自身提交（0a11893 等）经真实 pre-commit --staged 路径放行即活体实证）
+- [x] ci.yml 机器门含该步且克隆深度满足全扫；pre-commit 接线 guard 存在性（证据：ci.yml `fetch-depth: 0` + 机器门五道含 check-ledger-invariant；templates/_githooks/pre-commit guard + 暂存触发块；装副本 sync 一致、source-sync-check --gate exit 0）
+- [x] 合法追加回归：模拟一次合法 confirm-doc 追加提交 → 历史全扫与 --staged 均放行（防误拦）（证据：S1 历史追加过 / S9 staged 过 / S12 回退注记行过）
+- [x] 全量回归：npm test 全绿（含新套件，检查 20 合规）+ verify.mjs 全绿（证据：npm test「✅ 全部套件通过」；verify 2/2 全绿——2026-10-02 实录）
 
 > **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 冒烟脚本输出>）`。
 > done 状态仍有未勾项会被 check-loop 拦截（2026-09-12 起新建 intent 为 hard-block，存量 intent 仅 warning 提示）；勾选但缺「证据：」为 hard-block。
 
 ## 确认与复核
 
-- 确认日期：
+- 确认日期：2026-10-02（用户对话内「确认」×3 代录，台账 source=chat-delegated）
 - 确认人：用户（对话内明确放行即确认）
 - 确认范围：ledger-ci-invariant（历史全扫 + --staged + CI/pre-commit 接线 + 不可变规范条目）
-- 复核：L2——落地后 independent-reviewer 复核不变量判据完备性（前缀单调不可绕面）、fixture 注入真实性、CI 接线有效性
+- 复核：已完成（independent-reviewer 新上下文）——0 P0 / 0 P1 / 1 P2，建议放行；P2（删除提交 `continue` 可作「删除→重加」绕基线）收口升级为**任一提交删除台账即 hard fail**（`6ad4446`）；前缀不可绕面 / 行级完备性（含回退注记行兼容）/ fixture 真实性（真 git 仓）/ 五道门接线 / 范围纪律均核实；已知边界（--follow / 克隆深度 / force-push）声明于 spec 确认节

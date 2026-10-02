@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
-确认指纹: d6e4d1374367c859
+确认指纹: cc643046e143f9de
 ---
 # PLAN — ledger-ci-invariant（台账提交不变量）
 
@@ -49,6 +49,6 @@
 ## 确认与复核
 
 > 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节（确认环节的机器可见态），done 只在关单出现——禁从 draft 直跳 done。
-- 确认结果：approved（2026-10-02 用户对话内确认，原话「确认」——plan 全文过目）；done（关单时随入口文档置终态）
+- 确认结果：approved（2026-10-02 用户对话内确认，原话「确认」——plan 全文过目）；done（2026-10-02 关单，随入口文档置终态；实现 0a11893 + P2 收口 6ad4446）
 - 确认门记录：plan 草稿全文过目 + 改动清单确认（改动方案节随 plan 全文一并过目确认）
-- 复核：L2——independent-reviewer 复核前缀不变量不可绕面、fixture 真实性（真 git 仓）、CI 接线有效性
+- 复核：已完成（independent-reviewer 新上下文）——0 P0 / 0 P1 / 1 P2，建议放行；P2（删除提交绕基线）收口为「删除台账即 hard fail」（6ad4446）；fixture 真实性（12 场景真 git 仓）、五道门接线、范围纪律均核实

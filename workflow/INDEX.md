@@ -5,27 +5,24 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（5）
+## 活跃（2）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
-| INTENT | L2 | approved | 2026-10-02 | pipeline | ledger-ci-invariant（台账提交不变量） | ☑0/6 |
-| PLAN | L2 | approved | 2026-10-02 | pipeline | ledger-ci-invariant（台账提交不变量） | — |
-| SPEC | L2 | approved | 2026-10-02 | pipeline | ledger-ci-invariant（台账提交不变量） | — |
 | INCIDENT | L1 | open | 2026-09-27 | pipeline | 2026-09-27 P2 池批二（看板/wiki/宿主维护面收口） | — |
 | INCIDENT | L1 | open | 2026-09-25 | pipeline | 2026-09-25 doctor owned 漂移 WARN 升级 FAIL | — |
 
-## 档案计数（190，不进表）
+## 档案计数（193，不进表）
 
 | 类型 | 模块 | 数量 |
 |---|---|---|
 | INCIDENT | pipeline | 21 |
-| INTENT | pipeline | 54 |
+| INTENT | pipeline | 55 |
 | INTENT | wiki | 1 |
-| PLAN | pipeline | 76 |
+| PLAN | pipeline | 77 |
 | PLAN | wiki | 1 |
-| SPEC | pipeline | 37 |
+| SPEC | pipeline | 38 |
 
-终态构成：done 169 · closed 13 · fixed 8；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
+终态构成：done 172 · closed 13 · fixed 8；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
 
 <!-- GENERATED:END -->

@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-02
 模块: pipeline
 备注: 台账提交不变量——历史全扫（前缀单调 + 行级校验）+ --staged 前置 + CI/pre-commit 接线；入口 intents/2026-10-02-ledger-ci-invariant.md
-确认指纹: f0550fc166c8ae66
+确认指纹: edf4c9363bd0487c
 ---
 # SPEC — ledger-ci-invariant（台账提交不变量）
 
@@ -81,4 +81,4 @@ git commit
 
 - 确认日期：2026-10-02（用户对话内「确认」代录，台账 source=chat-delegated）
 - **实现前置实测（R1 排除）**：真仓台账全历史预检——90 个相关提交、时间正序逐字节前缀零违例、现 207 行——append-only 事实成立，无需生效日锚，门上线即绿
-- 复核：L2——independent-reviewer 复核前缀不变量不可绕面（如 blob 口径 / 重命名边界）、fixture 注入真实性（真 git 仓非 mock）、CI 接线有效性、R1 存量豁免口径（如触发）的正当性
+- 复核：已完成（independent-reviewer 新上下文）——0 P0 / 0 P1 / 1 P2（删除提交 `continue` 可作「删除→重加」绕基线），建议放行；P2 已收口升级为**任一提交删除台账即 hard fail**（比 skip 更严），随 `6ad4446` 落地。**已知边界声明**：台账重命名未用 `--follow`（自创建单一路径）；克隆深度不足仅扫可得历史（CI `fetch-depth: 0` 兜全史）；force-push 全史重写属无签名方案固有边界（非目标）
