@@ -194,11 +194,15 @@ function funnelFromLedger(entries, month) {
     if (!terminals.length) continue; // 未收口件不进漏斗桶（仍计台账行数）
     const lastTerm = terminals[terminals.length - 1];
     if (String(lastTerm.ts).slice(0, 7) !== month) continue; // 月度归桶 = 终态行所在月
-    const hasApproved = nonRevert.some((r) => r.stage === 'approved');
-    const approvals = nonRevert.filter((r) => r.stage === 'approved').length;
+    // 确认阶段按件型（复核 P2-3 收口）：docs=approved；incidents=fixed（两跳确认门 fixed→closed，
+    // 永无 approved 行——按 approved 判会把已走确认门的 incident 误归协议前）
+    const isInc = doc.includes('/incidents/');
+    const confirmStage = isInc ? 'fixed' : 'approved';
+    const confirms = nonRevert.filter((r) => r.stage === confirmStage);
+    const hasChain = confirms.length >= 1;
     const hasRevert = rs.some((r) => /^revert-/.test(String(r.stage || '')));
-    const kind = !hasApproved ? 'legacy' : (hasRevert || approvals >= 2 || terminals.length >= 2 ? 'rework' : 'once');
-    const firstTs = hasApproved ? nonRevert.find((r) => r.stage === 'approved').ts : rs[0].ts; // 协议前件首行起算
+    const kind = !hasChain ? 'legacy' : (hasRevert || confirms.length >= 2 || terminals.length >= 2 ? 'rework' : 'once');
+    const firstTs = hasChain ? confirms[0].ts : rs[0].ts; // 协议前件首行起算
     const days = (Date.parse(lastTerm.ts) - Date.parse(firstTs)) / 86400000;
     res.closed++;
     if (kind === 'legacy') res.legacy++;

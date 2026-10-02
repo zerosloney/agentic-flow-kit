@@ -179,14 +179,25 @@ const mkfixLedger = (lines) => {
   fs.rmSync(root, { recursive: true, force: true });
 }
 {
-  // L5：incident 两跳（approved 形态不适用——incident 链 open→fixed 由 confirm 落账，此处验 closed 终态计数）
+  // L5：incident 两跳（fixed→closed = incident 确认链，复核 P2-3 收口）→ 完整链一次通过
   const root = mkfixLedger([
     LROW({ ts: '2026-10-01T00:00:00.000Z', doc: 'workflow/incidents/inc.md', stage: 'fixed' }),
     LROW({ ts: '2026-10-02T00:00:00.000Z', doc: 'workflow/incidents/inc.md', stage: 'closed', prev: 'fixed' }),
   ]);
   const r = run(root, ['--month', '2026-10']);
   const md = readMetrics(root);
-  check('漏斗 L5 incident closed 终态 → 收口 1（链路按行计）',
+  check('漏斗 L5 incident 两跳确认链 → 完整链 1 / 一次通过 1 / 周期 1.0',
+    r.status === 0 && /\| 2026-10 \| 1 \| 1 \| 0 \| 1 \| 0 \| 1\.0 \|/.test(md), `${r.stdout}${md}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+{
+  // L7：incident 单行 closed（存量补关，无确认链）→ 协议前
+  const root = mkfixLedger([
+    LROW({ ts: '2026-10-02T00:00:00.000Z', doc: 'workflow/incidents/old.md', stage: 'closed', prev: 'fixed' }),
+  ]);
+  const r = run(root, ['--month', '2026-10']);
+  const md = readMetrics(root);
+  check('漏斗 L7 incident 单行 closed → 协议前 1',
     r.status === 0 && /\| 2026-10 \| 1 \| 0 \| 1 \| 0 \| 0 \|/.test(md), `${r.stdout}${md}`);
   fs.rmSync(root, { recursive: true, force: true });
 }
