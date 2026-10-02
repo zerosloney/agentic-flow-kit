@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-02
 模块: pipeline
 备注: 台账炼漏斗——机器口径一次通过/返工/周期入 metrics.md 双表；入口 intents/2026-10-02-ledger-funnel-metrics.md
-确认指纹: 905b3f32f8959136
+确认指纹: 0b1c9d96d36c07bf
 ---
 # SPEC — ledger-funnel-metrics（台账炼漏斗）
 
@@ -84,4 +84,4 @@
 ## 确认与复核
 
 - 确认日期：2026-10-02（用户对话内「确认」代录，台账 source=chat-delegated）
-- 复核：L2——independent-reviewer 复核口径定义式与实现一致、fixture 覆盖各形态、体量表零回归、真仓双月数值抽验
+- 复核：已完成（independent-reviewer 新上下文）——0 P0 / 0 P1 / 3 P2，建议放行；P2×3 全收随 `ad42ca8` 收口：**P2-3 口径语义盲点**（incident 确认阶段按件型=fixed，两跳链归完整链——本定义式表已同步该修正）+ P2-1 终态≥2 入返工定义式 + P2-2 一次通过边界声明；真仓双月抽验与重推导（108=96+12）核实

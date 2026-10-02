@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-02
 模块: pipeline
 备注: 三轴审查改进 1——从 confirmations.jsonl 炼闭环漏斗（机器口径一次通过/返工/周期时长）入 metrics.md，补可观测性最弱维（评审 3/5）
-确认指纹: e5b1f0cef5cb96ae
+确认指纹: 5c2a6cdd71bd2ae6
 ---
 # INTENT — ledger-funnel-metrics（台账炼漏斗）
 
@@ -63,18 +63,18 @@ risk_level: L2
 
 ## 验收标准（可测试）
 
-- [ ] 真仓跑 `gen-workflow-metrics.mjs`：metrics.md 双表（体量表原样 + 漏斗表新行），2026-09 与 2026-10 两个月漏斗行、数值与手工抽验一致（证据：metrics.md 内容 + 抽验计算）
-- [ ] 漏斗 fixture：构造台账 fixture（一次通过件 / revert 件 / 重确认件 / incidents 两跳 / 跨月收口）断言各分类计数与周期中位数（证据：测试用例名）
-- [ ] 既有体量表断言不回退：gen-workflow-metrics.test.mjs 既有用例全绿 + npm test 全绿（证据：测试输出）
-- [ ] stdout 明细含逐文档链路与「与 delegations 自报对照」提示（证据：脚本输出样例）
-- [ ] verify.mjs 全绿 + check-loop 无新增告警（证据：命令输出）
+- [x] 真仓跑 `gen-workflow-metrics.mjs`：metrics.md 双表（体量表原样 + 漏斗表新行），2026-09 与 2026-10 两个月漏斗行、数值与手工抽验一致（证据：metrics.md 双表落盘；复核者 dry-run 双月抽验 09=73/73/0/71/2、10=35/23/12/23/0，合计对账 108 收口 = 96 完整链 + 12 协议前、2 返工全在 09 月——P2-3 修正后重推导）
+- [x] 漏斗 fixture：构造台账 fixture（一次通过件 / revert 件 / 重确认件 / incidents 两跳 / 跨月收口）断言各分类计数与周期中位数（证据：gen-workflow-metrics.test.mjs L1-L7 七形态（含 incident 两跳确认链与单行协议前对照）24/0 全过）
+- [x] 既有体量表断言不回退：gen-workflow-metrics.test.mjs 既有用例全绿 + npm test 全绿（证据：场景 1-4 全过（场景 2 分段计数更新属双表结构合理适配）；npm test「✅ 全部套件通过」）
+- [x] stdout 明细含逐文档链路与「与 delegations 自报对照」提示（证据：脚本输出「闭环漏斗：收口…」+ 逐件行 + ℹ️ 对照提示行）
+- [x] verify.mjs 全绿 + check-loop 无新增告警（证据：verify 2/2 全绿；check-loop exit 0——2026-10-02 实录）
 
 > **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 冒烟脚本输出>）`。
 > done 状态仍有未勾项会被 check-loop 拦截（2026-09-12 起新建 intent 为 hard-block，存量 intent 仅 warning 提示）；勾选但缺「证据：」为 hard-block。
 
 ## 确认与复核
 
-- 确认日期：
+- 确认日期：2026-10-02（用户对话内「确认」×3 代录，台账 source=chat-delegated）
 - 确认人：用户（对话内明确放行即确认）
 - 确认范围：ledger-funnel-metrics（漏斗表 + 机器口径定义 + fixture）
-- 复核：L2——落地后 independent-reviewer 复核口径定义式与 spec 一致、fixture 覆盖各形态、体量表零回归
+- 复核：已完成（independent-reviewer 新上下文）——0 P0 / 0 P1 / 3 P2，建议放行；P2×3 用户定性全收随 `ad42ca8` 收口（P2-3 口径语义盲点：incident 确认阶段按件型=fixed，两跳链归完整链、重推导 108=96+12；P2-1 终态≥2 入返工定义式；P2-2 一次通过边界声明）；口径↔实现逐条对、fixture 七形态、体量零回归、检查 16 零接触、单写者未破坏均核实

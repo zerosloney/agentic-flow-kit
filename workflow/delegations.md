@@ -65,6 +65,7 @@
 | 2026-10-01 | gate-script-test-coverage：引擎脚本测试覆盖门（检查 20 + trust-mode 补测 + 豁免机制） | 一次通过 | intent 2026-10-01-gate-script-test-coverage（L2）；检查 20 四场景 fixture + trust-mode 8/8（含 --auto e2e 双向）+ 6 行豁免登记（零存量告警）+ gate-checklist 0 断档；独立复核两轮 0 P0/0 P1/2 P2，P2-1 收口 2fd70ae；npm test 全绿；主智能体自做 |
 | 2026-10-02 | caliber-convergence：口径收敛批（plan 单源 + 泳道方案 C 分歧双严 + check2 样例豁免 + 7 P2） | 返工×1 | intent 2026-10-02-caliber-convergence（L2）；实现 6d0e9fb（36 文件）；复核初判「修复后放行」——P1×2（加固门 suspect 逃逸 spec / 5 宿主交付面未 sync）+ P2×2 全收随 2989d9c；真仓占位符误报 8→2（余 2 真阳性）；check-loop 187/0（含 H7）+ confirm-doc 48/0（含 S31b/c）+ sync-hosts 76 对；顺手修 solidify 测试跨天脆断；主智能体自做 |
 | 2026-10-02 | ledger-ci-invariant：台账提交不变量（CI 历史全扫 + pre-commit --staged + 行级校验） | 一次通过 | intent 2026-10-02-ledger-ci-invariant（L2）；实现 0a11893 + P2 收口 6ad4446（删除台账即 hard fail）；预检 90 提交前缀零违例（append-only 事实成立）；fixture 12/12 真 git 仓六类篡改全检出 + 三正例防误拦；CI 五道门 + fetch-depth:0；README 硬规则 6；复核 0 P0/0 P1/1 P2 建议放行；主智能体自做 |
+| 2026-10-02 | ledger-funnel-metrics：台账炼漏斗（机器口径一次通过/返工/周期入 metrics.md 双表） | 一次通过 | intent 2026-10-02-ledger-funnel-metrics（L2）；实现 dcb7d1f + P2×3 收口 ad42ca8（incident 确认阶段按件型=fixed、终态≥2 入返工定义、边界声明——重推导 108=96 完整链+12 协议前、2 返工）；fixture 七形态 24/0 + 体量零回归 + 检查 16 零接触；双月回填 09/10；复核 0 P0/0 P1/3 P2 建议放行；主智能体自做 |
 
 ## 月度聚合快照
 
@@ -73,7 +74,7 @@
 | 月份 | 有效任务 | 一次通过率 | 平均返工 | 主兜底 | incident | 扩容门 | 备注 |
 |------|----------|-----------|----------|--------|----------|--------|------|
 | 2026-09 | 40 | 55% | 0.57 | 0% | 22 | ❌ 未达标（连续性中断）：2+3+5 | 样本含待修0 |
-| 2026-10 | 7 | 71% | 0.43 | — | 1 | ❌ 未达标（连续性中断）：1+2+3+5 | 样本含待修0 |
+| 2026-10 | 8 | 75% | 0.38 | — | 1 | ❌ 未达标（连续性中断）：1+2+3+5 | 样本含待修0 |
 
 ## 并发扩容门槛
 
