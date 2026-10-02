@@ -318,8 +318,44 @@ function confirmGate(ctx, run, docRel, quote, to) {
 // 语义上 confirm-doc 自行决定目标态（approved/done/fixed/closed）；事件里记录结果态
 function nextConfirmTarget(curState, docRel) { return curState || 'approved'; }
 
+// managedFaceCheck（复核 P2-4 修复 A′，2026-10-02 用户拍板）：提交集命中 kit.json 台账面或包源
+// templates/_agents/ 时——包源环境（bin/flow-kit.mjs 可达）自动跑 sync 刷台账并把 kit.json 与 sync
+// 产物追加进提交集（窗口闭合）；装户环境降级为显式 WARN（提示手动补 sync）。返回须追加的文件。
+function managedFaceCheck(ctx, run, files) {
+  let managedRels = null;
+  try {
+    const kit = JSON.parse(fs.readFileSync(path.join(ctx.root, '.agents', 'kit.json'), 'utf8'));
+    managedRels = new Set((kit.managed || []).map((e) => e && e.rel).filter(Boolean));
+  } catch { return []; } // 无台账（夹具/裸库）不处理
+  const hit = files.some((f) => f.startsWith('templates/_agents/') || managedRels.has(f));
+  if (!hit) return [];
+  const flowKit = path.join(ctx.root, 'bin', 'flow-kit.mjs');
+  if (!fs.existsSync(flowKit)) {
+    const msg = '触及 managed 面（kit.json 台账）——装户环境无 flow-kit：提交后须手动跑 flow-kit sync 刷新台账，否则克隆/CI doctor 报漂移';
+    console.log('⚠️ ' + msg);
+    emit(run, { type: 'warn', note: msg });
+    return ['.agents/kit.json']; // 台账仍随提交（尽力保持可见）
+  }
+  const cmd = 'node bin/flow-kit.mjs sync';
+  const t0 = Date.now();
+  const p = spawnSync(process.execPath, [flowKit, 'sync'], { cwd: ctx.root, encoding: 'utf8', windowsHide: true });
+  const exit = p.status ?? 1;
+  emit(run, { type: 'gate', cmd, exit, ms: Date.now() - t0 });
+  if (exit !== 0) {
+    console.log(`⚠️ flow-kit sync exit ${exit}——提交将带旧台账，须事后手动补 sync`);
+    return ['.agents/kit.json'];
+  }
+  // sync 产物（.agents/ 与 templates/ 下非运行态改动）+ 台账一并入提交
+  const extra = ['.agents/kit.json', ...(changedFiles(ctx, run) || [])].filter((c) =>
+    (c.startsWith('.agents/') || c.startsWith('templates/')) &&
+    !RUNTIME_OWNED.some((ro) => (ro.endsWith('/') ? c.startsWith(ro) : c === ro)));
+  emit(run, { type: 'managed-sync', extra: [...new Set(extra)] });
+  return [...new Set(extra)];
+}
+
 function docsCommit(ctx, run, files, subject) {
-  const add = runGit(ctx, run, ['add', ...files]);
+  const commitFiles = [...new Set([...files, ...managedFaceCheck(ctx, run, files)])];
+  const add = runGit(ctx, run, ['add', ...commitFiles]);
   if (add.exit !== 0) return { ok: false, msg: `git add 失败：${add.stderr.slice(0, 200)}` };
   const c = runGit(ctx, run, ['commit', '-m', subject]);
   if (c.exit !== 0) return { ok: false, msg: `git commit 失败：${(c.stderr || c.stdout).split(/\r?\n/).filter(Boolean).slice(-4).join(' | ')}` };

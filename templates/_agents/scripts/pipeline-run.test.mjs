@@ -356,6 +356,58 @@ test('deploy 三件缺口 → gate-fail 列缺口 exit 2（P1-2）', () => {
   assert.match(out(p), /2026-10-02-dep1\.md（approved/);
 });
 
+// P2-4 A′：提交命中 managed 面的处理（装户降级 WARN / 包源自愈 sync）
+test('P2-4 A′：命中台账件且无 flow-kit → 装户降级 WARN + 台账随提交（复核回归）', () => {
+  const f = buildFixture();
+  fs.mkdirSync(path.join(f.root, '.agents', 'notes'), { recursive: true });
+  fs.writeFileSync(path.join(f.root, '.agents', 'notes', 'runtime-env.md'), 'notes\n');
+  fs.writeFileSync(path.join(f.root, '.agents', 'kit.json'), JSON.stringify({ managed: [{ rel: '.agents/notes/runtime-env.md', sha256: 'x' }] }));
+  prun(f, ['start', '改一处文案']);
+  prun(f, ['next', '--triage', 'kind=require level=L0 module=wiki topic=mng1']);
+  editDoc(f, '.agents/notes/runtime-env.md', (t) => t + '\n- 演练追加一行\n');
+  const p = prun(f, ['next', '--files', '.agents/notes/runtime-env.md'], { FIXTURE_GIT_STATUS: ' M .agents/notes/runtime-env.md' });
+  assert.equal(p.status, 0, out(p));
+  assert.match(out(p), /⚠️ 触及 managed 面/);
+  assert.match(fs.readFileSync(f.gitLog, 'utf8'), /add \.agents\/notes\/runtime-env\.md \.agents\/kit\.json/);
+});
+
+test('P2-4 A′：包源环境自动 sync——flow-kit 假件被调 + 产物入提交（复核回归）', () => {
+  const f = buildFixture();
+  fs.mkdirSync(path.join(f.root, '.agents', 'notes'), { recursive: true });
+  fs.writeFileSync(path.join(f.root, '.agents', 'notes', 'runtime-env.md'), 'notes\n');
+  fs.writeFileSync(path.join(f.root, '.agents', 'kit.json'), JSON.stringify({ managed: [{ rel: '.agents/notes/runtime-env.md', sha256: 'x' }] }));
+  fs.mkdirSync(path.join(f.root, 'bin'), { recursive: true });
+  const syncLog = path.join(f.root, 'flowkit-sync.log');
+  fs.writeFileSync(path.join(f.root, 'bin', 'flow-kit.mjs'), `#!/usr/bin/env node
+import fs from 'node:fs';
+fs.appendFileSync(${JSON.stringify(syncLog)}, 'sync-called\\n');
+const kp = ${JSON.stringify(path.join(f.root, '.agents', 'kit.json'))};
+const kit = JSON.parse(fs.readFileSync(kp, 'utf8'));
+kit.managed[0].sha256 = 'refreshed';
+fs.writeFileSync(kp, JSON.stringify(kit));
+`);
+  prun(f, ['start', '改一处文案']);
+  prun(f, ['next', '--triage', 'kind=require level=L0 module=wiki topic=mng2']);
+  editDoc(f, '.agents/notes/runtime-env.md', (t) => t + '\n- 演练追加一行\n');
+  const p = prun(f, ['next', '--files', '.agents/notes/runtime-env.md'], { FIXTURE_GIT_STATUS: ' M .agents/notes/runtime-env.md' });
+  assert.equal(p.status, 0, out(p));
+  assert.match(fs.readFileSync(syncLog, 'utf8'), /sync-called/);
+  const run = runFile(f, latestId(f));
+  assert.ok(run.events.some((e) => e.type === 'gate' && e.cmd.includes('flow-kit.mjs sync') && e.exit === 0));
+  assert.ok(run.events.some((e) => e.type === 'managed-sync'));
+  assert.match(fs.readFileSync(f.gitLog, 'utf8'), /kit\.json/); // 台账（已被假 sync 刷新）随提交
+});
+
+test('P2-4 A′：未命中台账面 → 不触发 sync/告警', () => {
+  const f = buildFixture();
+  fs.writeFileSync(path.join(f.root, '.agents', 'kit.json'), JSON.stringify({ managed: [{ rel: '.agents/notes/runtime-env.md', sha256: 'x' }] }));
+  prun(f, ['start', '改一处文案']);
+  prun(f, ['next', '--triage', 'kind=require level=L0 module=wiki topic=mng3']);
+  const p = prun(f, ['next', '--files', 'README.md'], { FIXTURE_GIT_STATUS: ' M README.md' });
+  assert.equal(p.status, 0, out(p));
+  assert.doesNotMatch(out(p), /managed 面/);
+});
+
 test('rename 行 old+new 双收录防逃逸（复核 P2-2 回归）', () => {
   const f = buildFixture();
   driveToImplement(f, 'L1', 'rn1');
