@@ -81,7 +81,13 @@ let prev = null;
 let prevSha = null;
 for (const sha of shas) {
   let cur;
-  try { cur = blobOf(`${sha}:${REL}`); } catch { continue; } // 提交对该文件为删除等极端态，跳过（下个提交重建基线）
+  // 删除提交不是静默边界（复核 P2 收口）：台账在 append-only 世界里永不应删除——任一历史提交删除
+  // 台账即 hard fail（否则「删除→次提交重加」会把重加 blob 当新基线绕过前缀判据）。
+  try { cur = blobOf(`${sha}:${REL}`); } catch {
+    problems.push(`- [台账删除] ${sha.slice(0, 10)}：该提交删除了 confirmations.jsonl（append-only 世界禁删文件）`);
+    prev = null; // 后续重加无基线可比，仅受行级校验约束
+    continue;
+  }
   if (prev !== null && !cur.subarray(0, prev.length).equals(prev)) {
     let off = 0;
     while (off < Math.min(prev.length, cur.length) && prev[off] === cur[off]) off++;

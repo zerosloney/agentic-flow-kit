@@ -114,7 +114,7 @@
     },
     {
       "rel": ".agents/scripts/check-ledger-invariant.mjs",
-      "sha256": "1d782864e9335042b1c5dbc55e04e5f53ae8a79a8ff87a4708dfb534386ca37e"
+      "sha256": "3301bc0634afdbfb82f02d2472c64fccf80ea4a108ac006b072b57ffdc909dc5"
     },
     {
       "rel": ".agents/scripts/check-ledger-invariant.test.mjs",
