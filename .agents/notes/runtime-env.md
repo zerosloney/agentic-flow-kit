@@ -28,6 +28,7 @@
 - API：<端口 / 进程名 / 启动停止命令>
 - 前端：<端口 / 启动命令>
 - workflow 看板：8933（`node .agents/scripts/workflow-board-server.mjs`，只读）
+- pipeline-run 执行器：运行态在 `.agents/cache/pipeline-runs/*.json`（gitignored 缓存、非权威——权威在 workflow/ 文档+confirmations 台账；丢失后 status --adopt 重建）；watch 终端轮询 2s，Ctrl+C 退出不影响 run
 
 ## 3. 数据与密钥
 
