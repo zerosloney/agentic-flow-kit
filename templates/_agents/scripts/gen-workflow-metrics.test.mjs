@@ -70,8 +70,12 @@ const readMetrics = (root) => fs.readFileSync(path.join(root, 'workflow', 'metri
   run(root, ['--month', '2026-09']);
   run(root, ['--month', '2026-09']);
   let md = readMetrics(root);
-  const n09 = (md.match(/^\| 2026-09 \|/gm) || []).length;
-  check('场景 2：同月重跑只保留一行', n09 === 1, `${n09} 行\n${md}`);
+  const funnelMark = '## 闭环漏斗';
+  const bodyPart = md.slice(0, md.includes(funnelMark) ? md.indexOf(funnelMark) : undefined);
+  const n09 = (bodyPart.match(/^\| 2026-09 \|/gm) || []).length;
+  const n09f = ((md.includes(funnelMark) ? md.slice(md.indexOf(funnelMark)) : '').match(/^\| 2026-09 \|/gm) || []).length;
+  check('场景 2：同月重跑只保留一行（体量表分段计数）', n09 === 1, `${n09} 行\n${md}`);
+  check('场景 2：漏斗表同月 upsert 不重复', n09f === 1, `${n09f} 行\n${md}`);
   run(root, ['--month', '2026-08']);
   md = readMetrics(root);
   const i08 = md.indexOf('| 2026-08 |');
@@ -111,6 +115,93 @@ const readMetrics = (root) => fs.readFileSync(path.join(root, 'workflow', 'metri
   check('场景 4：单 * 按前缀+后缀匹配（pl*.md 只吃 plan.md 10B，zeta.md 500B 不计入）', /\.agents\/commands\/pl\*\.md（单篇最大）\s+10\s+\/\s+9999/.test(r.stdout), r.stdout);
   check('场景 4：常驻面合计随之正确（120+10=130B → 0.1 KB）', /0\.1 KB（峰值/.test(md) && /常驻面合计：0\.1 KB/.test(r.stdout), `${md}\n${r.stdout}`);
   check('场景 4：多 * 与目录段 * 各警告跳过', (r.stderr || '').includes('**.md') && (r.stderr || '').includes('.agents/*/cmd.md'), r.stderr);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 闭环漏斗（2026-10-02 ledger-funnel-metrics；口径定义式 = specs/2026-10-02-ledger-funnel-metrics.md）----
+const LROW = (o = {}) => JSON.stringify({
+  ts: '2026-10-02T00:00:00.000Z', doc: 'workflow/intents/demo.md', stage: 'approved',
+  fingerprint: 'b'.repeat(64), prev: 'draft', source: 'chat-delegated', quote: '确认', ...o,
+});
+// mkfixLedger：在 mkfix 基础上写台账（LROW 已是 JSON 字符串，直接 join——勿再 stringify 双重编码）
+const mkfixLedger = (lines) => {
+  const root = mkfix();
+  fs.writeFileSync(path.join(root, '.agents', 'confirmations.jsonl'), lines.join('\n') + '\n', 'utf8');
+  return root;
+};
+{
+  // L1：一次通过（approved→done 同月）→ 收口 1 / 完整链 1 / 一次通过 1 / 周期 1.0 天
+  const root = mkfixLedger([
+    LROW({ ts: '2026-10-01T00:00:00.000Z' }),
+    LROW({ ts: '2026-10-02T00:00:00.000Z', stage: 'done', prev: 'approved' }),
+  ]);
+  const r = run(root, ['--month', '2026-10']);
+  const md = readMetrics(root);
+  check('漏斗 L1 一次通过：| 2026-10 | 1 | 1 | 0 | 1 | 0 | 1.0 | 2 |',
+    r.status === 0 && /\| 2026-10 \| 1 \| 1 \| 0 \| 1 \| 0 \| 1\.0 \| 2 \|/.test(md), `${r.stdout}${md}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+{
+  // L2：revert 行（回退后重走）→ 返工件
+  const root = mkfixLedger([
+    LROW({ ts: '2026-10-01T00:00:00.000Z', stage: 'revert-draft', fingerprint: 'n/a', prev: 'approved' }),
+    LROW({ ts: '2026-10-02T00:00:00.000Z' }),
+    LROW({ ts: '2026-10-03T00:00:00.000Z', stage: 'done', prev: 'approved' }),
+  ]);
+  const r = run(root, ['--month', '2026-10']);
+  const md = readMetrics(root);
+  check('漏斗 L2 revert 行 → 返工件 1（周期按首 approved 起算 1.0 天）',
+    r.status === 0 && /\| 2026-10 \| 1 \| 1 \| 0 \| 0 \| 1 \| 1\.0 \| 3 \|/.test(md), `${r.stdout}${md}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+{
+  // L3：重确认（两次 approved）→ 返工件
+  const root = mkfixLedger([
+    LROW({ ts: '2026-10-01T00:00:00.000Z' }),
+    LROW({ ts: '2026-10-02T00:00:00.000Z', quote: '重确认' }),
+    LROW({ ts: '2026-10-03T00:00:00.000Z', stage: 'done', prev: 'approved' }),
+  ]);
+  const r = run(root, ['--month', '2026-10']);
+  const md = readMetrics(root);
+  check('漏斗 L3 两次 approved → 返工件 1',
+    r.status === 0 && /\| 2026-10 \| 1 \| 1 \| 0 \| 0 \| 1 \| 2\.0 \| 3 \|/.test(md), `${r.stdout}${md}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+{
+  // L4：协议前（首行即终态，无 approved）→ 协议前 1（不计一次通过分母）
+  const root = mkfixLedger([
+    LROW({ ts: '2026-10-02T00:00:00.000Z', stage: 'done', prev: 'approved' }),
+  ]);
+  const r = run(root, ['--month', '2026-10']);
+  const md = readMetrics(root);
+  check('漏斗 L4 协议前 → | 1 | 0 | 1 | 0 | 0 |',
+    r.status === 0 && /\| 2026-10 \| 1 \| 0 \| 1 \| 0 \| 0 \| 0\.0 \| 1 \|/.test(md), `${r.stdout}${md}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+{
+  // L5：incident 两跳（approved 形态不适用——incident 链 open→fixed 由 confirm 落账，此处验 closed 终态计数）
+  const root = mkfixLedger([
+    LROW({ ts: '2026-10-01T00:00:00.000Z', doc: 'workflow/incidents/inc.md', stage: 'fixed' }),
+    LROW({ ts: '2026-10-02T00:00:00.000Z', doc: 'workflow/incidents/inc.md', stage: 'closed', prev: 'fixed' }),
+  ]);
+  const r = run(root, ['--month', '2026-10']);
+  const md = readMetrics(root);
+  check('漏斗 L5 incident closed 终态 → 收口 1（链路按行计）',
+    r.status === 0 && /\| 2026-10 \| 1 \| 0 \| 1 \| 0 \| 0 \|/.test(md), `${r.stdout}${md}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+{
+  // L6：跨月收口（9 月 approved、10 月 done）→ 归桶 10 月；9 月只计台账行
+  const root = mkfixLedger([
+    LROW({ ts: '2026-09-30T00:00:00.000Z' }),
+    LROW({ ts: '2026-10-02T00:00:00.000Z', stage: 'done', prev: 'approved' }),
+  ]);
+  const rSep = run(root, ['--month', '2026-09']);
+  const rOct = run(root, ['--month', '2026-10']);
+  const md = readMetrics(root);
+  check('漏斗 L6 跨月收口归桶 10 月（9 月零收口 + 台账行 1）',
+    rSep.status === 0 && rOct.status === 0 && /\| 2026-09 \| 0 \| 0 \| 0 \| 0 \| 0 \| — \| 1 \|/.test(md)
+    && /\| 2026-10 \| 1 \| 1 \| 0 \| 1 \| 0 \| 2\.0 \| 1 \|/.test(md), `${rSep.stdout}${rOct.stdout}${md}`);
   fs.rmSync(root, { recursive: true, force: true });
 }
 

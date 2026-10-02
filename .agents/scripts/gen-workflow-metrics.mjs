@@ -168,6 +168,55 @@ const idxText = fs.existsSync(path.join(WORKFLOW, 'INDEX.md')) ? fs.readFileSync
 const idxBytes = Buffer.byteLength(idxText, 'utf8');
 const idxActive = Number((idxText.match(/^## 活跃（(\d+)）/m) || [])[1] ?? NaN);
 
+// ---- 闭环漏斗（2026-10-02 ledger-funnel-metrics；口径定义式单源 = workflow/specs/2026-10-02-ledger-funnel-metrics.md）----
+// 只读台账一手字段（doc/stage/ts/source），坏行跳过（与检查 15/19 同容错）；观测面不挂门禁、不新增文档断言（检查 16 零接触）。
+const LEDGER_P = path.join('.agents', 'confirmations.jsonl');
+function readLedgerRows() {
+  if (!fs.existsSync(LEDGER_P)) return [];
+  return fs.readFileSync(LEDGER_P, 'utf8').split(/\r?\n/)
+    .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+    .filter((e) => e && typeof e === 'object');
+}
+
+function funnelFromLedger(entries, month) {
+  const byDoc = new Map();
+  for (const e of entries) {
+    if (typeof e.doc !== 'string' || typeof e.ts !== 'string') continue;
+    if (!byDoc.has(e.doc)) byDoc.set(e.doc, []);
+    byDoc.get(e.doc).push(e);
+  }
+  const res = { closed: 0, full: 0, legacy: 0, once: 0, rework: 0, ledgerRows: 0, days: [], items: [] };
+  for (const e of entries) if (typeof e.ts === 'string' && e.ts.slice(0, 7) === month) res.ledgerRows++;
+  for (const [doc, rs] of byDoc) {
+    rs.sort((a, b) => String(a.ts).localeCompare(String(b.ts)));
+    const nonRevert = rs.filter((r) => !/^revert-/.test(String(r.stage || '')));
+    const terminals = nonRevert.filter((r) => r.stage === 'done' || r.stage === 'closed');
+    if (!terminals.length) continue; // 未收口件不进漏斗桶（仍计台账行数）
+    const lastTerm = terminals[terminals.length - 1];
+    if (String(lastTerm.ts).slice(0, 7) !== month) continue; // 月度归桶 = 终态行所在月
+    const hasApproved = nonRevert.some((r) => r.stage === 'approved');
+    const approvals = nonRevert.filter((r) => r.stage === 'approved').length;
+    const hasRevert = rs.some((r) => /^revert-/.test(String(r.stage || '')));
+    const kind = !hasApproved ? 'legacy' : (hasRevert || approvals >= 2 || terminals.length >= 2 ? 'rework' : 'once');
+    const firstTs = hasApproved ? nonRevert.find((r) => r.stage === 'approved').ts : rs[0].ts; // 协议前件首行起算
+    const days = (Date.parse(lastTerm.ts) - Date.parse(firstTs)) / 86400000;
+    res.closed++;
+    if (kind === 'legacy') res.legacy++;
+    else { res.full++; res[kind === 'once' ? 'once' : 'rework']++; }
+    if (Number.isFinite(days) && days >= 0) res.days.push(days);
+    res.items.push({ doc, kind, days: Number.isFinite(days) && days >= 0 ? days.toFixed(1) : '—' });
+  }
+  return res;
+}
+
+const ledgerRows = readLedgerRows();
+const funnel = funnelFromLedger(ledgerRows, month);
+const sortedDays = [...funnel.days].sort((a, b) => a - b);
+const medianDays = sortedDays.length
+  ? (sortedDays.length % 2 ? sortedDays[(sortedDays.length - 1) / 2] : (sortedDays[sortedDays.length / 2 - 1] + sortedDays[sortedDays.length / 2]) / 2)
+  : null;
+const funnelRow = `| ${month} | ${funnel.closed} | ${funnel.full} | ${funnel.legacy} | ${funnel.once} | ${funnel.rework} | ${medianDays === null ? '—' : medianDays.toFixed(1)} | ${funnel.ledgerRows} |`;
+
 const docs = scanDocs();
 const surf = scanSurface();
 const row = `| ${month} | ${docs.files}（活跃 ${docs.active} / 终态 ${docs.terminal}） | ${kb(docs.bytes)} | ${docs.withModule}/${docs.files} | ${kb(surf.total)}（峰值 ${surf.peak ? `${surf.peak.pct.toFixed(1)}% ${surf.peak.label}` : '—'}） | ${kb(idxBytes)}（${Number.isNaN(idxActive) ? '—' : idxActive} 行） |`;
@@ -179,9 +228,12 @@ for (const [t, v] of Object.entries(docs.perType)) console.log(`    ${t.padEnd(1
 console.log(`  索引：workflow/INDEX.md ${kb(idxBytes)}（活跃 ${Number.isNaN(idxActive) ? '—' : idxActive} 行）`);
 for (const e of surf.entries) console.log(`    ${e.label.padEnd(44)} ${String(e.max).padStart(6)} / ${String(e.lim).padStart(6)} B（${e.pct.toFixed(1)}%）`);
 console.log(`  常驻面合计：${kb(surf.total)}`);
+console.log(`  闭环漏斗：收口 ${funnel.closed}（完整链 ${funnel.full} = 一次通过 ${funnel.once} + 返工 ${funnel.rework}；协议前 ${funnel.legacy}）｜中位周期 ${medianDays === null ? '—' : `${medianDays.toFixed(1)} 天`}｜台账行 ${funnel.ledgerRows}`);
+for (const it of funnel.items) console.log(`    ${String(it.doc).padEnd(58)} ${it.kind.padEnd(7)} ${it.days} 天`);
+if (funnel.items.length) console.log('  ℹ️ 机器口径可与 workflow/delegations.md 自做表的人工自报交叉对照（差异即信号，不对账）');
 console.log(`  ${DRY ? '（--dry-run，未写盘）' : ''}`);
 
-if (DRY) { console.log(`\n将写入行：\n${row}`); process.exit(0); }
+if (DRY) { console.log(`\n将写入行：\n${row}\n${funnelRow}`); process.exit(0); }
 
 // ---- 组装：GENERATED 区内的月表按月份键 upsert（同月重跑覆盖，行序按月升序）----
 const HEADER = `# workflow 规模与规则面月度快照
@@ -193,17 +245,31 @@ const TABLE_HEAD = [
   '| 月份 | 文档（活跃/终态） | 文档字节 | 模块已填/总 | 常驻面字节（预算峰值） | INDEX（活跃行） |',
   '|---|---|---|---|---|---|',
 ];
+// 漏斗表头（第二表；口径定义式单源 = workflow/specs/2026-10-02-ledger-funnel-metrics.md）
+const FUNNEL_HEAD = [
+  '## 闭环漏斗（机器口径，源：.agents/confirmations.jsonl——定义式见 specs/2026-10-02-ledger-funnel-metrics.md）',
+  '',
+  '| 月份 | 收口 | 完整链 | 协议前 | 一次通过 | 返工件 | 中位周期(天) | 台账行数 |',
+  '|---|---|---|---|---|---|---|---|',
+];
 const existing = fs.existsSync(METRICS_P) ? fs.readFileSync(METRICS_P, 'utf8') : '';
 let rows = [];
+let funnelRows = [];
 if (existing.includes(BEGIN) && existing.includes(END)) {
-  rows = existing.slice(existing.indexOf(BEGIN), existing.indexOf(END))
-    .split(/\r?\n/)
-    .filter((l) => /^\|\s*\d{4}-\d{2}\s*\|/.test(l));
+  const section = existing.slice(existing.indexOf(BEGIN), existing.indexOf(END));
+  const marker = FUNNEL_HEAD[0];
+  const bodyPart = section.includes(marker) ? section.slice(0, section.indexOf(marker)) : section;
+  const funnelPart = section.includes(marker) ? section.slice(section.indexOf(marker)) : '';
+  rows = bodyPart.split(/\r?\n/).filter((l) => /^\|\s*\d{4}-\d{2}\s*\|/.test(l));
+  funnelRows = funnelPart.split(/\r?\n/).filter((l) => /^\|\s*\d{4}-\d{2}\s*\|/.test(l));
 }
 rows = rows.filter((l) => !l.startsWith(`| ${month} `));
 rows.push(row);
 rows.sort((a, b) => a.slice(2, 9).localeCompare(b.slice(2, 9)));
-const inner = `${BEGIN}\n\n${[...TABLE_HEAD, ...rows].join('\n')}\n\n${END}`;
+funnelRows = funnelRows.filter((l) => !l.startsWith(`| ${month} `));
+funnelRows.push(funnelRow);
+funnelRows.sort((a, b) => a.slice(2, 9).localeCompare(b.slice(2, 9)));
+const inner = `${BEGIN}\n\n${[...TABLE_HEAD, ...rows].join('\n')}\n\n${[...FUNNEL_HEAD, ...funnelRows].join('\n')}\n\n${END}`;
 let out;
 if (existing.includes(BEGIN) && existing.includes(END)) {
   out = existing.slice(0, existing.indexOf(BEGIN)) + inner + existing.slice(existing.indexOf(END) + END.length);
