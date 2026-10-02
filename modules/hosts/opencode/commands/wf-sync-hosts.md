@@ -9,7 +9,7 @@ description: 跨宿主适配层同步（正文段 sha 比对 + 用户拍板 + �
 
 ## 何时跑
 
-- 改 `templates/_agents/commands/*.md` 正文后（8 个 commands 文件）
+- 改 `templates/_agents/commands/*.md` 正文后（11 个 commands 文件）
 - 改 `templates/_agents/roles/*.md` 正文后（3 个 roles 文件）
 - 装户跑 `flow-kit doctor` 报"跨宿主薄适配正文漂移 N 对" WARN 时
 - 不跑：仅改 frontmatter；改 trae 钩子/规则；改包源其他文件

@@ -2179,7 +2179,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   rmfix(T);
 }
 
-// ---- 加固门（2026-09-30 hybrid-governance-explore-hardening；仅 --hardening 启用，不占 1-19 编号）----
+// ---- 加固门（2026-09-30 hybrid-governance-explore-hardening；仅 --hardening 启用，不占 1-20 编号）----
 {
   // H1：未标记 exploring 的 draft 件 → 带/不带 --hardening 均不拦（本门只管「已标记未收口」，
   //  常规流程的 draft 中间态不受影响——intent approved 后 plan 起草属正常在途）
@@ -2335,6 +2335,19 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   const zWarn = (o.match(/2026-10-02-z\.md 含模板占位符:[\s\S]*?(?=\n- |\n\n|$)/) || [''])[0];
   check('检查2 反引号/围栏样例不报、裸占位符照报',
     zWarn.includes('裸占位') && !zWarn.includes('行内样例') && !zWarn.includes('```'), o);
+  rmfix(T);
+}
+
+{
+  // H7（2026-10-02 caliber-convergence 复核 P1-1）：suspect（级别 L2/risk_level L1 分歧，协议期）转正
+  // → 与 high 同样另须同名 spec——缺 spec 即拦（只增不松：suspect 不得逃 spec 前置）。
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-10-02-h7.md',
+    INTENT('h7', '状态: approved\n级别: L2\nrisk_level: L1\n日期: 2026-10-02\n模块: pipeline\n阶段: exploring'));
+  w(T, 'workflow/plans/2026-10-02-h7.md', PLAN('h7', '状态: approved\n级别: L2'));
+  const r = run(T, { args: ['--hardening'] });
+  check('加固门 H7：suspect（L2/L1 分歧）转正 → 缺同名 spec 即拦',
+    r.status === 1 && outOf(r).includes('缺同名 spec'), outOf(r));
   rmfix(T);
 }
 

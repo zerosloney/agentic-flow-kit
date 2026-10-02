@@ -572,6 +572,37 @@ const gitHead = (root) => {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- S31b【方案 C 分歧双严】--batch 分歧件（级别 L1 / risk_level L2，协议期）→ 泳道 suspect 逐份拒绝（2026-10-02 caliber-convergence）----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-bt3-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
+  fs.mkdirSync(path.join(root, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.agents', 'kit.json'), JSON.stringify({ policyVersion: 2 }));
+  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-10-02-dv1.md'), '---\n状态: draft\n级别: L1\nrisk_level: L2\n日期: 2026-10-02\n---\n# DV\n');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-10-02-dv1.md', '--delegated', '批量放行', '--batch'], { cwd: root, encoding: 'utf8' });
+  const led = readLedgerOf(root);
+  const st = fs.readFileSync(path.join(root, 'workflow', 'intents', '2026-10-02-dv1.md'), 'utf8');
+  check('S31b --batch 分歧件 → 泳道 suspect 拒（exit 2 + 对齐两字段提示 + 零台账未落盘）',
+    r.status === 2 && /泳道「suspect」/.test(r.stderr) && /对齐/.test(r.stderr) && led.length === 0 && st.includes('状态: draft'),
+    JSON.stringify({ status: r.status, stderr: String(r.stderr).slice(0, 300), led }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- S31c【方案 C 分歧双严】--auto 分歧件 → suspect 拒（消息锁定，先于 trust 判定短路）----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-bt4-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
+  fs.mkdirSync(path.join(root, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.agents', 'kit.json'), JSON.stringify({ policyVersion: 2 }));
+  fs.writeFileSync(path.join(root, '.agents', 'trust-mode.json'), JSON.stringify({ enabled: true, level: 1, name: 'Standard', enabledAt: '2026-10-02T00:00:00.000Z' }));
+  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-10-02-dv2.md'), '---\n状态: draft\n级别: L1\nrisk_level: L2\n日期: 2026-10-02\n---\n# DV2\n');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-10-02-dv2.md', '--auto'], { cwd: root, encoding: 'utf8' });
+  check('S31c --auto（trust=Standard）分歧件 → 泳道 suspect 拒（消息含 suspect 与对齐指引）',
+    r.status !== 0 && /suspect/.test(r.stderr) && /对齐/.test(r.stderr),
+    JSON.stringify({ status: r.status, stderr: String(r.stderr).slice(0, 300) }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 // ---- S32 --batch 组合约束：与 --auto / --to 互斥（exit 1，零落账）----
 {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-bt3-'));

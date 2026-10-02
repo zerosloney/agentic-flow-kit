@@ -1150,7 +1150,9 @@ if (HARDENING) {
     } else if (!stOkDoc(planSt)) {
       blockers.push(`- [加固未过] exploring 任务入 main 的 plan 未收口:${base}（plan 状态『${planSt || '缺失'}』须为 approved/done）`);
     }
-    if (lane === 'high') {
+    // 泳道单源（2026-10-02 caliber-convergence 方案 C；复核 P1-1 修正）：suspect（缺失/非法/分歧）与
+    // high 同样另须同名 spec——仅 low（两字段一致 L0/L1）免 spec，只增不松。
+    if (lane !== 'low') {
       const specAbs = path.join(ROOT, WF, 'specs', base);
       const specSt = fs.existsSync(specAbs) ? fmGet(specAbs, '状态') : '';
       if (!fs.existsSync(specAbs)) {

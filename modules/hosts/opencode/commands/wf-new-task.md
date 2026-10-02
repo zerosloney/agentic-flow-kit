@@ -18,11 +18,22 @@ description: AI-Native 闭环总入口 · 6 阶段路由（新需求 → plan / 
 | **Maintain** | [.agents/commands/maintain.md](.agents/commands/maintain.md) | "线上出事了" / "记一笔 incident" | `implementer`(方案确认后) | 三件套要点确认 |
 | **Review**(横切,不占 6 阶段) | [.agents/commands/review.md](.agents/commands/review.md) | "评审一下" / "过 review 标准" | `independent-reviewer`(L2/L3 必须独立复核) | 问题定性与合入时机确认 |
 
+## 风险定级(第 0 步,先定级再路由)
+
+动工前先按下表定风险级 L0-L3(就高不就低;判据细则见下节「级别判断」),级别即风险级,决定走哪条泳道——确认放事前,还是审计补事后:
+
+| 泳道 | 级别 | 确认与审计口径 |
+|------|------|---------------|
+| **协作道**(敏捷优先,审计异步补) | L0 例行 / L1 实现级 | L0 直接 commit,豁免 intent;L1 快车道(intent 一句话确认 + 极简 plan)即动工。独立复核不设同步前置,check-loop 与事后 review 兜底;确认/代录可 `--batch` 批量(仅 L0/L1) |
+| **防御道**(严谨优先,确认同步拦) | L2 规则/契约 / L3 数据与运行时结构 | 同步确认门:spec 确认通过方可起草 plan,plan 确认后方可动手;L3 加新会话独立复核,未确认不放行 |
+
+> 定级结果落 intent frontmatter `risk_level`(=级别,`fill-intent.mjs` 自动写入,机器选道用);协作道勾触达红线会被 check-loop 判「红线判低」hard 拦(就高升级 L2/L3 并补同名 spec)。
+
 ## 路由判断
 
 - **新需求 / 功能**:从 `plan.md` 进,立 **intent**(`workflow/intents/`)
 - **修复类任务 / 事故**:从 `maintain.md` 进,立 **incident**(`workflow/incidents/`);incident 在 L1+ 即 **intent 等价物**(check-loop 认 incident≡intent),不必另立 intent。先检索同类历史(`node .agents/scripts/kb-search.mjs "<关键词>" --scope workflow --type incidents,plans`),有同类先读其历史三件套;再按级别走:
- - L0 → 直接修复;L1 → 立 incident 后进 `build.md` 起草并确认同名 plan → `test.md`
+  - L0 → 直接修复;L1 → 立 incident 后进 `build.md` 起草并确认同名 Quick-Plan → `test.md`
  - L2/L3 → 立 incident 后进 `design.md` 起草并确认同名 spec,再进 `build.md` 起草并确认同名 plan → `test.md`
  - 仅当根因属系统性 / 门禁缺位(maintain.md 三件套「是否需要新 intent」选"是")才另立 `workflow/intents/` 同名 intent
 - **改完代码要验证**:直接进 `test.md`（验证通过即关单；L1 到此结束）
@@ -34,7 +45,7 @@ description: AI-Native 闭环总入口 · 6 阶段路由（新需求 → plan / 
 | 级别 | 改什么 | 流程 |
 |------|--------|------|
 | L0 | 文档/样式微调(无行为影响) | 直接 commit,豁免 intent |
-| L1 | **实现级改动**(未命中 L2/L3) | 轻量入口文档(intent / incident) + plan |
+| L1 | **实现级改动**(未命中 L2/L3) | 快车道:液态草稿(.zcode/drafts) $\rightarrow$ 实现 $\rightarrow$ 固化(`solidify-task.mjs`)——用户确认后带 `--delegated "<原话>"` 执行；无确认来源只迁移不落账 |
 | L2 | **规则 / 契约**(一处改、多处依赖) | 入口文档(intent / incident) + spec + plan 三件套 |
 | L3 | **数据与运行时结构**(schema / 迁移 SQL / DI 链 / 认证与中间件管线) | 同 L2 + spec 新会话独立复核 |
 

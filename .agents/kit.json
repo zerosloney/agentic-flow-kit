@@ -126,7 +126,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "4015710fff6c38b51bd25f72f581420474780fa9b4dcf2888b9ec97b704ba43e"
+      "sha256": "0edb12cc85a8a0aae3e7c0afacb44f9cdcd875ea2b6b0d4eca674310bdddd7f2"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -134,7 +134,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "c3067e1e4a9fdf059daafde302c334c7bcb3faf6a44d6dc3c9e18c1afbff0a9d"
+      "sha256": "930ccda363211aeaac9888b0ecfb59f96b140cf857cdec0be9f2b142b7161729"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -150,7 +150,7 @@
     },
     {
       "rel": ".agents/scripts/confirm-doc.test.mjs",
-      "sha256": "346a407fe640ff59da566a5d8e4d9a505a435387152a20419337d8eecbe21d7c"
+      "sha256": "103c4beae8fe75ad73d7ccaaca93bf7d32d00afcd959d194ac0c6e2afa5c78fe"
     },
     {
       "rel": ".agents/scripts/doctor.test.mjs",

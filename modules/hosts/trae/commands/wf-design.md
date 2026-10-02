@@ -5,20 +5,20 @@ description: Design 阶段 · 起 spec（L2/L3 强制，L1 可省略直接进 wf
 
 # Design · 起 spec
 
-> L2/L3 强制;L1 可省略(直接跳 `next: build.md`)。
+> L2/L3 强制;L1 走快车道(直接跳 `next: build.md` 起草 Quick-Plan)。
 
 ## 执行
 
 1. 确认同名入口文档已批准：新需求为 approved intent，修复为已确认的 incident 草稿；否则拒绝，分别回 `plan.md` / `maintain.md`（2026-09-30 起机器强制：fill-spec / confirm-doc 对前置未过直接拒绝 exit 2、不落盘不记账）
 2. 级别判断(对照 AGENTS.md 第 3 条):
-   - **L1**(实现级改动,未命中 L2/L3)→ 可省略 spec,直接跳 `next: build.md`
+   - **L1**(实现级改动,未命中 L2/L3)→ 走快车道,省略 spec,直接跳 `next: build.md` 起草 Quick-Plan
    - **L2**(改规则 / 契约:编码权威 / 共享契约 / 既有接口语义 / 全局横切口径,闭集见 `new-task.md` §级别判断)→ 必须有 spec
    - **L3**(数据与运行时结构:schema / 迁移 SQL / DI 链 / 认证与中间件管线)→ 必须有 spec + **新会话独立复核**
 3. 起草 spec:
    - **填空工具先跑**：`node .agents/scripts/fill-spec.mjs --level <L1|L2|L3> --topic <主题> --output workflow/specs/<date>-<主题>.md`——输出含 frontmatter 5 字段 + 5 节正文（功能行为/数据流/系统改动/约束遵守映射/风险评估）的草稿；AI 据此填实
    - 复制 `workflow/specs/_TEMPLATE.md` → `workflow/specs/YYYY-MM-DD-<主题>.md`(与入口文档同名)
    - 按 5 节填写:功能行为 / 数据流 / 系统改动 / 约束遵守映射 / 风险评估
-   - 约束映射必须对照根 `AGENTS.md`「Working rules」与改动域目录级 `AGENTS.md`（如有）逐条说明如何满足
+   - 约束映射必须对照根 `AGENTS.md` 红线/约束相关节（如「项目适配区」「门禁与提交」）与改动域目录级 `AGENTS.md`（如有）逐条说明如何满足
    - 存在多个可行方案时,在 spec 中列出各方案取舍与 AI 建议项,由用户选定后方可确认
    - **页面/交互入口形态必须用户确认**:spec 须写明入口是「表单（字段清单）」还是「选择器/弹窗」，禁止自行推定交互形态
 4. 起草后停下,输出草稿全文给用户过目
