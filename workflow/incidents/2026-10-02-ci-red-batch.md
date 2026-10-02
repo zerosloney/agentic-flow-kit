@@ -1,8 +1,9 @@
 ---
-状态: open
+状态: closed
 级别: L1
 发现: 2026-10-02
 模块: pipeline
+确认指纹: 4da85ceb0ef2d8f2
 ---
 # INCIDENT — CI/Release 全红批（pre-push 测试平台缺陷 ×2 + owned 台账漂移）
 
@@ -38,7 +39,7 @@
 ## 复盘三件套（缺一不可）
 
 1. 结构性修复
-   - 修复 commit：<修复批提交 SHA，落地后回填>
+   - 修复 commit：`8121e4d`（fix(test)：测试双修 + sync 台账自愈；立档 `81c92bd`）
    - ① `templates/_agents/scripts/pre-push.test.mjs`：挂钩子后 `chmodSync 0o755`（Linux 执行位）② `PRE_PUSH` 改双布局探测（templates `_githooks` / 装户 `.githooks`）③ 跑 `node bin/flow-kit.mjs sync`——managed 装副本成对更新 + owned sha 盘面自愈（治 ③）
    - 影响环境：dev（包源）+ CI（ubuntu/windows）+ 装户（sync 下发）
    - 是否需要新 intent：否——实现级缺陷单点修复完成，防复发用例即修复后的测试自身（见下）

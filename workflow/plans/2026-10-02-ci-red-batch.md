@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L1
 模块: pipeline
-确认指纹: 1833205cdbef61c0
+确认指纹: d42c27db4ec8fd2b
 ---
 # PLAN — ci-red-batch
 
@@ -26,16 +26,16 @@
 - 风险：Linux 侧无法本地验证（开发机 win32）——chmod 修复依据 git 平台行为（不可执行钩子被跳过）与失败形态完全吻合；由 CI ubuntu 腿最终验证，红则回本 plan 迭代
 - 风险：低——改动面收敛在一个测试文件 + sync 产物 + 发版三件
 
-## 验证计划
+## 验证计划（关单勾验 2026-10-02，证据见括注）
 
-- 静态门：`npm test` 全套件绿（含 `templates/_agents/scripts/pre-push.test.mjs` 6/6）
-- 装户侧：`node .agents/scripts/pre-push.test.mjs` 不再 ENOENT（双布局探测命中根 `.githooks/`）
-- 台账：`node bin/flow-kit.mjs doctor` 13 项 PASS、owned 漂移 0；pre-commit managed 台账快检过
-- CI：push main 后 CI（ubuntu×2/windows×2）全绿；v0.9.4 tag 的 Release 走到 npm publish 成功（npm 侧 0.9.1 → 0.9.4）
+- ✅ 静态门：`npm test` exit=0 全套件绿（含 `templates/_agents/scripts/pre-push.test.mjs` 6/6，Windows 本地实跑）
+- ✅ 装户侧：`node .agents/scripts/pre-push.test.mjs` 6/6（双布局探测命中根 `.githooks/`，不再 ENOENT——修复前同机复现崩溃）
+- ✅ 台账：`node bin/flow-kit.mjs doctor` 13 PASS / 0 WARN / 0 FAIL（owned 17 份对齐，漂移 0）；后续三提交 pre-commit managed 台账快检连续全对齐
+- ⏭ CI 后置验证：push main 后 CI（ubuntu×2/windows×2）与 v0.9.4 tag 的 Release（走到 npm publish，npm 侧 0.9.1 → 0.9.4）——发版草稿门要求发版提交树先收口；Linux 侧修复本地 win32 无法直接复现，CI 红则另立 incident 回流
 
 ## 确认与复核
 
 > 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节（确认环节的机器可见态），done 只在关单出现——禁从 draft 直跳 done（2026-09-22 papercut）。
-- 确认结果：approved（2026-10-02 用户对话内确认「方案 a（推荐）」）；done（YYYY-MM-DD 关单，随入口文档置终态）
-- 确认门记录：方案 a 全文（删 tag / 修三缺陷 / 正式发版 0.9.4 重打）与用户逐项对过——对话内含四个根因定位与两方案取舍，用户选 a
+- 确认结果：approved（2026-10-02 用户对话内确认「方案 a（推荐）」）；done（2026-10-02 关单，随入口文档置终态）
+- 确认门记录：方案 a 全文（删 tag / 修三缺陷 / 正式发版 0.9.4 重打）与用户逐项对过——对话内含四个根因定位与两方案取舍，用户选 a；关单证据为上方勾验三项 + CI 后置
 - 复核：L1 不要求独立复核
