@@ -229,7 +229,8 @@ test('L2 全程到 done：spec→plan→改动清单→实现→复核→勾验�
   assert.match(out(pDone), /PIPELINE-STOP done/);
   const run = runFile(f, latestId(f));
   assert.equal(run.stopType, 'done');
-  assert.equal(run.events.filter((e) => e.type === 'commit').length, 2, '批次一 + 批次二');
+  assert.equal(run.events.filter((e) => e.type === 'commit').length, 3, '批次一 + 代码提交 + 批次二');
+  assert.match(fs.readFileSync(f.gitLog, 'utf8'), /commit -m feat\(wiki\): /, 'verify 绿后落代码提交（沙箱演练实证缺口）');
   assert.equal(fs.readFileSync(docP(f, run.docs.entry), 'utf8').match(/^状态: (.*)$/m)[1], 'done');
   assert.equal(fs.readFileSync(docP(f, run.docs.spec), 'utf8').match(/^状态: (.*)$/m)[1], 'done');
   const ledger = fs.readFileSync(f.ledger, 'utf8').trim().split('\n').map((l) => JSON.parse(l));
@@ -243,6 +244,14 @@ test('改动越权 → gate-fail 偏离即停', () => {
   const p = prun(f, ['next', '--files', 'src/app.mjs'], { FIXTURE_GIT_STATUS: ' M src/app.mjs\n?? sneaky.mjs' });
   assert.equal(p.status, 2);
   assert.match(out(p), /超出回填清单/);
+});
+
+test('运行态副产物不误拦（confirmations/INDEX/cache 排除）——沙箱演练回归', () => {
+  const f = buildFixture();
+  driveToImplement(f, 'L1', 'rt1');
+  const p = prun(f, ['next', '--files', 'src/app.mjs'], { FIXTURE_GIT_STATUS: ' M .agents/confirmations.jsonl\n M workflow/INDEX.md\n?? .agents/cache/pipeline-runs/x.json\n?? src/app.mjs' });
+  assert.equal(p.status, 0, out(p));
+  assert.match(out(p), /PIPELINE-STOP work-order/); // 不被运行态误拦，推进至下一停机点
 });
 
 test('implement 无 --files 重入 → 重发工单不误报', () => {

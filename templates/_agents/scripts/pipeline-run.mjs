@@ -324,7 +324,7 @@ function docsCommit(ctx, run, files, subject) {
 }
 
 function changedFiles(ctx, run) {
-  const r = runGit(ctx, run, ['status', '--porcelain']);
+  const r = runGit(ctx, run, ['status', '--porcelain', '-u']); // -u：展开 untracked 目录为逐文件（防「src/」折叠误报越权）
   if (r.exit !== 0) return null;
   const out = [];
   for (const line of r.stdout.split(/\r?\n/).filter(Boolean)) {
@@ -336,12 +336,16 @@ function changedFiles(ctx, run) {
   return out;
 }
 
+// 脚本自身管理的运行态路径——confirm/gate/gen-index 副产物，不属宿主越权面（沙箱演练实证，2026-10-02）
+const RUNTIME_OWNED = ['.agents/cache/', '.agents/confirmations.jsonl', 'workflow/INDEX.md'];
+
 function checkAuthorized(ctx, run, filesCsv) {
   const listed = String(filesCsv || '').split(/[,，]/).map((s) => s.trim().replace(/\\/g, '/')).filter(Boolean);
   if (!listed.length) return { ok: false, problems: ['须以 --files 回填本工单实际改动的文件清单（逗号分隔）'] };
   const changed = changedFiles(ctx, run);
   if (changed === null) return { ok: false, problems: ['git status 失败，无法核对改动面'] };
-  const beyond = changed.filter((c) => !listed.includes(c));
+  const beyond = changed.filter((c) =>
+    !listed.includes(c) && !RUNTIME_OWNED.some((ro) => (ro.endsWith('/') ? c.startsWith(ro) : c === ro)));
   if (beyond.length) return { ok: false, problems: [`git 改动超出回填清单（偏离即停）：${beyond.join('、')}`] };
   run.lastFiles = listed;
   return { ok: true };
@@ -592,7 +596,19 @@ function advance(ctx, run, opt) {
         if (r.exit === 0) stopDone(ctx, run);
         stopGateFail(ctx, run, s, ['verify 未过（verify-only 不带修复环——人工处理后重跑，或立正式任务走闭环）']);
       }
-      if (r.exit === 0) { run.fixLoop = { count: 0, cap: FIX_CAP }; run.stage = (L() === 'L2' || L() === 'L3') ? 'review' : 'closeout'; continue; }
+      if (r.exit === 0) {
+        run.fixLoop = { count: 0, cap: FIX_CAP };
+        // 代码提交（沙箱演练实证的缺口，2026-10-02）：verify 绿后、复核/关单前落一笔——
+        // 文件集 = 当前非运行态、非 workflow 文档的改动（均已过 --files 授权核对）
+        const codeFiles = (changedFiles(ctx, run) || []).filter((c) =>
+          !RUNTIME_OWNED.some((ro) => (ro.endsWith('/') ? c.startsWith(ro) : c === ro)) && !c.startsWith('workflow/'));
+        if (codeFiles.length) {
+          const verb = K() === 'fix' ? 'fix' : 'feat';
+          const c = docsCommit(ctx, run, codeFiles, `${verb}(${run.triage.module}): ${briefReq(run)}（pipeline-run ${run.runId}）`);
+          if (!c.ok) stopGateFail(ctx, run, s, [c.msg]);
+        }
+        run.stage = (L() === 'L2' || L() === 'L3') ? 'review' : 'closeout'; continue;
+      }
       run.fixLoop = run.fixLoop || { count: 0, cap: FIX_CAP };
       run.fixLoop.count += 1;
       const tail = (r.stderr || r.stdout).split(/\r?\n/).filter(Boolean).slice(-20).join('\n');

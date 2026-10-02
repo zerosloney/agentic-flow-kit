@@ -246,11 +246,11 @@
     },
     {
       "rel": ".agents/scripts/pipeline-run.mjs",
-      "sha256": "03b73bc241bcc2a729b3f2b1c564acabccef0993e59cc2dd5b05bd440718fac7"
+      "sha256": "8c6b52476aae9188200bc9cae629cc723aa35198b17ae44126bc29ecc6f4b406"
     },
     {
       "rel": ".agents/scripts/pipeline-run.test.mjs",
-      "sha256": "9fd73c541cb21649ff6630e16d3af6bdbe3dcaa2352a6d0b4818fb5e89ffc9ad"
+      "sha256": "66e60d95d293f3ae099e83de6b000623ab19aeca507c545bb1afe1084d894e76"
     },
     {
       "rel": ".agents/scripts/policy.mjs",
@@ -420,7 +420,7 @@
     },
     {
       "rel": ".agents/notes/runtime-env.md",
-      "sha256": "204832524029ba572e6a1af600bb4645fd28d0698bed763822b0cbfb769316b2"
+      "sha256": "ca4e0ab70c66906bd034d330312dfb12caad649f289e57320ca1010cc41a5bd7"
     },
     {
       "rel": ".agents/rule-budgets.txt",
@@ -436,7 +436,7 @@
     },
     {
       "rel": "AGENTS.md",
-      "sha256": "b9a8c7f93f6357752b8cd9ee8cb555a7471ad1d5018be8f4d81469dba12cbc60"
+      "sha256": "f90ed92feeb535b4b184f0008add057dc86170c5a5f04e99eb4f01d5cd58332a"
     },
     {
       "rel": "wiki/知识沉淀总览.html",
