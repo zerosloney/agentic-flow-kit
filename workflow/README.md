@@ -55,6 +55,7 @@
 3. **确认留痕**：approved / done / fixed / closed 须经 `confirm-doc.mjs`，指纹与台账一致。`--delegated` 原话仅限用户对话内明确确认的当次措辞——官方脚本/门禁不得自动代录或编造 quote（2026-10-01 v09-review-defects：solidify-task 曾自动伪造原话，已修复并纳入回归）。
 4. **敏感信息**：pre-commit 的 commit-check 扫描密钥。
 5. **双源与台账**：doctor 核对 managed / owned 的 sha；引擎改动改包源 `templates/` 再 `sync`。
+6. **台账不可变**（2026-10-02 ledger-ci-invariant）：`confirmations.jsonl` 历史行禁删改（append-only 前缀不变量，机器门 = CI 历史全扫 + pre-commit `--staged` 前置）；误写/修正只能**追加补偿行**，篡改历史属审计事件（`git revert` 整个提交后重新追加）。
 
 其余检查（占位符、引用、模块字段、常驻面预算、量化签名、阶段索引、适配器断线、引擎脚本测试覆盖（检查 20，包源环境——新增引擎脚本默认必须带 `.test.mjs`，库件/工具须登记 `.agents/scripts-test-exempt.txt`，2026-10-01 gate-script-test-coverage））只在 `audit` 不是 `false` 时出警告。
 
