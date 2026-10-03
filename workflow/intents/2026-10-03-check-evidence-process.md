@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-03
 模块: pipeline
 备注: check-loop 证据真相校验支持过程证据形态（执行器驱动提交）——2026-10-03 用户拍板方案 A；源起 pipeline-run 关单后 37b552a 证据无关 hard-block
-确认指纹: 1e03da068dc150dd
+确认指纹: 0bee1cd157476fac
 ---
 # INTENT — check-evidence-process
 
@@ -55,11 +55,11 @@ risk_level: L2
 
 ## 验收标准（可测试）
 
-- [ ] check-loop 测试套件新增过程证据三例全绿（有标记放行 / 无标记 irrelevant 仍拦 / 不存在 SHA forged 仍拦），既有用例零回归
-- [ ] 真实仓实证：`node .agents/scripts/check-loop.mjs` exit 0（2026-10-02-pipeline-run 的 37b552a 证据放行，hard-block 消除）
-- [ ] 全量门恢复：npm test 全部套件通过 + verify.mjs 全绿 + doctor 0 FAIL
-- [ ] 双源：source-sync-check --diff 0 命中（仅既有孤儿）
-- [ ] p2-pool-batch3 incident 在全量绿后按两跳关单（本 intent 不含其内容，仅顺序依赖）
+- [x] check-loop 测试套件新增过程证据三例全绿（有标记放行 / 无标记 irrelevant 仍拦 / 不存在 SHA forged 仍拦），既有用例零回归（证据：check-loop.test.mjs 合计 190/0，场景 5x/5y/5z；0126a02）
+- [x] 真实仓实证：node .agents/scripts/check-loop.mjs exit 0（2026-10-02-pipeline-run 的 37b552a 证据放行，hard-block 消除）（证据：实测 exit=0；判据收紧为 runId 严格形态后 L0 格式覆盖——spec 披露节同批）
+- [x] 全量门恢复：npm test 全部套件通过 + verify.mjs 全绿 + doctor 0 FAIL（证据：三码显式取值 0/0/13 PASS-0-0；随批修复 pipeline-run 测试跨日红（PIPELINE_RUN_TODAY 钩子）后 36 套件全绿）
+- [x] 双源：source-sync-check --diff 0 命中（仅既有孤儿）（证据：孤儿仅 trust-mode.json（gitignore 本地态），其余 0）
+- [x] p2-pool-batch3 incident 在全量绿后按两跳关单（本 intent 不含其内容，仅顺序依赖）（证据：随本呈报同批两跳——见关单台账行）
 
 > **闭环对账**：关单在 test 阶段。intent 置 done 前逐条勾验补证据。
 

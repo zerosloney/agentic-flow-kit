@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-03
 模块: pipeline
 备注: 关联 intents/2026-10-03-check-evidence-process.md（approved）
-确认指纹: c3226c55c6bedd5b
+确认指纹: 7e8dabaa3f5e254b
 ---
 # SPEC — check-evidence-process
 

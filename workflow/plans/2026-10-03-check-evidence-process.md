@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
-确认指纹: 077998b852329f44
+确认指纹: 13a5e9968cb13b03
 ---
 # PLAN — check-evidence-process
 
