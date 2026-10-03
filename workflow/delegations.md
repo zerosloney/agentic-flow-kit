@@ -20,6 +20,7 @@
 
 | 日期 | 任务一句话 | 结果 | 备注 |
 |------|------------|------|------|
+| 2026-10-03 | check-evidence-process：检查8证据核验新增过程证据判据（runId 严格形态标记放行，+3 回归场景+防复发行） | 一次通过 | intent 2026-10-03-check-evidence-process（L2，门禁判据面）；随批修 pipeline-run 测试跨日红（PIPELINE_RUN_TODAY 钩子，挂 p2-pool-batch3）；check-loop 测试 190/0、真实仓 exit 0 |
 | 2026-10-02 | pipeline-run 跨宿主全自动闭环执行器（状态机脚本+工单协议+run 事件流+命令封装五宿主） | 一次通过（演练修 3 缺陷） | intent 2026-10-02-pipeline-run；测试 18 组双侧绿；演练矩阵（L0/verify-only 本仓真实 + L1/L2/incident 沙箱真实工具链）抓 3 真缺陷当场根因修（d176321）：untracked 目录折叠误报、运行态副产物误拦、verify 后代码提交缺口 |
 | 2026-09-24 | 关单 verify 固定编排脚本（npm test + check-loop 一键过门） | 一次通过 | intent closeout-verify-script；fixture 6 断言 + 真实双步绿路径实跑首跑全过 |
 | 2026-09-25 | workflows 编排脚本机器 linter（解析校验先行落地）+ doctor §6.8 接线 | 一次通过 | intent 2026-09-25-workflows-linter；fixture 14 场景 + 真实仓库 baseline 断言；期间修复测试断言自身 E 码切片 bug 一次（非实现返工），实现一次通过 |
