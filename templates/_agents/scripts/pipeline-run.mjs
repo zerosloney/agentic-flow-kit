@@ -6,7 +6,8 @@
 // 契约：工单协议 + run 事件流 schema 见 spec §功能行为（宿主面契约，变更须走变更流程）。
 // 存储：.agents/cache/pipeline-runs/<runId>.json（gitignored 缓存态，非权威——workflow/ 文档 + confirmations.jsonl 是唯一真相源）。
 // 注入（测试钩子，spec §测试注入契约）：PIPELINE_RUN_ROOT（仓库根，默认 cwd）/
-//       PIPELINE_RUN_BIN（门脚本目录，默认 <root>/.agents/scripts）/ PIPELINE_RUN_GIT_BIN（git 命令前缀，空格分隔，默认 "git"）。
+//       PIPELINE_RUN_BIN（门脚本目录，默认 <root>/.agents/scripts）/ PIPELINE_RUN_GIT_BIN（git 命令前缀，空格分隔，默认 "git"）/
+//       PIPELINE_RUN_TODAY（文档日期锚定，默认当天——测试固定日期消除时钟依赖，2026-10-03 实证：测试硬编码日期跨日即红）。
 //       npm 不直接调用——测试门统一走 verify.mjs（其内部自跑 npm test）。
 // 用法：
 //   node .agents/scripts/pipeline-run.mjs start "<需求原文>" [--hint "kind=require level=L1 module=wiki"]
@@ -29,7 +30,7 @@ const GIT_NEVER_FLAGS = ['--no-verify', '-n']; // 不变量：任何 git 调用�
 
 function fail(msg, code = 1) { console.error('❌ ' + msg); process.exit(code); }
 const nowIso = () => new Date().toISOString();
-const today = () => nowIso().slice(0, 10);
+const today = () => process.env.PIPELINE_RUN_TODAY || nowIso().slice(0, 10);
 const pad = (n) => String(n).padStart(2, '0');
 
 // ── 环境解析（测试注入点） ─────────────────────────────────────────────

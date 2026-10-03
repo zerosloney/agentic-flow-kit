@@ -608,9 +608,18 @@ function verifyEvidenceTruth(evidenceStr, planBase, root) {
   
   const changedFiles = show.stdout.split(/\r?\n/).filter(Boolean);
   const hasIntersection = changedFiles.some(f => declaredFiles.some(df => f.includes(df) || df.includes(f)));
-  
-  if (!hasIntersection) return { ok: false, type: 'irrelevant', msg: `提交 ${sha} 未触及 plan 声明的任何文件` };
-  
+
+  if (!hasIntersection) {
+    // 过程证据（2026-10-03 check-evidence-process）：执行器驱动的提交可作验收证据——提交信息带
+    // 「pipeline-run <runId>」标记（docsCommit 四种格式共有段，runId 严格形态 日期8-时间4-主题-尾；
+    // 与 run 事件流同源，git 历史留痕可对质）。只救 irrelevant：forged（SHA 不存在）在前已判，其余判据不动。
+    const subj = spawnSync(GIT, ['log', '-1', '--format=%s', sha], { cwd: ROOT, encoding: 'utf8' });
+    if (subj.status === 0 && /pipeline-run [0-9]{8}-[0-9]{4}-[A-Za-z0-9-]+/.test(subj.stdout)) {
+      return { ok: true, type: 'process' };
+    }
+    return { ok: false, type: 'irrelevant', msg: `提交 ${sha} 未触及 plan 声明的任何文件` };
+  }
+
   return { ok: true, type: 'sha' };
 }
 

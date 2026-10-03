@@ -105,6 +105,7 @@ function prun(fixture, args, extraEnv = {}) {
     PRTEST_GITLOG: fixture.gitLog,
     PRTEST_LEDGER: fixture.ledger,
     PRTEST_VERIFY_FAIL: fixture.verifyFailMarker,
+    PIPELINE_RUN_TODAY: '2026-10-02', // 固定日期锚：消除测试对系统时钟的依赖（断言路径全部硬编码本日）
     ...extraEnv,
   };
   return spawnSync(process.execPath, [MAIN, ...args], { env, encoding: 'utf8', windowsHide: true });

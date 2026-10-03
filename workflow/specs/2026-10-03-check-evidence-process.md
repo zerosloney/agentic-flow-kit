@@ -13,7 +13,7 @@
 检查 8 的证据语义核验（verifyEvidenceTruth）新增一类放行形态：
 
 - 判定位置：git show --name-only 得 changedFiles 与 plan 声明文件无交集、即将判 irrelevant 处，先做过程证据探测：
-  `spawnSync(GIT, ["log", "-1", "--format=%s", sha])` 取提交信息首行，匹配 /（pipeline-run [A-Za-z0-9-]+）/（全角括号 + runId——pipeline-run docsCommit 既有格式）→ 返回 `{ ok: true, type: 'process' }`；不匹配 → 维持原 irrelevant 判定。
+  `spawnSync(GIT, ["log", "-1", "--format=%s", sha])` 取提交信息首行，匹配 /pipeline-run [0-9]{8}-[0-9]{4}-[A-Za-z0-9-]+/（runId 严格形态：日期8位-时间4位-主题-尾——docsCommit 四种提交格式共有段）→ 返回 `{ ok: true, type: 'process' }`；不匹配 → 维持原 irrelevant 判定。（实现披露 2026-10-03：首版判据 `/（pipeline-run [A-Za-z0-9-]+）/` 只认全角括号紧邻形态，L0 提交格式「（L0，pipeline-run <runId>）」不匹配——实测 37b552a 未放行后收紧为 runId 严格形态，覆盖执行器全部提交格式且防蹭更强。）
 - 顺序与不变量：forged 判定（SHA 不存在）在前、不受影响；process 只救 irrelevant，不放松任何既有拦截；plan 缺失（no-plan）与外部引用（external）分支不动。
 - 输出语义：放行不打 warning（与 sha/text 同级静默）；blocker 文案不变。
 - 用户场景：done 档验收证据引用执行器驱动的提交（如 37b552a）→ 原 hard-block，新判据下放行；引用普通无关提交（无标记）→ 仍 hard-block；引用不存在 SHA → 仍 forged hard-block。

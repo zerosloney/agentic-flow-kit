@@ -599,6 +599,44 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     r.status === 0 && !outOf(r).includes('模板未填'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
 }
+
+// ---- 场景 5x/5y/5z:检查 8 证据核验——过程证据形态（2026-10-03 check-evidence-process）----
+// 造法：gitInit（激活证据核验的 rev-parse 路径）+ 锚前自报日期（豁免检查 15 存量面）；
+// 证据引用「改动面外文件的提交」：带执行器标记 → process 放行；无标记 → irrelevant 拦；SHA 不存在 → forged 拦。
+{
+  const T = mkfix();
+  gitInit(T);
+  w(T, 'workflow/plans/2026-09-26-pe1.md', PLAN('pe1', '状态: done\n级别: L1\n模块: material', '\n## 改动方案\n\n- src/app.mjs：实现功能\n'));
+  fs.mkdirSync(path.join(T, 'notes'), { recursive: true });
+  w(T, 'notes/other.md', 'x\n');
+  gitCommitAll(T, 'docs(x): 演练穿越（pipeline-run 20260926-0900-pe1-abc1）');
+  const G = process.platform === 'win32' ? 'git.exe' : 'git';
+  const sha = spawnSync(G, ['rev-parse', '--short', 'HEAD'], { cwd: T, encoding: 'utf8' }).stdout.trim();
+  w(T, 'workflow/intents/2026-09-26-pe1.md', INTENT('pe1', '状态: done\n级别: L1\n日期: 2026-09-26', `\n## 验收标准（可测试）\n- [x] 演练穿越（证据:${sha}）\n`));
+  expectOk('过程证据:提交信息带执行器标记（改动面外）→ 放行 exit 0', T);
+  rmfix(T);
+}
+{
+  const T = mkfix();
+  gitInit(T);
+  w(T, 'workflow/plans/2026-09-26-pe2.md', PLAN('pe2', '状态: done\n级别: L1\n模块: material', '\n## 改动方案\n\n- src/app.mjs：实现功能\n'));
+  fs.mkdirSync(path.join(T, 'notes'), { recursive: true });
+  w(T, 'notes/other.md', 'x\n');
+  gitCommitAll(T, 'docs(x): 演练穿越（L0，无标记提交）');
+  const G = process.platform === 'win32' ? 'git.exe' : 'git';
+  const sha = spawnSync(G, ['rev-parse', '--short', 'HEAD'], { cwd: T, encoding: 'utf8' }).stdout.trim();
+  w(T, 'workflow/intents/2026-09-26-pe2.md', INTENT('pe2', '状态: done\n级别: L1\n日期: 2026-09-26', `\n## 验收标准（可测试）\n- [x] 演练穿越（证据:${sha}）\n`));
+  expectHard('过程证据:无标记无关提交 → 仍拦 证据无关', T, '证据无关');
+  rmfix(T);
+}
+{
+  const T = mkfix();
+  gitInit(T);
+  w(T, 'workflow/plans/2026-09-26-pe3.md', PLAN('pe3', '状态: done\n级别: L1\n模块: material', '\n## 改动方案\n\n- src/app.mjs：实现功能\n'));
+  w(T, 'workflow/intents/2026-09-26-pe3.md', INTENT('pe3', '状态: done\n级别: L1\n日期: 2026-09-26', '\n## 验收标准（可测试）\n- [x] 演练穿越（证据:deadbee）\n'));
+  expectHard('过程证据:SHA 不存在 → forged 仍拦（防伪线不放松）', T, '证据伪造');
+  rmfix(T);
+}
 // ---- 场景 45:检查 2——真未填占位（标题 <主题>，无 .md）→ 仍报模板未填 ----
 {
   const T = mkfix();
