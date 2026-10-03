@@ -1,9 +1,10 @@
 ---
-状态: draft
+状态: approved
 级别: L2
 日期: 2026-10-03
 模块: pipeline
 备注: 与 ../incidents/2026-10-03-plan-confirm-boiler.md 配对——检查 2 模板占位符判定豁免 plan「确认与复核」节样板句，消除三个 plan 的「模板未填」误报
+确认指纹: 1d4da3bfabc14691
 ---
 # SPEC — plan-confirm-boiler
 
