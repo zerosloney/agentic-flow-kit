@@ -1714,14 +1714,25 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   w(T, 'workflow/plans/2026-09-29-after.md', PLAN('after', '状态: draft\n级别: L1'));
   gitCommitAll(T, 'draft after release');
   r = run(T, { git: true });
-  check('检查17 发版之后新建的 draft 不拦', r.status === 0 && !outOf(r).includes('发版草稿'), `exit=${r.status}\n${outOf(r)}`);
-  rmfix(T);
+check('检查17 发版之后新建的 draft 不拦', r.status === 0 && !outOf(r).includes('发版草稿'), `exit=${r.status}\n${outOf(r)}`);
+rmfix(T);
 }
 {
-  const T = mkfix();
-  gitInit(T);
-  w(T, 'package.json', '{"name":"t","version":"0.1.0"}\n');
-  w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级别: L1\n日期: 2026-09-12'));
+const T = mkfix();
+gitInit(T);
+w(T, 'package.json', '{"name":"t","version":"0.1.0"}\n');
+w(T, 'workflow/incidents/2026-09-12-inc17.md', `---\n状态: open\n级别: L1\n发现: 2026-09-12\n模块: pipeline\n---\n# INCIDENT — inc17\n\n${三件套(false)}`);
+w(T, 'workflow/plans/2026-09-12-inc17.md', PLAN('inc17', '状态: draft\n级别: L1\n模块: pipeline'));
+gitCommitAll(T, 'v0.1.0');
+const r = run(T, { git: true });
+check('检查17 发版树上的 open incident 不参与（阻断由 plan 触发且不含 incident 路径）', r.status === 1 && outOf(r).includes('发版草稿') && !outOf(r).includes('workflow/incidents/2026-09-12-inc17.md'), `exit=${r.status}\n${outOf(r)}`);
+rmfix(T);
+}
+{
+const T = mkfix();
+gitInit(T);
+w(T, 'package.json', '{"name":"t","version":"0.1.0"}\n');
+w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级别: L1\n日期: 2026-09-12'));
   w(T, 'workflow/plans/2026-09-12-deep.md', PLAN('deep', '状态: draft\n级别: L1'));
   gitCommitAll(T, 'v0.1.0');
   for (let i = 1; i <= 41; i++) {

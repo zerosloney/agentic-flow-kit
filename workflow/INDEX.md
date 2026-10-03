@@ -10,7 +10,7 @@
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
 | INCIDENT | L1 | open | 2026-10-03 | pipeline | 2026-10-03 发版 draft 盲区评估收口（papercuts pre-push 条目） | — |
-| PLAN | L1 | draft | 2026-10-03 | pipeline | release-draft-scope | — |
+| PLAN | L1 | approved | 2026-10-03 | pipeline | release-draft-scope | — |
 
 ## 档案计数（208，不进表）
 

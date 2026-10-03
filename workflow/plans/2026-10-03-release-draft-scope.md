@@ -1,7 +1,8 @@
 ---
-状态: draft
+状态: approved
 级别: L1
 模块: pipeline
+确认指纹: f7e50c79cb4cf5ee
 ---
 # PLAN — release-draft-scope
 
