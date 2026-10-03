@@ -1,10 +1,11 @@
 ---
-状态: open
+状态: fixed
 级别: L1
 发现: 2026-09-25
 模块: pipeline
 配对: ../incidents/2026-09-25-doctor-owned-drift.md（首次引入用 WARN；本单为严化升级 FAIL）
 备注: 本单为 doctor-owned-drift 7ccc7b9「未做」节跟进：把 owned 漂移 WARN 升级 FAIL。首次引入保守用 WARN 避免现有装户首次跑 doctor 突然挂；现在用户拍板严化（installed 装户已吃过一次警告，知道要手动同步）。规则严度参数变更非规则语义变更 → L1；incident 即入口，不另立 intent；spec 略（L1 可省）。
+确认指纹: 7b9a18ea45980d52
 ---
 
 # INCIDENT — 2026-09-25 doctor owned 漂移 WARN 升级 FAIL
@@ -41,4 +42,4 @@
 
 3. 规范条目
    - 落点：src/doctor.mjs 第 6.6 节注释更新「WARN 首次引入 / FAIL 严化（2026-09-25 doctor-owned-drift-strict）」
-   - 引用：本次修复 commit SHA（修复完成后回填）
+   - 引用：75707c3（WARN 升级 FAIL，规则强约束生效）
