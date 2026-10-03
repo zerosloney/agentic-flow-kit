@@ -335,7 +335,11 @@ for (const plan of docFiles('plans')) {
 // --- 2. 模板字段占位符残留 [warning]（排除运行时文件名格式与协议样板，口径沿 sh 版）---
 {
   const phRe = /YYYY-MM-DD|<主题>|<日期 主题>|L0 \/ L1 \/ L2 \/ L3|draft \/ approved \/ done|open \/ fixed \/ closed/;
-  const boilerRe = /\.\.\/specs\/[A-Za-z0-9-]*\.md|写明如何满足|防复发验证|_YYYY-MM-DD\.|format\('YYYY-MM-DD'\)|value-format="YYYY-MM-DD"/;
+  const boilerRe = /\.\.\/specs\/[A-Za-z0-9-]*\.md|写明如何满足|防复发验证|_YYYY-MM-DD\.|format\('YYYY-MM-DD'\)|value-format="YYYY-MM-DD"|确认结果：approved（YYYY-MM-DD 用户对话内确认）；done（YYYY-MM-DD 关单，随入口文档置终态）/;
+  // plan 确认节样板豁免（2026-10-03 plan-confirm-boiler）：plan 模板「确认与复核」节自带
+  // 「确认结果：approved（YYYY-MM-DD 用户对话内确认）；done（YYYY-MM-DD 关单，随入口文档置终态）」
+  // 样板句，未回填不等于漏填占位（确认由 confirm-doc 机器兜底）——精确豁免整句，真实占位（如
+  // `日期: YYYY-MM-DD`）照拦。
   // 命名约定豁免：`<主题>` 与 `.md` 同行 = 在描述文件命名规则（如 `.agents/workflows/<主题>.md`、
   //   「复制本模板为 YYYY-MM-DD-<主题>.md」），非未填占位符；真未填的占位（标题 `# INTENT — <主题>`、
   //   `日期: YYYY-MM-DD`）不含 .md，仍照拦（2026-09-25-wf-runtime incident 记录的误报口径）

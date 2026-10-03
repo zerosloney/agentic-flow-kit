@@ -643,9 +643,28 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   w(T, 'workflow/intents/2026-09-01-nm2.md', INTENT('<主题>', '状态: done\n级别: L1\n日期: 2026-09-01', '\n正文无占位。\n'));
   w(T, 'workflow/plans/2026-09-01-nm2.md', PLAN('nm2', '状态: done\n级别: L1'));
   const r = run(T);
-  check('标题 <主题>（无 .md）→ 仍报模板未填',
-    r.status === 0 && outOf(r).includes('模板未填'), `exit=${r.status}\n${outOf(r)}`);
-  rmfix(T);
+check('标题 <主题>（无 .md）→ 仍报模板未填',
+  r.status === 0 && outOf(r).includes('模板未填'), `exit=${r.status}\n${outOf(r)}`);
+rmfix(T);
+}
+// ---- 场景 45b:检查 2——plan 确认节模板样板豁免；真实占位仍报（2026-10-03 plan-confirm-boiler）----
+{
+const T = mkfix();
+w(T, 'workflow/intents/2026-09-01-bo1.md', INTENT('bo1', '状态: done\n级别: L1\n日期: 2026-09-01', '\n## 验收标准（可测试）\n- [x] 用例通过\n'));
+w(T, 'workflow/plans/2026-09-01-bo1.md', PLAN('bo1', '状态: done\n级别: L1', '\n## 确认与复核\n\n- 确认结果：approved（YYYY-MM-DD 用户对话内确认）；done（YYYY-MM-DD 关单，随入口文档置终态）\n'));
+const r1 = run(T);
+check('检查2 plan 确认节样板句 → 不报模板未填',
+  r1.status === 0 && !outOf(r1).includes('模板未填'), `exit=${r1.status}\n${outOf(r1)}`);
+rmfix(T);
+}
+{
+const T = mkfix();
+w(T, 'workflow/intents/2026-09-01-bo2.md', INTENT('bo2', '状态: done\n级别: L1\n日期: 2026-09-01', '\n## 验收标准（可测试）\n- [x] 用例通过\n'));
+w(T, 'workflow/plans/2026-09-01-bo2.md', PLAN('bo2', '状态: done\n级别: L1', '\n## 确认与复核\n\n- 日期: YYYY-MM-DD\n'));
+const r2 = run(T);
+check('检查2 plan 真实未填占位（日期: YYYY-MM-DD）→ 仍报模板未填',
+  r2.status === 0 && outOf(r2).includes('模板未填'), `exit=${r2.status}\n${outOf(r2)}`);
+rmfix(T);
 }
 // ---- 场景 46:检查 6——薄适配正文含 .agents/roles/<role>.md 引用 → 不报 Adapter 断线 ----
 {
