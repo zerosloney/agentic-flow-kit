@@ -1,7 +1,8 @@
 ---
-状态: draft
+状态: approved
 级别: L2
 模块: pipeline
+确认指纹: af66c83ba3711c8f
 ---
 # PLAN — plan-confirm-boiler（plan 确认节模板样板误报豁免）
 

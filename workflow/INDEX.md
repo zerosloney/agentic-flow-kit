@@ -10,7 +10,7 @@
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
 | INCIDENT | L2 | open | 2026-10-03 | pipeline | 2026-10-03 plan 确认节模板样板误报豁免 | — |
-| PLAN | L2 | draft | 2026-10-03 | pipeline | plan-confirm-boiler（plan 确认节模板样板误报豁免） | — |
+| PLAN | L2 | approved | 2026-10-03 | pipeline | plan-confirm-boiler（plan 确认节模板样板误报豁免） | — |
 | SPEC | L2 | approved | 2026-10-03 | pipeline | plan-confirm-boiler | — |
 
 ## 档案计数（210，不进表）
