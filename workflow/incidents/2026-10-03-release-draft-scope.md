@@ -1,9 +1,10 @@
 ---
-状态: open
+状态: fixed
 级别: L1
 发现: 2026-10-03
 模块: pipeline
 备注: papercuts「pre-push 断档扫描 + 检查 15」条目正式立项——评估发版 draft 盲区的映射判据并收口；核心场景已由检查 17（release-unclosed）覆盖，本单聚焦剩余缺口定性 + 补测试 + papercuts 更新。修复类，incident 即 intent 等价入口；L1 配 plan
+确认指纹: f157a9d8dedbdb12
 ---
 # INCIDENT — 2026-10-03 发版 draft 盲区评估收口（papercuts pre-push 条目）
 
