@@ -1,8 +1,9 @@
 ---
-状态: open
+状态: closed
 级别: L2
 发现: 2026-10-04
 模块: pipeline
+确认指纹: ddf0effa41b172f7
 ---
 # INCIDENT — 2026-10-04 L1 plan 节名不匹配致验收证据校验误报
 

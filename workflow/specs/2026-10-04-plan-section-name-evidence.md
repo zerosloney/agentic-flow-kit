@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-04
 模块: pipeline
 备注: 对应 incidents/2026-10-04-plan-section-name-evidence.md
-确认指纹: d6bc9743a761a53c
+确认指纹: 3c99dd5f0129687a
 ---
 # SPEC — plan-section-name-evidence
 
