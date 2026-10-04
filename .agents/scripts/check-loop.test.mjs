@@ -16,6 +16,9 @@ import { entryConfirmed, MARK_RE, laneOfEntry, laneOfDoc } from './stage-gates.m
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
+const GIT = process.platform === 'win32' ? 'git.exe' : 'git'; // Windows spawn 不补 .exe 扩展名（gitInit/gitCommitAll/场景 43/44/47 共用）
+// 注意：check-loop.mjs 无 isMain 主守卫，被 import 即全量执行门禁并 process.exit——本套件只能端到端 spawn，
+// 不可从其 import 函数直测（2026-10-04 review-fix-batch 实证；可 import 化记 papercuts 待 L2 重构）
 
 let pass = 0;
 let fail = 0;
@@ -564,21 +567,31 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     r.status === 1 && outOf(r).includes('验收缺证据'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
 }
-// ---- 场景 43:检查 8 证据真相——L1 plan「改动方案」节（fill-plan 输出）+ 证据 SHA 触及声明文件 → 不报「证据无关」（2026-10-04 plan-section-name-evidence 回归）----
-{
+// evidenceFixture：场景 43/44/47 共用脚手架——git 仓 + L1 done 三件（plan「改动方案」节声明 declared）+
+// intent 证据引用唯一内容提交，返回 { T, sha }。createDeclared=false 时声明【从未存在】的文件（唯一内容
+// 提交必然不触及，判定确定——2026-10-04 实测原「二次提交区分触及/不触及」方案在 npm test 环境偶发失败
+// （git 时序敏感），负例改 ghost 构造）
+const evidenceFixture = (slug, declared, createDeclared) => {
   const T = mkfix();
   gitInit(T);
-  fs.mkdirSync(path.join(T, 'src'), { recursive: true });
-  w(T, 'src/foo.js', '// fixture\n');
-  w(T, 'workflow/plans/2026-10-04-ev3.md', PLAN('ev3', '状态: done\n级别: L1', '\n## 改动方案\n- src/foo.js：测试声明文件\n'));
-  w(T, 'workflow/intents/2026-10-04-ev3.md', INTENT('ev3', '状态: done\n级别: L1\n日期: 2026-10-04',
+  if (createDeclared) {
+    fs.mkdirSync(path.join(T, path.dirname(declared)), { recursive: true });
+    w(T, declared, '// fixture\n');
+  }
+  w(T, `workflow/plans/2026-10-04-${slug}.md`, PLAN(slug, '状态: done\n级别: L1', `\n## 改动方案\n- ${declared}：声明文件${createDeclared ? '' : '（实际不存在，证据必不触及）'}\n`));
+  w(T, `workflow/intents/2026-10-04-${slug}.md`, INTENT(slug, '状态: done\n级别: L1\n日期: 2026-10-04',
     '\n## 验收标准（可测试）\n- [x] 用例通过（证据:commit PLACEHOLDER）\n'));
-  gitCommitAll(T, 'feat: ev3 fixture');
-  const G = process.platform === 'win32' ? 'git.exe' : 'git';
-  const sha = spawnSync(G, ['rev-parse', 'HEAD'], { cwd: T, encoding: 'utf8' }).stdout.trim().slice(0, 7);
-  w(T, 'workflow/intents/2026-10-04-ev3.md', INTENT('ev3', '状态: done\n级别: L1\n日期: 2026-10-04',
+  gitCommitAll(T, `feat: ${slug} fixture`);
+  const sha = spawnSync(GIT, ['rev-parse', 'HEAD'], { cwd: T, encoding: 'utf8' }).stdout.trim().slice(0, 7);
+  w(T, `workflow/intents/2026-10-04-${slug}.md`, INTENT(slug, '状态: done\n级别: L1\n日期: 2026-10-04',
     `\n## 验收标准（可测试）\n- [x] 用例通过（证据:commit ${sha}）\n`));
-  gitCommitAll(T, 'docs: ev3 evidence');
+  gitCommitAll(T, `docs: ${slug} evidence`);
+  return { T, sha };
+};
+
+// ---- 场景 43:检查 8 证据真相——L1 plan「改动方案」节（fill-plan 输出）+ 证据 SHA 触及声明文件 → 不报「证据无关」（2026-10-04 plan-section-name-evidence 回归）----
+{
+  const { T } = evidenceFixture('ev3', 'src/foo.js', true);
   const r = run(T);
   // fixture 不构造确认记录 → done 必触「确认未对账」hard（exit 1 预期）；核心断言是证据面不出现「证据无关」
   check('L1 plan「改动方案」节 + 证据触及声明文件 → 不报证据无关',
@@ -588,24 +601,28 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
 
 // ---- 场景 44:检查 8 证据真相——L1 plan「改动方案」节 + 证据 SHA 不触及声明文件 → 仍报「证据无关」（负例，防过度豁免）----
 {
-  const T = mkfix();
-  gitInit(T);
-  fs.mkdirSync(path.join(T, 'src'), { recursive: true });
-  w(T, 'src/foo.js', '// fixture foo\n');
-  // 负例：plan 声明一个【从未存在】的文件 src/ghost.js —— 唯一内容提交必然不触及它，判定确定（
-  // 2026-10-04 实测原「二次提交区分触及/不触及」方案在 npm test 环境偶发失败（git 时序敏感），改此稳定构造）
-  w(T, 'workflow/plans/2026-10-04-ev4.md', PLAN('ev4', '状态: done\n级别: L1', '\n## 改动方案\n- src/ghost.js：声明文件（实际不存在，证据必不触及）\n'));
-  w(T, 'workflow/intents/2026-10-04-ev4.md', INTENT('ev4', '状态: done\n级别: L1\n日期: 2026-10-04',
-    '\n## 验收标准（可测试）\n- [x] 用例通过（证据:commit PLACEHOLDER）\n'));
-  gitCommitAll(T, 'feat: ev4 fixture');
-  const G = process.platform === 'win32' ? 'git.exe' : 'git';
-  const sha = spawnSync(G, ['rev-parse', 'HEAD'], { cwd: T, encoding: 'utf8' }).stdout.trim().slice(0, 7);
-  w(T, 'workflow/intents/2026-10-04-ev4.md', INTENT('ev4', '状态: done\n级别: L1\n日期: 2026-10-04',
-    `\n## 验收标准（可测试）\n- [x] 用例通过（证据:commit ${sha}）\n`));
-  gitCommitAll(T, 'docs: ev4 evidence');
+  const { T } = evidenceFixture('ev4', 'src/ghost.js', false);
   const r = run(T);
   check('L1 plan「改动方案」节 + 证据不触及声明文件 → 仍报证据无关（负例）',
     outOf(r).includes('证据无关'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+
+// ---- 场景 47:检查 8 证据真相——证据 SHA 触及声明文件 → 校验通过 exit 0（2026-10-04 review-fix-batch：
+// 补 spec 2026-10-04-plan-section-name-evidence §49「校验通过（type=sha）」断言强度——场景 43 的 fixture
+// 触「确认未对账」hard 只能间接断言无「证据无关」；本场景沿场景 5x 造法（锚前自报日期豁免存量面）走满
+// type=sha 放行路径：证据为真实 SHA + 声明文件被提交触及 + 提交无执行器标记 → exit 0 只能经 type=sha 达成
+// （text 需无 hex 串 / process 需 runId 标记 / forged·irrelevant 均 exit 1，三条岔路均被构造排除）----
+{
+  const T = mkfix();
+  gitInit(T);
+  w(T, 'workflow/plans/2026-09-26-sh1.md', PLAN('sh1', '状态: done\n级别: L1\n日期: 2026-09-26\n模块: material', '\n## 改动方案\n\n- src/app.mjs：实现功能\n'));
+  fs.mkdirSync(path.join(T, 'src'), { recursive: true });
+  w(T, 'src/app.mjs', '// fixture\n');
+  gitCommitAll(T, 'feat: sh1 实现（无执行器标记）');
+  const sha = spawnSync(GIT, ['rev-parse', '--short', 'HEAD'], { cwd: T, encoding: 'utf8' }).stdout.trim();
+  w(T, 'workflow/intents/2026-09-26-sh1.md', INTENT('sh1', '状态: done\n级别: L1\n日期: 2026-09-26', `\n## 验收标准（可测试）\n- [x] 用例通过（证据:${sha}）\n`));
+  expectOk('证据 SHA 触及声明文件（无执行器标记）→ type=sha 校验通过 exit 0', T);
   rmfix(T);
 }
 
@@ -622,7 +639,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     r.status === 0 && !outOf(r).includes('引用断档'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
 }
-// ---- 场景 43:检查 4——花括号展开三路皆不存在 → 仍报引用断档（带完整展开式文案）----
+// ---- 场景 45（原 43，2026-10-04 review-fix-batch 改号避让证据真相场景重号；旧号无文档按号引用）:检查 4——花括号展开三路皆不存在 → 仍报引用断档（带完整展开式文案）----
 {
   const T = mkfix();
   w(T, 'AGENTS.md', '# AGENTS\n\n起草先跑 `node .agents/scripts/fill-{alpha,beta,gamma}.mjs` 拿结构化草稿。\n');
@@ -633,7 +650,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     r.status === 0 && /引用断档.*fill-\{alpha,beta,gamma\}\.mjs/.test(outOf(r)), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
 }
-// ---- 场景 44:检查 2——<主题> 与 .md 同行 = 命名约定描述 → 不报模板未填 ----
+// ---- 场景 46（原 44，同场景 45 缘由改号）:检查 2——<主题> 与 .md 同行 = 命名约定描述 → 不报模板未填 ----
 {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-01-nm1.md', INTENT('nm1', '状态: done\n级别: L1\n日期: 2026-09-01',

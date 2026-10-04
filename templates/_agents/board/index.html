@@ -432,7 +432,7 @@ async function refreshRuns() {
   } catch (e) {
     return false;
   }
-  RUNS = data.runs || [];
+  RUNS = data.cards || []; // 键名 cards 对齐 /api/runs 载荷（intent 2026-10-04-board-run-panel 验收#1）
   const q = Q.trim().toLowerCase();
   const list = RUNS.filter((r) => !q || (r.runId + ' ' + r.requirement + ' ' + r.stage).toLowerCase().includes(q));
   const html = list.length
@@ -492,17 +492,31 @@ function loadRunTimeline() {
 function loadRunWorkOrder() {
   if (!RUN_CURRENT) return;
   const w = RUN_CURRENT.workOrder;
-  if (!w) { $('#d-body').innerHTML = '<div class="none">当前无工单（已停机在非工单点或已完成）</div>'; return; }
-  $('#d-body').innerHTML =
-    `<div class="md"><h2>工单 #${w.id} · ${esc(w.kind)}</h2>` +
-    `<p><b>${esc(w.title || '')}</b></p>` +
-    `<p>目标：${esc(w.goal || '')}</p>` +
-    (w.instructions?.length ? `<ul>${w.instructions.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : '') +
-    (w.context?.kbHits?.length ? `<p>查重命中：</p><ul>${w.context.kbHits.slice(0, 6).map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : '') +
-    (w.context?.stderrTail ? `<pre><code>${esc(w.context.stderrTail)}</code></pre>` : '') +
-    (w.constraints?.length ? `<p>约束：</p><ul>${w.constraints.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : '') +
-    (w.acceptance?.length ? `<p>验收：</p><ul>${w.acceptance.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : '') +
-    `</div>`;
+  if (w) {
+    $('#d-body').innerHTML =
+      `<div class="md"><h2>工单 #${w.id} · ${esc(w.kind)}</h2>` +
+      `<p><b>${esc(w.title || '')}</b></p>` +
+      `<p>目标：${esc(w.goal || '')}</p>` +
+      (w.instructions?.length ? `<ul>${w.instructions.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : '') +
+      (w.context?.kbHits?.length ? `<p>查重命中：</p><ul>${w.context.kbHits.slice(0, 6).map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : '') +
+      (w.context?.stderrTail ? `<pre><code>${esc(w.context.stderrTail)}</code></pre>` : '') +
+      (w.constraints?.length ? `<p>约束：</p><ul>${w.constraints.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : '') +
+      (w.acceptance?.length ? `<p>验收：</p><ul>${w.acceptance.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : '') +
+      `</div>`;
+    return;
+  }
+  // 停机在确认门：渲染确认门要点（intent 2026-10-04-board-run-panel 目标节「工单详情 + 确认门要点」）
+  const c = RUN_CURRENT.awaitConfirm;
+  if (c) {
+    $('#d-body').innerHTML =
+      `<div class="md"><h2>等待确认</h2>` +
+      `<p>文档：<code>${esc(c.doc || '')}</code></p>` +
+      `<p>确认门要点：${esc(c.points || '')}</p>` +
+      `<p>${c.ledger ? '将经 confirm-doc 代录入台账（对话内明确确认后逐份代录，台账记原话）。' : '对话级确认，记 run 事件不进台账。'}</p>` +
+      `</div>`;
+    return;
+  }
+  $('#d-body').innerHTML = '<div class="none">当前无工单（已停机在非工单点或已完成）</div>';
 }
 
 function renderRunDrawer() {

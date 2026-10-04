@@ -103,8 +103,8 @@ export function scanRuns() {
   return cards.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
 }
 
-// 路径白名单：resolve 后必须仍在 pipeline-runs/ 内且 .json 后缀
-function safeRunPath(rel) {
+// 路径白名单：resolve 后必须仍在 pipeline-runs/ 内且 .json 后缀（export 供测试直测白名单面）
+export function safeRunPath(rel) {
   const abs = path.resolve(PIPELINE_RUNS, rel);
   if (!abs.startsWith(PIPELINE_RUNS + path.sep) || !abs.endsWith('.json')) return null;
   return abs;
@@ -263,7 +263,9 @@ function watchDir(dir) {
     const watcher = fs.watch(dir, { recursive: true }, onWatchChange);
     watcher.on('error', (e) => { console.error(`fs.watch 失效（${dir}），已通知前端降级轮询:`, e.message); broadcast('watchdead'); });
   } catch (e) {
+    // 同步失败（典型：目录不存在 ENOENT）与异步 error 同口径广播 watchdead——否则前端徽标滞留「实时」而推送已死
     console.error(`fs.watch 初始化失败（${dir}，前端将走 60s 兜底轮询）:`, e.message);
+    broadcast('watchdead');
   }
 }
 watchDir(WORKFLOW);
@@ -331,15 +333,17 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/board') return sendJson(res, 200, await scanBoard());
 
     // 执行器面板（2026-10-04 board-run-panel）：run 卡片列表 + 单 run 事件流
-    if (url.pathname === '/api/runs') return sendJson(res, 200, { runs: scanRuns() });
+    if (url.pathname === '/api/runs') return sendJson(res, 200, { cards: scanRuns() }); // 键名 cards 对齐 intent 2026-10-04-board-run-panel 验收#1
     if (url.pathname === '/api/run') {
       const rel = url.searchParams.get('file') || '';
       const abs = safeRunPath(rel);
       if (!abs) return sendJson(res, 403, { error: '路径不在 pipeline-runs/ 白名单内' });
       try {
         return sendJson(res, 200, { run: parseRunFile(fs.readFileSync(abs, 'utf8')) });
-      } catch {
-        return sendJson(res, 404, { error: 'run 文件不存在' });
+      } catch (e) {
+        if (e && e.code === 'ENOENT') return sendJson(res, 404, { error: 'run 文件不存在' });
+        console.error(`读 run 失败（${rel}）:`, e.message); // 权限/占用等如实 500 留痕，不并成 404
+        return sendJson(res, 500, { error: `读 run 失败：${e.message}` });
       }
     }
 
@@ -379,8 +383,11 @@ server.on('error', (e) => {
 // isMain 守卫（board-kb-p1）：parseLoopHardBlocks 可被测试 import（import 不 listen）
 const isMain = process.argv[1] && process.argv[1].endsWith('workflow-board-server.mjs');
 if (isMain) {
+  // run 目录缺失（.agents/cache/ 被 gitignore，全新装机无此目录）时 fs.watch 同步抛 ENOENT 且无重试——
+  // 补建空目录启用监听（pipeline-run 首跑本会建；失败不阻启动，由 watchDir catch 兜底广播 watchdead）
+  try { fs.mkdirSync(PIPELINE_RUNS, { recursive: true }); } catch { /* 竞态/权限等交给 watchDir 降级 */ }
   watchDir(PIPELINE_RUNS); // 执行器 run 文件监听仅在作为服务运行时启动（import 不监听，避免测试进程挂起）
   server.listen(PORT, '127.0.0.1', () => {
-    console.log(`workflow 看板: http://127.0.0.1:${PORT}  （Ctrl+C 停止；只读 workflow/ 与 pipeline-runs/，不写任何文件）`);
+    console.log(`workflow 看板: http://127.0.0.1:${PORT}  （Ctrl+C 停止；只读 workflow/ 与 pipeline-runs/，不写任何文件；run 目录缺失时补建空目录以启用监听）`);
   });
 }

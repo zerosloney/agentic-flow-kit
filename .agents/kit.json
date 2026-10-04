@@ -14,7 +14,7 @@
   "managed": [
     {
       "rel": ".agents/board/index.html",
-      "sha256": "64e5a106a22728099901116dabf877944fa03b36bdb8673b2fc0979aaf6c09a9"
+      "sha256": "ce2af0bf68f384c5c710e92294b0643ae4ae035345ff7e47bd5681fe4657f1a0"
     },
     {
       "rel": ".agents/board/marked.min.js",
@@ -146,7 +146,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "fe2a385ba7562c0773ae5480ec6752b3817c5de48c10203c0808907b1ec15c51"
+      "sha256": "73db3eca1b15e4c24ef1ac325b4dcb4aee744be29cf0f0ad16570099e84687bb"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -318,11 +318,11 @@
     },
     {
       "rel": ".agents/scripts/workflow-board-server.mjs",
-      "sha256": "ea3b64b7d81aa8563c4696f0e1482af0eb48e128f1a0ed38fdba811780be976e"
+      "sha256": "1ef41d13f192f119cd7307dcf59710be9e185308333a60067d3e1ebfb149e9f4"
     },
     {
       "rel": ".agents/scripts/workflow-board-server.test.mjs",
-      "sha256": "c50ac18d44cb555e488e04ef0ac43964e68f2fea3b989d8d93b6e95ba011a10e"
+      "sha256": "e382a1c907cb3a6036737bac9fddc47f8cd7c3b272774b44492f6743abc2e95c"
     },
     {
       "rel": ".agents/scripts/workflow-enums.mjs",
@@ -436,7 +436,7 @@
     },
     {
       "rel": "AGENTS.md",
-      "sha256": "f90ed92feeb535b4b184f0008add057dc86170c5a5f04e99eb4f01d5cd58332a"
+      "sha256": "3c9d42d37a9dbd8ba793b2342118dc47e934275cc7e9ad4ddd5151222b4bb230"
     },
     {
       "rel": "wiki/知识沉淀总览.html",
@@ -460,7 +460,7 @@
     },
     {
       "rel": "workflow/papercuts.md",
-      "sha256": "5377a012aba105395fef88b4bac9128893bc509ef9c0855f283a11a756c687f9"
+      "sha256": "6ff498cc67bd933cac8a9af5d5b25b205c71e197836ba4b1b0fde8e378617a4c"
     },
     {
       "rel": "workflow/plans/_TEMPLATE.md",

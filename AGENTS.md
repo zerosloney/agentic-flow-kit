@@ -25,7 +25,7 @@
 - `.githooks/`（经 `core.hooksPath` 挂载，本地 clone 后执行 `git config core.hooksPath .githooks`）：pre-commit（闭环配对 / 泳道完整性 / wiki 台账 / 规则面预算 / 双源一致性 / managed 台账快检 / 敏感信息扫描与条件构建）、pre-push（闭环断档扫描）、commit-msg、post-commit、pre-merge-commit。
 - **`git commit` / `git merge` / `git push` 三处一律禁 `--no-verify`**——被拦说明产出不合规，按提示修完原路重试。
 - 项目专属门禁挂 `.agents/hooks/local-pre-commit`。装户五条硬规则（配对、验收、确认留痕、敏感信息、双源台账）与 `audit` 档见 `workflow/README.md`「硬规则」。
-- 提交遵循 Conventional Commits 中文（feat / fix / docs / style / refactor / perf）；L1+ 入口文档 / spec / plan 随代码同一提交；确认（approved）后立即 `docs(*)` 单独提交留痕。
+- 提交遵循 Conventional Commits 中文（feat / fix / docs / style / refactor / perf）。L1+ 三段式闭环链：`docs(*)` approved 留痕 → 代码 → 关单 `docs(*)`，相邻提交即同一闭环（2026-10-04 修订）。
 - **确认门（2026-09-27 起）**：intent/spec/plan 的 approved/done 与 incident 的 fixed/closed（两跳、无单跳）唯一入口 = `node .agents/scripts/confirm-doc.mjs <path>`，放弃态走显式 `--to superseded|cancelled`（合法前态见脚本提示；四终态同样内容绑定），两形态：① 用户终端亲手运行键入「可以」（TTY，AI 会话内被拒）；② **对话委托代录**——用户在对话内明确确认后，AI 跑 `confirm-doc.mjs <path> --delegated "<用户原话>"` 逐件代录（默认一次一份，多份并录被拒），台账如实记 `source: chat-delegated` + 原话供对质，永不伪装 TTY 行（check-loop 15 指纹+台账对账拦截，与 source 无关）；L0/L1 协作道可 `--batch` 多份一次代录（台账 `brief:true`，15 并录告警豁免；L2/L3 仍逐份）。
 
 ### 检索、看板与量化

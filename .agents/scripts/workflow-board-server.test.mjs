@@ -12,7 +12,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { parseLoopHardBlocks, parseAcceptance, detectAlerts, parseRunFile, runCard } from './workflow-board-server.mjs';
+import { parseLoopHardBlocks, parseAcceptance, detectAlerts, parseRunFile, runCard, safeRunPath } from './workflow-board-server.mjs';
 import { computeFingerprint } from './confirm-doc.mjs';
 import { stageBar } from './pipeline-run.mjs';
 
@@ -191,6 +191,11 @@ const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
   // 空事件容错
   const empty = runCard({ runId: 'r1', requirement: '', stage: 'triage', stopType: 'work-order', events: null });
   check('⑦runCard：events 非数组容错为 0', empty.eventCount === 0);
+  // safeRunPath 路径穿越白名单（2026-10-04 review-fix-batch：安全相关函数此前无测试；用例只用平台无关的正向斜杠相对路径）
+  check('⑦safeRunPath：合法 runId.json 通过', typeof safeRunPath('20261002-1819-x-abcd.json') === 'string' && safeRunPath('20261002-1819-x-abcd.json').endsWith('.json'));
+  check('⑦safeRunPath：.. 穿越拒绝', safeRunPath('../../package.json') === null && safeRunPath('a/../../package.json') === null);
+  check('⑦safeRunPath：根相对路径拒绝', safeRunPath('/etc/passwd') === null);
+  check('⑦safeRunPath：非 .json 拒绝', safeRunPath('20261002-1819-x-abcd.md') === null && safeRunPath('20261002-1819-x-abcd') === null);
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
