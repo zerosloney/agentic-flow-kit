@@ -564,6 +564,51 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     r.status === 1 && outOf(r).includes('验收缺证据'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
 }
+// ---- 场景 43:检查 8 证据真相——L1 plan「改动方案」节（fill-plan 输出）+ 证据 SHA 触及声明文件 → 不报「证据无关」（2026-10-04 plan-section-name-evidence 回归）----
+{
+  const T = mkfix();
+  gitInit(T);
+  fs.mkdirSync(path.join(T, 'src'), { recursive: true });
+  w(T, 'src/foo.js', '// fixture\n');
+  w(T, 'workflow/plans/2026-10-04-ev3.md', PLAN('ev3', '状态: done\n级别: L1', '\n## 改动方案\n- src/foo.js：测试声明文件\n'));
+  w(T, 'workflow/intents/2026-10-04-ev3.md', INTENT('ev3', '状态: done\n级别: L1\n日期: 2026-10-04',
+    '\n## 验收标准（可测试）\n- [x] 用例通过（证据:commit PLACEHOLDER）\n'));
+  gitCommitAll(T, 'feat: ev3 fixture');
+  const G = process.platform === 'win32' ? 'git.exe' : 'git';
+  const sha = spawnSync(G, ['rev-parse', 'HEAD'], { cwd: T, encoding: 'utf8' }).stdout.trim().slice(0, 7);
+  w(T, 'workflow/intents/2026-10-04-ev3.md', INTENT('ev3', '状态: done\n级别: L1\n日期: 2026-10-04',
+    `\n## 验收标准（可测试）\n- [x] 用例通过（证据:commit ${sha}）\n`));
+  gitCommitAll(T, 'docs: ev3 evidence');
+  const r = run(T);
+  // fixture 不构造确认记录 → done 必触「确认未对账」hard（exit 1 预期）；核心断言是证据面不出现「证据无关」
+  check('L1 plan「改动方案」节 + 证据触及声明文件 → 不报证据无关',
+    !outOf(r).includes('证据无关'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+
+// ---- 场景 44:检查 8 证据真相——L1 plan「改动方案」节 + 证据 SHA 不触及声明文件 → 仍报「证据无关」（负例，防过度豁免）----
+{
+  const T = mkfix();
+  gitInit(T);
+  fs.mkdirSync(path.join(T, 'src'), { recursive: true });
+  w(T, 'src/foo.js', '// fixture foo\n');
+  // 负例：plan 声明一个【从未存在】的文件 src/ghost.js —— 唯一内容提交必然不触及它，判定确定（
+  // 2026-10-04 实测原「二次提交区分触及/不触及」方案在 npm test 环境偶发失败（git 时序敏感），改此稳定构造）
+  w(T, 'workflow/plans/2026-10-04-ev4.md', PLAN('ev4', '状态: done\n级别: L1', '\n## 改动方案\n- src/ghost.js：声明文件（实际不存在，证据必不触及）\n'));
+  w(T, 'workflow/intents/2026-10-04-ev4.md', INTENT('ev4', '状态: done\n级别: L1\n日期: 2026-10-04',
+    '\n## 验收标准（可测试）\n- [x] 用例通过（证据:commit PLACEHOLDER）\n'));
+  gitCommitAll(T, 'feat: ev4 fixture');
+  const G = process.platform === 'win32' ? 'git.exe' : 'git';
+  const sha = spawnSync(G, ['rev-parse', 'HEAD'], { cwd: T, encoding: 'utf8' }).stdout.trim().slice(0, 7);
+  w(T, 'workflow/intents/2026-10-04-ev4.md', INTENT('ev4', '状态: done\n级别: L1\n日期: 2026-10-04',
+    `\n## 验收标准（可测试）\n- [x] 用例通过（证据:commit ${sha}）\n`));
+  gitCommitAll(T, 'docs: ev4 evidence');
+  const r = run(T);
+  check('L1 plan「改动方案」节 + 证据不触及声明文件 → 仍报证据无关（负例）',
+    outOf(r).includes('证据无关'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+
 // ---- 场景 42:检查 4——fill-{intent,spec,plan}.mjs 花括号展开，三路皆存在 → 不报引用断档 ----
 {
   const T = mkfix();

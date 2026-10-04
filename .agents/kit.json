@@ -138,7 +138,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "8391f21e8db43c5abc16f9f604753c94dbc403049b5bf43958ce643d84d3bd84"
+      "sha256": "758859270bfc467a9c6632ef5529551267a444e7b62870838474c74a374d87fd"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -146,7 +146,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "09ec7e84746166506acca58544fb59a950fc5670d37b14b4ad17a4c895a0dc66"
+      "sha256": "fe2a385ba7562c0773ae5480ec6752b3817c5de48c10203c0808907b1ec15c51"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -460,11 +460,11 @@
     },
     {
       "rel": "workflow/papercuts.md",
-      "sha256": "036e2fa9fec8bef784279a335f978c208737b6b1bcdbfa4f2195549a07af24c0"
+      "sha256": "5377a012aba105395fef88b4bac9128893bc509ef9c0855f283a11a756c687f9"
     },
     {
       "rel": "workflow/plans/_TEMPLATE.md",
-      "sha256": "e98cbe5dd8518b6697bfb5575655ed70ddfb8dd9dca420c6a3aeceb59d84f77d"
+      "sha256": "9cdcf4b1f10fa6d633adfe4e948adb54142a56500f714db8644dd76d6c9f6700"
     },
     {
       "rel": "workflow/regression-checklist.md",

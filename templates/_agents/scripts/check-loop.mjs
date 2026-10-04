@@ -596,10 +596,10 @@ function verifyEvidenceTruth(evidenceStr, planBase, root) {
 
   const planLines = linesOf(planPath) || [];
   const declaredFiles = [];
-  // 扫描「改动面」或「任务拆解」节
+  // 扫描「改动面」「任务拆解」或「改动方案」（L1 Quick-Plan 生成器 fill-plan 输出）节
   let inDeclaredSec = false;
   for (const line of planLines) {
-    if (/^##\s+(改动面|任务拆解)/.test(line)) { inDeclaredSec = true; continue; }
+    if (/^##\s+(改动面|任务拆解|改动方案)/.test(line)) { inDeclaredSec = true; continue; }
     if (inDeclaredSec && /^##\s+/.test(line)) { inDeclaredSec = false; continue; }
     if (inDeclaredSec) {
       const fileMatch = line.match(/([a-zA-Z0-9._\/-]+\.[a-zA-Z0-9]+)/);
