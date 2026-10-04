@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L1
 risk_level: L1
 日期: 2026-10-04
 模块: pipeline
 备注: pipeline-run 执行器面板（spec 二期）
-确认指纹: d187d568115d573d
+确认指纹: 633fef0ea57a884c
 ---
 # INTENT — board-run-panel
 
@@ -51,24 +51,22 @@ workflow 看板（`.agents/board/index.html` + `workflow-board-server.mjs`）已
 
 ## 触达红线（对照 AGENTS.md，勾选仅标记触及范围；具体如何满足在同名 spec 或 Quick-Plan 中说明）
 
-- [ ] <按本项目 AGENTS.md 红线逐行补；无则删本行>
-- [ ] 规则 / 契约变更（编码权威 / 共享契约 / 接口签名 / 既有参数语义 / 全局口径）→ 级别至少 L2
-- [ ] schema / 迁移 SQL / DI 链 / 认证与中间件管线 → 级别 L3
+- [x] 无触达红线（纯新增只读端点 + 前端视图，不改既有接口语义；按 AGENTS.md 红线逐行核对无命中）
 
 > 触及任一红线即为 L2 / L3，必须立 ../specs/YYYY-MM-DD-<主题>.md 写明如何满足，方可起草 plan。
 
 ## 验收标准（可测试）
 
-- [ ] `GET /api/runs` 返回 `.agents/cache/pipeline-runs/` 下全部 run 的解析卡片（runId / requirement / stage / stopType / updatedAt / triage / 事件数），JSON 结构含 `cards` 数组
-- [ ] `GET /api/run?file=<runId>.json` 返回单 run 完整事件流（含 gate 退出码 / commit sha / work-order 全文），路径白名单校验（越界 403）
-- [ ] run 卡片阶段条映射与 `pipeline-run.mjs stageBar` 口径一致（复用导出函数，不另写映射）
-- [ ] 看板页面新增「执行器」入口，点击显示 run 卡片列（空态显示「暂无 run」）；点击卡片展开抽屉显示事件时间线
-- [ ] 新增 run 文件落盘后看板 SSE 自动刷新（`fs.watch` 监听 pipeline-runs/ 目录）
-- [ ] 新增 server 纯函数测试通过（`npm test` 全绿）
+- [x] `GET /api/runs` 返回 `.agents/cache/pipeline-runs/` 下全部 run 的解析卡片（runId / requirement / stage / stopType / updatedAt / triage / 事件数），JSON 结构含 `cards` 数组（证据：手工探活 `Invoke-RestMethod http://127.0.0.1:8935/api/runs` 返回 3 个 run 卡片，含全部字段；`npm test` 的 `workflow-board-server.test.mjs` ⑦ runCard 字段映射用例 PASS；commit 6ea0051）
+- [x] `GET /api/run?file=<runId>.json` 返回单 run 完整事件流（含 gate 退出码 / commit sha / work-order 全文），路径白名单校验（越界 403）（证据：手工探活 `http://127.0.0.1:8935/api/run?file=20261002-1819-runtime-env-md-c2ju.json` 返回 13 事件含 gate exit/commit sha；`safeRunPath` 越界返回 403；commit 6ea0051）
+- [x] run 卡片阶段条映射与 `pipeline-run.mjs stageBar` 口径一致（复用导出函数，不另写映射）（证据：`workflow-board-server.mjs` `import { stageBar } from './pipeline-run.mjs'`，`runCard` 直接调用；测试断言 `[✓Plan][✓Design][✓Build][●Test]` 与 `stageBar` 直接输出一致 PASS；commit 6ea0051）
+- [x] 看板页面新增「执行器」入口，点击显示 run 卡片列（空态显示「暂无 run」）；点击卡片展开抽屉显示事件时间线（证据：浏览器 eval 实测 `switchView('runs')` 后 `.run-card` 3 个；点击卡片抽屉加载时间线「创建 run / 下发工单…」；脚本语法 node --check 通过；commit 6ea0051）
+- [x] 新增 run 文件落盘后看板 SSE 自动刷新（`fs.watch` 监听 pipeline-runs/ 目录）（证据：SSE 实测——写入 `_sse-test.json` 后 `/api/events` 流收到 `event: changed`，测试文件已清理；commit 6ea0051）
+- [x] 新增 server 纯函数测试通过（`npm test` 全绿）（证据：`npm test` 输出「✅ 全部套件通过」，`workflow-board-server.test.mjs` ⑦ 六条用例全 PASS；commit 6ea0051）
 
 ## 确认与复核
 
-- 确认日期：
+- 确认日期：2026-10-04
 - 确认人：用户（对话内明确放行即确认）
-- 确认范围：
+- 确认范围：intent + plan 草稿全文（「都可以」）
 - 复核：L1 不要求独立复核

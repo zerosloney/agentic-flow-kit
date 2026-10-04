@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L1
 模块: pipeline
-确认指纹: 60803f3e6ff5a075
+确认指纹: 48f8509b2dbc1f8e
 ---
 # PLAN — board-run-panel
 
