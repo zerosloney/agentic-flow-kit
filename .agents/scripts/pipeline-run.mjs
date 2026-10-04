@@ -231,7 +231,7 @@ function stopDone(ctx, run) {
 }
 
 // ── 输出（人类可读 + 机器标记） ────────────────────────────────────────
-function stageBar(run) {
+export function stageBar(run) {
   const s = run.stage;
   const mk = (name, pos) => (pos === 'cur' ? '[●' + name + ']' : pos === 'past' ? '[✓' + name + ']' : '[…' + name + ']');
   const seq = run.triage?.kind === 'verify' ? [['Verify', s === 'verify' || s === 'done']]
@@ -996,4 +996,4 @@ function adoptRun(ctx, a) {
   console.log('  提示：adopt 不推断断点位置——按文档现状人工续走（next 会按 stage 拒绝，请对照事件缺失情况手动接续或另起 run）');
 }
 
-export default { parseKV, validateDraftContent, closeoutComplete, placeholdersIn };
+export default { parseKV, validateDraftContent, closeoutComplete, placeholdersIn, stageBar };

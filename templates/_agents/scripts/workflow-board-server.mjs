@@ -3,18 +3,23 @@
 // 用法：node .agents/scripts/workflow-board-server.mjs [--port 8933]；多项目并行请用 ensure-board.mjs 拉起（自动上探可用端口）
 // 零依赖（node:http/node:fs/node:path/node:url/node:child_process）；只读 workflow/ 与 git，仅绑 127.0.0.1。
 // API：GET /（看板页） /marked.min.js（vendor） /api/board /api/doc?file=<相对路径> /api/history?file=<相对路径> /api/events（SSE）
+//       /api/runs（pipeline-run 执行器 run 卡片列表） /api/run?file=<runId>.json（单 run 事件流）
 // 实时边界：文档内容与状态随落盘实时（fs.watch→SSE 推送）；git 历史仅含已提交记录（git 语义）。
+// 执行器面板（2026-10-04 board-run-panel）：只读 .agents/cache/pipeline-runs/*.json（脚本亲写的机器事实），
+//   不读 orchestration-runs.jsonl（宿主 AI 自报态，非验证态）；纯只读观测层，不启动/推进/中止 run。
 import http from 'node:http';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execFile, spawnSync } from 'node:child_process';
 import { ENUMS } from './workflow-enums.mjs';
+import { stageBar } from './pipeline-run.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const WORKFLOW = path.join(ROOT, 'workflow');
 const BOARD_DIR = path.join(ROOT, '.agents', 'board');
 const DOC_TYPES = ['intents', 'incidents', 'plans', 'specs'];
+const PIPELINE_RUNS = path.join(ROOT, '.agents', 'cache', 'pipeline-runs');
 
 const portArg = process.argv.indexOf('--port');
 const PORT = portArg > 0 ? Number(process.argv[portArg + 1]) || 8933 : 8933;
@@ -52,6 +57,58 @@ function parseAcceptance(text) {
   return { done, total };
 }
 export { parseAcceptance };
+
+// ---- 执行器 run 文件解析（2026-10-04 board-run-panel）----
+// 只读 pipeline-runs/ 下的 run JSON（脚本亲写的机器事实，含 gate 真实退出码）。坏 JSON / 缺字段容错返回 null，
+// 由调用方跳过——run 文件写入原子化（临时文件+rename），读瞬间可能撞上 rename 前状态，不 500。
+export function parseRunFile(text) {
+  let j;
+  try {
+    j = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!j || typeof j !== 'object' || typeof j.runId !== 'string' || !j.runId) return null;
+  return j;
+}
+
+// 单 run 卡片（/api/runs 载荷元素）：runId / requirement / stage / stopType / updatedAt / triage / 事件数 / 阶段条
+export function runCard(run) {
+  const events = Array.isArray(run.events) ? run.events : [];
+  return {
+    runId: run.runId,
+    requirement: run.requirement || '',
+    stage: run.stage || '',
+    stopType: run.stopType || '',
+    updatedAt: run.updatedAt || run.createdAt || '',
+    triage: run.triage || null,
+    eventCount: events.length,
+    stageBar: stageBar(run),
+  };
+}
+
+// 扫 pipeline-runs/ 全部 run → 卡片数组，按 updatedAt 倒序（无目录/空目录 → []）
+export function scanRuns() {
+  if (!fs.existsSync(PIPELINE_RUNS) || !fs.statSync(PIPELINE_RUNS).isDirectory()) return [];
+  const cards = [];
+  for (const f of fs.readdirSync(PIPELINE_RUNS)) {
+    if (!f.endsWith('.json')) continue;
+    try {
+      const run = parseRunFile(fs.readFileSync(path.join(PIPELINE_RUNS, f), 'utf8'));
+      if (run) cards.push(runCard(run));
+    } catch {
+      // 读失败（瞬时占用等）跳过，等下次推送
+    }
+  }
+  return cards.sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt)));
+}
+
+// 路径白名单：resolve 后必须仍在 pipeline-runs/ 内且 .json 后缀
+function safeRunPath(rel) {
+  const abs = path.resolve(PIPELINE_RUNS, rel);
+  if (!abs.startsWith(PIPELINE_RUNS + path.sep) || !abs.endsWith('.json')) return null;
+  return abs;
+}
 
 // ---- 配对断裂检测：按完整文件名（含日期）聚合同族，异常卡附 alerts ----
 // 与 check-loop 检查 1 的 basename 同一口径。slug（去掉日期）只给界面分组，不参与配对。
@@ -196,16 +253,20 @@ let debounceTimer = null;
 function broadcast(event) {
   for (const res of sseClients) { if (!res.destroyed) res.write(`event: ${event}\ndata: {}\n\n`); }
 }
-try {
-  const watcher = fs.watch(WORKFLOW, { recursive: true }, () => {
-    clearTimeout(debounceTimer);
-    debounceTimer = setTimeout(() => broadcast('changed'), 500);
-  });
-  // watch 中途失效（目录被动/杀软锁）：显式告知前端降级轮询，避免假实时
-  watcher.on('error', (e) => { console.error('fs.watch 失效，已通知前端降级轮询:', e.message); broadcast('watchdead'); });
-} catch (e) {
-  console.error('fs.watch 初始化失败（前端将走 60s 兜底轮询）:', e.message);
+// 统一监听回调：workflow/ 文档 + pipeline-runs/ 执行器 run 文件任一变化 → 500ms 防抖广播 changed
+function onWatchChange() {
+  clearTimeout(debounceTimer);
+  debounceTimer = setTimeout(() => broadcast('changed'), 500);
 }
+function watchDir(dir) {
+  try {
+    const watcher = fs.watch(dir, { recursive: true }, onWatchChange);
+    watcher.on('error', (e) => { console.error(`fs.watch 失效（${dir}），已通知前端降级轮询:`, e.message); broadcast('watchdead'); });
+  } catch (e) {
+    console.error(`fs.watch 初始化失败（${dir}，前端将走 60s 兜底轮询）:`, e.message);
+  }
+}
+watchDir(WORKFLOW);
 // 25s 心跳：防半开连接；顺带清理已断开的 client
 setInterval(() => { for (const res of sseClients) { if (res.destroyed) sseClients.delete(res); else res.write(': ping\n\n'); } }, 25000).unref();
 
@@ -269,6 +330,19 @@ const server = http.createServer(async (req, res) => {
     }
     if (url.pathname === '/api/board') return sendJson(res, 200, await scanBoard());
 
+    // 执行器面板（2026-10-04 board-run-panel）：run 卡片列表 + 单 run 事件流
+    if (url.pathname === '/api/runs') return sendJson(res, 200, { runs: scanRuns() });
+    if (url.pathname === '/api/run') {
+      const rel = url.searchParams.get('file') || '';
+      const abs = safeRunPath(rel);
+      if (!abs) return sendJson(res, 403, { error: '路径不在 pipeline-runs/ 白名单内' });
+      try {
+        return sendJson(res, 200, { run: parseRunFile(fs.readFileSync(abs, 'utf8')) });
+      } catch {
+        return sendJson(res, 404, { error: 'run 文件不存在' });
+      }
+    }
+
     if (url.pathname === '/api/doc' || url.pathname === '/api/history') {
       const rel = url.searchParams.get('file') || '';
       const abs = safeDocPath(rel);
@@ -305,7 +379,8 @@ server.on('error', (e) => {
 // isMain 守卫（board-kb-p1）：parseLoopHardBlocks 可被测试 import（import 不 listen）
 const isMain = process.argv[1] && process.argv[1].endsWith('workflow-board-server.mjs');
 if (isMain) {
+  watchDir(PIPELINE_RUNS); // 执行器 run 文件监听仅在作为服务运行时启动（import 不监听，避免测试进程挂起）
   server.listen(PORT, '127.0.0.1', () => {
-    console.log(`workflow 看板: http://127.0.0.1:${PORT}  （Ctrl+C 停止；只读 workflow/，不写任何文件）`);
+    console.log(`workflow 看板: http://127.0.0.1:${PORT}  （Ctrl+C 停止；只读 workflow/ 与 pipeline-runs/，不写任何文件）`);
   });
 }

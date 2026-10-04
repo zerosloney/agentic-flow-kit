@@ -5,10 +5,12 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（0）
+## 活跃（2）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
+| INTENT | L1 | approved | 2026-10-04 | pipeline | board-run-panel | ☑0/6 |
+| PLAN | L1 | approved | 2026-10-04 | pipeline | board-run-panel | — |
 
 ## 档案计数（213，不进表）
 

@@ -14,7 +14,7 @@
   "managed": [
     {
       "rel": ".agents/board/index.html",
-      "sha256": "e0bb8bb7d462860136ec9bc7a7cb2dce1bdf55a2cf0d47d4f77aa436c443e879"
+      "sha256": "64e5a106a22728099901116dabf877944fa03b36bdb8673b2fc0979aaf6c09a9"
     },
     {
       "rel": ".agents/board/marked.min.js",
@@ -246,7 +246,7 @@
     },
     {
       "rel": ".agents/scripts/pipeline-run.mjs",
-      "sha256": "f8b9e2533c1a45817ca270e67b7a8b60a7d8ee5bf8698f8b462bf3f3a77d7819"
+      "sha256": "0fc09e79138115e7714b95f078cc4e711ce6ea1a97cd09a55636eaccba974dbf"
     },
     {
       "rel": ".agents/scripts/pipeline-run.test.mjs",
@@ -318,11 +318,11 @@
     },
     {
       "rel": ".agents/scripts/workflow-board-server.mjs",
-      "sha256": "5ca6c770b21dac111591a0b444837986194612bc3cd43529085359c67bfc71af"
+      "sha256": "ea3b64b7d81aa8563c4696f0e1482af0eb48e128f1a0ed38fdba811780be976e"
     },
     {
       "rel": ".agents/scripts/workflow-board-server.test.mjs",
-      "sha256": "74b09ceaeade22513f14a06d57f790e2327891daec7497e1ab6013ebacda7a43"
+      "sha256": "c50ac18d44cb555e488e04ef0ac43964e68f2fea3b989d8d93b6e95ba011a10e"
     },
     {
       "rel": ".agents/scripts/workflow-enums.mjs",

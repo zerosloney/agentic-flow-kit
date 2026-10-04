@@ -54,6 +54,24 @@
   #q { background: var(--card); border: 1px solid var(--border); color: var(--text); border-radius: 3px; padding: 6px 10px; font: 12px/1.4 var(--mono); width: 200px; transition: border-color .15s ease-out; }
   #q::placeholder { color: var(--faint); }
   #q:focus { outline: none; border-color: var(--border-strong); }
+  .viewbtn { background: var(--card); border: 1px solid var(--border); color: var(--muted); border-radius: 3px; padding: 6px 10px; font: 12px/1.4 var(--mono); cursor: pointer; transition: border-color .15s ease-out, color .15s ease-out, background .15s ease-out; }
+  .viewbtn:hover { border-color: var(--border-strong); color: var(--text); }
+  .viewbtn.on { background: var(--text); color: var(--bg); border-color: var(--text); }
+
+  /* 执行器视图：run 卡片列（2026-10-04 board-run-panel） */
+  #runs-view { display: flex; flex-direction: column; height: calc(100vh - 58px); overflow-y: auto; padding: 14px 22px 28px; gap: 10px; }
+  .run-card { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--border-strong); border-radius: 4px; padding: 12px 14px; cursor: pointer; transition: background .15s ease-out, border-color .15s ease-out, transform .15s ease-out, box-shadow .15s ease-out; }
+  .run-card:hover { background: var(--card-hover); border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--shadow-1); }
+  .run-card .row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 7px; }
+  .run-card .title { font-size: 13px; line-height: 1.6; }
+  .run-bar { font: 12px/1.6 var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; }
+  .run-bar b { color: var(--text); font-weight: 600; }
+  .stopchip { font: 500 10px/1 var(--mono); border-radius: 2px; padding: 2px 5px; }
+  .stopchip.work-order { color: var(--intent); border: 1px solid var(--intent); }
+  .stopchip.await-confirm { color: var(--warn); border: 1px solid var(--warn); }
+  .stopchip.gate-fail { color: var(--bad); border: 1px solid var(--bad); }
+  .stopchip.done { color: var(--ok); border: 1px solid var(--ok); }
+  .stopchip.aborted { color: var(--muted); border: 1px solid var(--border-strong); }
 
   /* ---- 看板：去列盒子，发丝竖线分栏的编辑式构图 ---- */
   #board { display: flex; overflow-x: auto; height: calc(100vh - 58px); }
@@ -162,9 +180,11 @@
   <span class="chip" id="c-plans"></span><span class="chip" id="c-specs"></span>
   <span class="chip" id="c-alerts" style="display:none"></span>
   <input id="q" placeholder="过滤 标题 / slug / 文件…" spellcheck="false">
+  <button id="view-runs" class="viewbtn" title="pipeline-run 执行器事件流">执行器</button>
   <span id="sse"><i></i><span>连接断开</span></span>
 </header>
 <div id="board"></div>
+<div id="runs-view" style="display:none"></div>
 
 <div id="drawer">
   <div id="d-head">
@@ -176,6 +196,8 @@
   <div id="d-tabs">
     <button data-tab="doc" class="on">文档</button>
     <button data-tab="hist">修改历史</button>
+    <button data-tab="timeline" class="run-tab" style="display:none">时间线</button>
+    <button data-tab="workorder" class="run-tab" style="display:none">工单</button>
   </div>
   <div id="d-body"></div>
 </div>
@@ -198,6 +220,10 @@ let TAB = 'doc';
 let retryTimer = null;     // /api/board 失败后的重试定时器
 let ROOT = '';             // 仓库根（/api/board 返回，内链 vscode 协议用）
 let Q = '';                // 搜索过滤关键字
+let RUNS = [];            // 最近一次 /api/runs 的 run 卡片
+let RUN_CURRENT = null;    // 抽屉当前打开的 run
+let VIEW = 'board';        // 当前视图：board | runs
+let RUN_TAB = 'timeline';  // run 抽屉当前 tab：timeline | workorder
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -343,7 +369,11 @@ function renderDrawer() {
   const related = CARDS.filter((c) => c.slug === CURRENT.slug && c.file !== CURRENT.file);
   $('#d-related').innerHTML = related.map((c) =>
     `<a data-file="${esc(c.file)}">${TYPE_LABEL[c.type]} · ${esc(c.date)}${c.status !== CURRENT.status ? ' · ' + esc(c.status) : ''}</a>`).join('');
-  document.querySelectorAll('#d-tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === TAB));
+  document.querySelectorAll('#d-tabs button').forEach((b) => {
+    const isRunTab = b.classList.contains('run-tab');
+    b.style.display = isRunTab ? 'none' : '';
+    b.classList.toggle('on', b.dataset.tab === TAB);
+  });
   if (TAB === 'doc') loadDoc(); else loadHist();
 }
 
@@ -381,6 +411,145 @@ async function loadHist() {
         `<div class="tl-item"><div class="tl-sub">${ctDot(c.subject)}${esc(c.subject)}</div>` +
         `<div class="tl-meta">${esc(c.date)} · <code class="hash" data-h="${esc(c.hash)}" title="点击复制完整 hash">${esc(c.hash.slice(0, 9))}</code></div></div>`).join('')}</div>`
     : '<div class="none">暂无提交记录（文件尚未 commit；git 历史只包含已提交的修改）</div>';
+}
+
+// ================= 执行器视图（2026-10-04 board-run-panel） =================
+// 只读 pipeline-runs/ 事件流（机器事实），不读 orchestration-runs.jsonl（自报态）。
+const STOP_LABEL = {
+  'work-order': '工单', 'await-confirm': '等待确认', 'gate-fail': '门拒绝', done: '完成', aborted: '已放弃',
+};
+const EVENT_DESC = {
+  'run-created': '创建 run', 'work-order': '下发工单', triage: '定级', gate: '门执行',
+  confirm: '确认', commit: '提交', stop: '停机', done: '完成', abort: '放弃',
+};
+
+async function refreshRuns() {
+  let data;
+  try {
+    const resp = await fetch('/api/runs');
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    data = await resp.json();
+  } catch (e) {
+    return false;
+  }
+  RUNS = data.runs || [];
+  const q = Q.trim().toLowerCase();
+  const list = RUNS.filter((r) => !q || (r.runId + ' ' + r.requirement + ' ' + r.stage).toLowerCase().includes(q));
+  const html = list.length
+    ? list.map((r) => {
+        const stop = STOP_LABEL[r.stopType] || esc(r.stopType || '');
+        const stopCls = r.stopType || '';
+        const bar = r.stageBar || '';
+        return `<div class="run-card" data-run="${esc(r.runId)}">` +
+          `<div class="row">` +
+          `<span class="type" style="background:var(--spec)">RUN</span>` +
+          `<span class="lv">${esc(r.triage?.level || '')}</span>` +
+          `<span class="stopchip ${esc(stopCls)}">${esc(stop)}</span>` +
+          `<span class="date">${esc(r.updatedAt?.slice(0, 16).replace('T', ' ') || '')}</span>` +
+          `</div>` +
+          `<div class="title">${esc(r.requirement || r.runId)}</div>` +
+          `<div class="run-bar">${esc(r.runId)} · <b>${esc(r.stage || '')}</b>${r.eventCount ? ` · ${r.eventCount} 事件` : ''}</div>` +
+          (bar ? `<div class="run-bar">${esc(bar)}</div>` : '') +
+          `</div>`;
+      }).join('')
+    : '<div class="empty">暂无 run</div>';
+  $('#runs-view').innerHTML = `<h2 style="font:600 11px/1 var(--mono);letter-spacing:.12em;color:var(--muted);padding:4px 0 10px;">执行器 · ${RUNS.length} runs</h2>` + html;
+  return true;
+}
+
+// —— run 抽屉：时间线 + 工单/确认详情 ——
+function runEventHtml(run) {
+  const evs = run.events || [];
+  if (!evs.length) return '<div class="none">暂无事件</div>';
+  return `<div class="tl">${evs.map((e) => {
+    const t = EVENT_DESC[e.type] || e.type;
+    const sub = e.type === 'gate'
+      ? `${esc(e.cmd || '')} · exit ${e.exit}${e.ms != null ? ` · ${e.ms}ms` : ''}`
+      : e.type === 'commit'
+        ? `${esc(e.subject || '')} · ${esc(e.sha || '')}`
+        : e.type === 'work-order'
+          ? `${esc(e.kind || '')} 工单 #${e.id}`
+          : e.type === 'stop'
+            ? `${esc(e.stopType || '')}${e.stage ? ' · ' + esc(e.stage) : ''}${e.workOrderId != null ? ' · 工单 #' + e.workOrderId : ''}`
+            : e.type === 'confirm'
+              ? `${esc(e.doc || '')} → ${esc(e.to || '')}${e.source ? ' · ' + esc(e.source) : ''}`
+              : e.type === 'abort'
+                ? `→ ${esc(e.to || '')}`
+                : e.type === 'triage'
+                  ? `${esc(e.kind || '')} · ${esc(e.level || '')} · ${esc(e.module || '')}`
+                  : '';
+    return `<div class="tl-item"><div class="tl-sub">${esc(t)}</div>` +
+      (sub ? `<div class="tl-meta">${sub}</div>` : '') +
+      `<div class="tl-meta">${esc((e.t || '').slice(0, 19).replace('T', ' '))}</div></div>`;
+  }).join('')}</div>`;
+}
+
+function loadRunTimeline() {
+  if (!RUN_CURRENT) return;
+  $('#d-body').innerHTML = runEventHtml(RUN_CURRENT);
+}
+
+function loadRunWorkOrder() {
+  if (!RUN_CURRENT) return;
+  const w = RUN_CURRENT.workOrder;
+  if (!w) { $('#d-body').innerHTML = '<div class="none">当前无工单（已停机在非工单点或已完成）</div>'; return; }
+  $('#d-body').innerHTML =
+    `<div class="md"><h2>工单 #${w.id} · ${esc(w.kind)}</h2>` +
+    `<p><b>${esc(w.title || '')}</b></p>` +
+    `<p>目标：${esc(w.goal || '')}</p>` +
+    (w.instructions?.length ? `<ul>${w.instructions.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : '') +
+    (w.context?.kbHits?.length ? `<p>查重命中：</p><ul>${w.context.kbHits.slice(0, 6).map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : '') +
+    (w.context?.stderrTail ? `<pre><code>${esc(w.context.stderrTail)}</code></pre>` : '') +
+    (w.constraints?.length ? `<p>约束：</p><ul>${w.constraints.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : '') +
+    (w.acceptance?.length ? `<p>验收：</p><ul>${w.acceptance.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : '') +
+    `</div>`;
+}
+
+function renderRunDrawer() {
+  if (!RUN_CURRENT) return;
+  $('#d-badges').innerHTML =
+    `<span class="type" style="background:var(--spec)">RUN</span>` +
+    (RUN_CURRENT.triage?.level ? `<span class="lv">${esc(RUN_CURRENT.triage.level)}</span>` : '') +
+    ` <span class="chip">${esc(RUN_CURRENT.stopType || '')}</span>` +
+    ` <span class="chip">${esc(RUN_CURRENT.stage || '')}</span>`;
+  $('#d-title').textContent = RUN_CURRENT.requirement || RUN_CURRENT.runId;
+  $('#d-related').innerHTML = `<a class="runid">${esc(RUN_CURRENT.runId)}</a>`;
+  // run 抽屉：显示时间线/工单 tab，隐藏文档/历史 tab
+  document.querySelectorAll('#d-tabs button').forEach((b) => {
+    const isRunTab = b.classList.contains('run-tab');
+    b.style.display = isRunTab ? '' : 'none';
+    b.classList.toggle('on', b.dataset.tab === RUN_TAB);
+  });
+  if (RUN_TAB === 'timeline') loadRunTimeline(); else loadRunWorkOrder();
+}
+
+async function openRun(runId) {
+  RUN_CURRENT = null;
+  $('#drawer').classList.add('open');
+  $('#d-title').textContent = '加载中…';
+  $('#d-body').innerHTML = '<div class="none">加载中…</div>';
+  try {
+    const resp = await fetch(`/api/run?file=${encodeURIComponent(runId + '.json')}`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const data = await resp.json();
+    RUN_CURRENT = data.run || null;
+    if (!RUN_CURRENT) throw new Error('run 为空');
+    RUN_TAB = 'timeline';
+    renderRunDrawer();
+  } catch (e) {
+    $('#d-title').textContent = '加载失败';
+    $('#d-body').innerHTML = `<div class="none">无法加载 run：${esc(e.message)}</div>`;
+  }
+}
+
+function switchView(v) {
+  VIEW = v;
+  const isRuns = v === 'runs';
+  $('#board').style.display = isRuns ? 'none' : '';
+  $('#runs-view').style.display = isRuns ? '' : 'none';
+  $('#view-runs').classList.toggle('on', isRuns);
+  $('#q').placeholder = isRuns ? '过滤 runId / 需求 / 阶段…' : '过滤 标题 / slug / 文件…';
+  if (isRuns) refreshRuns(); else refreshBoard();
 }
 
 function openCard(card) { CURRENT = card; TAB = 'doc'; $('#drawer').classList.add('open'); renderDrawer(); }
@@ -445,20 +614,35 @@ document.addEventListener('click', (e) => {
   if (hash) navigator.clipboard.writeText(hash.dataset.h)
     .then(() => toast('已复制 ' + hash.dataset.h.slice(0, 9)))
     .catch(() => toast('复制失败'));
+  // 执行器 run 卡片 → 开抽屉（时间线）
+  const runCard = e.target.closest('.run-card');
+  if (runCard) {
+    const hit = RUNS.find((r) => r.runId === runCard.dataset.run);
+    if (hit) openRun(hit.runId);
+    return;
+  }
 });
 $('#d-close').onclick = () => { $('#drawer').classList.remove('open'); };
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#drawer').classList.remove('open'); });
-document.querySelectorAll('#d-tabs button').forEach((b) => b.onclick = () => { TAB = b.dataset.tab; renderDrawer(); });
+// 抽屉 tab：run 抽屉（时间线/工单）与文档抽屉（文档/历史）分开处理
+document.querySelectorAll('#d-tabs button').forEach((b) => b.onclick = () => {
+  if (b.classList.contains('run-tab') && RUN_CURRENT) { RUN_TAB = b.dataset.tab; renderRunDrawer(); }
+  else if (!b.classList.contains('run-tab')) { TAB = b.dataset.tab; renderDrawer(); }
+});
+$('#view-runs').onclick = () => switchView(VIEW === 'runs' ? 'board' : 'runs');
 
 // SSE：服务端 fs.watch 防抖后推送 changed → 看板与打开中的抽屉自动刷新
 const sse = new EventSource('/api/events');
-sse.addEventListener('changed', () => { refreshBoard().then((ok) => { if (ok) renderDrawer(); }); });
+sse.addEventListener('changed', () => {
+  refreshBoard().then((ok) => { if (ok) renderDrawer(); });
+  if (VIEW === 'runs') refreshRuns();
+});
 sse.addEventListener('watchdead', () => { $('#sse').classList.remove('on'); $('#sse').classList.add('poll'); $('#sse span:last-child').textContent = '监听失效 · 60s 轮询'; });
 sse.onopen = () => { $('#sse').classList.add('on'); $('#sse').classList.remove('poll'); $('#sse span:last-child').textContent = '实时'; };
 sse.onerror = () => { $('#sse').classList.remove('on'); $('#sse span:last-child').textContent = '连接断开，自动重连中'; };
 
 // 60s 兜底轮询：SSE/watch 任何环节失效时数据仍保鲜（正常时多拉一次无害）
-setInterval(() => refreshBoard(), 60000);
+setInterval(() => { refreshBoard(); if (VIEW === 'runs') refreshRuns(); }, 60000);
 
 // 搜索过滤：本地过滤标题/slug/文件，SSE 刷新时保持关键字
 // 击键去抖 400ms（复核 P2-2 rider）：/api/board 服务端有 loop TTL 缓存，去抖进一步避免连发请求排队
@@ -466,7 +650,7 @@ let qTimer = null;
 $('#q').addEventListener('input', (e) => {
   Q = e.target.value;
   clearTimeout(qTimer);
-  qTimer = setTimeout(refreshBoard, 400);
+  qTimer = setTimeout(() => { if (VIEW === 'runs') refreshRuns(); else refreshBoard(); }, 400);
 });
 
 // 首次入场：列错峰上浮一次（.boot 稍后摘除，SSE / 过滤触发的重渲染不再重播）

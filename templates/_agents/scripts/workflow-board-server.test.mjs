@@ -12,8 +12,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { parseLoopHardBlocks, parseAcceptance, detectAlerts } from './workflow-board-server.mjs';
+import { parseLoopHardBlocks, parseAcceptance, detectAlerts, parseRunFile, runCard } from './workflow-board-server.mjs';
 import { computeFingerprint } from './confirm-doc.mjs';
+import { stageBar } from './pipeline-run.mjs';
 
 let pass = 0;
 let fail = 0;
@@ -159,6 +160,37 @@ const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
   const bogus = card({ name: '2026-09-05-bad', status: 'nope' });
   detectAlerts([bogus]);
   check('⑥未知状态仍报不在枚举内', has(bogus, '状态不在枚举内'), JSON.stringify(bogus.alerts));
+}
+
+// ---- ⑦执行器面板纯函数（2026-10-04 board-run-panel）----
+{
+  // 真实 run 文件形态（对齐 .agents/cache/pipeline-runs/20261002-1819-runtime-env-md-c2ju.json）
+  const real = {
+    runId: '20261002-1819-runtime-env-md-c2ju',
+    requirement: '在 runtime-env.md 补记 pipeline-run 运行态',
+    stage: 'done',
+    stopType: 'done',
+    triage: { kind: 'require', level: 'L0', module: 'pipeline', topic: 'runtime-note', decidedBy: 'ai' },
+    updatedAt: '2026-10-02T10:19:22.566Z',
+    events: [
+      { t: '2026-10-02T10:19:02.680Z', type: 'run-created', requirement: 'x' },
+      { t: '2026-10-02T10:19:02.682Z', type: 'work-order', id: 1, kind: 'triage' },
+      { t: '2026-10-02T10:19:19.512Z', type: 'gate', cmd: 'git status --porcelain', exit: 0, ms: 58 },
+      { t: '2026-10-02T10:19:22.566Z', type: 'commit', sha: '37b552a', subject: 'docs(pipeline): x' },
+      { t: '2026-10-02T10:19:22.566Z', type: 'done' },
+    ],
+  };
+  check('⑦parseRunFile：真实 run JSON 解析成功', parseRunFile(JSON.stringify(real))?.runId === real.runId);
+  check('⑦parseRunFile：坏 JSON → null', parseRunFile('{oops') === null);
+  check('⑦parseRunFile：非对象/缺 runId → null', parseRunFile('"str"') === null && parseRunFile('{}') === null && parseRunFile('{"a":1}') === null);
+  const card = runCard(real);
+  check('⑦runCard：字段映射齐全', card.runId === real.runId && card.stage === 'done' && card.stopType === 'done' && card.eventCount === 5 && card.requirement === real.requirement);
+  check('⑦runCard：updatedAt 取 updatedAt', card.updatedAt === real.updatedAt);
+  // 阶段条复用 pipeline-run stageBar（done → Plan/Design/Build 全 [✓]，Test 为当前 [●]）
+  check('⑦stageBar：done run 前三个阶段 [✓] 且 Test 为当前', card.stageBar.includes('[✓Plan]') && card.stageBar.includes('[✓Design]') && card.stageBar.includes('[✓Build]') && card.stageBar.includes('[●Test]'));
+  // 空事件容错
+  const empty = runCard({ runId: 'r1', requirement: '', stage: 'triage', stopType: 'work-order', events: null });
+  check('⑦runCard：events 非数组容错为 0', empty.eventCount === 0);
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
