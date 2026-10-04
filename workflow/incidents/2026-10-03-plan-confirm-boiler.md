@@ -1,9 +1,10 @@
 ---
-状态: open
+状态: fixed
 级别: L2
 发现: 2026-10-03
 模块: pipeline
 备注: 推送 v1.0.0 时三个 plan 触发「模板未填」advisory WARN（confirm-gate-one-per-call / p2-batch1 / release-draft-scope），根因同为 plan 模板「确认与复核」节样板句被检查 2 的 phRe 误判。release-draft-scope 为本次新建引入，已关单文档不可直接修改（确认内容漂移 hard-block），故走规则面根治：豁免模板样板句。命中 papercuts「检查 6 模板占位符误报」第 2 次升级条件。修复类，incident 即入口；L2 配 spec + plan
+确认指纹: 1c2da8009dc24586
 ---
 # INCIDENT — 2026-10-03 plan 确认节模板样板误报豁免
 

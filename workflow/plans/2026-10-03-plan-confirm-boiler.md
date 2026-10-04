@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
-确认指纹: af66c83ba3711c8f
+确认指纹: b672661c04237761
 ---
 # PLAN — plan-confirm-boiler（plan 确认节模板样板误报豁免）
 
