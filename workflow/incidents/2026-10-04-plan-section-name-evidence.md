@@ -14,6 +14,8 @@
 - 2026-10-04 已记 papercut（workflow/papercuts.md，commit d8d3d7d），按「不当场顺手改」纪律未直接改引擎
 - 2026-10-04 用户确认：立 incident 修引擎
 - 2026-10-04 用户确认：incident + spec 草稿过目通过（「都可以」）
+- 2026-10-04 用户确认：plan 草稿过目通过（「可以」）
+- 2026-10-04 修复完成：check-loop.mjs 节名正则扩展 + check-loop.test.mjs 新增正/负例 + _TEMPLATE.md 注释统一（commit 94188ee）；npm test 全绿；doctor 0 FAIL（含 board-run-panel 误报消除）
 
 ## 影响面
 
@@ -35,15 +37,16 @@
 ## 复盘三件套（缺一不可）
 
 1. 结构性修复
-   - 修复方向（二选一，确认后定）：① fill-plan L1 主节改「改动面」（与模板正文/check-loop 对齐，存量 14 份 plan 的节名仍是「改动方案」但已 done 不受证据校验影响）；② check-loop 兼容「改动方案」节名（与 fill-plan 输出对齐，存量 L1 plan 证据校验自动通过）
+   - 修复方向：② check-loop 兼容「改动方案」节名（与 fill-plan 输出对齐，存量 L1 plan 证据校验自动通过；fill-plan 保持输出不变，改动集中在校验器一处）
+   - 修复 commit：94188ee（`templates/_agents/scripts/check-loop.mjs` 节名正则 `(改动面|任务拆解)` → `(改动面|任务拆解|改动方案)`；`templates/_agents/scripts/check-loop.test.mjs` 新增场景 43 正例 / 44 负例；`templates/workflow/plans/_TEMPLATE.md` 第 9 行注释统一口径；含装副本同步）
    - 影响环境：dev（引擎包源 + 装副本 + 模板）
    - 是否需要新 intent：
      - 否 → 理由：根因属实现 bug（生成器/校验器节名契约未耦合），单点修复 + 防复发用例 + 规范条目可覆盖，incident 即 intent 等价物
 
 2. 防复发验证（必须落到自动化用例或回归清单条目）
-   - 自动化用例：`templates/_agents/scripts/fill-plan.test.mjs` 新增断言——生成的 L1 骨架主节标题与 check-loop `verifyEvidenceTruth` 提取口径一致（节名 ∈ {改动面, 任务拆解}）
-   - 或回归清单条目：`workflow/regression-checklist.md` 防复发验证节追加一行——L1 plan 主节名与 check-loop 证据提取口径一致性
+   - 自动化用例：`templates/_agents/scripts/check-loop.test.mjs` 场景 43/44——正例（L1 plan「改动方案」节 + 证据 SHA 触及声明文件 → 不报证据无关）与负例（声明不存在的文件 → 仍报证据无关）；`npm test` 全绿（195 断言全过）
+   - 回归清单条目：`workflow/regression-checklist.md` 防复发验证节追加一行——L1 plan 主节名与 check-loop 证据提取口径一致性（见规范条目）
 
 3. 规范条目（必须有可追溯的落点）
-   - 落点：`templates/workflow/plans/_TEMPLATE.md` 注释与正文节名统一（消除第 9 行注释「改动方案」与第 14 行正文「改动面」的分裂）；`workflow/regression-checklist.md` 条目
-   - 引用：修复 commit <SHA>；文件:`templates/_agents/scripts/fill-plan.mjs`#L31、`templates/_agents/scripts/check-loop.mjs`#L602、`templates/workflow/plans/_TEMPLATE.md`#L9
+   - 落点：`templates/workflow/plans/_TEMPLATE.md` 第 9 行注释已统一——明确「模板正文用『改动面』，fill-plan 生成『改动方案』，check-loop 对 改动面/任务拆解/改动方案 三种节名均识别为声明文件来源」；`workflow/regression-checklist.md` 防复发验证节追加一行
+   - 引用：修复 commit 94188ee；文件:`templates/_agents/scripts/check-loop.mjs`#L602、`templates/_agents/scripts/check-loop.test.mjs` 场景 43-44、`templates/workflow/plans/_TEMPLATE.md`#L9

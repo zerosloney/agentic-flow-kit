@@ -69,5 +69,6 @@ plan 文档（L1「改动方案」节）→ check-loop verifyEvidenceTruth
 
 ## 确认与复核
 
-- 确认日期：
-- 复核：L2 推荐独立复核——建议 spec 确认前由 independent-reviewer 预审节名扩展正则与测试用例（用户拍板是否需要）
+- 确认日期：2026-10-04
+- 确认结果：approved（2026-10-04 用户对话内确认）
+- 复核：L2 推荐独立复核——建议 spec 确认前由 independent-reviewer 预审节名扩展正则与测试用例（用户拍板是否需要；本次未启用，用户以「都可以」直接放行）
