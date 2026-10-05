@@ -677,12 +677,15 @@ function verifyEvidenceTruth(evidenceStr, planBase, root) {
     // 过程证据（2026-10-03 check-evidence-process）：执行器驱动的提交可作验收证据——提交信息带
     // 「pipeline-run <runId>」标记（docsCommit 四种格式共有段，runId 严格形态 日期8-时间4-主题-尾；
     // 与 run 事件流同源，git 历史留痕可对质）。只救 irrelevant：forged（SHA 不存在）在前已判，其余判据不动。
+    // 记录型标志（2026-10-06-v114-backflow-batch）：docs 系 Conventional Commit（冒烟报告 / 留痕 / 关单台账）
+    // 不触 plan 声明面属预期——是否降级豁免由检查 8 聚合段判（须同文档存在可过检实现证据），此处只出标志。
     const subj = spawnGit(['log', '-1', '--format=%s', sha]);
+    const recordCommit = subj.status === 0 && /^docs[(:]/.test(subj.stdout.trim());
     if (subj.status === 0 && /pipeline-run [0-9]{8}-[0-9]{4}-[A-Za-z0-9-]+/.test(subj.stdout)) {
       warnEvidenceExempt('process', planBase);
       return { ok: true, type: 'process' };
     }
-    return { ok: false, type: 'irrelevant', msg: `提交 ${sha} 未触及 plan 声明的任何文件` };
+    return { ok: false, type: 'irrelevant', msg: `提交 ${sha} 未触及 plan 声明的任何文件`, recordCommit };
   }
 
   return { ok: true, type: 'sha' };
@@ -705,6 +708,7 @@ function verifyEvidenceTruth(evidenceStr, planBase, root) {
     let insec = false, ex = false;
     let pendX = false; // 上一 [x] 项尚无证据，证据可能在紧随的续行
     let currentEvidence = ''; // 当前条目的证据内容，用于语义校验
+    const evidenceItems = []; // 逐条证据（2026-10-06-v114-backflow-batch：两遍裁决——先文档级判实现证据在场，再逐条落判）
     const evRe = /证据[：:]/;
     const closeItem = () => { 
       if (pendX) { 
@@ -712,10 +716,7 @@ function verifyEvidenceTruth(evidenceStr, planBase, root) {
         pendX = false; 
       } 
       if (currentEvidence && !ex) {
-        const truth = verifyEvidenceTruth(currentEvidence, base.replace(/\.md$/, ''), ROOT);
-        if (!truth.ok) {
-          blockers.push(`- [证据${truth.type === 'forged' ? '伪造' : '无关'}] ${base} 验收证据校验失败: ${truth.msg}`);
-        }
+        evidenceItems.push(currentEvidence);
       }
       currentEvidence = '';
     };
@@ -740,6 +741,23 @@ function verifyEvidenceTruth(evidenceStr, planBase, root) {
       }
     }
     closeItem(); // 节末（或全文末）仍无证据 → 计缺证据
+    // 两遍裁决（2026-10-06-v114-backflow-batch 记录型提交豁免）：文档级先判「存在可过检实现证据」
+    // （sha / process 型任一），记录型提交（subject=docs 系）证据仅在实现证据在场时降级豁免告警——
+    // 冒烟报告 / approved 留痕 / 关单提交不改 plan 声明面属预期；仅引记录型而无实现证据 → 维持 hard-block
+    //（豁免通道不得独立成立，防「只引 docs 提交洗白代码改动」）。
+    if (evidenceItems.length) {
+      const planBase = base.replace(/.md$/, '');
+      const results = evidenceItems.map((ev) => ({ t: verifyEvidenceTruth(ev, planBase, ROOT) }));
+      const hasImplEvidence = results.some((r) => r.t.ok && (r.t.type === 'sha' || r.t.type === 'process'));
+      for (const r of results) {
+        if (r.t.ok) continue;
+        if (r.t.type === 'irrelevant' && r.t.recordCommit && hasImplEvidence) {
+          warnEvidenceExempt('record', planBase);
+          continue;
+        }
+        blockers.push(`- [证据${r.t.type === 'forged' ? '伪造' : '无关'}] ${base} 验收证据校验失败: ${r.t.msg}`);
+      }
+    }
     // 生效日锚 = git 首次加入日期（2026-09-28 改；此前取文件名前 10 字符）。**准确收益**：关掉
     // 「改文件名日期（日常必写、零成本）即整段跳过 hard 门」这条通道；锚取 author date(%aI)，
     // 刻意伪造（`git commit --date=`）仍可绕过——与伪造台账同属本地信任边界内，不宣称"通道已关闭"。

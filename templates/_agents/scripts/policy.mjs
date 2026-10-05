@@ -25,6 +25,16 @@ export const POLICIES = {
     stageGateSince: '2026-09-29', // 检查 19 逐阶段审计的生效日（2026-09-30 stage-gate-machine）；锚 = 台账 ts 的 UTC 日期（复核 P2-3：本批 ts 2026-09-29T17:33Z 落在受审范围，顺序合规故静默）；v1 无此键 → 该检查整体跳过
     riskLevelSince: '2026-10-01', // intent risk_level 双字段协议生效日（2026-10-01 hybrid-governance 落地 fill-intent 双写；2026-10-02 caliber-convergence 方案 C 引入消费）——此日前建档的 intent 无该字段不判 suspect；v1 无此键 → 双字段协议视为从未生效（单字段判）
   },
+  // 版本 3 = 版本 1 的五个日期，仅确认门两锚后移至装户台账首次实际使用日（2026-10-05）。
+  // 背景（2026-10-06-v114-backflow-batch）：装户确认台账机制 09-27 上线但 10-05 才首次运转，存量整体落入既有「存量豁免」，
+  // 新档（≥ 生效日）照常受管。以 v1 为基线、不夹带 v2 键激活；装户经 kit.json policyVersion: 3 选入，kit 仓自身维持 v1。
+  3: {
+    moduleSince: '2026-09-22',
+    check14Since: '2026-09-23',
+    confirmDocsEffective: '2026-10-05',
+    confirmIncidentsEffective: '2026-10-05',
+    bindingTs: '2026-09-28',
+  },
 };
 
 export function loadKitPolicy(root) {

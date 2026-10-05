@@ -47,8 +47,8 @@
 
 ## 验收标准（可测试）
 
-- [ ] POLICIES[3] 键集 = v1 键集且两锚 = 2026-10-05；loadKitPolicy 在 kit.json policyVersion:3 时取值正确（证据：单测断言或 node 一行脚本输出）
-- [ ] 检查 8：docs 系提交证据 + 同文档存在可过检实现提交 → exit 0 且 stderr 含「证据豁免 record」；仅 docs 提交证据 → 仍「证据无关」hard（证据：新增两场景 PASS）
-- [ ] 预算场景：上调预算表后超限样本仍触发（自校准）（证据：npm test 全绿含原两场景）
-- [ ] `npm test` 全套件 0 fail（证据：run 输出合计行）
-- [ ] 双源一致：source-sync-check --gate exit 0（证据：命令输出）
+- [x] POLICIES[3] 键集 = v1 键集且两锚 = 2026-10-05；loadKitPolicy 在 kit.json policyVersion:3 时取值正确（证据：node 断言输出 v3 keys: moduleSince,check14Since,confirmDocsEffective,confirmIncidentsEffective,bindingTs | anchors: 2026-10-05 2026-10-05）
+- [x] 检查 8：docs 系提交证据 + 同文档存在可过检实现提交 → exit 0 且 stderr 含「证据豁免 record」；仅 docs 提交证据 → 仍「证据无关」hard（证据：check-loop.test.mjs 新场景两例 PASS「检查 8 记录型豁免:docs 证据 + 实现证据在场 → 豁免且 exit 0」/「仅 docs 证据无实现证据 → 仍 hard 证据无关」）
+- [x] 预算场景：上调预算表后超限样本仍触发（自校准）（证据：npm test 全绿含原两预算场景——fixture 改从拷入预算表读 AGENTS.md 上限 +512，与上限值解耦）
+- [x] `npm test` 全套件 0 fail（证据：test-full.log 尾部 exit=0、全仓 PASS 865、0 套件失败）
+- [x] 双源一致：source-sync-check --gate exit 0（证据：--gate exit=0，孤儿 trust-mode.json 仅报告不计失败，为本就存在的装户渲染产物）

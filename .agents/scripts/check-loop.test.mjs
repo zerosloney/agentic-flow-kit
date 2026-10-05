@@ -429,6 +429,8 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   fs.mkdirSync(path.join(T, '.agents', 'scripts'), { recursive: true });
   fs.copyFileSync(path.join(SCRIPT_DIR, 'rule-budget.sh'), path.join(T, '.agents', 'scripts', 'rule-budget.sh'));
   fs.copyFileSync(path.join(SCRIPT_DIR, '..', 'rule-budgets.txt'), path.join(T, '.agents', 'rule-budgets.txt'));
+  // 超限样本自校准：从拷入的预算表读 AGENTS.md 上限（预算可上调，硬编码样本会随上调失效——2026-10-06-v114-backflow-batch）
+  const agLimit = Number(fs.readFileSync(path.join(T, '.agents', 'rule-budgets.txt'), 'utf8').split(/\r?\n/).find((l) => l.startsWith('AGENTS.md ')).trim().split(' ').pop());
   w(T, 'AGENTS.md', '# AGENTS 小体积 fixture\n');
   fs.mkdirSync(path.join(T, '.agents', 'commands'), { recursive: true });
   w(T, '.agents/commands/plan.md', '# 小命令\n');
@@ -436,7 +438,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   w(T, 'workflow/plans/2026-09-22-budget-ok.md', PLAN('budget ok', '状态: approved\n级别: L1\n模块: pipeline'));
   let r = run(T);
   check('常驻面预算:合规 → 无超限告警且 exit 0', r.status === 0 && !outOf(r).includes('WARN 常驻面超限'), outOf(r));
-  w(T, 'AGENTS.md', 'x'.repeat(8000));
+  w(T, 'AGENTS.md', 'x'.repeat(agLimit + 512));
   w(T, 'workflow/intents/2026-09-22-budget-bad.md', INTENT('budget bad', '状态: approved\n级别: L1\n日期: 2026-09-22\n模块: pipeline'));
   w(T, 'workflow/plans/2026-09-22-budget-bad.md', PLAN('budget bad', '状态: approved\n级别: L1\n模块: pipeline'));
   r = run(T);
@@ -455,8 +457,9 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     fs.mkdirSync(path.join(T, '.agents', 'scripts'), { recursive: true });
     fs.copyFileSync(path.join(SCRIPT_DIR, 'rule-budget.sh'), path.join(T, '.agents', 'scripts', 'rule-budget.sh'));
     fs.copyFileSync(path.join(SCRIPT_DIR, '..', 'rule-budgets.txt'), path.join(T, '.agents', 'rule-budgets.txt'));
+    const agLimit = Number(fs.readFileSync(path.join(T, '.agents', 'rule-budgets.txt'), 'utf8').split(/\r?\n/).find((l) => l.startsWith('AGENTS.md ')).trim().split(' ').pop());
     gitInit(T);
-    w(T, 'AGENTS.md', 'x'.repeat(8000));
+    w(T, 'AGENTS.md', 'x'.repeat(agLimit + 512));
     gitRetry(['add', 'AGENTS.md'], T);
     let r = spawnSync('sh', ['.agents/scripts/rule-budget.sh', '--staged'], { cwd: T, encoding: 'utf8' });
     check('rule-budget --staged:暂存超限 → exit 1（硬拦路径）',
@@ -2560,6 +2563,27 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T, { args: ['--hardening'] });
   check('加固门 H7：suspect（L2/L1 分歧）转正 → 缺同名 spec 即拦',
     r.status === 1 && outOf(r).includes('缺同名 spec'), outOf(r));
+  rmfix(T);
+}
+
+// ---- 场景:检查 8 记录型提交豁免——docs 系证据 + 实现证据在场 → 豁免;仅 docs 证据 → hard（2026-10-06-v114-backflow-batch）----
+{
+  const T = mkfix();
+  gitInit(T);
+  w(T, 'workflow/plans/2026-09-12-rec.md', PLAN('rec', '状态: done\n级别: L1\n日期: 2026-09-12', '\n## 改动面\n- src/impl.txt: 实现改动\n'));
+  fs.mkdirSync(path.join(T, 'src'), { recursive: true });
+  w(T, 'src/impl.txt', 'impl\n');
+  gitCommitAll(T, 'feat: impl change');
+  const implSha = shortSha(T);
+  w(T, 'record-note.md', 'record\n');
+  gitCommitAll(T, 'docs: 记录留痕');
+  const docsSha = shortSha(T);
+  w(T, 'workflow/intents/2026-09-12-rec.md', INTENT('rec', '状态: done\n级别: L1\n日期: 2026-09-12', `\n## 验收标准（可测试）\n- [x] 实现（证据:commit ${implSha}）\n- [x] 记录（证据:commit ${docsSha}）\n`));
+  let r = run(T);
+  check('检查 8 记录型豁免:docs 证据 + 实现证据在场 → 豁免且 exit 0', r.status === 0 && outOf(r).includes('证据豁免 record'), outOf(r));
+  w(T, 'workflow/intents/2026-09-12-rec.md', INTENT('rec', '状态: done\n级别: L1\n日期: 2026-09-12', `\n## 验收标准（可测试）\n- [x] 记录（证据:commit ${docsSha}）\n`));
+  r = run(T);
+  check('检查 8 记录型豁免:仅 docs 证据无实现证据 → 仍 hard 证据无关', r.status === 1 && outOf(r).includes('证据无关'), outOf(r));
   rmfix(T);
 }
 
