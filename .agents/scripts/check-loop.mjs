@@ -226,8 +226,9 @@ function spawnGit(args) {
   const opts = { cwd: ROOT, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 };
   let r = spawnSync(GIT, args, opts);
   if (r.error) {
-    warnGitInfra(args, r.error.code || r.error.message);
+    // 出账在重试终败后（与 linesOf 对称——瞬时重试恢复成功不打扰）；非瞬时类直接出账
     if (GIT_TRANSIENT.has(r.error.code)) r = spawnSync(GIT, args, opts);
+    if (r.error) warnGitInfra(args, r.error.code || r.error.message);
   }
   return r;
 }

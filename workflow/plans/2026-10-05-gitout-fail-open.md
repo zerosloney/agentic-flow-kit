@@ -32,13 +32,13 @@
 - 装副本同步：`flow-kit sync` 刷 `.agents/scripts/check-loop.{mjs,test.mjs}` 与 `.agents/kit.json` 两个 sha256
 - `workflow/papercuts.md`：2026-10-05 行「拟修」列回填「已立 incident（修复 SHA，fixed 时）」
 - `workflow/regression-checklist.md`：防复发验证节追加「引擎内 spawn 基础设施异常须与业务失败区分并响亮出账（2026-10-05-gitout-fail-open）」
-- **不动**：其余 20+ gitOut 业务调用点、:156 基础设施消息、非 git 仓跳过语义（exit 0）、检查 16 取数器路径、fix workflow（CI/Release yaml）
+- **不动**：其余 gitOut 业务调用点（共 14 处，含 4 探测门——L2 复核 P2-1 订正计数）、:156 基础设施消息、非 git 仓跳过语义（exit 0）、检查 16 取数器路径、fix workflow（CI/Release yaml）
 
 ## 任务拆解（L2/L3 必填；L1 仅多文件多步骤时用，单任务微改动删本节）
 
 1. check-loop.mjs 引擎改动（env 钩子 + gitOut loud/retry + :581 同模式）
-   - 判据：真仓 + `CHECK_LOOP_GIT=<不存在路径>` 手动跑 → stderr「git 探测异常」恰一条且 exit 0；正常跑零出账；`grep -c CHECK_LOOP_GIT templates/_agents/scripts/check-loop.mjs` = 1（仅 GIT 常量消费，无第三处）
-   - 风险：中（主门禁引擎件；缓解——返回契约不变、20+ 调用点零接触、出账走 stderr 不改 stdout 协议）
+   - 判据：真仓 + `CHECK_LOOP_GIT=<不存在路径>` 手动跑 → stderr「git 探测异常」恰一条且 exit 0；正常跑零出账；`grep -c CHECK_LOOP_GIT templates/_agents/scripts/check-loop.mjs` = 2（GIT 常量 + 其上方注释行，消费点仅 GIT 常量一处——L2 复核 P2-1 订正）
+   - 风险：中（主门禁引擎件；缓解——返回契约不变、14 处调用点零接触、出账走 stderr 不改 stdout 协议）
 2. check-loop.test.mjs 两新场景 + run() env 支持
    - 判据：`node templates/_agents/scripts/check-loop.test.mjs` 全绿（既有 196 + 新增断言；出账恰一次、降级语义、防误报负例全钉住）
    - 风险：低（增量场景，不动既有断言；替身=不存在路径跨平台稳定触发 r.error，无平台分支）
@@ -73,4 +73,4 @@
 > 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节（确认环节的机器可见态），done 只在关单出现——禁从 draft 直跳 done（2026-09-22 papercut）。
 - 确认结果：approved（2026-10-05 用户对话内确认，原话「确认」）；done（关单时随入口文档置终态）
 - 确认门记录：plan 草稿全文过目 + 改动清单确认（build.md 两道门，逐次，不合并）
-- 复核：L2 推荐独立复核——关单前 independent-reviewer 复核，结论此处回填
+- 复核：L2 独立复核已执行（2026-10-05，independent-reviewer，基准 3be0425，复核对象 c7b6cf5，只读）——**结论：放行**。已实证：diff 与 spec 改动清单 5 项逐条对应；gitOut 返回契约未变、调用点零接触；:581/:628/:633 归入 spawnGit 后 fail-closed 保持；CHECK_LOOP_GIT 未设时逐字节一致、既有场景零泄漏；双源逐字相同、kit.json sha 现算吻合；复跑包源 201/0、装副本 199/0、doctor 13/0/0、sync.test 56/0。4 项 P2 全部关单前采纳收口：P2-1 计数订正（gitOut 调用 14 处、grep 判据 2）；P2-2 场景 5v 补注「出账断言不构成 :581 独立钉死」；P2-3 spawnGit 出账时机移至重试终败后（与 linesOf 对称，瞬时恢复不打扰）；P2-4 测试 :460/:465 裸 git add 入 gitRetry。未验证范围（据实）：瞬时错误码重试路径未实测（静态替身不可复现，代码走读）；20 轮稳定性循环与 CI 六矩阵采信 plan 记录

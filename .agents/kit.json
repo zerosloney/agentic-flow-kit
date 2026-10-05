@@ -138,7 +138,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "31687de991711313dd0852412d968992c336fe59f2686b7f527979164c1d9f88"
+      "sha256": "2aa26069dcf8ecd3ab80d76956060c2393a53692116444f3cc9f361264c049c1"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -146,7 +146,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "d5a5ba40287a4ddd5516faca3098be9747e7bd3908ffb54438d19a4ae49eb0c0"
+      "sha256": "380bd78bb656da7ccc9a1c994dfbf461f1535c11d648357e67eed52e86359b7f"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",

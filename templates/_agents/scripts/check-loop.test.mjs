@@ -457,12 +457,12 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     fs.copyFileSync(path.join(SCRIPT_DIR, '..', 'rule-budgets.txt'), path.join(T, '.agents', 'rule-budgets.txt'));
     gitInit(T);
     w(T, 'AGENTS.md', 'x'.repeat(8000));
-    spawnSync(process.platform === 'win32' ? 'git.exe' : 'git', ['add', 'AGENTS.md'], { cwd: T });
+    gitRetry(['add', 'AGENTS.md'], T);
     let r = spawnSync('sh', ['.agents/scripts/rule-budget.sh', '--staged'], { cwd: T, encoding: 'utf8' });
     check('rule-budget --staged:暂存超限 → exit 1（硬拦路径）',
       r.status === 1 && `${r.stdout}${r.stderr}`.includes('常驻面超限：AGENTS.md'), `${r.stdout}${r.stderr}`);
     w(T, 'AGENTS.md', '# 小体积\n');
-    spawnSync(process.platform === 'win32' ? 'git.exe' : 'git', ['add', 'AGENTS.md'], { cwd: T });
+    gitRetry(['add', 'AGENTS.md'], T);
     r = spawnSync('sh', ['.agents/scripts/rule-budget.sh', '--staged'], { cwd: T, encoding: 'utf8' });
     check('rule-budget --staged:合规 → exit 0（不误拦）', r.status === 0, `${r.stdout}${r.stderr}`);
     rmfix(T);
@@ -722,6 +722,8 @@ const evidenceFixture = (slug, declared, createDeclared) => {
 // ---- 场景 5v:git 基础设施异常 fail-loud（2026-10-05-gitout-fail-open）----
 // CHECK_LOOP_GIT 指向不存在路径 → spawnSync 跨平台稳定 r.error（ENOENT）→ 响亮出账恰一条（进程去重）
 // + 证据核验降级（exit 语义不变、无业务裁决误报）；正常 git 零出账（防误报负例）
+// 注（L2 复核 P2-2）：出账断言不构成 :581 接入 spawnGit 的独立钉死——探测门与 :581 共用去重 flag，
+// 变异（:581 改回裸 spawnSync）三断言仍绿；:581 接线由代码走读 + CI 覆盖，瞬时重试路径静态替身不可测
 {
   const T = mkfix();
   gitInit(T);
