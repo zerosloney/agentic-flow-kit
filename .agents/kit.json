@@ -1,6 +1,6 @@
 {
   "kit": "agentic-flow-kit",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "policyVersion": 2,
   "audit": true,
   "createdAt": "2026-09-23T15:07:19.753Z",
@@ -436,7 +436,7 @@
     },
     {
       "rel": "AGENTS.md",
-      "sha256": "3c9d42d37a9dbd8ba793b2342118dc47e934275cc7e9ad4ddd5151222b4bb230"
+      "sha256": "f873fa337e45c2300681870b72b285d67ef3ed690c8b610fe7ead79ccc83cede"
     },
     {
       "rel": "wiki/知识沉淀总览.html",
