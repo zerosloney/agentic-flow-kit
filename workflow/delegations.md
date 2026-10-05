@@ -20,6 +20,7 @@
 
 | 日期 | 任务一句话 | 结果 | 备注 |
 |------|------------|------|------|
+| 2026-10-05 | 2026-10-05-host-gitignore-localonly-revoke：撤销 zcode/omp localOnly 档位——七宿主一律入库（init/add-host 不再向装户 .gitignore 追加宿主目录，草稿目录改装户自管） | 一次通过 | intent/spec/plan 三件套 done（delegated 台账 6 行在档，指纹逐件对上）；独立复核 8/8 验收满足、P2×3 全处置（P2-1 本单顺带、P2-2 闭合、P2-3 既有缺口不扩）；S7 断言翻转 + ROpt 可选读 + templates 注释两件 sync 刷装副本（kit.json sha 对齐）；随 v1.1.0 发版（tag + npm publish 双绿）；主智能体自做 |
 | 2026-10-04 | review-fix-batch：双轴审查 13 项发现批修复（cards 键名对齐 intent 验收 / watchdead 广播+目录兜底 / 404·500 区分 / 确认门要点渲染 / 场景重号消除+type=sha 端到端正例 / safeRunPath 白名单测试 / AGENTS.md 三段式口径） | 返工×1 | incident 2026-10-04-review-fix-batch（L2，spec/plan 同名 approved+done delegated）；返工点：初版场景 47 用 import 直测——check-loop.mjs 无主守卫，import 即全量跑门禁并 exit，套件空心化（exit 0 断言全没跑），自测探针当场抓到回炉改端到端正例并回退 export（记 papercuts）；npm test 全绿（check-loop 196 断言）、浏览器实测三态（确认门要点/工单回归/空态）、doctor 13 PASS |
 | 2026-10-04 | plan-section-name-evidence：check-loop 证据校验兼容 L1 plan「改动方案」节（verifyEvidenceTruth 节名正则扩一项，消除「真实提交被误判证据无关」的验收证据误报） | 一次通过 | incident 2026-10-04-plan-section-name-evidence（L2，门禁判据面；spec/plan 同名 approved+done delegated）；正/负例测试场景 43/44 钉住；npm test 全绿；发现过程记 papercuts 2026-10-04 fill-plan 行（d8d3d7d） |
 | 2026-10-03 | plan 确认节模板样板豁免（检查 2 boilerRe 精确豁免确认节样板句，三 plan 占位符 WARN 清零） | 一次通过 | incident 2026-10-03-plan-confirm-boiler（L2，门禁判据面）；spec+plan 确认门逐道走（delegated）；npm test 全绿，真实仓三 WARN 3→0 |
@@ -79,7 +80,7 @@
 | 月份 | 有效任务 | 一次通过率 | 平均返工 | 主兜底 | incident | 扩容门 | 备注 |
 |------|----------|-----------|----------|--------|----------|--------|------|
 | 2026-09 | 40 | 55% | 0.57 | 0% | 22 | ❌ 未达标（连续性中断）：2+3+5 | 样本含待修0 |
-| 2026-10 | 12 | 75% | 0.33 | — | 7 | ❌ 未达标（连续性中断）：1+2+3+5 | 样本含待修0、未知1 |
+| 2026-10 | 13 | 77% | 0.31 | — | 7 | ❌ 未达标（连续性中断）：1+2+3+5 | 样本含待修0、未知1 |
 
 ## 并发扩容门槛
 
