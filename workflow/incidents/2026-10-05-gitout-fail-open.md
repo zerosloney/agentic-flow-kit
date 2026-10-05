@@ -1,9 +1,10 @@
 ---
-状态: open
+状态: closed
 级别: L2
 发现: 2026-10-05
 模块: pipeline
 备注: gitOut 把 spawn 异常与「非 git 仓」合并返回 null——git 仓内瞬时探测异常静默降级（fail-open）；根治 = fail-loud + 单次重试，同名 spec/plan 配对
+确认指纹: 008afa92f3c22cc2
 ---
 # INCIDENT — 2026-10-05 gitOut fail-open：瞬时 spawn 异常致检查 8 静默跳过
 
@@ -17,6 +18,8 @@
 - 2026-10-05 实现期稳定性诊断：首轮 50 轮循环捕获 8 次同型失败（含与本单无关的旧场景）；聚焦取证（12 轮带全 detail）显示失败轮 check-loop 自身 git 调用**全部成功**（无「git 探测异常」出账、exit=0）但证据裁决缺失 → 根因侧修正：flake 直接根因在**测试夹具自身的 git spawn**（gitCommitAll / rev-parse 裸 spawnSync 瞬时 `r.error` → sha 空 → 证据串成纯文本 → 无裁决）；gitOut fail-open 为同暴露的真实引擎缺陷但非该 flake 直接根因（引擎侧加固保留——原 CI flake 与今日复现形态一致，夹具侧假说与引擎侧假说在旧代码无出账时不可区分，本单两侧同修）
 - 2026-10-05 夹具侧加固：check-loop.test.mjs 新增 gitRetry（spawn `r.error` 重试一次、持续失败抛错响亮失败）+ shortSha 统一入口，替换 gitInit / gitCommitAll / 全部 6 处裸 rev-parse——「绝不静默产出空 sha / 缺提交的假夹具」
 - 2026-10-05 复验：加固后套件 201/0，诊断循环复跑见 plan 验证记录
+- 2026-10-05 修复完成：c7b6cf5（实现）+ 4f55c4a（L2 复核 4 项 P2 关单前收口，复核结论放行）；复验套件 201/0（包源）/ 199/0（装副本）/ doctor 13 PASS 0 WARN 0 FAIL / sync.test 56/0 / 稳定性循环 fail-loud 全覆盖后 20 轮 0 失败（加固前基线 8/50）+ P2 收口后 10 轮 0 失败
+- 2026-10-05 用户确认：关单（对话内，原话「确认」——incident fixed→closed、spec/plan done 逐件代录）
 
 ## 影响面
 
@@ -38,20 +41,19 @@
 
 ## 复盘三件套（缺一不可）
 
-> 立单时点为前瞻计划形态；fixed/closed 时回填实际 SHA 与证据。
+> fixed 时已回填实际 SHA 与复验证据（2026-10-05）。
 
 1. 结构性修复
-   - 修复方向（引擎侧）：方案 A（fail-loud + 单次重试，语义红线不动）——`gitOut` 对 `r.error` 响亮出账（stderr，进程级去重）并重试一次，仍异常才返回 null（调用方与 20+ 业务调用点语义零变化）；`CHECK_LOOP_GIT` env 测试注入钩子；:581 直连点同模式。详见同名 spec
-   - 修复方向（测试平台侧，实现期诊断追加）：夹具 git 调用防瞬时失败——gitRetry（`r.error` 重试一次、持续失败抛错）+ shortSha 统一入口，替换 gitInit / gitCommitAll / 全部裸 rev-parse
+   - 修复 commit：c7b6cf5（引擎 spawnGit 统一通道——gitOut 与 :581 证据核验/:628 git show/:633 git log 归口，`r.error` 响亮出账 + 瞬时类单次重试；linesOf fs 读取重试 + 响亮出账；CHECK_LOOP_GIT 注入钩子；场景 5v 两块 5 断言；夹具 gitRetry/shortSha 替换 gitInit/gitCommitAll/6 处裸 rev-parse）+ 4f55c4a（L2 复核 P2 收口：出账时机与 linesOf 对称、夹具 git add 入统一通道、计数订正、断言补注）
    - 影响环境：dev（引擎包源 templates/ + 装副本 .agents/，经 flow-kit sync 双源同步）
    - 是否需要新 intent：
      - 否 → 理由：根因属实现缺陷（错误分类缺失 + 夹具防护缺位），单点修复 + 防复发用例 + 规范条目可覆盖；incident 即 intent 等价物，spec/plan 同名配对承载
 
 2. 防复发验证（必须落到自动化用例或回归清单条目，禁止只写「已人工验证」）
-   - 自动化用例（计划）：templates/_agents/scripts/check-loop.test.mjs 场景 5v 两块 5 断言——`CHECK_LOOP_GIT` 指向不可执行路径 → stderr 响亮出账（进程级去重恰一条）+ 持续异常 fail-closed（伪造拦）+ 无「证据无关」误报；正常 git 零出账 + 行为不变负例；夹具侧 gitRetry/shortSha 防瞬时失败
-   - 稳定性验证（计划）：稳定性循环（诊断口径见 plan 验证记录）+ CI 六矩阵持续观察
-   - 回归清单条目（计划）：workflow/regression-checklist.md 防复发验证节追加一行
+   - 自动化用例：templates/_agents/scripts/check-loop.test.mjs 场景 5v 两块 5 断言——`CHECK_LOOP_GIT` 指向不可执行路径 → stderr 响亮出账（进程级去重恰一条）+ 持续异常 fail-closed（伪造拦）+ 无「证据无关」误报；正常 git 零出账 + 行为不变负例；夹具侧 gitRetry/shortSha 防瞬时失败（随 npm test 回归）
+   - 稳定性验证：加固前基线 50 轮 8 失败 → fail-loud 全覆盖后 20 轮 0 失败 + P2 收口后 10 轮 0 失败（同宿主压力环境）；CI 六矩阵随每次推送持续观察
+   - 回归清单条目：workflow/regression-checklist.md 防复发验证节 2026-10-05-gitout-fail-open 行（c7b6cf5）
 
 3. 规范条目（必须有可追溯的落点）
-   - 落点（计划）：check-loop.mjs gitOut 处注释互引（gitOut 与 :581 直连点、与检查 16 fail-loud 先例）；workflow/regression-checklist.md 防复发验证节追加「引擎内 spawn 基础设施异常须与业务失败区分并响亮出账」
-   - 引用：修复 commit（fixed 时回填）；papercuts 2026-10-05 行（d9096ba）
+   - 落点：templates/_agents/scripts/check-loop.mjs spawnGit / linesOf 区块注释互引（spawn 与 fs 基础设施异常 fail-loud 口径，引检查 16 装户先例）；workflow/regression-checklist.md 防复发验证节追加行
+   - 引用：commit c7b6cf5 / 4f55c4a；文件:templates/_agents/scripts/check-loop.mjs spawnGit 区块、workflow/regression-checklist.md 防复发验证节

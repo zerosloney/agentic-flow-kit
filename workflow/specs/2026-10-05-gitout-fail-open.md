@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-05
 模块: pipeline
 备注: gitOut fail-open 根治——fail-loud + 单次重试，返回语义红线不动；与同名 incident 配对（incident 即 intent 等价入口）
-确认指纹: f7fb92c5c9bde7f7
+确认指纹: a7156a11eae5059d
 ---
 # SPEC — gitout-fail-open
 
