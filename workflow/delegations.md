@@ -21,6 +21,7 @@
 | 日期 | 任务一句话 | 结果 | 备注 |
 |------|------------|------|------|
 | 2026-10-04 | review-fix-batch：双轴审查 13 项发现批修复（cards 键名对齐 intent 验收 / watchdead 广播+目录兜底 / 404·500 区分 / 确认门要点渲染 / 场景重号消除+type=sha 端到端正例 / safeRunPath 白名单测试 / AGENTS.md 三段式口径） | 返工×1 | incident 2026-10-04-review-fix-batch（L2，spec/plan 同名 approved+done delegated）；返工点：初版场景 47 用 import 直测——check-loop.mjs 无主守卫，import 即全量跑门禁并 exit，套件空心化（exit 0 断言全没跑），自测探针当场抓到回炉改端到端正例并回退 export（记 papercuts）；npm test 全绿（check-loop 196 断言）、浏览器实测三态（确认门要点/工单回归/空态）、doctor 13 PASS |
+| 2026-10-04 | plan-section-name-evidence：check-loop 证据校验兼容 L1 plan「改动方案」节（verifyEvidenceTruth 节名正则扩一项，消除「真实提交被误判证据无关」的验收证据误报） | 一次通过 | incident 2026-10-04-plan-section-name-evidence（L2，门禁判据面；spec/plan 同名 approved+done delegated）；正/负例测试场景 43/44 钉住；npm test 全绿；发现过程记 papercuts 2026-10-04 fill-plan 行（d8d3d7d） |
 | 2026-10-03 | plan 确认节模板样板豁免（检查 2 boilerRe 精确豁免确认节样板句，三 plan 占位符 WARN 清零） | 一次通过 | incident 2026-10-03-plan-confirm-boiler（L2，门禁判据面）；spec+plan 确认门逐道走（delegated）；npm test 全绿，真实仓三 WARN 3→0 |
 | 2026-10-03 | check-evidence-process：检查8证据核验新增过程证据判据（runId 严格形态标记放行，+3 回归场景+防复发行） | 一次通过 | intent 2026-10-03-check-evidence-process（L2，门禁判据面）；随批修 pipeline-run 测试跨日红（PIPELINE_RUN_TODAY 钩子，挂 p2-pool-batch3）；check-loop 测试 190/0、真实仓 exit 0 |
 | 2026-10-02 | pipeline-run 跨宿主全自动闭环执行器（状态机脚本+工单协议+run 事件流+命令封装五宿主） | 一次通过（演练修 3 缺陷） | intent 2026-10-02-pipeline-run；测试 18 组双侧绿；演练矩阵（L0/verify-only 本仓真实 + L1/L2/incident 沙箱真实工具链）抓 3 真缺陷当场根因修（d176321）：untracked 目录折叠误报、运行态副产物误拦、verify 后代码提交缺口 |
@@ -78,7 +79,7 @@
 | 月份 | 有效任务 | 一次通过率 | 平均返工 | 主兜底 | incident | 扩容门 | 备注 |
 |------|----------|-----------|----------|--------|----------|--------|------|
 | 2026-09 | 40 | 55% | 0.57 | 0% | 22 | ❌ 未达标（连续性中断）：2+3+5 | 样本含待修0 |
-| 2026-10 | 11 | 73% | 0.36 | — | 7 | ❌ 未达标（连续性中断）：1+2+3+5 | 样本含待修0、未知1 |
+| 2026-10 | 12 | 75% | 0.33 | — | 7 | ❌ 未达标（连续性中断）：1+2+3+5 | 样本含待修0、未知1 |
 
 ## 并发扩容门槛
 
