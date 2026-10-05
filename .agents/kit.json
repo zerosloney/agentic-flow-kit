@@ -101,6 +101,10 @@
       "sha256": "6f4e9cde9d688bba739246e5bb28720f1d9b8d896dfbcecadb306d44c07baf41"
     },
     {
+      "rel": ".agents/scripts/_probe-tmp.mjs",
+      "sha256": "49aa2b26e561a33e2cb26063365d2e5dcd9d057703f41bfcac8e2bb1e916da79"
+    },
+    {
       "rel": ".agents/scripts/agg-delegations.cjs",
       "sha256": "13ca19219450218187b51356df3f28d1bc99c7637ed6ba404a230f9f5b6e9f48"
     },
@@ -138,7 +142,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "2aa26069dcf8ecd3ab80d76956060c2393a53692116444f3cc9f361264c049c1"
+      "sha256": "3d3c9e6d59d418bb93306834d6d47e4118152a474e42b129a6035581de12ea2a"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -146,7 +150,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "380bd78bb656da7ccc9a1c994dfbf461f1535c11d648357e67eed52e86359b7f"
+      "sha256": "05ef2eb6eb406f4e7bae995a45a6582de8000f37e44f5c69c6d3f888ff425af3"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -460,7 +464,7 @@
     },
     {
       "rel": "workflow/papercuts.md",
-      "sha256": "e9c87808006d98199f76430a85eaa8425ff10c40a95af5b3d699dc18a88b6d6c"
+      "sha256": "753910dfdae5273275c7d286af6a4eef68ce77fa56738670b14512af9790cd9b"
     },
     {
       "rel": "workflow/plans/_TEMPLATE.md",
@@ -468,7 +472,7 @@
     },
     {
       "rel": "workflow/regression-checklist.md",
-      "sha256": "123e994901d7f590550995cff1386ef78149110891d571b24cf924d0b8ce62fa"
+      "sha256": "bfbcf6156aa481e9a2722a2bf7a4e853ff4d3dd446b90c7f376df8d057a38c1b"
     },
     {
       "rel": "workflow/specs/_TEMPLATE.md",

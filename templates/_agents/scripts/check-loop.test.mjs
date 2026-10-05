@@ -754,6 +754,33 @@ const evidenceFixture = (slug, declared, createDeclared) => {
   check('git 基础设施异常:正常 git 行为不变（无标记无关提交仍拦证据无关）', r.status === 1 && outOf(r).includes('证据无关'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
 }
+// ---- 场景 5u:检查 8 全数字证据串——rev-parse 实证分流（2026-10-05-check8-digit-sha-misfire）----
+// 纯数字证据串曾由 /^\d+$/ 形态守卫抢先 text 豁免（全数字短 SHA≈4.4%/夹具 静默漏检）；改为实证分流：
+// 能解析成提交（含同名 ref/tag）→ 走真相核验；解析失败 → 维持 text 豁免。构造性钉子：git tag 数字名，不依赖哈希运气
+{
+  const T = mkfix();
+  gitInit(T);
+  w(T, 'workflow/plans/2026-10-04-ev5.md', PLAN('ev5', '状态: done\n级别: L1', '\n## 改动方案\n- src/ghost.js：声明文件（实际不存在，证据必不触及）\n'));
+  w(T, 'workflow/intents/2026-10-04-ev5.md', INTENT('ev5', '状态: done\n级别: L1\n日期: 2026-10-04', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:2620913）\n'));
+  gitCommitAll(T, 'feat: ev5 fixture');
+  gitRetry(['tag', '2620913', 'HEAD'], T);
+  const r = run(T);
+  check('全数字证据串可解析成提交（同名 ref）→ 按真相核验报证据无关（数字形态不豁免）',
+    outOf(r).includes('证据无关'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+{
+  const T = mkfix();
+  gitInit(T);
+  w(T, 'workflow/plans/2026-10-04-ev6.md', PLAN('ev6', '状态: done\n级别: L1', '\n## 改动方案\n- src/ghost.js：声明文件（实际不存在，证据必不触及）\n'));
+  w(T, 'workflow/intents/2026-10-04-ev6.md', INTENT('ev6', '状态: done\n级别: L1\n日期: 2026-10-04', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:20260926）\n'));
+  gitCommitAll(T, 'feat: ev6 fixture');
+  const r = run(T);
+  check('纯数字时间戳证据（无同名 ref）→ 维持文本豁免不误报',
+    !outOf(r).includes('证据无关') && !outOf(r).includes('证据伪造'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+
 // ---- 场景 45:检查 2——真未填占位（标题 <主题>，无 .md）→ 仍报模板未填 ----
 {
   const T = mkfix();

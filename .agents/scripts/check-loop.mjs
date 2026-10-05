@@ -242,7 +242,7 @@ function gitOut(args, { ok = () => true } = {}) {
 // fs 读取同走 fail-loud（2026-10-05-gitout-fail-open 实现期诊断追加，与 spawnGit 同一故障类）：
 // readFileSync 瞬时异常（宿主资源压力 EMFILE/共享冲突类）重试一次，仍失败响亮出账（进程级去重）
 // 后按 null 降级——调用方按空文档跳过该件，但异常本身不再静默
-let fsReadWarned = false;
+let fsReadWarned = new Set();
 const fileLinesCache = new Map();
 function linesOf(file) {
   if (!fileLinesCache.has(file)) {
@@ -251,8 +251,8 @@ function linesOf(file) {
       lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
     } catch (e) {
       try { lines = fs.readFileSync(file, 'utf8').split(/\r?\n/); } catch { lines = null; }
-      if (!lines && !fsReadWarned) {
-        fsReadWarned = true;
+      if (!lines && !fsReadWarned.has(file)) {
+        fsReadWarned.add(file);
         console.error(`check-loop: 文档读取异常 ${path.basename(file)}（${e.code || e.message}）——按空文档降级，检查面可能收窄`);
       }
     }
@@ -605,30 +605,54 @@ const addedDateOf = (absDoc) => {
   return iso ? iso.slice(0, 10) : '';
 };
 
+// 豁免/放行分支出账（fail-loud 口径——「裁决消失」不可归因的教训：豁免路径零痕迹；
+// 2026-10-05-check8-digit-sha-misfire）：按 type 进程级去重，每类至多一条；stderr 不改 stdout 协议
+const evidenceExemptWarned = new Set();
+function warnEvidenceExempt(type, base) {
+  if (evidenceExemptWarned.has(type)) return;
+  evidenceExemptWarned.add(type);
+  console.error(`check-loop: 证据豁免 ${type} ${base}——该文档的验收证据未做真相核验`);
+}
+
 // 证据真相校验：检查证据字符串是否包含合法的 commit SHA，且该 commit 触及了 plan 声明的文件
 function verifyEvidenceTruth(evidenceStr, planBase, root) {
   const shaMatch = evidenceStr.match(/\b([a-f0-9]{7,40})\b/i);
-  // 排除纯数字串（时间戳/ID），必须是包含字母的 hex 串才疑似 SHA
-  if (!shaMatch || /^\d+$/.test(shaMatch[1])) return { ok: true, type: 'text' };
+  if (!shaMatch) {
+    warnEvidenceExempt('text', planBase);
+    return { ok: true, type: 'text' };
+  }
 
   const sha = shaMatch[1];
   // 直连走 spawnGit（与 gitOut 同一 loud+retry 通道，注释互引）：spawn 异常不再被静默算作业务失败；
   // 重试后仍异常按下方 status!==0 判定（fail-closed 保持——本地核验不了就按伪造拦）
   const revParse = spawnGit(['rev-parse', sha]);
   if (revParse.status !== 0) {
+    // 纯数字串且解析失败 → 时间戳/ID 维持文本豁免（2026-10-05-check8-digit-sha-misfire：形态守卫
+    // 曾把全数字短 SHA≈4.4%/夹具 误分类为文本致核验静默跳过——改由 rev-parse 实证分流）。
+    // 纪律：文本启发式须可被实证兜底，禁以字符形态抢先分类。
+    if (/^\d+$/.test(sha)) {
+      warnEvidenceExempt('text', planBase);
+      return { ok: true, type: 'text' };
+    }
     // 区分本地伪造与外部仓库引用：
     // 剔除 SHA 与泛指词后仍有其他内容（如项目名、路径描述）→ 视为外部仓库引用，不硬拦（本地无法核验他仓哈希）；
     // 剔除后为空（如纯「commit a1b2c3d」「提交 a1b2c3d」）→ 视为本地引用伪造，硬拦。
     const residue = evidenceStr.replace(sha, '')
       .replace(/证据[：:]|commit|提交|[（）()。—-]/gi, '')
       .trim();
-    if (residue.length > 0) return { ok: true, type: 'external' };
+    if (residue.length > 0) {
+      warnEvidenceExempt('external', planBase);
+      return { ok: true, type: 'external' };
+    }
     return { ok: false, type: 'forged', msg: `提交 ${sha} 不存在` };
   }
 
-  // 语义核验：该 commit 必须触及 plan 中声明的任何一个文件
+  // 解析成功（含纯数字短 SHA 命中提交/ref 的情形）→ 真相核验
   const planPath = path.join(ROOT, WF, 'plans', planBase + '.md');
-  if (!fs.existsSync(planPath)) return { ok: true, type: 'no-plan' }; // 缺 plan 走 Check 1 拦截
+  if (!fs.existsSync(planPath)) {
+    warnEvidenceExempt('no-plan', planBase);
+    return { ok: true, type: 'no-plan' }; // 缺 plan 走 Check 1 拦截
+  }
 
   const planLines = linesOf(planPath) || [];
   const declaredFiles = [];
@@ -655,6 +679,7 @@ function verifyEvidenceTruth(evidenceStr, planBase, root) {
     // 与 run 事件流同源，git 历史留痕可对质）。只救 irrelevant：forged（SHA 不存在）在前已判，其余判据不动。
     const subj = spawnGit(['log', '-1', '--format=%s', sha]);
     if (subj.status === 0 && /pipeline-run [0-9]{8}-[0-9]{4}-[A-Za-z0-9-]+/.test(subj.stdout)) {
+      warnEvidenceExempt('process', planBase);
       return { ok: true, type: 'process' };
     }
     return { ok: false, type: 'irrelevant', msg: `提交 ${sha} 未触及 plan 声明的任何文件` };
