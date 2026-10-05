@@ -101,10 +101,6 @@
       "sha256": "6f4e9cde9d688bba739246e5bb28720f1d9b8d896dfbcecadb306d44c07baf41"
     },
     {
-      "rel": ".agents/scripts/_probe-tmp.mjs",
-      "sha256": "49aa2b26e561a33e2cb26063365d2e5dcd9d057703f41bfcac8e2bb1e916da79"
-    },
-    {
       "rel": ".agents/scripts/agg-delegations.cjs",
       "sha256": "13ca19219450218187b51356df3f28d1bc99c7637ed6ba404a230f9f5b6e9f48"
     },
