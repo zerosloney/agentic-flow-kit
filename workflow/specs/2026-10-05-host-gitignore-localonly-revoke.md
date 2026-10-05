@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-05
 模块: pipeline
 备注: 撤销 zcode/omp 的 localOnly 档位；与 intent / plan 同名配对
-确认指纹: 801a74dd850bab26
+确认指纹: 25672b647ebb80ac
 ---
 # SPEC — host-gitignore-localonly-revoke
 

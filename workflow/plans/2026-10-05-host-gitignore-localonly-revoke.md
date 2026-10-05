@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-05
 模块: pipeline
 备注: 与 intent / spec 同名配对
-确认指纹: a8c84582b9c4f7a9
+确认指纹: d5ad6a71bfd1efe6
 ---
 # PLAN — host-gitignore-localonly-revoke
 

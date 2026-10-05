@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-05
 模块: pipeline
 备注: 撤销 zcode/omp 的 localOnly——init/add-host 不再把宿主目录写进装户 .gitignore
-确认指纹: eefa639334dcda52
+确认指纹: 055d9fda64df4d32
 ---
 # INTENT — host-gitignore-localonly-revoke
 
