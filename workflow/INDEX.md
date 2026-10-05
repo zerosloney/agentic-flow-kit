@@ -5,25 +5,25 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（3）
+## 活跃（0）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
-| INTENT | L2 | approved | 2026-10-06 | infra | v1.1.4 回流批次（policy v3 + 记录型提交豁免 + 预算 fixture 自校准） | ☑0/5 |
-| PLAN | L2 | approved | 2026-10-06 | infra | v1.1.4 回流批次（policy v3 + 记录型提交豁免 + 预算 fixture 自校准） | — |
-| SPEC | L2 | approved | 2026-10-06 | infra | v1.1.4 回流批次（policy v3 + 记录型提交豁免 + 预算 fixture 自校准） | — |
 
-## 档案计数（230，不进表）
+## 档案计数（233，不进表）
 
 | 类型 | 模块 | 数量 |
 |---|---|---|
 | INCIDENT | pipeline | 31 |
+| INTENT | infra | 1 |
 | INTENT | pipeline | 60 |
 | INTENT | wiki | 1 |
+| PLAN | infra | 1 |
 | PLAN | pipeline | 90 |
 | PLAN | wiki | 1 |
+| SPEC | infra | 1 |
 | SPEC | pipeline | 47 |
 
-终态构成：done 199 · closed 19 · fixed 12；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
+终态构成：done 202 · closed 19 · fixed 12；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
 
 <!-- GENERATED:END -->

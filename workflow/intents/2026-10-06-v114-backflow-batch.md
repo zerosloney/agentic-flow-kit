@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-06
 模块: infra
 备注: 装户（Shipyard.Material）回流批次，用户 2026-10-05/06 对话拍板打包三件；kit 仓自身不切 v3（无存量欠账，POLICIES[3] 供装户 kit.json 选入）
-确认指纹: 5fdf0581cf611b18
+确认指纹: a09e58b40c7d2898
 ---
 # INTENT — v1.1.4 回流批次（policy v3 + 记录型提交豁免 + 预算 fixture 自校准）
 

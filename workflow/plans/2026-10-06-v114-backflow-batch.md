@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: infra
-确认指纹: fe03bd1acf628386
+确认指纹: 53a862e7cecfdbf7
 ---
 # PLAN — v1.1.4 回流批次（policy v3 + 记录型提交豁免 + 预算 fixture 自校准）
 

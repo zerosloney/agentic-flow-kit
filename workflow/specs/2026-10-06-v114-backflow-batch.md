@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: infra
-确认指纹: 17a352154f15d607
+确认指纹: 7862708c25ee7574
 ---
 # SPEC — v1.1.4 回流批次（policy v3 + 记录型提交豁免 + 预算 fixture 自校准）
 
