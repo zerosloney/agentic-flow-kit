@@ -10,20 +10,20 @@
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
 
-## 档案计数（233，不进表）
+## 档案计数（236，不进表）
 
 | 类型 | 模块 | 数量 |
 |---|---|---|
 | INCIDENT | pipeline | 31 |
-| INTENT | infra | 1 |
+| INTENT | infra | 2 |
 | INTENT | pipeline | 60 |
 | INTENT | wiki | 1 |
-| PLAN | infra | 1 |
+| PLAN | infra | 2 |
 | PLAN | pipeline | 90 |
 | PLAN | wiki | 1 |
-| SPEC | infra | 1 |
+| SPEC | infra | 2 |
 | SPEC | pipeline | 47 |
 
-终态构成：done 202 · closed 19 · fixed 12；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
+终态构成：done 205 · closed 19 · fixed 12；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
 
 <!-- GENERATED:END -->

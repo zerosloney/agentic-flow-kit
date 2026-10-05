@@ -1,9 +1,9 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 模块: infra
-确认指纹: 86a5b07593c3e174
+确认指纹: 5144cdc865871b01
 ---
 # SPEC — v1.1.4 回流批次（policy v3 + 记录型提交豁免 + 预算 fixture 自校准）
 
