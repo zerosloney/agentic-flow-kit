@@ -5,10 +5,13 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（0）
+## 活跃（3）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
+| INCIDENT | L2 | open | 2026-10-05 | pipeline | 2026-10-05 检查 8 全数字短 SHA 误判文本致证据核验静默跳过 | — |
+| PLAN | L2 | draft | 2026-10-05 | pipeline | check8-digit-sha-misfire | — |
+| SPEC | L2 | approved | 2026-10-05 | pipeline | check8-digit-sha-misfire | — |
 
 ## 档案计数（227，不进表）
 
