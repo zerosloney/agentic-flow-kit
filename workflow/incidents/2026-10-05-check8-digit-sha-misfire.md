@@ -1,9 +1,10 @@
 ---
-状态: open
+状态: closed
 级别: L2
 发现: 2026-10-05
 模块: pipeline
 备注: 检查 8「纯数字串豁免」守卫把全数字短 SHA 误分类为时间戳文本——证据真相核验按概率 ≈4.4%/夹具 静默跳过；探针实证，与宿主/版本/负载无关
+确认指纹: 9e014e17d8095d2c
 ---
 # INCIDENT — 2026-10-05 检查 8 全数字短 SHA 误判文本致证据核验静默跳过
 
@@ -15,6 +16,8 @@
 - 2026-10-05 归因修正：gitout-fail-open 单修的 git 通道/fs 读取/夹具三层属真实缺陷但**与本 flake 无关**（当时引擎与夹具两侧均无出账、不可区分）；本单统一归因全部历史实例（原 CI run 37252874044、本地 50 轮 run 35、本次 CI 两腿）
 - 2026-10-05 顺带发现：linesOf 的 fs 读取告警**进程级去重**会被「合法缺失文件」消耗（夹具无 AGENTS.md → 检查 7 每次 ENOENT 即耗掉额度）→ 同进程后续真异常被静默——本单一并修（按文件去重）
 - 2026-10-05 用户确认：现在立项（对话内明确）
+- 2026-10-05 修复完成：77da9d2（实现）+ 9ce9ec0（L2 复核 P1/P2 收口——复核结论「修复后放行」，变异自验钉住修复前漏检：还原旧守卫 → 场景 5u 正例与历史场景 43 同轮 FAIL）；复验套件 203/0（包源）/ 201/0（装副本）/ 探针 A/B 修复前 10/10 复现 → 修复后 40 轮 0 次 / 套件 10 轮 0 FAIL / doctor 13 PASS 0 WARN 0 FAIL
+- 2026-10-05 用户确认：关单（对话内，原话「确认」——incident fixed→closed、spec/plan done 逐件代录）
 
 ## 影响面
 
@@ -36,17 +39,18 @@
 
 ## 复盘三件套（缺一不可）
 
-> 立单时点为前瞻计划形态；fixed/closed 时回填实际 SHA 与证据。
+> fixed 时已回填实际 SHA 与复验证据（2026-10-05）。
 
 1. 结构性修复
-   - 修复方向：`/^\d+$/` 守卫**后移至 rev-parse 实证之后**——纯数字串也先试 `git rev-parse`：能解析成提交（含同名 ref/tag）→ 按 SHA 走真相核验；解析失败 → 维持 text 豁免（时间戳/ID 语义保持）。非数字 hex 路径零变化；linesOf 告警去重改按文件
+   - 修复 commit：77da9d2（引擎守卫后移——`/^\d+$/` 抢先分类删除、纯数字串 rev-parse 实证分流；`text/no-plan/external/process` 豁免分支补出账；linesOf 告警按文件去重；场景 5u 两块构造性钉子）+ 9ce9ec0（L2 复核 P1/P2 收口：探针临时件出册、plan 订正、复核结论回填）
    - 影响环境：dev（引擎包源 templates/ + 装副本 .agents/，经 flow-kit sync 双源同步）
    - 是否需要新 intent：
      - 否 → 理由：根因属实现缺陷（启发式替代实证），单点修复 + 构造性用例 + 规范条目可覆盖；incident 即 intent 等价物，spec/plan 同名配对承载
 2. 防复发验证（必须落到自动化用例或回归清单条目，禁止只写「已人工验证」）
-   - 自动化用例（计划）：场景 5u 两块——①构造性正例：fixture 打 7 位全数字 tag 指向提交 + 证据引用该数字串 → 须报「证据无关」（修复前静默 text 漏检，确定性钉死）；②负例：证据引纯数字时间戳（无对应 ref）→ 维持豁免不误报
-   - 稳定性验证（计划）：探针脚本（/tmp 诊断件，不入库）40 轮裁决消失 0 次
-   - 回归清单条目（计划）：workflow/regression-checklist.md 防复发验证节追加「证据校验的文本豁免须以 rev-parse 实证兜底，禁以字符形态抢先分类」
+   - 自动化用例：templates/_agents/scripts/check-loop.test.mjs 场景 5u 两块——①全数字 ref 正例（git tag 2620913 + 证据引数字串 → 须报「证据无关」，修复前静默 text 漏检——变异自验实证）；②纯数字时间戳负例（无 ref → 维持豁免防误报）（随 npm test 回归）
+   - 稳定性验证：探针 A/B（/tmp 诊断件）修复前 10/10 复现 → 修复后 40 轮 0 次；套件 10 轮 0 FAIL；CI 六矩阵随每次推送持续观察
+   - 回归清单条目：workflow/regression-checklist.md 防复发验证节 2026-10-05-check8-digit-sha-misfire 行（77da9d2）
+
 3. 规范条目（必须有可追溯的落点）
-   - 落点（计划）：check-loop.mjs verifyEvidenceTruth 守卫处注释（启发式与实证的先后纪律）；workflow/regression-checklist.md 防复发验证节
-   - 引用：修复 commit（fixed 时回填）；前单 workflow/incidents/2026-10-05-gitout-fail-open.md（abbf4f9）与其 papercuts 行（d9096ba）
+   - 落点：templates/_agents/scripts/check-loop.mjs verifyEvidenceTruth 守卫处注释（「文本启发式须可被实证兜底，禁以字符形态抢先分类」）；workflow/regression-checklist.md 防复发验证节追加行
+   - 引用：commit 77da9d2 / 9ce9ec0；文件:templates/_agents/scripts/check-loop.mjs verifyEvidenceTruth 守卫区块、workflow/regression-checklist.md 防复发验证节

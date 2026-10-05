@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-05
 模块: pipeline
 备注: 检查 8「纯数字串豁免」误分类全数字短 SHA——守卫后移为 rev-parse 实证分流；与同名 incident 配对
-确认指纹: 73431c6d64a847d7
+确认指纹: f5d538814ef16b41
 ---
 # SPEC — check8-digit-sha-misfire
 

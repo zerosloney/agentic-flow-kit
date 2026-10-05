@@ -5,25 +5,22 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（3）
+## 活跃（0）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
-| INCIDENT | L2 | open | 2026-10-05 | pipeline | 2026-10-05 检查 8 全数字短 SHA 误判文本致证据核验静默跳过 | — |
-| PLAN | L2 | approved | 2026-10-05 | pipeline | check8-digit-sha-misfire | — |
-| SPEC | L2 | approved | 2026-10-05 | pipeline | check8-digit-sha-misfire | — |
 
-## 档案计数（227，不进表）
+## 档案计数（230，不进表）
 
 | 类型 | 模块 | 数量 |
 |---|---|---|
-| INCIDENT | pipeline | 30 |
+| INCIDENT | pipeline | 31 |
 | INTENT | pipeline | 60 |
 | INTENT | wiki | 1 |
-| PLAN | pipeline | 89 |
+| PLAN | pipeline | 90 |
 | PLAN | wiki | 1 |
-| SPEC | pipeline | 46 |
+| SPEC | pipeline | 47 |
 
-终态构成：done 197 · closed 18 · fixed 12；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
+终态构成：done 199 · closed 19 · fixed 12；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
 
 <!-- GENERATED:END -->

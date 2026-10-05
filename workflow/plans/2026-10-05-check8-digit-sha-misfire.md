@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-05
 模块: pipeline
 备注: 检查 8 全数字短 SHA 误分类根治——守卫后移 rev-parse 实证分流 + 豁免分支插桩 + linesOf 按文件去重；与同名 incident/spec 配对
-确认指纹: 530c8d57270350f3
+确认指纹: 00ad01fb0b751f1e
 ---
 # PLAN — check8-digit-sha-misfire
 
