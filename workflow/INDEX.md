@@ -9,8 +9,8 @@
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
-| INTENT | L2 | approved | 2026-10-05 | pipeline | host-gitignore-localonly-revoke | ☑0/8 |
-| PLAN | L2 | draft | 2026-10-05 | pipeline | host-gitignore-localonly-revoke | — |
+| INTENT | L2 | approved | 2026-10-05 | pipeline | host-gitignore-localonly-revoke | ☑8/8 |
+| PLAN | L2 | approved | 2026-10-05 | pipeline | host-gitignore-localonly-revoke | — |
 | SPEC | L2 | approved | 2026-10-05 | pipeline | host-gitignore-localonly-revoke | — |
 
 ## 档案计数（221，不进表）

@@ -504,7 +504,7 @@ for (const inc of docFiles('incidents')) {
       }
     }
     const zc = `.zcode/agents/${role}.md`;
-    if (fs.existsSync(path.join(ROOT, zc))) { // 本地配置不入 git：缺失不告警，存在时校验一致性
+    if (fs.existsSync(path.join(ROOT, zc))) { // .zcode/agents/ 现为入库件（2026-10-05 起宿主一律入库）；缺失只说明宿主未装，不告警，存在时校验一致性
       if (!new RegExp(`^name:\\s*["']?${role}["']?\\s*$`, 'm').test(textOf(zc).join('\n'))) warnings.push(`- [WARN Adapter 无效] ZCode ${role} 的 name 与文件名不一致:${zc}`);
       if (!textOf(zc).some((l) => l.includes(rolePath))) warnings.push(`- [WARN Adapter 断线] ZCode ${role} 未引用公共角色:${rolePath}`);
     }

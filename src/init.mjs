@@ -242,7 +242,8 @@ export async function init(args, pkgRoot) {
     ownedGenerated.push({ rel, sha256: sha256(Buffer.from(content, 'utf8')) });
   }
 
-  // 4) .gitignore 追加（缺哪条补哪条）
+  // 4) .gitignore 追加（缺哪条补哪条）。2026-10-05 起七个宿主一律 localOnly:false，
+  // 宿主目录不再自动进 .gitignore——实际只补 .agents/cache/ 这条运行时缓存。
   const giPath = path.join(target, '.gitignore');
   const giNeed = ['.agents/cache/', ...(hosts.filter((h) => HOSTS[h].localOnly).map((h) => `${HOSTS[h].dir}/`))];
   let giText = fs.existsSync(giPath) ? fs.readFileSync(giPath, 'utf8') : '';

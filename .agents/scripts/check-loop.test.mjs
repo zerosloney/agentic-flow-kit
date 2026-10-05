@@ -253,7 +253,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   rmfix(T);
 }
 
-// ---- 场景 15:ZCode Adapter 缺失不告警(本地配置不入 git),存在且断线仍告警 ----
+// ---- 场景 15:ZCode Adapter 缺失不告警(宿主未装),存在且断线仍告警 ----
 {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-12-o.md', INTENT('o', '状态: done\n级别: L1\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:全绿）\n'));

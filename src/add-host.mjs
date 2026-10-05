@@ -1,6 +1,6 @@
 // flow-kit add-host <宿主>：init 后补装宿主适配层。
 // 渲染 modules/hosts/<h> → HOSTS[h].dir → managed 台账按 rel 去重补记 → options.hosts 补记
-// → localOnly 宿主（zcode/omp）.gitignore 追加 → doctor
+// → localOnly 宿主（2026-10-05 起暂无命中，见 profiles.mjs#HOSTS.localOnly）.gitignore 追加 → doctor
 import fs from 'node:fs';
 import path from 'node:path';
 import { renderTree } from './render.mjs';
@@ -51,7 +51,8 @@ export function addHost(args, pkgRoot) {
   if (!already) kit.options.hosts = [...(kit.options.hosts || []), host];
   fs.writeFileSync(kitPath, `${JSON.stringify(kit, null, 2)}\n`);
 
-  // localOnly 宿主进 .gitignore（缺才补）
+  // localOnly 宿主进 .gitignore（缺才补）。2026-10-05 起七个宿主一律 localOnly:false，该分支暂无宿主命中；
+  // 保留是为了未来重开「本机专属宿主」档位时不必改结构——判定单源在 profiles.mjs#HOSTS.localOnly。
   if (HOSTS[host].localOnly) {
     const giPath = path.join(target, '.gitignore');
     const line = `${HOSTS[host].dir}/`;

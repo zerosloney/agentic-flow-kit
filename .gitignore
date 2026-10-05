@@ -2,6 +2,7 @@ node_modules/
 *.log
 tmp/
 # agentic-flow-kit
+# zcode 会话级液态草稿（本机态，不入库）；.zcode/agents/ 薄适配是 managed 件，保持 tracked
 .zcode/drafts/
 .zcode/plans/
 .agents/trust-mode.json

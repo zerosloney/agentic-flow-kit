@@ -6,10 +6,14 @@
 // pkg:scripts.build 表示 package.json 里该脚本为非空字符串。没有对应配置的项目自动跳过，
 // 不 fail-closed 误拦。none = 不配置（项目日后自填）。
 export const HOSTS = {
-  zcode: { dir: '.zcode', localOnly: true },
+  // 2026-10-05 宿主本地化撤销：zcode / omp 原 localOnly:true（init 与 add-host 会把 .zcode/、.omp/
+  // 整目录写进装户 .gitignore）。改为 false 后七个宿主一律入库，换宿主不丢文件、CI 克隆面与本仓一致。
+  // 代价是 zcode 的会话级液态草稿（.zcode/drafts/、.zcode/plans/）改由装户自己加 .gitignore 规则；
+  // 本仓已同步删掉那两行，.zcode/agents/*.md 保持 tracked（2026-09-27 gate-coverage 独立复核确立）。
+  zcode: { dir: '.zcode', localOnly: false },
   opencode: { dir: '.opencode', localOnly: false, commandPrefix: 'wf-' },
   trae: { dir: '.trae', localOnly: false, commandPrefix: 'wf-' },
-  omp: { dir: '.omp', localOnly: true },
+  omp: { dir: '.omp', localOnly: false },
   // 2026-09-29 店面：序号仍把 zcode 放第一（交互菜单 1–4 不变）。claude / cursor 的 commands 由宿主自动加载；
   // codex 自动读仓库根 AGENTS.md 与 .codex/skills/，commands 与 agents 是同形薄转发，供显式引用。
   claude: { dir: '.claude', localOnly: false, commandPrefix: 'wf-' },

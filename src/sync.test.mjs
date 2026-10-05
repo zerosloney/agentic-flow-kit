@@ -18,6 +18,8 @@ function check(name, cond, detail = '') {
 }
 const W = (p, content) => { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, content); };
 const R = (p) => fs.readFileSync(p, 'utf8');
+// 可选读：装户端在无 localOnly 宿主时不再创建 .gitignore，断言「不追加」须容忍文件不存在
+const ROpt = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : '');
 
 // ---- fixture 包根（v2 形态：chg/host 变更、new 新增、gone 已删）----
 function mkFixture() {
@@ -162,7 +164,7 @@ else if (cmd === 'add-gate') addGate(rest, root);
   const kit = JSON.parse(R(path.join(t, '.agents/kit.json')));
   check('S7 managed 台账补记（项目根相对路径）', kit.managed.some((f) => f.rel === '.zcode/h.txt'), JSON.stringify(kit.managed));
   check('S7 options.hosts 补记', Array.isArray(kit.options.hosts) && kit.options.hosts.includes('zcode'));
-  check('S7 localOnly 宿主进 .gitignore', R(path.join(t, '.gitignore')).includes('.zcode/'));
+  check('S7 宿主目录不再进 .gitignore（localOnly 已撤销，zcode 与其余宿主同策）', !ROpt(path.join(t, '.gitignore')).includes('.zcode/'), ROpt(path.join(t, '.gitignore')));
   const r2 = runCmd('add-host', fx, t, ['zcode']);
   check('S7 重复装未 --force → 报错退出', r2.status === 1 && (r2.stderr || '').includes('--force'), r2.stderr);
 }

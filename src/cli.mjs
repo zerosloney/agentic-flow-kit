@@ -46,7 +46,7 @@ init 选项（全部可选，均有默认值）：
                        条件编译检查（builds）与质量检测（checks：lint/类型/vet 等秒级确定性检查，
                        有对应配置文件才启用）、settings.json 自检验命令权限（allow）、
                        AGENTS.md「项目适配区」命令预填
-  --hosts <宿主列表>   逗号分隔：zcode,opencode,trae,omp,claude,cursor,codex（默认 zcode；zcode/omp 为本地配置，自动进 .gitignore）
+  --hosts <宿主列表>   逗号分隔：zcode,opencode,trae,omp,claude,cursor,codex（默认 zcode；七个宿主一律入库，不自动进 .gitignore）
   --board-port <端口>  workflow 看板端口（默认 8933）
   --dir <目录>         目标项目根（默认当前目录）
   --force              覆盖已存在的同名文件（默认保守跳过）

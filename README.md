@@ -54,7 +54,7 @@ npx agentic-flow-kit add-gate dotnet-ca
 | 选项 | 说明 |
 |------|------|
 | `--stack` | `dotnet` / `node` / `python` / `go` / `none`（默认 none）——**门禁配置三处**：commit-check 条件编译检查（暂存对应扩展名时 commit 前自动构建）+ **质量检测**（`checks`：lint / 类型检查 / vet 等秒级确定性检查，存在对应配置文件（tsconfig / eslint / ruff / go.mod 等）才启用，没有则自动跳过；测试不放提交门——关单在 test.md 阶段门）、settings.json 自检验命令权限、AGENTS.md「项目适配区」命令预填 |
-| `--hosts` | `zcode` / `opencode` / `trae` / `omp` / `claude` / `cursor` / `codex` 逗号多选（默认 zcode）。zcode/omp 为本地配置，自动进 .gitignore。Claude Code 加载 `.claude/commands` 与 `.claude/agents`；Cursor 加载 `.cursor/commands`；Codex 读仓库根 `AGENTS.md` 与 `.codex/skills/`，`.codex/commands` 是同形薄转发 |
+| `--hosts` | `zcode` / `opencode` / `trae` / `omp` / `claude` / `cursor` / `codex` 逗号多选（默认 zcode）。七个宿主一律入库（2026-10-05 起 zcode/omp 撤销 localOnly——换宿主不丢文件、CI 克隆面与本仓一致）；zcode 的会话级液态草稿（`.zcode/drafts/`、`.zcode/plans/`）是本机态、不该入库——init 不再自动写这条规则，请自行加进 `.gitignore`（本仓实例见根 `.gitignore`）。Claude Code 加载 `.claude/commands` 与 `.claude/agents`；Cursor 加载 `.cursor/commands`；Codex 读仓库根 `AGENTS.md` 与 `.codex/skills/`，`.codex/commands` 是同形薄转发 |
 | `--board-port` | workflow 看板端口（默认 8933） |
 | `--dir` | 目标项目根（默认当前目录） |
 | `--force` | 覆盖已存在的同名文件（默认保守跳过） |

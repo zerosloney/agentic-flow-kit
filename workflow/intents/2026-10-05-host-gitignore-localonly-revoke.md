@@ -68,14 +68,14 @@ risk_level: L2
 
 ## 验收标准（可测试）
 
-- [ ] `profiles.mjs#HOSTS` 七个宿主的 `localOnly` 全为 `false`（grep 断言，无 `localOnly: true` 残留）
-- [ ] 全新空 git 仓跑 `init --hosts zcode`，装户 `.gitignore` 中**不含** `.zcode/`（fresh-init 场景扩展断言或手工冒烟）
-- [ ] 全新空 git 仓跑 `add-host omp`，装户 `.gitignore` 中**不含** `.omp/`
-- [ ] `src/sync.test.mjs` S7 断言已翻转为「不进 .gitignore」且该套件 PASS
-- [ ] `npm test` 相关套件全绿：`src/sync.test.mjs` / `src/init.test.mjs` / `src/fresh-init.test.mjs` / `src/stack-profile.test.mjs` / `src/sync-hosts.test.mjs` / `src/pack.test.mjs` + `templates/_agents/scripts` 下 28 个引擎套件
-- [ ] `node bin/flow-kit.mjs doctor` 输出 13 PASS / 0 WARN / 0 FAIL
-- [ ] `README.md` 与 `src/cli.mjs` 帮助文本无「自动进 .gitignore」陈旧表述，且含草稿目录自管提示
-- [ ] 本仓 `.gitignore` 含 `.zcode/drafts/`、`.zcode/plans/` 两行，且 `git check-ignore` 确认 `.zcode/plans/` 生效、`.zcode/agents/*.md` 仍为 tracked
+- [x] `profiles.mjs#HOSTS` 七个宿主的 `localOnly` 全为 `false`（grep 断言，无 `localOnly: true` 残留）（证据：精确 grep 排除注释行后 0 命中，`src/profiles.mjs:13-21` 七项全 false；首轮 grep 报的 1 处命中经核为注释文本「原 localOnly:true」，非配置项）
+- [x] 全新空 git 仓跑 `init --hosts zcode`，装户 `.gitignore` 中**不含** `.zcode/`（fresh-init 场景扩展断言或手工冒烟）（证据：TEMP 空 git 仓实跑 `init --stack none --hosts zcode` exit 0，装户 `.gitignore` 仅 `# agentic-flow-kit` + `.agents/cache/` 两行；`independent-reviewer` 独立复现同结论）
+- [x] 全新空 git 仓跑 `add-host omp`，装户 `.gitignore` 中**不含** `.omp/`（证据：TEMP 空 git 仓 `init --hosts claude` + `add-host omp` 均 exit 0，`.gitignore` 仍仅两行无 `.omp/`；`.omp/agents/` 三份薄适配正常落盘——正是本次要恢复的语义）
+- [x] `src/sync.test.mjs` S7 断言已翻转为「不进 .gitignore」且该套件 PASS（证据：`node src/sync.test.mjs` PASS 56 / FAIL 0；**注入式实证断言有效性**——临时改 zcode 回 `localOnly: true` 即 FAIL 55/1 并打印 `.zcode/`，还原后 56/0）
+- [x] `npm test` 相关套件全绿：`src/sync.test.mjs` / `src/init.test.mjs` / `src/fresh-init.test.mjs` / `src/stack-profile.test.mjs` / `src/sync-hosts.test.mjs` / `src/pack.test.mjs` + `templates/_agents/scripts` 下 28 个引擎套件（证据：逐套件实跑 src 9 + 引擎 28 = 37 套件全 exit 0；`check-loop.test.mjs` 196/0 复跑三次稳定；`npm test` 整跑在本机因 PowerShell 管道 OOM + `workflow-enums.test.mjs` 依赖 `sh -c sed`（Windows 无 sh）不可用，属环境限制绕行，非脚本缺陷）
+- [x] `node bin/flow-kit.mjs doctor` 输出 13 PASS / 0 WARN / 0 FAIL（证据：首次因 `workflow/INDEX.md` 漂移得 12 PASS / 1 WARN（复核 P2-2），跑 `gen-workflow-index.mjs` 后复跑 `doctor：13 PASS ｜ 0 WARN ｜ 0 FAIL`）
+- [x] `README.md` 与 `src/cli.mjs` 帮助文本无「自动进 .gitignore」陈旧表述，且含草稿目录自管提示（证据：正向 grep「为本地配置」在 README/cli/init/add-host 四处 0 命中；`README.md:57` 与 `src/cli.mjs:49` 现口径一致；复核方读完 README 全 93 行确认「装了什么」「设计原则」两节无残留矛盾说法）
+- [x] 本仓 `.gitignore` 含 `.zcode/drafts/`、`.zcode/plans/` 两行，且 `git check-ignore` 确认 `.zcode/plans/` 生效、`.zcode/agents/*.md` 仍为 tracked（证据：`git check-ignore -v` → `.gitignore:7:.zcode/plans/` 命中；`git ls-files .zcode` 返回三份 `agents/*.md`；`git check-ignore .zcode/agents/implementer.md` 空输出即未被忽略）
 
 > **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 冒烟脚本输出>）`。
 > done 状态仍有未勾项会被 check-loop 拦截。
