@@ -28,6 +28,7 @@
 | 2026-10-03 | plan 确认节模板样板豁免（检查 2 boilerRe 精确豁免确认节样板句，三 plan 占位符 WARN 清零） | 一次通过 | incident 2026-10-03-plan-confirm-boiler（L2，门禁判据面）；spec+plan 确认门逐道走（delegated）；npm test 全绿，真实仓三 WARN 3→0 |
 | 2026-10-03 | check-evidence-process：检查8证据核验新增过程证据判据（runId 严格形态标记放行，+3 回归场景+防复发行） | 一次通过 | intent 2026-10-03-check-evidence-process（L2，门禁判据面）；随批修 pipeline-run 测试跨日红（PIPELINE_RUN_TODAY 钩子，挂 p2-pool-batch3）；check-loop 测试 190/0、真实仓 exit 0 |
 | 2026-10-02 | pipeline-run 跨宿主全自动闭环执行器（状态机脚本+工单协议+run 事件流+命令封装五宿主） | 一次通过（演练修 3 缺陷） | intent 2026-10-02-pipeline-run；测试 18 组双侧绿；演练矩阵（L0/verify-only 本仓真实 + L1/L2/incident 沙箱真实工具链）抓 3 真缺陷当场根因修（d176321）：untracked 目录折叠误报、运行态副产物误拦、verify 后代码提交缺口 |
+| 2026-10-06 | 自做（主智能体，用户交办） | v1.1.4 回流批次三件（policy v3 + 检查 8 记录型提交豁免 + 预算 fixture 自校准；intent 2026-10-06-v114-backflow-batch-r2，前组同主题 done 后双字段/改动面对齐走补偿行） | 一次通过（套件抓出 2 处 fixture 缺陷当场修：--staged agLimit 作用域、fixture 父目录） | 静态门：npm test 865 PASS / 0 fail、双源 --gate exit 0、check-loop 全绿；发版提交 f760c42 |
 | 2026-09-24 | 关单 verify 固定编排脚本（npm test + check-loop 一键过门） | 一次通过 | intent closeout-verify-script；fixture 6 断言 + 真实双步绿路径实跑首跑全过 |
 | 2026-09-25 | workflows 编排脚本机器 linter（解析校验先行落地）+ doctor §6.8 接线 | 一次通过 | intent 2026-09-25-workflows-linter；fixture 14 场景 + 真实仓库 baseline 断言；期间修复测试断言自身 E 码切片 bug 一次（非实现返工），实现一次通过 |
 | 2026-09-25 | gate-checklist 关键词匹配退役→显式配对登记表 + --json/死代码修复 | 返工×1 | intent 2026-09-25-gate-checklist-registry；实现返工 1 次——实跑暴露小节号无尾随点解析 bug（doctorCount 8/12），正则二次修正后 14 场景全绿；真实仓库登记完整 0/0 |

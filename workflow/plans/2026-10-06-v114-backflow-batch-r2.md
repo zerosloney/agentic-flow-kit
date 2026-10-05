@@ -3,7 +3,7 @@
 级别: L2
 risk_level: L2
 模块: infra
-确认指纹: 414ee315faf1d68f
+确认指纹: 690fd5371cc38ecb
 ---
 # PLAN — v1.1.4 回流批次（policy v3 + 记录型提交豁免 + 预算 fixture 自校准）
 
@@ -20,6 +20,12 @@ risk_level: L2
 4. 双源 --gate exit 0
 5. 关单 + 发版（package.json/CHANGELOG/.agents/kit.json → 1.1.4）
 
+## 改动面
+
+- templates/_agents/scripts/policy.mjs：POLICIES 追加 v3（双源镜像 .agents/scripts/）
+- templates/_agents/scripts/check-loop.mjs：recordCommit 标志 + 检查 8 两遍裁决聚合（双源）
+- templates/_agents/scripts/check-loop.test.mjs：预算自校准 + 记录型豁免正反场景（双源）
+- package.json / CHANGELOG.md / .agents/kit.json：1.1.4 发版面
 ## 实现记录
 
 实现已随前组三件套落账（实现提交 71439e2、发版 f760c42），本组为双字段对齐的文档面取代，实现与验证证据沿用：npm test 865 PASS / 0 fail（test-full.log）、双源 --gate exit 0、loadKitPolicy v3 断言输出、新场景「检查 8 记录型豁免」正反两例 PASS。
