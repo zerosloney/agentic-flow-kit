@@ -9,7 +9,7 @@ export const HOSTS = {
   // 2026-10-05 宿主本地化撤销：zcode / omp 原 localOnly:true（init 与 add-host 会把 .zcode/、.omp/
   // 整目录写进装户 .gitignore）。改为 false 后七个宿主一律入库，换宿主不丢文件、CI 克隆面与本仓一致。
   // 代价是 zcode 的会话级液态草稿（.zcode/drafts/、.zcode/plans/）改由装户自己加 .gitignore 规则；
-  // 本仓已同步删掉那两行，.zcode/agents/*.md 保持 tracked（2026-09-27 gate-coverage 独立复核确立）。
+  // 本仓 .gitignore 净效果保留这两行草稿规则（实例见根 .gitignore），.zcode/agents/*.md 保持 tracked（2026-09-27 gate-coverage 独立复核确立）。
   zcode: { dir: '.zcode', localOnly: false },
   opencode: { dir: '.opencode', localOnly: false, commandPrefix: 'wf-' },
   trae: { dir: '.trae', localOnly: false, commandPrefix: 'wf-' },
