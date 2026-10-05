@@ -1,8 +1,9 @@
 ---
-状态: open
+状态: closed
 级别: L2
 发现: 2026-10-04
 模块: pipeline
+确认指纹: d5bedb0f89a3acdb
 ---
 # INCIDENT — 2026-10-04 review-fix-batch
 

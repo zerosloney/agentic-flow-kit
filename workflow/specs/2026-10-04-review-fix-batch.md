@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-04
 模块: pipeline
 备注: 与 incidents/2026-10-04-review-fix-batch.md 同名配对（修复类，审查发现批）
-确认指纹: 70b6fe7b9e2414e4
+确认指纹: dccb0aee1904a3f9
 ---
 # SPEC — review-fix-batch
 

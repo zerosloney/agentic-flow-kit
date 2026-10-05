@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
-确认指纹: 8d7f21d0c09a3d3a
+确认指纹: 75d8bb97eb4ca5c8
 ---
 # PLAN — review-fix-batch
 
