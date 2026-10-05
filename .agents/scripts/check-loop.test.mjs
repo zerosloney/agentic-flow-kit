@@ -68,9 +68,12 @@ ${refs ? '     - 是 → ../intents/2026-09-12-ghost.md\n' : ' - 否 → 理由:
 `;
 
 // run：默认 CHECK_LOOP_ROOT 注入（fixture 模式）；{git:true} 时 cwd 注入（真 git 模式，测 tracked 过滤）；
-// opts.args 追加 CLI 参数（--hardening 等加固门场景用，2026-09-30 hybrid-governance-explore-hardening）
+// opts.args 追加 CLI 参数（--hardening 等加固门场景用，2026-09-30 hybrid-governance-explore-hardening）；
+// opts.env 增量覆盖子进程 env（CHECK_LOOP_GIT 替身注入用，2026-10-05-gitout-fail-open）
 const run = (root, opts = {}) => spawnSync(process.execPath, [CHECK_LOOP, ...(opts.args || [])], {
-  ...(opts.git ? { cwd: root } : { cwd: ROOT_CWD, env: { ...process.env, CHECK_LOOP_ROOT: root } }),
+  ...(opts.git
+    ? { cwd: root, ...(opts.env ? { env: { ...process.env, ...opts.env } } : {}) }
+    : { cwd: ROOT_CWD, env: { ...process.env, ...(opts.env || {}), CHECK_LOOP_ROOT: root } }),
   encoding: 'utf8',
 });
 const ROOT_CWD = process.cwd();
@@ -83,13 +86,32 @@ const expectOk = (desc, root) => {
   const r = run(root);
   check(desc, r.status === 0, `exit=${r.status}\n${outOf(r)}`);
 };
+// 夹具 git 调用防瞬时失败（2026-10-05-gitout-fail-open 夹具侧加固）：宿主/CI 资源压力下 spawnSync 可能
+// 瞬时 `r.error`，git 侧也可能瞬时 status≠0（如 index.lock 争用）——对夹具 setup 调用（init/add/commit/
+// rev-parse）两者都永不合法：重试一次，持续失败抛错响亮失败。绝不静默产出空 sha / 缺提交的假夹具
+// （那会让证据场景拿到「无裁决」的错误结果——CI run 37252874044 flake 的实际根因侧，诊断详见同名 incident）
+function gitRetry(args, root) {
+  const opts = { cwd: root, encoding: 'utf8' };
+  let r = spawnSync(GIT, args, opts);
+  if (r.error || r.status !== 0) {
+    r = spawnSync(GIT, args, opts);
+    if (r.error || r.status !== 0) {
+      throw new Error(`fixture git 瞬时失败（重试后仍 ${r.error ? (r.error.code || r.error.message) : `exit ${r.status}`}）: git ${args.join(' ')}\n${(r.stderr || '').slice(0, 300)}`);
+    }
+  }
+  return r;
+}
+const shortSha = (root, args = ['rev-parse', '--short', 'HEAD']) => {
+  const out = gitRetry(args, root).stdout.trim();
+  if (!out) throw new Error(`fixture git 空输出（假夹具防线）: git ${args.join(' ')}`);
+  return out;
+};
 const gitInit = (root) => {
-  spawnSync(process.platform === 'win32' ? 'git.exe' : 'git', ['init', '-q'], { cwd: root });
+  gitRetry(['init', '-q'], root);
 };
 const gitCommitAll = (root, msg) => {
-  const G = process.platform === 'win32' ? 'git.exe' : 'git';
-  spawnSync(G, ['add', '-A'], { cwd: root });
-  spawnSync(G, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', msg], { cwd: root });
+  gitRetry(['add', '-A'], root);
+  gitRetry(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', msg], root);
 };
 const rmfix = (root) => fs.rmSync(root, { recursive: true, force: true });
 // writeLedger：fixture 台账辅助（检查 15 配对用；行 schema 同 confirm-doc.mjs appendLedger）
@@ -582,7 +604,7 @@ const evidenceFixture = (slug, declared, createDeclared) => {
   w(T, `workflow/intents/2026-10-04-${slug}.md`, INTENT(slug, '状态: done\n级别: L1\n日期: 2026-10-04',
     '\n## 验收标准（可测试）\n- [x] 用例通过（证据:commit PLACEHOLDER）\n'));
   gitCommitAll(T, `feat: ${slug} fixture`);
-  const sha = spawnSync(GIT, ['rev-parse', 'HEAD'], { cwd: T, encoding: 'utf8' }).stdout.trim().slice(0, 7);
+  const sha = shortSha(T, ['rev-parse', 'HEAD']).slice(0, 7);
   w(T, `workflow/intents/2026-10-04-${slug}.md`, INTENT(slug, '状态: done\n级别: L1\n日期: 2026-10-04',
     `\n## 验收标准（可测试）\n- [x] 用例通过（证据:commit ${sha}）\n`));
   gitCommitAll(T, `docs: ${slug} evidence`);
@@ -620,7 +642,7 @@ const evidenceFixture = (slug, declared, createDeclared) => {
   fs.mkdirSync(path.join(T, 'src'), { recursive: true });
   w(T, 'src/app.mjs', '// fixture\n');
   gitCommitAll(T, 'feat: sh1 实现（无执行器标记）');
-  const sha = spawnSync(GIT, ['rev-parse', '--short', 'HEAD'], { cwd: T, encoding: 'utf8' }).stdout.trim();
+  const sha = shortSha(T);
   w(T, 'workflow/intents/2026-09-26-sh1.md', INTENT('sh1', '状态: done\n级别: L1\n日期: 2026-09-26', `\n## 验收标准（可测试）\n- [x] 用例通过（证据:${sha}）\n`));
   expectOk('证据 SHA 触及声明文件（无执行器标记）→ type=sha 校验通过 exit 0', T);
   rmfix(T);
@@ -672,8 +694,7 @@ const evidenceFixture = (slug, declared, createDeclared) => {
   fs.mkdirSync(path.join(T, 'notes'), { recursive: true });
   w(T, 'notes/other.md', 'x\n');
   gitCommitAll(T, 'docs(x): 演练穿越（pipeline-run 20260926-0900-pe1-abc1）');
-  const G = process.platform === 'win32' ? 'git.exe' : 'git';
-  const sha = spawnSync(G, ['rev-parse', '--short', 'HEAD'], { cwd: T, encoding: 'utf8' }).stdout.trim();
+  const sha = shortSha(T);
   w(T, 'workflow/intents/2026-09-26-pe1.md', INTENT('pe1', '状态: done\n级别: L1\n日期: 2026-09-26', `\n## 验收标准（可测试）\n- [x] 演练穿越（证据:${sha}）\n`));
   expectOk('过程证据:提交信息带执行器标记（改动面外）→ 放行 exit 0', T);
   rmfix(T);
@@ -685,8 +706,7 @@ const evidenceFixture = (slug, declared, createDeclared) => {
   fs.mkdirSync(path.join(T, 'notes'), { recursive: true });
   w(T, 'notes/other.md', 'x\n');
   gitCommitAll(T, 'docs(x): 演练穿越（L0，无标记提交）');
-  const G = process.platform === 'win32' ? 'git.exe' : 'git';
-  const sha = spawnSync(G, ['rev-parse', '--short', 'HEAD'], { cwd: T, encoding: 'utf8' }).stdout.trim();
+  const sha = shortSha(T);
   w(T, 'workflow/intents/2026-09-26-pe2.md', INTENT('pe2', '状态: done\n级别: L1\n日期: 2026-09-26', `\n## 验收标准（可测试）\n- [x] 演练穿越（证据:${sha}）\n`));
   expectHard('过程证据:无标记无关提交 → 仍拦 证据无关', T, '证据无关');
   rmfix(T);
@@ -697,6 +717,39 @@ const evidenceFixture = (slug, declared, createDeclared) => {
   w(T, 'workflow/plans/2026-09-26-pe3.md', PLAN('pe3', '状态: done\n级别: L1\n模块: material', '\n## 改动方案\n\n- src/app.mjs：实现功能\n'));
   w(T, 'workflow/intents/2026-09-26-pe3.md', INTENT('pe3', '状态: done\n级别: L1\n日期: 2026-09-26', '\n## 验收标准（可测试）\n- [x] 演练穿越（证据:deadbee）\n'));
   expectHard('过程证据:SHA 不存在 → forged 仍拦（防伪线不放松）', T, '证据伪造');
+  rmfix(T);
+}
+// ---- 场景 5v:git 基础设施异常 fail-loud（2026-10-05-gitout-fail-open）----
+// CHECK_LOOP_GIT 指向不存在路径 → spawnSync 跨平台稳定 r.error（ENOENT）→ 响亮出账恰一条（进程去重）
+// + 证据核验降级（exit 语义不变、无业务裁决误报）；正常 git 零出账（防误报负例）
+{
+  const T = mkfix();
+  gitInit(T);
+  w(T, 'workflow/plans/2026-09-26-pe4.md', PLAN('pe4', '状态: done\n级别: L1\n模块: material', '\n## 改动方案\n\n- src/app.mjs：实现功能\n'));
+  fs.mkdirSync(path.join(T, 'notes'), { recursive: true });
+  w(T, 'notes/other.md', 'x\n');
+  gitCommitAll(T, 'docs(x): 演练穿越（L0，无标记提交）');
+  const sha = shortSha(T);
+  w(T, 'workflow/intents/2026-09-26-pe4.md', INTENT('pe4', '状态: done\n级别: L1\n日期: 2026-09-26', `\n## 验收标准（可测试）\n- [x] 演练穿越（证据:${sha}）\n`));
+  const r = run(T, { env: { CHECK_LOOP_GIT: 'definitely-not-git-xyz-2026' } });
+  const hits = outOf(r).split('git 探测异常').length - 1;
+  check('git 基础设施异常:响亮出账恰一条（进程去重）', hits === 1, `hits=${hits}\n${outOf(r)}`);
+  check('git 基础设施异常:持续异常仍 fail-closed（伪造拦不放松，防静默降级）', r.status === 1 && outOf(r).includes('证据伪造'), `exit=${r.status}\n${outOf(r)}`);
+  check('git 基础设施异常:基础设施异常不冒充业务裁决（无证据无关误报）', !outOf(r).includes('证据无关'), outOf(r));
+  rmfix(T);
+}
+{
+  const T = mkfix();
+  gitInit(T);
+  w(T, 'workflow/plans/2026-09-26-pe5.md', PLAN('pe5', '状态: done\n级别: L1\n模块: material', '\n## 改动方案\n\n- src/app.mjs：实现功能\n'));
+  fs.mkdirSync(path.join(T, 'notes'), { recursive: true });
+  w(T, 'notes/other.md', 'x\n');
+  gitCommitAll(T, 'docs(x): 演练穿越（L0，无标记提交）');
+  const sha = shortSha(T);
+  w(T, 'workflow/intents/2026-09-26-pe5.md', INTENT('pe5', '状态: done\n级别: L1\n日期: 2026-09-26', `\n## 验收标准（可测试）\n- [x] 演练穿越（证据:${sha}）\n`));
+  const r = run(T);
+  check('git 基础设施异常:正常 git 零出账（防误报负例）', !outOf(r).includes('git 探测异常'), outOf(r));
+  check('git 基础设施异常:正常 git 行为不变（无标记无关提交仍拦证据无关）', r.status === 1 && outOf(r).includes('证据无关'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
 }
 // ---- 场景 45:检查 2——真未填占位（标题 <主题>，无 .md）→ 仍报模板未填 ----

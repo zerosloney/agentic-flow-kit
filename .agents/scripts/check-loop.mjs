@@ -117,7 +117,8 @@ import { laneOfEntry } from './stage-gates.mjs';
 import { MARK_RE, approvedTraceHit } from './stage-gates.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const GIT = process.platform === 'win32' ? 'git.exe' : 'git';
+// CHECK_LOOP_GIT：测试注入钩子（指向不存在/不可执行路径可稳定触发 spawn 异常）；未设置时与原行为逐字节一致（2026-10-05-gitout-fail-open）
+const GIT = process.env.CHECK_LOOP_GIT || (process.platform === 'win32' ? 'git.exe' : 'git');
 
 function takeOpts() {
   const args = process.argv.slice(2);
@@ -210,19 +211,51 @@ const inSet = (v, arr) => arr.includes(v);
 const stOkDoc = (st) => inSet(st, ENUMS['doc.status.confirmed']);
 
 // git 调用（参数数组形式不走 shell——Windows cmd 不认单引号；git.exe 显式解析沿 doctor 先例）
+// 基础设施异常与业务失败分流（2026-10-05-gitout-fail-open）：spawn 异常响亮出账（进程级去重恰一条，
+// 沿检查 16 装户「载入失败响亮出账」先例）+ 瞬时类错误码单次重试；「非 git 仓」（status≠0）仍是
+// 合法装户语义、静默走降级。intentional-simple: 重试后仍异常继续走原降级/拦截语义（连续瞬时异常
+// 残余面小且有账可查）；升级路径 = 探测门（:720/:796）改三态拆分
+let gitInfraWarned = false;
+function warnGitInfra(args, code) {
+  if (gitInfraWarned) return;
+  gitInfraWarned = true;
+  console.error(`check-loop: git 探测异常 ${args[0]}（${code}）——按非 git 仓降级，检查面可能收窄`);
+}
+const GIT_TRANSIENT = new Set(['EAGAIN', 'EPERM', 'EMFILE', 'EINTR']);
+function spawnGit(args) {
+  const opts = { cwd: ROOT, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 };
+  let r = spawnSync(GIT, args, opts);
+  if (r.error) {
+    warnGitInfra(args, r.error.code || r.error.message);
+    if (GIT_TRANSIENT.has(r.error.code)) r = spawnSync(GIT, args, opts);
+  }
+  return r;
+}
 function gitOut(args, { ok = () => true } = {}) {
-  const r = spawnSync(GIT, args,
-    { cwd: ROOT, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+  const r = spawnGit(args);
   if (r.error || r.status !== 0 || !ok(r)) return null;
   return r.stdout || '';
 }
 
 // ---- frontmatter 受限子集读取（fm_get 语义：首行 --- 进入、下一 --- 闭合、键在行首、首个命中、值两侧去空白）----
+// fs 读取同走 fail-loud（2026-10-05-gitout-fail-open 实现期诊断追加，与 spawnGit 同一故障类）：
+// readFileSync 瞬时异常（宿主资源压力 EMFILE/共享冲突类）重试一次，仍失败响亮出账（进程级去重）
+// 后按 null 降级——调用方按空文档跳过该件，但异常本身不再静默
+let fsReadWarned = false;
 const fileLinesCache = new Map();
 function linesOf(file) {
   if (!fileLinesCache.has(file)) {
-    try { fileLinesCache.set(file, fs.readFileSync(file, 'utf8').split(/\r?\n/)); }
-    catch { fileLinesCache.set(file, null); }
+    let lines = null;
+    try {
+      lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
+    } catch (e) {
+      try { lines = fs.readFileSync(file, 'utf8').split(/\r?\n/); } catch { lines = null; }
+      if (!lines && !fsReadWarned) {
+        fsReadWarned = true;
+        console.error(`check-loop: 文档读取异常 ${path.basename(file)}（${e.code || e.message}）——按空文档降级，检查面可能收窄`);
+      }
+    }
+    fileLinesCache.set(file, lines);
   }
   return fileLinesCache.get(file);
 }
@@ -578,7 +611,9 @@ function verifyEvidenceTruth(evidenceStr, planBase, root) {
   if (!shaMatch || /^\d+$/.test(shaMatch[1])) return { ok: true, type: 'text' };
 
   const sha = shaMatch[1];
-  const revParse = spawnSync(GIT, ['rev-parse', sha], { cwd: ROOT, encoding: 'utf8' });
+  // 直连走 spawnGit（与 gitOut 同一 loud+retry 通道，注释互引）：spawn 异常不再被静默算作业务失败；
+  // 重试后仍异常按下方 status!==0 判定（fail-closed 保持——本地核验不了就按伪造拦）
+  const revParse = spawnGit(['rev-parse', sha]);
   if (revParse.status !== 0) {
     // 区分本地伪造与外部仓库引用：
     // 剔除 SHA 与泛指词后仍有其他内容（如项目名、路径描述）→ 视为外部仓库引用，不硬拦（本地无法核验他仓哈希）；
@@ -607,7 +642,7 @@ function verifyEvidenceTruth(evidenceStr, planBase, root) {
     }
   }
 
-  const show = spawnSync(GIT, ['show', '--name-only', sha], { cwd: ROOT, encoding: 'utf8' });
+  const show = spawnGit(['show', '--name-only', sha]);
   if (show.status !== 0) return { ok: false, type: 'error', msg: `无法读取提交 ${sha} 的文件列表` };
   
   const changedFiles = show.stdout.split(/\r?\n/).filter(Boolean);
@@ -617,7 +652,7 @@ function verifyEvidenceTruth(evidenceStr, planBase, root) {
     // 过程证据（2026-10-03 check-evidence-process）：执行器驱动的提交可作验收证据——提交信息带
     // 「pipeline-run <runId>」标记（docsCommit 四种格式共有段，runId 严格形态 日期8-时间4-主题-尾；
     // 与 run 事件流同源，git 历史留痕可对质）。只救 irrelevant：forged（SHA 不存在）在前已判，其余判据不动。
-    const subj = spawnSync(GIT, ['log', '-1', '--format=%s', sha], { cwd: ROOT, encoding: 'utf8' });
+    const subj = spawnGit(['log', '-1', '--format=%s', sha]);
     if (subj.status === 0 && /pipeline-run [0-9]{8}-[0-9]{4}-[A-Za-z0-9-]+/.test(subj.stdout)) {
       return { ok: true, type: 'process' };
     }
