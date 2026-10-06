@@ -813,6 +813,28 @@ check('检查2 plan 真实未填占位（日期: YYYY-MM-DD）→ 仍报模板�
   r2.status === 0 && outOf(r2).includes('模板未填'), `exit=${r2.status}\n${outOf(r2)}`);
 rmfix(T);
 }
+// ---- 场景 45c:检查 2——日期显示格式字面量豁免；纯占位仍报（2026-10-06 check2-datetime-literal-exempt）----
+// 日期取 2026-09-26（< 确认门 v1 锚 2026-09-27，豁免检查 15 存量面——沿 5x 块先例），避免 hard 干扰本断言
+{
+const T = mkfix();
+w(T, 'workflow/intents/2026-09-26-dt1.md', INTENT('dt1', '状态: done\n级别: L1\n日期: 2026-09-26',
+  '\n匹配时间列格式简化为 YYYY-MM-DD HH:mm；同款括号形态（YYYY-MM-DD HH:mm）与秒级 YYYY-MM-DD HH:mm:ss 均为格式描述。\n'));
+w(T, 'workflow/plans/2026-09-26-dt1.md', PLAN('dt1', '状态: done\n级别: L1'));
+const r1 = run(T);
+check('检查2 裸写 YYYY-MM-DD HH:mm(:ss) 显示格式描述 → 不报模板未填',
+  r1.status === 0 && !outOf(r1).includes('模板未填'), `exit=${r1.status}\n${outOf(r1)}`);
+rmfix(T);
+}
+{
+const T = mkfix();
+w(T, 'workflow/intents/2026-09-26-dt2.md', INTENT('dt2', '状态: done\n级别: L1\n日期: 2026-09-26',
+  '\n匹配时间列格式简化为 YYYY-MM-DD HH:mm（合法格式描述）；另有真占位 日期: YYYY-MM-DD 在同文档。\n'));
+w(T, 'workflow/plans/2026-09-26-dt2.md', PLAN('dt2', '状态: done\n级别: L1', '\n- 日期: YYYY-MM-DD\n'));
+const r2 = run(T);
+check('检查2 同文档混真占位（无时间后缀）→ 格式描述豁免不吞真占位，仍报',
+  r2.status === 0 && outOf(r2).includes('模板未填'), `exit=${r2.status}\n${outOf(r2)}`);
+rmfix(T);
+}
 // ---- 场景 46:检查 6——薄适配正文含 .agents/roles/<role>.md 引用 → 不报 Adapter 断线 ----
 {
   const T = mkfix();

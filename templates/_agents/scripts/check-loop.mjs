@@ -382,12 +382,17 @@ for (const plan of docFiles('plans')) {
   // 样例引用豁免（2026-10-02 caliber-convergence 假阳性消除，先例=检查 18 行尾归一）：命中位于行内代码
   // （反引号包裹）或围栏代码块内 = 引用样例而非未填占位符，不报；正文裸占位符照报——真占位符均为
   // 裸文本（模板正文无反引号包裹），检测面不缩。
+  // 日期显示格式豁免（2026-10-06 check2-datetime-literal-exempt）：`YYYY-MM-DD HH:mm(:ss)` 是功能
+  // 自实现的显示格式描述（文档叙述「匹配时间列显示为 YYYY-MM-DD HH:mm」属常态——cancel-export
+  // intent/plan 实证 2 条 advisory、2026-10-06 loop-audit intent 现场复现），非未填占位——行内剔除
+  // 后再判；真占位（`日期: YYYY-MM-DD`，无时间后缀）不含该形态仍拦。只豁免实证形态，变体（斜杠日期
+  // /十二小时制等）出现假阳性再扩。
   const stripSamples = (lines) => {
     let inFence = false;
     return lines.map((line) => {
       if (/^\s*(```|~~~)/.test(line)) { inFence = !inFence; return ''; }
       if (inFence) return '';
-      return line.replace(/`[^`]*`/g, '');
+      return line.replace(/`[^`]*`/g, '').replace(/YYYY-MM-DD\s+HH:mm(:ss)?/g, '');
     });
   };
   const groups = new Map(); // file -> [ "行号:内容" ]（首现序）
