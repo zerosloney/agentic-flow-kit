@@ -296,5 +296,75 @@ else if (cmd === 'add-gate') addGate(rest, root);
   check('S14③ 盘上无 → 新增安装（既有行为不回归）', (r3.stdout + r3.stderr).includes('新增安装') && R(path.join(t3, '.agents/commands/new.txt')) === 'new in v2\n');
 }
 
+// ============ 场景 15：模板下发感知三态（2026-10-06 template-downstream）============
+// fixture 包源 templates/AGENTS.md = 'owned skeleton v2\n'；盘面定制 'owned CUSTOM\n'（≠ 包源）
+{
+  const sha = (s) => sha256(Buffer.from(s, 'utf8'));
+  const SRC_TPL = 'owned skeleton v2\n';
+  const kitOf = (t) => JSON.parse(R(path.join(t, '.agents', 'kit.json')));
+  const mkStale = (fx, t, owned) => W(path.join(t, '.agents', 'kit.json'), `${JSON.stringify({
+    kit: 'agentic-flow-kit', version: '1.0.0', createdAt: '2026-09-23T00:00:00Z',
+    options: { hosts: ['zcode'], stack: 'none', boardPort: '777' },
+    managed: [{ rel: '.agents/scripts/keep.txt', sha256: sha('keep v2\n') }], owned,
+  }, null, 2)}\n`);
+
+  // ① 源演进未拉取 → advisory 出账（唯一出账形态）+ 锚刷新 + 再跑静默（单周期出账）
+  const fx1 = mkFixture(), t1 = mkTarget(fx1);
+  W(path.join(t1, 'AGENTS.md'), 'owned CUSTOM\n');
+  mkStale(fx1, t1, [{ rel: 'AGENTS.md', sha256: sha('owned CUSTOM\n'), srcSha256: sha('owned skeleton v1\n') }]);
+  let r1 = runCmd('sync', fx1, t1);
+  const out1 = r1.stdout + r1.stderr;
+  // 断言锚定出账特征串「有演进且盘面未跟随」——doctor §6.9 的 PASS 回显也含「模板感知」四字，不可作判据
+  check('S15① 源演进未拉取 → 出账「模板感知」含文件名', out1.includes('有演进且盘面未跟随') && out1.includes('AGENTS.md'), out1.slice(0, 300));
+  check('S15① 锚刷新为当前包源 sha', kitOf(t1).owned[0].srcSha256 === sha(SRC_TPL));
+  r1 = runCmd('sync', fx1, t1);
+  check('S15① 锚已刷 → 再跑静默（单周期出账）', !(r1.stdout + r1.stderr).includes('有演进且盘面未跟随'));
+
+  // ② 定制跟源（srcSha256 == 当前包源）→ custom-synced 静默
+  const fx2 = mkFixture(), t2 = mkTarget(fx2);
+  W(path.join(t2, 'AGENTS.md'), 'owned CUSTOM\n');
+  mkStale(fx2, t2, [{ rel: 'AGENTS.md', sha256: sha('owned CUSTOM\n'), srcSha256: sha(SRC_TPL) }]);
+  const r2 = runCmd('sync', fx2, t2);
+  check('S15② 定制跟源 → 静默（owned 语义正常态永不告警）', !(r2.stdout + r2.stderr).includes('有演进且盘面未跟随'));
+
+  // ③ 旧 schema 无锚（mkTarget 原生）→ 静默写锚不追溯
+  const fx3b = mkFixture(), t3b = mkTarget(fx3b);
+  const r3b = runCmd('sync', fx3b, t3b);
+  check('S15③ 旧 schema 无锚 → 静默（写锚不出账，不追溯）', !(r3b.stdout + r3b.stderr).includes('有演进且盘面未跟随'));
+  check('S15③ 无锚首跑写入锚（下次 sync 起生效）', kitOf(t3b).owned.find((f) => f.rel === 'AGENTS.md').srcSha256 === sha(SRC_TPL));
+
+  // ④ 手工拉取（盘面 == 包源）→ synced 静默（可消退出账的路径）
+  const fx4 = mkFixture(), t4 = mkTarget(fx4);
+  mkStale(fx4, t4, [{ rel: 'AGENTS.md', sha256: sha(SRC_TPL), srcSha256: sha('owned skeleton v1\n') }]);
+  const r4 = runCmd('sync', fx4, t4);
+  check('S15④ 盘面已跟随（手工拉取）→ 静默', !(r4.stdout + r4.stderr).includes('有演进且盘面未跟随'));
+
+  // ⑤ doctor 只读回显：同判据出 stale 清单、且运行后 kit.json 字节不变；旧账无锚 skipped
+  //    （no-anchor 须用未跑过 sync 的独立 fixture——sync 会写锚）
+  const { checkTemplateDrift } = await import(pathToFileURL(path.join(SRC_ROOT, 'doctor.mjs')).href);
+  const fx5 = mkFixture(), t5 = mkTarget(fx5);
+  W(path.join(t5, 'AGENTS.md'), 'owned CUSTOM\n');
+  mkStale(fx5, t5, [{ rel: 'AGENTS.md', sha256: sha('owned CUSTOM\n'), srcSha256: sha('owned skeleton v1\n') }]);
+  const before = R(path.join(t5, '.agents', 'kit.json'));
+  const resStale = checkTemplateDrift(t5, fx5);
+  check('S15⑤ doctor 判据同源：stale 出清单', resStale.skipped === false && resStale.stale.includes('AGENTS.md'), JSON.stringify(resStale));
+  check('S15⑤ doctor 只读：kit.json 字节不变', R(path.join(t5, '.agents', 'kit.json')) === before);
+  const fx6 = mkFixture(), t6 = mkTarget(fx6);
+  const resNoAnchor = checkTemplateDrift(t6, fx6);
+  check('S15⑤ doctor 旧账无锚 → skipped 静默', resNoAnchor.skipped === true, JSON.stringify(resNoAnchor));
+
+  // ⑥ 点目录前缀翻译（复核 P2-1）：owned rel `.agents/x` ↔ 包源 `templates/_agents/x`——
+  //    有包源起步模板的 .agents/ owned 件同样参与感知（rule-budgets.txt 等 5 类）
+  const fx7 = mkFixture(), t7 = mkTarget(fx7);
+  W(path.join(fx7, 'templates/_agents/rule-budgets.txt'), 'budgets v2\n');
+  W(path.join(t7, '.agents/rule-budgets.txt'), 'budgets CUSTOM\n');
+  mkStale(fx7, t7, [
+    { rel: 'AGENTS.md', sha256: sha('owned skeleton v2\n'), srcSha256: sha(SRC_TPL) },
+    { rel: '.agents/rule-budgets.txt', sha256: sha('budgets CUSTOM\n'), srcSha256: sha('budgets v1\n') },
+  ]);
+  const r7 = runCmd('sync', fx7, t7);
+  check('S15⑥ .agents/ 前缀翻译 → _agents 模板参与感知出账', (r7.stdout + r7.stderr).includes('有演进且盘面未跟随') && (r7.stdout + r7.stderr).includes('.agents/rule-budgets.txt'));
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${failCount}`);
 process.exit(failCount ? 1 : 0);

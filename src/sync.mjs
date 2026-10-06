@@ -12,7 +12,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { renderTree, sha256, scriptTrusted } from './render.mjs';
-import { HOSTS, pickStackVars, isOwned } from './profiles.mjs';
+import { HOSTS, pickStackVars, isOwned, srcTemplatePath, templateDriftOf, TEMPLATE_DRIFT_EXCLUDE } from './profiles.mjs';
 import { doctor } from './doctor.mjs';
 
 function fail(msg) {
@@ -165,6 +165,28 @@ export function sync(args, pkgRoot) {
       });
     }
     if (ownedRefreshed) console.log(`  owned 台账哈希按盘面刷新 ${ownedRefreshed} 份（owned 归项目所有，仅记账不约束）`);
+
+    // 模板下发感知（2026-10-06 template-downstream，advisory 恒不 hard-block）：owned 模板无下发通道，
+    // 源仓演进静默陈旧（S18/S20 装户事故根因）——三方 sha 判定见 profiles.templateDriftOf 单源。
+    // 锚「见过即刷新」：本次 sync 见到的包源 sha 记入 srcSha256（含旧账无锚首跑写锚——写锚不出账，
+    // 不追溯）；唯一出账形态 = 源已演进且盘面未跟随。GEN_TARGETS 生成器目标不期望被跟随，排除。
+    const driftList = [];
+    if (Array.isArray(kit.owned)) {
+      kit.owned = kit.owned.map((f) => {
+        if (TEMPLATE_DRIFT_EXCLUDE.has(f.rel)) return f;
+        const src = srcTemplatePath(pkgRoot, f.rel);
+        if (!src) return f; // 无包源模板对应（项目配置类）不参与
+        const srcCur = ownedSha(src);
+        const diskPath = path.join(target, f.rel);
+        const disk = fs.existsSync(diskPath) ? ownedSha(diskPath) : null;
+        if (templateDriftOf({ disk, srcRecord: f.srcSha256, srcCur }) === 'stale-drift') driftList.push(f.rel);
+        return srcCur === f.srcSha256 ? f : { ...f, srcSha256: srcCur };
+      });
+    }
+    if (driftList.length) {
+      console.log(`  ⚠️ 模板感知（advisory）：源仓 ${driftList.length} 份模板自上次同步后有演进且盘面未跟随：${driftList.join('、')}`);
+      console.log('    owned 归项目所有，不自动覆盖；如需跟随：从包源 templates/ 拷贝对应文件；有意定制可忽略（下次 sync 起静默）');
+    }
 
     // 台账重写：版本对齐当前包；removed 出册；skipped 保持包侧基线持续报告
     kit.managed = managedNew.sort((a, b) => a.rel.localeCompare(b.rel));

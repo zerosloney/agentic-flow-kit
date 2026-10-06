@@ -65,6 +65,7 @@ const PAIRS = [
   { doctor: '6.6', cl: null, note: 'owned 漂移——装户体检独有' },
   { doctor: '6.7', cl: null, note: '跨宿主薄适配——装户体检独有' },
   { doctor: '6.8', cl: null, note: 'workflows 编排脚本 lint——装户体检独有' },
+  { doctor: '6.9', cl: null, note: '模板下发感知（2026-10-06 template-downstream）——装户体检独有（只读回显 sync 出账同源判据）' },
   { doctor: '8', cl: null, note: '看板端口——信息级独有' },
   // 经 §7 覆盖：doctor §7 整体运行 check-loop（#2/#11 已直接配对，不重复登记）
   { doctor: '7', cl: '1', note: '经 §7 整体运行覆盖' },

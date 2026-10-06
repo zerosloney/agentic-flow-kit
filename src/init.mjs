@@ -5,7 +5,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { execSync, spawnSync } from 'node:child_process';
 import { renderTree, renderContent, sha256, scriptTrusted, listTree } from './render.mjs';
-import { HOSTS, STACKS, STACK_ALIASES, settingsJson, commitCheckConfig, pickStackVars, isOwned } from './profiles.mjs';
+import { HOSTS, STACKS, STACK_ALIASES, settingsJson, commitCheckConfig, pickStackVars, isOwned, srcTemplatePath, TEMPLATE_DRIFT_EXCLUDE } from './profiles.mjs';
 import { doctor } from './doctor.mjs';
 
 function fail(msg) {
@@ -292,7 +292,7 @@ export async function init(args, pkgRoot) {
   //    owned 的生成器目标按生成后盘面重记（P1-2）；记账一律 LF 归一 sha（P1-4——render 写盘已归一，
   //    生成器重写目标与用户合并文件两侧同口径，跨 checkout 字节稳定）
   const shaText = (p) => sha256(Buffer.from(fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n'), 'utf8'));
-  const GEN_TARGETS = new Set(['workflow/INDEX.md', 'wiki/INDEX.md', 'wiki/知识沉淀总览.html']); // 新增生成器目标须同步本清单
+  const GEN_TARGETS = TEMPLATE_DRIFT_EXCLUDE; // 单源挪 profiles（2026-10-06 template-downstream）：模板感知排除面与生成器重记面同集
   const managed = [
     ...t.written.filter((f) => !isOwned(f.rel)),
     // 宿主文件渲染时相对宿主根，入台账须还原为项目根相对路径
@@ -311,6 +311,14 @@ export async function init(args, pkgRoot) {
     owned.push({ rel, sha256: shaText(path.join(target, rel)) });
   }
   if (agentsMergedSha) owned.push({ rel: 'AGENTS.md', sha256: agentsMergedSha });
+  // 模板下发感知初始锚（2026-10-06 template-downstream）：有包源模板对应的 owned 条目记
+  // srcSha256＝包源模板原始文件 LF 归一 sha——锚记「见过的源」而非「期望盘面」（装户渲染/定制与锚正交）；
+  // GEN_TARGETS 是生成器重写目标，不期望被跟随，排除出感知面（防「拉取了也被重写」的单周期无谓出账）
+  const ownedFinal = owned.map((f) => {
+    if (GEN_TARGETS.has(f.rel)) return f;
+    const src = srcTemplatePath(pkgRoot, f.rel);
+    return src ? { ...f, srcSha256: shaText(src) } : f;
+  });
   const pkg = JSON.parse(fs.readFileSync(path.join(pkgRoot, 'package.json'), 'utf8'));
   fs.mkdirSync(path.dirname(kitPath), { recursive: true });
   fs.writeFileSync(kitPath, `${JSON.stringify({
@@ -322,9 +330,9 @@ export async function init(args, pkgRoot) {
     createdAt: new Date().toISOString(),
     options: { hosts, stack: opt.stack, boardPort: String(opt.boardPort) },
     managed,
-    owned,
+    owned: ownedFinal,
   }, null, 2)}\n`);
-  console.log(`  kit.json 台账：managed ${managed.length} 份 ｜ owned ${owned.length} 份（版本 ${pkg.version}）`);
+  console.log(`  kit.json 台账：managed ${managed.length} 份 ｜ owned ${ownedFinal.length} 份（版本 ${pkg.version}）`);
 
   // 8) 自检（kit.json 已按生成后盘面记账——doctor §6.6 应全绿，fresh init 以 exit 0 收场）
   // 输出语义（p2-batch1 P2-4）：doctor 打印在异步端口回调里、晚于本横幅——脚本化消费方按退出码判定

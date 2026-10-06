@@ -1,4 +1,7 @@
 // 宿主注册表 + 技术栈 profile + init 生成的 owned 基线配置
+// fs/path 仅供 srcTemplatePath（模板下发感知）——显式 import，不依赖 Node 22+ 的全局 fs（engines >=18）
+import fs from 'node:fs';
+import path from 'node:path';
 // stack 决定门禁配置三处：commit-check 的条件构建（builds）与质量检测（checks，秒级确定性
 // 检查——lint/类型/vet；测试不放提交门，关单在 test.md 阶段门）、settings.json 的自检验
 // 命令权限（allow）、AGENTS.md「项目适配区」命令预填；不改工作流流程本身。
@@ -110,6 +113,37 @@ export function isOwned(rel) {
     || rel === '.agents/metric-claims.txt' || rel === '.agents/metric-derivers.cjs'
     || rel === '.agents/metric-derivers.mjs'
     || rel === '.agents/hooks/local-pre-commit';
+}
+
+// ---- 模板下发感知（2026-10-06 template-downstream）----
+// 装户 owned 模板无下发通道（init 一次性复制），源仓演进静默陈旧——S18/S20 装户事故根因。
+// 感知层 = 三方 sha 比对（一律 LF 归一，与 ownedSha 自愈同口径）：
+//   disk＝装户盘面 / srcRecord＝kit.json owned[].srcSha256（上次 sync/init 见过的包源 sha）/ srcCur＝本次包源。
+
+// 生成器目标（init「按生成后盘面重记」的清单，原 init 内 GEN_TARGETS 挪此单源）：生成器拥有该文件，
+// 装户不期望跟随包源模板——模板感知排除出比对面（防「拉取了也被生成器重写」的无谓出账）。新增生成器目标须同步本清单。
+export const TEMPLATE_DRIFT_EXCLUDE = new Set(['workflow/INDEX.md', 'wiki/INDEX.md', 'wiki/知识沉淀总览.html']);
+
+// 映射规则单源：renderTree 的「srcRoot/templates ↔ targetRoot/项目根」关系 + 点目录前缀翻译
+// （render.mjs：`_agents` → `.agents`）——装户 rel 以 .agents/ 开头时探 templates/_agents/<余径>。
+// 复核 P2-1（2026-10-06 template-downstream 独立复核）：漏翻译会让 rule-budgets.txt /
+// metric-claims.txt / local-pre-commit 等 5 条有包源起步模板的 owned 件永不参与感知。
+export function srcTemplatePath(pkgRoot, rel) {
+  const tplRel = rel.startsWith('.agents/') ? `_agents/${rel.slice('.agents/'.length)}` : rel;
+  const p = path.join(pkgRoot, 'templates', tplRel);
+  return fs.existsSync(p) ? p : null;
+}
+
+// 三态判定纯函数（sync 出账与 doctor 回显共用——防两处字面量漂移，N3 教训）：
+//   'stale-drift'   源已演进且盘面未跟随 → 唯一出账形态（advisory）
+//   'custom-synced' 盘面 ≠ 源但源 == 上次锚 → 装户定制跟源，owned 语义正常态，永不告警
+//   'synced'        盘面 == 当前源 → 静默（手工拉取后天然落此态）
+//   'no-anchor'     台账缺 srcSha256（旧装户）→ 静默跳过，下次 sync 写锚后生效，不追溯
+export function templateDriftOf({ disk, srcRecord, srcCur }) {
+  if (typeof srcRecord !== 'string' || !srcRecord) return 'no-anchor';
+  if (disk === srcCur) return 'synced';
+  if (srcCur !== srcRecord) return 'stale-drift';
+  return 'custom-synced';
 }
 
 export function settingsJson(stackKey) {

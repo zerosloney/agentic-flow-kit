@@ -1,6 +1,6 @@
 {
   "kit": "agentic-flow-kit",
-  "version": "1.1.8",
+  "version": "1.1.9",
   "policyVersion": 2,
   "audit": true,
   "createdAt": "2026-09-23T15:07:19.753Z",
@@ -198,7 +198,7 @@
     },
     {
       "rel": ".agents/scripts/gate-checklist.mjs",
-      "sha256": "b831709f64756b4b298be94d5c026b06e263dc98a110b86aab50c26245411ada"
+      "sha256": "54c6e50d73c1436111648a2e5c86a5980a66f9d8ef48a9971f505738dfb6cb76"
     },
     {
       "rel": ".agents/scripts/gate-checklist.test.mjs",
@@ -412,19 +412,23 @@
     },
     {
       "rel": ".agents/hooks/local-pre-commit",
-      "sha256": "ca855027bd8d33535f3fa18b48a2612e4a0c76ea8633e62d73a290ff392f0537"
+      "sha256": "ca855027bd8d33535f3fa18b48a2612e4a0c76ea8633e62d73a290ff392f0537",
+      "srcSha256": "ca855027bd8d33535f3fa18b48a2612e4a0c76ea8633e62d73a290ff392f0537"
     },
     {
       "rel": ".agents/metric-claims.txt",
-      "sha256": "e668589d817d589b9f81ba73460c0bd024d6d34203c9f1fa36bb9019d5e8b3ce"
+      "sha256": "e668589d817d589b9f81ba73460c0bd024d6d34203c9f1fa36bb9019d5e8b3ce",
+      "srcSha256": "e668589d817d589b9f81ba73460c0bd024d6d34203c9f1fa36bb9019d5e8b3ce"
     },
     {
       "rel": ".agents/notes/runtime-env.md",
-      "sha256": "ca4e0ab70c66906bd034d330312dfb12caad649f289e57320ca1010cc41a5bd7"
+      "sha256": "ca4e0ab70c66906bd034d330312dfb12caad649f289e57320ca1010cc41a5bd7",
+      "srcSha256": "5f02aa1dbe39c56d3742cab930ddeb2c49778da2c6875af7a89119d143daccc4"
     },
     {
       "rel": ".agents/rule-budgets.txt",
-      "sha256": "869a630f3c11f0a2a8baf95741dce703567d76f900976e851f1c5000e39e05c3"
+      "sha256": "869a630f3c11f0a2a8baf95741dce703567d76f900976e851f1c5000e39e05c3",
+      "srcSha256": "869a630f3c11f0a2a8baf95741dce703567d76f900976e851f1c5000e39e05c3"
     },
     {
       "rel": ".agents/settings.json",
@@ -432,11 +436,13 @@
     },
     {
       "rel": ".agents/workflow-modules.txt",
-      "sha256": "d03593598f6b0495ebc650019c474da0d6538da06c6f58ccc00bd5a9cdc760f1"
+      "sha256": "d03593598f6b0495ebc650019c474da0d6538da06c6f58ccc00bd5a9cdc760f1",
+      "srcSha256": "d03593598f6b0495ebc650019c474da0d6538da06c6f58ccc00bd5a9cdc760f1"
     },
     {
       "rel": "AGENTS.md",
-      "sha256": "f873fa337e45c2300681870b72b285d67ef3ed690c8b610fe7ead79ccc83cede"
+      "sha256": "f873fa337e45c2300681870b72b285d67ef3ed690c8b610fe7ead79ccc83cede",
+      "srcSha256": "c1fba6eeb1849f2ead29aa6bb0794d32f2b3640e6d2711202b35907b284f3849"
     },
     {
       "rel": "wiki/知识沉淀总览.html",
@@ -444,7 +450,8 @@
     },
     {
       "rel": "wiki/drafts-archive/README.md",
-      "sha256": "623fe32d78312453ec593d9f8fcf677344a4f9f0c8ae8efd31303efed2d4c350"
+      "sha256": "623fe32d78312453ec593d9f8fcf677344a4f9f0c8ae8efd31303efed2d4c350",
+      "srcSha256": "623fe32d78312453ec593d9f8fcf677344a4f9f0c8ae8efd31303efed2d4c350"
     },
     {
       "rel": "wiki/INDEX.md",
@@ -452,27 +459,33 @@
     },
     {
       "rel": "workflow/incidents/_TEMPLATE.md",
-      "sha256": "d21138a48f88308d01eec45f7e1f269d45bee5f6065f0d35bd93228741b58df1"
+      "sha256": "d21138a48f88308d01eec45f7e1f269d45bee5f6065f0d35bd93228741b58df1",
+      "srcSha256": "d21138a48f88308d01eec45f7e1f269d45bee5f6065f0d35bd93228741b58df1"
     },
     {
       "rel": "workflow/intents/_TEMPLATE.md",
-      "sha256": "d93f0fea337a60ac822c35e2efbd322a35f1303baf1afb88a9c153ced2f7443a"
+      "sha256": "d93f0fea337a60ac822c35e2efbd322a35f1303baf1afb88a9c153ced2f7443a",
+      "srcSha256": "d93f0fea337a60ac822c35e2efbd322a35f1303baf1afb88a9c153ced2f7443a"
     },
     {
       "rel": "workflow/papercuts.md",
-      "sha256": "753910dfdae5273275c7d286af6a4eef68ce77fa56738670b14512af9790cd9b"
+      "sha256": "753910dfdae5273275c7d286af6a4eef68ce77fa56738670b14512af9790cd9b",
+      "srcSha256": "07f8b0fad8223d25a5f67ce2c672bc9d92288c7b2e123a28e430c509e2c83115"
     },
     {
       "rel": "workflow/plans/_TEMPLATE.md",
-      "sha256": "9cdcf4b1f10fa6d633adfe4e948adb54142a56500f714db8644dd76d6c9f6700"
+      "sha256": "9cdcf4b1f10fa6d633adfe4e948adb54142a56500f714db8644dd76d6c9f6700",
+      "srcSha256": "9cdcf4b1f10fa6d633adfe4e948adb54142a56500f714db8644dd76d6c9f6700"
     },
     {
       "rel": "workflow/regression-checklist.md",
-      "sha256": "bfbcf6156aa481e9a2722a2bf7a4e853ff4d3dd446b90c7f376df8d057a38c1b"
+      "sha256": "bfbcf6156aa481e9a2722a2bf7a4e853ff4d3dd446b90c7f376df8d057a38c1b",
+      "srcSha256": "057968f042d301089721b8e9106c8e7019c9a3ecdfd2d0f304e6bad36779fc07"
     },
     {
       "rel": "workflow/specs/_TEMPLATE.md",
-      "sha256": "3d0e06303b174813496fa9abdf04e143eba716abce507e0d8b906d2b8acfa931"
+      "sha256": "3d0e06303b174813496fa9abdf04e143eba716abce507e0d8b906d2b8acfa931",
+      "srcSha256": "3d0e06303b174813496fa9abdf04e143eba716abce507e0d8b906d2b8acfa931"
     }
   ]
 }

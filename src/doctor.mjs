@@ -5,7 +5,7 @@ import { execSync, spawnSync } from 'node:child_process';
 import net from 'node:net';
 import { createHash } from 'node:crypto';
 import { listTree, scriptTrusted } from './render.mjs';
-import { isOwned, HOSTS, pickStackVars } from './profiles.mjs';
+import { isOwned, HOSTS, pickStackVars, srcTemplatePath, templateDriftOf, TEMPLATE_DRIFT_EXCLUDE } from './profiles.mjs';
 
 // 宿主目录映射（与 src/profiles.mjs#HOSTS 同源：装副本目录名前缀带点）
 const HOST_DIR = Object.fromEntries(Object.entries(HOSTS).map(([k, v]) => [k, v.dir]));
@@ -257,6 +257,19 @@ export function doctor(args, pkgRoot) {
     }
   }
 
+  // 6.9 模板下发感知（2026-10-06 template-downstream，只读 advisory——与 sync 出账同判据
+  //     profiles.templateDriftOf 单源；doctor 不写 kit.json，两次 sync 之间持续回显，sync 后自然消隐）。
+  //     语义：源仓模板已演进且盘面未跟随 → WARN 提醒（owned 归项目所有，不自动覆盖）；首次引入 WARN。
+  //     旧装户 owned[] 无 srcSha256 → no-anchor 静默跳过（无判定依据不产出告警），下次 sync 写锚后生效。
+  const tplRes = checkTemplateDrift(target, pkgRoot);
+  if (tplRes.skipped) {
+    if (tplRes.note) add('PASS', `模板感知跳过（${tplRes.note}）`);
+  } else if (tplRes.stale.length === 0) {
+    add('PASS', `模板感知 ${tplRes.total} 份无陈旧分歧（源仓模板与上次同步锚一致或盘面已跟随）`);
+  } else {
+    add('WARN', `模板感知：源仓 ${tplRes.stale.length} 份模板自上次同步后有演进且盘面未跟随：${tplRes.stale.join('、')}——如需跟随从包源 templates/ 拷贝；有意定制可忽略（跑 flow-kit sync 刷新锚后本项静默）`);
+  }
+
   // 7. check-loop——2026-09-26 check-loop-node 起 node 实现直跑（sh 版曾需先探 sh 可用性：Windows
   //    PowerShell 常无 sh，ENOENT 曾被吞进 hard-block 分支报成空原因假警报，incident 2026-09-24-doctor-sh-enoent；
   //    迁移后无 sh 依赖，探针退役。check-loop.sh 为兼容 shim，pre-push 钩子路径照常）
@@ -349,6 +362,42 @@ export function checkOwnedDrift(target) {
     if (h !== f.sha256) drift++;
   }
   return { drift, gone, total: owned.length, skipped: false };
+}
+
+// 模板下发感知（2026-10-06 template-downstream）：只读判据——owned 模板条目三方 sha 比对，
+// 判定单源 profiles.templateDriftOf（与 sync 出账同源，防两处字面量漂移）。恒不写 kit.json。
+// 返回 { skipped, note?, total, stale[] }：skipped=true 时 note 说明原因（无 kit / 无 owned /
+// 无锚——旧装户静默不追溯）；total＝参与比对的条目数；stale＝stale-drift 的 rel 清单。
+export function checkTemplateDrift(target, pkgRoot) {
+  const kitPath = path.join(target, '.agents', 'kit.json');
+  if (!fs.existsSync(kitPath)) return { skipped: true, note: 'kit.json 不存在', total: 0, stale: [] };
+  let kit;
+  try {
+    kit = JSON.parse(fs.readFileSync(kitPath, 'utf8'));
+  } catch (e) {
+    return { skipped: true, note: `kit.json 解析失败：${e.message}`, total: 0, stale: [] };
+  }
+  if (!pkgRoot) return { skipped: true, note: '无包源根', total: 0, stale: [] };
+  const owned = Array.isArray(kit.owned) ? kit.owned : [];
+  if (owned.length === 0) return { skipped: true, note: 'kit.json 无 owned 条目', total: 0, stale: [] };
+  const shaText = (p) => createHash('sha256').update(fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n'), 'utf8').digest('hex');
+  const stale = [];
+  let total = 0;
+  let anchored = 0;
+  for (const f of owned) {
+    if (TEMPLATE_DRIFT_EXCLUDE.has(f.rel)) continue;
+    const src = srcTemplatePath(pkgRoot, f.rel);
+    if (!src) continue;
+    total++;
+    if (typeof f.srcSha256 !== 'string' || !f.srcSha256) continue; // no-anchor：旧装户静默跳过
+    anchored++;
+    const srcCur = shaText(src);
+    const diskPath = path.join(target, f.rel);
+    const disk = fs.existsSync(diskPath) ? shaText(diskPath) : null;
+    if (templateDriftOf({ disk, srcRecord: f.srcSha256, srcCur }) === 'stale-drift') stale.push(f.rel);
+  }
+  if (anchored === 0) return { skipped: true, note: 'owned 模板条目均无 srcSha256 锚（旧装户，下次 sync 写锚后生效）', total: 0, stale: [] };
+  return { skipped: false, total, stale };
 }
 
 // 跨宿主薄适配正文段漂移校验（独立 export 供 doctor 主流程 + 单元测试共用；2026-09-25 cross-host-sync）
