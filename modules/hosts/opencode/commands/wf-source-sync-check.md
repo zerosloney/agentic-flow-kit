@@ -2,6 +2,8 @@
 description: 装户面同步一致性检查（包源 templates/_agents/ vs 装副本 .agents/ 三类差异：缺失 / 孤儿 / 漂移；横向工具）
 ---
 
+> **装户边界**：本文档中 `src/`、`bin/flow-kit.mjs`、`templates/_agents/`、`modules/hosts/` 为 kit 包源仓视角引用——装户仓（无 `templates/` 包源）对应命令不适用，本仓以 `.agents/` 装副本为准。
+
 # Source-Sync-Check · 装户面同步一致性
 
 > `templates/_agents/` 包源 vs `.agents/` 装副本——三类差异报告：缺失 / 孤儿 / 漂移。

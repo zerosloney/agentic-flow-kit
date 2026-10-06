@@ -37,6 +37,21 @@ export const POLICIES = {
     confirmIncidentsEffective: '2026-10-06',
     bindingTs: '2026-09-28',
   },
+  // 版本 4 = 版本 3 的五个日期 + 检查 18 的 delegationSince（委派台账对账生效日）。
+  // 背景（2026-10-06 loop-audit-remediation）：delegations.md 台账记法自始为「任务一句话」（全表 0 行含
+  // workflow 文件名），检查 18 匹配口径要求行含文件名且无生效日豁免——8 月底起的 L2/L3 存量在现口径下
+  // 永远无法满足，产出 113 条不可消退 advisory，违反「无判定依据的行不产出不可消除噪声」红线。
+  // 补锚后：日期 < delegationSince 的文档存量豁免；≥ 生效日的 L2/L3 done/fixed/closed 须在台账
+  // （记法约定同步补「任务一句话含文件名」，见 delegations.md 头部）。缺键（v1-v3）→ 检查 18 维持
+  // 原全量对账行为（向后兼容不放松）。装户经 kit.json policyVersion: 4 选入。
+  4: {
+    moduleSince: '2026-09-22',
+    check14Since: '2026-09-23',
+    confirmDocsEffective: '2026-10-06',
+    confirmIncidentsEffective: '2026-10-06',
+    bindingTs: '2026-09-28',
+    delegationSince: '2026-10-06', // 检查 18 委派台账对账生效日（2026-10-06 loop-audit-remediation）；v1-v3 无此键 → 原全量对账行为
+  },
 };
 
 export function loadKitPolicy(root) {

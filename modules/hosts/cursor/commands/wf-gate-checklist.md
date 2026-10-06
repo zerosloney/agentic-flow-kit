@@ -2,6 +2,8 @@
 description: 三处口径一致性检查（doctor §检查项 ↔ check-loop §检查项，显式配对登记表 + 断档/未登记告警）
 ---
 
+> **装户边界**：本文档中 `src/`、`bin/flow-kit.mjs`、`templates/_agents/`、`modules/hosts/` 为 kit 包源仓视角引用——装户仓（无 `templates/` 包源）对应命令不适用，本仓以 `.agents/` 装副本为准。
+
 # Gate-Checklist · 三处口径一致性（显式配对登记表）
 
 > `src/doctor.mjs` § 检查项 ↔ `.agents/scripts/check-loop.sh` § 检查项，按脚本内 **PAIRS 登记表**对照。

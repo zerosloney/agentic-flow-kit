@@ -17,6 +17,8 @@ approval_required: true
 next: .agents/commands/test.md
 ---
 
+> **装户边界**：本文档中 `src/`、`bin/flow-kit.mjs`、`templates/_agents/`、`modules/hosts/` 为 kit 包源仓视角引用——装户仓（无 `templates/` 包源）对应命令不适用，本仓以 `.agents/` 装副本为准。
+
 # Build · 起 plan + 写代码
 
 > AI 起草 plan,用户确认;进计划模式列改动,用户确认;最后才动代码。两道确认门。

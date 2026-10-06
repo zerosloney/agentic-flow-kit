@@ -2079,6 +2079,33 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   rmfix(T);
 }
 {
+  // 检查 18 delegationSince 生效日豁免（policy v4，2026-10-06 loop-audit-remediation）。
+  // 「缺键回退原行为」由上方既有场景群天然覆盖（fixture 不写 kit.json → loadKitPolicy 回退 v1 无该键）。
+  const T = mkfix();
+  const pre = '2026-09-12-pre.md';
+  w(T, '.agents/kit.json', '{"policyVersion":4}\n');
+  w(T, `workflow/intents/${pre}`, INTENT('pre', '状态: done\n级别: L2\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
+  w(T, `workflow/specs/${pre}`, SPEC('pre', '状态: approved\n级别: L2\n日期: 2026-09-12'));
+  w(T, `workflow/plans/${pre}`, PLAN('pre', '状态: approved\n级别: L2\n日期: 2026-09-12'));
+  let r = run(T);
+  check('检查18 v4：文档日期早于 delegationSince → 存量豁免不出账（同面在 v1 下照报，见上方首场景）',
+    r.status === 0 && !outOf(r).includes('委派台账'),
+    `exit=${r.status}\n${outOf(r)}`);
+
+  const post = '2026-10-06-post.md';
+  w(T, `workflow/intents/${post}`, INTENT('post', '状态: done\n级别: L2\n日期: 2026-10-06', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
+  w(T, `workflow/specs/${post}`, SPEC('post', '状态: approved\n级别: L2\n日期: 2026-10-06'));
+  w(T, `workflow/plans/${post}`, PLAN('post', '状态: approved\n级别: L2\n日期: 2026-10-06'));
+  r = run(T);
+  // post 日期 ≥ 确认门生效日（v4 confirmDocsEffective=2026-10-06）且无台账行 → 检查 15 hard 同场出账（预期）；
+  // 本场景只断言检查 18 对受管日期照报——豁免通道不得吞掉生效日后的真漏点。
+  check('检查18 v4：文档日期 ≥ delegationSince 且台账无文件名 → 照报（exit 1 属检查15 同场，非本检查升级）',
+    r.status === 1 && outOf(r).includes('确认未对账')
+      && outOf(r).split('\n').some((l) => l.includes('委派台账') && l.includes(`intents/${post}`)),
+    `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+{
   const T = mkfix();
   const body = 三件套(false);
   w(T, 'workflow/incidents/2026-09-12-closed.md', `---\n状态: closed\n级别: L2\n发现: 2026-09-12\n---\n# INCIDENT — closed\n\n${body}`);

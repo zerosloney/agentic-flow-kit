@@ -2,6 +2,8 @@
 description: Test 阶段:静态门(架构红线 + build + test)+ UI 实测(headless Chrome)
 ---
 
+> **装户边界**：本文档中 `src/`、`bin/flow-kit.mjs`、`templates/_agents/`、`modules/hosts/` 为 kit 包源仓视角引用——装户仓（无 `templates/` 包源）对应命令不适用，本仓以 `.agents/` 装副本为准。
+
 # Test · 静态门 + UI 实测
 
 > 两道闸:静态门全过 + 涉及 UI 走浏览器实测。失败不放过。

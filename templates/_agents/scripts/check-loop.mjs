@@ -68,7 +68,8 @@
 //      quote 字段职责冲突(对质凭据 vs 并录指纹,现归还单一职责)。无 batch 的历史行静默跳过
 //      (无判定依据的行不产出不可消除噪声——沿 audit-gate-hardening P3 教训)
 //  17. 发版提交树上仍未收口的 intent/spec/plan [hard-block]
-//  18. 委派台账对账 [warning]
+//  18. 委派台账对账 [warning]（policy v4 加 delegationSince 生效日豁免：日期早于锚的 L2/L3 存量豁免——
+//      delegations.md 记法自始不含文件名、无豁免时 113 条不可消退；缺键 v1-v3 维持原全量对账）
 //  19. 逐阶段审计（起草先于入口确认 / 台账审批顺序倒置） [warning]
 //  20. 引擎脚本测试覆盖（包源环境：templates/_agents/scripts/ 下每个非 *.test.mjs 引擎脚本须有同名兄弟
 //      .test.mjs，或在 .agents/scripts-test-exempt.txt 登记豁免；2026-10-01 gate-script-test-coverage） [warning]
@@ -1077,6 +1078,10 @@ runCheck16({ ROOT, ENUMS, docFiles, fmGet, inSet, isTracked, linesOf, readdirOrN
       if (!inScope) continue;
       const date = sub === 'incidents' ? (fmGet(abs, '发现') || fmGet(abs, '日期')) : fmGet(abs, '日期');
       if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) continue;
+      // delegationSince 生效日豁免（policy v4，2026-10-06 loop-audit-remediation）：锚前文档为存量回溯件
+      // ——台账记法约定（delegations.md 头部「任务一句话含文件名」）自生效日才立，存量不回填；缺键
+      // （v1-v3）→ 维持原全量对账行为（向后兼容，检查面不放松）
+      if (typeof kitPolicy.delegationSince === 'string' && date < kitPolicy.delegationSince) continue;
       const base = path.basename(abs);
       const stripped = base.replace(/\.md$/, '');
       if (rows.some((r) => r.date >= date && (r.line.includes(base) || r.line.includes(stripped)))) continue;

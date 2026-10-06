@@ -2,6 +2,8 @@
 description: Review · 代码评审（横切，合入前使用；P0/P1/P2 分级清单 + 用户定性与合入时机）
 ---
 
+> **装户边界**：本文档中 `src/`、`bin/flow-kit.mjs`、`templates/_agents/`、`modules/hosts/` 为 kit 包源仓视角引用——装户仓（无 `templates/` 包源）对应命令不适用，本仓以 `.agents/` 装副本为准。
+
 # Review
 
 > 参考 Anthropic REVIEW.md 做法。宗旨是**用户决策 + AI 协作**：AI 跑机器门禁、自查、出分级清单与建议；用户确认问题定性与合入。把"该机器兜底"与"靠 AI 自查"分开列明，避免注意力耗在机械逐行上。

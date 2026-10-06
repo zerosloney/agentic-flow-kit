@@ -16,6 +16,8 @@ approval_required: true
 next: .agents/commands/build.md（漂移属 build 改包源未同步导致的，修复后回 build）
 ---
 
+> **装户边界**：本文档中 `src/`、`bin/flow-kit.mjs`、`templates/_agents/`、`modules/hosts/` 为 kit 包源仓视角引用——装户仓（无 `templates/` 包源）对应命令不适用，本仓以 `.agents/` 装副本为准。
+
 # Source-Sync-Check · 装户面同步一致性
 
 > `templates/_agents/` 包源 vs `.agents/` 装副本——三类差异报告：缺失 / 孤儿 / 漂移。

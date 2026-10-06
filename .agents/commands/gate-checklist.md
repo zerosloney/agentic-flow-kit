@@ -16,6 +16,8 @@ approval_required: true
 next: .agents/commands/build.md（缺点属 build 改 doctor / check-loop 未对账导致的，修复后回 build）
 ---
 
+> **装户边界**：本文档中 `src/`、`bin/flow-kit.mjs`、`templates/_agents/`、`modules/hosts/` 为 kit 包源仓视角引用——装户仓（无 `templates/` 包源）对应命令不适用，本仓以 `.agents/` 装副本为准。
+
 # Gate-Checklist · 三处口径一致性（显式配对登记表）
 
 > `src/doctor.mjs` § 检查项 ↔ `.agents/scripts/check-loop.sh` § 检查项，按脚本内 **PAIRS 登记表**对照。

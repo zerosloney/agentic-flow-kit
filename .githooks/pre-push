@@ -12,8 +12,9 @@
 #   （intent approved/done + 同名 plan 在场 + L2/L3 另须同名 spec；判据见 check-loop.mjs 加固门段），
 #   hard 失败即阻断 push，防「未文档化的探索件」进 main。
 #
-# 机器门：本地钩子（唯一本地机器门）——服务端兜底（如有）= 项目自有 CI；本 kit 不附带 CI 配置，裸装无跨环境保证。
-# 本仓：.github/workflows/ci.yml 于 push main / 全部 PR 复跑 check-loop / doctor / source-sync-check --gate / workflows-check 四道门。
+# 机器门：本地钩子（唯一机器门）——kit 不附带 CI 配置，装户仓裸装无跨环境保证。
+# kit 源仓：.github/workflows/ci.yml 于 push main / 全部 PR 复跑 check-loop / doctor / source-sync-check --gate / workflows-check 四道门。
+# 装户仓（无 templates/ 包源）：无 CI——source-sync-check --gate / doctor / flow-kit 命令不适用（引用即失败），本地钩子即全部机器门。
 # 不要用 `git push --no-verify` 绕开——发现 hard-block 应先修 workflow 文档再推。
 
 cd "$(git rev-parse --show-toplevel)" || exit 1

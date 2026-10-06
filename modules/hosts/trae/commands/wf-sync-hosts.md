@@ -3,6 +3,8 @@ name: wf-sync-hosts
 description: 跨宿主适配层同步（正文段 sha 比对 + 用户拍板 + 单向 apply；frontmatter 不动；横向工具）
 ---
 
+> **装户边界**：本文档中 `src/`、`bin/flow-kit.mjs`、`templates/_agents/`、`modules/hosts/` 为 kit 包源仓视角引用——装户仓（无 `templates/` 包源）对应命令不适用，本仓以 `.agents/` 装副本为准。
+
 # Sync-Hosts · 跨宿主适配层正文段同步
 
 > 改权威源（`templates/_agents/{commands,roles}/*.md`）后薄适配（`modules/hosts/<h>/{agents,commands}/*.md`）要同步——薄适配正文 = 权威源正文，frontmatter 各自保留宿主特化（commands 层文件名 = 宿主命令名，opencode / trae 同用 `wf-` 前缀，单源见 `src/profiles.mjs#HOSTS.commandPrefix`；trae 另有 `name: wf-X`，zcode/omp 各自原描述）。

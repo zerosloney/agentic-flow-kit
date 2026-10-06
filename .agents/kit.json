@@ -1,6 +1,6 @@
 {
   "kit": "agentic-flow-kit",
-  "version": "1.1.4",
+  "version": "1.1.5",
   "policyVersion": 2,
   "audit": true,
   "createdAt": "2026-09-23T15:07:19.753Z",
@@ -22,7 +22,7 @@
     },
     {
       "rel": ".agents/commands/build.md",
-      "sha256": "7223ae9cf520f68a6acc052e240937ac4df0eb700104ceb6612b86dfb242b281"
+      "sha256": "9682476f604398f0697a7e6549ccfbfc3befd7f2d32f1d178da1e5401902edd2"
     },
     {
       "rel": ".agents/commands/deploy.md",
@@ -34,7 +34,7 @@
     },
     {
       "rel": ".agents/commands/gate-checklist.md",
-      "sha256": "42b99ddbc5179f479e87d6f3e70edef8674ac321cafcdb2635440fa236b924db"
+      "sha256": "9d87a8770cf1ca760cd2dbc95217d9099e28dbf1cf1790282c3b7a26a59a74a4"
     },
     {
       "rel": ".agents/commands/maintain.md",
@@ -54,19 +54,19 @@
     },
     {
       "rel": ".agents/commands/review.md",
-      "sha256": "30836987c30a56ac6c7dcade545b9c0a6fb4e2e8d441f27c39e56edf6c0e1bb7"
+      "sha256": "e71b9d4b27ec5b0c766005a0d2f416fe484f5a4bc4c90b9333220677ac20c156"
     },
     {
       "rel": ".agents/commands/source-sync-check.md",
-      "sha256": "5baa903e690f7ded911c1259581f80f43eacafed4eb424868b2bd6e0a9fa58db"
+      "sha256": "fd34bd22bd9eff7a6db0980996a766f08f842831b8c1c49ff59e279eee23c70e"
     },
     {
       "rel": ".agents/commands/sync-hosts.md",
-      "sha256": "9d67980b0a144d9d07bdb2e9019ad1a3c2e503e01e19816686a1b98ed0885f3f"
+      "sha256": "5074d3574b232b20a5fb2dc9a50080de814c4eacb43053707d0d66ebafc750e8"
     },
     {
       "rel": ".agents/commands/test.md",
-      "sha256": "b5413df13e101a290e273c7f2dd3e86a33c12c67c3e5658608aa1769977828d7"
+      "sha256": "c30aeace96724f4e30fce81c2c84341e0b4666eb224ad991bd48160b1b913551"
     },
     {
       "rel": ".agents/hooks/check-pairing-incremental.sh",
@@ -138,7 +138,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "c8be448226cc76d22ec224491eb3235e947b4a434b9c4675b455c2ef698aabe1"
+      "sha256": "abe3911ec511c550b940fa0866e6da10565e6556626a6d615c487a89ac73bdbd"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -146,7 +146,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "7b5e3a3de246946ffc8c47f8b37127f8eea0a4465e1760c0f555fca4a416c50e"
+      "sha256": "d117ffa0ad3e3b4c90e7f6b7d6a78ad7a2d33de12790927996b423a713c4762e"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -254,7 +254,7 @@
     },
     {
       "rel": ".agents/scripts/policy.mjs",
-      "sha256": "2f9da5332e356168299536f20f1fcc227b3c1824b50806e53658abff9bfc4ea6"
+      "sha256": "a034f4398fbef2cf1738d5337f361adf4cfa0e8cc0f929e9ded5475295c5d792"
     },
     {
       "rel": ".agents/scripts/pre-push.test.mjs",
@@ -390,7 +390,7 @@
     },
     {
       "rel": ".githooks/pre-push",
-      "sha256": "37be577cc1c1f4ceba1f545bd7bbbd69441da8e96fc359a79fa56b190472f5c3"
+      "sha256": "451402c001ff3ba985c4de3fc02fdf5499ef1cceb1542b5aaae794b30227ed1f"
     },
     {
       "rel": ".zcode/agents/implementer.md",
@@ -424,7 +424,7 @@
     },
     {
       "rel": ".agents/rule-budgets.txt",
-      "sha256": "453bfb91a9304dd056b43ece92d6fc6d3d780f2e43b5ebc1e8fd11f37de2dcad"
+      "sha256": "869a630f3c11f0a2a8baf95741dce703567d76f900976e851f1c5000e39e05c3"
     },
     {
       "rel": ".agents/settings.json",
