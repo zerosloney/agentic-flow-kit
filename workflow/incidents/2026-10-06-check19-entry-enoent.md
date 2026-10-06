@@ -1,0 +1,41 @@
+---
+状态: open
+级别: L1
+发现: 2026-10-06
+模块: pipeline
+备注: fail-loud fs 读 × 检查 19 判据 B「读空判级」惯用法无守卫——incident 闭环主题每次推送出账 12 条 ENOENT 噪声；判定面不变，修 existsSync 守卫
+---
+# INCIDENT — 2026-10-06 check19-entry-enoent
+
+## 时间线
+- 2026-10-06 推送 v1.1.5：pre-push check-loop stderr 出现 12 条「文档读取异常 *.md（ENOENT）——按空文档降级，检查面可能收窄」（pre-push 两段式输出 ×2 成对）
+- 2026-10-06 定位：fs monkey-patch 抓栈复现——12 条全部命中 check-loop.mjs 检查 19 判据 B 入口 intent 读取（`fmGet(workflow/intents/<主题>.md)` 无 existsSync 守卫）；12 个主题均为 incident 闭环（L2 incident 为入口，按闭环约定无同名 intent）
+- 2026-10-06 修复方案过目：入口读取加 existsSync 守卫（同文件 entryConfirmed19 与 spec 读取两处先例），缺文件仍不豁免顺序判定——判定面不变，只消诊断噪声
+- 用户确认：修复方案过目通过（2026-10-06）
+
+## 影响面
+- 门禁诊断输出：每次 push 固定 12 条 stderr 噪声（fail-loud 出账），淹没真异常信号；检查 19 判定行为不受影响（缺文件 → 级别空 → 不豁免，顺序判定照跑）
+
+## 根因
+检查 19 判据 B 对台账主题无条件 fmGet 读入口 intent 取「级别」，而 incident 闭环主题不存在同名 intent——「读空判级」惯用法依赖 fs 读取静默失败；2026-10-05-gitout-fail-open 把 fs 读取改 fail-loud 后，该惯用法每次响亮出账。
+（深层：fail-loud 改造只盘点了「文件存在但瞬时读取失败」，未盘点「路径本就不存在」的合法调用点。）
+
+## 为什么之前没拦住
+- 测试：fixture 场景均有同名 intent 文件（或 policy v1 整体跳过检查 19），「台账有行、入口缺件」形态零覆盖
+- 门禁：ENOENT 出账是 warning 级 stderr，不阻断任何门——噪声类缺陷天然无硬门可拦
+- 规范：fail-loud 改造（gitout-fail-open，L2 三件套）复核未扫「读空判级」惯用法调用点
+
+## 复盘三件套（缺一不可）
+
+1. 结构性修复
+   - 修复 commit：关单时回填（本闭环 fix 提交）
+   - 影响环境：kit 仓自身 + 装户（templates 包源随下版发布）
+   - 是否需要新 intent：
+     - 否 → 理由：实现 bug 单点修复（单守卫 + 测试场景），无门禁缺位/系统性问题
+
+2. 防复发验证（必须落到自动化用例或回归清单条目，禁止只写「已人工验证」）
+   - 自动化用例：templates/_agents/scripts/check-loop.test.mjs（新增场景：台账有 approved 行 + 入口 intent 缺件 → 无 ENOENT 出账；顺序合规静默 / 顺序倒置照报）
+
+3. 规范条目（必须有可追溯的落点）
+   - 落点：templates/_agents/scripts/check-loop.mjs 判据 B 读取点注释（与同文件 entryConfirmed19、spec 读取两处守卫先例互引）
+   - 引用：关单时回填 commit SHA
