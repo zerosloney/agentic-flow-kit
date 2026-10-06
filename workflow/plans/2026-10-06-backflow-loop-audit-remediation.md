@@ -1,9 +1,9 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 模块: infra
-确认指纹: ad668f0ce38b36bf
+确认指纹: 7051700a7f9e27b3
 ---
 
 # PLAN — 闭环引擎审查修复回流批次

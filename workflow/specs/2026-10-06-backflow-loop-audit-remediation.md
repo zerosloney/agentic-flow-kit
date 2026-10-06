@@ -1,9 +1,9 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 模块: infra
-确认指纹: 109c2568e6c18257
+确认指纹: 8762c4a790a437a4
 ---
 
 # SPEC — 闭环引擎审查修复回流批次

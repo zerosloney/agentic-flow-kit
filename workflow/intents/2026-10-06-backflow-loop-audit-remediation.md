@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-06
 模块: infra
 备注: 装户（Shipyard.Material）2026-10-06-loop-audit-remediation 回流批次，用户 2026-10-06 对话拍板「风险1 要处理」；kit 仓自身不切 v4（POLICIES[4] 供装户 kit.json 选入）
-确认指纹: 23f18a640d9db9b4
+确认指纹: 91423c7baf8b0839
 ---
 
 # INTENT — 闭环引擎审查修复回流批次（policy v4 / 检查 18 豁免 / 装户边界标注 / pre-push 两段式）
@@ -49,10 +49,10 @@ risk_level: L2
 
 ## 验收标准（可测试）
 
-- [ ] `node src/run-tests.mjs` 全部套件通过（含 check-loop.test.mjs v4 新场景）
-- [ ] `node .agents/scripts/source-sync-check.mjs --gate` 绿（templates ↔ .agents / _githooks ↔ .githooks 双侧成对）
-- [ ] `node bin/flow-kit.mjs sync-hosts --diff` 无漂移（或 --apply 后无漂移——薄适配不含 commands 正文则恒无）
-- [ ] 装仓 E:\Git\Shipyard.Material 的 9 份对应文件与源仓 templates/_agents/、templates/_githooks/ 零 diff（LF 归一口径）
-- [ ] package.json version 1.1.5 + CHANGELOG 记本批
+- [x] `node src/run-tests.mjs` 全部套件通过（含 check-loop.test.mjs v4 新场景）（证据：回流提交 53d3105 前后各跑一轮，FAIL 行数 0；中途 trae-hooks 4 FAIL 系手动复制致 managed 台账漂移 10 份被 pre-commit 模拟拦——`flow-kit sync` 刷台账后恢复全绿，53d3105 已含台账）
+- [x] `node .agents/scripts/source-sync-check.mjs --gate` 绿（templates ↔ .agents / _githooks ↔ .githooks 双侧成对）（证据：feat 提交前实跑 exit 0，缺失 0 / 漂移 0；rule-budgets.txt 双侧 cp 成对后过门）
+- [x] `node bin/flow-kit.mjs sync-hosts --diff` 无漂移（或 --apply 后无漂移）（证据：--apply 后「正文对齐 81 对 / 权威源缺失 0 / 正文漂移 0」，30 对漂移 = 6 commands × 5 宿主薄适配，随 53d3105 提交）
+- [x] 装仓 E:\Git\Shipyard.Material 的 9 份对应文件与源仓 templates/_agents/、templates/_githooks/ 零 diff（LF 归一口径）（证据：2026-10-06 逐份 diff 实跑，9 份 scripts/commands + pre-push 全部一致）
+- [x] package.json version 1.1.5 + CHANGELOG 记本批（证据：53d3105——version 1.1.4→1.1.5、CHANGELOG 1.1.5 节 4 条目 + 已知边界 1 条）
 
 > **闭环对账**：关单在 test 阶段。intent 置 done 前逐条勾验，每条勾选项后补证据。
