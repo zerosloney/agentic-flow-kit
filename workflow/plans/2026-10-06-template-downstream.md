@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
-确认指纹: caf9298505d9ed08
+确认指纹: 538e72f25093f8fd
 ---
 # PLAN — template-downstream
 
@@ -47,6 +47,7 @@
 
 ## 确认与复核
 
-- 确认结果：approved（2026-10-06 用户对话内代录）；done（关单时随入口文档置终态）
+- 确认结果：approved（2026-10-06 用户对话内代录「确认」）；done（2026-10-06 关单，同语代录）
 - 确认门记录：spec 三方 sha 比对方案已在对话内过目并 approved；plan 为其函数级落点拆解，无新增行为决策
-- 复核：L2 推荐独立复核（实现完成后 independent-reviewer 横切）
+- 复核：已完成（2026-10-06 independent-reviewer）——七条设计承诺全过零 P0/P1；P2-1 前缀翻译缺失当场修复（单源点 srcTemplatePath + S15⑥/fresh-init 断言）；P2-2 trae-hooks 系发版草稿门禁预期拦截、关单后复绿
+- 实现偏离留痕：①doctor 新增 §6.9 触发 gate-checklist S10「未登记」拦截——PAIRS 表补登记（该门禁按设计抓漏，非缺陷）；②独立复核修复轮将「同 rel」映射补全为「同 rel + 点目录前缀翻译」（render.mjs `_agents`→`.agents`），感知面从 8 扩至 13 条；③实现期一次 debug 误跑 `sync([], fixture)` 未传 --dir 致 fixture 模板件短暂落入本仓（keep.txt/h.txt），已清理并 amend 出历史（留痕教训：debug 调用 sync 必须显式 --dir）

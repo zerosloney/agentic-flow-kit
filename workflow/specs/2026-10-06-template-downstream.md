@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-06
 模块: pipeline
 备注: 对应 intent 2026-10-06-template-downstream（workflow/ 模板下发感知机制）；方案 = 包源运行时可达 × 三态 sha 比对感知层，不改 owned 所有权语义
-确认指纹: bc282b7944b35f02
+确认指纹: d50e892198120020
 ---
 # SPEC — template-downstream
 

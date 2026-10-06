@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-06
 模块: pipeline
 备注: workflow/ 模板属 owned（init 一次性复制）无下发通道——S18/S20 装户事故根因，机制改进立项
-确认指纹: 62a19c2cbfb51536
+确认指纹: 0ed394f4e23b9ed4
 ---
 # INTENT — template-downstream
 
@@ -51,17 +51,17 @@ risk_level: L2
 
 ## 验收标准（可测试）
 
-- [ ] fixture 装户（init 产物）+ 源仓模板演进 → `flow-kit sync`（或 doctor）出「模板更新感知」advisory，含分歧文件清单（证据：测试用例）
-- [ ] 装户模板与源仓一致 → 感知检查静默零出账（证据：测试用例）
-- [ ] owned 语义不回归：装户手改模板后 sync 不覆写、不硬拦，既有 owned 自愈测试全绿（证据：npm test）
-- [ ] init 新装户全流程无回归（证据：init.test.mjs 全绿）
+- [x] fixture 装户（init 产物）+ 源仓模板演进 → `flow-kit sync`（或 doctor）出「模板更新感知」advisory，含分歧文件清单（证据：src/sync.test.mjs S15①「出账含文件名」+ S15⑥「.agents/ 前缀翻译出账」+ S15⑤「doctor stale 清单同源」，套件 67 PASS / 0 FAIL）
+- [x] 装户模板与源仓一致 → 感知检查静默零出账（证据：S15②「定制跟源静默」+ S15④「手工拉取静默」+ S15①「锚已刷再跑静默（单周期出账）」）
+- [x] owned 语义不回归：装户手改模板后 sync 不覆写、不硬拦，既有 owned 自愈测试全绿（证据：S12「owned 文件不被触碰」/ S1 / S11 既有断言零改动全绿；npm test 除 trae-hooks 关单顺序项外全绿——trae-hooks 系发版草稿门禁对 approved 三件套的预期拦截，关单后复绿）
+- [x] init 新装户全流程无回归（证据：src/fresh-init.test.mjs 8 PASS / 0 FAIL，含锚断言 3 条——AGENTS.md 带初始锚等于包源原文 sha / 生成器目标无锚 / _agents 前缀翻译带锚 + 无模板对应条目无锚）
 
 > **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 冒烟脚本输出>）`。
 > done 状态仍有未勾项会被 check-loop 拦截（2026-09-12 起新建 intent 为 hard-block，存量 intent 仅 warning 提示）；勾选但缺「证据：」为 hard-block。
 
 ## 确认与复核
 
-- 确认日期：
+- 确认日期：2026-10-06（intent approved 代录「可用」；spec approved 代录「可用」；plan approved 代录「确认」；done 关单同语代录）
 - 确认人：用户（对话内明确放行即确认）
-- 确认范围：
-- 复核：L2 须独立复核（.agents/commands/review.md 横切入口，实现完成后）
+- 确认范围：三方 sha 感知方案（spec）、函数级拆解（plan）、验收四条勾验（done）
+- 复核：已完成独立复核（2026-10-06，independent-reviewer 对实现提交全量核验）——七条设计承诺全部通过、零 P0/P1；P2-1（_agents→.agents 前缀翻译缺失，5 条 owned 件漏出感知面）当场修复于 src/profiles.mjs#srcTemplatePath 单源点并补 S15⑥/fresh-init 断言钉住；P2-2（trae-hooks 因发版草稿门禁对 approved 三件套的预期拦截）关单后复绿；N-1 断言补齐，N-2/N-3/N-5 为口径/文案登记不阻断，N-4 历史遗留非本批范围
