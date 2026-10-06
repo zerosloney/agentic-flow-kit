@@ -1,9 +1,10 @@
 ---
-状态: open
+状态: closed
 级别: L1
 发现: 2026-10-06
 模块: pipeline
 备注: fail-loud fs 读 × 检查 19 判据 B「读空判级」惯用法无守卫——incident 闭环主题每次推送出账 12 条 ENOENT 噪声；判定面不变，修 existsSync 守卫
+确认指纹: e0af1696e26ffeea
 ---
 # INCIDENT — 2026-10-06 check19-entry-enoent
 
@@ -29,14 +30,14 @@
 ## 复盘三件套（缺一不可）
 
 1. 结构性修复
-   - 修复 commit：关单时回填（本闭环 fix 提交）
-   - 影响环境：kit 仓自身 + 装户（templates 包源随下版发布）
+   - 修复 commit：f8514a5（templates/_agents/scripts/check-loop.mjs 三处守卫 + check-loop.test.mjs 新场景；.agents/scripts/ 装回两件 + package.json/kit.json 1.1.7 + CHANGELOG）
+   - 影响环境：kit 仓自身 + 装户（templates 包源随 1.1.7 发布）
    - 是否需要新 intent：
-     - 否 → 理由：实现 bug 单点修复（单守卫 + 测试场景），无门禁缺位/系统性问题
+     - 否 → 理由：实现 bug 单点修复（守卫 + 测试场景），无门禁缺位/系统性问题
 
 2. 防复发验证（必须落到自动化用例或回归清单条目，禁止只写「已人工验证」）
-   - 自动化用例：templates/_agents/scripts/check-loop.test.mjs（新增场景：台账有 approved 行 + 入口 intent 缺件 → 无 ENOENT 出账；顺序合规静默 / 顺序倒置照报）
+   - 自动化用例：templates/_agents/scripts/check-loop.test.mjs（新增场景：台账有 approved 行 + 入口 intent 缺件 → 裸 fixture 全程无 ENOENT 出账；顺序倒置照报「审批顺序倒置」——守卫不放松判定。红→绿实证：修复撤下场景红，三处守卫齐 211/0 全绿）
 
 3. 规范条目（必须有可追溯的落点）
-   - 落点：templates/_agents/scripts/check-loop.mjs 判据 B 读取点注释（与同文件 entryConfirmed19、spec 读取两处守卫先例互引）
-   - 引用：关单时回填 commit SHA
+   - 落点：templates/_agents/scripts/check-loop.mjs（判据 B 读取点 + 检查 5 textOf 助手 + 检查 6，三处守卫注释互引 incident）
+   - 引用：commit f8514a5

@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L1
 模块: pipeline
-确认指纹: 174c8b4cb72b333f
+确认指纹: 201ea51c45249da7
 ---
 # PLAN — 2026-10-06 check19-entry-enoent
 
