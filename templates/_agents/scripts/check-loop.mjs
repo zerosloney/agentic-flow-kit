@@ -520,7 +520,12 @@ for (const inc of docFiles('incidents')) {
 {
   const cmdFiles = () => (readdirOrNull(path.join(ROOT, '.agents', 'commands')) || [])
     .filter((f) => f.endsWith('.md')).map((f) => `.agents/commands/${f}`);
-  const textOf = (rel) => linesOf(path.join(ROOT, rel)) || [];
+  // existsSync 守卫（2026-10-06-check19-entry-enoent 同类）：AGENTS.md 等可合法缺失（调用方按空数组
+  // 判定本就预期缺失态），fail-loud fs 读下按缺省跳过、不再响亮出账；其余调用方路径另有上游守卫
+  const textOf = (rel) => {
+    const p = path.join(ROOT, rel);
+    return fs.existsSync(p) ? (linesOf(p) || []) : [];
+  };
   for (const role of ['implementer', 'independent-reviewer', 'ui-verifier']) {
     const rolePath = `.agents/roles/${role}.md`;
     if (!fs.existsSync(path.join(ROOT, rolePath))) {
@@ -572,7 +577,10 @@ for (const inc of docFiles('incidents')) {
 // --- 6. 阶段索引同步 [warning] ---
 for (const cmd of ['plan', 'design', 'build', 'test', 'deploy', 'maintain', 'review']) {
   for (const doc of ['AGENTS.md', '.agents/commands/new-task.md']) {
-    const text = linesOf(path.join(ROOT, doc));
+    // existsSync 守卫（2026-10-06-check19-entry-enoent 同类）：两文件可合法缺失（下方 text 判空本就
+    // 预期缺失态），fail-loud fs 读下按空跳过、不再响亮出账
+    const docPath = path.join(ROOT, doc);
+    const text = fs.existsSync(docPath) ? linesOf(docPath) : null;
     if (text && !text.some((l) => l.includes(`.agents/commands/${cmd}.md`))) {
       warnings.push(`- [WARN 阶段索引漂移] ${doc} 缺 ${cmd} 指令索引(两处阶段表须同步维护)`);
     }
@@ -1209,7 +1217,12 @@ runCheck16({ ROOT, ENUMS, docFiles, fmGet, inSet, isTracked, linesOf, readdirOrN
       // 协作道豁免（2026-09-30 hybrid-governance-risk-lanes）：入口 L0/L1 的审批顺序倒置（如 plan 先于
       // intent approved——「动手后确认」）是异步审计泳道语义，非流程违规；入口文件缺失（纯台账历史行 /
       // incident 侧）不豁免，维持既有判据。
-      const ilvlB = fmGet(path.join(ROOT, WF, 'intents', `${base}.md`), '级别');
+      // existsSync 守卫（2026-10-06-check19-entry-enoent）：incident 闭环主题无同名 intent，「读空判级」
+      // 惯用法（缺文件→级别空→不豁免，判定面不变）在 fail-loud fs 读（2026-10-05-gitout-fail-open）下
+      // 每次推送响亮出账 N 条 ENOENT 噪声——守卫跳过读取，语义与上注释一致；同款先例 entryConfirmed19
+      // 与下方 spec 读取。
+      const iabsB = path.join(ROOT, WF, 'intents', `${base}.md`);
+      const ilvlB = fs.existsSync(iabsB) ? fmGet(iabsB, '级别') : '';
       if (ilvlB === 'L0' || ilvlB === 'L1') continue;
       const earliest = seq.map((k) => rec[k]).sort()[0];
       if (!(earliest.slice(0, 10) >= since)) continue;

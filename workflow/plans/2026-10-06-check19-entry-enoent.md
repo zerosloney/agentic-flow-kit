@@ -10,7 +10,8 @@
 
 ## 改动面
 - templates/_agents/scripts/check-loop.mjs：检查 19 判据 B 入口 intent 读取（ilvlB）加 existsSync 守卫——缺同名 intent（incident 闭环主题）跳过读取、级别视为空，顺序判定与豁免语义不变；注释互引同文件两处守卫先例
-- templates/_agents/scripts/check-loop.test.mjs：新增场景——fixture kit.json policyVersion 2 + 台账 specs/plans approved 行 + 无同名 intent：① 顺序合规 → exit 0 且输出无「文档读取异常」；② 顺序倒置 → 照报「审批顺序倒置」（守卫不放松判定）
+- templates/_agents/scripts/check-loop.mjs：**同类读空点一并守卫**（新增测试场景裸 fixture 实证揪出，同根因同文件不扩散）——检查 5 `textOf` 助手集中守卫（AGENTS.md 可合法缺失，调用方按空数组判定本就预期缺失态）+ 检查 6 AGENTS.md / new-task.md 读取守卫（实仓恒存在故属潜伏面，装户缺件时才触发）
+- templates/_agents/scripts/check-loop.test.mjs：新增场景——fixture kit.json policyVersion 2 + 台账 specs/plans approved 行 + 无同名 intent：① 顺序合规裸 fixture → exit 0 且全程无「文档读取异常」（判据 B 与 AGENTS.md/new-task.md 同类读空点一并钉住）；② 顺序倒置 → 照报「审批顺序倒置」（守卫不放松判定）
 - 装回：`node bin/flow-kit.mjs sync`（.agents/scripts/ 两件 managed 副本）
 - 版本收尾：package.json 1.1.6 → 1.1.7 + kit.json version 同步 + CHANGELOG
 

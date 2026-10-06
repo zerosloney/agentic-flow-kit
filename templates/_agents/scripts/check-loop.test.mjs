@@ -2636,5 +2636,31 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   rmfix(T);
 }
 
+// ---- 场景:检查 19 判据 B——台账 approved 行在、入口 intent 缺件（incident 闭环主题）→ 无 ENOENT 出账，顺序判定不放松（2026-10-06-check19-entry-enoent）----
+{
+  const ledgerRows = (specTs, planTs) => [
+    { doc: 'workflow/specs/2026-10-06-noent.md', stage: 'approved', ts: specTs },
+    { doc: 'workflow/plans/2026-10-06-noent.md', stage: 'approved', ts: planTs },
+  ];
+  // ① 顺序合规（specs 先于 plans）：exit 0，且裸 fixture 全程无「文档读取异常（ENOENT）」出账——
+  //    修复前「读空判级」惯用法在 fail-loud fs 读下对缺件主题每次响亮出账（实仓 12 条/推送）；
+  //    同类读空点（AGENTS.md / new-task.md，检查 6）一并被裸 fixture 钉住
+  const T = mkfix();
+  w(T, '.agents/kit.json', JSON.stringify({ policyVersion: 2 }));
+  writeLedger(T, ledgerRows('2026-10-06T10:00:00Z', '2026-10-06T11:00:00Z'));
+  let r = run(T);
+  check('检查 19 判据 B:入口 intent 缺件 → 无 ENOENT 噪声且 exit 0',
+    r.status === 0 && !outOf(r).includes('文档读取异常'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  // ② 顺序倒置（plans 先于 specs）：入口缺件不豁免，照报「审批顺序倒置」——守卫不放松判定
+  const T2 = mkfix();
+  w(T2, '.agents/kit.json', JSON.stringify({ policyVersion: 2 }));
+  writeLedger(T2, ledgerRows('2026-10-06T11:00:00Z', '2026-10-06T10:00:00Z'));
+  r = run(T2);
+  check('检查 19 判据 B:入口 intent 缺件 → 顺序倒置照报（守卫不放松判定）',
+    r.status === 0 && outOf(r).includes('审批顺序倒置'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T2);
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

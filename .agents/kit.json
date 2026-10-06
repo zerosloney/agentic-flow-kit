@@ -1,6 +1,6 @@
 {
   "kit": "agentic-flow-kit",
-  "version": "1.1.6",
+  "version": "1.1.7",
   "policyVersion": 2,
   "audit": true,
   "createdAt": "2026-09-23T15:07:19.753Z",
@@ -138,7 +138,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "3bf4fff404a77fabbc54aadd35b8a8e7b5c3b8e91135d9174a98e20759733827"
+      "sha256": "f3bd0a47e145f05cdd1adc472520759797b25dc0a4bf15d0604979d6bd97d650"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -146,7 +146,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "24040197055eae153ce5f07fbcd8bcd87d540a6b2895c381f20c6be660bda61f"
+      "sha256": "07502514dd2a569afb1b75182ed99e9bde04c7b7ab2fa270e87f809232b5bc89"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
