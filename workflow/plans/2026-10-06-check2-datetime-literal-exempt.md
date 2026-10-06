@@ -1,9 +1,9 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 模块: infra
-确认指纹: e4550e9f4c6ca6fc
+确认指纹: ef52436e504e827a
 ---
 
 # PLAN — 检查 2 日期显示格式字面量豁免（回流）

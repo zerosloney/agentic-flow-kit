@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-06
 模块: infra
 备注: 装户（Shipyard.Material）2026-10-06-check2-datetime-literal-exempt 回流批次，用户 2026-10-06 对话拍板「按照你的建议继续修」；随 1.1.6 发版
-确认指纹: fe0143af0fd01caf
+确认指纹: 4c8bc1d952d23a79
 ---
 
 # INTENT — 检查 2 日期显示格式字面量豁免（装户回流）
@@ -34,8 +34,8 @@ risk_level: L2
 
 ## 验收标准（可测试）
 
-- [ ] `node src/run-tests.mjs` 全绿（含检查 2 新正反场景）
-- [ ] `node .agents/scripts/source-sync-check.mjs --gate` 绿；两仓 check-loop.mjs / check-loop.test.mjs 零 diff（LF 归一）
-- [ ] package.json version 1.1.6 + CHANGELOG 记本批
+- [x] `node src/run-tests.mjs` 全绿（含检查 2 新正反场景）（证据：245fb0b 提交前实跑 FAIL 行数 0）
+- [x] `node .agents/scripts/source-sync-check.mjs --gate` 绿；两仓 check-loop.mjs / check-loop.test.mjs 零 diff（LF 归一）（证据：gate exit 0；装仓↔templates/ 2 份 LF 归一 diff 一致）
+- [x] package.json version 1.1.6 + CHANGELOG 记本批（证据：245fb0b）
 
 > **闭环对账**：关单在 test 阶段。intent 置 done 前逐条勾验补证据。
