@@ -1,9 +1,9 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
 备注: 2026-10-06 补 approved 快照——台账有 approved 行（09-29T23:38Z，代录「继续」）但 git 无中间快照致检查 14 恒告警；本提交指纹取台账 approved 行、随即重确认 done 重绑内容。
-确认指纹: dca5f10921c21921
+确认指纹: d6ddbbc26836d4f2
 ---
 # PLAN — stage-gate-machine
 

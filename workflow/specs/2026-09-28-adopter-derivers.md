@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-09-28
 模块: pipeline
 备注: 承接 `2026-09-28-metric-claim-gate` 真装端到端暴露的 P1（装户无法新增指标）。同名入口：../incidents/2026-09-28-adopter-derivers.md。同名 plan：../plans/2026-09-28-adopter-derivers.md。方案已由用户拍板：**分层（内置硬编码 + 装户模块可选）**。2026-10-06 补 approved 快照——台账有 approved 行（09-28T11:31Z，代录「确认」）但 git 无中间快照致检查 14 恒告警；本提交指纹取台账 approved 行、随即重确认 done 重绑内容。
-确认指纹: f53fd9adeba96ee9
+确认指纹: 965da971c158bda8
 ---
 # SPEC — 装户侧 derivers 动态载入（检查 16 扩展契约）
 
