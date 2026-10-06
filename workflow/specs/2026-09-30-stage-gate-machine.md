@@ -1,10 +1,10 @@
 ---
-状态: done
+状态: approved
 级别: L2
 日期: 2026-09-30
 模块: pipeline
-备注: stage-gate-machine 三件套之 spec（与 intent / plan 同名配对）；含三项待选设计点（审计形态 / incident 口径 / 生效日键）的建议
-确认指纹: 84e0090a519fbff8
+备注: stage-gate-machine 三件套之 spec（与 intent / plan 同名配对）；含三项待选设计点（审计形态 / incident 口径 / 生效日键）的建议。2026-10-06 补 approved 快照——台账有 approved 行（09-29T23:33Z，代录「可以」）但 git 无中间快照致检查 14 恒告警；本提交指纹取台账 approved 行、随即重确认 done 重绑内容。
+确认指纹: 77fb08908b895d43
 ---
 # SPEC — stage-gate-machine
 
