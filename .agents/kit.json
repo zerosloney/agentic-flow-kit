@@ -254,7 +254,7 @@
     },
     {
       "rel": ".agents/scripts/policy.mjs",
-      "sha256": "223c444629c412dc58ae009e5ae726372dbb644b3bd3904240a7fec7cc73e0dc"
+      "sha256": "2f9da5332e356168299536f20f1fcc227b3c1824b50806e53658abff9bfc4ea6"
     },
     {
       "rel": ".agents/scripts/pre-push.test.mjs",
