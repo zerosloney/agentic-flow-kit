@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
-确认指纹: 47399654c3e5cb8a
+确认指纹: 4ccd148f58679f4b
 ---
 # PLAN — adopter-ci-github
 
@@ -48,6 +48,7 @@
 ## 确认与复核
 
 > 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节；done 只在关单出现——禁从 draft 直跳 done（2026-09-22 papercut）。
-- 确认结果：approved（2026-10-07 用户对话内确认）；done（YYYY-MM-DD 关单，随入口文档置终态）
+- 确认结果：approved（2026-10-07 用户对话内确认）；done（2026-10-07 关单，随入口文档置终态）
 - 确认门记录：plan 草稿全文过目 + 改动清单确认（build.md 两道门，逐次，不合并）
-- 复核：L2 独立复核——independent-reviewer 复核契约点与测试覆盖（任务 5，提交前）
+- 复核：L2 独立复核——independent-reviewer 已复核（2026-10-07，零 P0/P1，P2-1/P3-1 当场修复，判定可提交）
+- 偏离留痕：①测试落位 `src/fresh-init.test.mjs`（跑真实全量 init，保真度更高）替代 spec 字面 `src/init.test.mjs`——复核 P3-2 定性无害；②实现期 pre-commit 规则面预算拦下 AGENTS.md 超限（7969B > 7680）——按 53d3105 先例 512B 步进上调 rule-budgets 7680→8192（双源成对 templates/_agents + .agents），属任务 3 的合规延伸

@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-07
 模块: pipeline
 备注: 关联 intents/plans 2026-10-07-adopter-ci-github（L2 防御道，intent 已 approved）
-确认指纹: ea6ec7631b1e440e
+确认指纹: cdf2b2748475df25
 ---
 # SPEC — adopter-ci-github
 
@@ -95,5 +95,5 @@ jobs:
 
 ## 确认与复核
 
-- 确认日期：
-- 复核：L2 推荐独立复核——实现完成后由 independent-reviewer 复核 diff（契约点 + 测试覆盖），时机在 plan 约定
+- 确认日期：2026-10-07（对话原话「确认」）
+- 复核：L2 推荐独立复核——independent-reviewer 已于实现后复核 diff（2026-10-07，总判定可提交，处置记录见 intent「确认与复核」）

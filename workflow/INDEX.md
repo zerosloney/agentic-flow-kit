@@ -5,28 +5,25 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（3）
+## 活跃（0）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
-| INTENT | L2 | approved | 2026-10-07 | pipeline | adopter-ci-github | ☑0/5 |
-| PLAN | L2 | approved | 2026-10-07 | pipeline | adopter-ci-github | — |
-| SPEC | L2 | approved | 2026-10-07 | pipeline | adopter-ci-github | — |
 
-## 档案计数（250，不进表）
+## 档案计数（253，不进表）
 
 | 类型 | 模块 | 数量 |
 |---|---|---|
 | INCIDENT | pipeline | 32 |
 | INTENT | infra | 4 |
-| INTENT | pipeline | 62 |
+| INTENT | pipeline | 63 |
 | INTENT | wiki | 1 |
 | PLAN | infra | 4 |
-| PLAN | pipeline | 93 |
+| PLAN | pipeline | 94 |
 | PLAN | wiki | 1 |
 | SPEC | infra | 4 |
-| SPEC | pipeline | 49 |
+| SPEC | pipeline | 50 |
 
-终态构成：done 218 · closed 20 · fixed 12；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
+终态构成：done 221 · closed 20 · fixed 12；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
 
 <!-- GENERATED:END -->

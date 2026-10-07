@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-07
 模块: pipeline
 备注: 装户 GitHub Actions 远端门模板下发（templates/_github → .github，owned）
-确认指纹: 9d5d73a7397a3483
+确认指纹: 9be5db37dd049190
 ---
 # INTENT — adopter-ci-github
 
@@ -56,17 +56,17 @@ Anthropic「AI 原生 SDLC」基准核对（2026-10-07 会话）确认两个必�
 
 ## 验收标准（可测试）
 
-- [ ] `isOwned('.github/workflows/kit-ci.yml') === true` 且 `isOwned('.agents/notes/x.md')` 等存量断言不回归（单元）
-- [ ] fresh init 夹具：目标树落盘 `.github/workflows/kit-ci.yml`，kit.json owned 含该 rel 且 `srcSha256` == 包源模板 LF 归一 sha；模板内容断言含统一入口引用（`node .agents/scripts/verify.mjs`）与分支策略人工边界提示
-- [ ] sync 感知场景：源模板改一字 → 夹具 sync 出 stale-drift advisory 含该 rel；盘面定制且源未演进 → 不出账（custom-synced）
-- [ ] 存量装户夹具（盘上无该件）sync：出 newOwned 提示行且不自动写盘
-- [ ] `npm test` 全绿（含 templates/ 与 shipped `.agents/` 两套件）
+- [x] `isOwned('.github/workflows/kit-ci.yml') === true` 且 `.agents/notes/x.md` 等存量断言不回归（单元）（证据：src/sync.test.mjs S16① 双向断言（正例含 AGENTS.md / .agents/notes / workflow 路径 + managed 反例），fd4ab48）
+- [x] fresh init 夹具：目标树落盘 `.github/workflows/kit-ci.yml`，kit.json owned 含该 rel 且 `srcSha256` == 包源模板 LF 归一 sha；模板内容断言含统一入口引用（`node .agents/scripts/verify.mjs`）与分支策略人工边界提示（证据：src/fresh-init.test.mjs「新装 CI 远端门模板落盘且 kit.json owned 带锚」「新装 CI 模板引用统一入口 verify.mjs、含分支策略人工边界提示且无 Tab 缩进」两条 PASS，fd4ab48）
+- [x] sync 感知场景：源模板改一字 → 夹具 sync 出 stale-drift advisory 含该 rel；盘面定制且源未演进 → 不出账（custom-synced）（证据：src/sync.test.mjs S16③ 四断言（出账 / 定制不覆盖 / 锚刷新 / 再跑静默），fd4ab48）
+- [x] 存量装户夹具（盘上无该件）sync：出 newOwned 提示行且不自动写盘（证据：src/sync.test.mjs S16② + 本仓 `flow-kit sync` 实跑输出「新增 owned 起步文档…​.github/workflows/kit-ci.yml」且盘上无该件，fd4ab48 批）
+- [x] `npm test` 全绿（含 templates/ 与 shipped `.agents/` 两套件）（证据：verify 2/2 全绿，合计 PASS 15 / FAIL 0，凭证落账 .agents/verifications.jsonl（2026-10-07），fd4ab48 批）
 
 > 运行时真值（GitHub Actions 实跑）留装户首跑验证——本仓不采用该文件、零依赖纪律不引 YAML parser，此边界在 spec 申明。
 
 ## 确认与复核
 
-- 确认日期：
+- 确认日期：2026-10-07
 - 确认人：用户（对话内明确放行即确认）
-- 确认范围：intent 全文（含非目标与验收标准）
-- 复核：L2 防御道，独立复核时机与范围在 plan 约定
+- 确认范围：intent 全文（含非目标与验收标准），对话原话「可以」
+- 复核：independent-reviewer 已复核实现 diff（2026-10-07）——零 P0/P1；P2-1（分支策略提示断言缺失）与 P3-1（isOwned 存量正例）当场补断言修复，P3-2（测试落位 fresh-init 替代 init.test，保真度更高）与 P3-3（verify 既有语义提示）留定性记录；总判定「可提交」
