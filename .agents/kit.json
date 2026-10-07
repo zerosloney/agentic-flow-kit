@@ -62,7 +62,7 @@
     },
     {
       "rel": ".agents/commands/sync-hosts.md",
-      "sha256": "5074d3574b232b20a5fb2dc9a50080de814c4eacb43053707d0d66ebafc750e8"
+      "sha256": "1be9c2a1033048a955633d66ccac78e13f5017341597bf0537f66883b72696de"
     },
     {
       "rel": ".agents/commands/test.md",

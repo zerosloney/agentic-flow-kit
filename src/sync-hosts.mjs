@@ -45,17 +45,19 @@ function listMd(dir) {
 // pairsFor：权威源文件 → 薄适配 rel 列表（映射单源见 profiles.mjs#HOSTS.commandPrefix）
 //   commands 权威源 → 带 commandPrefix 的宿主各一份（<dir>/commands/<prefix><name>.md）
 //   roles    权威源 → 全部宿主 agents 各一份
-function pairsFor(authRel) {
+// hostDirOf：宿主 → 适配目录名。包源布局 = 宿主键（modules/hosts/opencode/…）；装户布局 = HOSTS[h].dir
+// （项目根下 .opencode/…，带点）——2026-10-07 sync-hosts-target-fix 加装户支持时引入。
+function pairsFor(authRel, hostDirOf = (h) => h) {
   const out = [];
   const norm = authRel.split(path.sep).join('/');
   if (norm.startsWith('commands/') && norm.endsWith('.md')) {
     const name = norm.slice('commands/'.length, -'.md'.length);
     for (const [h, v] of Object.entries(HOSTS)) {
-      if (v.commandPrefix) out.push({ adapterRel: `${h}/commands/${v.commandPrefix}${name}.md` });
+      if (v.commandPrefix) out.push({ adapterRel: `${hostDirOf(h)}/commands/${v.commandPrefix}${name}.md` });
     }
   } else if (norm.startsWith('roles/') && norm.endsWith('.md')) {
     const name = norm.slice('roles/'.length, -'.md'.length);
-    for (const h of Object.keys(HOSTS)) out.push({ adapterRel: `${h}/agents/${name}.md` });
+    for (const h of Object.keys(HOSTS)) out.push({ adapterRel: `${hostDirOf(h)}/agents/${name}.md` });
   }
   return out;
 }
@@ -63,12 +65,13 @@ function pairsFor(authRel) {
 // diffHosts：权威源正文段 vs 薄适配正文段的漂移分析（B-b 语义；pure function）。
 // authorityRoot：权威源根（含 commands/ + roles/）
 // adaptersRoot：薄适配根（含 <h>/{agents,commands}/）
+// hostDirOf：宿主 → 适配目录名（默认宿主键 = 包源布局；装户布局传 (h) => HOSTS[h].dir）
 // 返回：{ drift, inSync, authorityMissing, adapterOrphans, note }
-//   drift       = 正文段 sha 不一致（权威源改 / 薄适配手改 都计入；不区分方向）
-//   inSync      = 正文段 sha 对齐的文件对数
-//   authorityMissing = 权威源声明但薄适配文件不存在（apply 不自动创建——薄适配须经 add-host 接管）
-//   adapterOrphans   = 薄适配存在但权威源无对应文件（apply 不删——可能是宿主特化或历史残留）
-export function diffHosts({ authorityRoot, adaptersRoot }) {
+// drift = 正文段 sha 不一致（权威源改 / 薄适配手改 都计入；不区分方向）
+// inSync = 正文段 sha 对齐的文件对数
+// authorityMissing = 权威源声明但薄适配文件不存在（apply 不自动创建——薄适配须经 add-host 接管）
+// adapterOrphans = 薄适配存在但权威源无对应文件（apply 不删——可能是宿主特化或历史残留）
+export function diffHosts({ authorityRoot, adaptersRoot, hostDirOf = (h) => h }) {
   if (!fs.existsSync(authorityRoot)) return { drift: [], inSync: 0, authorityMissing: [], adapterOrphans: [], note: `权威源根不存在：${authorityRoot}` };
 
   const drift = [];
@@ -83,14 +86,16 @@ export function diffHosts({ authorityRoot, adaptersRoot }) {
       const authRel = `${sub}/${f}`;
       const authAbs = path.join(authorityRoot, authRel);
       const authSha = bodySha(authAbs);
-      const pairs = pairsFor(authRel);
+      const pairs = pairsFor(authRel, hostDirOf);
       if (pairs.length === 0) continue;
       for (const { adapterRel } of pairs) {
         adapterSeen.add(adapterRel);
         const adapterAbs = path.join(adaptersRoot, adapterRel);
         const adapterSha = bodySha(adapterAbs);
         if (adapterSha === null) {
-          authorityMissing.push({ authRel, adapterRel });
+          // 未安装的宿主不算「缺失」——那是没装，不是漂移（2026-10-07：装户只装部分宿主时，
+          // 旧行为会把未装宿主的全部适配文件列成 authorityMissing，装户 --apply 恒 exit 1 且刷屏）
+          if (fs.existsSync(path.dirname(adapterAbs))) authorityMissing.push({ authRel, adapterRel });
           continue;
         }
         if (authSha === adapterSha) { inSync++; continue; }
@@ -103,9 +108,9 @@ export function diffHosts({ authorityRoot, adaptersRoot }) {
   const adapterOrphans = [];
   for (const h of Object.keys(HOSTS)) {
     for (const sub of ['agents', 'commands']) {
-      const subAbs = path.join(adaptersRoot, h, sub);
+      const subAbs = path.join(adaptersRoot, hostDirOf(h), sub);
       for (const f of listMd(subAbs)) {
-        const adapterRel = `${h}/${sub}/${f}`;
+        const adapterRel = `${hostDirOf(h)}/${sub}/${f}`;
         if (adapterSeen.has(adapterRel)) continue;
         let authGuess;
         const prefix = HOSTS[h] && HOSTS[h].commandPrefix;
@@ -168,24 +173,42 @@ function applyForward({ authorityRoot, adaptersRoot }, drift) {
 export function syncHosts(args, pkgRoot) {
   let apply = false;
   let json = false;
-  for (const a of args) {
+  let dir = null;
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
     if (a === '--diff') apply = false;
     else if (a === '--apply') apply = true;
     else if (a === '--json') json = true;
+    else if (a === '--dir') { dir = args[++i]; if (!dir) fail('--dir 缺少参数（目标项目根）'); }
     else fail(`未知选项：${a}（flow-kit sync-hosts --help）`);
   }
   if (!pkgRoot) fail('sync-hosts 缺少 pkgRoot（开发模式入口）');
 
-  const authorityRoot = path.join(pkgRoot, 'templates', '_agents');
-  const adaptersRoot = path.join(pkgRoot, 'modules', 'hosts');
-  const result = diffHosts({ authorityRoot, adaptersRoot });
+  // 目标根：--dir > cwd > pkgRoot（兜底）。
+  // 2026-10-07 sync-hosts-target-fix：此前恒用 pkgRoot——装户里跑 `flow-kit sync-hosts` 时 pkgRoot
+  // 解析为**包安装目录**，于是 doctor §7.x 报漂移、照提示跑 `--apply` 会去改包源仓（装户自己的适配层纹丝不动）。
+  const target = path.resolve(dir || process.cwd() || pkgRoot);
+  // 布局判定（与 doctor.checkAdapterDrift 同口径）：
+  //   包源（templates/_agents 与 modules/hosts 同时存在）→ 权威源 = <target>/templates/_agents，薄适配根 = <target>/modules/hosts
+  //   装户（其余）→ 权威源 = <target>/.agents，薄适配根 = <target>（宿主目录 .opencode/.trae/… 直接位于项目根）
+  const isSourceRepo = fs.existsSync(path.join(target, 'templates', '_agents'))
+    && fs.existsSync(path.join(target, 'modules', 'hosts'));
+  const authorityRoot = isSourceRepo ? path.join(target, 'templates', '_agents') : path.join(target, '.agents');
+  const adaptersRoot = isSourceRepo ? path.join(target, 'modules', 'hosts') : target;
+  if (!fs.existsSync(authorityRoot)) {
+    fail(`未找到权威源目录：${authorityRoot}——目标根 ${target} 既非包源（无 templates/_agents）也非装户（无 .agents）；用 --dir <项目根> 指定`);
+  }
+  const layout = isSourceRepo ? '包源' : '装户';
+  // 适配目录名：包源 = 宿主键（modules/hosts/opencode/…）；装户 = HOSTS[h].dir（项目根下 .opencode/…）
+  const hostDirOf = isSourceRepo ? (h) => h : (h) => (HOSTS[h] && HOSTS[h].dir) || h;
+  const result = diffHosts({ authorityRoot, adaptersRoot, hostDirOf });
 
   if (apply && result.drift.length > 0) {
     const { synced } = applyForward({ authorityRoot, adaptersRoot }, result.drift);
-    console.log(`▶ flow-kit sync-hosts --apply → ${pkgRoot}`);
+    console.log(`▶ flow-kit sync-hosts --apply → ${target}（${layout}布局）`);
     console.log(`  按权威源正文覆盖薄适配正文段 ${synced.length} 份（薄适配 frontmatter 不动）：`);
     for (const rel of synced) console.log(`    - ${rel}`);
-    const after = diffHosts({ authorityRoot, adaptersRoot });
+    const after = diffHosts({ authorityRoot, adaptersRoot, hostDirOf });
     console.log(`  同步后正文对齐：${after.inSync} 对；权威源缺失：${after.authorityMissing.length}；正文漂移：${after.drift.length}`);
     return after.drift.length === 0 && after.authorityMissing.length === 0 ? 0 : 1;
   }
@@ -193,7 +216,7 @@ export function syncHosts(args, pkgRoot) {
   if (json) {
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
   } else {
-    console.log(`▶ flow-kit sync-hosts --diff → ${pkgRoot}`);
+    console.log(`▶ flow-kit sync-hosts --diff → ${target}（${layout}布局）`);
     printDiff(result);
   }
   return 0;

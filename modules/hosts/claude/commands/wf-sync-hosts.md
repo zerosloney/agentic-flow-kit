@@ -7,7 +7,10 @@ description: 跨宿主适配层同步（正文段 sha 比对 + 用户拍板 + �
 # Sync-Hosts · 跨宿主适配层正文段同步
 
 > 改权威源（`templates/_agents/{commands,roles}/*.md`）后薄适配（`modules/hosts/<h>/{agents,commands}/*.md`）要同步——薄适配正文 = 权威源正文，frontmatter 各自保留宿主特化（commands 层文件名 = 宿主命令名，opencode / trae 同用 `wf-` 前缀，单源见 `src/profiles.mjs#HOSTS.commandPrefix`；trae 另有 `name: wf-X`，zcode/omp 各自原描述）。
-> 装户视角：`flow-kit doctor` §7.x 跑同名检查（仅装户，包源环境跳过——包源下永远是 drift）。
+> 装户视角：`flow-kit doctor` §7.x 跑同名检查（仅装户，包源环境跳过——包源下永远是 drift）；**修漂移用同一条命令**
+> `flow-kit sync-hosts --apply`——2026-10-07 起按**目标根**自动判布局（含 `templates/_agents` + `modules/hosts` → 包源：
+> 比 `templates/_agents` ↔ `modules/hosts/<宿主键>/`；含 `.agents` → 装户：比 `.agents` ↔ 项目根下 `<宿主点目录>/`），
+> 目标根取 `--dir <目录>` > 当前目录。
 
 ## 何时跑
 
@@ -21,8 +24,9 @@ description: 跨宿主适配层同步（正文段 sha 比对 + 用户拍板 + �
 ### 默认 `--diff`（仅报告）
 
 ```
-node bin/flow-kit.mjs sync-hosts --diff
-node bin/flow-kit.mjs sync-hosts --json   # 机器可读
+node bin/flow-kit.mjs sync-hosts --diff      # 包源仓（在包源根跑）
+node bin/flow-kit.mjs sync-hosts --json      # 机器可读
+flow-kit sync-hosts --diff                   # 装户仓（在装户根跑；或用 --dir <项目根> 指定）
 ```
 
 输出三类：

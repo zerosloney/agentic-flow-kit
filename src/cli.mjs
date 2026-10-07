@@ -52,7 +52,9 @@ init 选项（全部可选，均有默认值）：
   --force              覆盖已存在的同名文件（默认保守跳过）
 
 sync / add-host 选项：--dir <目录>、--force（覆盖本地已改 / 已装内容）；add-gate 选项：--dir <目录>、--force。
-sync-hosts 选项：--diff（默认，仅报告，不修改）/ --apply（单向同步到薄适配）/ --json（机器可读输出）。
+sync-hosts 选项：--diff（默认，仅报告，不修改）/ --apply（单向同步到薄适配）/ --json（机器可读输出）/ --dir <目录>（目标项目根，默认当前目录）。
+sync-hosts 双布局（2026-10-07）：包源仓（含 templates/_agents + modules/hosts）比对 templates/_agents ↔ modules/hosts；
+装户仓（含 .agents）比对 .agents ↔ 各宿主目录（.opencode/.trae/.omp/.zcode…）——同一命令两处都可用。
 
 示例：
   npx agentic-flow-kit init                        # 交互模式：宿主 → 技术栈 → 端口 → 确认安装
