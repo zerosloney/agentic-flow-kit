@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-08
 模块: pipeline
 备注: 关联 incidents/plans 2026-10-08-checkloop-importable（L2 防御道，incident 已含用户确认留痕）
-确认指纹: c8ea2a48a33cd809
+确认指纹: 8b7f0dad827dbc3d
 ---
 # SPEC — checkloop-importable
 

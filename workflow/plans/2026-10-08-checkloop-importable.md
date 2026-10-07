@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
-确认指纹: dfa41678aa4fde2e
+确认指纹: c92c35c5fbb2f1a8
 ---
 # PLAN — checkloop-importable
 
@@ -53,6 +53,7 @@
 ## 确认与复核
 
 > 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节；done 只在关单出现——禁从 draft 直跳 done（2026-09-22 papercut）。
-- 确认结果：approved（2026-10-08 用户对话内确认）；done（YYYY-MM-DD 关单，随入口文档置终态）
+- 确认结果：approved（2026-10-08 用户对话内确认）；done（2026-10-08 关单，随入口文档置终态）
 - 确认门记录：plan 草稿全文过目 + 改动清单确认（build.md 两道门，逐次，不合并）
-- 复核：L2 独立复核——independent-reviewer 复核接缝变换与退出点改写（任务 5，提交前，diff -w 主视图）
+- 复核：L2 独立复核——independent-reviewer 已复核（2026-10-08，diff -w 主视图，零 P0/P1/P2、3 条 P3 缩进项当场修齐，总判定可提交）
+- 偏离留痕：①流程段实际起点 :143（spec 估算 :127）与流程退出点实际 10 处 + 新增 root 分支 1 处（估算 9 处）——盘点口径修正，判据不变；②`git diff -w` 实质 77+/49-（估算 ≈40 行偏低——检查 20+ 输出段整体搬移计入）；③互斥报错文案初版拆散既有断言子串「不能同时使用」致 rev 套件 1 FAIL——恢复连续子串「--rev 不能同时使用 root 参数 / CHECK_LOOP_ROOT」后复绿（教训：改报错文案先 grep 断言子串）；④codemod 三缺陷（env-if 开括号未跳过致配平失衡 +1、缩进退出点正则锚列 0 未匹配、末尾硬编码重复 return）均在 node --check / 配平扫描 / 同状态逐字节对账三重网内当场修正——机械变换的三重验证网按设计工作
