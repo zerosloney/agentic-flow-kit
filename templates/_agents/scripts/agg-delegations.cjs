@@ -57,9 +57,15 @@ function splitTables(text) {
   return tables;
 }
 
-function readLedger() {
-  if (!fs.existsSync(LEDGER)) fail(`找不到 ${LEDGER}`);
-  const text = fs.readFileSync(LEDGER, 'utf8');
+// readLedger：root 显式参数 + soft 模式（2026-10-08 workflow-dashboard 使能导出，判据单源复用——
+// 仪表盘 require 本函数取行，不重写表解析；缺省 root/无 soft 行为与原签名完全一致，main() 零变化）
+function readLedger(root = ROOT, opts = {}) {
+  const ledger = path.join(root, 'workflow', 'delegations.md');
+  if (!fs.existsSync(ledger)) {
+    if (opts.soft) return [];
+    fail(`找不到 ${ledger}`);
+  }
+  const text = fs.readFileSync(ledger, 'utf8');
   const tables = splitTables(text);
   const delegated = parseTableRows(tables.delegated.join('\n')).map((c) => ({
     scope: '委派',
@@ -76,7 +82,8 @@ function readLedger() {
   const rows = delegated.concat(selfDone);
   // 零数据行时区分「台账真空」与「结构漂移」：有日期开头的数据行却识别不到表 → fail-loud，不再静默「台账为空」
   if (!rows.length && /^\s*\|\s*\d{4}-\d{2}-\d{2}\s*\|/m.test(text)) {
-    fail(`台账结构漂移：${LEDGER} 存在日期开头的数据行但未识别到结果表（委派表表头须含「被委派方」列，自做表表头须为「日期 | 任务一句话 | 结果 | 备注」）`);
+    if (opts.soft) return [];
+    fail(`台账结构漂移：${ledger} 存在日期开头的数据行但未识别到结果表（委派表表头须含「被委派方」列，自做表表头须为「日期 | 任务一句话 | 结果 | 备注」）`);
   }
   return rows;
 }
@@ -200,5 +207,5 @@ function main() {
 if (require.main === module) {
   main();
 } else {
-  module.exports = { parseResult, metrics, gateMonth, expansionVerdict, GATE };
+  module.exports = { parseResult, metrics, gateMonth, expansionVerdict, GATE, readLedger };
 }

@@ -102,7 +102,7 @@
     },
     {
       "rel": ".agents/scripts/agg-delegations.cjs",
-      "sha256": "d2566b888a930bc95422d747916d47432a29340f7cbe69e3bf08d06039196dc4"
+      "sha256": "5af97786f9a57bb18c54c908903d6d95b7ec98fa7f650531919a3707c8c00546"
     },
     {
       "rel": ".agents/scripts/agg-delegations.test.mjs",
@@ -211,6 +211,14 @@
     {
       "rel": ".agents/scripts/gen-wiki-board.test.mjs",
       "sha256": "2eaf639b0ff77b0966c273e62edac3cb64f988f0d9ee4bef31f661945d4bfc58"
+    },
+    {
+      "rel": ".agents/scripts/gen-workflow-dashboard.mjs",
+      "sha256": "3b8a4117510b459c01a85c139c893c9059e7833e846fd3b523221973d234b163"
+    },
+    {
+      "rel": ".agents/scripts/gen-workflow-dashboard.test.mjs",
+      "sha256": "d51c2624a4b3a9b5682678f57b325df51a1811a26c9708c5f9a648d204d35e02"
     },
     {
       "rel": ".agents/scripts/gen-workflow-index.mjs",
