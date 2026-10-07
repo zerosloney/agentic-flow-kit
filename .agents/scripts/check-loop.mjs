@@ -672,6 +672,13 @@ export function runCheckLoop(opts = {}) {
     // 重试后仍异常按下方 status!==0 判定（fail-closed 保持——本地核验不了就按伪造拦）
     const revParse = spawnGit(['rev-parse', sha]);
     if (revParse.status !== 0) {
+      // git 通道坏死（spawn 异常，非 git 的正常回答）→ 禁用下方两类豁免：「实证分流」依赖 rev-parse
+      // 可用，通道失效时纯数字/外部引用都无法实证，按伪造拦（fail-closed，与 :672 注释一致）。
+      // v1.3.0 Release CI 实证：fixture 短 sha 恰全数字（≈4%/run）时，纯数字 text 豁免曾把本场景
+      // fail-closed 漏成 exit 0（ubuntu 腿）；win32 sha 含字母走 forged 故本地恒绿——平台概率差异。
+      if (revParse.error) {
+        return { ok: false, type: 'forged', msg: `提交 ${sha} 不存在` };
+      }
       // 纯数字串且解析失败 → 时间戳/ID 维持文本豁免（2026-10-05-check8-digit-sha-misfire：形态守卫
       // 曾把全数字短 SHA≈4.4%/夹具 误分类为文本致核验静默跳过——改由 rev-parse 实证分流）。
       // 纪律：文本启发式须可被实证兜底，禁以字符形态抢先分类。

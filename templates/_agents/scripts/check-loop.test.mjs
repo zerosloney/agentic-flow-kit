@@ -744,6 +744,24 @@ const evidenceFixture = (slug, declared, createDeclared) => {
   rmfix(T);
 }
 {
+  // 纯数字短 sha × 通道坏死（2026-10-07 v1.3.0 Release CI ubuntu 实证）：fixture 短 sha 恰全数字
+  //（`--short` 7 位 ≈4%/run）时，rev-parse 实证分流在 CHECK_LOOP_GIT 整体坏死下不可能——
+  // 纯数字 text 豁免曾把 fail-closed 漏成 exit 0。守卫后：通道坏死（spawn 异常）→ forged 拦；
+  // 对照：通道健康时纯数字假 sha → rev-parse 正常回答不存在 → text 豁免语义保持（misfire 防线不回归）。
+  const T = mkfix();
+  gitInit(T);
+  w(T, 'workflow/plans/2026-09-26-pe7.md', PLAN('pe7', '状态: done\n级别: L1\n模块: material', '\n## 改动方案\n\n- src/app.mjs：实现功能\n'));
+  w(T, 'workflow/intents/2026-09-26-pe7.md', INTENT('pe7', '状态: done\n级别: L1\n日期: 2026-09-26', '\n## 验收标准（可测试）\n- [x] 演练穿越（证据:1234567）\n'));
+  gitCommitAll(T, 'docs(x): 纯数字证据通道坏死场景');
+  const rDead = run(T, { env: { CHECK_LOOP_GIT: 'definitely-not-git-xyz-2026' } });
+  check('git 基础设施异常:纯数字 sha × 通道坏死 → forged 拦不豁免（实证不可能即 fail-closed）',
+    rDead.status === 1 && outOf(rDead).includes('证据伪造'), `exit=${rDead.status}\n${outOf(rDead)}`);
+  const rAlive = run(T);
+  check('git 基础设施异常:纯数字假 sha × 通道健康 → text 豁免语义保持（misfire 防线不回归）',
+    rAlive.status === 0 && outOf(rAlive).includes('证据豁免 text'), `exit=${rAlive.status}\n${outOf(rAlive)}`);
+  rmfix(T);
+}
+{
   const T = mkfix();
   gitInit(T);
   w(T, 'workflow/plans/2026-09-26-pe5.md', PLAN('pe5', '状态: done\n级别: L1\n模块: material', '\n## 改动方案\n\n- src/app.mjs：实现功能\n'));
