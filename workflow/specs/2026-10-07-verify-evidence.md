@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-07
 模块: pipeline
 备注: 对应 intent 2026-10-07-verify-evidence（done 前测试绿机器凭证）；方案 = verify.mjs 落账点 × confirm-doc 门前置 × 检查 8 凭证对账，policyVersion v5
-确认指纹: f339ee677ef5d2c9
+确认指纹: 4cafe25c11909004
 ---
 # SPEC — verify-evidence
 

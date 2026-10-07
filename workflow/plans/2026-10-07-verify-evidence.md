@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
-确认指纹: aa91dd70d932150f
+确认指纹: 0568a3b1e8a05a7d
 ---
 # PLAN — verify-evidence
 
@@ -48,6 +48,7 @@
 
 ## 确认与复核
 
-- 确认结果：approved（2026-10-07 用户对话内代录「确认」）；done（关单时随入口文档置终态）
+- 确认结果：approved（2026-10-07 用户对话内代录「确认」）；done（2026-10-07 关单，同语代录）
 - 确认门记录：spec 落账点/窗口/灰度方案已在对话内过目并 approved；plan 为其函数级落点拆解，无新增行为决策
-- 复核：L2 推荐独立复核（实现完成后 independent-reviewer 横切）
+- 复核：已完成（2026-10-07 independent-reviewer）——PASS 零 P0/P1，六条承诺逐条对齐；P2-1（PIPELINE_RUN_ID 无生产方）当场修复 pipeline-run.mjs#runNode env 注入；N-1~N-5 登记不阻断（详见 intent 确认与复核节）
+- 实现偏离留痕：①verify.mjs npm test 步骤 stdio 从 inherit 改 pipe 捕获后回放（延迟显示，关单场景可接受——为 best-effort 抓计数行，spec 场景 1 已论证）；②检查 8 场景 fixture 手构指纹配对（mkConfirmedDoc 不支持自定义正文——验收节 body 需求，与 bindingSha256 复原口径对称）
