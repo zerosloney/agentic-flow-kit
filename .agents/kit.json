@@ -102,7 +102,7 @@
     },
     {
       "rel": ".agents/scripts/agg-delegations.cjs",
-      "sha256": "13ca19219450218187b51356df3f28d1bc99c7637ed6ba404a230f9f5b6e9f48"
+      "sha256": "d2566b888a930bc95422d747916d47432a29340f7cbe69e3bf08d06039196dc4"
     },
     {
       "rel": ".agents/scripts/agg-delegations.test.mjs",
@@ -126,11 +126,11 @@
     },
     {
       "rel": ".agents/scripts/check-ledger.mjs",
-      "sha256": "6088f04a32ac779cbcbe61bdf1c9798756c7f6eb83c9508471814f0008d6e0df"
+      "sha256": "dcca3bca643f6e1fdca0add30caffea693db698bc5d4345a444c67cfffcb0d69"
     },
     {
       "rel": ".agents/scripts/check-ledger.test.mjs",
-      "sha256": "f867d94644c8db83dd807cada921f3d800718320793c026ab4eb68bf897922f3"
+      "sha256": "fce172348fd5c0aced64e2f65a075b3db6c9ecac7f437db013920629f32ef12b"
     },
     {
       "rel": ".agents/scripts/check-loop-rev.test.mjs",
@@ -138,7 +138,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "c2ae99e89d378a4734ece888e6c0419bbb25e00b67608d8d405b5accfe36a83f"
+      "sha256": "44ee8d5be0a17e30add3fe90ecb9c6e25975452dcd4369059262d8b1816401ab"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -146,7 +146,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "4ce4695d4c11574a51e0f90eeeca33f95db7cc17c180b75e53b8c7e317071b96"
+      "sha256": "2ba060420d2b750b4b2ced409d20aaa03aa09755606dbfc3e2690950df4ac319"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -469,7 +469,7 @@
     },
     {
       "rel": "workflow/papercuts.md",
-      "sha256": "81fc6f1ee94d9cc64acff15aac57e8271e37f9885b31e9912eb606e1139daed4",
+      "sha256": "d538be815e9a51ae115be6a9e3c9d8fa717685ceb794687b89106ec5052d79d7",
       "srcSha256": "07f8b0fad8223d25a5f67ce2c672bc9d92288c7b2e123a28e430c509e2c83115"
     },
     {

@@ -461,7 +461,9 @@ for (const inc of docFiles('incidents')) {
   // 花括号展开逐路查存在，任一路存在即有效；`*` 按目录枚举 glob 匹配，命中即有效；全不中才算断档
   // （2026-09-26 审查修复：正则字符类不含 {} *，曾把 `fill-{intent,spec,plan}.mjs` / `fill-*.mjs`
   //   截断成 `fill-` 误报引用断档）
-  const refRe = /\.agents\/(commands|hooks|scripts|skills|roles)\/[A-Za-z0-9_][A-Za-z0-9_./{},，*-]*/g;
+  // 全角逗号不入字符类（2026-10-08 papercuts-cleanup-batch 修 4）：中文文档路径引用后紧跟「，」时
+  // 曾被并入引用串 → 引用断档误报（p0-gate-noise-batch 实证 2 条 + 本登记行自中）；花括号保留（{{VAR}} 引用形态）
+  const refRe = /\.agents\/(commands|hooks|scripts|skills|roles)\/[A-Za-z0-9_][A-Za-z0-9_./{},*-]*/g;
   const expandRef = (ref) => {
     const m = ref.match(/^([^{]*)\{([^}]*)\}(.*)$/);
     if (!m) return [ref];
@@ -915,8 +917,25 @@ if (gitOut(['rev-parse', '--git-dir']) !== null) {
   }
 }
 
-// --- 14. 新 done 的 spec/plan 须在 git 历史里出现过 `状态: approved` [warning]（恒 advisory；非 git 跳过）---
+// --- 14. 新 done 的 spec/plan 须有确认留痕：git 历史「状态: approved」 或 confirmations.jsonl 台账 approved 行 [warning]（恒 advisory；非 git 跳过）---
+// 2026-10-08 papercuts-cleanup-batch 修 3：两跳确认同批提交时 git 历史不出现行首「状态: approved」曾误报，
+// 而台账已证明两跳均走（2026-09-28-adopter-derivers 实证）——判据改 OR 并集（git 判据保留不弱化，
+// 台账为第二通道；确认事件以台账为准）。台账伪造面由检查 15 指纹 hard 门把关，本修仅消 advisory 误报。
 if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '--verify', 'HEAD']) !== null) {
+  // 台账 approved 文档集合：单次读取（坏行容忍跳过，与检查 15 同口径）；缺失视为空集（git 判据仍守门）
+  const ledgerApproved = new Set();
+  try {
+    const lp = path.join(ROOT, '.agents', 'confirmations.jsonl');
+    if (fs.existsSync(lp)) {
+      for (const line of fs.readFileSync(lp, 'utf8').split(/\r?\n/)) {
+        if (!line.trim()) continue;
+        try {
+          const e = JSON.parse(line);
+          if (e && typeof e.doc === 'string' && e.stage === 'approved') ledgerApproved.add(e.doc);
+        } catch { /* 坏行容忍跳过 */ }
+      }
+    }
+  } catch { /* 台账不可读视为无 approved 行 */ }
   for (const sub of ['specs', 'plans']) {
     for (const doc of docFiles(sub)) {
       if (fmGet(doc, '状态') !== 'done') continue;
@@ -925,12 +944,12 @@ if (gitOut(['rev-parse', '--git-dir']) !== null && gitOut(['rev-parse', '-q', '-
       if (!d) d = /^\d{4}-\d{2}-\d{2}$/.test(base.slice(0, 10)) ? base.slice(0, 10) : '';
       if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || d < kitPolicy.check14Since) continue; // policy.mjs check14Since
       const lines = linesOf(doc) || [];
-      if (lines.some((l) => l.includes('存量确认态豁免（'))) continue;
+      if (lines.some((l) => l.includes('存量确认态豁免（'))) continue; // 保留：服务对象随修 3 自然消失，退役条件=连续两版本周期零命中
       const rel = path.relative(ROOT, doc).split(path.sep).join('/');
       // 命中判据单源（stage-gates.approvedTraceHit，2026-09-30 confirm-gate-approved-history）：
       // 返回 ''=从未出现 / <sha>=命中 / null=git 调用失败（不报，沿本段 fail-open 口径）
       const hit = approvedTraceHit(ROOT, rel);
-      if (hit !== null && hit === '') {
+      if (hit !== null && hit === '' && !ledgerApproved.has(rel)) {
         warnings.push(`- [WARN 确认态缺失] ${base} 状态已 done 但 git 历史中从未出现行首「状态: approved」——确认环节未留痕(draft 直跳 done)`);
       }
     }
@@ -1313,18 +1332,21 @@ function delegationResultRows(file) {
   let text = '';
   try { text = fs.readFileSync(file, 'utf8'); } catch { return []; }
   const lines = text.split(/\r?\n/);
-  const targetSec = (line) => /^##\s+(委派结果|自做任务结果)\s*$/.test(line);
-  let inSec = false;
+  // 两表识别与 agg-delegations.cjs splitTables 表头签名同口径（一边改另一边须跟，2026-10-08 papercuts-cleanup-batch 修 2）：
+  // 委派表头=含「被委派方」列；自做表头=首列「日期」且含「任务一句话」列——节标题只服务人类阅读，
+  // 表头才是数据边界（节标题漂移不再静默停解析）；「##」节边界仍作收集终止符（表不跨节）。
+  let inTable = false;
   const rows = [];
   for (const line of lines) {
-    if (/^##\s+/.test(line)) {
-      inSec = targetSec(line);
-      continue;
-    }
-    if (!inSec || !/^\s*\|/.test(line)) continue;
+    if (/^##\s+/.test(line)) { inTable = false; continue; }
+    if (!/^\s*\|/.test(line)) continue;
     const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
     if (!cells.length || cells.every((c) => /^[-: ]*$/.test(c))) continue;
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(cells[0])) continue;
+    if (cells.some((c) => c.startsWith('被委派方')) || (cells[0] === '日期' && cells.some((c) => c.startsWith('任务一句话')))) {
+      inTable = true;
+      continue;
+    }
+    if (!inTable || !/^\d{4}-\d{2}-\d{2}$/.test(cells[0])) continue;
     rows.push({ date: cells[0], line });
   }
   return rows;

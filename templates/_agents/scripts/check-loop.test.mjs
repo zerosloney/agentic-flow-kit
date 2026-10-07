@@ -2703,5 +2703,72 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   rmfix(T2);
 }
 
+// ---- 检查 18 表头签名识别（2026-10-08 papercuts-cleanup-batch 修 2）：节标题漂移不再静默停解析 ----
+// 修前按 `## 委派结果|自做任务结果` 精确节标题切段，装户把标题写成「委派结果表」即静默停解析该表
+// → L2/L3 done 回流无告警；修后按表头签名（与 agg-delegations.cjs splitTables 同口径）识别。
+{
+  const T = mkfix();
+  const gap = '2026-09-12-drift.md';
+  w(T, `workflow/intents/${gap}`, INTENT('drift', '状态: done\n级别: L2\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
+  w(T, `workflow/specs/${gap}`, SPEC('drift', '状态: approved\n级别: L2\n日期: 2026-09-12'));
+  w(T, `workflow/plans/${gap}`, PLAN('drift', '状态: approved\n级别: L2\n日期: 2026-09-12'));
+  const ledgerWarn = (r) => outOf(r).split('\n').some((l) => l.includes('委派台账') && l.includes(`intents/${gap}`));
+  // 正例：节标题漂移（「委派结果表」≠精确节名）而表头不动 → 仍按表头签名解析，警告消失
+  w(T, 'workflow/delegations.md', '## 委派结果表\n\n| 日期 | 被委派方 | 任务一句话 | 结果 | 备注 |\n|------|----------|------------|------|------|\n| 2026-09-12 | x | y | 一次通过 | 2026-09-12-drift |\n');
+  let r = run(T);
+  check('检查18 节标题漂移而表头不动 → 仍按表头签名解析，警告消失（修 2 核心场景）',
+    r.status === 0 && !ledgerWarn(r), `exit=${r.status}\n${outOf(r)}`);
+  // 负例：表头也漂移（新格式无签名列）→ 数据行不收集 → 警告仍在（识别不过宽）
+  w(T, 'workflow/delegations.md', '## 委派结果表\n\n| 日期 | 承办 | 说明 |\n|------|------|------|\n| 2026-09-12 | x | 2026-09-12-drift |\n');
+  r = run(T);
+  check('检查18 表头也漂移（无签名列）→ 不收集 → 警告仍在（识别不过宽负例）',
+    r.status === 0 && ledgerWarn(r), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+
+// ---- 检查 14 台账 OR（2026-10-08 papercuts-cleanup-batch 修 3）：git 历史无 approved 行而台账有 → 不再误报 ----
+// 两跳确认同批提交时 git 历史不出现行首「状态: approved」（2026-09-28-adopter-derivers 实证）——
+// confirmations.jsonl 已证明两跳均走；判据改 OR 并集（git 判据保留，台账为第二通道）。
+{
+  const T = mkfix();
+  gitInit(T);
+  const base = '2026-09-23-confirm-ledger';
+  w(T, `workflow/incidents/${base}.md`, `---\n状态: closed\n级别: L1\n发现: 2026-09-23\n模块: material\n---\n# INCIDENT — confirm ledger\n\n${三件套(false)}`);
+  w(T, `workflow/plans/${base}.md`, PLAN('confirm ledger', '状态: done\n级别: L1\n模块: material'));
+  gitCommitAll(T, 'test'); // 两跳同批：git 历史无行首 approved（修前必 WARN）
+  w(T, '.agents/confirmations.jsonl', `${JSON.stringify({ ts: '2026-09-23T00:00:00Z', doc: `workflow/plans/${base}.md`, stage: 'approved', fingerprint: 'x', prev: 'draft', source: 'tty' })}\n`);
+  let r = run(T);
+  // exit 1 属检查 15 指纹 hard 同场（台账有该 doc 行即受管，fixture 无真实指纹必拦——预期）；
+  // 本场景只断言检查 14 的 WARN 确认态缺失不再出账（台账 OR 兜住）
+  check('检查14 git 历史无 approved 行而台账有 → 台账 OR 兜住不误报（修 3 核心场景）',
+    !outOf(r).includes('WARN 确认态缺失'), `exit=${r.status}\n${outOf(r)}`);
+  // 台账行 doc 不指向该文档 → 仍 WARN（OR 不弱化原判据）
+  w(T, '.agents/confirmations.jsonl', `${JSON.stringify({ ts: '2026-09-23T00:00:00Z', doc: 'workflow/plans/other.md', stage: 'approved', fingerprint: 'x', prev: 'draft', source: 'tty' })}\n`);
+  r = run(T);
+  check('检查14 台账无该文档 approved 行 → 仍 WARN（git 判据未被弱化）',
+    r.status === 0 && /WARN 确认态缺失.*2026-09-23-confirm-ledger\.md/.test(outOf(r)), outOf(r));
+  rmfix(T);
+}
+
+// ---- 检查 4 全角逗号（2026-10-08 papercuts-cleanup-batch 修 4）：路径引用后跟「，」不再吞入引用串 ----
+// 中文文档「`.agents/...`，以及…」写法曾把「，」并入引用 → 引用断档误报（p0-gate-noise-batch 实证 2 条）。
+{
+  const T = mkfix();
+  fs.mkdirSync(path.join(T, '.agents', 'commands'), { recursive: true });
+  w(T, '.agents/commands/plan.md', '# 小命令\n');
+  w(T, 'workflow/intents/2026-09-12-ref-comma.md', INTENT('ref comma', '状态: approved\n级别: L1\n日期: 2026-09-12\n模块: pipeline', '\n入口 `.agents/commands/plan.md`，以及后续步骤。\n'));
+  w(T, 'workflow/plans/2026-09-12-ref-comma.md', PLAN('ref comma', '状态: approved\n级别: L1\n模块: pipeline'));
+  let r = run(T);
+  check('检查4 路径后跟全角逗号 → 引用串不吞「，」，真实路径不误报断档',
+    r.status === 0 && !outOf(r).includes('引用断档'), `exit=${r.status}\n${outOf(r)}`);
+  w(T, 'workflow/intents/2026-09-12-ref-comma2.md', INTENT('ref comma2', '状态: approved\n级别: L1\n日期: 2026-09-12\n模块: pipeline', '\n入口 `.agents/commands/missing-broken.md`，后续。\n'));
+  w(T, 'workflow/plans/2026-09-12-ref-comma2.md', PLAN('ref comma2', '状态: approved\n级别: L1\n模块: pipeline'));
+  r = run(T);
+  // 负例用 ASCII 断档名：refRe 字符类本就只含 ASCII 路径字符（中文名路径不在扫描范围）
+  check('检查4 全角逗号后的真断档 → 仍拦（判据不放松）',
+    r.status === 0 && /引用断档.*missing-broken\.md/.test(outOf(r)), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

@@ -41,6 +41,9 @@ function parseResult(raw) {
 
 // splitTables：按表头签名识别两张结果表——节标题只服务人类阅读，表头才是数据边界
 // （2026-09-24 修复：曾按 `## 委派结果` 节标题定位，节结构漂移时已有记录被静默读成「台账为空」）
+// ⚠️ 互引（2026-10-08 papercuts-cleanup-batch 修 2）：check-loop.mjs delegationResultRows 已对齐本签名
+// 口径（委派表头=含「被委派方」列 / 自做表头=首列「日期」且含「任务一句话」列）——一边改另一边须跟；
+// 差异保留：本函数按「连续 | 行」断表（聚合需分行归属），check-loop 按「## 节」终止收集（对账只需并集）
 function splitTables(text) {
   const tables = { delegated: [], self: [] };
   let cur = null;

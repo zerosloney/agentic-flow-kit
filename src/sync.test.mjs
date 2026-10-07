@@ -421,5 +421,32 @@ else if (cmd === 'add-gate') addGate(rest, root);
   check('S16③ 锚已刷（custom-synced）→ 再跑静默', !(r2b.stdout + r2b.stderr).includes('有演进且盘面未跟随'));
 }
 
+// ============ 场景 17：sync 一次自洽——生成器重写 owned 目标后按终态记账（2026-10-08 papercuts-cleanup-batch 修 1）============
+// 修前：记账段（owned 自愈/感知/台账重写）先于生成器执行 → 生成器重写 wiki 类 owned 目标后台账停旧值
+// → doctor §6.6 owned 漂移 FAIL 一次，需二次 sync 自愈。修后：生成器先跑，记账按生成后盘面收口。
+{
+  const sha = (s) => sha256(Buffer.from(s, 'utf8'));
+  const GEN = "import fs from 'node:fs';\nfs.writeFileSync('wiki/INDEX.md', 'generated v2\\n');\n";
+  const fx = mkFixture();
+  W(path.join(fx, 'templates/_agents/scripts/gen-wiki-board.mjs'), GEN);
+  const t = mkTarget(fx);
+  W(path.join(t, '.agents/scripts/gen-wiki-board.mjs'), GEN); // 目标侧与包源渲染一致（genGuard/scriptTrusted 放行）
+  W(path.join(t, 'wiki/INDEX.md'), 'generated v1\n');    // 盘面停旧版——生成器将重写它
+  const k0 = JSON.parse(R(path.join(t, '.agents/kit.json')));
+  k0.managed.push({ rel: '.agents/scripts/gen-wiki-board.mjs', sha256: sha(GEN) });
+  k0.owned.push({ rel: 'wiki/INDEX.md', sha256: sha('generated v1\n') });
+  W(path.join(t, '.agents/kit.json'), `${JSON.stringify(k0, null, 2)}\n`);
+  const r = runCmd('sync', fx, t);
+  const out = r.stdout + r.stderr;
+  check('S17 一次 sync：生成器重写后 owned 台账按终态记账（wiki/INDEX.md → v2 sha）',
+    JSON.parse(R(path.join(t, '.agents/kit.json'))).owned.find((f) => f.rel === 'wiki/INDEX.md').sha256 === sha('generated v2\n'),
+    JSON.stringify(JSON.parse(R(path.join(t, '.agents/kit.json'))).owned) + out.slice(0, 300));
+  const { checkOwnedDrift } = await import(pathToFileURL(path.join(SRC_ROOT, 'doctor.mjs')).href);
+  const d = checkOwnedDrift(t);
+  check('S17 一次 sync 后 doctor owned 零漂移（修前必漂移需二次 sync）', d.drift === 0 && d.gone.length === 0, JSON.stringify(d));
+  const r2 = runCmd('sync', fx, t);
+  check('S17 二次 sync 幂等（无 owned 刷新报告）', !(r2.stdout + r2.stderr).includes('owned 台账哈希按盘面刷新'), r2.stdout + r2.stderr);
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${failCount}`);
 process.exit(failCount ? 1 : 0);

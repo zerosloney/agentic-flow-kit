@@ -1,7 +1,8 @@
 // flow-kit sync：按 .agents/kit.json 台账升级 managed 文件。
 // 三态：未改动（磁盘 sha==台账）→ 覆盖新版；本地已改 → 跳过并报告（--force 覆盖；台账保持包侧基线，
 //       每次持续报告直至 --force 或本地对齐新版——防跳过一次后下次升级被静默覆盖，2026-09-24 语义修正）；
-//       生成器目标（INDEX.md / wiki 看板）→ 不比对，收尾重跑生成器走锚点重写。
+//       生成器目标（INDEX.md / wiki 看板）→ 不比对，生成器先于台账记账执行（2026-10-08 修 1：一次 sync
+//       自洽——生成器重写盘面后按终态记账），锚点内重写。
 // 附带：包内新增 managed 文件 → 安装；包内已删 → 仅报告不删盘、出台账；managed 缺失 → 恢复。
 // 台账外文件收养（2026-09-26 managed-ledger-adopt）：盘上存在但台账无该 rel 的 managed 类文件，
 //       若内容恰好等于新版渲染 sha（diskSha === fresh.sha）则收养登记——判据与台账内「改动恰好等于新版」
@@ -149,9 +150,35 @@ export function sync(args, pkgRoot) {
       console.log(`  无变化 ${unchanged} 份`);
     }
 
+    // 生成器目标走锚点重写（不参与 sha 比对）——执行前过供应链防线（init-p1-batch P1-3）：
+    // 目标侧脚本与包源渲染值 sha 一致才执行（预置/被改动的脚本不可信，跳过并显式提示）。
+    // 先于台账记账执行（2026-10-08 papercuts-cleanup-batch 修 1）：生成器会重写 owned 生成目标
+    // （INDEX/看板），记账段按生成后盘面收口——一次 sync 自洽，不再出现「wiki 变更后需二次 sync 自愈」。
+    const genGuard = (rel) => {
+      const g = scriptTrusted({ pkgRoot, target, rel, vars });
+      if (!g.ok) {
+        console.log(`  ⚠️ 跳过执行 ${rel}——${g.note}（供应链防线：只执行与包源渲染值一致的目标侧脚本）`);
+        return false;
+      }
+      return true;
+    };
+    if (genGuard('.agents/scripts/gen-workflow-index.mjs')) {
+      const genIndex = runNode(target, '.agents/scripts/gen-workflow-index.mjs');
+      if (genIndex.ok || fs.existsSync(path.join(target, '.agents/scripts/gen-workflow-index.mjs'))) {
+        console.log(genIndex.ok ? '  已重生成 workflow/INDEX.md（锚点内重写）' : `  ⚠️ gen-workflow-index 失败：${genIndex.out.split('\n')[0]}`);
+      }
+    }
+    if (genGuard('.agents/scripts/gen-wiki-board.mjs')) {
+      const genBoard = runNode(target, '.agents/scripts/gen-wiki-board.mjs');
+      if (genBoard.ok || fs.existsSync(path.join(target, '.agents/scripts/gen-wiki-board.mjs'))) {
+        console.log(genBoard.ok ? '  已重生成 wiki 速览与看板 DATA（锚点内重写）' : `  ⚠️ gen-wiki-board 失败：${genBoard.out.split('\n')[0]}`);
+      }
+    }
+
     // owned 台账按盘面自愈：owned 归项目所有，哈希只是记账不是约束——手改后无须手工刷 kit.json
     // （Shipyard 回流策略，2026-09-24：曾在消费仓被迫手工刷新 owned 哈希，根因收敛到此处）。
-    // sha 按 LF 归一记（与 doctor checkOwnedDrift 同口径，2026-09-27 gate-coverage：跨 checkout 字节稳定）
+    // sha 按 LF 归一记（与 doctor checkOwnedDrift 同口径，2026-09-27 gate-coverage：跨 checkout 字节稳定）。
+    // 位于生成器之后（2026-10-08 papercuts-cleanup-batch 修 1）：生成器重写盘面后按终态记账。
     const ownedSha = (p) => sha256(Buffer.from(fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n'), 'utf8'));
     let ownedRefreshed = 0;
     if (Array.isArray(kit.owned)) {
@@ -188,33 +215,10 @@ export function sync(args, pkgRoot) {
       console.log('    owned 归项目所有，不自动覆盖；如需跟随：从包源 templates/ 拷贝对应文件；有意定制可忽略（下次 sync 起静默）');
     }
 
-    // 台账重写：版本对齐当前包；removed 出册；skipped 保持包侧基线持续报告
+    // 台账重写（生成器之后）：版本对齐当前包；removed 出册；skipped 保持包侧基线持续报告
     kit.managed = managedNew.sort((a, b) => a.rel.localeCompare(b.rel));
     kit.version = pkg.version;
     fs.writeFileSync(kitPath, `${JSON.stringify(kit, null, 2)}\n`);
-
-    // 生成器目标走锚点重写（不参与 sha 比对）——执行前过供应链防线（init-p1-batch P1-3）：
-    // 目标侧脚本与包源渲染值 sha 一致才执行（预置/被改动的脚本不可信，跳过并显式提示）
-    const genGuard = (rel) => {
-      const g = scriptTrusted({ pkgRoot, target, rel, vars });
-      if (!g.ok) {
-        console.log(`  ⚠️ 跳过执行 ${rel}——${g.note}（供应链防线：只执行与包源渲染值一致的目标侧脚本）`);
-        return false;
-      }
-      return true;
-    };
-    if (genGuard('.agents/scripts/gen-workflow-index.mjs')) {
-      const genIndex = runNode(target, '.agents/scripts/gen-workflow-index.mjs');
-      if (genIndex.ok || fs.existsSync(path.join(target, '.agents/scripts/gen-workflow-index.mjs'))) {
-        console.log(genIndex.ok ? '  已重生成 workflow/INDEX.md（锚点内重写）' : `  ⚠️ gen-workflow-index 失败：${genIndex.out.split('\n')[0]}`);
-      }
-    }
-    if (genGuard('.agents/scripts/gen-wiki-board.mjs')) {
-      const genBoard = runNode(target, '.agents/scripts/gen-wiki-board.mjs');
-      if (genBoard.ok || fs.existsSync(path.join(target, '.agents/scripts/gen-wiki-board.mjs'))) {
-        console.log(genBoard.ok ? '  已重生成 wiki 速览与看板 DATA（锚点内重写）' : `  ⚠️ gen-wiki-board 失败：${genBoard.out.split('\n')[0]}`);
-      }
-    }
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });
   }
