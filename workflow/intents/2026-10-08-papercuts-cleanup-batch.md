@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-07
 模块: pipeline
 备注: papercuts 清账批——5 项真刺行为修复 + 4 行已修补标注（用户点名升级，攒批）
-确认指纹: a1500b0e3a84876f
+确认指纹: c16c7128d2b207f4
 ---
 # INTENT — papercuts-cleanup-batch
 
@@ -59,17 +59,17 @@ risk_level: L2
 
 ## 验收标准（可测试）
 
-- [ ] sync 顺序：夹具含 wiki 生成目标变更 → sync **一次**后 doctor owned 零漂移（不再需要二次 sync）（证据：sync 测试新场景）
-- [ ] 检查 18：夹具 delegations.md 节标题漂移（如「## 委派结果表」）而表头不动 → 检查 18 仍解析并出账（证据：check-loop 测试新场景）
-- [ ] 检查 14：夹具两跳同批提交（git 历史无行首 approved 行）+ confirmations.jsonl 含 approved 行 → 不再 WARN；仅 git 或仅台账任一在 → 亦不 WARN；两者皆无 → 仍 WARN（证据：check-loop 测试新场景 ×3 态 + 回溯验证记录）
-- [ ] 检查 4：路径引用后跟全角逗号 → 不再误报；真实引用断档仍拦（证据：check-loop 测试双场景）
-- [ ] check-ledger：提交集含 kit.json 且台账 sha 指向未提交内容 → 拦；入库态一致 → 过（证据：check-ledger 测试新场景）
-- [ ] papercuts.md 九行标注更新，症状描述原文未改（证据：diff 审查）
-- [ ] `npm test` 全套通过 + `flow-kit sync` 后 doctor 全绿（证据：verify 凭证落账）
+- [x] sync 顺序：夹具含 wiki 生成目标变更 → sync **一次**后 doctor owned 零漂移（不再需要二次 sync）（证据：src/sync.test.mjs S17 三断言（一次记账 / checkOwnedDrift 零漂移 / 二次幂等），276b661）
+- [x] 检查 18：夹具 delegations.md 节标题漂移（如「## 委派结果表」）而表头不动 → 检查 18 仍解析并出账（证据：check-loop.test「检查18 节标题漂移…警告消失（修 2 核心场景）」+「表头也漂移…警告仍在（识别不过宽负例）」双例，276b661）
+- [x] 检查 14：夹具两跳同批提交（git 历史无行首 approved 行）+ confirmations.jsonl 含 approved 行 → 不再 WARN；仅 git 或仅台账任一在 → 亦不 WARN；两者皆无 → 仍 WARN（证据：check-loop.test「台账有→兜住不误报」「台账无该 doc→仍 WARN」新双例 + 既有「git 有→不 WARN」场景；回溯验证三历史树 worktree 重放零新增（53d3105/c5d4e5c 各消 3 条存量误报）——记录在 plan 偏离留痕②，276b661）
+- [x] 检查 4：路径引用后跟全角逗号 → 不再误报；真实引用断档仍拦（证据：check-loop.test「路径后跟全角逗号→不误报」「全角逗号后的真断档→仍拦（ASCII 名负例）」双例，276b661）
+- [x] check-ledger：提交集含 kit.json 且台账 sha 指向未提交内容 → 拦；入库态一致 → 过（证据：check-ledger.test S10 七分支（含复核 P1 修后 S10④ 暂存删除拦 / ④b 退出性提交放行 / ⑥ 只 add 件不 add 台账姊妹漏洞拦），276b661）
+- [x] papercuts.md 九行标注更新，症状描述原文未改（证据：十处处置标注（五真刺 + 四勘误 + isMain 点名）均为「拟修」列尾追加，独立复核逐行比对症状列字节未动，276b661）
+- [x] `npm test` 全套通过 + `flow-kit sync` 后 doctor 全绿（证据：verify 2/2 全绿，合计 PASS 15 / FAIL 0，凭证落账 .agents/verifications.jsonl（2026-10-08）；sync 后 doctor 14 PASS 0 FAIL，276b661 批）
 
 ## 确认与复核
 
-- 确认日期：
+- 确认日期：2026-10-08
 - 确认人：用户（对话内明确放行即确认）
-- 确认范围：intent 全文（含五项真刺范围圈定与 isMain 留单独立项的非目标决策）
-- 复核：L2 防御道——实现后 independent-reviewer 复核（判据改动五处 + 回溯验证），时机在 plan 约定
+- 确认范围：intent 全文（含五项真刺范围圈定与 isMain 留单独立项的非目标决策），对话原话「可以」
+- 复核：independent-reviewer 已复核（2026-10-08）——修1/2/4 与十处标注 PASS；P1（check-ledger HEAD 兜底放行暂存删除 = 提交门绕过）当场修复 + S10④ 翻转，P2（plan 偏离留痕）补齐，P3-a/P3-b 顺带修复；处置全记录在 plan「偏离留痕」
