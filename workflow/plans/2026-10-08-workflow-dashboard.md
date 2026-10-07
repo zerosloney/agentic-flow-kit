@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L1
 模块: pipeline
-确认指纹: e2605271ca8dfa64
+确认指纹: 0bb347e0c9a380e4
 ---
 # PLAN — workflow-dashboard
 
@@ -33,6 +33,7 @@
 ## 确认与复核
 
 > 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节（确认环节的机器可见态），done 只在关单出现——禁从 draft 直跳 done（2026-09-22 papercut）。
-- 确认结果：approved（2026-10-08 用户对话内确认）；done（YYYY-MM-DD 关单，随入口文档置终态）
+- 确认结果：approved（2026-10-08 用户对话内确认）；done（2026-10-08 关单，随入口文档置终态）
 - 确认门记录：plan 草稿全文过目 + 改动清单确认（build.md 两道门，逐次，不合并）
 - 复核：L1 不要求独立复核
+- 偏离留痕：①（使能改动）agg-delegations.cjs readLedger 增 root 显式参数 + soft 模式并导出（原签名缺省行为不变、main() 零变化）——plan 未列该文件，系「判据零重复复用」的必要使能（硬编码 ROOT + fail() 退出无法被仪表盘注入 fixture 复用）；②（实现修正）时长天数用 floor 非 round（日历天语义：同日关单 0.625 天记 0，round 会记 1——测试夹具实证后修正）；③（包源跑法边角）包源份脚本 ROOT=脚本位置上两级——源仓自跑必须跑装副本 `.agents/scripts/`（首跑误跑包源份把 DASHBOARD.md 落到 templates/workflow/，已清理；装户无此问题），教训与「debug 调 sync 须显式 --dir」同族

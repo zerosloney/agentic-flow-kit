@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L1
 risk_level: L1
 日期: 2026-10-08
 模块: pipeline
 备注: workflow 仪表盘——关单时长（台账 done 行-立项日）+ 质量/返工（agg 纯函数复用）+ 红绿灯控制带，生成 workflow/DASHBOARD.md
-确认指纹: f5a5a1ae2bdce984
+确认指纹: f471f901c436327e
 ---
 # INTENT — workflow-dashboard
 
@@ -52,14 +52,14 @@ risk_level: L1
 
 ## 验收标准（可测试）
 
-- [ ] `node .agents/scripts/gen-workflow-dashboard.mjs`（本仓）生成 workflow/DASHBOARD.md：头部红绿灯行 + 时长分布（真实值 P50=0/P90=7/max=8、样本 43）+ 质量月度行与 agg-delegations 直跑输出一致（证据：本仓实跑 + 抽查比对）
-- [ ] fixture 测试：时长计算四例（同日=0 / 跨 N 天 / 多次 done 取最早 / 无台账行跳过）+ 带判定三态（绿/超 P50/超 P90）+ 复用数字与 agg 纯函数同值（证据：gen-workflow-dashboard.test.mjs 全绿）
-- [ ] `npm test` 全套通过（新套件经 run-tests glob 自动发现）（证据：verify 凭证）
-- [ ] `flow-kit sync` 装副本成对（脚本+测试 2 份覆盖更新）、doctor 全绿；装户视角 DASHBOARD.md 不在模板树（init 不落盘、零台账交互）（证据：sync 输出 + doctor）
+- [x] `node .agents/scripts/gen-workflow-dashboard.mjs`（本仓）生成 workflow/DASHBOARD.md：头部红绿灯行 + 时长分布（真实值 P50=0/P90=7/max=8、样本 43）+ 质量月度行与 agg-delegations 直跑输出一致（证据：本仓实跑——红绿灯「❌ 未达标：2+3+5｜质量门（当月 2026-10）」+「✅ 带内｜关单时长带（样本 43，跳过存量 26）」；月度行 2026-09=40 单 55% / 2026-10=21 单 62% 与 agg 直跑快照行同值）
+- [x] fixture 测试：时长计算四例（同日=0 / 跨 N 天 / 多次 done 取最早 / 无台账行跳过）+ 带判定三态（绿/超 P50/超 P90）+ 复用数字与 agg 纯函数同值（证据：gen-workflow-dashboard.test.mjs 18 PASS / 0 FAIL，含端到端 spawn 与空台账装户 ⚪ 降级）
+- [x] `npm test` 全套通过（新套件经 run-tests glob 自动发现）（证据：verify 2/2 全绿，凭证落账 verifications.jsonl 2026-10-08）
+- [x] `flow-kit sync` 装副本成对（脚本+测试 2 份新增安装 + agg 1 份覆盖更新）、doctor 全绿；装户视角 DASHBOARD.md 不在模板树（init 不落盘、零台账交互）（证据：sync 输出「新增安装（2）+覆盖更新（1）」、doctor 14 PASS 0 FAIL）
 
 ## 确认与复核
 
-- 确认日期：
+- 确认日期：2026-10-08
 - 确认人：用户（对话内明确放行即确认）
-- 确认范围：intent 全文（含不挂门禁 / 不做定时触发的非目标决策）
-- 复核：L1 不要求独立复核（协作道异步审计）
+- 确认范围：intent 全文（含不挂门禁 / 不做定时触发的非目标决策），对话原话「可以」
+- 复核：L1 不要求独立复核（协作道异步审计）；偏离留痕见同名 plan
