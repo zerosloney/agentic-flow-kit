@@ -2,6 +2,12 @@
 
 已发布版本的摘要。未打进 `package.json` 的改动见 README「当前能力」。
 
+## 1.2.2
+
+- fix(hosts)：**sync-hosts 支持装户布局**（2026-10-07 papercut，装户回流批）——目标根由恒 `pkgRoot`（= 包安装目录）改为 `--dir` > cwd > pkgRoot，并按目标根自动判布局（包源 `templates/_agents` ↔ `modules/hosts/<宿主键>/`；装户 `.agents` ↔ 项目根下 `<宿主点目录>/`，新增 `hostDirOf` 处理点目录命名）。**修前装户跑 `flow-kit sync-hosts --apply`（doctor §7.x 的提示）会去改包源仓、装户自己的适配层纹丝不动**；另：未安装宿主（目录不存在）不再计 `authorityMissing`（此前装户 `--apply` 恒 exit 1 且刷 45 行噪声）。测试 +1 场景（装户布局 `--dir`/cwd/apply，35→36 断言）
+- fix(hosts)：**补回流 1.2.1 遗漏的薄适配**——1.2.1 改了 `templates/_agents/commands/test.md` 但未跑 `sync-hosts --apply`，包源 5 份 `modules/hosts/*/commands/wf-test.md` 与本次 `wf-sync-hosts.md` 一并补同步（包源 81 对全对齐）
+- docs(commands)：`sync-hosts.md` 补装户跑法（双布局说明 + `--dir`）
+
 ## 1.2.1
 
 - fix(gate)：**verify 装户仓跳过语义**（2026-10-07 papercut，装户回流批）——装户仓（根目录无 `package.json`，工程在子目录）默认 `npm test` 恒 ENOENT 卡死关单编排；改为无显式 `--test-cmd` 且 cwd 无 package.json 时**显式跳过步骤 1**（⏭ 提示装项目口径或 `--test-cmd`）且**不落测试绿凭证**（跳过即无「测试绿」事实，防假绿——与 1.2.0 凭证语义自洽，confirm-doc 前置/检查 8 对账零改动兼容：装户仓关单将得到 advisory 引导）；测试 +1 场景三态钉住
