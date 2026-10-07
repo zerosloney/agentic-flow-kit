@@ -1,7 +1,9 @@
 #!/usr/bin/env node
 // verify.mjs 的 fixture 测试（--test-cmd 注入假命令 + CHECK_LOOP_ROOT 注入夹具根，不触真实 npm test 与 workflow）
 // 断言：①绿路径（假过 + 空夹具闭环）exit 0；②步骤 1 假败 exit 1 且不出全绿；
-//       ③步骤 2 配对断裂夹具 exit 1（verify 自身标记断言——孙进程 stdio inherit 输出不进本测试管道）。
+// ③步骤 2 配对断裂夹具 exit 1（verify 自身标记断言——孙进程 stdio inherit 输出不进本测试管道）；
+// ④⑤⑥凭证落账三态（绿落 / check-loop 红不落 / 无汇总行省略计数键）；
+// ⑦装户仓（cwd 无 package.json）未给 --test-cmd → 跳过步骤 1、不落凭证、仍跑步骤 2、exit 0。
 // 用法：node templates/_agents/scripts/verify.test.mjs
 import fs from 'node:fs';
 import os from 'node:os';
@@ -114,6 +116,20 @@ const run = (argv, opts = {}) => spawnSync(process.execPath, [VERIFY, ...argv], 
     r.status === 0 && line !== null && line.exitCode === 0 && !('passed' in line) && !('failed' in line),
     `line=${JSON.stringify(line)}`);
   fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 7：装户仓（cwd 无 package.json）且未给 --test-cmd → 跳过步骤 1、不落凭证、仍跑步骤 2 → exit 0 ----
+{
+ const root = mkfix();
+ const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'verify-bare-'));
+ const r = run([], { cwd: bare, env: { ...process.env, CHECK_LOOP_ROOT: root } });
+ check('场景 7：exit 0', r.status === 0, `exit=${r.status}\n${r.stdout}\n${r.stderr}`);
+ check('场景 7：步骤 1 显式跳过（⏭ 1/2）、步骤 2 通过且全绿', r.stdout.includes('⏭ 1/2') && r.stdout.includes('✅ 2/2') && r.stdout.includes('全绿'), r.stdout);
+ check('场景 7：跳过时不落测试绿凭证（防假绿）',
+ !fs.existsSync(path.join(root, '.agents', 'verifications.jsonl')) && r.stdout.includes('不落测试绿凭证'),
+ r.stdout);
+ fs.rmSync(root, { recursive: true, force: true });
+ fs.rmSync(bare, { recursive: true, force: true });
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

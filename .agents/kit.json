@@ -1,6 +1,6 @@
 {
   "kit": "agentic-flow-kit",
-  "version": "1.2.0",
+  "version": "1.2.1",
   "policyVersion": 5,
   "audit": true,
   "createdAt": "2026-09-23T15:07:19.753Z",
@@ -66,7 +66,7 @@
     },
     {
       "rel": ".agents/commands/test.md",
-      "sha256": "c30aeace96724f4e30fce81c2c84341e0b4666eb224ad991bd48160b1b913551"
+      "sha256": "824ad75d7ac8430809eb69639e4f9359d09a63760a86e8bd9e1b0510636f216e"
     },
     {
       "rel": ".agents/hooks/check-pairing-incremental.sh",
@@ -298,11 +298,11 @@
     },
     {
       "rel": ".agents/scripts/verify.mjs",
-      "sha256": "73f2868429e6ce57a82319ece11335b98f37de1229cc49e3e2781815dee3119f"
+      "sha256": "0003e602a13864ba692cf6faed5a8389d2871936585b495fa940965dc3e54b81"
     },
     {
       "rel": ".agents/scripts/verify.test.mjs",
-      "sha256": "23428f1ed6ba59fa9cf3fc64fdc14e312e69ba39974ca087172ad9d9d813e503"
+      "sha256": "afce1686ec3d9f18e0d3cd8101c1e5b48564ceeb58e86723982f5a46cf99eaf1"
     },
     {
       "rel": ".agents/scripts/wf-journal.mjs",
@@ -342,7 +342,7 @@
     },
     {
       "rel": ".agents/skills/verify-ui/SKILL.md",
-      "sha256": "c5a9d43570e71027ae1d76b90fd59dba0ea67675c39661f35d162f768e8a9a4b"
+      "sha256": "65f4c1b3a4b011319da5cbddeeb4337b7cd3ff90c02fcd9077b0e1a170d530eb"
     },
     {
       "rel": ".agents/skills/wiki/SKILL.md",
@@ -469,7 +469,7 @@
     },
     {
       "rel": "workflow/papercuts.md",
-      "sha256": "753910dfdae5273275c7d286af6a4eef68ce77fa56738670b14512af9790cd9b",
+      "sha256": "81fc6f1ee94d9cc64acff15aac57e8271e37f9885b31e9912eb606e1139daed4",
       "srcSha256": "07f8b0fad8223d25a5f67ce2c672bc9d92288c7b2e123a28e430c509e2c83115"
     },
     {

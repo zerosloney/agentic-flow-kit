@@ -2,6 +2,11 @@
 
 已发布版本的摘要。未打进 `package.json` 的改动见 README「当前能力」。
 
+## 1.2.1
+
+- fix(gate)：**verify 装户仓跳过语义**（2026-10-07 papercut，装户回流批）——装户仓（根目录无 `package.json`，工程在子目录）默认 `npm test` 恒 ENOENT 卡死关单编排；改为无显式 `--test-cmd` 且 cwd 无 package.json 时**显式跳过步骤 1**（⏭ 提示装项目口径或 `--test-cmd`）且**不落测试绿凭证**（跳过即无「测试绿」事实，防假绿——与 1.2.0 凭证语义自洽，confirm-doc 前置/检查 8 对账零改动兼容：装户仓关单将得到 advisory 引导）；测试 +1 场景三态钉住
+- docs(skill)：**verify-ui 技能卡增强**（装户实测经验回流）——浏览器选择（较新 Chromium headless）、登录态注入+整页重载（hash 路由 hardGoto）、不留脏数据纪律（按 ID 精确删除禁模糊匹配）、关键坑（HTTP 避自签证书 / MCP profile 残留锁）；`<待填>` 占位改引用 owned 的 `runtime-env.md`（managed 件不承载项目特定值，sync 覆盖无害）
+
 ## 1.2.0
 
 - feat(gate)：**测试绿机器凭证**（2026-10-07 verify-evidence，Anthropic AI-Native SDLC「make test before done」基准必修缺口①）——关单勾验的「测试绿」从声明式升级为机器事实三件：① verify.mjs 两步全绿后向 `.agents/verifications.jsonl` append 绿行（{ts, exitCode:0, suite, passed?, failed?, runId?}，计数 best-effort 抓「合计: PASS n / FAIL n」，check-loop 红不落账，IO 失败不阻断）；② confirm-doc 置 done 且文档含「验收标准」节且 policy v5 → 24h 窗口无绿行出 ⚠️ advisory（不拦，fail-open，升 hard 走后续 policyVersion 演进）；③ 检查 8 无 SHA 证据命中「测试绿」关键词且 intent 首次加入 git ≥ verifySince → 凭证对账（有绿行 verify 型豁免出账 / 无 warning）。窗口判定单源 `policy.hasFreshVerifyLine`（两消费方共用）；policyVersion **v5**（= v2 全键 + verifySince: 2026-10-07，装户升 v5 视同接受 v2 基线早期锚）；v1-v4 整体跳过零变化；测试 +7 场景（verify 落账 ×3 / confirm-doc 前置 ×2 / 检查 8 对账 ×2）
