@@ -90,7 +90,9 @@ function runNode(ctx, run, script, args) {
   const scriptPath = path.join(ctx.bin, script);
   const cmd = `node .agents/scripts/${script} ${args.join(' ')}`;
   const t0 = Date.now();
-  const p = spawnSync(process.execPath, [scriptPath, ...args], { cwd: ctx.root, encoding: 'utf8', windowsHide: true });
+  // PIPELINE_RUN_ID 注入（2026-10-07 verify-evidence 复核 P2-1）：verify.mjs 绿行据此绑定 runId
+  //（对质链与 run 事件流同源，docsCommit 格式已含同一 runId）——spec「pipeline-run 路径自动绑定」落点
+  const p = spawnSync(process.execPath, [scriptPath, ...args], { cwd: ctx.root, encoding: 'utf8', windowsHide: true, env: { ...process.env, PIPELINE_RUN_ID: run.runId } });
   const ms = Date.now() - t0;
   const exit = p.status ?? 1;
   emit(run, { type: 'gate', cmd, exit, ms });

@@ -1,7 +1,7 @@
 {
   "kit": "agentic-flow-kit",
-  "version": "1.1.9",
-  "policyVersion": 2,
+  "version": "1.2.0",
+  "policyVersion": 5,
   "audit": true,
   "createdAt": "2026-09-23T15:07:19.753Z",
   "options": {
@@ -138,7 +138,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "f3bd0a47e145f05cdd1adc472520759797b25dc0a4bf15d0604979d6bd97d650"
+      "sha256": "c2ae99e89d378a4734ece888e6c0419bbb25e00b67608d8d405b5accfe36a83f"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -146,7 +146,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "07502514dd2a569afb1b75182ed99e9bde04c7b7ab2fa270e87f809232b5bc89"
+      "sha256": "4ce4695d4c11574a51e0f90eeeca33f95db7cc17c180b75e53b8c7e317071b96"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -158,11 +158,11 @@
     },
     {
       "rel": ".agents/scripts/confirm-doc.mjs",
-      "sha256": "12d5306461d4b93474511c9a1189617237817ddba005c5d9334f2a55517c1c42"
+      "sha256": "437b1bf937c1439cc4319273b6819294a00eafdfa3d0ce8661f900388ff293bf"
     },
     {
       "rel": ".agents/scripts/confirm-doc.test.mjs",
-      "sha256": "103c4beae8fe75ad73d7ccaaca93bf7d32d00afcd959d194ac0c6e2afa5c78fe"
+      "sha256": "d9db3c698f07a3d8cd70c186719795736008ff3513f9e2178248cc36cd845baf"
     },
     {
       "rel": ".agents/scripts/doctor.test.mjs",
@@ -246,7 +246,7 @@
     },
     {
       "rel": ".agents/scripts/pipeline-run.mjs",
-      "sha256": "0fc09e79138115e7714b95f078cc4e711ce6ea1a97cd09a55636eaccba974dbf"
+      "sha256": "09cdd5fcf9d2d6e6ce72ec7423cc82b891a3f7766d9197cd63586e2c3c550fec"
     },
     {
       "rel": ".agents/scripts/pipeline-run.test.mjs",
@@ -254,7 +254,7 @@
     },
     {
       "rel": ".agents/scripts/policy.mjs",
-      "sha256": "a034f4398fbef2cf1738d5337f361adf4cfa0e8cc0f929e9ded5475295c5d792"
+      "sha256": "cb1d6f32bede2e4036eb254714ee5968ab8da45a319374ba7da496d1c080178c"
     },
     {
       "rel": ".agents/scripts/pre-push.test.mjs",
@@ -298,11 +298,11 @@
     },
     {
       "rel": ".agents/scripts/verify.mjs",
-      "sha256": "754886b6460c4a7398f341afb6609a5c88853138feae69a30e62ec262fb02062"
+      "sha256": "73f2868429e6ce57a82319ece11335b98f37de1229cc49e3e2781815dee3119f"
     },
     {
       "rel": ".agents/scripts/verify.test.mjs",
-      "sha256": "e306cf22171509808621dfde4387f713251cd361f621e61eb0706145c57c66ef"
+      "sha256": "23428f1ed6ba59fa9cf3fc64fdc14e312e69ba39974ca087172ad9d9d813e503"
     },
     {
       "rel": ".agents/scripts/wf-journal.mjs",

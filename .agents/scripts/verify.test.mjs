@@ -46,10 +46,10 @@ const mkBroken = () => {
   ].join('\n'), 'utf8');
   return d;
 };
-// 假命令（绝对路径直调，不依赖 PATH，跨平台无引号问题）
-const mkCmd = (code) => {
+// 假命令（绝对路径直调，不依赖 PATH，跨平台无引号问题）；out 可选输出汇总行
+const mkCmd = (code, out = '') => {
   const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'verify-cmd-')), `exit${code}.mjs`);
-  fs.writeFileSync(f, `process.exit(${code});`, 'utf8');
+  fs.writeFileSync(f, `process.stdout.write(${JSON.stringify(out)});process.exit(${code});`, 'utf8');
   return f;
 };
 const run = (argv, opts = {}) => spawnSync(process.execPath, [VERIFY, ...argv], { encoding: 'utf8', ...opts });
@@ -78,6 +78,41 @@ const run = (argv, opts = {}) => spawnSync(process.execPath, [VERIFY, ...argv], 
   const r = run(['--test-cmd', `node ${mkCmd(0)}`], { env: { ...process.env, CHECK_LOOP_ROOT: root } });
   check('场景 3：exit 1', r.status === 1, `exit=${r.status}\n${r.stdout}\n${r.stderr}`);
   check('场景 3：步骤 2 失败标记在 stderr，且不输出全绿', r.stderr.includes('❌ 2/2') && !r.stdout.includes('全绿'), `${r.stdout}\n${r.stderr}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 4：绿路径凭证落账（2026-10-07 verify-evidence）——全绿后 fixture 台账出合法绿行 ----
+{
+  const root = mkfix();
+  const r = run(['--test-cmd', `node ${mkCmd(0, '合计: PASS 3 / FAIL 0\n')}`], { env: { ...process.env, CHECK_LOOP_ROOT: root } });
+  const vp = path.join(root, '.agents', 'verifications.jsonl');
+  const line = fs.existsSync(vp) ? JSON.parse(fs.readFileSync(vp, 'utf8').trim()) : null;
+  check('场景 4：全绿 → verifications.jsonl 落绿行（exitCode 0 + 计数捕获）',
+    r.status === 0 && line !== null && line.exitCode === 0 && line.passed === 3 && line.failed === 0
+      && typeof line.ts === 'string' && r.stdout.includes('凭证已落账'),
+    `exit=${r.status} line=${JSON.stringify(line)}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 5：红路径不落账（check-loop 红 → fail-fast 在落账前退出）----
+{
+  const root = mkBroken();
+  const r = run(['--test-cmd', `node ${mkCmd(0)}`], { env: { ...process.env, CHECK_LOOP_ROOT: root } });
+  check('场景 5：npm test 绿但 check-loop 红 → 无凭证行（凭证语义 = verify 全绿）',
+    r.status === 1 && !fs.existsSync(path.join(root, '.agents', 'verifications.jsonl')),
+    `exit=${r.status}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 6：输出无汇总行 → 计数键省略（exitCode 才是硬事实）----
+{
+  const root = mkfix();
+  const r = run(['--test-cmd', `node ${mkCmd(0, 'ok\n')}`], { env: { ...process.env, CHECK_LOOP_ROOT: root } });
+  const vp = path.join(root, '.agents', 'verifications.jsonl');
+  const line = fs.existsSync(vp) ? JSON.parse(fs.readFileSync(vp, 'utf8').trim()) : null;
+  check('场景 6：无汇总输出 → 绿行落盘但计数键省略',
+    r.status === 0 && line !== null && line.exitCode === 0 && !('passed' in line) && !('failed' in line),
+    `line=${JSON.stringify(line)}`);
   fs.rmSync(root, { recursive: true, force: true });
 }
 

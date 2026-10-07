@@ -40,7 +40,19 @@ import readline from 'node:readline';
 import { createHash, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { confirmGateFor, doneGateFor, laneOfEntry, laneOfDoc } from './stage-gates.mjs';
-import { loadKitPolicy } from './policy.mjs';
+import { loadKitPolicy, hasFreshVerifyLine } from './policy.mjs';
+
+// hasFreshVerify(root)：读 <root>/.agents/verifications.jsonl 判 24h 窗口绿行（判定单源
+// policy.hasFreshVerifyLine）。只读，台账缺失/不可读一律 false（=无凭证，advisory 层 fail-open）。
+function hasFreshVerify(root) {
+  try {
+    const p = path.join(root, '.agents', 'verifications.jsonl');
+    if (!fs.existsSync(p)) return false;
+    return hasFreshVerifyLine(fs.readFileSync(p, 'utf8').split(/\r?\n/));
+  } catch {
+    return false;
+  }
+}
 
 // computeFingerprint(text)：CRLF 归一 → 剔指纹行 → sha256 hex（64 位）
 export function computeFingerprint(text) {
@@ -303,6 +315,14 @@ if (isMain) {
         refused++;
         continue;
       }
+    }
+    // 测试绿凭证前置（2026-10-07 verify-evidence，advisory 不拦）：→done 且文档含「验收标准」节且
+    // policy v5（verifySince）→ 24h 窗口内须有 verifications.jsonl 绿行。只读判定，任何读取异常降级
+    // 静默（fail-open——advisory 层不因台账缺失/坏行阻断关单）；升 hard 走后续 policyVersion 演进。
+    if (target === 'done' && typeof loadKitPolicy(root).verifySince === 'string'
+      && /^##\s*[^#]*验收标准/m.test(text) && !hasFreshVerify(root)) {
+      console.error(`⚠️ ${doc} 置 done：24h 内无测试绿凭证（verifications.jsonl）——关单勾验的「测试绿」声明缺机器事实`);
+      console.error('   跑 node .agents/scripts/verify.mjs（全绿自动落账）后重新关单；本次不拦截（advisory，灰度第一档）');
     }
     const fp = computeFingerprint(text);
     // AI 自治放行分支（2026-09-30 ai-autonomy-trust）：

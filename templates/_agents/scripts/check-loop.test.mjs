@@ -2662,5 +2662,46 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   rmfix(T2);
 }
 
+// ---- 场景:检查 8 测试绿声明对账（2026-10-07 verify-evidence）——v5 锚后无 SHA「测试绿」声明须有凭证 ----
+{
+  // 配对构造（检查 15 须过）：approved 态全文算指纹 → done 态落盘 + 台账 done 行（prev=approved，
+  // ts=今天 ≥ bindingTs）——与 bindingSha256 复原口径对称
+  const mkVe = (withLedger) => {
+    const T = mkfix();
+    gitInit(T);
+    w(T, '.agents/kit.json', JSON.stringify({ policyVersion: 5 }));
+    if (withLedger) {
+      w(T, '.agents/verifications.jsonl', `${JSON.stringify({ ts: new Date().toISOString(), exitCode: 0, suite: 'npm test' })}\n`);
+    }
+    const iBody = '# INTENT — ve\n\n## 验收标准（可测试）\n- [x] 用例通过（证据:测试全绿）\n';
+    const pBody = '# PLAN — ve\n';
+    const fpI = computeFingerprint(`---\n状态: approved\n级别: L1\n日期: 2026-10-07\n---\n${iBody}`);
+    const fpP = computeFingerprint(`---\n状态: approved\n级别: L1\n---\n${pBody}`);
+    w(T, 'workflow/intents/2026-10-07-ve.md', `---\n状态: done\n级别: L1\n日期: 2026-10-07\n确认指纹: ${fpI.slice(0, 16)}\n---\n${iBody}`);
+    w(T, 'workflow/plans/2026-10-07-ve.md', `---\n状态: done\n级别: L1\n确认指纹: ${fpP.slice(0, 16)}\n---\n${pBody}`);
+    const now = new Date().toISOString();
+    writeLedger(T, [
+      { ts: now, doc: 'workflow/intents/2026-10-07-ve.md', stage: 'done', fingerprint: fpI, prev: 'approved' },
+      { ts: now, doc: 'workflow/plans/2026-10-07-ve.md', stage: 'done', fingerprint: fpP, prev: 'approved' },
+    ]);
+    gitCommitAll(T, 'feat: ve fixture');
+    return T;
+  };
+  // ① 无凭证 → warning（advisory，不拦 exit）
+  const T1 = mkVe(false);
+  let r = run(T1);
+  check('检查 8 凭证对账:锚后「测试绿」声明无凭证 → warning 且不 hard',
+    r.status === 0 && outOf(r).includes('测试绿缺凭证') && !outOf(r).includes('证据伪造') && !outOf(r).includes('证据无关'),
+    `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T1);
+  // ② 有近期绿行 → verify 型豁免出账、零 warning
+  const T2 = mkVe(true);
+  r = run(T2);
+  check('检查 8 凭证对账:24h 内有绿行 → verify 豁免出账且无 warning',
+    r.status === 0 && outOf(r).includes('证据豁免 verify') && !outOf(r).includes('测试绿缺凭证'),
+    `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T2);
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

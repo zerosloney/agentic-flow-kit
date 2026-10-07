@@ -52,6 +52,23 @@ export const POLICIES = {
     bindingTs: '2026-09-28',
     delegationSince: '2026-10-06', // 检查 18 委派台账对账生效日（2026-10-06 loop-audit-remediation）；v1-v3 无此键 → 原全量对账行为
   },
+  // 版本 5 = 版本 2 的全部日期 + verifySince（测试绿机器凭证生效日，2026-10-07 verify-evidence）。
+  // 基准：Anthropic AI-Native SDLC「make test before done」。三处消费：verify.mjs 绿行落账（无开关，
+  // 纯事实记录）+ confirm-doc 置 done 门前置 advisory（24h 窗口）+ 检查 8 无 SHA 测试绿声明对账
+  // （intent 首次加入 git ≥ verifySince 才判）。缺键（v1-v4）→ 两处判定整体跳过，存量零新增告警。
+  // 注意本版本以 v2 为基线（本仓自用版本），不含 v3/v4 的装户后移锚——装户升 v5 视同同时接受
+  // v2 基线的早期锚（装户已选 v3/v4 的，升 v5 前 doctor 会提示锚变化，逐键核对后再升）。
+  5: {
+    moduleSince: '2026-09-22',
+    check14Since: '2026-09-26',
+    confirmDocsEffective: '2026-09-27',
+    confirmIncidentsEffective: '2026-09-28',
+    bindingTs: '2026-09-28',
+    check17UnclosedAfter: '0.8.0',
+    stageGateSince: '2026-09-29',
+    riskLevelSince: '2026-10-01',
+    verifySince: '2026-10-07', // 测试绿机器凭证生效日（2026-10-07 verify-evidence）；v1-v4 无此键 → 前置与对账整体跳过
+  },
 };
 
 export function loadKitPolicy(root) {
@@ -71,4 +88,23 @@ export function loadKitPolicy(root) {
 
 export function auditEnabled(policy) {
   return policy.audit !== false;
+}
+
+// ---- 测试绿凭证判定（2026-10-07 verify-evidence）----
+// 单源（confirm-doc done 前置与 check-loop 检查 8 对账共用——防两处窗口字面量漂移，N3 教训）：
+// hasFreshVerifyLine(lines, now)：verifications.jsonl 的行数组里是否存在「ts 距 now ≤ 24h 且
+// exitCode === 0」的绿行。坏行（非 JSON / 缺 ts）跳过不抛；窗口 24h = 覆盖「跑 verify → 跨会话/
+// 隔夜 → 次日关单」节奏（spec 2026-10-07-verify-evidence 论证）。
+export function hasFreshVerifyLine(lines, now = Date.now()) {
+  for (const line of lines || []) {
+    if (!line || !line.trim()) continue;
+    try {
+      const e = JSON.parse(line);
+      if (e && e.exitCode === 0 && typeof e.ts === 'string') {
+        const t = Date.parse(e.ts);
+        if (Number.isFinite(t) && now - t <= 24 * 60 * 60 * 1000) return true;
+      }
+    } catch { /* 坏行容忍跳过（confirmations.jsonl 同口径） */ }
+  }
+  return false;
 }

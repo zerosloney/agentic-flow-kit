@@ -700,5 +700,41 @@ const writeTrust = (root, cfg) => {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- S38 测试绿凭证前置（2026-10-07 verify-evidence）：v5 + 验收节 + 无凭证 → ⚠️ advisory 且仍落账 ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-verify1-'));
+  const docP = path.join(root, 'workflow', 'intents');
+  fs.mkdirSync(docP, { recursive: true });
+  fs.mkdirSync(path.join(root, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.agents', 'kit.json'), JSON.stringify({ policyVersion: 5 }), 'utf8');
+  fs.writeFileSync(path.join(docP, '2026-10-07-v.md'),
+    '---\n状态: approved\n级别: L1\n确认指纹: aaaa1111aaaa1111\n---\n# I\n\n## 验收标准（可测试）\n- [x] 用例通过（证据:测试全绿）\n', 'utf8');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-10-07-v.md', '--delegated', '可以'], { cwd: root, encoding: 'utf8' });
+  const after = fs.readFileSync(path.join(docP, '2026-10-07-v.md'), 'utf8');
+  check('S38 凭证前置：v5 + 验收节 + 无凭证 → ⚠️ 出账且 done 仍落态（advisory 不拦）',
+    r.status === 0 && /无测试绿凭证/.test(r.stderr) && /verify\.mjs/.test(r.stderr) && after.includes('状态: done'),
+    JSON.stringify({ status: r.status, stderr: String(r.stderr).slice(0, 200) }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- S39 测试绿凭证前置：近期绿凭证在场 → 静默（无 ⚠️）----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-verify2-'));
+  const docP = path.join(root, 'workflow', 'intents');
+  fs.mkdirSync(docP, { recursive: true });
+  fs.mkdirSync(path.join(root, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.agents', 'kit.json'), JSON.stringify({ policyVersion: 5 }), 'utf8');
+  fs.writeFileSync(path.join(root, '.agents', 'verifications.jsonl'),
+    `${JSON.stringify({ ts: new Date().toISOString(), exitCode: 0, suite: 'npm test', passed: 1, failed: 0 })}\n`, 'utf8');
+  fs.writeFileSync(path.join(docP, '2026-10-07-w.md'),
+    '---\n状态: approved\n级别: L1\n确认指纹: bbbb2222bbbb2222\n---\n# I\n\n## 验收标准（可测试）\n- [x] 用例通过（证据:测试全绿）\n', 'utf8');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-10-07-w.md', '--delegated', '可以'], { cwd: root, encoding: 'utf8' });
+  const after = fs.readFileSync(path.join(docP, '2026-10-07-w.md'), 'utf8');
+  check('S39 凭证前置：24h 内有绿行 → 静默（无 ⚠️）且 done 落态',
+    r.status === 0 && !/无测试绿凭证/.test(r.stderr) && after.includes('状态: done'),
+    JSON.stringify({ status: r.status, stderr: String(r.stderr).slice(0, 200) }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

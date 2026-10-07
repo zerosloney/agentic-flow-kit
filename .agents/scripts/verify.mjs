@@ -1,12 +1,18 @@
 #!/usr/bin/env node
 // verify.mjs — 关单固定编排（2026-09-24 intent closeout-verify-script；2026-09-26 check-loop-node 第 2 步直连 node）
 // 用途：关单前一键过门——按写死顺序执行 npm test → check-loop，逐项输出 pass/fail。
-// 语义：只编排不裁决——两条命令都是既有门禁原样跑，本脚本不新增校验、不读配置、无状态；
-//   任一步非零即 fail-fast 退出 1，失败原因经 stdio inherit 原样透传不吞。
+// 语义：只编排不裁决——两条命令都是既有门禁原样跑，本脚本不读配置、不判窗口、不改退出码；
+//   任一步非零即 fail-fast 退出 1，失败原因原样透传不吞。
 //   check-loop 为 node 实现（经 check-loop.mjs 直跑——node 即本脚本运行时必然可用，
 //   旧「缺 sh 环境 fail-closed」分支随 sh 依赖消失退役）。
+// 凭证落账（2026-10-07 verify-evidence）：两步全绿后向 <root>/.agents/verifications.jsonl append
+//   一行机器事实 {ts, exitCode:0, suite, passed?, failed?, runId?}——append-only 事实记录，不属裁决
+//   （窗口判定/门禁在消费方 confirm-doc 与 check-loop 检查 8）；消费语义 = 「按门跑了 verify 且全绿」，
+//   裸跑 npm test 不落账（对齐引导）。npm test 步骤输出从 inherit 改 pipe 捕获后回放（延迟显示，
+//   关单场景可接受）——仅为 best-effort 抓「合计: PASS n / FAIL n」计数行，抓不到则省略计数键。
 // 测试：node templates/_agents/scripts/verify.test.mjs（--test-cmd 注入假命令 + CHECK_LOOP_ROOT 注入夹具，不触真实 npm test 与 workflow）
 // 用法：node .agents/scripts/verify.mjs [--test-cmd "<shell 命令>"]（--test-cmd 仅供测试注入）
+import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,9 +21,12 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const args = process.argv.slice(2);
 const testCmd = args.includes('--test-cmd') ? args[args.indexOf('--test-cmd') + 1] : 'npm test';
 const checkLoop = path.join(SCRIPT_DIR, 'check-loop.mjs');
+const ROOT = process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
 
 console.log(`[verify] ▶ 1/2 ${testCmd}`);
-const t = spawnSync(testCmd, { shell: true, stdio: 'inherit' });
+const t = spawnSync(testCmd, { shell: true, encoding: 'utf8', maxBuffer: 32 * 1024 * 1024 });
+if (t.stdout) process.stdout.write(t.stdout);
+if (t.stderr) process.stderr.write(t.stderr);
 if (t.status !== 0) {
   console.error(`[verify] ❌ 1/2 ${testCmd} 未通过（exit ${t.status ?? t.error?.code}）——修复后重跑，非绿不关单`);
   process.exit(1);
@@ -31,4 +40,17 @@ if (c.status !== 0) {
   process.exit(1);
 }
 console.log('[verify] ✅ 2/2 闭环校验通过');
+
+// 凭证落账：两步全绿才落（check-loop 红不产生凭证——凭证语义 = verify 全绿）；IO 失败出账不阻断
+try {
+  const m = [...String(t.stdout || '').matchAll(/合计: PASS (\d+) \/ FAIL (\d+)/g)].pop();
+  const entry = { ts: new Date().toISOString(), exitCode: 0, suite: 'npm test' };
+  if (m) { entry.passed = Number(m[1]); entry.failed = Number(m[2]); }
+  if (process.env.PIPELINE_RUN_ID) entry.runId = process.env.PIPELINE_RUN_ID;
+  fs.mkdirSync(path.join(ROOT, '.agents'), { recursive: true });
+  fs.appendFileSync(path.join(ROOT, '.agents', 'verifications.jsonl'), `${JSON.stringify(entry)}\n`);
+  console.log(`[verify] 🧾 测试绿凭证已落账 verifications.jsonl${entry.passed !== undefined ? `（PASS ${entry.passed} / FAIL ${entry.failed}）` : ''}`);
+} catch (e) {
+  console.error(`[verify] ⚠️ 凭证落账失败（${e.code || e.message}）——不阻断，关单门前置将按无凭证告警`);
+}
 console.log('[verify] ✅ 全绿——可以关单（逐条勾验验收标准补证据后 intent/plan → done）');

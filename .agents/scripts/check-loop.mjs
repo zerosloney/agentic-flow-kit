@@ -111,7 +111,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 import { loadEnums } from './workflow-enums.mjs';
 import { runCheck16 } from './check-metric-claims.mjs';
-import { auditEnabled, loadKitPolicy } from './policy.mjs';
+import { auditEnabled, loadKitPolicy, hasFreshVerifyLine } from './policy.mjs';
 import { laneOfEntry } from './stage-gates.mjs';
 // MARK_RE：incident 留痕形态的单源（第七轮复核 N3——此前 check-loop 内联复制一份同口径字面量，
 // 两处靠注释与人工同步；改为复用 stage-gates.mjs 的导出，从结构上消除漂移可能）
@@ -629,9 +629,22 @@ function warnEvidenceExempt(type, base) {
 }
 
 // 证据真相校验：检查证据字符串是否包含合法的 commit SHA，且该 commit 触及了 plan 声明的文件
-function verifyEvidenceTruth(evidenceStr, planBase, root) {
+// 测试绿声明对账（2026-10-07 verify-evidence）：ctx = { verifyRelevant, hasFresh } 时，无 SHA 且命中
+// 关键词的证据走凭证对账——有 24h 绿行 → verify 型豁免出账；无 → verify-missing（聚合段出 warning，
+// 灰度第一档非 blocker）。ctx 由调用方按「intent 加入 git ≥ verifySince（v5 锚）」组装；锚不可判定
+// → ctx null → 维持 text 豁免（无判定依据不产出告警）。关键词表最小集起步（check2-datetime 先例：
+// 只豁免实证形态，变体实证再扩）。
+const VERIFY_GREEN_RE = /测试通过|测试全绿|测试绿|全绿/;
+function verifyEvidenceTruth(evidenceStr, planBase, root, ctx) {
   const shaMatch = evidenceStr.match(/\b([a-f0-9]{7,40})\b/i);
   if (!shaMatch) {
+    if (ctx && ctx.verifyRelevant && VERIFY_GREEN_RE.test(evidenceStr)) {
+      if (ctx.hasFresh) {
+        warnEvidenceExempt('verify', planBase);
+        return { ok: true, type: 'verify' };
+      }
+      return { ok: true, type: 'verify-missing' };
+    }
     warnEvidenceExempt('text', planBase);
     return { ok: true, type: 'text' };
   }
@@ -711,6 +724,15 @@ function verifyEvidenceTruth(evidenceStr, planBase, root) {
 {
   const accCutoff = '2026-09-12';
   let legacyUnaccounted = 0;
+  // 测试绿凭证状态（2026-10-07 verify-evidence）：台账读一次循环外缓存；policy 缺 verifySince
+  //（v1-v4）→ ctxBase null → 对账整体跳过（向后兼容）
+  const verifySinceOf = kitPolicy.verifySince;
+  const verifyFresh = (() => {
+    try {
+      const vp = path.join(ROOT, '.agents', 'verifications.jsonl');
+      return fs.existsSync(vp) ? hasFreshVerifyLine(fs.readFileSync(vp, 'utf8').split(/\r?\n/)) : false;
+    } catch { return false; }
+  })();
   for (const intent of docFiles('intents')) {
     if (fmGet(intent, '状态') !== 'done') continue;
     const base = path.basename(intent);
@@ -761,9 +783,17 @@ function verifyEvidenceTruth(evidenceStr, planBase, root) {
     //（豁免通道不得独立成立，防「只引 docs 提交洗白代码改动」）。
     if (evidenceItems.length) {
       const planBase = base.replace(/.md$/, '');
-      const results = evidenceItems.map((ev) => ({ t: verifyEvidenceTruth(ev, planBase, ROOT) }));
+      // verify 对账 ctx：intent 首次加入 git ≥ verifySince（v5 锚）才参与；不可判定 → null 走 text 豁免
+      const iadd = addedDateOf(intent);
+      const vctx = typeof verifySinceOf === 'string' && iadd !== '' && iadd >= verifySinceOf
+        ? { verifyRelevant: true, hasFresh: verifyFresh } : null;
+      const results = evidenceItems.map((ev) => ({ t: verifyEvidenceTruth(ev, planBase, ROOT, vctx) }));
       const hasImplEvidence = results.some((r) => r.t.ok && (r.t.type === 'sha' || r.t.type === 'process'));
       for (const r of results) {
+        if (r.t.ok && r.t.type === 'verify-missing') {
+          warnings.push(`- [WARN 测试绿缺凭证] ${base} 验收证据声明「测试绿」但 24h 内无 verify 凭证（verifications.jsonl）——跑 node .agents/scripts/verify.mjs 后重跑（advisory，灰度第一档）`);
+          continue;
+        }
         if (r.t.ok) continue;
         if (r.t.type === 'irrelevant' && r.t.recordCommit && hasImplEvidence) {
           warnEvidenceExempt('record', planBase);
