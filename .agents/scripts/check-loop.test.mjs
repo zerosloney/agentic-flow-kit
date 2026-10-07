@@ -17,7 +17,7 @@ import { entryConfirmed, MARK_RE, laneOfEntry, laneOfDoc } from './stage-gates.m
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
 const GIT = process.platform === 'win32' ? 'git.exe' : 'git'; // Windows spawn 不补 .exe 扩展名（gitInit/gitCommitAll/场景 43/44/47 共用）
-// 注意：check-loop.mjs 无 isMain 主守卫，被 import 即全量执行门禁并 process.exit——本套件只能端到端 spawn，
+// 注意（2026-10-08 checkloop-importable 后）：check-loop.mjs 已有 isMain 主守卫，可 import（runCheckLoop/四纯零件，直测见 check-loop-unit.test.mjs）——本套件保持端到端 spawn 作为行为回归网，
 // 不可从其 import 函数直测（2026-10-04 review-fix-batch 实证；可 import 化记 papercuts 待 L2 重构）
 
 let pass = 0;
