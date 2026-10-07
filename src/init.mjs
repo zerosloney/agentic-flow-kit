@@ -97,7 +97,7 @@ async function interactive() {
   const menu = (names) => '  ' + names.map((n, i) => dim(`${menuMark(i)} ${stackLabel(n)}`)).join(dim('   '));
 
   console.log(bold(cyan('▶ flow-kit init')) + dim(' · AI 闭环工作流 + wiki 知识层脚手架'));
-  console.log(dim('  安装到当前目录：.agents/ · .githooks/ · workflow/ · wiki/ · AGENTS.md（已存在的文件保守跳过；AGENTS.md 无工作流骨架时文末追加补齐）'));
+  console.log(dim('  安装到当前目录：.agents/ · .githooks/ · workflow/ · wiki/ · AGENTS.md · .github/workflows/kit-ci.yml（CI 远端门，非 GitHub 装户可删）（已存在的文件保守跳过；AGENTS.md 无工作流骨架时文末追加补齐）'));
   try {
     let hosts;
     for (;;) {

@@ -23,6 +23,7 @@
 ### 门禁与提交
 
 - `.githooks/`（经 `core.hooksPath` 挂载，本地 clone 后执行 `git config core.hooksPath .githooks`）：pre-commit（闭环配对 / 泳道完整性 / wiki 台账 / 规则面预算 / 双源一致性 / managed 台账快检 / 敏感信息扫描与条件构建）、pre-push（闭环断档扫描）、commit-msg、post-commit、pre-merge-commit。
+- **CI 远端门（2026-10-07 起）**：`.github/workflows/kit-ci.yml`（owned）在 GitHub runner 复跑 `node .agents/scripts/verify.mjs`（云端兜底本地钩子）；非 GitHub 装户可删，等价门 = 同入口命令 + 服务端分支策略（人工一次性配置，机器不校验）。
 - **`git commit` / `git merge` / `git push` 三处一律禁 `--no-verify`**——被拦说明产出不合规，按提示修完原路重试。
 - 项目专属门禁挂 `.agents/hooks/local-pre-commit`。装户五条硬规则（配对、验收、确认留痕、敏感信息、双源台账）与 `audit` 档见 `workflow/README.md`「硬规则」。
 - 提交遵循 Conventional Commits 中文（feat / fix / docs / style / refactor / perf）。L1+ 三段式闭环链：`docs(*)` approved 留痕 → 代码 → 关单 `docs(*)`，相邻提交即同一闭环（2026-10-04 修订）。

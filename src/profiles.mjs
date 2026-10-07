@@ -106,13 +106,17 @@ export function pickStackVars(stackKey) {
 // Node 18.20 / 20.18 / 22.11 全部 ERR_REQUIRE_ESM（只有 ≥20.19/≥22.12 可用），而本仓 engines
 // 写 >=18.0.0、CI 跑 18/22 → 装户在 CI 目标版本上根本用不了。改 .cjs 后 createRequire 同步载入
 // 全线可用。旧 .mjs 路径同样登记为 owned（免装户残留旧文件时落 managed 重演缺陷）。
+// .github/ 是装户 CI 远端门（2026-10-07 adopter-ci-github）：kit 只下发 workflows/kit-ci.yml 薄模板，
+// 触发分支 / node 版本 / 测试命令均项目特定——归 owned，sync 永不覆盖；感知锚经 srcTemplatePath
+// 通用点前缀翻译命中 templates/_github/。
 export function isOwned(rel) {
   return rel === 'AGENTS.md' || rel === '.gitattributes' || rel.startsWith('workflow/') || rel.startsWith('wiki/')
     || rel.startsWith('.agents/notes/')
     || rel === '.agents/workflow-modules.txt' || rel === '.agents/rule-budgets.txt'
     || rel === '.agents/metric-claims.txt' || rel === '.agents/metric-derivers.cjs'
     || rel === '.agents/metric-derivers.mjs'
-    || rel === '.agents/hooks/local-pre-commit';
+    || rel === '.agents/hooks/local-pre-commit'
+    || rel.startsWith('.github/');
 }
 
 // ---- 模板下发感知（2026-10-06 template-downstream）----
@@ -124,12 +128,14 @@ export function isOwned(rel) {
 // 装户不期望跟随包源模板——模板感知排除出比对面（防「拉取了也被生成器重写」的无谓出账）。新增生成器目标须同步本清单。
 export const TEMPLATE_DRIFT_EXCLUDE = new Set(['workflow/INDEX.md', 'wiki/INDEX.md', 'wiki/知识沉淀总览.html']);
 
-// 映射规则单源：renderTree 的「srcRoot/templates ↔ targetRoot/项目根」关系 + 点目录前缀翻译
-// （render.mjs：`_agents` → `.agents`）——装户 rel 以 .agents/ 开头时探 templates/_agents/<余径>。
-// 复核 P2-1（2026-10-06 template-downstream 独立复核）：漏翻译会让 rule-budgets.txt /
-// metric-claims.txt / local-pre-commit 等 5 条有包源起步模板的 owned 件永不参与感知。
+// 映射规则单源：renderTree 的「srcRoot/templates ↔ targetRoot/项目根」关系 + 点目录前缀翻译。
+// 通用点前缀翻译（2026-10-07 adopter-ci-github，由 .agents/ 特例泛化）：装户 rel 首段以 `.` 开头时探
+// templates/_<去点首段>/<余径>（.agents/notes/x → _agents/notes/x、.github/workflows/kit-ci.yml →
+// _github/…）——与 render.mjs relOf 的顶层 `_`→`.` 同一规则的逆向；无点前缀 rel（AGENTS.md / workflow/…）
+// 原样探 templates/<rel>。无对应模板返回 null（不参与感知）。
 export function srcTemplatePath(pkgRoot, rel) {
-  const tplRel = rel.startsWith('.agents/') ? `_agents/${rel.slice('.agents/'.length)}` : rel;
+  const first = rel.split('/')[0];
+  const tplRel = first.startsWith('.') ? `_${first.slice(1)}${rel.slice(first.length)}` : rel;
   const p = path.join(pkgRoot, 'templates', tplRel);
   return fs.existsSync(p) ? p : null;
 }

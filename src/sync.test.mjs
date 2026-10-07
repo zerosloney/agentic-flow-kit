@@ -366,5 +366,60 @@ else if (cmd === 'add-gate') addGate(rest, root);
   check('S15⑥ .agents/ 前缀翻译 → _agents 模板参与感知出账', (r7.stdout + r7.stderr).includes('有演进且盘面未跟随') && (r7.stdout + r7.stderr).includes('.agents/rule-budgets.txt'));
 }
 
+// ============ 场景 16：装户 GitHub CI 远端门模板（2026-10-07 adopter-ci-github）============
+// 包源 templates/_github/workflows/kit-ci.yml → 装户 .github/workflows/kit-ci.yml（owned）：
+// ① isOwned / srcTemplatePath 契约（含 .agents 存量不回归、无模板反例）；
+// ② 存量装户盘上无该件 → newOwned 提示且不自动落盘；③ 已装 + 源演进 → 感知出账 + 锚刷新 + 再跑静默
+{
+  const sha = (s) => sha256(Buffer.from(s, 'utf8'));
+  const CI_REL = '.github/workflows/kit-ci.yml';
+  const CI_TPL = 'ci v2\n';
+  const { isOwned, srcTemplatePath } = await import(pathToFileURL(path.join(SRC_ROOT, 'profiles.mjs')).href);
+
+  // ① 契约断言：.github/ 归 owned；点前缀翻译 .github ↔ _github 命中、.agents 严格不回归、无模板 null
+  check('S16① isOwned：.github/ 前缀归 owned + 存量正例不回归（spec 验收 1）',
+    isOwned(CI_REL) === true && isOwned('.github/other.yml') === true
+    && isOwned('AGENTS.md') === true && isOwned('.agents/notes/x.md') === true && isOwned('workflow/plans/a.md') === true
+    && isOwned('.agents/scripts/check-loop.mjs') === false);
+  const fxC = mkFixture();
+  W(path.join(fxC, 'templates/_github/workflows/kit-ci.yml'), CI_TPL);
+  const norm = (p) => p.split(path.sep).join('/');
+  check('S16① srcTemplatePath 通用点前缀翻译：.github → _github 命中 / .agents 严格不回归',
+    norm(srcTemplatePath(fxC, CI_REL)).endsWith('templates/_github/workflows/kit-ci.yml')
+    && norm(srcTemplatePath(fxC, '.agents/scripts/keep.txt')).endsWith('templates/_agents/scripts/keep.txt'),
+    JSON.stringify({ ci: srcTemplatePath(fxC, CI_REL), agents: srcTemplatePath(fxC, '.agents/scripts/keep.txt') }));
+  check('S16① srcTemplatePath 无对应模板 → null（.gitattributes 反例，与旧实现等价）',
+    srcTemplatePath(fxC, '.gitattributes') === null);
+
+  // ② 存量装户（盘上无该件）→ newOwned 提示且不自动落盘
+  const fx1 = mkFixture();
+  W(path.join(fx1, 'templates/_github/workflows/kit-ci.yml'), CI_TPL);
+  const t1 = mkTarget(fx1);
+  const r1 = runCmd('sync', fx1, t1);
+  const out1 = r1.stdout + r1.stderr;
+  check('S16② 存量装户无该件 → newOwned 提示含文件名且不自动落盘',
+    out1.includes('新增 owned 起步文档') && out1.includes(CI_REL) && !fs.existsSync(path.join(t1, CI_REL)), out1);
+
+  // ③ 装户已装（带旧锚）+ 源演进 → 感知出账；锚刷新后（custom-synced）再跑静默
+  const fx2 = mkFixture();
+  W(path.join(fx2, 'templates/_github/workflows/kit-ci.yml'), CI_TPL);
+  const t2 = mkTarget(fx2);
+  W(path.join(t2, CI_REL), 'ci CUSTOM\n');
+  W(path.join(t2, '.agents/kit.json'), `${JSON.stringify({
+    kit: 'agentic-flow-kit', version: '1.0.0', createdAt: '2026-09-23T00:00:00Z',
+    options: { hosts: ['zcode'], stack: 'none', boardPort: '777' },
+    managed: [{ rel: '.agents/scripts/keep.txt', sha256: sha('keep v2\n') }],
+    owned: [{ rel: CI_REL, sha256: sha('ci CUSTOM\n'), srcSha256: sha('ci v1\n') }],
+  }, null, 2)}\n`);
+  const r2 = runCmd('sync', fx2, t2);
+  const out2 = r2.stdout + r2.stderr;
+  check('S16③ 源演进未跟随 → 感知出账含 .github rel', out2.includes('有演进且盘面未跟随') && out2.includes(CI_REL), out2.slice(0, 300));
+  check('S16③ 装户定制不被覆盖（盘面仍 CUSTOM）', R(path.join(t2, CI_REL)) === 'ci CUSTOM\n', out2);
+  const kit2 = JSON.parse(R(path.join(t2, '.agents/kit.json')));
+  check('S16③ 锚刷新为当前包源 sha', kit2.owned.find((f) => f.rel === CI_REL).srcSha256 === sha(CI_TPL), JSON.stringify(kit2.owned));
+  const r2b = runCmd('sync', fx2, t2);
+  check('S16③ 锚已刷（custom-synced）→ 再跑静默', !(r2b.stdout + r2b.stderr).includes('有演进且盘面未跟随'));
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${failCount}`);
 process.exit(failCount ? 1 : 0);

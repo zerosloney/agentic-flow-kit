@@ -5,6 +5,8 @@
 # 口径：预算比较用「索引 / HEAD 字节」（git cat-file，LF 归一）；禁用工作区 wc -c 核对（CRLF 膨胀）。
 # 2026-10-06 backflow-loop-audit-remediation：6 份命令文档顶部加「装户边界」标注（build.md 实测 8386B
 # 超 8192 被拦）——单篇上限 8192→8704（与装户 Shipyard.Material 同值，512B 步进）；目录合计未超不动。
-AGENTS.md 7680
+# 2026-10-07 adopter-ci-github：AGENTS.md 门禁节补 CI 远端门一行（299B，实测 7969B 超 7680 被拦）——
+# 新门入册属合法增长，同 512B 步进上调 7680→8192。
+AGENTS.md 8192
 .agents/commands/*.md 8704
 .agents/commands/ 65536

@@ -42,6 +42,16 @@ check('新装 audit 为 false 且 policyVersion 为 2', kit.audit === false && k
   check('新装无包源模板对应条目无锚（生成类配置不参与感知）', cfg !== undefined && cfg.srcSha256 === undefined);
   const rb = tplAnchor('.agents/rule-budgets.txt');
   check('新装 _agents 前缀翻译参与感知（rule-budgets 带锚）', rb !== undefined && typeof rb.srcSha256 === 'string');
+  // CI 远端门模板（2026-10-07 adopter-ci-github）：.github → _github 通用点前缀翻译 + owned 落盘带锚
+  const ci = tplAnchor('.github/workflows/kit-ci.yml');
+  const ciSrc = fs.readFileSync(path.join(ROOT, 'templates', '_github', 'workflows', 'kit-ci.yml'), 'utf8').replace(/\r\n/g, '\n');
+  check('新装 CI 远端门模板落盘且 kit.json owned 带锚（srcSha256 == 包源 LF 归一 sha）',
+    fs.existsSync(path.join(dir, '.github', 'workflows', 'kit-ci.yml'))
+    && ci !== undefined && ci.srcSha256 === shaOf(Buffer.from(ciSrc, 'utf8')),
+    JSON.stringify(ci || null));
+  const ciText = fs.readFileSync(path.join(dir, '.github', 'workflows', 'kit-ci.yml'), 'utf8');
+  check('新装 CI 模板引用统一入口 verify.mjs、含分支策略人工边界提示且无 Tab 缩进',
+    ciText.includes('node .agents/scripts/verify.mjs') && ciText.includes('branch protection') && !ciText.includes('\t'));
 }
 check('claude 命令与角色薄适配落盘',
   fs.existsSync(path.join(dir, '.claude', 'commands', 'wf-plan.md'))

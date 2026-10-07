@@ -1,0 +1,28 @@
+# kit-ci —— agentic-flow-kit 装户远端门（GitHub Actions 薄模板，2026-10-07 adopter-ci-github）
+# 语义：本地 git hooks 可被 --no-verify / 未配 hooksPath 的克隆绕过——本工作流在 GitHub runner 上复跑
+# 统一入口 node .agents/scripts/verify.mjs（测试【有根 package.json 才跑】+ check-loop），任一非零即红；
+# 不在 YAML 里复制门禁逻辑（本地/远端单源，防口径漂移）。
+# 本文件归装户自持（owned）：触发分支 / node 版本 / 测试命令可自改，flow-kit sync 永不覆盖。
+# 装户仓工程在子目录（根无 package.json）时 verify 会跳过测试——改用
+#   node .agents/scripts/verify.mjs --test-cmd "<项目测试命令>"
+# 非 GitHub 托管（TFS / Azure DevOps / Jenkins…）可删除本文件：等价远端门 = 同入口命令 + 服务端分支策略。
+# ⚠️ 真正的「门」在服务端：Settings → Branches → branch protection 勾「要求 PR + 状态检查绿才可合并」
+# ——该配置带不进仓库文件，一次性人工动作，机器不校验。
+name: kit-ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22   # 按项目 engines 调整（kit 引擎要求 >=18）
+      - name: 安装依赖（有根 package.json 才跑；私有源在此加 registry 配置）
+        if: hashFiles('package.json') != ''
+        run: npm ci || npm install
+      - name: 远端门（测试 + 闭环校验）
+        run: node .agents/scripts/verify.mjs

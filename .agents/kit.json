@@ -427,8 +427,8 @@
     },
     {
       "rel": ".agents/rule-budgets.txt",
-      "sha256": "869a630f3c11f0a2a8baf95741dce703567d76f900976e851f1c5000e39e05c3",
-      "srcSha256": "869a630f3c11f0a2a8baf95741dce703567d76f900976e851f1c5000e39e05c3"
+      "sha256": "cd5fee0ae3eebe0398f2b15d4c801bc7f30c4ec20d46508033eeebb4a417a960",
+      "srcSha256": "cd5fee0ae3eebe0398f2b15d4c801bc7f30c4ec20d46508033eeebb4a417a960"
     },
     {
       "rel": ".agents/settings.json",
@@ -441,8 +441,8 @@
     },
     {
       "rel": "AGENTS.md",
-      "sha256": "f873fa337e45c2300681870b72b285d67ef3ed690c8b610fe7ead79ccc83cede",
-      "srcSha256": "c1fba6eeb1849f2ead29aa6bb0794d32f2b3640e6d2711202b35907b284f3849"
+      "sha256": "8f583a4ad887331fe71c8b1a3ac1350d4f58a08f8df0192ce25033496c66ccb9",
+      "srcSha256": "f660c6299041261e5d0591d4e8babc37a862421ad8ada0bff48e0f55990e6039"
     },
     {
       "rel": "wiki/知识沉淀总览.html",
