@@ -2,6 +2,13 @@
 
 已发布版本的摘要。未打进 `package.json` 的改动见 README「当前能力」。
 
+## 1.3.0
+
+- feat(gate)：**装户 GitHub Actions CI 远端门下发**（2026-10-07 adopter-ci-github，Anthropic AI-Native SDLC 基准必修缺口②）——新增 `templates/_github/workflows/kit-ci.yml`（owned 薄模板）：push(main)/PR 时在 GitHub runner 复跑统一入口 `node .agents/scripts/verify.mjs`（测试【有根 package.json 才跑】+ check-loop），YAML 零门禁逻辑（本地/远端单源防口径漂移）；新装 init 直装、存量装户 sync 出「新增 owned 起步文档」提示自取；文件头声明 owned 自持 / 非 GitHub 装户可删（等价门 = 同入口命令 + 服务端分支策略）/ branch protection 属服务端人工一次性配置（机器不校验）。契约两处：`isOwned` 增 `.github/` 前缀（CI 配置归装户自持，sync 永不覆盖）；`srcTemplatePath` 由 `.agents/` 特例泛化为通用点前缀翻译（`.github` 新增命中感知锚，`.agents` 严格不变）；测试 +10 断言（S16 感知三态/newOwned/fresh-init 落盘锚）
+- feat(gate)：**papercuts 清账批**（2026-10-08 papercuts-cleanup-batch，用户点名升级）——五项真刺行为修复 + 台账十处处置标注：① sync 记账三段（owned 自愈/模板感知/台账重写）移到生成器之后，wiki 变更后一次 sync 自洽（S17）；② 检查 18 两表识别与 agg splitTables 表头签名同口径（节标题漂移不再静默停解析，双向互引注释）；③ 检查 14 确认态判据改 OR 并集（git 历史 ∪ confirmations.jsonl 台账 approved 行，git 判据不弱化；回溯三历史树 worktree 重放零新增误报、真实历史树消 3 条存量误报）；④ 检查 4 refRe 字符类移除全角逗号（中文路径引用后跟「，」不再误报断档）；⑤ check-ledger 无参自适应入库态（暂存区非空即入库态、暂存版=index、暂存删除即拦——堵分批提交「提交树内 kit.json 预 landing」CI 必红 + 只 add 件不 add 台账姊妹漏洞，独立复核 P1 修正 HEAD 兜底绕过后终态）
+- feat(tools)：**workflow 仪表盘**（2026-10-08 workflow-dashboard）——`gen-workflow-dashboard.mjs` 一键生成 `workflow/DASHBOARD.md`：头部红绿灯（质量门复用 agg-delegations 判据 + 关单时长带 P50≤1 且 P90≤10 天）+ 关单时长新指标（done intents 立项日 → confirmations.jsonl 最早 done 行，P50/P90/max，存量单无台账行诚实跳过）+ 质量月度行；观测面非门禁（红灯看不拦，gen-workflow-metrics 教训）；`agg-delegations.readLedger` 使能导出（root 显式参数 + soft，原签名行为不变）
+- feat(gate)：**check-loop 可 import 化重构**（2026-10-08 checkloop-importable，papercuts 2026-10-04 isMain 行用户点名单独立项）——isMain 主守卫 + CLI 入口收敛；约 1280 行顶层流程包进 `export function runCheckLoop(opts)`（opts = {root?, rev?, hardening?}，root 显式参数优先；返回 `{exitCode, blockers, warnings}`，输出打印照旧——CLI 行为 stash 同状态逐字节不变）；纯零件导出 delegationResultRows / versionGreater / fmStatus / bindingSha256 + `check-loop-unit.test.mjs` 直测 10 断言；端到端 219 断言套件全量保留为行为回归网；独立复核 diff -w 视图零 P0/P1/P2。20 个检查逐个拆独立模块留渐进程序（check-metric-claims.mjs 先例）
+
 ## 1.2.2
 
 - fix(hosts)：**sync-hosts 支持装户布局**（2026-10-07 papercut，装户回流批）——目标根由恒 `pkgRoot`（= 包安装目录）改为 `--dir` > cwd > pkgRoot，并按目标根自动判布局（包源 `templates/_agents` ↔ `modules/hosts/<宿主键>/`；装户 `.agents` ↔ 项目根下 `<宿主点目录>/`，新增 `hostDirOf` 处理点目录命名）。**修前装户跑 `flow-kit sync-hosts --apply`（doctor §7.x 的提示）会去改包源仓、装户自己的适配层纹丝不动**；另：未安装宿主（目录不存在）不再计 `authorityMissing`（此前装户 `--apply` 恒 exit 1 且刷 45 行噪声）。测试 +1 场景（装户布局 `--dir`/cwd/apply，35→36 断言）
