@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-08
 模块: pipeline
 备注: 引擎源码质量审查三项 P2 改进：lint 工具链 + check-loop 头部判据下沉 + pipeline-run 拆分
-确认指纹: c562d28a8751d036
+确认指纹: 02114d1616c86c46
 ---
 # INTENT — engine-quality-batch
 
@@ -60,14 +60,14 @@ risk_level: L2
 
 ## 验收标准（可测试）
 
-- [ ] G1：本地 `npm run lint` exit 0；npm test 编排含 lint 首步且全量 exit 0（证据：命令输出）
-- [ ] G1：CI 工作流具备可跑性——ci.yml 补 install 步骤后本地等价推演通过（实际 runner 绿在 push 后补证）（证据：ci.yml diff + 推演说明）
-- [ ] G2：`node .agents/scripts/gate-checklist.mjs --diff` 输出「登记完整（0 断档 / 0 未登记）」（证据：命令输出）
-- [ ] G2：check-loop 头部清单 15 项的编号 / 标题 / severity 与 HEAD 逐字一致，仅续行判据注迁移（证据：git diff 对照）
-- [ ] G2：check-loop.test.mjs + check-hygiene.test.mjs + gate-seg.test.mjs 全绿（证据：npm test 输出）
-- [ ] G3：pipeline-run.test.mjs 全绿且断言未改（证据：git diff 显示仅 import 路径与夹具路径变化）
-- [ ] G3：五子命令冒烟行为不变——`start/status/next`（夹具环境）输出与拆分前一致（证据：冒烟对照）
-- [ ] 全量门：npm test exit 0；doctor 0 WARN 0 FAIL；source-sync-check 0 漂移；rule-budget --all exit 0；装副本 shipped 视角全绿（sync 后两侧一致）（证据：命令输出）
+- [x] G1：本地 `npm run lint` exit 0；npm test 编排含 lint 首步且全量 exit 0（证据：284d9e2 实测两命令；独立复核在 HEAD=284d9e2 复现，npm test 首步即 lint 段、末段 ✅ 全部套件通过）
+- [x] G1：CI 工作流具备可跑性——ci.yml 补 install 步骤后本地等价推演通过（实际 runner 绿在 push 后补证）（证据：ci.yml 第 47 行 `- run: npm install` 位于五道零依赖机器门后、`npm test` 前——独立复核确认位置与依赖面；runner 从 npmmirror 镜像拉包的注记见 plan 偏离留痕 ⑥）
+- [x] G2：`node .agents/scripts/gate-checklist.mjs --diff` 输出「登记完整（0 断档 / 0 未登记）」（证据：实测输出「✅ 登记完整（0 断档 / 0 未登记）」，独立复核复现）
+- [x] G2：check-loop 头部清单 15 项的编号 / 标题 / severity 与 HEAD 逐字一致，仅续行判据注迁移（证据：独立复核对 88a7954..284d9e2 逐字节比对——21 条清单行零变化、被删 5 行全为续行注；端态措辞偏离见 plan 偏离留痕 ⑤）
+- [x] G2：check-loop.test.mjs + check-hygiene.test.mjs + gate-seg.test.mjs 全绿（证据：实测 PASS 234 / PASS 15 / PASS 15，随 npm test 全量绿）
+- [x] G3：pipeline-run.test.mjs 全绿且断言未改（证据：独立复核比对 88a7954..284d9e2 该文件双侧 diff 为零 + 29 组断言全过）
+- [x] G3：五子命令冒烟行为不变——`start/status/next`（夹具环境）输出与拆分前一致（证据：独立复核以 `git archive 88a7954` 取拆分前单文件对照，归一 runId/时间戳后 start/status/next×2/watch/abort 输出逐字节一致，PIPELINE-STOP 标记行与 run 文件 schema 一致）
+- [x] 全量门：npm test exit 0；doctor 0 WARN 0 FAIL；source-sync-check 0 漂移；rule-budget --all exit 0；装副本 shipped 视角全绿（sync 后两侧一致）（证据：实测 doctor 14 PASS 0 WARN 0 FAIL / source-sync 仅既有 trust-mode.json 孤儿 0 漂移 / rule-budget exit 0 / npm test exit 0；独立复核将 .agents/scripts/*.test.mjs 全量逐个复跑 exit 0 且 templates 与 .agents 两侧关键文件 cmp 一致）
 
 > **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 冒烟脚本输出>）`。
 

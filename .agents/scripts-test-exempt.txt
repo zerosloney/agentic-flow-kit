@@ -8,3 +8,6 @@ policy.mjs | 库件 | 被 check-loop.test.mjs 直接 import 覆盖
 stage-gates.mjs | 库件 | 被 check-loop.test.mjs 直接 import 覆盖（fill-*/confirm-doc.test 消费其行为）
 verify-wiki-consistency.mjs | wiki 一致性校验工具 | 无（工具豁免，后续批次评估补测）
 wiki-search.mjs | 检索库件 | 无（工具豁免，后续批次评估补测）
+# 2026-10-08 engine-quality-batch：pipeline-run 三层拆分的库件层——纯函数/存储层由 pipeline-run.test.mjs 全量覆盖（断言零改动全过），单建同名测试属形式主义（plan 偏离留痕 ①）
+pipeline-run-docs.mjs | 库件（文档纯函数层，2026-10-08 engine-quality-batch 拆分） | 由 pipeline-run.test.mjs 全量覆盖（断言零改动 29 组全过）
+pipeline-run-run.mjs | 库件（run 存储层，同上拆分） | 由 pipeline-run.test.mjs 全量覆盖（含 PIPELINE_RUN_* 注入契约场景）

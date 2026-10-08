@@ -19,8 +19,8 @@
 
 ### 1.2 阶段路由 (Stage Routing)
 **入口**：`.agents/commands/new-task.md`
-**路径**：`Plan` → `Design` → `Build` → `Test` → `Deploy` → `Maintain`
-**横切**：`.agents/commands/review.md` (评审)
+**指令**：`.agents/commands/plan.md` → `.agents/commands/design.md` → `.agents/commands/build.md` → `.agents/commands/test.md` → `.agents/commands/deploy.md` → `.agents/commands/maintain.md`
+**横切**：`.agents/commands/review.md` (评审)；自动化驱动 `pipeline-run.mjs`（二选一）
 
 ### 1.3 确认门 (Confirmation Gate)
 **唯一入口**：`node .agents/scripts/confirm-doc.mjs <path>`

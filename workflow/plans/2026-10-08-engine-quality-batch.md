@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
-确认指纹: 3b80dee9e1d59f59
+确认指纹: 649d3d9c98144f09
 ---
 # PLAN — engine-quality-batch
 
@@ -61,6 +61,9 @@ T1 → T2 → T3 → T4。依赖：T1 独立（不触 templates）；T2、T3 互
 1. **S3 拆出模块不单独建同名 .test.mjs**（偏离 selfmeasure「新模块带测试」先例）：纯函数与存储层由 `pipeline-run.test.mjs` 全量覆盖（迁 import 后继续），为拆分单造测试文件属形式主义——判据以「断言零改动全绿」承接。
 2. **lint 存量清零用行内 disable 非规则降级**：豁免点位逐处标注、进评审视野；不用文件级 `/* eslint-disable */`。
 3. **「装户跳过 lint」表述修正**（spec 约束遵守映射小偏差）：装户仓无 `src/run-tests.mjs` 编排器、verify.mjs 已单独处理无 package.json 场景——run-tests.mjs 的跳过容错实际保护的是**裸 checkout / 未 install 的包源仓场景**的可诊断性，语义不变、适用面收窄。
+4. **「三笔独立 commit」并为一笔**（284d9e2）：lint 清零与拆分重构在 check-loop.mjs / pipeline-run.mjs 同文件交错，hunk 级分离的误分险 > 独立 revert 收益；提交信息已留痕。
+5. **G2 端态措辞偏离**（独立复核 P2-2）：intent/spec 描述「清单行尾加短指针（实现已迁 check-hygiene.mjs）」，实现为整删迁移注续行、清单行未加新指针——映射信息已由 check-hygiene.mjs 头部（列明承载 2/9/11/12/13）与 check-loop.mjs import 区注释承载，判据（清单行与 HEAD 逐字一致、仅续行迁移）全部满足。
+6. **package-lock.json 87/87 包钉 registry.npmmirror.com**（独立复核 P2-1）：本机 npm 配置钉国内镜像（环境事实，非本单选择）；官方源重生成尝试未生效。接受：integrity 哈希齐全兜底内容完整性；镜像偶发滞后时 `npm install --package-lock-only --registry=https://registry.npmjs.org` 重生成即可。
 
 ## 确认与复核
 

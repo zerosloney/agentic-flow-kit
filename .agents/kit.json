@@ -98,7 +98,7 @@
     },
     {
       "rel": ".agents/scripts-test-exempt.txt",
-      "sha256": "6f4e9cde9d688bba739246e5bb28720f1d9b8d896dfbcecadb306d44c07baf41"
+      "sha256": "b7d207b62613fffb3bf22141150e3d9501b92de5c899ad02a00a3a74dfa6a293"
     },
     {
       "rel": ".agents/scripts/agg-delegations.cjs",
@@ -485,7 +485,7 @@
     },
     {
       "rel": "AGENTS.md",
-      "sha256": "1535fd524be7074c3406ee773ae350105a38c5309a49dacb3ee7009a1c7323f8",
+      "sha256": "e26ed07599230666797845ead4bdf86c79db88a9928e531cc5ac6a4c1429aa09",
       "srcSha256": "f660c6299041261e5d0591d4e8babc37a862421ad8ada0bff48e0f55990e6039"
     },
     {
@@ -513,7 +513,7 @@
     },
     {
       "rel": "workflow/papercuts.md",
-      "sha256": "959452d23c489bd569c8bca92bb6c309f538fe073b2949923ab9b851bcd2ed8c",
+      "sha256": "8cb88b24a87bf0ec0023949d02e0aeb40562960c9d5ca5c2bd71bd9926fc9610",
       "srcSha256": "07f8b0fad8223d25a5f67ce2c672bc9d92288c7b2e123a28e430c509e2c83115"
     },
     {

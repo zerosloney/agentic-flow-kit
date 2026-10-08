@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-08
 模块: pipeline
 备注: engine-quality-batch（lint 工具链 + check-loop 头部判据下沉 + pipeline-run 拆分）
-确认指纹: 70c658f6d7dac5df
+确认指纹: 5706e0342afdaa6e
 ---
 # SPEC — engine-quality-batch
 
@@ -79,5 +79,5 @@
 
 ## 确认与复核
 
-- 确认日期：
-- 复核：L2 推荐独立复核（independent-reviewer）；实现完成后 test 阶段按 test.md §4 执行
+- 确认日期：2026-10-08（用户对话内「确认」）
+- 复核：L2 独立复核已完成（2026-10-08，实现提交 284d9e2 后，independent-reviewer 独立上下文）——结论**无 P0/P1**；3 项 P2 均有证据并已处置：P2-1 package-lock 钉 npmmirror 镜像（plan 偏离留痕 ⑥ 接受）/ P2-2 G2 端态措辞偏离（plan 偏离留痕 ⑤ 补记，判据全满足）/ P2-3 上一单 bb69e19 sync-hosts 声明与 .zcode 盘面不符（本单提交已补齐同步，papercuts 记追溯行）。复核对验收 8 条全部实跑复现：清单行 21 条逐字节一致、pipeline-run.test 双侧 diff 为零、五子命令拆分前后输出归一后逐字节一致、shipped 视角全量复跑 exit 0。未验证范围：CI runner 实际绿（push 后补证）。
