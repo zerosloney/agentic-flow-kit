@@ -102,11 +102,11 @@
     },
     {
       "rel": ".agents/scripts/agg-delegations.cjs",
-      "sha256": "b3d7ece54d440b6247cd33a8aeda735efb89e530028f73730caade1e8fb20fb5"
+      "sha256": "23badae99a8b21beba41173b45c12bbf39424cbec283e087004992b1fc9cd52e"
     },
     {
       "rel": ".agents/scripts/agg-delegations.test.mjs",
-      "sha256": "785da82a18a6a8f5601b32c2f263a9519cb78f19fb3131e27a1512f878338295"
+      "sha256": "49ca9635873a78482b65e90676084a821711d3202dba097a1e564afcfc8b7551"
     },
     {
       "rel": ".agents/scripts/check-hygiene.mjs",

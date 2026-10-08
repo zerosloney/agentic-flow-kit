@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-08
 模块: pipeline
 备注: 关联 intent 2026-10-08-rework-attribution-split（L2 防御道，用户 2026-10-08「怎么不执行？」授权按 B 方案直接落地）
-确认指纹: 32e706eb48c830e6
+确认指纹: 1f64298d258f2948
 ---
 # SPEC — rework-attribution-split
 

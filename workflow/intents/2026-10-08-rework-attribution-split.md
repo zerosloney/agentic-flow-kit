@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-08
 模块: pipeline
 备注: 2026-10-08 承 2026-10-08-selfmeasure-and-modularize 之末问——门禁噪声档在存量上无法应用（严格口径 29 行 0 行可标），根因是台账一行只记一个返工总数、粒度不足以承载归因；本单扩协议支持行内双值并回溯标注
-确认指纹: 0924295b8fe539e5
+确认指纹: ab9affc7759e5317
 ---
 # INTENT — rework-attribution-split
 

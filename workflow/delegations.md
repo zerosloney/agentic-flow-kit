@@ -4,9 +4,12 @@
 > 记法（主智能体顺手写一行，不增加用户负担）：
 > - **委派结果表**：每次向子智能体/执行模型委派后追加一行。
 > - **自做任务结果表**：主智能体自己完成的 **L1+ 新需求任务**，闭环时（intent→done）追加一行；**修复类不重复记**——incident 本身即故障信号，聚合脚本按月扫 `workflow/incidents/` 计数。
-> - 结果列取值：`一次通过`（静态门首跑全过且复核无 P0/P1 返工）/ `返工×N`（设计面返工，回炉 N 次）/ `返工×N（门禁噪声）`（**返工由门禁面而非设计面触发**，见下）/ `主兜底`（executor 失败、主智能体接手——委派口径专用，计返工信号）/ `返工待修`（未闭环，不计入率，单列提示）。
+> - 结果列取值：`一次通过`（静态门首跑全过且复核无 P0/P1 返工）/ `返工×N`（设计面返工，回炉 N 次）/ `返工×N（门禁噪声）`（**返工由门禁面而非设计面触发**，见下）/ `返工×N + 门禁噪声×M`（**行内双值：混合归因**，见下）/ `主兜底`（executor 失败、主智能体接手——委派口径专用，计返工信号）/ `返工待修`（未闭环，不计入率，单列提示）。
 > - **门禁噪声返工**（2026-10-08 selfmeasure-and-modularize 新增）：指返工根因在门禁面而非设计面——预算超限（常驻面单篇/合计）、双源漏刷（`templates/` 改了没 sync）、节名/字段名与消费方不一致、门禁自身误报等。本仓质量门曾连续两月红（一次通过率 55% / 61%，门槛 ≥90%）且指标不指示改进方向，根因即两档混列：扩容门第 3 项「月度返工次数 = 0」对门禁噪声与设计返工一视同仁。拆分后第 3 项只对**设计返工**判 `=0`，门禁噪声返工单列观测（数字仍可见，不隐藏）。
 >   **边界（防标签滥用）**：该取值由作者手写、机器无法判真伪（同 `--delegated` 信任边界，见 incidents/2026-10-05-host-gitignore-localonly-revoke 台账行先例）——**不得用于给设计返工贴「门禁噪声」标签洗白指标**；机器侧保障是台账行 append-only + 检查 18 对账 + 事后对质。判据拿不准时**写 `返工×N`**，宁可让指标红也不要掩盖真问题。
+> - **行内双值**（2026-10-08 rework-attribution-split 新增）：一次任务里设计返工与门禁噪声都有时写 `返工×N + 门禁噪声×M`。
+>   **为什么需要第三种格式**：单值格式无法表达混合归因——一行只记一个返工总数时，「1 次设计 + 1 次噪声」只能整行倒向某一侧，而整行倒向噪声 = 洗白设计返工。行内双值让**两个归因各自落到自己的列**。
+>   **为什么用行内双值而不是拆成两行**：拆行会虚增有效任务数、进而抬高一次通过率的分母（一次通过率 = 一次通过数 ÷ 有效任务数）。行内双值保持「一行 = 一个任务」，`total` 与 `passRate` 分母不变（`agg-delegations.test.mjs` 场景 7 有专测断言）。
 > 聚合：`node .agents/scripts/agg-delegations.cjs` → 输出各月指标 + 扩容门判定 + 可粘贴快照行，粘贴进 §月度聚合快照（每月一行）。聚合时顺路按「三类清理清单」巡检 AGENTS.md：代码/配置已可推导的删；只针对一次需求的细节移 wiki 或删；已被脚本/hook/测试自动保证的只留入口。
 > 口径说明：合并冲突率不适用（单人串行 + 每阶段确认）；人工复核负担以「复核类委派的返工行」近似（见结果列 + 备注）。
 > 调整某角色的模型指派前，先从 `workflow/incidents/` 取 3 个已定性 bug 丢给候选模型做回归对比，再拍板。
@@ -22,11 +25,12 @@
 
 | 日期 | 任务一句话 | 结果 | 备注 |
 |------|------------|------|------|
+| 2026-10-08 | 2026-10-08-rework-attribution-split：返工归因行内拆分——结果列增第三格式 `返工×N + 门禁噪声×M`（一行两归因、**total 按行计 1 不虚增任务数**）+ 存量 29 行逐行审计（可标 1 / 不可精确拆分 3 / 全设计返工 25）+ L29 adopter-ci-github 精确拆分标注 + 台账「判定留痕」节（含数据质量问题清单） | 返工×1 | 三件套 approved→done（用户 2026-10-08 追问「怎么不执行？」即授权按 B 方案直接落地，原话在台账）；返工点：场景 6 首条旧断言 `parseResult('返工×2（门禁噪声）').rework === 2` 转红——**发现上一单的实现疏漏**：纯噪声档当时把 `rework` 字段也填了 N（噪声被当成设计返工），只因 `metrics()` 恰好从另一字段取值而未暴露，本单更正为 `{kind:'rework-noise', rework:0, reworkNoise:2}` 并在断言文案写明更正原因（外部行为 metrics/第 3 项/聚合输出零变化）；测试 22/0 → 31/0（新增场景 7 共 9 条：双值解析 / 宽容空格 / 四格式互不误吞 / 非法数字落 unknown / **total 不虚增** / 双列累计 / passRate 分母不变 / 纯噪声行门 3 ✅ / 含设计返工门 3 ❌ 反例）；实仓指标：2026-10 设计返工 16→15、门禁噪声 0→1、**有效任务 24 与一次通过率 58% 均不变**（证明未靠虚增分母粉饰）；全量 npm test 38 套件 exit 0、doctor 14 PASS 0 FAIL、双源零 diff；主智能体自做 |
 | 2026-10-08 | 2026-10-08-selfmeasure-and-modularize：自测量层修复批——① DASHBOARD 生成物漂移门（gen-workflow-dashboard --check 双归一 + 检查 11 扩覆盖面，装户缺失即跳过）② 台账门禁噪声返工归因拆分（结果列新增 `返工×N（门禁噪声）`，扩容门第 3 项只对设计返工判 0，存量零回填）③ check-loop 卫生类检查拆模块（检查 2/9/11/12/13 → check-hygiene.mjs，1473→1383 行）④ README/CHANGELOG 能力清单收敛单源 ⑤ 确认门措辞改「留痕非防伪」；metrics.md 重跑刷真值 | 返工×4 | 三件套 approved→done（delegated 台账在档，用户就 2 处取舍拍板）；返工点：① **ctx 键名不匹配**——模块解构 `root` 而 check-loop 实参传 `ROOT`，被 doctor 的 check-loop FAIL 抓到（模块自测用 makeCtx 传小写故全绿，是典型「自测掩盖集成 bug」，逐字节对账与真实 doctor 各抓一层）；② 模块内输出顺序写成 2→9→12→13，违反「warnings 按插入序、行序属稳定输出契约」，自查发现并改回 2→9→11→12→13（测试钉死）；③ 新测试 fixture 漏建 DASHBOARD.md 致双告警场景空跑（装户跳过分支正确生效暴露）；④ 顺序断言 fixture 漏建词表致检查 12 整段跳过；验收：拆分前后 CLI stdout+stderr **逐字节 diff 为空**（核心证据）、check-hygiene 10/0、agg 22/0、dashboard 25/0、check-loop 223/0、全量 npm test 38 套件 exit 0、doctor 14 PASS 0 FAIL、双源 8 件零 diff；偏离：验收判据原写「全仓 grep 无命中」不可满足（存量 done intent 的验收证据合法引用该串）→ 收窄为 README.md 零命中并在勾验中如实留痕；主智能体自做 |
 | 2026-10-08 | 2026-10-08-checkloop-importable：check-loop 可 import 化重构——isMain 主守卫 + runCheckLoop(opts) 接缝（返回 {exitCode,blockers,warnings}，CLI 输出 stash 同状态逐字节不变）+ 四纯零件导出 + unit 直测套件（papercuts 2026-10-04 isMain 行用户点名单独立项） | 返工×2 | 三件套 fixed/closed（delegated 台账在档）；返工点：① codemod 三缺陷（配平失衡/缩进退出点漏匹配/重复 return）三重验证网当场修；② 互斥文案拆散断言子串「不能同时使用」致 rev 套件 FAIL——恢复连续子串复绿（教训留 plan 偏离留痕③）；独立复核 diff -w 视图零 P0/P1/P2；同状态对账 diff 空；219/0+28/0+10/0+全套 exit 0；主智能体自做 |
 | 2026-10-08 | 2026-10-08-workflow-dashboard：workflow 仪表盘——gen-workflow-dashboard.mjs 生成 DASHBOARD.md（红绿灯：质量门复用 agg 判据 + 关单时长带 P50≤1/P90≤10）+ 关单时长新指标（立项日→台账最早 done 行，存量诚实跳过）+ readLedger 使能导出（root+soft） | 一次通过 | 两件套 done（delegated 台账在档）；测试 18/0（时长四例 / 带三态 / agg 同值对账 / 端到端 / 空台账降级）；首跑真实对账 P50=0/P90=7/max=8 样本 43、质量门红灯真实亮起（当月 62%<90%）；floor 日历天修正（round 同日记 1）；包源份 ROOT 边角教训留 plan 偏离留痕；主智能体自做 |
 | 2026-10-08 | 2026-10-08-papercuts-cleanup-batch：papercuts 清账批——sync 一次自洽（记账三段移生成器后）+ 检查18 表头签名识别（与 agg 同口径互引）+ 检查14 台账 OR（回溯三历史树零新增、真实树消 3 条存量误报）+ 检查4 全角逗号 + check-ledger 入库态（暂存区非空即入库态、暂存删除即拦）+ 台账十处处置标注（5 真刺 + 4 勘误 + isMain 留立项） | 返工×1 | 三件套 done（delegated 台账在档）；返工点：独立复核 P1——HEAD 兜底把暂存删除误读为「未触碰」放行（提交门绕过，`:rel` 缺失唯一可达路径即暂存删除）当场修复 + S10④ 翻转/④b 新增；P2 plan 偏离留痕补齐；P3-a 文案分叉 / P3-b 头注释滞后顺带；修1/2/4 与标注 PASS；回归 sync 78/0、check-loop 219/0、ledger 18/0、全套 exit 0；主智能体自做 |
-| 2026-10-07 | 2026-10-07-adopter-ci-github：装户 GitHub Actions CI 远端门下发——templates/_github/workflows/kit-ci.yml（owned 薄门，统一入口 verify.mjs）+ isOwned `.github/` 前缀 + srcTemplatePath 点前缀泛化（.agents 特例推广，感知锚覆盖新面）+ AGENTS.md 门禁节口径行两处（rule-budgets 7680→8192 双源成对），Anthropic AI-Native SDLC 必修缺口②，TFS 装户手放 azure-pipelines 方案留对话档 | 返工×2 | 三件套 done（delegated 台账在档）；返工点：① pre-commit 规则面预算拦 AGENTS.md 7969B>7680——按 53d3105 先例 512B 步进上调预算；② rule-budgets 只改装副本被双源门拦——补 templates/_agents 包源侧成对；独立复核零 P0/P1，P2-1（分支策略提示断言）+P3-1（isOwned 存量正例）当场补断言；npm test 全套 36 套件 exit 0（含与并行会话 1.2.2 提交的一次瞬时撞态复跑确认）；fresh-init/S16 共 +10 断言；主智能体自做 |
+| 2026-10-07 | 2026-10-07-adopter-ci-github：装户 GitHub Actions CI 远端门下发——templates/_github/workflows/kit-ci.yml（owned 薄门，统一入口 verify.mjs）+ isOwned `.github/` 前缀 + srcTemplatePath 点前缀泛化（.agents 特例推广，感知锚覆盖新面）+ AGENTS.md 门禁节口径行两处（rule-budgets 7680→8192 双源成对），Anthropic AI-Native SDLC 必修缺口②，TFS 装户手放 azure-pipelines 方案留对话档 | 返工×1 + 门禁噪声×1 | 三件套 done（delegated 台账在档）；**归因回溯标注（2026-10-08 rework-attribution-split）**：原记 `返工×2`，两个返工点各归一门面——① **门禁噪声**：pre-commit 规则面预算拦 AGENTS.md 7969B>7680，新增 CI 远端门口径行属合法增长而 7680 是历史实测+余量，门禁拦的是合规改动（按 53d3105 先例 512B 步进上调预算）；② **设计返工**：rule-budgets 只改装副本被双源门拦，确属违反双源纪律，门禁正确拦下真错。两条各有依据、可逐点对质；独立复核零 P0/P1，P2-1（分支策略提示断言）+P3-1（isOwned 存量正例）当场补断言；npm test 全套 36 套件 exit 0（含与并行会话 1.2.2 提交的一次瞬时撞态复跑确认）；fresh-init/S16 共 +10 断言；主智能体自做 |
 | 2026-10-07 | 2026-10-07-verify-evidence：测试绿机器凭证——verify.mjs 全绿落账 verifications.jsonl + confirm-doc done 前置 advisory（24h 窗口）+ 检查 8 凭证对账（无 SHA「测试绿」声明须对账），窗口判定单源 hasFreshVerifyLine，policyVersion v5，Anthropic AI-Native SDLC「make test before done」必修缺口①，随 v1.2.0 发版 | 一次通过 | 三件套 done（delegated 台账在档）；测试 +7 场景（verify 落账 ×3 / 前置 ×2 / 对账 ×2）；实仓冒烟台账行 {passed:15,failed:0}；关单时新前置首次真实使用即静默通过（当天绿行对账）；独立复核 PASS 零 P0/P1，P2-1（PIPELINE_RUN_ID 无生产方）当场修复 runNode env 注入；v1-v4 装户零变化、存量零回溯；主智能体自做 |
 | 2026-10-06 | 2026-10-06-template-downstream：模板下发感知机制——owned 模板 srcSha256 锚 + sync 三方 sha 判定（判据单源 templateDriftOf 四态，唯一出账=源演进且未跟随 advisory）+ doctor §6.9 只读回显 + init 初始锚 + 前缀翻译（_agents→.agents，感知面 13 件），S18/S20 装户事故根因，随 v1.1.9 发版 | 返工×1 | 三件套 done（delegated 台账在档）；返工点：① doctor 新节未登记 gate-checklist PAIRS 被 S10 拦（门禁按设计抓漏）补登记；② 复核 P2-1 前缀翻译缺失当场修复单源点并补 S15⑥ 断言；③ debug 误跑 sync 未传 --dir 致 fixture 件短暂落仓，清理 amend 出历史；独立复核七承诺全过零 P0/P1；npm test 全套件通过（关单后复跑复绿实证）；主智能体自做 |
 | 2026-10-06 | 2026-10-06-check2-datetime-literal-exempt：装户回流——检查 2 日期显示格式字面量豁免（YYYY-MM-DD HH:mm(:ss) 行内剔除再判，真占位照拦），随 v1.1.6 发版 | 一次通过 | 三件套 done（delegated 台账在档）；复制双侧 + sync 刷台账一次通过（run-tests FAIL 0 / gate 绿 / 两仓 2 份零 diff）；装仓同日先行关单验证 207/207、WARN 31→29 |
@@ -86,6 +90,45 @@
 | 2026-10-02 | caliber-convergence：口径收敛批（plan 单源 + 泳道方案 C 分歧双严 + check2 样例豁免 + 7 P2） | 返工×1 | intent 2026-10-02-caliber-convergence（L2）；实现 6d0e9fb（36 文件）；复核初判「修复后放行」——P1×2（加固门 suspect 逃逸 spec / 5 宿主交付面未 sync）+ P2×2 全收随 2989d9c；真仓占位符误报 8→2（余 2 真阳性）；check-loop 187/0（含 H7）+ confirm-doc 48/0（含 S31b/c）+ sync-hosts 76 对；顺手修 solidify 测试跨天脆断；主智能体自做 |
 | 2026-10-02 | ledger-ci-invariant：台账提交不变量（CI 历史全扫 + pre-commit --staged + 行级校验） | 一次通过 | intent 2026-10-02-ledger-ci-invariant（L2）；实现 0a11893 + P2 收口 6ad4446（删除台账即 hard fail）；预检 90 提交前缀零违例（append-only 事实成立）；fixture 12/12 真 git 仓六类篡改全检出 + 三正例防误拦；CI 五道门 + fetch-depth:0；README 硬规则 6；复核 0 P0/0 P1/1 P2 建议放行；主智能体自做 |
 | 2026-10-02 | ledger-funnel-metrics：台账炼漏斗（机器口径一次通过/返工/周期入 metrics.md 双表） | 一次通过 | intent 2026-10-02-ledger-funnel-metrics（L2）；实现 dcb7d1f + P2×3 收口 ad42ca8（incident 确认阶段按件型=fixed、终态≥2 入返工定义、边界声明——重推导 108=96 完整链+12 协议前、2 返工）；fixture 七形态 24/0 + 体量零回归 + 检查 16 零接触；双月回填 09/10；复核 0 P0/0 P1/3 P2 建议放行；主智能体自做 |
+
+## 返工归因回溯判定留痕（2026-10-08 rework-attribution-split）
+
+> 背景：`2026-10-08-selfmeasure-and-modularize` 引入「门禁噪声」档后，用户指示回溯标注存量。2026-10-08 对本表**全部 29 行含返工记录逐行审计**，结论如下。留痕的目的是**让「没标」也可对质**——否则下一个人会重复做同样的逐行审计。
+>
+> **判据**：门禁噪声 = 返工根因在门禁面（规则面预算 / 双源纪律 / 节名契约 / 门禁自身误报），且该改动本身合规；设计返工 = 实现有真实缺陷（复核抓出的逻辑错 / 漏改 / codemod 缺陷 / 测试 fixture 错误）。
+> **标注纪律**：只标**能逐点对质**的行——每个噪声点必须在备注列写明「哪一点、依据是什么」；混合行按点拆，**不整行标噪声**。
+
+### 审计结论总览
+
+| 分类 | 行数 | 说明 |
+|---|---|---|
+| 可精确拆分并已标注 | **1** | `2026-10-07-adopter-ci-github`（2 个返工点，一条噪声一条设计） |
+| 不可精确拆分 | 3 | 结果列记录数 < 备注列返工点数，无法确定那 N 次记的是哪几点（L31 / L33 / L77） |
+| 全为设计返工，不标 | 25 | 每行至少一个复核抓出的实现缺陷 / 漏改 / 测试 fixture 错误 |
+
+### 为什么只有 1 行可标
+
+29 行中每行**至少含一个设计面返工点**（独立复核抓出的 P1/P2、codemod 缺陷、测试断言写错、正则解析 bug 等）。真正的高频门禁面摩擦集中在两处——**规则面预算**（`adopter-ci-github` ①、`backflow-loop-audit-remediation` ②）与**双源纪律**（`adopter-ci-github` ②、`backflow-loop-audit-remediation` ①、`p2-batch1`、`wf-runtime`）——但它们**全部以混合形态存在**：同一行里既有门禁拦的合法改动，也有门禁正确拦下的真实违约。
+
+严格口径下「整行含噪声即整行标」会洗白同行的设计返工（正是本节要防的滥用），故只有返工点数与记录数**一一对应**的行才能精确拆分——全表仅 L29 符合。
+
+### 附带发现的数据质量问题（不掩盖，待后续处理）
+
+以下行的**结果列返工总数小于备注列列出的返工点数**，即记录数与实际发生数不一致，使「精确拆分」在这些行上不可能（不是不愿标，是标不出）：
+
+| 行 | 结果列 | 备注列返工点数 | 说明 |
+|---|---|---|---|
+| `2026-10-06-template-downstream` | `返工×1` | 3 | ① doctor 新节未登记 PAIRS 被 S10 拦 ② 复核 P2-1 前缀翻译 ③ debug 误跑 sync 落仓 amend 出历史 |
+| `2026-10-06-backflow-loop-audit-remediation` | `返工×1` | 2+ | ① 双侧复制漏刷台账 ② 单篇预算超限 ③ sync-hosts 漂移收口 |
+| `2026-09-30-stage-gate-machine` | `返工×3` | 7 轮复核各 1 项 P1 | 三轮复核各有 P1，计数口径与「复核轮次」不对齐 |
+
+**本单不回填这些行**——无据补数即造数，违反「宁可让指标红也不要掩盖真问题」。后续若要回填，须先定义「记录数 = 返工发生次数」的记法纪律（当前记法允许只记部分返工点），属独立事项。
+
+### 为什么这件事仍然值得做
+
+单值格式下，混合归因**只能整行倒向某一侧**：倒向设计 = 噪声被计入指标（指标红但不可诊断）；倒向噪声 = 洗白设计返工。`返工×N + 门禁噪声×M` 让两个归因各落各的列，且保持「一行 = 一个任务」（`total` / `passRate` 分母不变）。存量只有 1 行用得上，但**机制对未来的混合返工有效**——尤其是规则面预算在改动面扩大时会持续产生合法增长被拦的场景。
+
+---
 
 ## 月度聚合快照
 

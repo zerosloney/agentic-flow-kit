@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
-确认指纹: f61eb9c045b7838b
+确认指纹: 22453adea93d8175
 ---
 # PLAN — rework-attribution-split
 

@@ -32,21 +32,31 @@ function parseTableRows(sectionText) {
     .filter((cols) => !/^\s*$/.test(cols[0]) && /^\d{4}-\d{2}-\d{2}$/.test(cols[0])); // 只留数据行（首列是日期；表头/分隔行随之滤除）
 }
 
+// parseResult：结果列解析。返回值统一为 { kind, rework, reworkNoise } 两个分量。
+// 三个返工格式（2026-10-08 rework-attribution-split 补第三种）：
+//   返工×N                  → 纯设计返工        { kind:'rework',       rework:N,  reworkNoise:0 }
+//   返工×N（门禁噪声）      → 纯门禁面噪声      { kind:'rework-noise', rework:0,  reworkNoise:N }
+//   返工×N + 门禁噪声×M     → 行内双值（混合）  { kind:'rework-mixed', rework:N,  reworkNoise:M }
+// 动机：存量逐行审计（29 行含返工）证实前两种单值格式**无法表达混合归因**——一行只记一个返工
+// 总数时，「1 次设计 + 1 次噪声」只能整行倒向某一侧。行内双值是作者写入时确定已知的归因事实，
+// 不从返工点数量反推（batch-ledger-audit 结论：判据读写入时事实，不猜）。
+// ⚠️ 顺序约束：新分支须排在两个单值分支之前（`$` 锚定使三者互斥，此处按语义就近声明）。
 function parseResult(raw) {
   const r = (raw || '').trim();
-  if (/^一次通过$/.test(r)) return { kind: 'pass', rework: 0 };
-  // 门禁噪声返工（2026-10-08 selfmeasure-and-modularize）：结果列新增取值，剥离「返工由门禁面
-  // （预算超限 / 双源漏刷 / 节名不一致 / 门禁自身误报）触发、而非设计面」的形态。
-  // 动机：本仓 DASHBOARD 自报质量门连续两月红（一次通过率 55% / 61%，门槛 ≥90%），根因是两档混列——
-  // 门禁噪声与设计返工同判第 3 项「月度返工次数 = 0」，指标永远红且不指示该改什么。拆分后指标可指示改进方向。
-  // ⚠️ 顺序约束：须排在既有 `^返工×(\d+)$` 之前判定（`$` 锚定已使二者互斥，此处按语义就近声明）。
+  // 行内双值（混合归因）：宽容空格（`返工×1+门禁噪声×1` 亦可解析）
+  const mx = r.match(/^返工×(\d+)\s*\+\s*门禁噪声×(\d+)$/);
+  if (mx) return { kind: 'rework-mixed', rework: parseInt(mx[1], 10), reworkNoise: parseInt(mx[2], 10) };
+  if (/^一次通过$/.test(r)) return { kind: 'pass', rework: 0, reworkNoise: 0 };
+  // 门禁噪声档（2026-10-08 selfmeasure-and-modularize）：剥离「返工由门禁面（预算超限 / 双源漏刷 /
+  // 节名不一致 / 门禁自身误报）触发、而非设计面」的形态。动机：本仓 DASHBOARD 自报质量门连续两月红
+  // （一次通过率 55% / 61%，门槛 ≥90%），根因是两档混列——指标永远红且不指示该改什么。
   const mn = r.match(/^返工×(\d+)（门禁噪声）$/);
-  if (mn) return { kind: 'rework-noise', rework: parseInt(mn[1], 10) };
+  if (mn) return { kind: 'rework-noise', rework: 0, reworkNoise: parseInt(mn[1], 10) };
   const m = r.match(/^返工×(\d+)$/);
-  if (m) return { kind: 'rework', rework: parseInt(m[1], 10) };
-  if (/^主兜底$/.test(r)) return { kind: 'fallback', rework: 1 };
-  if (/^返工待修$/.test(r)) return { kind: 'pending', rework: 0 };
-  return { kind: 'unknown', rework: 0 };
+  if (m) return { kind: 'rework', rework: parseInt(m[1], 10), reworkNoise: 0 };
+  if (/^主兜底$/.test(r)) return { kind: 'fallback', rework: 1, reworkNoise: 0 };
+  if (/^返工待修$/.test(r)) return { kind: 'pending', rework: 0, reworkNoise: 0 };
+  return { kind: 'unknown', rework: 0, reworkNoise: 0 };
 }
 
 // splitTables：按表头签名识别两张结果表——节标题只服务人类阅读，表头才是数据边界
@@ -125,10 +135,12 @@ function metrics(rows) {
     const p = parseResult(r.result);
     if (p.kind === 'pass') pass += 1;
     if (p.kind === 'fallback') fallback += 1;
-    // 双列累计（2026-10-08 selfmeasure-and-modularize）：设计返工与门禁噪声返工分列，
-    // reworkSum 显式只吃 kind==='rework'——不写成「reworkSum += p.rework」以免后续新增 kind 被静默并入。
-    if (p.kind === 'rework') reworkSum += p.rework;
-    if (p.kind === 'rework-noise') reworkNoiseSum += p.rework;
+    // 双列累计：设计返工与门禁噪声返工分列（2026-10-08 selfmeasure-and-modularize 引入分列，
+    // 2026-10-08 rework-attribution-split 加行内混合档）。
+    // 显式列 kind 而非 `reworkSum += p.rework`——否则后续新增 kind 会被静默并入设计返工，
+    // 且混合档的两个分量必须各走各的累加器（只加 rework 会漏掉噪声）。
+    if (p.kind === 'rework' || p.kind === 'rework-mixed') reworkSum += p.rework;
+    if (p.kind === 'rework-noise' || p.kind === 'rework-mixed') reworkNoiseSum += p.reworkNoise;
   }
   const delegatedValid = valid.filter((r) => r.scope === '委派');
   return {

@@ -122,8 +122,9 @@ const { metrics, gateMonth, expansionVerdict, parseResult } = requireCjs(path.jo
 // 场景 6：门禁噪声返工拆分（2026-10-08 selfmeasure-and-modularize）
 // 动机：本仓质量门连续两月红（55% / 61% < 90%），根因是门禁噪声与设计返工同判第 3 项 → 指标不指示改进方向。
 {
-  check('场景 6：parseResult 识别门禁噪声档（kind=rework-noise）',
-    parseResult('返工×2（门禁噪声）').kind === 'rework-noise' && parseResult('返工×2（门禁噪声）').rework === 2);
+  check('场景 6：parseResult 识别门禁噪声档（kind=rework-noise；2026-10-08 rework-attribution-split 更正：rework 分量归 0——噪声不是设计返工；外部行为 metrics/第 3 项不变）',
+    parseResult('返工×2（门禁噪声）').kind === 'rework-noise' && parseResult('返工×2（门禁噪声）').reworkNoise === 2
+    && parseResult('返工×2（门禁噪声）').rework === 0, JSON.stringify(parseResult('返工×2（门禁噪声）')));
   check('场景 6：存量四档解析逐条不变（向后兼容钉子）',
     parseResult('一次通过').kind === 'pass' && parseResult('返工×2').kind === 'rework'
     && parseResult('返工×2').rework === 2 && parseResult('主兜底').kind === 'fallback'
@@ -150,6 +151,47 @@ const { metrics, gateMonth, expansionVerdict, parseResult } = requireCjs(path.jo
   const mixed = metrics([{ scope: '自做', result: '返工×1' }, { scope: '自做', result: '返工×1（门禁噪声）' }]);
   check('场景 6：反例——设计返工 1 + 噪声 1 → 门 3 ❌（噪声标签不能洗白设计返工）',
     gateMonth(mixed).items.find((i) => i.no === 3).ok === false, JSON.stringify(gateMonth(mixed).items[2]));
+}
+
+// 场景 7：行内双值归因（2026-10-08 rework-attribution-split）
+// 动机：存量逐行审计（29 行含返工）证实单值格式无法表达混合归因——一行只记一个返工总数时，
+// 「1 次设计 + 1 次噪声」只能整行倒向某一侧。行内双值是作者写入时确定已知的归因事实，不反推。
+{
+  const mixed = parseResult('返工×1 + 门禁噪声×1');
+  check('场景 7：行内双值解析出两个分量（kind=rework-mixed）',
+    mixed.kind === 'rework-mixed' && mixed.rework === 1 && mixed.reworkNoise === 1, JSON.stringify(mixed));
+  check('场景 7：宽容空格（无空格变体亦可解析）',
+    parseResult('返工×2+门禁噪声×3').rework === 2 && parseResult('返工×2+门禁噪声×3').reworkNoise === 3);
+  check('场景 7：四个返工格式互不误吞',
+    parseResult('返工×2').kind === 'rework' && parseResult('返工×2').reworkNoise === 0
+    && parseResult('返工×2（门禁噪声）').kind === 'rework-noise'
+    && parseResult('返工×2（门禁噪声）').rework === 0
+    && parseResult('一次通过').kind === 'pass' && parseResult('乱填').kind === 'unknown');
+  check('场景 7：非法数字落 unknown（记录本身有问题，不混进待修）',
+    parseResult('返工×a + 门禁噪声×1').kind === 'unknown');
+
+  // 不变量①：任务总数不虚增——一行仍是一个任务，两个数字不拆成两个任务
+  const rows = [
+    { scope: '自做', result: '返工×1 + 门禁噪声×2' },
+    { scope: '自做', result: '返工×1 + 门禁噪声×2' },
+    { scope: '自做', result: '一次通过' },
+  ];
+  const m = metrics(rows);
+  check('场景 7：不变量①——total 按行计 1（行内双值不虚增任务数 / 不抬高 passRate 分母）',
+    m.total === 3, `total=${m.total}`);
+  check('场景 7：双列准确累计（设计返工 2 / 门禁噪声 4）',
+    m.reworkSum === 2 && m.reworkNoiseSum === 4, JSON.stringify({ r: m.reworkSum, n: m.reworkNoiseSum }));
+  check('场景 7：一次通过率分母不变（1/3，与若拆成两行的结果不同——这是选行内双值而非拆行的理由）',
+    Math.abs(m.passRate - 1 / 3) < 1e-9, String(m.passRate));
+
+  // 混合行的门 3 判定：设计返工 0 + 噪声 4 → ok；设计返工 2 → ❌
+  const onlyNoise = metrics([{ scope: '自做', result: '返工×0 + 门禁噪声×3' }, { scope: '自做', result: '一次通过' }]);
+  const i3ok = gateMonth(onlyNoise).items.find((i) => i.no === 3);
+  check('场景 7：纯噪声混合行 → 门 3 ✅ 且描述带噪声数',
+    i3ok.ok === true && /门禁噪声返工 3 次已剥离单列/.test(i3ok.desc), JSON.stringify(i3ok));
+  const withDesign = gateMonth(m).items.find((i) => i.no === 3);
+  check('场景 7：含设计返工的混合行 → 门 3 ❌（噪声分量不能洗白设计分量）',
+    withDesign.ok === false, JSON.stringify(withDesign));
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
