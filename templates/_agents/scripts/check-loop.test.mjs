@@ -423,6 +423,37 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   rmfix(T);
 }
 
+// ---- 场景 27b:DASHBOARD 漂移门（2026-10-08 selfmeasure-and-modularize 检查 11 扩覆盖面）----
+// 三态：陈旧盘面 → WARN；盘面缺失（装户从未生成过看板）→ 不报（防常驻噪声）；一致 → 不报。
+{
+  const mkDashFix = () => {
+    const T = mkfix();
+    fs.mkdirSync(path.join(T, '.agents', 'scripts'), { recursive: true });
+    for (const f of ['gen-workflow-index.mjs', 'gen-workflow-dashboard.mjs', 'agg-delegations.cjs', 'workflow-enums.mjs']) {
+      fs.copyFileSync(path.join(SCRIPT_DIR, f), path.join(T, '.agents', 'scripts', f));
+    }
+    fs.copyFileSync(path.join(SCRIPT_DIR, '..', 'workflow-modules.txt'), path.join(T, '.agents', 'workflow-modules.txt'));
+    w(T, 'workflow/intents/2026-09-22-dash.md', INTENT('dash', '状态: approved\n级别: L1\n日期: 2026-09-22\n模块: pipeline'));
+    w(T, 'workflow/plans/2026-09-22-dash.md', PLAN('dash', '状态: approved\n级别: L1\n模块: pipeline'));
+    spawnSync(process.execPath, ['.agents/scripts/gen-workflow-index.mjs'], { cwd: T });
+    return T;
+  };
+  // ① DASHBOARD.md 从未生成（装户形态）→ 不得出 WARN
+  let T = mkDashFix();
+  let r = run(T);
+  check('观测面:装户未生成过 DASHBOARD.md → 不出仪表盘漂移 WARN（防常驻噪声）',
+    r.status === 0 && !outOf(r).includes('WARN 仪表盘漂移'), outOf(r));
+  rmfix(T);
+  // ② 生成后改事实 → 漂移 WARN，且 exit 0（advisory 不阻断）
+  T = mkDashFix();
+  spawnSync(process.execPath, ['.agents/scripts/gen-workflow-dashboard.mjs'], { cwd: T });
+  w(T, 'workflow/intents/2026-09-22-dash.md', INTENT('dash', '状态: done\n级别: L1\n日期: 2026-09-22\n模块: pipeline'));
+  r = run(T);
+  check('观测面:DASHBOARD 漂移 → WARN 仪表盘漂移 且 exit 0',
+    r.status === 0 && outOf(r).includes('WARN 仪表盘漂移') && outOf(r).includes('gen-workflow-dashboard.mjs'), outOf(r));
+  rmfix(T);
+}
+
 // ---- 场景 28/29:常驻面预算——合规无告警;AGENTS.md 超限 → WARN 含一进一出 ----
 {
   const T = mkfix();

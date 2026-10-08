@@ -91,7 +91,7 @@ const runAgg = (root) => spawnSync(process.execPath, [path.join(root, '.agents',
 //     纯函数经 module.exports require（isMain 守卫后 import 不执行 main）
 import { createRequire } from 'node:module';
 const requireCjs = createRequire(import.meta.url);
-const { metrics, gateMonth, expansionVerdict } = requireCjs(path.join(SCRIPT_DIR, 'agg-delegations.cjs'));
+const { metrics, gateMonth, expansionVerdict, parseResult } = requireCjs(path.join(SCRIPT_DIR, 'agg-delegations.cjs'));
 
 // 场景 4：审查反例——30 任务、2 主兜底、平均返工 0.25（旧口径四门全过，声明口径下必须 ❌）
 {
@@ -117,6 +117,39 @@ const { metrics, gateMonth, expansionVerdict } = requireCjs(path.join(SCRIPT_DIR
   check('场景 5：本月达标、上月无数据 → ⚠️ 1/2', expansionVerdict(true, undefined, true, []).includes('⚠️'));
   check('场景 5：本月达标、上月未达标 → ⚠️ 1/2', expansionVerdict(true, false, false, []).includes('⚠️'));
   check('场景 5：本月未达标 → ❌ 且列出未达标项号', expansionVerdict(false, true, false, [{ no: 3, ok: false }, { no: 4, ok: false }]).match(/❌.*3\+4/));
+}
+
+// 场景 6：门禁噪声返工拆分（2026-10-08 selfmeasure-and-modularize）
+// 动机：本仓质量门连续两月红（55% / 61% < 90%），根因是门禁噪声与设计返工同判第 3 项 → 指标不指示改进方向。
+{
+  check('场景 6：parseResult 识别门禁噪声档（kind=rework-noise）',
+    parseResult('返工×2（门禁噪声）').kind === 'rework-noise' && parseResult('返工×2（门禁噪声）').rework === 2);
+  check('场景 6：存量四档解析逐条不变（向后兼容钉子）',
+    parseResult('一次通过').kind === 'pass' && parseResult('返工×2').kind === 'rework'
+    && parseResult('返工×2').rework === 2 && parseResult('主兜底').kind === 'fallback'
+    && parseResult('返工待修').kind === 'pending' && parseResult('乱填').kind === 'unknown');
+  check('场景 6：新旧形态互不误吞（$ 锚定；半角括号不认）',
+    parseResult('返工×1（门禁噪声）').kind !== 'rework' && parseResult('返工×1(门禁噪声)').kind === 'unknown');
+
+  const rows = [
+    { scope: '自做', result: '返工×2（门禁噪声）' },   // 噪声
+    { scope: '自做', result: '返工×3（门禁噪声）' },   // 噪声
+    { scope: '自做', result: '一次通过' },
+  ];
+  const m = metrics(rows);
+  check('场景 6：双列累计分离（设计返工 0 / 噪声 5）',
+    m.reworkSum === 0 && m.reworkNoiseSum === 5, JSON.stringify({ reworkSum: m.reworkSum, noise: m.reworkNoiseSum }));
+  check('场景 6：平均返工仍含噪声（快照行口径不变，delegations.md 表结构零改动）',
+    Math.abs(m.avgRework - 5 / 3) < 1e-9, String(m.avgRework));
+  const g = gateMonth(m);
+  const i3 = g.items.find((i) => i.no === 3);
+  check('场景 6：扩容门第 3 项只对设计返工判 ok=true（噪声不计入）', i3.ok === true, JSON.stringify(i3));
+  check('场景 6：噪声数字在描述里显式可见（不隐藏）', /门禁噪声返工 5 次已剥离单列/.test(i3.desc), i3.desc);
+
+  // 反向：设计返工不得因存在噪声档而被放过
+  const mixed = metrics([{ scope: '自做', result: '返工×1' }, { scope: '自做', result: '返工×1（门禁噪声）' }]);
+  check('场景 6：反例——设计返工 1 + 噪声 1 → 门 3 ❌（噪声标签不能洗白设计返工）',
+    gateMonth(mixed).items.find((i) => i.no === 3).ok === false, JSON.stringify(gateMonth(mixed).items[2]));
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

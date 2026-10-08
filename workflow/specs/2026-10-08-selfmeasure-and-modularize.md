@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-08
 模块: pipeline
 备注: 关联 intent 2026-10-08-selfmeasure-and-modularize（L2 防御道，含用户两处取舍拍板）
-确认指纹: fe868e2d4fe55090
+确认指纹: aea4950099279f87
 ---
 # SPEC — selfmeasure-and-modularize
 

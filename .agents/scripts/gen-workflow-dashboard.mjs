@@ -7,8 +7,13 @@
 // （多次 done 取首关；无台账行的存量单诚实跳过不虚构）。真实分布基准（2026-10-08 本仓 43 单）：P50=0 / P90=7 / max=8。
 // 复用：require('./agg-delegations.cjs') 纯函数（readLedger / metrics / gateMonth / expansionVerdict）——
 //   质量判据零重复（N3 教训）；readLedger 的 root 显式参数 + soft 模式为本批使能导出（原签名行为不变）。
-// isMain 守卫 + 纯函数导出（board-kb-p1 先例）：closeDurations / pickPct / durationVerdict 供测试 import 直测。
-// 用法：node .agents/scripts/gen-workflow-dashboard.mjs [--dry-run]
+// isMain 守卫 + 纯函数导出（board-kb-p1 先例）：closeDurations / pickPct / durationVerdict / normalizeForCheck 供测试 import 直测。
+// 用法：node .agents/scripts/gen-workflow-dashboard.mjs [--dry-run | --check]
+//   --check  不写盘；与磁盘不一致时 exit 1 并打印差异（供 check-loop 检查 11 漂移告警，2026-10-08 selfmeasure-and-modularize）
+//     两道归一缺一不可（均照 gen-workflow-index.mjs 先例）：
+//     ① 行尾：fresh clone 检出 CRLF、生成段恒 LF——直接字符串相等会在克隆环境假阳性「漂移」（2026-09-30 该坑已在
+//        gen-workflow-index 踩过，本件照抄 normEol）；
+//     ② 「生成于 <ISO>」行：每次运行必变，不归一则门禁恒红（不可消退噪声，违反 audit-gate-hardening P3 教训）。
 // 测试：node templates/_agents/scripts/gen-workflow-dashboard.test.mjs
 import fs from 'node:fs';
 import path from 'node:path';
@@ -112,15 +117,36 @@ export function qualityRows(root) {
     verdictMap.set(ym, verdict);
     const pct = (x) => (Number.isFinite(x) ? `${Math.round(x * 100)}%` : '—');
     const avg = Number.isFinite(m.avgRework) ? m.avgRework.toFixed(2) : '—';
-    out.push(`| ${ym} | ${m.total} | ${pct(m.passRate)} | ${avg} | ${pct(m.fallbackRate)} | ${verdict} |`);
+    // 门禁噪声返工单列（2026-10-08 selfmeasure-and-modularize）：设计返工与噪声返工分列可诊断——
+    // 「平均返工」把两者平均在一起时看不出该改门禁还是改设计。
+    out.push(`| ${ym} | ${m.total} | ${pct(m.passRate)} | ${m.reworkSum} | ${m.reworkNoiseSum} | ${avg} | ${pct(m.fallbackRate)} | ${verdict} |`);
   }
   return { rows: out, verdictMap, months };
 }
 
-const USAGE = '用法：node .agents/scripts/gen-workflow-dashboard.mjs [--dry-run]';
+const USAGE = '用法：node .agents/scripts/gen-workflow-dashboard.mjs [--dry-run | --check]';
+
+// normalizeForCheck：--check 比对前的双归一（纯函数供测试直测）——行尾 CRLF→LF + 「生成于 <ISO>」行抹平。
+//   导出是为了让测试不必 spawn 子进程即可断言「仅时间戳不同 → 归一后相等」（门禁恒红的直接防线）。
+export function normalizeForCheck(s) {
+  return String(s)
+    .replace(/\r\n/g, '\n')
+    .replace(/生成于 \d{4}-\d{2}-\d{2}T[\d:.]+Z/g, '生成于 <TS>');
+}
+
+function firstDiffLine(a, b) {
+  const la = a.split('\n');
+  const lb = b.split('\n');
+  for (let i = 0; i < Math.max(la.length, lb.length); i++) {
+    if (la[i] !== lb[i]) return i + 1;
+  }
+  return -1;
+}
 
 function main() {
-  const dry = process.argv.includes('--dry-run');
+  const args = process.argv.slice(2);
+  const dry = args.includes('--dry-run');
+  const check = args.includes('--check');
   const intents = collectDoneIntents(ROOT);
   const doneMap = collectDoneMap(ROOT);
   const { days, skipped } = closeDurations(intents, doneMap);
@@ -160,18 +186,39 @@ function main() {
     '',
     '## 质量 / 返工（月度，判据复用 agg-delegations）',
     '',
-    '| 月份 | 有效任务 | 一次通过率 | 平均返工 | 主兜底占比 | 扩容门判定 |',
-    '|------|----------|------------|----------|------------|------------|',
-    ...(q.rows.length ? q.rows : ['| — | — | — | — | — | 台账暂无数据 |']),
+    '| 月份 | 有效任务 | 一次通过率 | 设计返工 | 门禁噪声返工 | 平均返工 | 主兜底占比 | 扩容门判定 |',
+    '|------|----------|------------|---------|-------------|--------|------------|------------|',
+    ...(q.rows.length ? q.rows : ['| — | — | — | — | — | — | — | 台账暂无数据 |']),
     '',
   ];
   const out = lines.join('\n');
+  const target = path.join(ROOT, 'workflow', 'DASHBOARD.md');
+  // --check 优先于写盘、--dry-run 优先于 --check（显式不写盘意图最高）：比对模式不改任何盘面。
+  if (check) {
+    let disk;
+    try {
+      disk = fs.readFileSync(target, 'utf8');
+    } catch {
+      console.error(`[check] ❌ ${path.relative(ROOT, target) || 'workflow/DASHBOARD.md'} 不存在或不可读——跑 node .agents/scripts/gen-workflow-dashboard.mjs 生成`);
+      process.exitCode = 1;
+      return;
+    }
+    const a = normalizeForCheck(out);
+    const b = normalizeForCheck(disk);
+    if (a === b) {
+      console.log(`[check] ✅ ${path.relative(ROOT, target) || 'workflow/DASHBOARD.md'} 与盘面一致（行尾与「生成于」时间戳已归一）`);
+      return;
+    }
+    const ln = firstDiffLine(a, b);
+    console.error(`[check] ❌ ${path.relative(ROOT, target) || 'workflow/DASHBOARD.md'} 与当前事实不一致（首个差异在第 ${ln} 行）——跑 node .agents/scripts/gen-workflow-dashboard.mjs 重新生成`);
+    process.exitCode = 1;
+    return;
+  }
   if (dry) {
     console.log(out);
     console.log(`（--dry-run：未写盘。${USAGE}）`);
     return;
   }
-  const target = path.join(ROOT, 'workflow', 'DASHBOARD.md');
   fs.mkdirSync(path.dirname(target), { recursive: true });
   fs.writeFileSync(target, out, 'utf8');
   console.log(`✅ 已生成 ${path.relative(ROOT, target) || 'workflow/DASHBOARD.md'}`);

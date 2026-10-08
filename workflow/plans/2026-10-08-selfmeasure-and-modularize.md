@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
-确认指纹: 347d09aa00cb6aba
+确认指纹: 50687632a3fc20b1
 ---
 # PLAN — selfmeasure-and-modularize
 

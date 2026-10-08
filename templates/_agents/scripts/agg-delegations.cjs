@@ -2,7 +2,10 @@
 /* agg-delegations: 量化证据聚合
  * 读 workflow/delegations.md 两张结果表（按表头签名识别：委派表含「被委派方」列、自做表=日期+任务一句话；不依赖 ## 节标题）+ 扫 workflow/incidents/ 按月计数，
  * 输出各月指标（一次通过率 / 平均返工次数 / 主兜底占比）、并发扩容门判定、可粘贴的月度快照行。
- * 结果取值：一次通过 | 返工×N | 主兜底 | 返工待修（未闭环，不计入率）。
+ * 结果取值：一次通过 | 返工×N | 返工×N（门禁噪声）| 主兜底 | 返工待修（未闭环，不计入率）。
+ *   门禁噪声档（2026-10-08 selfmeasure-and-modularize）：剥离「返工由门禁面而非设计面触发」的形态——
+ *   扩容门第 3 项只对设计返工判 =0，门禁噪声返工单列观测。存量行零回填（旧四档解析逐条不变）。
+ *   取值定义与边界（何为门禁噪声 / 不得用于给设计返工贴标签）以 workflow/delegations.md 头部记法为准。
  * 用法：node .agents/scripts/agg-delegations.cjs [--month=YYYY-MM]（默认输出全部月份 + 全量累计）
  * 门槛定义见 workflow/delegations.md §并发扩容门槛（doc 为权威，脚本向文档对齐——2026-09-27 board-kb-p1）。
  */
@@ -32,6 +35,13 @@ function parseTableRows(sectionText) {
 function parseResult(raw) {
   const r = (raw || '').trim();
   if (/^一次通过$/.test(r)) return { kind: 'pass', rework: 0 };
+  // 门禁噪声返工（2026-10-08 selfmeasure-and-modularize）：结果列新增取值，剥离「返工由门禁面
+  // （预算超限 / 双源漏刷 / 节名不一致 / 门禁自身误报）触发、而非设计面」的形态。
+  // 动机：本仓 DASHBOARD 自报质量门连续两月红（一次通过率 55% / 61%，门槛 ≥90%），根因是两档混列——
+  // 门禁噪声与设计返工同判第 3 项「月度返工次数 = 0」，指标永远红且不指示该改什么。拆分后指标可指示改进方向。
+  // ⚠️ 顺序约束：须排在既有 `^返工×(\d+)$` 之前判定（`$` 锚定已使二者互斥，此处按语义就近声明）。
+  const mn = r.match(/^返工×(\d+)（门禁噪声）$/);
+  if (mn) return { kind: 'rework-noise', rework: parseInt(mn[1], 10) };
   const m = r.match(/^返工×(\d+)$/);
   if (m) return { kind: 'rework', rework: parseInt(m[1], 10) };
   if (/^主兜底$/.test(r)) return { kind: 'fallback', rework: 1 };
@@ -99,7 +109,7 @@ function countIncidents() {
 }
 
 // 门槛（2026-09-27 board-kb-p1 对齐 workflow/delegations.md §并发扩容门槛声明——doc 为权威）：
-//   月度口径项：一次完成率 ≥90% ｜ 月度返工次数 = 0 ｜ 无主兜底信号（=0）（旧「平均返工≤0.3 / 兜底≤10%」为宽松分叉，退役）
+//   月度口径项：一次完成率 ≥90% ｜ 月度**设计**返工次数 = 0（2026-10-08 起门禁噪声返工剥离单列）｜ 无主兜底信号（=0）（旧「平均返工≤0.3 / 兜底≤10%」为宽松分叉，退役）
 //   样本护栏项（脚本侧统计可信度门槛，非口径分叉）：月样本量 ≥20 ｜ 委派样本 ≥5
 //   连续性：扩容需「本月 + 上一自然月」连续两月月度口径全达标（delegations.md「连续两个月」）
 const GATE = { minSample: 20, minPassRate: 0.9, minDelegated: 5 };
@@ -110,12 +120,15 @@ function metrics(rows) {
   const valid = rows.filter((_, i) => kinds[i] !== 'pending' && kinds[i] !== 'unknown');
   const pending = kinds.filter((k) => k === 'pending').length;
   const unknown = kinds.filter((k) => k === 'unknown').length;
-  let pass = 0, reworkSum = 0, fallback = 0;
+  let pass = 0, reworkSum = 0, reworkNoiseSum = 0, fallback = 0;
   for (const r of valid) {
     const p = parseResult(r.result);
     if (p.kind === 'pass') pass += 1;
     if (p.kind === 'fallback') fallback += 1;
-    reworkSum += p.rework;
+    // 双列累计（2026-10-08 selfmeasure-and-modularize）：设计返工与门禁噪声返工分列，
+    // reworkSum 显式只吃 kind==='rework'——不写成「reworkSum += p.rework」以免后续新增 kind 被静默并入。
+    if (p.kind === 'rework') reworkSum += p.rework;
+    if (p.kind === 'rework-noise') reworkNoiseSum += p.rework;
   }
   const delegatedValid = valid.filter((r) => r.scope === '委派');
   return {
@@ -125,7 +138,8 @@ function metrics(rows) {
     pass,
     passRate: valid.length ? pass / valid.length : null,
     reworkSum,
-    avgRework: valid.length ? reworkSum / valid.length : null,
+    reworkNoiseSum,
+    avgRework: valid.length ? (reworkSum + reworkNoiseSum) / valid.length : null,
     delegatedValid: delegatedValid.length,
     fallback,
     fallbackRate: delegatedValid.length ? fallback / delegatedValid.length : null,
@@ -144,7 +158,10 @@ function gateMonth(m) {
   const items = [];
   items.push({ no: 1, ok: m.total >= GATE.minSample, desc: `样本量 ${m.total}/${GATE.minSample}`, kind: '样本护栏' });
   items.push({ no: 2, ok: m.passRate != null && m.passRate >= GATE.minPassRate, desc: `一次完成率 ${fmtRate(m.passRate)}≥90%`, kind: '口径' });
-  items.push({ no: 3, ok: m.reworkSum === 0, desc: `月度返工次数 ${m.reworkSum}=0`, kind: '口径' });
+  // 第 3 项判据 2026-10-08 语义变更：只对**设计返工**判 =0；门禁噪声返工单列在描述里（数字仍可见不隐藏，
+  // 但不参与 ok 判定——两类混判是本仓质量门连续两月红的根因）。⚠️ 不可据此给设计返工贴噪声标签洗白指标：
+  // 该取值由作者手写、机器无法判真伪（同 --delegated 信任边界），口径约束见 delegations.md 头部。
+  items.push({ no: 3, ok: m.reworkSum === 0, desc: `月度设计返工 ${m.reworkSum}=0（门禁噪声返工 ${m.reworkNoiseSum || 0} 次已剥离单列）`, kind: '口径' });
   items.push({ no: 4, ok: m.fallback === 0, desc: `主兜底 ${m.fallback}=0（无主兜底信号）`, kind: '口径' });
   items.push({ no: 5, ok: m.delegatedValid >= GATE.minDelegated, desc: `委派样本 ${m.delegatedValid}≥5`, kind: '样本护栏' });
   items.push({ no: 6, ok: null, desc: '门禁不失守（人工对照当月 incident 定性）', kind: '人工' });
@@ -183,7 +200,7 @@ function main() {
     const prevYm = (() => { const [y, mo] = ym.split('-').map(Number); const d = new Date(Date.UTC(y, mo - 2, 1)); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; })();
     const verdict = expansionVerdict(monthOk, monthResults.get(prevYm), !months.includes(prevYm), items);
     console.log(`## ${ym}`);
-    console.log(`  有效任务 ${m.total}（待修 ${m.pending}${m.unknown ? `、未知结果 ${m.unknown}` : ''}）｜一次通过 ${m.pass}（${fmtRate(m.passRate)}）｜返工总次数 ${m.reworkSum}（平均 ${fmtNum(m.avgRework)}）｜主兜底 ${m.fallback}/${m.delegatedValid}（${fmtRate(m.fallbackRate)}）｜incident ${incidents[ym] || 0} 起`);
+    console.log(`  有效任务 ${m.total}（待修 ${m.pending}${m.unknown ? `、未知结果 ${m.unknown}` : ''}）｜一次通过 ${m.pass}（${fmtRate(m.passRate)}）｜设计返工 ${m.reworkSum} 次 / 门禁噪声返工 ${m.reworkNoiseSum} 次（合计返工 ${m.reworkSum + m.reworkNoiseSum}，平均 ${fmtNum(m.avgRework)}）｜主兜底 ${m.fallback}/${m.delegatedValid}（${fmtRate(m.fallbackRate)}）｜incident ${incidents[ym] || 0} 起`);
     for (const i of items) console.log(`  门${i.no}[${i.kind}] ${i.ok === null ? '[人工]' : i.ok ? '✅' : '❌'} ${i.desc}`);
     console.log(`  扩容门判定：${verdict}\n`);
     snapshotRows.push(`| ${ym} | ${m.total} | ${fmtRate(m.passRate)} | ${fmtNum(m.avgRework)} | ${fmtRate(m.fallbackRate)} | ${incidents[ym] || 0} | ${verdict} | 样本含待修${m.pending}${m.unknown ? `、未知${m.unknown}` : ''} |`);

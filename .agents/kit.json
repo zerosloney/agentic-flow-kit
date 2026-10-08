@@ -102,11 +102,19 @@
     },
     {
       "rel": ".agents/scripts/agg-delegations.cjs",
-      "sha256": "5af97786f9a57bb18c54c908903d6d95b7ec98fa7f650531919a3707c8c00546"
+      "sha256": "b3d7ece54d440b6247cd33a8aeda735efb89e530028f73730caade1e8fb20fb5"
     },
     {
       "rel": ".agents/scripts/agg-delegations.test.mjs",
-      "sha256": "5ff4b3f46fab815e6be256f010188511d558b6ce9bcb3a769325914e673c5274"
+      "sha256": "785da82a18a6a8f5601b32c2f263a9519cb78f19fb3131e27a1512f878338295"
+    },
+    {
+      "rel": ".agents/scripts/check-hygiene.mjs",
+      "sha256": "5bb52b73c41ec63e4541f7b03e7a9b3bd3b9c9d78ec029f261921699afd9b0ad"
+    },
+    {
+      "rel": ".agents/scripts/check-hygiene.test.mjs",
+      "sha256": "5f6e730bc3bfe9f984048d1b426926cb0e3eed19556a27497a4ce4bb9fa269d1"
     },
     {
       "rel": ".agents/scripts/check-lane-surface.mjs",
@@ -142,7 +150,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "fc0b9f1c853da402fab94719d341ab6115eab8d22d01a6e5778e20eecfcc045b"
+      "sha256": "d54da6c3555150317b1c3b7f1c39178e6945e2061b09eeadc109db13bbf684c2"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -150,7 +158,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "2d7c5329cbc3fc2738695ed82d2d483b321c8555c76585a83670dc561e256cda"
+      "sha256": "3b235c73bc72b4bde002d8f119f08e14bca3cfc7196493ffe1d021ce8918b37d"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -218,11 +226,11 @@
     },
     {
       "rel": ".agents/scripts/gen-workflow-dashboard.mjs",
-      "sha256": "3b8a4117510b459c01a85c139c893c9059e7833e846fd3b523221973d234b163"
+      "sha256": "147eb1f50dd460b3009839fcb1e5b92825e9fd7bf35b1dc92449176e7956fc8d"
     },
     {
       "rel": ".agents/scripts/gen-workflow-dashboard.test.mjs",
-      "sha256": "d51c2624a4b3a9b5682678f57b325df51a1811a26c9708c5f9a648d204d35e02"
+      "sha256": "4c16a0fe2047fc051576308a557303e821d8f83cc3ce2e07c3592f14f3105257"
     },
     {
       "rel": ".agents/scripts/gen-workflow-index.mjs",

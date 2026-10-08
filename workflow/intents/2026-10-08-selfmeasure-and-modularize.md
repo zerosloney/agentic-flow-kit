@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-08
 模块: pipeline
 备注: 2026-10-08 AI SDLC 质量评审批次——用户点名修复自测量层失真 / 返工归因不可指导改进 / check-loop 单体 / README-CHANGELOG 过期互指 / 确认门卖点升格五项
-确认指纹: 36f5c592abb2cf3a
+确认指纹: 9b81ea677c605e5d
 ---
 # INTENT — selfmeasure-and-modularize
 

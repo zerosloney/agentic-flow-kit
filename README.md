@@ -32,6 +32,8 @@ node .agents/scripts/confirm-doc.mjs workflow/intents/<文件>.md   # 终端里�
 
 可选红线用 `add-gate`：`dotnet-ca`、`node-layer`、`py-import`、`generated-readonly`。约定见 `modules/gates/README.md`。
 
+**关于「确认门」的诚实边界**：确认门是**留痕机制，不是防伪机制**。`confirm-doc.mjs` 把确认事件写进 `.agents/confirmations.jsonl`（append-only，入 git），check-loop 据此对账——但台账是本地可写文件，**刻意手改台账仍可伪造**。门禁的实际作用是把「顺手绕过」抬到「主动伪造」（两者性质不同、可事后对质），而非关闭通道。仓库自身的引擎注释对此有完整声明（见 `.agents/scripts/stage-gates.mjs` 头部信任边界段）。委托代录（`--delegated`）的台账行如实记 `source` 与用户原话供事后对质，永不伪装 TTY 确认。
+
 ## 快速开始
 
 ```bash
@@ -84,10 +86,14 @@ modules/gates/      可选门禁模块（dotnet-ca：Clean Architecture 参考�
 - 抽取自真实项目长期运转的引擎（某真实项目），dogfooding 是后续路线（sync 升级 / add-host / add-gate / npm 发布）的一部分。
 - **威胁模型（2026-09-27 init-p1-batch）**：勿在不可信仓库运行 `init` / `doctor` / `sync`——三命令在执行目标侧 `.agents/scripts/` 脚本（生成器 / 校验器）前有供应链防线：脚本内容与包源渲染值（LF 归一 sha）一致才执行，失配即显式跳过提示，不执行不下结论。**防线不覆盖 git 钩子面**：预植的 `.githooks/`、`.agents/hooks/` 仍会被保留挂载，并在你自己的首次 git 操作时执行——不可信仓库请先审查/清除预置件再 init。
 
-## 当前能力（已发布 0.8.0）
+## 当前能力
 
-版本沿革写在 `CHANGELOG.md`。0.8.0 已包含：init / doctor / sync / add-host / add-gate、四套技术栈门禁初值、宿主薄适配、确认门、check-loop 16 项、看板端口上探、opencode 命令 `wf-` 前缀、pre-commit managed 台账快检。
+**能力清单的单一真相源是 `CHANGELOG.md`**——每个已发布版本带什么、为什么这么带，都在那里。本节只讲当前语义，不重复枚举版本特性（此前列举导致 README 与实际发布内容长期漂移，2026-10-08 已收敛到单源）。
 
-仓库里还没打进版本号的增量：`audit` 档（新装默认 false）、`policyVersion`、检查 17（发版树上的未收口文档）、检查 18（委派台账对账）、检查 19（逐阶段审计）、逐阶段前置门（起草门 / 确认门 / done 前置门）、claude / cursor / codex 薄适配、`node-layer` / `py-import` / `generated-readonly` 三个可选门禁、fresh init 冒烟。效果数字等有外部仓库跑过再记，不在这次。
+当前语义三点：
 
-活跃层里 2026-09-23 至 09-28 的 approved / open 文档没有在这次改成 done 或 closed。那些文件的确认指纹绑着当时的正文，关单要逐份 `confirm-doc`。
+- **门禁面**：check-loop 20 项检查 + `.githooks/` 五个钩子（pre-commit / pre-push / commit-msg / post-commit / pre-merge-commit），门禁逻辑不依赖 agent 客户端自觉。
+- **闭环面**：intents → specs → plans → incidents 四态文档链 + 确认台账（`.agents/confirmations.jsonl`）+ 逐阶段前置门（起草门 / 确认门 / done 前置门）。
+- **观测面**：`workflow/INDEX.md`（检索索引）、`workflow/DASHBOARD.md`（红绿灯仪表盘）、`workflow/metrics.md`（月度快照）——**观测面非门禁**，红灯是「看」的不是「拦」的。
+
+版本号与已发布能力看 `package.json` 的 `version` 与 `CHANGELOG.md`；仓库当前工作流实况看 `workflow/INDEX.md`。

@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const { closeDurations, pickPct, durationVerdict, qualityRows, DURATION_BAND } =
+const { closeDurations, pickPct, durationVerdict, qualityRows, DURATION_BAND, normalizeForCheck } =
   await import(pathToFileURL(path.join(SCRIPT_DIR, 'gen-workflow-dashboard.mjs')).href);
 const agg = (await import(pathToFileURL(path.join(SCRIPT_DIR, 'agg-delegations.cjs')).href)).default
   ?? null; // .cjs 经 import 具名空间取——见下方 createRequire 兜底
@@ -120,6 +120,37 @@ const INTENT = (fm) => `---\n${fm}\n---\n# INTENT — x\n`;
     r2.status === 0 && dash2.includes('⚪') && dash2.includes('暂无关单样本') && dash2.includes('跳过（存量单） | 1 |'), `status=${r2.status} ${dash2.slice(0, 300)}`);
   fs.rmSync(root, { recursive: true, force: true });
   fs.rmSync(empty, { recursive: true, force: true });
+}
+
+// ---- ④ --check 漂移门（2026-10-08 selfmeasure-and-modularize）----
+// 归一（CRLF + 「生成于」戳）不过则门禁恒红 = 不可消退噪声（audit-gate-hardening P3），故纯函数层先钉死。
+{
+  const base = '# dash\n> 生成于 2026-10-07T13:56:00.376Z\n| P50 | 0 天 |\n';
+  check('--check 归一：仅「生成于」戳不同 → 归一后相等（否则门禁恒红）',
+    normalizeForCheck(base) === normalizeForCheck(base.replace('2026-10-07T13:56:00.376Z', '2026-10-08T00:00:00.000Z')));
+  check('--check 归一：CRLF 盘面 vs LF 生成段 → 相等（gen-workflow-index 2026-09-30 同坑先例）',
+    normalizeForCheck(base) === normalizeForCheck(base.replace(/\n/g, '\r\n')));
+  check('--check 归一：内容真漂移仍不等（归一不得吞真差异）',
+    normalizeForCheck(base) !== normalizeForCheck(base.replace('| P50 | 0 天 |', '| P50 | 7 天 |')));
+
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-dash-check-'));
+  W(root, 'workflow/intents/2026-10-01-x.md', INTENT('状态: done\n级别: L1\n日期: 2026-10-01\n模块: pipeline'));
+  const gen = path.join(SCRIPT_DIR, 'gen-workflow-dashboard.mjs');
+  const runCheck = () => spawnSync(process.execPath, [gen, '--check'], {
+    cwd: root, encoding: 'utf8', env: { ...process.env, CHECK_LOOP_ROOT: root },
+  });
+  const rMiss = runCheck();
+  check('--check 端到端：盘面缺失 → exit 1 + 提示生成', rMiss.status === 1 && /不存在或不可读/.test(rMiss.stderr || ''), `status=${rMiss.status}`);
+  spawnSync(process.execPath, [gen], { cwd: root, env: { ...process.env, CHECK_LOOP_ROOT: root } });
+  const rOk = runCheck();
+  check('--check 端到端：刚生成 → exit 0', rOk.status === 0 && /一致/.test(rOk.stdout || ''), `status=${rOk.status} ${rOk.stdout || ''}${rOk.stderr || ''}`);
+  fs.appendFileSync(path.join(root, 'workflow', 'DASHBOARD.md'), '\n<!-- drift -->\n');
+  const rDrift = runCheck();
+  check('--check 端到端：内容漂移 → exit 1 + 差异行号 + 修复命令',
+    rDrift.status === 1 && /首个差异在第 \d+ 行/.test(rDrift.stderr || '') && /gen-workflow-dashboard\.mjs 重新生成/.test(rDrift.stderr || ''), `status=${rDrift.status} ${rDrift.stderr || ''}`);
+  const noWrite = fs.readFileSync(path.join(root, 'workflow', 'DASHBOARD.md'), 'utf8');
+  check('--check 端到端：不写盘（漂移态下盘面保持原样）', noWrite.includes('<!-- drift -->'));
+  fs.rmSync(root, { recursive: true, force: true });
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

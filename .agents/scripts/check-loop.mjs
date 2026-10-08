@@ -17,6 +17,7 @@
 //      L0/L1 勾触达红线 → 「红线判低」hard——协作道不受理 STOP 级改动,就高不就低,
 //      2026-09-30 hybrid-governance-risk-lanes)                                        [hard-block]
 //   2. 模板字段占位符残留(YYYY-MM-DD / <主题> 等未替换;<主题> 与 .md 同行 = 命名约定描述,豁免)  [warning]
+//      （2026-10-08 selfmeasure-and-modularize：实现已迁 check-hygiene.mjs，判据与文案未变）
 //   3. incidents 复盘三件套完整性 + 状态严格枚举 + 新 intent 回路(回路断档=hard,其他=warning)
 //   4. 引用有效性(文档/指令中引用的 .agents/ 路径必须存在;支持 fill-{a,b,c}.mjs 花括号展开与 fill-*.mjs 通配;
 //      workflow 文档仅扫活跃态——终态件的引用是历史叙述,不扫,2026-09-27 audit-gate-hardening)  [warning]
@@ -29,11 +30,15 @@
 //      非 git / 查不到加入记录 → 不可判定 → 走存量口径(不误报 hard)
 //      证据可写在 [x] 行的续行（仓库通写法「（证据：…）」另起一行；全/半角冒号皆认）
 //   9. 文件名英文 kebab-case(非 ASCII 文件名=warning,2026-09-11 规则)
+//      （2026-10-08 selfmeasure-and-modularize：实现已迁 check-hygiene.mjs，判据与文案未变）
 //  10. 级别 vs 迁移文件一致性(L1/L2 入口文档加入提交触及迁移 SQL/Migrations=疑似判低,warning)
-//  11. workflow/INDEX.md 漂移(活跃层索引与磁盘不一致=warning,2026-09-21 检索层;调生成器 --check,口径单一)
+//  11. 生成物漂移：workflow/INDEX.md(2026-09-21 检索层) + workflow/DASHBOARD.md(2026-10-08 扩覆盖面)=warning;
+//      各自调对应生成器 --check,口径单一不复刻渲染;实现已迁 check-hygiene.mjs
 //  12. frontmatter「模块:」合法性(枚举非法 / 2026-09-22 起新建缺字段=warning;词表单源 .agents/workflow-modules.txt)
+//      （2026-10-08 selfmeasure-and-modularize：实现已迁 check-hygiene.mjs，判据与文案未变）
 //  13. 常驻面体积预算(超限=warning;判定单源 rule-budget.sh——经 sh 调用,
 //      无 sh 环境静默跳过:advisory 级且 pre-commit 侧在 git 钩子 sh 环境照常硬拦)
+//      （2026-10-08 selfmeasure-and-modularize：实现已迁 check-hygiene.mjs，判据与文案未变）
 //  14. 新 done 的 spec/plan 须在 git 历史里出现过 `状态: approved`(确认环节留痕,2026-09-22;恒 advisory 永不升级 hard)
 //  15. 确认指纹对账(2026-09-27 起:approved/done 须 confirm-doc.mjs 确认指纹+台账配对,缺=hard-block;
 //      两形态——TTY 亲手 / --delegated 对话委托代录,台账 source 如实区分,配对判据与 source 无关)
@@ -118,6 +123,10 @@ import { laneOfEntry } from './stage-gates.mjs';
 // MARK_RE：incident 留痕形态的单源（第七轮复核 N3——此前 check-loop 内联复制一份同口径字面量，
 // 两处靠注释与人工同步；改为复用 stage-gates.mjs 的导出，从结构上消除漂移可能）
 import { MARK_RE, approvedTraceHit } from './stage-gates.mjs';
+// 卫生类检查已拆出（2026-10-08 selfmeasure-and-modularize）：检查 2/9/11/12/13 迁入 check-hygiene.mjs，
+// 本文件只组装 ctx 并消费返回的文案数组（先例 = check-metric-claims.mjs 承载检查 16）。
+// 调用点位置即输出顺序位：须留在检查 10 与 12 之间以保持 warnings 行序（稳定输出契约），见该模块内注释。
+import { runCheckHygiene } from './check-hygiene.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 // CHECK_LOOP_GIT：测试注入钩子（指向不存在/不可执行路径可稳定触发 spawn 异常）；未设置时与原行为逐字节一致（2026-10-05-gitout-fail-open）
@@ -383,50 +392,15 @@ export function runCheckLoop(opts = {}) {
     }
   }
 
-  // --- 2. 模板字段占位符残留 [warning]（排除运行时文件名格式与协议样板，口径沿 sh 版）---
-  {
-    const phRe = /YYYY-MM-DD|<主题>|<日期 主题>|L0 \/ L1 \/ L2 \/ L3|draft \/ approved \/ done|open \/ fixed \/ closed/;
-    const boilerRe = /\.\.\/specs\/[A-Za-z0-9-]*\.md|写明如何满足|防复发验证|_YYYY-MM-DD\.|format\('YYYY-MM-DD'\)|value-format="YYYY-MM-DD"|确认结果：approved（YYYY-MM-DD 用户对话内确认）；done（YYYY-MM-DD 关单，随入口文档置终态）/;
-    // plan 确认节样板豁免（2026-10-03 plan-confirm-boiler）：plan 模板「确认与复核」节自带
-    // 「确认结果：approved（YYYY-MM-DD 用户对话内确认）；done（YYYY-MM-DD 关单，随入口文档置终态）」
-    // 样板句，未回填不等于漏填占位（确认由 confirm-doc 机器兜底）——精确豁免整句，真实占位（如
-    // `日期: YYYY-MM-DD`）照拦。
-    // 命名约定豁免：`<主题>` 与 `.md` 同行 = 在描述文件命名规则（如 `.agents/workflows/<主题>.md`、
-    //   「复制本模板为 YYYY-MM-DD-<主题>.md」），非未填占位符；真未填的占位（标题 `# INTENT — <主题>`、
-    //   `日期: YYYY-MM-DD`）不含 .md，仍照拦（2026-09-25-wf-runtime incident 记录的误报口径）
-    const isNamingConv = (line) => line.includes('<主题>') && /\.md/.test(line);
-    // 样例引用豁免（2026-10-02 caliber-convergence 假阳性消除，先例=检查 18 行尾归一）：命中位于行内代码
-    // （反引号包裹）或围栏代码块内 = 引用样例而非未填占位符，不报；正文裸占位符照报——真占位符均为
-    // 裸文本（模板正文无反引号包裹），检测面不缩。
-    // 日期显示格式豁免（2026-10-06 check2-datetime-literal-exempt）：`YYYY-MM-DD HH:mm(:ss)` 是功能
-    // 自实现的显示格式描述（文档叙述「匹配时间列显示为 YYYY-MM-DD HH:mm」属常态——cancel-export
-    // intent/plan 实证 2 条 advisory、2026-10-06 loop-audit intent 现场复现），非未填占位——行内剔除
-    // 后再判；真占位（`日期: YYYY-MM-DD`，无时间后缀）不含该形态仍拦。只豁免实证形态，变体（斜杠日期
-    // /十二小时制等）出现假阳性再扩。
-    const stripSamples = (lines) => {
-      let inFence = false;
-      return lines.map((line) => {
-        if (/^\s*(```|~~~)/.test(line)) { inFence = !inFence; return ''; }
-        if (inFence) return '';
-        return line.replace(/`[^`]*`/g, '').replace(/YYYY-MM-DD\s+HH:mm(:ss)?/g, '');
-      });
-    };
-    const groups = new Map(); // file -> [ "行号:内容" ]（首现序）
-    for (const sub of DOC_DIRS) {
-      for (const f of docFiles(sub)) {
-        const lines = linesOf(f) || [];
-        const hits = [];
-        stripSamples(lines).forEach((line, i) => {
-          if (phRe.test(line) && !boilerRe.test(line) && !isNamingConv(line)) hits.push(`${i + 1}:${lines[i]}`);
-        });
-        if (hits.length) groups.set(f, hits);
-      }
-    }
-    for (const [f, hits] of groups) {
-      warnings.push(`- [WARN 模板未填] ${path.relative(ROOT, f).split(path.sep).join('/')} 含模板占位符:\n${hits.join('\n')}`);
-    }
-  }
-
+  // --- 卫生类检查 2 / 9 / 11 / 12 / 13（2026-10-08 selfmeasure-and-modularize 拆出）---
+  // ⚠️ 调用点位置即输出顺序位：原实现分处五处，逐条顺序 2 → 9 → 11 → 12 → 13，而 warnings 按插入序输出、
+  //    行序属稳定输出契约（pre-push / pre-commit 消费者 + doctor 按 WARN 行计数）。拆成一次调用后本块统一落在
+  //    原检查 2 的位置，**块内顺序由 check-hygiene.mjs 保证**（与其内注释互引）。新增检查请按原编号插入
+  //    到正确位置，勿一律追加末尾。
+  // ctx 只传既有 helper、模块内零复刻：docFiles 的 tracked 过滤、fmGet 的 frontmatter 受限子集、
+  // linesOf 的读异常响亮出账各自承载不可漂移语义，复刻即造口径分叉。audit:false 下 warnings.push 是
+  // no-op，卫生项因此不出账（硬规则语义保持）。
+  warnings.push(...runCheckHygiene({ root: ROOT, WF, DOC_DIRS, docFiles, linesOf, fmGet, isTracked, readdirOrNull, kitPolicy }));
   // --- 3. incidents 复盘三件套 + 状态严格枚举 + 新 intent 回路（回路断档 = hard）---
   for (const inc of docFiles('incidents')) {
     const name = path.basename(inc);
@@ -851,19 +825,6 @@ export function runCheckLoop(opts = {}) {
     }
   }
 
-  // --- 9. 文件名英文 kebab-case [warning] ---
-  for (const sub of DOC_DIRS) {
-    const dir = path.join(ROOT, WF, sub);
-    for (const f of readdirOrNull(dir) || []) {
-      if (!f.endsWith('.md') || f === '_TEMPLATE.md') continue;
-      const abs = path.join(dir, f);
-      if (!isTracked(abs)) continue;
-      if (!/^[\x20-\x7e]*$/.test(f)) {
-        warnings.push(`- [WARN 文件名非英文] 文件名含非 ASCII 字符,应为英文 kebab-case:${WF}/${sub}/${f}`);
-      }
-    }
-  }
-
   // --- 10. 级别 vs 迁移文件一致性 [warning]（启发式：入口文档加入提交触及迁移 SQL/Migrations → 疑似判低；非 git 跳过）---
   if (gitOut(['rev-parse', '--git-dir']) !== null) {
     const log = gitOut(['log', '--diff-filter=A', '--format=@%H', '--name-only']);
@@ -889,53 +850,6 @@ export function runCheckLoop(opts = {}) {
         if (hits.length) {
           warnings.push(`- [WARN 级别疑似判低] ${path.basename(doc)} 级别 ${lvl} 但其加入提交触及迁移文件(混合改动应就高不就低,请复核级别):\n${hits.join('\n')}`);
         }
-      }
-    }
-  }
-
-  // --- 11. workflow/INDEX.md 漂移 [warning]（调生成器 --check，口径单一不复刻渲染）---
-  {
-    const gen = path.join(ROOT, '.agents', 'scripts', 'gen-workflow-index.mjs');
-    if (fs.existsSync(gen)) {
-      const r = spawnSync(process.execPath, [gen, '--check'], { cwd: ROOT, encoding: 'utf8' });
-      if (r.status !== 0) {
-        const first = `${r.stdout || ''}${r.stderr || ''}`.split('\n')[0];
-        warnings.push(`- [WARN 索引漂移] workflow/INDEX.md 与磁盘不一致——跑 node .agents/scripts/gen-workflow-index.mjs 重新生成（${first}）`);
-      }
-    }
-  }
-
-  // --- 12. frontmatter「模块:」合法性 [warning]（词表单源；缺字段只对 2026-09-22 起新建提示）---
-  {
-    const modsFile = path.join(ROOT, '.agents', 'workflow-modules.txt');
-    if (fs.existsSync(modsFile)) {
-      const mods = linesOf(modsFile).filter((l) => l.trim() && !l.startsWith('#')).map((l) => l.trim());
-      const vocab = new Set(mods);
-      for (const sub of ['intents', 'specs', 'plans', 'incidents']) {
-        for (const doc of docFiles(sub)) {
-          const base = path.basename(doc);
-          const mod = fmGet(doc, '模块');
-          let d = fmGet(doc, '日期') || fmGet(doc, '发现');
-          if (!d) d = /^\d{4}-\d{2}-\d{2}$/.test(base.slice(0, 10)) ? base.slice(0, 10) : '';
-          if (mod) {
-            if (!vocab.has(mod)) warnings.push(`- [WARN 模块元数据] ${base}「模块: ${mod}」不在词表(见 .agents/workflow-modules.txt)`);
-          } else if (/^\d{4}-\d{2}-\d{2}$/.test(d) && d >= kitPolicy.moduleSince) {
-            warnings.push(`- [WARN 模块元数据] ${base} 缺「模块:」字段(${kitPolicy.moduleSince} 起新建文档必填)`);
-          }
-        }
-      }
-    }
-  }
-
-  // --- 13. 常驻面体积预算 [warning]（判定单源 rule-budget.sh；无 sh 环境静默跳过——advisory，pre-commit 硬拦兜底）---
-  {
-    const rb = path.join(ROOT, '.agents', 'scripts', 'rule-budget.sh');
-    const budgets = path.join(ROOT, '.agents', 'rule-budgets.txt');
-    if (fs.existsSync(rb) && fs.existsSync(budgets)) {
-      const r = spawnSync('sh', [rb, '--all'], { cwd: ROOT, encoding: 'utf8' });
-      if (!r.error && r.status !== 0) {
-        const head = `${r.stdout || ''}${r.stderr || ''}`.split('\n').slice(0, 5).map((l) => '    ' + l).join('\n');
-        warnings.push(`- [WARN 常驻面超限] 常驻面体积超预算(先删除或下沉被取代条目再增——一进一出):\n${head}`);
       }
     }
   }
