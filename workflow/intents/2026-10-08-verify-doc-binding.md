@@ -86,7 +86,7 @@ risk_level: L2
   - 证据：`confirm-doc.test.mjs` S40①（v6 + 他单绿行 → advisory 出账）、S40②（v6 + 本单绿行 → 静默）、S40④（v6 + 无 `doc` 键的绿行 → 出账）；`check-loop.test.mjs` 新增三条（v6 他单 → WARN / v6 本单 → 豁免 / **v5 他单 → 无 WARN**）。缺省路径的兼容性由既有 S38/S39（policyVersion 5）**零改动仍绿**保证，两套件合计 **54/0** 与 **231→234/0**。
 - [x] G3：检查 8 对一个 done intent 判定「测试绿」时，只认 `e.doc` 等于该 intent 相对路径的绿行；全仓有他单绿行但无本单绿行 → 出 `WARN 测试绿缺凭证`
   - 证据：`check-loop.test.mjs`「检查8 凭证绑定:v6 + 只有**他单**绿行 → 仍出 WARN」——同时断言 `!outOf(r).includes('证据豁免 verify')`，即**不只是多一行，而是豁免确实没生效**。
-  - 证据（**实仓**）：本仓升 v6 后立即实仓跑 check-loop，4 个存量 intent 新增 8 条 `测试绿缺凭证` WARN（verify-evidence 2 / gate-roi-metrics 1 / selfmeasure-and-modularize 4 / workflow-dashboard 1）——漏洞在存量真实存在的直接证据，逐条对质见上方「实测发现」节。
+  - 证据：**实仓**——本仓升 v6 后立即实仓跑 check-loop，4 个存量 intent 新增 8 条 `测试绿缺凭证` WARN（verify-evidence 2 / gate-roi-metrics 1 / selfmeasure-and-modularize 4 / workflow-dashboard 1）——漏洞在存量真实存在的直接证据，逐条对质见上方「实测发现」节。
 - [x] G3：`confirm-doc` 置 done 前置同样按本 doc 过滤，无本单绿行时出 advisory 且文案含 `--doc`
   - 证据：S40① 断言 `/--doc/.test(r.stderr)`；实仓本次走 `verify.mjs --doc workflow/intents/2026-10-08-verify-doc-binding.md`，落行带 `"doc":"workflow/intents/2026-10-08-verify-doc-binding.md"` —— 本单关单时前置凭**绑定到本单**的绿行放行，是该机制的首次真实使用。
   - 文案锚点未被破坏：`无测试绿凭证` 六字连续 + `verify.mjs` 出现——既有 S38/S39 **零改动仍绿**（`confirm-doc.test.mjs` 54/0）。
@@ -116,7 +116,7 @@ risk_level: L2
 
 ## 确认与复核
 
-- 确认日期：
+- 确认日期：2026-10-08（对话内代录，approved/done 原话见台账）
 - 确认人：用户（对话内明确放行即确认）
 - 确认范围：用户 2026-10-08 拍板「方向 1 启动」+ 就切口范围选「只做②凭证绑定」
 - 复核：L2 独立复核未执行（用户放行）；主智能体以「v1–v5 兼容 fixture 对账 + 既有 231 断言零改动 + 双源零 diff + 实仓冒烟」取证替代

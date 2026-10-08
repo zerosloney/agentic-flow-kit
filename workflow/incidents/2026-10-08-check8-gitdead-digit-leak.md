@@ -1,9 +1,10 @@
 ---
-状态: open
+状态: closed
 级别: L1
 发现: 2026-10-08
 模块: pipeline
 备注: 检查 8「纯数字证据 × git 通道坏死」组合路径漏拦——rev-parse 实证不可能时纯数字 text 豁免把 fail-closed 漏成 fail-open（v1.3.0 Release ubuntu 腿实证）；本件为补留痕：修复 e1624b7 已于 2026-10-08 提交，双轴审查 Spec 轴发现该修复无 incident 留痕后回填
+确认指纹: 75b07d36ad27b96c
 ---
 # INCIDENT — 2026-10-08 check8 通道坏死 × 纯数字证据漏拦
 
@@ -14,6 +15,7 @@
 - 2026-10-08 00:21 修复：e1624b7——`revParse.error`（spawn 异常，非 git 的正常回答）时禁用 text/external 豁免、按伪造拦（fail-closed），与守卫上方既有注释「本地核验不了就按伪造拦」对齐；通道健康时纯数字 text 豁免语义保持（misfire 防线不回归，+2 断言）
 - 2026-10-08 补留痕：双轴审查（Spec 轴）发现该修复类门禁行为变更无 incident 留痕、提交信息是唯一规格——本件与同名 plan 回填
 - 用户确认：补留痕授权（2026-10-08 对话内「处理1，2，3」第 2 项）
+- 2026-10-08 用户确认：关单（对话内，原话「确认」——incident fixed→closed、同名 plan approved→done 逐件代录）
 
 ## 影响面
 
