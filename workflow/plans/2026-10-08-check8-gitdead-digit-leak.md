@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L1
 模块: pipeline
-确认指纹: aed50dc29719cb17
+确认指纹: 1717141a56775bde
 ---
 # PLAN — 2026-10-08 check8-gitdead-digit-leak
 

@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-08
 模块: pipeline
 备注: 对应 intent 2026-10-08-verify-doc-binding（L2 防御道，用户 2026-10-08 拍板方向 1 只切②凭证绑定）
-确认指纹: 91cade07419d4202
+确认指纹: 083ce307806d69be
 ---
 # SPEC — verify-doc-binding
 

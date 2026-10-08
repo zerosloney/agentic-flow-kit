@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-08
 模块: pipeline
 备注: 2026-10-08 AI SDLC 演进缺口判断的第二刀——测试绿凭证与被证明对象零绑定（用户 2026-10-08 拍板方向 1 只切②凭证绑定）
-确认指纹: 3bed9ecabb773cdb
+确认指纹: c4a972afa907b49c
 ---
 # INTENT — verify-doc-binding
 
