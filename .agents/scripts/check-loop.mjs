@@ -976,17 +976,21 @@ export function runCheckLoop(opts = {}) {
     const EFFECTIVE = kitPolicy.confirmDocsEffective;
     const ledgerPath = path.join(ROOT, '.agents', 'confirmations.jsonl');
     const ledger = [];
+    const ledgerBadLines = []; // 坏行（JSON.parse 失败）的物理行号（复核 P2-1：报文行号须对齐物理行）
     if (fs.existsSync(ledgerPath)) {
-      for (const line of linesOf(ledgerPath) || []) {
+      for (const [lineNo, line] of (linesOf(ledgerPath) || []).entries()) {
         if (!line.trim()) continue;
-        try { ledger.push(JSON.parse(line)); } catch { /* 坏行跳过 */ }
+        try { ledger.push(JSON.parse(line)); } catch { ledgerBadLines.push(lineNo + 1); }
       }
     }
     // 台账哈希链校验（2026-10-09 engine-quality-round2 D；写入侧=confirm-doc appendLedger，哈希单源
     // policy.ledgerChainHash——判定零复刻）。判据：连续带 hash 行段内，① prevHash 须等于前一带 hash
-    // 行的 hash（无 hash 行/坏行后链段重启为 ''，与写入侧读末行口径一致）；② hash 须可重算一致。
-    // 断裂 = hard「台账链断裂」（只报首断行号 + 影响行计数，不做逐行刷屏）——就地改/删中间行必留
-    // 痕迹；边界：整文件重写可重建链，不可机器防，兜底 = 台账文件自身 git 历史（check-ledger-invariant）。
+    // 行的 hash（无 hash 行后链段重启 ''，与写入侧读末行口径一致）；② hash 须可重算一致。
+    // **坏行口径（复核 P2-1 勘误，此前注释误称「与写入侧一致」）**：坏行被本解析整体剔除、不重置游标
+    // ——坏行后写入的链行（写入侧读末行遇坏行 prevHash=''）验链必失配出账。这是**预期 fail-loud**
+    // （坏行本身即台账完整性事故，应人工查验），非口径一致场景。
+    // 断裂 = hard「台账链断裂」（只报首断**物理行号** + 影响行计数，不做逐行刷屏）——就地改/删中间行
+    // 必留痕迹；边界：整文件重写可重建链，不可机器防，兜底 = 台账自身 git 历史（check-ledger-invariant）。
     // 历史行（v1.5.0 前，无 hash 字段）零回填零告警——向后兼容。
     {
       let prevHash = '';
@@ -1003,7 +1007,8 @@ export function runCheckLoop(opts = {}) {
         prevHash = hash;
       });
       if (brokenAt) {
-        blockers.push(`- [台账链断裂] confirmations.jsonl 自第 ${brokenAt} 行起哈希链校验失败（共 ${brokenCount} 行不一致——append-only 台账出现就地改/删痕迹；prevHash 接续或内容重算不符。整文件重写不可机器防，对质走台账自身 git 历史）`);
+        const physical = brokenAt + ledgerBadLines.filter((n) => n <= brokenAt).length; // 物理行号（复核 P2-1：剔除坏行会令数组下标漂移）
+        blockers.push(`- [台账链断裂] confirmations.jsonl 自第 ${physical} 行（物理）起哈希链校验失败（共 ${brokenCount} 行不一致——append-only 台账出现就地改/删痕迹；prevHash 接续或内容重算不符。整文件重写不可机器防，对质走台账自身 git 历史）`);
       }
     }
     // incidents 侧覆盖（2026-09-27 gate-coverage）：fixed/closed 为已确认态（open = 起草态不加门——

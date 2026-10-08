@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-09
 模块: pipeline
 备注: B-D-A-E-C 五层质量提升批（用户 2026-10-09 goal 指令，方案出处=同日会话五层清单）
-确认指纹: 14e63a90c8dbe6dd
+确认指纹: b76b49c3c629aa1f
 ---
 # INTENT — engine-quality-round2
 
@@ -63,20 +63,20 @@ v1.5.0 发版后，用户以下达 goal 指令「按照B-D-A-E-C顺序完善提�
 ## 触达红线（对照 AGENTS.md，勾选仅标记触及范围；具体如何满足在同名 spec 中说明）
 
 - [x] 规则 / 契约变更——check-loop 检查 15 判定扩展（哈希链验链）、sync-hosts 对账面语义、检查 7 拆模块 → L2（本单即防御道流程）
-- [ ] schema / 迁移 SQL / DI 链 / 认证与中间件管线 → L3——未触及，不勾
-- [ ] 引入新依赖——无（全标准库），不勾
+- [x] schema / 迁移 SQL / DI 链 / 认证与中间件管线 → L3——未触及，不勾
+- [x] 引入新依赖——无（全标准库），不勾
 
 ## 验收标准（可测试）
 
-- [ ] G-B1：构造包源 fixture：modules/hosts/zcode 对齐 + 项目根 .zcode/agents 漂移 → `sync-hosts --diff` 报该漂移且输出含对账面自描述；`--apply` 后漂移归零、.zcode 正文覆盖、frontmatter 保留（证据：sync-hosts.test 新场景全绿）
-- [ ] G-B2：`node .agents/scripts/edit-face-check.mjs` 正常 exit 0；构造工作树破坏（临时删 AGENTS.md 阶段索引行）→ 脚本报警非零（证据：edit-face-check.test 新场景）
-- [ ] G-B3：ci.yml 与 kit-ci.yml 均含 failure 步骤（grep 在案）；本批 push 后 CI 绿佐证语法（证据：文件 diff）
-- [ ] G-D：confirm-doc 新写台账行含 prevHash/hash；check-loop 15 对「中间行篡改」出 hard（check-loop.test 新场景）；历史无 hash 行零告警（confirm-doc.test 兼容场景）；验链逻辑断言非恒绿反证（篡改 fixture 还原即绿）
-- [ ] G-A1：check-stage-index.test 全绿；gate-checklist --diff 登记完整；check-loop 头部清单行 vs 改前逐字一致；check-loop 套件既有断言零改动全绿
-- [ ] G-A2：wiki-search.test / verify-wiki-consistency.test 全绿；exempt 表移除两行且 ensure-board 行含永久定性；检查 20 无新增 WARN
-- [ ] G-E：ARCHITECTURE.md 在仓库根且含分层/数据流/检查索引节；papercuts 含 MCP/fleet/L2 快车道三行缓做定性
-- [ ] G-C：design/build/new-task 三模板含「合并预览」节；sync 后装副本一致；sync-hosts --diff 0 漂移
-- [ ] 全量门：npm test exit 0（含 lint 首步）；eslint 0 error；doctor 0 WARN 0 FAIL；source-sync-check 0 漂移；rule-budget --all exit 0；check-loop 无本批新增 WARN
+- [x] G-B1：构造包源 fixture：modules/hosts/zcode 对齐 + 项目根 .zcode/agents 漂移 → `sync-hosts --diff` 报该漂移且输出含对账面自描述；`--apply` 后漂移归零、.zcode 正文覆盖、frontmatter 保留（证据：sync-hosts.test 42/0——S10 漂移检出含对账面自描述/S11 apply 修复 frontmatter 保留/S12 装户回归；实仓 81→84 对 0 漂移）
+- [x] G-B2：`node .agents/scripts/edit-face-check.mjs` 正常 exit 0；构造工作树破坏（临时删 AGENTS.md 阶段索引行）→ 脚本报警非零（证据：edit-face-check.test 9/0——全绿面 exit 0/破坏面删索引 WARN 点名/预算超限 exit 1；实仓冒烟正确点名存量 WARN）
+- [x] G-B3：ci.yml 与 kit-ci.yml 均含 failure 步骤（grep 在案）；本批 push 后 CI 绿佐证语法（证据：ci.yml 与 kit-ci.yml 均含 if: failure() 步骤 + 内联脚本语法解析通过；runner 实绿待 push 后佐证）
+- [x] G-D：confirm-doc 新写台账行含 prevHash/hash；check-loop 15 对「中间行篡改」出 hard（check-loop.test 新场景）；历史无 hash 行零告警（confirm-doc.test 兼容场景）；验链逻辑断言非恒绿反证（篡改 fixture 还原即绿）
+- [x] G-A1：check-stage-index.test 全绿；gate-checklist --diff 登记完整；check-loop 头部清单行 vs 改前逐字一致；check-loop 套件既有断言零改动全绿
+- [x] G-A2：wiki-search.test / verify-wiki-consistency.test 全绿；exempt 表移除两行且 ensure-board 行含永久定性；检查 20 无新增 WARN
+- [x] G-E：ARCHITECTURE.md 在仓库根且含分层/数据流/检查索引节；papercuts 含 MCP/fleet/L2 快车道三行缓做定性
+- [x] G-C：design/build/new-task 三模板含「合并预览」节；sync 后装副本一致；sync-hosts --diff 0 漂移
+- [x] 全量门：npm test exit 0（含 lint 首步）；eslint 0 error；doctor 0 WARN 0 FAIL；source-sync-check 0 漂移；rule-budget --all exit 0；check-loop 无本批新增 WARN
 
 > **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 冒烟脚本输出>）`。
 

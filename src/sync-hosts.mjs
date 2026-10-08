@@ -52,17 +52,19 @@ function listMd(dir) {
 function pairsFor(authRel, hostDirOf = (h) => h, hostFilter = null) {
   const out = [];
   const norm = authRel.split(path.sep).join('/');
+  // 条目带 h（宿主键）——faces 计数用「实际生成配对 > 0 的宿主数」（复核 P2-2：存在但空的宿主点
+  // 目录此前被计入「N 宿主」，对账面自描述轻微夸大）
   if (norm.startsWith('commands/') && norm.endsWith('.md')) {
     const name = norm.slice('commands/'.length, -'.md'.length);
     for (const [h, v] of Object.entries(HOSTS)) {
       if (hostFilter && !hostFilter(h)) continue;
-      if (v.commandPrefix) out.push({ adapterRel: `${hostDirOf(h)}/commands/${v.commandPrefix}${name}.md` });
+      if (v.commandPrefix) out.push({ h, adapterRel: `${hostDirOf(h)}/commands/${v.commandPrefix}${name}.md` });
     }
   } else if (norm.startsWith('roles/') && norm.endsWith('.md')) {
     const name = norm.slice('roles/'.length, -'.md'.length);
     for (const h of Object.keys(HOSTS)) {
       if (hostFilter && !hostFilter(h)) continue;
-      out.push({ adapterRel: `${hostDirOf(h)}/agents/${name}.md` });
+      out.push({ h, adapterRel: `${hostDirOf(h)}/agents/${name}.md` });
     }
   }
   return out;
@@ -92,8 +94,7 @@ export function diffHosts(opts) {
 
   for (const spec of roots) {
     const { root, hostDirOf, hostFilter, label } = spec;
-    const hostCount = Object.keys(HOSTS).filter((h) => !hostFilter || hostFilter(h)).length;
-    faces.push(label ? `${label}（${hostCount} 宿主）` : `${root}（${hostCount} 宿主）`);
+    const rootHosts = new Set(); // 该根实际生成配对 > 0 的宿主（faces 计数口径，复核 P2-2）
     // 扫权威源 commands/ + roles/
     for (const sub of ['commands', 'roles']) {
       const subAbs = path.join(authorityRoot, sub);
@@ -103,7 +104,8 @@ export function diffHosts(opts) {
         const authSha = bodySha(authAbs);
         const pairs = pairsFor(authRel, hostDirOf, hostFilter);
         if (pairs.length === 0) continue;
-        for (const { adapterRel } of pairs) {
+        for (const { h, adapterRel } of pairs) {
+          rootHosts.add(h);
           adapterSeen.add(adapterRel);
           const adapterAbs = path.join(root, adapterRel);
           const adapterSha = bodySha(adapterAbs);
@@ -119,6 +121,7 @@ export function diffHosts(opts) {
       }
     }
 
+    faces.push(label ? `${label}（${rootHosts.size} 宿主）` : `${root}（${rootHosts.size} 宿主）`);
     // 扫薄适配找孤儿（权威源无对应文件）
     for (const h of Object.keys(HOSTS)) {
       if (hostFilter && !hostFilter(h)) continue;

@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-09
 模块: pipeline
 备注: engine-quality-round2（B-D-A-E-C 五层质量提升批）
-确认指纹: c3f4a1e79ac8e37b
+确认指纹: cbbae89f7c341fd9
 ---
 # SPEC — engine-quality-round2
 
@@ -93,4 +93,5 @@
 ## 确认与复核
 
 - 确认日期：2026-10-09（自治批次——授权链同 intent：用户 goal 指令放行五层方案内容）
+- 复核：L2 独立复核已完成（2026-10-09，提交 9ca1675+6e96edf 后，independent-reviewer 独立上下文）——结论 P0=0、P1×1、P2×2，全部处置：P1-1 D 冒烟探针行残留实仓台账（首次内联探针崩在 appendLedger 后未还原）→ papercuts 定性 + stage=void 作废行经 appendLedger 链上追加；P2-1 验链坏行口径注释勘误 + 报文改物理行号（已修）；P2-2 faces 宿主计数改「实际生成配对>0」（已修，84 对不变）。授权链留痕完整性观察两点（放行对象出账外/同句 quote）为已声明结构性缺口。复核实测：npm test 全绿/eslint 0/登记完整/84 对 0 漂移/doctor 14 PASS。未验证：CI 远端实跑（push 后佐证）
 - 复核：L2——实现完成后 test 阶段 independent-reviewer 独立复核

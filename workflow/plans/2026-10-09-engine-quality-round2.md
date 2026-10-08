@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
-确认指纹: 99653f0e3443ae7e
+确认指纹: 1d6909c2c0f32a0d
 ---
 # PLAN — engine-quality-round2
 
