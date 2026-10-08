@@ -1,10 +1,10 @@
 ---
-状态: done
+状态: superseded
 级别: L2
 日期: 2026-10-09
 模块: pipeline
 备注: engine-quality-round2（B-D-A-E-C 五层质量提升批）
-确认指纹: cbbae89f7c341fd9
+确认指纹: e367cd56a8cd2783
 ---
 # SPEC — engine-quality-round2
 

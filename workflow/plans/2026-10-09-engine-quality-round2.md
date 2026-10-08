@@ -1,8 +1,8 @@
 ---
-状态: done
+状态: superseded
 级别: L2
 模块: pipeline
-确认指纹: 1d6909c2c0f32a0d
+确认指纹: a5a84d6db1a42537
 ---
 # PLAN — engine-quality-round2
 

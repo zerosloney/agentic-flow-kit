@@ -1,11 +1,11 @@
 ---
-状态: done
+状态: superseded
 级别: L2
 risk_level: L2
 日期: 2026-10-09
 模块: pipeline
 备注: B-D-A-E-C 五层质量提升批（用户 2026-10-09 goal 指令，方案出处=同日会话五层清单）
-确认指纹: b76b49c3c629aa1f
+确认指纹: bc443d2de5282d17
 ---
 # INTENT — engine-quality-round2
 
