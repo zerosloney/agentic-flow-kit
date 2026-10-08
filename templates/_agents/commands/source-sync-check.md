@@ -23,16 +23,16 @@ next: .agents/commands/build.md（漂移属 build 改包源未同步导致的，
 > `templates/_agents/` 包源 vs `.agents/` 装副本——三类差异报告：缺失 / 孤儿 / 漂移。
 > managed 文件由 `flow-kit sync` 跟踪；owned 文件由 `flow-kit doctor` §6.6 校验——本工具补"两者都没扫"的真空地带（结构级差异）。
 
-## 何时跑
+## 1. 何时跑
 
 - 改 `templates/_agents/*` 包源后
 - 怀疑装副本未跟包源更新
 - 体检装副本完整性（清理前 / 发版前）
 - 不跑：仅改装副本 `.agents/*`（B-b 决策「只报告」+ 不反向同步）
 
-## 怎么跑
+## 2. 怎么跑
 
-### 默认 `--diff`（仅报告）
+### 2.1 默认 `--diff`（仅报告）
 
 ```
 node .agents/scripts/source-sync-check.mjs --diff
@@ -49,7 +49,7 @@ node .agents/scripts/source-sync-check.mjs --pkg-root <path> --target <path>   #
 - `templates/_agents/cache/`（运行时缓存，与 `flow-kit sync` 既有约定一致）
 - `.agents/kit.json` / `.agents/settings.json`（init 渲染产物，不属双源）
 
-### 输出示例
+### 2.2 输出示例
 
 ```
 ▶ flow-kit source-sync-check --diff
@@ -64,7 +64,7 @@ node .agents/scripts/source-sync-check.mjs --pkg-root <path> --target <path>   #
     - scripts/ensure-board.mjs  pkg=e66653b0…  tgt=b6f3cc9b…
 ```
 
-### 自验
+### 2.3 自验
 
 ```
 node .agents/scripts/source-sync-check.test.mjs   # 11 场景全过
@@ -72,7 +72,7 @@ npm test                                            # 含 source-sync-check 套�
 flow-kit doctor                                     # 10/0/0
 ```
 
-## 边界（不要做）
+## 3. 边界（不要做）
 
 - 不要自动化同步（B-b 决策「只报告不修复」——与 `gate-checklist` 同源）
 - 不改 managed 台账跟踪逻辑（`sync.mjs` 不动）
@@ -80,7 +80,7 @@ flow-kit doctor                                     # 10/0/0
 - 不反向同步——装副本独自有文件（如 hooks/commit-check.config.json）可能是装户配置，不应被删
 - 不检查注册表内宿主 `modules/hosts/` 薄适配漂移（那是 `flow-kit sync-hosts` 范围）
 
-## 当前已识别的真实漂点（首次实测，2026-09-25）
+## 4. 当前已识别的真实漂点（首次实测，2026-09-25）
 
 - **缺失**：本工具写完后未同步装副本（预期内——随本次 commit 解决）
 - **孤儿**：`.agents/hooks/commit-check.config.json`（装副本独有，疑似装户配置）
@@ -88,7 +88,7 @@ flow-kit doctor                                     # 10/0/0
 
 修复留后续 incident / intent 跟踪（不在本次范围）。
 
-## 与既有工具的关系
+## 5. 与既有工具的关系
 
 | 工具 | 作用域 | 算法 |
 |---|---|---|
@@ -98,7 +98,7 @@ flow-kit doctor                                     # 10/0/0
 
 三者互补，不重叠。
 
-## 相关留痕
+## 6. 相关留痕
 
 - intent：`workflow/intents/2026-09-25-source-sync-check.md`
 - plan：`workflow/plans/2026-09-25-source-sync-check.md`

@@ -22,51 +22,51 @@
     },
     {
       "rel": ".agents/commands/build.md",
-      "sha256": "9682476f604398f0697a7e6549ccfbfc3befd7f2d32f1d178da1e5401902edd2"
+      "sha256": "9687950ebac4bec6dc9fa86f16630ed87fe19bceee4506afd07aed854871c198"
     },
     {
       "rel": ".agents/commands/deploy.md",
-      "sha256": "92f74aae3b9c1f302f64da648cf264f527bae32d121712d07b9487050533e575"
+      "sha256": "071309816a45be2b24eb285387eaca83e4fff9bf741a51ac29f1eb5f773315c3"
     },
     {
       "rel": ".agents/commands/design.md",
-      "sha256": "9ec941d16bdf1564ebe5a7b37bea1274a26fab755b1bb2490c120687c875ee28"
+      "sha256": "5072cebc36b621e606fbc5265794550b8a0fcd5137baaa06d608efcfe0303829"
     },
     {
       "rel": ".agents/commands/gate-checklist.md",
-      "sha256": "9d87a8770cf1ca760cd2dbc95217d9099e28dbf1cf1790282c3b7a26a59a74a4"
+      "sha256": "323985d78068f06e66e820f4f10fd78b15c7cc75295d5b1b7b657964f1c95a53"
     },
     {
       "rel": ".agents/commands/maintain.md",
-      "sha256": "356cc02c06201c346f45e535d06b114829776033afb180a491b936459c263161"
+      "sha256": "8a2fd004f7a59d4cb49e76439b16cbfe38c6885aa49c0acdf7982eba4fdb5b33"
     },
     {
       "rel": ".agents/commands/new-task.md",
-      "sha256": "bf969d9cd7f55d6e50bce6e7aaab2c175d02b1dbe0542335691be3e27d0951d1"
+      "sha256": "aee017867228be222952c2b31578436b201d55d664ee6360d39aea345acafa72"
     },
     {
       "rel": ".agents/commands/pipeline-run.md",
-      "sha256": "1cbc1f9ff7bafe56bce6fa6d9485cf4e4a14c24aca325615e698d0ad498c69d0"
+      "sha256": "88a30662546e52198d33c4e2a4ceaa27b047cbf328a5ce78f24ecf239528447e"
     },
     {
       "rel": ".agents/commands/plan.md",
-      "sha256": "f55798f2fd3d008c05f5cd62f9861fe46d53ddc617fcd1199ad7913f1127c041"
+      "sha256": "ba3bb76659926f0f8af959a0cc9b80a3dbb10aee7cb0eda60f030fddb3b0d67f"
     },
     {
       "rel": ".agents/commands/review.md",
-      "sha256": "e71b9d4b27ec5b0c766005a0d2f416fe484f5a4bc4c90b9333220677ac20c156"
+      "sha256": "16842b8bbfbbd30c6bd590d8effd384034e6c52e0549c6f803546f9557df4c42"
     },
     {
       "rel": ".agents/commands/source-sync-check.md",
-      "sha256": "fd34bd22bd9eff7a6db0980996a766f08f842831b8c1c49ff59e279eee23c70e"
+      "sha256": "60e3f49d83bdd919f3623a0651485f65b4ad8fb74e5844d429606992eaa71b51"
     },
     {
       "rel": ".agents/commands/sync-hosts.md",
-      "sha256": "1be9c2a1033048a955633d66ccac78e13f5017341597bf0537f66883b72696de"
+      "sha256": "82a1ec59034853a401f91ecc8c4e7a40f0a66541945b59f1eeea248f7452b1ee"
     },
     {
       "rel": ".agents/commands/test.md",
-      "sha256": "1baf76912d58160bc3de555009684df7bd4542af249334e36638c9d104ffa1af"
+      "sha256": "a5781062cc5662ebc60e0ebdd0ab6401dc67328474277ba13f7d558afbb859e2"
     },
     {
       "rel": ".agents/hooks/check-pairing-incremental.sh",
@@ -86,15 +86,15 @@
     },
     {
       "rel": ".agents/roles/implementer.md",
-      "sha256": "e01581201193911349c80e133a6110a63ca0ce296149a0e09406af35c7a03ccc"
+      "sha256": "ae1fddecd997405a366554d60699173d93ea452112f3fd82295492c375e6a3cd"
     },
     {
       "rel": ".agents/roles/independent-reviewer.md",
-      "sha256": "d030f3581f92335cc1b1edb67517e70f65adf96426ff60412871827dbe2ee645"
+      "sha256": "0dd4e832d62e2787c5776f979ee2a633a0c3deb71a13e6a6c877d0d22698b973"
     },
     {
       "rel": ".agents/roles/ui-verifier.md",
-      "sha256": "5c4a210fc684d02501bed78e6aec9f5a5d3d0ce34f22640e97a5e3db6386b9f1"
+      "sha256": "527cb06eaa6ad192696b3833cd04ecd93dbddb422eda139254b0a8c60667111a"
     },
     {
       "rel": ".agents/scripts-test-exempt.txt",
@@ -477,7 +477,7 @@
     },
     {
       "rel": "AGENTS.md",
-      "sha256": "8f583a4ad887331fe71c8b1a3ac1350d4f58a08f8df0192ce25033496c66ccb9",
+      "sha256": "1535fd524be7074c3406ee773ae350105a38c5309a49dacb3ee7009a1c7323f8",
       "srcSha256": "f660c6299041261e5d0591d4e8babc37a862421ad8ada0bff48e0f55990e6039"
     },
     {

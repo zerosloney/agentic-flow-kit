@@ -6,7 +6,7 @@ description: AI-Native 闭环总入口 · 6 阶段路由（新需求 → plan / 
 
 > 6 阶段指令索引。AI 读 AGENTS.md 后按阶段路由,不并阶段、不跳阶段。
 
-## 6 阶段指令索引
+## 1. 6 阶段指令索引
 
 | 阶段 | 指令 | 触发短语 | 可委派子智能体 | 确认点 |
 |------|------|---------|----------------|--------|
@@ -18,7 +18,7 @@ description: AI-Native 闭环总入口 · 6 阶段路由（新需求 → plan / 
 | **Maintain** | [.agents/commands/maintain.md](.agents/commands/maintain.md) | "线上出事了" / "记一笔 incident" | `implementer`(方案确认后) | 三件套要点确认 |
 | **Review**(横切,不占 6 阶段) | [.agents/commands/review.md](.agents/commands/review.md) | "评审一下" / "过 review 标准" | `independent-reviewer`(L2/L3 必须独立复核) | 问题定性与合入时机确认 |
 
-## 风险定级(第 0 步,先定级再路由)
+## 2. 风险定级(第 0 步,先定级再路由)
 
 动工前先按下表定风险级 L0-L3(就高不就低;判据细则见下节「级别判断」),级别即风险级,决定走哪条泳道——确认放事前,还是审计补事后:
 
@@ -29,24 +29,24 @@ description: AI-Native 闭环总入口 · 6 阶段路由（新需求 → plan / 
 
 > 定级结果落 intent frontmatter `risk_level`(=级别,`fill-intent.mjs` 自动写入,机器选道用);协作道勾触达红线会被 check-loop 判「红线判低」hard 拦(就高升级 L2/L3 并补同名 spec)。
 
-## 路由判断
+## 3. 路由判断
 
 - **自动化驱动（并列入口,可选）**:一句话全程走 [pipeline-run.md](pipeline-run.md)——状态机驱动+工单协议+原话代录,与下述手动路由二选一,同一任务不混用
 - **新需求 / 功能**:从 `plan.md` 进,立 **intent**(`workflow/intents/`)
 - **修复类任务 / 事故**:从 `maintain.md` 进,立 **incident**(`workflow/incidents/`);incident 在 L1+ 即 **intent 等价物**(check-loop 认 incident≡intent),不必另立 intent。先检索同类历史(`node .agents/scripts/kb-search.mjs "<关键词>" --scope workflow --type incidents,plans`),有同类先读其历史三件套;再按级别走:
   - L0 → 直接修复;L1 → 立 incident 后进 `build.md` 起草并确认同名 Quick-Plan → `test.md`
- - L2/L3 → 立 incident 后进 `design.md` 起草并确认同名 spec,再进 `build.md` 起草并确认同名 plan → `test.md`
- - 仅当根因属系统性 / 门禁缺位(maintain.md 三件套「是否需要新 intent」选"是")才另立 `workflow/intents/` 同名 intent
+  - L2/L3 → 立 incident 后进 `design.md` 起草并确认同名 spec,再进 `build.md` 起草并确认同名 plan → `test.md`
+  - 仅当根因属系统性 / 门禁缺位(maintain.md 三件套「是否需要新 intent」选"是")才另立 `workflow/intents/` 同名 intent
 - **改完代码要验证**:直接进 `test.md`（验证通过即关单；L1 到此结束）
 - **合入前评审**:直接进 `review.md`(横切,P0/P1/P2 分级清单 + L2/L3 独立复核)
 - **准备上线**:直接进 `deploy.md`（仅 prod；文档应已在 test 关单）
 
-## 级别判断(AGENTS.md 第 3 条)
+## 4. 级别判断(AGENTS.md 第 3 条)
 
 | 级别 | 改什么 | 流程 |
 |------|--------|------|
 | L0 | 文档/样式微调(无行为影响) | 直接 commit,豁免 intent |
-| L1 | **实现级改动**(未命中 L2/L3) | 快车道:液态草稿(.zcode/drafts) $\rightarrow$ 实现 $\rightarrow$ 固化(`solidify-task.mjs`)——用户确认后带 `--delegated "<原话>"` 执行；无确认来源只迁移不落账 |
+| L1 | **实现级改动**(未命中 L2/L3) | 快车道:液态草稿(.zcode/drafts) → 实现 → 固化(`solidify-task.mjs`)——用户确认后带 `--delegated "<原话>"` 执行；无确认来源只迁移不落账 |
 | L2 | **规则 / 契约**(一处改、多处依赖) | 入口文档(intent / incident) + spec + plan 三件套 |
 | L3 | **数据与运行时结构**(schema / 迁移 SQL / DI 链 / 认证与中间件管线) | 同 L2 + spec 新会话独立复核 |
 
@@ -66,12 +66,12 @@ description: AI-Native 闭环总入口 · 6 阶段路由（新需求 → plan / 
 > **L1 是默认档**:红线全不勾即 L1,无需正列举——判级只回答「是否命中 L2 四类或 L3 结构面」。
 > **L3 的「DI 链」按组合根与运行时管线理解**:DI 注册、中间件/认证管线、服务构造器依赖变更(先例:本仓 workflow/ 留痕中无 schema 变更仍定 L3 的同类历史)。
 
-## intent 豁免(避免小改动也走完整闭环)
+## 5. intent 豁免(避免小改动也走完整闭环)
 
 - **L0 新需求**:可直接处理；**L1 新需求**:立轻量 intent + plan(不必 spec)
 - **docs 级改动**(AGENTS.md / workflow/ 模板 / .agents/ 脚本与 commands / yaml):豁免 intent,走 Conventional Commits 直接 commit;若同时触及代码,按代码部分级别立 intent
 - **bootstrap 类改动**(引入规则本身):豁免 intent,commit message 显式声明 `bootstrap`
 
-## 闭环兜底
+## 6. 闭环兜底
 
 - 门禁清单与判据以 `.githooks/` / `.agents/hooks/` / `check-loop.sh` 头部注释为准(本文件不复述、不写项数);hard-block = 配对断裂 / 回路断档 / 新建 done 未勾验。本地机器门只有本地钩子,禁 `--no-verify`(见根 `AGENTS.md`)。

@@ -10,7 +10,7 @@ description: Review · 代码评审（横切，合入前使用；P0/P1/P2 分级
 > 参考 Anthropic REVIEW.md 做法。宗旨是**用户决策 + AI 协作**：AI 跑机器门禁、自查、出分级清单与建议；用户确认问题定性与合入。把"该机器兜底"与"靠 AI 自查"分开列明，避免注意力耗在机械逐行上。
 > 本文件为通用骨架;项目专属红线 / 命名 / 组件约定的具体口径在项目适配区（目录级 `AGENTS.md` 与 `.agents/hooks/`）补充。
 
-## P0 必拦（优先机器兜底，hook 覆盖不到的靠 AI 自查）
+## 1. P0 必拦（优先机器兜底，hook 覆盖不到的靠 AI 自查）
 
 - **架构红线**：分层依赖方向约束(如领域 / 应用层禁直接引用基础设施实现;豁免清单见目录级 `AGENTS.md` / 项目适配区)
   - 机器兜底：项目自有架构门禁(如有,`.agents/hooks/`)
@@ -22,7 +22,7 @@ description: Review · 代码评审（横切，合入前使用；P0/P1/P2 分级
   - 机器兜底：项目验证测试覆盖(如有) + AI 自查
 - **L2 / L3 改动无 spec**：拒收，先回 `workflow/specs/` 立 spec 确认通过
 
-## P1 应拦（自查重点）
+## 2. P1 应拦（自查重点）
 
 - **DB 命名与迁移**：遵循项目表 / 字段 / 外键命名规范与 schema 变更流程(见目录级 `AGENTS.md`);不得擅自引入项目未采用的迁移机制
 - **前端形态**：新增 / 编辑与大数据量选择等交互遵循项目组件约定(弹层 vs 跳页、选择器形态、表格与样式统一等)
@@ -35,14 +35,14 @@ description: Review · 代码评审（横切，合入前使用；P0/P1/P2 分级
 - **spec 承诺的断言落地**：spec §测试列出的用例 / 断言须真落到测试或验证脚本；「写进 spec」不等于「跑得起来」，且常驻断言禁写成随时间增长的行数常量
 - **跨宿主薄适配正文漂移**：改 `templates/_agents/{commands,roles}/*.md` 后必须跑 `flow-kit sync-hosts --apply` 单向同步注册表内全部宿主薄适配（`modules/hosts/<h>/{agents,commands}/*.md`）；装户视角由 `flow-kit doctor` §6.7 检查（包源环境 §6.7 skipped）
 
-## P2 建议（提醒，不拦合入）
+## 3. P2 建议（提醒，不拦合入）
 
 - 样式统一性（深色 / 浅色主题、卡片样式）
 - 注释完整性（复杂逻辑处补注释，AGENTS.md 已说的不重复）
 - Conventional Commits 中文（feat / fix / docs / style / refactor / perf）
 - 历史同类 incident 的复盘三件套是否补齐
 
-## 审查分工（用户决策 + AI 协作）
+## 4. 审查分工（用户决策 + AI 协作）
 
 - **机器兜底**（pre-commit / pre-push / test 自动拦，无需人守）：门禁清单与判据以 `.githooks/`、`.agents/hooks/`、`check-loop.sh` 头部注释为准；`项目测试命令` 跑自动化用例。
 - **AI 复核**：机器门禁完成后优先委派 `independent-reviewer`，聚焦 P0 hook 未覆盖项 + 全部 P1（P2 视精力）——产出分级问题清单 + 修复建议。复核方法参考 `code-review` 技能（Standards×Spec 双轴）；每条 finding 报告前过 `review-verification-protocol` 防误报门（锚定 file:line、给出证据、校准严重级，不确定就降级为提问）。

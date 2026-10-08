@@ -53,11 +53,11 @@ next: .agents/commands/maintain.md(仅事故时)
 - 异常回落:超阈值 → 生成 `workflow/incidents/YYYY-MM-DD-<主题>.md`,进 `maintain.md`(止血方案用户拍板,见 maintain.md §0)
 - 事故响应:单用途账号 + 最小权限;不得跨智能体协作推送修复(参考 Anthropic 教训)
 
-## 子代理调用约定
+## 7. 子代理调用约定
 
 - 上线清单、回滚方案、授权、tag 与事故决策均由主智能体处理,本阶段不委派子智能体;回滚方案(尤其含数据回滚 SQL)涉及数据安全,不得以通用实现子智能体代替主智能体判断与用户确认。
 
-## 确认后
+## 8. 确认后
 
 - 打 `release/<日期>` tag（commit SHA 可追溯）
 - 上线 + 用户观察 24h

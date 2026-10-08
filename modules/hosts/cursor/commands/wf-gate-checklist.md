@@ -10,14 +10,14 @@ description: 三处口径一致性检查（doctor §检查项 ↔ check-loop §�
 > 任何一处加新检查项，另一处不会自动同步——本工具报「未登记」；检查项被删/改号而登记未跟报「断档」。
 > 只报告不修复（B-b 决策）：缺点暴露给用户拍板，本工具不自动同步；exit 恒 0。
 
-## 何时跑
+## 1. 何时跑
 
 - 改 `src/doctor.mjs` 加新 § 检查项后（同时须登记 PAIRS）
 - 改 `.agents/scripts/check-loop.sh` 加新 § 检查项后（同时须登记 PAIRS）
 - 怀疑两处口径不一致时
 - 不跑：仅改既有检查项的提示文案（不动 § 项与登记表）
 
-## 登记表纪律（契约）
+## 2. 登记表纪律（契约）
 
 `templates/_agents/scripts/gate-checklist.mjs` 内 **PAIRS** 是配对单源，三选一登记：
 
@@ -31,7 +31,7 @@ description: 三处口径一致性检查（doctor §检查项 ↔ check-loop §�
 - 删/改检查项不动登记表 → 工具报「断档」
 - 关键词匹配已退役（2026-09-25 registry 重写：实测 18×14 项只匹配 2、28 条噪声缺点，真漏点不可见）
 
-## 怎么跑
+## 3. 怎么跑
 
 ```bash
 node .agents/scripts/gate-checklist.mjs --diff   # 人类可读（默认）
@@ -40,7 +40,7 @@ node .agents/scripts/gate-checklist.mjs --json   # 机器可读
 
 输出四段：总览计数 → 对照表（登记表展开）→ 断档（如有）→ 未登记（如有）；全绿时输出「登记完整」。
 
-### 输出示例
+### 3.1 输出示例
 
 ```
 ▶ flow-kit gate-checklist --diff（显式配对登记表）
@@ -52,27 +52,27 @@ node .agents/scripts/gate-checklist.mjs --json   # 机器可读
   ✅ 登记完整（0 断档 / 0 未登记）
 ```
 
-### 自验
+### 3.2 自验
 
 ```bash
 node .agents/scripts/gate-checklist.test.mjs   # 13 场景全过
 npm test                                       # 含 gate-checklist 套件
 ```
 
-## 边界（不要做）
+## 4. 边界（不要做）
 
 - 不要把「登记完整」当作强制门 —— B-b 决策「只报告不修复」：断档/未登记暴露给 follow-up，exit 恒 0
 - 不要改 doctor / check-loop 检查项来消音 —— 登记表才是该改的地方（配对 / 独有 / 经 §7 三选一）
 - 不要扩展到看板告警 —— 看板当前无告警规则（gen-wiki-board.mjs 不做判定），扩展超出范围
 - 不要绕过登记直接改解析正则 —— 解析面只认 doctor `// N.` 节注释与 check-loop `// N.` 项注释（.mjs 头部清单，fallback 旧装户 .sh `# N.`）
 
-## 不在本次同步范围
+## 5. 不在本次同步范围
 
 - `.agents/board/` 看板告警（无告警规则）
 - `wiki/知识沉淀总览.html` 渲染（数据来源是 workflow/INDEX.md 与 wiki 目录，非本工具对照）
 - `flow-kit sync` managed 台账追踪（gate-checklist 不在 managed 范围）
 
-## 相关留痕
+## 6. 相关留痕
 
 - intent（登记表重写）：`workflow/intents/2026-09-25-gate-checklist-registry.md`
 - intent（工具首建）：`workflow/intents/2026-09-25-gate-checklist.md`

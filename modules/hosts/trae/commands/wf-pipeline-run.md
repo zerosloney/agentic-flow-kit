@@ -8,7 +8,7 @@ description: pipeline-run 自动化驱动入口——单命令驱动六阶段闭
 > 确定性部分由 `pipeline-run.mjs` 状态机驱动（机器门序列：fill-* → confirm-doc → verify.mjs → git，退出码全记录）；
 > AI 槽位经工单协议交宿主执行；人件门到点即停、原话代录。宿主只按本协议驱动，不自行改状态。
 
-## 驱动协议（宿主 AI 逐条执行）
+## 1. 驱动协议（宿主 AI 逐条执行）
 
 1. **启动**：`node .agents/scripts/pipeline-run.mjs start "<需求原文>"`（可预判则加 `--hint "kind=… level=… module=…"`）。
 2. **循环读停机点**：每次命令的 stdout 末行是机器标记 `PIPELINE-STOP <type> …`，按 type 分流：
@@ -24,13 +24,13 @@ description: pipeline-run 自动化驱动入口——单命令驱动六阶段闭
 3. **放弃**：用户明确不做时 `abort --run <id> --to superseded|cancelled --delegated "<原话>"`（approved 文档逐份走 confirm-doc --to）。
 4. **观测**（可选）：`status [--run <id>] [--json]` 全量事件流水；`watch` 终端轮询视图。
 
-## 硬纪律（违反即协议破坏）
+## 2. 硬纪律（违反即协议破坏）
 
 - 状态迁移唯一入口是脚本内部的 confirm-doc 调用——宿主**永不直改** workflow 文档 frontmatter 状态。
 - `--delegated` 的原话必须是用户当次对话原话（台账 `confirmations.jsonl` 留痕可对质）。
 - 修复环超限（3 次）时停机交人工，不带病推进；verify 非绿不关单。
 - run 文件（.agents/cache/pipeline-runs/）是脚本亲写的机器事实——宿主只读不写。
 
-## 与 new-task 的关系
+## 3. 与 new-task 的关系
 
 本命令是**自动化驱动的并列入口**（单命令走全程）；new-task.md 是手动阶段路由入口。同一套门禁与确认语义，二者只选其一驱动一个任务，不混用。
