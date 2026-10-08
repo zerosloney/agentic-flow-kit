@@ -39,7 +39,6 @@ const USAGE = `用法: node .agents/scripts/kb-search.mjs [选项] <词1> [词2 
 
 const args = process.argv.slice(2);
 let scope = '';
-let scopeExplicit = false;
 let typeFilter = null;
 let moduleFilter = '';
 let statusFilter = 'all';
@@ -53,7 +52,7 @@ let rebuild = false;
 const words = [];
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
-  if (a === '--scope') { scope = args[++i] || ''; scopeExplicit = true; }
+  if (a === '--scope') { scope = args[++i] || ''; }
   else if (a === '--type') typeFilter = (args[++i] || '').split(',').map((s) => s.trim()).filter(Boolean);
   else if (a === '--module') moduleFilter = args[++i] || '';
   else if (a === '--status') statusFilter = args[++i] || '';

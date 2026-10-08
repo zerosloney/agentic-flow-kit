@@ -83,7 +83,7 @@ check('合并：原内容为空时骨架即全文', mergeAgents('', '<!-- m -->\
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'init-p1-'));
   const pkgRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const vars = { BOARD_PORT: '8933' };
-  const t = renderTree(path.join(pkgRoot, 'templates'), tmp, vars, { force: true });
+  renderTree(path.join(pkgRoot, 'templates'), tmp, vars, { force: true });
   // P1-1：renderTree 落盘执行位——win32 下 statSync().mode 无 0o111 语义（恒 0666 系），
   // 断言「writeFileSync 带 mode 参数不炸 + POSIX 语义表达」；真值在 POSIX CI 腿验证
   const hookStat = fs.statSync(path.join(tmp, '.githooks', 'pre-commit'));

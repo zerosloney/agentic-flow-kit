@@ -9,7 +9,6 @@ import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const HOOK = path.join(SCRIPT_DIR, '..', 'hooks', 'commit-check.cjs');
-const MARK = 'TRIGGER_TEST_BUILD_RAN';
 
 let pass = 0, fail = 0;
 const check = (desc, cond, detail = '') => {

@@ -2,7 +2,6 @@
 // 判据：① 真实单源文件解析 + 不变量通过 ② 坏数据（坏行/重复键/重复值/缺键/子集破/重叠）fail-loud
 //       ③ 缺文件 fail-loud ④ sh 消费方同口径（sed 可取到全部 8 键）
 // 用法：node templates/_agents/scripts/workflow-enums.test.mjs（npm test 随跑）
-import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';

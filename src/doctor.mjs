@@ -10,7 +10,7 @@ import { isOwned, HOSTS, pickStackVars, srcTemplatePath, templateDriftOf, TEMPLA
 // 宿主目录映射（与 src/profiles.mjs#HOSTS 同源：装副本目录名前缀带点）
 const HOST_DIR = Object.fromEntries(Object.entries(HOSTS).map(([k, v]) => [k, v.dir]));
 // 命令层薄适配宿主：[装副本目录名, 文件名前缀]（单源 profiles.mjs#HOSTS.commandPrefix；与 sync-hosts pairsFor 同口径）
-const HOST_CMD_DIR = Object.entries(HOSTS).filter(([, v]) => v.commandPrefix).map(([k, v]) => [v.dir, v.commandPrefix]);
+const HOST_CMD_DIR = Object.entries(HOSTS).filter(([, v]) => v.commandPrefix).map(([, v]) => [v.dir, v.commandPrefix]);
 
 function sh(cmd, cwd) {
   try {

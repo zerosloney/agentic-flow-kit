@@ -112,12 +112,12 @@ function printDiff(result) {
 
 const isMain = process.argv[1] && process.argv[1].endsWith('source-sync-check.mjs');
 if (isMain) {
-  let jsonMode = false, diffMode = false, gateMode = false;
+  let jsonMode = false, gateMode = false;
   let pkgRoot = null, target = null;
   for (let i = 0; i < process.argv.length - 2; i++) {
     const a = process.argv[2 + i];
     if (a === '--json') jsonMode = true;
-    else if (a === '--diff') diffMode = true;
+    else if (a === '--diff') { /* diff 为默认输出模式，无需置位 */ }
     else if (a === '--gate') gateMode = true;
     else if (a === '--pkg-root') pkgRoot = process.argv[2 + i + 1];
     else if (a === '--target') target = process.argv[2 + i + 1];

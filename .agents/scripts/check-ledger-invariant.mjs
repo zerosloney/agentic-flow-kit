@@ -41,7 +41,6 @@ const gitText = (args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8
 const blobOf = (ref) => git(['show', ref]); // ref 必须为完整对象引用（<sha>:<path> / HEAD:<path> / :<path>）
 
 const problems = [];
-const fail = (msg) => { console.error(msg); process.exit(1); };
 
 // ---- --staged：暂存 blob ⊇ HEAD blob ----
 if (staged) {

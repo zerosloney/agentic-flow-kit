@@ -96,8 +96,8 @@ const { metrics, gateMonth, expansionVerdict, parseResult } = requireCjs(path.jo
 // 场景 4：审查反例——30 任务、2 主兜底、平均返工 0.25（旧口径四门全过，声明口径下必须 ❌）
 {
   const rows = [
-    ...Array.from({ length: 22 }, (_, i) => ({ scope: '委派', result: '一次通过' })),
-    ...Array.from({ length: 6 }, (_, i) => ({ scope: '委派', result: '返工×1' })),
+    ...Array.from({ length: 22 }, () => ({ scope: '委派', result: '一次通过' })),
+    ...Array.from({ length: 6 }, () => ({ scope: '委派', result: '返工×1' })),
     { scope: '委派', result: '主兜底' }, { scope: '委派', result: '主兜底' },
   ];
   const m = metrics(rows);

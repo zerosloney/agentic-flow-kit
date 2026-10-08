@@ -9,7 +9,6 @@ import path from 'node:path';
 import { ENUMS } from './workflow-enums.mjs';
 import { draftGateFor, resolveWorkspace } from './stage-gates.mjs';
 
-const TODAY = new Date().toISOString().slice(0, 10);
 const LEVELS = ENUMS['level.all']; // 级别词表单源（.agents/workflow-enums.txt）
 
 function parseArgs(argv) {
@@ -40,7 +39,7 @@ const FULL_SECTIONS = [
   L1_SECTIONS[2],
 ];
 
-export function renderPlan({ topic, level = 'L1', date = TODAY }) {
+export function renderPlan({ topic, level = 'L1' }) {
   if (!LEVELS.includes(level)) throw new Error('level 不在枚举 ' + LEVELS.join('|') + '：' + level);
   const sections = level === 'L1' ? L1_SECTIONS : FULL_SECTIONS;
   const fm = '---\n状态: draft\n级别: ' + level + '\n模块: pipeline\n---\n';

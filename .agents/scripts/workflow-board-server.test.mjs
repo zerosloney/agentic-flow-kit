@@ -14,7 +14,6 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { parseLoopHardBlocks, parseAcceptance, detectAlerts, parseRunFile, runCard, safeRunPath } from './workflow-board-server.mjs';
 import { computeFingerprint } from './confirm-doc.mjs';
-import { stageBar } from './pipeline-run.mjs';
 
 let pass = 0;
 let fail = 0;

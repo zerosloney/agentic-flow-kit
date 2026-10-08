@@ -109,7 +109,7 @@ const files = (out) => (out.match(/^📄 (workflow\/\S+)/gm) || []).map((l) => l
 // ---- 场景 5：增量失效——warm 后改 1 个源文件，仅该文件重解析且输出与纯扫一致 ----
 {
   const root = mkfix();
-  const base = run(root, ['编码模板']);
+  run(root, ['编码模板']);
   const planP = path.join(root, 'workflow', 'plans', '2026-09-20-ccc.md');
   fs.appendFileSync(planP, '\n## 影响面\n- 新标记NEWWORD：编码模板修订\n', 'utf8');
   const after = run(root, ['编码模板', 'NEWWORD']);

@@ -125,7 +125,6 @@ for (const line of fs.readFileSync(path.join(WIKI, 'INDEX.md'), 'utf8').split(/\
 }
 
 const diff = (a, b) => [...a].filter((x) => !b.has(x));
-const eq = (a, b) => a.size === b.size && diff(a, b).length === 0;
 
 // ---- 1. 文件级三方比对 ----
 for (const [label, extra] of [

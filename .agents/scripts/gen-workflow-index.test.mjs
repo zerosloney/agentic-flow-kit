@@ -124,7 +124,7 @@ const run = (root, args = []) => spawnSync(process.execPath, [GEN, ...args], { c
     '状态: draft\n级别: L1\n日期: 2026-09-22\n模块: pipeline',
     'workflow-doc-retrieval',
   ), 'utf8');
-  const r = run(root);
+  run(root);
   const idx = fs.readFileSync(path.join(root, 'workflow', 'INDEX.md'), 'utf8');
   check('场景 5：kebab-case H1 完整保留（未被截成末段）', idx.includes('| workflow-doc-retrieval |') && !idx.includes('| retrieval |'), idx.split('\n').filter((l) => l.includes('retrieval')).join('\n'));
   check('场景 5：em-dash 前缀仍正常剥离', idx.includes('| 在跑的需求甲 |'), '');

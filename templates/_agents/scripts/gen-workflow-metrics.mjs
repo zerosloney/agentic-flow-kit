@@ -48,7 +48,7 @@ const DOC_TYPES = ['intents', 'specs', 'plans', 'incidents'];
 // **不能用固定上溯级数**（2026-09-28 修正）：本脚本在两处运行、深度不同——
 //   包源 `templates/_agents/scripts/` → 上溯 3 级到仓库根
 //   装户 `.agents/scripts/`          → 上溯 2 级到安装根
-// 首版硬编码 3 级，故**在每个装户安装里都解析不到枚举文件**（报错路径 `<install>/..​/.agents/…`）。
+// 首版硬编码 3 级，故**在每个装户安装里都解析不到枚举文件**（报错路径 `<install>/../.agents/…`）。
 // 实测暴露路径：CI 新增「shipped 套件」步骤后，`.agents/scripts/gen-workflow-metrics.test.mjs`
 // 场景 1 即 exit 1（workflow-enums 单源文件不可读），而包源侧同字节跑出全绿。
 // 改为**逐级上溯探测**：找到含 `.agents/workflow-enums.txt` 的那一级即用，找不到则回退标准位置让

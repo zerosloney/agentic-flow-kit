@@ -39,7 +39,7 @@ function mkFixture() {
 }
 
 // ---- v1 安装态（managed 台账与盘面对应 v1 渲染产物）----
-function mkTarget(fixtureRoot) {
+function mkTarget(_fixtureRoot) {
   const t = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-target-'));
   const files = {
     '.agents/scripts/keep.txt': 'keep v2\n',

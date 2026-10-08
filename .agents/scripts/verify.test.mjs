@@ -162,9 +162,9 @@ const run = (argv, opts = {}) => spawnSync(process.execPath, [VERIFY, ...argv], 
   const rootC = mkfix();
   const abs = path.join(rootC, rel);
   const winStyle = rel.split('/').join(path.sep);
-  const rC1 = run(['--test-cmd', `node ${mkCmd(0)}`, '--doc', winStyle], { cwd: rootC, env: { ...process.env, CHECK_LOOP_ROOT: rootC } });
+  run(['--test-cmd', `node ${mkCmd(0)}`, '--doc', winStyle], { cwd: rootC, env: { ...process.env, CHECK_LOOP_ROOT: rootC } });
   const eC1 = readLast(rootC);
-  const rC2 = run(['--test-cmd', `node ${mkCmd(0)}`, '--doc', abs], { cwd: rootC, env: { ...process.env, CHECK_LOOP_ROOT: rootC } });
+  run(['--test-cmd', `node ${mkCmd(0)}`, '--doc', abs], { cwd: rootC, env: { ...process.env, CHECK_LOOP_ROOT: rootC } });
   const eC2 = readLast(rootC);
   check('场景 8③：反斜杠 / posix / 绝对路径三种写法落同一 doc 值（归一是地基）',
     eC1 && eC1.doc === rel && eC2 && eC2.doc === rel, `win=${JSON.stringify(eC1 && eC1.doc)} abs=${JSON.stringify(eC2 && eC2.doc)}`);

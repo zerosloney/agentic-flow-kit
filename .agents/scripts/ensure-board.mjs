@@ -105,7 +105,7 @@ function openBrowser(url) {
   try {
     if (process.platform === 'win32') spawn('cmd', ['/c', 'start', '', url], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
     else spawn(process.platform === 'darwin' ? 'open' : 'xdg-open', [url], { detached: true, stdio: 'ignore' }).unref();
-  } catch { }
+  } catch { /* 浏览器拉起失败不阻断看板流程 */ }
 }
 
 // ---- 主流程（返回退出码，自然排水退出——不用 process.exit：强退在 Windows 上会触发 libuv 断言）----
@@ -123,7 +123,7 @@ async function main() {
       board = b;
       const stale = staleCode(b.startedAt);
       if (stale === true) {
-        try { process.kill(b.pid); } catch { } // 进程可能已自行退出，忽略
+        try { process.kill(b.pid); } catch { /* 进程可能已自行退出 */ }
         await sleep(500);
         action = 'restarted (stale code detected)';
       } else if (stale === null) {

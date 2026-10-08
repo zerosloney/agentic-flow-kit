@@ -85,7 +85,7 @@ export function runCheckHygiene(ctx) {
     }
   }
 
-  // --- 9. 文件名英文 kebab-case [warning] ---
+  // --- 9. 文件名英文 kebab-case [warning]（2026-09-11 规则）---
   markGate('9', '文件名 kebab-case');
   for (const sub of DOC_DIRS) {
     const dir = path.join(ROOT, WF, sub);
@@ -99,7 +99,7 @@ export function runCheckHygiene(ctx) {
     }
   }
 
-  // --- 11. 生成物漂移 [warning]（调生成器 --check，口径单一不复刻渲染）---
+  // --- 11. 生成物漂移 [warning]（调生成器 --check，口径单一不复刻渲染；INDEX 2026-09-21 检索层 / DASHBOARD 2026-10-08 扩覆盖面）---
   markGate('11', '生成物漂移（INDEX+DASHBOARD）');
   // ⚠️ 位置：本段须排在 12/13 之前——check-loop 输出按 warnings 插入序，行序是稳定输出契约
   // （pre-push / pre-commit 消费者 + doctor 按 WARN 行计数）；原序为 2 → 9 → 11 → 12 → 13，勿调换。

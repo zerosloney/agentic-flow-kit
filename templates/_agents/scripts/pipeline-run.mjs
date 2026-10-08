@@ -19,9 +19,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 
-const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const KINDS = ['require', 'fix', 'verify', 'review', 'deploy'];
 const LEVELS = ['L0', 'L1', 'L2', 'L3'];
 const TERMINAL = ['done', 'superseded', 'cancelled', 'closed'];
@@ -29,61 +27,13 @@ const FIX_CAP = 3;
 const GIT_NEVER_FLAGS = ['--no-verify', '-n']; // 不变量：任何 git 调用不得携带（防御性断言，正常路径不会拼出）
 
 function fail(msg, code = 1) { console.error('❌ ' + msg); process.exit(code); }
-const nowIso = () => new Date().toISOString();
-const today = () => process.env.PIPELINE_RUN_TODAY || nowIso().slice(0, 10);
-const pad = (n) => String(n).padStart(2, '0');
 
-// ── 环境解析（测试注入点） ─────────────────────────────────────────────
-function ctxEnv(overrideRoot) {
-  const root = path.resolve(overrideRoot || process.env.PIPELINE_RUN_ROOT || process.cwd());
-  const bin = path.resolve(process.env.PIPELINE_RUN_BIN || path.join(root, '.agents', 'scripts'));
-  const gitPrefix = (process.env.PIPELINE_RUN_GIT_BIN || 'git').split(/\s+/).filter(Boolean);
-  return { root, bin, gitPrefix, runsDir: path.join(root, '.agents', 'cache', 'pipeline-runs') };
-}
 
-function moduleList(ctx) {
-  try {
-    return fs.readFileSync(path.join(ctx.root, '.agents', 'workflow-modules.txt'), 'utf8')
-      .split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
-  } catch { return ['backend', 'frontend', 'ui', 'infra', 'integration', 'pipeline', 'wiki']; } // 夹具缺表时的回退默认（warning 由调用方打）
-}
-
-// ── run 文件（原子写；事件 append-only） ──────────────────────────────
-function runFileOf(ctx, runId) { return path.join(ctx.runsDir, `${runId}.json`); }
-
-function loadRun(ctx, runId) {
-  const f = runFileOf(ctx, runId);
-  if (!fs.existsSync(f)) return null;
-  try { return JSON.parse(fs.readFileSync(f, 'utf8')); } catch { return null; }
-}
-
-function saveRun(ctx, run) {
-  fs.mkdirSync(ctx.runsDir, { recursive: true });
-  run.updatedAt = nowIso();
-  const f = runFileOf(ctx, run.runId);
-  const tmp = f + '.tmp';
-  fs.writeFileSync(tmp, JSON.stringify(run, null, 2) + '\n');
-  fs.renameSync(tmp, f);
-}
-
-function emit(run, ev) { run.events.push({ t: nowIso(), ...ev }); }
-
-function latestRunId(ctx) {
-  if (!fs.existsSync(ctx.runsDir)) return null;
-  const ids = fs.readdirSync(ctx.runsDir).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5)).sort();
-  for (let i = ids.length - 1; i >= 0; i--) {
-    const r = loadRun(ctx, ids[i]);
-    if (r && !['done', 'aborted'].includes(r.stopType)) return ids[i];
-  }
-  return ids[ids.length - 1] || null;
-}
-
-function newRunId(requirement) {
-  const d = new Date();
-  const ascii = (requirement.toLowerCase().match(/[a-z0-9]{2,}/g) || []).slice(0, 3).join('-') || 'task';
-  const rand = Math.random().toString(36).slice(2, 6);
-  return `${d.getFullYear()}${pad(d.getMonth() + 1)}${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}-${ascii}-${rand}`;
-}
+import { nowIso, today, ctxEnv, moduleList, loadRun, saveRun, emit, latestRunId, newRunId } from './pipeline-run-run.mjs';
+import { fmGet, placeholdersIn, sectionBody, validateDraftContent, closeoutComplete, summarizeDoc } from './pipeline-run-docs.mjs';
+// 拆分（2026-10-08 engine-quality-batch）：文档纯函数层 / run 存储层迁出本文件（判据注释随函数迁走，
+// 对外导出面经下行 re-export 保持不变——stageBar/parseKV 仍在本文件）；本文件 = CLI 编排层 + 状态机。
+export { placeholdersIn, validateDraftContent, closeoutComplete } from './pipeline-run-docs.mjs';
 
 // ── 门执行（唯一子进程出口；记录真实退出码） ──────────────────────────
 function runNode(ctx, run, script, args) {
@@ -114,78 +64,8 @@ function runGit(ctx, run, args) {
 function readDoc(ctx, rel) {
   try { return fs.readFileSync(path.join(ctx.root, rel), 'utf8'); } catch { return null; }
 }
-function fmGet(text, key) {
-  const m = text.split(/\r?\n/).find((l) => l.startsWith(`${key}:`));
-  return m ? m.slice(key.length + 1).trim() : null;
-}
 function docState(ctx, rel) { const t = readDoc(ctx, rel); return t ? fmGet(t, '状态') : null; }
 
-// 占位符判定（复核 P1-3 收窄，2026-10-02）：先剔除 code span（`…`）与引号串（"…"）——
-// 正文合法的命令语法占位（如 `next --delegated "<原话>"`）几乎总在 code span 内，
-// 模板实占位符（如 <为什么做；写明需求来源…>）从不包 code span；再匹配剩余裸尖括号。
-export function placeholdersIn(text) {
-  const stripped = String(text)
-    .replace(/^```[\s\S]*?^```$/gm, '') // 复核 P2-B：跨行 code fence 整块剔除（围栏内命令示例占位不属模板占位符）
-    .replace(/`[^`\n]*`/g, '')
-    .replace(/"[^"\n]*"/g, '');
-  const hits = [];
-  for (const re of [/<[^>\n]{1,60}>/g, /YYYY-MM-DD 用户/g]) {
-    let m; while ((m = re.exec(stripped))) hits.push(m[0]);
-  }
-  return [...new Set(hits)].slice(0, 5);
-}
-
-function sectionBody(text, title) {
-  const lines = text.split(/\r?\n/);
-  const i = lines.findIndex((l) => l.trim() === `## ${title}` || l.trim() === `## ${title}（L1 微改动无实质内容可删本节，不硬填）` || l.trim().startsWith(`## ${title}`));
-  if (i < 0) return null;
-  const body = [];
-  for (let j = i + 1; j < lines.length; j++) {
-    if (/^##\s/.test(lines[j])) break;
-    body.push(lines[j]);
-  }
-  return body.join('\n').trim();
-}
-
-export function validateDraftContent(text, kind, level) {
-  const problems = [];
-  if (!text) return ['文件不存在或为空'];
-  const state = fmGet(text, '状态');
-  if (!state) problems.push('frontmatter 缺「状态:」行');
-  if (kind !== 'incident' && !fmGet(text, '级别')) problems.push('frontmatter 缺「级别:」行');
-  const ph = placeholdersIn(text);
-  if (ph.length) problems.push(`模板占位符残留：${ph.join('、')}`);
-  const required = {
-    intent: level === 'L1' ? ['背景与问题', '目标', '验收标准'] : ['背景与问题', '历史教训/防复发', '目标', '非目标', '约束', '验收标准'],
-    spec: ['功能行为', '数据流', '系统改动', '约束遵守映射'],
-    plan: level === 'L1' ? ['改动方案', '约束与风险', '验证计划'] : ['改动方案', '任务拆解', '执行顺序', '验证计划'],
-    incident: ['时间线', '根因', '复盘三件套'],
-  }[kind] || [];
-  for (const sec of required) {
-    const b = sectionBody(text, sec);
-    if (b === null) { if (!(level === 'L1' && ['非目标', '约束', '任务拆解', '执行顺序'].includes(sec))) problems.push(`缺节：## ${sec}`); }
-    else if (!b) problems.push(`节为空：## ${sec}`);
-  }
-  return problems;
-}
-
-export function closeoutComplete(text) {
-  const body = sectionBody(text, '验收标准');
-  if (body === null) return { ok: false, problems: ['缺「## 验收标准」节'] };
-  const lines = body.split(/\r?\n/);
-  const open = lines.filter((l) => /^\s*-\s\[\s\]\s/.test(l));
-  // 复核 P2-6：证据冒号后须直接跟内容（非空白、非收括号）——「（证据：）」空值不算过
-  const checkedNoEv = lines.filter((l) => /^\s*-\s\[x\]\s/.test(l) && !/证据[:：][^）\s]/.test(l));
-  const problems = [];
-  if (open.length) problems.push(`未勾验收 ${open.length} 条`);
-  if (checkedNoEv.length) problems.push(`已勾缺证据 ${checkedNoEv.length} 条`);
-  return { ok: problems.length === 0, problems };
-}
-
-function summarizeDoc(text) {
-  const body = text.split(/\r?\n/).filter((l) => l.trim() && !l.startsWith('---') && !/^状态:|^级别:|^日期:|^模块:|^备注:|^risk_level:/.test(l));
-  return body.slice(0, 3).join(' / ').slice(0, 200);
-}
 
 // ── 工单构建 ───────────────────────────────────────────────────────────
 function wo(run, o) {
@@ -211,7 +91,7 @@ function stopConfirm(ctx, run, docRel, points, ledger) {
   printRun(ctx, run);
   process.exit(0);
 }
-function stopGateFail(ctx, run, stage, problems, exitHint) {
+function stopGateFail(ctx, run, stage, problems) {
   run.workOrder = null;
   run.stopType = 'gate-fail';
   run.stage = stage;
@@ -318,11 +198,11 @@ function confirmGate(ctx, run, docRel, quote, to) {
     const tail = (r.stderr || r.stdout).split(/\r?\n/).filter(Boolean).slice(-6).join(' | ');
     return { ok: false, msg: `confirm-doc exit ${r.exit}：${tail}` };
   }
-  emit(run, { type: 'confirm', doc: docRel, to: to || nextConfirmTarget(docState(ctx, docRel), docRel), source: quote ? 'chat-delegated' : 'tty', ...(quote ? { quote } : {}) });
+  emit(run, { type: 'confirm', doc: docRel, to: to || nextConfirmTarget(docState(ctx, docRel)), source: quote ? 'chat-delegated' : 'tty', ...(quote ? { quote } : {}) });
   return { ok: true };
 }
 // 语义上 confirm-doc 自行决定目标态（approved/done/fixed/closed）；事件里记录结果态
-function nextConfirmTarget(curState, docRel) { return curState || 'approved'; }
+function nextConfirmTarget(curState) { return curState || 'approved'; }
 
 // managedFaceCheck（复核 P2-4 修复 A′，2026-10-02 用户拍板）：提交集命中 kit.json 台账面或包源
 // templates/_agents/ 时——包源环境（bin/flow-kit.mjs 可达）自动跑 sync 刷台账并把 kit.json 与 sync

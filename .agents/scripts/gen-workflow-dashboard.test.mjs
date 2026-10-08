@@ -12,8 +12,6 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const { closeDurations, pickPct, durationVerdict, qualityRows, DURATION_BAND, normalizeForCheck, gateRoiLines } =
   await import(pathToFileURL(path.join(SCRIPT_DIR, 'gen-workflow-dashboard.mjs')).href);
-const agg = (await import(pathToFileURL(path.join(SCRIPT_DIR, 'agg-delegations.cjs')).href)).default
-  ?? null; // .cjs 经 import 具名空间取——见下方 createRequire 兜底
 import { createRequire } from 'node:module';
 const require2 = createRequire(import.meta.url);
 const aggCjs = require2(path.join(SCRIPT_DIR, 'agg-delegations.cjs'));

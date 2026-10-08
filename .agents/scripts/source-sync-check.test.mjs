@@ -125,7 +125,7 @@ if (!SRC_ROOT) {
     drift: r.drift.map((d) => ({ rel: d.rel, pkgSha: d.pkgSha.slice(0, 8), tgtSha: d.tgtSha.slice(0, 8) })),
   }, null, 2);
   let parsed = null;
-  try { parsed = JSON.parse(jsonOut); } catch {}
+  try { parsed = JSON.parse(jsonOut); } catch { /* 非 JSON 输出时 parsed 保持 null，S6 判失败路径 */ }
   check('S6 --json 输出可解析', parsed && typeof parsed === 'object' && Array.isArray(parsed.missing));
 }
 

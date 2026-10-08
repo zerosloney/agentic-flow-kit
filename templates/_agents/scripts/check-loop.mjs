@@ -17,7 +17,6 @@
 //      L0/L1 勾触达红线 → 「红线判低」hard——协作道不受理 STOP 级改动,就高不就低,
 //      2026-09-30 hybrid-governance-risk-lanes)                                        [hard-block]
 //   2. 模板字段占位符残留(YYYY-MM-DD / <主题> 等未替换;<主题> 与 .md 同行 = 命名约定描述,豁免)  [warning]
-//      （2026-10-08 selfmeasure-and-modularize：实现已迁 check-hygiene.mjs，判据与文案未变）
 //   3. incidents 复盘三件套完整性 + 状态严格枚举 + 新 intent 回路(回路断档=hard,其他=warning)
 //   4. 引用有效性(文档/指令中引用的 .agents/ 路径必须存在;支持 fill-{a,b,c}.mjs 花括号展开与 fill-*.mjs 通配;
 //      workflow 文档仅扫活跃态——终态件的引用是历史叙述,不扫,2026-09-27 audit-gate-hardening)  [warning]
@@ -30,15 +29,11 @@
 //      非 git / 查不到加入记录 → 不可判定 → 走存量口径(不误报 hard)
 //      证据可写在 [x] 行的续行（仓库通写法「（证据：…）」另起一行；全/半角冒号皆认）
 //   9. 文件名英文 kebab-case(非 ASCII 文件名=warning,2026-09-11 规则)
-//      （2026-10-08 selfmeasure-and-modularize：实现已迁 check-hygiene.mjs，判据与文案未变）
 //  10. 级别 vs 迁移文件一致性(L1/L2 入口文档加入提交触及迁移 SQL/Migrations=疑似判低,warning)
 //  11. 生成物漂移：workflow/INDEX.md(2026-09-21 检索层) + workflow/DASHBOARD.md(2026-10-08 扩覆盖面)=warning;
-//      各自调对应生成器 --check,口径单一不复刻渲染;实现已迁 check-hygiene.mjs
 //  12. frontmatter「模块:」合法性(枚举非法 / 2026-09-22 起新建缺字段=warning;词表单源 .agents/workflow-modules.txt)
-//      （2026-10-08 selfmeasure-and-modularize：实现已迁 check-hygiene.mjs，判据与文案未变）
 //  13. 常驻面体积预算(超限=warning;判定单源 rule-budget.sh——经 sh 调用,
 //      无 sh 环境静默跳过:advisory 级且 pre-commit 侧在 git 钩子 sh 环境照常硬拦)
-//      （2026-10-08 selfmeasure-and-modularize：实现已迁 check-hygiene.mjs，判据与文案未变）
 //  14. 新 done 的 spec/plan 须在 git 历史里出现过 `状态: approved`(确认环节留痕,2026-09-22;恒 advisory 永不升级 hard)
 //  15. 确认指纹对账(2026-09-27 起:approved/done 须 confirm-doc.mjs 确认指纹+台账配对,缺=hard-block;
 //      两形态——TTY 亲手 / --delegated 对话委托代录,台账 source 如实区分,配对判据与 source 无关)
@@ -114,8 +109,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { createRequire } from 'node:module';
-import { fileURLToPath } from 'node:url';
 import { loadEnums } from './workflow-enums.mjs';
 import { runCheck16 } from './check-metric-claims.mjs';
 import { auditEnabled, loadKitPolicy, hasFreshVerifyLine } from './policy.mjs';
@@ -129,7 +122,6 @@ import { MARK_RE, approvedTraceHit } from './stage-gates.mjs';
 import { runCheckHygiene } from './check-hygiene.mjs';
 import { gateSeg, finishSegs, makeCollector } from './gate-seg.mjs';
 
-const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 // CHECK_LOOP_GIT：测试注入钩子（指向不存在/不可执行路径可稳定触发 spawn 异常）；未设置时与原行为逐字节一致（2026-10-05-gitout-fail-open）
 const GIT = process.env.CHECK_LOOP_GIT || (process.platform === 'win32' ? 'git.exe' : 'git');
 
@@ -723,7 +715,7 @@ export function runCheckLoop(opts = {}) {
       if (/^##\s+(改动面|任务拆解|改动方案)/.test(line)) { inDeclaredSec = true; continue; }
       if (inDeclaredSec && /^##\s+/.test(line)) { inDeclaredSec = false; continue; }
       if (inDeclaredSec) {
-        const fileMatch = line.match(/([a-zA-Z0-9._\/-]+\.[a-zA-Z0-9]+)/);
+        const fileMatch = line.match(/([a-zA-Z0-9._/-]+\.[a-zA-Z0-9]+)/);
         if (fileMatch) declaredFiles.push(fileMatch[1]);
       }
     }

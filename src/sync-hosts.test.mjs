@@ -149,7 +149,7 @@ syncHosts(process.argv.slice(2), root);
   const r = runSyncHosts(fx, ['--diff']);
   const out = r.stdout + r.stderr;
   check('S5 薄适配正文手改 → 正文段漂移 1', /正文段漂移（1/.test(out), out);
-  const r2 = runSyncHosts(fx, ['--apply']);
+  runSyncHosts(fx, ['--apply']);
   check('S5 apply 后：薄适配正文回到权威源（含「权威源正文 implementer v1」）', /权威源正文 implementer v1/.test(R(path.join(fx, 'modules/hosts/zcode/agents/implementer.md'))));
   check('S5 apply 不污染权威源（权威源仍 v1）', !R(path.join(fx, 'templates/_agents/roles/implementer.md')).includes('薄适配手改'));
   // apply 后再 diff 一次，diff 应显示"无漂移"
@@ -164,7 +164,7 @@ syncHosts(process.argv.slice(2), root);
   const r = runSyncHosts(fx, ['--diff']);
   const out = r.stdout + r.stderr;
   check('S6 薄适配缺失 → authorityMissing 列', /权威源声明但薄适配缺失（/.test(out) && out.includes('opencode/commands/wf-build.md'), out);
-  const r2 = runSyncHosts(fx, ['--apply']);
+  runSyncHosts(fx, ['--apply']);
   check('S6 apply 不自动创建薄适配（仍缺失）', !fs.existsSync(path.join(fx, 'modules/hosts/opencode/commands/wf-build.md')));
 }
 
@@ -174,7 +174,7 @@ syncHosts(process.argv.slice(2), root);
   const r = runSyncHosts(fx, ['--json']);
   const out = r.stdout + r.stderr;
   let parsed = null;
-  try { parsed = JSON.parse(out); } catch {}
+  try { parsed = JSON.parse(out); } catch { /* 非 JSON 输出时 parsed 保持 null */ }
   check('S7 --json 输出可解析', parsed && typeof parsed === 'object' && Array.isArray(parsed.drift));
   check('S7 --json 含 inSync = 17', parsed && parsed.inSync === 17, parsed ? JSON.stringify({ inSync: parsed && parsed.inSync, missing: parsed && parsed.authorityMissing }) : 'null');
 }
@@ -188,7 +188,7 @@ syncHosts(process.argv.slice(2), root);
   check('S8 孤儿薄适配 → adapterOrphans 列', /孤儿薄适配（/.test(out) && out.includes('opencode/commands/orphan.md'), out);
   check('S8 opencode 孤儿带 wf- 前缀 → 反推权威源去掉前缀', out.includes('opencode/commands/wf-legacy.md（推测权威源：commands/legacy.md）'), out);
   check('S8 opencode 孤儿不带前缀 → 原样反推 commands/<file>', out.includes('opencode/commands/orphan.md（推测权威源：commands/orphan.md）'), out);
-  const r2 = runSyncHosts(fx, ['--apply']);
+  runSyncHosts(fx, ['--apply']);
   check('S8 apply 不删孤儿薄适配', fs.existsSync(path.join(fx, 'modules/hosts/opencode/commands/orphan.md')) && fs.existsSync(path.join(fx, 'modules/hosts/opencode/commands/wf-legacy.md')));
 }
 

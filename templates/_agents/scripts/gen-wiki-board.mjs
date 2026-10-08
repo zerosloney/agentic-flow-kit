@@ -141,7 +141,7 @@ let out = indexText;
 {
   const lines = out.split(/\r?\n/);
   const headIdx = lines.findIndex((l) => /^\| 主题 \|/.test(l));
-  if (headIdx < 0 || !/^[\|:\-\s]+$/.test(lines[headIdx + 1] || '')) {
+  if (headIdx < 0 || !/^[|:\-\s]+$/.test(lines[headIdx + 1] || '')) {
     console.error('❌ INDEX 速览表表头未找到，未写盘');
     process.exit(1);
   }

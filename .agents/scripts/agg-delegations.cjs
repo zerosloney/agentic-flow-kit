@@ -14,7 +14,6 @@ const fs = require('fs');
 const path = require('path');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const LEDGER = path.join(ROOT, 'workflow', 'delegations.md');
 const INCIDENTS = path.join(ROOT, 'workflow', 'incidents');
 
 const argMonth = (process.argv.find((a) => a.startsWith('--month=')) || '').split('=')[1] || null;
