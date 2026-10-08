@@ -26,3 +26,23 @@ jobs:
         run: npm ci || npm install
       - name: 远端门（测试 + 闭环校验）
         run: node .agents/scripts/verify.mjs
+      - name: CI 红回溯点名（2026-10-09 engine-quality-round2 B3：红时列出最近关单，复核优先）
+        if: failure()
+        run: |
+          node -e "
+            try {
+              const fs = require('fs');
+              const p = '.agents/confirmations.jsonl';
+              if (!fs.existsSync(p)) process.exit(0);
+              const cut = Date.now() - 7 * 864e5;
+              const rows = fs.readFileSync(p, 'utf8').split(/\r?\n/).filter(Boolean)
+                .map((l) => { try { return JSON.parse(l); } catch { return null; } })
+                .filter((e) => e && e.ts && ['done', 'closed'].includes(e.stage) && Date.parse(e.ts) >= cut)
+                .map((e) => e.doc);
+              const uniq = [...new Set(rows)];
+              if (uniq.length) {
+                console.log('⚠️ CI 红——最近 7 天关单文档（优先复核是否本批引入）：');
+                for (const d of uniq) console.log('  - ' + d);
+              } else console.log('最近 7 天无关单记录');
+            } catch { /* 回溯是辅助面，读不到不添乱 */ }
+          "

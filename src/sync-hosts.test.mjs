@@ -237,5 +237,44 @@ syncHosts(process.argv.slice(2), root);
   check('实仓薄适配无缺失无正文漂移', r.authorityMissing.length === 0 && r.drift.length === 0, `missing=${r.authorityMissing.length} drift=${r.drift.length} ${sample}`);
 }
 
+// ============ 场景 10-12：包源布局多根对账（2026-10-09 sync-hosts-root-coverage，B1）============
+// 根因教训（bb69e19「81 对全对齐」漏 .zcode 三份，独立复核 P2-3）：包源布局此前只扫 modules/hosts，
+// 项目根 HOSTS.dir 形态宿主点（本仓 .zcode/）不在扫描面。三场景钉住：漂移可检出 / apply 可修复且
+// frontmatter 保留 / 对账面自描述行在案。
+{
+  // S10：包源 fixture + 项目根 .zcode/agents 漂移（正文旧 + frontmatter zcode 风格）→ --diff 报漂移
+  const fx = mkFixture();
+  W(path.join(fx, '.zcode/agents/implementer.md'),
+    `---\nname: implementer\ndescription: zcode 本仓风格\n---\n\n# Implementer · v0\n\n旧版正文 implementer v0\n`);
+  const r = runSyncHosts(fx, ['--diff']);
+  const out = r.stdout + r.stderr;
+  check('S10 项目根宿主点漂移：--diff 报 .zcode/agents/implementer.md',
+    out.includes('.zcode/agents/implementer.md') && /正文段漂移/.test(out), out.slice(0, 600));
+  check('S10 对账面自描述：含「项目根宿主点（1 宿主）」', /对账面：.*项目根宿主点（1 宿主）/.test(out), out.split('\n').slice(0, 4).join('\n'));
+
+  // S11：--apply 修复项目根漂移——正文覆盖为权威源、frontmatter 保留、漂移归零
+  const r2 = runSyncHosts(fx, ['--apply']);
+  const out2 = r2.stdout + r2.stderr;
+  const synced = /- \.zcode\/agents\/implementer\.md/.test(out2);
+  const fixed = R(path.join(fx, '.zcode/agents/implementer.md'));
+  check('S11 --apply 同步清单含 .zcode 条目', synced, out2.slice(0, 500));
+  check('S11 --apply 正文覆盖 + frontmatter 保留',
+    fixed.includes('权威源正文 implementer v1') && fixed.includes('description: zcode 本仓风格'),
+    fixed.slice(0, 200));
+  check('S11 --apply 后漂移归零', /正文漂移：\s*0/.test(out2), out2.slice(-300));
+}
+
+{
+  // S12：装户布局 faces 自描述（回归钉住——装户单根 label=项目根宿主点，行为不变）
+  const fx = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-synchosts-adopter-'));
+  W(path.join(fx, '.agents/roles/implementer.md'),
+    `---\ndescription: Implementer 角色契约\n---\n\n# Implementer · v1\n\n权威源正文 implementer v1\n`);
+  W(path.join(fx, '.zcode/agents/implementer.md'),
+    `---\nname: implementer\ndescription: zcode\n---\n\n# Implementer · v1\n\n权威源正文 implementer v1\n`);
+  const r = runSyncHostsByCwd(fx, ['--diff']);
+  const out = r.stdout + r.stderr;
+  check('S12 装户布局：faces 单根自描述 + 对齐 1 对', /对账面：项目根宿主点（1 宿主）/.test(out) && /正文对齐：\s*1\s*对/.test(out), out.slice(0, 400));
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${failCount}`);
 process.exit(failCount ? 1 : 0);
