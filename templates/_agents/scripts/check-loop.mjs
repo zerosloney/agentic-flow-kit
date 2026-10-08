@@ -762,15 +762,24 @@ export function runCheckLoop(opts = {}) {
     // 测试绿凭证状态（2026-10-07 verify-evidence）：台账读一次循环外缓存；policy 缺 verifySince
     //（v1-v4）→ ctxBase null → 对账整体跳过（向后兼容）
     const verifySinceOf = kitPolicy.verifySince;
-    const verifyFresh = (() => {
+    // 台账内容循环外读一次并缓存（doc 过滤是纯内存行匹配，不新增子进程——门禁成本零增加）。
+    const verifyLines = (() => {
       try {
         const vp = path.join(ROOT, '.agents', 'verifications.jsonl');
-        return fs.existsSync(vp) ? hasFreshVerifyLine(fs.readFileSync(vp, 'utf8').split(/\r?\n/)) : false;
-      } catch { return false; }
+        return fs.existsSync(vp) ? fs.readFileSync(vp, 'utf8').split(/\r?\n/) : null;
+      } catch { return null; }
     })();
+    // 全局绿行（v5 语义）：仅供 v1-v5 装户走原路径，本仓 v6+ 不再消费它。
+    const verifyFreshGlobal = verifyLines ? hasFreshVerifyLine(verifyLines) : false;
+    // 2026-10-08 verify-doc-binding：v6+（verifyDocSince）按本 doc 精确匹配；缺键维持全局布尔。
+    const verifyDocBound = typeof kitPolicy.verifyDocSince === 'string';
+    const verifyFreshFor = (rel) => (verifyLines
+      ? hasFreshVerifyLine(verifyLines, Date.now(), verifyDocBound ? rel : null)
+      : false);
     for (const intent of docFiles('intents')) {
       if (fmGet(intent, '状态') !== 'done') continue;
       const base = path.basename(intent);
+      const rel = path.relative(ROOT, intent).split(path.sep).join('/'); // 与 verify.mjs --doc 落账口径同源
       const lines = linesOf(intent) || [];
       // 节扫描：hs=有验收节；insec 至下一个二级标题；uc=未勾项；ne=勾选缺证据；ex=存量豁免声明
       //   证据可写在 [x] 行的续行（仓库通写法「（证据：…）」另起一行）——pendX 记「待证据项」，
@@ -821,12 +830,14 @@ export function runCheckLoop(opts = {}) {
         // verify 对账 ctx：intent 首次加入 git ≥ verifySince（v5 锚）才参与；不可判定 → null 走 text 豁免
         const iadd = addedDateOf(intent);
         const vctx = typeof verifySinceOf === 'string' && iadd !== '' && iadd >= verifySinceOf
-          ? { verifyRelevant: true, hasFresh: verifyFresh } : null;
+          ? { verifyRelevant: true, hasFresh: verifyDocBound ? verifyFreshFor(rel) : verifyFreshGlobal } : null;
         const results = evidenceItems.map((ev) => ({ t: verifyEvidenceTruth(ev, planBase, ROOT, vctx) }));
         const hasImplEvidence = results.some((r) => r.t.ok && (r.t.type === 'sha' || r.t.type === 'process'));
         for (const r of results) {
           if (r.t.ok && r.t.type === 'verify-missing') {
-            warnings.push(`- [WARN 测试绿缺凭证] ${base} 验收证据声明「测试绿」但 24h 内无 verify 凭证（verifications.jsonl）——跑 node .agents/scripts/verify.mjs 后重跑（advisory，灰度第一档）`);
+            // ⚠️ 文案锚点硬约束（既有 check-loop.test.mjs:2743 锚定「测试绿缺凭证」四字连续，零改动前提）：
+            // doc 与修复命令只能追加在整句之后，不得插进这四个字中间。
+            warnings.push(`- [WARN 测试绿缺凭证] ${base} 验收证据声明「测试绿」但 24h 内无 verify 凭证（verifications.jsonl${verifyDocBound ? `；本单须带 --doc 落账` : ''}）——跑 node .agents/scripts/verify.mjs${verifyDocBound ? ` --doc ${rel}` : ''} 后重跑（advisory，灰度第一档）`);
             continue;
           }
           if (r.t.ok) continue;

@@ -42,15 +42,27 @@ import { fileURLToPath } from 'node:url';
 import { confirmGateFor, doneGateFor, laneOfEntry, laneOfDoc } from './stage-gates.mjs';
 import { loadKitPolicy, hasFreshVerifyLine } from './policy.mjs';
 
-// hasFreshVerify(root)：读 <root>/.agents/verifications.jsonl 判 24h 窗口绿行（判定单源
+// hasFreshVerify(root, doc)：读 <root>/.agents/verifications.jsonl 判 24h 窗口绿行（判定单源
 // policy.hasFreshVerifyLine）。只读，台账缺失/不可读一律 false（=无凭证，advisory 层 fail-open）。
-function hasFreshVerify(root) {
+// doc 绑定（2026-10-08 verify-doc-binding）：非空时只认 e.doc === doc 的绿行——不带 doc 的绿行
+// （CI 场景）与**别的单**的绿行都不给本单背证。调用方负责「仅 v6+ 才传 doc」，本函数不做版本判断。
+function hasFreshVerify(root, doc = null) {
   try {
     const p = path.join(root, '.agents', 'verifications.jsonl');
     if (!fs.existsSync(p)) return false;
-    return hasFreshVerifyLine(fs.readFileSync(p, 'utf8').split(/\r?\n/));
+    return hasFreshVerifyLine(fs.readFileSync(p, 'utf8').split(/\r?\n/), Date.now(), doc);
   } catch {
     return false;
+  }
+}
+
+// docRelOf：把用户传入的 doc 路径归一成「相对仓库根的 posix 相对路径」——与 verify.mjs --doc 的落账口径
+// 必须逐字一致（一个转得动、另一个转不动 = 凭证永远匹配不上）。win32 反斜杠 / posix / 绝对路径三者同值。
+function docRelOf(root, doc) {
+  try {
+    return path.relative(root, path.resolve(root, doc)).split(path.sep).join('/');
+  } catch {
+    return doc;
   }
 }
 
@@ -319,10 +331,19 @@ if (isMain) {
     // 测试绿凭证前置（2026-10-07 verify-evidence，advisory 不拦）：→done 且文档含「验收标准」节且
     // policy v5（verifySince）→ 24h 窗口内须有 verifications.jsonl 绿行。只读判定，任何读取异常降级
     // 静默（fail-open——advisory 层不因台账缺失/坏行阻断关单）；升 hard 走后续 policyVersion 演进。
+    // 2026-10-08 verify-doc-binding：v6+（verifyDocSince）时按本 doc 精确匹配绿行——他单的绿行不再
+    // 给本单背书；v1-v5 维持 v5 全局行为逐字不变。
+    // ⚠️ 文案锚点硬约束（既有 confirm-doc.test.mjs 断言锚定子串，零改动前提）：
+    // 「无测试绿凭证」六字须**连续**，doc 与命令只能追加在其后——不得写成「无本单（x）的测试绿凭证」。
     if (target === 'done' && typeof loadKitPolicy(root).verifySince === 'string'
-      && /^##\s*[^#]*验收标准/m.test(text) && !hasFreshVerify(root)) {
-      console.error(`⚠️ ${doc} 置 done：24h 内无测试绿凭证（verifications.jsonl）——关单勾验的「测试绿」声明缺机器事实`);
-      console.error('   跑 node .agents/scripts/verify.mjs（全绿自动落账）后重新关单；本次不拦截（advisory，灰度第一档）');
+      && /^##\s*[^#]*验收标准/m.test(text)) {
+      const pol = loadKitPolicy(root);
+      const rel = docRelOf(root, doc);
+      const bound = typeof pol.verifyDocSince === 'string' ? rel : null;
+      if (!hasFreshVerify(root, bound)) {
+        console.error(`⚠️ ${doc} 置 done：24h 内无测试绿凭证（${bound ? `本单 ${rel} 须带 --doc 落账` : '凭证未按单绑定'}）——关单勾验的「测试绿」声明缺机器事实`);
+        console.error(`   跑 node .agents/scripts/verify.mjs${bound ? ` --doc ${rel}` : ''} 后重新关单；本次不拦截（advisory，灰度第一档）`);
+      }
     }
     const fp = computeFingerprint(text);
     // AI 自治放行分支（2026-09-30 ai-autonomy-trust）：

@@ -132,6 +132,59 @@ const run = (argv, opts = {}) => spawnSync(process.execPath, [VERIFY, ...argv], 
  fs.rmSync(bare, { recursive: true, force: true });
 }
 
+// ---- 场景 8：--doc 凭证绑定（2026-10-08 verify-doc-binding）----
+// ① 带 --doc → 末行含 doc 且为规范化 posix 相对路径；② 不带 → 末行**无 doc 键**（不是 null）；
+// ③ win32 反斜杠 / posix / 绝对路径三种写法落同一值（归一是本单的地基，错一处=凭证永远匹配不上）；
+// ④ 缺值 → exit 1 用法错误；⑤ 跳过步骤 1 时即便带 --doc 仍不落账（防假绿语义不得被 --doc 破坏）。
+{
+  const readLast = (root) => {
+    const p = path.join(root, '.agents', 'verifications.jsonl');
+    if (!fs.existsSync(p)) return null;
+    const lines = fs.readFileSync(p, 'utf8').trim().split('\n').filter(Boolean);
+    return lines.length ? JSON.parse(lines[lines.length - 1]) : null;
+  };
+
+  const rootA = mkfix();
+  const rel = 'workflow/intents/2026-10-08-demo.md';
+  const rA = run(['--test-cmd', `node ${mkCmd(0, '合计: PASS 3 / FAIL 0\n')}`, '--doc', rel],
+    { env: { ...process.env, CHECK_LOOP_ROOT: rootA } });
+  const eA = readLast(rootA);
+  check('场景 8①：带 --doc → 末行含 doc 且为 posix 相对路径',
+    rA.status === 0 && eA && eA.doc === rel && rA.stdout.includes('绑定本单'), `exit=${rA.status} entry=${JSON.stringify(eA)}`);
+
+  const rootB = mkfix();
+  run(['--test-cmd', `node ${mkCmd(0)}`], { env: { ...process.env, CHECK_LOOP_ROOT: rootB } });
+  const eB = readLast(rootB);
+  check('场景 8②：不带 --doc → 仍落行但**无 doc 键**（CI 路径不退化；此行不给任何单背书）',
+    eB && eB.exitCode === 0 && !('doc' in eB) && eB.suite === 'npm test', JSON.stringify(eB));
+
+  // 归一：cwd 设为仓库根时，win32 反斜杠 / posix / 绝对路径三种写法须落同一值
+  const rootC = mkfix();
+  const abs = path.join(rootC, rel);
+  const winStyle = rel.split('/').join(path.sep);
+  const rC1 = run(['--test-cmd', `node ${mkCmd(0)}`, '--doc', winStyle], { cwd: rootC, env: { ...process.env, CHECK_LOOP_ROOT: rootC } });
+  const eC1 = readLast(rootC);
+  const rC2 = run(['--test-cmd', `node ${mkCmd(0)}`, '--doc', abs], { cwd: rootC, env: { ...process.env, CHECK_LOOP_ROOT: rootC } });
+  const eC2 = readLast(rootC);
+  check('场景 8③：反斜杠 / posix / 绝对路径三种写法落同一 doc 值（归一是地基）',
+    eC1 && eC1.doc === rel && eC2 && eC2.doc === rel, `win=${JSON.stringify(eC1 && eC1.doc)} abs=${JSON.stringify(eC2 && eC2.doc)}`);
+
+  const rootD = mkfix();
+  const rD = run(['--test-cmd', `node ${mkCmd(0)}`, '--doc'], { env: { ...process.env, CHECK_LOOP_ROOT: rootD } });
+  check('场景 8④：--doc 缺值 → exit 1 + 用法提示',
+    rD.status === 1 && /--doc 缺值/.test(rD.stderr), `exit=${rD.status} ${rD.stderr}`);
+
+  const rootE = mkfix();
+  const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'verify-bare-doc-'));
+  const rE = run(['--doc', rel], { cwd: bare, env: { ...process.env, CHECK_LOOP_ROOT: rootE } });
+  check('场景 8⑤：步骤 1 跳过时即便带 --doc 仍不落账（防假绿语义不被 --doc 破坏）',
+    rE.status === 0 && !fs.existsSync(path.join(rootE, '.agents', 'verifications.jsonl')) && rE.stdout.includes('不落测试绿凭证'),
+    `exit=${rE.status} ${rE.stdout}`);
+
+  for (const r of [rootA, rootB, rootC, rootD, rootE]) fs.rmSync(r, { recursive: true, force: true });
+  fs.rmSync(bare, { recursive: true, force: true });
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 if (fail) {
   console.log('\n用法：node templates/_agents/scripts/verify.test.mjs');

@@ -736,5 +736,40 @@ const writeTrust = (root, cfg) => {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- S40 测试绿凭证按 doc 绑定（2026-10-08 verify-doc-binding）----
+// 核心防线三条：① v6 + 只有**他单**绿行 → advisory 出账（漏洞已堵）；② v6 + 本单绿行 → 静默；
+// ③ **v5 + 只有他单绿行 → 静默**（向后兼容反例——收紧只许对 v6+ 生效，存量装户零变化）。
+// 文案锚点：既有 S38/S39 锚定「无测试绿凭证」六字连续 + 「verify.mjs」出现，本组不得破坏。
+{
+  const mkVerifyRoot = (pv, lines) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-docbind-'));
+    const docP = path.join(root, 'workflow', 'intents');
+    fs.mkdirSync(docP, { recursive: true });
+    fs.mkdirSync(path.join(root, '.agents'), { recursive: true });
+    fs.writeFileSync(path.join(root, '.agents', 'kit.json'), JSON.stringify({ policyVersion: pv }), 'utf8');
+    fs.writeFileSync(path.join(root, '.agents', 'verifications.jsonl'), lines, 'utf8');
+    fs.writeFileSync(path.join(docP, '2026-10-08-m.md'),
+      '---\n状态: approved\n级别: L1\n确认指纹: cccc3333cccc3333\n---\n# I\n\n## 验收标准（可测试）\n- [x] 用例通过（证据:测试全绿）\n', 'utf8');
+    return root;
+  };
+  const green = (doc) => `${JSON.stringify({ ts: new Date().toISOString(), exitCode: 0, suite: 'npm test', passed: 1, failed: 0, ...(doc ? { doc } : {}) })}\n`;
+  const MINE = 'workflow/intents/2026-10-08-m.md';
+  const OTHER = 'workflow/intents/2026-10-08-other.md';
+  const runM = (root) => spawnSync(process.execPath, [CLI, MINE, '--delegated', '可以'], { cwd: root, encoding: 'utf8' });
+
+  const r40 = runM(mkVerifyRoot(6, green(OTHER)));
+  check('S40① v6 + 只有他单绿行 → advisory 出账（跨单背书漏洞已堵）+ 文案带 --doc',
+    r40.status === 0 && /无测试绿凭证/.test(r40.stderr) && /--doc/.test(r40.stderr), String(r40.stderr).slice(0, 200));
+  const r41 = runM(mkVerifyRoot(6, green(MINE)));
+  check('S40② v6 + 本单绿行 → 静默（绑定成立）',
+    r41.status === 0 && !/无测试绿凭证/.test(r41.stderr), String(r41.stderr).slice(0, 200));
+  const r42 = runM(mkVerifyRoot(5, green(OTHER)));
+  check('S40③ v5 + 只有他单绿行 → **静默**（兼容反例：收紧只对 v6+ 生效，存量装户零变化）',
+    r42.status === 0 && !/无测试绿凭证/.test(r42.stderr), String(r42.stderr).slice(0, 200));
+  const r43 = runM(mkVerifyRoot(6, green(null)));
+  check('S40④ v6 + 不带 doc 的绿行（CI 场景）→ 不给本单背书，advisory 出账',
+    r43.status === 0 && /无测试绿凭证/.test(r43.stderr), String(r43.stderr).slice(0, 200));
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

@@ -1,7 +1,7 @@
 {
   "kit": "agentic-flow-kit",
   "version": "1.3.0",
-  "policyVersion": 5,
+  "policyVersion": 6,
   "audit": true,
   "createdAt": "2026-09-23T15:07:19.753Z",
   "options": {
@@ -66,7 +66,7 @@
     },
     {
       "rel": ".agents/commands/test.md",
-      "sha256": "824ad75d7ac8430809eb69639e4f9359d09a63760a86e8bd9e1b0510636f216e"
+      "sha256": "1baf76912d58160bc3de555009684df7bd4542af249334e36638c9d104ffa1af"
     },
     {
       "rel": ".agents/hooks/check-pairing-incremental.sh",
@@ -158,7 +158,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "64414248c9f7d5c87aeff66c31ec9b7dd95122bc1140d7f0b45e3e6df7e01d53"
+      "sha256": "26d5968ce4bc087a3d752c4b1cc1b87b798e297ed2dc84bd163fc9c45d273c56"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -166,7 +166,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "191ab14771f1f79060d1b6e0c404ca7cd8d00cf3aa5add76aae9a83b3ad9c6de"
+      "sha256": "d202b7e01650dcdd6d965d814cb7804fd771bc460a7fe4ffaaf15d3e3bbcbc48"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -178,11 +178,11 @@
     },
     {
       "rel": ".agents/scripts/confirm-doc.mjs",
-      "sha256": "437b1bf937c1439cc4319273b6819294a00eafdfa3d0ce8661f900388ff293bf"
+      "sha256": "a139c2b206322f87eb2170758bce374dd2fdc78ea09320201c4f94107613d610"
     },
     {
       "rel": ".agents/scripts/confirm-doc.test.mjs",
-      "sha256": "d9db3c698f07a3d8cd70c186719795736008ff3513f9e2178248cc36cd845baf"
+      "sha256": "964955a04c6ea5853c4799d043ce27669158fe913d4c0b013d3a4eed506d1ec0"
     },
     {
       "rel": ".agents/scripts/doctor.test.mjs",
@@ -290,7 +290,7 @@
     },
     {
       "rel": ".agents/scripts/policy.mjs",
-      "sha256": "cb1d6f32bede2e4036eb254714ee5968ab8da45a319374ba7da496d1c080178c"
+      "sha256": "2d927ba11bf6f8835e8447b927ab03f76e6284442416f7efd2d4d52ef4ea6035"
     },
     {
       "rel": ".agents/scripts/pre-push.test.mjs",
@@ -334,11 +334,11 @@
     },
     {
       "rel": ".agents/scripts/verify.mjs",
-      "sha256": "0003e602a13864ba692cf6faed5a8389d2871936585b495fa940965dc3e54b81"
+      "sha256": "69f57c37d1c1ba0657da24b952f31d0d5a6ce2c3afc015fdd838c334f9dd7501"
     },
     {
       "rel": ".agents/scripts/verify.test.mjs",
-      "sha256": "afce1686ec3d9f18e0d3cd8101c1e5b48564ceeb58e86723982f5a46cf99eaf1"
+      "sha256": "fe471e2d1bfba1d17c8bbd0db656199b320694a954798fccd5166ad79e976ab1"
     },
     {
       "rel": ".agents/scripts/wf-journal.mjs",
@@ -505,7 +505,7 @@
     },
     {
       "rel": "workflow/papercuts.md",
-      "sha256": "83ee0d1dc88e262f1f4782625f392122f64b2f452f4478a5ddcc9bf6296a0921",
+      "sha256": "eab668c38878b3d215f69ebfa0903d82ea66d15b53cf537a235cdb83889c0f00",
       "srcSha256": "07f8b0fad8223d25a5f67ce2c672bc9d92288c7b2e123a28e430c509e2c83115"
     },
     {

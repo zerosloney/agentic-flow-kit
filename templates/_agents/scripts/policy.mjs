@@ -69,6 +69,25 @@ export const POLICIES = {
     riskLevelSince: '2026-10-01',
     verifySince: '2026-10-07', // 测试绿机器凭证生效日（2026-10-07 verify-evidence）；v1-v4 无此键 → 前置与对账整体跳过
   },
+  // 版本 6 = 版本 5 的全部键 + verifyDocSince（测试绿凭证与被证明对象的绑定日，2026-10-08 verify-doc-binding）。
+  // 背景（2026-10-08 verify-doc-binding）：v5 的凭证行只记 {ts, exitCode, suite, passed, failed}，
+  // **没有字段能承载「它是为哪一单落的」**，而两个消费方（confirm-doc 置 done 前置 / 检查 8 对账）
+  // 都只问「全仓任意一份 24h 内绿行」→ 跑一次 verify 就能给全仓任意一单的「测试绿」声明背书，
+  // 这是自证式验证的教科书形态（证据与被证明对象零绑定）。
+  // 本版本只加一个开关键：**缺键（v1-v5）时两个消费方维持 v5 的全局行为逐字不变**（存量装户与存量
+  // fixture 零变化、零新增告警）；本仓升 v6 后才按 doc 精确匹配。抄全键仍是铁律（见 v2 注释）。
+  6: {
+    moduleSince: '2026-09-22',
+    check14Since: '2026-09-26',
+    confirmDocsEffective: '2026-09-27',
+    confirmIncidentsEffective: '2026-09-28',
+    bindingTs: '2026-09-28',
+    check17UnclosedAfter: '0.8.0',
+    stageGateSince: '2026-09-29',
+    riskLevelSince: '2026-10-01',
+    verifySince: '2026-10-07',
+    verifyDocSince: '2026-10-08', // 凭证按 doc 绑定生效日；v1-v5 无此键 → 两个消费方维持 v5 全局行为
+  },
 };
 
 export function loadKitPolicy(root) {
@@ -90,17 +109,26 @@ export function auditEnabled(policy) {
   return policy.audit !== false;
 }
 
-// ---- 测试绿凭证判定（2026-10-07 verify-evidence）----
+// ---- 测试绿凭证判定（2026-10-07 verify-evidence；2026-10-08 verify-doc-binding 增 doc 绑定）----
 // 单源（confirm-doc done 前置与 check-loop 检查 8 对账共用——防两处窗口字面量漂移，N3 教训）：
-// hasFreshVerifyLine(lines, now)：verifications.jsonl 的行数组里是否存在「ts 距 now ≤ 24h 且
+// hasFreshVerifyLine(lines, now, doc)：verifications.jsonl 的行数组里是否存在「ts 距 now ≤ 24h 且
 // exitCode === 0」的绿行。坏行（非 JSON / 缺 ts）跳过不抛；窗口 24h = 覆盖「跑 verify → 跨会话/
 // 隔夜 → 次日关单」节奏（spec 2026-10-07-verify-evidence 论证）。
-export function hasFreshVerifyLine(lines, now = Date.now()) {
+//
+// doc 绑定（2026-10-08 verify-doc-binding，第三参）：
+//   doc 为空/缺省 → 逻辑与 2026-10-07 版**逐字相同**（全量行扫描）——v1-v5 装户走这条，零变化；
+//   doc 非空     → 额外要求该行 `e.doc === doc`（**精确等值**，不做前缀/子串/形态匹配——
+//                  沿 check8-digit-sha-misfire「文本启发式须可被实证兜底，禁以形态抢先分类」纪律）。
+//   为什么必须精确：放宽成「包含即认」等于给跨单背书开后门，那正是本单要消灭的漏洞。
+//   不带 doc 落账的行（CI 场景）**不给任何单背书**——doc 为 null 时 e.doc === doc 恒假。
+export function hasFreshVerifyLine(lines, now = Date.now(), doc = null) {
+  const byDoc = typeof doc === 'string' && doc !== '';
   for (const line of lines || []) {
     if (!line || !line.trim()) continue;
     try {
       const e = JSON.parse(line);
       if (e && e.exitCode === 0 && typeof e.ts === 'string') {
+        if (byDoc && e.doc !== doc) continue;
         const t = Date.parse(e.ts);
         if (Number.isFinite(t) && now - t <= 24 * 60 * 60 * 1000) return true;
       }

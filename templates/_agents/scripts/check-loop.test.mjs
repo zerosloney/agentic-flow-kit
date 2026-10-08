@@ -2752,6 +2752,54 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   rmfix(T2);
 }
 
+// ---- 检查 8 凭证按 doc 绑定（2026-10-08 verify-doc-binding）：v6 收紧 / v5 不变 ----
+// 漏洞本体：凭证行不带 doc 字段 + 判定只看「全仓任意一份 24h 内绿行」→ 跑一次 verify 就能给全仓
+// 任意一单的「测试绿」声明背书。本组三条：① v6 + 只有他单绿行 → 仍出 WARN（漏洞已堵）；
+// ② v6 + 本单绿行 → 豁免零 WARN；③ **v5 + 只有他单绿行 → 无 WARN**（兼容反例，收紧只对 v6+ 生效）。
+{
+  const mkVeDoc = (pv, docField) => {
+    const T = mkfix();
+    gitInit(T);
+    w(T, '.agents/kit.json', JSON.stringify({ policyVersion: pv }));
+    const green = { ts: new Date().toISOString(), exitCode: 0, suite: 'npm test' };
+    if (docField) green.doc = docField;
+    w(T, '.agents/verifications.jsonl', `${JSON.stringify(green)}\n`);
+    const iBody = '# INTENT — ve\n\n## 验收标准（可测试）\n- [x] 用例通过（证据:测试全绿）\n';
+    const pBody = '# PLAN — ve\n';
+    const fpI = computeFingerprint(`---\n状态: approved\n级别: L1\n日期: 2026-10-07\n---\n${iBody}`);
+    const fpP = computeFingerprint(`---\n状态: approved\n级别: L1\n---\n${pBody}`);
+    w(T, 'workflow/intents/2026-10-07-ve.md', `---\n状态: done\n级别: L1\n日期: 2026-10-07\n确认指纹: ${fpI.slice(0, 16)}\n---\n${iBody}`);
+    w(T, 'workflow/plans/2026-10-07-ve.md', `---\n状态: done\n级别: L1\n确认指纹: ${fpP.slice(0, 16)}\n---\n${pBody}`);
+    const now = new Date().toISOString();
+    writeLedger(T, [
+      { ts: now, doc: 'workflow/intents/2026-10-07-ve.md', stage: 'done', fingerprint: fpI, prev: 'approved' },
+      { ts: now, doc: 'workflow/plans/2026-10-07-ve.md', stage: 'done', fingerprint: fpP, prev: 'approved' },
+    ]);
+    gitCommitAll(T, 'feat: ve doc-binding fixture');
+    return T;
+  };
+  const MINE = 'workflow/intents/2026-10-07-ve.md';
+  const OTHER = 'workflow/intents/2026-10-07-someone-else.md';
+
+  const D1 = mkVeDoc(6, OTHER);
+  let r = run(D1);
+  check('检查8 凭证绑定:v6 + 只有**他单**绿行 → 仍出 WARN（跨单背书漏洞已堵）',
+    r.status === 0 && outOf(r).includes('测试绿缺凭证') && !outOf(r).includes('证据豁免 verify'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(D1);
+
+  const D2 = mkVeDoc(6, MINE);
+  r = run(D2);
+  check('检查8 凭证绑定:v6 + 本单绿行 → verify 豁免零 WARN（绑定成立）',
+    r.status === 0 && outOf(r).includes('证据豁免 verify') && !outOf(r).includes('测试绿缺凭证'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(D2);
+
+  const D3 = mkVeDoc(5, OTHER);
+  r = run(D3);
+  check('检查8 凭证绑定:v5 + 只有他单绿行 → **无 WARN**（兼容反例：收紧只对 v6+ 生效）',
+    r.status === 0 && !outOf(r).includes('测试绿缺凭证') && outOf(r).includes('证据豁免 verify'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(D3);
+}
+
 // ---- 检查 18 表头签名识别（2026-10-08 papercuts-cleanup-batch 修 2）：节标题漂移不再静默停解析 ----
 // 修前按 `## 委派结果|自做任务结果` 精确节标题切段，装户把标题写成「委派结果表」即静默停解析该表
 // → L2/L3 done 回流无告警；修后按表头签名（与 agg-delegations.cjs splitTables 同口径）识别。
