@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-08
 模块: pipeline
 备注: 关联 intent 2026-10-08-gate-roi-metrics（L2 防御道，用户 2026-10-08「先做 2，再做 1」）
-确认指纹: c0e546c52aeb907b
+确认指纹: 453961239fa1291b
 ---
 # SPEC — gate-roi-metrics
 

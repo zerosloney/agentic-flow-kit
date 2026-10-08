@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: pipeline
-确认指纹: 4d39b11bc1ae20ad
+确认指纹: 5588e85e85f52d95
 ---
 # PLAN — gate-roi-metrics
 
