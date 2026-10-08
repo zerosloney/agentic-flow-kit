@@ -3,6 +3,7 @@
 // kit.json 缺 policyVersion、或版本不在表内：回退版本 1（不启用版本 2 的 approved 锚）。
 // audit 不在本表：缺省视为全量检查（已装仓库与无 kit 的测试夹具）；init 新装显式写 false。
 import fs from 'node:fs';
+import { createHash } from 'node:crypto';
 import path from 'node:path';
 
 export const POLICIES = {
@@ -141,4 +142,16 @@ export function hasFreshVerifyLine(lines, now = Date.now(), doc = null) {
     } catch { /* 坏行容忍跳过（confirmations.jsonl 同口径） */ }
   }
   return false;
+}
+
+// ---- 台账哈希链（2026-10-09 engine-quality-round2 D）----
+// 单源（confirm-doc appendLedger 写入与 check-loop 检查 15 验链共用——判定零复刻）：
+// ledgerChainHash(row, prevHash) = sha256(prevHash + JSON.stringify(row))。
+//   row = 台账行**去掉 prevHash/hash 两字段**后的对象（键序 = 写入序，JSON.parse 保序 → 重算一致）；
+//   prevHash = 上一行的 hash（上一行无 hash/文件首行 → ''——历史行零回填，链从首个带 hash 行起算）。
+// 边界（诚实声明）：整文件重写可重建完整链，不可机器防——兜底 = 台账文件自身的 git 历史
+//   （check-ledger-invariant 已扫 append-only 历史）；本链堵的是「就地改/删中间行」这一高频伪造面，
+//   把主动伪造从静默可行抬到必留断链痕迹。
+export function ledgerChainHash(row, prevHash) {
+  return createHash('sha256').update((prevHash || '') + JSON.stringify(row)).digest('hex');
 }

@@ -22,7 +22,7 @@
     },
     {
       "rel": ".agents/commands/build.md",
-      "sha256": "9687950ebac4bec6dc9fa86f16630ed87fe19bceee4506afd07aed854871c198"
+      "sha256": "747857abd7de30357cefaa7b346a6ea7f5908fec4ceaa6e1feb42dc27ff6c623"
     },
     {
       "rel": ".agents/commands/deploy.md",
@@ -30,7 +30,7 @@
     },
     {
       "rel": ".agents/commands/design.md",
-      "sha256": "5072cebc36b621e606fbc5265794550b8a0fcd5137baaa06d608efcfe0303829"
+      "sha256": "bd7f563408c695f2c1767857ed5bf6ac4474cacdb903137473af871f5b91e54b"
     },
     {
       "rel": ".agents/commands/gate-checklist.md",
@@ -42,7 +42,7 @@
     },
     {
       "rel": ".agents/commands/new-task.md",
-      "sha256": "aee017867228be222952c2b31578436b201d55d664ee6360d39aea345acafa72"
+      "sha256": "e6ecccf41fc7c396f7b0796ee803c9a5d4b8f06264a8bcc3f6eaf80bba97bf29"
     },
     {
       "rel": ".agents/commands/pipeline-run.md",
@@ -98,7 +98,7 @@
     },
     {
       "rel": ".agents/scripts-test-exempt.txt",
-      "sha256": "b7d207b62613fffb3bf22141150e3d9501b92de5c899ad02a00a3a74dfa6a293"
+      "sha256": "16dba615f04a08895e009a4b4d180e7ddea752a6075231f7e2a40c711168f597"
     },
     {
       "rel": ".agents/scripts/agg-delegations.cjs",
@@ -158,7 +158,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "b87f18b527fe05b87d7c640975621543000bee7570207d3fd5d3c1c33e4d56f0"
+      "sha256": "3e83daa1bfc573b2eb46f172a45aeb4557a925c349727f6c1163c33e766ddecc"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -166,11 +166,19 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "2dd5f98cae9ec220d0011356d67101989831f99bc51b6ee8a7f99d19f44af7c9"
+      "sha256": "5e135412e3ea9798febbac2879b61de3da7a71007ff968b0e410f88f3fb648c5"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
       "sha256": "b33d35180afdfb7b5a256441d19165c0d24ebb13b9ae15b7a5cbfa031fa9f820"
+    },
+    {
+      "rel": ".agents/scripts/check-stage-index.mjs",
+      "sha256": "9118b8fe57b80b5d36a0db38ed141c08036629895c143a64f0c29e301b2218c8"
+    },
+    {
+      "rel": ".agents/scripts/check-stage-index.test.mjs",
+      "sha256": "6a51c3b504551cf5109cf6af5f4a1817e041499c44d0ee83a27523aac54f8335"
     },
     {
       "rel": ".agents/scripts/commit-check-trigger.test.mjs",
@@ -178,15 +186,23 @@
     },
     {
       "rel": ".agents/scripts/confirm-doc.mjs",
-      "sha256": "70635dd8f18e5b9d6565f13e9f406f0197bec09d3cfaa58cb10ad36133555e88"
+      "sha256": "58cf786a067af1d69628e2291a2a2b1dd938381e929a9ec827fa94a4054ea111"
     },
     {
       "rel": ".agents/scripts/confirm-doc.test.mjs",
-      "sha256": "964955a04c6ea5853c4799d043ce27669158fe913d4c0b013d3a4eed506d1ec0"
+      "sha256": "3246a3e703d13eda7d6819b6d6bb859e45f4fa9cd37fee3e2639fd6b1c26526d"
     },
     {
       "rel": ".agents/scripts/doctor.test.mjs",
       "sha256": "8f68e0b3e3db615bc8a22cc9fcd957db184d548a7021d1716f3513aaed227fb0"
+    },
+    {
+      "rel": ".agents/scripts/edit-face-check.mjs",
+      "sha256": "24faba555101f0aacd652e3728c99982f95461cd57de844f9483df6a6923d1fa"
+    },
+    {
+      "rel": ".agents/scripts/edit-face-check.test.mjs",
+      "sha256": "be0b9eb5aa753410d8e96899c2e2ef4f642a92db7661ca8c89d32dc4089ab7f6"
     },
     {
       "rel": ".agents/scripts/ensure-board.mjs",
@@ -298,7 +314,7 @@
     },
     {
       "rel": ".agents/scripts/policy.mjs",
-      "sha256": "c0f422727ee77b36f911ef2e81911246a711c443cc337f3a81f126f1ed65b08c"
+      "sha256": "1d139f64e31ebce8d035b4b018ab92d0eeea6acc6ed5f6c53c692c0dce67acb7"
     },
     {
       "rel": ".agents/scripts/pre-push.test.mjs",
@@ -341,6 +357,10 @@
       "sha256": "7126bd619e6bf294a3cc0008416b74d571819914ff9b3e3d3334261c5819267f"
     },
     {
+      "rel": ".agents/scripts/verify-wiki-consistency.test.mjs",
+      "sha256": "e0f6b19313fdafa3a23ab850c18487a885777a30c075a5aeb6fdd1f453b04aac"
+    },
+    {
       "rel": ".agents/scripts/verify.mjs",
       "sha256": "69f57c37d1c1ba0657da24b952f31d0d5a6ce2c3afc015fdd838c334f9dd7501"
     },
@@ -359,6 +379,10 @@
     {
       "rel": ".agents/scripts/wiki-search.mjs",
       "sha256": "a493c85924644613619b83334b6f8e4db40ebf0d398960738422116d3afd3015"
+    },
+    {
+      "rel": ".agents/scripts/wiki-search.test.mjs",
+      "sha256": "a62956b987f0b52653a363b1bcabd33fe19a751d260f7ee4e567056a475ba800"
     },
     {
       "rel": ".agents/scripts/workflow-board-server.mjs",
@@ -485,7 +509,7 @@
     },
     {
       "rel": "AGENTS.md",
-      "sha256": "e26ed07599230666797845ead4bdf86c79db88a9928e531cc5ac6a4c1429aa09",
+      "sha256": "e364ac3fc17842be02325efcf0dc810af67334ba260b06a792b4632402d28696",
       "srcSha256": "f660c6299041261e5d0591d4e8babc37a862421ad8ada0bff48e0f55990e6039"
     },
     {
@@ -513,7 +537,7 @@
     },
     {
       "rel": "workflow/papercuts.md",
-      "sha256": "8cb88b24a87bf0ec0023949d02e0aeb40562960c9d5ca5c2bd71bd9926fc9610",
+      "sha256": "6ea681eb251ffe8915e15dff14375b3c252d3c09519029c6fc8f38ff7b14fa38",
       "srcSha256": "07f8b0fad8223d25a5f67ce2c672bc9d92288c7b2e123a28e430c509e2c83115"
     },
     {

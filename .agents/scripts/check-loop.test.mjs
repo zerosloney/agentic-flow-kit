@@ -2902,5 +2902,41 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   rmfix(T);
 }
 
+// ---- 场景 21:台账哈希链（2026-10-09 engine-quality-round2 D）——篡改必抓 / 存量零告警 ----
+{
+  // 21a：连续带 hash 行中间被篡改（改 quote 不动链字段）→ hard「台账链断裂」
+  const T = mkfix();
+  const { ledgerChainHash } = await import('./policy.mjs');
+  const chainRow = (prevHash, fields) => {
+    const row = { ...fields, prevHash };
+    return { ...row, hash: ledgerChainHash(fields, prevHash) };
+  };
+  const row1 = chainRow('', { ts: '2026-10-09T01:00:00Z', doc: 'workflow/intents/2026-10-09-a.md', stage: 'approved', fingerprint: 'a'.repeat(64), prev: 'draft', source: 'chat-delegated', quote: '真原话一' });
+  const row2 = chainRow(row1.hash, { ts: '2026-10-09T02:00:00Z', doc: 'workflow/intents/2026-10-09-a.md', stage: 'done', fingerprint: 'b'.repeat(64), prev: 'approved', source: 'chat-delegated', quote: '真原话二' });
+  // 篡改第一行 quote（链字段不动 → hash 失配）
+  const tampered = { ...row1, quote: '篡改后的假原话' };
+  writeLedger(T, [tampered, row2]);
+  let r = run(T);
+  let out = outOf(r);
+  check('场景 21a 链断裂：中间行篡改 → hard 台账链断裂（指首断行号）',
+    r.status !== 0 && out.includes('台账链断裂') && /第 1 行/.test(out), `exit=${r.status}\n${out.slice(-400)}`);
+  // 反证还原：篡改行恢复原 quote → 链复通（断言非恒绿）
+  writeLedger(T, [row1, row2]);
+  r = run(T);
+  check('场景 21b 反证还原：篡改修复 → 链校验通过', !outOf(r).includes('台账链断裂'), outOf(r).slice(-300));
+  rmfix(T);
+}
+{
+  // 21c：全无 hash 的存量台账（v1.5.0 前形态）→ 零链告警（向后兼容）
+  const T = mkfix();
+  writeLedger(T, [
+    { ts: '2026-09-20T01:00:00Z', doc: 'workflow/intents/2026-09-20-legacy.md', stage: 'approved', fingerprint: 'c'.repeat(64), prev: 'draft' },
+    { ts: '2026-09-20T02:00:00Z', doc: 'workflow/intents/2026-09-20-legacy.md', stage: 'done', fingerprint: 'd'.repeat(64), prev: 'approved' },
+  ]);
+  const r = run(T);
+  check('场景 21c 存量无 hash 行：零链告警（不追溯）', !outOf(r).includes('台账链断裂'), outOf(r).slice(-300));
+  rmfix(T);
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

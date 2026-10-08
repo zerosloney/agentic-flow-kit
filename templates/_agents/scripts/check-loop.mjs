@@ -111,7 +111,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { loadEnums } from './workflow-enums.mjs';
 import { runCheck16 } from './check-metric-claims.mjs';
-import { auditEnabled, loadKitPolicy, hasFreshVerifyLine } from './policy.mjs';
+import { auditEnabled, loadKitPolicy, hasFreshVerifyLine, ledgerChainHash } from './policy.mjs';
 import { laneOfEntry } from './stage-gates.mjs';
 // MARK_RE：incident 留痕形态的单源（第七轮复核 N3——此前 check-loop 内联复制一份同口径字面量，
 // 两处靠注释与人工同步；改为复用 stage-gates.mjs 的导出，从结构上消除漂移可能）
@@ -120,6 +120,8 @@ import { MARK_RE, approvedTraceHit } from './stage-gates.mjs';
 // 本文件只组装 ctx 并消费返回的文案数组（先例 = check-metric-claims.mjs 承载检查 16）。
 // 调用点位置即输出顺序位：须留在检查 10 与 12 之间以保持 warnings 行序（稳定输出契约），见该模块内注释。
 import { runCheckHygiene } from './check-hygiene.mjs';
+// 检查 7 拆模块（2026-10-09 engine-quality-round2 A1）：阶段索引同步迁 check-stage-index.mjs
+import { runCheckStageIndex } from './check-stage-index.mjs';
 import { gateSeg, finishSegs, makeCollector } from './gate-seg.mjs';
 
 // CHECK_LOOP_GIT：测试注入钩子（指向不存在/不可执行路径可稳定触发 spawn 异常）；未设置时与原行为逐字节一致（2026-10-05-gitout-fail-open）
@@ -592,19 +594,10 @@ export function runCheckLoop(opts = {}) {
     if (modelHits.length) warnings.push(`- [WARN 宿主耦合] 薄 Adapter 不应固定模型:\n${modelHits.join('\n')}`);
   }
 
-  // --- 6. 阶段索引同步 [warning] ---
-  markGate('6', '阶段索引同步');
-  for (const cmd of ['plan', 'design', 'build', 'test', 'deploy', 'maintain', 'review']) {
-    for (const doc of ['AGENTS.md', '.agents/commands/new-task.md']) {
-      // existsSync 守卫（2026-10-06-check19-entry-enoent 同类）：两文件可合法缺失（下方 text 判空本就
-      // 预期缺失态），fail-loud fs 读下按空跳过、不再响亮出账
-      const docPath = path.join(ROOT, doc);
-      const text = fs.existsSync(docPath) ? linesOf(docPath) : null;
-      if (text && !text.some((l) => l.includes(`.agents/commands/${cmd}.md`))) {
-        warnings.push(`- [WARN 阶段索引漂移] ${doc} 缺 ${cmd} 指令索引(两处阶段表须同步维护)`);
-      }
-    }
-  }
+  // --- 6. 阶段索引同步 [warning]（2026-10-09 engine-quality-round2 A1：实现迁 check-stage-index.mjs——
+  //     先例 check-hygiene / check-metric-claims；段 id 沿 sh 版 '6'，清单编号 7 与文案逐字不动；
+  //     调用点位置即输出顺序契约）---
+  warnings.push(...runCheckStageIndex({ root: ROOT, linesOf, gateStats }));
 
   // --- 共享：文件「首次加入 git」的日期索引（2026-09-28 check8-git-anchor）---
   // 用途：检查 8 的生效日锚从**可手填的文件名前缀**（项目命名规范本身即 `YYYY-MM-DD-<主题>`，作者
@@ -987,6 +980,30 @@ export function runCheckLoop(opts = {}) {
       for (const line of linesOf(ledgerPath) || []) {
         if (!line.trim()) continue;
         try { ledger.push(JSON.parse(line)); } catch { /* 坏行跳过 */ }
+      }
+    }
+    // 台账哈希链校验（2026-10-09 engine-quality-round2 D；写入侧=confirm-doc appendLedger，哈希单源
+    // policy.ledgerChainHash——判定零复刻）。判据：连续带 hash 行段内，① prevHash 须等于前一带 hash
+    // 行的 hash（无 hash 行/坏行后链段重启为 ''，与写入侧读末行口径一致）；② hash 须可重算一致。
+    // 断裂 = hard「台账链断裂」（只报首断行号 + 影响行计数，不做逐行刷屏）——就地改/删中间行必留
+    // 痕迹；边界：整文件重写可重建链，不可机器防，兜底 = 台账文件自身 git 历史（check-ledger-invariant）。
+    // 历史行（v1.5.0 前，无 hash 字段）零回填零告警——向后兼容。
+    {
+      let prevHash = '';
+      let brokenAt = 0;
+      let brokenCount = 0;
+      ledger.forEach((row, idx) => {
+        if (!row || typeof row.hash !== 'string') { prevHash = ''; return; } // 存量行/无链字段 → 链段重启
+        const { hash, prevHash: p, ...rest } = row;
+        const ok = (p ?? '') === prevHash && ledgerChainHash(rest, p ?? '') === hash;
+        if (!ok) {
+          if (!brokenAt) brokenAt = idx + 1;
+          brokenCount++;
+        }
+        prevHash = hash;
+      });
+      if (brokenAt) {
+        blockers.push(`- [台账链断裂] confirmations.jsonl 自第 ${brokenAt} 行起哈希链校验失败（共 ${brokenCount} 行不一致——append-only 台账出现就地改/删痕迹；prevHash 接续或内容重算不符。整文件重写不可机器防，对质走台账自身 git 历史）`);
       }
     }
     // incidents 侧覆盖（2026-09-27 gate-coverage）：fixed/closed 为已确认态（open = 起草态不加门——

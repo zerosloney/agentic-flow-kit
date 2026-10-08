@@ -77,6 +77,7 @@
 - **构建/测试**：构建 = 无（纯 JS，node 直跑）| 测试 = `npm test` | 类型检查 = 无。
 - **闭环驱动**：`node .agents/scripts/pipeline-run.mjs start "<需求>"`（工单干活 / 到门即停 / `--delegated` 原话代录）；与 new-task 手动路由二选一。
 - **文档填空**：起草 intent / spec / plan 先跑 `node .agents/scripts/fill-{intent,spec,plan}.mjs` 拿骨架再填实。
+- **编辑时快检**：改根 `AGENTS.md` 后跑 `node .agents/scripts/edit-face-check.mjs`（工作树面阶段索引/引用/预算 advisory——常驻面约束左移到编辑期）。
 
 ### 4.2 引擎双源纪律 (Core Discipline)
 - **同步路径**：`templates/` (包源) → `node bin/flow-kit.mjs sync` → `managed` (装副本)。**`.agents/` 直改 managed 文件会被 doctor 台账漂移告警。**

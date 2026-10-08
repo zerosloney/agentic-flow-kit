@@ -8,6 +8,12 @@ description: Build 阶段:起 plan + 实现代码 + 自验(确认后才动代码
 
 > AI 起草 plan,用户确认;进计划模式列改动,用户确认;最后才动代码。两道确认门。
 
+## 0. 三件套合并预览（L2/L3 起草期，2026-10-09 engine-quality-round2 C）
+
+起草 intent / spec / plan 任一件后，**在输出草稿全文前先给三件要点总览**（各一件：目标 / 关键取舍 /
+验收判据 diff，合计 ≤12 行）——用户一次看整体再逐件拍板，省三次盲确认的上下文切换。
+确认纪律不变：逐件过目全文 + 逐件 `confirm-doc` 代录（禁并录、禁复用同句）。本阶段总览侧重：plan 任务拆解与两道确认门位置。
+
 ## 1. 执行
 
 ### 1.1 起草 plan
@@ -53,6 +59,7 @@ description: Build 阶段:起 plan + 实现代码 + 自验(确认后才动代码
 ## 4. 改权威源后必跑（薄适配同步防漏）
 
 - 改 `templates/_agents/{commands,roles}/*.md` 正文后跑 `node bin/flow-kit.mjs sync-hosts --diff` → 拍板 → `--apply` 单向同步（只动正文段，frontmatter 不动）；口径与边界详见 `.agents/commands/sync-hosts.md`
+- 改根 `AGENTS.md`（owned 常驻面）后跑 `node .agents/scripts/edit-face-check.mjs`——工作树面快检（阶段索引/引用/预算 advisory），别等提交门才发觉砍坏（2026-10-09 B2）
 
 ## 5. 改 doctor / check-loop 后必跑（三处口径对账）
 

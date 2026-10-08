@@ -39,7 +39,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { createHash, randomBytes } from 'node:crypto';
 import { confirmGateFor, doneGateFor, laneOfEntry, laneOfDoc } from './stage-gates.mjs';
-import { loadKitPolicy, hasFreshVerifyLine } from './policy.mjs';
+import { loadKitPolicy, hasFreshVerifyLine, ledgerChainHash } from './policy.mjs';
 
 // hasFreshVerify(root, doc)：读 <root>/.agents/verifications.jsonl 判 24h 窗口绿行（判定单源
 // policy.hasFreshVerifyLine）。只读，台账缺失/不可读一律 false（=无凭证，advisory 层 fail-open）。
@@ -120,10 +120,25 @@ export function applyTransition(text, targetStage, fingerprint16) {
 }
 
 // appendLedger(root, entry)：追加一行 JSON（目录不存在自动建；只 append 不重写）
+// 哈希链（2026-10-09 engine-quality-round2 D）：每行追加 prevHash（末行 hash，末行无 hash/空文件 → ''）
+//   与 hash（ledgerChainHash 单源计算，check-loop 15 同函数验链）——「就地改/删中间行」必留断链痕迹；
+//   历史行零回填（无 hash 行后链重启），整文件重写不可机器防（边界声明见 policy.ledgerChainHash）。
 export function appendLedger(root, entry) {
   const p = path.join(root, '.agents', 'confirmations.jsonl');
   fs.mkdirSync(path.dirname(p), { recursive: true });
-  fs.appendFileSync(p, JSON.stringify(entry) + '\n');
+  let prevHash = '';
+  try {
+    if (fs.existsSync(p)) {
+      const lines = fs.readFileSync(p, 'utf8').split(/\r?\n/).filter((l) => l.trim());
+      if (lines.length) {
+        const last = JSON.parse(lines[lines.length - 1]);
+        prevHash = last && typeof last.hash === 'string' ? last.hash : '';
+      }
+    }
+  } catch { /* 末行不可解析 → prevHash ''（链从本行重启；断裂由 check-loop 15 出账） */ }
+  const { hash: _h, prevHash: _p, ...rest } = entry;
+  const row = { ...rest, prevHash, hash: ledgerChainHash(rest, prevHash) };
+  fs.appendFileSync(p, JSON.stringify(row) + '\n');
   return p;
 }
 

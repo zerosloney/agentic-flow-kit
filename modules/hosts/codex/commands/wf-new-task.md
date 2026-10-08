@@ -27,6 +27,8 @@ description: AI-Native 闭环总入口:6 阶段指令索引(Plan→Design→Buil
 | **协作道**(敏捷优先,审计异步补) | L0 例行 / L1 实现级 | L0 直接 commit,豁免 intent;L1 快车道(intent 一句话确认 + 极简 plan)即动工。独立复核不设同步前置,check-loop 与事后 review 兜底;确认/代录可 `--batch` 批量(仅 L0/L1) |
 | **防御道**(严谨优先,确认同步拦) | L2 规则/契约 / L3 数据与运行时结构 | 同步确认门:spec 确认通过方可起草 plan,plan 确认后方可动手;L3 加新会话独立复核,未确认不放行 |
 
+> **L2/L3 起草期合并预览**：三件套起草按 [design.md §0](design.md) 一次呈现要点总览（逐件确认代录不变）。
+>
 > 定级结果落 intent frontmatter `risk_level`(=级别,`fill-intent.mjs` 自动写入,机器选道用);协作道勾触达红线会被 check-loop 判「红线判低」hard 拦(就高升级 L2/L3 并补同名 spec)。
 
 ## 3. 路由判断

@@ -6,6 +6,12 @@ description: Design 阶段:起 spec(L2/L3 强制,L1 可省略)
 
 > L2/L3 强制;L1 走快车道(直接跳 `next: build.md` 起草 Quick-Plan)。
 
+## 0. 三件套合并预览（L2/L3 起草期，2026-10-09 engine-quality-round2 C）
+
+起草 intent / spec / plan 任一件后，**在输出草稿全文前先给三件要点总览**（各一件：目标 / 关键取舍 /
+验收判据 diff，合计 ≤12 行）——用户一次看整体再逐件拍板，省三次盲确认的上下文切换。
+确认纪律不变：逐件过目全文 + 逐件 `confirm-doc` 代录（禁并录、禁复用同句）。本阶段总览侧重：spec 方案取舍与 L3 复核安排。
+
 ## 1. 执行
 
 1. 确认同名入口文档已批准：新需求为 approved intent，修复为已确认的 incident 草稿；否则拒绝，分别回 `plan.md` / `maintain.md`（2026-09-30 起机器强制：fill-spec / confirm-doc 对前置未过直接拒绝 exit 2、不落盘不记账）。

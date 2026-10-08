@@ -104,6 +104,23 @@ const readLedgerOf = (root) => {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- S8b 哈希链（2026-10-09 engine-quality-round2 D）：链字段写入 + 接续 + 重算自洽 ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-chain-'));
+  // 先写一行无 hash 的「存量」行（模拟 v1.5.0 前台账）——新行 prevHash 应为 ''（链重启）
+  fs.mkdirSync(path.join(root, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.agents', 'confirmations.jsonl'), JSON.stringify({ ts: 'T0', doc: 'workflow/plans/old.md', stage: 'done', fingerprint: 'e'.repeat(64), prev: 'approved' }) + '\n');
+  appendLedger(root, { ts: 'T1', doc: 'workflow/plans/a.md', stage: 'approved', fingerprint: 'f'.repeat(64), prev: 'draft' });
+  appendLedger(root, { ts: 'T2', doc: 'workflow/plans/a.md', stage: 'done', fingerprint: 'g'.repeat(64), prev: 'approved' });
+  const rows = fs.readFileSync(path.join(root, '.agents', 'confirmations.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l));
+  check('S8b 存量行后首链行 prevHash 为空（链重启，历史零回填）', rows[0].hash === undefined && rows[1].prevHash === '');
+  check('S8b 第二链行 prevHash 接续第一链行 hash', rows[2].prevHash === rows[1].hash);
+  const { ledgerChainHash } = await import('./policy.mjs');
+  const recompute = (row) => { const { hash, prevHash, ...rest } = row; return ledgerChainHash(rest, prevHash) === hash; };
+  check('S8b 两链行 hash 重算自洽（CRLF/键序规范化单源）', recompute(rows[1]) && recompute(rows[2]));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 // ---- S9【核心】非 TTY spawn（AI 调用路径）必须被拒 ----
 {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-tty-'));
