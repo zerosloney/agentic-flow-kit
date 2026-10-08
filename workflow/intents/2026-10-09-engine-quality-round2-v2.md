@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-09
 模块: pipeline
 备注: round2 重立单（v1 勾验事故 superseded——实现已交付，本单重走验证与关单）
-确认指纹: 3da497c147c103ad
+确认指纹: 641e6f51b03bd5fa
 ---
 # INTENT — engine-quality-round2-v2
 

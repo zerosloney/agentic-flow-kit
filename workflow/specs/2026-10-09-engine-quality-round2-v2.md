@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-09
 模块: pipeline
 备注: engine-quality-round2-v2（v1 superseded 重立关单单）
-确认指纹: abc2beab2a42c4ea
+确认指纹: 438ab943249b71a4
 ---
 # SPEC — engine-quality-round2-v2
 
