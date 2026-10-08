@@ -158,7 +158,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "765d3a45bd3ca206d81e36daae9c27558c6342f9659e5cb1bf6a8e57ad2172b2"
+      "sha256": "b87f18b527fe05b87d7c640975621543000bee7570207d3fd5d3c1c33e4d56f0"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -194,7 +194,7 @@
     },
     {
       "rel": ".agents/scripts/fill-intent.mjs",
-      "sha256": "8bd0d59c1b4628e72ecf73a51765307b0db5d076c128a09f339002a04c440a4f"
+      "sha256": "a793a7a062069c525a29a457083f2d39262da523e240575260d16935f21d4c52"
     },
     {
       "rel": ".agents/scripts/fill-intent.test.mjs",
@@ -298,7 +298,7 @@
     },
     {
       "rel": ".agents/scripts/policy.mjs",
-      "sha256": "2d927ba11bf6f8835e8447b927ab03f76e6284442416f7efd2d4d52ef4ea6035"
+      "sha256": "c0f422727ee77b36f911ef2e81911246a711c443cc337f3a81f126f1ed65b08c"
     },
     {
       "rel": ".agents/scripts/pre-push.test.mjs",

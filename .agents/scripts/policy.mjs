@@ -86,7 +86,13 @@ export const POLICIES = {
     stageGateSince: '2026-09-29',
     riskLevelSince: '2026-10-01',
     verifySince: '2026-10-07',
-    verifyDocSince: '2026-10-08', // 凭证按 doc 绑定生效日；v1-v5 无此键 → 两个消费方维持 v5 全局行为
+    // 凭证按 doc 绑定的生效**时刻**（ISO 8601，含 T/Z）；v1-v5 无此键 → 两个消费方维持 v5 全局行为。
+    // 2026-10-09 verifydoc-anchor：值从日期 '2026-10-08' 升级为时刻——本仓 v6 上线当日（本地 17:37 =
+    // 09:37Z）之前 done 的单（selfmeasure 00:22Z / gate-roi-metrics 03:25Z）在日期粒度下被误纳入精确匹配、
+    // 产 3 条不可消退 advisory（它们关单时 --doc 机制尚不存在，无从补证）；升级为时刻后按 done ts 精确比较，
+    // 机制上线前的存量单退回 v5 全局布尔（不误报、不伪造），与检查 15/18 的生效日锚同构。
+    // 消费方：检查 8 的 verifyDocInWindow（done ts ≥ 本值才启用精确匹配）。
+    verifyDocSince: '2026-10-08T09:37:35Z',
   },
 };
 

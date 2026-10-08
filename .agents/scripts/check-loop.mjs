@@ -765,8 +765,39 @@ export function runCheckLoop(opts = {}) {
     const verifyFreshGlobal = verifyLines ? hasFreshVerifyLine(verifyLines) : false;
     // 2026-10-08 verify-doc-binding：v6+（verifyDocSince）按本 doc 精确匹配；缺键维持全局布尔。
     const verifyDocBound = typeof kitPolicy.verifyDocSince === 'string';
+    // 2026-10-09 verifydoc-anchor：v6 精确匹配的**追溯边界**——只对「确认门 done ts ≥ verifyDocSince」的单生效。
+    // 背景（用户 2026-10-09 拍板 D）：4 单（verify-evidence / workflow-dashboard / selfmeasure / gate-roi-metrics）
+    // 的 done ts 均 < v6 上线日（2026-10-08 17:37），它们关单时既无 --doc 机制、也无从补证——被精确匹配追责
+    // 会产 9 条不可消退 advisory（补跑=自证，回溯不了关单当时全绿，与门禁本意相悖）。退回全局布尔 = v5 语义
+    // （不误报、不伪造），与检查 15/18 生效日锚同构。done ts 台账读一次循环外缓存，零新增子进程。
+    const verifyDocSinceTs = verifyDocBound ? kitPolicy.verifyDocSince : null;
+    const doneTsOf = (() => {
+      const map = new Map();
+      try {
+        const lp = path.join(ROOT, '.agents', 'confirmations.jsonl');
+        if (fs.existsSync(lp)) {
+          for (const line of fs.readFileSync(lp, 'utf8').split(/\r?\n/)) {
+            if (!line.trim()) continue;
+            try {
+              const e = JSON.parse(line);
+              // append-only 取末次 done 跳转（同一 doc 多次 done 取最后一条 ts）
+              if (e && e.doc && ['done', 'closed'].includes(e.stage)) map.set(e.doc, e.ts || '');
+            } catch { /* 坏行跳过（同检查 15 口径） */ }
+          }
+        }
+      } catch { /* 台账不可读 → 无锚 → 全走全局布尔（fail-open，不误报 hard） */ }
+      return map;
+    })();
+    // 该 doc 的确认门 done 是否落在 v6 追溯窗口内；无台账行 / 台账不可读 → false（存量豁免，退回全局布尔）
+    // 2026-10-09 verifydoc-anchor：按 ISO 时刻比较（不再是日期粒度）——机制上线当日的更早时刻 done 的单
+    // 仍在窗口外（日期粒度会把同日的早时刻误纳入，见 policy.mjs verifyDocSince 注释）。
+    const verifyDocInWindow = (rel) => {
+      if (!verifyDocSinceTs) return false;
+      const ts = doneTsOf.get(rel);
+      return !!ts && ts >= verifyDocSinceTs;
+    };
     const verifyFreshFor = (rel) => (verifyLines
-      ? hasFreshVerifyLine(verifyLines, Date.now(), verifyDocBound ? rel : null)
+      ? hasFreshVerifyLine(verifyLines, Date.now(), verifyDocInWindow(rel) ? rel : null)
       : false);
     for (const intent of docFiles('intents')) {
       if (fmGet(intent, '状态') !== 'done') continue;
