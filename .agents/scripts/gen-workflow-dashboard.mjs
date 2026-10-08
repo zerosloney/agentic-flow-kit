@@ -124,6 +124,22 @@ export function qualityRows(root) {
   return { rows: out, verdictMap, months };
 }
 
+// gateRoiLines：门禁 ROI 节的行（2026-10-08 gate-roi-metrics）
+//   口径声明 + 采集/查看入口。**刻意不把运行数据（次数 / 耗时 / 噪声率）铺进 DASHBOARD**——
+//   本文件被检查 11（--check）覆盖，而采集数据每跑一次门禁就变一次：铺进去等于
+//   「每次采集必产一条漂移 WARN」＝不可消除噪声（audit-gate-hardening P3 的反面教材）。
+//   连「有无数据」也不做分支（cache 已 gitignore → 新克隆必然无 cache，一采集文案就翻转 = 又一次漂移）：
+//   降级语义交由 CLI 承担——agg-gate-stats.mjs 空数据时自己打印「未采集——跑 check-loop --gate-stats」。
+//   故本节恒为静态文案：**任何时候生成本文件，字节恒等**（测试 ⑤ 的两条 --check exit 0 钉的就是这条）。
+export function gateRoiLines() {
+  return [
+    '- 采集：`node .agents/scripts/check-loop.mjs --gate-stats`（数据落 `.agents/cache/gate-stats.jsonl`，该目录已 gitignore；不带 flag 时零写入、输出逐字节不变）',
+    '- 看数值：`node .agents/scripts/agg-gate-stats.mjs [--days 30]`——输出成本排序 + 两类决策依据：噪声率 top（该收窄或该修）、死检查（该拆或该降级）；无采集数据时该命令自己提示「未采集」并给出采集命令',
+    '- 口径：耗时**含子进程时间**（检查 11 调两个生成器 `--check`、检查 13 调 `sh rule-budget.sh`）——门禁真实成本，不做剔除；样本 <5 次时只作线索，不作决策依据',
+    '- 本节为何不铺数值：本文件被检查 11 漂移门覆盖，运行数据每跑一次门禁即变一次，铺进来会让每次采集都产一条漂移 WARN（不可消除噪声）',
+  ];
+}
+
 const USAGE = '用法：node .agents/scripts/gen-workflow-dashboard.mjs [--dry-run | --check]';
 
 // normalizeForCheck：--check 比对前的双归一（纯函数供测试直测）——行尾 CRLF→LF + 「生成于 <ISO>」行抹平。
@@ -189,6 +205,10 @@ function main() {
     '| 月份 | 有效任务 | 一次通过率 | 设计返工 | 门禁噪声返工 | 平均返工 | 主兜底占比 | 扩容门判定 |',
     '|------|----------|------------|---------|-------------|--------|------------|------------|',
     ...(q.rows.length ? q.rows : ['| — | — | — | — | — | — | — | 台账暂无数据 |']),
+    '',
+    '## 门禁 ROI（门禁自身的度量）',
+    '',
+    ...gateRoiLines(),
     '',
   ];
   const out = lines.join('\n');

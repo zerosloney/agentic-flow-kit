@@ -127,6 +127,7 @@ import { MARK_RE, approvedTraceHit } from './stage-gates.mjs';
 // 本文件只组装 ctx 并消费返回的文案数组（先例 = check-metric-claims.mjs 承载检查 16）。
 // 调用点位置即输出顺序位：须留在检查 10 与 12 之间以保持 warnings 行序（稳定输出契约），见该模块内注释。
 import { runCheckHygiene } from './check-hygiene.mjs';
+import { gateSeg, finishSegs, makeCollector } from './gate-seg.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 // CHECK_LOOP_GIT：测试注入钩子（指向不存在/不可执行路径可稳定触发 spawn 异常）；未设置时与原行为逐字节一致（2026-10-05-gitout-fail-open）
@@ -134,18 +135,20 @@ const GIT = process.env.CHECK_LOOP_GIT || (process.platform === 'win32' ? 'git.e
 
 function takeOpts() {
   const args = process.argv.slice(2);
-  const opts = { rev: null, hardening: false };
+  const opts = { rev: null, hardening: false, gateStats: false };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--rev') {
       opts.rev = args[++i] ?? '';
       if (!opts.rev) {
-        console.error('check-loop: 用法 node check-loop.mjs [--rev <sha>] [--hardening]');
+        console.error('check-loop: 用法 node check-loop.mjs [--rev <sha>] [--hardening] [--gate-stats]');
         process.exit(1);
       }
     } else if (args[i] === '--hardening') {
       opts.hardening = true; // 加固门（2026-09-30 hybrid-governance-explore-hardening）：pre-push 对 main 目标传入
+    } else if (args[i] === '--gate-stats') {
+      opts.gateStats = true; // 门禁 ROI 落盘（2026-10-08 gate-roi-metrics）：默认路径输出逐字节不变
     } else {
-      console.error('check-loop: 用法 node check-loop.mjs [--rev <sha>] [--hardening]');
+      console.error('check-loop: 用法 node check-loop.mjs [--rev <sha>] [--hardening] [--gate-stats]');
       process.exit(1);
     }
   }
@@ -157,6 +160,29 @@ function takeOpts() {
 // 优先于 CHECK_LOOP_ROOT env 优先于 git toplevel（CLI 缺省行为逐字节不变）；返回 { exitCode, blockers, warnings }，
 // 输出打印照旧在本函数内（稳定输出契约：banner 后空行、条目 `- ` 前缀、HARD-BLOCK/WARN 两段式——消费者 .githooks/pre-push）。
 // opts.rev 的 worktree 清理挂 process.on('exit')——进程内多次调用累计监听器（测试场景 ≤3 次，可接受）。
+// ---- 门禁 ROI 插桩件已抽至 gate-seg.mjs（2026-10-08 gate-roi-metrics）----
+// 抽因：check-loop.mjs 已 import check-hygiene.mjs，后者若再 import check-loop.mjs 即循环依赖——
+// 而两者都要插桩，判据单源必须只有一处。gateSeg / finishSegs / makeCollector 见该件；
+// 本文件在每段开头调 markGate(id,label)，统计由数组长度差推出，不动任何 push 调用点。
+
+// writeGateStats：门禁 ROI 落盘（2026-10-08 gate-roi-metrics）——append 一行到
+// <root>/.agents/cache/gate-stats.jsonl（该目录已 gitignore，属运行时数据、不入 git、不进 kit.json
+// managed 台账——刻意避开 papercuts 2026-10-05 探针临时件被 sync 收编的事故面）。
+// IO 失败只出账不阻断（沿 verify.mjs 凭证落账同款容错——度量失败不该让门禁变成红灯）。
+export function writeGateStats(root, segs) {
+  try {
+    const dir = path.join(root, '.agents', 'cache');
+    fs.mkdirSync(dir, { recursive: true });
+    const total = segs.reduce((a, s) => a + s.ms, 0);
+    fs.appendFileSync(path.join(dir, 'gate-stats.jsonl'),
+      `${JSON.stringify({ ts: new Date().toISOString(), root, segs, totalMs: total })}\n`);
+    const hits = segs.filter((s) => s.warns || s.blocks).length;
+    console.error(`[gate-stats] ${segs.length} 段已记账（命中 ${hits} 段）→ .agents/cache/gate-stats.jsonl`);
+  } catch (e) {
+    console.error(`[gate-stats] ⚠️ 落盘失败（${e.code || e.message}）——不阻断门禁`);
+  }
+}
+
 export function runCheckLoop(opts = {}) {
   const REV_ARG = opts.rev ?? null;
   const HARDENING = !!opts.hardening;
@@ -302,6 +328,10 @@ export function runCheckLoop(opts = {}) {
   const DOC_DIRS = ['intents', 'specs', 'plans', 'incidents'];
   const blockers = [];
   const warnings = [];
+  // 门禁 ROI 收集器（2026-10-08 gate-roi-metrics）：引用同一对数组 + 段游标，不复制任何数据。
+  // 默认路径不打印不写盘（见 gate-seg.mjs 注释的输出契约硬约束）。
+  const gateStats = makeCollector(warnings, blockers);
+  const markGate = (id, label) => gateSeg(gateStats, id, label); // 局部别名，避免遮蔽同名导出
   // audit:false（init 新装）只保留 blockers。缺省与 audit:true 保持全量警告。
   // 硬规则：配对 / 验收勾验的阻断 / 确认留痕 / 发版草稿。卫生项走 warnings。
   const kitPolicy = loadKitPolicy(ROOT);
@@ -327,6 +357,7 @@ export function runCheckLoop(opts = {}) {
   };
 
   // --- 1. intent/spec/plan 同名配对 + 状态确认 + L3 确认三件 + 风险泳道一致性 [hard-block] ---
+  markGate('1', '意图/spec/plan 配对');
   for (const intent of docFiles('intents')) {
     const base = path.basename(intent);
     const st = fmGet(intent, '状态');
@@ -400,8 +431,9 @@ export function runCheckLoop(opts = {}) {
   // ctx 只传既有 helper、模块内零复刻：docFiles 的 tracked 过滤、fmGet 的 frontmatter 受限子集、
   // linesOf 的读异常响亮出账各自承载不可漂移语义，复刻即造口径分叉。audit:false 下 warnings.push 是
   // no-op，卫生项因此不出账（硬规则语义保持）。
-  warnings.push(...runCheckHygiene({ root: ROOT, WF, DOC_DIRS, docFiles, linesOf, fmGet, isTracked, readdirOrNull, kitPolicy }));
+  warnings.push(...runCheckHygiene({ root: ROOT, WF, DOC_DIRS, docFiles, linesOf, fmGet, isTracked, readdirOrNull, kitPolicy, gateStats }));
   // --- 3. incidents 复盘三件套 + 状态严格枚举 + 新 intent 回路（回路断档 = hard）---
+  markGate('3', 'incidents 复盘三件套');
   for (const inc of docFiles('incidents')) {
     const name = path.basename(inc);
     const lines = linesOf(inc) || [];
@@ -446,6 +478,7 @@ export function runCheckLoop(opts = {}) {
   }
 
   // --- 4. 引用有效性 [warning]（.agents/ 路径须存在；skills 特例允许用户级 ~/.agents/skills）---
+  markGate('4', '引用有效性');
   {
     // 引用可带 {a,b,c} 花括号展开（仓库通写法 `fill-{intent,spec,plan}.mjs`）或 `*` 通配（`fill-*.mjs`）——
     // 花括号展开逐路查存在，任一路存在即有效；`*` 按目录枚举 glob 匹配，命中即有效；全不中才算断档
@@ -509,6 +542,7 @@ export function runCheckLoop(opts = {}) {
   }
 
   // --- 5. 子智能体角色契约 + 宿主 Adapter 一致性 + 旧委派残留 + 钉死模型 [warning] ---
+  markGate('5', '角色契约与宿主 Adapter');
   {
     const cmdFiles = () => (readdirOrNull(path.join(ROOT, '.agents', 'commands')) || [])
       .filter((f) => f.endsWith('.md')).map((f) => `.agents/commands/${f}`);
@@ -567,6 +601,7 @@ export function runCheckLoop(opts = {}) {
   }
 
   // --- 6. 阶段索引同步 [warning] ---
+  markGate('6', '阶段索引同步');
   for (const cmd of ['plan', 'design', 'build', 'test', 'deploy', 'maintain', 'review']) {
     for (const doc of ['AGENTS.md', '.agents/commands/new-task.md']) {
       // existsSync 守卫（2026-10-06-check19-entry-enoent 同类）：两文件可合法缺失（下方 text 判空本就
@@ -718,6 +753,7 @@ export function runCheckLoop(opts = {}) {
   }
 
   // --- 8. intent 验收标准对账（done 须逐条勾验并补证据；新建 hard，存量聚合 warning）---
+  markGate('8', '验收标准对账');
   // 生效日锚 2026-09-28 改「git 首次加入日期」（此前取文件名前 10 字符——命名规范强制的字段、
   // 写早零成本，见 incidents/2026-09-28-check8-git-anchor）。非 git → 不可判定 → 走存量口径（不误报 hard）。
   {
@@ -826,6 +862,7 @@ export function runCheckLoop(opts = {}) {
   }
 
   // --- 10. 级别 vs 迁移文件一致性 [warning]（启发式：入口文档加入提交触及迁移 SQL/Migrations → 疑似判低；非 git 跳过）---
+  markGate('10', '级别 vs 迁移文件');
   if (gitOut(['rev-parse', '--git-dir']) !== null) {
     const log = gitOut(['log', '--diff-filter=A', '--format=@%H', '--name-only']);
     if (log !== null) {
@@ -855,6 +892,7 @@ export function runCheckLoop(opts = {}) {
   }
 
   // --- 14. 新 done 的 spec/plan 须有确认留痕：git 历史「状态: approved」 或 confirmations.jsonl 台账 approved 行 [warning]（恒 advisory；非 git 跳过）---
+  markGate('14', '确认留痕（approved 快照）');
   // 2026-10-08 papercuts-cleanup-batch 修 3：两跳确认同批提交时 git 历史不出现行首「状态: approved」曾误报，
   // 而台账已证明两跳均走（2026-09-28-adopter-derivers 实证）——判据改 OR 并集（git 判据保留不弱化，
   // 台账为第二通道；确认事件以台账为准）。台账伪造面由检查 15 指纹 hard 门把关，本修仅消 advisory 误报。
@@ -896,6 +934,7 @@ export function runCheckLoop(opts = {}) {
   // --- 15. 确认指纹对账 [hard-block]（2026-09-26 confirm-gate-machine；2026-09-27 confirm-gate-delegated 两形态；
   //     生效日锚 2026-09-28 改台账 ts——此前锚取自文档自报「日期/发现」，新档只要把日期写早即整段跳过判定，
   //     incident 2026-09-28-confirm-gate-effective-date-anchor 实证）---
+  markGate('15', '确认指纹对账');
   // 确认两形态（confirm-doc.mjs）：TTY 亲手键入「可以」/ --delegated 对话委托代录（用户对话内明确放行后
   // AI 代录，台账行如实记 source=chat-delegated + quote 原话，永不伪装 TTY）。intents/specs/plans 凡
   // approved/done 须有 confirm-doc 产生的 frontmatter 确认指纹 + 台账（.agents/confirmations.jsonl）
@@ -1013,6 +1052,7 @@ export function runCheckLoop(opts = {}) {
   }
 
   // --- 16. 量化断言指标签名对账 [warning]（2026-09-28 claim-exceeds-fix；登记表单源 .agents/metric-claims.txt）---
+  markGate('16', '量化断言签名对账');
   // 判据要点：活跃态文档（draft/approved/open）中的 `{{指标名}}`（小写点分）签名须替换为实时值，留签名=未回填=
   //   warning；只查显式签名、不全文扫数字（历史叙述假阳性恒 0）；未登记签名 / 取数器缺失 → fail-loud 出账；
   //   登记表缺失 → 静默跳过（未启用该检查的装户零噪声）；装户自有指标走 .agents/metric-derivers.cjs（CJS 契约，
@@ -1023,6 +1063,7 @@ export function runCheckLoop(opts = {}) {
   runCheck16({ ROOT, ENUMS, docFiles, fmGet, inSet, isTracked, linesOf, readdirOrNull, warnings });
 
   // --- 17. 发版提交树上仍未收口的 intent/spec/plan [hard-block] ---
+  markGate('17', '发版树未收口文档');
   // 最近一次 package.json version 发生变化的提交里，当时状态已是 draft 或 approved 的
   // intent/spec/plan，被扫描的树上仍是 draft 或 approved 则阻断。
   // 当时已是 draft：不看版本锚。当时已是 approved：只在发版版本大于
@@ -1062,6 +1103,7 @@ export function runCheckLoop(opts = {}) {
   }
 
   // --- 18. 委派台账对账 [warning] ---
+  markGate('18', '委派台账对账');
   // L2/L3 的 intent、spec、plan 状态为 done，或同级别 incident 状态为 fixed 或 closed 时，
   // 「委派结果」表与「自做任务结果」表均没有日期不早于文档日期、且含该文件名（带/不带 .md 均匹配）的一行，则警告。
   // 缺级别、缺日期、以及其他状态不警告。audit:false 时 warnings.push 已被换成空函数。
@@ -1091,6 +1133,7 @@ export function runCheckLoop(opts = {}) {
   }
 
   // --- 19. 逐阶段审计 [warning]（2026-09-30 stage-gate-machine；口径与 stage-gates.mjs / fill-* / confirm-doc 前置门互引） ---
+  markGate('19', '逐阶段审计');
   // 判据 A（在途扫描）：同名 spec/plan 为 draft 且其日期 ≥ stageGateSince 时——入口未确认（intent：状态非
   //   approved/done、或缺台账行且非存量；incident：「时间线」小节缺行首「用户确认」条目）→ warning；
   //   入口缺合法「级别」→ warning（与起草门 fail-closed 同口径，2026-09-30 复核 P2-7）；
@@ -1266,6 +1309,7 @@ export function runCheckLoop(opts = {}) {
   }
 
   // --- 20. 引擎脚本测试覆盖 [warning]（2026-10-01 gate-script-test-coverage；仅包源环境） ---
+  markGate('20', '引擎脚本测试覆盖');
   // 包源开发纪律：templates/_agents/scripts/ 下每个非 *.test.mjs 引擎脚本须有同名兄弟 .test.mjs，
   // 或在 .agents/scripts-test-exempt.txt 登记豁免（managed 下发）。装户（无 templates/）整体跳过。
   {
@@ -1289,6 +1333,9 @@ export function runCheckLoop(opts = {}) {
   }
 
   // --- 输出（banner 沿 sh 版字样与格式 = 稳定输出契约：banner 后空行、条目 '- ' 前缀）---
+  // 门禁 ROI 收口（2026-10-08 gate-roi-metrics）：末段结算（末段之后无下次 gateSeg 调用）+ 可选落盘。
+  // ⚠️ 结算在输出**之前**：否则检查 20 之后的段不计入。落盘只在 --gate-stats 时发生。
+  if (opts.gateStats) writeGateStats(ROOT, finishSegs(gateStats));
   if (blockers.length) {
     process.stderr.write(`闭环骨架断档（check-loop.sh）— HARD-BLOCK:\n\n${blockers.join('\n')}\n\n`);
     if (warnings.length) process.stderr.write(`WARN（advisory,不阻断）:\n\n${warnings.join('\n')}\n`);

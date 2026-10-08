@@ -10,7 +10,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const { closeDurations, pickPct, durationVerdict, qualityRows, DURATION_BAND, normalizeForCheck } =
+const { closeDurations, pickPct, durationVerdict, qualityRows, DURATION_BAND, normalizeForCheck, gateRoiLines } =
   await import(pathToFileURL(path.join(SCRIPT_DIR, 'gen-workflow-dashboard.mjs')).href);
 const agg = (await import(pathToFileURL(path.join(SCRIPT_DIR, 'agg-delegations.cjs')).href)).default
   ?? null; // .cjs 经 import 具名空间取——见下方 createRequire 兜底
@@ -150,6 +150,38 @@ const INTENT = (fm) => `---\n${fm}\n---\n# INTENT — x\n`;
     rDrift.status === 1 && /首个差异在第 \d+ 行/.test(rDrift.stderr || '') && /gen-workflow-dashboard\.mjs 重新生成/.test(rDrift.stderr || ''), `status=${rDrift.status} ${rDrift.stderr || ''}`);
   const noWrite = fs.readFileSync(path.join(root, 'workflow', 'DASHBOARD.md'), 'utf8');
   check('--check 端到端：不写盘（漂移态下盘面保持原样）', noWrite.includes('<!-- drift -->'));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- ⑤ 门禁 ROI 节（2026-10-08 gate-roi-metrics）----
+// 本节存在的核心断言不是「有数值」，而是「**不因运行数据而漂移」**：DASHBOARD 被检查 11 --check 覆盖，
+// 采集数值每跑一次门禁就变一次——铺进去等于每次采集必报一条漂移 WARN（不可消除噪声）。
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-dash-roi-'));
+  W(root, 'workflow/intents/2026-10-01-x.md', INTENT('状态: done\n级别: L1\n日期: 2026-10-01\n模块: pipeline'));
+  const gen = path.join(SCRIPT_DIR, 'gen-workflow-dashboard.mjs');
+  const run = (...args) => spawnSync(process.execPath, [gen, ...args], { cwd: root, encoding: 'utf8', env: { ...process.env, CHECK_LOOP_ROOT: root } });
+  const dashOf = () => fs.readFileSync(path.join(root, 'workflow', 'DASHBOARD.md'), 'utf8');
+
+  // 无采集态（先于造 cache 生成）：节恒为静态文案，故与有无数据无关
+  const rl = gateRoiLines();
+  check('门禁ROI：节内容给出采集命令 + 看数值命令 + 无数据时 CLI 自带「未采集」提示（优雅降级不落空节）',
+    rl.join('\n').includes('check-loop.mjs --gate-stats') && rl.join('\n').includes('agg-gate-stats.mjs') && rl.join('\n').includes('未采集'), rl.join('\n'));
+  check('门禁ROI：节内容不含任何耗时/次数运行数值（防检查 11 每次采集报漂移的设计核心）',
+    !/\d+\s*(ms|s)\b/.test(rl.join('\n')) && !/运行\s*\d/.test(rl.join('\n')), rl.join('\n'));
+  run();
+  const dash0 = dashOf();
+  check('门禁ROI：生成物含该节 + 耗时口径显式声明「含子进程」防误读',
+    dash0.includes('## 门禁 ROI') && dash0.includes('含子进程时间'), dash0.slice(-800));
+
+  // 采集数据从无到有 → DASHBOARD 必须仍一致：这是本节设计的核心钉子
+  const cacheRel = path.join(root, '.agents', 'cache', 'gate-stats.jsonl');
+  fs.mkdirSync(path.dirname(cacheRel), { recursive: true });
+  fs.writeFileSync(cacheRel, JSON.stringify({ ts: '2026-10-08T00:00:00Z', segs: [{ id: '8', warns: 3, ms: 11809 }], totalMs: 11809 }) + '\n');
+  check('门禁ROI：采集数据「从无到有」后 --check 仍 exit 0', run('--check').status === 0, `status=${run('--check').status}`);
+  fs.appendFileSync(cacheRel, JSON.stringify({ ts: '2026-10-08T01:00:00Z', segs: [{ id: '8', warns: 9, ms: 99 }], totalMs: 99 }) + '\n');
+  check('门禁ROI：采集数据「再变一次」后 --check 仍 exit 0 且盘面字节恒等（零新增漂移源）',
+    run('--check').status === 0 && dashOf() === dash0, `status=${run('--check').status}`);
   fs.rmSync(root, { recursive: true, force: true });
 }
 

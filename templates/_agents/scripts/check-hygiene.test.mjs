@@ -53,7 +53,7 @@ function makeCtx(root, overrides = {}) {
   };
   const readdirOrNull = (dir) => { try { return fs.readdirSync(dir); } catch { return null; } };
   const kitPolicy = { moduleSince: '2026-09-22', ...(overrides.kitPolicy || {}) };
-  return { root, WF, DOC_DIRS, docFiles, linesOf, fmGet, isTracked, readdirOrNull, kitPolicy };
+  return { root, WF, DOC_DIRS, docFiles, linesOf, fmGet, isTracked, readdirOrNull, kitPolicy, ...overrides };
 }
 
 const W = (root, rel, content) => {
@@ -149,6 +149,33 @@ const DOC = (fm, body = '# T\n') => `---\n${fm}\n---\n${body}`;
   check('检查 20：本套件与被测模块同名兄弟（否则检查 20 出账）', found);
   const r = spawnSync(process.execPath, ['--check', path.join(SCRIPT_DIR, 'check-hygiene.mjs')], { encoding: 'utf8' });
   check('被测模块语法有效', r.status === 0, r.stderr || '');
+}
+
+// ---- 门禁 ROI 段归属（2026-10-08 gate-roi-metrics，实仓抓到的错账根因）----
+// 症状：本模块的 warnings 是**局部数组**（check-loop 事后才 spread 进全局），若段增量记在全收集器上，
+//   本模块 5 段恒记 0 命中、且全部增量被误记到模块之后的第一个段（检查 3）。修复 = 局部收集器 + appendSegs。
+// 本组断言在**模块层**钉死归属：检查 2 与检查 9 各产 1 条，必须各归各的段，不得漂到别的段上。
+{
+  const { makeCollector, finishSegs } = await import(pathToFileURL(path.join(SCRIPT_DIR, 'gate-seg.mjs')).href);
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-hygroi-'));
+  W(root, 'workflow/intents/2026-10-01-ph.md', DOC('状态: done\n级别: L1\n日期: 2026-10-01\n模块: pipeline', '# I\n日期: YYYY-MM-DD\n'));
+  W(root, 'workflow/intents/2026-10-01-中文名.md', DOC('状态: done\n级别: L1\n日期: 2026-10-01\n模块: pipeline'));
+  // 全局收集器挂在**空数组**上：若模块错误地用全局数组做 Δ 源，两条警告一条都不会被算进去。
+  const globalStats = makeCollector([], []);
+  const r = runCheckHygiene(makeCtx(root, { gateStats: globalStats }));
+  const segs = globalStats.segs;
+  const byId = new Map(segs.map((s) => [s.id, s.warns]));
+  const hits = r.length;
+  check('段归属：本模块 5 段全部入账（2/9/11/12/13）',
+    segs.map((s) => s.id).join(',') === '2,9,11,12,13', JSON.stringify(segs.map((s) => s.id)));
+  check('段归属：各段增量之和 == 本模块实际产出条数（无漏记无重复记）',
+    segs.reduce((a, s) => a + s.warns, 0) === hits && hits === 2, `segs=${JSON.stringify(segs)} hits=${hits}`);
+  check('段归属：检查 2 / 检查 9 各归 1 条（**不都堆到末段**——本次实抓的错账形态）',
+    byId.get('2') === 1 && byId.get('9') === 1 && byId.get('11') === 0 && byId.get('12') === 0 && byId.get('13') === 0,
+    JSON.stringify(segs));
+  check('段归属：并入后全局游标清空（check-loop 随后的 markGate 从零起算）', globalStats.current === null);
+  check('段归属：finishSegs(全局) 幂等，不产生额外伪段', finishSegs(globalStats).length === segs.length);
+  fs.rmSync(root, { recursive: true, force: true });
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

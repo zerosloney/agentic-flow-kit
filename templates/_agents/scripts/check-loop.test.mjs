@@ -2819,5 +2819,40 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   rmfix(T);
 }
 
+// ---- 门禁 ROI 插桩（2026-10-08 gate-roi-metrics）----
+// 断言两件事：① 默认路径不落盘、stderr 无 gate-stats 行（输出契约零污染）；
+//           ② --gate-stats 落一行 jsonl 且段覆盖全部检查（判据不漏插）。
+// 既有 223 条断言零改动本身即最强钉子——任何 push 到 warnings 的插桩副作用都会把它们打红。
+{
+  const T = mkfix();
+  const statsRel = path.join('.agents', 'cache', 'gate-stats.jsonl');
+  const plain = run(T);
+  check('门禁ROI：默认路径不落 gate-stats.jsonl（统计默认静默）',
+    !fs.existsSync(path.join(T, statsRel)), outOf(plain));
+  check('门禁ROI：默认路径 stderr 无 [gate-stats] 摘要行（稳定输出契约零污染）',
+    !outOf(plain).includes('[gate-stats]'), outOf(plain));
+  const before = fs.existsSync(path.join(T, statsRel)) ? fs.readFileSync(path.join(T, statsRel), 'utf8') : '';
+
+  const st = run(T, { args: ['--gate-stats'] });
+  check('门禁ROI：--gate-stats → 落盘 + stderr 摘要行', fs.existsSync(path.join(T, statsRel)) && outOf(st).includes('[gate-stats]'), outOf(st));
+  const lines = fs.readFileSync(path.join(T, statsRel), 'utf8').split('\n').filter(Boolean);
+  check('门禁ROI：--gate-stats 只 append 一行（每跑一次门禁 = 一条记录）',
+    lines.length === 1 && !before, `lines=${lines.length} before=${before.length}`);
+  let row = null;
+  try { row = JSON.parse(lines[0]); } catch { /* 留给下一条断言报错 */ }
+  const ids = row && Array.isArray(row.segs) ? row.segs.map((s) => String(s.id)) : [];
+  const uniq = new Set(ids);
+  check('门禁ROI：段 id 唯一且覆盖 19 个插桩点（14 主流程 + 5 hygiene 模块），无重复插桩',
+    ids.length === 19 && uniq.size === 19, `ids=${ids.join(',')}`);
+  const expected = ['1','2','3','4','5','6','8','9','10','11','12','13','14','15','16','17','18','19','20'];
+  check('门禁ROI：段 id 集合 == 现有检查编号（不新增/不遗漏检查项编号）',
+    expected.every((e) => uniq.has(e)) && uniq.size === expected.length, `got=${[...uniq].sort().join(',')}`);
+  check('门禁ROI：每段都有 label + 非负 ms（成本度量的地基）',
+    row && row.segs.every((s) => s.label && Number(s.ms) >= 0 && Number.isInteger(Number(s.ms))), JSON.stringify(row && row.segs.slice(0, 3)));
+  check('门禁ROI：行顶层含 ts / root / totalMs（聚合器的窗口过滤依赖 ts）',
+    row && typeof row.ts === 'string' && typeof row.root === 'string' && Number(row.totalMs) >= 0, JSON.stringify({ ts: row && row.ts, totalMs: row && row.totalMs }));
+  rmfix(T);
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

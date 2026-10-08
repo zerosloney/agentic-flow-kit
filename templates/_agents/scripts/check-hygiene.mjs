@@ -23,12 +23,25 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { gateSeg, finishSegs, makeCollector, appendSegs } from './gate-seg.mjs';
+
+// 门禁 ROI 插桩（2026-10-08 gate-roi-metrics）：本模块承载的检查 2/9/11/12/13 同样需要计入门禁成本
+// 统计——尤其检查 11（调两个生成器 --check 的 spawn 子进程）与检查 13（调 sh rule-budget.sh）是耗时大户，
+// 不插桩就等于把最贵的两段排除在度量之外。collector 由 check-loop 传入（它持有全局 warnings/blockers），
+// 未传时跳过插桩（纯函数直测场景零副作用）。判据单源见 gate-seg.mjs。
 
 export function runCheckHygiene(ctx) {
   const { root: ROOT, WF, DOC_DIRS, docFiles, linesOf, fmGet, isTracked, readdirOrNull, kitPolicy } = ctx;
   const warnings = [];
+  // ⚠️ 插桩记在**本模块的局部数组**上，不是 ctx.gateStats 的全局数组——本模块产出的是局部 warnings，
+  // 由 check-loop 在返回后才 spread 进全局；执行期间全局长度不动，直接共用游标会导致确定的错账
+  // （本模块 5 段恒记 0 命中，全部增量被误记到模块之后的第一个段即检查 3 头上；实测已抓到该症状）。
+  // 末尾用 appendSegs 把结算好的段按序并入全局收集器——它会先结算模块前的那一段（如检查 1）再清游标。
+  const localStats = makeCollector(warnings, []); // 本模块只产 warnings，不产 blockers
+  const markGate = (id, label) => { if (ctx.gateStats) gateSeg(localStats, id, label); };
 
   // --- 2. 模板字段占位符残留 [warning]（排除运行时文件名格式与协议样板，口径沿 sh 版）---
+  markGate('2', '模板字段占位符残留');
   {
     const phRe = /YYYY-MM-DD|<主题>|<日期 主题>|L0 \/ L1 \/ L2 \/ L3|draft \/ approved \/ done|open \/ fixed \/ closed/;
     const boilerRe = /\.\.\/specs\/[A-Za-z0-9-]*\.md|写明如何满足|防复发验证|_YYYY-MM-DD\.|format\('YYYY-MM-DD'\)|value-format="YYYY-MM-DD"|确认结果：approved（YYYY-MM-DD 用户对话内确认）；done（YYYY-MM-DD 关单，随入口文档置终态）/;
@@ -73,6 +86,7 @@ export function runCheckHygiene(ctx) {
   }
 
   // --- 9. 文件名英文 kebab-case [warning] ---
+  markGate('9', '文件名 kebab-case');
   for (const sub of DOC_DIRS) {
     const dir = path.join(ROOT, WF, sub);
     for (const f of readdirOrNull(dir) || []) {
@@ -86,6 +100,7 @@ export function runCheckHygiene(ctx) {
   }
 
   // --- 11. 生成物漂移 [warning]（调生成器 --check，口径单一不复刻渲染）---
+  markGate('11', '生成物漂移（INDEX+DASHBOARD）');
   // ⚠️ 位置：本段须排在 12/13 之前——check-loop 输出按 warnings 插入序，行序是稳定输出契约
   // （pre-push / pre-commit 消费者 + doctor 按 WARN 行计数）；原序为 2 → 9 → 11 → 12 → 13，勿调换。
   // 两个生成物各自独立出账：漂移来源不同、修复命令不同，混成一条会让装户猜该跑哪个。
@@ -108,6 +123,7 @@ export function runCheckHygiene(ctx) {
   }
 
   // --- 12. frontmatter「模块:」合法性 [warning]（词表单源；缺字段只对 2026-09-22 起新建提示）---
+  markGate('12', '模块枚举合法性');
   {
     const modsFile = path.join(ROOT, '.agents', 'workflow-modules.txt');
     if (fs.existsSync(modsFile)) {
@@ -130,6 +146,7 @@ export function runCheckHygiene(ctx) {
   }
 
   // --- 13. 常驻面体积预算 [warning]（判定单源 rule-budget.sh；无 sh 环境静默跳过——advisory，pre-commit 硬拦兜底）---
+  markGate('13', '常驻面体积预算');
   {
     const rb = path.join(ROOT, '.agents', 'scripts', 'rule-budget.sh');
     const budgets = path.join(ROOT, '.agents', 'rule-budgets.txt');
@@ -141,6 +158,10 @@ export function runCheckHygiene(ctx) {
       }
     }
   }
+
+  // 并入全局收集器（仅显式插桩时）：把本模块 5 段按序插到「模块前的那一段」之后，
+  // 游标由 appendSegs 清空 → check-loop 随后的 markGate('3', …) 从零起算，Δ 天然正确。
+  if (ctx.gateStats) appendSegs(ctx.gateStats, finishSegs(localStats));
 
   return warnings;
 }

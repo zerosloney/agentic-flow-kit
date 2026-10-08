@@ -109,12 +109,20 @@
       "sha256": "49ca9635873a78482b65e90676084a821711d3202dba097a1e564afcfc8b7551"
     },
     {
+      "rel": ".agents/scripts/agg-gate-stats.mjs",
+      "sha256": "488517dfdc37b79b327e1f47603c94fc1fc236145d12df213e6ce2de60f11730"
+    },
+    {
+      "rel": ".agents/scripts/agg-gate-stats.test.mjs",
+      "sha256": "87904e12d93908bb6b816bbb2a8997f134ba8086bc5a0e161fc67c18a15a28ac"
+    },
+    {
       "rel": ".agents/scripts/check-hygiene.mjs",
-      "sha256": "5bb52b73c41ec63e4541f7b03e7a9b3bd3b9c9d78ec029f261921699afd9b0ad"
+      "sha256": "5ea7cfbb165221ed31a11aadec0c64d6f73f9fc4896673c94d26f9d292538f11"
     },
     {
       "rel": ".agents/scripts/check-hygiene.test.mjs",
-      "sha256": "5f6e730bc3bfe9f984048d1b426926cb0e3eed19556a27497a4ce4bb9fa269d1"
+      "sha256": "d9a1acb327349e814df511582c9e926931a7085077bb0e81f9a389bd9335c371"
     },
     {
       "rel": ".agents/scripts/check-lane-surface.mjs",
@@ -150,7 +158,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "d54da6c3555150317b1c3b7f1c39178e6945e2061b09eeadc109db13bbf684c2"
+      "sha256": "64414248c9f7d5c87aeff66c31ec9b7dd95122bc1140d7f0b45e3e6df7e01d53"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -158,7 +166,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "3b235c73bc72b4bde002d8f119f08e14bca3cfc7196493ffe1d021ce8918b37d"
+      "sha256": "191ab14771f1f79060d1b6e0c404ca7cd8d00cf3aa5add76aae9a83b3ad9c6de"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -217,6 +225,14 @@
       "sha256": "588e3cabb6b5e76bf417c5c495c027f233f2924b53208f32cfa643d7b56201c7"
     },
     {
+      "rel": ".agents/scripts/gate-seg.mjs",
+      "sha256": "b579593ff67e7876e4e1051f62c9a7451032fb2255a2efe5e437a6a2e2c1ce9f"
+    },
+    {
+      "rel": ".agents/scripts/gate-seg.test.mjs",
+      "sha256": "13c7366e9e0a96977656765b35bcd522e7561c8cd377f3b385bacb5e2f5b8d93"
+    },
+    {
       "rel": ".agents/scripts/gen-wiki-board.mjs",
       "sha256": "0bfa4bbb2d2546533232e257fcf2460f561001893e036ad3022b641dbb2cc31c"
     },
@@ -226,11 +242,11 @@
     },
     {
       "rel": ".agents/scripts/gen-workflow-dashboard.mjs",
-      "sha256": "147eb1f50dd460b3009839fcb1e5b92825e9fd7bf35b1dc92449176e7956fc8d"
+      "sha256": "f5b6c1c2804b8ce5fa2d7bfb9ce33608e6e67082c702c06261a34d2174a0e1d4"
     },
     {
       "rel": ".agents/scripts/gen-workflow-dashboard.test.mjs",
-      "sha256": "4c16a0fe2047fc051576308a557303e821d8f83cc3ce2e07c3592f14f3105257"
+      "sha256": "792e8266f8a34ff5ac7769171e31de1cd4523583be1b0bba9eaad232630b5a5b"
     },
     {
       "rel": ".agents/scripts/gen-workflow-index.mjs",
