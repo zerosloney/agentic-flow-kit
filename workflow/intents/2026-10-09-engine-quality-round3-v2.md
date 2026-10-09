@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-09
 模块: pipeline
 备注: round3 重立单（漏勾全量门条即 done 触发双 hard 死锁——实现已交付 3817ea7，重走关单）
-确认指纹: 106f9edc9f7041a6
+确认指纹: 34ccc819b172add6
 ---
 # INTENT — engine-quality-round3-v2
 
