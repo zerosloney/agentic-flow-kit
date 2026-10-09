@@ -60,6 +60,13 @@
 //      按 prev 复原跳转前文本重算 sha256 与台账全量比对,不符=hard「确认内容漂移」;状态行保分隔符换值
 //      (非规范格式不误伤);台账行缺 prev 降级 warning;关单编辑顺序新约定:勾验/回填先于关单确认,
 //      confirm-doc 是最后一次写入)
+//      + scope 子项(2026-10-09 审查 A1 干净版):受管行(ts≥policy.scopeSince,**时刻**锚,缺键 v1-v6 整体跳过
+//      →存量 406 行零新增告警)须带机器派生的改动面 scope{files,sha256}——写入侧 confirm-doc.machineScope
+//      自动派生(被确认文档 + `git status --porcelain` 未提交改动集),**AI 无输入面**,分辨力从
+//      「一句可复用的用户原话」换成「机器实测的这 N 个文件」。判据:缺 scope→warning(灰度第一档);
+//      scope.files 重算 sha256 不符→hard(「改了 files 没改摘要」= 同一信任边界内手改痕迹,兜住整文件
+//      重写重建链后的二次篡改)。**边界**:scope 证「放行时盘面上哪些文件在动」,不证「这些改动语义正确」
+//      ——后者由 fingerprint(文档内容绑定)+ commit diff(事后对质)承担,不越界宣称
 //      + 并录批次审计子检查(2026-09-28 batch-ledger-audit 改判据;**读调用事实,不猜时间戳模式**):
 //      判据 = 台账行按 batch 分组、组内 of>1(delegated 行) → warning「确认并录」;batch/seq/of 由
 //      confirm-doc 写入时记录(那才是"本次调用落几份"确定已知的时刻)。旧判据「同 quote + 相邻 ts<2s」
@@ -111,7 +118,7 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { loadEnums } from './workflow-enums.mjs';
 import { runCheck16 } from './check-metric-claims.mjs';
-import { auditEnabled, loadKitPolicy, hasFreshVerifyLine, ledgerChainHash } from './policy.mjs';
+import { auditEnabled, loadKitPolicy, hasFreshVerifyLine, ledgerChainHash, scopeMatches } from './policy.mjs';
 import { laneOfEntry } from './stage-gates.mjs';
 // MARK_RE：incident 留痕形态的单源（第七轮复核 N3——此前 check-loop 内联复制一份同口径字面量，
 // 两处靠注释与人工同步；改为复用 stage-gates.mjs 的导出，从结构上消除漂移可能）
@@ -1004,6 +1011,39 @@ export function runCheckLoop(opts = {}) {
       if (brokenAt) {
         const physical = brokenAt + ledgerBadLines.filter((n) => n <= brokenAt).length; // 物理行号（复核 P2-1：剔除坏行会令数组下标漂移）
         blockers.push(`- [台账链断裂] confirmations.jsonl 自第 ${physical} 行（物理）起哈希链校验失败（共 ${brokenCount} 行不一致——append-only 台账出现就地改/删痕迹；prevHash 接续或内容重算不符。整文件重写不可机器防，对质走台账自身 git 历史）`);
+      }
+    }
+    // scope 子项（2026-10-09 审查 A1 干净版）：受管台账行须带**机器派生**的改动面 scope{files,sha256}。
+    // 背景：委托代录的授权凭据原是 `--delegated` 的用户原话——自由文本机器不可校验、AI 可零成本复用
+    //   （本仓实测「可以」133 次、「确认」60 次，406 行里仅 6 行 tty），整条授权链源头不可核对。
+    //   干净版把分辨力从「一句说过的话」换成「机器实测的这 N 个文件」：写入侧 confirm-doc.machineScope
+    //   自动派生（被确认文档 + `git status --porcelain` 未提交改动集），AI 无输入面。
+    // 判定（scopeSince 生效**时刻**锚，缺键 v1-v6 整体跳过——存量行零新增告警、不追溯）：
+    //   ① 缺 scope → warning（灰度第一档：新机制先观察，升 hard 走后续 policyVersion 演进）
+    //   ② scope 存在但按其 files 重算 sha256 不符 → hard-block（「改了 files 没改摘要」= 同一信任
+    //      边界内的手改痕迹；哈希链本已覆盖就地改，本项兜住「整文件重写重建链」后二次篡改的场景）
+    // 注：scope 证明的是「放行时盘面上哪些文件在动」，**不是**「这些改动语义正确」——后者由 fingerprint
+    //   （文档内容绑定）+ commit diff（事后对质）承担。不越界宣称（沿本检查既有口径纪律）。
+    {
+      const since = loadKitPolicy(ROOT).scopeSince;
+      if (typeof since === 'string' && Number.isFinite(Date.parse(since))) {
+        const sinceT = Date.parse(since);
+        const missing = [];
+        const mismatched = [];
+        for (const row of ledger) {
+          if (!row || typeof row.ts !== 'string') continue;
+          const t = Date.parse(row.ts);
+          if (!Number.isFinite(t) || t < sinceT) continue; // 存量豁免（不追溯）
+          const name = row.doc || '(未知 doc)';
+          if (!row.scope) { missing.push(name); continue; }
+          if (!scopeMatches(row)) mismatched.push(name);
+        }
+        if (missing.length) {
+          warnings.push(`- [WARN 缺机器改动面] ${missing.length} 条受管台账行无 scope 字段（${missing.slice(0, 3).join('、')}${missing.length > 3 ? ' …' : ''}）——confirm-doc 落账自动派生 scope；此形态多见于手工/旧脚本写的行，advisory 不阻断`);
+        }
+        if (mismatched.length) {
+          blockers.push(`- [台账 scope 失配] ${mismatched.length} 条受管台账行的 scope.sha256 与其 files 重算不符（${mismatched.slice(0, 3).join('、')}${mismatched.length > 3 ? ' …' : ''}）——「改了 files 没同步摘要」，同一信任边界内的手改痕迹；对质走台账 git 历史`);
+        }
       }
     }
     // incidents 侧覆盖（2026-09-27 gate-coverage）：fixed/closed 为已确认态（open = 起草态不加门——

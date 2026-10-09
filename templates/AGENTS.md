@@ -28,7 +28,8 @@
 - **`git commit` / `git merge` / `git push` 三处一律禁 `--no-verify`**——被拦说明产出不合规，按提示修完原路重试。
 - 项目专属门禁挂 `.agents/hooks/local-pre-commit`。装户五条硬规则（配对、验收、确认留痕、敏感信息、双源台账）与 `audit` 档见 `workflow/README.md`「硬规则」。
 - 提交遵循 Conventional Commits 中文（feat / fix / docs / style / refactor / perf）。L1+ 三段式闭环链：`docs(*)` approved 留痕 → 代码 → 关单 `docs(*)`，相邻提交即同一闭环（2026-10-04 修订）。
-- **确认门（2026-09-27 起）**：intent/spec/plan 的 approved/done 与 incident 的 fixed/closed（两跳、无单跳）唯一入口 = `node .agents/scripts/confirm-doc.mjs <path>`，放弃态走显式 `--to superseded|cancelled`（合法前态见脚本提示；四终态同样内容绑定），两形态：① 用户终端亲手运行键入「可以」（TTY，AI 会话内被拒）；② **对话委托代录**——用户在对话内明确确认后，AI 跑 `confirm-doc.mjs <path> --delegated "<用户原话>"` 逐件代录（默认一次一份，多份并录被拒），台账如实记 `source: chat-delegated` + 原话供对质，永不伪装 TTY 行（check-loop 15 指纹+台账对账拦截，与 source 无关）；L0/L1 协作道可 `--batch` 多份一次代录（台账 `brief:true`，15 并录告警豁免；L2/L3 仍逐份）。
+- **确认门（2026-09-27 起）**：intent/spec/plan 的 approved/done 与 incident 的 fixed/closed（两跳、无单跳）唯一入口 = `node .agents/scripts/confirm-doc.mjs <path>`，放弃态走显式 `--to superseded|cancelled`（合法前态见脚本提示；四终态同样内容绑定），两形态：① 用户终端亲手运行键入「可以」（TTY，AI 会话内被拒）；② **对话委托代录**——用户在对话内明确确认后，AI 跑 `confirm-doc.mjs <path> --delegated "<授权摘要>"` 逐件代录（默认一次一份，多份并录被拒），台账如实记 `source: chat-delegated`，永不伪装 TTY 行（check-loop 15 指纹+台账对账拦截，与 source 无关）；L0/L1 协作道可 `--batch` 多份一次代录（台账 `brief:true`，15 并录告警豁免；L2/L3 仍逐份）。
+- **改动面 scope = 授权的机器事实（2026-10-09 起）**：confirm-doc 落账自动记 `scope{files,sha256}`（被确认文档 + `git status` 实测未提交改动集，机器派生、**AI 无输入面**）。分辨力由 scope + 指纹承担，`--delegated` 的摘要降级为人类可读留痕——**「每次换一句原话」纪律退役**，复用同一句摘要不再削弱任何判据。check-loop 15 校验受管行带 scope 且摘要自洽（`policyVersion ≥ 7` 起，旧版本与存量行零新增告警）。
 
 ### 检索、看板与量化
 

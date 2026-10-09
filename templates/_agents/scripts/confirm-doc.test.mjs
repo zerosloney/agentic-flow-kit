@@ -13,7 +13,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { computeFingerprint, nextStage, applyTransition, appendLedger, resolveTransition } from './confirm-doc.mjs';
+import { computeFingerprint, nextStage, applyTransition, appendLedger, resolveTransition, machineScope } from './confirm-doc.mjs';
+import { scopeDigest, scopeMatches } from './policy.mjs';
 
 let pass = 0;
 let fail = 0;
@@ -786,6 +787,38 @@ const writeTrust = (root, cfg) => {
   const r43 = runM(mkVerifyRoot(6, green(null)));
   check('S40④ v6 + 不带 doc 的绿行（CI 场景）→ 不给本单背书，advisory 出账',
     r43.status === 0 && /无测试绿凭证/.test(r43.stderr), String(r43.stderr).slice(0, 200));
+}
+
+// ---- S41 台账 scope：机器派生改动面（2026-10-09 审查 A1 干净版）----
+// 背景：委托代录的授权凭据原是 `--delegated` 的用户原话——自由文本机器不可校验、AI 可零成本复用。
+// 干净版把分辨力换成机器派生的 scope{files,sha256}：写入侧机器派生（AI 无输入面），校验侧重算比对。
+// ① 归一与摘要单源（反斜杠 / 前导 ./ / 重复项 / 顺序无关 → 同一摘要）；② scopeMatches 抓「改了 files
+//    没改摘要」；③ 委托落账行带 scope 且含被确认文档；④ 非 git 夹具降级不崩（scope 退化为仅含 doc）。
+{
+  const d = scopeDigest(['b.md', 'a.md', './a.md', 'x\\y.md']);
+  check('S41① scopeDigest 归一：反斜杠→posix、去重、排序无关，摘要自洽',
+    d.files.join(',') === 'a.md,b.md,x/y.md' && d.sha256 === scopeDigest(['x/y.md', 'a.md', 'b.md']).sha256
+      && scopeMatches({ scope: d }), JSON.stringify(d));
+  check('S41② scopeMatches：files 被改而摘要未同步 → 判否',
+    !scopeMatches({ scope: { files: [...d.files, 'zz.md'], sha256: d.sha256 } })
+      && !scopeMatches({}) && !scopeMatches({ scope: { files: d.files } }));
+
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-scope-'));
+  const docP = path.join(root, 'workflow', 'intents'); // 用 intents：无逐阶段前置门，本用例只验 scope 落账
+  fs.mkdirSync(docP, { recursive: true });
+  fs.writeFileSync(path.join(docP, '2026-10-09-s.md'), '---\n状态: draft\n---\n# I\n');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-10-09-s.md', '--delegated', '放行'], { cwd: root, encoding: 'utf8' });
+  const led = readLedgerOf(root);
+  const j = led[led.length - 1];
+  check('S41③ 委托落账行带机器派生 scope：含被确认文档 + 摘要自洽',
+    r.status === 0 && j && j.scope && Array.isArray(j.scope.files)
+      && j.scope.files.includes('workflow/intents/2026-10-09-s.md') && scopeMatches(j),
+    JSON.stringify({ status: r.status, stderr: r.stderr, scope: j && j.scope }));
+  check('S41④ 非 git 夹具降级：machineScope 不崩且仍含 doc（静默退化为无额外改动面，不拒绝关单）',
+    (() => { const s = machineScope(root, 'workflow/intents/2026-10-09-s.md');
+      return Array.isArray(s.files) && s.files.includes('workflow/intents/2026-10-09-s.md') && scopeMatches({ scope: s }); })(),
+    JSON.stringify(machineScope(root, 'workflow/intents/2026-10-09-s.md')));
+  fs.rmSync(root, { recursive: true, force: true });
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

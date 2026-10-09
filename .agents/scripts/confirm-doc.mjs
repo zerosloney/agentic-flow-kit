@@ -38,8 +38,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import { createHash, randomBytes } from 'node:crypto';
+import { spawnSync } from 'node:child_process';
 import { confirmGateFor, doneGateFor, laneOfEntry, laneOfDoc } from './stage-gates.mjs';
-import { loadKitPolicy, hasFreshVerifyLine, ledgerChainHash } from './policy.mjs';
+import { loadKitPolicy, hasFreshVerifyLine, ledgerChainHash, scopeDigest } from './policy.mjs';
 
 // hasFreshVerify(root, doc)：读 <root>/.agents/verifications.jsonl 判 24h 窗口绿行（判定单源
 // policy.hasFreshVerifyLine）。只读，台账缺失/不可读一律 false（=无凭证，advisory 层 fail-open）。
@@ -65,6 +66,33 @@ function docRelOf(root, doc) {
   }
 }
 
+// gitDirtyFiles(root)：机器实测的「工作树处于改动态的文件集合」（已跟踪改动 + 未跟踪新件，gitignore 项天然排除）。
+//   解析 `git status --porcelain`（-z 不用，逐行解析足够；重命名行取 `->` 后段）。
+//   非 git 仓库 / git 不可用 / 命令失败 → []（**静默降级为「无额外改动面」而非假装有**——scope 退化成
+//   只含被确认文档本身，仍然自洽可验；不因探测失败而拒绝关单）。
+function gitDirtyFiles(root) {
+  try {
+    const r = spawnSync('git', ['-C', root, 'status', '--porcelain'], { encoding: 'utf8', timeout: 10_000 });
+    if (r.status !== 0 || !r.stdout) return [];
+    return r.stdout.split(/\r?\n/).filter(Boolean).map((line) => {
+      const p = line.slice(3).trim();
+      const arrow = p.lastIndexOf(' -> ');
+      const rel = arrow >= 0 ? p.slice(arrow + 4) : p;
+      return rel.replace(/^"(.*)"$/, '$1');
+    }).filter(Boolean);
+  } catch {
+    return [];
+  }
+}
+
+// machineScope(root, doc)：落账用的改动面事实（2026-10-09 审查 A1 干净版）。
+//   **AI 无输入面**——files 全部由机器派生（被确认文档 + git 实测工作树改动集），不是调用方能填的参数。
+//   这正是相对旧设计的核心改进：旧的 quote 是 AI 自填的自由文本（可复用、可伪造、机器不可校验）；
+//   scope 是机器事实，AI 填不了假，对质时问的是「这 N 个文件」而非「一句说过的话」。
+//   归一/摘要计算单源在 policy.scopeDigest（check-loop 检查 15 侧校验复用同一实现）。
+export function machineScope(root, doc) {
+  return scopeDigest([docRelOf(root, doc), ...gitDirtyFiles(root)]);
+}
 // computeFingerprint(text)：CRLF 归一 → 剔指纹行 → sha256 hex（64 位）
 export function computeFingerprint(text) {
   const norm = String(text).replace(/\r\n/g, '\n').split('\n')
@@ -360,6 +388,9 @@ if (isMain) {
       }
     }
     const fp = computeFingerprint(text);
+    // 改动面事实（2026-10-09 审查 A1 干净版）：机器派生，三形态（TTY / 委托代录 / AI 自治）一律记入——
+    // TTY 形态同样需要（事后对质问的是「放行时盘面上哪些文件在动」，与谁点的确认无关）。
+    const scope = machineScope(root, doc);
     // AI 自治放行分支（2026-09-30 ai-autonomy-trust）：
     // ① 仅 L0/L1（读 frontmatter「级别」，缺级别按不可自治处理——fail-closed）；
     // ② Level 1：仅 draft→approved；Level 2：draft→approved 与 approved→done；
@@ -378,7 +409,7 @@ if (isMain) {
       appendLedger(root, {
         ts: new Date().toISOString(), doc, stage: target, fingerprint: fp, prev: st,
         source: `ai-auto-trust-L${trustConfig.level}`, quote: `AI 自治放行 (Trust Level ${trustConfig.level})`,
-        batch, seq, of: docs.length,
+        batch, seq, of: docs.length, scope,
       });
       console.log(`✓ ${doc} ${st} → ${target}（指纹 ${fp.slice(0, 16)}，AI 自治已记账：source=ai-auto-trust-L${trustConfig.level}）`);
       confirmed++;
@@ -401,6 +432,9 @@ if (isMain) {
         source: 'chat-delegated', quote: String(delegatedQuote),
         // 调用事实（batch-ledger-audit）：seq=本次调用内件序（从 1），of=本次调用总份数
         batch, seq, of: docs.length,
+        // 改动面事实（A1 干净版）：quote 降级为「人类可读摘要」，分辨力改由 scope（机器派生）+ fingerprint
+        // （文档内容）承担——「不复用同句」纪律据此退役（复用一句摘要不再削弱任何判据）。
+        scope,
         // 简洁审计标记（hybrid-governance-risk-lanes）：L0/L1 协作道行带 brief（quote 仍入账供对质），
         // 检查 15 并录审计对全 brief 批次豁免「确认并录」告警
         ...(low ? { brief: true } : {}),

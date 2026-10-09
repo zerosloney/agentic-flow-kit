@@ -7,7 +7,7 @@
 ## 1. 一句话定位
 
 把软件工程治理（门禁、确认、溯源）编译成「机器可执行的文件系统协议」：AI 干活，机器把门，
-用户只在风险决策点出现。引擎 ~23k 行零运行时依赖纯 JS（node ≥18），75+ 测试套件。
+用户只在风险决策点出现。引擎 ~23k 行零运行时依赖纯 JS（node ≥18），46 测试套件（`npm test` 按盘面 glob 枚举）。
 
 ## 2. 三层分发（引擎如何到达宿主）
 
@@ -79,7 +79,7 @@ gate-seg 插桩（20 段计时/计数）→ `agg-gate-stats`（噪声率 top/死
 
 ## 7. 质量底座
 
-75+ 测试套件；eslint 9 入 npm test 首步（裸 checkout 显式 skip）；零运行时依赖；scripts-test-exempt
+46 测试套件（`npm test` 按 `src/` 与 `templates/_agents/scripts/` 两面 glob 盘面枚举，新增测试文件不会被静默漏挂）；eslint 9 入 npm test 首步（裸 checkout 显式 skip）；零运行时依赖；scripts-test-exempt
 登记制（登记 ≠ 免责，评估定性在案）。
 
 ## 8. 已知边界与缓做项（诚实声明）

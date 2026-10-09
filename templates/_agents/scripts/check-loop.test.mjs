@@ -2940,6 +2940,61 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
 }
 
 
+// ---- 场景 23:台账 scope 子项（2026-10-09 审查 A1 干净版）——缺 scope 出账 / 摘要失配 hard / 存量与旧 policy 零告警 ----
+// 背景：委托代录的授权凭据原是「用户原话」（自由文本、AI 可零成本复用）。干净版改记机器派生的
+// scope{files,sha256}（AI 无输入面），本子项校验受管行带该字段且摘要自洽。
+{
+  const AFTER = '2026-10-09T12:00:00Z'; // ≥ policy v7 scopeSince（生效时刻锚）
+  const BEFORE = '2026-10-01T00:00:00Z'; // 存量（生效前）：豁免、不追溯
+  const { scopeDigest } = await import('./policy.mjs');
+
+  // 23a：受管行缺 scope → advisory 出账（灰度第一档，不阻断）
+  const Ta = mkfix();
+  w(Ta, '.agents/kit.json', '{"policyVersion":7}\n');
+  writeLedger(Ta, [{ ts: AFTER, doc: 'workflow/intents/2026-10-09-a.md', stage: 'approved', fingerprint: 'a'.repeat(64), prev: 'draft', source: 'chat-delegated', quote: '可以' }]);
+  const ra = run(Ta);
+  check('场景 23a 缺机器改动面：受管行无 scope → WARN 出账且不阻断',
+    ra.status === 0 && outOf(ra).includes('缺机器改动面'), `exit=${ra.status}\n${outOf(ra).slice(-400)}`);
+  rmfix(Ta);
+
+  // 23b：scope 存在但摘要与 files 重算不符（「改了 files 没改摘要」）→ hard 阻断
+  const Tb = mkfix();
+  w(Tb, '.agents/kit.json', '{"policyVersion":7}\n');
+  const good = scopeDigest(['workflow/intents/2026-10-09-b.md', 'src/x.mjs']);
+  writeLedger(Tb, [{ ts: AFTER, doc: 'workflow/intents/2026-10-09-b.md', stage: 'approved', fingerprint: 'b'.repeat(64), prev: 'draft', source: 'chat-delegated', quote: '可以', scope: { ...good, files: [...good.files, 'src/悄悄加的.mjs'] } }]);
+  const rb = run(Tb);
+  check('场景 23b scope 摘要失配：files 被改未同步 sha256 → hard 阻断',
+    rb.status !== 0 && outOf(rb).includes('台账 scope 失配'), `exit=${rb.status}\n${outOf(rb).slice(-400)}`);
+  rmfix(Tb);
+
+  // 23c：scope 完整自洽 → 零 scope 告警（断言非恒红）
+  const Tc = mkfix();
+  w(Tc, '.agents/kit.json', '{"policyVersion":7}\n');
+  writeLedger(Tc, [{ ts: AFTER, doc: 'workflow/intents/2026-10-09-c.md', stage: 'approved', fingerprint: 'c'.repeat(64), prev: 'draft', source: 'chat-delegated', quote: '可以', scope: scopeDigest(['workflow/intents/2026-10-09-c.md']) }]);
+  const rc = run(Tc);
+  check('场景 23c scope 自洽：零 scope 告警（断言非恒红）',
+    !outOf(rc).includes('缺机器改动面') && !outOf(rc).includes('台账 scope 失配'), outOf(rc).slice(-300));
+  rmfix(Tc);
+
+  // 23d：存量行（ts < scopeSince）缺 scope → 零告警（生效日锚不追溯，不产不可消除噪声）
+  const Td = mkfix();
+  w(Td, '.agents/kit.json', '{"policyVersion":7}\n');
+  writeLedger(Td, [{ ts: BEFORE, doc: 'workflow/intents/2026-10-01-d.md', stage: 'approved', fingerprint: 'd'.repeat(64), prev: 'draft', source: 'chat-delegated', quote: '可以' }]);
+  const rd = run(Td);
+  check('场景 23d 存量豁免：ts < scopeSince 的行缺 scope → 零告警（不追溯）',
+    !outOf(rd).includes('缺机器改动面'), outOf(rd).slice(-300));
+  rmfix(Td);
+
+  // 23e：旧 policy（v6 无 scopeSince 键）→ 子项整体跳过，存量 406 行零新增告警
+  const Te = mkfix();
+  w(Te, '.agents/kit.json', '{"policyVersion":6}\n');
+  writeLedger(Te, [{ ts: AFTER, doc: 'workflow/intents/2026-10-09-e.md', stage: 'approved', fingerprint: 'e'.repeat(64), prev: 'draft', source: 'chat-delegated', quote: '可以' }]);
+  const re = run(Te);
+  check('场景 23e 旧 policy 跳过：v6 无 scopeSince 键 → 子项整体跳过（装户零新增告警）',
+    !outOf(re).includes('缺机器改动面') && !outOf(re).includes('台账 scope 失配'), outOf(re).slice(-300));
+  rmfix(Te);
+}
+
 // ---- 场景 22:addedDates 持久缓存（2026-10-09 engine-quality-round3 W1）----
 {
   const log = '@2026-10-02T10:00:00+08:00\nworkflow/intents/a.md\nworkflow/plans/a.md\n@2026-10-01T09:00:00+08:00\nworkflow/intents/a.md\n';

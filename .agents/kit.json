@@ -1,7 +1,7 @@
 {
   "kit": "agentic-flow-kit",
-  "version": "1.6.0",
-  "policyVersion": 6,
+  "version": "1.7.0",
+  "policyVersion": 7,
   "audit": true,
   "createdAt": "2026-09-23T15:07:19.753Z",
   "options": {
@@ -158,7 +158,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "6051a4a8ce17cdbb7a1ea577c0234f7d97f1b445d0a3b538079b296cbd0d153f"
+      "sha256": "a3428fa341858fab077a977f73db671c309e73c196bc675629155fc2c154e865"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -166,7 +166,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "6c930900af4a7d91964d57b2e4063946caba462ebdb8a97ec5fe61483f1e191e"
+      "sha256": "d9b3c1b8fd8712e15b7d3678cb17e88f7982b4377203bc304982a7d899449e37"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -186,11 +186,11 @@
     },
     {
       "rel": ".agents/scripts/confirm-doc.mjs",
-      "sha256": "58cf786a067af1d69628e2291a2a2b1dd938381e929a9ec827fa94a4054ea111"
+      "sha256": "af25b8cd4d1bff7dd660fdf3c2dee4ab9aadf2f0c6e1457b2aa64c6571908a4d"
     },
     {
       "rel": ".agents/scripts/confirm-doc.test.mjs",
-      "sha256": "3246a3e703d13eda7d6819b6d6bb859e45f4fa9cd37fee3e2639fd6b1c26526d"
+      "sha256": "2d975dcd09f5f6db15752122645c05550524b7f519f4997a4e704b8a58584239"
     },
     {
       "rel": ".agents/scripts/doctor.test.mjs",
@@ -314,7 +314,7 @@
     },
     {
       "rel": ".agents/scripts/policy.mjs",
-      "sha256": "1d139f64e31ebce8d035b4b018ab92d0eeea6acc6ed5f6c53c692c0dce67acb7"
+      "sha256": "68af46ccf056807e3054a12d9cf6a98dc14822c0dd60b1086d2f5095a8055a4f"
     },
     {
       "rel": ".agents/scripts/pre-push.test.mjs",
@@ -362,11 +362,11 @@
     },
     {
       "rel": ".agents/scripts/verify.mjs",
-      "sha256": "69f57c37d1c1ba0657da24b952f31d0d5a6ce2c3afc015fdd838c334f9dd7501"
+      "sha256": "f15ea9be0d57a11ea0857444eb1d7b818dcb16f714596fa1b339ff283382d665"
     },
     {
       "rel": ".agents/scripts/verify.test.mjs",
-      "sha256": "42155bd7490e165c7956ffde5d9be619b2c14d848e86232dc0607d652a90a7b1"
+      "sha256": "873cc1ec36212afcea227c80b21b202490235e5a7cd9f0162153384be6b63206"
     },
     {
       "rel": ".agents/scripts/wf-journal.mjs",
@@ -509,8 +509,8 @@
     },
     {
       "rel": "AGENTS.md",
-      "sha256": "e364ac3fc17842be02325efcf0dc810af67334ba260b06a792b4632402d28696",
-      "srcSha256": "f660c6299041261e5d0591d4e8babc37a862421ad8ada0bff48e0f55990e6039"
+      "sha256": "b1595f89ef53d1ad8266e716b2d0656e17ea594fba9a8a859c1393e23e84f528",
+      "srcSha256": "b0e3bf6fce4c9b0e67537f4dbaaa5a5e87383213489d6f357856fc289668f65a"
     },
     {
       "rel": "wiki/知识沉淀总览.html",

@@ -3,7 +3,8 @@
 // 断言：①绿路径（假过 + 空夹具闭环）exit 0；②步骤 1 假败 exit 1 且不出全绿；
 // ③步骤 2 配对断裂夹具 exit 1（verify 自身标记断言——孙进程 stdio inherit 输出不进本测试管道）；
 // ④⑤⑥凭证落账三态（绿落 / check-loop 红不落 / 无汇总行省略计数键）；
-// ⑦装户仓（cwd 无 package.json）未给 --test-cmd → 跳过步骤 1、不落凭证、仍跑步骤 2、exit 0。
+// ⑦装户仓（cwd 无 package.json）未给 --test-cmd → 跳过步骤 1、不落凭证、仍跑步骤 2、exit 0；
+// ⑧--doc 绑定五态；⑨⑩嵌套套件同形汇总行不得被误取（计数口径=编排器权威套件数，2026-10-09 审查 P0-2 回归锁）。
 // 用法：node templates/_agents/scripts/verify.test.mjs
 import fs from 'node:fs';
 import os from 'node:os';
@@ -86,7 +87,7 @@ const run = (argv, opts = {}) => spawnSync(process.execPath, [VERIFY, ...argv], 
 // ---- 场景 4：绿路径凭证落账（2026-10-07 verify-evidence）——全绿后 fixture 台账出合法绿行 ----
 {
   const root = mkfix();
-  const r = run(['--test-cmd', `node ${mkCmd(0, '合计: PASS 3 / FAIL 0\n')}`], { env: { ...process.env, CHECK_LOOP_ROOT: root } });
+  const r = run(['--test-cmd', `node ${mkCmd(0, '[run-tests] 合计: SUITES 3 / FAILED 0\n')}`], { env: { ...process.env, CHECK_LOOP_ROOT: root } });
   const vp = path.join(root, '.agents', 'verifications.jsonl');
   const line = fs.existsSync(vp) ? JSON.parse(fs.readFileSync(vp, 'utf8').trim()) : null;
   check('场景 4：全绿 → verifications.jsonl 落绿行（exitCode 0 + 计数捕获）',
@@ -146,7 +147,7 @@ const run = (argv, opts = {}) => spawnSync(process.execPath, [VERIFY, ...argv], 
 
   const rootA = mkfix();
   const rel = 'workflow/intents/2026-10-08-demo.md';
-  const rA = run(['--test-cmd', `node ${mkCmd(0, '合计: PASS 3 / FAIL 0\n')}`, '--doc', rel],
+  const rA = run(['--test-cmd', `node ${mkCmd(0, '[run-tests] 合计: SUITES 3 / FAILED 0\n')}`, '--doc', rel],
     { env: { ...process.env, CHECK_LOOP_ROOT: rootA } });
   const eA = readLast(rootA);
   check('场景 8①：带 --doc → 末行含 doc 且为 posix 相对路径',
@@ -183,6 +184,32 @@ const run = (argv, opts = {}) => spawnSync(process.execPath, [VERIFY, ...argv], 
 
   for (const r of [rootA, rootB, rootC, rootD, rootE]) fs.rmSync(r, { recursive: true, force: true });
   fs.rmSync(bare, { recursive: true, force: true });
+}
+
+// ---- 场景 9 / 10：嵌套套件同形汇总行不得被误取（2026-10-09 审查 P0-2 回归锁）----
+// 缺陷复现：旧判据 pop 通配「合计: PASS n / FAIL n」，而全仓 45+ 套件每个都打印自己那行同形文本，
+// 取到的是字母序最后一个套件的场景数（本仓实况 workflows-check.test.mjs = 15），落进凭证 passed。
+// ⑨ 权威行与同形行并存 → 取权威套件数；⑩ 仅有同形行 → 省略计数键（宁缺勿错，不回退到错的事实）。
+{
+  const root9 = mkfix();
+  const r9 = run(['--test-cmd', `node ${mkCmd(0, '合计: PASS 15 / FAIL 0\n[run-tests] 合计: SUITES 45 / FAILED 0\n')}`],
+    { env: { ...process.env, CHECK_LOOP_ROOT: root9 } });
+  const vp9 = path.join(root9, '.agents', 'verifications.jsonl');
+  const l9 = fs.existsSync(vp9) ? JSON.parse(fs.readFileSync(vp9, 'utf8').trim()) : null;
+  check('场景 9：嵌套套件同形行不被误取，计数取编排器权威套件数',
+    r9.status === 0 && l9 !== null && l9.passed === 45 && l9.failed === 0,
+    `line=${JSON.stringify(l9)}`);
+  fs.rmSync(root9, { recursive: true, force: true });
+
+  const root10 = mkfix();
+  const r10 = run(['--test-cmd', `node ${mkCmd(0, '合计: PASS 15 / FAIL 0\n')}`],
+    { env: { ...process.env, CHECK_LOOP_ROOT: root10 } });
+  const vp10 = path.join(root10, '.agents', 'verifications.jsonl');
+  const l10 = fs.existsSync(vp10) ? JSON.parse(fs.readFileSync(vp10, 'utf8').trim()) : null;
+  check('场景 10：仅有嵌套同形行 → 绿行落盘但省略计数键（不回退到错的事实）',
+    r10.status === 0 && l10 !== null && l10.exitCode === 0 && !('passed' in l10) && !('failed' in l10),
+    `line=${JSON.stringify(l10)}`);
+  fs.rmSync(root10, { recursive: true, force: true });
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

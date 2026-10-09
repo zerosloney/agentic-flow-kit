@@ -95,6 +95,30 @@ export const POLICIES = {
     // 消费方：检查 8 的 verifyDocInWindow（done ts ≥ 本值才启用精确匹配）。
     verifyDocSince: '2026-10-08T09:37:35Z',
   },
+  // 版本 7 = 版本 6 的全部键 + scopeSince（台账「机器派生改动面」的生效时刻，2026-10-09 审查 A1 干净版）。
+  // 背景：委托代录的授权凭据是 `--delegated` 的**用户原话**——机器无法校验自由文本，AI 可无成本复用同一句
+  // （本仓实测「可以」133 次、「确认」60 次），且台账 406 行里仅 6 行为 tty。整条授权链的源头不可核对，
+  // 下游的哈希链/指纹对账/内容绑定全建得很好却是建在空地基上。
+  // 干净版解法：**改动面改由机器派生，AI 无输入面**——confirm-doc 落账时自动记
+  // `scope:{files:[…], sha256}`（被确认文档 + `git status --porcelain` 实测的未提交改动集，归一去重排序后
+  // 取 sha256）。AI 无法伪造这个字段，因为它根本不参与输入；事后对质问的是「这 N 个文件」，而不是一句可复用的原话。
+  // 本版本只加一个开关键：**缺键（v1-v6）时该子检查整体跳过**，存量 406 行零新增告警；抄全键仍是铁律。
+  7: {
+    moduleSince: '2026-09-22',
+    check14Since: '2026-09-26',
+    confirmDocsEffective: '2026-09-27',
+    confirmIncidentsEffective: '2026-09-28',
+    bindingTs: '2026-09-28',
+    check17UnclosedAfter: '0.8.0',
+    stageGateSince: '2026-09-29',
+    riskLevelSince: '2026-10-01',
+    verifySince: '2026-10-07',
+    verifyDocSince: '2026-10-08T09:37:35Z',
+    // 生效「时刻」（ISO 8601，UTC）而非日期：本日 04:29Z 已有一批旧口径台账行写入，日期粒度会把它们
+    // 纳入受审范围产出不可消退告警——沿 v6 verifyDocSince 升级为时刻的同款教训。
+    // 消费方：check-loop 检查 15 的 scope 子项（台账行 ts ≥ 本值才判）。
+    scopeSince: '2026-10-09T11:24:43Z',
+  },
 };
 
 export function loadKitPolicy(root) {
@@ -154,4 +178,29 @@ export function hasFreshVerifyLine(lines, now = Date.now(), doc = null) {
 //   把主动伪造从静默可行抬到必留断链痕迹。
 export function ledgerChainHash(row, prevHash) {
   return createHash('sha256').update((prevHash || '') + JSON.stringify(row)).digest('hex');
+}
+
+// ---- 台账 scope（机器派生改动面，2026-10-09 审查 A1 干净版）----
+// scopeDigest(files) = {files, sha256}：files 归一（反斜杠→posix）、去重、排序；sha256 = files.join('\n') 的摘要。
+// **单源**（confirm-doc 落账侧构造与 check-loop 检查 15 校验侧重算共用——防两处归一/排序口径漂移，
+//   N3 教训同款）：任一侧改了口径而另一侧没改，台账会整体判失效。
+// 边界（诚实声明）：scope 是**机器实测**的「确认时刻工作树处于改动态的文件集合」，不是「本次任务应改什么」
+// 的语义判定——它能证明「你放行时盘面上就是这些文件在动」，不能证明「这些改动就是你要的」。
+// 语义正确性仍由指纹（文档内容）+ commit diff（事后对质）承担。
+export function scopeDigest(files) {
+  const norm = [...new Set((Array.isArray(files) ? files : [])
+    .map((f) => String(f).replace(/\\/g, '/').replace(/^\.\//, ''))
+    .filter(Boolean))]
+    .sort();
+  return { files: norm, sha256: createHash('sha256').update(norm.join('\n'), 'utf8').digest('hex') };
+}
+
+// scopeMatches(row)：台账行自带的 scope 是否与按其 files 重算的结果逐字一致。
+// 用于检出「行里改了 files 却没同步 sha256」的手改形态（哈希链能兜住就地改，但整文件重写可重建链——
+//   同一信任边界内的第二道，见 ledgerChainHash 边界声明）。
+export function scopeMatches(row) {
+  if (!row || typeof row !== 'object' || !row.scope) return false;
+  const s = row.scope;
+  if (!Array.isArray(s.files) || typeof s.sha256 !== 'string') return false;
+  return scopeDigest(s.files).sha256 === s.sha256;
 }

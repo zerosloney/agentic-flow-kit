@@ -9,7 +9,8 @@
 //   一行机器事实 {ts, exitCode:0, suite, passed?, failed?, runId?}——append-only 事实记录，不属裁决
 //   （窗口判定/门禁在消费方 confirm-doc 与 check-loop 检查 8）；消费语义 = 「按门跑了 verify 且全绿」，
 //   裸跑 npm test 不落账（对齐引导）。npm test 步骤输出从 inherit 改 pipe 捕获后回放（延迟显示，
-//   关单场景可接受）——仅为 best-effort 抓「合计: PASS n / FAIL n」计数行，抓不到则省略计数键。
+//   关单场景可接受）——仅 best-effort 抓编排器权威汇总行 `[run-tests] 合计: SUITES n / FAILED m`，
+//   抓不到则省略计数键（宁缺勿错：exitCode 才是硬事实，计数缺失不阻断）。
 // 装户仓（根目录无 package.json，工程在子目录）下默认 npm test 恒 ENOENT（exit 4058）→ **显式跳过步骤 1**
 // 且**不落测试绿凭证**（凭证语义 = 测试真跑绿，跳过即无凭证，防假绿），并提示用
 // --test-cmd "<项目测试命令>" 指定；显式 --test-cmd 不受此判定影响（2026-10-07 papercut）。
@@ -84,8 +85,15 @@ try {
   if (skipTest) {
     console.log('[verify] ⚠️ 步骤 1 已跳过——本次不落测试绿凭证（凭证语义 = 测试真跑绿）');
   } else {
-    const m = [...testStdout.matchAll(/合计: PASS (\d+) \/ FAIL (\d+)/g)].pop();
+    // 计数行**只认编排器权威前缀**（2026-10-09 审查 P0-2）：此前是 pop 通配「合计: PASS n / FAIL n」，
+    // 而全仓 45+ 套件每个都打印自己那行同形文本 → 取到的是字母序最后一个套件的场景数
+    // （本仓实况：workflows-check.test.mjs 的 15），落进「一行机器事实」的 passed 字段。
+    // 改为精确匹配 run-tests.mjs 的专属行 + 套件口径：嵌套套件同形行不再被误取，
+    // 非本编排器口径的 --test-cmd（装户项目自有测试命令）抓不到即省略计数键，不回退到错的事实。
+    const m = [...testStdout.matchAll(/\[run-tests\] 合计: SUITES (\d+) \/ FAILED (\d+)/g)].pop();
     const entry = { ts: new Date().toISOString(), exitCode: 0, suite: 'npm test' };
+    // passed/failed 口径 = **套件**（非断言、非场景）：凭证明此记录的是「跑过多少套、挂了几套」。
+    // 步骤 1 红已在上面 fail-fast 退出，故落账行 failed 恒为 0。
     if (m) { entry.passed = Number(m[1]); entry.failed = Number(m[2]); }
     if (process.env.PIPELINE_RUN_ID) entry.runId = process.env.PIPELINE_RUN_ID;
     // doc 键：未传 --doc 时**不写该键**（不是写 null）——消费方按 doc 精确匹配，undefined 与 null 都恒不命中，
@@ -93,7 +101,7 @@ try {
     if (docRel) entry.doc = docRel;
     fs.mkdirSync(path.join(ROOT, '.agents'), { recursive: true });
     fs.appendFileSync(path.join(ROOT, '.agents', 'verifications.jsonl'), `${JSON.stringify(entry)}\n`);
-    console.log(`[verify] 🧾 测试绿凭证已落账 verifications.jsonl${entry.passed !== undefined ? `（PASS ${entry.passed} / FAIL ${entry.failed}）` : ''}${docRel ? ` 绑定本单 ${docRel}` : '（未带 --doc：不给任何单背书）'}`);
+    console.log(`[verify] 🧾 测试绿凭证已落账 verifications.jsonl${entry.passed !== undefined ? `（套件 ${entry.passed} / FAIL ${entry.failed}）` : ''}${docRel ? ` 绑定本单 ${docRel}` : '（未带 --doc：不给任何单背书）'}`);
   }
 } catch (e) {
   console.error(`[verify] ⚠️ 凭证落账失败（${e.code || e.message}）——不阻断，关单门前置将按无凭证告警`);

@@ -2,6 +2,13 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.7.0
+
+- feat(gate)：**台账 scope —— 授权的机器事实**（2026-10-09 审查 A1 干净版）——委托代录的授权凭据原是 `--delegated` 的用户原话：**自由文本机器不可校验，AI 可零成本复用**（本仓实测「可以」133 次、「确认」60 次，406 行台账仅 6 行 tty），整条授权链的源头不可核对，而下游哈希链/指纹对账/内容绑定全建在空地基上。本版**换掉凭据本身**而非加一道校验：落账自动记 `scope{files,sha256}` = 被确认文档 + `git status --porcelain` 实测的未提交改动集，**机器派生、AI 无输入面**（写入侧 `confirm-doc.machineScope`，三形态 TTY/委托代录/AI 自治一律记）。归一与摘要单源 `policy.scopeDigest`（写入侧与检查 15 校验侧共用，防口径漂移 N3 教训同款）。`quote` 随之降级为人类可读留痕、**不再承担分辨力职责**——AGENTS.md「每次传当次原话、不复用同句」纪律据此退役（一条纪律存在的全部理由消失就该退役，而非留作仪式负担）。检查 15 新增 scope 子项（policy v7 `scopeSince` **时刻**锚，沿 v6 verifyDocSince 同款教训——日期粒度会把当日 04:29Z 已落的旧口径行误纳入受审）：缺 scope → warning（灰度第一档）；scope.files 重算 sha256 不符 → hard（「改了 files 没改摘要」，兜住整文件重写重建链后的二次篡改）。**向后兼容**：缺键 v1-v6 子项整体跳过，存量 406 行零新增告警；实仓 check-loop 9 条 WARN 与基线逐条一致。诚实边界：scope 证「放行时盘面上哪些文件在动」，**不证「这些改动语义正确」**——后者由 fingerprint（文档内容绑定）+ commit diff（事后对质）承担，不越界宣称
+- fix(tools)：**npm test 漏跑 `src/sync-hosts.test.mjs`**（2026-10-09 审查 P0-1）——`run-tests.mjs` 的 `nodeSuites` 硬编码 8 项 `src/` 套件，该套件（19KB，全仓第三大）自 2026-09-25 挂载起从未被 `npm test` 执行；CI 也盖不住（`ci.yml` shipped 步骤只 glob `.agents/scripts/*.test.mjs`）。而 `commands/sync-hosts.md`「npm test 含 sync-hosts.test.mjs 8 场景」随模板下发 5 个装户宿主——**装户被告知的契约是假的**。检查 20 只扫 `templates/_agents/scripts/` 面，结构上抓不到 `src/` 漏挂。修法：**src/ 侧改盘面 glob 枚举**而非补一行（新增 src 测试文件不可能再被静默漏挂，枚举漂移交给盘面不靠人记得补）；附带给编排器一条机器可读汇总行 `[run-tests] 合计: SUITES n / FAILED m`。补挂后单跑 42/0 无腐坏，**文档那句随修复自动变回真话、无需改文档**
+- fix(gate)：**测试绿凭证落的是错的事实**（2026-10-09 审查 P0-2）——`verify.mjs` 凭证计数原为 `pop(通配「合计: PASS n / FAIL n」)`，而全仓 46 套件**每个都打印自己那行同形文本** → 取到的是字母序最后一个套件的场景数（本仓实况 `workflows-check.test.mjs` 的 15），落进自称「一行机器事实」的 `passed` 字段。改为**只认编排器专属前缀行** + 套件口径（非本编排器口径的 `--test-cmd` 抓不到即省略计数键，**宁缺勿错、不回退到错的事实**）。两条回归锁在案：权威行与同形行并存取权威（45≠15）；仅有同形行则省略计数键。ARCHITECTURE「75+ 测试套件」同步证伪为 46
+- docs(workflow)：**AGENTS.md 确认门纪律段重写**（A1 配套）——委托代录 `quote` 语义由「用户原话」改为「授权摘要」，新增「改动面 scope」条，退役「不复用同句」纪律并写明退役理由（分辨力已由 scope+指纹承担）；防伪条补 scope 摘要失配 hard。templates/AGENTS.md 双写（包源），根 AGENTS.md 为 owned 文件直改
+
 ## 1.6.0
 
 - feat(gate)：**台账哈希链**（2026-10-09 engine-quality-round2/v2 D）——confirmations.jsonl 此前已知信任边界=本地可写、检查 15 不验签、静默手改不可机器检。写入侧 appendLedger（三调用方单点）每行追加 `prevHash`（末行 hash，历史行/空文件 → ''）与 `hash`（`policy.ledgerChainHash` 单源计算=sha256(prevHash+JSON.stringify(row))）；校验侧检查 15 新增子检查——连续带 hash 行段 prevHash 接续 + 重算一致，断裂 = hard「台账链断裂」（首断物理行号）。**向后兼容**：无 hash 历史行零回填零告警（链段重启口径与写入侧一致）。**断言非恒绿反证**：禁用验链判据 → 场景 21a 当场红。边界诚实声明：整文件重写可重建链不可机器防（兜底=台账自身 git 历史），同信任域锚文件评估增量≈0 缓做（papercuts 在案）。实仓冒烟：写入→自洽→中间行篡改→hard 抓到→还原即净；生产台账全链验算 0 断裂

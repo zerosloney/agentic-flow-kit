@@ -28,12 +28,13 @@
 - **放弃态**：`--to superseded|cancelled`（四终态同样内容绑定）。
 - **执行形态**：
     1. **TTY**：用户终端亲手键入「可以」（AI 会话内被拒）。
-    2. **委托代录**：`--delegated "<用户原话>"` → 台账记 `source: chat-delegated` + 原话供对质。
-- **纪律**：逐件调用 + 逐件原话——一次一份，多份并录被拒；每次传当次实际放行的措辞，**不复用同句**（复用使台账 quote 失去分辨力）。
+    2. **委托代录**：`--delegated "<授权摘要>"` → 台账记 `source: chat-delegated` + 摘要。
+- **改动面 scope**（授权的机器事实）：confirm-doc 落账自动记 `scope{files,sha256}` = 被确认文档 + `git status` 实测未提交改动集，**AI 无输入面**。对质问「这 N 个文件」而非「一句说过的话」；摘要不承担分辨力（quote 降级为人类可读留痕）。
+- **纪律**：逐件调用——一次一份，多份并录被拒。**原「每次传当次原话、不复用同句」已退役**：该纪律的全部意义是维持 quote 的分辨力，而分辨力已由 scope（机器派生、不可伪造）+ 指纹（文档内容绑定）承担。
 - **批量**：仅 L0/L1 可 `--batch`（台账 `brief:true`，并录告警豁免）；L2/L3 逐份。
 - **done 内容绑定**：关单编辑（勾验/回填）先于 done 确认，confirm-doc 是最后一次写入；此后修订走 superseded 或新 intent。
 - **approved 留痕**：done 确认前 approved 态须已进 git 历史（confirm-doc 前置门硬校验，逐份）。
-- **防伪**：check-loop 15 指纹+台账对账，缺记录/指纹不配对 → hard-block；伪造台账留痕供事后对质。
+- **防伪**：check-loop 15 指纹+台账对账，缺记录/指纹不配对 → hard-block；台账哈希链堵就地改/删；scope 摘要失配 → hard-block；伪造台账留痕供事后对质。
 
 ---
 
