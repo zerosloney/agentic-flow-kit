@@ -134,11 +134,11 @@
     },
     {
       "rel": ".agents/scripts/check-ledger-invariant.mjs",
-      "sha256": "cd3260526336cc252234fcfff578c03e008a1fe45654eeaf554b934194521003"
+      "sha256": "8f32414a3b3b5d8aecc5fb917a2751e7722213e82f48bb1ad56f33e8d997d1b0"
     },
     {
       "rel": ".agents/scripts/check-ledger-invariant.test.mjs",
-      "sha256": "41b9a4a320307f2c130cf53d2b820214a28edb8fe9b1efd5dd9060b410ea04cc"
+      "sha256": "c51ed18785caf8be3085f4b1379e3895a6b1580e644d797d853353b68918401f"
     },
     {
       "rel": ".agents/scripts/check-ledger.mjs",
@@ -537,7 +537,7 @@
     },
     {
       "rel": "workflow/papercuts.md",
-      "sha256": "25c389bee48dcd8187cb605faeed5b026838307b5bf74fb48ef2da3ea20cf750",
+      "sha256": "f5cfb3a8862d3d911a1d268a6dd5c89f925becea89b0b88c8395fa0222ad3fcc",
       "srcSha256": "07f8b0fad8223d25a5f67ce2c672bc9d92288c7b2e123a28e430c509e2c83115"
     },
     {

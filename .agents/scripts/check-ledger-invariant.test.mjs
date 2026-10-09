@@ -157,5 +157,21 @@ const append = (d, line) => fs.appendFileSync(ledPath(d), line + '\n');
   check('S12 回退注记行（n/a 指纹）→ 历史全扫过', r.code === 0, r.out);
 }
 
+// ---- 豁免登记（2026-10-09 ledger-line-exempt，CI 红事故处置）----
+{
+  // 坏行（fingerprint 非 hex + doc 不存在）→ 红；登记豁免 → 绿 + 计数可见
+  const d = mkrepo(row({ fingerprint: 'probe-fp', doc: 'workflow/intents/ghost.md' }));
+  let r = run(d);
+  check('豁免前：行级坏行 hard（fingerprint/doc 双违规）', r.code === 1 && r.out.includes('行级'), r.out.slice(0, 200));
+  fs.writeFileSync(path.join(d, '.agents', 'ledger-line-exempt.json'), JSON.stringify([{ line: 1, doc: 'workflow/intents/ghost.md', reason: '事故定性' }], null, 2));
+  r = run(d);
+  check('豁免后：exit 0 且计数可见', r.code === 0 && r.out.includes('台账豁免行 1 条'), r.out.slice(0, 200));
+  // 行号错位豁免不生效（line=99 无对应坏行）
+  fs.writeFileSync(path.join(d, '.agents', 'ledger-line-exempt.json'), JSON.stringify([{ line: 99, reason: '错位' }]));
+  r = run(d);
+  check('豁免行号不匹配：仍 hard（精确豁免）', r.code === 1, r.out.slice(0, 150));
+  fs.rmSync(d, { recursive: true, force: true });
+}
+
 console.log(`\n${fail ? `❌ ${fail} failed` : '✅ all passed'}（${pass} passed）`);
 process.exit(fail ? 1 : 0);

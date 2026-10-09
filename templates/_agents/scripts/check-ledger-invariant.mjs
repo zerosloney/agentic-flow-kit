@@ -16,6 +16,12 @@
 //   ④ doc 匹配 workflow/(intents|specs|plans|incidents)/[^/]+.md 且当前树存在
 //   ⑤ stage ∈ 合法跳转终态集（approved/done/fixed/closed/superseded/cancelled）
 //
+// 行级豁免（2026-10-09 ledger-line-exempt，CI 红事故处置）：.agents/ledger-line-exempt.json 登记
+// 已定性的污染行（{line, doc, reason}——line = 校验序号即非空行序）——行级五项对豁免行整体跳过、
+// 行**保留在台账**（审计面完整），豁免计数照常出账保持可见。定位：事故行无法追加修复（行级扫最终树
+// 全行）且不可就地改（历史前缀不变量）——superseded 重立单之外的唯一出口。**滥用边界**：豁免文件
+// 自身入库、git 历史可对质；逐条须 papercuts/incident 定性引用，无定性登记 = 审计事件。
+//
 // 静默条件：台账不存在 / 零提交历史（装户、新仓）/ --staged 且暂存未触台账或无 HEAD 版本。
 // 已知边界：git log --follow 未用——台账自创建无重命名（单一路径取史）；克隆深度不足时仅扫可得
 //   历史（CI 侧 fetch-depth:0 兜全史，深度不足会告警声明边界，fail-open 于深度、fail-closed 于内容）。
@@ -102,9 +108,20 @@ let rows = [];
 try {
   rows = fs.readFileSync(FILE, 'utf8').split(/\r?\n/).filter((l) => l.trim()).map((l) => { try { return JSON.parse(l); } catch { return null; } });
 } catch { /* 上面 existsSync 已兜 */ }
+const EXEMPT_P = path.join(ROOT, '.agents', 'ledger-line-exempt.json');
+const exemptLines = new Set();
+try {
+  if (fs.existsSync(EXEMPT_P)) {
+    for (const e of JSON.parse(fs.readFileSync(EXEMPT_P, 'utf8'))) {
+      if (e && Number.isInteger(e.line)) exemptLines.add(e.line);
+    }
+  }
+} catch { /* 豁免表损坏 → 视同无豁免（fail-closed 于校验面） */ }
+let exemptCount = 0;
 let prevTs = '';
 rows.forEach((e, idx) => {
   const at = `第 ${idx + 1} 行`;
+  if (exemptLines.has(idx + 1)) { exemptCount++; return; } // 事故行豁免（登记文件入库可对质）
   if (!e || typeof e !== 'object') { problems.push(`- [行级] ${at}：非 JSON 对象行`); return; }
   if (typeof e.ts !== 'string' || Number.isNaN(Date.parse(e.ts))) problems.push(`- [行级] ${at}：ts 非 ISO 字符串`);
   else {
@@ -126,6 +143,7 @@ rows.forEach((e, idx) => {
   if (!VALID_STAGES.has(e.stage)) problems.push(`- [行级] ${at}：stage「${e.stage || '缺失'}」不在合法跳转终态集`);
 });
 
+if (exemptCount) console.log(`ℹ️  台账豁免行 ${exemptCount} 条（定性见 .agents/ledger-line-exempt.json）`);
 if (problems.length) {
   console.error(`台账不可变（历史全扫）— HARD-BLOCK:\n\n${problems.join('\n')}\n`);
   console.error('  修法：台账历史行禁删改（append-only 前缀不变量）——误写只能追加补偿行；确需撤销历史提交请 git revert 后重新追加。篡改属审计事件，保留现场联系仓库所有者。');

@@ -1,0 +1,12 @@
+[
+  {
+    "line": 389,
+    "doc": "workflow/intents/chain-probe.md",
+    "reason": "D 哈希链实仓冒烟探针行（首次内联探针崩在 appendLedger 后未还原）——非真实确认，papercuts 2026-10-09 P1-1 行定性"
+  },
+  {
+    "line": 390,
+    "doc": "workflow/intents/chain-probe.md",
+    "reason": "P1-1 处置误设计：stage=void/fingerprint 非 hex/doc 不存在三处违反行级 schema——作废意图正确但形态错误，本豁免行取代 void 行处置"
+  }
+]
