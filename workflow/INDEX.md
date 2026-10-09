@@ -5,10 +5,13 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（0）
+## 活跃（3）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
+| INTENT | L2 | approved | 2026-10-09 | pipeline | engine-quality-round3-v2 | ☑7/7 |
+| PLAN | L2 | approved | 2026-10-09 | pipeline | engine-quality-round3-v2 | — |
+| SPEC | L2 | approved | 2026-10-09 | pipeline | engine-quality-round3-v2 | — |
 
 ## 档案计数（287，不进表）
 
@@ -24,6 +27,6 @@
 | SPEC | infra | 4 |
 | SPEC | pipeline | 60 |
 
-终态构成：done 250 · closed 22 · fixed 12 · superseded 3；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
+终态构成：done 247 · closed 22 · fixed 12 · superseded 6；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
 
 <!-- GENERATED:END -->

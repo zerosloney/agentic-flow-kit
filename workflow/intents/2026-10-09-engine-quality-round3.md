@@ -1,11 +1,11 @@
 ---
-状态: done
+状态: superseded
 级别: L2
 risk_level: L2
 日期: 2026-10-09
 模块: pipeline
 备注: 四工作流：W1 git索引增量缓存（降频决策样本1<5缓做）/ W2 fill-intent 历史坑强制注入 / W3 registry fallback + 台账锚缓做定性 / W4 metrics 历史序列+确认负担
-确认指纹: 8d4590ecefefed78
+确认指纹: 0929521b5ef2a255
 ---
 
 # INTENT — engine-quality-round3

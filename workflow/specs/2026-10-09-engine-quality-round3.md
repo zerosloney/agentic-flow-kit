@@ -1,10 +1,10 @@
 ---
-状态: done
+状态: superseded
 级别: L2
 日期: 2026-10-09
 模块: pipeline
 备注: engine-quality-round3（增量缓存/kb 注入/fallback/趋势+负担）
-确认指纹: 834926a92cb7fc32
+确认指纹: 223e3a02d2a7569c
 ---
 # SPEC — engine-quality-round3
 
