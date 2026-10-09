@@ -2,6 +2,18 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.6.0
+
+- feat(gate)：**台账哈希链**（2026-10-09 engine-quality-round2/v2 D）——confirmations.jsonl 此前已知信任边界=本地可写、检查 15 不验签、静默手改不可机器检。写入侧 appendLedger（三调用方单点）每行追加 `prevHash`（末行 hash，历史行/空文件 → ''）与 `hash`（`policy.ledgerChainHash` 单源计算=sha256(prevHash+JSON.stringify(row))）；校验侧检查 15 新增子检查——连续带 hash 行段 prevHash 接续 + 重算一致，断裂 = hard「台账链断裂」（首断物理行号）。**向后兼容**：无 hash 历史行零回填零告警（链段重启口径与写入侧一致）。**断言非恒绿反证**：禁用验链判据 → 场景 21a 当场红。边界诚实声明：整文件重写可重建链不可机器防（兜底=台账自身 git 历史），同信任域锚文件评估增量≈0 缓做（papercuts 在案）。实仓冒烟：写入→自洽→中间行篡改→hard 抓到→还原即净；生产台账全链验算 0 断裂
+- fix(tools)：**sync-hosts 包源布局多根对账**（2026-10-09 B1）——包源布局薄适配根恒为 modules/hosts，项目根 HOSTS.dir 宿主点（本仓 .zcode/）不在扫描面：bb69e19「81 对全对齐」声明漏其三份（复核 P2-3 实证）的机制根因。diffHosts 多根归一（adapterRoots，旧单根入参向后兼容）+ pairsFor hostFilter（只扫实际存在宿主点）+ applyForward 按条目 root 定位 + **对账面自描述行**（防不可解释的 N 对声明）。实仓 81→84 对 0 漂移；装户布局回归钉住（42/0）
+- feat(tools)：**edit-face-check 编辑时快检**（2026-10-09 B2）——常驻面机器约束此前只在 git 钩子层生效（check-loop 仓库模式只扫 HEAD），编辑期零反馈（实测砍掉阶段索引到提交才被检查 7 报警）。工作树面 CHECK_LOOP_ROOT 全扫（判定零复刻单源）+ 预算 advisory；exit 语义 hard→2/预算超限→1/WARN 明细透传不进 exit（绝对计数会让存量仓库恒非零）
+- feat(tools)：**fill-intent 历史坑强制注入**（2026-10-09 W2）——「历史教训/防复发」节检索占位此前靠 AI 自觉执行（pipeline-run 工单已注入，手动路由没有）：生成时自动 kb-search（--type incidents,plans，3s 超时）注入命中行；零命中/不可用 fail-open 保留占位+手工命令注释行。复核 P1-1 修正：模块名入关键词（spec S2 口径）
+- fix(gate)：**check 8 凭证对账补 verifyDocSince 追溯窗口**（2026-10-09，用户拍板 D）——v6 凭证按 doc 绑定机制对**上线前** done 的单追责产 9 条不可消退 advisory；done ts ≥ verifyDocSince（值升级为时刻 2026-10-08T09:37:35Z——日期粒度把同日早时刻误纳入）才启用精确匹配，早于者退回 v5 全局布尔——不伪造凭证、不放宽 24h 窗口，与检查 15/18 生效日锚同构。断言非恒绿反证在案
+- refactor(gate)：**检查 7 拆模块**（A1）——阶段索引同步迁 check-stage-index.mjs（check-hygiene/check-metric-claims 先例），头部清单行逐字不动、gate-checklist 登记完整、gate-seg 段归属按局部收集器口径
+- feat(tools)：**CI 红回溯点名**（B3）——ci.yml/kit-ci.yml failure 步骤列出最近 7 天关单文档；**registry fallback**（W3）——npm ci 优先 lock + 末级官方源兜底（镜像故障不阻塞 CI）
+- feat(tools)：**metrics 趋势序列 + 确认负担**（W4）——.agents/cache/metrics-history.jsonl 每日一行幂等；metrics.md 增「趋势（环比昨日）」与「确认调用 N 次（环比）」行（void 不计）——确认负担从无量化到有数据（治理效率议题的数据前提）
+- chore：scripts-test-exempt 停车场清理（verify-wiki-consistency/wiki-search 补测移出 3 场景各、ensure-board 永久定性）+ ARCHITECTURE.md 架构单源 + check-loop advisory 10→1（余 1 条三件套不全用户拍板保留）+ 两起关单勾验事故 superseded 重立留痕（round2-v2/round3-v2——confirm-doc 前 grep 自检归零制度化）+ lint 工具链（eslint 9 入 npm test 首步，1.5.0 前实装本版补充豁免表收敛）
+
 ## 1.5.0
 
 - feat(tools)：**lint 工具链**（2026-10-08 engine-quality-batch）——补上引擎 18k 行纯 JS「无任何 lint 配置」的缺口（test.md 质量门口径里的 lint 项在本仓一直是空转的）。eslint 9 + `@eslint/js`（flat config，`eslint.config.mjs`）**仅 devDependency**——零运行时依赖红线不破（`files` 打包面不含 node_modules，装户 init 后环境无 eslint 也无任何运行时 import 变化）。范围 = 包源四区（`src` / `bin` / `templates/_agents/scripts` / `modules`+`scripts`），ignores = `.agents/`（managed 装副本）/ `modules/hosts/`（薄适配生成物）/ `workflow/` / `wiki/` / `**/cache/**` / `**/*.min.js`（`marked.min.js` 第三方产物——首轮 92 处报错里 29 处源于未排除它）。`npm test` 首步跑 lint（`src/run-tests.mjs`）：eslint 未装（裸 checkout 未 `npm install`）**显式打印 skip 后继续**（可诊断性容错），已装但报错则 fail-closed 计失败——两分支均有冒烟实测。CI（`.github/workflows/ci.yml`）补 `npm install` 步骤置于五道零依赖机器门之后、`npm test` 之前。**存量清零 40 处**：28 处 unused（测试死赋值 + 引擎死代码——`SCRIPT_DIR` / `createRequire` / `fileURLToPath` / `LEDGER` / `fail` / `eq` / `scopeExplicit` / `diffMode` 等，逐处 grep 确认调用面后删）+ 4 处空 `catch {}` 补意图注释（「降级必须保留原因」纪律）+ 2 处正则多余转义 + **1 处零宽空格 U+200B**（`gen-workflow-metrics.mjs:51` 实证，肉眼不可见）。豁免纪律：用行内 `// eslint-disable-next-line` 最小标注，禁文件级禁用
