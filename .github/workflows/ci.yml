@@ -44,7 +44,7 @@ jobs:
           node bin/flow-kit.mjs doctor
           node .agents/scripts/source-sync-check.mjs --gate
           node .agents/scripts/workflows-check.mjs
-      - run: npm install # eslint devDependency（2026-10-08 engine-quality-batch：npm test 首步 lint 需 node_modules；装户视角不涉及）
+      - run: npm ci || npm install || npm install --registry=https://registry.npmjs.org # lock 优先 + 末级官方源兜底（eslint devDependency 需 node_modules；2026-10-09 W3）
       - run: npm test
       - name: shipped 套件（.agents/ 装副本——npm test 只跑 templates/，此处补装户视角）
         run: |

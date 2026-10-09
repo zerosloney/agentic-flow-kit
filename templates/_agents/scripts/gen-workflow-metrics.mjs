@@ -280,5 +280,56 @@ if (existing.includes(BEGIN) && existing.includes(END)) {
 } else {
   out = (existing ? existing.replace(/\s*$/, '') + '\n\n' : HEADER) + inner + '\n';
 }
-fs.writeFileSync(METRICS_P, out, 'utf8');
+
+// ---- 趋势序列 + 确认负担（2026-10-09 engine-quality-round3 W4）----
+// ① 确认负担：本月 confirmations.jsonl 行数（stage=void 除外）与上月比（口径：每次 confirm-doc 调用
+//    落一行——「确认门调用次数」即确认负担的机器事实；void 为作废标记不计）。
+// ② 趋势序列：.agents/cache/metrics-history.jsonl 每日一行幂等（同日重跑覆盖）——metrics.md「趋势」
+//    行对比昨日 docsTotal/confirmCalls；history 损坏重建（fail-open）。
+const HISTORY_P = path.join('.agents', 'cache', 'metrics-history.jsonl');
+const voidExcluded = ledgerRows.filter((e) => e.stage !== 'void');
+const monthOf = (e) => (typeof e.ts === 'string' ? e.ts.slice(0, 7) : '');
+const thisMonth = month.slice(0, 7); // month 变量 = 生成锚月（YYYY-MM）
+const prevMonthDate = new Date(thisMonth + '-01T00:00:00Z');
+prevMonthDate.setUTCMonth(prevMonthDate.getUTCMonth() - 1);
+const prevMonth = prevMonthDate.toISOString().slice(0, 7);
+const confirmThis = voidExcluded.filter((e) => monthOf(e) === thisMonth).length;
+const confirmPrev = voidExcluded.filter((e) => monthOf(e) === prevMonth).length;
+const confirmDelta = confirmPrev > 0 ? Math.round(((confirmThis - confirmPrev) / confirmPrev) * 100) : null;
+
+// docsTotal：metrics 主表本月行的文档数列（第一数值列）——从 row 提取，避免重复统计逻辑
+const docsTotal = docs.files; // 直取作用域变量（正则提取曾因「287（活跃…）」复合列失配——round3 实测修正）
+
+// history 读写（fail-open：损坏重建）
+let history = [];
+try {
+  if (fs.existsSync(HISTORY_P)) {
+    history = fs.readFileSync(HISTORY_P, 'utf8').split(/\r?\n/).filter(Boolean)
+      .map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+  }
+} catch { history = []; }
+const today = new Date().toISOString().slice(0, 10);
+history = history.filter((h) => h && h.date !== today); // 同日幂等：覆盖当日行
+history.push({ date: today, docsTotal, passRate: funnel.closed ? Math.round((funnel.once / funnel.closed) * 100) + '%' : '', confirmCalls: confirmThis, savedAt: new Date().toISOString() });
+try {
+  fs.mkdirSync(path.dirname(HISTORY_P), { recursive: true });
+  const tmpH = HISTORY_P + '.tmp';
+  fs.writeFileSync(tmpH, history.map((h) => JSON.stringify(h)).join('\n') + '\n');
+  fs.renameSync(tmpH, HISTORY_P);
+} catch { /* history 写失败不影响 metrics.md 主产物 */ }
+
+// 趋势行（对比昨日快照）
+const yesterday = history.filter((h) => h.date !== today).slice(-1)[0];
+const trendParts = [];
+if (yesterday) {
+  trendParts.push('docs ' + docsTotal + '（昨日 ' + (yesterday.docsTotal ?? '?') + '）');
+  trendParts.push('确认调用 ' + confirmThis + '（昨日 ' + (yesterday.confirmCalls ?? '?') + '）');
+} else {
+  trendParts.push('无前值（history 首日）');
+}
+const trendLine = '> 趋势（环比昨日）：' + trendParts.join('；') + '；确认调用本月 ' + confirmThis + ' 次（上月 ' + confirmPrev + ' 次' + (confirmDelta === null ? '' : '，' + (confirmDelta >= 0 ? '+' : '') + confirmDelta + '%') + '；void 不计）';
+
+// 注入「闭环漏斗」节尾（inner 的 FUNNEL 段之后、END 之前）
+
+fs.writeFileSync(METRICS_P, out.replace(END, trendLine + '\n\n' + END), 'utf8');
 console.log(`✅ 已更新 workflow/metrics.md（${month} 行；共 ${rows.length} 个月）`);

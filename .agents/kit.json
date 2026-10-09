@@ -158,7 +158,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "894849c07e68ac22bca9f09bbebf5395def8b4b87cd7314590fc6af545c41ca9"
+      "sha256": "4d76ad226bd69b496c811f53781fb53c44c0f13e946610d4c7b610fd92e075b2"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -166,7 +166,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "5e135412e3ea9798febbac2879b61de3da7a71007ff968b0e410f88f3fb648c5"
+      "sha256": "6c930900af4a7d91964d57b2e4063946caba462ebdb8a97ec5fe61483f1e191e"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -210,11 +210,11 @@
     },
     {
       "rel": ".agents/scripts/fill-intent.mjs",
-      "sha256": "a793a7a062069c525a29a457083f2d39262da523e240575260d16935f21d4c52"
+      "sha256": "3517e656fd0af8fe01846d88a56ec0ee4fe795cb63d9fcaf59e169c12abea9ff"
     },
     {
       "rel": ".agents/scripts/fill-intent.test.mjs",
-      "sha256": "6a40b1fec7fb9ae77680b4d49ee4af87dda5192b0df565f529bda34cb2dc222b"
+      "sha256": "f68ed8207fee2b7df87278e567132742009a3f7b2d144c1893996dae1180e3ca"
     },
     {
       "rel": ".agents/scripts/fill-plan.mjs",
@@ -274,7 +274,7 @@
     },
     {
       "rel": ".agents/scripts/gen-workflow-metrics.mjs",
-      "sha256": "31ddd2ded85cdcead6351b1124b6b63177e05f0d3e899c107f1a0cca9e17456d"
+      "sha256": "fe5be05a5fb579887776f3825d6ec65236c966d53872fc66252b7a5fd027bfcd"
     },
     {
       "rel": ".agents/scripts/gen-workflow-metrics.test.mjs",
@@ -537,7 +537,7 @@
     },
     {
       "rel": "workflow/papercuts.md",
-      "sha256": "e48715fc6913af84b66bba2867f8b7df8903d2b77135375d94aeba55a937bdaf",
+      "sha256": "25c389bee48dcd8187cb605faeed5b026838307b5bf74fb48ef2da3ea20cf750",
       "srcSha256": "07f8b0fad8223d25a5f67ce2c672bc9d92288c7b2e123a28e430c509e2c83115"
     },
     {

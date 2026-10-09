@@ -78,5 +78,18 @@ function check(name, cond, detail = '') {
   }
 }
 
+
+// ---- 历史坑注入 kbHits（2026-10-09 engine-quality-round3 W2）----
+{
+  const hits = ["📄 workflow/incidents/2026-10-01-aaa.md — closed · L2 · pipeline · 3 处命中 / 1KB"];
+  const { body } = renderIntent({ topic: 't', module: 'pipeline', level: 'L2', kbHits: hits });
+  check('kb 注入：命中行替换占位（含自动注入计数与 📄 原文）',
+    body.includes('检索结果（自动注入 1 条') && body.includes("📄 workflow/incidents/2026-10-01-aaa.md — closed · L2 · pipeline · 3 处命中 / 1KB") && !body.includes("- 检索结果：`node .agents/scripts/kb-search.mjs \"<关键词>\" --type incidents` 命中结果"), body.slice(0, 200));
+}
+{
+  const { body } = renderIntent({ topic: 't', module: 'pipeline', level: 'L2', kbHits: [] });
+  check('kb 零命中：保留占位（fail-open 口径）', body.includes("- 检索结果：`node .agents/scripts/kb-search.mjs \"<关键词>\" --type incidents` 命中结果"), body.slice(0, 200));
+}
+
 console.log('\n合计: PASS ' + pass + ' / FAIL ' + failCount);
 process.exit(failCount ? 1 : 0);

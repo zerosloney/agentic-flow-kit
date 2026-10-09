@@ -5,6 +5,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { ENUMS } from './workflow-enums.mjs';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 const TODAY = new Date().toISOString().slice(0, 10);
 const LEVELS = ENUMS['level.all']; // 级别词表单源（.agents/workflow-enums.txt）
@@ -36,12 +38,21 @@ const SECTIONS = [
   { title: '验收标准（可测试）', hint: '- [ ] <逐条可测试；写不出可测试判据 = 还没想清楚>\n\n> **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 冒烟脚本输出>）`。\n> done 状态仍有未勾项会被 check-loop 拦截（2026-09-12 起新建 intent 为 hard-block，存量 intent 仅 warning 提示）；勾选但缺「证据：」为 hard-block。' },
 ];
 
-export function renderIntent({ topic, module, level, notes, date = TODAY }) {
+// renderIntent：骨架渲染（纯函数）。kbHits（2026-10-09 engine-quality-round3 W2）：kb-search 命中行
+// 数组（📄 行原文）——非空时替换「历史教训/防复发」节的检索占位行为实际命中列表（历史坑强制注入，
+// 手动路由与 pipeline-run 工单同权）；空/缺省保留占位（fail-open 口径）。子进程调用在 main，本函数保持无 IO。
+export function renderIntent({ topic, module, level, notes, date = TODAY, kbHits = [] }) {
   if (!LEVELS.includes(level)) throw new Error('level 不在枚举 ' + LEVELS.join('|') + '：' + level);
   const fm = '---\n状态: draft\n级别: ' + level + '\nrisk_level: ' + level + '\n日期: ' + date + '\n模块: ' + module + '\n备注: ' + (notes || '<可选：附注自由文本，check-loop 不解析>') + '\n---\n';
   let body = '# INTENT — ' + topic + '\n\n<!-- 复制本模板为 YYYY-MM-DD-<主题>.md 后填写；plans/ 下同名文件与本文件配对 -->\n<!-- frontmatter 受限子集（2026-09-13）：每行 键: 值；状态∈draft/approved/done/superseded/cancelled（严格枚举，附注写备注键）；级别∈L0/L1/L2/L3；risk_level=级别（混合治理风险泳道选道：L0/L1 协作道异步审计 / L2/L3 防御道同步确认）；check-loop 只扫 frontmatter 取机器字段，正文不再写状态/级别行 -->\n\n';
   for (const { title, hint } of SECTIONS) {
-    body += '## ' + title + '\n\n' + hint + '\n\n';
+    let section = hint;
+    if (title === '历史教训/防复发' && Array.isArray(kbHits) && kbHits.length) {
+      const placeholder = '- 检索结果：`node .agents/scripts/kb-search.mjs "<关键词>" --type incidents` 命中结果';
+      const injected = '- 检索结果（自动注入 ' + kbHits.length + ' 条，同域历史——起草前先读其根因与防复发）：\n' + kbHits.map((h) => '  - ' + h).join('\n');
+      section = section.includes(placeholder) ? section.replace(placeholder, injected) : section;
+    }
+    body += '## ' + title + '\n\n' + section + '\n\n';
   }
   body += '## 确认与复核\n\n- 确认日期：\n- 确认人：用户（对话内明确放行即确认）\n- 确认范围：\n- 复核：L1 不要求独立复核\n';
   return { frontmatter: fm, body: fm + body, sections: SECTIONS.map((s) => s.title) };
@@ -52,7 +63,20 @@ if (isMain) {
   const a = parseArgs(process.argv.slice(2));
   if (!a.topic || !a.module || !a.output) fail('必填：--topic / --module / --output；选填：--level（默认 L1）/ --notes');
   if (!LEVELS.includes(a.level)) fail('level 必须在 ' + LEVELS.join('|') + '：' + a.level);
-  const { body } = renderIntent(a);
+  // 历史坑强制注入（2026-10-09 engine-quality-round3 W2）：同目录 kb-search 子进程检索同域历史
+  // （关键词 = topic ascii 段 + 模块名；--type incidents,plans——修复先例与计划同查）。fail-open：
+  // 非零/零命中/3s 超时 → kbHits 空 → 保留占位（与手动路由「AI 自觉检索」不同，此处机器保证尝试）。
+  let kbHits = [];
+  try {
+    const words = (String(a.topic).toLowerCase().match(/[a-z0-9]{2,}/g) || []).slice(0, 2);
+    const kw = words.length ? words : [String(a.topic).slice(0, 6)];
+    const r = spawnSync(process.execPath, [path.join(path.dirname(fileURLToPath(import.meta.url)), 'kb-search.mjs'),
+      ...kw, '--scope', 'workflow', '--type', 'incidents,plans', '-n', '4'], { encoding: 'utf8', timeout: 3000, windowsHide: true });
+    if (r.status === 0 && r.stdout) {
+      kbHits = r.stdout.split(/\r?\n/).filter((l) => l.startsWith('📄')).slice(0, 4);
+    }
+  } catch { /* fail-open：检索不可用保留占位 */ }
+  const { body } = renderIntent({ ...a, kbHits });
   fs.mkdirSync(path.dirname(a.output), { recursive: true });
   fs.writeFileSync(a.output, body);
   console.log('✅ 已生成 intent 草稿：' + a.output + '（状态 draft / 级别 ' + a.level + ' / 模块 ' + a.module + '）');

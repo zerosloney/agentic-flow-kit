@@ -13,6 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { computeFingerprint } from './confirm-doc.mjs';
 import { POLICIES, loadKitPolicy } from './policy.mjs';
 import { entryConfirmed, laneOfEntry, laneOfDoc } from './stage-gates.mjs';
+import { parseAddedDatesLog, addedDatesWithCache } from './check-loop.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
@@ -2936,6 +2937,35 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T);
   check('场景 21c 存量无 hash 行：零链告警（不追溯）', !outOf(r).includes('台账链断裂'), outOf(r).slice(-300));
   rmfix(T);
+}
+
+
+// ---- 场景 22:addedDates 持久缓存（2026-10-09 engine-quality-round3 W1）----
+{
+  const log = '@2026-10-02T10:00:00+08:00\nworkflow/intents/a.md\nworkflow/plans/a.md\n@2026-10-01T09:00:00+08:00\nworkflow/intents/a.md\n';
+  const m = parseAddedDatesLog(log);
+  check('场景 22a 提取：新→旧序首遇 = 最新一次加入（原 IIFE 语义零复刻；注释「最早」为历史误述）', m.get('workflow/intents/a.md') === '2026-10-02T10:00:00+08:00' && m.get('workflow/plans/a.md') === '2026-10-02T10:00:00+08:00', JSON.stringify([...m]));
+}
+{
+  const cacheP = path.join(os.tmpdir(), 'adc-' + Date.now() + '.json');
+  let gitLogCalls = 0;
+  const gitLog = () => { gitLogCalls++; return '@2026-10-01T09:00:00+08:00\nworkflow/intents/a.md\n'; };
+  const head = 'head-sha-1';
+  const m1 = addedDatesWithCache({ head, gitLog, cachePath: cacheP });
+  const m2 = addedDatesWithCache({ head, gitLog, cachePath: cacheP });
+  check('场景 22b 缓存命中：同 HEAD 二次调用 gitLog 仅 1 次且结果一致',
+    gitLogCalls === 1 && m1.get('workflow/intents/a.md') === m2.get('workflow/intents/a.md'), 'calls=' + gitLogCalls);
+  const m3 = addedDatesWithCache({ head: 'head-sha-2', gitLog, cachePath: cacheP });
+  check('场景 22c HEAD 变更：重算（gitLog 计 2 次）', gitLogCalls === 2 && m3.get('workflow/intents/a.md') === '2026-10-01T09:00:00+08:00', 'calls=' + gitLogCalls);
+  fs.writeFileSync(cacheP, '{broken json');
+  const before = gitLogCalls;
+  const m4 = addedDatesWithCache({ head: 'head-sha-2', gitLog, cachePath: cacheP });
+  check('场景 22d 缓存损坏：fail-open 全算（gitLog 再调 1 次）且结果正确',
+    gitLogCalls === before + 1 && m4.get('workflow/intents/a.md') === '2026-10-01T09:00:00+08:00', 'calls=' + gitLogCalls);
+  const before2 = gitLogCalls;
+  addedDatesWithCache({ head: null, gitLog, cachePath: cacheP });
+  check('场景 22e 无 head：不读缓存直接全算（gitLog 再调 1 次）', gitLogCalls === before2 + 1, 'calls=' + gitLogCalls);
+  fs.rmSync(cacheP, { force: true });
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

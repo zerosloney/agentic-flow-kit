@@ -611,18 +611,13 @@ export function runCheckLoop(opts = {}) {
   // 非 git / 命令失败 → null，调用方按既有「非 git 跳过」语义退化（不 fail-loud）。
   // 注：检查 10 需要的是「文件→加入 commit」+「commit→文件清单」两份映射（判断同提交是否触及迁移 SQL），
   // 与本索引「文件→日期」不同构，故**不合并**——避免把两处判据耦死。
-  const addedDates = (() => {
-    if (gitOut(['rev-parse', '--git-dir']) === null) return null;
-    const log = gitOut(['log', '--diff-filter=A', '--format=@%aI', '--name-only']);
-    if (log === null) return null;
-    const m = new Map();
-    let cur = null;
-    for (const line of log.split('\n')) {
-      if (line.startsWith('@')) { cur = line.slice(1); continue; }
-      if (line.trim() && cur && !m.has(line.trim())) m.set(line.trim(), cur); // 新→旧序首遇 = 最早
-    }
-    return m;
-  })();
+  // addedDates（2026-10-09 engine-quality-round3 W1）：全史解析走持久缓存（HEAD 键）——
+  // 同 HEAD 多入口复跑（verify/edit-face-check/pre-commit/CI）不再重复全算；git-dir 探测保留在前。
+  const addedDates = gitOut(['rev-parse', '--git-dir']) === null ? null : addedDatesWithCache({
+    head: gitOut(['rev-parse', 'HEAD']),
+    gitLog: () => gitOut(['log', '--diff-filter=A', '--format=@%aI', '--name-only']),
+    cachePath: path.join(ROOT, '.agents', 'cache', 'added-dates.json'),
+  });
   // 某文档「首次加入日期」（YYYY-MM-DD）；不可判定（非 git / 查不到）返回 ''
   const addedDateOf = (absDoc) => {
     if (!addedDates) return '';
@@ -1459,6 +1454,43 @@ export function fmStatus(text) {
 // lines 已 CRLF 归一（split(/\r?\n/)），frontmatter 区内首个「状态:」行保分隔符换值为 prev（`状态:  done`
 // 双空格 → `状态:  approved`——与前向按原行字面计算对称，非规范分隔符不误伤；行尾空白等更奇异格式仍会
 // 失配，触发前提本身已违反「确认落态唯一入口」约定，接受），全文剔「确认指纹:」行后 join('\n') 再 sha256。
+// parseAddedDatesLog：git log（--diff-filter=A --format=@%aI --name-only）文本 → Map(rel → 加入 ISO 时间)。
+// 新→旧序首遇 = 最早加入（2026-09-28 check8-git-anchor 口径原样提取——判定零复刻，消费方不变）。
+export function parseAddedDatesLog(logText) {
+  const m = new Map();
+  let cur = null;
+  for (const line of logText.split('\n')) {
+    if (line.startsWith('@')) { cur = line.slice(1); continue; }
+    if (line.trim() && cur && !m.has(line.trim())) m.set(line.trim(), cur);
+  }
+  return m;
+}
+
+// addedDatesWithCache：addedDates 的持久缓存层（2026-10-09 engine-quality-round3 W1）。
+// 键 = HEAD sha（同 commit 祖先不可变 → log 幂等；rebase 必改 HEAD 必重算——无陈旧窗口）；
+// 缓存位于 .agents/cache/（gitignored 运行态）；读/写任一失败 fail-open 回退全算（门禁不失效）；
+// head 缺省（detached --rev worktree 等场景）→ 不读写缓存直接全算（语义不变）。
+export function addedDatesWithCache({ head, gitLog, cachePath }) {
+  if (head) {
+    try {
+      const c = JSON.parse(fs.readFileSync(cachePath, 'utf8'));
+      if (c && c.head === head && c.map && Object.keys(c.map).length) return new Map(Object.entries(c.map));
+    } catch { /* 缓存缺失/损坏 → 全算 */ }
+  }
+  const log = gitLog();
+  if (log === null) return null;
+  const m = parseAddedDatesLog(log);
+  if (head) {
+    try {
+      fs.mkdirSync(path.dirname(cachePath), { recursive: true });
+      const tmp = cachePath + '.tmp';
+      fs.writeFileSync(tmp, JSON.stringify({ head, map: Object.fromEntries(m), savedAt: new Date().toISOString() }) + '\n');
+      fs.renameSync(tmp, cachePath);
+    } catch { /* 写失败 fail-open：本轮已用全算结果，缓存留待下次 */ }
+  }
+  return m;
+}
+
 export function bindingSha256(lines, prevStatus) {
   const isDelim = (l) => /^---\s*$/.test(l);
   const out = [];

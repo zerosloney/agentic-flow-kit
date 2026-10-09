@@ -23,7 +23,7 @@ jobs:
           node-version: 22   # 按项目 engines 调整（kit 引擎要求 >=18）
       - name: 安装依赖（有根 package.json 才跑；私有源在此加 registry 配置）
         if: hashFiles('package.json') != ''
-        run: npm ci || npm install
+        run: npm ci || npm install || npm install --registry=https://registry.npmjs.org # 末级官方源兜底（2026-10-09 engine-quality-round3 W3：镜像故障不阻塞 CI）
       - name: 远端门（测试 + 闭环校验）
         run: node .agents/scripts/verify.mjs
       - name: CI 红回溯点名（2026-10-09 engine-quality-round2 B3：红时列出最近关单，复核优先）
