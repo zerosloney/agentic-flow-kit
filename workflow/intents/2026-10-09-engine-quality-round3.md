@@ -1,11 +1,11 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-09
 模块: pipeline
 备注: 四工作流：W1 git索引增量缓存（降频决策样本1<5缓做）/ W2 fill-intent 历史坑强制注入 / W3 registry fallback + 台账锚缓做定性 / W4 metrics 历史序列+确认负担
-确认指纹: 53ca7439f9e0ffba
+确认指纹: 8d4590ecefefed78
 ---
 
 # INTENT — engine-quality-round3
@@ -59,11 +59,11 @@ risk_level: L2
 
 ## 验收标准（可测试）
 
-- [ ] G-W1 缓存生效：tmp git 仓直测——同 HEAD 二次调用 gitLog 调用次数为 1（缓存命中）、HEAD 变更后重算、缓存文件损坏 fail-open；check-loop.test 237 断言零改动全绿
-- [ ] G-W2 注入生效：fill-intent.test 新场景——fixture 语料命中注入「历史教训」节（含文件路径行）、零命中保留占位、kb-search 不可用 fail-open；真实生成骨架含命中行
-- [ ] G-W3 fallback 在案：kit-ci.yml 与 ci.yml 均含 registry.npmjs.org 兜底段；papercuts 含台账锚缓做定性行（同信任域论证）
-- [ ] G-W4 趋势与负担：metrics-history.jsonl 同日重跑幂等（仍一行）；metrics.md 含「确认负担」（本月调用次数+环比口径）与「趋势（环比昨日）」行；gen-workflow-metrics.test 全绿
-- [ ] G-降频缓做：plan 偏离留痕含「样本 1<5 不决策」定性（gate-stats 实测样本数引用）
+- [x] G-W1 缓存生效：tmp git 仓直测——同 HEAD 二次调用 gitLog 调用次数为 1（缓存命中）、HEAD 变更后重算、缓存文件损坏 fail-open；check-loop.test 237 断言零改动全绿（证据：check-loop.test 场景 22a-e 五断言 242/0——22b 计数=1、22c 重算、22d fail-open、22e 无 head；实仓 .agents/cache/added-dates.json 生成且检查 8 段 gate-stats 实测 12.6→8.9s -29%）
+- [x] G-W2 注入生效：fill-intent.test 新场景——fixture 语料命中注入「历史教训」节（含文件路径行）、零命中保留占位、kb-search 不可用 fail-open；真实生成骨架含命中行（证据：fill-intent.test 30/0——kb 注入/零命中占位双断言；实仓冒烟 check-loop 主题注入 4 条同域 incident、零命中主题走「手工跑」注释行；复核 P1-1 模块名入关键词已补）
+- [x] G-W3 fallback 在案：kit-ci.yml 与 ci.yml 均含 registry.npmjs.org 兜底段；papercuts 含台账锚缓做定性行（同信任域论证）（证据：grep registry.npmjs.org 双 yml 命中 + 内联 new Function 语法解析通过；papercuts 2026-10-09 两行缓做定性在案）
+- [x] G-W4 趋势与负担：metrics-history.jsonl 同日重跑幂等（仍一行）；metrics.md 含「确认负担」（本月调用次数+环比口径）与「趋势（环比昨日）」行；gen-workflow-metrics.test 全绿（证据：history 首日行 {docsTotal:287, passRate:86%, confirmCalls:247} + 二跑 wc -l=1 幂等；metrics.md 趋势行「247 次（上月 157 次，+57%；void 不计）」；gen-workflow-metrics.test 24/0）
+- [x] G-降频缓做：plan 偏离留痕含「样本 1<5 不决策」定性（gate-stats 实测样本数引用）（证据：plan 偏离留痕② + papercuts 降频行引用 gate-stats 样本 1 次）
 - [ ] 全量门：npm test 全部套件通过（含 lint 首步）；eslint 0；doctor 14 PASS 0 WARN 0 FAIL；source-sync 0 漂移；rule-budget exit 0；check-loop 仅存量 1 条 advisory；sync-hosts 84 对 0 漂移
 
 > **闭环对账**：关单在 test 阶段。勾验逐条精确编辑补实测数据，禁止全文替换类批量操作（round2-v2 教训）。

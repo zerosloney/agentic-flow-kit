@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 日期: 2026-10-09
 模块: pipeline
 备注: engine-quality-round3（增量缓存/kb 注入/fallback/趋势+负担）
-确认指纹: b317c676e5ac57c3
+确认指纹: 834926a92cb7fc32
 ---
 # SPEC — engine-quality-round3
 
@@ -76,4 +76,4 @@
 ## 确认与复核
 
 - 确认日期：2026-10-09（自治批次——授权链：用户消息「按此顺序我可以直接走 L2 闭环」）
-- 复核：L2——实现完成后 independent-reviewer 独立复核
+- 复L2 独立复核已完成（2026-10-09，提交 3817ea7 后）——结论 P0=0、P1×1、P2×5，处置：P1-1 W2 关键词缺模块名（实现与批准 spec S2 不符）→ 已补模块名入关键词并对齐；P2-1 注释「最早」误述→勘误为「最新一次加入」；P2-2 fail-open 注释行已实现（spec 承诺的测试断言缺口=spawn 层无法无框架 mock，plan 偏离留痕声明）；P2-3 spec「--check 自动覆盖」说法勘误（gen-workflow-metrics 无 --check 不挂门禁，history 为本机观测面跨机不可复现属口径内）+ P2-4 shallow 陈旧窗口注记 + P2-5 固定 tmp 名并发有界自愈——均注释/声明处置。复核实测：npm test 全绿/eslint 0/doctor 14 PASS/登记完整/84 对。未验证：CI runner fallback 链实跑（push 后佐证）

@@ -1455,7 +1455,7 @@ export function fmStatus(text) {
 // 双空格 → `状态:  approved`——与前向按原行字面计算对称，非规范分隔符不误伤；行尾空白等更奇异格式仍会
 // 失配，触发前提本身已违反「确认落态唯一入口」约定，接受），全文剔「确认指纹:」行后 join('\n') 再 sha256。
 // parseAddedDatesLog：git log（--diff-filter=A --format=@%aI --name-only）文本 → Map(rel → 加入 ISO 时间)。
-// 新→旧序首遇 = 最早加入（2026-09-28 check8-git-anchor 口径原样提取——判定零复刻，消费方不变）。
+// 新→旧序首遇 = 最新一次加入（复核 P2-1 勘误：旧注释「最早」系误述——行为原样零复刻，检查 8 isNew 取最新加入日期更保守）。
 export function parseAddedDatesLog(logText) {
   const m = new Map();
   let cur = null;
@@ -1467,7 +1467,7 @@ export function parseAddedDatesLog(logText) {
 }
 
 // addedDatesWithCache：addedDates 的持久缓存层（2026-10-09 engine-quality-round3 W1）。
-// 键 = HEAD sha（同 commit 祖先不可变 → log 幂等；rebase 必改 HEAD 必重算——无陈旧窗口）；
+// 键 = HEAD sha（同 commit 祖先不可变 → log 幂等；rebase 必改 HEAD 必重算；复核 P2-4：shallow→unshallow 同 HEAD 可见性增长有陈旧窗口——后果退化为旧行为 addedDateOf 返回 ""，HEAD 变化自愈）；
 // 缓存位于 .agents/cache/（gitignored 运行态）；读/写任一失败 fail-open 回退全算（门禁不失效）；
 // head 缺省（detached --rev worktree 等场景）→ 不读写缓存直接全算（语义不变）。
 export function addedDatesWithCache({ head, gitLog, cachePath }) {

@@ -158,7 +158,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "4d76ad226bd69b496c811f53781fb53c44c0f13e946610d4c7b610fd92e075b2"
+      "sha256": "6051a4a8ce17cdbb7a1ea577c0234f7d97f1b445d0a3b538079b296cbd0d153f"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -210,7 +210,7 @@
     },
     {
       "rel": ".agents/scripts/fill-intent.mjs",
-      "sha256": "3517e656fd0af8fe01846d88a56ec0ee4fe795cb63d9fcaf59e169c12abea9ff"
+      "sha256": "a042786789116cc3d78fbb1ad84cef91c6d8d09b1ff12b636db38fa055fd9c2f"
     },
     {
       "rel": ".agents/scripts/fill-intent.test.mjs",
