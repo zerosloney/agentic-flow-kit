@@ -24,6 +24,8 @@
 //   6. 子智能体角色契约 + OpenCode/Trae/ZCode Adapter 一致性(含旧委派残留/钉死模型)  [warning]
 //   7. 阶段索引同步(AGENTS.md 与 new-task.md 须双向索引全部阶段指令)                [warning]
 //   8. intent 验收标准对账(新建:done 未勾验/缺节=hard,勾选缺证据=warning;存量聚合 warning,含「存量对账豁免」声明者出账)
+//      + 场景覆盖子判据(2026-10-10 scenario-coverage,灰度 warning):同名 spec 有「验收场景」节时,
+//        done intent 验收标准须逐场景 ID 引用(场景:S1…),缺引用=warning;spec 无该节则不适用(零变化)
 //      **生效日锚=git 首次加入日期(2026-09-28 改;此前取文件名前 10 字符——命名规范强制的字段、
 //      写早零成本,一条 hard 门可被平凡绕过;incident 2026-09-28-check8-git-anchor 实证)**:
 //      非 git / 查不到加入记录 → 不可判定 → 走存量口径(不误报 hard)
@@ -877,6 +879,27 @@ export function runCheckLoop(opts = {}) {
         else if (!ex) legacyUnaccounted++;
         continue;
       }
+      // 场景覆盖子判据（2026-10-10 scenario-coverage，灰度第一档 = warning）：
+      //   同名 spec 写了「## 验收场景」节（GIVEN/WHEN/THEN，每条带 ID：S1、S2…）时，
+      //   done intent 的验收标准须**逐场景 ID 引用**（`场景：S1`）。缺引用只出 warning——
+      //   有意不进 hard：新判据先灰度观察存量装户告警噪音，沿检查 8 自身 / 检查 15 / 检查 18
+      //   「先 WARN、装户吃过警告后升 FAIL」的既有路径；spec 无该节 = 原判据零变化。
+      //   ID 提取单源 = 本块（spec 侧），引用匹配只认验收标准节内的 `场景：S<n>` 行。
+      const specPath = path.join(ROOT, WF, 'specs', base);
+      if (fs.existsSync(specPath)) {
+        const sids = scenarioIdsOf(specPath);
+        if (sids.length) {
+          const covered = new Set();
+          for (const line of lines) {
+            const m = line.match(/场景[：:]\s*S(\d+)/);
+            if (m) covered.add(`S${m[1]}`);
+          }
+          const missing = sids.filter((id) => !covered.has(id));
+          if (missing.length) {
+            warnings.push(`- [WARN 场景未覆盖] ${base} 同名 spec 有验收场景但验收标准未逐场景引用：缺 ${missing.join('、')}——在「## 验收标准」按「- [x] 场景：S<n> <判据>（证据：…）」补齐（advisory，灰度第一档；不写场景节的 spec 不适用）`);
+          }
+        }
+      }
       if (!uc && !ne) continue;
         if (isNew) {
           if (uc) blockers.push(`- [验收未对账] done intent 验收标准有未勾验项:${base}（逐条勾验并补证据：commit/用例/冒烟输出）`);
@@ -1555,4 +1578,24 @@ function readdirOrNull(dir) {
 }
 function isDirectoryOrNull(p) {
   try { return fs.statSync(p).isDirectory(); } catch { return false; }
+}
+
+// 场景 ID 提取（2026-10-10 scenario-coverage，检查 8 场景覆盖子判据的 spec 侧单源）：
+//   认「## 验收场景」节内的场景声明——三级标题 `### S1 <名>` 或列表项 `- S1 <名>`，
+//   提取 S<n> 形 ID（按出现序去重）。节外不认（防「## 功能行为」里偶然出现的 S1 干扰）。
+//   无该节 / 无场景声明 → 空数组（调用方按「不适用」跳过，原判据零变化）。
+//   独立 export 供单元测试直测（纯函数：只吃文件路径、只读）。
+export function scenarioIdsOf(specPath) {
+  let lines;
+  try { lines = fs.readFileSync(specPath, 'utf8').split(/\r?\n/); } catch { return []; }
+  const ids = [];
+  let inSec = false;
+  for (const line of lines) {
+    if (/^\s*##\s+[^#]*验收场景/.test(line)) { inSec = true; continue; }
+    if (inSec && /^\s*##\s/.test(line)) break; // 下一二级标题 = 节末
+    if (!inSec) continue;
+    const m = line.match(/^\s*(?:###|-)\s*\**S(\d+)\b/i);
+    if (m && !ids.includes(`S${m[1]}`)) ids.push(`S${m[1]}`);
+  }
+  return ids;
 }

@@ -39,3 +39,5 @@
 
 > **闭环对账**：关单在 test 阶段（不依赖 deploy）。intent 置 done 前逐条勾验，每条勾选项后补证据——`- [x] <判据>（证据：<commit SHA / 测试用例名 / 冒烟脚本输出>）`。
 > done 状态仍有未勾项会被 check-loop 拦截（2026-09-12 起新建 intent 为 hard-block，存量 intent 仅 warning 提示）；勾选但缺「证据：」为 warning。
+> **场景覆盖**（2026-10-10 scenario-coverage 灰度）：同名 spec 写了「验收场景」节时，本节须**逐场景 ID 引用**——
+> `- [x] 场景：S1 <判据>（证据：…）`。缺引用只出 warning（灰度第一档，不阻断）；spec 无该节则本条不适用。

@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { computeFingerprint } from './confirm-doc.mjs';
 import { POLICIES, loadKitPolicy } from './policy.mjs';
 import { entryConfirmed, laneOfEntry, laneOfDoc } from './stage-gates.mjs';
-import { parseAddedDatesLog, addedDatesWithCache } from './check-loop.mjs';
+import { parseAddedDatesLog, addedDatesWithCache, scenarioIdsOf } from './check-loop.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
@@ -3021,6 +3021,51 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   addedDatesWithCache({ head: null, gitLog, cachePath: cacheP });
   check('场景 22e 无 head：不读缓存直接全算（gitLog 再调 1 次）', gitLogCalls === before2 + 1, 'calls=' + gitLogCalls);
   fs.rmSync(cacheP, { force: true });
+}
+
+// ---- 场景 23：场景覆盖子判据（2026-10-10 scenario-coverage，灰度 warning）----
+// scenarioIdsOf 纯函数 + 端到端（spec 有「验收场景」节 → done intent 须逐场景引用；缺 = warning 不阻断）
+{
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'scen-ids-'));
+  fs.writeFileSync(path.join(d, 's1.md'),
+    '---\n状态: draft\n---\n# SPEC\n## 功能行为\n### S0 不该被提取（节外）\n## 验收场景（可选）\n### S1 折扣\n- GIVEN x\n- WHEN y\n- THEN z\n### S2 退款\n- GIVEN a\n## 数据流\n### S3 也不提取（节外）\n');
+  const ids = scenarioIdsOf(path.join(d, 's1.md'));
+  check('场景 24a scenarioIdsOf：只提「验收场景」节内 ID，按序去重', ids.join(',') === 'S1,S2', JSON.stringify(ids));
+  fs.writeFileSync(path.join(d, 's2.md'), '---\n状态: draft\n---\n# SPEC\n## 功能行为\n无场景节\n');
+  check('场景 24b scenarioIdsOf：无「验收场景」节 → 空数组', scenarioIdsOf(path.join(d, 's2.md')).length === 0);
+  check('场景 24c scenarioIdsOf：文件不可读 → 空数组（fail-open）', scenarioIdsOf(path.join(d, 'nope.md')).length === 0);
+  fs.rmSync(d, { recursive: true, force: true });
+}
+{
+  // 端到端：spec 两场景 + intent 全引用 → exit 0 且无「场景未覆盖」warning
+  const T = mkfix();
+  w(T, 'workflow/specs/2026-09-12-sc.md', '---\n状态: approved\n级别: L1\n---\n# SPEC — sc\n## 验收场景（可选）\n### S1 折扣\n- GIVEN x\n- WHEN y\n- THEN z\n### S2 退款\n- GIVEN a\n');
+  w(T, 'workflow/intents/2026-09-12-sc.md', INTENT('sc', '状态: done\n级别: L1\n日期: 2026-09-12',
+    '\n## 验收标准（可测试）\n- [x] 场景：S1 折扣生效（证据:冒烟 checkout.json）\n- [x] 场景：S2 退款到账（证据:refund.test.js）\n'));
+  w(T, 'workflow/plans/2026-09-12-sc.md', PLAN('sc', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('场景 24d spec 有场景且 intent 全引用 → exit 0 无告警', r.status === 0 && !outOf(r).includes('场景未覆盖'), `exit=${r.status}\n${outOf(r).slice(0, 400)}`);
+}
+{
+  // 端到端：缺 S2 引用 → warning（灰度，不阻断：exit 仍 0）
+  const T = mkfix();
+  w(T, 'workflow/specs/2026-09-12-sc.md', '---\n状态: approved\n级别: L1\n---\n# SPEC — sc\n## 验收场景（可选）\n### S1 折扣\n- GIVEN x\n### S2 退款\n- GIVEN a\n');
+  w(T, 'workflow/intents/2026-09-12-sc.md', INTENT('sc', '状态: done\n级别: L1\n日期: 2026-09-12',
+    '\n## 验收标准（可测试）\n- [x] 场景：S1 折扣生效（证据:冒烟 checkout.json）\n'));
+  w(T, 'workflow/plans/2026-09-12-sc.md', PLAN('sc', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('场景 24e 缺场景引用 → warning 且不阻断（exit 0）',
+    r.status === 0 && outOf(r).includes('场景未覆盖') && outOf(r).includes('缺 S2'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
+}
+{
+  // 端到端：spec 无场景节 → 零变化（不出现「场景未覆盖」）
+  const T = mkfix();
+  w(T, 'workflow/specs/2026-09-12-sc.md', '---\n状态: approved\n级别: L1\n---\n# SPEC — sc\n## 功能行为\n普通 spec\n');
+  w(T, 'workflow/intents/2026-09-12-sc.md', INTENT('sc', '状态: done\n级别: L1\n日期: 2026-09-12',
+    '\n## 验收标准（可测试）\n- [x] 用例通过（证据:jest 全绿）\n'));
+  w(T, 'workflow/plans/2026-09-12-sc.md', PLAN('sc', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('场景 24f spec 无场景节 → 零变化（无场景告警，exit 0）', r.status === 0 && !outOf(r).includes('场景未覆盖'), `exit=${r.status}\n${outOf(r).slice(0, 400)}`);
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
