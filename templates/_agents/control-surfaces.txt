@@ -1,0 +1,53 @@
+# 控制面清单（单源：本文件——check-lane-surface.mjs 检查 C 共读，pre-commit「泳道完整性」门禁）
+# 格式：每行一条 ERE（grep -E 兼容），匹配暂存文件的仓库相对路径（/ 分隔）。
+#   # 注释与空行忽略；本文件缺失或清单为空 = 检查 C 跳过（装户无感升级，同 lane-surfaces.txt 口径）。
+#   正则语法错误行 → 门禁 fail-closed 阻断（防静默空洞）。
+#
+# 语义（与 lane-surfaces.txt 的「触达面」不同一档）：命中本清单 = **改动门禁/授权/权限系统本身**。
+#   此时必须有活跃（draft/approved / open/fixed）L2/L3 入口罩着，**否则 hard 拦**——
+#   与检查 A 的唯一区别是「无任何活跃入口」这一档：检查 A 出 advisory（docs/bootstrap 豁免的合法形态），
+#   检查 C 出 BLOCK。理由（2026-10-09 P0-A）：此前 `.agents/` 脚本与 commands 属 new-task.md §5
+#   「docs 级豁免 → 直接 commit」，而检查 A 在无活跃入口时只 advisory，两条各自合理的规则**组合起来**
+#   等于「改 check-loop.mjs 削弱某条检查 → 不需要入口文档 → 不触发同步确认门 → 提交通过」；
+#   CI 侧又跑被测分支自己的 check-loop（自指裁判）。本清单把这条通路从「advisory」抬到「必过同步确认门」。
+#   边界（诚实声明）：仍是本地信任边界内的**归因**机制——整文件删清单即可摘掉本门（该文件本身在清单内，
+#   删它同样要过门，但门是可以被 `--no-verify` / 不挂 hooksPath 绕过的）；堵的是「顺手改弱」，
+#   不宣称关闭「刻意绕过」。事后对质面 = 台账 + git 历史 + check-engine-integrity 的基线比对。
+#
+# 覆盖哪些面（为什么各条目都在控制面上）：
+#   引擎判据本体（包源 + 装副本两面都列——单边改动同样要过门）
+^templates/_agents/scripts/
+^\.agents/scripts/
+#   git 钩子面（本地唯一机器门的编排）与钩子内的门禁实现件
+^templates/_githooks/
+^\.githooks/
+^templates/_agents/hooks/
+^\.agents/hooks/
+#   CI 远端门定义（GitHub 面；owned 件，删一行等于摘一道门）
+^templates/_github/
+^\.github/
+#   权限与门禁配置本体（deny 表 / 自治信任 / 触达面与豁免清单 / 引擎基线 / 检查豁免登记）
+#   .json 件为装户安装时生成、无包源双生子；.txt 单源件包源与装副本两面都列
+^\.agents/settings\.json$
+^\.agents/trust-mode\.json$
+^\.agents/kit\.json$
+^\.agents/lane-surfaces\.txt$
+^templates/_agents/lane-surfaces\.txt$
+^\.agents/control-surfaces\.txt$
+^templates/_agents/control-surfaces\.txt$
+^\.agents/engine-lock\.json$
+^templates/_agents/engine-lock\.json$
+^\.agents/scripts-test-exempt\.txt$
+^templates/_agents/scripts-test-exempt\.txt$
+^\.agents/workflow-enums\.txt$
+^templates/_agents/workflow-enums\.txt$
+^\.agents/ledger-line-exempt\.json$
+^\.agents/rule-budgets\.txt$
+^templates/_agents/rule-budgets\.txt$
+^\.agents/metric-claims\.txt$
+^templates/_agents/metric-claims\.txt$
+#   常驻规则面（AI 行为契约本体——改 prompt 面与改判据面同档；体积预算只约束「多大」不约束「改了什么」）
+^AGENTS\.md$
+^templates/AGENTS\.md$
+#   可装门禁模块（红线守卫的判据）
+^modules/gates/

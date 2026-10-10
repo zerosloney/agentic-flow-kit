@@ -136,6 +136,25 @@ check('合并：原内容为空时骨架即全文', mergeAgents('', '<!-- m -->\
   fs.rmSync(tmp, { recursive: true, force: true });
 }
 
+// ---- ⑨ 引擎基线不下发（装户端内容清理后：包源径基线的键命名空间与装户盘面不一致，下发即污染）----
+{
+  const src = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-lock-src-'));
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-lock-tgt-'));
+  fs.mkdirSync(path.join(src, '_agents', 'scripts'), { recursive: true });
+  fs.writeFileSync(path.join(src, '_agents', 'scripts', 'gate.mjs'), '// 正常模板件\n');
+  fs.writeFileSync(path.join(src, '_agents', 'engine-lock.json'), '{"files":{}}\n');
+  const rels = listTree(src);
+  check('⑨listTree 排除 .agents/engine-lock.json（枚举面无基线）',
+    rels.includes('.agents/scripts/gate.mjs') && !rels.includes('.agents/engine-lock.json'),
+    JSON.stringify(rels));
+  const t = renderTree(src, tmp, {}, { force: true });
+  check('⑨renderTree 不落盘 .agents/engine-lock.json（written 无基线、目标不生成）',
+    !t.written.some((w) => w.rel === '.agents/engine-lock.json') && !fs.existsSync(path.join(tmp, '.agents', 'engine-lock.json')),
+    JSON.stringify(t.written.map((w) => w.rel)));
+  fs.rmSync(src, { recursive: true, force: true });
+  fs.rmSync(tmp, { recursive: true, force: true });
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 if (fail) {
   console.log('\n用法：node src/init.test.mjs');

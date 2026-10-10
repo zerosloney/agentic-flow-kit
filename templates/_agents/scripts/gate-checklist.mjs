@@ -19,6 +19,7 @@
 // 测试：node templates/_agents/scripts/gate-checklist.test.mjs（fixture + 真实仓库 baseline）
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 function fail(msg) { console.error('❌ ' + msg); process.exit(1); }
 
@@ -175,10 +176,17 @@ if (isMain) {
   const pkgRoot = process.argv[2] && !process.argv[2].startsWith('--') ? process.argv[2] : null;
   const base = pkgRoot || process.cwd();
   const doctorPath = path.join(base, 'src', 'doctor.mjs');
+  // check-loop 解析序：装副本 .agents/（装户径）→ 包源脚本同级（纯包源径，装户端内容清理后形态）
+  const here = path.dirname(fileURLToPath(import.meta.url));
   const clPathMjs = path.join(base, '.agents', 'scripts', 'check-loop.mjs');
-  const clPath = fs.existsSync(clPathMjs) ? clPathMjs : path.join(base, '.agents', 'scripts', 'check-loop.sh');
+  const clCandidates = [
+    clPathMjs,
+    path.join(base, '.agents', 'scripts', 'check-loop.sh'),
+    path.join(here, 'check-loop.mjs'),
+  ];
+  const clPath = clCandidates.find((p) => fs.existsSync(p));
   if (!fs.existsSync(doctorPath)) fail('找不到 doctor.mjs：' + doctorPath);
-  if (!fs.existsSync(clPath)) fail('找不到 check-loop（.mjs / .sh 均无）：' + clPath);
+  if (!clPath) fail('找不到 check-loop（.mjs / .sh 均无）：' + clPathMjs);
   const doctorSrc = fs.readFileSync(doctorPath, 'utf8');
   const checkLoopSrc = fs.readFileSync(clPath, 'utf8');
   const result = gateChecklist({ doctorSrc, checkLoopSrc });

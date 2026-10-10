@@ -15,7 +15,7 @@
 templates/（包源，唯一改这里）
    │ flow-kit sync（三态覆盖 + kit.json managed 台账，109 份）
    ▼
-.agents/（装副本 —— 本仓自己也是装户）
+.agents/（装副本 —— 装户仓才有；本仓为纯包源，不持装副本）
    │ flow-kit sync-hosts --apply（单向：正文段对齐，frontmatter 保留宿主特化）
    ▼
 modules/hosts/{claude,codex,cursor,omp,opencode,trae,zcode}/ + 项目根宿主点（.zcode/ 等）

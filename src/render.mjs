@@ -43,6 +43,9 @@ export function renderTree(srcRoot, targetRoot, vars, { force = false, protectSe
         continue;
       }
       const rel = relOf(abs, srcRoot);
+      // 引擎基线不是模板：包源径基线的键命名空间与装户盘面不一致（见 check-engine-integrity.mjs
+      // resolveLock 注释）——下发会致装户全员误报。包源跑 --update 落盘时排除，杜绝入库即污染
+      if (rel === '.agents/engine-lock.json') continue;
       const target = path.join(targetRoot, rel);
       fs.mkdirSync(path.dirname(target), { recursive: true });
       if (fs.existsSync(target) && !force) {
@@ -118,6 +121,8 @@ export function listTree(srcRoot) {
         walk(abs);
         continue;
       }
+      // 引擎基线不下发（命名空间错配会致装户全员误报——同 renderTree 排除，见 check-engine-integrity.mjs）
+      if (relOf(abs, srcRoot) === '.agents/engine-lock.json') continue;
       out.push(relOf(abs, srcRoot).split(path.sep).join('/'));
     }
   })(srcRoot);

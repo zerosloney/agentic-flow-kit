@@ -102,15 +102,20 @@ function mkFixture() {
 }
 
 // ---- 场景 5：实际仓库扫描 baseline（包源 ≥ 30 份 / 装副本 ≥ 30 份；装户环境无包源 → SKIP）----
+// 纯包源仓（装户端内容清理后）无 `.agents/` 装副本——包源侧仍扫得到，装副本侧 SKIP 不算失败。
 if (!SRC_ROOT) {
   check('S5 baseline SKIP（未探测到包源 templates/_agents——装户环境直跑，不算失败）', true);
 } else {
   const r = sourceSyncCheck({ pkgRoot: SRC_ROOT, target: SRC_ROOT });
   check('S5 实际仓库 包源 ≥ 30 份', r.pkgCount >= 30, '实际 ' + r.pkgCount);
-  check('S5 实际仓库 装副本 ≥ 30 份', r.tgtCount >= 30, '实际 ' + r.tgtCount);
-  // 装副本 kit.json / settings.json 不应在孤儿
-  check('S5 实际仓库 装副本独有（kit.json / settings.json）排除',
-    !r.orphan.some((o) => o.rel === 'kit.json' || o.rel === 'settings.json'));
+  if (!fs.existsSync(path.join(SRC_ROOT, '.agents'))) {
+    check('S5 装副本 SKIP（纯包源仓无 .agents/——装户端内容清理后形态，不算失败）', true);
+  } else {
+    check('S5 实际仓库 装副本 ≥ 30 份', r.tgtCount >= 30, '实际 ' + r.tgtCount);
+    // 装副本 kit.json / settings.json 不应在孤儿
+    check('S5 实际仓库 装副本独有（kit.json / settings.json）排除',
+      !r.orphan.some((o) => o.rel === 'kit.json' || o.rel === 'settings.json'));
+  }
 }
 
 // ---- 场景 6：--json 输出可解析（CLI 子流程）----

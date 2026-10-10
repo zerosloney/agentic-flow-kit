@@ -153,9 +153,15 @@ const y = 2;
 
 const realDoctor = () => fs.readFileSync(path.join(SRC_ROOT, 'src', 'doctor.mjs'), 'utf8');
 // check-loop 解析面与 CLI 同口径：.mjs 优先（2026-09-26 迁移后主位），fallback .sh（旧装户）
+// 装户端内容清理后（2026-10-09）：纯包源仓无 .agents/ 装副本——check-loop.mjs 在包源 scripts/ 下，
+// 即本测试同级；.agents/ 优先（装户径），包源径兜底（纯包源径），两者皆无 → hasReal 已经把守。
 const realCl = () => {
   const mjs = path.join(SRC_ROOT, '.agents', 'scripts', 'check-loop.mjs');
-  return fs.readFileSync(fs.existsSync(mjs) ? mjs : path.join(SRC_ROOT, '.agents', 'scripts', 'check-loop.sh'), 'utf8');
+  if (fs.existsSync(mjs)) return fs.readFileSync(mjs, 'utf8');
+  const sh = path.join(SRC_ROOT, '.agents', 'scripts', 'check-loop.sh');
+  if (fs.existsSync(sh)) return fs.readFileSync(sh, 'utf8');
+  const pkgMjs = path.join(SCRIPT_DIR, 'check-loop.mjs');
+  return fs.readFileSync(pkgMjs, 'utf8');
 };
 const hasReal = fs.existsSync(path.join(SRC_ROOT, 'src', 'doctor.mjs'));
 

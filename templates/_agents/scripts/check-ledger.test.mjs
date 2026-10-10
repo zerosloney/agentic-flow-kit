@@ -117,6 +117,8 @@ const runCli = (cwd) => spawnSync(process.execPath, [SCRIPT], { encoding: 'utf8'
   }
   if (!srcRoot || !fs.existsSync(path.join(srcRoot, 'templates', '_agents'))) {
     console.log('SKIP S9（装户环境无包源，不计失败）');
+  } else if (!fs.existsSync(path.join(srcRoot, '.agents', 'kit.json'))) {
+    console.log('SKIP S9（纯包源仓无 .agents/ 装副本——装户端内容清理后形态，不计失败）');
   } else {
     const r = ledgerDrift(srcRoot);
     check('S9 真实仓 baseline → 台账↔盘面全对齐', !r.skipped && r.modified.length === 0 && r.gone.length === 0, JSON.stringify({ modified: r.modified, gone: r.gone }));

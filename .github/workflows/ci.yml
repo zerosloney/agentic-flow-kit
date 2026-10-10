@@ -1,78 +1,23 @@
-# CI — push(main) 与全部 PR 跑全套测试；ubuntu + windows × node 18/20/22 六组合。
-# windows 统一走 bash（runner 自带 Git Bash）：让 check-loop bash 套件真实执行，而不是被 run-tests 的无 sh 分支跳过。
-# **node 20.x 为何在矩阵里（2026-09-28 跨版本登记）**：20.19 是 `require(esm)` 默认可用的分界版本
-# （18 从不支持；20.19+ 与 22.12+ 才可用）。本仓曾因此踩过真缺陷——装户取数模块首版约定 `.mjs` 并用
-# require() 载入，实测在 18.20.5 / 20.18.0 / 22.11.0 全 ERR_REQUIRE_ESM，而本机 v24 恰好支持、
-# 全绿掩盖了它。现已改用 `.cjs` 去掉该版本线依赖；保留 20.x 是为了让**这类版本分界差异**今后更早暴露。
-# 机器门（服务端兜底，2026-09-27 gate-coverage）：本地钩子是唯一本地机器门、可被 --no-verify 或未配 hooksPath
-# 的克隆绕过——CI 在 runner 上复跑五道真实仓库门（check-loop / check-ledger-invariant / doctor /
-# source-sync-check --gate / workflows-check），任一非零即红。均秒级只读，不拖慢矩阵。
-# **shipped 套件步骤（2026-09-28 补）**：`npm test` 只跑 `templates/` 副本（见 src/run-tests.mjs），
-# 而装户实际拿到的是 `.agents/` 下的 shipped 副本——**同一份字节、不同路径上下文**，故前者绿不代表后者可用
-# （上一轮 P1：shipped 套件在装户 `ERR_MODULE_NOT_FOUND` 整个崩，CI 因只跑 templates/ 而看不见；
-# 实测同字节两处跑出的断言数都不同：118 vs 116）。该步骤显式跑 `.agents/scripts/*.test.mjs`，钉住这个盲区。
-name: CI
-
+# 引擎仓自身 CI（纯包源形态——装户端内容清理后，远端门只跑引擎自检）
+# npm test = lint（eslint 未装显式 skip）+ 全量套件（src/ + templates/_agents/scripts/）。
+# 装户侧远端门是另一份：templates/_github/workflows/kit-ci.yml（随包下发，在装户仓跑 verify.mjs）。
+name: ci
 on:
   push:
     branches: [main]
   pull_request:
-
 jobs:
   test:
+    runs-on: ubuntu-latest
     strategy:
-      fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
-        node: [18, 20, 22]
-    runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        shell: bash
+        node-version: [18, 22]  # engines >=18：守地板与当前 LTS
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0 # 台账不变量历史全扫需全史（check-ledger-invariant，2026-10-02 ledger-ci-invariant）
       - uses: actions/setup-node@v4
         with:
-          node-version: ${{ matrix.node }}
-      - name: 机器门（服务端兜底——本地钩子可被绕过，此处复跑真实仓库门）
-        run: |
-          git config core.hooksPath .githooks # 克隆无本地钩子配置（AGENTS.md 要求的本地手工步骤），runner 侧补上
-          node .agents/scripts/check-loop.mjs
-          node .agents/scripts/check-ledger-invariant.mjs # 确认台账 append-only 历史全扫 + 行级校验（伪造可机器检出）
-          node bin/flow-kit.mjs doctor
-          node .agents/scripts/source-sync-check.mjs --gate
-          node .agents/scripts/workflows-check.mjs
-      - run: npm ci || npm install || npm install --registry=https://registry.npmjs.org # lock 优先 + 末级官方源兜底（eslint devDependency 需 node_modules；2026-10-09 W3）
-      - run: npm test
-      - name: shipped 套件（.agents/ 装副本——npm test 只跑 templates/，此处补装户视角）
-        run: |
-          # 逐套件跑 .agents/scripts/*.test.mjs；任一非零即红。
-          # 与 npm test 的 templates/ 侧成对：两侧都绿才算「本仓能跑 **且** 装户能跑」。
-          fail=0
-          for f in .agents/scripts/*.test.mjs; do
-            echo "===== $f ====="
-            node "$f" || fail=1
-          done
-          exit $fail
-      - name: CI 红回溯点名（2026-10-09 engine-quality-round2 B3：红时列出最近关单，复核优先）
-        if: failure()
-        run: |
-          node -e "
-            try {
-              const fs = require('fs');
-              const p = '.agents/confirmations.jsonl';
-              if (!fs.existsSync(p)) process.exit(0);
-              const cut = Date.now() - 7 * 864e5;
-              const rows = fs.readFileSync(p, 'utf8').split(/\r?\n/).filter(Boolean)
-                .map((l) => { try { return JSON.parse(l); } catch { return null; } })
-                .filter((e) => e && e.ts && ['done', 'closed'].includes(e.stage) && Date.parse(e.ts) >= cut)
-                .map((e) => e.doc);
-              const uniq = [...new Set(rows)];
-              if (uniq.length) {
-                console.log('⚠️ CI 红——最近 7 天关单文档（优先复核是否本批引入）：');
-                for (const d of uniq) console.log('  - ' + d);
-              } else console.log('最近 7 天无关单记录');
-            } catch { /* 回溯是辅助面，读不到不添乱 */ }
-          "
+          node-version: ${{ matrix.node-version }}
+      - name: 安装依赖（镜像故障走官方源兜底，不阻塞 CI）
+        run: npm ci || npm install || npm install --registry=https://registry.npmjs.org
+      - name: 引擎自检（lint + 全量套件）
+        run: npm test

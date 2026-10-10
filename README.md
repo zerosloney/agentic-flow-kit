@@ -28,11 +28,11 @@ node .agents/scripts/confirm-doc.mjs workflow/intents/<文件>.md   # 终端里�
 
 ## 五条硬规则
 
-新装的 `kit.json` 写 `audit: false` 与 `policyVersion: 2`：check-loop 只阻断配对、验收勾验、确认留痕，外加发版提交树上仍未收口的文档。敏感信息在 pre-commit，双源和台账在 doctor / sync。`audit` 缺省（升级来的旧台账）保持全量卫生警告。本仓库显式 `audit: true`。豁免日期只在 `.agents/scripts/policy.mjs` 的 `policyVersion` 表里改。
+新装的 `kit.json` 写 `audit: false` 与 `policyVersion: 2`：check-loop 只阻断配对、验收勾验、确认留痕，外加发版提交树上仍未收口的文档。敏感信息在 pre-commit，双源和台账在 doctor / sync。`audit` 缺省（升级来的旧台账）保持全量卫生警告；自己装一份 dogfood 时可显式置 `audit: true`。豁免日期只在 `.agents/scripts/policy.mjs` 的 `policyVersion` 表里改。
 
 可选红线用 `add-gate`：`dotnet-ca`、`node-layer`、`py-import`、`generated-readonly`。约定见 `modules/gates/README.md`。
 
-**关于「确认门」的诚实边界**：确认门是**留痕机制，不是防伪机制**。`confirm-doc.mjs` 把确认事件写进 `.agents/confirmations.jsonl`（append-only，入 git），check-loop 据此对账——但台账是本地可写文件，**刻意手改台账仍可伪造**。门禁的实际作用是把「顺手绕过」抬到「主动伪造」（两者性质不同、可事后对质），而非关闭通道。仓库自身的引擎注释对此有完整声明（见 `.agents/scripts/stage-gates.mjs` 头部信任边界段）。委托代录（`--delegated`）的台账行如实记 `source` 与用户原话供事后对质，永不伪装 TTY 确认。
+**关于「确认门」的诚实边界**：确认门是**留痕机制，不是防伪机制**。`confirm-doc.mjs` 把确认事件写进 `.agents/confirmations.jsonl`（append-only，入 git），check-loop 据此对账——但台账是本地可写文件，**刻意手改台账仍可伪造**。门禁的实际作用是把「顺手绕过」抬到「主动伪造」（两者性质不同、可事后对质），而非关闭通道。引擎注释对此有完整声明（见包源 `templates/_agents/scripts/stage-gates.mjs` 头部信任边界段；装户径同份在 `.agents/scripts/stage-gates.mjs`）。委托代录（`--delegated`）的台账行如实记 `source` 与用户原话供事后对质，永不伪装 TTY 确认。
 
 ## 快速开始
 

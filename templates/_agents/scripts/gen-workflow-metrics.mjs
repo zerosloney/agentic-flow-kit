@@ -53,8 +53,11 @@ const DOC_TYPES = ['intents', 'specs', 'plans', 'incidents'];
 // 场景 1 即 exit 1（workflow-enums 单源文件不可读），而包源侧同字节跑出全绿。
 // 改为**逐级上溯探测**：找到含 `.agents/workflow-enums.txt` 的那一级即用，找不到则回退标准位置让
 // loadEnums fail-loud（保持「缺失即响亮」的既有纪律，不静默兜底）。
+// 包源仓布局补丁（装户端内容清理后）：纯包源仓无 `.agents/`，枚举单源在 `templates/_agents/` 下——
+// 上一级目录名是 `_agents` 而非 `.agents`。探测同步认这两种布局，回退仍走 fail-loud。
 const resolveEnumsPath = () => {
-  let dir = path.dirname(fileURLToPath(import.meta.url));
+  const scriptDir = path.dirname(fileURLToPath(import.meta.url));
+  let dir = scriptDir;
   for (let i = 0; i < 6; i++) {
     const cand = path.join(dir, '.agents', 'workflow-enums.txt');
     if (fs.existsSync(cand)) return cand;
@@ -62,7 +65,10 @@ const resolveEnumsPath = () => {
     if (parent === dir) break; // 到根
     dir = parent;
   }
-  return path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', '.agents', 'workflow-enums.txt');
+  // 包源径：脚本在 templates/_agents/scripts/，枚举在 templates/_agents/workflow-enums.txt
+  const pkgSrc = path.join(scriptDir, '..', 'workflow-enums.txt');
+  if (fs.existsSync(pkgSrc)) return pkgSrc;
+  return path.join(scriptDir, '..', '..', '.agents', 'workflow-enums.txt');
 };
 const ENUMS = loadEnums(resolveEnumsPath());
 const ACTIVE_STATUS = [...ENUMS['doc.status.active'], ...ENUMS['incident.status.active']];

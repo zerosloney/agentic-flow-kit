@@ -39,6 +39,17 @@ const runHook = (command, cwd) => {
   return { decision, reason, raw: r.stdout || '', status: r.status };
 };
 
+// 门禁在位桩（2026-10-09 装户端内容清理后）：纯包源仓无 .githooks/——hook 第二道关卡
+// （commit/push 前置 .githooks/*）在仓内必判「门禁未执行」。①/②/②附 的 token 边界断言
+// 需要「门禁通过」语境：造临时目录放通过型桩门禁当 cwd；③ 另用空目录保留「缺失 → 门禁未执行」deny。
+const GATE_FIXTURE = fs.mkdtempSync(path.join(os.tmpdir(), 'trae-hook-gates-'));
+fs.mkdirSync(path.join(GATE_FIXTURE, '.githooks'));
+for (const name of ['pre-commit', 'pre-push']) {
+  const stub = path.join(GATE_FIXTURE, '.githooks', name);
+  fs.writeFileSync(stub, '#!/usr/bin/env bash\nexit 0\n');
+  fs.chmodSync(stub, 0o755);
+}
+
 // ---- ① 强推 token 化（P1-B2）----
 {
   const cases = [
@@ -54,7 +65,7 @@ const runHook = (command, cwd) => {
     ['dotnet build --force', 'none', '非 push 命令带 --force 不误拦'],
   ];
   for (const [cmd, expect, label] of cases) {
-    const r = runHook(cmd);
+    const r = runHook(cmd, GATE_FIXTURE);
     check(`①${label}（${cmd}）→ ${expect === 'none' ? '放行' : expect}`,
       r.decision === expect,
       `decision=${r.decision} reason=${r.reason}`);
@@ -79,7 +90,7 @@ const runHook = (command, cwd) => {
     ['git commit -m "fix: 修复"', 'none'], // commit 走 .githooks 链（本仓有钩子且全绿）；deny 门本身不应拦 commit
   ];
   for (const [cmd, expect] of cases) {
-    const r = runHook(cmd, PKG_ROOT); // cwd=本仓：git commit 场景能找到 .githooks
+    const r = runHook(cmd, GATE_FIXTURE); // cwd=桩门禁目录：git commit 能通过第二道关卡，只测 deny/ask 门
     check(`②${cmd} → ${expect === 'none' ? '不因 deny/ask 门拦' : expect}`,
       r.decision === expect,
       `decision=${r.decision} reason=${r.reason}`);
@@ -94,7 +105,7 @@ const runHook = (command, cwd) => {
     ['git commit -m "真正要拦的消息"', 'none', '普通消息照常'],
   ];
   for (const [cmd, expect, label] of cases) {
-    const r = runHook(cmd, PKG_ROOT);
+    const r = runHook(cmd, GATE_FIXTURE);
     check(`②附 ${label} → ${expect === 'none' ? '不误拦' : expect}`,
       r.decision === expect,
       `decision=${r.decision} reason=${r.reason}`);
@@ -112,4 +123,5 @@ const runHook = (command, cwd) => {
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
+fs.rmSync(GATE_FIXTURE, { recursive: true, force: true });
 process.exit(fail ? 1 : 0);

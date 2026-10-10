@@ -1,5 +1,10 @@
 #!/usr/bin/env node
 // check-lane-surface.mjs — 泳道完整性门禁（pre-commit 增量；2026-10-01 drift-hardening）
+// 布局前提：本门读 .agents/lane-surfaces.txt，豁免出口是 workflow/intents 的活跃 L2/L3 入口——
+//   二者都是**装户侧**件。纯包源仓（装户端内容清理后）两处皆无：清单缺失 = 检查 A/C 按既定
+//   「装户无感」口径跳过，本门整体惰性。此时把清单解析改双路径**只会让门跑起来而不会可用**——
+//   无 L2 入口机器时，任何控制面改动都走「无活跃入口」分支（A 出 advisory / C 出 BLOCK），
+//   纯包源仓的控制面保护改由 npm test（47 套件覆盖门禁逻辑）+ 评审 + CHANGELOG 承担。
 // 检查 A「触达面判低」：暂存 diff 命中项目 L2 触达面（.agents/lane-surfaces.txt，ERE 逐行；
 //   # 注释与空行忽略；文件缺失或清单为空 = 检查跳过，装户无感）时——
 //   存在活跃 L2/L3 入口 → 放行（归因歧义为已知边界：机器不猜「哪个入口在干这批改动」）；
