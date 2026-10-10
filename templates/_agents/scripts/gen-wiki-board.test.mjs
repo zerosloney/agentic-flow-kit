@@ -85,7 +85,7 @@ const mkfix = (eol) => {
   return root;
 };
 
-const runGen = (root) => spawnSync(process.execPath, [GEN], { cwd: root, encoding: 'utf8' });
+const runGen = (root, extraArgs = []) => spawnSync(process.execPath, [GEN, ...extraArgs], { cwd: root, encoding: 'utf8' });
 
 // ---- 场景 1：CRLF INDEX ——「用途」列重生成后保持 + 行尾保持（缺陷回归）----
 {
@@ -165,6 +165,39 @@ const runGen = (root) => spawnSync(process.execPath, [GEN], { cwd: root, encodin
   const out2 = fs.readFileSync(idx, 'utf8');
   check('场景 6：二次生成用途文本保持（round-trip 不重置为 <待补>）',
     r2.status === 0 && out2.includes(USAGE_WITH_PIPE) && !out2.includes('<待补'), out2.split('\n').slice(0, 8).join('\n'));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 7：--check 漂移判定（2026-10-10 wiki-index-drift：供 doctor §6 镜像 workflow INDEX 检查）----
+//      不写盘；一致 exit 0，任一生成区漂移 exit 1 + 差异预览。行尾归一（CRLF clone 不假阳性）
+{
+  const root = mkfix('\r\n');
+  // 先跑一次正规生成，把 INDEX/看板对齐到磁盘事实
+  const r0 = runGen(root);
+  check('场景 7：前置生成 exit 0', r0.status === 0, `exit=${r0.status}\n${r0.stdout}${r0.stderr}`);
+  // 对齐后 --check 须一致（CRLF INDEX 尤其不能因行尾假阳性）
+  const r1 = runGen(root, ['--check']);
+  check('场景 7a --check 对齐态 → exit 0 且提示一致',
+    r1.status === 0 && (r1.stdout || '').includes('一致'), `exit=${r1.status}\n${r1.stdout}${r1.stderr}`);
+  check('场景 7a --check 不写盘（INDEX 内容字节不变）',
+    fs.readFileSync(path.join(root, 'wiki', 'INDEX.md'), 'utf8').includes(USAGE_COL), '');
+  // 磁盘新增文件 → 生成区与磁盘不一致 → exit 1
+  fs.writeFileSync(path.join(root, 'wiki', '主题A', 'b.md'), '# b\n', 'utf8');
+  const r2 = runGen(root, ['--check']);
+  check('场景 7b --check 漂移（磁盘新增文件未重生成）→ exit 1',
+    r2.status === 1 && (r2.stderr || '').includes('不一致'), `exit=${r2.status}\n${r2.stdout}${r2.stderr}`);
+  check('场景 7b --check 不写盘（漂移时仍不覆盖磁盘文件）',
+    !fs.readFileSync(path.join(root, 'wiki', 'INDEX.md'), 'utf8').includes('| b.md | 主题A |'), '');
+  // 修复后 --check 恢复 exit 0
+  const r3 = runGen(root);
+  const r4 = runGen(root, ['--check']);
+  check('场景 7c 重生成后 --check 恢复 exit 0', r3.status === 0 && r4.status === 0, `exit3=${r3.status} exit4=${r4.status}\n${r4.stdout}${r4.stderr}`);
+  // 看板 DATA 被手改 → exit 1（与 INDEX 漂移同档）
+  const board = path.join(root, 'wiki', '知识沉淀总览.html');
+  fs.writeFileSync(board, fs.readFileSync(board, 'utf8').replace('"total": 2', '"total": 99'), 'utf8');
+  const r5 = runGen(root, ['--check']);
+  check('场景 7d --check 看板 DATA 漂移 → exit 1',
+    r5.status === 1 && (r5.stderr || '').includes('知识沉淀总览.html'), `exit=${r5.status}\n${r5.stdout}${r5.stderr}`);
   fs.rmSync(root, { recursive: true, force: true });
 }
 

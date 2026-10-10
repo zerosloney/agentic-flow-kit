@@ -175,6 +175,31 @@ const files = (out) => (out.match(/^📄 (workflow\/\S+)/gm) || []).map((l) => l
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- 场景 10：A1 wiki 侧节级提取 + 主题路径加权（2026-10-10）----
+//    wiki 命中带节名（骨架节或无小节兜底）；主题目录命中查询词时排序提前；长文节外内容不参与检索
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-a1-'));
+  fs.mkdirSync(path.join(root, 'wiki', '项目规范'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'wiki', '杂项'), { recursive: true });
+  // 长文：命中在白名单节内（## 结论）+ 节外（## 历史流水，不应被索引）
+  fs.writeFileSync(path.join(root, 'wiki', '项目规范', '权限收敛.md'),
+    '# 权限收敛方案\n\n## 结论\n- 权限收敛后只读接口不再放行写操作。\n\n## 历史流水\n- 2026-09 某次发布也提到权限收敛但属节外内容\n', 'utf8');
+  // 短文：无任何 ## —— 正文兜底全收
+  fs.writeFileSync(path.join(root, 'wiki', '杂项', '说明.md'), '# 说明\n\n权限收敛的领域知识条目。\n', 'utf8');
+  const r = run(root, ['--scope', 'wiki', '--cache', rootCache(root), '权限收敛']);
+  check('场景 10a wiki 长文命中带节名（结论节）',
+    r.status === 0 && /wiki\/项目规范\/权限收敛.md/.test(r.stdout) && /\[结论\]/.test(r.stdout), `exit=${r.status}\n${r.stdout}`);
+  check('场景 10b wiki 长文节外内容不参与检索（历史流水行不进命中摘录）',
+    !/历史流水/.test(r.stdout), r.stdout);
+  check('场景 10c wiki 短文无小节兜底（正文命中，节名 (正文)）',
+    /wiki\/杂项\/说明.md/.test(r.stdout) && /\(正文\)/.test(r.stdout), `exit=${r.status}\n${r.stdout}`);
+  // 主题加权：两文件命中数同量级时，主题名含查询词的「项目规范」排前
+  const order = (r.stdout.match(/^📄 (wiki\/\S+)/gm) || []).map((l) => l.replace('📄 ', ''));
+  check('场景 10d 主题路径加权：主题名命中查询词的文件排前',
+    order.length === 2 && order[0].includes('项目规范'), `order=${JSON.stringify(order)}\n${r.stdout}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 if (fail) {
   console.log(`\n${USAGE}`);

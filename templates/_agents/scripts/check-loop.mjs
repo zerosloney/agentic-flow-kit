@@ -33,6 +33,8 @@
 //   9. 文件名英文 kebab-case(非 ASCII 文件名=warning,2026-09-11 规则)
 //  10. 级别 vs 迁移文件一致性(L1/L2 入口文档加入提交触及迁移 SQL/Migrations=疑似判低,warning)
 //  11. 生成物漂移：workflow/INDEX.md(2026-09-21 检索层) + workflow/DASHBOARD.md(2026-10-08 扩覆盖面)=warning;
+//      wiki 侧（wiki/INDEX.md + 看板 DATA）由 doctor §6b 经 gen-wiki-board --check 校验，不在此重复
+//      （2026-10-10：wiki 生成区此前零机器校验，现与 workflow 侧对称为 doctor 单路）；
 //  12. frontmatter「模块:」合法性(枚举非法 / 2026-09-22 起新建缺字段=warning;词表单源 .agents/workflow-modules.txt)
 //  13. 常驻面体积预算(超限=warning;判定单源 rule-budget.sh——经 sh 调用,
 //      无 sh 环境静默跳过:advisory 级且 pre-commit 侧在 git 钩子 sh 环境照常硬拦)
@@ -461,9 +463,22 @@ export function runCheckLoop(opts = {}) {
     }
 
     // 三件套：正文行锚定 /^1\. /^2\. /^3\. （sh awk 同款）
+    let trioOk = true;
     for (const n of [1, 2, 3]) {
       if (!lines.some((l) => l.startsWith(`${n}. `))) {
         warnings.push(`- [WARN 三件套不全] ${name} 缺复盘三件套之 ${n}`);
+        trioOk = false;
+      }
+    }
+    // 沉淀追踪（incident 侧，与检查 8 intent 侧对称）：closed 且三件套齐全 = 最高价值沉淀源。
+    //   frontmatter「沉淀: <相对仓根路径>」登记去向；缺登记 → WARN 未沉淀（advisory，灰度第一档）；
+    //   登记了但文件不存在 → WARN 沉淀断档。同「沉淀: 无」显式豁免口径。
+    if (incSt === 'closed' && trioOk) {
+      const sed = fmGet(inc, '沉淀');
+      if (!sed) {
+        warnings.push(`- [WARN 未沉淀] ${name} 复盘三件套齐全（closed）但未登记沉淀去向——整理到 wiki 后在 frontmatter 记「沉淀: wiki/<主题>/<文件>」，或显式写「沉淀: 无」（advisory，灰度第一档；沉淀是人工判断，机器只提醒不强制）`);
+      } else if (sed !== '无' && !fs.existsSync(path.resolve(ROOT, sed))) {
+        warnings.push(`- [WARN 沉淀断档] ${name} frontmatter「沉淀: ${sed}」指向的文件不存在——沉淀文件移动/改名后须同步更新本字段（advisory，灰度第一档）`);
       }
     }
     const hasParent = lines.some((l) => l.includes('是否需要新 intent'));
@@ -899,6 +914,20 @@ export function runCheckLoop(opts = {}) {
             warnings.push(`- [WARN 场景未覆盖] ${base} 同名 spec 有验收场景但验收标准未逐场景引用：缺 ${missing.join('、')}——在「## 验收标准」按「- [x] 场景：S<n> <判据>（证据：…）」补齐（advisory，灰度第一档；不写场景节的 spec 不适用）`);
           }
         }
+      }
+      // 沉淀追踪子判据（2026-10-10 sediment-tracking，灰度第一档 = warning）：
+      //   intent 高价值节（影响面 / 触达红线）是 wiki 沉淀的主源——frontmatter「沉淀: <相对仓根路径>」
+      //   登记去向（如 wiki/项目规范/xxx.md），「沉淀: 无」= 显式声明不沉淀。缺登记且内容高价值
+      //   → WARN 未沉淀（advisory：沉淀是人工判断，机器只提醒不强制，不进 hard）；登记了但文件
+      //   不存在 → WARN 沉淀断档（路径漂移）。高价值判据 = 两节之一有非占位正文内容。
+      //   incident 侧对称（检查 3 内）：closed 且复盘三件套齐全 = 最高价值沉淀源，同款提醒。
+      //   有意不加 policyVersion 锚：字段缺失 = 未登记，无字段语义零变化（沿场景覆盖子判据同款口径）。
+      const sed = fmGet(intent, '沉淀');
+      const highValue = sectionHasBody(lines, '影响面') || sectionHasBody(lines, '触达红线');
+      if (highValue && !sed) {
+        warnings.push(`- [WARN 未沉淀] ${base} 含高价值沉淀内容（影响面/触达红线）但未登记沉淀去向——整理到 wiki 后在 frontmatter 记「沉淀: wiki/<主题>/<文件>」，或显式写「沉淀: 无」（advisory，灰度第一档；沉淀是人工判断，机器只提醒不强制）`);
+      } else if (sed && sed !== '无' && !fs.existsSync(path.resolve(ROOT, sed))) {
+        warnings.push(`- [WARN 沉淀断档] ${base} frontmatter「沉淀: ${sed}」指向的文件不存在——沉淀文件移动/改名后须同步更新本字段（advisory，灰度第一档）`);
       }
       if (!uc && !ne) continue;
         if (isNew) {
@@ -1598,4 +1627,26 @@ export function scenarioIdsOf(specPath) {
     if (m && !ids.includes(`S${m[1]}`)) ids.push(`S${m[1]}`);
   }
   return ids;
+}
+
+// 节体非空判定（2026-10-10 sediment-tracking，检查 8 沉淀追踪子判据的「高价值」信号）：
+//   认 `## <标题前缀>` 节内**标题之后**存在非空非占位行（占位 = `<…>` 单行包揽 / HTML 注释 / 引用）。
+//   只有光标题（如模板未填的 `## 影响面`）= 未沉淀价值，不出告警——防模板未填段被误判为高价值。
+//   前缀匹配（startsWith）：兼容「## 影响面」「## 影响面与边界」等变体写法。
+//   独立 export 供单元测试直测（纯函数：只吃行数组、无 IO）。
+export function sectionHasBody(lines, headingPrefix) {
+  let inSec = false;
+  for (const line of lines) {
+    if (/^\s*##\s/.test(line)) {
+      const t = line.replace(/^\s*##\s*/, '').trim();
+      inSec = t.startsWith(headingPrefix);
+      continue;
+    }
+    if (!inSec) continue;
+    const s = line.trim();
+    if (!s) continue;
+    if (/^<.*>$/.test(s) || s.startsWith('<!--') || s.startsWith('>')) continue; // 占位 / 注释 / 引用
+    return true;
+  }
+  return false;
 }

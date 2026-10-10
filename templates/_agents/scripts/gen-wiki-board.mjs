@@ -1,7 +1,8 @@
 // wiki 索引生成器：磁盘 + INDEX 速览表「用途」列 → 自动重生成 INDEX 速览计数/映射表 + 看板 DATA
 // 2026-09-13 引入：消除三层手工双写（短板①）。人工只维护两样：磁盘文件本身 + 速览表用途列。
-// 用法：node .agents/scripts/gen-wiki-board.mjs [--dry-run] [--help]
+// 用法：node .agents/scripts/gen-wiki-board.mjs [--dry-run] [--check] [--help]
 //   （收录/删除/移动 wiki 文件后必跑，随后跑 verify-wiki-consistency.mjs）
+//   --check 不写盘；INDEX/看板与磁盘不一致时 exit 1 并打印差异（供 doctor 漂移告警）
 // 测试：node .agents/scripts/gen-wiki-board.test.mjs（fixture 回归，须全绿）
 // 生成范围（锚点内整段重写，锚点外字节原样保留）：
 //   INDEX.md 速览表数据行 / 「合计」行数字 / 「## 文件 → 主题 → 归属目录 映射表」到「## 命名规则」之间
@@ -11,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 
-const USAGE = `用法：node .agents/scripts/gen-wiki-board.mjs [--dry-run] [--help]
+const USAGE = `用法：node .agents/scripts/gen-wiki-board.mjs [--dry-run] [--check] [--help]
 
 事实源：磁盘 wiki/<主题>/ 一层文件 + INDEX.md 速览表「用途」列（人工列）。重生成：
   - wiki/INDEX.md：速览表数据行与文件计数、「合计」行数字、映射表节
@@ -21,6 +22,7 @@ const USAGE = `用法：node .agents/scripts/gen-wiki-board.mjs [--dry-run] [--h
 
 选项：
   --dry-run   只打印将生成内容的摘要与逐行差异，不写盘
+  --check     不写盘；INDEX/看板与磁盘不一致时 exit 1 并打印差异（供 doctor 漂移告警）
   --help      打印本说明`;
 
 const args = process.argv.slice(2);
@@ -28,12 +30,13 @@ if (args.includes('--help') || args.includes('-h')) {
   console.log(USAGE);
   process.exit(0);
 }
-const unknown = args.filter((a) => a !== '--dry-run');
+const unknown = args.filter((a) => a !== '--dry-run' && a !== '--check');
 if (unknown.length) {
   console.error(`❌ 未知参数：${unknown.join(' ')}\n\n${USAGE}`);
   process.exit(1);
 }
 const DRY = args.includes('--dry-run');
+const CHECK = args.includes('--check');
 
 const WIKI = 'wiki';
 const INDEX_P = path.join(WIKI, 'INDEX.md');
@@ -185,7 +188,28 @@ if (boardOut === boardText && !/const DATA = \{[\s\S]*?\n\};/.test(boardText)) {
   process.exit(1);
 }
 
-// ---- 写盘（dry-run 只预览差异）----
+// ---- 写盘（dry-run 只预览差异；--check 只比对不写盘）----
+// 行尾归一比较（与 gen-workflow-index.mjs 同款：fresh clone 检出 CRLF、生成段恒 LF——
+// 直接字符串相等会在克隆环境假阳性「漂移」；仅内容差异才算漂移）
+const normEol = (s) => String(s).replace(/\r\n/g, '\n');
+const indexOk = normEol(out) === normEol(indexText);
+const boardOk = normEol(boardOut) === normEol(boardText);
+const summary = `文件 ${totalFiles} 份 / 主题 ${diskTopics.size} 个 / 归档 ${archiveCount} 份`;
+if (CHECK) {
+  if (indexOk && boardOk) {
+    console.log(`✅ wiki/INDEX.md 与看板均与磁盘一致（${summary}）`);
+    process.exit(0);
+  }
+  if (!indexOk) {
+    console.error(`❌ wiki/INDEX.md 与磁盘不一致（${summary}）——跑 node .agents/scripts/gen-wiki-board.mjs 重新生成`);
+    previewDiff('wiki/INDEX.md', indexText, out);
+  }
+  if (!boardOk) {
+    console.error(`❌ wiki/知识沉淀总览.html 与磁盘不一致（${summary}）——跑 node .agents/scripts/gen-wiki-board.mjs 重新生成`);
+    previewDiff('wiki/知识沉淀总览.html', boardText, boardOut);
+  }
+  process.exit(1);
+}
 if (DRY) {
   console.log('🔎 --dry-run：未写盘，差异预览如下');
   previewDiff('wiki/INDEX.md', indexText, out);
@@ -196,7 +220,7 @@ if (DRY) {
 }
 
 const tail = DRY ? '将重写' : '已重写';
-console.log(`${DRY ? '🔎 [dry-run] 将生成' : '✅ 已生成'}：文件 ${totalFiles} 份 / 主题 ${diskTopics.size} 个 / 归档 ${archiveCount} 份；速览表 ${overviewRows.length} 行、映射表 ${ordered.length} 节、看板 DATA ${tail}`);
+console.log(`${DRY ? '🔎 [dry-run] 将生成' : '✅ 已生成'}：${summary}；速览表 ${overviewRows.length} 行、映射表 ${ordered.length} 节、看板 DATA ${tail}`);
 console.log('   人工仅维护：磁盘文件 + 速览表「用途」列（新主题为 <待补> 的请补描述后重跑本脚本）');
 
 // dry-run 差异预览：首尾对齐后取中段变更块（逐行），各方向最多显示 10 行

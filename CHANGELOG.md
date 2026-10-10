@@ -2,6 +2,29 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.7.5
+
+- feat(gate)：**KB 检索层与 wiki 知识库三处接缝收敛**（2026-10-10，对照建议第一批 small：B1 + wiki INDEX
+  漂移 + A1）——前提判断：`workflow/ 永不入 wiki` 红线是对的（过程真相 vs 稳定提炼物的失效语义不同），
+  收敛的目标是**让接缝变便宜**，不是消掉接缝。三处：
+  ① **B1 沉淀追踪**（堵知识流失）：done intent 含高价值节（影响面/触达红线）或 closed incident 复盘三件套
+  齐全时，frontmatter 须记 `沉淀: <相对仓根路径>`；缺登记 → `[WARN 未沉淀]`，路径指向文件不存在 →
+  `[WARN 沉淀断档]`，`沉淀: 无` = 显式豁免。**刻意 warning 不 hard + 不加 policyVersion 锚**（沿场景覆盖
+  子判据同款口径：字段缺失 = 零行为变化）。此前 intent/incident 与 wiki **零关联机制**——沉淀全靠
+  两句人肉提示（closeout / 月度聚合），归档后复盘内容再无人见。新增导出 `sectionHasBody` 纯函数
+  （节体非空判定：占位/注释/引用行不算，防模板未填段误判）
+  ② **wiki INDEX 漂移检查**（补对称缺口）：workflow/INDEX.md 早有 doctor §6 + check-loop 11 双路机器校验，
+  wiki 侧（速览计数/合计行/映射表/看板 DATA 四处生成区）**此前一路都没有**——装户手改生成区或忘跑
+  生成器只有肉眼能发现。`gen-wiki-board.mjs` 加 `--check`（镜像 gen-workflow-index：不写盘、行尾归一
+  比对、漂移 exit 1 + 差异预览）；doctor 新增 §6b（scriptGuard 供应链校验 + 存在性先行，旧装户无脚本
+  静默跳过不产噪音）
+  ③ **A1 kb-search wiki 侧节级提取 + 主题路径加权**：wiki 长文此前是全文 `includes`（召回差、命中行
+  无上下文），现与 workflow 侧同构——节级提取（frontmatter + H1 + 白名单节 `WIKI_SECTIONS`，命中带
+  `[节名] L行`）、**短文兜底**（无任何 `## ` 时正文全收，防纯标题文档零命中）、主题目录命中查询词 ×1.2
+  （主题归属是 wiki 最有价值的结构特征，此前打分完全没用上）。行结构二元组升三元组（schema v2，
+  CFG_FP 指纹自动作废旧缓存）
+- chore(repo)：模板随动——intents/incidents `_TEMPLATE.md` frontmatter 加 `沉淀` 字段及注释；版本 1.7.5
+
 ## 1.7.4
 
 - feat(gate)：**检查 8 加「场景覆盖」子判据 + specs/intents 模板加「验收场景」节**（2026-10-10，

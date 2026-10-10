@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { computeFingerprint } from './confirm-doc.mjs';
 import { POLICIES, loadKitPolicy } from './policy.mjs';
 import { entryConfirmed, laneOfEntry, laneOfDoc } from './stage-gates.mjs';
-import { parseAddedDatesLog, addedDatesWithCache, scenarioIdsOf } from './check-loop.mjs';
+import { parseAddedDatesLog, addedDatesWithCache, scenarioIdsOf, sectionHasBody } from './check-loop.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
@@ -3066,6 +3066,79 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   w(T, 'workflow/plans/2026-09-12-sc.md', PLAN('sc', '状态: done\n级别: L1'));
   const r = run(T);
   check('场景 24f spec 无场景节 → 零变化（无场景告警，exit 0）', r.status === 0 && !outOf(r).includes('场景未覆盖'), `exit=${r.status}\n${outOf(r).slice(0, 400)}`);
+}
+
+// ---- 场景 25：沉淀追踪子判据（2026-10-10 sediment-tracking，灰度 warning）----
+// sectionHasBody 纯函数 + 端到端（done intent 含影响面/触达红线 且 frontmatter 无「沉淀」→ WARN 未沉淀；
+// incident closed 且三件套齐全 → 同款；「沉淀: 无」豁免；路径断档 → WARN 沉淀断档）
+{
+  check('场景 25a sectionHasBody：标题后有实质行 → true',
+    sectionHasBody(['## 影响面', '- 页面 A', ''], '影响面') === true);
+  check('场景 25b sectionHasBody：光标题（模板未填）→ false',
+    sectionHasBody(['## 影响面', '<页面 / 接口 / 数据范围>', ''], '影响面') === false);
+  check('场景 25c sectionHasBody：无该节 → false',
+    sectionHasBody(['## 目标', '做 X'], '影响面') === false);
+  check('场景 25d sectionHasBody：前缀匹配 + 节外有同名行不算',
+    sectionHasBody(['## 目标', '提影响面', '## 影响面与边界', '- 内容'], '影响面') === true);
+}
+{
+  // intent 侧：done + 影响面有内容 + 无沉淀字段 → WARN 未沉淀（不阻断）
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-12-sed.md', INTENT('sed', '状态: done\n级别: L1\n日期: 2026-09-12',
+    '\n## 验收标准（可测试）\n- [x] 用例通过（证据:jest 全绿）\n## 影响面\n- 页面 A / 接口 B\n'));
+  w(T, 'workflow/plans/2026-09-12-sed.md', PLAN('sed', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('场景 25e done intent 高价值无沉淀 → WARN 未沉淀且不阻断',
+    r.status === 0 && outOf(r).includes('未沉淀') && outOf(r).includes('2026-09-12-sed.md'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
+}
+{
+  // 「沉淀: 无」显式豁免 → 无未沉淀告警
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-12-sed.md', INTENT('sed', '状态: done\n级别: L1\n日期: 2026-09-12\n沉淀: 无',
+    '\n## 验收标准（可测试）\n- [x] 用例通过（证据:jest 全绿）\n## 影响面\n- 页面 A\n'));
+  w(T, 'workflow/plans/2026-09-12-sed.md', PLAN('sed', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('场景 25f 「沉淀: 无」显式豁免 → 无未沉淀告警',
+    r.status === 0 && !outOf(r).includes('未沉淀'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
+}
+{
+  // 沉淀字段指向不存在的文件 → WARN 沉淀断档
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-12-sed.md', INTENT('sed', '状态: done\n级别: L1\n日期: 2026-09-12\n沉淀: wiki/项目规范/不存在.md',
+    '\n## 验收标准（可测试）\n- [x] 用例通过（证据:jest 全绿）\n## 影响面\n- 页面 A\n'));
+  w(T, 'workflow/plans/2026-09-12-sed.md', PLAN('sed', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('场景 25g 沉淀字段指向缺失文件 → WARN 沉淀断档',
+    r.status === 0 && outOf(r).includes('沉淀断档') && !outOf(r).includes('未沉淀'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
+}
+{
+  // intent 无影响面/触达红线 → 零变化（不出现未沉淀告警）
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-12-sed.md', INTENT('sed', '状态: done\n级别: L1\n日期: 2026-09-12',
+    '\n## 验收标准（可测试）\n- [x] 用例通过（证据:jest 全绿）\n'));
+  w(T, 'workflow/plans/2026-09-12-sed.md', PLAN('sed', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('场景 25h intent 无高价值节 → 零变化', r.status === 0 && !outOf(r).includes('未沉淀'), `exit=${r.status}\n${outOf(r).slice(0, 400)}`);
+}
+{
+  // incident 侧：closed 且三件套齐全 且无沉淀 → WARN 未沉淀
+  const T = mkfix();
+  w(T, 'workflow/incidents/2026-09-12-inc.md',
+    `---\n状态: closed\n级别: L1\n发现: 2026-09-12\n---\n# INCIDENT — inc\n## 时间线\n- 用户确认：草稿过目通过（2026-09-12）\n## 复盘三件套（缺一不可）\n\n${三件套(false)}`);
+  w(T, 'workflow/plans/2026-09-12-inc.md', PLAN('inc', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('场景 25i closed incident 三件套齐全无沉淀 → WARN 未沉淀',
+    r.status === 0 && outOf(r).includes('未沉淀') && outOf(r).includes('2026-09-12-inc.md'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
+}
+{
+  // incident 三件套不全 → 沉淀子判据不触发（不出未沉淀，只出三件套不全）
+  const T = mkfix();
+  w(T, 'workflow/incidents/2026-09-12-inc.md',
+    `---\n状态: closed\n级别: L1\n发现: 2026-09-12\n---\n# INCIDENT — inc\n## 时间线\n- 用户确认：草稿过目通过（2026-09-12）\n## 复盘三件套（缺一不可）\n\n1. 结构性修复\n - 修复 commit:abc1234\n - 是否需要新 intent:\n - 否 → 理由:单点修复\n`);
+  w(T, 'workflow/plans/2026-09-12-inc.md', PLAN('inc', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('场景 25j incident 三件套不全 → 只告三件套不全，不出未沉淀',
+    r.status === 0 && outOf(r).includes('三件套不全') && !outOf(r).includes('未沉淀'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

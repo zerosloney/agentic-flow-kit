@@ -88,6 +88,9 @@ if (moduleFilter && !MODULES.includes(moduleFilter)) {
 // 活跃口径 = 单源 doc.status.active ∪ incident.status.active（与 workflow/INDEX.md 活跃层一致，fixed 归档案默认也可命中）
 const ACTIVE_STATUS = [...ENUMS['doc.status.active'], ...ENUMS['incident.status.active']];
 const WF_SECTIONS = ['背景', '目标', '根因', '复盘三件套', '验收标准', '影响面'];
+// wiki 侧节提取白名单（2026-10-10 A1）：wiki 知识文档的骨架节——长文全文 includes 召回差，
+//   节级提取让命中带节名上下文。放此处（WF_SECTIONS 旁，CFG_FP 之前）供指纹派生。
+const WIKI_SECTIONS = ['标题', '摘要', '背景', '结论', '要点', '规范', '用法', '示例'];
 const WIKI_EXCLUDE = new Set(['INDEX.md', '知识沉淀总览.html']);
 const WIKI_MAX_KB = 180;
 
@@ -149,17 +152,20 @@ const ROOT_NS = `${path.resolve('.')}::`;
 const WIKI_EXTS = includeGenerated ? /\.(md|sql|html|csv|json|txt)$/i : /\.(md|sql|html|txt)$/i;
 
 // 行序列化/复活（缓存 schema 的定义者——board-kb-p1 起纳入 CFG_FP 指纹：schema 演进即整份缓存作废）
-const serializeLines = (lines, kind) => lines.map((x) => (kind === 'wf' ? [x.ln, x.section, x.line] : [x.ln, x.line]));
-const reviveLines = (lines, kind) => lines.map((a) => (kind === 'wf' ? { ln: a[0], section: a[1], line: a[2] } : { ln: a[0], line: a[1] }));
+//   2026-10-10 A1：wiki 行从二元组 [ln, line] 升三元组 [ln, section, line]（节级提取随动）——
+//   两 kind 同构后 serialize/revive 按 kind 取三元组即可，旧缓存由 CFG_FP 指纹整份作废。
+const serializeLines = (lines) => lines.map((x) => [x.ln, x.section, x.line]);
+const reviveLines = (lines) => lines.map((a) => ({ ln: a[0], section: a[1], line: a[2] }));
 
 // linesShapeOk：缓存条目 lines 形状校验（board-kb-p1）——JSON 合法但 schema 坏（lines 非数组 / 元素非数组）
 // 一律视同 miss 走 build 重建（头注释「任何读写异常静默回退」契约恢复；此前直接 .map 抛 TypeError exit 1）
 const linesShapeOk = (lines) => Array.isArray(lines) && (lines.length === 0 || lines.every(Array.isArray));
 
 const CFG_FP = createHash('sha256').update(JSON.stringify({
-  v: 1, WF_SECTIONS, ACTIVE_STATUS, WIKI_MAX_KB, excl: [...WIKI_EXCLUDE],
+  v: 2, // 2026-10-10 A1：wiki 行升三元组（节级 section），schema 演进显式版本号
+  WF_SECTIONS, WIKI_SECTIONS, ACTIVE_STATUS, WIKI_MAX_KB, excl: [...WIKI_EXCLUDE],
   exts: WIKI_EXTS.source, // schema 派生（board-kb-p1：手抄摘要曾致扩展面演进不触发指纹失效；RegExp.source 跨 includeGenerated 分支稳定）
-  fns: [parseDoc.toString(), workflowLines.toString(), matchWords.toString(), serializeLines.toString(), reviveLines.toString()],
+  fns: [parseDoc.toString(), workflowLines.toString(), wikiLines.toString(), matchWords.toString(), serializeLines.toString(), reviveLines.toString()],
 })).digest('hex').slice(0, 16);
 const cacheUsable = !noCache && !includeGenerated;
 let cache = null;
@@ -186,13 +192,13 @@ function cachedEntry(relPath, kind, build) {
   const e = cache[key];
   if (e && e.kind === kind && Array.isArray(e.st) && e.st[0] === sig[0] && e.st[1] === sig[1] && linesShapeOk(e.lines)) {
     touched.add(key);
-    return { st: e.st, meta: e.meta, title: e.title, lines: reviveLines(e.lines, kind) };
+    return { st: e.st, meta: e.meta, title: e.title, lines: reviveLines(e.lines) };
   }
   const built = build();
   cache[key] = {
     st: sig, kind,
     ...(kind === 'wf' ? { meta: built.meta, title: built.title } : {}),
-    lines: serializeLines(built.lines, kind),
+    lines: serializeLines(built.lines),
   };
   touched.add(key);
   return { st: sig, meta: built.meta, title: built.title, lines: built.lines };
@@ -249,7 +255,36 @@ function searchWorkflow(words) {
   return results.sort((a, b) => b.score - a.score);
 }
 
-// ---- wiki 检索（口径同 2026-09-21 降噪版 wiki-search）----
+// ---- wiki 检索（口径同 2026-09-21 降噪版 wiki-search；2026-10-10 A1：节级提取 + 主题路径加权）----
+// wiki 侧与 workflow 侧同款行结构（ln + section + line），节提取用 wiki 自己的标题滚动：
+//   wiki 知识文档多为长文，全文 includes 召回差、命中行缺乏上下文——节级提取让命中带节名
+//   （`[<节名>] L<行>: <摘录>`，与 workflow 侧输出对齐）。frontmatter（如有）单列 '(frontmatter)' 节。
+//   提取节白名单 WIKI_SECTIONS（常量定义在文件头部 WF_SECTIONS 旁），与 WF_SECTIONS 平行。
+function wikiLines(text) {
+  const lines = text.split(/\r?\n/);
+  const out = [];
+  let i = 0;
+  if (/^---\s*$/.test(lines[0] || '')) {
+    out.push({ ln: 1, section: '(frontmatter)', line: lines[0] });
+    for (i = 1; i < lines.length; i++) {
+      out.push({ ln: i + 1, section: '(frontmatter)', line: lines[i] });
+      if (/^---\s*$/.test(lines[i])) { i++; break; }
+    }
+  }
+  let section = '';
+  // wiki 短文常无小节标题（如「# 说明\n正文」）——节白名单只覆盖骨架节，纯标题文档会零命中。
+  //   兜底：全文无任何 `## ` 时正文全收（section 记 '(正文)'）；有 ## 后回到白名单口径。
+  const sawH2 = lines.slice(i).some((l) => /^## /.test(l));
+  for (; i < lines.length; i++) {
+    const line = lines[i];
+    const h1 = line.match(/^# (.+?)\s*$/);
+    if (h1 && !/^## /.test(line)) { out.push({ ln: i + 1, section: '(标题)', line }); section = ''; continue; }
+    const h2 = line.match(/^## (.+?)\s*$/);
+    if (h2) section = h2[1];
+    if (!sawH2 || WIKI_SECTIONS.some((s) => section.startsWith(s))) out.push({ ln: i + 1, section: section || '(正文)', line });
+  }
+  return out;
+}
 const walkWiki = (dir, rel) => {
   const out = [];
   for (const e of fs.readdirSync(dir)) {
@@ -275,13 +310,17 @@ function searchWiki(words) {
       const e = cachedEntry(p, 'wiki', () => {
         let text;
         try { text = fs.readFileSync(p, 'utf8'); } catch { return { lines: [] }; }
-        return { lines: text.split('\n').map((line, i) => ({ ln: i + 1, line })) };
+        return { lines: wikiLines(text) };
       });
       if (!e.lines.length) continue;
       const hits = matchWords(e.lines.filter((x) => words.some((w) => x.line.includes(w))), words);
       if (!hits) continue;
       const kb = size / 1024;
-      results.push({ file: key, total: hits.total, shown: hits.shown, kb, score: hits.total / Math.sqrt(Math.max(kb, 0.1)) });
+      // 主题路径加权（A1）：查询词出现在主题目录名（key 首段，如「项目规范」）时 ×1.2——
+      //   主题归属是 wiki 最有价值的结构特征，纯全文打分完全没用上；权重温和（不压倒命中数主序）
+      const topicHit = words.some((w) => key.includes(w));
+      const score = (hits.total / Math.sqrt(Math.max(kb, 0.1))) * (topicHit ? 1.2 : 1);
+      results.push({ file: key, total: hits.total, shown: hits.shown, kb, score });
     }
   }
   return { results: results.sort((a, b) => b.score - a.score), skipped };
@@ -310,7 +349,7 @@ if (scope === 'wiki' || scope === 'all') {
   console.log(`── wiki（${res.length} 个文件命中${res.length > shown.length ? `，展示前 ${shown.length}` : ''}）──`);
   for (const r of shown) {
     console.log(`📄 wiki/${r.file} — ${r.total} 处命中 / ${r.kb < 10 ? r.kb.toFixed(1) : Math.round(r.kb)}KB`);
-    for (const h of r.shown) console.log(`   L${h.ln}: ${h.line.trim().slice(0, 130)}`);
+    for (const h of r.shown) console.log(`   [${h.section || '(无节)'}] L${h.ln}: ${h.line.trim().slice(0, 130)}`);
   }
   if (!res.length) console.log('（无命中）');
   if (skipped) console.log(`（wiki 跳过 ${skipped} 个产物/大文件——--include-generated 纳入）`);

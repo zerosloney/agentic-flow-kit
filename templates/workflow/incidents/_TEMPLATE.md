@@ -3,6 +3,7 @@
 级别: L1
 发现: YYYY-MM-DD
 模块: <词表之一，见 .agents/workflow-modules.txt>
+沉淀: <可选：复盘沉淀到 wiki 的相对仓根路径，如 wiki/项目规范/权限收敛方案.md；不沉淀写「无」，留空待 check-loop 提醒>
 ---
 # INCIDENT — <日期 主题>
 <!-- 复制为 YYYY-MM-DD-<主题>.md；线上或实测发现的功能缺陷都记录，历史 BUG 可回填 -->

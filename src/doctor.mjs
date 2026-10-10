@@ -178,6 +178,20 @@ export function doctor(args, pkgRoot) {
     else add('WARN', `workflow/INDEX.md 漂移——跑 node .agents/scripts/gen-workflow-index.mjs 重生成`);
   }
 
+  // 6b. wiki 索引漂移（2026-10-10：镜像 §6 workflow 侧——wiki INDEX 计数/映射表/看板 DATA 原本无任何
+  //     机器校验，装户手改生成区或忘跑 gen-wiki-board 只有肉眼能发现；workflow 侧有 doctor + check-loop 11
+  //     双路，wiki 侧此前是单路都没有）。存在性先行：旧装户无此脚本 = 既有「静默跳过」语义（同 §6.5 口径）
+  if (fs.existsSync(path.join(target, '.agents/scripts/gen-wiki-board.mjs'))) {
+    const wikiGuard = scriptGuard('.agents/scripts/gen-wiki-board.mjs');
+    if (!wikiGuard.ok) {
+      add('WARN', `wiki/INDEX.md 漂移检查跳过——${wikiGuard.note}（供应链防线）`);
+    } else {
+      const wb = spawnSync(process.execPath, ['.agents/scripts/gen-wiki-board.mjs', '--check'], { cwd: target, encoding: 'utf8' });
+      if (wb.status === 0) add('PASS', 'wiki/INDEX.md 与看板无漂移');
+      else add('WARN', `wiki/INDEX.md 或看板漂移——跑 node .agents/scripts/gen-wiki-board.mjs 重生成`);
+    }
+  }
+
   // 6.5 delegations 台账结构（量化层非门禁：结构漂移曾静默吞掉全部记录，2026-09-24）
   // 存在性先行（复核 P2-2）：旧装户无此脚本 = 既有「静默跳过」语义，不产生防线 WARN 噪音
   if (fs.existsSync(path.join(target, '.agents/scripts/agg-delegations.cjs'))) {
