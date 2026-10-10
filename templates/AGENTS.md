@@ -46,6 +46,7 @@
 `wiki/` 是项目知识沉淀，按主题目录归位；原始 / 一次性文档归档 `wiki/drafts-archive/<日期-主题>/`（只读不增量）。
 
 - 人工只维护两样：**磁盘文件本身 + `wiki/INDEX.md` 速览表「用途」列**；计数 / 映射表 / 看板 DATA 均为生成区，勿手改——`node .agents/scripts/gen-wiki-board.mjs` 重生成，`node .agents/scripts/verify-wiki-consistency.mjs` 三方一致性验证（触及 `wiki/` 的提交会被 pre-commit 台账门禁校验）。
+- **沉淀与血缘（2026-10-10 起）**：关单时 `node .agents/scripts/draft-sediment.mjs workflow/<intents|incidents>/<本单>.md` 自动把高价值节抽成 `drafts-archive/` 草稿（`--dry-run` 预览；全占位拒抽）；草稿是中间态，人工归类到 `wiki/<主题>/` 后跑生成器 + 验证。沉淀关系用 frontmatter 双向链接：wiki 文件 `来源: workflow/…`、workflow 文件 `沉淀: wiki/…`（不沉淀写 `沉淀: 无`）——两向字段的存在性由 verify-wiki-consistency 与 check-loop 校验，改名 / 移动时须同步。
 - wiki 看板：`wiki/知识沉淀总览.html`。
 
 ## 项目适配区（项目自填）

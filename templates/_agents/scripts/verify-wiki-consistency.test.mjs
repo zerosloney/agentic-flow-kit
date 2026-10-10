@@ -14,12 +14,19 @@ const check = (name, cond, detail = '') => {
   else { fail++; console.log(`FAIL ${name}${detail ? `——${detail}` : ''}`); }
 };
 
-function mkWiki({ extraDiskFile = false, noArchive = false } = {}) {
+function mkWiki({ extraDiskFile = false, noArchive = false, draftSource = null } = {}) {
   const fx = fs.mkdtempSync(path.join(os.tmpdir(), 'vwc-'));
   fs.mkdirSync(path.join(fx, 'wiki', '主题A'), { recursive: true });
   fs.writeFileSync(path.join(fx, 'wiki', '主题A', '文档1.md'), '# 文档1\n\n无外链。\n');
   if (extraDiskFile) fs.writeFileSync(path.join(fx, 'wiki', '主题A', '文档2.md'), '# 文档2\n');
+  let archiveCount = 0;
   if (!noArchive) fs.mkdirSync(path.join(fx, 'wiki', 'drafts-archive'), { recursive: true });
+  if (draftSource) { // B2 落的草稿形态：drafts-archive/<日期-主题>/ 下带来源 frontmatter
+    fs.mkdirSync(path.join(fx, 'wiki', 'drafts-archive', '2026-09-12-主题'), { recursive: true });
+    fs.writeFileSync(path.join(fx, 'wiki', 'drafts-archive', '2026-09-12-主题', '草稿.md'),
+      `---\n来源: ${draftSource}\n---\n# 草稿\n`);
+    archiveCount = 1;
+  }
   fs.writeFileSync(path.join(fx, 'wiki', 'INDEX.md'), [
     '# Wiki 索引',
     '',
@@ -40,7 +47,7 @@ function mkWiki({ extraDiskFile = false, noArchive = false } = {}) {
   ].join('\n'));
   const DATA = {
     topics: [{ name: '主题A', files: [{ file: '文档1.md', dir: '主题A' }] }],
-    summary: { total: 1, files: 1, topics: 1, archive: 0 },
+    summary: { total: 1, files: 1, topics: 1, archive: archiveCount },
   };
   fs.writeFileSync(path.join(fx, 'wiki', '知识沉淀总览.html'),
     '<!doctype html><script>\nconst DATA = ' + JSON.stringify(DATA, null, 2) + ';\n</script>\n');
@@ -74,6 +81,41 @@ const run = (fx) => spawnSync(process.execPath, [path.join(SRC, 'verify-wiki-con
   const r = run(fx);
   const out = (r.stdout || '') + (r.stderr || '');
   check('③ drafts-archive 缺失 → exit 1 且明示', r.status === 1 && out.includes('drafts-archive'), `status=${r.status}\n${out.slice(0, 400)}`);
+  fs.rmSync(fx, { recursive: true, force: true });
+}
+
+// ---- ④⑤⑥ 来源血缘校验（B3，2026-10-10，第 9 项）----
+{
+  // ④ 活跃层来源断链 → exit 1
+  const fx = mkWiki();
+  fs.writeFileSync(path.join(fx, 'wiki', '主题A', '文档1.md'),
+    '---\n来源: workflow/intents/2026-09-12-不存在.md\n---\n# 文档1\n\n无外链。\n');
+  const r = run(fx);
+  const out = (r.stdout || '') + (r.stderr || '');
+  check('④ 活跃层来源断链 → exit 1 且点名断链',
+    r.status === 1 && out.includes('来源断链') && out.includes('不存在.md'), `status=${r.status}\n${out.slice(0, 500)}`);
+  fs.rmSync(fx, { recursive: true, force: true });
+}
+{
+  // ⑤ 活跃层来源指向存在的文件 → exit 0 且血缘有效提示
+  const fx = mkWiki();
+  fs.writeFileSync(path.join(fx, 'wiki', '主题A', '文档1.md'),
+    '---\n来源: workflow/intents/2026-09-12-真单.md\n---\n# 文档1\n\n无外链。\n');
+  fs.mkdirSync(path.join(fx, 'workflow', 'intents'), { recursive: true });
+  fs.writeFileSync(path.join(fx, 'workflow', 'intents', '2026-09-12-真单.md'), '# INTENT\n');
+  const r = run(fx);
+  const out = (r.stdout || '') + (r.stderr || '');
+  check('⑤ 活跃层来源有效 → exit 0 且提示血缘有效',
+    r.status === 0 && out.includes('来源血缘有效'), `status=${r.status}\n${out.slice(0, 500)}`);
+  fs.rmSync(fx, { recursive: true, force: true });
+}
+{
+  // ⑥ 草稿来源未落地 → 仅提示不阻断（草稿中间态，归类前允许）
+  const fx = mkWiki({ draftSource: 'workflow/incidents/2026-09-12-未闭环.md' });
+  const r = run(fx);
+  const out = (r.stdout || '') + (r.stderr || '');
+  check('⑥ 草稿来源未落地 → exit 0 且降级提示（不阻断）',
+    r.status === 0 && out.includes('草稿中间态'), `status=${r.status}\n${out.slice(0, 500)}`);
   fs.rmSync(fx, { recursive: true, force: true });
 }
 

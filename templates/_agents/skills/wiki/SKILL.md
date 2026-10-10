@@ -26,7 +26,9 @@ description: 项目 wiki 整理与验证技能。负责把项目内散落文档�
 - **权威**：红线与闭环以 AGENTS.md / workflow 为准；wiki 承载当前态知识（领域 / 表 / 编码 / SQL 台账）。wiki 当前文档优于 `drafts-archive/`（归档仅历史快照）。
 - **双格式对（md + html 同内容）**：md 为权威内容源，html 为展示快照——内容冲突以 md 为准，改 md 后按需重出 html；速览表「用途」列标注权威关系。
 - **索引生成（2026-09-13 起）**：速览表计数/映射表/看板 DATA 由 `node .agents/scripts/gen-wiki-board.mjs` 自动生成——人工只维护磁盘文件 + 速览表「用途」列；收录/删除/移动文件后必跑生成器（新主题用途列为 `<待补>` 时补描述后重跑）。写盘前可先 `--dry-run` 看差异（`--help` 打印用法，未知参数 exit 1）。
-- **归档目录**：`wiki/drafts-archive/YYYY-MM-DD_<主题>/`，按整理批次日期+主题命名，保留原文件名。
+- **归档目录**：`wiki/drafts-archive/YYYY-MM-DD-<主题>/`，按整理批次日期+主题命名，保留原文件名。
+- **来源血缘（双向链接，2026-10-10 起）**：沉淀到 wiki 的知识在 frontmatter 记 `来源: workflow/<intents|incidents|...>/<文件>` 指回 workflow 归档；被沉淀的 workflow 文件记 `沉淀: wiki/<主题>/<文件>`（或 `沉淀: 无` 显式豁免）。两向字段由 `verify-wiki-consistency.mjs` 校验存在性（活跃层断链即拦，草稿未落地仅提示）——人工移动/改归类时须同步改这两行，否则 check-loop 的 `[WARN 沉淀断档]` 与验证脚本都会点名。
+- **关单自动沉淀（2026-10-10 起）**：intent 置 done / incident 置 closed 时，跑 `node .agents/scripts/draft-sediment.mjs <源文件>` 自动抽取高价值节（intent：影响面/触达红线；incident：影响面/根因/为什么之前没拦住/复盘三件套）→ 落 `wiki/drafts-archive/<日期-主题>/` 草稿（带 `来源` 字段）→ 回写源文件 `沉淀` 字段 → 重跑 gen-wiki-board。草稿是**中间态**：人工读一遍，归类到 `wiki/<主题>/`（补主题与用途，保留 `来源`）后跑生成器 + §4 验证。`--dry-run` 预览不写盘；仅占位的高价值节会被拒抽（内容无沉淀价值）。
 - **排除**：`workflow/`、依赖锁文件、IDE 配置。
 
 ## 3. 标准操作流程
@@ -35,8 +37,8 @@ description: 项目 wiki 整理与验证技能。负责把项目内散落文档�
 
 1. **识别范围**：列出候选文件后逐篇读首行判断主题——pwsh：`Get-ChildItem -Recurse -File -Include *.md` / `Get-Content <文件> -TotalCount 8`；POSIX：`find` / `head -8`。
 2. **主题判定**：主题由内容自决，不预设分类。当前已沉淀主题：`产品需求 / 项目计划 / 开发方案 / 用户功能 / 项目规范 / 测试报告 / 数据维护`。新增主题前先与用户对齐。
-3. **建目录**：pwsh `New-Item -ItemType Directory -Force wiki/<主题>`（POSIX：`mkdir -p`）；归档目录同理建 `wiki/drafts-archive/YYYY-MM-DD_<主题>`。
-4. **复制并改名**：pwsh `Copy-Item 原路径 wiki/<主题>/<新名>`（POSIX：`cp`）；来源为仓库内原位文件时，同时按原名复制一份到 `drafts-archive/YYYY-MM-DD_<主题>/` 留溯源。
+3. **建目录**：pwsh `New-Item -ItemType Directory -Force wiki/<主题>`（POSIX：`mkdir -p`）；归档目录同理建 `wiki/drafts-archive/YYYY-MM-DD-<主题>`。
+4. **复制并改名**：pwsh `Copy-Item 原路径 wiki/<主题>/<新名>`（POSIX：`cp`）；来源为仓库内原位文件时，同时按原名复制一份到 `drafts-archive/YYYY-MM-DD-<主题>/` 留溯源。
 5. **生成索引**：跑 `node .agents/scripts/gen-wiki-board.mjs`（速览计数/映射表/看板 DATA 自动重生成）；新主题在速览表「用途」列补一行描述后重跑。
 6. **自检**：跑第 4 节"验证脚本"，确认三方一致、目录无孤儿。
 

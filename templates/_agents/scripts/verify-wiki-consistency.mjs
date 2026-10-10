@@ -209,6 +209,40 @@ for (const m2 of html.matchAll(/href="([^"]+)"/g)) {
 }
 if (deadLinks.length) problems.push(`看板链接指向不存在的路径（相对 wiki/ 解析）: ${deadLinks.join('；')}`);
 
+// ---- 9. 来源血缘（B3，2026-10-10）：wiki frontmatter「来源: workflow/<类型>/<文件>」指回 workflow 归档 ----
+// 与 intent/incident 的正向「沉淀:」字段对称闭环——双向链接任一端指向不存在的文件即断链。
+// 校验面：活跃层知识文档（.md/.html，含子目录递归）。无 frontmatter / 无来源键的老文件零影响。
+// drafts-archive 草稿的来源校验降级为提示（草稿是中间态，来源 intent 可能尚未在仓库——B2 落的草稿
+//   在 intent done 前生成，此时断链属预期），不进 problems。
+// 注意：activeTree 只含活跃主题目录（drafts-archive 在枚举处被排除），草稿须另行扫描归档树。
+const fmGet = (text, key) => {
+  const m = text.match(/^---\r?\n([\s\S]*?)\r?\n---/);
+  if (!m) return null;
+  const kv = m[1].split(/\r?\n/).map((l) => l.match(/^(\S+):\s*(.*)$/)).find((x) => x && x[1] === key);
+  return kv ? kv[2].trim() : null;
+};
+let brokenSources = 0;
+const checkSource = (f, isDraft) => {
+  let text;
+  try { text = fs.readFileSync(path.join(WIKI, f), 'utf8'); } catch { return; }
+  const src = fmGet(text, '来源');
+  if (!src) return;
+  if (fs.existsSync(src)) return;
+  if (isDraft) notes.push(`草稿 ${f} 来源未落地（草稿中间态，归类前允许）：${src}`);
+  else { problems.push(`来源断链：${f} frontmatter「来源: ${src}」指向的文件不存在`); brokenSources++; }
+};
+for (const f of activeTree.files) {
+  if (!/\.(md|html)$/i.test(f)) continue;
+  checkSource(f, false);
+}
+if (fs.existsSync(ARCHIVE_DIR)) {
+  for (const f of walkTree(ARCHIVE_DIR).files) {
+    if (!/\.(md|html)$/i.test(f)) continue;
+    checkSource(`drafts-archive/${f}`, true);
+  }
+}
+if (brokenSources === 0) notes.push('来源血缘有效：活跃层 wiki 文件的「来源」均指向存在的 workflow 归档');
+
 // ---- 输出 ----
 for (const n of notes) console.log('ℹ️  ' + n);
 if (problems.length) {

@@ -2,6 +2,31 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.7.6
+
+- feat(tools)：**B2 关单自动沉淀 + B3 wiki 来源血缘双向链接**（2026-10-10，KB 检索层与 wiki 收敛第二批）——
+  ① **B3 来源血缘**（先于 B2 落地——B2 生成的 `来源` 字段须先有消费方）：wiki 文件 frontmatter 记
+  `来源: workflow/<intents|incidents>/…` 指回源归档；`verify-wiki-consistency.mjs` 第 9 项校验存在性
+  （活跃层断链 → 拒绝，草稿未落地 → 仅提示「草稿中间态」不阻断——归类前来源本就不存在）
+  ② **B2 draft-sediment.mjs**：关单时 `node .agents/scripts/draft-sediment.mjs workflow/<intents|incidents>/<本单>.md`
+  自动抽高价值节（intent：影响面/触达红线；incident：影响面/根因/为什么之前没拦住/复盘三件套）→ 渲染
+  带 `来源` frontmatter 的草稿落 `wiki/drafts-archive/<日期-主题>/<主题>.md` → 回写源文件 `沉淀` 字段
+  （已有非空人工登记不覆盖，`沉淀: 无` 视为豁免位可写）→ 重跑 gen-wiki-board（归档计数随动，否则
+  verify-wiki-consistency 的 summary.archive 比对拦提交）。占位行（`<…>` / 注释 / 引用）剔除——与
+  check-loop `sectionHasBody` 同口径，全占位单拒抽（内容无沉淀价值）。主题取法**标题行优先于文件名**
+  （`# INTENT — 权限收敛` 胜过文件名尾段 `perm`）。`--dry-run` 预览不写盘。草稿是**中间态**：只读不增量、
+  不参与文件级登记（仅计归档总数）、不进 kb-search 索引——人工归类到 `wiki/<主题>/` 后跑生成器 + 验证
+  ③ 模板随动：test.md §6 关单加沉淀步骤；wiki SKILL.md 加来源/沉淀双向链接与关单自动沉淀约定，并修
+  **命名漂移**（`drafts-archive/YYYY-MM-DD_<主题>` 下划线 → `<日期-主题>` 连字符，与 drafts-archive/README
+  及本批脚本一致）；AGENTS.md Wiki 节同款补述；两模板 `沉淀` 字段注释指向新脚本
+- fix(tpl)：**模板自带 wiki INDEX/看板与磁盘对齐**——templates/wiki 的映射表节此前是「（生成区…维护）」
+  占位、看板 DATA 为 total 0 的初始态，--check 与 verify-wiki-consistency 均报漂移（HEAD 前既有，
+  git stash 对照确认）。跑生成器对齐：映射表 7 节填实、看板 DATA total 7 / archive 1；用途列与锚点外
+  内容原样保留。模板自此过自己的门（装户 clone 即一致，不再首轮就漂移）
+- 测试：draft-sediment.test.mjs 41 场景全绿（4 纯函数直测 + dry-run 不写盘 / 实跑落草稿并回写沉淀 +
+  重跑看板 / 事故口径四节 / 状态守卫 / 占位拒抽 / 路径越界）；kb-search 37/0、verify-wiki-consistency 6/6
+  保持；版本 1.7.6
+
 ## 1.7.5
 
 - feat(gate)：**KB 检索层与 wiki 知识库三处接缝收敛**（2026-10-10，对照建议第一批 small：B1 + wiki INDEX

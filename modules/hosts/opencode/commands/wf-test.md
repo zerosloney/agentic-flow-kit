@@ -60,6 +60,7 @@ node bin/flow-kit.mjs doctor                       # §6.5 delegations + §6.6 o
   - **approved 留痕提交**（2026-09-30 起）：done 确认前确认**本次关单文档**的 approved 态已进 git 历史（越早越好——approved 后即应提交；若尚未，先补提交再 done；门为逐份校验，三件套均关单时逐份各自满足）——confirm-doc 的 done 前置门硬校验（历史未出现「状态: approved」→ 拒绝落账）；done 后再提交 done 态与其余改动
   - **确认落态**：唯一入口 `node .agents/scripts/confirm-doc.mjs <path>`（两形态 / 逐件+逐件原话 / done 内容绑定（关单编辑先于 done 确认、confirm-doc 是最后一次写入）/ 台账对质全口径见根 `AGENTS.md` §1.3 确认门）。
   - 修复：防复发验证已落地，incident → closed（经确认门 confirm-doc：open→fixed / fixed→closed 两跳、无单跳；2026-09-28 起 check-loop 15 对账——关单编辑先于 closed 确认，口径同 done 内容绑定）
+  - **沉淀草稿（2026-10-10 起）**：intent done / incident closed 后跑 `node .agents/scripts/draft-sediment.mjs workflow/<intents|incidents>/<本单>.md`——自动抽高价值节（intent：影响面/触达红线；incident：影响面/根因/为什么之前没拦住/复盘三件套）落 `wiki/drafts-archive/<日期-主题>/` 草稿、回写源文件 `沉淀` 字段、重跑 gen-wiki-board（归档计数随动，否则 verify-wiki-consistency 拦提交）。全占位单拒抽（正常，无沉淀价值）。`--dry-run` 先预览。草稿是**中间态**：人工读一遍归类到 `wiki/<主题>/`（补主题与用途、保留 `来源` 字段）后跑 gen-wiki-board + verify-wiki-consistency。沉淀是人工判断——机器只代抽与登记，值不值得入库由人定；不沉淀写 `沉淀: 无` 显式豁免（check-loop 的 `[WARN 未沉淀]` 随之消除）
   - **同族收尾**：入口置终态时，同名 plan 一并置 `done`（spec 见上条），不留 `approved` 孤儿（口径同看板「入口已 done，本 plan 未终态」告警）
   - 主智能体自做的 L1+ 新需求在 `workflow/delegations.md`「自做任务结果表」记一行（修复类不重复记）
   - **委派快照回写**：关单后若 `workflow/delegations.md` §月度聚合快照缺当月行或 doctor §6.5 报陈旧 → 跑 `node .agents/scripts/agg-delegations.cjs` 并回贴当月快照行

@@ -3,7 +3,7 @@
 级别: L1
 日期: YYYY-MM-DD
 模块: <词表之一，见 .agents/workflow-modules.txt>
-沉淀: <可选：沉淀到 wiki 的相对仓根路径，如 wiki/项目规范/权限收敛方案.md；不沉淀写「无」，留空待 check-loop 提醒>
+沉淀: <可选：沉淀到 wiki 的相对仓根路径，如 wiki/项目规范/权限收敛方案.md；不沉淀写「无」，留空待 check-loop 提醒；关单时可跑 node .agents/scripts/draft-sediment.mjs 自动抽草稿并回写本字段>
 备注: <可选：附注自由文本，check-loop 不解析>
 ---
 # INTENT — <主题>

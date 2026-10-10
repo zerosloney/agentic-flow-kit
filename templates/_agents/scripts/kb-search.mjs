@@ -162,7 +162,7 @@ const reviveLines = (lines) => lines.map((a) => ({ ln: a[0], section: a[1], line
 const linesShapeOk = (lines) => Array.isArray(lines) && (lines.length === 0 || lines.every(Array.isArray));
 
 const CFG_FP = createHash('sha256').update(JSON.stringify({
-  v: 2, // 2026-10-10 A1：wiki 行升三元组（节级 section），schema 演进显式版本号
+  v: 3, // 2026-10-10 B3：wiki 条目也存 meta（来源 frontmatter 血缘显示），schema 演进作废旧缓存
   WF_SECTIONS, WIKI_SECTIONS, ACTIVE_STATUS, WIKI_MAX_KB, excl: [...WIKI_EXCLUDE],
   exts: WIKI_EXTS.source, // schema 派生（board-kb-p1：手抄摘要曾致扩展面演进不触发指纹失效；RegExp.source 跨 includeGenerated 分支稳定）
   fns: [parseDoc.toString(), workflowLines.toString(), wikiLines.toString(), matchWords.toString(), serializeLines.toString(), reviveLines.toString()],
@@ -197,7 +197,7 @@ function cachedEntry(relPath, kind, build) {
   const built = build();
   cache[key] = {
     st: sig, kind,
-    ...(kind === 'wf' ? { meta: built.meta, title: built.title } : {}),
+    ...(built.meta ? { meta: built.meta, ...(built.title ? { title: built.title } : {}) } : {}),
     lines: serializeLines(built.lines),
   };
   touched.add(key);
@@ -310,7 +310,8 @@ function searchWiki(words) {
       const e = cachedEntry(p, 'wiki', () => {
         let text;
         try { text = fs.readFileSync(p, 'utf8'); } catch { return { lines: [] }; }
-        return { lines: wikiLines(text) };
+        const { meta } = parseDoc(text);
+        return { meta, lines: wikiLines(text) };
       });
       if (!e.lines.length) continue;
       const hits = matchWords(e.lines.filter((x) => words.some((w) => x.line.includes(w))), words);
@@ -320,7 +321,10 @@ function searchWiki(words) {
       //   主题归属是 wiki 最有价值的结构特征，纯全文打分完全没用上；权重温和（不压倒命中数主序）
       const topicHit = words.some((w) => key.includes(w));
       const score = (hits.total / Math.sqrt(Math.max(kb, 0.1))) * (topicHit ? 1.2 : 1);
-      results.push({ file: key, total: hits.total, shown: hits.shown, kb, score });
+      // 来源血缘（B3，2026-10-10）：wiki frontmatter「来源: workflow/<类型>/<文件>」指回 workflow 归档——
+      //   与 intent/incident 的正向「沉淀:」字段对称。有则结果行显示，无则空（老 wiki 文件零行为变化）
+      const source = (e.meta && e.meta['来源']) || '';
+      results.push({ file: key, total: hits.total, shown: hits.shown, kb, score, source });
     }
   }
   return { results: results.sort((a, b) => b.score - a.score), skipped };
@@ -348,7 +352,7 @@ if (scope === 'wiki' || scope === 'all') {
   const shown = top(res);
   console.log(`── wiki（${res.length} 个文件命中${res.length > shown.length ? `，展示前 ${shown.length}` : ''}）──`);
   for (const r of shown) {
-    console.log(`📄 wiki/${r.file} — ${r.total} 处命中 / ${r.kb < 10 ? r.kb.toFixed(1) : Math.round(r.kb)}KB`);
+    console.log(`📄 wiki/${r.file} — ${r.total} 处命中 / ${r.kb < 10 ? r.kb.toFixed(1) : Math.round(r.kb)}KB${r.source ? ` · 来源 ${r.source}` : ''}`);
     for (const h of r.shown) console.log(`   [${h.section || '(无节)'}] L${h.ln}: ${h.line.trim().slice(0, 130)}`);
   }
   if (!res.length) console.log('（无命中）');

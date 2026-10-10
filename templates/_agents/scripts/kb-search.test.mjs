@@ -200,6 +200,29 @@ const files = (out) => (out.match(/^📄 (workflow\/\S+)/gm) || []).map((l) => l
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- 场景 11：B3 来源血缘显示（2026-10-10）----
+//    wiki frontmatter「来源: workflow/<类型>/<文件>」→ 结果行带「· 来源 …」；无来源老文件零变化
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-b3-'));
+  fs.mkdirSync(path.join(root, 'wiki', '项目规范'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
+  // 带来源的 wiki 文件（B2 生成的草稿/人工沉淀都是这个形态）
+  fs.writeFileSync(path.join(root, 'wiki', '项目规范', '权限收敛.md'),
+    '---\n来源: workflow/intents/2026-09-12-perm-shrink.md\n---\n# 权限收敛方案\n\n## 结论\n- 权限收敛后只读接口不再放行写操作。\n', 'utf8');
+  // 无 frontmatter 的老 wiki 文件（零行为变化对照）
+  fs.writeFileSync(path.join(root, 'wiki', '项目规范', '老规范.md'), '# 老规范\n\n权限收敛的旧条目。\n', 'utf8');
+  const r = run(root, ['--scope', 'wiki', '--cache', rootCache(root), '权限收敛']);
+  check('场景 11a 有来源的 wiki 结果行显示来源血缘',
+    r.status === 0 && /来源 workflow\/intents\/2026-09-12-perm-shrink\.md/.test(r.stdout), `exit=${r.status}\n${r.stdout}`);
+  check('场景 11b 无 frontmatter 老文件正常命中且无来源行干扰',
+    r.status === 0 && /wiki\/项目规范\/老规范\.md/.test(r.stdout), `exit=${r.status}\n${r.stdout}`);
+  // 来源字段本身可被检索（frontmatter 已进可检索面——双向找链：从 wiki 侧反查 workflow 来源）
+  const r2 = run(root, ['--scope', 'wiki', '--cache', rootCache(root), 'perm-shrink']);
+  check('场景 11c 来源路径本身参与检索（frontmatter 命中）',
+    r2.status === 0 && /wiki\/项目规范\/权限收敛\.md/.test(r2.stdout), `exit=${r2.status}\n${r2.stdout}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 if (fail) {
   console.log(`\n${USAGE}`);
