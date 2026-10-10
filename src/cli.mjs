@@ -1,7 +1,8 @@
 #!/usr/bin/env node
-// flow-kit CLI 入口：init（安装）/ sync（升级）/ add-host（补宿主）/ add-gate（装门禁）/ doctor（体检）/ sync-hosts（跨宿主同步）/ help
+// flow-kit CLI 入口：init（安装）/ sync（升级）/ add-host（补宿主）/ add-gate（装门禁）/ doctor（体检）/ validate（只读校验）/ sync-hosts（跨宿主同步）/ help
 import { init } from './init.mjs';
 import { doctor } from './doctor.mjs';
+import { validate } from './validate.mjs';
 import { sync } from './sync.mjs';
 import { syncHosts } from './sync-hosts.mjs';
 import { addHost } from './add-host.mjs';
@@ -39,6 +40,10 @@ export const HELP = `flow-kit — AI-Native 闭环工作流 + wiki 知识层脚�
                             --apply 单向同步（权威→薄适配，不反向避免污染）；
                             改一处权威源要同步 N 份薄适配，人工 grep 易漏
   flow-kit doctor           体检：目录布局 / git 钩子 / managed 清单 / 索引漂移 / 跨宿主漂移 / check-loop
+  flow-kit validate         只读校验：包内置 check-loop 引擎对装户盘面跑闭环 20 项检查（不执行装户侧脚本，
+                            不改文档台账）；明细走 stderr，stdout 承载汇总——0/1 退出码可作 CI 独立一道门。
+                            与 doctor 的分工：doctor 查「装得健不健康」（含装户侧引擎校验后执行），
+                            validate 查「盘面内容合不合规」（判定引擎随包版本走）
 
 init 选项（全部可选，均有默认值）：
   --stack <技术栈>     dotnet | node（ts/js） | python | go | none（默认 none；ts/js/typescript/javascript
@@ -52,6 +57,7 @@ init 选项（全部可选，均有默认值）：
   --force              覆盖已存在的同名文件（默认保守跳过）
 
 sync / add-host 选项：--dir <目录>、--force（覆盖本地已改 / 已装内容）；add-gate 选项：--dir <目录>、--force。
+validate 选项：--strict（advisory warning 也判红）/ --json（机器可读，stdout）/ --dir <目录>（目标项目根，默认当前目录）。
 sync-hosts 选项：--diff（默认，仅报告，不修改）/ --apply（单向同步到薄适配）/ --json（机器可读输出）/ --dir <目录>（目标项目根，默认当前目录）。
 sync-hosts 双布局（2026-10-07）：包源仓（含 templates/_agents + modules/hosts）比对 templates/_agents ↔ modules/hosts；
 装户仓（含 .agents）比对 .agents ↔ 各宿主目录（.opencode/.trae/.omp/.zcode…）——同一命令两处都可用。
@@ -62,6 +68,8 @@ sync-hosts 双布局（2026-10-07）：包源仓（含 templates/_agents + modul
   npx agentic-flow-kit sync                        # 包出新版后升级（本地改过的 managed 文件会跳过并报告）
   npx agentic-flow-kit add-host opencode           # 后补宿主
   npx agentic-flow-kit add-gate dotnet-ca          # 装 Clean Architecture 门禁
+  npx agentic-flow-kit doctor                       # 体检
+  npx agentic-flow-kit validate --strict            # 只读结构校验（CI 可用，0/1 退出码）
   npx agentic-flow-kit sync-hosts --diff           # 看权威源 vs 薄适配漂移
   npx agentic-flow-kit sync-hosts --apply          # 单向同步到薄适配
 
@@ -104,6 +112,13 @@ export function run(argv) {
   }
   if (cmd === 'doctor') {
     doctor(argv.slice(1), PKG_ROOT);
+    return;
+  }
+  if (cmd === 'validate') {
+    validate(argv.slice(1), PKG_ROOT).catch((e) => {
+      console.error(`❌ ${e?.message || e}`);
+      process.exit(1);
+    });
     return;
   }
   console.error(`未知命令：${cmd}\n\n${HELP}`);

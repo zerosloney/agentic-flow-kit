@@ -2,6 +2,12 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.7.2
+
+- feat(tools)：**`flow-kit validate` 只读校验入口**（2026-10-10，对照 OpenSpec validate 形态）——装户此前想单独跑结构检查只能挂全套钩子或跑全量 doctor。新增命令：包**内置** check-loop 引擎（`runCheckLoop({root})`，isMain 守卫 import 零副作用）对装户盘面跑闭环 20 项检查，`spawnGit` 以 `cwd:ROOT` 落在目标仓——tracked 过滤按目标仓 HEAD 算，与 git 钩子所见提交面一致。**不执行装户侧 `.agents/scripts/*`**（判定引擎随包版本走，与 doctor 的 scriptGuard「先验后跑装户脚本」两极互补）；缺 `.agents/` 先给 init 指引再红。输出契约：check-loop 的 HARD-BLOCK/WARN 两段式原样走 stderr（消费者 pre-push 不受扰），stdout 只承载汇总行 / `--json`（`{target,strict,checkLoopExitCode,exitCode,blockers,warnings}`）；`--strict` 把 advisory warning 也判红（判据单源 `validateExit` 纯函数）。不暴露 `--rev`（与 root 注入互斥，提交时点判定属钩子链职责）。测试 13 场景（纯函数 5 + 端到端 8：绿/红/strict 判红/指引/用法错）
+- docs(readme)：**补装户 CI 接入与离线安装两节**（2026-10-10）——CI：init 本就把 `kit-ci.yml` 写进装户仓（此前只在 init 输出与文件头注释里，README 无从发现）；新节写明远端门语义（复跑 `verify.mjs`、owned 永不覆盖、非 GitHub 可删）、其他 CI 等价接入 = 同入口命令 + 服务端分支策略、并给出 `validate --strict --json` 作独立一道门。离线：包零运行时依赖（package.json 无 `dependencies`），`npm pack` tarball 自包含——外网 `npm pack` 取包 → 内网 `npm install -g`（或项目内）/ publish 进内网 registry，全路径**实测**（pack 产物无 dependencies 字段、tarball 装后 `flow-kit version` 正常）；`npx <tgz>` 直跑在本机 npm 实测 exit 0 但子进程 stdio 不回显，文档明示走安装后调用
+- chore(repo)：validate 随动——README 快速开始补 validate 行、cli HELP/示例/头注同步；版本 1.7.2
+
 ## 1.7.1
 
 - chore(repo)：**装户端内容清理——仓库回归纯包源形态**（2026-10-10）——本仓此前同时是引擎骨架**和**一个自装实例（dogfood）：删 `workflow/`（301 份实例文档）/ `wiki/`（11）/ `.agents/`（118 装副本+台账）/ `.zcode/` / `.githooks/`（5）/ 根 `AGENTS.md` / `.github/`，共 441 份，另清 `.agents/cache/`、`ppk.log` 等散落残留与悬空 `core.hooksPath`。验证：fresh `flow-kit init` 自举正常（doctor 13 PASS / 1 WARN 为看板端口占用，环境性），`npm pack` 266 份只发四区——删除的件全由 init 重生成，无损失。**装户侧机器门（门禁链 / check-loop / 泳道门）本就不在包源仓运行**：其豁免出口是 `workflow/intents` 的 L2/L3 入口，纯包源仓刻意不携带该语境，引擎仓控制面保护改由 `npm test`（47 套件）+ 评审 + 本 CHANGELOG 承担（约束写入 `check-lane-surface.mjs` 头部）

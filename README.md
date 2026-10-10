@@ -45,6 +45,9 @@ npx agentic-flow-kit init --stack node --hosts zcode,opencode
 # 体检（布局 / git 钩子 / managed 台账 / 索引漂移 / check-loop）
 npx agentic-flow-kit doctor
 
+# 只读校验（包内置 check-loop 引擎跑闭环结构检查；--strict 把 advisory 也判红，--json 机器可读）
+npx agentic-flow-kit validate
+
 # 包出新版后升级（未改动→覆盖；本地已改→跳过并报告，--force 才覆盖；owned 永不触碰）
 npx agentic-flow-kit sync
 
@@ -75,6 +78,32 @@ modules/gates/      可选门禁模块（dotnet-ca：Clean Architecture 参考�
 ```
 
 **两态文件模型**：`.agents/kit.json` 记录 managed（引擎件，随包升级）与 owned（项目内容，永不覆盖）清单及 sha256；`doctor` 会校验漂移。已存在的文件 init 保守跳过（`--force` 覆盖）。
+
+## CI 远端门与离线安装
+
+**CI 远端门**：init 已把 `.github/workflows/kit-ci.yml` 写进装户仓（GitHub Actions：checkout 后复跑 `node .agents/scripts/verify.mjs`——测试【有根 package.json 才跑】+ 闭环校验，任一非零即红）。本地 git 钩子可被 `--no-verify` 绕过，远端门兜底；该文件归装户自持（owned），`flow-kit sync` 永不覆盖，非 GitHub 装户可删。其他 CI（GitLab / Jenkins / Azure DevOps…）等价接入 = 同一入口命令 + 服务端分支策略：
+
+```bash
+node .agents/scripts/verify.mjs                    # 远端门本体（工程在子目录时加 --test-cmd "<项目测试命令>"）
+npx agentic-flow-kit validate --strict --json      # 可选加一道：包内置引擎只读结构校验（warning 也判红，stdout 机器可读）
+```
+
+真正的「门」在服务端分支保护（Settings → Branches：要求 PR + 状态检查绿才可合并）——该配置带不进仓库文件，一次性人工动作，机器不校验。
+
+**离线 / 内网安装**：本包零运行时依赖（package.json 无 `dependencies`），tarball 自包含，离线装机不拖依赖树：
+
+```bash
+# 外网机取包（或从 npm 镜像站直接下载 tgz）
+npm pack agentic-flow-kit@<版本>                   # 产出 agentic-flow-kit-<版本>.tgz
+
+# 内网机安装（二选一）
+npm install -g ./agentic-flow-kit-<版本>.tgz       # 全局：之后直接用 flow-kit 命令
+npm install ./agentic-flow-kit-<版本>.tgz          # 项目内：之后用 npx flow-kit init
+
+# 批量内网：tgz publish 进内网 registry（verdaccio / nexus…），之后照常 npx agentic-flow-kit init
+```
+
+`npx <tgz 路径>` 直跑不经安装在部分 npm 版本有子进程 stdio 不回显的问题（实测 exit 0 但无输出），离线场景请走上述安装后调用。
 
 **升级语义（sync）**：managed 文件三方比对（台账 sha / 磁盘 sha / 新版渲染 sha）——未改动 → 直接覆盖新版；本地已改 → 跳过并报告（`--force` 才覆盖，git diff 自查差异；跳过件的台账保持包侧基线，后续每次 sync 持续报告，不会在下次升级被静默覆盖——消除报告的办法：`--force` 覆盖，或把本地内容改回与新版一致）；改动恰好等于新版 → 视为已最新。包内新增文件自动安装；包内已删文件仅报告不删盘；缺失的 managed 文件自动恢复。INDEX / wiki 看板等生成器目标不比对 sha，收尾重跑生成器走锚点重写。门禁模块（add-gate 装入）归项目所有，sync 永不覆盖。add-host 对已存在的宿主文件保守跳过且不入台账——后续 sync 不升级（仅报告「已存在未入台账」），要纳入包管理用 `--force` 覆盖。owned 件归项目所有、sync 永不覆盖；其台账哈希仅记账不约束，sync 每次按盘面自愈刷新（手改后无须手工对账），add-gate 接线 local-pre-commit 后同步刷新其记账。
 
