@@ -2,6 +2,20 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.7.3
+
+- docs(repo)：**修两处文档漂移 + 补宿主接入指南**（对照建议 5，2026-10-10）——① ARCHITECTURE 两处
+  「46 测试套件」与盘面实测 48 不符：套件数是盘面派生量（两面 glob 枚举），**改为不硬编码、指向
+  `npm test` 的机器可读汇总行 `[run-tests] 合计: SUITES n / FAILED m`**（沿本仓「派生量不入单源」
+  纪律——硬编码必漂，1.7.0 的汇总行就是为机器消费建的权威源）② README 英文段「Five rules always
+  block a bad push: … and the managed/owned ledger」与中文「五条硬规则」口径冲突：台账/双源是
+  doctor / sync 校验面、**不拦提交**——按中文单源重写为「五个拦截面分布在不同工具」并显式声明
+  中文段为单源 ③ 新增 `modules/hosts/README.md`（仿 `modules/gates/README.md`）：薄适配两层约定
+  （agents 无前缀 / commands 带 commandPrefix，单源 `profiles.mjs#HOSTS`）、七宿主表（含 codex
+  `skills/` 子层）、`sync-hosts --diff/--apply` 对账口径、「加一个新宿主」五步（注册 HOSTS → 建薄
+  适配 → 权威源不动 → sync-hosts 自查 + npm test → README/HELP 随动）
+- chore(repo)：版本 1.7.3
+
 ## 1.7.2
 
 - feat(tools)：**`flow-kit validate` 只读校验入口**（2026-10-10，对照 OpenSpec validate 形态）——装户此前想单独跑结构检查只能挂全套钩子或跑全量 doctor。新增命令：包**内置** check-loop 引擎（`runCheckLoop({root})`，isMain 守卫 import 零副作用）对装户盘面跑闭环 20 项检查，`spawnGit` 以 `cwd:ROOT` 落在目标仓——tracked 过滤按目标仓 HEAD 算，与 git 钩子所见提交面一致。**不执行装户侧 `.agents/scripts/*`**（判定引擎随包版本走，与 doctor 的 scriptGuard「先验后跑装户脚本」两极互补）；缺 `.agents/` 先给 init 指引再红。输出契约：check-loop 的 HARD-BLOCK/WARN 两段式原样走 stderr（消费者 pre-push 不受扰），stdout 只承载汇总行 / `--json`（`{target,strict,checkLoopExitCode,exitCode,blockers,warnings}`）；`--strict` 把 advisory warning 也判红（判据单源 `validateExit` 纯函数）。不暴露 `--rev`（与 root 注入互斥，提交时点判定属钩子链职责）。测试 13 场景（纯函数 5 + 端到端 8：绿/红/strict 判红/指引/用法错）

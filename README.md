@@ -8,7 +8,7 @@ AI-Native 闭环工作流 + wiki 知识层脚手架。`flow-kit init` 一条命�
 
 agentic-flow-kit installs a self-contained AI workflow into a repository: stage commands, role contracts, git hooks, and an intent → spec → plan → incident trail. After `init`, the project does not need this package at runtime. Node ≥ 18 is enough.
 
-The product is the hook, not another prompt pack. Five rules always block a bad push: paired docs, checked acceptance, a confirmation ledger, secret scanning, and the managed/owned ledger. Other hygiene checks are warnings, and a fresh install sets `audit: false` so only those five stay in the way. Omit `audit` on an older ledger and the full check set stays on.
+The product is the hook, not another prompt pack. Five blocking surfaces, split across tools: check-loop blocks unpaired docs, unchecked acceptance criteria, missing confirmation trace, and release-time unclosed docs; secret scanning sits in pre-commit; the managed/owned ledger and dual-source drift are checked by `doctor` / `sync`, not by the push gate. Other hygiene checks are warnings, and a fresh install sets `audit: false` so only the blocking set stays in the way. Omit `audit` on an older ledger and the full check set stays on. The Chinese section above is the single source of truth for this split.
 
 Hosts: `zcode`, `opencode`, `trae`, `omp`, `claude`, `cursor`, `codex`. Claude Code loads `.claude/commands` and `.claude/agents`. Cursor loads `.cursor/commands`. Codex reads the repo `AGENTS.md` and `.codex/skills/flow-kit`; the `.codex/commands` files are the same thin forwards for explicit reference.
 
