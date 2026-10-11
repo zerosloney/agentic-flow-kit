@@ -20,5 +20,6 @@
 | `node-layer` | `src/` 引用 `tests/`、`test/`、`__tests__/` |
 | `py-import` | 业务 `.py` 引用 `tests` / `test` 包 |
 | `generated-readonly` | 手改 `GENERATED:BEGIN` 与 `GENERATED:END` 之间的行 |
+| `test-protect` | fix/调试提交里测试文件与被测代码同框改动（豁免：`FLOW_KIT_ALLOW_TEST_EDIT=1`） |
 
 项目自己的红线复制其中一个目录，改判断，再用 `add-gate` 装上。

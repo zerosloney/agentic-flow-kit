@@ -121,6 +121,23 @@ function run(script, dir, env = {}) {
   check('generated 暂存改区外、工作区改区内 → exit 0', ok.status === 0, ok.stderr);
   fs.rmSync(dir, { recursive: true, force: true });
 }
+{
+  const dir = repo();
+  stage(dir, 'src/app.mjs', 'export const fix = 1;\n');
+  stage(dir, 'tests/app.test.mjs', "import { fix } from '../src/app.mjs';\n");
+  const bad = run('modules/gates/test-protect/check-test-protect.mjs', dir);
+  check('test-protect 测试与代码同框 → exit 1', bad.status === 1 && bad.stderr.includes('test-protect'), bad.stderr);
+  const allowed = run('modules/gates/test-protect/check-test-protect.mjs', dir, { FLOW_KIT_ALLOW_TEST_EDIT: '1' });
+  check('test-protect FLOW_KIT_ALLOW_TEST_EDIT=1 → exit 0', allowed.status === 0, allowed.stderr);
+  fs.rmSync(dir, { recursive: true, force: true });
+}
+{
+  const dir = repo();
+  stage(dir, 'tests/app.test.mjs', "import { fix } from '../src/app.mjs';\n");
+  const ok = run('modules/gates/test-protect/check-test-protect.mjs', dir);
+  check('test-protect 纯测试提交 → exit 0', ok.status === 0, ok.stderr);
+  fs.rmSync(dir, { recursive: true, force: true });
+}
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);
