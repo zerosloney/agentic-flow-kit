@@ -74,7 +74,7 @@ next: .agents/commands/test.md
 ## 4. 改权威源后必跑（薄适配同步防漏）
 
 - 改 `templates/_agents/{commands,roles}/*.md` 正文后跑 `node bin/flow-kit.mjs sync-hosts --diff` → 拍板 → `--apply` 单向同步（只动正文段，frontmatter 不动）；口径与边界详见 `.agents/commands/sync-hosts.md`
-- 改根 `AGENTS.md`（owned 常驻面）后跑 `node .agents/scripts/edit-face-check.mjs`——工作树面快检（阶段索引/引用/预算 advisory），别等提交门才发觉砍坏（2026-10-09 B2）
+- 改根 `AGENTS.md`（owned 常驻面）后跑 `node .agents/scripts/edit-face-check.mjs`——工作树面快检（阶段索引/引用/预算 advisory），别等提交门才发觉砍坏
 
 ## 5. 改 doctor / check-loop 后必跑（三处口径对账）
 

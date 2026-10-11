@@ -16,7 +16,7 @@ description: Test 阶段 · 静态门 + 切库冒烟 + UI 实测 + L2/L3 独立�
 项目测试命令                                       # 自动化测试
 项目类型检查命令                                  # 前端类型检查/构建(涉及前端时跑)
 node .agents/scripts/verify-wiki-consistency.mjs   # 触及 wiki/ 时跑(exit 1 即先修台账再继续:跑 gen-wiki-board.mjs 补索引/看板;pre-commit 已按增量自动拦,此行用于改完即验)
-node bin/flow-kit.mjs doctor                       # §6.5 delegations + §6.6 owned 漂移 + §6.7 跨宿主薄适配正文漂移(装户环境；包源环境 §6.7 skipped)
+npx agentic-flow-kit doctor                        # §6.5 delegations + §6.6 owned 漂移 + §6.7 跨宿主薄适配正文漂移(装户环境；包源环境 §6.7 skipped)
 ```
 
 > **环境注记**：本地服务占用构建产物导致编译失败、多会话并行时「谁跑静态门 / 提交谁先停服务」等约定——如有,见项目注记 `.agents/notes/runtime-env.md` §2,跑静态门前先过一眼。
@@ -55,12 +55,12 @@ node bin/flow-kit.mjs doctor                       # §6.5 delegations + §6.6 o
 
 - 输出测试报告(通过项 / 失败项);失败项已修复并复测通过。
 - **关单**（日常闭环点，不依赖是否上 prod）:
-  - 关单前一键过门：`node .agents/scripts/verify.mjs --doc workflow/intents/<本单>.md`（npm test + check-loop 固定编排，任一失败非零退出，非绿不关单）；**`--doc` 把测试绿凭证绑到本单**——不带它落下的绿行不给任何单背书，confirm-doc 前置与检查 8 对账只认带本单 `--doc` 的绿行（仅 v6+ 生效）；**装户仓**（根目录无 `package.json`，工程在子目录）默认 `npm test` 不可跑 → 脚本**显式跳过步骤 1 且不落测试绿凭证**（防假绿）并提示；此时按项目口径手工跑测试，或带 `--test-cmd "<项目测试命令>"` 指定（2026-10-07 papercut）
+  - 关单前一键过门：`node .agents/scripts/verify.mjs --doc workflow/intents/<本单>.md`（npm test + check-loop 固定编排，任一失败非零退出，非绿不关单）；**`--doc` 把测试绿凭证绑到本单**——不带它落下的绿行不给任何单背书，confirm-doc 前置与检查 8 对账只认带本单 `--doc` 的绿行（仅 v6+ 生效）；**装户仓**（根目录无 `package.json`，工程在子目录）默认 `npm test` 不可跑 → 脚本**显式跳过步骤 1 且不落测试绿凭证**（防假绿）并提示；此时按项目口径手工跑测试，或带 `--test-cmd "<项目测试命令>"` 指定
   - 新需求：逐条勾验入口 intent「验收标准」，每条补「证据：」（例如：粘贴 CI 运行结果、UI 截图路径、或具体的 commit SHA），intent → done；同名 spec/Quick-Plan（若有）仍 approved → done。**注意：勾选但缺证据会被 check-loop 拦截（hard-block）**
-  - **approved 留痕提交**（2026-09-30 起）：done 确认前确认**本次关单文档**的 approved 态已进 git 历史（越早越好——approved 后即应提交；若尚未，先补提交再 done；门为逐份校验，三件套均关单时逐份各自满足）——confirm-doc 的 done 前置门硬校验（历史未出现「状态: approved」→ 拒绝落账）；done 后再提交 done 态与其余改动
+  - **approved 留痕提交**：done 确认前确认**本次关单文档**的 approved 态已进 git 历史（越早越好——approved 后即应提交；若尚未，先补提交再 done；门为逐份校验，三件套均关单时逐份各自满足）——confirm-doc 的 done 前置门硬校验（历史未出现「状态: approved」→ 拒绝落账）；done 后再提交 done 态与其余改动
   - **确认落态**：唯一入口 `node .agents/scripts/confirm-doc.mjs <path>`（两形态 / 逐件+逐件原话 / done 内容绑定（关单编辑先于 done 确认、confirm-doc 是最后一次写入）/ 台账对质全口径见根 `AGENTS.md` §1.3 确认门）。
   - 修复：防复发验证已落地，incident → closed（经确认门 confirm-doc：open→fixed / fixed→closed 两跳、无单跳；2026-09-28 起 check-loop 15 对账——关单编辑先于 closed 确认，口径同 done 内容绑定）
-  - **沉淀草稿（2026-10-10 起）**：intent done / incident closed 后跑 `node .agents/scripts/draft-sediment.mjs workflow/<intents|incidents>/<本单>.md`——自动抽高价值节（intent：影响面/触达红线；incident：影响面/根因/为什么之前没拦住/复盘三件套）落 `wiki/drafts-archive/<日期-主题>/` 草稿、回写源文件 `沉淀` 字段、重跑 gen-wiki-board（归档计数随动，否则 verify-wiki-consistency 拦提交）。全占位单拒抽（正常，无沉淀价值）。`--dry-run` 先预览。草稿是**中间态**：人工读一遍归类到 `wiki/<主题>/`（补主题与用途、保留 `来源` 字段）后跑 gen-wiki-board + verify-wiki-consistency。沉淀是人工判断——机器只代抽与登记，值不值得入库由人定；不沉淀写 `沉淀: 无` 显式豁免（check-loop 的 `[WARN 未沉淀]` 随之消除）
+  - **沉淀草稿**：intent done / incident closed 后跑 `node .agents/scripts/draft-sediment.mjs workflow/<intents|incidents>/<本单>.md`——自动抽高价值节（intent：影响面/触达红线；incident：影响面/根因/为什么之前没拦住/复盘三件套）落 `wiki/drafts-archive/<日期-主题>/` 草稿、回写源文件 `沉淀` 字段、重跑 gen-wiki-board（归档计数随动，否则 verify-wiki-consistency 拦提交）。全占位单拒抽（正常，无沉淀价值）。`--dry-run` 先预览。草稿是**中间态**：人工读一遍归类到 `wiki/<主题>/`（补主题与用途、保留 `来源` 字段）后跑 gen-wiki-board + verify-wiki-consistency。沉淀是人工判断——机器只代抽与登记，值不值得入库由人定；不沉淀写 `沉淀: 无` 显式豁免（check-loop 的 `[WARN 未沉淀]` 随之消除）
   - **同族收尾**：入口置终态时，同名 plan 一并置 `done`（spec 见上条），不留 `approved` 孤儿（口径同看板「入口已 done，本 plan 未终态」告警）
   - 主智能体自做的 L1+ 新需求在 `workflow/delegations.md`「自做任务结果表」记一行（修复类不重复记）
   - **委派快照回写**：关单后若 `workflow/delegations.md` §月度聚合快照缺当月行或 doctor §6.5 报陈旧 → 跑 `node .agents/scripts/agg-delegations.cjs` 并回贴当月快照行

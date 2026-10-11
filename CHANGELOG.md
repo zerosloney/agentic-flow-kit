@@ -2,6 +2,22 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.7.10
+
+- fix(tpl+docs)：**装户第一公里两处修复 + 冒烟暴露的预算超限回归**（2026-10-11，对照当日多维评审 S1/S2）——
+  ① **test.md 静态门 doctor 命令装户环境修正**（S2）：`node bin/flow-kit.mjs doctor` 在装户仓必报错
+  （装户无 bin/，实测 Cannot find module）→ 改 `npx agentic-flow-kit doctor`，与 README 快速开始同口径。
+  ② **README 60 秒路径补首装提交步**（S1）：init 后先 `git add -A && git commit -m "feat: bootstrap——…"`
+  （此刻无活跃入口，泳道门仅 advisory），再立 intent——修复裸 git add 全暂存装户产物 × 活跃 L1 入口 →
+  泳道完整性硬拦首提（fresh init 实测复现）。提交类型须在 feat/fix/docs/style/refactor/perf 内
+  （commit-msg 机器校验——首版示例 chore: 实测被拦后改 feat:）。
+  ③ **常驻面目录合计超限回归**（②冒烟暴露）：装户首提被预算门拦（.agents/commands/ 合计 65581B > 65536B）
+  ——bb69e19/418960a 重构净增 78B，纯包源仓不跑装户 pre-commit 预算门故未暴露；沿 71e0b0e「不调预算」先例
+  压缩 build.md/test.md 四处版本括号（-84B，出处权威在 CHANGELOG），恢复 ≤65536。
+  ①③ 共十份宿主薄适配（wf-test/wf-build ×5 宿主）经 sync-hosts --apply 随动（frontmatter 不动，81 对全对齐）。
+  实测全链路（fresh init 冒烟）：init → bootstrap 首提 → fill-plan（L1 草稿豁免）→ confirm-doc --delegated
+  → 代码改动提交 → doctor，全 exit 0；npm test 50 套件 0 失败。
+
 ## 1.7.9
 
 - feat(tpl)：**事故复盘根因节加克隆分叉证据收集提示**（2026-10-11，P4 判据触发器）——incidents/_TEMPLATE.md

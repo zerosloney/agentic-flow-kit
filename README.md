@@ -21,6 +21,7 @@ npx agentic-flow-kit doctor
 
 ```bash
 npx agentic-flow-kit init --stack node --hosts claude
+git add -A && git commit -m "feat: bootstrap——安装 agentic-flow-kit 工作流引擎"   # 先入库装户产物：此刻无活跃入口，泳道门仅 advisory
 # 按 .agents/commands/plan.md 写一份 L1 intent 与同名 plan（状态先保持 draft）
 node .agents/scripts/confirm-doc.mjs workflow/intents/<文件>.md   # 终端里键入「可以」
 # 改代码，git add，然后提交。配对没齐、验收没勾、确认指纹对不上，钩子会拒绝这次提交。
