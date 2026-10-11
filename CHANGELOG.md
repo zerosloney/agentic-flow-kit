@@ -2,6 +2,35 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.7.8
+
+- feat(gate)：**gate 防改锚**（2026-10-11，P3-1——对照 2026-10-10 调研「gate 装户可改、hard 项缺防改」结论）——
+  add-gate 给逐字拷贝安装的 gate 脚本在 owned 条目写 `srcSha256`＝安装时刻包源 sha（LF 归一，复用
+  template-downstream 先例的锚字段）：sync 对 `sha256` 按盘面自愈（手改不留痕），但 gate 条目在装户 sync
+  中解析不到包源模板、`srcSha256` 锚恒定——doctor 新增 §6.6b「gate 安装锚」校验，盘面 ≠ 锚 → WARN 永久
+  可见（不阻断：装户对门有最终所有权，锚只提供可见性；重锚 = `flow-kit add-gate <门名> --force`；旧装户
+  无锚静默跳过，重装后生效）。已存在被跳过的文件锚盘面现状、与包源不一致时 WARN 差异；local-pre-commit
+  是合并接线件，不写锚、校验显式排除（防恒失配误报）。测试：新增 src/add-gate.test.mjs（4 场景 20 断言：
+  首装锚＝包源 sha / 幂等 / 手改原锚保留 + 端到端抓改 / --force 重锚）；doctor.test.mjs +7 场景（完好 /
+  篡改 / 缺失 / 无锚跳过 / local-pre-commit 排除 / 解析失败 / WARN 渐进路径）
+- feat(tools)：**检查 8 场景对账双向补全**（2026-10-11，P2 批次——THEN 断言机器可抽 + 引用断链反向对账，
+  均灰度第一档 warning、不进 hard、不加版本锚，沿 1.7.5 方案 B 口径）——
+  ① `extractThenByScenario` 纯函数（check-loop.mjs）：按场景声明分块抽 THEN 断言行（`- THEN` 行首为准，
+  `THEN:`/`THEN ` 变体兼容，GIVEN 行内 "THEN" 字样不误抽）；检查 8 对缺 THEN 的场景聚合出一条
+  `[WARN 场景无断言]`——写了场景没写断言 = 空壳场景，机器从此可见；spec 读取失败跳过不误报（fail-open）
+  ② 反向对账：intent「验收标准」引用了 spec 未声明的场景 ID → `[WARN 场景引用断链]`（spec 无场景节时
+  引用同样悬空）——与既有「场景未覆盖」正向互补，共用同一次遍历解析不重复解析
+  ③ spec 模板验收场景节补 THEN 机器对账说明一句。独立 check-spec-chain 脚本**未建**：plan 模板无需求
+  编号约定、无对账面，按 YAGNI 收进检查 8（跨工件一致性对账的 analyze 位点）
+  测试：check-loop.test.mjs 285/0（+11：纯函数四态 / 聚合列 ID / 无节零变化 / S9 断链 / 引用一致零告警 /
+  无节引用仍断链）
+- 备注：**宿主 5 份薄壳本批零改动**——薄壳架构既存（sync-hosts B-b：基座 templates/_agents/commands 正文
+  单向同步宿主 wf-*.md，frontmatter 各自维护），THEN/断链规则落在 spec 模板与 check-loop，宿主无需随动；
+  P2-3 指令预算经核实**已覆盖**（rule-budgets.txt 2026-10-06/07 已纳 AGENTS.md 8192B 与
+  .agents/commands/*.md 8704B、目录合计 65536B，pre-commit 硬拦；宿主薄壳体积由 sync-hosts 正文 sha +
+  doctor §6.7 把关）——不加重复防线
+- 测试：run-tests 50 套件全绿（新增 add-gate.test.mjs）；版本 1.7.8
+
 ## 1.7.7
 
 - feat(tools)：**test-protect 测试保护门入库 + 沉淀闭环三类机器对账补全**（2026-10-11，P0/P1 落地批次——对照 2026-10-10「AI-Native SDLC 闭环交付最佳实践」深度调研的建议项）——

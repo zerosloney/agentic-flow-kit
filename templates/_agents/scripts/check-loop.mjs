@@ -26,6 +26,10 @@
 //   8. intent 验收标准对账(新建:done 未勾验/缺节=hard,勾选缺证据=warning;存量聚合 warning,含「存量对账豁免」声明者出账)
 //      + 场景覆盖子判据(2026-10-10 scenario-coverage,灰度 warning):同名 spec 有「验收场景」节时,
 //        done intent 验收标准须逐场景 ID 引用(场景:S1…),缺引用=warning;spec 无该节则不适用(零变化)
+//        + THEN 断言子判据(2026-10-11 then-assertion,灰度 warning):声明场景缺「- THEN」行=空壳场景,
+//          聚合一条「场景无断言」warning(THEN 是机器对账锚;节不存在=零变化)
+//        + 引用断链子判据(2026-10-11 dangling-ref,灰度 warning):验收标准引用 spec 未声明的场景 ID
+//          (含 spec 无场景节)=「场景引用断链」warning——场景未覆盖的反向对账,共用同一次解析
 //      **生效日锚=git 首次加入日期(2026-09-28 改;此前取文件名前 10 字符——命名规范强制的字段、
 //      写早零成本,一条 hard 门可被平凡绕过;incident 2026-09-28-check8-git-anchor 实证)**:
 //      非 git / 查不到加入记录 → 不可判定 → 走存量口径(不误报 hard)
@@ -915,19 +919,40 @@ export function runCheckLoop(opts = {}) {
       //   有意不进 hard：新判据先灰度观察存量装户告警噪音，沿检查 8 自身 / 检查 15 / 检查 18
       //   「先 WARN、装户吃过警告后升 FAIL」的既有路径；spec 无该节 = 原判据零变化。
       //   ID 提取单源 = 本块（spec 侧），引用匹配只认验收标准节内的 `场景：S<n>` 行。
+      // 引用断链子判据（2026-10-11 dangling-ref，P2-1，灰度第一档 = warning）：
+      //   上判据的**反向对账**——验收标准引用了 spec 未声明的场景 ID = 悬空引用（改 ID 漏改 / 复制粘贴
+      //   残留的机器信号）；spec 无场景节但引用了 S<n> 同样算断链（引用了不存在的场景）。与「场景未覆盖」
+      //   共用同一次 ID 解析与引用遍历（covered 一份两用），不重复解析。
+      // THEN 断言子判据（2026-10-11 then-assertion，P2-2，灰度第一档 = warning）：
+      //   声明了场景却无 THEN 断言行 = 空壳场景——THEN 是可观测结果的机器对账锚（GIVEN/WHEN 可省），
+      //   聚合一条不逐场景刷屏；验收场景节本身可选，节不存在 → 零变化。
       const specPath = path.join(ROOT, WF, 'specs', base);
       if (fs.existsSync(specPath)) {
         const sids = scenarioIdsOf(specPath);
+        // 引用遍历单次（覆盖/断链两方向共用）：不锁进 sids.length 分支——spec 无场景节时引用同样悬空
+        const covered = new Set();
+        for (const line of lines) {
+          const m = line.match(/场景[：:]\s*S(\d+)/);
+          if (m) covered.add(`S${m[1]}`);
+        }
         if (sids.length) {
-          const covered = new Set();
-          for (const line of lines) {
-            const m = line.match(/场景[：:]\s*S(\d+)/);
-            if (m) covered.add(`S${m[1]}`);
-          }
           const missing = sids.filter((id) => !covered.has(id));
           if (missing.length) {
             warnings.push(`- [WARN 场景未覆盖] ${base} 同名 spec 有验收场景但验收标准未逐场景引用：缺 ${missing.join('、')}——在「## 验收标准」按「- [x] 场景：S<n> <判据>（证据：…）」补齐（advisory，灰度第一档；不写场景节的 spec 不适用）`);
           }
+          // THEN 对账需 spec 全文（scenarioIdsOf 只回 ID）；读取失败 = 不可判定 → 跳过不误报（fail-open）
+          let thenMap = null;
+          try { thenMap = extractThenByScenario(fs.readFileSync(specPath, 'utf8')); } catch { /* 极窄竞态，不判空壳 */ }
+          if (thenMap) {
+            const noThen = sids.filter((id) => !(thenMap.get(id) || []).length);
+            if (noThen.length) {
+              warnings.push(`- [WARN 场景无断言] ${base} 同名 spec 场景缺 THEN 断言：${noThen.join('、')}——每场景至少一行「- THEN <可观测结果>」（GIVEN/WHEN 可省；advisory，灰度第一档）`);
+            }
+          }
+        }
+        const dangling = [...covered].filter((id) => !sids.includes(id));
+        if (dangling.length) {
+          warnings.push(`- [WARN 场景引用断链] ${base} 验收标准引用了 spec 未声明的场景 ID：${dangling.join('、')}——修正 ID 或在 spec「## 验收场景」补该场景（advisory，灰度第一档）`);
         }
       }
       // 沉淀追踪子判据（2026-10-10 sediment-tracking，灰度第一档 = warning）：
@@ -1645,6 +1670,38 @@ export function scenarioIdsOf(specPath) {
     if (m && !ids.includes(`S${m[1]}`)) ids.push(`S${m[1]}`);
   }
   return ids;
+}
+
+// THEN 断言抽取（2026-10-11 then-assertion，检查 8「场景无断言」子判据的 spec 侧单源）：
+//   输入 spec 全文，定位「## 验收场景」节（节定位正则与 scenarioIdsOf 同款——口径单源，改写法时两处同步），
+//   按场景块分组（`### S1 <名>` 三级标题或 `- S1 <名>` 列表项，声明正则同 scenarioIdsOf），抽块内 THEN 断言行。
+//   行匹配口径：剥缩进后以 `- THEN` 开头（模板规定形式）；`THEN:` / `THEN `（无连字符）也认——
+//   防「写了断言但少了 `- ` 前缀」的写法漂移把断言误判为空；只认行首 THEN，GIVEN/WHEN 行中段的
+//   "THEN" 字样不误抽。返回 Map<S-ID, string[]>（声明即建键，无 THEN = 空数组——空壳判定交给调用方）；
+//   节不存在 / 非字符串输入 → 空 Map（验收场景节本身可选，调用方零变化）。
+//   独立 export 供单元测试直测（纯函数：只吃文本、无 IO）。
+export function extractThenByScenario(text) {
+  const byScen = new Map();
+  if (typeof text !== 'string') return byScen; // 读取失败（调用方传 null）→ 空 Map，调用方按不可判定跳过
+  const lines = text.split(/\r?\n/);
+  let cur = null; // 当前场景块 ID（null = 尚未进入任何场景块，节头说明行不算断言）
+  let inSec = false;
+  for (const line of lines) {
+    if (/^\s*##\s+[^#]*验收场景/.test(line)) { inSec = true; continue; }
+    if (inSec && /^\s*##\s/.test(line)) break; // 下一二级标题 = 节末
+    if (!inSec) continue;
+    const decl = line.match(/^\s*(?:###|-)\s*\**S(\d+)\b/i);
+    if (decl) {
+      const id = `S${decl[1]}`;
+      if (!byScen.has(id)) byScen.set(id, []);
+      cur = id;
+      continue;
+    }
+    if (cur === null) continue;
+    const s = line.trim();
+    if (/^-\s*THEN\b/i.test(s) || /^THEN\b/i.test(s)) byScen.get(cur).push(s);
+  }
+  return byScen;
 }
 
 // 节体非空判定（2026-10-10 sediment-tracking，检查 8 沉淀追踪子判据的「高价值」信号）：

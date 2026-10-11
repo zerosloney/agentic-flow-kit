@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { computeFingerprint } from './confirm-doc.mjs';
 import { POLICIES, loadKitPolicy } from './policy.mjs';
 import { entryConfirmed, laneOfEntry, laneOfDoc } from './stage-gates.mjs';
-import { parseAddedDatesLog, addedDatesWithCache, scenarioIdsOf, sectionHasBody, sedimentLandingIsShell } from './check-loop.mjs';
+import { parseAddedDatesLog, addedDatesWithCache, scenarioIdsOf, extractThenByScenario, sectionHasBody, sedimentLandingIsShell } from './check-loop.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
@@ -3226,6 +3226,111 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T);
   check('场景 25u 沉淀落点读取失败（目录）→ WARN 落点空壳并注明读取失败',
     r.status === 0 && outOf(r).includes('落点空壳') && outOf(r).includes('读取失败'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
+}
+
+// ---- 场景 92：THEN 断言抽取（2026-10-11 then-assertion，P2-2，灰度 warning）----
+// extractThenByScenario 纯函数 + 端到端（声明场景缺 THEN 行 = 空壳场景 → WARN 场景无断言，聚合一条；
+// 验收场景节本身可选——节不存在零变化）
+{
+  const spec = [
+    '## 验收场景（可选）',
+    '<说明行，不属于任何场景块>',
+    '### S1 折扣',
+    '- GIVEN 购物车有商品 THEN 不误抽（行中段 THEN 字样不算断言）',
+    '- WHEN 结算',
+    '- THEN 折扣金额入账',
+    '  - THEN 重复结算幂等（缩进变体也认）',
+    '### S2 退款',
+    'THEN: 退款单生成（无连字符带冒号也认）',
+    'THEN 审计流水落库（无连字符空格也认）',
+  ].join('\n');
+  const m = extractThenByScenario(spec);
+  check('场景 92a extractThenByScenario：- THEN / 缩进 / THEN: / THEN 变体均抽取',
+    m.get('S1').length === 2 && m.get('S2').length === 2
+    && m.get('S1')[0] === '- THEN 折扣金额入账' && m.get('S2')[0] === 'THEN: 退款单生成（无连字符带冒号也认）',
+    JSON.stringify([...m]));
+  check('场景 92b extractThenByScenario：GIVEN 行中段 THEN 字样不误抽',
+    !m.get('S1').some((s) => s.includes('GIVEN')), JSON.stringify(m.get('S1')));
+  check('场景 92c extractThenByScenario：无验收场景节 → 空 Map（节外 THEN 不认）',
+    extractThenByScenario('# SPEC\n## 功能行为\n- THEN 节外不认\n').size === 0);
+  check('场景 92d extractThenByScenario：非字符串（读取失败）→ 空 Map（不可判定不误报）',
+    extractThenByScenario(null).size === 0);
+}
+{
+  // 端到端：全场景带 THEN → 无「场景无断言」
+  const T = mkfix();
+  w(T, 'workflow/specs/2026-09-12-thn.md', '---\n状态: approved\n级别: L1\n---\n# SPEC — thn\n## 验收场景（可选）\n### S1 折扣\n- GIVEN x\n- WHEN y\n- THEN z\n### S2 退款\n- GIVEN a\n- THEN b\n');
+  w(T, 'workflow/intents/2026-09-12-thn.md', INTENT('thn', '状态: done\n级别: L1\n日期: 2026-09-12',
+    '\n## 验收标准（可测试）\n- [x] 场景：S1 折扣生效（证据:checkout.json）\n- [x] 场景：S2 退款到账（证据:refund.test.js）\n'));
+  w(T, 'workflow/plans/2026-09-12-thn.md', PLAN('thn', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('场景 92e 全场景带 THEN → 无场景无断言告警（exit 0）',
+    r.status === 0 && !outOf(r).includes('场景无断言'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
+}
+{
+  // 端到端：S2/S3 缺 THEN → 聚合一条 WARN，S1（有断言）不在列
+  const T = mkfix();
+  w(T, 'workflow/specs/2026-09-12-thn.md', '---\n状态: approved\n级别: L1\n---\n# SPEC — thn\n## 验收场景（可选）\n### S1 折扣\n- GIVEN x\n- THEN z\n### S2 退款\n- GIVEN a\n### S3 对账\n- WHEN c\n');
+  w(T, 'workflow/intents/2026-09-12-thn.md', INTENT('thn', '状态: done\n级别: L1\n日期: 2026-09-12',
+    '\n## 验收标准（可测试）\n- [x] 场景：S1（证据:a.log）\n- [x] 场景：S2（证据:b.log）\n- [x] 场景：S3（证据:c.log）\n'));
+  w(T, 'workflow/plans/2026-09-12-thn.md', PLAN('thn', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('场景 92f 场景缺 THEN → 聚合 WARN 且只列缺断言的 ID（S2、S3）',
+    r.status === 0 && outOf(r).includes('场景无断言') && outOf(r).includes('缺 THEN 断言：S2、S3'),
+    `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
+}
+{
+  // 端到端：spec 无验收场景节 → THEN 对账不适用（零变化）
+  const T = mkfix();
+  w(T, 'workflow/specs/2026-09-12-thn.md', '---\n状态: approved\n级别: L1\n---\n# SPEC — thn\n## 功能行为\n普通 spec，无场景节\n');
+  w(T, 'workflow/intents/2026-09-12-thn.md', INTENT('thn', '状态: done\n级别: L1\n日期: 2026-09-12',
+    '\n## 验收标准（可测试）\n- [x] 用例通过（证据:jest 全绿）\n'));
+  w(T, 'workflow/plans/2026-09-12-thn.md', PLAN('thn', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('场景 92g spec 无验收场景节 → 零场景告警（exit 0）',
+    r.status === 0 && !outOf(r).includes('场景无断言') && !outOf(r).includes('场景引用断链'),
+    `exit=${r.status}\n${outOf(r).slice(0, 400)}`);
+}
+
+// ---- 场景 93：引用断链反向对账（2026-10-11 dangling-ref，P2-1，灰度 warning）----
+// 端到端（与「场景未覆盖」共用同一次解析）：验收标准引用 spec 未声明的场景 ID → WARN 场景引用断链
+{
+  // 引用 S1（已声明且覆盖）+ S9（未声明）→ 只出断链，不出未覆盖
+  const T = mkfix();
+  w(T, 'workflow/specs/2026-09-12-dr.md', '---\n状态: approved\n级别: L1\n---\n# SPEC — dr\n## 验收场景（可选）\n### S1 折扣\n- GIVEN x\n- THEN z\n');
+  w(T, 'workflow/intents/2026-09-12-dr.md', INTENT('dr', '状态: done\n级别: L1\n日期: 2026-09-12',
+    '\n## 验收标准（可测试）\n- [x] 场景：S1（证据:a.log）\n- [x] 场景：S9 幻影场景（证据:ghost.log）\n'));
+  w(T, 'workflow/plans/2026-09-12-dr.md', PLAN('dr', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('场景 93a 引用 spec 未声明的 S9 → WARN 场景引用断链（不阻断）',
+    r.status === 0 && outOf(r).includes('场景引用断链') && outOf(r).includes('S9'),
+    `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
+  check('场景 93b 已覆盖的 S1 不触发未覆盖（两方向互不误伤）',
+    !outOf(r).includes('场景未覆盖'), outOf(r).slice(0, 400));
+}
+{
+  // 引用与声明完全一致 → 无断链
+  const T = mkfix();
+  w(T, 'workflow/specs/2026-09-12-dr.md', '---\n状态: approved\n级别: L1\n---\n# SPEC — dr\n## 验收场景（可选）\n### S1 折扣\n- GIVEN x\n- THEN z\n### S2 退款\n- GIVEN a\n- THEN b\n');
+  w(T, 'workflow/intents/2026-09-12-dr.md', INTENT('dr', '状态: done\n级别: L1\n日期: 2026-09-12',
+    '\n## 验收标准（可测试）\n- [x] 场景：S1（证据:a.log）\n- [x] 场景：S2（证据:b.log）\n'));
+  w(T, 'workflow/plans/2026-09-12-dr.md', PLAN('dr', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('场景 93c 引用与声明一致 → 无断链无未覆盖（exit 0）',
+    r.status === 0 && !outOf(r).includes('场景引用断链') && !outOf(r).includes('场景未覆盖'),
+    `exit=${r.status}\n${outOf(r).slice(0, 400)}`);
+}
+{
+  // spec 无场景节但 intent 引用 S1 → 同样算断链（引用了不存在的场景）
+  const T = mkfix();
+  w(T, 'workflow/specs/2026-09-12-dr.md', '---\n状态: approved\n级别: L1\n---\n# SPEC — dr\n## 功能行为\n普通 spec，无场景节\n');
+  w(T, 'workflow/intents/2026-09-12-dr.md', INTENT('dr', '状态: done\n级别: L1\n日期: 2026-09-12',
+    '\n## 验收标准（可测试）\n- [x] 场景：S1（证据:a.log）\n'));
+  w(T, 'workflow/plans/2026-09-12-dr.md', PLAN('dr', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('场景 93d spec 无场景节且引用 S1 → 断链 WARN（exit 0）',
+    r.status === 0 && outOf(r).includes('场景引用断链') && outOf(r).includes('S1'),
+    `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
