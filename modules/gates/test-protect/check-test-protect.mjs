@@ -12,8 +12,6 @@
 // 实现零依赖、纯 Node ≥18。
 
 import { spawnSync } from 'node:child_process';
-import fs from 'node:fs';
-import path from 'node:path';
 
 // 测试文件识别：常见测试目录/文件命名。装户可按项目在脚本头部 CONFIG 扩展。
 // 目录面：tests/、__tests__/、test/、spec/（仓库根或任意层级）；文件面：*.test.*、*.spec.*、_test.*（python pytest 风格）。
