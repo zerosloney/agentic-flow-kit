@@ -1,0 +1,14 @@
+{
+  "_note": "jscpd 复杂度基线（advisory，只可见不阻断）。口径：HEAD 干净 worktree（仅 git 跟踪文件，未跟踪/忽略文件不计），命令 npx --yes jscpd --format javascript --reporters json --output <tmp> . 。复现：git worktree add <tmp> <commit> 后在该目录执行。后续演进对照此基线，故意抬升需在本文件更新并注明原因。",
+  "commit": "9e0cbc5",
+  "date": "2026-10-11",
+  "command": "npx --yes jscpd --format \"javascript\" --reporters \"json\" --output <tmp> .",
+  "totals": {
+    "sources": 111,
+    "lines": 24810,
+    "clones": 209,
+    "duplicatedLines": 1858,
+    "duplicatedLinesPct": 7.49,
+    "duplicatedTokensPct": 6.2
+  }
+}
