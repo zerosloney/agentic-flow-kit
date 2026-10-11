@@ -2,6 +2,19 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.7.11
+
+- test(src)：**纯包源预算自检门**（2026-10-11 budget-self-check）——关闭「纯包源仓不跑装户预算门」盲区：
+  常驻面预算单源 templates/_agents/rule-budgets.txt 此前只在装户侧强制（pre-commit --staged 硬拦 /
+  check-loop 13 --all warning），v1.7.1 起本仓纯包源两处皆不跑——bb69e19/418960a 重构净增 78B 把
+  .agents/commands/ 推到 65581B > 65536B 包源侧零暴露（同日 S1 冒烟实测发现，装户首提被硬拦）。
+  新增 src/rule-budget.test.mjs：同一张预算表映射到包源路径核对（run-tests 盘面 glob 自动挂载）——
+  字节 = LF 归一（等价 fsize 的 git cat-file 口径）、目录合计 = 扁平 glob 不入子目录（rule-budget.sh
+  同口径勿两处漂移）、AGENTS.md 按全部技术栈 profile 渲染取 max（单源复用 STACKS/renderContent，
+  BOARD_PORT 按最坏 5 位端口）；预算表缺失 / 解析 0 行 / 映射目标失踪 / 文件 glob 零命中 fail-loud
+  （装户侧这些是 skip，包源侧是打包回归），装户侧专属面 SKIP 注记。实测：npm test 51 套件 0 失败；
+  负向证明：目录限额临时压到 65000 → 套件 FAIL（超 497B + 处置指引）exit 1，复原回绿。版本 1.7.11
+
 ## 1.7.10
 
 - fix(tpl+docs)：**装户第一公里两处修复 + 冒烟暴露的预算超限回归**（2026-10-11，对照当日多维评审 S1/S2）——
