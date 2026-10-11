@@ -2,6 +2,16 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.7.7
+
+- feat(tools)：**test-protect 测试保护门入库 + 沉淀闭环三类机器对账补全**（2026-10-11，P0/P1 落地批次——对照 2026-10-10「AI-Native SDLC 闭环交付最佳实践」深度调研的建议项）——
+  ① **test-protect 门入库**（modules/gates/test-protect，此前已实现未跟踪）：fix/调试提交里测试文件与被测代码同框 → exit 1（测试是「bug 已修」的证据，证据与结论同一次改动 = 自证）；`FLOW_KIT_ALLOW_TEST_EDIT=1` 显式豁免；纯测试提交合法。gates.test.mjs 补 3 用例（同框拦 / 豁免放行 / 纯测试过），gates README 模块表补行；顺手清理该脚本两个未使用 import（lint 绿）
+  ② **P1-1 检索留痕**（kb-search）：每次实际检索后向 `.agents/notes/kb-search-ledger.jsonl` 追加一行 JSON（ts/query/scope/hits/top，append-only）——KB 沉淀↔检索形成可审计闭环（此前只有 console 输出零落账）；`--no-ledger` 显式退出；写失败仅 stderr WARN，不影响检索输出与退出码。kb-search.test.mjs +7 用例（留痕格式 / 追加不覆盖 / --no-ledger / 无命中也留痕 / 目录自建）
+  ③ **P1-2 草稿超龄**（gen-wiki-board）：`drafts-archive/<YYYY-MM-DD-主题>/` 落盘超 14 天未归类 → stdout `[WARN 草稿超龄]`（advisory 同 B1 档，只提醒不阻断；恰 14 天不提醒、超过才提醒；目录名无日期前缀静默跳过；`FLOW_KIT_TODAY` 环境变量仅供测试/演练覆盖「今天」；归档计数与看板生成物零影响）。gen-wiki-board.test.mjs +2 场景（超龄命中 / 边界与无日期前缀不误报）
+  ④ **P1-3 落点真实性**（check-loop）：沉淀追踪（incident 检查 3 / intent 检查 8 两侧对称）从「存在」升级「存在且非空壳」——落点文件存在但无 `来源` frontmatter 且非占位正文不足 3 行 → `[WARN 落点空壳]`（占位口径逐字对齐 sectionHasBody，标题行不算正文防凑数；`sedimentLandingIsShell` 纯函数 export 供直测；读取失败按空壳出账并注明）。既有 `[WARN 沉淀断档]`（不存在）回归不变。check-loop.test.mjs +11 用例（两侧空壳命中 / 来源豁免 / 正文豁免 / 断档回归 / 读取失败 / 纯函数边界）
+  ⑤ **jscpd 复杂度基线固化**（scripts/jscpd-baseline.json）：干净 worktree 口径（仅 git 跟踪文件）111 文件 / 24,810 行 / 重复 1,858 行 = 7.49%，锚 commit、含复现命令——advisory 只可见不阻断，后续演进对照此基线，故意抬升须更新本文件并注明原因
+- 测试：run-tests 49 套件全绿；kb-search 44/0、gen-wiki-board 35/0、check-loop 274/0、gates 15/0；版本 1.7.7
+
 ## 1.7.6
 
 - feat(tools)：**B2 关单自动沉淀 + B3 wiki 来源血缘双向链接**（2026-10-10，KB 检索层与 wiki 收敛第二批）——

@@ -90,6 +90,34 @@ for (const d of fs.readdirSync(WIKI)) {
   diskTopics.set(d, entries);
 }
 
+// ---- 草稿超龄提醒（P1-2）：drafts-archive/<YYYY-MM-DD-主题>/ 落盘超龄未归类 → stdout WARN ----
+// advisory 档：只提醒不阻断（与 B1 沉淀追踪同档），不改归档统计口径与任何生成物，exit code 不受影响。
+// 目录名不带日期前缀（人工建的目录）→ 静默跳过，不 WARN 也不报错。
+const DRAFT_AGE_DAYS = 14; // 超龄档位（天）：与 B1 沉淀追踪同档 advisory，只提醒不阻断
+const TODAY = (() => {
+  // FLOW_KIT_TODAY=YYYY-MM-DD 仅测试/演练用：覆盖「今天」便于构造超龄/未超龄用例；未设置或格式不合法时用系统当前日期
+  const env = process.env.FLOW_KIT_TODAY;
+  if (env && /^\d{4}-\d{2}-\d{2}$/.test(env)) return env;
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+})();
+const utcMs = (s) => { // 'YYYY-MM-DD' → 当日 UTC 零点毫秒（与 TODAY 同构换算，天数差恒为精确整数）
+  const [y, m, d] = s.split('-').map(Number);
+  return Date.UTC(y, m - 1, d);
+};
+// rel：相对 drafts-archive 的 '/' 分隔路径（如 '2026-09-01-主题/主题.md'，与上方 walk 的 rel 拼法一致）
+const warnIfDraftAged = (rel) => {
+  if (!rel.includes('/')) return; // 直接躺在 drafts-archive 根（无日期目录包裹）→ 静默跳过
+  const dirName = rel.split('/')[0];
+  const m = dirName.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (!m) return; // 目录名不带日期前缀（人工建的目录）→ 静默跳过
+  const days = (utcMs(TODAY) - utcMs(m[1])) / 86400000;
+  if (!(days > DRAFT_AGE_DAYS)) return; // 未超龄（恰 14 天不提醒，超过才提醒）；NaN 同样落此静默跳过
+  const topic = dirName.slice('YYYY-MM-DD-'.length) || dirName; // 目录名 = 日期-主题；无主题段则退回目录名
+  console.log(`[WARN 草稿超龄] drafts-archive/${rel} 落于 ${m[1]} 未归类——草稿是中间态，归类到 wiki/${topic}/ 后跑 gen-wiki-board + verify-wiki-consistency`);
+};
+
 const archiveCount = (() => {
   let n = 0;
   const walk = (dir, rel = '') => {
@@ -98,7 +126,10 @@ const archiveCount = (() => {
       // 集合键带 drafts-archive/ 前缀（扫描面扩全 wiki/ 后），walk rel 须拼前缀比对（复核 P2-b）
       const r = rel ? `drafts-archive/${rel}/${e}` : `drafts-archive/${e}`;
       if (fs.statSync(p).isDirectory()) walk(p, rel ? `${rel}/${e}` : e);
-      else if (!gitIgnoredArchive.has(r)) n++;
+      else if (!gitIgnoredArchive.has(r)) {
+        n++;
+        warnIfDraftAged(rel ? `${rel}/${e}` : e); // 超龄提醒挂在计数控分支：口径一致（ignored 件不提醒），不影响计数
+      }
     }
   };
   if (fs.existsSync(path.join(WIKI, 'drafts-archive'))) walk(path.join(WIKI, 'drafts-archive'));

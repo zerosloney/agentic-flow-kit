@@ -85,7 +85,8 @@ const mkfix = (eol) => {
   return root;
 };
 
-const runGen = (root, extraArgs = []) => spawnSync(process.execPath, [GEN, ...extraArgs], { cwd: root, encoding: 'utf8' });
+// extraEnv：注入被测脚本环境变量（场景 8/9 用 FLOW_KIT_TODAY 固定「今天」，默认继承父进程环境不变）
+const runGen = (root, extraArgs = [], extraEnv = {}) => spawnSync(process.execPath, [GEN, ...extraArgs], { cwd: root, encoding: 'utf8', env: { ...process.env, ...extraEnv } });
 
 // ---- 场景 1：CRLF INDEX ——「用途」列重生成后保持 + 行尾保持（缺陷回归）----
 {
@@ -198,6 +199,45 @@ const runGen = (root, extraArgs = []) => spawnSync(process.execPath, [GEN, ...ex
   const r5 = runGen(root, ['--check']);
   check('场景 7d --check 看板 DATA 漂移 → exit 1',
     r5.status === 1 && (r5.stderr || '').includes('知识沉淀总览.html'), `exit=${r5.status}\n${r5.stdout}${r5.stderr}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 8：草稿超龄 WARN（P1-2：drafts-archive/<YYYY-MM-DD-主题>/ 落盘超 14 天未归类 → stdout 提醒）----
+//      advisory 档只提醒不阻断：exit 0、INDEX/看板 DATA 不因 WARN 有任何变化；FLOW_KIT_TODAY 固定「今天」保证时间可控
+{
+  const root = mkfix('\n');
+  const DRAFT_DIR = '2026-09-01-登录优化';
+  const DRAFT_DATE = '2026-09-01';
+  fs.mkdirSync(path.join(root, 'wiki', 'drafts-archive', DRAFT_DIR));
+  fs.writeFileSync(path.join(root, 'wiki', 'drafts-archive', DRAFT_DIR, '登录优化.md'), '# 登录优化草稿\n', 'utf8');
+  const board = path.join(root, 'wiki', '知识沉淀总览.html');
+  const warnLine = `[WARN 草稿超龄] drafts-archive/${DRAFT_DIR}/登录优化.md 落于 ${DRAFT_DATE} 未归类——草稿是中间态，归类到 wiki/登录优化/ 后跑 gen-wiki-board + verify-wiki-consistency`;
+
+  // a) 「今天」= 草稿日期 + 15 天（> 14 天档）→ WARN 整行点名该草稿
+  const ra = runGen(root, [], { FLOW_KIT_TODAY: '2026-09-16' });
+  check('场景 8a：超龄 15 天 → exit 0（advisory 不阻断）', ra.status === 0, `exit=${ra.status}\n${ra.stdout}${ra.stderr}`);
+  check('场景 8a：stdout 含超龄 WARN 且整行点名草稿', (ra.stdout || '').includes(warnLine), ra.stdout);
+  check('场景 8a：生成物不受影响（看板归档计数仍为文件数 1）', /"archive": 1/.test(fs.readFileSync(board, 'utf8')), '');
+
+  // b) 「今天」= 同日 / 恰 14 天 → 未超龄，无 WARN（超过才提醒）
+  const rb = runGen(root, [], { FLOW_KIT_TODAY: DRAFT_DATE });
+  check('场景 8b：同日 → 无超龄 WARN', rb.status === 0 && !(rb.stdout || '').includes('[WARN 草稿超龄]'), rb.stdout);
+  const rb14 = runGen(root, [], { FLOW_KIT_TODAY: '2026-09-15' });
+  check('场景 8b：恰 14 天 → 无超龄 WARN（边界）', rb14.status === 0 && !(rb14.stdout || '').includes('[WARN 草稿超龄]'), rb14.stdout);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 9：目录名无日期前缀（人工建的目录）→ 静默跳过：不 WARN、不报错、生成物不受影响（P1-2）----
+{
+  const root = mkfix('\n');
+  fs.mkdirSync(path.join(root, 'wiki', 'drafts-archive', '临时素材'));
+  fs.writeFileSync(path.join(root, 'wiki', 'drafts-archive', '临时素材', 'x.md'), '# x\n', 'utf8');
+  // 「今天」取远期（2027-01-01）：若误把无日期目录判成超龄必触发 WARN，可当场暴露缺陷
+  const r = runGen(root, [], { FLOW_KIT_TODAY: '2027-01-01' });
+  const board = fs.readFileSync(path.join(root, 'wiki', '知识沉淀总览.html'), 'utf8');
+  check('场景 9：无日期前缀目录 → exit 0（不报错）', r.status === 0, `exit=${r.status}\n${r.stdout}${r.stderr}`);
+  check('场景 9：无超龄 WARN（静默跳过）', !(r.stdout || '').includes('[WARN 草稿超龄]'), r.stdout);
+  check('场景 9：看板输出不受影响（归档计数仍为文件数 1）', /"archive": 1/.test(board), '');
   fs.rmSync(root, { recursive: true, force: true });
 }
 

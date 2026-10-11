@@ -223,6 +223,41 @@ const files = (out) => (out.match(/^📄 (workflow\/\S+)/gm) || []).map((l) => l
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- 场景 12：检索留痕（P1-1）——每次检索后 ledger 追加一行 / --no-ledger 退出 / notes 目录自动创建 ----
+//    ledger 落在 <临时根>/.agents/notes/kb-search-ledger.jsonl（与 workflow/、wiki/ 索引根同 ROOT）
+{
+  const ledgerOf = (root) => path.join(root, '.agents', 'notes', 'kb-search-ledger.jsonl');
+  const ledgerLines = (root) => fs.readFileSync(ledgerOf(root), 'utf8').split('\n').filter(Boolean);
+  const root = mkfix();
+  check('场景 12 前置：.agents/notes 尚不存在', !fs.existsSync(path.join(root, '.agents')));
+  // a) 首次检索 → 恰 1 行、JSON 合法、字段齐全、hits 为数字
+  const r1 = run(root, ['--scope', 'workflow', '编码模板', '冲突']);
+  const lines1 = ledgerLines(root);
+  check('场景 12a 检索后 ledger 存在且恰 1 行', r1.status === 0 && lines1.length === 1, `exit=${r1.status}\n${r1.stderr}`);
+  const entry = JSON.parse(lines1[0]);
+  check('场景 12a ledger 行字段齐全（ts/query/scope/hits/top）',
+    typeof entry.ts === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(entry.ts)
+    && entry.query === '编码模板 冲突' && entry.scope === 'workflow'
+    && entry.hits === 2 && entry.top === 'workflow/intents/2026-09-21-bbb.md', lines1[0]);
+  // b) 已有 ledger 再跑 → 追加成 2 行且旧行原样
+  const r2 = run(root, ['--scope', 'wiki', '编码模板']);
+  const lines2 = ledgerLines(root);
+  check('场景 12b 再次检索追加成 2 行且旧行原样',
+    r2.status === 0 && lines2.length === 2 && lines2[0] === lines1[0]
+    && JSON.parse(lines2[1]).scope === 'wiki' && JSON.parse(lines2[1]).top === 'wiki/测试主题/说明.md', lines2.join('\n'));
+  // c) --no-ledger → 不追加（仍 2 行）
+  const r3 = run(root, ['--no-ledger', '--scope', 'workflow', '编码模板']);
+  check('场景 12c --no-ledger 不追加不新建', r3.status === 0 && ledgerLines(root).length === 2, r3.stderr);
+  // d) 无命中检索也留痕（top=null、hits=0）
+  const r4 = run(root, ['--scope', 'workflow', 'zzz-绝不存在-zzz']);
+  const lines4 = ledgerLines(root);
+  const entry4 = JSON.parse(lines4[2]);
+  check('场景 12d 无命中留痕 top=null 且 hits=0',
+    r4.status === 0 && entry4.query === 'zzz-绝不存在-zzz' && entry4.hits === 0 && entry4.top === null, lines4.join('\n'));
+  check('场景 12e .agents/notes 目录由检索自动创建', fs.statSync(path.join(root, '.agents', 'notes')).isDirectory());
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 if (fail) {
   console.log(`\n${USAGE}`);

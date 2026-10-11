@@ -10,6 +10,9 @@
 // 结构缓存（2026-09-23 intent kb-search-structure-cache）：可检索子集预提取进 .agents/cache/kb-index.json，
 //   按 [mtimeMs,size] 逐文件失效，口径指纹变化整份作废；匹配/排序/输出路径不变（三路输出与冷扫逐字节一致）；
 //   缓存任何读写异常静默回退全扫。`--include-generated` 走纯扫（bulk 文件不入缓存）。
+// 检索留痕（2026-10-11 P1-1）：每次实际检索后向 .agents/notes/kb-search-ledger.jsonl 追加一行 JSON
+//   （ts/query/scope/hits/top），KB 沉淀↔检索形成可审计闭环；--no-ledger 显式退出；
+//   写失败仅 console.error 一行 WARN，不改变检索输出与退出码。
 // 测试：node .agents/scripts/kb-search.test.mjs（fixture 回归，须全绿）
 // 模块词表：.agents/workflow-modules.txt（--module 取值校验，单源）
 import fs from 'node:fs';
@@ -33,6 +36,7 @@ const USAGE = `用法: node .agents/scripts/kb-search.mjs [选项] <词1> [词2 
   --no-cache                     禁用结构缓存，全量扫（与缓存热路径输出逐字节一致）
   --cache <文件>                 结构缓存文件路径覆盖（默认 .agents/cache/kb-index.json；测试注入用）
   --rebuild                      忽略现有缓存重建后回写
+  --no-ledger                    退出检索留痕：不向 .agents/notes/kb-search-ledger.jsonl 追加本次检索记录
   --help                         打印本说明
 
 退出码：0 正常（含无命中）；1 参数错误（无词 / 未知选项 / 非法枚举值）`;
@@ -49,6 +53,7 @@ let includeGenerated = false;
 let noCache = false;
 let cacheFileOverride = ''; // --cache <文件>（board-kb-p1）：测试注入式缓存路径，不再直跑清真实开发缓存
 let rebuild = false;
+let noLedger = false; // --no-ledger（P1-1）：留痕默认开启（审计要完整），显式退出才跳过写 ledger
 const words = [];
 for (let i = 0; i < args.length; i++) {
   const a = args[i];
@@ -62,6 +67,7 @@ for (let i = 0; i < args.length; i++) {
   else if (a === '--no-cache') noCache = true;
   else if (a === '--cache') cacheFileOverride = args[++i] ?? '';
   else if (a === '--rebuild') rebuild = true;
+  else if (a === '--no-ledger') noLedger = true;
   else if (a === '--help' || a === '-h') { console.log(USAGE); process.exit(0); }
   else words.push(a);
 }
@@ -333,11 +339,13 @@ function searchWiki(words) {
 // ---- 输出 ----
 const top = (arr) => (limit ? arr.slice(0, limit) : arr);
 let anyHits = 0;
+let topFile = null; // 首个展示文件（留痕用）：按展示顺序 workflow→wiki 取 shown[0]，无命中保持 null
 
 if (scope === 'workflow' || scope === 'all') {
   const res = searchWorkflow(words);
   anyHits += res.length;
   const shown = top(res);
+  if (shown.length && !topFile) topFile = `workflow/${shown[0].file}`;
   console.log(`── workflow（${res.length} 个文件命中${res.length > shown.length ? `，展示前 ${shown.length}` : ''}）──`);
   for (const r of shown) {
     console.log(`📄 workflow/${r.file} — ${r.status || '未填状态'} · ${r.level} · ${r.module} · ${r.total} 处命中 / ${r.kb < 10 ? r.kb.toFixed(1) : Math.round(r.kb)}KB`);
@@ -350,6 +358,7 @@ if (scope === 'wiki' || scope === 'all') {
   const { results: res, skipped } = searchWiki(words);
   anyHits += res.length;
   const shown = top(res);
+  if (shown.length && !topFile) topFile = `wiki/${shown[0].file}`;
   console.log(`── wiki（${res.length} 个文件命中${res.length > shown.length ? `，展示前 ${shown.length}` : ''}）──`);
   for (const r of shown) {
     console.log(`📄 wiki/${r.file} — ${r.total} 处命中 / ${r.kb < 10 ? r.kb.toFixed(1) : Math.round(r.kb)}KB${r.source ? ` · 来源 ${r.source}` : ''}`);
@@ -364,3 +373,26 @@ console.log(`\n${anyHits ? `合计 ${anyHits} 个文件命中（${words.join(' A
   (scope === 'all' ? '；`--scope` 限定语料、`--status all` 显式全量' : ''));
 
 saveCache();
+
+// ---- 检索留痕（P1-1）：append-only 一行 JSON，KB 沉淀↔检索可审计闭环 ----
+// ROOT 与 workflow/、wiki/ 索引根一致（脚本按 cwd 相对路径读语料，ROOT_NS 同源）；
+// 写失败只 WARN 不阻断：留痕是旁路记录，异常必须可见，但绝不能改变检索结果与退出码。
+const LEDGER_FILE = path.join('.agents', 'notes', 'kb-search-ledger.jsonl');
+function appendLedger() {
+  if (noLedger) return;
+  const pad = (n) => String(n).padStart(2, '0');
+  const d = new Date();
+  try {
+    fs.mkdirSync(path.dirname(LEDGER_FILE), { recursive: true });
+    fs.appendFileSync(LEDGER_FILE, `${JSON.stringify({
+      ts: `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`, // ISO 8601 本地时间
+      query: words.join(' '),
+      scope,
+      hits: anyHits, // 切 top 之前的命中总量（workflow + wiki）
+      top: topFile,
+    })}\n`, 'utf8');
+  } catch (e) {
+    console.error(`WARN 检索留痕写入失败（不影响检索结果）：${e && e.message ? e.message : e}`);
+  }
+}
+appendLedger();

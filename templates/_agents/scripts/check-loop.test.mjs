@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { computeFingerprint } from './confirm-doc.mjs';
 import { POLICIES, loadKitPolicy } from './policy.mjs';
 import { entryConfirmed, laneOfEntry, laneOfDoc } from './stage-gates.mjs';
-import { parseAddedDatesLog, addedDatesWithCache, scenarioIdsOf, sectionHasBody } from './check-loop.mjs';
+import { parseAddedDatesLog, addedDatesWithCache, scenarioIdsOf, sectionHasBody, sedimentLandingIsShell } from './check-loop.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
@@ -3139,6 +3139,93 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T);
   check('场景 25j incident 三件套不全 → 只告三件套不全，不出未沉淀',
     r.status === 0 && outOf(r).includes('三件套不全') && !outOf(r).includes('未沉淀'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
+}
+
+// ---- 场景 25 续：落点真实性（2026-10-11 landing-reality，P1-3，灰度 warning）----
+// sedimentLandingIsShell 纯函数 + 端到端（落点只有标题/占位 → WARN 落点空壳；带「来源:」frontmatter
+// 或 ≥3 行非占位正文 → 不出；不存在 → 仍 WARN 沉淀断档（回归）；指向目录（读取失败）→ 空壳并注明读取失败）
+{
+  check('场景 25k sedimentLandingIsShell：只有标题+占位（空壳）→ true',
+    sedimentLandingIsShell('---\n标题: 某主题\n---\n# 某主题\n<状态:待整理>\n') === true);
+  check('场景 25l sedimentLandingIsShell：frontmatter 有「来源:」→ false',
+    sedimentLandingIsShell('---\n来源: workflow/incidents/2026-09-12-inc.md\n---\n# 某主题\n') === false);
+  check('场景 25m sedimentLandingIsShell：非占位正文 ≥3 行 → false',
+    sedimentLandingIsShell('# 某主题\n- 要点一\n- 要点二\n- 要点三\n') === false);
+  check('场景 25n sedimentLandingIsShell：非占位正文仅 2 行 → true',
+    sedimentLandingIsShell('# 某主题\n- 要点一\n- 要点二\n') === true);
+  check('场景 25o sedimentLandingIsShell：读取失败（null）→ true',
+    sedimentLandingIsShell(null) === true);
+}
+{
+  // incident 侧：closed + 三件套齐全 + 沉淀指向只有标题/占位的文件 → WARN 落点空壳（不阻断）
+  const T = mkfix();
+  w(T, 'workflow/incidents/2026-09-12-inc.md',
+    `---\n状态: closed\n级别: L1\n发现: 2026-09-12\n沉淀: wiki/项目规范/shell.md\n---\n# INCIDENT — inc\n## 时间线\n- 用户确认：草稿过目通过（2026-09-12）\n## 复盘三件套（缺一不可）\n\n${三件套(false)}`);
+  w(T, 'workflow/plans/2026-09-12-inc.md', PLAN('inc', '状态: done\n级别: L1'));
+  fs.mkdirSync(path.join(T, 'wiki', '项目规范'), { recursive: true });
+  w(T, 'wiki/项目规范/shell.md', '---\n标题: 某主题沉淀\n---\n# 某主题沉淀\n<状态:待整理>\n');
+  const r = run(T);
+  check('场景 25p incident 沉淀落点为标题/占位空壳 → WARN 落点空壳',
+    r.status === 0 && outOf(r).includes('落点空壳') && outOf(r).includes('2026-09-12-inc.md')
+    && !outOf(r).includes('沉淀断档') && !outOf(r).includes('未沉淀'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
+}
+{
+  // intent 侧对称：done + 影响面有内容 + 沉淀指向空壳文件 → WARN 落点空壳（不阻断）
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-12-sed.md', INTENT('sed', '状态: done\n级别: L1\n日期: 2026-09-12\n沉淀: wiki/项目规范/shell.md',
+    '\n## 验收标准（可测试）\n- [x] 用例通过（证据:jest 全绿）\n## 影响面\n- 页面 A\n'));
+  w(T, 'workflow/plans/2026-09-12-sed.md', PLAN('sed', '状态: done\n级别: L1'));
+  fs.mkdirSync(path.join(T, 'wiki', '项目规范'), { recursive: true });
+  w(T, 'wiki/项目规范/shell.md', '# 某主题沉淀\n<待整理>\n');
+  const r = run(T);
+  check('场景 25q intent 沉淀落点为标题/占位空壳 → WARN 落点空壳',
+    r.status === 0 && outOf(r).includes('落点空壳') && outOf(r).includes('2026-09-12-sed.md')
+    && !outOf(r).includes('沉淀断档') && !outOf(r).includes('未沉淀'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
+}
+{
+  // 落点带「来源:」frontmatter → 非空壳（无落点空壳告警）
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-12-sed.md', INTENT('sed', '状态: done\n级别: L1\n日期: 2026-09-12\n沉淀: wiki/项目规范/real.md',
+    '\n## 验收标准（可测试）\n- [x] 用例通过（证据:jest 全绿）\n## 影响面\n- 页面 A\n'));
+  w(T, 'workflow/plans/2026-09-12-sed.md', PLAN('sed', '状态: done\n级别: L1'));
+  fs.mkdirSync(path.join(T, 'wiki', '项目规范'), { recursive: true });
+  w(T, 'wiki/项目规范/real.md', '---\n来源: workflow/incidents/2026-09-12-inc.md\n---\n# 某主题沉淀\n');
+  const r = run(T);
+  check('场景 25r 沉淀落点带来源 frontmatter → 不出落点空壳',
+    r.status === 0 && !outOf(r).includes('落点空壳') && !outOf(r).includes('沉淀断档'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
+}
+{
+  // 落点有 ≥3 行非占位正文 → 非空壳（incident 侧非空壳路径）
+  const T = mkfix();
+  w(T, 'workflow/incidents/2026-09-12-inc.md',
+    `---\n状态: closed\n级别: L1\n发现: 2026-09-12\n沉淀: wiki/项目规范/real.md\n---\n# INCIDENT — inc\n## 时间线\n- 用户确认：草稿过目通过（2026-09-12）\n## 复盘三件套（缺一不可）\n\n${三件套(false)}`);
+  w(T, 'workflow/plans/2026-09-12-inc.md', PLAN('inc', '状态: done\n级别: L1'));
+  fs.mkdirSync(path.join(T, 'wiki', '项目规范'), { recursive: true });
+  w(T, 'wiki/项目规范/real.md', '---\n标题: 某主题沉淀\n---\n# 某主题沉淀\n- 要点一\n- 要点二\n- 要点三\n');
+  const r = run(T);
+  check('场景 25s 沉淀落点有 ≥3 行非占位正文 → 不出落点空壳',
+    r.status === 0 && !outOf(r).includes('落点空壳') && !outOf(r).includes('沉淀断档'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
+}
+{
+  // 回归：沉淀指向不存在的文件 → 仍是 WARN 沉淀断档（incident 侧；intent 侧由既有 25g 锚定）
+  const T = mkfix();
+  w(T, 'workflow/incidents/2026-09-12-inc.md',
+    `---\n状态: closed\n级别: L1\n发现: 2026-09-12\n沉淀: wiki/项目规范/不存在.md\n---\n# INCIDENT — inc\n## 时间线\n- 用户确认：草稿过目通过（2026-09-12）\n## 复盘三件套（缺一不可）\n\n${三件套(false)}`);
+  w(T, 'workflow/plans/2026-09-12-inc.md', PLAN('inc', '状态: done\n级别: L1'));
+  const r = run(T);
+  check('场景 25t 沉淀指向缺失文件 → 仍 WARN 沉淀断档（不出落点空壳）',
+    r.status === 0 && outOf(r).includes('沉淀断档') && !outOf(r).includes('落点空壳'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
+}
+{
+  // 落点指向目录（readFileSync 抛异常）→ 按空壳出账并在文案注明读取失败
+  const T = mkfix();
+  w(T, 'workflow/incidents/2026-09-12-inc.md',
+    `---\n状态: closed\n级别: L1\n发现: 2026-09-12\n沉淀: wiki/项目规范\n---\n# INCIDENT — inc\n## 时间线\n- 用户确认：草稿过目通过（2026-09-12）\n## 复盘三件套（缺一不可）\n\n${三件套(false)}`);
+  w(T, 'workflow/plans/2026-09-12-inc.md', PLAN('inc', '状态: done\n级别: L1'));
+  fs.mkdirSync(path.join(T, 'wiki', '项目规范'), { recursive: true });
+  const r = run(T);
+  check('场景 25u 沉淀落点读取失败（目录）→ WARN 落点空壳并注明读取失败',
+    r.status === 0 && outOf(r).includes('落点空壳') && outOf(r).includes('读取失败'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

@@ -329,6 +329,18 @@ export function runCheckLoop(opts = {}) {
     return '';
   }
 
+  // 落点空壳告警（2026-10-11 landing-reality，沉淀追踪第三级，incident/intent 两侧共用）：
+  //   「沉淀: <路径>」存在 ≠ 有效——文件存在但 sedimentLandingIsShell 为真（无来源 frontmatter
+  //   且非占位正文不足 3 行）→ WARN 落点空壳（advisory，灰度第一档）。调用方须先出过「沉淀断档」
+  //   分支（文件不存在），故此处 readFileSync 异常 = 真读取故障，按空壳出账并在文案注明读取失败。
+  const warnSedimentShell = (single, sed) => {
+    let text = null;
+    try { text = fs.readFileSync(path.resolve(ROOT, sed), 'utf8'); } catch { text = null; }
+    if (!sedimentLandingIsShell(text)) return;
+    const readFail = text === null ? '；落点文件读取失败' : '';
+    warnings.push(`- [WARN 落点空壳] ${single} frontmatter「沉淀: ${sed}」指向的文件存在但无有效内容（无来源 frontmatter 且非占位正文不足 3 行${readFail}）——沉淀须真实整理而非空壳占位（advisory，灰度第一档）`);
+  };
+
   const WF = 'workflow';
   const DOC_DIRS = ['intents', 'specs', 'plans', 'incidents'];
   const blockers = [];
@@ -472,13 +484,16 @@ export function runCheckLoop(opts = {}) {
     }
     // 沉淀追踪（incident 侧，与检查 8 intent 侧对称）：closed 且三件套齐全 = 最高价值沉淀源。
     //   frontmatter「沉淀: <相对仓根路径>」登记去向；缺登记 → WARN 未沉淀（advisory，灰度第一档）；
-    //   登记了但文件不存在 → WARN 沉淀断档。同「沉淀: 无」显式豁免口径。
+    //   登记了但文件不存在 → WARN 沉淀断档；存在但空壳（无来源且非占位正文不足 3 行）→ WARN 落点空壳。
+    //   同「沉淀: 无」显式豁免口径。
     if (incSt === 'closed' && trioOk) {
       const sed = fmGet(inc, '沉淀');
       if (!sed) {
         warnings.push(`- [WARN 未沉淀] ${name} 复盘三件套齐全（closed）但未登记沉淀去向——整理到 wiki 后在 frontmatter 记「沉淀: wiki/<主题>/<文件>」，或显式写「沉淀: 无」（advisory，灰度第一档；沉淀是人工判断，机器只提醒不强制）`);
       } else if (sed !== '无' && !fs.existsSync(path.resolve(ROOT, sed))) {
         warnings.push(`- [WARN 沉淀断档] ${name} frontmatter「沉淀: ${sed}」指向的文件不存在——沉淀文件移动/改名后须同步更新本字段（advisory，灰度第一档）`);
+      } else if (sed !== '无') {
+        warnSedimentShell(name, sed); // 落点真实性（P1-3）：存在但空壳 → WARN 落点空壳
       }
     }
     const hasParent = lines.some((l) => l.includes('是否需要新 intent'));
@@ -919,7 +934,8 @@ export function runCheckLoop(opts = {}) {
       //   intent 高价值节（影响面 / 触达红线）是 wiki 沉淀的主源——frontmatter「沉淀: <相对仓根路径>」
       //   登记去向（如 wiki/项目规范/xxx.md），「沉淀: 无」= 显式声明不沉淀。缺登记且内容高价值
       //   → WARN 未沉淀（advisory：沉淀是人工判断，机器只提醒不强制，不进 hard）；登记了但文件
-      //   不存在 → WARN 沉淀断档（路径漂移）。高价值判据 = 两节之一有非占位正文内容。
+      //   不存在 → WARN 沉淀断档（路径漂移）；存在但空壳（无来源且非占位正文不足 3 行）→ WARN 落点
+      //   空壳（2026-10-11 landing-reality，P1-3 落点真实性）。高价值判据 = 两节之一有非占位正文内容。
       //   incident 侧对称（检查 3 内）：closed 且复盘三件套齐全 = 最高价值沉淀源，同款提醒。
       //   有意不加 policyVersion 锚：字段缺失 = 未登记，无字段语义零变化（沿场景覆盖子判据同款口径）。
       const sed = fmGet(intent, '沉淀');
@@ -928,6 +944,8 @@ export function runCheckLoop(opts = {}) {
         warnings.push(`- [WARN 未沉淀] ${base} 含高价值沉淀内容（影响面/触达红线）但未登记沉淀去向——整理到 wiki 后在 frontmatter 记「沉淀: wiki/<主题>/<文件>」，或显式写「沉淀: 无」（advisory，灰度第一档；沉淀是人工判断，机器只提醒不强制）`);
       } else if (sed && sed !== '无' && !fs.existsSync(path.resolve(ROOT, sed))) {
         warnings.push(`- [WARN 沉淀断档] ${base} frontmatter「沉淀: ${sed}」指向的文件不存在——沉淀文件移动/改名后须同步更新本字段（advisory，灰度第一档）`);
+      } else if (sed && sed !== '无') {
+        warnSedimentShell(base, sed); // 落点真实性（P1-3）：存在但空壳 → WARN 落点空壳
       }
       if (!uc && !ne) continue;
         if (isNew) {
@@ -1649,4 +1667,37 @@ export function sectionHasBody(lines, headingPrefix) {
     return true;
   }
   return false;
+}
+
+// 沉淀落点空壳判定（2026-10-11 landing-reality，「存在 ≠ 有效」的落点真实性一环）：
+//   落点文件可能是只有标题没有内容的空壳。满足任一即**非**空壳（有效沉淀）：
+//   ① frontmatter 含「来源:」键（人工已登记来源 = 真实整理的机器信号；frontmatter 口径同 fmGet 受限子集）；
+//   ② frontmatter / 标题行 / 占位行剔除后的非空正文 ≥ 3 行（占位口径逐字对齐 sectionHasBody：
+//     `<…>` 单行包揽 / HTML 注释 / 引用块）——标题行不算正文，防「只有标题」凑行数绕过。
+//   text = 落点文件全文；非字符串（调用方读取失败传 null）按空壳处理，调用方在告警文案注明读取失败。
+//   独立 export 供单元测试直测（纯函数：只吃文本、无 IO）。
+export function sedimentLandingIsShell(text) {
+  if (typeof text !== 'string') return true; // 读取失败 → 按空壳
+  const lines = text.split(/\r?\n/);
+  const isDelim = (l) => /^---\s*$/.test(l); // 同 fmGet：首行 --- 进入、下一 --- 闭合
+  let inFm = isDelim(lines[0] || '');
+  if (inFm) {
+    for (let i = 1; i < lines.length; i++) {
+      if (isDelim(lines[i])) break; // 下一 --- = frontmatter 闭合
+      if (lines[i].startsWith('来源:')) return false; // ① 有来源登记 = 有效
+    }
+  }
+  let body = 0;
+  for (let i = inFm ? 1 : 0; i < lines.length; i++) {
+    if (inFm) {
+      if (isDelim(lines[i])) inFm = false; // frontmatter 闭合，其后才开始数正文
+      continue;
+    }
+    const s = lines[i].trim();
+    if (!s) continue;
+    if (s.startsWith('#')) continue; // 标题行 = 结构不算正文（空壳 = 只有标题没有内容）
+    if (/^<.*>$/.test(s) || s.startsWith('<!--') || s.startsWith('>')) continue; // 占位 / 注释 / 引用（同 sectionHasBody）
+    if (++body >= 3) return false; // ② 非占位正文 ≥ 3 行 = 有效
+  }
+  return true;
 }
