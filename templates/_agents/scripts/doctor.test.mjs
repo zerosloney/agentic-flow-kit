@@ -7,6 +7,9 @@
 //   ④ kit.json 无 owned 字段 → skipped=true total=0
 // 另测 checkAdapterDrift(target)（场景 5-14）与 checkLedgerCoverage(target, pkgRoot)（场景 15-18，
 //   2026-09-26 managed-ledger-adopt：补「盘上有、台账无」一侧）。
+// 另测 checkDelegationSnapshotFreshness(target)（场景 19-23，2026-09-29 p0-gate-noise-batch）与
+//   checkGateAnchors(target)（场景 24-30，2026-10-11 P3-1 gate 防改锚：add-gate 写下的 srcSha256 锚让
+//   .agents/hooks/ 门禁脚本手改永久可见；local-pre-commit 模板语义锚须排除出比对面）。
 // 用法：node .agents/scripts/doctor.test.mjs（在仓库根执行，需 src/doctor.mjs 存在——dogfooding 模式）
 import fs from 'node:fs';
 import os from 'node:os';
@@ -27,7 +30,7 @@ if (!fs.existsSync(SRC)) {
   console.error(`doctor.test.mjs：SKIP——未找到 ${SRC}（装户环境无包源 src/；本套件仅在包源仓库/dogfooding 跑 npm test 时有意义）`);
   process.exit(0);
 }
-const { checkOwnedDrift, checkAdapterDrift, checkLedgerCoverage, checkDelegationSnapshotFreshness } = await import(pathToFileURL(SRC).href);
+const { checkOwnedDrift, checkAdapterDrift, checkLedgerCoverage, checkDelegationSnapshotFreshness, checkGateAnchors } = await import(pathToFileURL(SRC).href);
 
 let pass = 0;
 let fail = 0;
@@ -471,6 +474,124 @@ const CMD_BODY = '# Build\n\n正文 build v1\n';
     r.skipped === true && r.stale === false,
     JSON.stringify(r));
   fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 24-30：checkGateAnchors（2026-10-11 P3-1 gate 防改锚）—— .agents/hooks/ 门禁脚本安装锚 ----
+// 锚语义（见 src/add-gate.mjs 头注）：add-gate 逐字拷贝安装时写 srcSha256＝安装时刻包源 LF 归一 sha；
+// sync 自愈 sha256 但从不按盘面刷新 gate 条目的 srcSha256（srcTemplatePath 解析不到包源模板提前 return）
+// → 盘面 sha ≠ 锚即「装后手改」，doctor 出 WARN 留痕（不阻断——装户对门有最终所有权，锚只提供可见性）。
+const GATE_A = '.agents/hooks/check-test-protect.mjs';
+const GATE_B = '.agents/hooks/check-node-layer.mjs';
+const GATE_BODY = '// gate v1\n';
+
+// ---- 场景 24：锚完好 → PASS 语义（skipped=false mismatch=[] gone=[] total=带锚数）----
+{
+  const root = mkfix({
+    kitContent: mkKit([{ rel: GATE_A, sha256: sha256Of(GATE_BODY), srcSha256: sha256Of(GATE_BODY) }]),
+    files: { [GATE_A]: GATE_BODY },
+  });
+  const r = checkGateAnchors(root);
+  check('场景 24：gate 锚完好 → mismatch=0 gone=0 total=1 skipped=false',
+    r.skipped === false && r.mismatch.length === 0 && r.gone.length === 0 && r.total === 1,
+    JSON.stringify(r));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 25：篡改带锚 gate 文件 → mismatch=[rel]（手改永久留痕——本单的目标形态）----
+{
+  const root = mkfix({
+    kitContent: mkKit([{ rel: GATE_A, sha256: sha256Of(GATE_BODY), srcSha256: sha256Of(GATE_BODY) }]),
+    files: { [GATE_A]: '// gate v1 本地手改：放宽红线\n' }, // 盘面 ≠ 安装时刻包源
+  });
+  const r = checkGateAnchors(root);
+  check('场景 25：手改带锚 gate → mismatch 含该件 skipped=false',
+    r.skipped === false && r.mismatch.length === 1 && r.mismatch[0] === GATE_A,
+    JSON.stringify(r));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 26：混合面——完好 / 失配 / 缺失并存 → mismatch 与 gone 各归各位，total＝带锚条目数 ----
+{
+  const root = mkfix({
+    kitContent: mkKit([
+      { rel: GATE_A, sha256: sha256Of(GATE_BODY), srcSha256: sha256Of(GATE_BODY) },  // 完好
+      { rel: GATE_B, sha256: sha256Of(GATE_BODY), srcSha256: sha256Of(GATE_BODY) },  // 缺失（不落盘）
+    ]),
+    files: { [GATE_A]: GATE_BODY },
+  });
+  const r = checkGateAnchors(root);
+  check('场景 26：完好+缺失并存 → gone=[GATE_B] mismatch=[] total=2',
+    r.skipped === false && r.gone.length === 1 && r.gone[0] === GATE_B && r.mismatch.length === 0 && r.total === 2,
+    JSON.stringify(r));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 27：无带锚条目（旧装户 owned 无 srcSha256 / 非 hooks 条目）→ skipped=true 静默 ----
+{
+  const root = mkfix({
+    kitContent: mkKit([
+      { rel: GATE_A, sha256: sha256Of(GATE_BODY) }, // 旧装户：无锚
+      { rel: 'AGENTS.md', sha256: sha256Of('# a\n') }, // 非 hooks 条目不参与
+    ]),
+    files: { [GATE_A]: GATE_BODY, 'AGENTS.md': '# a\n' },
+  });
+  const r = checkGateAnchors(root);
+  check('场景 27：无带锚 gate 条目 → skipped=true（旧装户重装 add-gate 后生效）',
+    r.skipped === true && r.total === 0,
+    JSON.stringify(r));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 28：local-pre-commit 模板语义锚不参与比对（防恒失配误报）----
+// 它的 srcSha256 由 init/sync 按「模板语义」写（锚＝templates/_agents/hooks/local-pre-commit），
+// 盘面含各门挂载行 ≠ 模板——纳入比对面必恒失配，须排除（见 checkGateAnchors 注释）。
+{
+  const LP_WIRED = '#!/bin/sh\nset -e\nnode .agents/hooks/check-test-protect.mjs\n'; // 接线后盘面
+  const root = mkfix({
+    kitContent: mkKit([
+      { rel: '.agents/hooks/local-pre-commit', sha256: sha256Of(LP_WIRED), srcSha256: sha256Of('#!/bin/sh\nset -e\n') },
+    ]),
+    files: { '.agents/hooks/local-pre-commit': LP_WIRED },
+  });
+  const r = checkGateAnchors(root);
+  check('场景 28：local-pre-commit（模板锚+接线盘面）不纳入 → skipped=true 不误报',
+    r.skipped === true && r.total === 0,
+    JSON.stringify(r));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 29：kit.json 解析失败 → skipped=true 含 error（沿用 §6.6 同款跳过语义）----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-gateanchor-'));
+  fs.mkdirSync(path.join(root, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.agents', 'kit.json'), '{ broken json');
+  const r = checkGateAnchors(root);
+  check('场景 29：kit.json 解析失败 → skipped=true 含 error',
+    r.skipped === true && typeof r.error === 'string' && r.error.length > 0,
+    JSON.stringify(r));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 30：主流程渐进路径源断言（同场景 8 手法）——§6.6b 失配分支必须 WARN 不 FAIL ----
+// gate 锚校验首次引入即 WARN（「先 WARN 升级 FAIL」渐进路径）：装户可改门禁，锚只提供可见性不阻断。
+{
+  const doctorSrc = fs.readFileSync(SRC, 'utf8');
+  const warnMismatch = /gateRes\.mismatch\.length\)\s*add\('WARN'/.test(doctorSrc);
+  check('场景 30a：§6.6b gate 锚失配分支用 add(\'WARN\', …)（渐进路径，不阻断）',
+    warnMismatch,
+    `src/doctor.mjs §6.6b 失配分支应为 add('WARN', ...)`);
+  check('场景 30b：失配出账含「gate 安装锚失配」字样（含重装重锚/恢复原版指引）',
+    doctorSrc.includes('gate 安装锚失配') && doctorSrc.includes('add-gate <门名> --force'),
+    'src/doctor.mjs §6.6b WARN 文案缺失');
+  check('场景 30c：无带锚条目 → PASS 跳过语义（旧装户静默）',
+    doctorSrc.includes('无带锚 gate 条目'),
+    'src/doctor.mjs §6.6b 应有无锚跳过 PASS 分支');
+  // 函数体切取：checkGateAnchors 声明行起、下一个 export function 止（JSDoc 不参与断言）
+  const fnStart = doctorSrc.indexOf('export function checkGateAnchors');
+  const fnEnd = doctorSrc.indexOf('export function', fnStart + 10);
+  check('场景 30d：local-pre-commit 排除在比对面外（防模板锚恒失配误报）',
+    fnStart >= 0 && fnEnd > fnStart && doctorSrc.slice(fnStart, fnEnd).includes("'.agents/hooks/local-pre-commit'"),
+    'checkGateAnchors 应排除 .agents/hooks/local-pre-commit');
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

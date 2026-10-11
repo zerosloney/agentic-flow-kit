@@ -2,6 +2,13 @@
 // 模块约定：modules/gates/<gate>/ 下源文件拷入 .agents/hooks/（平铺，README.md 与 local-pre-commit.line 为包内元数据不拷）；
 // local-pre-commit.line 内容 = 需追加进 .agents/hooks/local-pre-commit 的挂载行（存在同名行则不重复追加，幂等）。
 // 门禁装后归项目所有：入 owned 台账，sync 永不覆盖（改红线/删不适用条目自行编辑——见各模块 README）。
+// gate 防改锚（2026-10-11 P3-1）：逐字拷贝安装的 gate 脚本，owned 条目写 srcSha256＝安装时刻包源文件
+// （modules/gates/<gate>/<file>）的 LF 归一 sha。语义：sync 对 owned 的 sha256 按盘面自愈（记账不约束），
+// 但 srcSha256 只按包源刷新——gate 文件在装户 sync 中 srcTemplatePath 解析不到包源模板（templates/_agents/
+// hooks/ 无同名件）即提前 return，锚一经写入恒定。doctor 的 gate 安装锚校验据此让「装后手改」永久可见：
+// 装户可改（不阻断），但改了会被看见。--force 重装锚随新安装刷新（即重锚路径）；已存在被跳过的文件锚
+// 盘面现状（盘面非逐字拷贝，锚包源会装后即误报），盘面与包源不一致时 WARN 差异。local-pre-commit 是
+// 合并接线件（模板 + 各门挂载行），非逐字拷贝——不写锚（它的 srcSha256 由 init/sync 按模板语义记，含义不同）。
 import fs from 'node:fs';
 import path from 'node:path';
 import { sha256 } from './render.mjs';
@@ -77,9 +84,26 @@ export function addGate(args, pkgRoot) {
   // 记账一律 LF 归一（init-p1-batch P1-4 rider）：与 doctor §6.6 / sync ownedSha 同口径，跨 checkout 字节稳定
   const shaText = (p) => sha256(Buffer.from(fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n'), 'utf8'));
   const ownedLedger = new Map((kit.owned || []).map((f) => [f.rel, f]));
+  // 跳过件（盘上已存在、未 --force）：先出声再记账——盘面与包源不一致即本地已改，WARN 保证差异在安装输出可见。
+  // 无台账条目的首次见面按盘面现状建立基线与锚；已有条目则原样保留（锚停在安装时刻值，盘面手改
+  // 继续由 doctor gate 安装锚校验留痕——重锚会把手改吸收成「无差异」，违背防改锚初衷）。
+  for (const name of skipped) {
+    const rel = `.agents/hooks/${name}`;
+    const known = ownedLedger.has(rel);
+    if (shaText(path.join(hooksDir, name)) !== shaText(path.join(srcRoot, name))) {
+      console.log(known
+        ? `  ⚠️ ${name} 盘面与包源不一致（本地已改）——原锚保留，手改由 doctor 锚校验留痕；重装覆盖用 --force`
+        : `  ⚠️ ${name} 盘面与包源不一致（本地已改），锚记盘面现状——重装覆盖用 --force`);
+    }
+    if (!known) {
+      const diskSha = shaText(path.join(hooksDir, name));
+      ownedLedger.set(rel, { rel, sha256: diskSha, srcSha256: diskSha });
+    }
+  }
   for (const name of installed) {
     const rel = `.agents/hooks/${name}`;
-    ownedLedger.set(rel, { rel, sha256: shaText(path.join(hooksDir, name)) });
+    // srcSha256＝安装时刻包源文件 sha（gate 防改锚，见文件头注）：sha256 被 sync 按盘面自愈，锚恒定
+    ownedLedger.set(rel, { rel, sha256: shaText(path.join(hooksDir, name)), srcSha256: shaText(path.join(srcRoot, name)) });
   }
   if (wiredLp) {
     const lpRel = '.agents/hooks/local-pre-commit';

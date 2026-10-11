@@ -232,6 +232,24 @@ export function doctor(args, pkgRoot) {
     if (ownedRes.gone.length) add('FAIL', `owned 文件缺失：${ownedRes.gone.join('、')}——sync 恢复或手动恢复`);
   }
 
+  // 6.6b gate 安装锚校验（2026-10-11 P3-1 gate 防改锚）：add-gate 给逐字拷贝安装的 gate 脚本写
+  //      srcSha256＝安装时刻包源 sha（见 src/add-gate.mjs 头注）；sync 只按包源刷新模板条目锚，gate 条目
+  //      解析不到包源模板（srcTemplatePath→null 提前 return）故锚恒定 → 盘面 sha ≠ 锚即「装后手改」。
+  //      设计依据：2026-10-10 调研结论「gate 装户可改、hard 项缺防改」——sync 对 owned 的 sha256 按盘面
+  //      自愈使手改不留痕，本项补上可见性。不阻断（沿用「先 WARN 升级 FAIL」渐进路径）：装户对门有最终
+  //      所有权，锚只提供可见性，有意改动知悉即可。
+  const gateRes = checkGateAnchors(target);
+  if (gateRes.error) {
+    add('WARN', `gate 安装锚校验跳过（kit.json 解析失败：${gateRes.error}）`);
+  } else if (gateRes.skipped) {
+    add('PASS', 'gate 安装锚校验跳过（无带锚 gate 条目——旧装户重装 add-gate 后生效）');
+  } else if (gateRes.mismatch.length === 0 && gateRes.gone.length === 0) {
+    add('PASS', `gate 安装锚 ${gateRes.total} 份无失配`);
+  } else {
+    if (gateRes.mismatch.length) add('WARN', `gate 安装锚失配 ${gateRes.mismatch.length} 份：${gateRes.mismatch.join('、')}——.agents/hooks/ 门禁脚本与安装时包源 sha 不一致（手改会永久留痕）；有意改动知悉即可（重装重锚：flow-kit add-gate <门名> --force；恢复原版：从包源 modules/gates/ 拷回）`);
+    if (gateRes.gone.length) add('WARN', `gate 带锚文件缺失 ${gateRes.gone.length} 份：${gateRes.gone.join('、')}——门禁已不在盘面（失效）；恢复：flow-kit add-gate <门名> --force 或从包源 modules/gates/ 拷回`);
+  }
+
   // 6.7 跨宿主薄适配正文段漂移校验（2026-09-25 cross-host-sync，参见 workflows/intents/2026-09-25-cross-host-sync.md）
   //     装户侧视角：.agents/{commands,roles}/*.md 是权威源；4 宿主目录（.zcode/.omp/.opencode/.trae）下的
   //     {agents,commands}/*.md 是薄适配。按正文段 sha 比对（B-b 语义，frontmatter 不计入漂移），
@@ -376,6 +394,42 @@ export function checkOwnedDrift(target) {
     if (h !== f.sha256) drift++;
   }
   return { drift, gone, total: owned.length, skipped: false };
+}
+
+// gate 安装锚校验（独立 export 供 doctor 主流程 + 单元测试共用；2026-10-11 P3-1 gate 防改锚）
+// 判据：kit.owned 中 rel 以 .agents/hooks/ 开头且带 srcSha256 的条目（＝add-gate 逐字拷贝安装的 gate 脚本，
+// 锚语义见 src/add-gate.mjs 头注），按 LF 归一算盘面 sha（与 checkOwnedDrift 同口径）比对锚。
+// local-pre-commit 须排除：它是合并接线件，其 srcSha256 由 init/sync 按「模板语义」写（≠ 逐字拷贝锚），
+// 且盘面含各门挂载行——纳入必恒失配误报。
+// 不阻断：装户对门有最终所有权，锚只提供可见性（2026-10-10 调研「gate 装户可改、hard 项缺防改」结论）。
+// 返回：{ total, mismatch, gone, skipped, error? }
+//   - skipped=true：kit.json 不存在 / 无 owned / 无带锚条目（旧装户静默，重装 add-gate 后生效）
+//   - error：kit.json 解析失败（沿用 §6.6 同款跳过语义，由主流程 WARN）
+//   - total：参与比对的带锚条目数；mismatch：盘面 sha ≠ 锚（装后手改）；gone：盘面缺失
+export function checkGateAnchors(target) {
+  const kitPath = path.join(target, '.agents', 'kit.json');
+  if (!fs.existsSync(kitPath)) return { total: 0, mismatch: [], gone: [], skipped: true };
+  let kit;
+  try {
+    kit = JSON.parse(fs.readFileSync(kitPath, 'utf8'));
+  } catch (e) {
+    return { total: 0, mismatch: [], gone: [], skipped: true, error: e.message };
+  }
+  const owned = Array.isArray(kit.owned) ? kit.owned : [];
+  const anchored = owned.filter((f) => f.rel.startsWith('.agents/hooks/')
+    && f.rel !== '.agents/hooks/local-pre-commit' // 合并接线件，srcSha256 是模板语义锚，非逐字拷贝锚（见上）
+    && typeof f.srcSha256 === 'string' && f.srcSha256);
+  if (anchored.length === 0) return { total: 0, mismatch: [], gone: [], skipped: true };
+  const mismatch = [];
+  const gone = [];
+  for (const f of anchored) {
+    const p = path.join(target, f.rel);
+    if (!fs.existsSync(p)) { gone.push(f.rel); continue; }
+    // sha 按 LF 归一口径（同 checkOwnedDrift）：CRLF 盘面（autocrlf 检出）与锚不误报
+    const h = createHash('sha256').update(fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n'), 'utf8').digest('hex');
+    if (h !== f.srcSha256) mismatch.push(f.rel);
+  }
+  return { total: anchored.length, mismatch, gone, skipped: false };
 }
 
 // 模板下发感知（2026-10-06 template-downstream）：只读判据——owned 模板条目三方 sha 比对，
