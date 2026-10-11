@@ -73,7 +73,7 @@ sync-hosts 双布局（2026-10-07）：包源仓（含 templates/_agents + modul
   npx agentic-flow-kit sync-hosts --diff           # 看权威源 vs 薄适配漂移
   npx agentic-flow-kit sync-hosts --apply          # 单向同步到薄适配
 
-装完即自包含：项目不依赖本包运行；AGENTS.md 生成「AI工作流 + Wiki」骨架，项目细节在「项目适配区」自填。`;
+装完本地可跑：日常闭环走项目内 .agents/scripts/（零 npm 运行时依赖）；升级 / 体检 / 装门禁用 npx agentic-flow-kit（sync / doctor / add-host / add-gate）；AGENTS.md 生成「AI工作流 + Wiki」骨架，项目细节在「项目适配区」自填。`;
 
 export function run(argv) {
   const cmd = argv[0];

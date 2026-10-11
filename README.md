@@ -2,11 +2,11 @@
 
 AI-Native 闭环工作流 + wiki 知识层脚手架。`flow-kit init` 一条命令为新项目装好整套项目级 AI 工作流引擎：8 个阶段命令、3 个子智能体角色契约、git 门禁钩子（闭环配对 / 敏感信息扫描 / 条件构建 / 规则面预算）、kb 跨语料检索、workflow 实时看板、intents→specs→plans→incidents 文档闭环、wiki 知识库三件套。
 
-**装完即自包含**：引擎文件拷贝进项目（零 npm 运行时依赖，Node ≥ 18 即可跑），clone 后只差 `git config core.hooksPath .githooks`——init 会自动挂好。
+**装完本地可跑**：日常闭环（门禁钩子 / check-loop / fill-* / confirm-doc / kb 检索 / 看板）走项目内 `.agents/scripts/`，零 npm 运行时依赖，Node ≥ 18 即可跑；升级 / 体检 / 装门禁（`sync` / `doctor` / `add-host` / `add-gate`）走 `npx agentic-flow-kit`。clone 后只差 `git config core.hooksPath .githooks`——init 会自动挂好。
 
 ## English
 
-agentic-flow-kit installs a self-contained AI workflow into a repository: stage commands, role contracts, git hooks, and an intent → spec → plan → incident trail. After `init`, the project does not need this package at runtime. Node ≥ 18 is enough.
+agentic-flow-kit installs a project-level AI workflow into a repository: stage commands, role contracts, git hooks, and an intent → spec → plan → incident trail. After `init`, day-to-day loop work (hooks, check-loop, confirm-doc, retrieval) runs from the in-repo `.agents/scripts/` with zero npm runtime dependencies; Node ≥ 18 is enough. Lifecycle operations — `sync` / `doctor` / `add-host` / `add-gate` — go through `npx agentic-flow-kit`.
 
 The product is the hook, not another prompt pack. Five blocking surfaces, split across tools: check-loop blocks unpaired docs, unchecked acceptance criteria, missing confirmation trace, and release-time unclosed docs; secret scanning sits in pre-commit; the managed/owned ledger and dual-source drift are checked by `doctor` / `sync`, not by the push gate. Other hygiene checks are warnings, and a fresh install sets `audit: false` so only the blocking set stays in the way. Omit `audit` on an older ledger and the full check set stays on. The Chinese section above is the single source of truth for this split.
 
