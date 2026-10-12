@@ -32,7 +32,7 @@ if (!fs.existsSync(SRC)) {
   console.error(`doctor.test.mjs：SKIP——未找到 ${SRC}（装户环境无包源 src/；本套件仅在包源仓库/dogfooding 跑 npm test 时有意义）`);
   process.exit(0);
 }
-const { checkOwnedDrift, checkAdapterDrift, checkLedgerCoverage, checkDelegationSnapshotFreshness, checkGateAnchors, checkTemplateDrift } = await import(pathToFileURL(SRC).href);
+const { checkOwnedDrift, checkAdapterDrift, checkLedgerCoverage, checkDelegationSnapshotFreshness, checkGateAnchors, checkTemplateDrift, gateTrustOf, GATE_TRUST_LEVELS, GATE_TRUST_DEFAULT } = await import(pathToFileURL(SRC).href);
 
 let pass = 0;
 let fail = 0;
@@ -574,17 +574,19 @@ const GATE_BODY = '// gate v1\n';
   fs.rmSync(root, { recursive: true, force: true });
 }
 
-// ---- 场景 30：主流程渐进路径源断言（同场景 8 手法）——§6.6b 失配分支必须 WARN 不 FAIL ----
-// gate 锚校验首次引入即 WARN（「先 WARN 升级 FAIL」渐进路径）：装户可改门禁，锚只提供可见性不阻断。
+// ---- 场景 30：主流程渐进路径源断言（同场景 8 手法）——§6.6b 失配分支按信任档分级 ----
+// 默认档（gateTrust=project）= WARN（「先 WARN 升级 FAIL」渐进路径）：装户可改门禁，锚只提供可见性。
+// org 档（2026-10-12 gate-trust-level）= FAIL —— 组织级强制位。断言的是**分级存在**，不是写死某档。
 {
   const doctorSrc = fs.readFileSync(SRC, 'utf8');
-  const warnMismatch = /gateRes\.mismatch\.length\)\s*add\('WARN'/.test(doctorSrc);
-  check('场景 30a：§6.6b gate 锚失配分支用 add(\'WARN\', …)（渐进路径，不阻断）',
-    warnMismatch,
-    `src/doctor.mjs §6.6b 失配分支应为 add('WARN', ...)`);
+  const lvMatch = /gateRes\.mismatch\.length\)\s*add\((lv)/.test(doctorSrc);
+  const lvDef = /const lv = orgMode \? 'FAIL' : 'WARN'/.test(doctorSrc);
+  check('场景 30a：§6.6b gate 锚失配分支按信任档分级（lv 常量，不写死单档）',
+    lvMatch && lvDef,
+    `src/doctor.mjs §6.6b 失配分支应为 add(lv, ...) 且 lv = orgMode ? 'FAIL' : 'WARN'`);
   check('场景 30b：失配出账含「gate 安装锚失配」字样（含重装重锚/恢复原版指引）',
     doctorSrc.includes('gate 安装锚失配') && doctorSrc.includes('add-gate <门名> --force'),
-    'src/doctor.mjs §6.6b WARN 文案缺失');
+    'src/doctor.mjs §6.6b 文案缺失');
   check('场景 30c：无带锚条目 → PASS 跳过语义（旧装户静默）',
     doctorSrc.includes('无带锚 gate 条目'),
     'src/doctor.mjs §6.6b 应有无锚跳过 PASS 分支');
@@ -594,6 +596,40 @@ const GATE_BODY = '// gate v1\n';
   check('场景 30d：local-pre-commit 排除在比对面外（防模板锚恒失配误报）',
     fnStart >= 0 && fnEnd > fnStart && doctorSrc.slice(fnStart, fnEnd).includes("'.agents/hooks/local-pre-commit'"),
     'checkGateAnchors 应排除 .agents/hooks/local-pre-commit');
+}
+
+// ---- 场景 37-42：gateTrustOf 信任档（2026-10-12 gate-trust-level）----
+// 反例钉子核心：**非法值 / 缺键必须回退 project（零行为变化），绝不因非法配置变严**
+// ——把默认升 org 是另一个决定；让「写错一个字符串」自动升到组织级强制则是配置事故。
+{
+  check('场景 37：显式 project / org 均如实返回',
+    gateTrustOf({ gateTrust: 'project' }) === 'project' && gateTrustOf({ gateTrust: 'org' }) === 'org');
+  check('场景 38：缺键（旧台账）/ null / undefined / 无 kit → 回退 project（零行为变化）',
+    gateTrustOf({}) === 'project' && gateTrustOf({ gateTrust: undefined }) === 'project'
+      && gateTrustOf(null) === 'project' && gateTrustOf(undefined) === 'project');
+  check('场景 39：非法值全部回退 project（大小写错、自造档、数字、数组皆同）',
+    gateTrustOf({ gateTrust: 'ORG' }) === 'project' && gateTrustOf({ gateTrust: 'organization' }) === 'project'
+      && gateTrustOf({ gateTrust: 1 }) === 'project' && gateTrustOf({ gateTrust: ['org'] }) === 'project');
+  check('场景 40：默认值常量与档位表同源一致（init 写 kit.json 用的就是它）',
+    GATE_TRUST_DEFAULT === 'project' && GATE_TRUST_LEVELS.join(',') === 'project,org');
+
+  // 端到端：kit.json 带 gateTrust → checkGateAnchors 回读该档（判据确实消费了它）
+  const mkTrustKit = (gateTrust) => ({
+    ...mkKit([{ rel: GATE_A, sha256: sha256Of(GATE_BODY), srcSha256: sha256Of(GATE_BODY) }]),
+    ...(gateTrust === undefined ? {} : { gateTrust }),
+  });
+  for (const [label, gt, want] of [
+    ['显式 org → 回读 org', 'org', 'org'],
+    ['显式 project → 回读 project', 'project', 'project'],
+    ['缺键（旧装户）→ 回读 project', undefined, 'project'],
+    ['非法值 → 回读 project', 'ORG', 'project'],
+  ]) {
+    const root = mkfix({ kitContent: mkTrustKit(gt), files: { [GATE_A]: '// 手改\n' } });
+    const r = checkGateAnchors(root);
+    check(`场景 41 ${label}（且失配仍照常检出）`, r.trust === want && r.mismatch.length === 1,
+      JSON.stringify({ want, got: r.trust, mismatch: r.mismatch }));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
 }
 
 // ---- 场景 31-36：checkTemplateDrift（2026-10-11 模板感知直测补齐——此前唯一无直测的导出 check）----

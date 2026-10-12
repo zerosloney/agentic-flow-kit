@@ -204,7 +204,54 @@ export function draftGateFor(kind, root, base) {
   return { ok: true, entry };
 }
 
+// ---- 待澄清标记（2026-10-12 needs-clarification，spec-kit NEEDS CLARIFICATION 对应物）----
+// 动机：本项目的歧义处理此前只有一种形态——**停下来问**（确认门停机）。那是「事后阻塞」：AI 停住等
+//   人，而人在上下文里未必答得上（他刚提的需求，细节是你算出来的）。spec-kit 的做法是**起草期把
+//   歧义显式写下来**（`[NEEDS CLARIFICATION]`），不阻塞起草但禁臆测——「我不知道」是负责，「猜一个」
+//   是失职。本件补这个表达：**零阻塞 + 不许糊过去**。
+// 形态：正文行 `- 待澄清：<问题>`（行首可选列表符；半角冒号兼容）。行首 `- 已澄清：<问题>` **不算**
+//   （同一行改前缀即声明解决，不删行——保留「曾经不清楚过」的痕迹，供事后对质）。
+// ⚠️ 与检查 2（模板占位符）刻意区分：占位符 = 「忘了填」（失职），本标记 = 「这里我不知道」
+//   （负责）。两者都要求作者动作，但语义相反，故不复用同一正则——复用即把负责判成失职。
+// 边界（诚实声明）：**起草门不阻断**（这才是零阻塞的意义），仅在 draft→approved 确认门点名——
+//   确认即「我认可这份文档」，文档里还挂着未澄清项则确认本身失去含义，故此处拒绝落账。
+//   例外：<日期>/YYYY-MM-DD 等占位由检查 2 管，本件不重复拦。
+const CLARIFY_RE = /^\s*[-*]\s*(待澄清|需澄清|待确认细节)\s*[：:]\s*(\S.*)$/;
+
+// openClarifications：抽出正文里未澄清的行（pure，供直测）。返回 [{ lineNo, text }]
+// HTML 注释行不计入——模板自带说明写在注释里，不该被判成作者留下的未澄清项。
+export function openClarifications(body) {
+  const out = [];
+  const lines = String(body || '').replace(/\r\n/g, '\n').split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    const l = lines[i];
+    if (/^\s*<!--/.test(l) || /-->\s*$/.test(l)) continue; // 整行注释
+    const m = l.match(CLARIFY_RE);
+    if (m) out.push({ lineNo: i + 1, text: m[2].trim(), kind: m[1] });
+  }
+  return out;
+}
+
+// clarifyGateFor：确认门「待澄清项已解决」前置判（confirm-doc draft→approved 用）
+// 返回 { ok, items?, reason?, hint? }。ok=false 时 items 供逐条点名（不只说「有未澄清项」——
+//   说清是哪几行哪几句，作者才不用回去逐行找）。
+export function clarifyGateFor(abs) {
+  let body = '';
+  try { body = fs.readFileSync(abs, 'utf8'); } catch { return { ok: true, skipped: 'unreadable' }; }
+  const items = openClarifications(body);
+  if (!items.length) return { ok: true, items };
+  const list = items.map((i) => `第${i.lineNo}行「${i.text}」`).join('；');
+  return {
+    ok: false,
+    items,
+    reason: `文档含 ${items.length} 处未澄清项——${list}`,
+    hint: '逐条解决后把行首「待澄清」改为「已澄清」（保留行，便于事后对质曾不清楚过），或直接删行；确认门不接受挂着未澄清项的文档',
+  };
+}
+
 // confirmGateFor：确认门总判（confirm-doc 用；docRel = workflow/specs/... 或 workflow/plans/...）
+// ⚠️ 只判**前置深度**（入口/spec 是否已确认）。待澄清项判定是**同一确认门上的另一条独立判据**，
+//   由 clarifyGateFor 单独承担——两者不合并：合并后拒绝原因会指向「前置」，作者找错地方。
 export function confirmGateFor(root, docRel) {
   const base = path.basename(docRel).replace(/\.md$/, '');
   const kind = docRel.startsWith('workflow/specs/') ? 'spec' : 'plan';
@@ -276,4 +323,4 @@ export function resolveWorkspace(outputPath, rootOverride) {
   return null;
 }
 
-export default { entryConfirmed, specConfirmed, draftGateFor, confirmGateFor, doneGateFor, gitReady, approvedTraceHit, resolveWorkspace, readFm, readLedger };
+export default { entryConfirmed, specConfirmed, draftGateFor, confirmGateFor, clarifyGateFor, openClarifications, doneGateFor, gitReady, approvedTraceHit, resolveWorkspace, readFm, readLedger };

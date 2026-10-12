@@ -386,6 +386,65 @@ const readLedgerOf = (root) => {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- S19b【待澄清门】spec 挂未澄清项 → 拒绝落账（2026-10-12 needs-clarification）----
+// 夹具沿 S23 的正路入口（台账行 + approved），确保**前置门已过**——否则拒绝原因会指向前置而非待澄清，
+// 用例就测不出新门。断言拒绝文案点名「needs-clarification」且**不含**前置门文案（两门分开出账）。
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-cl1-'));
+  for (const sub of ['intents', 'specs']) fs.mkdirSync(path.join(root, 'workflow', sub), { recursive: true });
+  fs.mkdirSync(path.join(root, '.agents'), { recursive: true });
+  const fp = 'c'.repeat(64);
+  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-10-12-n.md'), `---\n状态: approved\n级别: L2\n日期: 2026-10-12\n确认指纹: ${fp.slice(0, 16)}\n---\n# I\n`);
+  fs.writeFileSync(path.join(root, '.agents', 'confirmations.jsonl'), JSON.stringify({ ts: '2026-10-12T02:00:00.000Z', doc: 'workflow/intents/2026-10-12-n.md', stage: 'approved', fingerprint: fp, prev: 'draft', source: 'chat-delegated', batch: 'n1', seq: 1, of: 1 }) + '\n');
+  const specP = path.join(root, 'workflow', 'specs', '2026-10-12-n.md');
+  fs.writeFileSync(specP, '---\n状态: draft\n级别: L2\n---\n# S\n\n## 功能行为\n- 待澄清：错误率的判据是 5xx 占比还是全量？\n');
+  const before = fs.readFileSync(specP, 'utf8');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/specs/2026-10-12-n.md', '--delegated', '可以'], { cwd: root, encoding: 'utf8' });
+  const after = fs.readFileSync(specP, 'utf8');
+  const led = readLedgerOf(root);
+  check('S19b 待澄清门：挂未澄清项 → exit 2 + 点名行号与内容 + 未落盘 + 零新增台账',
+    r.status === 2 && /needs-clarification/.test(r.stderr) && /第8行/.test(r.stderr) && /5xx 占比还是全量/.test(r.stderr)
+      && after === before && led.length === 1,
+    JSON.stringify({ status: r.status, stderr: r.stderr, ledger: led.length }));
+  check('S19b 待澄清门：拒绝原因不误指向前置门（两门分开出账，否则作者查错地方）',
+    !/逐阶段前置门/.test(r.stderr), r.stderr);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- S19c【待澄清门】解决后（行首改「已澄清」）→ 放行；纯删行亦可 ----
+{
+  const mkClarified = (body) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-cl2-'));
+    for (const sub of ['intents', 'specs']) fs.mkdirSync(path.join(root, 'workflow', sub), { recursive: true });
+    fs.mkdirSync(path.join(root, '.agents'), { recursive: true });
+    const fp = 'd'.repeat(64);
+    fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-10-12-o.md'), `---\n状态: approved\n级别: L2\n日期: 2026-10-12\n确认指纹: ${fp.slice(0, 16)}\n---\n# I\n`);
+    fs.writeFileSync(path.join(root, '.agents', 'confirmations.jsonl'), JSON.stringify({ ts: '2026-10-12T02:00:00.000Z', doc: 'workflow/intents/2026-10-12-o.md', stage: 'approved', fingerprint: fp, prev: 'draft', source: 'chat-delegated', batch: 'o1', seq: 1, of: 1 }) + '\n');
+    fs.writeFileSync(path.join(root, 'workflow', 'specs', '2026-10-12-o.md'), body);
+    return root;
+  };
+  for (const [name, body] of [
+    ['改前缀为「已澄清」（保留行、留痕曾不清楚）', '---\n状态: draft\n级别: L2\n---\n# S\n\n- 已澄清：错误率判据 = 5xx 占比（与用户 10-12 对齐）\n'],
+    ['直接删行', '---\n状态: draft\n级别: L2\n---\n# S\n\n## 功能行为\n- 错误率判据 = 5xx 占比\n'],
+  ]) {
+    const root = mkClarified(body);
+    const r = spawnSync(process.execPath, [CLI, 'workflow/specs/2026-10-12-o.md', '--delegated', '可以'], { cwd: root, encoding: 'utf8' });
+    const after = fs.readFileSync(path.join(root, 'workflow', 'specs', '2026-10-12-o.md'), 'utf8');
+    check(`S19c 待澄清门：${name} → 放行落态`, r.status === 0 && after.includes('状态: approved'),
+      JSON.stringify({ status: r.status, stderr: r.stderr }));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+  // intents 不受本门约束（歧义标记的落点是 spec/plan 的设计判据；intent 是需求单，澄清天然发生在此处）
+  const root3 = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-cl3-'));
+  fs.mkdirSync(path.join(root3, 'workflow', 'intents'), { recursive: true });
+  fs.writeFileSync(path.join(root3, 'workflow', 'intents', '2026-10-12-p.md'), '---\n状态: draft\n级别: L1\n---\n# I\n\n- 待澄清：范围含不含移动端？\n');
+  const r3 = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-10-12-p.md', '--delegated', '可以'], { cwd: root3, encoding: 'utf8' });
+  check('S19c 待澄清门：intent 不受本门约束（澄清天然发生在需求单处）',
+    r3.status === 0 && fs.readFileSync(path.join(root3, 'workflow', 'intents', '2026-10-12-p.md'), 'utf8').includes('状态: approved'),
+    JSON.stringify({ status: r3.status, stderr: r3.stderr }));
+  fs.rmSync(root3, { recursive: true, force: true });
+}
+
 // ---- S20【逐阶段门】入口存在但未确认（draft）→ 拒绝 ----
 {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-sg2-'));

@@ -6,7 +6,7 @@ import readline from 'node:readline';
 import { execSync, spawnSync } from 'node:child_process';
 import { renderTree, renderContent, sha256, scriptTrusted, listTree } from './render.mjs';
 import { HOSTS, STACKS, STACK_ALIASES, settingsJson, commitCheckConfig, pickStackVars, isOwned, srcTemplatePath, TEMPLATE_DRIFT_EXCLUDE } from './profiles.mjs';
-import { doctor } from './doctor.mjs';
+import { doctor, GATE_TRUST_DEFAULT } from './doctor.mjs';
 
 function fail(msg) {
   console.error(`❌ ${msg}`);
@@ -327,6 +327,12 @@ export async function init(args, pkgRoot) {
     policyVersion: 2,
     // 新装默认只跑硬规则。缺省（旧台账无此字段）在 check-loop 里仍是全量，避免升级后卫生检查突然消失。
     audit: false,
+    // 门禁信任档（2026-10-12 gate-trust-level）：默认 'project' —— gate 安装锚失配只 WARN，
+    // 装户对门有最终所有权（1.7.11 起现状，此处只是把隐式默认显式命名）。多仓/组织场景改 'org'
+    // 即让失配升 FAIL（doctor exit 1），对齐 managed policy 的组织级强制。
+    // ⚠️ 默认值取 gateTrustOf / GATE_TRUST_DEFAULT 而非字面量：判据单源在 doctor.mjs（§6.6b 消费），
+    // 两处各写一份字符串即漂移面（N3 教训）。
+    gateTrust: GATE_TRUST_DEFAULT,
     createdAt: new Date().toISOString(),
     options: { hosts, stack: opt.stack, boardPort: String(opt.boardPort) },
     managed,

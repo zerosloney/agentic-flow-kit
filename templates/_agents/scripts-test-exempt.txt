@@ -6,7 +6,9 @@
 check-metric-claims.mjs | 经 check-loop.mjs 消费 | 由 check-loop.test.mjs 间接覆盖其调用路径
 ensure-board.mjs | 看板启动器 | 永久工具豁免（需真实端口/进程环境，自动化覆盖无性价比——2026-10-09 engine-quality-round2 A2 评估定性）
 policy.mjs | 库件 | 被 check-loop.test.mjs 直接 import 覆盖
-stage-gates.mjs | 库件 | 被 check-loop.test.mjs 直接 import 覆盖（fill-*/confirm-doc.test 消费其行为）
+# 2026-10-12 needs-clarification：stage-gates.mjs 已建同名直测（stage-gates.test.mjs 15 断言），
+#   覆盖待澄清门纯函数族（CLARIFY_RE 形态矩阵 / HTML 注释不计 / clarifyGateFor 三态 / 行号点名）——
+#   这两条判据**没有 check-loop 侧对应检查**，间接覆盖盖不到，故必须直测。登记随之撤除。
 # 2026-10-08 engine-quality-batch：pipeline-run 三层拆分的库件层——纯函数/存储层由 pipeline-run.test.mjs 全量覆盖（断言零改动全过），单建同名测试属形式主义（plan 偏离留痕 ①）
 pipeline-run-docs.mjs | 库件（文档纯函数层，2026-10-08 engine-quality-batch 拆分） | 由 pipeline-run.test.mjs 全量覆盖（断言零改动 29 组全过）
 pipeline-run-run.mjs | 库件（run 存储层，同上拆分） | 由 pipeline-run.test.mjs 全量覆盖（含 PIPELINE_RUN_* 注入契约场景）

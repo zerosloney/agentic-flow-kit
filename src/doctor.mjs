@@ -240,15 +240,21 @@ export function doctor(args, pkgRoot) {
   //      自愈使手改不留痕，本项补上可见性。不阻断（沿用「先 WARN 升级 FAIL」渐进路径）：装户对门有最终
   //      所有权，锚只提供可见性，有意改动知悉即可。
   const gateRes = checkGateAnchors(target);
+  // 出账分级按信任档（2026-10-12 gate-trust-level）：project 档 = WARN 永久可见（装户对门有最终
+  // 所有权）；org 档 = FAIL（doctor exit 1，组织级强制位）。两种档位的**文案主干逐字相同**——
+  // 升档只改级别与追加一句「本仓已声明 org 档」，不改判据、不改修复指引（作者照同一套指引修即可）。
+  const orgMode = gateRes.trust === 'org';
+  const trustNote = orgMode ? '【本仓 kit.json gateTrust=org：组织级强制档，失配属 FAIL】' : '【本仓 kit.json gateTrust=project：项目自治档，失配属 WARN；改 org 可升级为强制】';
   if (gateRes.error) {
     add('WARN', `gate 安装锚校验跳过（kit.json 解析失败：${gateRes.error}）`);
   } else if (gateRes.skipped) {
-    add('PASS', 'gate 安装锚校验跳过（无带锚 gate 条目——旧装户重装 add-gate 后生效）');
+    add('PASS', `gate 安装锚校验跳过（无带锚 gate 条目——旧装户重装 add-gate 后生效）`);
   } else if (gateRes.mismatch.length === 0 && gateRes.gone.length === 0) {
     add('PASS', `gate 安装锚 ${gateRes.total} 份无失配`);
   } else {
-    if (gateRes.mismatch.length) add('WARN', `gate 安装锚失配 ${gateRes.mismatch.length} 份：${gateRes.mismatch.join('、')}——.agents/hooks/ 门禁脚本与安装时包源 sha 不一致（手改会永久留痕）；有意改动知悉即可（重装重锚：flow-kit add-gate <门名> --force；恢复原版：从包源 modules/gates/ 拷回）`);
-    if (gateRes.gone.length) add('WARN', `gate 带锚文件缺失 ${gateRes.gone.length} 份：${gateRes.gone.join('、')}——门禁已不在盘面（失效）；恢复：flow-kit add-gate <门名> --force 或从包源 modules/gates/ 拷回`);
+    const lv = orgMode ? 'FAIL' : 'WARN';
+    if (gateRes.mismatch.length) add(lv, `gate 安装锚失配 ${gateRes.mismatch.length} 份：${gateRes.mismatch.join('、')}——.agents/hooks/ 门禁脚本与安装时包源 sha 不一致（手改会永久留痕）${orgMode ? '（org 档即不可接受）' : '；有意改动知悉即可'}（重装重锚：flow-kit add-gate <门名> --force；恢复原版：从包源 modules/gates/ 拷回）${trustNote}`);
+    if (gateRes.gone.length) add(lv, `gate 带锚文件缺失 ${gateRes.gone.length} 份：${gateRes.gone.join('、')}——门禁已不在盘面（失效${orgMode ? '；org 档即不可接受' : ''}）；恢复：flow-kit add-gate <门名> --force 或从包源 modules/gates/ 拷回${trustNote}`);
   }
 
   // 6.7 跨宿主薄适配正文段漂移校验（2026-09-25 cross-host-sync 立法）
@@ -397,16 +403,35 @@ export function checkOwnedDrift(target) {
   return { drift, gone, total: owned.length, skipped: false };
 }
 
+// ---- 门禁信任档（2026-10-12 gate-trust-level）----
+// 单源：本文件（doctor §6.6b 判定 + init.mjs 写 kit.json 默认值，两处 import 同一份——
+// 装户侧不消费（kit.json 是包源 CLI 写的台账），故不落 templates/_agents/scripts/policy.mjs：
+// 放那边会让装副本带一个它自己不用的判据，两处真值反而更多。两档语义：
+//   'project'（默认）：gate 安装锚失配 = **WARN**。装户对门有最终所有权——锚只提供可见性，
+//     有意改动知悉即可。这是 1.7.11 起的现状，本档只是把隐式默认显式命名为「项目自治」。
+//   'org'：失配 = **FAIL**（doctor exit 1）。给多仓/组织场景一个真实的强制位——对齐 Claude Code 的
+//     managed policy + allowManagedHooksOnly（组织级强制 + 可屏蔽项目自定义 hook）。
+// 为什么**不把默认改成 org**：本仓诚实边界声明写明「门禁关不掉通道」（台账可写、哈希链防不住整文件
+// 重写）。把可见性升成强制而不同步补上「组织侧锚源的不可篡改性」，等于宣称一个关不掉的通道能关——
+// 那比 WARN 更不可信。默认档与现行为逐字一致（零行为变化），要升的人显式改 kit.json 并自行承担
+// 「组织必须同步管住锚来源」的责任。
+// 非法值 / 缺键（旧台账）→ 回退 'project'（= 零行为变化，**绝不因非法配置变严**）。
+export const GATE_TRUST_LEVELS = ['project', 'org'];
+export const GATE_TRUST_DEFAULT = 'project';
+export function gateTrustOf(kit) {
+  const v = kit && kit.gateTrust;
+  return GATE_TRUST_LEVELS.includes(v) ? v : GATE_TRUST_DEFAULT;
+}
+
 // gate 安装锚校验（独立 export 供 doctor 主流程 + 单元测试共用；2026-10-11 P3-1 gate 防改锚）
 // 判据：kit.owned 中 rel 以 .agents/hooks/ 开头且带 srcSha256 的条目（＝add-gate 逐字拷贝安装的 gate 脚本，
 // 锚语义见 src/add-gate.mjs 头注），按 LF 归一算盘面 sha（与 checkOwnedDrift 同口径）比对锚。
 // local-pre-commit 须排除：它是合并接线件，其 srcSha256 由 init/sync 按「模板语义」写（≠ 逐字拷贝锚），
 // 且盘面含各门挂载行——纳入必恒失配误报。
-// 不阻断：装户对门有最终所有权，锚只提供可见性（2026-10-10 调研「gate 装户可改、hard 项缺防改」结论）。
-// 返回：{ total, mismatch, gone, skipped, error? }
-//   - skipped=true：kit.json 不存在 / 无 owned / 无带锚条目（旧装户静默，重装 add-gate 后生效）
-//   - error：kit.json 解析失败（沿用 §6.6 同款跳过语义，由主流程 WARN）
-//   - total：参与比对的带锚条目数；mismatch：盘面 sha ≠ 锚（装后手改）；gone：盘面缺失
+// 不阻断（默认 'project' 档）：装户对门有最终所有权，锚只提供可见性（2026-10-10 调研
+// 「gate 装户可改、hard 项缺防改」结论）。'org' 档（2026-10-12 gate-trust-level，判据单源
+// policy.mjs#gateTrustOf）下失配升 FAIL —— 多仓/组织场景的组织级强制位，对齐 managed policy。
+// 返回：{ total, mismatch, gone, skipped, error?, trust }
 export function checkGateAnchors(target) {
   const kitPath = path.join(target, '.agents', 'kit.json');
   if (!fs.existsSync(kitPath)) return { total: 0, mismatch: [], gone: [], skipped: true };
@@ -416,11 +441,12 @@ export function checkGateAnchors(target) {
   } catch (e) {
     return { total: 0, mismatch: [], gone: [], skipped: true, error: e.message };
   }
+  const trust = gateTrustOf(kit); // 缺键/非法 → 'project'（零行为变化）
   const owned = Array.isArray(kit.owned) ? kit.owned : [];
   const anchored = owned.filter((f) => f.rel.startsWith('.agents/hooks/')
     && f.rel !== '.agents/hooks/local-pre-commit' // 合并接线件，srcSha256 是模板语义锚，非逐字拷贝锚（见上）
     && typeof f.srcSha256 === 'string' && f.srcSha256);
-  if (anchored.length === 0) return { total: 0, mismatch: [], gone: [], skipped: true };
+  if (anchored.length === 0) return { total: 0, mismatch: [], gone: [], skipped: true, trust };
   const mismatch = [];
   const gone = [];
   for (const f of anchored) {
@@ -430,7 +456,7 @@ export function checkGateAnchors(target) {
     const h = createHash('sha256').update(fs.readFileSync(p, 'utf8').replace(/\r\n/g, '\n'), 'utf8').digest('hex');
     if (h !== f.srcSha256) mismatch.push(f.rel);
   }
-  return { total: anchored.length, mismatch, gone, skipped: false };
+  return { total: anchored.length, mismatch, gone, skipped: false, trust };
 }
 
 // 模板下发感知（2026-10-06 template-downstream）：只读判据——owned 模板条目三方 sha 比对，

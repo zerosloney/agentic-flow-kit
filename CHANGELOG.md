@@ -2,6 +2,59 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.7.14
+
+- feat(gate)+feat(gates)：**补组织级强制位 + 起草期歧义表达**（2026-10-12，对照「AI-Native SDLC 成熟度」调研
+  短板表 P1 两项）。两处都是**补表达不补门禁数量**：20 项检查编号零变动，扩容门仍 6 项。新增 1 套件
+  （stage-gates.test.mjs），撤除 1 条 scripts-test-exempt 登记。
+
+  **① 起草期待澄清标记（needs-clarification）——补 spec-kit 的零阻塞歧义表达**
+  外部对标：spec-kit 在模板内置 `[NEEDS CLARIFICATION]`，起草期强制显式标记歧义、禁臆测（不阻塞起草）。
+  本项目此前的歧义处理只有一种形态——**停下来问**（确认门停机）：那是「事后阻塞」，AI 停住等人，
+  而人在上下文里未必答得上（他刚提的需求，细节是 AI 算出来的）。
+  做法（判据落 stage-gates.mjs = 起草前置判定的单源，confirm-doc 消费）：
+  - 形态：正文行 `- 待澄清：<问题>`；同义前缀 `需澄清` / `待确认细节`；全/半角冒号；列表符 `-`/`*` + 前导空格
+  - **`- 已澄清：…` 不算未澄清**——同前缀改字即声明解决，**保留该行**（留痕「曾不清楚过」，供事后对质）
+  - **起草门不阻断**（这才是零阻塞的意义）；仅 `draft→approved` 确认门点名拒绝。intents 不受约束
+    （澄清天然发生在需求单处）
+  - **与检查 2（模板占位符）刻意区分**：占位符 = 忘了填（失职），本标记 = 我不知道（负责）。复用同一
+    正则即把负责判成失职，故两条判据互不复用
+  - 与「逐阶段前置门」**分开出账**：合并会让拒绝原因指向「前置」而前置其实是好的，作者查错地方
+  - 诚实边界（已在源码与测试中钉住）：跨行 HTML 注释块 `<!--\n- 待澄清：x\n-->` 的中间行会被抽出——
+    逐行过滤只认整行/行尾注释。**方向保守**（多拒不漏放），且跨行注释在 workflow 文档零先例，为不存在的
+    形态加状态机属过度工程
+  测试：`stage-gates.test.mjs`（新套件 15 断言：CLARIFY_RE 形态矩阵正例 5 / 负例 4、HTML 注释不计、
+  跨行注释已知边界如实钉住、CRLF、空输入、clarifyGateFor 三态 + 行号点名）+ `confirm-doc.test.mjs`
+  S19b/S19c（4 断言端到端：拒绝 exit 2 + 点名行号与内容 + 零落盘零新增台账 + 文案不误指前置门 /
+  改前缀放行 / 删行放行 / intents 不受影响）。**scripts-test-exempt.txt 撤除 stage-gates.mjs 登记**——
+  理由：该模块此前靠 check-loop.test 间接覆盖，但新加的两条判据**check-loop 侧无对应检查**，间接覆盖
+  天然盖不到，故必须直测。
+
+  **② 门禁信任档 gateTrust（gate-trust-level）——给多仓/组织场景一个真实强制位**
+  背景：调研结论「gate 装户可改、hard 项缺防改」在 1.7.11 已补 `srcSha256` 安装锚 + doctor §6.6b 永久可见，
+  但**只可见不阻断**（装户对门有最终所有权）。外部对标：Claude Code 的 managed policy +
+  `allowManagedHooksOnly`（组织级强制 + 可屏蔽项目自定义 hook）——业界已有「组织级不可绕」这一层。
+  做法（判据单源 src/doctor.mjs，`GATE_TRUST_LEVELS` / `GATE_TRUST_DEFAULT` / `gateTrustOf`）：
+  - `kit.json` 新增 `gateTrust`：`project`（默认）失配 WARN（= 1.7.11 现状，**零行为变化**）/
+    `org` 失配 FAIL（doctor exit 1）
+  - **不把默认改成 org**：本仓诚实边界声明写明「门禁关不掉通道」（台账可写、哈希链防不住整文件重写）。
+    把可见性升成强制而不同步补上「组织侧锚源的不可篡改性」，等于宣称一个关不掉的通道能关——比 WARN 更不可信
+  - **非法值 / 缺键（旧台账）一律回退 `project`**：绝不因写错一个字符串自动升到组织级强制（配置事故）
+  - **文案主干逐字相同**：升档只改级别 + 追加一句档位说明，不改判据、不改修复指引
+  - 判据落 src/ 而非 templates/_agents/scripts/policy.mjs：kit.json 是包源 CLI 写的台账，装副本不消费
+    这项——放 policy.mjs 会让装副本带一个自己不用的判据，两处真值反而更多
+  测试：`doctor.test.mjs` 场景 30a 改写（断言**分级存在**而非写死单档：`add(lv, …)` + `lv = orgMode ? 'FAIL' : 'WARN'`）
+  + 场景 37-42 新增（8 断言：显式两档 / 缺键·null·undefined·无 kit 回退 / 非法值四类回退 / 默认常量同源 /
+  端到端四组 kit.json → checkGateAnchors 回读该档且失配仍检出）；50 断言绿。
+
+  附带：README「五条硬规则」节补两段（gateTrust 两档 + 待澄清标记用法）；init.mjs 写 kit.json 时
+  `gateTrust: GATE_TRUST_DEFAULT`（取常量不写字面量，与 §6.6b 同源）。
+  实测：npm test 54 套件 0 失败；新套件 stage-gates 15/0、doctor 50/0、confirm-doc 66/0、check-loop 285/0；
+  rule-budget 5/0（AGENTS.md 7829B ≤ 8192B，commands 目录 63918B ≤ 65536B——两处余量未动）；
+  eslint exit 0；fresh-init 装户冒烟 doctor 16 PASS 0 WARN 0 FAIL，gateTrust 两档与待澄清门端到端实测
+  （project → WARN / org → FAIL exit 1 / 挂未澄清项 → exit 2 点名第38行 / 改前缀后放行落态）。
+  版本 1.7.14
+
 ## 1.7.13
 
 - feat(metrics)+feat(scripts)：**补上外部证据点名的两处缺口**（2026-10-12，对照「AI-Native SDLC 成熟度」调研）——

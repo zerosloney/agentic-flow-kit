@@ -39,7 +39,7 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { createHash, randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { confirmGateFor, doneGateFor, laneOfEntry, laneOfDoc } from './stage-gates.mjs';
+import { confirmGateFor, clarifyGateFor, doneGateFor, laneOfEntry, laneOfDoc } from './stage-gates.mjs';
 import { loadKitPolicy, hasFreshVerifyLine, ledgerChainHash, scopeDigest } from './policy.mjs';
 
 // hasFreshVerify(root, doc)：读 <root>/.agents/verifications.jsonl 判 24h 窗口绿行（判定单源
@@ -355,6 +355,19 @@ if (isMain) {
       if (!gate.ok) {
         console.error(`❌ ${doc} 未过逐阶段前置门（stage-gates）：${gate.reason}`);
         console.error(`   ${gate.hint}（本份未落账、未写盘）`);
+        refused++;
+        continue;
+      }
+      // 待澄清项门（2026-10-12 needs-clarification）：起草期挂「待澄清」标记**不阻断**（零阻塞），
+      // 但 draft→approved 确认时若仍挂着未澄清项则拒绝——确认即「认可这份文档」，文档里还写着
+      // 「这里我不知道」，确认就没有意义。与上面的前置门分开出账：拒绝原因必须指向真正的原因
+      // （合并会让作者去查「前置」，而前置其实是好的）。
+      // ⚠️ 文案锚点硬约束：本段禁止并入上方 gate 分支的输出契约（既有 confirm-doc.test.mjs 断言
+      // 锚定「未过逐阶段前置门（stage-gates）」子串），故单列独立分支。
+      const cl = clarifyGateFor(abs);
+      if (!cl.ok) {
+        console.error(`❌ ${doc} 含未澄清项（needs-clarification）：${cl.reason}`);
+        console.error(`   ${cl.hint}（本份未落账、未写盘）`);
         refused++;
         continue;
       }

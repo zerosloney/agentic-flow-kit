@@ -31,7 +31,11 @@ node .agents/scripts/confirm-doc.mjs workflow/intents/<文件>.md   # 终端里�
 
 新装的 `kit.json` 写 `audit: false` 与 `policyVersion: 2`：check-loop 只阻断配对、验收勾验、确认留痕，外加发版提交树上仍未收口的文档。敏感信息在 pre-commit，双源和台账在 doctor / sync。`audit` 缺省（升级来的旧台账）保持全量卫生警告；自己装一份 dogfood 时可显式置 `audit: true`。豁免日期只在 `.agents/scripts/policy.mjs` 的 `policyVersion` 表里改。
 
-可选红线用 `add-gate`：`dotnet-ca`、`node-layer`、`py-import`、`generated-readonly`。约定见 `modules/gates/README.md`。
+可选红线用 `add-gate`：`dotnet-ca`、`node-layer`、`py-import`、`generated-readonly`、`test-protect`。约定见 `modules/gates/README.md`。
+
+**门禁信任档**（`.agents/kit.json` 的 `gateTrust`）：默认 `project` —— gate 安装锚失配只 WARN（装户对门有最终所有权，锚只提供可见性）。多仓或组织场景改成 `org`，失配即 `doctor` FAIL（exit 1），对齐托管策略的组织级强制。缺键或非法值一律回退 `project`，不会因写错而变严。
+
+**待澄清标记**：起草 spec / plan 时不确定的地方照实写一行 `- 待澄清：<你卡在哪>`，不要猜——「我不知道」是负责，猜是失职（与检查 2 的模板占位符语义相反：占位符是忘了填）。起草门不拦（零阻塞），但 `draft→approved` 确认时仍挂着未澄清项会被 `confirm-doc` 拒绝落账。解决后把行首改成 `- 已澄清：`（保留行，留痕曾不清楚过）或删行。
 
 **关于「确认门」的诚实边界**：确认门是**留痕机制，不是防伪机制**。`confirm-doc.mjs` 把确认事件写进 `.agents/confirmations.jsonl`（append-only，入 git），check-loop 据此对账——但台账是本地可写文件，**刻意手改台账仍可伪造**。门禁的实际作用是把「顺手绕过」抬到「主动伪造」（两者性质不同、可事后对质），而非关闭通道。引擎注释对此有完整声明（见包源 `templates/_agents/scripts/stage-gates.mjs` 头部信任边界段；装户径同份在 `.agents/scripts/stage-gates.mjs`）。委托代录（`--delegated`）的台账行如实记 `source` 与用户原话供事后对质，永不伪装 TTY 确认。
 

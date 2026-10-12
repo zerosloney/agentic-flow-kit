@@ -6,6 +6,12 @@
 # SPEC — <与入口文档同名主题>
 <!-- 与 intents/ 或 incidents/ 下同名入口文档配对；L2 / L3 必须先有 spec 确认通过方可起草 plan；L1 可省略 -->
 <!-- frontmatter 受限子集（2026-09-13）：状态∈draft/approved/done/superseded/cancelled（done=关单、superseded=曾确认后放弃、cancelled=未完成即取消）；L3 确认通过后在 frontmatter 追加两行：`确认结果: approved` 与 `确认时间: YYYY-MM-DD`（check-loop 对 L3 强制校验） -->
+<!-- 待澄清标记（2026-10-12 needs-clarification）：起草时**不确定的地方照实写一行** `- 待澄清：<你卡在哪>`，
+     不要猜一个填上去——「我不知道」是负责，猜是失职（与检查 2 的模板占位符语义相反：占位符是忘了填）。
+     起草门不拦（不阻塞你继续写）；但 draft→approved 确认时仍挂着未澄清项会被 confirm-doc 拒绝落账——
+     确认即「认可这份文档」，文档里写着「这里我不知道」就没法确认。
+     解决后把行首改成 `- 已澄清：…`（**保留该行**，留痕曾不清楚过，便于事后对质）或直接删行。
+     判据单源：stage-gates.mjs#openClarifications / clarifyGateFor（confirm-doc 消费）。 -->
 
 对应入口：../intents/YYYY-MM-DD-<主题>.md 或 ../incidents/YYYY-MM-DD-<主题>.md（保留实际一项）
 
