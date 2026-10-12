@@ -6,6 +6,7 @@ import net from 'node:net';
 import { createHash } from 'node:crypto';
 import { listTree, scriptTrusted } from './render.mjs';
 import { isOwned, HOSTS, pickStackVars, srcTemplatePath, templateDriftOf, TEMPLATE_DRIFT_EXCLUDE } from './profiles.mjs';
+import { bodySha } from './sync-hosts.mjs';
 
 // 宿主目录映射（与 src/profiles.mjs#HOSTS 同源：装副本目录名前缀带点）
 const HOST_DIR = Object.fromEntries(Object.entries(HOSTS).map(([k, v]) => [k, v.dir]));
@@ -228,7 +229,7 @@ export function doctor(args, pkgRoot) {
     add('PASS', `owned ${ownedRes.total} 份无漂移（装副本与台账 sha 对齐）`);
   } else {
     // owned 漂移已严化为 FAIL（2026-09-25 doctor-owned-drift-strict 复盘；首次引入用 WARN，installed 装户吃过警告后升级）
-    if (ownedRes.drift) add('FAIL', `owned 漂移 ${ownedRes.drift} 份——装副本手改未跑 sync 刷台账 / 包源改了装副本未同步；须手动同步装副本后跑 node bin/flow-kit.mjs sync 刷台账（见 incidents/2026-09-25-wf-runtime 复盘）`);
+    if (ownedRes.drift) add('FAIL', `owned 漂移 ${ownedRes.drift} 份——装副本手改未跑 sync 刷台账 / 包源改了装副本未同步；须手动同步装副本后跑 npx agentic-flow-kit sync 刷台账`);
     if (ownedRes.gone.length) add('FAIL', `owned 文件缺失：${ownedRes.gone.join('、')}——sync 恢复或手动恢复`);
   }
 
@@ -250,7 +251,7 @@ export function doctor(args, pkgRoot) {
     if (gateRes.gone.length) add('WARN', `gate 带锚文件缺失 ${gateRes.gone.length} 份：${gateRes.gone.join('、')}——门禁已不在盘面（失效）；恢复：flow-kit add-gate <门名> --force 或从包源 modules/gates/ 拷回`);
   }
 
-  // 6.7 跨宿主薄适配正文段漂移校验（2026-09-25 cross-host-sync，参见 workflows/intents/2026-09-25-cross-host-sync.md）
+  // 6.7 跨宿主薄适配正文段漂移校验（2026-09-25 cross-host-sync 立法）
   //     装户侧视角：.agents/{commands,roles}/*.md 是权威源；4 宿主目录（.zcode/.omp/.opencode/.trae）下的
   //     {agents,commands}/*.md 是薄适配。按正文段 sha 比对（B-b 语义，frontmatter 不计入漂移），
   //     commands 层按 profiles.mjs#HOSTS.commandPrefix 前缀映射（2026-09-28 起 opencode/trae 同 wf-）。
@@ -486,15 +487,8 @@ export function checkAdapterDrift(target) {
     return { drift: 0, total: 0, skipped: true, note: '包源环境（templates/ + modules/ 同时存在）——§7.x 仅在装户环境有意义' };
   }
   // 4 宿主目录映射（与顶层 HOST_DIR 同源）
-  const splitFm = (text) => {
-    const m = String(text || '').match(/^---\r?\n([\s\S]*?\r?\n)---\r?\n?([\s\S]*)$/);
-    if (!m) return { fm: '', body: String(text || '') };
-    return { fm: `---\n${m[1]}---\n`, body: m[2] };
-  };
-  const bodySha = (p) => {
-    // 正文段 LF 归一后哈希（closing-coverage：与 sync-hosts bodySha 同口径，CRLF/LF 盘面不误报漂移）
-    try { return createHash('sha256').update(splitFm(fs.readFileSync(p, 'utf8')).body.replace(/\r\n/g, '\n'), 'utf8').digest('hex'); } catch { return null; }
-  };
+  // splitFm/bodySha 单源复用 sync-hosts（2026-10-11 bodysha-single-source：此前内联第二份实现靠
+  // 注释约束同口径，收敛为 import 消灭漂移面）
   let total = 0;
   let drift = 0;
   const listMd = (dir) => fs.existsSync(dir) && fs.statSync(dir).isDirectory() ? fs.readdirSync(dir).filter((f) => f.endsWith('.md')) : [];

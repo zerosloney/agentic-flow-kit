@@ -11,7 +11,7 @@ description: Design 阶段 · 起 spec（L2/L3 强制，L1 可省略直接进 wf
 
 起草 intent / spec / plan 任一件后，**在输出草稿全文前先给三件要点总览**（各一件：目标 / 关键取舍 /
 验收判据 diff，合计 ≤12 行）——用户一次看整体再逐件拍板，省三次盲确认的上下文切换。
-确认纪律不变：逐件过目全文 + 逐件 `confirm-doc` 代录（禁并录、禁复用同句）。本阶段总览侧重：spec 方案取舍与 L3 复核安排。
+确认纪律不变：逐件过目全文 + 逐件 `confirm-doc` 代录（禁并录；摘要可复用——分辨力由 scope+指纹承担，2026-10-09 起）。本阶段总览侧重：spec 方案取舍与 L3 复核安排。
 
 ## 1. 执行
 
@@ -44,6 +44,6 @@ description: Design 阶段 · 起 spec（L2/L3 强制，L1 可省略直接进 wf
 ## 4. 确认后
 
 - spec 状态 draft → approved
-- **确认落态**：唯一入口 `node .agents/scripts/confirm-doc.mjs <path>`（draft→approved / approved→done；TTY 两形态 / 逐件调用+逐件原话 / 台账对质全口径见根 `AGENTS.md` §1.3 确认门）。
+- **确认落态**：唯一入口 `node .agents/scripts/confirm-doc.mjs <path>`（draft→approved / approved→done；TTY 两形态 / 逐件代录（摘要可复用——分辨力由 scope+指纹承担）/ 台账对质全口径见根 `AGENTS.md` §1.3 确认门）。
 - 立即 `docs(workflow)` 单独提交留痕(根 `AGENTS.md` 提交约定;check-loop 检查 14 口径)
 - 进 `next: .agents/commands/build.md`

@@ -67,6 +67,4 @@ sh .agents/scripts/check-loop.sh                # Windows 无 sh 时 doctor 已�
 
 ## 5. 相关留痕
 
-- intent：`workflow/intents/2026-09-25-cross-host-sync.md`
-- plan：`workflow/plans/2026-09-25-cross-host-sync.md`（含 B-b 方案拍板）
-- incident：`workflow/incidents/2026-09-25-wf-runtime.md`（双源纪律教训，规范 §7.x 包源环境跳过）
+- 立法出处：2026-09-25 cross-host-sync（intent/plan，含 B-b 方案拍板；父事件 = wf-runtime 双源纪律教训，规范 §7.x 包源环境跳过）——留痕在包源仓 git 历史与 CHANGELOG，装户径不引实例路径

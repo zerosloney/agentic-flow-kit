@@ -1,5 +1,7 @@
 # 引擎仓自身 CI（纯包源形态——装户端内容清理后，远端门只跑引擎自检）
 # npm test = lint（eslint 未装显式 skip）+ 全量套件（src/ + templates/_agents/scripts/）。
+# 纯包源后本仓无本地钩子——CI 是唯一机器门：双平台矩阵守 win32 分支（git.exe/路径/spawn 差异，
+# check-loop.mjs 记录过 ubuntu vs win32 行为分叉事故）。
 # 装户侧远端门是另一份：templates/_github/workflows/kit-ci.yml（随包下发，在装户仓跑 verify.mjs）。
 name: ci
 on:
@@ -8,10 +10,11 @@ on:
   pull_request:
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         node-version: [18, 22]  # engines >=18：守地板与当前 LTS
+        os: [ubuntu-latest, windows-latest]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

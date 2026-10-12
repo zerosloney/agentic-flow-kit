@@ -26,8 +26,10 @@ function splitFm(text) {
 }
 
 // bodySha：剥离 frontmatter 后的正文段 sha256（缺失返 null）；正文 LF 归一（2026-09-27 closing-coverage：
-// CRLF/LF 盘面同值——权威源与薄适配行尾不一致不再误报漂移，与 doctor §6.7 同口径）
-function bodySha(p) {
+// CRLF/LF 盘面同值——权威源与薄适配行尾不一致不再误报漂移）。
+// 单源 export（2026-10-11 bodysha-single-source）：doctor §6.7 checkAdapterDrift 复用——此前 doctor
+// 内联第二份实现靠注释约束同口径，收敛为单源 import 消灭漂移面。
+export function bodySha(p) {
   try {
     const { body } = splitFm(fs.readFileSync(p, 'utf8'));
     return sha256(Buffer.from(body.replace(/\r\n/g, '\n'), 'utf8'));

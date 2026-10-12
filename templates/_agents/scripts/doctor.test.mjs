@@ -10,6 +10,8 @@
 // 另测 checkDelegationSnapshotFreshness(target)（场景 19-23，2026-09-29 p0-gate-noise-batch）与
 //   checkGateAnchors(target)（场景 24-30，2026-10-11 P3-1 gate 防改锚：add-gate 写下的 srcSha256 锚让
 //   .agents/hooks/ 门禁脚本手改永久可见；local-pre-commit 模板语义锚须排除出比对面）。
+// 另测 checkTemplateDrift(target, pkgRoot)（场景 31-36，2026-10-11 模板感知直测补齐——此前唯一无直测的
+//   导出 check：三态判定 + 排除面 + 无模板跳过）。
 // 用法：node .agents/scripts/doctor.test.mjs（在仓库根执行，需 src/doctor.mjs 存在——dogfooding 模式）
 import fs from 'node:fs';
 import os from 'node:os';
@@ -30,7 +32,7 @@ if (!fs.existsSync(SRC)) {
   console.error(`doctor.test.mjs：SKIP——未找到 ${SRC}（装户环境无包源 src/；本套件仅在包源仓库/dogfooding 跑 npm test 时有意义）`);
   process.exit(0);
 }
-const { checkOwnedDrift, checkAdapterDrift, checkLedgerCoverage, checkDelegationSnapshotFreshness, checkGateAnchors } = await import(pathToFileURL(SRC).href);
+const { checkOwnedDrift, checkAdapterDrift, checkLedgerCoverage, checkDelegationSnapshotFreshness, checkGateAnchors, checkTemplateDrift } = await import(pathToFileURL(SRC).href);
 
 let pass = 0;
 let fail = 0;
@@ -592,6 +594,97 @@ const GATE_BODY = '// gate v1\n';
   check('场景 30d：local-pre-commit 排除在比对面外（防模板锚恒失配误报）',
     fnStart >= 0 && fnEnd > fnStart && doctorSrc.slice(fnStart, fnEnd).includes("'.agents/hooks/local-pre-commit'"),
     'checkGateAnchors 应排除 .agents/hooks/local-pre-commit');
+}
+
+// ---- 场景 31-36：checkTemplateDrift（2026-10-11 模板感知直测补齐——此前唯一无直测的导出 check）----
+// 三态判定单源 profiles.templateDriftOf：synced（盘==当前源）/ stale-drift（源演进盘未跟，唯一出账）/
+// custom-synced（盘定制、源==锚，永不告警）/ no-anchor（旧装户静默）；TEMPLATE_DRIFT_EXCLUDE 与
+// 无对应模板 rel 均不入比对面。fixture 双根：target（.agents/kit.json + 盘面）+ pkgRoot（templates/）。
+{
+  const OLD_BODY = '# tpl v1\n';
+  const NEW_BODY = '# tpl v2 — source evolved\n';
+  const CUSTOM_BODY = '# hand-customized\n';
+  const mkpkg = (tplContent) => {
+    const pkg = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-tpl-pkg-'));
+    fs.mkdirSync(path.join(pkg, 'templates'), { recursive: true });
+    if (tplContent !== null) fs.writeFileSync(path.join(pkg, 'templates', 'AGENTS.md'), tplContent);
+    return pkg;
+  };
+  // 31 盘面 == 当前源 → synced，零 stale
+  {
+    const pkg = mkpkg(OLD_BODY);
+    const root = mkfix({
+      kitContent: mkKit([{ rel: 'AGENTS.md', sha256: sha256Of(OLD_BODY), srcSha256: sha256Of(OLD_BODY) }]),
+      files: { 'AGENTS.md': OLD_BODY },
+    });
+    const r = checkTemplateDrift(root, pkg);
+    check('场景 31：盘面==当前源 → synced（skipped=false stale=[] total=1）',
+      r.skipped === false && r.total === 1 && r.stale.length === 0, JSON.stringify(r));
+    fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(pkg, { recursive: true, force: true });
+  }
+  // 32 源演进 + 盘面未跟 → stale-drift（唯一出账形态）
+  {
+    const pkg = mkpkg(NEW_BODY);                       // 包源已演进
+    const root = mkfix({
+      kitContent: mkKit([{ rel: 'AGENTS.md', sha256: sha256Of(OLD_BODY), srcSha256: sha256Of(OLD_BODY) }]),
+      files: { 'AGENTS.md': OLD_BODY },                // 盘面还停在锚版本
+    });
+    const r = checkTemplateDrift(root, pkg);
+    check('场景 32：源演进盘未跟 → stale-drift（stale=[AGENTS.md]）',
+      r.skipped === false && r.stale.length === 1 && r.stale[0] === 'AGENTS.md', JSON.stringify(r));
+    fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(pkg, { recursive: true, force: true });
+  }
+  // 33 盘面定制（源==锚）→ custom-synced，永不告警
+  {
+    const pkg = mkpkg(OLD_BODY);
+    const root = mkfix({
+      kitContent: mkKit([{ rel: 'AGENTS.md', sha256: sha256Of(CUSTOM_BODY), srcSha256: sha256Of(OLD_BODY) }]),
+      files: { 'AGENTS.md': CUSTOM_BODY },
+    });
+    const r = checkTemplateDrift(root, pkg);
+    check('场景 33：盘面定制源==锚 → custom-synced（stale=[] 不出账）',
+      r.skipped === false && r.total === 1 && r.stale.length === 0, JSON.stringify(r));
+    fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(pkg, { recursive: true, force: true });
+  }
+  // 34 无 srcSha256 锚（旧装户）→ skipped 静默不追溯
+  {
+    const pkg = mkpkg(OLD_BODY);
+    const root = mkfix({
+      kitContent: mkKit([{ rel: 'AGENTS.md', sha256: sha256Of(OLD_BODY) }]),
+      files: { 'AGENTS.md': OLD_BODY },
+    });
+    const r = checkTemplateDrift(root, pkg);
+    check('场景 34：无锚 → skipped=true（旧装户静默，下次 sync 写锚生效）',
+      r.skipped === true && r.total === 0 && r.stale.length === 0, JSON.stringify(r));
+    fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(pkg, { recursive: true, force: true });
+  }
+  // 35 生成器目标（TEMPLATE_DRIFT_EXCLUDE）排除出比对面——混合条目只计 AGENTS.md
+  {
+    const pkg = mkpkg(OLD_BODY);
+    const root = mkfix({
+      kitContent: mkKit([
+        { rel: 'workflow/INDEX.md', sha256: sha256Of('# idx\n'), srcSha256: sha256Of('# idx\n') },
+        { rel: 'AGENTS.md', sha256: sha256Of(OLD_BODY), srcSha256: sha256Of(OLD_BODY) },
+      ]),
+      files: { 'AGENTS.md': OLD_BODY },
+    });
+    const r = checkTemplateDrift(root, pkg);
+    check('场景 35：生成器目标排除 → total=1 只计 AGENTS.md',
+      r.skipped === false && r.total === 1 && r.stale.length === 0, JSON.stringify(r));
+    fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(pkg, { recursive: true, force: true });
+  }
+  // 36 rel 无对应模板（srcTemplatePath null）→ 不入比对面
+  {
+    const pkg = mkpkg(OLD_BODY);
+    const root = mkfix({
+      kitContent: mkKit([{ rel: 'wiki/自定文档.md', sha256: sha256Of('# x\n'), srcSha256: sha256Of('# x\n') }]),
+      files: {},
+    });
+    const r = checkTemplateDrift(root, pkg);
+    check('场景 36：无对应模板 rel → 不计数（skipped=true）',
+      r.skipped === true && r.total === 0, JSON.stringify(r));
+    fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(pkg, { recursive: true, force: true });
+  }
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

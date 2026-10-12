@@ -7,7 +7,7 @@
 //       # 迁移后，以调用方显式传入的用户原话逐份 confirm-doc --delegated（quote 原样转发）
 //   node .agents/scripts/solidify-task.mjs --topic <主题> --auto
 //       # 迁移后，逐份 confirm-doc --auto（trust-mode=Trusted 才放行；Strict 下被拒并计数失败）
-// 确认门契约（incidents/2026-10-01-v09-review-defects）：--delegated 的 quote 必须来自用户在对话内的
+// 确认门契约（2026-10-01 v09 复盘立法）：--delegated 的 quote 必须来自用户在对话内的
 //   明确原话，由调用方显式传入——本脚本永不编造用户话术。无确认来源时只迁移不落账，末尾打印指引。
 import fs from 'node:fs';
 import path from 'node:path';

@@ -5,7 +5,7 @@
 //     否则 verify-wiki-consistency 的 summary.archive 比对会拦提交）
 // 草稿是中间态：drafts-archive 只读不增量、不参与文件级登记（仅计总数），归类到活跃主题目录由人工完成
 // （人工移动后跑 gen-wiki-board + verify-wiki-consistency，并在目标文件保留/改写「来源」字段）
-// 用法：node .agents/scripts/draft-sediment.mjs workflow/intents/2026-10-10-主题.md [--dry-run] [--help]
+// 用法：node .agents/scripts/draft-sediment.mjs workflow/intents/<日期>-<主题>.md [--dry-run] [--help]
 //   （intent 须 done；incident 须 closed 且复盘三件套齐全——与 check-loop 沉淀追踪子判据同口径）
 // 零依赖；抽节为纯函数（export 供测试）；CLI 解析最简字符串匹配
 import fs from 'node:fs';

@@ -21,7 +21,7 @@
 //   事实；这样的行不给任何单背书（消费方按 doc 精确匹配时 e.doc 为 undefined 恒不命中）。
 // 用法：node .agents/scripts/verify.mjs [--test-cmd "<shell 命令>"] [--doc <本单 workflow 路径>]
 //   （--test-cmd 用于测试注入，或在无根 package.json 的装户仓指定项目测试命令；
-//     --doc 把凭证绑到本单，如 --doc workflow/intents/2026-10-08-x.md）
+//     --doc 把凭证绑到本单，如 --doc workflow/intents/<日期>-<主题>.md）
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';

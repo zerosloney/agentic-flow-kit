@@ -164,7 +164,7 @@ function takeOpts() {
   return opts;
 }
 
-// ---- runCheckLoop：门禁主流程可 import 化（2026-10-08 checkloop-importable；papercuts 2026-10-04 isMain 行点名单独立项）----
+// ---- runCheckLoop：门禁主流程可 import 化（2026-10-08 checkloop-importable；2026-10-04 isMain 行点名单独立项）----
 // import 本模块零副作用（isMain 主守卫，board-kb-p1 先例）；opts = { root?, rev?, hardening? }——root 显式参数
 // 优先于 CHECK_LOOP_ROOT env 优先于 git toplevel（CLI 缺省行为逐字节不变）；返回 { exitCode, blockers, warnings }，
 // 输出打印照旧在本函数内（稳定输出契约：banner 后空行、条目 `- ` 前缀、HARD-BLOCK/WARN 两段式——消费者 .githooks/pre-push）。
@@ -176,7 +176,7 @@ function takeOpts() {
 
 // writeGateStats：门禁 ROI 落盘（2026-10-08 gate-roi-metrics）——append 一行到
 // <root>/.agents/cache/gate-stats.jsonl（该目录已 gitignore，属运行时数据、不入 git、不进 kit.json
-// managed 台账——刻意避开 papercuts 2026-10-05 探针临时件被 sync 收编的事故面）。
+// managed 台账——刻意避开 2026-10-05 探针临时件被 sync 收编的事故面）。
 // IO 失败只出账不阻断（沿 verify.mjs 凭证落账同款容错——度量失败不该让门禁变成红灯）。
 export function writeGateStats(root, segs) {
   try {
@@ -778,7 +778,7 @@ export function runCheckLoop(opts = {}) {
   // --- 8. intent 验收标准对账（done 须逐条勾验并补证据；新建 hard，存量聚合 warning）---
   markGate('8', '验收标准对账');
   // 生效日锚 2026-09-28 改「git 首次加入日期」（此前取文件名前 10 字符——命名规范强制的字段、
-  // 写早零成本，见 incidents/2026-09-28-check8-git-anchor）。非 git → 不可判定 → 走存量口径（不误报 hard）。
+  // 写早零成本）。非 git → 不可判定 → 走存量口径（不误报 hard）。
   {
     const accCutoff = '2026-09-12';
     let legacyUnaccounted = 0;
@@ -1232,7 +1232,7 @@ export function runCheckLoop(opts = {}) {
         if (rows.every((r) => r.brief === true)) continue;
         const of = Math.max(...rows.map((r) => (typeof r.of === 'number' ? r.of : 0)));
         const docs = rows.map((r) => String(r.doc).replace(/^workflow\//, '')).join('、');
-        warnings.push(`- [WARN 确认并录] 单次调用落账 ${rows.length} 份（batch ${b}，of=${of}）：${docs}——同一次 --delegated 调用放行多份，塌掉「逐件确认」门（build.md）；口径见 workflow/papercuts.md 2026-09-28 与 incidents/2026-09-28-batch-ledger-audit.md`);
+        warnings.push(`- [WARN 确认并录] 单次调用落账 ${rows.length} 份（batch ${b}，of=${of}）：${docs}——同一次 --delegated 调用放行多份，塌掉「逐件确认」门（build.md；口径见根 AGENTS.md「门禁与提交」确认门节）`);
       }
     }
   }

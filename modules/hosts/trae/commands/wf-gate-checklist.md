@@ -75,6 +75,4 @@ npm test                                       # 含 gate-checklist 套件
 
 ## 6. 相关留痕
 
-- intent（登记表重写）：`workflow/intents/2026-09-25-gate-checklist-registry.md`
-- intent（工具首建）：`workflow/intents/2026-09-25-gate-checklist.md`
-- 父 incident：`workflow/incidents/2026-09-25-wf-runtime.md`（owned 漂移未对账，催生本工具）
+- 立法出处：2026-09-25（登记表重写 + 工具首建；父事件 = owned 漂移未对账，催生本工具）——留痕在包源仓 git 历史与 CHANGELOG，装户径不引实例路径

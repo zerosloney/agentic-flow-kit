@@ -100,6 +100,4 @@ flow-kit doctor                                     # 10/0/0
 
 ## 6. 相关留痕
 
-- intent：`workflow/intents/2026-09-25-source-sync-check.md`
-- plan：`workflow/plans/2026-09-25-source-sync-check.md`
-- 父 incident：`workflow/incidents/2026-09-25-wf-runtime.md`（包源改了装副本未同步——本工具预防性体检）
+- 立法出处：2026-09-25 source-sync-check（intent/plan；父事件 = 包源改了装副本未同步，本工具预防性体检）——留痕在包源仓 git 历史与 CHANGELOG，装户径不引实例路径

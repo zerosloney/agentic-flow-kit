@@ -15,7 +15,7 @@
 // 检查 B「探索标记缺失」：experiment/* 分支暂存的 workflow/intents/*.md（排除 _TEMPLATE）
 //   frontmatter 无「阶段: exploring」且无「状态: exploring」（口径同 check-loop 加固门）→ hard 拦。
 //   标记是加固门覆盖率的前提且补写零成本——advisory 免的是纪律负担，不免标记本身。
-// 判据原则（incidents/2026-09-28-batch-ledger-audit 教训）：只用一手事实——暂存文件清单、
+// 判据原则（2026-09-28 台账批量代录事故教训）：只用一手事实——暂存文件清单、
 //   当前分支名、工作区 frontmatter 字段；不用时间戳 / 字符串相等反推过程事实。
 // 边界：git 调用一律 -c core.quotepath=off（非 ASCII 路径教训，同 check-pairing-incremental.sh）；
 //   frontmatter 读取容忍 CRLF（显式按 \r?\n 切分）；detached HEAD 分支不可判 → A 按 strict、
@@ -176,7 +176,7 @@ if (isExperiment) {
 for (const a of advisories) console.error(`泳道完整性（增量）— advisory:\n${a}\n`);
 if (blocks.length) {
   for (const b of blocks) console.error(`泳道完整性（增量）— BLOCK:\n${b}\n`);
-  console.error('pre-commit: 泳道完整性未通过，提交已阻止（spec: workflow/specs/2026-10-01-drift-hardening.md）');
+  console.error('pre-commit: 泳道完整性未通过，提交已阻止（判据见 .agents/commands/new-task.md §级别判断）');
   process.exit(1);
 }
 process.exit(0);

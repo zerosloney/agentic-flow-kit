@@ -2,6 +2,44 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.7.12
+
+- feat(gate)+fix(tpl+ci)：**第一性原理序列 1-6 批**（2026-10-11，对照当日评审重排）——
+  ① **实例引用不变量门**（新增 src/instance-ref.test.mjs，第 52 套件）：包源随包下发件（引擎脚本 +
+  命令/角色/协议文档）禁止引用实例专属带日期文档路径（incidents/specs/intents/plans/20xx-* 与
+  papercuts 日期条目）——机器输出是证据性的，装户径路径悬空摧毁门禁可信度。清理 14 处：3 处运行时输出
+  （check-lane-surface.mjs 阻断消息改指 new-task.md §级别判断、check-loop.mjs 并录 WARN 改指根
+  AGENTS.md 确认门节、gen-workflow-metrics.mjs 漏斗表头去 specs 指针）+ 8 处注释出处改写 + 3 组命令
+  文档「相关留痕」节收敛为「包源仓 git 历史」+ 2 处用法示例改 &lt;日期&gt; 占位。门立时咬出 4 处漏网
+  （build.md:41 papercuts 指针、doctor.mjs 两处 WARN/注释、build.md:89）——机器化的价值实证。
+  ② **CI 双平台矩阵**：ubuntu → ubuntu+windows（node 18/22 × 2）——纯包源后 CI 是本仓唯一机器门，
+  win32 分支（git.exe/路径/spawn）此前零机器验证，平台分叉事故在案（check-loop.mjs 平台注记）。
+  ③ **bodySha 单源化**：doctor §6.7 checkAdapterDrift 内联第二份 splitFm/bodySha 收敛为 import
+  sync-hosts 导出（splitFm 保持模块私有）——消灭「注释约束同口径」的漂移面。lint 抓到 splitFm
+  未使用导入（首版多导出），顺手修正。
+  ④ **build.md 包源专属三节删除**（§4-6 改权威源/doctor/包源后必跑）：三节提醒的属性（薄适配同步、
+  双源一致）在唯一适用仓已有机器强制（pre-commit 双源门 + doctor §6.7），正文与 sync-hosts.md/
+  source-sync-check.md 专题文档重复——装户 AI 每次读 Build 少消化三节无关指令（约 1.7KB），§7/§8
+  重编号为 §4/§5。
+  ⑤ **deploy 观察期决策规则 + plans 验证层标注**：deploy.md §6 补「异常判据（错误日志/异常告警/
+  关键业务流失败任一出现即触发回滚，不等 24h；无异常满 24h 方可闭环）」——观察期从形式存在升级为
+  功能存在；plans/_TEMPLATE.md 验证方式补「每条验收标准标注验证层（单元/集成/E2E/人工实测），
+  关单证据按层对质」——证据声明可证伪。
+  ⑥ **checkTemplateDrift 直测补齐**（doctor.test.mjs 场景 31-36）：三态判定（synced/stale-drift/
+  custom-synced）+ 无锚静默 + 生成器目标排除 + 无对应模板跳过——此前唯一无直测的导出 check（评审
+  预检勘误：doctor 并非「无直测」，checkOwnedDrift/AdapterDrift/LedgerCoverage/Snapshot/GateAnchors
+  共 30 场景早在案）。
+  附带修复：doctor §6.6 FAIL 消息内 `node bin/flow-kit.mjs sync` → `npx agentic-flow-kit sync`
+  （装户无 bin/，S2 同类）；build.md:41 owned 同步条目标注「仅包源/dogfood 双形态仓适用」。
+  ⑦ **确认口径随动收口**（2026-10-09 scope 变更的文档遗漏）：build/test/plan/design 五处残留退役
+  纪律「逐件配逐件原话 / 不复用同句 / 逐件调用+逐件原话 / 禁复用同句」→ 统一为「逐件确认不变（手动
+  路由每阶段一道确认门，禁并录）+ 摘要为人类可读留痕可复用——分辨力由落账自动记录的改动面
+  scope{files,sha256} 与文档指纹承担」；引擎脚本内的退役说明注释（check-loop/confirm-doc 记录旧判据
+  四类失效）保留不动。口径本质：手动路由 = 每阶段过确认门再进下一阶段；pipeline-run = 人件门（关键
+  不清楚处）确认后继续。
+  实测：npm test 52 套件 0 失败；instance-ref 门扫 106 份零引用；sync-hosts 81 对全对齐；fresh init
+  冒烟首提过门、doctor 16 PASS 0 WARN 0 FAIL、四项新内容装户面在位。版本 1.7.12
+
 ## 1.7.11
 
 - test(src)：**纯包源预算自检门**（2026-10-11 budget-self-check）——关闭「纯包源仓不跑装户预算门」盲区：

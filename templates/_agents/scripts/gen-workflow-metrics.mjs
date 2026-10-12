@@ -174,7 +174,7 @@ const idxText = fs.existsSync(path.join(WORKFLOW, 'INDEX.md')) ? fs.readFileSync
 const idxBytes = Buffer.byteLength(idxText, 'utf8');
 const idxActive = Number((idxText.match(/^## 活跃（(\d+)）/m) || [])[1] ?? NaN);
 
-// ---- 闭环漏斗（2026-10-02 ledger-funnel-metrics；口径定义式单源 = workflow/specs/2026-10-02-ledger-funnel-metrics.md）----
+// ---- 闭环漏斗（2026-10-02 ledger-funnel-metrics 立法）----
 // 只读台账一手字段（doc/stage/ts/source），坏行跳过（与检查 15/19 同容错）；观测面不挂门禁、不新增文档断言（检查 16 零接触）。
 const LEDGER_P = path.join('.agents', 'confirmations.jsonl');
 function readLedgerRows() {
@@ -255,9 +255,9 @@ const TABLE_HEAD = [
   '| 月份 | 文档（活跃/终态） | 文档字节 | 模块已填/总 | 常驻面字节（预算峰值） | INDEX（活跃行） |',
   '|---|---|---|---|---|---|',
 ];
-// 漏斗表头（第二表；口径定义式单源 = workflow/specs/2026-10-02-ledger-funnel-metrics.md）
+// 漏斗表头（第二表）
 const FUNNEL_HEAD = [
-  '## 闭环漏斗（机器口径，源：.agents/confirmations.jsonl——定义式见 specs/2026-10-02-ledger-funnel-metrics.md）',
+  '## 闭环漏斗（机器口径，源：.agents/confirmations.jsonl）',
   '',
   '| 月份 | 收口 | 完整链 | 协议前 | 一次通过 | 返工件 | 中位周期(天) | 台账行数 |',
   '|---|---|---|---|---|---|---|---|',

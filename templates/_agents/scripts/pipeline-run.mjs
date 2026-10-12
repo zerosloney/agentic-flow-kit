@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// pipeline-run — 跨宿主全自动闭环执行器（2026-10-02 pipeline-run；spec workflow/specs/2026-10-02-pipeline-run.md）
+// pipeline-run — 跨宿主全自动闭环执行器（2026-10-02 pipeline-run 立法）
 // 用途：把六阶段闭环的确定性部分代码化为状态机——start/next/status/watch/abort 五子命令；
 //       AI 槽位经工单协议交宿主执行，人件门到点即停、next --delegated "<原话>" 逐份过 confirm-doc。
 // 红线：绝不 spawn AI 会话 / 零依赖 / git 永不 --no-verify / 永不伪造原话 / 永不直改文档状态（唯一入口 confirm-doc）。
