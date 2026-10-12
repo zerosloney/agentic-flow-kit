@@ -2,6 +2,11 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.7.15
+
+- chore(ci)：**恢复 npm 发布管线并补发**（2026-10-12）——Release 工作流（`.github/workflows/release.yml`）在 v1.7.1「装户端内容清理」时随 `.github/` 一并删除后未重建。此后 v1.7.1~v1.7.14 的 tag 正常推送到 GitHub，但无任何 workflow 监听，**发布静默失效约 14 个版本**——npm `latest` 停滞在 1.7.0，git 与 npm 双源脱节。本版恢复该工作流（与删除前逐字一致：`push: tags v*` → tag 与 package.json 版本一致性 fail-fast → `npm test` → `npm publish --provenance`），因工作区有并发在途改动，release.yml 单独先行提交（889c8a1），本提交仅随动版本号与本条目。
+  **诚实边界**：npm 不允许补发历史版本号，**1.7.1~1.7.14 在 npm 上永久缺失**；本版 1.7.15 的 tarball 一次性包含 git 侧 1.7.1~1.7.14 的全部改动——CHANGELOG 各版本条目仍是那些改动的真实记录，npm 版本号与 CHANGELOG 版本号从此恢复同步。`--provenance` 需 `id-token: write`（workflow 已含）+ public 包，均满足。
+
 ## 1.7.14
 
 - feat(gate)+feat(gates)：**补组织级强制位 + 起草期歧义表达**（2026-10-12，对照「AI-Native SDLC 成熟度」调研
