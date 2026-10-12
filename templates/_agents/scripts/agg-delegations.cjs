@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /* agg-delegations: 量化证据聚合
  * 读 workflow/delegations.md 两张结果表（按表头签名识别：委派表含「被委派方」列、自做表=日期+任务一句话；不依赖 ## 节标题）+ 扫 workflow/incidents/ 按月计数，
- * 输出各月指标（一次通过率 / 平均返工次数 / 主兜底占比）、并发扩容门判定、可粘贴的月度快照行。
+ * 输出各月指标（一次通过率 / 平均返工次数 / 主兜底占比 / **产出接受率**）、并发扩容门判定、可粘贴的月度快照行。
  * 结果取值：一次通过 | 返工×N | 返工×N（门禁噪声）| 主兜底 | 返工待修（未闭环，不计入率）。
  *   门禁噪声档（2026-10-08 selfmeasure-and-modularize）：剥离「返工由门禁面而非设计面触发」的形态——
  *   扩容门第 3 项只对设计返工判 =0，门禁噪声返工单列观测。存量行零回填（旧四档解析逐条不变）。
@@ -58,6 +58,25 @@ function parseResult(raw) {
   return { kind: 'unknown', rework: 0, reworkNoise: 0 };
 }
 
+// parseVerdict：合入结论列解析（2026-10-12 merge-accept-rate）
+// 三档：合入 / 返工后合入 / 未合入；空与未知一律 return null（**不计入接受率分母**——
+// 存量行零回填是硬约定，未记录 ≠ 未合入，混进去会凭空造出一个低接受率）。
+// 判据边界：结论由人工/独立复核写入，机器不判真伪（同 --delegated 信任边界）；
+// 本项是**观测不是门槛**，不进 gateMonth（理由见 workflow/delegations.md 头部）。
+// 与结果列（过程质量）刻意分开：结果列量「跑了几遍」，本列量「人愿不愿意合」——
+// METR 2026-03 实测两者落差约 24 个百分点，混列即被前者盖过后者。
+function parseVerdict(raw) {
+  const v = (raw || '').trim();
+  if (/^合入$/.test(v)) return 'accepted';
+  if (/^返工后合入$/.test(v)) return 'accepted-after-rework';
+  if (/^未合入$/.test(v)) return 'rejected';
+  return null; // 留空 / 未登记取值 = 未记录（不进分母）
+}
+
+// ACCEPT_MIN_SAMPLE：接受率最小样本护栏（样本 <5 不出率，沿 agg 既有护栏口径——
+// 样本过小的比率是噪声不是信号，且一旦进门禁就会产出不可消退的告警）。
+const ACCEPT_MIN_SAMPLE = 5;
+
 // splitTables：按表头签名识别两张结果表——节标题只服务人类阅读，表头才是数据边界
 // （2026-09-24 修复：曾按 `## 委派结果` 节标题定位，节结构漂移时已有记录被静默读成「台账为空」）
 // ⚠️ 互引（2026-10-08 papercuts-cleanup-batch 修 2）：check-loop.mjs delegationResultRows 已对齐本签名
@@ -91,18 +110,20 @@ function readLedger(root = ROOT, opts = {}) {
     date: c[0],
     actor: c[1],
     result: c[3] || '',
+    verdict: c[5] || '',
   }));
   const selfDone = parseTableRows(tables.self.join('\n')).map((c) => ({
     scope: '自做',
     date: c[0],
     actor: '主智能体',
     result: c[2] || '',
+    verdict: c[4] || '',
   }));
   const rows = delegated.concat(selfDone);
   // 零数据行时区分「台账真空」与「结构漂移」：有日期开头的数据行却识别不到表 → fail-loud，不再静默「台账为空」
   if (!rows.length && /^\s*\|\s*\d{4}-\d{2}-\d{2}\s*\|/m.test(text)) {
     if (opts.soft) return [];
-    fail(`台账结构漂移：${ledger} 存在日期开头的数据行但未识别到结果表（委派表表头须含「被委派方」列，自做表表头须为「日期 | 任务一句话 | 结果 | 备注」）`);
+    fail(`台账结构漂移：${ledger} 存在日期开头的数据行但未识别到结果表（委派表表头须含「被委派方」列，自做表表头须为「日期 | 任务一句话 | 结果 | 备注」——末列「合入结论」可缺省，存量表不要求补）`);
   }
   return rows;
 }
@@ -142,6 +163,18 @@ function metrics(rows) {
     if (p.kind === 'rework-noise' || p.kind === 'rework-mixed') reworkNoiseSum += p.reworkNoise;
   }
   const delegatedValid = valid.filter((r) => r.scope === '委派');
+  // 接受率（2026-10-12 merge-accept-rate）：分母 = **已记录合入结论**的行数（parseVerdict 非 null），
+  // 分子 = accepted + accepted-after-rework。留空行不计入——存量行零回填，未记录 ≠ 未合入。
+  // 分母不足 ACCEPT_MIN_SAMPLE 时 acceptRate = null（输出 '—'），不给小样本比率。
+  let verdictRecorded = 0, accepted = 0, rejected = 0;
+  for (const r of valid) {
+    const v = parseVerdict(r.verdict);
+    if (!v) continue;
+    verdictRecorded += 1;
+    if (v === 'accepted' || v === 'accepted-after-rework') accepted += 1;
+    if (v === 'rejected') rejected += 1;
+  }
+  const acceptRate = verdictRecorded >= ACCEPT_MIN_SAMPLE ? accepted / verdictRecorded : null;
   return {
     total: valid.length,
     pending,
@@ -154,7 +187,18 @@ function metrics(rows) {
     delegatedValid: delegatedValid.length,
     fallback,
     fallbackRate: delegatedValid.length ? fallback / delegatedValid.length : null,
+    verdictRecorded,
+    accepted,
+    rejected,
+    acceptRate,
   };
+}
+
+// fmtAccept：接受率展示（分母为 0 或未过护栏 → '—' 并注明原因，不打 0%）
+function fmtAccept(m) {
+  if (!m.verdictRecorded) return '—（合入结论零记录）';
+  if (m.acceptRate == null) return `—（样本 ${m.verdictRecorded}/${ACCEPT_MIN_SAMPLE}）`;
+  return `${(m.acceptRate * 100).toFixed(0)}%（${m.accepted}/${m.verdictRecorded}）`;
 }
 
 function fmtRate(x, digits = 0) {
@@ -211,16 +255,17 @@ function main() {
     const prevYm = (() => { const [y, mo] = ym.split('-').map(Number); const d = new Date(Date.UTC(y, mo - 2, 1)); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; })();
     const verdict = expansionVerdict(monthOk, monthResults.get(prevYm), !months.includes(prevYm), items);
     console.log(`## ${ym}`);
-    console.log(`  有效任务 ${m.total}（待修 ${m.pending}${m.unknown ? `、未知结果 ${m.unknown}` : ''}）｜一次通过 ${m.pass}（${fmtRate(m.passRate)}）｜设计返工 ${m.reworkSum} 次 / 门禁噪声返工 ${m.reworkNoiseSum} 次（合计返工 ${m.reworkSum + m.reworkNoiseSum}，平均 ${fmtNum(m.avgRework)}）｜主兜底 ${m.fallback}/${m.delegatedValid}（${fmtRate(m.fallbackRate)}）｜incident ${incidents[ym] || 0} 起`);
+    console.log(`  有效任务 ${m.total}（待修 ${m.pending}${m.unknown ? `、未知结果 ${m.unknown}` : ''}）｜一次通过 ${m.pass}（${fmtRate(m.passRate)}）｜设计返工 ${m.reworkSum} 次 / 门禁噪声返工 ${m.reworkNoiseSum} 次（合计返工 ${m.reworkSum + m.reworkNoiseSum}，平均 ${fmtNum(m.avgRework)}）｜主兜底 ${m.fallback}/${m.delegatedValid}（${fmtRate(m.fallbackRate)}）｜产出接受率 ${fmtAccept(m)}｜incident ${incidents[ym] || 0} 起`);
+    console.log(`  接受率说明（观测项，非门槛）：已记录合入结论 ${m.verdictRecorded} 行｜合入 ${m.accepted}｜未合入 ${m.rejected}｜留空未记录行不入分母`);
     for (const i of items) console.log(`  门${i.no}[${i.kind}] ${i.ok === null ? '[人工]' : i.ok ? '✅' : '❌'} ${i.desc}`);
     console.log(`  扩容门判定：${verdict}\n`);
-    snapshotRows.push(`| ${ym} | ${m.total} | ${fmtRate(m.passRate)} | ${fmtNum(m.avgRework)} | ${fmtRate(m.fallbackRate)} | ${incidents[ym] || 0} | ${verdict} | 样本含待修${m.pending}${m.unknown ? `、未知${m.unknown}` : ''} |`);
+    snapshotRows.push(`| ${ym} | ${m.total} | ${fmtRate(m.passRate)} | ${fmtNum(m.avgRework)} | ${fmtRate(m.fallbackRate)} | ${incidents[ym] || 0} | ${fmtAccept(m)} | ${verdict} | 样本含待修${m.pending}${m.unknown ? `、未知${m.unknown}` : ''} |`);
   }
 
   if (!argMonth && rows.length) {
     const m = metrics(rows);
     console.log(`## 全量累计`);
-    console.log(`  有效任务 ${m.total}（待修 ${m.pending}${m.unknown ? `、未知结果 ${m.unknown}` : ''}）｜一次通过 ${fmtRate(m.passRate)}｜平均返工 ${fmtNum(m.avgRework)}｜主兜底 ${fmtRate(m.fallbackRate)}｜incident 合计 ${Object.values(incidents).reduce((a, b) => a + b, 0)} 起\n`);
+    console.log(`  有效任务 ${m.total}（待修 ${m.pending}${m.unknown ? `、未知结果 ${m.unknown}` : ''}）｜一次通过 ${fmtRate(m.passRate)}｜平均返工 ${fmtNum(m.avgRework)}｜主兜底 ${fmtRate(m.fallbackRate)}｜产出接受率 ${fmtAccept(m)}｜incident 合计 ${Object.values(incidents).reduce((a, b) => a + b, 0)} 起\n`);
   }
 
   console.log(`## 可粘贴快照行（粘到 workflow/delegations.md §月度聚合快照）`);
@@ -235,5 +280,5 @@ function main() {
 if (require.main === module) {
   main();
 } else {
-  module.exports = { parseResult, metrics, gateMonth, expansionVerdict, GATE, readLedger };
+  module.exports = { parseResult, parseVerdict, metrics, gateMonth, expansionVerdict, fmtAccept, GATE, ACCEPT_MIN_SAMPLE, readLedger };
 }

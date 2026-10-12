@@ -119,7 +119,7 @@ export function qualityRows(root) {
     const avg = Number.isFinite(m.avgRework) ? m.avgRework.toFixed(2) : '—';
     // 门禁噪声返工单列（2026-10-08 selfmeasure-and-modularize）：设计返工与噪声返工分列可诊断——
     // 「平均返工」把两者平均在一起时看不出该改门禁还是改设计。
-    out.push(`| ${ym} | ${m.total} | ${pct(m.passRate)} | ${m.reworkSum} | ${m.reworkNoiseSum} | ${avg} | ${pct(m.fallbackRate)} | ${verdict} |`);
+    out.push(`| ${ym} | ${m.total} | ${pct(m.passRate)} | ${m.reworkSum} | ${m.reworkNoiseSum} | ${avg} | ${pct(m.fallbackRate)} | ${agg.fmtAccept(m)} | ${verdict} |`);
   }
   return { rows: out, verdictMap, months };
 }
@@ -202,7 +202,7 @@ function main() {
     '',
     '## 质量 / 返工（月度，判据复用 agg-delegations）',
     '',
-    '| 月份 | 有效任务 | 一次通过率 | 设计返工 | 门禁噪声返工 | 平均返工 | 主兜底占比 | 扩容门判定 |',
+    '| 月份 | 有效任务 | 一次通过率 | 设计返工 | 门禁噪声返工 | 平均返工 | 主兜底占比 | 产出接受率 | 扩容门判定 |',
     '|------|----------|------------|---------|-------------|--------|------------|------------|',
     ...(q.rows.length ? q.rows : ['| — | — | — | — | — | — | — | 台账暂无数据 |']),
     '',

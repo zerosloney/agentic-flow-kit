@@ -2,6 +2,59 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.7.13
+
+- feat(metrics)+feat(scripts)：**补上外部证据点名的两处缺口**（2026-10-12，对照「AI-Native SDLC 成熟度」调研）——
+  两项都**不加门禁项**：第一项是观测项（缺的不是拦，是量），第二项刻意不挂门（jscpd 需联网取包，
+  进门禁路径等于给断网/攻击制造绕过口）。新增 2 套件，共 73 新断言。
+
+  **① 产出接受率（merge-accept-rate）——补 METR 可合入性度量**
+  外部证据：METR 2026-03 研究（296 个 agent 生成的 SWE-bench Verified 通过 PR 交真实维护者盲评，
+  **合并判定比自动评分低约 24 个百分点**，约一半不会被合入）——通过自动评测与「人愿意合」是两个维度。
+  本仓此前的度量面只覆盖**过程质量**（一次通过率 / 设计返工 / 门禁噪声 / 主兜底），**产出是否被接受
+  零度量**——`independent-reviewer` 角色契约在，但复核结论不进任何机器台账。
+  做法（扩既有单源，零新体系）：`workflow/delegations.md` 两张表加**末列**「合入结论」
+  （`合入` / `返工后合入` / `未合入` / 留空）；`agg-delegations.cjs` 加 `parseVerdict` 纯函数 +
+  `metrics` 加 `verdictRecorded / accepted / rejected / acceptRate` + `fmtAccept` 展示函数。
+  四条口径决定（全部有反例钉子）：
+  - **留空 = 未记录，不计入分母**——存量行零回填是硬约定；「未记录 ≠ 未合入」，混进去即凭空造低接受率
+  - **样本 <5 不出率**（`ACCEPT_MIN_SAMPLE`，沿 agg 既有护栏）——小样本比率是噪声不是信号，
+    且一旦进门禁就产出不可消退告警；`fmtAccept` 显式打印「样本 2/5」而非打 0%
+  - **不进 `gateMonth`**——扩容门仍是 6 项，接受率不参与 `monthOk`（钉死断言：`items.length === 6`）
+  - **合入结论由人工/独立复核写入，机器不判真伪**——同 `--delegated` 信任边界，delegations.md 头部声明
+  消费侧：`gen-workflow-dashboard.mjs` 的 `qualityRows` 表头 + 行并列接受率（判据仍全部 reuse agg 纯函数，
+  零重复）。月度行另打一行接受率分项说明（已记录/合入/未合入/留空不入分母）。
+  测试：`agg-delegations.test.mjs` 场景 8（11 断言，核心反例 = **一次通过率 100% 而接受率 90%**——
+  混列必被前者盖过后者）与场景 9（存量五列表兼容零误判 + 六列表末列解析 + 快照行含接受率列）；42 断言绿。
+
+  **② jscpd 重复率漂移消费端（jscpd-drift-gate）——把 1.7.7 固化的基线接上消费方**
+  背景：`scripts/jscpd-baseline.json`（111 文件 / 24810 行 / 209 克隆块 / 重复 7.49%，锚 commit
+  9e0cbc5）自 1.7.7 落地起**全仓无任何代码读它**——死数据。外部证据：GitClear 2025（2.11 亿行变更，
+  2020-2024）显示重构行占比 25%→<10%、复制粘贴行 8.3%→12.3%、重复块约 4 倍增长——重复率是 AI 编码
+  最确定的退化信号之一。1.7.9 已在 `incidents/_TEMPLATE.md` 根因节埋「克隆分叉」采集点（证据采集在案），
+  **消费端一直缺失**。新 `scripts/jscpd-drift.mjs`：读基线 → 干净 worktree 跑基线自带复现命令 → 比对
+  `duplicatedLinesPct` → advisory 报告（抬升 >1pct WARN / >3pct 提示立 intent 收敛并指回克隆分叉采集点）。
+  四条设计决定：
+  - **默认实测面 = HEAD，不是基线 commit**——扫基线 commit 必得 Δ=0，那是自我复读不是漂移检查
+    （`pickRef` 纯函数专钉这条判据）；`--verify-baseline` 才复扫基线做口径自查，与漂移判定分离
+  - **不挂门禁**——jscpd 需 `npx --yes` 联网 + worktree + 全仓扫描，入门禁路径即引入网络依赖绕过口；
+    恒 exit 0，报告器不是门
+  - **基线坏了 fail-loud（exit 1）但不阻断**——判据的输入坏了却静默跳过 =「登记了却没查」不可见
+    （六键齐 + 数值有限非负 + commit 锚 + 复现命令，逐项点名缺哪个）
+  - **实测取不到 → `unknown`，既不判 OK 也不判红**——拿不到数据不是「没退化」的证据（沿 1.7.8 方案 B
+    灰度第一档口径）；`parseReport` 逐路径探测跨版本字段（5.4.1 实测为 `statistics.total.percentage`，
+    早期为 `duplicatedLinesPct`，本次实测踩到并修）
+  测试：新增 `src/jscpd-drift.test.mjs`（第 53 套件，31 断言：真实基线可解析 / 六类 fail-loud /
+    parseReport 跨版本路径含 5.4.1 实测形态 / compareDrift 四态含反例「取不到数据不谎报 OK」/
+    pickRef 判据 / --no-run 端到端 / 阈值与未知参数校验）。**不真跑 jscpd 不联网**（真跑慢且依赖网），
+  真跑路径由 CI 的 `workflow_dispatch` 手动 job 覆盖（新增 `jscpd-drift` job：基线快检 → 漂移检查 →
+  报告入 run summary，**恒不红**；`fetch-depth: 0` 因 worktree 依赖完整历史）。
+  实测真跑（win32 本机）：Δ +0.28pct（7.49% → 7.77%，114 文件 / 228 克隆块），未过 warn 阈值；
+  首次真跑即咬出 `parseReport` 字段路径错误（取不到 duplicatedLinesPct）——**机器化的价值再次实证**。
+
+  实测：npm test 53 套件 0 失败；新套件 agg-delegations 42/0、jscpd-drift 31/0、gen-workflow-dashboard 30/0。
+  版本 1.7.13
+
 ## 1.7.12
 
 - feat(gate)+fix(tpl+ci)：**第一性原理序列 1-6 批**（2026-10-11，对照当日评审重排）——

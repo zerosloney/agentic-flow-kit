@@ -91,7 +91,7 @@ const runAgg = (root) => spawnSync(process.execPath, [path.join(root, '.agents',
 //     纯函数经 module.exports require（isMain 守卫后 import 不执行 main）
 import { createRequire } from 'node:module';
 const requireCjs = createRequire(import.meta.url);
-const { metrics, gateMonth, expansionVerdict, parseResult } = requireCjs(path.join(SCRIPT_DIR, 'agg-delegations.cjs'));
+const { metrics, gateMonth, expansionVerdict, parseResult, parseVerdict, fmtAccept, ACCEPT_MIN_SAMPLE } = requireCjs(path.join(SCRIPT_DIR, 'agg-delegations.cjs'));
 
 // 场景 4：审查反例——30 任务、2 主兜底、平均返工 0.25（旧口径四门全过，声明口径下必须 ❌）
 {
@@ -192,6 +192,84 @@ const { metrics, gateMonth, expansionVerdict, parseResult } = requireCjs(path.jo
   const withDesign = gateMonth(m).items.find((i) => i.no === 3);
   check('场景 7：含设计返工的混合行 → 门 3 ❌（噪声分量不能洗白设计分量）',
     withDesign.ok === false, JSON.stringify(withDesign));
+}
+
+// 场景 8：产出接受率（2026-10-12 merge-accept-rate）
+// 动机（METR 2026-03）：agent 生成的 SWE-bench 通过 PR，维护者合并判定比自动评分低约 24 个百分点、
+// 约一半不会被合入——「自动门全绿」与「人愿意合」是两个维度，混列必被前者盖过后者。
+{
+  check('场景 8：parseVerdict 三档 + 留空/乱填落 null（未记录 ≠ 未合入）',
+    parseVerdict('合入') === 'accepted' && parseVerdict('返工后合入') === 'accepted-after-rework'
+    && parseVerdict('未合入') === 'rejected'
+    && parseVerdict('') === null && parseVerdict(undefined) === null && parseVerdict('已上线') === null,
+    JSON.stringify([parseVerdict('合入'), parseVerdict('返工后合入'), parseVerdict('未合入'), parseVerdict(''), parseVerdict('已上线')]));
+
+  // 反例钉子：一次通过率 100% 但接受率低 —— 这正是混列会掩盖的形态
+  const rows = [
+    ...Array.from({ length: 8 }, () => ({ scope: '自做', result: '一次通过', verdict: '合入' })),
+    { scope: '自做', result: '一次通过', verdict: '未合入' },
+    { scope: '自做', result: '一次通过', verdict: '返工后合入' },
+    { scope: '自做', result: '一次通过' }, // 留空 = 未记录，不入分母
+  ];
+  const m = metrics(rows);
+  check('场景 8：一次通过率 100% 但接受率 90%（8 合入 + 1 返工后合入 / 10 已记录）',
+    Math.abs(m.passRate - 1) < 1e-9 && Math.abs(m.acceptRate - 0.9) < 1e-9,
+    JSON.stringify({ passRate: m.passRate, acceptRate: m.acceptRate }));
+  check('场景 8：留空行不入分母（verdictRecorded=10 而非 11）',
+    m.verdictRecorded === 10 && m.accepted === 9 && m.rejected === 1, JSON.stringify(m));
+  check('场景 8：接受率不影响任何扩容门项（观测项非门槛项——METR 缺口不靠加门堵）',
+    gateMonth(m).items.length === 6, JSON.stringify(gateMonth(m).items.map((i) => i.no)));
+
+  // 样本护栏：不足 ACCEPT_MIN_SAMPLE 条不出率（给小样本比率 = 给噪声开门）
+  check('场景 8：护栏阈值 = 5 且与脚本常量同源（文档写死一处会漂）', ACCEPT_MIN_SAMPLE === 5, String(ACCEPT_MIN_SAMPLE));
+  const tiny = metrics([{ scope: '自做', result: '一次通过', verdict: '未合入' }]);
+  check('场景 8：样本 <5 → acceptRate=null 且 fmtAccept 注明样本数',
+    tiny.acceptRate === null && fmtAccept(tiny).includes(`样本 1/${ACCEPT_MIN_SAMPLE}`), `${String(tiny.acceptRate)} | ${fmtAccept(tiny)}`);
+  check('场景 8：零记录 → fmtAccept 显式说明而非打 0%',
+    fmtAccept(metrics([{ scope: '自做', result: '一次通过' }])).includes('零记录'), fmtAccept(metrics([{ scope: '自做', result: '一次通过' }])));
+
+  // 存量兼容：无 verdict 字段的行（旧行对象）零影响
+  const legacy = metrics([{ scope: '自做', result: '一次通过' }, { scope: '委派', result: '返工×1' }]);
+  check('场景 8：存量行（无 verdict 键）零影响——verdictRecorded=0 / 一次通过率与旧口径一致',
+    legacy.verdictRecorded === 0 && legacy.total === 2 && Math.abs(legacy.passRate - 0.5) < 1e-9,
+    JSON.stringify(legacy));
+}
+
+// 场景 9：表结构兼容 —— 末列缺省不误判（存量表不要求补列）
+{
+  const root = mkfix([
+    '# 量化证据台账（fixture）',
+    '',
+    '## 委派结果',
+    '',
+    '| 日期 | 被委派方(模型) | 任务一句话 | 结果 | 备注 |',
+    '|------|----------------|------------|------|------|',
+    '| 2026-09-23 | executor(子代理) | 旧表结构行（无合入结论列） | 一次通过 | fixture |',
+    '',
+  ].join('\n'));
+  const r = runAgg(root);
+  check('场景 9：存量五列表 → exit 0 且正常入账', r.status === 0 && /有效任务 1（/.test(r.stdout), `exit=${r.status}\n${r.stdout}${r.stderr}`);
+  check('场景 9：合入结论零记录 → 接受率显示「零记录」', r.stdout.includes('零记录'), r.stdout);
+  fs.rmSync(root, { recursive: true, force: true });
+
+  const root2 = mkfix([
+    '# 量化证据台账（fixture）',
+    '',
+    '## 委派结果',
+    '',
+    '| 日期 | 被委派方(模型) | 任务一句话 | 结果 | 备注 | 合入结论 |',
+    '|------|----------------|------------|------|------|----------|',
+    ...Array.from({ length: 8 }, (_, i) => `| 2026-10-0${i + 1} | executor(子代理) | 新表结构行 | 一次通过 | fixture | 合入 |`),
+    '| 2026-10-09 | executor(子代理) | 新表结构行 | 一次通过 | fixture | 未合入 |',
+    '| 2026-10-10 | executor(子代理) | 新表结构行 | 一次通过 | fixture | 返工后合入 |',
+    '',
+  ].join('\n'));
+  const r2 = runAgg(root2);
+  check('场景 9：六列表 → 末列正确解析（已记录 10 / 合入 9 / 未合入 1）',
+    r2.status === 0 && /已记录合入结论 10 行｜合入 9｜未合入 1/.test(r2.stdout), `exit=${r2.status}\n${r2.stdout}${r2.stderr}`);
+  check('场景 9：快照行含接受率列（90%（9/10）——样本过护栏才出率）',
+    /\|\s*90%（9\/10）\s*\|/.test(r2.stdout), r2.stdout);
+  fs.rmSync(root2, { recursive: true, force: true });
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

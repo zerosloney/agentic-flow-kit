@@ -8,6 +8,21 @@ on:
   push:
     branches: [main]
   pull_request:
+  # 重复率漂移检查（jscpd-drift-gate）：**手动触发，不进 push/PR 路径**——
+  #   jscpd 需 `npx --yes` 联网取包 + 建 worktree + 全仓扫描（约 1-2 分钟），放常驻路径
+  #   等于给门禁引入网络依赖（断网即失败 = 绕过口）。它是 advisory 报告器，不是门。
+  #   与 check-loop 的 20 项检查不同源：本仓尚无 jscpd 依赖（零运行时依赖是硬约束）。
+  workflow_dispatch:
+    inputs:
+      warn_pct:
+        description: '抬升告警阈值（百分点）'
+        default: '1.0'
+      fail_pct:
+        description: '显著抬升阈值（百分点）'
+        default: '3.0'
+      ref:
+        description: '实测面（git ref，默认 HEAD；填基线 commit 即 --verify-baseline 口径自查）'
+        default: 'HEAD'
 jobs:
   test:
     runs-on: ${{ matrix.os }}
@@ -24,3 +39,28 @@ jobs:
         run: npm ci || npm install || npm install --registry=https://registry.npmjs.org
       - name: 引擎自检（lint + 全量套件）
         run: npm test
+
+  # 手动触发才跑；恒 exit 0（advisory 报告器）——阈值触达不红，报告贴进 run summary 供人判。
+  jscpd-drift:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # 基线 commit 与实测 ref 都需完整历史（worktree add 依赖）
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 基线可解析性快检（不出网，先挡「基线坏了却在跑 2 分钟 jscpd」）
+        run: node scripts/jscpd-drift.mjs --no-run
+      - name: 重复率漂移检查（基线 commit vs ${{ inputs.ref }}）
+        run: |
+          node scripts/jscpd-drift.mjs --warn-pct '${{ inputs.warn_pct }}' --fail-pct '${{ inputs.fail_pct }}' \
+            ${{ inputs.ref != 'HEAD' && '--verify-baseline' || '' }} --json | tee drift.json
+      - name: 报告入 run summary（恒不失败——这是报告器不是门）
+        if: always()
+        run: |
+          echo '### jscpd 重复率漂移（advisory）' >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          cat drift.json >> "$GITHUB_STEP_SUMMARY" 2>/dev/null || echo '(无输出)'
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
