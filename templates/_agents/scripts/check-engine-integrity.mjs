@@ -9,15 +9,23 @@
 //
 // 本门的做法：把「门禁本体当前的硬拦面」**冻结进一个入库基线** `templates/_agents/engine-lock.json`，
 //   判定 = 包源盘面向量 ↔ 基线逐项比对（哈希 + 硬拦单位数）。它不是签名、也不宣称不可伪造——
-//   它把「静默改弱」变成「必须显式声明的改弱」：
+//   它把「静默改弱」变成「必须显式 --update 的改弱」：
 //     · 硬拦单位数**下降**（删 blocker / 删 exit 1 / 从面清单删行 / 从 CI 删一次门调用）→ 无条件 BLOCK；
-//     · 内容变了但硬拦面没缩 → 须有一份**活跃 L2/L3 入口文档正文点名该文件**，否则 BLOCK；
+//     · 内容变了但硬拦面没缩 → 同样 BLOCK，直到跑 --update 把新盘面显式入账；
 //     · 基线本身在受检面内（control-surfaces 列了 templates/_agents/engine-lock.json），
-//       改基线同样要过入口门。
-//   于是绕过路径从「编辑一个文件」抬到「编辑两个文件 + 立一份 L2 文档 + 落一条确认台账 + 提交」——
-//   每一环都在 git 历史与台账里留痕，可事后对质。诚实边界：`--no-verify` / 不挂 hooksPath /
-//   删掉本脚本仍可绕过本地门，兜底 = CI 复跑（本脚本被 ci.yml 调用）+ 分支保护；本地信任边界内
+//       改基线同样要过本门（对基线的改动 = 受检面内容变更 → 未入新基线即拦）。
+//   诚实边界：`--no-verify` / 不挂 hooksPath / 删掉本脚本仍可绕过本地门，兜底 = CI 复跑
+//   （本脚本被 .github/workflows 的 engine-integrity job 调用）+ 分支保护；本地信任边界内
 //   不可机器防这一点不掩盖（沿 policy.mjs#ledgerChainHash 与 README 确认门口径）。
+//
+// **无声明式豁免（2026-10-13 移除入口退路）**：此前本门有两档豁免——本地层「正文提及即认」、
+//   锚层「活跃 L2/L3 入口在 §改动面 点名」，参照物是 `<root>/workflow/{intents,incidents}`。
+//   但 1.7.15「卸掉同仓双身份」后**包源仓已无该目录**（装户端内容清理），退路在本仓结构性不可达：
+//   门消息让包源维护者去「立 L2 入口」，而立不了——不可达的能力等于误导。故整体移除（连带
+//   T4b/T4c/T4d 与锚层严格档测试）：本仓只认 --update 这一条显式演进路径，语义更少、更可核对。
+//   **代价（诚实记录）**：跨提交锚只比对**硬拦单位数**、不比 sha，故「改写某检查的语义但保住
+//   exit 1 计数 + --update」这一形态两层都绿。补法是让锚层也比对 sha，代价是每次合法演进都需一份
+//   显式凭据（改判据面，未决）。
 //
 // 可选外部锚两条（都是「不受被测对象控制的参照物」，缺省不启用=无外部副本/无历史时不误报）：
 //   --against <目录>      逐字比对包源件与外部副本（装户/发布仓：node_modules/agentic-flow-kit）
@@ -25,21 +33,18 @@
 //     与盘面硬拦单位数做单调比较。本地门只比「盘面 ↔ 同分支基线」——恶意分支可同时改弱门禁并 --update
 //     重写基线，两者自洽、CI 全绿（「裁判给自己判无罪」的第二形态）。跨提交锚的参照物在**祖先提交**里，
 //     改它要 rewrite history + 强推（分支保护拦住），CI 由此获得一个不受被测分支控制的参照。
-//     合法收缩（退役一道门）不是一步死路：本地层宽松档（正文提及即认），锚层**严格档**——须活跃
-//     L2/L3 入口在 §改动面 段落点名该文件（正文顺手提及不豁免；否则存量无关 L2 文档可替任意改弱背书）。
+//     硬拦面收缩在本层**无豁免出口**：锚的参照物分支改不动，只能改判据基线并走评审。
 //     ref 不可解析 / 该 ref 无基线（首个入账提交）→ 跳过并报 ℹ️（锚缺失不误报）。
 //
-// 判据原则（沿 check-lane-surface）：只用一手事实——盘面字节哈希、可数单位、文档正文点名；
-//   不从时间戳反推过程。
+// 判据原则（沿 check-lane-surface）：只用一手事实——盘面字节哈希与可数单位；
+//   不从时间戳反推过程、不靠文档正文为改动背书。
 // 用法：node check-engine-integrity.mjs [--root <dir>] [--update] [--against <dir>] [--against-ref <ref>] [--quiet]
-//   --update  按当前盘面重生成基线（合法演进的最后一步；本身是控制面改动，须与入口文档同批提交）
+//   --update  按当前盘面重生成基线（合法演进的唯一路径：演进=显式改基线，不存在自动放行）
 // 退出码：0 通过（含基线缺失=未启用）；1 阻断（stderr 出 [标签] 与修法，或目标根不是包源仓）；2 用法错误（如 --against 目录不存在）
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
-import { laneOfEntry, laneOfDoc } from './stage-gates.mjs';
-import { loadKitPolicy } from './policy.mjs';
 
 const argv = process.argv.slice(2);
 const argOf = (k) => {
@@ -132,71 +137,6 @@ const readJson = (p) => {
   try { return JSON.parse(fs.readFileSync(p, 'utf8')); } catch { return null; }
 };
 
-// 活跃 L2/L3（泳道 high）入口集合：一次扫描，宽松/严格两档判据共用同一份盘面事实
-const HIGH_ENTRIES = (() => {
-  const ACTIVE = { intent: new Set(['draft', 'approved']), incident: new Set(['open', 'fixed']) };
-  const fmGet = (lines, key) => {
-    for (let i = 1; i < lines.length; i++) {
-      if (/^---\s*$/.test(lines[i])) break;
-      const m = lines[i].match(new RegExp(`^${key}:\\s*(.*)$`));
-      if (m) return m[1].trim();
-    }
-    return '';
-  };
-  const pol = loadKitPolicy(ROOT);
-  const cache = [];
-  for (const [dir, kind] of [['intents', 'intent'], ['incidents', 'incident']]) {
-    const dp = path.join(ROOT, 'workflow', dir);
-    if (!fs.existsSync(dp)) continue;
-    for (const f of fs.readdirSync(dp)) {
-      if (!f.endsWith('.md') || f === '_TEMPLATE.md') continue;
-      const abs = path.join(dp, f);
-      let lines;
-      try { lines = fs.readFileSync(abs, 'utf8').replace(/\r\n/g, '\n').split('\n'); } catch { continue; }
-      if (!/^---\s*$/.test(lines[0] || '')) continue;
-      const st = fmGet(lines, '状态');
-      if (!ACTIVE[kind].has(st)) continue;
-      const level = fmGet(lines, '级别');
-      const lane = kind === 'intent'
-        ? laneOfEntry(level, fmGet(lines, 'risk_level'), pol.riskLevelSince, fmGet(lines, '日期'))
-        : laneOfDoc(level);
-      if (lane !== 'high') continue;
-      cache.push({ rel: `workflow/${dir}/${f}`, text: lines.join('\n') });
-    }
-  }
-  return cache;
-})();
-
-// 宽松档（本地层）：整条 rel 或 basename 出现在正文即认——口径同检查 8 的「声明改动面 ↔ 提交文件」
-//   模糊匹配，宁松不假阳性；精确性由 confirm-doc 指纹与台账承担。
-const entryNamesFile = (fileRel) => {
-  const base = path.basename(fileRel);
-  return HIGH_ENTRIES.find((e) => e.text.includes(fileRel) || e.text.includes(base)) || null;
-};
-
-// 严格档（仅跨提交锚用）：入口须在**声明改动面**段落点名该文件，而非正文任意一处提及。
-//   为什么分层：本地层的模糊放行代价低（内容漂移本就允许「声明过的演进」）；锚层拦的是
-//   「硬拦单位数下降」——若一句顺手提及就能豁免，本仓实测三份**与本批无关的存量 L2 incident**
-//   （2026-09-28-metric-claim-gate / 2026-10-03-plan-confirm-boiler 正文含 check-loop.mjs，
-//   2026-09-26-managed-ledger-adopt 含 pre-commit）即可替任意改弱行为背书，锚等于没有。
-//   严格档的误拦修法就是协议本意：把该文件写进入口的 §改动面。
-const entryDeclaresFile = (() => {
-  const SECTION = /^[^\n]{0,40}改动面/;
-  const declared = (text) => {
-    const lines = text.split('\n');
-    const out = [];
-    for (let i = 0; i < lines.length; i++) {
-      if (/^---\s*$/.test(lines[i]) || !SECTION.test(lines[i])) continue;
-      // 含标题行本身（「§改动面 点名 x.mjs」是常见的一行式声明）与标题后到下一个 heading 前的全部正文
-      for (let j = i; j < lines.length && (j === i || !/^\s*#{1,6}\s/.test(lines[j])); j++) out.push(lines[j]);
-    }
-    return out.join('\n');
-  };
-  return (fileRel) => {
-    const base = path.basename(fileRel);
-    return HIGH_ENTRIES.find((e) => { const s = declared(e.text); return s.includes(fileRel) || s.includes(base); }) || null;
-  };
-})();
 
 if (UPDATE) {
   fs.mkdirSync(path.dirname(LOCK_ABS), { recursive: true });
@@ -208,7 +148,7 @@ if (UPDATE) {
   console.log(`引擎基线已更新：${LOCK_REL}（受检面 ${Object.keys(lock.files).length} 个文件）`);
   if (changed.length) console.log(`  本次入账为改动件：${changed.length} 个`);
   if (removed.length) console.log(`  本次移除（文件已不在盘）：${removed.join(' ')}`);
-  console.log('  ⚠️ 基线更新本身是控制面改动：须与点名这些文件的 L2 入口文档同批提交（否则检查 C / 本门默认模式会拦）');
+  console.log('  ⚠️ 基线更新本身是控制面改动：须与该次演进的 CHANGELOG 记录同批提交（改基线 = 受检面内容变更，不入新基线即被本门拦）');
   process.exit(0);
 }
 
@@ -231,10 +171,7 @@ if (argOf('--against-ref')) {
       const got = current[rel];
       if (!got) { problems.push(`[门禁件消失（跨提交锚）] ${rel} 在 ${ref} 的基线内但盘面不存在——删除一道门等于禁用该检查`); continue; }
       if (typeof was.hard !== 'number' || got.hard >= was.hard) continue;
-      const e = entryDeclaresFile(rel);
-      if (!e) {
-        problems.push(`[硬拦面收缩（跨提交锚）] ${rel} 硬拦单位数 ${was.hard}（见 ${ref}）→ 盘面 ${got.hard}，减少 ${was.hard - got.hard}——祖先提交是参照物，本分支改不动它；确需退役该判据须有活跃 L2/L3 入口在**声明改动面**段落点名该文件（正文顺手提及不算——存量无关文档会替任意改弱行为背书）`);
-      }
+      problems.push(`[硬拦面收缩（跨提交锚）] ${rel} 硬拦单位数 ${was.hard}（见 ${ref}）→ 盘面 ${got.hard}，减少 ${was.hard - got.hard}——祖先提交是参照物，本分支改不动它。本门无声明式豁免出口（2026-10-13 移除：入口退路在本仓结构性不可达，详见文件头），收缩一律拦`);
     }
   }
 }
@@ -248,14 +185,13 @@ if (!lock || !lock.files) {
     if (!got) { problems.push(`[门禁件消失] ${rel} 在基线内但盘面不存在——删除一道门等于禁用该检查`); continue; }
     if (got.sha256 === want.sha256) continue;
     if (typeof want.hard === 'number' && got.hard < want.hard) {
-      problems.push(`[硬拦面收缩] ${rel} 硬拦单位数 ${want.hard} → ${got.hard}（减少 ${want.hard - got.hard}）——删 blocker/exit/判据行的结构性形态，无论是否声明均拦`);
+      problems.push(`[硬拦面收缩] ${rel} 硬拦单位数 ${want.hard} → ${got.hard}（减少 ${want.hard - got.hard}）——删 blocker/exit/判据行的结构性形态，一律拦`);
     } else {
-      const e = entryNamesFile(rel);
-      if (!e) problems.push(`[控制面改动无入口] ${rel} 内容与基线不符（${name} 硬拦单位数 ${want.hard} → ${got.hard}）——无活跃 L2/L3 入口正文点名该文件`);
+      problems.push(`[控制面改动未入基线] ${rel} 内容与基线不符（${name} 硬拦单位数 ${want.hard} → ${got.hard}）——门禁本体的每次演进都要显式更新基线，不存在「声明过的改动」自动放行`);
     }
   }
   for (const rel of Object.keys(current)) {
-    if (!lock.files[rel]) problems.push(`[门禁件未入基线] ${rel} 是新出现的受检文件——合法新增判据须跑 --update 并把基线更新与入口文档同批提交`);
+    if (!lock.files[rel]) problems.push(`[门禁件未入基线] ${rel} 是新出现的受检文件——合法新增判据须跑 --update 入账`);
   }
 }
 
@@ -273,8 +209,8 @@ if (argOf('--against')) {
 
 if (problems.length) {
   console.error(`引擎完整性 — HARD-BLOCK:\n\n${problems.map((p) => `- ${p}`).join('\n')}\n`);
-  console.error(`  修法：确属门禁演进 → 立 L2 入口（正文 §改动面 点名上述文件）+ 判据更新后跑 node templates/_agents/scripts/check-engine-integrity.mjs --update，三者同批提交`);
-  console.error('  修法：非演进（误改/被他人改动）→ git diff 核对并回退，勿改基线绕过（基线本身在控制面清单内）');
+  console.error(`  修法：确属门禁演进 → 跑 node templates/_agents/scripts/check-engine-integrity.mjs --update 入账，并与 CHANGELOG 记录同批提交（提交评审即对质场；本门无声明式豁免出口，见文件头）`);
+  console.error('  修法：非演进（误改/被他人改动）→ git diff 核对并回退，勿改基线绕过（基线本身在控制面清单内，改它同样是受检面变更）');
   process.exit(1);
 }
 if (!QUIET) console.log(`✅ 引擎完整性：受检面 ${Object.keys(current).length} 个文件（硬拦面无收缩${lock && lock.files ? '、盘面与基线一致' : '、本地基线未启用'}）`);

@@ -164,3 +164,52 @@ export function routeAdvice(level, ctx = {}) {
   lines.push('提示：级别是**意图面**的语义判定（「一处定义、多处消费」），机器只兜「就高不就低」与路径下限。');
   return lines.join('\n');
 }
+
+// ---- 体检入口（2026-10-13 hint-doctor）------------------------------------
+// 为什么需要：非法 hints 此前只在**跑 flow-kit route 时**才抛 LEVEL_HINTS_INVALID，而 route 是
+//   可选调用 → 写错的清单能静默存活很久，直到某天有人碰巧路由一次才炸。写错配置比没配置危险
+//   （没配置会提示补，写错会误判），故给 doctor 一条**主动体检**通道。
+// 口径纪律：doctor 不自己复刻解析器（复刻=判据双源漂移），改为 spawn 本文件执行本节——
+//   解析逻辑永远只有 parseLevelHints 一份。
+//   用法：node level-criteria.mjs --check <清单路径>
+//   退出码：0 通过（含文件缺失/空清单＝未启用）；1 配置有误（stderr 出逐行原因）。无参数 → 退出 2。
+export function checkHintsFile(file) {
+  if (!fs.existsSync(file)) return { configured: false, entries: 0, note: '文件不存在（默认空＝纯语义定级）' };
+  const text = fs.readFileSync(file, 'utf8');
+  let hints;
+  try {
+    hints = parseLevelHints(text);
+  } catch (e) {
+    return { configured: true, ok: false, entries: 0, error: e.message, code: e.code || 'LEVEL_HINTS_INVALID' };
+  }
+  return {
+    configured: true,
+    ok: true,
+    entries: hints.length,
+    levels: [...new Set(hints.map((h) => h.level))].sort(),
+  };
+}
+
+// CLI 自运行守卫：仅当本文件被直接执行时进入体检模式（被 import 时不跑——库用法不受影响）
+if (process.argv[1] && path.resolve(process.argv[1]).endsWith(path.join('scripts', 'level-criteria.mjs'))) {
+  const argv = process.argv.slice(2);
+  const at = argv.indexOf('--check');
+  if (at >= 0) {
+    const file = argv[at + 1];
+    if (!file || argv[at + 1].startsWith('--')) {
+      console.error('用法：node level-criteria.mjs --check <level-hints.txt 路径>');
+      process.exit(2);
+    }
+    const r = checkHintsFile(path.resolve(file));
+    if (r.ok === false) {
+      console.error(`[level-hints 配置有误] ${file}\n${String(r.error).split('\n').map((l) => `  ${l}`).join('\n')}`);
+      console.error('  修法：按 `<档位> <ERE>` 格式修正（档位 ∈ L0-L3，ERE 为 grep -E 兼容正则）——'
+        + '写错配置比没配置危险：没配置会提示补配置，写错会误判档位');
+      process.exit(1);
+    }
+    console.log(r.configured
+      ? `level-hints：${r.entries} 条有效（${(r.levels || []).join('/') || '—'}）`
+      : `level-hints：未配置（${r.note}）`);
+    process.exit(0);
+  }
+}

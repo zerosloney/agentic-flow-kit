@@ -200,6 +200,54 @@ const FM_L0_NEW = '状态: draft\n级别: L0\n日期: 2026-10-01\n模块: ui';
   const r = run(d, { staged: ['ok/a.ts'] });
   check('配置含非法 ERE → fail-closed 阻断并指出坏行', r.code === 1 && r.out.includes('[面清单语法错误]') && r.out.includes('[invalid('), r.out);
 }
+// --- S-hints（2026-10-13 hints-backstop）：level-hints 接入提交面判低 ---
+// 此前「就高不就低」只在 flow-kit route 输出 advisory，提交面只认 lane-surfaces → 两份清单无机器对账。
+{
+  // ① hints 命中 L3，但活跃入口只有 L2 → 判低必须拦（此前「有个 high 入口」就放行）
+  const d = mkfix();
+  base(d, { level: 'L2' });
+  w(d, '.agents/level-hints.txt', 'L3 ^src/db/\n');
+  const r = run(d, { staged: ['src/db/schema.sql'] });
+  check('S-hints hints 命中 L3 + 活跃仅 L2 → 阻断（要求入口 ≥ L3，不只「有个 high」）',
+    r.code === 1 && r.out.includes('[触达面判低]') && r.out.includes('src/db/schema.sql')
+      && r.out.includes('L3') && r.out.includes('level-hints.txt'), r.out);
+
+  // ② 升到 L3 后放行
+  const d2 = mkfix();
+  base(d2, { level: 'L3' });
+  w(d2, '.agents/level-hints.txt', 'L3 ^src/db/\n');
+  const r2 = run(d2, { staged: ['src/db/schema.sql'] });
+  check('S-hints 入口升到 L3 → 放行', r2.code === 0 && !r2.out.includes('[触达面判低]'), r2.out);
+
+  // ③ 无 hints（默认空）→ 不产生任何新阻断面（旧装户零影响）
+  const d3 = mkfix();
+  base(d3, { level: 'L1' });
+  const r3 = run(d3, { staged: ['src/db/schema.sql'] });
+  check('S-hints 未配 hints → 不触发新判定（默认空=纯语义定级）', !r3.out.includes('[触达面判低]'), r3.out);
+
+  // ④ hints 命中但无任何活跃入口 → advisory（与检查 A 同口径，豁免 docs/bootstrap 类）
+  const d4 = mkfix();
+  w(d4, '.agents/lane-surfaces.txt', '^templates/\n');
+  w(d4, '.agents/level-hints.txt', 'L2 ^src/db/\n');
+  const r4 = run(d4, { staged: ['src/db/x.sql'] });
+  check('S-hints 命中但无活跃入口 → advisory 不阻断',
+    r4.code === 0 && r4.out.includes('触达面判低') && r4.out.includes('advisory'), r4.out);
+
+  // ⑤ hints 语法错 → fail-closed（写错配置比没配置危险）
+  const d5 = mkfix();
+  base(d5, { level: 'L2' });
+  w(d5, '.agents/level-hints.txt', 'L3 [bad(\n');
+  const r5 = run(d5, { staged: ['ok/a.ts'] });
+  check('S-hints 非法 hints → fail-closed 阻断并带路径行号',
+    r5.code === 1 && r5.out.includes('[level-hints 配置错误]') && r5.out.includes('level-hints.txt'), r5.out);
+
+  // ⑥ 两份清单交叉对账：hints 登记了高风险面、lane-surfaces 为空 → advisory 点名「提交面无兜底」
+  const d6 = mkfix();
+  w(d6, '.agents/level-hints.txt', 'L2 ^src/db/\n');
+  const r6 = run(d6, { staged: ['src/db/x.sql'] });
+  check('S-hints hints 已登记但触达面清单空 → advisory 点名无兜底',
+    r6.code === 0 && r6.out.includes('level-hints 无提交面兜底'), r6.out);
+}
 // --- git 真仓端到端：走生产发现路径（quotepath=off + diff --cached）---
 {
   const d = mkfix();

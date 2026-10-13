@@ -309,6 +309,18 @@ export function doctor(args, pkgRoot) {
     add('WARN', `模板感知：源仓 ${tplRes.stale.length} 份模板自上次同步后有演进且盘面未跟随：${tplRes.stale.join('、')}——如需跟随从包源 templates/ 拷贝；有意定制可忽略（跑 flow-kit sync 刷新锚后本项静默）`);
   }
 
+  // 6.10 level-hints 配置体检（2026-10-13 hint-doctor）——非法档位/正则此前只在**跑 flow-kit route 时**
+  //     才抛 LEVEL_HINTS_INVALID，而 route 是可选调用 → 写错的清单能静默存活很久。写错配置比没配置危险：
+  //     没配置会提示补，写错会误判档位。故给一条主动体检通道。
+  //     口径纪律：doctor 不复刻解析器（复刻＝判据双源漂移），spawn 装户 level-criteria.mjs 的 --check
+  //     入口（判据单源仍是 parseLevelHints 一份）。
+  {
+    const hr = checkLevelHints(target);
+    if (hr.skipped) add('PASS', `level-hints 体检跳过（${hr.note}）`);
+    else if (hr.ok) add('PASS', `level-hints 配置合法（${hr.note}）`);
+    else add('FAIL', `level-hints 配置有误——非法档位或正则会让 flow-kit route fail-loud 抛错、按错误下限定级：\n${hr.detail}`);
+  }
+
   // 7. check-loop——2026-09-26 check-loop-node 起 node 实现直跑（sh 版曾需先探 sh 可用性：Windows
   //    PowerShell 常无 sh，ENOENT 曾被吞进 hard-block 分支报成空原因假警报，incident 2026-09-24-doctor-sh-enoent；
   //    迁移后无 sh 依赖，探针退役。check-loop.sh 为兼容 shim，pre-push 钩子路径照常）
@@ -335,6 +347,26 @@ export function doctor(args, pkgRoot) {
       : `ℹ️  看板端口 ${port} 空闲（看板默认不拉起；需要时手动 .agents/scripts/ensure-board.mjs（跨平台）或 node .agents/scripts/workflow-board-server.mjs）`);
     process.exit(results.some((r) => r.level === 'FAIL') ? 1 : 0);
   });
+}
+
+// checkLevelHints（2026-10-13 hint-doctor）：.agents/level-hints.txt 的**主动**体检。
+// 为什么不能靠 route：非法档位/ERE 此前只在跑 flow-kit route 时才抛 LEVEL_HINTS_INVALID，
+//   而 route 是可选调用 → 写错的清单能静默存活很久，直到某次碰巧路由才炸（写错配置比没配置危险）。
+// 口径纪律：doctor **不复刻解析器**（复刻＝判据双源漂移），改为 spawn 装户 .agents/scripts/
+//   level-criteria.mjs 的 --check 入口——parseLevelHints 永远只有一份实现。
+// 三态：skipped（无判据单源＝1.7.15 前旧装户，不产出告警）/ ok（含未配置=默认空）/ 配置有误。
+export function checkLevelHints(target) {
+  const script = path.join(target, '.agents', 'scripts', 'level-criteria.mjs');
+  if (!fs.existsSync(script)) return { skipped: true, ok: true, note: '无 .agents/scripts/level-criteria.mjs——1.7.15 之前版本无此判据单源' };
+  const r = spawnSync(process.execPath, [script, '--check', path.join(target, '.agents', 'level-hints.txt')], {
+    cwd: target, encoding: 'utf8',
+  });
+  if (r.status === 0) return { skipped: false, ok: true, note: String(r.stdout || '').trim() || '通过' };
+  return {
+    skipped: false,
+    ok: false,
+    detail: String(r.stderr || '').split('\n').slice(0, 6).join('\n').trim(),
+  };
 }
 
 function print(results) {

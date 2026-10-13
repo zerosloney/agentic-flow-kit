@@ -77,36 +77,31 @@ const mkfix = ({ withEntry = false, entryNames = 'gate.mjs' } = {}) => {
   check('T3b 有活跃 L2 入口仍拦（收缩无豁免出口）', r.code === 1 && r.out.includes('[硬拦面收缩]'), r.out);
 }
 
-// --- T4 非收缩改动：无入口拦、有入口放行 ---
+// --- T4 非收缩改动：内容漂移即拦（2026-10-13 移除入口退路后无豁免出口）---
 {
   const d = mkfix();
   run(d, ['--update']);
   w(d, 'templates/_agents/scripts/gate.mjs', '// 门禁样例（改写文案）\n// 说明行\ntoast(`hint`);\nblockers.push(`A`);\nblockers.push(`B`);\nif (bad) process.exit(1);\n');
-  const noEntry = run(d);
-  check('T4a 内容漂移 + 无入口 → [控制面改动无入口]',
-    noEntry.code === 1 && noEntry.out.includes('[控制面改动无入口]') && noEntry.out.includes('gate.mjs'), noEntry.out);
-  w(d, 'workflow/intents/2026-10-09-ctrl.md',
-    '---\n状态: approved\n级别: L2\n日期: 2026-10-09\n模块: gate\n---\n# INTENT\n改动面：templates/_agents/scripts/gate.mjs\n');
-  const withEntry = run(d);
-  check('T4b 同一改动 + 活跃 L2 入口点名该件 → 放行', withEntry.code === 0, withEntry.out);
+  const drift = run(d);
+  check('T4a 内容漂移（硬拦面未缩）→ [控制面改动未入基线]',
+    drift.code === 1 && drift.out.includes('[控制面改动未入基线]') && drift.out.includes('gate.mjs'), drift.out);
+  check('T4a 修法指向 --update（不再宣传不可达的「立 L2 入口」）',
+    drift.out.includes('--update') && !drift.out.includes('立 L2 入口'), drift.out);
+  check('T4a --update 入账后放行', run(d, ['--update']).code === 0 && run(d).code === 0);
 }
-// --- T4c 入口存在但级别为 L1（协作道）→ 不算点名 ---
+// --- T4e 入口面即便存在也不豁免（锁死新口径）---
+// 1.7.15 卸掉同仓双身份后，包源仓没有 workflow/intents —— 旧「立入口即放行」退路在本仓不可达。
+// 删掉该能力后，即使有人在包源仓手工造出入口文档点名该件，**也不得**成为放行口：
+// 否则一个 mkdir 就把门重新打开，等于用未验证的路径恢复未验证的能力。
 {
-  const d = mkfix({ withEntry: false });
-  run(d, ['--update']);
-  w(d, 'templates/_agents/scripts/gate.mjs', 'blockers.push(`A`);\nblockers.push(`B`);\nif (bad) process.exit(1);\n// 追加注释不改硬拦面\n');
-  w(d, 'workflow/intents/2026-10-09-low.md', '---\n状态: approved\n级别: L1\n日期: 2026-10-09\n模块: gate\n---\n改动面：gate.mjs\n');
-  const r = run(d);
-  check('T4c L1 入口点名不豁免（控制面须防御道）', r.code === 1 && r.out.includes('[控制面改动无入口]'), r.out);
-}
-// --- T4d 入口非活跃（done 已关单）→ 不算点名 ---
-{
-  const d = mkfix({ withEntry: false });
+  const d = mkfix();
   run(d, ['--update']);
   w(d, 'templates/_agents/scripts/gate.mjs', 'blockers.push(`A`);\nblockers.push(`B`);\nif (bad) process.exit(1);\n// 追加注释\n');
-  w(d, 'workflow/intents/2026-10-09-done.md', '---\n状态: done\n级别: L2\n日期: 2026-10-09\n模块: gate\n---\n改动面：gate.mjs\n');
+  w(d, 'workflow/intents/2026-10-09-ctrl.md',
+    '---\n状态: approved\n级别: L2\n日期: 2026-10-09\n模块: gate\n---\n# INTENT\n改动面：gate.mjs\n');
   const r = run(d);
-  check('T4d done 入口不点名（活跃口径：draft/approved）', r.code === 1 && r.out.includes('[控制面改动无入口]'), r.out);
+  check('T4e 活跃 L2 入口点名该件 → 仍拦（本门无声明式豁免出口）',
+    r.code === 1 && r.out.includes('[控制面改动未入基线]'), r.out);
 }
 
 // --- T5 门禁件消失 / 新增件未入基线 ---
@@ -157,26 +152,20 @@ if (haveGit) {
   const anchored = run(d, ['--against-ref', 'HEAD']);
   check('T7b 跨提交锚（祖先提交基线）出账 [硬拦面收缩（跨提交锚）]',
     anchored.code === 1 && anchored.out.includes('[硬拦面收缩（跨提交锚）]') && /3（见 HEAD）→ 盘面 2/.test(anchored.out), anchored.out);
-  // 合法退役出口：活跃 L2 入口点名该件
+  // T7c/T7e（2026-10-13 移除入口退路后删除）：原为「活跃 L2 入口点名 → 锚层放行」与「严格档：
+  //   模糊提及不豁免」两条断言。二者均依赖 workflow/intents 入口面，而该面在本仓结构性不可达
+  //   （1.7.15 卸掉同仓双身份），故能力与测试一并移除——锚层的收缩判定现在**无豁免出口**。
+  // T7c 替代断言：造出入口文档点名该件，锚层仍须拦（锁死「无豁免」不随时间被悄悄恢复）
   w(d, 'workflow/intents/2026-10-09-retire.md',
     '---\n状态: approved\n级别: L2\n日期: 2026-10-09\n模块: gate\n---\n# INTENT\n改动面：templates/_agents/scripts/gate.mjs（退役 B 判据）\n');
   git(d, ['add', '-A']);
-  git(d, ['commit', '-q', '-m', 'docs(gate): L2 入口留痕']);
+  git(d, ['commit', '-q', '-m', 'docs(gate): 造入口文档（应不构成放行口）']);
   const declared = run(d, ['--against-ref', 'HEAD~1']);
-  check('T7c 声明过的收缩（L2 入口点名）→ 跨提交锚放行', declared.code === 0, declared.out);
+  check('T7c 入口文档点名该件 → 锚层仍拦（本门无声明式豁免出口）',
+    declared.code === 1 && declared.out.includes('[硬拦面收缩（跨提交锚）]'), declared.out);
   // 锚缺失（首个入账提交之前）→ 跳过不误报
   const missing = run(d, ['--against-ref', 'HEAD~9']);
   check('T7d ref 不可解析 → 锚缺失跳过（exit 0 不假阳性）', missing.code === 0 && missing.out.includes('跨提交锚缺失'), missing.out);
-  // 严格档反例（T7e）：正文顺手提及 ≠ 声明改动面——存量无关 L2 文档不得替改弱行为背书
-  w(d, 'workflow/intents/2026-10-09-retire.md',
-    '---\n状态: superseded\n级别: L2\n日期: 2026-10-09\n模块: gate\n---\n# INTENT\n改动面：templates/_agents/scripts/gate.mjs\n');
-  w(d, 'workflow/intents/2026-10-09-prose.md',
-    '---\n状态: approved\n级别: L2\n日期: 2026-10-09\n模块: gate\n---\n# INTENT\n本批沿用 gate.mjs 与 check-loop.mjs 的既有判据，未改动它们。\n');
-  git(d, ['add', '-A']);
-  git(d, ['commit', '-q', '-m', 'docs(gate):  prose 提及（非声明改动面）']);
-  const prose = run(d, ['--against-ref', 'HEAD~2']);
-  check('T7e 正文提及但无 §改动面 声明 → 跨提交锚仍拦（严格档：模糊提及不豁免收缩）',
-    prose.code === 1 && prose.out.includes('[硬拦面收缩（跨提交锚）]'), prose.out);
 } else {
   console.log('SKIP T7 跨提交锚（未找到 git）');
 }

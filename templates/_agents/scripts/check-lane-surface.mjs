@@ -30,6 +30,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { laneOfEntry, laneOfDoc } from './stage-gates.mjs';
 import { loadKitPolicy } from './policy.mjs';
+import { loadLevelHints, rankOf, maxLevel } from './level-criteria.mjs';
 
 const argv = process.argv.slice(2);
 const argOf = (k) => {
@@ -126,32 +127,79 @@ const collectActive = () => {
 const blocks = [];
 const advisories = [];
 
+// --- 检查 A0：level-hints 路径下限对账（2026-10-13 hints-backstop）----------------
+// 背景：此前「就高不就低」只在 flow-kit route 输出 advisory，而提交面判低门只认 lane-surfaces.txt
+//   → 两份清单各管一头、**无机器对账**：项目在 hints 里登记了「改这些面至少 L2/L3」，提交面却可能
+//   靠一个 L1 活跃入口放行（判低有机可乘）。本段把 hints 接进提交面：
+//   ① hints 命中 → 要求存在**级别 ≥ 命中档**的活跃入口（不只「有个 high 入口」），否则 hard 拦；
+//   ② hints 已登记高风险面、lane-surfaces.txt 却缺失/为空 → advisory 提示「意图面登记了、提交面无兜底」。
+//   fail-closed：hints 语法错 → hard 拦（写错配置比没配置危险，见 level-criteria parseLevelHints）。
+const hintsState = (() => {
+  try {
+    const { hints, missing } = loadLevelHints(ROOT);
+    return { hints, missing, invalid: null };
+  } catch (e) {
+    return { hints: [], missing: false, invalid: e.message };
+  }
+})();
+
+if (hintsState.invalid) {
+  blocks.push([
+    '[level-hints 配置错误] .agents/level-hints.txt 非法（档位或 ERE 语法错）——配置面坏了整条兜底不可信：',
+    ...String(hintsState.invalid).split('\n').map((l) => `  ${l}`),
+    '  修法：修正清单后重试（fail-closed，防静默空洞——写错配置比没配置危险：没配置会提示，写错会误判档位）',
+  ].join('\n'));
+}
+
+const hintHits = hintsState.hints.length
+  ? STAGED.map((p) => {
+      const norm = p.replace(/\\/g, '/').replace(/^\.\//, '');
+      let lv = '';
+      for (const h of hintsState.hints) if (h.rx.test(norm)) lv = maxLevel(lv, h.level);
+      return { p, lv };
+    }).filter((x) => x.lv)
+  : [];
+const hintLevel = hintHits.reduce((acc, x) => maxLevel(acc, x.lv), '');
+
 // --- 检查 A：触达面判低 ---
 const patterns = loadPatterns();
+
+if (hintLevel && !patterns.length) {
+  advisories.push(
+    `[level-hints 无提交面兜底] .agents/level-hints.txt 登记了 ${hintHits.length} 个命中（${hintHits.slice(0, 5).map((x) => `${x.p}→${x.lv}`).join(' ')}）——`
+    + '但 .agents/lane-surfaces.txt 缺失或为空，触达面判低检查整体跳过：意图面登记了高风险面，提交面却无兜底',
+  );
+}
 const hits = patterns.length ? STAGED.filter((p) => patterns.some((re) => re.test(p))) : [];
-if (hits.length) {
+// 本次提交触达到的**最低应然档位**：lane-surfaces 命中隐含 L2（沿原口径），hints 命中按登记档取。
+// 混档取高——与 level-criteria maxLevel 同一口径（就高不就低在提交面同样成立）。
+const requiredLevel = maxLevel(hits.length ? 'L2' : '', hintLevel);
+if (requiredLevel) {
   const active = collectActive();
-  const hasHigh = active.some((e) => e.lane === 'high');
-  if (!hasHigh) {
-    const low = active.filter((e) => e.lane !== 'high'); // low + suspect 均拦（suspect 不作豁免依据）
-    if (low.length) {
-      const newest = [...low].sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.rel.localeCompare(a.rel))[0];
-      const fixVerb = newest.lane === 'suspect'
-        ? '① 对齐该入口「级别」与「risk_level」两字段至一致的 L2/L3（fill-intent 双写口径；现两值缺失/非法/分歧）并补同名 spec（.agents/commands/design.md）'
-        : '① 升级该入口「级别」与「risk_level」两字段至 L2/L3 并补同名 spec（.agents/commands/design.md）';
-      const text = [
-        `[触达面判低] 暂存命中 L2 触达面，但活跃入口无泳道 high（存在 low/suspect）：`,
-        `  命中: ${hits.join(' ')}`,
-        `  关联入口: ${newest.rel}（级别 ${newest.level || '缺失'}/risk_level ${newest.risk || '缺失'}→ 泳道 ${newest.lane}${newest.date ? `，${newest.date}` : ''}；活跃非 high 共 ${low.length} 件）`,
-        `  修法（三选一）: ${fixVerb}`,
-        `    ② 该入口已完成则关单（done）或显式放弃（superseded/cancelled）——不留活跃残留`,
-        `    ③ 面清单误配则修 .agents/lane-surfaces.txt`,
-      ].join('\n');
-      if (isExperiment) advisories.push(`（advisory·experiment 泳道，不阻断；转正由 pre-push 加固门兜底）\n${text}`);
-      else blocks.push(text);
-    } else {
-      advisories.push(`[触达面判低]（advisory）暂存命中 L2 触达面（${hits.length} 个文件），但当前无任何活跃入口——若非 docs / bootstrap 豁免类改动（.agents/commands/new-task.md §intent 豁免），请先立入口文档`);
-    }
+  const requiredRank = rankOf(requiredLevel) ?? 1;
+  // 入口是否够格：级别 rank ≥ 应然档。**suspect（级别/risk_level 缺失、非法或分歧）一律不够格**——
+  //   沿用原口径「suspect 不作豁免依据」：分歧（L2/L1）这类看似够档的入口，机器无法确认它真罩着这批改动。
+  const enough = (e) => e.lane !== 'suspect' && (rankOf(e.level) ?? -1) >= requiredRank;
+  const insufficient = active.filter((e) => !enough(e));
+  if (insufficient.length) {
+    const newest = [...insufficient].sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.rel.localeCompare(a.rel))[0];
+    const hitList = [...hits.map((p) => `${p}（触达面）`), ...hintHits.map((x) => `${x.p}（hints→${x.lv}）`)];
+    const fixVerb = newest.lane === 'suspect'
+      ? `① 对齐该入口「级别」与「risk_level」两字段至一致的 ${requiredLevel}（fill-intent 双写口径；现两值缺失/非法/分歧）并补同名 spec（.agents/commands/design.md）`
+      : `① 升级该入口「级别」与「risk_level」两字段至 ${requiredLevel} 及以上并补同名 spec（.agents/commands/design.md）`;
+    const text = [
+      `[触达面判低] 暂存命中高风险面，但活跃入口无 ${requiredLevel} 及以上（存在更低档/low/suspect）：`,
+      `  命中: ${hitList.join(' ')}`,
+      `  关联入口: ${newest.rel}（级别 ${newest.level || '缺失'}/risk_level ${newest.risk || '缺失'}→ 泳道 ${newest.lane}${newest.date ? `，${newest.date}` : ''}；活跃不足共 ${insufficient.length} 件）`,
+      ...(hintLevel ? ['  判据：.agents/level-hints.txt 登记的路径下限——就高不就低在提交面同样成立（此前只 advisory，无门）'] : []),
+      `  修法（三选一）: ${fixVerb}`,
+      `    ② 该入口已完成则关单（done）或显式放弃（superseded/cancelled）——不留活跃残留`,
+      `    ③ 清单误配则修 .agents/lane-surfaces.txt${hintLevel ? ' 或 .agents/level-hints.txt' : ''}`,
+    ].join('\n');
+    if (isExperiment) advisories.push(`（advisory·experiment 泳道，不阻断；转正由 pre-push 加固门兜底）\n${text}`);
+    else blocks.push(text);
+  } else if (!active.length) {
+    advisories.push(`[触达面判低]（advisory）暂存命中高风险面（${hits.length + hintHits.length} 个文件，应然 ${requiredLevel}），但当前无任何活跃入口——若非 docs / bootstrap 豁免类改动（.agents/commands/new-task.md §intent 豁免），请先立入口文档`);
   }
 }
 

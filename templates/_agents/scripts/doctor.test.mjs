@@ -32,7 +32,7 @@ if (!fs.existsSync(SRC)) {
   console.error(`doctor.test.mjs：SKIP——未找到 ${SRC}（装户环境无包源 src/；本套件仅在包源仓库/dogfooding 跑 npm test 时有意义）`);
   process.exit(0);
 }
-const { checkOwnedDrift, checkAdapterDrift, checkLedgerCoverage, checkDelegationSnapshotFreshness, checkGateAnchors, checkTemplateDrift, gateTrustOf, GATE_TRUST_LEVELS, GATE_TRUST_DEFAULT } = await import(pathToFileURL(SRC).href);
+const { checkOwnedDrift, checkAdapterDrift, checkLedgerCoverage, checkDelegationSnapshotFreshness, checkGateAnchors, checkTemplateDrift, checkLevelHints, gateTrustOf, GATE_TRUST_LEVELS, GATE_TRUST_DEFAULT } = await import(pathToFileURL(SRC).href);
 
 let pass = 0;
 let fail = 0;
@@ -720,6 +720,49 @@ const GATE_BODY = '// gate v1\n';
     check('场景 36：无对应模板 rel → 不计数（skipped=true）',
       r.skipped === true && r.total === 0, JSON.stringify(r));
     fs.rmSync(root, { recursive: true, force: true }); fs.rmSync(pkg, { recursive: true, force: true });
+  }
+}
+
+// --- 场景 37-40：checkLevelHints（2026-10-13 hint-doctor）---
+// level-hints 配置此前**只**在 flow-kit route 时才校验，而 route 是可选调用 → 写错的清单能静默存活。
+// 本组直测三态：旧装户无判据单源 → skipped；配置合法（含默认空）→ ok；非法档位/ERE → ok=false。
+{
+  const mkHintsRoot = (hintsText) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-hints-'));
+    fs.mkdirSync(path.join(root, '.agents', 'scripts'), { recursive: true });
+    fs.copyFileSync(path.join(ROOT, 'templates/_agents/scripts/level-criteria.mjs'),
+      path.join(root, '.agents/scripts/level-criteria.mjs'));
+    if (hintsText !== null) fs.writeFileSync(path.join(root, '.agents/level-hints.txt'), hintsText);
+    return root;
+  };
+
+  {
+    const r = mkHintsRoot('L2 ^src/contracts/\nL3 ^src/db/migrations/.*\\.sql$\n');
+    const out = checkLevelHints(r);
+    check('场景 37：合法 hints → ok 且报条数与档位',
+      out.skipped === false && out.ok === true && /2 条有效/.test(out.note) && /L2/.test(out.note) && /L3/.test(out.note),
+      JSON.stringify(out));
+    fs.rmSync(r, { recursive: true, force: true });
+  }
+  {
+    const r = mkHintsRoot(null); // 缺文件＝默认空＝纯语义定级
+    const out = checkLevelHints(r);
+    check('场景 38：清单缺失（默认空）→ ok 且明示未配置', out.ok === true && out.skipped === false && out.note.length > 0, JSON.stringify(out));
+    fs.rmSync(r, { recursive: true, force: true });
+  }
+  {
+    const r = mkHintsRoot('L3 ^src/db/[bad(\n'); // 非法 ERE
+    const out = checkLevelHints(r);
+    check('场景 39：非法 ERE → ok=false 且带清单路径与行号',
+      out.ok === false && out.skipped === false && /level-hints/.test(out.detail) && /第 \d+ 行/.test(out.detail), JSON.stringify(out));
+    fs.rmSync(r, { recursive: true, force: true });
+  }
+  {
+    const r = fs.mkdtempSync(path.join(os.tmpdir(), 'doctor-hints-old-')); // 无判据单源＝旧装户
+    fs.mkdirSync(path.join(r, '.agents'), { recursive: true });
+    const out = checkLevelHints(r);
+    check('场景 40：无 level-criteria.mjs（1.7.15 前旧装户）→ skipped 不产出告警', out.skipped === true, JSON.stringify(out));
+    fs.rmSync(r, { recursive: true, force: true });
   }
 }
 

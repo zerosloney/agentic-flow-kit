@@ -84,6 +84,39 @@
   （含本门脚本、ci.yml、engine-lock.json、level-hints.txt）若无活跃 L2/L3 入口点名，会被本门以
   `控制面改动无入口` 拦下。这是设计代价，不是缺陷。
 
+- fix(executor)+feat(gate)+refactor(gate)：**执行器三处缺陷收口 + 移除门禁的「立 L2 入口」退路**（2026-10-13）。
+  承接上一条记录里我复核出的 4/5/6 三项缺陷，外加一条结构性发现：
+
+  **④ level-hints 写错只在跑 route 时才炸，无体检面。** 非法档位/ERE 此前只在 `flow-kit route` 时抛
+  `LEVEL_HINTS_INVALID`，而 route 是可选调用 → 写错的清单能静默存活很久。故 `level-criteria.mjs` 新增
+  `--check` 入口（判据单源仍只有 `parseLevelHints` 一份），doctor 新增导出 `checkLevelHints()` 与 §6.10 消费
+  它（spawn 装户单源跑 `--check`，doctor 不复刻解析器）；三态：旧装户无单源 skipped / 合法（含默认空）ok /
+  非法 FAIL。doctor.test 新增 4 场景直测，并登记进 gate-checklist 登记表（§6.10 doctor 独有——
+  提交面判低不在 check-loop 20 项内）。
+
+  **⑤ 判低只在提交面 advisory、且两份清单无机器对账。** `check-lane-surface.mjs` 接入 level-hints：命中档位与
+  触达面隐含的 L2 取高得「应然档」，要求活跃入口**级别 ≥ 应然档**（不再是「有个 high 入口就行」），suspect
+  （级别缺失/非法/分歧）一律不够格；hints 语法错 fail-closed；hints 命中但触达面清单空 → advisory 点名
+  「意图面登记了、提交面无兜底」。新增 6 条 S-hints 场景回归锁。
+
+  **⑥ `flow-kit route` 四种「缺失」策略混用、降级只对一个消费方可见。** 收成单一 `degradations[]` 出口
+  （文本面「⚠️ 降级运行」+ `--json` 的 `degraded`/`degradations`）：`enums-fallback` / `lane-source-fallback` /
+  `level-hints-empty` / `under-hint-proposed`。判据单源缺失仍 fail-loud（配置面坏了不定级）；软回落一律登记、
+  不阻断定级。executor.test 新增 7 条降级断言，并把夹具补齐枚举单源（否则 `enums-fallback` 恒真、断言成假护栏）。
+
+  **⑦（结构性发现 → 已按决策清理）「立 L2 入口」这条退路在本仓不可达。** check-engine-integrity 原有两档
+  豁免——本地层「正文提及即认」、锚层「活跃 L2/L3 入口在 §改动面 点名」——参照物是 `<root>/workflow/
+  {intents,incidents}`。但 1.7.15「卸掉同仓双身份」后**包源仓已无该目录**，门消息让维护者去「立 L2 入口」而立
+  不了：不可达的能力等于误导。故整体移除（实现 + T4b/T4c/T4d + 锚层严格档 T7e，共删约 65 行）：本仓只认
+  `--update` 一条显式演进路径，语义更少、更可核对；消息标签随之由 `控制面改动无入口` 改为
+  `控制面改动未入基线`，修法只留 `--update` + CHANGELOG 同批。新增 T4e/T7c 两条断言**锁死**「即便有人手工
+  造出入口文档点名该件也不放行」——否则一个 mkdir 就能把门重新打开。
+  **诚实代价**：跨提交锚只比对**硬拦单位数**、不比 sha，故「改写某检查语义但保住 exit 1 计数 + --update」
+  这一形态两层都绿。补法是让锚层也比对 sha，代价是每次合法演进都需一份显式凭据（改判据面，本次未决）。
+
+  验证：npm test 全量 61 套件 / 0 失败；完整性门单测 27/27；四个改动套件（executor 70 / lane-surface 27 /
+  doctor 54 / level-criteria 69）全绿；eslint 0 errors。
+
 ## 1.7.15
 
 - chore(ci)：**恢复 npm 发布管线并补发**（2026-10-12）——Release 工作流（`.github/workflows/release.yml`）在 v1.7.1「装户端内容清理」时随 `.github/` 一并删除后未重建。此后 v1.7.1~v1.7.14 的 tag 正常推送到 GitHub，但无任何 workflow 监听，**发布静默失效约 14 个版本**——npm `latest` 停滞在 1.7.0，git 与 npm 双源脱节。本版恢复该工作流（与删除前逐字一致：`push: tags v*` → tag 与 package.json 版本一致性 fail-fast → `npm test` → `npm publish --provenance`），因工作区有并发在途改动，release.yml 单独先行提交（889c8a1），本提交仅随动版本号与本条目。

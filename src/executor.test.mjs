@@ -14,6 +14,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const SRC = path.dirname(fileURLToPath(import.meta.url));
 const PKG = path.resolve(SRC, '..');
 const REAL_CRIT = path.join(PKG, 'templates/_agents/scripts/level-criteria.mjs');
+const REAL_ENUMS_MJS = path.join(PKG, 'templates/_agents/scripts/workflow-enums.mjs');
+const REAL_ENUMS_TXT = path.join(PKG, 'templates/_agents/workflow-enums.txt');
 
 let pass = 0, failCount = 0;
 function check(name, cond, detail = '') {
@@ -22,8 +24,10 @@ function check(name, cond, detail = '') {
 }
 const W = (p, content) => { fs.mkdirSync(path.dirname(p), { recursive: true }); fs.writeFileSync(p, content, 'utf8'); };
 
-// 装户 fixture：判据单源真拷；stage-gates / pipeline-run 用哨兵 stub（证明薄壳是「调用装户」而非自带实现）
-function mkProject({ withCrit = true, withStageGates = true, laneKey = null, hints = null, modules = null } = {}) {
+// 装户 fixture：判据单源与枚举单源真拷；stage-gates / pipeline-run 用哨兵 stub（证明薄壳是「调用装户」而非自带实现）
+//   withEnums 默认 true = 完整装户面。降级通道（2026-10-13）要求能断言「完整态无降级」，
+//   若夹具恒缺枚举单源，enums-fallback 会恒真、该断言即假护栏。
+function mkProject({ withCrit = true, withStageGates = true, withEnums = true, laneKey = null, hints = null, modules = null } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-exec-'));
   const S = path.join(root, '.agents', 'scripts');
   if (withCrit) fs.mkdirSync(S, { recursive: true }), fs.copyFileSync(REAL_CRIT, path.join(S, 'level-criteria.mjs'));
@@ -36,6 +40,11 @@ function mkProject({ withCrit = true, withStageGates = true, laneKey = null, hin
   }
   if (hints !== null) W(path.join(root, '.agents', 'level-hints.txt'), hints);
   if (modules !== null) W(path.join(root, '.agents', 'workflow-modules.txt'), modules);
+  if (withEnums) {
+    fs.mkdirSync(S, { recursive: true });
+    fs.copyFileSync(REAL_ENUMS_MJS, path.join(S, 'workflow-enums.mjs'));
+    fs.copyFileSync(REAL_ENUMS_TXT, path.join(root, '.agents', 'workflow-enums.txt'));
+  }
   return root;
 }
 
@@ -118,12 +127,46 @@ const run = (args, cwd) => runCli(['run', ...args], cwd);
   const bj = JSON.parse(route(['--level', 'L2', '--json'], bad).stdout);
   check('S4 单源返回非法值 → 回落', bj.laneKey === 'high' && bj.laneSource === 'fallback', JSON.stringify(bj.laneKey));
 
-  // 单源缺失 → 回落 + 文本面提示 sync
+  // 单源缺失 → 回落 + 降级通道可见（2026-10-13 degradation-channel：文本与 JSON 同一出口）
   const miss = mkProject({ withStageGates: false });
   const mx = route(['--level', 'L2'], miss);
-  check('S4 单源缺失 → 回落标注', mx.stdout.includes('未取到装户 stage-gates.mjs 单源'));
+  check('S4 单源缺失 → 回落标注', mx.stdout.includes('lane-source-fallback'), mx.stdout.slice(-200));
+  check('S4 降级文本面统一出口', mx.stdout.includes('降级运行'));
   check('S4 缺单源不阻断路由（仍给档位与入口）', mx.stdout.includes('建议级别：L2') && mx.status === 0);
-  check('S4 缺单源时 JSON 面标 fallback', JSON.parse(route(['--level', 'L2', '--json'], miss).stdout).laneSource === 'fallback');
+  const mj = JSON.parse(route(['--level', 'L2', '--json'], miss).stdout);
+  check('S4 缺单源时 JSON 面标 fallback', mj.laneSource === 'fallback');
+  check('S4 JSON 降级数组含 lane-source-fallback', mj.degraded === true && mj.degradations.some((d) => d.code === 'lane-source-fallback'), JSON.stringify(mj.degradations));
+}
+
+// ============ 场景 4b：降级通道完整性（此前四种缺失策略混用、只有 laneSource 可见）============
+{
+  const codesOf = (proj, args) => JSON.parse(route(args.concat(['--json']), proj).stdout).degradations.map((d) => d.code);
+
+  // 判据单源齐全、无 hints → level-hints-empty 必须登记（此前对 JSON 消费方完全静默）
+  const noHints = mkProject();
+  const c1 = codesOf(noHints, ['--level', 'L1']);
+  check('S4b 未配 hints → 降级登记 level-hints-empty', c1.includes('level-hints-empty'), JSON.stringify(c1));
+  check('S4b 配了 hints 后不再报该降级', (() => {
+    fs.writeFileSync(path.join(noHints, '.agents', 'level-hints.txt'), '# x\nL2 ^src/db/\n');
+    return !codesOf(noHints, ['--level', 'L1']).includes('level-hints-empty');
+  })());
+
+  // 枚举单源缺失 → enums-fallback（此前静默用自带表）
+  const noEnums = mkProject({ withEnums: false });
+  check('S4b 枚举缺失 → 降级登记 enums-fallback', codesOf(noEnums, ['--level', 'L1']).includes('enums-fallback'), JSON.stringify(codesOf(noEnums, ['--level', 'L1'])));
+
+  // 建议档低于 hints 下限 → under-hint-proposed（此前仅 warning 字段，无统一出口）
+  const under = mkProject();
+  fs.writeFileSync(path.join(under, '.agents', 'level-hints.txt'), 'L3 ^src/db/\n');
+  const c3 = codesOf(under, ['--level', 'L1', '--files', 'src/db/schema.sql']);
+  check('S4b 判低 → 降级登记 under-hint-proposed 且仍按就高不就低取 L3', c3.includes('under-hint-proposed')
+    && JSON.parse(route(['--level', 'L1', '--files', 'src/db/schema.sql', '--json'], under).stdout).level === 'L3', JSON.stringify(c3));
+
+  // 完整态（hints + 枚举 + 单源齐全）→ degraded=false，降级数组为空
+  const full = mkProject();
+  fs.writeFileSync(path.join(full, '.agents', 'level-hints.txt'), 'L2 ^src/db/\n');
+  const fj = JSON.parse(route(['--level', 'L1', '--json'], full).stdout);
+  check('S4b 完整态无降级', fj.degraded === false && fj.degradations.length === 0, JSON.stringify(fj.degradations));
 }
 
 // ============ 场景 5：非法输入 fail-loud ============

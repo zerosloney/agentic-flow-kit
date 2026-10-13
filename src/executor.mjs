@@ -82,6 +82,13 @@ export async function route(args) {
   const o = parseArgs(args);
   const target = resolveTarget(o);
   const scriptsDir = path.join(target, ...AGENT_SCRIPTS_REL.split('/'));
+  // 降级可见通道（2026-10-13 degradation-channel）：此前同一命令里混用四种「缺失」策略——
+  //   判据单源缺 → fail-loud；stage-gates 缺 → 静默回落泳道；enums 缺 → 静默用自带表；
+  //   hints 缺 → 静默按 L1 起步。**只有 laneSource 一个字段对外可见**，--json 消费方拿到的是同一份静默。
+  // 口径：fail-loud 的判据单源缺失仍在最前面（改配置比没配置危险），此后**所有软回落一律登记进
+  //   degradations**，文本与 --json 走同一个通道——降级必须可见，但不因此阻断定级（路由不该因为
+  //   词表缺失整个挂掉）。
+  const degradations = [];
 
   // 判据单源在装户面（随模板下发、随 sync 升级）——包不复制判据，避免双源漂移
   const critPath = path.join(scriptsDir, 'level-criteria.mjs');
@@ -97,7 +104,10 @@ export async function route(args) {
     const enumsMod = await import(pathToFileURL(path.join(scriptsDir, 'workflow-enums.mjs')).href);
     const enums = enumsMod.loadEnums(path.join(scriptsDir, '..', 'workflow-enums.txt'));
     if (Array.isArray(enums['level.all']) && enums['level.all'].length) levelList = enums['level.all'];
-  } catch { /* 枚举缺失 → 用判据单源自带档位表，不阻断（定级面不该因词表缺失整个挂掉） */ }
+    else degradations.push({ code: 'enums-missing-key', detail: '.agents/workflow-enums.txt 无 level.all 键——档位值域回落判据单源自带表' });
+  } catch (e) {
+    degradations.push({ code: 'enums-fallback', detail: `读不到 .agents/workflow-enums.txt（${String(e?.message || e).split('\n')[0]}）——档位值域回落判据单源自带表，不阻断定级` });
+  }
   const modFile = path.join(target, '.agents', 'workflow-modules.txt');
   if (fs.existsSync(modFile)) {
     modules = fs.readFileSync(modFile, 'utf8').split(/\r?\n/)
@@ -120,8 +130,17 @@ export async function route(args) {
   const a = crit.assessLevel(target, { files, proposed });
   const level = a.level || 'L1';
   // 泳道取法沿装户 stage-gates 单源（laneOfDoc：级别单字段协议），不在本文件复刻 low/high 口径。
-  //   装户无 stage-gates.mjs（老版本未升级）→ fail-soft 回退默认（判 L2/L3 → high），并在输出里标明未取到单源。
+  //   装户无 stage-gates.mjs（老版本未升级）→ fail-soft 回退默认（判 L2/L3 → high），并登记降级。
   const laneKey = await laneOfDoc(target, level);
+  if (laneKey.source === 'fallback') {
+    degradations.push({ code: 'lane-source-fallback', detail: '装户 .agents/scripts/stage-gates.mjs 缺失或 laneOfDoc 不可用——泳道按档位回落判定（建议 flow-kit sync 升级）' });
+  }
+  if (a.hintsConfigured === false) {
+    degradations.push({ code: 'level-hints-empty', detail: `.agents/level-hints.txt 未配置（缺失或为空）——路径下限给不出提示，本次按 ${level} 起步（写清单前判级只能靠语义自查句）` });
+  }
+  if (a.underHint) {
+    degradations.push({ code: 'under-hint-proposed', detail: `建议档 ${a.proposed} 低于路径下限 ${a.hintLevel}（命中：${(a.matched || []).slice(0, 3).join('、')}）——已按就高不就低取 ${a.hintLevel}，但调用方给的建议档偏低，建议复核` });
+  }
   const lane = laneKey.key === 'high' ? '防御道（同步确认门）' : '协作道（快车道）';
   const entry = STAGE_ENTRY[kind] || STAGE_ENTRY.require;
 
@@ -130,6 +149,8 @@ export async function route(args) {
       level, lane, laneKey: laneKey.key, laneSource: laneKey.source, kind: kind || '(未定)',
       files, proposed: a.proposed, hintLevel: a.hintLevel, matched: a.matched,
       underHint: a.underHint, hintsConfigured: a.hintsConfigured,
+      // 降级统一出口（消费方判「这次路由是否在降级态」只需看这一个字段，不必逐个猜 source 字段）
+      degraded: degradations.length > 0, degradations,
       nextStage: entry, nextCommand: `.agents/commands/${entry}`,
       modules,
     }, null, 2));
@@ -140,12 +161,14 @@ export async function route(args) {
   console.log(crit.routeAdvice(level, a));
   console.log('');
   console.log(`泳道：${lane}`);
-  if (laneKey.source === 'fallback') {
-    console.log('  ℹ️  泳道取法未取到装户 stage-gates.mjs 单源，按档位回落判定（建议 flow-kit sync 升级）。');
-  }
   if (kind) console.log(`入口指令：.agents/commands/${entry}（kind=${kind}）`);
   else console.log(`入口指令：未定 —— 先判 kind（require 新需求 / fix 修复 / verify 验证 / review 评审 / deploy 上线）`);
   console.log(`  new-task 阶段索引：.agents/commands/new-task.md`);
+  if (degradations.length) {
+    console.log('');
+    console.log(`⚠️ 降级运行（${degradations.length} 项——机器面能给的部分比完整态少，逐条点名）：`);
+    for (const d of degradations) console.log(`  · [${d.code}] ${d.detail}`);
+  }
   console.log('');
   console.log('本命令只给机器可判的部分。**定级仍需语义判断**——按上面自查句逐条判；');
   console.log('不确定就高不就低。要走全自动六阶段闭环另用：flow-kit run start "<需求>"');

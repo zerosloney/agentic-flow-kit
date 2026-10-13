@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-13T05:39:20.494Z",
+  "generatedAt": "2026-10-13T06:38:38.358Z",
   "files": {
     ".github/workflows/ci.yml": {
       "sha256": "57d51fed7452f04919166e7397d373fe476d6bb6df7bef40576684b3d9687bd2",
@@ -43,7 +43,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/check-engine-integrity.mjs": {
-      "sha256": "8aee8af68d08705039633b91623523835dba97e1f28b7018b97a56ff2c3e0045",
+      "sha256": "e62a23c861d060ee74f15aae57410cfce8e644e29517ebc5b1c1c3d85e5935c1",
       "hard": 2
     },
     "templates/_agents/scripts/check-hygiene.mjs": {
@@ -51,7 +51,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/check-lane-surface.mjs": {
-      "sha256": "7f1fb766e36bb0d31408c3ccb4c03507002e79152017cb19c7e34e485be537e9",
+      "sha256": "a6dcc71ecfc158fa0008b495e19d21bac388fdf471d6f95445353cb9d8057638",
       "hard": 2
     },
     "templates/_agents/scripts/check-ledger-invariant.mjs": {
@@ -107,7 +107,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/gate-checklist.mjs": {
-      "sha256": "d57ae04b4ce84515cbc81620dde65846c474460cf4eed24af5e525a438d5e97e",
+      "sha256": "99ec369fddee6867a2baeced610760e58a3f85506f95f8a4131bcc584a3a3109",
       "hard": 1
     },
     "templates/_agents/scripts/gate-seg.mjs": {
@@ -151,8 +151,8 @@
       "hard": 0
     },
     "templates/_agents/scripts/level-criteria.mjs": {
-      "sha256": "05f2e6ab666e2f02ca9a06aa83c2c5e12ad17093cb3bd7ac4600b17de3f43e5b",
-      "hard": 0
+      "sha256": "6c02111b47b2394922d856712b31a869bd708669ba080cd8ded9c7d46c484b70",
+      "hard": 1
     },
     "templates/_agents/scripts/pipeline-run-docs.mjs": {
       "sha256": "d54085b21d857f4db6df7d5fc7b6a65ffc2391c9e0f100754d1e76a844a318c1",
