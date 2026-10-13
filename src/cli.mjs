@@ -97,6 +97,11 @@ run 参数：除 --dir 外原样透传给装户 pipeline-run（--hint / --triage
 
 装完本地可跑：日常闭环走项目内 .agents/scripts/（零 npm 运行时依赖）；升级 / 体检 / 装门禁用 npx agentic-flow-kit（sync / doctor / add-host / add-gate）；AGENTS.md 生成「AI工作流 + Wiki」骨架，项目细节在「项目适配区」自填。`;
 
+// errText：异步命令失败的统一输出。带 code 的错误把 code 一并打出来——
+//   例：flow-kit route 遇非法 level-hints 会抛 e.code = LEVEL_HINTS_INVALID，
+//   只打 message 等于把机器可判的错误类别在 CLI 边界扔掉（路径与行号仍在 message 里）。
+const errText = (e) => `❌ ${e?.code ? `[${e.code}] ` : ''}${e?.message || e}`;
+
 export function run(argv) {
   const cmd = argv[0];
   if (!cmd || cmd === 'help' || cmd === '--help' || cmd === '-h') {
@@ -110,7 +115,7 @@ export function run(argv) {
   }
   if (cmd === 'init') {
     init(argv.slice(1), PKG_ROOT).catch((e) => {
-      console.error(`❌ ${e?.message || e}`);
+      console.error(errText(e));
       process.exit(1);
     });
     return;
@@ -138,14 +143,14 @@ export function run(argv) {
   }
   if (cmd === 'validate') {
     validate(argv.slice(1), PKG_ROOT).catch((e) => {
-      console.error(`❌ ${e?.message || e}`);
+      console.error(errText(e));
       process.exit(1);
     });
     return;
   }
   if (cmd === 'route') {
     route(argv.slice(1)).catch((e) => {
-      console.error(`❌ ${e?.message || e}`);
+      console.error(errText(e));
       process.exit(1);
     });
     return;

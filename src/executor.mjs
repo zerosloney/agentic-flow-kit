@@ -61,22 +61,33 @@ const STAGE_ENTRY = {
   review: 'review.md', deploy: 'deploy.md',
 };
 
-// laneOfDoc：调装户 stage-gates.mjs 的单源泳道取法。返回 { key, source }
-//   source='stage-gates.mjs' → 真取到单源；source='fallback' → 装户缺该脚本，按档位直接回落（fail-soft，不阻断路由）。
+// laneOfDoc：调装户 stage-gates.mjs 的单源泳道取法。返回 { key, source, reason }
+//   source='stage-gates.mjs' → 真取到单源；source='fallback' → 装户缺该脚本或取不到，按档位直接回落
+//   （fail-soft，不阻断路由）。**reason 区分「文件不存在」与「存在但 import 失败」**（2026-10-13
+//   executor-review）——两者曾被合并成一句「缺失」，实测把「装户脚本依赖缺失导致 import 报错」诊断成
+//   「未安装」，排障方向直接被带偏。
 async function laneOfDoc(target, level) {
   const p = path.join(target, ...`${AGENT_SCRIPTS_REL}/stage-gates.mjs`.split('/'));
+  if (!fs.existsSync(p)) {
+    return { key: fallbackLane(level), source: 'fallback', reason: '装户 .agents/scripts/stage-gates.mjs 不存在（未安装或版本更早）' };
+  }
   try {
-    if (fs.existsSync(p)) {
-      const mod = await import(pathToFileURL(p).href);
-      if (typeof mod.laneOfDoc === 'function') {
-        const key = mod.laneOfDoc(level);
-        if (key === 'low' || key === 'high' || key === 'suspect') return { key, source: 'stage-gates.mjs' };
-      }
+    const mod = await import(pathToFileURL(p).href);
+    if (typeof mod.laneOfDoc === 'function') {
+      const got = mod.laneOfDoc(level);
+      if (got === 'low' || got === 'high' || got === 'suspect') return { key: got, source: 'stage-gates.mjs', reason: '' };
+      return { key: fallbackLane(level), source: 'fallback', reason: `装户 stage-gates.mjs 未返回合法泳道值（返回 ${JSON.stringify(got)}）` };
     }
-  } catch { /* 装户脚本缺失/异常 → 回落 */ }
-  const rank = { L0: 0, L1: 1, L2: 2, L3: 3 }[level];
-  return { key: rank >= 2 ? 'high' : 'low', source: 'fallback' };
+    return { key: fallbackLane(level), source: 'fallback', reason: '装户 stage-gates.mjs 未导出 laneOfDoc（版本不匹配）' };
+  } catch (e) {
+    // 注意：这里必须把真实原因带出去——「脚本在但装不起来」与「脚本不在」是两回事。
+    const why = String(e?.message || e).split('\n')[0];
+    return { key: fallbackLane(level), source: 'fallback', reason: `装户 stage-gates.mjs 存在但 import 失败：${why}` };
+  }
 }
+
+const fallbackLane = (level) => ((rankOfLevel(level)) >= 2 ? 'high' : 'low');
+const rankOfLevel = (level) => ({ L0: 0, L1: 1, L2: 2, L3: 3 }[String(level || '').toUpperCase()] ?? 0);
 
 export async function route(args) {
   const o = parseArgs(args);
@@ -133,13 +144,13 @@ export async function route(args) {
   //   装户无 stage-gates.mjs（老版本未升级）→ fail-soft 回退默认（判 L2/L3 → high），并登记降级。
   const laneKey = await laneOfDoc(target, level);
   if (laneKey.source === 'fallback') {
-    degradations.push({ code: 'lane-source-fallback', detail: '装户 .agents/scripts/stage-gates.mjs 缺失或 laneOfDoc 不可用——泳道按档位回落判定（建议 flow-kit sync 升级）' });
+    degradations.push({ code: 'lane-source-fallback', detail: `${laneKey.reason || '装户 .agents/scripts/stage-gates.mjs 缺失或 laneOfDoc 不可用'}——泳道按档位回落判定（建议 flow-kit sync 升级）` });
   }
   if (a.hintsConfigured === false) {
-    degradations.push({ code: 'level-hints-empty', detail: `.agents/level-hints.txt 未配置（缺失或为空）——路径下限给不出提示，本次按 ${level} 起步（写清单前判级只能靠语义自查句）` });
+    degradations.push({ code: 'level-hints-empty', detail: `.agents/level-hints.txt 未配置（缺失或为空）→ 机器面给不出档位提示，本次按 ${level} 起步；该清单登记「哪些路径一碰就至少是 L2/L3」（项目私有，只收 L2/L3 两档）` });
   }
   if (a.underHint) {
-    degradations.push({ code: 'under-hint-proposed', detail: `建议档 ${a.proposed} 低于路径下限 ${a.hintLevel}（命中：${(a.matched || []).slice(0, 3).join('、')}）——已按就高不就低取 ${a.hintLevel}，但调用方给的建议档偏低，建议复核` });
+    degradations.push({ code: 'under-hint-proposed', detail: `建议档 ${a.proposed} 低于路径提示下限 ${a.hintLevel}（命中：${(a.matched || []).slice(0, 4).join('、')}）——已按就高不就低取 ${a.hintLevel}，建议复核` });
   }
   const lane = laneKey.key === 'high' ? '防御道（同步确认门）' : '协作道（快车道）';
   const entry = STAGE_ENTRY[kind] || STAGE_ENTRY.require;

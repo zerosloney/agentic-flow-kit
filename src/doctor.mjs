@@ -361,7 +361,11 @@ export function checkLevelHints(target) {
   const r = spawnSync(process.execPath, [script, '--check', path.join(target, '.agents', 'level-hints.txt')], {
     cwd: target, encoding: 'utf8',
   });
+  // spawn 本身失败（ENOENT/EACCES/超时被杀）时 status 为 null 且 stderr 可能为空——
+  //   不区分会把「体检脚本跑不起来」误报成「配置有误」，排障方向直接被带偏（2026-10-13 executor-review）。
+  if (r.error) return { skipped: false, ok: false, detail: `无法执行体检脚本 ${path.basename(script)}：${r.error.message}` };
   if (r.status === 0) return { skipped: false, ok: true, note: String(r.stdout || '').trim() || '通过' };
+  if (r.status === null) return { skipped: false, ok: false, detail: `体检脚本异常终止（无退出码，signal=${r.signal || '未知'}）——无法判定 level-hints 是否合法` };
   return {
     skipped: false,
     ok: false,

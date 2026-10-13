@@ -247,6 +247,24 @@ const FM_L0_NEW = '状态: draft\n级别: L0\n日期: 2026-10-01\n模块: ui';
   const r6 = run(d6, { staged: ['src/db/x.sql'] });
   check('S-hints hints 已登记但触达面清单空 → advisory 点名无兜底',
     r6.code === 0 && r6.out.includes('level-hints 无提交面兜底'), r6.out);
+
+  // ⑦ L0 档 hints → 配置错误 fail-closed（2026-10-13 executor-review 实测 Major）
+  //   原实现接受 `L0 ^docs/`，提交面判低门当真 → 纯文档提交被硬拦，修法还让人「升级至 L0 及以上」
+  const d7 = mkfix();
+  base(d7, { level: 'L1' });
+  w(d7, '.agents/level-hints.txt', 'L0 ^docs/\n');
+  const r7 = run(d7, { staged: ['docs/readme.md'] });
+  check('S-hints L0 档 hints → fail-closed 阻断（不拿低档当门槛）',
+    r7.code === 1 && r7.out.includes('[level-hints 配置错误]') && r7.out.includes('L2 或 L3'), r7.out);
+
+  // ⑧ 路径归一化口径与判据单源一致（复用 hintLevelFor，不再各自复刻）
+  //   同一文件同时命中 hints 与触达面 → 判据里点名两处来源；Windows 反斜杠写法也要能命中
+  const d8 = mkfix();
+  base(d8, { level: 'L3' });
+  w(d8, '.agents/level-hints.txt', 'L3 ^src/db/\n');
+  const r8 = run(d8, { staged: ['src\\db\\a.sql'] });
+  check('S-hints 反斜杠路径经单源归一后仍命中（复用 hintLevelFor）',
+    r8.code === 0 && !r8.out.includes('[触达面判低]'), r8.out);
 }
 // --- git 真仓端到端：走生产发现路径（quotepath=off + diff --cached）---
 {

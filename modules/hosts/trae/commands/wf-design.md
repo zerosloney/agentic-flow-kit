@@ -16,10 +16,11 @@ description: Design 阶段 · 起 spec（L2/L3 强制，L1 可省略直接进 wf
 ## 1. 执行
 
 1. 确认同名入口文档已批准：新需求为 approved intent，修复为已确认的 incident 草稿；否则拒绝，分别回 `plan.md` / `maintain.md`（2026-09-30 起机器强制：fill-spec / confirm-doc 对前置未过直接拒绝 exit 2、不落盘不记账）。
-2. 级别判断(对照 AGENTS.md 第 3 条;判据单源 = `.agents/scripts/level-criteria.mjs`，别在本文件复述判据):
-   - **L1**(实现级改动,未命中 L2/L3)→ 走快车道,省略 spec,直接跳 `next: build.md` 起草 Quick-Plan
-   - **L2**(改规则 / 契约:编码权威 / 共享契约 / 既有接口语义 / 全局横切口径,闭集见单源 `L2_SURFACES`)→ 必须有 spec
-   - **L3**(数据与运行时结构:schema / 迁移 SQL / DI 链 / 认证与中间件管线,闭集见单源 `L3_SURFACES`)→ 必须有 spec + **新会话独立复核**
+2. 级别判断(对照 AGENTS.md 第 3 条;判据单源 = `.agents/scripts/level-criteria.mjs`，**本文件只承载流程映射，不复述判据闭集**):
+   - **L1**（未命中 L2/L3）→ 快车道：省略 spec，直接跳 `next: build.md` 起草 Quick-Plan
+   - **L2**（触达面闭集见单源 `L2_SURFACES`）→ 必须有 spec
+   - **L3**（结构面闭集见单源 `L3_SURFACES`）→ 必须有 spec + **新会话独立复核**
+   - 判哪一档：逐条对照单源的 `L2_SURFACES` / `L3_SURFACES` / `L1_NEGATIVES`，不要凭记忆——判据只读单源一处
 3. 起草 spec:
    - **填空工具先跑**：`node .agents/scripts/fill-spec.mjs --level <L1|L2|L3> --topic <主题> --output workflow/specs/<date>-<主题>.md`——输出含 frontmatter 5 字段 + 5 节正文（功能行为/数据流/系统改动/约束遵守映射/风险评估）的草稿；AI 据此填实
    - 复制 `workflow/specs/_TEMPLATE.md` → `workflow/specs/YYYY-MM-DD-<主题>.md`(与入口文档同名)

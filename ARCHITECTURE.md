@@ -7,7 +7,9 @@
 ## 1. 一句话定位
 
 把软件工程治理（门禁、确认、溯源）编译成「机器可执行的文件系统协议」：AI 干活，机器把门，
-用户只在风险决策点出现。引擎 ~23k 行零运行时依赖纯 JS（node ≥18）。测试套件数是盘面派生量
+用户只在风险决策点出现。引擎零运行时依赖纯 JS（node ≥18）；引擎本体约 **1.2 万行**
+（口径：`src/` + `templates/_agents/scripts/`，不含测试；随演进变动，**不是判据**）。
+测试套件数是盘面派生量
 （`src/` + `templates/_agents/scripts/` 两面 glob 枚举），随套件增删变动——权威数见 `npm test` 的
 机器可读汇总行 `[run-tests] 合计: SUITES n / FAILED m`，不在此硬编码（硬编码必漂移：2026-10-10
 实测 48 而本处停在 46）。
@@ -85,13 +87,16 @@ modules/hosts/{claude,codex,cursor,omp,opencode,trae,zcode}/
 ```
 .githooks/pre-commit（闭环配对/泳道/wiki台账/规则预算/确认台账不变量/敏感扫描）
    ↓
-check-loop.mjs（20 项检查，237 断言）——闭环完整性总裁判
+check-loop.mjs（20 项检查，断言数随演进变动、不在此硬编码——权威判据看该文件头部清单）——闭环完整性总裁判
    ├─ check-hygiene.mjs（2/9/11/12/13）   ├─ check-stage-index.mjs（7）
    ├─ check-metric-claims.mjs（16）        └─ policy.mjs（policyVersion 生效日锚表）
    ↓
 verify.mjs（npm test + check-loop，绿凭证落 verifications.jsonl，--doc 绑单）
    ↓
-CI（ci.yml：五道机器门 + npm install + npm test + shipped 装户视角 + CI 红回溯点名）
+CI（.github/workflows/ci.yml，纯包源仓的**唯一**机器门——本仓无本地钩子，故每道门都在编排里点名）：
+   ├─ `test`：四宫格矩阵（node 18/22 × ubuntu/windows）跑 `npm test`（eslint + 全量套件）
+   ├─ `engine-integrity`：门禁本体完整性门（入库基线 + 跨提交锚，见 §8）
+   └─ `jscpd-drift`：**手动触发**的 advisory 报告器，恒 exit 0，不在 push/PR 路径上
 ```
 
 - **20 检查索引**：1 配对(hard) 2 占位符 3 复盘三件套 4 引用有效 5 状态+L3复核 6 角色契约
@@ -108,7 +113,7 @@ CI（ci.yml：五道机器门 + npm install + npm test + shipped 装户视角 + 
 | 入口 | 形态 | 包 CLI 转发面 |
 | :- | :-- | :-- |
 | 手动路由 `new-task.md` | AI 读阶段索引 + 级别判据，逐阶段走命令文档 | `flow-kit route`：定级机器面（判据单源 + 路径下限 + 泳道单源）+ 该读的 md 路径 |
-| 自动化 `pipeline-run.mjs` | 状态机六阶段（882 行），AI 槽位走工单协议，人件门 `PIPELINE-STOP` 停机 | `flow-kit run`：薄壳转发五子命令，参数与退出码原样透传 |
+| 自动化 `pipeline-run.mjs` | 状态机六阶段，AI 槽位走工单协议，人件门 `PIPELINE-STOP` 停机 | `flow-kit run`：薄壳转发五子命令，参数与退出码原样透传 |
 
 内部三层单向：CLI 编排 → `pipeline-run-run.mjs`（run 存储）→ `pipeline-run-docs.mjs`（文档纯函数）；
 契约（五子命令输出/exit/四注入点）逐字节稳定。

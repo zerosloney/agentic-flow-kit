@@ -30,7 +30,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { laneOfEntry, laneOfDoc } from './stage-gates.mjs';
 import { loadKitPolicy } from './policy.mjs';
-import { loadLevelHints, rankOf, maxLevel } from './level-criteria.mjs';
+import { loadLevelHints, hintLevelFor, rankOf, maxLevel } from './level-criteria.mjs';
 
 const argv = process.argv.slice(2);
 const argOf = (k) => {
@@ -136,28 +136,29 @@ const advisories = [];
 //   fail-closed：hints 语法错 → hard 拦（写错配置比没配置危险，见 level-criteria parseLevelHints）。
 const hintsState = (() => {
   try {
-    const { hints, missing } = loadLevelHints(ROOT);
-    return { hints, missing, invalid: null };
+    const { hints } = loadLevelHints(ROOT);
+    return { hints, invalid: null };
   } catch (e) {
-    return { hints: [], missing: false, invalid: e.message };
+    return { hints: [], invalid: e.message };
   }
 })();
 
 if (hintsState.invalid) {
   blocks.push([
-    '[level-hints 配置错误] .agents/level-hints.txt 非法（档位或 ERE 语法错）——配置面坏了整条兜底不可信：',
+    '[level-hints 配置错误] .agents/level-hints.txt 非法（档位只收 L2/L3；ERE 不得带行内注释）——配置面坏了整条兜底不可信：',
     ...String(hintsState.invalid).split('\n').map((l) => `  ${l}`),
     '  修法：修正清单后重试（fail-closed，防静默空洞——写错配置比没配置危险：没配置会提示，写错会误判档位）',
   ].join('\n'));
 }
 
+// 命中判定复用判据单源的 hintLevelFor（2026-10-13 executor-review）：此前本文件手写了一遍
+//   「路径归一化 + 多条命中取高档」，与 level-criteria.mjs:104 的实现同形但独立演进——
+//   双源漂移是本仓硬规则（doctor 段就写着「不复刻解析器」），一旦归一化口径调整，
+//   route 会判 L1 而本门拦 L3，且没有任何测试能发现。
 const hintHits = hintsState.hints.length
-  ? STAGED.map((p) => {
-      const norm = p.replace(/\\/g, '/').replace(/^\.\//, '');
-      let lv = '';
-      for (const h of hintsState.hints) if (h.rx.test(norm)) lv = maxLevel(lv, h.level);
-      return { p, lv };
-    }).filter((x) => x.lv)
+  ? STAGED
+    .map((p) => ({ p, lv: hintLevelFor(hintsState.hints, [p]).level }))
+    .filter((x) => x.lv)
   : [];
 const hintLevel = hintHits.reduce((acc, x) => maxLevel(acc, x.lv), '');
 

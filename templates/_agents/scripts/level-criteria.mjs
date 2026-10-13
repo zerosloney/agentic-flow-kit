@@ -70,16 +70,38 @@ export function maxLevel(a, b) {
 
 // parseLevelHints：读 hints 清单。行格式 `L3 <ERE>`，ERE 为 grep -E 兼容正则，匹配仓库相对路径（/ 分隔）。
 //   非法档位 / 语法错误的行 → fail-loud 抛错（防静默空洞：写错配置比没配置更危险——没配置会提示，写错会误判）。
+// 三条收紧（2026-10-13 executor-review，全部来自实测复现，不是假想）：
+//   ① **只收 L2 / L3**。本清单语义是「哪些路径一碰就至少是 L2/L3」，L0/L1 行不构成任何门槛——
+//      而此前接受 L0 会被提交面判低门当真：`L0 ^docs/` 会让纯文档提交被硬拦，修法还让人
+//      「升级至 L0 及以上」（L0 即最低档，荒谬）。写这种行的人本意多半是「这里是 L0 区」，
+//      那正是不该登记的面——故按写错配置处理，fail-loud 点名。
+//   ② **行内 `#` 注释 fail-loud**。ERE 取整行剩余部分（`(\S.*)$`），所以 `L3 ^a\.sql$  # 注释`
+//      会把注释编进正则：若路径含 `$` 锚点，该条**永不命中**且无任何报错——路径下限与提交面兜底
+//      同时静默失效，而 `--check` 还报「N 条有效」。这正是随包模板原先示例的写法（评审实测）。
+//      注释请单独成行；确需匹配路径里的 `#` 写 `\#`。
+//   ③ 档位大写归一：只接受 `L2` / `L3`（原正则 `L[0-3]` 已含大小写外的写法，见下）。
 export function parseLevelHints(text) {
   const out = [];
   const errs = [];
   String(text || '').split(/\r?\n/).forEach((raw, i) => {
     const line = raw.trim();
     if (!line || line.startsWith('#')) return;
-    const m = line.match(/^(L[0-3])\s+(\S.*)$/);
-    if (!m) { errs.push(`第 ${i + 1} 行：格式须为 \`L2 <ERE>\`（实际「${line.slice(0, 40)}」）`); return; }
+    const m = line.match(/^(L[0-3])\s+(\S.*)$/i);
+    if (!m) { errs.push(`第 ${i + 1} 行：格式须为 \`L2 <ERE>\` 或 \`L3 <ERE>\`（实际「${line.slice(0, 40)}」）`); return; }
     const level = m[1].toUpperCase();
     const re = m[2];
+    if (level !== 'L2' && level !== 'L3') {
+      errs.push(`第 ${i + 1} 行：档位只能是 L2 或 L3（实际 ${level}）——本清单只登记「一碰就至少是中/高风险面」的路径下限；`
+        + `L0/L1 不构成门槛，登记了只会让提交面判低门对无关改动出手。若本意是「这里是低风险区」，那就不该登记`);
+      return;
+    }
+    // 行内注释检测：空白后的未转义 #。ERE 里的 `#` 若被转义（\#）或前面不是空白（形如 `^src/#old/`）则放行。
+    const inline = /(^|\s)#/.exec(re);
+    if (inline) {
+      errs.push(`第 ${i + 1} 行：ERE 与行内注释不得同一行（实际「${line.slice(0, 40)}」）——注释会被编进正则，`
+        + `若含 $ 锚点则该条永不命中且无任何报错；请把注释放到上一行单独成行（确需匹配路径里的 # 请写 \\#）`);
+      return;
+    }
     try {
       out.push({ level, re, rx: new RegExp(re), source: line });
     } catch (e) {
@@ -130,20 +152,15 @@ export function assessLevel(root, { files = [], proposed = '' } = {}) {
   };
 }
 
-// routeAdvice：给人/AI 的判定面文本（route 命令直接输出这份）。
-export function routeAdvice(level, ctx = {}) {
+// routeAdvice：给人/AI 的**判据面**文本（route 命令直接输出这份）。
+//   2026-10-13 executor-review：原先这里还兼报「hints 未配置」「建议档低于下限」两条**状态**信息，
+//   而 route 的降级块（executor.mjs degradations）讲的是同一件事 → 文本模式把同一事实打了两遍。
+//   口径：**判据归本函数、状态归降级块**，单一出口。故 ctx（原 hintsConfigured / underHint /
+//   hintLevel / matched）保留在签名里仅为兼容既有调用方，本函数不再读取——故参数名带下划线前缀。
+export function routeAdvice(level, _ctx = {}) {
   const L = String(level || 'L1').toUpperCase();
   const lines = [];
   lines.push(`建议级别：${L} —— ${LEVEL_MEANING[L] || '（未知档）'}`);
-  if (ctx.hintsConfigured === false) {
-    lines.push('');
-    lines.push(`ℹ️  ${HINTS_REL} 未配置（缺失或为空）→ **机器面给不出档位提示**，本次按 L1 起步。`);
-    lines.push('   该清单用于登记「哪些路径一碰就至少是 L2/L3」（项目私有，参照 lane-surfaces.txt 写法）。');
-  }
-  if (ctx.underHint) {
-    lines.push('');
-    lines.push(`⚠️  建议档 ${ctx.proposed} 低于路径提示下限 ${ctx.hintLevel}（命中：${(ctx.matched || []).slice(0, 4).join('、')}）——就高不就低，建议改判。`);
-  }
   if (L === 'L2' || L === 'L3') {
     lines.push('');
     lines.push(`【L2 触达面 · 闭集，逐条判】`);

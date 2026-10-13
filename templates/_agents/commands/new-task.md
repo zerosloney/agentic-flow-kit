@@ -72,10 +72,10 @@ next: 按阶段路由
 | L0 | 文档/样式微调(无行为影响) | 直接 commit,豁免 intent |
 | L1 | 实现级改动(未命中 L2/L3) | 快车道:液态草稿(.zcode/drafts) → 实现 → 固化(`solidify-task.mjs`)——用户确认后带 `--delegated "<原话>"` 执行;无确认来源只迁移不落账 |
 | L2 | 规则 / 契约(一处改、多处依赖) | 入口文档(intent / incident) + spec + plan 三件套 |
-| L3 | 数据与运行时结构(schema / 迁移 SQL / DI 链 / 认证与中间件管线) | 同 L2 + spec 新会话独立复核 |
+| L3 | 数据与运行时结构(结构面闭集见单源 `L3_SURFACES`) | 同 L2 + spec 新会话独立复核 |
 
-> 混合改动按最高档定级(就高不就低);**L1 是默认档**——判级只回答「是否命中 L2 四类或 L3 结构面」,
-> 负例(`L1_NEGATIVES`)命中即不得升档;自查句:`SELF_CHECK`。
+> 混合改动按最高档定级(就高不就低);**L1 是默认档**——判级只回答「是否命中单源 `L2_SURFACES` 或
+> `L3_SURFACES`」,负例(`L1_NEGATIVES`)命中即不得升档;自查句:`SELF_CHECK`。
 > 机器兜得住的只有「就高不就低」与路径下限;「一处定义、多处消费」是**语义**判定,由你按单源逐条判,
 > 漏判由 lane-surface 触达面门在提交面兜。先例:`workflow/specs/`、`workflow/intents/` 下同类历史(kb 检索主题词)。
 

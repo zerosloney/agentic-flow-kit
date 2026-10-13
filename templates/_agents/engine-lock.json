@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-13T06:38:38.358Z",
+  "generatedAt": "2026-10-13T07:55:28.357Z",
   "files": {
     ".github/workflows/ci.yml": {
       "sha256": "57d51fed7452f04919166e7397d373fe476d6bb6df7bef40576684b3d9687bd2",
@@ -23,7 +23,7 @@
       "hard": 5
     },
     "templates/_agents/level-hints.txt": {
-      "sha256": "307f0534358f21c93490cd0a3331b0eb7683b16f1a3e349b1e2435260309ed06",
+      "sha256": "6cb3a2c9f2bdd9b0f859c3eb67c310e2dab12d8777a5bd82a31a8634890b0a43",
       "hard": 0
     },
     "templates/_agents/metric-claims.txt": {
@@ -51,7 +51,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/check-lane-surface.mjs": {
-      "sha256": "a6dcc71ecfc158fa0008b495e19d21bac388fdf471d6f95445353cb9d8057638",
+      "sha256": "c22ad9ab80070051d2c9db344f407c70e9d9a2815dc0c73066f43bc16592bf98",
       "hard": 2
     },
     "templates/_agents/scripts/check-ledger-invariant.mjs": {
@@ -91,7 +91,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/fill-intent.mjs": {
-      "sha256": "796af3754a771dbb2ffeeac1f94ec520fd40cfd6ae4e01f978e70571346a7e21",
+      "sha256": "b5e386e2a088c2cfbb9101379233295ce199d668866ddef596140fc76db6d766",
       "hard": 1
     },
     "templates/_agents/scripts/fill-plan.mjs": {
@@ -151,7 +151,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/level-criteria.mjs": {
-      "sha256": "6c02111b47b2394922d856712b31a869bd708669ba080cd8ded9c7d46c484b70",
+      "sha256": "384fc339ba1d24815a1db226cb8be165b4c042b983bc7af6c6623114ddc35234",
       "hard": 1
     },
     "templates/_agents/scripts/pipeline-run-docs.mjs": {

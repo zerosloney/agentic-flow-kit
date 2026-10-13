@@ -69,6 +69,25 @@ const throwsCode = (fn, code) => {
   try { C.parseLevelHints('L2 ^ok/\n\nL2 ^bad/([\nL9 x'); } catch (e) { msg2 = e.message; }
   check('S3 一次聚合全部坏行行号', msg2.includes('第 3 行') && msg2.includes('第 4 行'), msg2);
   check('S3 合法行不报错（只聚合坏行）', !msg2.includes('第 2 行'), msg2);
+
+  // 2026-10-13 executor-review 两条实测 Major 的回归锁：
+  // ① 行内 `#` 注释会被编进 ERE → 含 $ 锚点时该条永不命中且**无任何报错**，
+  //    路径下限与提交面兜底同时静默失效（原随包模板示例就是这个写法）。
+  let c1 = '';
+  try { C.parseLevelHints('L3 ^src/db/migrations/.*\\.sql$   # 迁移 SQL'); } catch (e) { c1 = e.message; }
+  check('S3 行内 # 注释 → fail-loud（否则该条永不命中且静默）',
+    c1.includes('LEVEL_HINTS_INVALID') || c1.includes('行内注释'), c1);
+  check('S3 行内注释报文点名该行并给出正确写法', c1.includes('第 1 行') && c1.includes('单独成行'), c1);
+  check('S3 转义 \\# 视为路径字符而非注释', C.parseLevelHints('L2 ^src/\\#old/').length === 1);
+  check('S3 路径里的 #（前非空白）不算注释', C.parseLevelHints('L2 ^src/#old/').length === 1);
+
+  // ② L0/L1 档被原实现接受，而提交面判低门会当真：`L0 ^docs/` 让纯文档提交被硬拦，
+  //    修法还让人「升级至 L0 及以上」（L0 即最低档）。只收 L2/L3。
+  let c2 = '';
+  try { C.parseLevelHints('L0 ^docs/'); } catch (e) { c2 = e.message; }
+  check('S3 L0 档 → fail-loud（本清单只登记 L2/L3 下限）', c2.includes('只能是 L2 或 L3'), c2);
+  check('S3 L1 档同样被拒', throwsCode(() => C.parseLevelHints('L1 ^src/'), 'LEVEL_HINTS_INVALID') === 'ok');
+  check('S3 拒绝低档时说明理由（登记低档只会让提交面门出手）', c2.includes('噪声') || c2.includes('不构成门槛'), c2);
 }
 
 // ============ 场景 4：路径下限与多命中取高 ============
@@ -144,12 +163,17 @@ const throwsCode = (fn, code) => {
   const l0 = C.routeAdvice('L0', { hintsConfigured: true });
   check('S7 L0 归一为语义行（无下溢）', l0.includes('建议级别：L0'));
 
+  // 2026-10-13 executor-review：hints 未配置 / 低于下限两条**状态**信息已移出 routeAdvice，
+  //   改由 route 的降级块（executor.mjs degradations）单一输出——原实现把同一事实在文本面打两遍。
+  //   判据面留在本函数，状态面归降级块；此处锁死「不再重复」。
   const un = C.routeAdvice('L1', { hintsConfigured: false });
-  check('S7 未配置 hints 时明示「机器面给不出档位提示」', un.includes('未配置') && un.includes('L1 起步'));
-  check('S7 未配置提示带清单路径', un.includes(C.HINTS_REL));
-
+  check('S7 routeAdvice 不再输出 hints 状态（降级块唯一出口）',
+    !un.includes('未配置') && !un.includes('机器面给不出档位提示'), un);
   const under = C.routeAdvice('L3', { hintsConfigured: true, underHint: true, proposed: 'L1', hintLevel: 'L3', matched: ['L3←src/db/migrations/001_init.sql'] });
-  check('S7 underHint 输出改判警告并带命中证据', under.includes('低于路径提示下限') && under.includes('src/db/migrations/001_init.sql'));
+  check('S7 routeAdvice 不再输出 underHint 状态（降级块唯一出口）',
+    !under.includes('低于路径提示下限') && !under.includes('src/db/migrations/001_init.sql'), under);
+  check('S7 但判据面照常输出（自查句 + 机器边界声明）',
+    under.includes(C.SELF_CHECK) && under.includes('语义'), under);
 
   check('S7 未知档位标注未知而非假装', C.routeAdvice('L9', {}).includes('（未知档）'));
   check('S7 空档位回落 L1', C.routeAdvice('', {}).includes('建议级别：L1'));
@@ -194,6 +218,37 @@ const throwsCode = (fn, code) => {
   };
   walk(AGENTS_DIR);
   check('S8 装户面无指向 §级别判断的过期指针', stale.length === 0, stale.join(','));
+
+  // 判据**散文本身**的回归（2026-10-13 executor-review）：原护栏只锁 new-task.md 里 3 个字面串，
+  //   于是判据换了措辞就能在别处重新长回来——实测 design.md 与 fill-intent.mjs 各存了一份
+  //   （后者把 L2 列成五项，单源是四项）。故改为**按单源词条扫判级面**：单源与本测试之外，
+  //   凡列举/复述判据闭集的文件即判红。
+  //   扫描面 = 会指导判级的两类件（命令 md + 起草工具脚本）；不含 level-hints.txt——那是路径
+  //   示例文件，其注释里提到「迁移 SQL」「DI 链」是路径举例，不是判据复述。
+  const CRITERIA_TERMS = ['编码权威', '共享契约', '既有接口语义', '全局横切口径', 'DI 链', '认证与中间件管线'];
+  const ALLOW = new Set(['level-criteria.mjs', 'level-criteria.test.mjs']);
+  const proseHits = [];
+  const scanProse = (dir) => {
+    for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, e.name);
+      const rel = path.relative(AGENTS_DIR, abs).replace(/\\/g, '/');
+      if (e.isDirectory()) { if (e.name !== 'node_modules' && e.name !== 'cache') scanProse(abs); continue; }
+      if (!/\.(mjs|md)$/.test(e.name)) continue;
+      if (e.name.endsWith('.test.mjs') || ALLOW.has(e.name)) continue;
+      // 只扫判级面：命令 md + 起草工具（fill-*）。其余脚本引用单源属正常。
+      if (!/^commands\//.test(rel) && !/^scripts\/fill-/.test(rel)) continue;
+      const t = fs.readFileSync(abs, 'utf8');
+      const hit = CRITERIA_TERMS.filter((w) => t.includes(w));
+      if (hit.length) proseHits.push(`${rel} → ${hit.join('/')}`);
+    }
+  };
+  scanProse(AGENTS_DIR);
+  check('S8 判级面不复述判据闭集（词条只在单源一处）', proseHits.length === 0, proseHits.join(' | '));
+  check('S8 design.md 只留流程映射 + 指向单源',
+    design.includes('L2_SURFACES') && design.includes('L3_SURFACES') && proseHits.every((h) => !h.startsWith('commands/design.md')),
+    proseHits.filter((h) => h.startsWith('commands/design.md')).join('|'));
+  check('S8 fill-intent 触达红线改为对照单源（不再自带五项/四项清单）',
+    fillIntent.includes('L2_SURFACES') && fillIntent.includes('L3_SURFACES'), '');
 }
 
 // ============ 场景 9：装户模板面 —— level-hints.txt 随模板下发且默认为空 ============

@@ -117,6 +117,82 @@
   验证：npm test 全量 61 套件 / 0 失败；完整性门单测 27/27；四个改动套件（executor 70 / lane-surface 27 /
   doctor 54 / level-criteria 69）全绿；eslint 0 errors。
 
+- fix(executor)：**执行器评审发现的 2 Major + 4 项一并收口**（2026-10-13 executor-review）。
+  以 v1.7.15 为固定点对执行面做双轴评审（Standards + Spec，子代理并行），下列问题**均由实跑复现**，
+  非推断；每条都补了回归锁。
+
+  **① Major：随包下发的示例格式会把新机制静默关掉。** `parseLevelHints` 取整行剩余部分作 ERE
+  （`(\S.*)$`），而 `level-hints.txt` 示例教用户「取消注释」且示例行自带行内 `# 注释`——注释被编进
+  正则后，若 ERE 含 `$` 锚点则该条**永不命中**且不报任何错：`flow-kit route` 的路径下限与 pre-commit
+  的提交面兜底同时静默失效，而 `--check` 还报「N 条有效」。两侧都改：parser 对「空白后的未转义 #」
+  fail-loud（`\#` 与 `^src/#old/` 放行，路径里的 # 仍可匹配）；模板示例注释全部移到独立行并写明
+  「ERE 与注释必须分两行」，顺带补上文件末尾换行。
+
+  **② Major：L0 档 hints 让纯文档提交被硬拦。** `requiredLevel = maxLevel(触达面?'L2':'', hintLevel)`，
+  而 parser 原接受 `L0`——写 `L0 ^docs/` 会让 `docs/readme.md` 这类提交触发 `[触达面判低]` BLOCK，
+  修法还让人「升级至 L0 及以上」（L0 即最低档）。本清单语义是「一碰就**至少**是 L2/L3」的下限，
+  L0/L1 不构成任何门槛，登记了只会让门对无关改动出手。故只收 L2/L3，低档按写错配置 fail-loud
+  并在报文里说明理由。
+
+  **③ 门禁复刻了判据单源的匹配逻辑（双源漂移，硬规则违反）。** `check-lane-surface.mjs` 手写了一遍
+  「路径归一化 + 多条命中取高档」，与 `level-criteria.mjs` 的 `hintLevelFor` 同形但独立演进；同一 commit
+  的 doctor 段还写着「不复刻解析器（复刻＝判据双源漂移）」。改为 import 复用 `hintLevelFor`，
+  死字段 `missing` 一并删除（「缺配置」与「空清单」两态在门侧无区别，route 侧则登记为不同 degradation）。
+
+  **④ route 文本面把同一事实打两遍。** `routeAdvice` 原兼报「hints 未配置」与「建议档低于下限」两条
+  **状态**信息，而降级块（`degradations`）讲的是同一件事。口径收为**判据归 routeAdvice、状态归降级块**，
+  单一出口；降级块补齐被移出的可读文案。
+
+  **⑤ 泳道回落文案掩盖真实故障。** `catch {}` 吞掉原因，「装户脚本存在但 import 失败」被诊断成「未安装」，
+  排障方向直接被带偏。`laneOfDoc` 现返回 `reason`，区分「文件不存在 / 存在但 import 失败（带真实错误）
+  / 未导出可用 laneOfDoc」三种。
+
+  **⑥ doctor 把体检脚本跑不起来误报成「配置有误」。** `checkLevelHints` 区分 `r.error`（无法执行体检脚本）
+  与 `status===null`（异常终止），不再输出「配置有误 + 空白 detail」。
+
+  **⑦ CLI 边界丢弃错误码（Informational，顺手收）。** `init`/`validate`/`route` 三处 catch 只打
+  `e?.message`，把 `e.code`（如 `LEVEL_HINTS_INVALID`）扔掉；新增 `errText()` 统一输出 `[CODE] message`。
+
+  验证：npm test 全量 61 套件 / 0 失败；level-criteria 76/0（新增 6 条 parser 回归锁）、
+  check-lane-surface 29/0（新增 L0 fail-closed 与反斜杠归一两条）、executor 70/0、doctor 54/0；
+  两条 Major 均用评审时的原始复现脚本实跑确认「静默失效 → fail-loud」「假阳性硬拦 → 配置层拦下」；
+  eslint 0 errors。
+
+  **未做（留待单独决策）**：判据散文仍存活于 `design.md` 与 `fill-intent.mjs`（后者把 L2 列成五项，
+  单源是四项），而单源纪律的回归测试只锁 `new-task.md` 里 3 个字面串——换个措辞就能长回来。
+  修它要删 md 正文并跑 `sync-hosts --apply` 同步 5 份宿主薄适配，属跨文件内容决策，未塞进本批。
+
+- docs(gate)+fix(criteria)：**勘误上一条 + 判据散文清扫，单源纪律护栏从 3 个字面串扩到判级面**（2026-10-13）。
+  **勘误（B6）**：上一条末尾的「未做」记录中，那句「无活跃 L2/L3 入口点名会被本门以 `控制面改动无入口`
+  拦下」**已随入口退路移除而失效**——该标签与那条退路都不再存在（见同节 ⑦）。本条为勘误，
+  原记录按历史如实保留不回改。
+
+  **判据散文清扫（补做上一条声明的「未做」）**：`design.md` 的级别判断节、`fill-intent.mjs` 的触达红线
+  勾选项、`new-task.md` 的泳道表 L3 行，各存了一份判据闭集的复述——其中 `fill-intent.mjs` 把 L2 列成
+  **五**项而单源是四项（判低即错判的原料）。三处一律改为**只留流程映射 + 指向单源**
+  （`L2_SURFACES` / `L3_SURFACES`），逐条判据只在 `level-criteria.mjs` 一处。
+  经 `sync-hosts --apply` 同步 5 份宿主薄适配（76 对正文对齐、0 漂移）。
+
+  **护栏加宽**：原单源纪律回归只断言 `new-task.md` 里 3 个字面串——换个措辞就能在别处重新长回来，
+  这正是「换措辞即复发」的成因。改为按**单源词条**扫判级面（命令 md + 起草工具脚本），词条只允许出现在
+  单源与其测试中。**加宽后当场抓出第三个漏网文件**（`new-task.md` 的泳道表 L3 行仍带结构面词条）——
+  即上一批我以为已清干净的散文，实际还有残留；这也是「首轮只扫一面就是假护栏」的又一次实证。
+
+  验证：level-criteria 79/0（含新增 4 条判级面扫描断言）；sync-hosts 同步后 0 漂移。
+
+- docs(engine)：**ARCHITECTURE 四处「文档说谎」按事实重写**（2026-10-13）。
+  §1「引擎 **~23k 行**」实测 **11,588 行**（src 2,280 + templates/_agents/scripts 9,308，不含测试）——
+  **差了近一倍**；§4「20 项检查，**237 断言**」断言数为演进派生量；§4「ci.yml：**五道机器门** +
+  **shipped 装户视角** + **CI 红回溯点名**」与实际编排不符（无 shipped 步骤、无红回溯点名）；§5
+  「状态机六阶段（**882 行**）」实测 830 行。
+  **改法不是把数字换成新值**——那只是推迟下一次漂移（本文件 §1 早就批过「硬编码必漂移」，自己却硬编码）。
+  改为**写口径 + 指向权威源**：行数标明口径并注明「不是判据」；断言数指向 `check-loop.mjs` 头部清单；
+  CI 段按实际 job 逐个点名（含 `jscpd-drift` 为**手动触发的 advisory、不在 push/PR 路径**这一事实）；
+  行数从状态机描述里删掉。保留「20 项检查」——它是 check id 空间（1-20），由 gate-checklist 消费，
+  不是随手变的派生量。
+  全文复查：`五道机器门 / shipped / 882 / 237 断言 / ~23k` 在 ARCHITECTURE 与 README 中已清零
+  （CHANGELOG 内的历史叙述按历史如实保留）。已确认无任何测试读 ARCHITECTURE.md，不影响套件。
+
 ## 1.7.15
 
 - chore(ci)：**恢复 npm 发布管线并补发**（2026-10-12）——Release 工作流（`.github/workflows/release.yml`）在 v1.7.1「装户端内容清理」时随 `.github/` 一并删除后未重建。此后 v1.7.1~v1.7.14 的 tag 正常推送到 GitHub，但无任何 workflow 监听，**发布静默失效约 14 个版本**——npm `latest` 停滞在 1.7.0，git 与 npm 双源脱节。本版恢复该工作流（与删除前逐字一致：`push: tags v*` → tag 与 package.json 版本一致性 fail-fast → `npm test` → `npm publish --provenance`），因工作区有并发在途改动，release.yml 单独先行提交（889c8a1），本提交仅随动版本号与本条目。
