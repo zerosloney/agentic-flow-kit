@@ -39,6 +39,7 @@ export const HELP = `flow-kit — AI-Native 闭环工作流 + wiki 知识层脚�
   flow-kit sync-hosts       跨宿主适配层同步：templates/_agents/{commands,roles}/*.md 权威源 vs
                             modules/hosts/<h>/{agents,commands}/*.md 薄适配——默认 --diff 输出报告；
                             --apply 单向同步（权威→薄适配，不反向避免污染）；
+                            --strict 漂移判红（CI 机器门用；默认 --diff 恒 exit 0，报告器语义）；
                             改一处权威源要同步 N 份薄适配，人工 grep 易漏
   flow-kit doctor           体检：目录布局 / git 钩子 / managed 清单 / 索引漂移 / 跨宿主漂移 / check-loop
   flow-kit validate         只读校验：包内置 check-loop 引擎对装户盘面跑闭环 20 项检查（不执行装户侧脚本，

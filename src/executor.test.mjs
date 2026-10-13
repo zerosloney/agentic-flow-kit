@@ -27,7 +27,7 @@ const W = (p, content) => { fs.mkdirSync(path.dirname(p), { recursive: true }); 
 // 装户 fixture：判据单源与枚举单源真拷；stage-gates / pipeline-run 用哨兵 stub（证明薄壳是「调用装户」而非自带实现）
 //   withEnums 默认 true = 完整装户面。降级通道（2026-10-13）要求能断言「完整态无降级」，
 //   若夹具恒缺枚举单源，enums-fallback 会恒真、该断言即假护栏。
-function mkProject({ withCrit = true, withStageGates = true, withEnums = true, laneKey = null, hints = null, modules = null } = {}) {
+function mkProject({ withCrit = true, withStageGates = true, withEnums = true, withRouteTable = true, laneKey = null, hints = null, modules = null } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-exec-'));
   const S = path.join(root, '.agents', 'scripts');
   if (withCrit) fs.mkdirSync(S, { recursive: true }), fs.copyFileSync(REAL_CRIT, path.join(S, 'level-criteria.mjs'));
@@ -44,6 +44,12 @@ function mkProject({ withCrit = true, withStageGates = true, withEnums = true, l
     fs.mkdirSync(S, { recursive: true });
     fs.copyFileSync(REAL_ENUMS_MJS, path.join(S, 'workflow-enums.mjs'));
     fs.copyFileSync(REAL_ENUMS_TXT, path.join(root, '.agents', 'workflow-enums.txt'));
+  }
+  // 完整装户必带 route-kinds 机器单源（B5）：kind→入口映射的权威在 new-task.md，包内不再自带一份
+  if (withRouteTable) {
+    fs.mkdirSync(path.join(root, '.agents', 'commands'), { recursive: true });
+    fs.writeFileSync(path.join(root, '.agents/commands/new-task.md'),
+      '## 3. 路由判断\n\n<!-- route-kinds: require=plan.md | fix=maintain.md | verify=test.md | review=review.md | deploy=deploy.md -->\n', 'utf8');
   }
   return root;
 }
@@ -247,6 +253,39 @@ const run = (args, cwd) => runCli(['run', ...args], cwd);
   check('S9 薄壳代码不出现 --no-verify 实参', !ex.includes("'--no-verify'") && !ex.includes('"--no-verify"'));
   check('S9 薄壳不 spawn AI 会话', !/claude|codex|opencode|gemini/.test(ex));
   check('S9 判据单源从装户面动态载入（不在包内拷一份）', ex.includes('level-criteria.mjs') && ex.includes('import('));
+}
+
+// ============ 场景 4c：kind→入口读装户权威表（B5：包内不再自带一份映射）============
+{
+  // ① 默认夹具带 route-kinds 行 → routeTableSource 应为 new-task.md（非兜底）
+  const r = mkProject();
+  fs.mkdirSync(path.join(r, '.agents', 'commands'), { recursive: true });
+  fs.writeFileSync(path.join(r, '.agents', 'commands', 'new-task.md'),
+    '## 3. 路由判断\n\n<!-- route-kinds: require=plan.md | fix=maintain.md | verify=test.md | review=review.md | deploy=deploy.md -->\n', 'utf8');
+  const j = JSON.parse(route(['--kind', 'fix', '--json'], r).stdout);
+  check('S4c 路由表取自装户 new-task.md（非兜底）', j.routeTableSource === 'new-task.md', j.routeTableSource);
+  check('S4c kind=fix → 入口取自权威表', j.nextStage === 'maintain.md', j.nextStage);
+
+  // ② 装户把入口改了个名（模拟项目自定义）→ 包必须跟随，不得仍指向旧名
+  fs.writeFileSync(path.join(r, '.agents', 'commands', 'new-task.md'),
+    '<!-- route-kinds: require=plan.md | fix=hotfix.md | verify=test.md | review=review.md | deploy=deploy.md -->\n', 'utf8');
+  const j2 = JSON.parse(route(['--kind', 'fix', '--json'], r).stdout);
+  check('S4c 装户改入口名 → 包跟随权威表（无第二份硬编码）', j2.nextStage === 'hotfix.md', j2.nextStage);
+
+  // ③ 权威表读不到 → 回退包内默认表 + 登记降级（老版本装户无该行，不静默假装）
+  const r3 = mkProject({ withRouteTable: false });
+  const j3 = JSON.parse(route(['--kind', 'require', '--json'], r3).stdout);
+  check('S4c 无 route-kinds 行 → 回落 + 登记 route-table-fallback',
+    j3.routeTableSource === 'fallback' && j3.nextStage === 'plan.md'
+      && j3.degradations.some((d) => d.code === 'route-table-fallback'), JSON.stringify(j3.degradations));
+
+  // ④ kind 闭集随权威表走：表里没有的 kind 判红，报文点明值域来源
+  const r4 = mkProject();
+  fs.writeFileSync(path.join(r4, '.agents', 'commands', 'new-task.md'),
+    '<!-- route-kinds: require=plan.md | ship=deploy.md -->\n', 'utf8');
+  const bad = route(['--kind', 'fix'], r4);
+  check('S4c 权威表无该 kind → exit 1 且值域读自权威表',
+    bad.status === 1 && bad.stderr.includes('require|ship') && bad.stderr.includes('new-task.md'), bad.stderr);
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${failCount}`);

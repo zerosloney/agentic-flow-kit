@@ -193,6 +193,39 @@
   全文复查：`五道机器门 / shipped / 882 / 237 断言 / ~23k` 在 ARCHITECTURE 与 README 中已清零
   （CHANGELOG 内的历史叙述按历史如实保留）。已确认无任何测试读 ARCHITECTURE.md，不影响套件。
 
+- fix(gate)+docs(engine)：**B3 —— `flow-kit route` 从「可绕旁路」升为流程强制，并写下它的天花板**（2026-10-13）。
+  复核发现：装户面唯一提及 route 的地方只是 `new-task.md` §4 的一行 bash 提示，**无任何必跑语义**，
+  而宿主 AI 可以全程不跑它——判级仍是纯自由心证，闭环零反馈、零遥测。
+  **改法（流程层，因为这是当时唯一有把握的一手事实）**：`new-task.md` §2 升出「第 0 步先取机器面下界」
+  必跑块——必须带 `--files <预计改动面>`（不给文件就拿不到路径下限，机器面只能按 L1 起步并在降级栏
+  点名，等于白跑）；确实跳过必须写明理由；并点名兜底门 `check-lane-surface`。经 `sync-hosts --apply`
+  同步 5 份宿主薄适配。新增 5 条回归锁（必跑标记 / 不给 --files 拿不到下限 / 跳过须写理由 /
+  点名兜底门 / 诚实边界声明），防止日后被改回「一行可选提示」。
+  **诚实边界（同时写进 ARCHITECTURE §5）**：机器**无法发现它没被调用**——定级发生在改动面确定之前，
+  盘面没有可比对的记录面，因此「跑没跑 route」不存在一手事实（判据原则：只用一手事实）。故本次只把
+  **接线强度**提到「流程强制 + 提交面兜底」，**路径下限在提交面是硬约束、在定级时刻仍只是流程纪律**。
+  要把它变成机器可判，须先有改动面（让起草期先产出改动面清单，或让 route 落一份可对账的判级记录）
+  ——那是改判据面的产品决策，**未决**，不在本批范围。
+
+- fix(cli)+fix(gate)+chore(ci)：**B4 跨宿主漂移接成机器门 + B5 路由映射归装户单源**（2026-10-13）。
+  **B4**：跨宿主正文漂移此前只剩人工跑一次 `sync-hosts --diff`，CI 里**无任何调用点**——而改权威源要同步
+  N 份薄适配，人工 grep 易漏（本次评审前实仓就带着 10 份漂移，靠一次 `--apply` 归零）。现给
+  `sync-hosts` 加 `--strict`：`ci.yml` 的 `engine-integrity` job 增一步 `sync-hosts --diff --strict`。
+  默认 `--diff` 仍恒 exit 0（人工跑不因漂移失败，报告器语义不变）。
+  **口径**：strict 只判「跑一次 `--apply` 就能归零」的两项（正文漂移 + 权威源缺失）；**孤儿薄适配不判红**
+  ——`--apply` 按设计不删它（可能是宿主特化/历史残留），算红就是一条机器无法自愈的假红，按本仓
+  「假阳性即噪声」纪律不能设成门（仍照常报告并给出处置提示）。新增 6 条回归锁（含「默认 --diff 恒 0」）。
+
+  **B5**：`STAGE_ENTRY` 与 kind 闭集此前**硬编码在包内**，而权威阶段表在装户 `new-task.md`——装户改入口
+  文件名而不动包，`route` 就会把 AI 指向一个不存在的 md（双源漂移）。现把权威表落到 `new-task.md` §3 的
+  一行机器可读注释 `<!-- route-kinds: require=plan.md | fix=maintain.md | … -->`，包 CLI 读它得出
+  kind→入口与 kind 值域；读不到才回落包内默认表并登记 `route-table-fallback` 降级（老版本装户无该行，
+  不静默假装取到单源）。JSON 面新增 `routeTableSource` 供消费方分辨。包内默认表降级为纯兜底。
+  新增 5 条回归锁，其中一条直接锁「装户改入口名 → 包必须跟随」。
+
+  验证：npm test 全量 SUITES 61 / FAILED 0；executor 75/0、sync-hosts 43/0；eslint 0 error；
+  实仓 `sync-hosts --diff --strict` exit 0；CI YAML 解析通过。
+
 ## 1.7.15
 
 - chore(ci)：**恢复 npm 发布管线并补发**（2026-10-12）——Release 工作流（`.github/workflows/release.yml`）在 v1.7.1「装户端内容清理」时随 `.github/` 一并删除后未重建。此后 v1.7.1~v1.7.14 的 tag 正常推送到 GitHub，但无任何 workflow 监听，**发布静默失效约 14 个版本**——npm `latest` 停滞在 1.7.0，git 与 npm 双源脱节。本版恢复该工作流（与删除前逐字一致：`push: tags v*` → tag 与 package.json 版本一致性 fail-fast → `npm test` → `npm publish --provenance`），因工作区有并发在途改动，release.yml 单独先行提交（889c8a1），本提交仅随动版本号与本条目。

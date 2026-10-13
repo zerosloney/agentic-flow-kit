@@ -64,6 +64,11 @@ jobs:
           node-version: 22
       - name: 引擎完整性门（入库基线 + 跨提交锚）
         run: node templates/_agents/scripts/check-engine-integrity.mjs --against-ref HEAD~1
+      # 跨宿主薄适配漂移门（B4）：改权威源要同步 N 份薄适配，人工 grep 易漏。
+      #   source-sync-check 删除后本仓一度无任何调用点，靠人工跑一次 --diff 兜——本步把它变成机器门。
+      #   默认 --diff 仍恒 exit 0（人工跑不因漂移而失败），--strict 才把漂移判红。
+      - name: 跨宿主薄适配漂移门（strict）
+        run: node bin/flow-kit.mjs sync-hosts --diff --strict
 
   # 手动触发才跑；恒 exit 0（advisory 报告器）——阈值触达不红，报告贴进 run summary 供人判。
   jscpd-drift:

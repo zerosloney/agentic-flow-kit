@@ -56,10 +56,33 @@ function requireInstalledScript(target, rel) {
   return abs;
 }
 
-const STAGE_ENTRY = {
+// 读装户权威路由表（B5，2026-10-13）：`new-task.md` §3 有一行机器可读注释
+//   <!-- route-kinds: require=plan.md | fix=maintain.md | ... -->
+// 包 CLI **不再自带一份映射**——此前 STAGE_ENTRY 硬编码在包里，装户改入口文件名而不动包，
+// route 就会把 AI 指向一个不存在的 md（双源漂移）。权威表就在宿主 AI 也在读的 md 里，一处即两处用。
+//   读不到 → 回落到包内 DEFAULT_ROUTE_TABLE 并登记降级（老版本装户无该行，不静默假装取到单源）。
+const DEFAULT_ROUTE_TABLE = {
   require: 'plan.md', fix: 'maintain.md', verify: 'test.md',
   review: 'review.md', deploy: 'deploy.md',
 };
+const ROUTE_TABLE_LINE = /<!--\s*route-kinds:\s*([^>]*?)-->/;
+
+function loadRouteTable(target, degradations) {
+  const p = path.join(target, '.agents', 'commands', 'new-task.md');
+  try {
+    const m = fs.readFileSync(p, 'utf8').match(ROUTE_TABLE_LINE);
+    const table = {};
+    for (const part of String(m ? m[1] : '').split('|')) {
+      const kv = part.trim().match(/^([a-z]+)\s*=\s*([\w.-]+\.md)$/);
+      if (kv) table[kv[1]] = kv[2];
+    }
+    if (!Object.keys(table).length) throw new Error('route-kinds 行未解析出任何 kind');
+    return { table, source: 'new-task.md' };
+  } catch (e) {
+    degradations.push({ code: 'route-table-fallback', detail: `读不到装户 .agents/commands/new-task.md 的 route-kinds 机器单源（${String(e?.message || e).split('\n')[0]}）——kind→入口回落包内默认表，装户升级 flow-kit sync 后生效` });
+    return { table: { ...DEFAULT_ROUTE_TABLE }, source: 'fallback' };
+  }
+}
 
 // laneOfDoc：调装户 stage-gates.mjs 的单源泳道取法。返回 { key, source, reason }
 //   source='stage-gates.mjs' → 真取到单源；source='fallback' → 装户缺该脚本或取不到，按档位直接回落
@@ -125,9 +148,11 @@ export async function route(args) {
       .map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
   }
 
+  // 路由表从装户权威 md 读（B5）：kind 闭集随之以装户为准，包内不再硬编码 kind 列表
+  const route = loadRouteTable(target, degradations);
   const kind = typeof o.kind === 'string' ? o.kind : '';
-  if (kind && !['require', 'fix', 'verify', 'review', 'deploy'].includes(kind)) {
-    fail(`--kind 须为 require|fix|verify|review|deploy（实际「${kind}」）`);
+  if (kind && !Object.keys(route.table).includes(kind)) {
+    fail(`--kind 须为 ${Object.keys(route.table).join('|')}（实际「${kind}」，值域读自 ${route.source}）`);
   }
 
   const files = typeof o.files === 'string'
@@ -153,13 +178,15 @@ export async function route(args) {
     degradations.push({ code: 'under-hint-proposed', detail: `建议档 ${a.proposed} 低于路径提示下限 ${a.hintLevel}（命中：${(a.matched || []).slice(0, 4).join('、')}）——已按就高不就低取 ${a.hintLevel}，建议复核` });
   }
   const lane = laneKey.key === 'high' ? '防御道（同步确认门）' : '协作道（快车道）';
-  const entry = STAGE_ENTRY[kind] || STAGE_ENTRY.require;
+  const entry = route.table[kind] || route.table.require;
 
   if (o.json) {
     console.log(JSON.stringify({
       level, lane, laneKey: laneKey.key, laneSource: laneKey.source, kind: kind || '(未定)',
       files, proposed: a.proposed, hintLevel: a.hintLevel, matched: a.matched,
       underHint: a.underHint, hintsConfigured: a.hintsConfigured,
+      // 路由表来源（B5）：'new-task.md' = 真取到装户机器单源；'fallback' = 包内兜底表（已登记降级）
+      routeTableSource: route.source,
       // 降级统一出口（消费方判「这次路由是否在降级态」只需看这一个字段，不必逐个猜 source 字段）
       degraded: degradations.length > 0, degradations,
       nextStage: entry, nextCommand: `.agents/commands/${entry}`,

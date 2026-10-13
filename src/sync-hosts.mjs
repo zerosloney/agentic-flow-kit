@@ -191,12 +191,14 @@ function applyForward({ authorityRoot }, drift) {
 export function syncHosts(args, pkgRoot) {
   let apply = false;
   let json = false;
+  let strict = false;
   let dir = null;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === '--diff') apply = false;
     else if (a === '--apply') apply = true;
     else if (a === '--json') json = true;
+    else if (a === '--strict') strict = true;
     else if (a === '--dir') { dir = args[++i]; if (!dir) fail('--dir 缺少参数（目标项目根）'); }
     else fail(`未知选项：${a}（flow-kit sync-hosts --help）`);
   }
@@ -231,6 +233,25 @@ export function syncHosts(args, pkgRoot) {
   } else {
     console.log(`▶ flow-kit sync-hosts --diff → ${target}（包源）`);
     printDiff(result);
+  }
+  // --strict（B4，2026-10-13）：漂移**报告器**变机器门。
+  // 背景：source-sync-check 删除后，跨宿主正文漂移只剩人工跑一次 --diff，CI 里无任何调用点——
+  //   而改权威源要同步 N 份薄适配，人工 grep 易漏（本次评审前 10 份薄适配就带着漂移）。
+  //   默认仍返回 0（保持「报告器」语义，人工跑不因漂移而失败）；CI 用 --strict 把漂移变成红。
+  // 口径：**只判「跑一次 --apply 就能归零」的两项**（正文漂移 + 权威源缺失）。
+  //   孤儿薄适配不判红——--apply 按设计不删它（可能是宿主特化/历史残留），
+  //   把它算红就是一条机器无法自愈的假红，按本仓「假阳性即噪声」纪律不能设成门（仍照常报告）。
+  if (strict) {
+    const fixable = result.drift.length + result.authorityMissing.length;
+    if (fixable > 0) {
+      console.error(`[跨宿主漂移 strict] 正文漂移 ${result.drift.length} · 权威源缺失 ${result.authorityMissing.length}`
+        + `${result.adapterOrphans.length ? `（另有孤儿薄适配 ${result.adapterOrphans.length} 份，按设计不判红）` : ''}`
+        + '——须先 flow-kit sync-hosts --apply 再提交');
+      return 1;
+    }
+    if (result.adapterOrphans.length) {
+      console.log(`  ℹ️ 孤儿薄适配 ${result.adapterOrphans.length} 份（--apply 按设计不删，故 strict 不判红；确为残留请手工删）`);
+    }
   }
   return 0;
 }

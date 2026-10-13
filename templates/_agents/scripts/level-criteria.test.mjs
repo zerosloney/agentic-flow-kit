@@ -249,6 +249,16 @@ const throwsCode = (fn, code) => {
     proseHits.filter((h) => h.startsWith('commands/design.md')).join('|'));
   check('S8 fill-intent 触达红线改为对照单源（不再自带五项/四项清单）',
     fillIntent.includes('L2_SURFACES') && fillIntent.includes('L3_SURFACES'), '');
+
+  // B3：route 曾是「可绕旁路」——装户面唯一提及只是 §4 里一行 bash 提示，无任何必跑语义，
+  //   而机器又无法发现它没被调用（定级早于改动面确定，无可比对的记录面，见 ARCHITECTURE §5）。
+  //   故把接线强度锁在**流程文本**上：必跑标记 + 不给 --files 拿不到下限 + 跳过须写理由 + 兜底门。
+  const nt = fs.readFileSync(path.join(SCRIPT_DIR, '..', 'commands', 'new-task.md'), 'utf8');
+  check('S8 new-task.md 定级第 0 步标注必跑 route（非可选提示）', /必跑/.test(nt) && /flow-kit route --files/.test(nt));
+  check('S8 new-task.md 说明不给 --files 就拿不到路径下限', nt.includes('不给 `--files` 就拿不到路径下限'));
+  check('S8 new-task.md 要求跳过时写明理由', nt.includes('写明理由'));
+  check('S8 new-task.md 点名提交面兜底门', nt.includes('check-lane-surface'));
+  check('S8 new-task.md 声明机器无法发现跳过（诚实边界）', nt.includes('无法**发现'));
 }
 
 // ============ 场景 9：装户模板面 —— level-hints.txt 随模板下发且默认为空 ============

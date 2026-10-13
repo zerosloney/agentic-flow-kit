@@ -78,6 +78,17 @@ syncHosts(process.argv.slice(2), root);
   return spawnSync(process.execPath, [driver, '--dir', fixtureRoot, ...extra], { encoding: 'utf8', ...opts });
 }
 
+// runSyncHostsExit：与 CLI 同口径**传播退出码**（cli.mjs 会 process.exit(syncHosts(...))）。
+//   上面的 runSyncHosts driver 丢弃返回值，故退出码恒 0——不能用来断言 --strict 判红（B4）。
+function runSyncHostsExit(fixtureRoot, extra = []) {
+  const driver = path.join(fixtureRoot, 'driver-exit.mjs');
+  W(driver, `import { syncHosts } from ${JSON.stringify(pathToFileURL(path.join(SRC_ROOT, 'sync-hosts.mjs')).href)};
+const code = syncHosts(process.argv.slice(2), ${JSON.stringify(fixtureRoot)});
+process.exit(typeof code === 'number' ? code : 0);
+`);
+  return spawnSync(process.execPath, [driver, '--dir', fixtureRoot, ...extra], { encoding: 'utf8' });
+}
+
 // 不传 --dir 形态：把 cwd 设为 fixture（验「默认当前目录」解析）
 function runSyncHostsByCwd(fixtureRoot, extra = []) {
   const driver = path.join(fixtureRoot, 'driver.mjs');
@@ -232,6 +243,48 @@ syncHosts(process.argv.slice(2), root);
   check('S10 项目根 .zcode 漂移不入报告', !out.includes('.zcode/agents/implementer.md'), out.slice(0, 500));
   runSyncHosts(fx, ['--apply']);
   check('S10 --apply 不改写项目根 .zcode', R(path.join(fx, '.zcode/agents/implementer.md')) === zcodeBody);
+}
+
+// ============ 场景 11：--strict 把漂移报告器变成机器门（B4）============
+// 背景：source-sync-check 删除后，跨宿主正文漂移只剩人工跑一次 --diff，CI 里无任何调用点——
+//   而改权威源要同步 N 份薄适配，人工 grep 易漏（本仓评审前就带着 10 份漂移）。
+//   默认 --diff 仍恒 exit 0（人工跑不因漂移失败），--strict 才判红，供 CI 当门。
+{
+  const fx = mkFixture();
+  // 先 --apply 归零：夹具出厂状态未必干净（默认就可能带孤儿/缺失），
+  // 「--strict 在无漂移时 exit 0」这句话得先有个干净盘面才成立。
+  runSyncHosts(fx, ['--apply']);
+  const clean = runSyncHostsExit(fx, ['--diff', '--strict']);
+  check('S11 无漂移 + --strict → exit 0', clean.status === 0, `status=${clean.status} ${(clean.stdout + clean.stderr).slice(0, 300)}`);
+
+  // 制造一处薄适配正文漂移
+  const anyAdapter = fs.readdirSync(path.join(fx, 'modules/hosts'), { withFileTypes: true })
+    .filter((d) => d.isDirectory()).map((d) => d.name);
+  let broke = null;
+  for (const host of anyAdapter) {
+    const cmdDir = path.join(fx, 'modules/hosts', host, 'commands');
+    if (!fs.existsSync(cmdDir)) continue;
+    const f = fs.readdirSync(cmdDir).find((x) => x.endsWith('.md'));
+    if (!f) continue;
+    const abs = path.join(cmdDir, f);
+    fs.appendFileSync(abs, '\n手改一行，权威源没有这段。\n');
+    broke = `${host}/commands/${f}`;
+    break;
+  }
+  check('S11 夹具确实制造了漂移', !!broke, '未找到可改的薄适配');
+
+  const loose = runSyncHostsExit(fx, ['--diff']);
+  check('S11 有漂移但默认 --diff 仍 exit 0（报告器语义不变）', loose.status === 0, `status=${loose.status}`);
+  check('S11 默认 --diff 仍报告漂移', (loose.stdout + loose.stderr).includes('正文段漂移'), loose.stdout.slice(0, 300));
+
+  const strict = runSyncHostsExit(fx, ['--diff', '--strict']);
+  const sout = strict.stdout + strict.stderr;
+  check('S11 有漂移 + --strict → exit 1（CI 机器门）', strict.status === 1, `status=${strict.status}`);
+  check('S11 strict 报错点名修法（sync-hosts --apply）', sout.includes('--apply') && sout.includes('strict'), sout.slice(-300));
+
+  runSyncHosts(fx, ['--apply']);
+  const after = runSyncHostsExit(fx, ['--diff', '--strict']);
+  check('S11 --apply 归零后 --strict 回到 exit 0', after.status === 0, `status=${after.status}`);
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${failCount}`);
