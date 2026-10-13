@@ -223,6 +223,13 @@
   不静默假装取到单源）。JSON 面新增 `routeTableSource` 供消费方分辨。包内默认表降级为纯兜底。
   新增 5 条回归锁，其中一条直接锁「装户改入口名 → 包必须跟随」。
 
+  **B5 收尾（同批自纠）**：B5 说「包内不再自带一份映射」，但 `flow-kit --help` 的 route 选项行仍是
+  手写的 `require|fix|verify|review|deploy`——同一批漏掉的第二份。现把 `route-kinds` 解析器抽成
+  `executor.mjs` 的 `parseRouteTable` 单函数（装户 `loadRouteTable` 与包源 help 共用），新增导出
+  `routeKindList(pkgRoot)` 读包源权威 md 派生值域，help 改为插值 `${ROUTE_KIND_LIST}`（同 `GATE_LIST`
+  纪律：列表一律从权威面派生）。新增回归锁「help route kind 列表等于 new-task.md route-kinds 单源」，
+  并用负例探针实测（临时把包源 kind 改成 `require|ship` → help 立刻跟随，复原后一致）。
+
   验证：npm test 全量 SUITES 61 / FAILED 0；executor 75/0、sync-hosts 43/0；eslint 0 error；
   实仓 `sync-hosts --diff --strict` exit 0；CI YAML 解析通过。
 

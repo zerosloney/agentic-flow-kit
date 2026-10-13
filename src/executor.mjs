@@ -67,20 +67,37 @@ const DEFAULT_ROUTE_TABLE = {
 };
 const ROUTE_TABLE_LINE = /<!--\s*route-kinds:\s*([^>]*?)-->/;
 
+// route-kinds 行的**唯一解析器**——两个消费方共用：装户面 loadRouteTable（判定该读哪个 md）与
+//   包源 help 的 routeKindList（列 kind 值域）。此前 help 自带第二份 kind 列表，装户改 kind 时
+//   help 与判定面会漂移（与 GATE_LIST 同纪律：列表一律从权威面派生，不手写第二份）。
+function parseRouteTable(mdAbs) {
+  const m = fs.readFileSync(mdAbs, 'utf8').match(ROUTE_TABLE_LINE);
+  const table = {};
+  for (const part of String(m ? m[1] : '').split('|')) {
+    const kv = part.trim().match(/^([a-z]+)\s*=\s*([\w.-]+\.md)$/);
+    if (kv) table[kv[1]] = kv[2];
+  }
+  if (!Object.keys(table).length) throw new Error('route-kinds 行未解析出任何 kind');
+  return table;
+}
+
 function loadRouteTable(target, degradations) {
   const p = path.join(target, '.agents', 'commands', 'new-task.md');
   try {
-    const m = fs.readFileSync(p, 'utf8').match(ROUTE_TABLE_LINE);
-    const table = {};
-    for (const part of String(m ? m[1] : '').split('|')) {
-      const kv = part.trim().match(/^([a-z]+)\s*=\s*([\w.-]+\.md)$/);
-      if (kv) table[kv[1]] = kv[2];
-    }
-    if (!Object.keys(table).length) throw new Error('route-kinds 行未解析出任何 kind');
-    return { table, source: 'new-task.md' };
+    return { table: parseRouteTable(p), source: 'new-task.md' };
   } catch (e) {
     degradations.push({ code: 'route-table-fallback', detail: `读不到装户 .agents/commands/new-task.md 的 route-kinds 机器单源（${String(e?.message || e).split('\n')[0]}）——kind→入口回落包内默认表，装户升级 flow-kit sync 后生效` });
     return { table: { ...DEFAULT_ROUTE_TABLE }, source: 'fallback' };
+  }
+}
+
+// 包源 help 的 kind 值域：读包源权威 md（templates/_agents/commands/new-task.md）的 route-kinds 行，
+//   与装户面 loadRouteTable 共用同一解析器。读不到（包源缺该行/文件）回落包内默认表，不阻断 help。
+export function routeKindList(pkgRoot) {
+  try {
+    return Object.keys(parseRouteTable(path.join(pkgRoot, 'templates', '_agents', 'commands', 'new-task.md')));
+  } catch {
+    return Object.keys(DEFAULT_ROUTE_TABLE);
   }
 }
 

@@ -7,7 +7,7 @@ import { sync } from './sync.mjs';
 import { syncHosts } from './sync-hosts.mjs';
 import { addHost } from './add-host.mjs';
 import { addGate } from './add-gate.mjs';
-import { route, runPipeline } from './executor.mjs';
+import { route, runPipeline, routeKindList } from './executor.mjs';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -24,6 +24,10 @@ function gateNames(pkgRoot) {
 }
 
 const GATE_LIST = gateNames(PKG_ROOT).join(' | ') || '无';
+
+// route 的 kind 值域从权威面派生（同 GATE_LIST 纪律）：读包源 new-task.md 的 route-kinds 机器单源，
+//   不手写第二份——否则装户改 kind 时本帮助文本与 route 判定面会双源漂移（B5 同一问题）。
+const ROUTE_KIND_LIST = routeKindList(PKG_ROOT).join('|') || 'require|fix|verify|review|deploy';
 
 export const HELP = `flow-kit — AI-Native 闭环工作流 + wiki 知识层脚手架（agentic-flow-kit）
 
@@ -56,7 +60,7 @@ export const HELP = `flow-kit — AI-Native 闭环工作流 + wiki 知识层脚�
                             路径下限清单 = .agents/level-hints.txt（装户自持、内容项目私有，默认空）。
                             **诚实边界**：级别是意图面的语义判定（「一处定义、多处消费」），机器判不了语义；
                             未配 hints 时按 L1 起步并提示补配置，绝不假装判得出。
-                            选项：--kind require|fix|verify|review|deploy ｜ --level L0|L1|L2|L3
+                            选项：--kind ${ROUTE_KIND_LIST} ｜ --level L0|L1|L2|L3
                                   --files "a,b"（改动文件，参与路径下限判定）｜ --dir <目录> ｜ --json
   flow-kit run <子命令>     自动流水线：薄壳转发装户 pipeline-run 状态机
                             （start / next / status / watch / abort），参数与退出码原样透传。

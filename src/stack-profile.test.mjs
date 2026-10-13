@@ -8,6 +8,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HELP } from './cli.mjs';
+import { routeKindList } from './executor.mjs';
 import { commitCheckConfig, settingsJson } from './profiles.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -29,6 +30,11 @@ check('help 含四套已发布门禁',
   ['dotnet-ca', 'generated-readonly', 'node-layer', 'py-import'].every((n) => HELP.includes(n)));
 check('help 不再把当前门禁写成只有 dotnet-ca',
   !HELP.includes('当前：dotnet-ca；') && !HELP.includes('当前：dotnet-ca）'));
+
+// route 的 kind 值域与 GATE_LIST 同纪律：从权威面（new-task.md 的 route-kinds 机器单源）派生，
+//   不手写第二份——否则装户改 kind 时 help 与 route 判定面双源漂移。
+const kindList = routeKindList(ROOT).join('|');
+check('help route kind 列表等于 new-task.md route-kinds 单源', HELP.includes(`--kind ${kindList}`), kindList);
 
 const nodeCfg = JSON.parse(commitCheckConfig('node'));
 check('node 构建命令带 pkg:scripts.build',
