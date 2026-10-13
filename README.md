@@ -44,7 +44,7 @@ node .agents/scripts/confirm-doc.mjs workflow/intents/<文件>.md   # 终端里�
 | 形态 | 机制 |
 |---|---|
 | 多人/多分支合并冲突 | `.gitattributes` 的 `merge=jsonl-union` → 并集去重，两侧行全保留、无冲突可解（此前人工解的常见错法是「整取一侧」——静默丢掉另一侧的确认行） |
-| 单机多 worktree 并行 append | `confirm-doc --shard` 写 `.agents/confirmations.d/<doc>.jsonl`，各写各的；里程碑跑 `compact-ledgers.mjs --execute` 并回主台账 |
+| 单机多 worktree 并行 append | 确认行**默认**写分片 `.agents/confirmations.d/<doc>.jsonl`（2026-10-13 ledger-shard-default），各写各的；`--no-shard` / `CONFIRM_SHARDED=0` 回退主台账；里程碑可选跑 `compact-ledgers.mjs --execute` 并回主台账 |
 | 所有者明令删某批文档 | **特许修剪**：同笔提交 `.agents/ledger-prune-manifest.json`（逐行 sha256 + 授权 + 理由），门禁逐行对账放行；无 manifest 的删/改/重排仍全拦 |
 
 哈希链的域是「**同一 doc 的逻辑序**」而非文件物理序（生效日锚，缺键回退旧口径，存量零变化），因此上面三种协作都不打断它；就地改行、删行、插行三类篡改照拦。诚实边界：manifest 是可写文件，**刻意伪造即可让任意删行合法化**——与「台账本地可写」同级，本通道只把「顺手手改」抬到「提交一份可被 git 历史对质的凭据」。

@@ -13,8 +13,10 @@
 //     落态记账——免 TTY、免逐份问答，但台账行如实记 source:"chat-delegated" + quote:<原话>，
 //     永不伪装 TTY 行。调用纪律（AI 须先取得用户对话内明确确认）由 AGENTS.md 确认门条款承载，
 //     quote 原话入账供事后对质。
-// 台账：.agents/confirmations.jsonl（入 git、追加式）——每行 {ts, doc, stage, fingerprint(64位), prev,
-//   source:"tty"|"chat-delegated", quote?(仅委托行), batch, seq, of}。
+// 台账：默认分片 .agents/confirmations.d/<doc基名>.jsonl（2026-10-13 ledger-shard-default，
+//   协议对齐 Shipyard 参考实现；--no-shard / CONFIRM_SHARDED=0 回退主台账 .agents/confirmations.jsonl）
+//   ——两者入 git、追加式。每行 {ts, doc, stage, fingerprint(64位), prev, source:"tty"|"chat-delegated",
+//   quote?(仅委托行), batch, seq, of}。
 //   batch/seq/of（2026-09-28 batch-ledger-audit 新增，纯增字段、向后兼容、历史行不回填）：
 //   记「本次进程调用落了几份态」这一**写入时确定已知的事实**——batch 为本次调用生成的短随机串
 //   （无时间语义、无全局唯一要求，仅需单台账内不碰撞），seq 为该次调用内件序（从 1），of 为本次
@@ -25,8 +27,8 @@
 //       node .agents/scripts/confirm-doc.mjs <doc...> --delegated "<用户对话原话>"（委托代录）
 //       node .agents/scripts/confirm-doc.mjs <doc...> --delegated "<原话>" --batch（协作道批量：L0/L1 多份一次代录）
 //       node .agents/scripts/confirm-doc.mjs <doc...> --to superseded|cancelled（放弃态：取代/取消，留指纹与台账）
-//       node .agents/scripts/confirm-doc.mjs <doc...> --shard（分片写入：多 worktree 并行时各写各的
-//         .agents/confirmations.d/<doc>.jsonl，避免同文件并发覆盖；里程碑跑 compact-ledgers.mjs 归并）
+//       node .agents/scripts/confirm-doc.mjs <doc...> --no-shard（回退主台账 .agents/confirmations.jsonl：
+//         分片已是默认写入口径，环境变量 CONFIRM_SHARDED=0 同效；里程碑可选跑 compact-ledgers.mjs 归并分片）
 //   多文档一次传入：TTY 模式天然逐份过目键入；--delegated 默认一次仅一份（2026-09-27
 //   confirm-gate-one-per-call：多份并录曾系统性塌掉 build.md「逐件确认」三道门），L0/L1 协作道可
 //   `--batch` 多份一次代录（2026-09-30 hybrid-governance-risk-lanes）：逐份读「级别」，L2/L3 逐份拒绝
@@ -158,10 +160,12 @@ export function applyTransition(text, targetStage, fingerprint16) {
 //   最后一个带 hash 行**（ledgerDocChainPrev），不再取物理末行。理由见 POLICIES v8 注释：物理链隐含
 //   「单写者顺序追加」前提，而并发 append / git 并集合并 / 分片归并三种**正常协作**都会打断它。
 //   缺键（v1-v7）→ 走旧物理链口径，存量零变化。
-// shard（2026-10-12 ledger-shard-write）：多 worktree 并行时两个进程同时 append 同一台账文件会互相覆盖
-//   （各自读到同一末行 → 同 prevHash → 后写者覆盖前写者）。--shard 把本行写入分片
-//   `.agents/confirmations.d/<doc基名>.jsonl`，各 worktree 各写各的、互不冲突；里程碑跑 compact-ledgers.mjs
-//   归并回主台账。**默认仍写主台账**——分片是有意的并发开关，不设则零影响。
+// shard（2026-10-12 ledger-shard-write；2026-10-13 ledger-shard-default 升为默认）：多 worktree 并行时
+//   两个进程同时 append 同一台账文件会互相覆盖（各自读到同一末行 → 同 prevHash → 后写者覆盖前写者）。
+//   分片把本行写入 `.agents/confirmations.d/<doc基名>.jsonl`，各 worktree 各写各的、互不冲突。
+//   **默认写分片**（CLI 层；--no-shard / CONFIRM_SHARDED=0 显式回退主台账）——doc 链未激活
+//   （policyVersion < 8）时 CLI 层自动回退主台账（见 isMain 内 ledger-shard-default 注释），
+//   存量装户升级后行为零变化。函数层契约不变：shard 显式传入，默认 false。
 export function appendLedger(root, entry, { shard = false } = {}) {
   const p = shard && entry.doc
     ? path.join(root, '.agents', 'confirmations.d', `${path.basename(entry.doc, '.md')}.jsonl`)
@@ -209,7 +213,7 @@ if (isMain) {
   let toTarget = null; // null = 默认前向跳转；superseded|cancelled = 放弃态显式目标
   let autoMode = false; // AI 自治模式（信任等级授权，2026-09-30 ai-autonomy-trust）
   let batchMode = false; // 协作道批量代录（--batch，2026-09-30 hybrid-governance-risk-lanes：仅 --delegated + L0/L1）
-  let shardWrite = false; // 分片写入（--shard，2026-10-12 ledger-shard-write）：多 worktree 并行时各写各的分片，避免互相覆盖
+  let shardWrite = process.env.CONFIRM_SHARDED !== '0'; // 分片默认写入口径（2026-10-13 ledger-shard-default）：CONFIRM_SHARDED=0 显式回退主台账
   const docs = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--root') root = path.resolve(argv[++i]);
@@ -218,18 +222,33 @@ if (isMain) {
     else if (argv[i] === '--auto') autoMode = true;
     else if (argv[i] === '--batch') batchMode = true;
     else if (argv[i] === '--shard') shardWrite = true;
+    else if (argv[i] === '--no-shard') shardWrite = false;
     else docs.push(argv[i].replace(/\\/g, '/'));
   }
   if (toTarget !== null && !ABANDON_TARGETS.includes(toTarget)) {
     console.error(`用法：--to 仅接受 superseded|cancelled（现「${toTarget}」）——cancelled 自 draft/approved/open/fixed；superseded 自 approved/done/fixed/closed（未确认态只能 cancelled；终态间仅允许 done/closed→superseded）`);
     process.exit(1);
   }
-  // --shard 与 doc 链口径绑定（2026-10-12 ledger-shard-write）：分片与主台账分属不同文件，
-//   只有 doc 链能跨来源接续；旧物理链口径下分片行的 prevHash 会与主台账末行失配 → 提交即断链。
-//   故缺锚时**参数期直接拒**（友好报错），而不是让用户写完台账再被门禁拦。
-if (shardWrite && !ledgerDocChainActive(loadKitPolicy(root))) {
-    console.error('❌ --shard 需要台账 doc 链口径（policy.ledgerDocChainSince），当前 policyVersion 无此键。\n   原因：分片与主台账是不同文件，只有 doc 链能跨来源接续；旧物理链口径下分片行会与主台账断链。\n   修法：在 .agents/kit.json 设 policyVersion: 8（或更高的支持版本）后重试。');
+  // 分片默认写入口径（2026-10-13 ledger-shard-default，对齐 Shipyard 参考实现）：
+  //   确认行默认写 `.agents/confirmations.d/<doc基名>.jsonl`——多 worktree / 多人并行天然各写各的，
+  //   互不覆盖；跨分支合并走 .gitattributes 的 union driver（confirmations.d/*.jsonl merge=jsonl-union），
+  //   里程碑可选跑 compact-ledgers.mjs 收敛碎片。--no-shard / CONFIRM_SHARDED=0 显式回退主台账。
+  // doc 链仍是分片的前提（2026-10-12 ledger-shard-write 口径保留）：分片与主台账分属不同文件，
+  //   只有 doc 链能跨来源接续；旧物理链口径下分片行的 prevHash 会与主台账末行失配 → 提交即断链。故：
+  //   显式 --shard + doc 链未激活 → 参数期直接拒（友好报错，原口径不变）；
+  //   默认分片 + doc 链未激活 → 自动回退主台账并出 ℹ️——存量装户（policyVersion < 8）升级模板后
+  //     行为零变化，分片默认仅对 doc 链已激活的装户生效；升级法：.agents/kit.json 设 policyVersion: 8。
+  if (argv.includes('--shard') && argv.includes('--no-shard')) {
+    console.error('用法：--shard 与 --no-shard 互斥——分片已是默认写入口径，显式回退主台账只需 --no-shard');
     process.exit(1);
+  }
+  if (shardWrite && !ledgerDocChainActive(loadKitPolicy(root))) {
+    if (argv.includes('--shard')) {
+      console.error('❌ --shard 需要台账 doc 链口径（policy.ledgerDocChainSince），当前 policyVersion 无此键。\n   原因：分片与主台账是不同文件，只有 doc 链能跨来源接续；旧物理链口径下分片行会与主台账断链。\n   修法：在 .agents/kit.json 设 policyVersion: 8（或更高的支持版本）后重试，或改用 --no-shard 显式写主台账。');
+      process.exit(1);
+    }
+    shardWrite = false; // 存量装户回退：分片默认仅对 doc 链已激活（policyVersion ≥ 8）的装户生效
+    console.error('ℹ️ 分片默认写入口径需 doc 链口径（policy.ledgerDocChainSince），当前 policyVersion 未激活——本次写主台账 .agents/confirmations.jsonl。升级法：.agents/kit.json 设 policyVersion: 8。');
   }
 
   const delegated = delegatedQuote !== null;
@@ -448,11 +467,13 @@ if (shardWrite && !ledgerDocChainActive(loadKitPolicy(root))) {
         continue;
       }
       fs.writeFileSync(abs, applyTransition(text, target, fp.slice(0, 16)));
+      // shard 走第三参 options（不进 entry）：appendLedger(root, entry, { shard }) 的契约是 options 形参，
+      // 写进 entry 会让旗标混入台账行数据且分片开关失效（2026-10-13 ledger-shard-default 修复的存量缺陷）。
       appendLedger(root, {
-        shard: shardWrite, ts: new Date().toISOString(), doc, stage: target, fingerprint: fp, prev: st,
+        ts: new Date().toISOString(), doc, stage: target, fingerprint: fp, prev: st,
         source: `ai-auto-trust-L${trustConfig.level}`, quote: `AI 自治放行 (Trust Level ${trustConfig.level})`,
         batch, seq, of: docs.length, scope,
-      });
+      }, { shard: shardWrite });
       console.log(`✓ ${doc} ${st} → ${target}（指纹 ${fp.slice(0, 16)}，AI 自治已记账：source=ai-auto-trust-L${trustConfig.level}）`);
       confirmed++;
       seq++;
@@ -470,7 +491,7 @@ if (shardWrite && !ledgerDocChainActive(loadKitPolicy(root))) {
       }
       fs.writeFileSync(abs, applyTransition(text, target, fp.slice(0, 16)));
       appendLedger(root, {
-        shard: shardWrite, ts: new Date().toISOString(), doc, stage: target, fingerprint: fp, prev: st,
+        ts: new Date().toISOString(), doc, stage: target, fingerprint: fp, prev: st,
         source: 'chat-delegated', quote: String(delegatedQuote),
         // 调用事实（batch-ledger-audit）：seq=本次调用内件序（从 1），of=本次调用总份数
         batch, seq, of: docs.length,
@@ -480,7 +501,7 @@ if (shardWrite && !ledgerDocChainActive(loadKitPolicy(root))) {
         // 简洁审计标记（hybrid-governance-risk-lanes）：L0/L1 协作道行带 brief（quote 仍入账供对质），
         // 检查 15 并录审计对全 brief 批次豁免「确认并录」告警
         ...(low ? { brief: true } : {}),
-      });
+      }, { shard: shardWrite });
       console.log(low
         ? `✓ ${doc} ${st} → ${target} [${lvl} 协作道/异步审计]（指纹 ${fp.slice(0, 16)}）`
         : `✓ ${doc} ${st} → ${target}（指纹 ${fp.slice(0, 16)}，代录已记账：source=chat-delegated）`);
@@ -500,10 +521,10 @@ if (shardWrite && !ledgerDocChainActive(loadKitPolicy(root))) {
     }
     fs.writeFileSync(abs, applyTransition(text, target, fp.slice(0, 16)));
     appendLedger(root, {
-        shard: shardWrite, ts: new Date().toISOString(), doc, stage: target, fingerprint: fp, prev: st,
+        ts: new Date().toISOString(), doc, stage: target, fingerprint: fp, prev: st,
       source: 'tty',
       batch, seq, of: docs.length, // 调用事实（形态无关：TTY 多文档天然逐件过目，of>1 不构成违规）
-    });
+    }, { shard: shardWrite });
     console.log(`✓ ${doc} → ${target}（指纹 ${fp.slice(0, 16)}，台账已记）`);
     confirmed++;
     seq++;

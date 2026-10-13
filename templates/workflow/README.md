@@ -59,12 +59,12 @@
    | 形态 | 机制 | 用法 |
    |---|---|---|
    | 多人/多分支合并冲突 | `.gitattributes` 的 `.agents/*.jsonl merge=jsonl-union` → `git-merge-jsonl.mjs` 并集去重（两侧行全保留，无冲突可解） | 需目标仓 `.gitattributes` 有该行 + 本机 `git config merge.jsonl-union.driver "node .agents/scripts/git-merge-jsonl.mjs %O %A %B"`（`init` 自动配） |
-   | 单机多 worktree 并行 append | `confirm-doc --shard` 写 `.agents/confirmations.d/<doc>.jsonl`，各写各的互不覆盖；里程碑跑 `compact-ledgers.mjs [--execute]` 并回主台账 | `--shard` **依赖 doc 链口径**（`kit.json` 须 `policyVersion: 8`+），缺锚时参数期直接拒 |
+   | 单机多 worktree 并行 append | 确认行**默认**写分片 `.agents/confirmations.d/<doc>.jsonl`（2026-10-13 ledger-shard-default），各写各的互不覆盖；`--no-shard` / `CONFIRM_SHARDED=0` 回退主台账；里程碑可选跑 `compact-ledgers.mjs [--execute]` 并回主台账 | 分片默认**依赖 doc 链口径**（`kit.json` 须 `policyVersion: 8`+）：缺锚时自动回退主台账并出 ℹ️（存量装户行为零变化）；显式 `--shard` 缺锚仍参数期直接拒 |
    | 所有者明令删某批文档 | **特许修剪**：同笔提交 `.agents/ledger-prune-manifest.json`（`{ts, authority, reason, removes:[被删行 sha256], docs:[家族名]}`），门禁逐行对账放行 | 无 manifest 的删/改/重排**仍全拦** |
 
    哈希链的域是「同一 doc 的逻辑序」而非文件物理序——并发 append / 并集合并 / 分片归并都不会打断它；就地改行、删行、插行三类篡改照拦。诚实边界：manifest 是可写文件，**刻意伪造即可让任意删行合法化**（与「台账本地可写」同级），本通道只把「顺手手改」抬到「提交一份可被 git 历史对质的凭据」。
 
-   > **存量装户迁移动作**：`merge=jsonl-union` 属 `.gitattributes`，而该文件是**项目自持（owned）**、`sync` 永不覆盖——升级后**不会自动获得**，需手动在目标仓 `.gitattributes` 补一行 `.agents/*.jsonl merge=jsonl-union`。driver 是本机态配置、不跨机共享（漏配退化为文本冲突，不静默丢数据但要人工解）。
+   > **存量装户迁移动作**：`merge=jsonl-union` 属 `.gitattributes`，而该文件是**项目自持（owned）**、`sync` 永不覆盖——升级后**不会自动获得**，需手动在目标仓 `.gitattributes` 补两行：`.agents/*.jsonl merge=jsonl-union` 与 `.agents/confirmations.d/*.jsonl merge=jsonl-union`（2026-10-13 ledger-shard-default 起分片为默认写入口径，分片行漏配则并行分支合并分片仍走文本冲突）。driver 是本机态配置、不跨机共享（漏配退化为文本冲突，不静默丢数据但要人工解）。
 
 其余检查（占位符、引用、模块字段、常驻面预算、量化签名、阶段索引、适配器断线、引擎脚本测试覆盖（检查 20，包源环境——新增引擎脚本默认必须带 `.test.mjs`，库件/工具须登记 `.agents/scripts-test-exempt.txt`，2026-10-01 gate-script-test-coverage））只在 `audit` 不是 `false` 时出警告。
 

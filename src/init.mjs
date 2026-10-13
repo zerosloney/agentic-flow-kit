@@ -331,7 +331,10 @@ export async function init(args, pkgRoot) {
   fs.writeFileSync(kitPath, `${JSON.stringify({
     kit: 'agentic-flow-kit',
     version: pkg.version,
-    policyVersion: 2,
+    // policyVersion 8（2026-10-13 ledger-shard-default）：新装即带 doc 链锚（ledgerDocChainSince）——
+    // 确认行分片默认写入口径的前提；v1-v7 存量装户升级模板后 confirm-doc 自动回退主台账（行为零变化），
+    // 想启用分片默认须手动升 .agents/kit.json 的 policyVersion 到 8。
+    policyVersion: 8,
     // 新装默认只跑硬规则。缺省（旧台账无此字段）在 check-loop 里仍是全量，避免升级后卫生检查突然消失。
     audit: false,
     // 门禁信任档（2026-10-12 gate-trust-level）：默认 'project' —— gate 安装锚失配只 WARN，

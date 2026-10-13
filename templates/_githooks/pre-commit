@@ -62,11 +62,12 @@ if [ -f .agents/scripts/rule-budget.sh ] && [ -f .agents/rule-budgets.txt ]; the
   run_gate "常驻面体积预算" .agents/scripts/rule-budget.sh --staged
 fi
 
-# 确认台账不变量前置（--staged，2026-10-02 ledger-ci-invariant）：暂存的 confirmations.jsonl 必须
+# 确认台账不变量前置（--staged，2026-10-02 ledger-ci-invariant）：暂存的 confirmations.jsonl 与分片
+# confirmations.d/*.jsonl（2026-10-13 ledger-shard-default 起分片为默认写入口径，触发面同步扩大）必须
 # 是 HEAD 的逐字节前缀扩展（append-only）——本地提交时刻即拦「顺手重写台账」，CI 历史全扫兜底。
 # guard 旧装副本自然跳过；暂存未触台账静默。
 if [ -f .agents/scripts/check-ledger-invariant.mjs ] && command -v node >/dev/null 2>&1; then
-  if git -c core.quotepath=off diff --cached --name-only | grep -q '^\.agents/confirmations\.jsonl$'; then
+  if git -c core.quotepath=off diff --cached --name-only | grep -qE '^\.agents/confirmations\.jsonl$|^\.agents/confirmations\.d/[^/]+\.jsonl$'; then
     if ! node .agents/scripts/check-ledger-invariant.mjs --staged; then
       echo "pre-commit: 确认台账不变量未通过，提交已阻止——历史行禁删改（append-only），修正走追加补偿行" >&2
       exit 1

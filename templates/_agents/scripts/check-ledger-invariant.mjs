@@ -63,32 +63,67 @@ const problems = [];
 
 // ---- --staged：暂存 blob ⊇ HEAD blob ----
 if (staged) {
-  const stagedHit = gitText(['-c', 'core.quotepath=off', 'diff', '--cached', '--name-only']).split(/\r?\n/).includes(REL);
-  if (!stagedHit) process.exit(0);
+  const stagedFiles = gitText(['-c', 'core.quotepath=off', 'diff', '--cached', '--name-only']).split(/\r?\n/).filter(Boolean);
+  const stagedHit = stagedFiles.includes(REL);
+  // 分片触发面（2026-10-13 ledger-shard-default）：分片已是默认写入口径，pre-commit 触发条件已扩到
+  // confirmations.d/*.jsonl——本模式同须覆盖，否则「顺手重写分片」只能等 CI 历史全扫兜底。
+  const stagedShards = stagedFiles.filter((f) => f.startsWith(`${SHARD_DIR_REL}/`) && f.endsWith('.jsonl'));
+  if (!stagedHit && stagedShards.length === 0) process.exit(0);
   const headExists = (() => { try { gitText(['rev-parse', '--verify', '--quiet', `HEAD:${REL}`]); return true; } catch { return false; } })();
-  if (!headExists) process.exit(0); // 首次入库：无 HEAD 基线，历史全扫后续覆盖
-  let head, cur;
-  try {
-    head = blobOf(`HEAD:${REL}`);
-    cur = blobOf(`:${REL}`); // 暂存区
-  } catch {
-    process.exit(0); // 对象读取异常（如极端并发）交由 CI 全扫兜底
-  }
-  if (!cur.subarray(0, head.length).equals(head)) {
-    // 特许修剪（2026-10-12 ledger-prune-manifest）：仓库所有者明令删某批 workflow 文档时，台账对应行
-    // 须随之删除，否则行级④「doc 在当前树存在」持续报红、退路只剩手改台账（踩 --no-verify 红线）。
-    // 出口 = **逐行对账 + 凭据入库**：暂存集须同时携带 .agents/ledger-prune-manifest.json，判据见
-    // ledger-prune.mjs matchPrune（四条缺一不可）。无 manifest 的删/改/重排仍全拦——append-only 红线
-    // 对其他一切场景不变。被删行哈希随 manifest 入库，事后可对质。
-    const m = matchPrune(head.toString('utf8'), cur.toString('utf8'),
-      loadManifestFromRef(`:${PRUNE_REL}`, ROOT));
-    if (m && !m.err) {
-      console.log(`台账不变量（--staged）— 特许修剪通过：移除 ${m.removed} 行（${m.docs.length} 家族）——凭据 ${PRUNE_REL} 随笔入库，被删行可在 git 历史对质`);
-      process.exit(0);
+  if (stagedHit && headExists) {
+    let head, cur;
+    try {
+      head = blobOf(`HEAD:${REL}`);
+      cur = blobOf(`:${REL}`); // 暂存区
+    } catch {
+      process.exit(0); // 对象读取异常（如极端并发）交由 CI 全扫兜底
     }
-    let off = 0;
-    while (off < Math.min(head.length, cur.length) && head[off] === cur[off]) off++;
-    problems.push(`- [台账重写] 暂存内容不是 HEAD 的前缀扩展（首异偏移 ${off}，HEAD ${head.length}B → 暂存 ${cur.length}B）${m && m.err ? `；特许修剪对账失败：${m.err}` : ''}`);
+    if (!cur.subarray(0, head.length).equals(head)) {
+      // 特许修剪（2026-10-12 ledger-prune-manifest）：仓库所有者明令删某批 workflow 文档时，台账对应行
+      // 须随之删除，否则行级④「doc 在当前树存在」持续报红、退路只剩手改台账（踩 --no-verify 红线）。
+      // 出口 = **逐行对账 + 凭据入库**：暂存集须同时携带 .agents/ledger-prune-manifest.json，判据见
+      // ledger-prune.mjs matchPrune（四条缺一不可）。无 manifest 的删/改/重排仍全拦——append-only 红线
+      // 对其他一切场景不变。被删行哈希随 manifest 入库，事后可对质。
+      const m = matchPrune(head.toString('utf8'), cur.toString('utf8'),
+        loadManifestFromRef(`:${PRUNE_REL}`, ROOT));
+      if (m && !m.err) {
+        console.log(`台账不变量（--staged）— 特许修剪通过：移除 ${m.removed} 行（${m.docs.length} 家族）——凭据 ${PRUNE_REL} 随笔入库，被删行可在 git 历史对质`);
+      } else {
+        let off = 0;
+        while (off < Math.min(head.length, cur.length) && head[off] === cur[off]) off++;
+        problems.push(`- [台账重写] 暂存内容不是 HEAD 的前缀扩展（首异偏移 ${off}，HEAD ${head.length}B → 暂存 ${cur.length}B）${m && m.err ? `；特许修剪对账失败：${m.err}` : ''}`);
+      }
+    }
+  }
+  // ---- 分片 --staged 前置（2026-10-13 ledger-shard-default）----
+  // 判据与主台账同款（暂存 blob ⊇ HEAD blob 逐字节前缀）；分片删除是合法形态（compact 归并）——
+  // 判据同历史扫：被删分片的每一行都已出现在**暂存主台账**里才放行，否则丢行 hard 拦。
+  let stagedMainText = '';
+  try { stagedMainText = blobOf(`:${REL}`).toString('utf8'); } catch { /* 暂存主台账缺失/未触 → 空集 */ }
+  const stagedMainLines = new Set(stagedMainText.replace(/\r\n/g, '\n').split('\n').filter((l) => l.trim()));
+  for (const shardRel of stagedShards) {
+    let sHead;
+    try { sHead = blobOf(`HEAD:${shardRel}`); } catch { continue; } // 新分片首入库：无 HEAD 基线，历史扫续管
+    let sCur = null;
+    try { sCur = blobOf(`:${shardRel}`); } catch { sCur = null; }
+    if (sCur === null) {
+      // 暂存里分片被删 → compact 归并判据（行全并入暂存主台账才放行）
+      const shardLines = sHead.toString('utf8').replace(/\r\n/g, '\n').split('\n').filter((l) => l.trim());
+      const missing = shardLines.filter((l) => !stagedMainLines.has(l));
+      if (missing.length === 0) {
+        console.log(`台账不变量（--staged）— 分片 ${shardRel} 删除：${shardLines.length} 行已全部并入暂存主台账（compact 归并形态，放行）`);
+      } else {
+        problems.push(`- [分片删除丢行] ${shardRel} 被删除，但其中 ${missing.length} 行未出现在暂存主台账（compact 归并须先并入再删）`);
+      }
+      continue;
+    }
+    if (!sCur.subarray(0, sHead.length).equals(sHead)) {
+      let off = 0;
+      while (off < Math.min(sHead.length, sCur.length) && sHead[off] === sCur[off]) off++;
+      problems.push(`- [分片重写] ${shardRel} 暂存内容不是 HEAD 的前缀扩展（首异偏移 ${off}，HEAD ${sHead.length}B → 暂存 ${sCur.length}B）——分片同受 append-only 前缀不变量约束`);
+    }
+  }
+  if (problems.length) {
     console.error('台账不可变（--staged）— BLOCK:\n' + problems.join('\n'));
     console.error(`  修法：台账历史行禁删改——误写走追加补偿行（node .agents/scripts/confirm-doc.mjs ...）；确需撤销历史提交请 git revert 后重新追加。\n        所有者明令删除某批文档须同笔暂存 ${PRUNE_REL}（逐行 sha256 + 授权 + 理由），门禁逐行对账后才放行。`);
     process.exit(1);

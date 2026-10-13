@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// compact-ledgers.mjs — 台账分片归并器（2026-10-12 ledger-shard-write 配套）
+// compact-ledgers.mjs — 台账分片归并器（2026-10-12 ledger-shard-write 配套；2026-10-13 ledger-shard-default 起为默认分片的收敛动作）
 // 用途：里程碑节点或发布前，把 `.agents/confirmations.d/*.jsonl` 的分片确认行并回主台账
-//   `.agents/confirmations.jsonl` 并清理分片。`--shard` 写入的分片若长期不归并，会让台账面无限碎片化，
-//   且分片的历史不受主台账的前缀不变量约束（见 check-ledger-invariant 已知边界）——本脚本就是收敛动作。
+//   `.agents/confirmations.jsonl` 并清理分片。分片已是**默认**写入口径（confirm-doc 不带 --no-shard 即写分片），
+//   长期不归并会让台账面无限碎片化——本脚本就是可选的收敛动作（跨分支合并另由 union driver 承担，归并非必需）。
 //
 // 保持 append-only 前缀不变量：主台账既有行**严格保序不动**，分片新行只追加到末尾——这正是
 //   check-ledger-invariant 的「旧 blob 是新 blob 的逐字节前缀」所要求的形态。绝不做重排/去重改写。

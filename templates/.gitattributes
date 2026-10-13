@@ -12,3 +12,6 @@
 # **故意不加 text eol=lf**：给既有 .jsonl 加 text 规则会让下次提交时 git 重新规范化换行 → 台账 blob 字节变化
 #   → check-ledger-invariant 的 append-only 前缀不变量判为「台账重写」而硬拦。台账换行归一由 driver 自身负责。
 .agents/*.jsonl merge=jsonl-union
+# 分片目录（2026-10-13 ledger-shard-default）：上面的 glob 不跨目录层级，confirmations.d/ 下的分片
+# 须单列——分片已是默认写入口径，漏配则并行分支合并分片时仍走文本冲突（整取一侧 = 静默丢确认行）。
+.agents/confirmations.d/*.jsonl merge=jsonl-union

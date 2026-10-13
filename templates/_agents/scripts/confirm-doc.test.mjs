@@ -880,5 +880,83 @@ const writeTrust = (root, cfg) => {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- S42 分片默认写入口径（2026-10-13 ledger-shard-default）：CLI 默认写分片 / 两种回退 / 存量回退 / 显式拒 ----
+{
+  const mkFixture = (withV8) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-shard-'));
+    const docP = path.join(root, 'workflow', 'intents');
+    fs.mkdirSync(docP, { recursive: true });
+    fs.writeFileSync(path.join(docP, '2026-10-13-s.md'), '---\n状态: draft\n级别: L1\n---\n# I\n');
+    if (withV8) {
+      fs.mkdirSync(path.join(root, '.agents'), { recursive: true });
+      fs.writeFileSync(path.join(root, '.agents', 'kit.json'), JSON.stringify({ policyVersion: 8 }), 'utf8');
+    }
+    return root;
+  };
+  const shardPathOf = (root) => path.join(root, '.agents', 'confirmations.d', '2026-10-13-s.jsonl');
+  const mainPathOf = (root) => path.join(root, '.agents', 'confirmations.jsonl');
+  const readRows = (p) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : []);
+  const spawnConfirm = (root, args, env = {}) => spawnSync(process.execPath, [CLI, 'workflow/intents/2026-10-13-s.md', '--delegated', '可以', ...args], { cwd: root, encoding: 'utf8', env: { ...process.env, ...env } });
+
+  // S42① 默认（无旗标）+ doc 链已激活（policyVersion 8）→ 写分片，主台账零行
+  {
+    const root = mkFixture(true);
+    const r = spawnConfirm(root, []);
+    check('S42① 默认写分片：exit 0 + 行落 confirmations.d/<doc基名>.jsonl + 主台账零行',
+      r.status === 0 && readRows(shardPathOf(root)).length === 1
+        && readRows(shardPathOf(root))[0].source === 'chat-delegated'
+        && readRows(mainPathOf(root)).length === 0,
+      JSON.stringify({ status: r.status, stderr: r.stderr }));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+  // S42② --no-shard → 显式回退主台账
+  {
+    const root = mkFixture(true);
+    const r = spawnConfirm(root, ['--no-shard']);
+    check('S42② --no-shard 回退主台账：exit 0 + 行落 confirmations.jsonl + 分片不存在',
+      r.status === 0 && readRows(mainPathOf(root)).length === 1 && !fs.existsSync(shardPathOf(root)),
+      JSON.stringify({ status: r.status, stderr: r.stderr }));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+  // S42③ CONFIRM_SHARDED=0 → 环境变量回退主台账
+  {
+    const root = mkFixture(true);
+    const r = spawnConfirm(root, [], { CONFIRM_SHARDED: '0' });
+    check('S42③ CONFIRM_SHARDED=0 回退主台账：exit 0 + 行落 confirmations.jsonl + 分片不存在',
+      r.status === 0 && readRows(mainPathOf(root)).length === 1 && !fs.existsSync(shardPathOf(root)),
+      JSON.stringify({ status: r.status, stderr: r.stderr }));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+  // S42④ 存量装户（无 kit.json → policyVersion 1，doc 链未激活）默认 → 自动回退主台账 + ℹ️ 升级指引
+  {
+    const root = mkFixture(false);
+    const r = spawnConfirm(root, []);
+    check('S42④ 存量装户默认：自动回退主台账（exit 0 + 行落 confirmations.jsonl）+ stderr 带 policyVersion: 8 升级指引 + 分片不存在',
+      r.status === 0 && readRows(mainPathOf(root)).length === 1
+        && /policyVersion: 8/.test(r.stderr) && !fs.existsSync(shardPathOf(root)),
+      JSON.stringify({ status: r.status, stderr: r.stderr }));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+  // S42⑤ 存量装户显式 --shard → 参数期直接拒（原口径不变）
+  {
+    const root = mkFixture(false);
+    const r = spawnConfirm(root, ['--shard']);
+    check('S42⑤ 显式 --shard 缺 doc 链锚：exit 1 + 报错带修法 + 零落账（文档/台账均未动）',
+      r.status === 1 && /--shard 需要台账 doc 链口径/.test(r.stderr)
+        && !fs.existsSync(shardPathOf(root)) && !fs.existsSync(mainPathOf(root)),
+      JSON.stringify({ status: r.status, stderr: r.stderr }));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+  // S42⑥ --shard 与 --no-shard 互斥 → 用法错误
+  {
+    const root = mkFixture(true);
+    const r = spawnConfirm(root, ['--shard', '--no-shard']);
+    check('S42⑥ --shard 与 --no-shard 互斥：exit 1 + 用法提示 + 零落账',
+      r.status === 1 && /互斥/.test(r.stderr) && !fs.existsSync(shardPathOf(root)) && !fs.existsSync(mainPathOf(root)),
+      JSON.stringify({ status: r.status, stderr: r.stderr }));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

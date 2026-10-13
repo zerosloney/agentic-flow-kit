@@ -2,6 +2,42 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.7.17
+
+- feat(ledger)：**确认行分片升为默认写入口径**（2026-10-13 ledger-shard-default，协议对齐 Shipyard.Material
+  参考实现——两仓 10 月初分叉后首次协议级回灌）。此前分片是 `--shard` 的 opt-in 并发开关；本版翻转默认：
+  `confirm-doc` 落账**默认**写 `.agents/confirmations.d/<doc基名>.jsonl`，`--no-shard` / 环境变量
+  `CONFIRM_SHARDED=0` 显式回退主台账 `.agents/confirmations.jsonl`。理由：多 worktree / 多人并行的
+  「同文件 append 互相覆盖」不是小概率特例而是协作常态，防呆位应在默认侧——漏配旗标的代价是静默丢确认行。
+
+  **① 顺带修复存量缺陷（CLI `--shard` 此前从未生效）**：三个 `appendLedger` 调用点把 `shard: shardWrite`
+  写进了 **entry 数据对象**，而 `appendLedger(root, entry, { shard })` 的开关契约在第三参 options——
+  旗标被当作数据字段混入台账行（多出一个无语义的 `shard` 键），分片开关恒为 false。本版把三处调用
+  改为第三参传 `{ shard: shardWrite }`（测试 S42① 原本就过不了，实证缺陷存在）。
+
+  **② doc 链前提的降级语义（存量装户零变化）**：分片与主台账分属不同文件，只有 doc 链
+  （`policy.ledgerDocChainSince`，policyVersion 8）能跨来源接续。显式 `--shard` 缺锚仍**参数期直接拒**
+  （原口径不变）；**默认分片**缺锚则自动回退主台账并在 stderr 出 ℹ️ 升级指引（升 `.agents/kit.json`
+  的 `policyVersion: 8`）——存量装户（v1-v7）升级模板后行为逐字不变，不会被新默认打断。
+
+  **③ `init` 新装 `policyVersion: 2 → 8`**：分片默认的前提是 doc 链激活，新装不给锚则旗舰默认永不生效。
+  v8 含全量锚（verify/scope/doc-chain），新装空台账零回溯负担；存量装户 `kit.json` 属 owned、`sync`
+  不动，按 ② 的降级语义自行选择升级时机。
+
+  **④ union 驱动覆盖分片目录**：`.gitattributes` 模板补 `.agents/confirmations.d/*.jsonl
+  merge=jsonl-union`——`.agents/*.jsonl` 的 gitattributes glob 不跨目录层级，漏配则并行分支合并分片
+  仍走文本冲突（人工「整取一侧」= 静默丢确认行）。存量装户迁移指引同步更新（该文件 owned，须手动补行）。
+
+  **⑤ `--staged` 不变量前置扩到分片**：分片成为默认后，暂存面常态含 `confirmations.d/*.jsonl`——
+  `pre-commit` 触发 grep 扩到分片路径，`check-ledger-invariant --staged` 补分片三态判据：纯追加放行 /
+  前缀破坏拦（报文点名「分片重写」）/ 删除仅当每行都已并入**暂存主台账**才认领 compact 归并
+  （否则「分片删除丢行」拦），与历史全扫的分片判据同构，把「顺手重写分片」的检出从事后 CI 提前到提交时刻。
+
+  **测试**：`confirm-doc.test.mjs` 新增 S42 六态（默认写分片 / `--no-shard` / `CONFIRM_SHARDED=0` /
+  存量回退+指引 / 显式 `--shard` 拒 / 双旗标互斥）；`check-ledger-invariant.test.mjs` 新增 S13-S17
+  五态（新分片首入库 / 纯追加 / 重写拦 / compact 归并删放行 / 丢行删拦）；`fresh-init.test.mjs`
+  断言新装 `policyVersion: 8`。
+
 ## 1.7.16
 
 - feat(cli)+refactor(criteria)：**包从「引擎骨架」升级为「引擎执行器」——`route` 手动路由 + `run` 自动流水线**

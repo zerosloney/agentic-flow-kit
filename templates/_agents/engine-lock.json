@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-13T08:17:26.315Z",
+  "generatedAt": "2026-10-13T10:16:59.729Z",
   "files": {
     ".github/workflows/ci.yml": {
       "sha256": "ae6b751a29ce08f28f8831fc9b64770acce4d42fc6a5bd60286eca67e8488bd9",
@@ -55,7 +55,7 @@
       "hard": 2
     },
     "templates/_agents/scripts/check-ledger-invariant.mjs": {
-      "sha256": "2d187a82781a5e076985d91f1a4734b45cd507c1b87942064bad949bd0b3f806",
+      "sha256": "ad078ef238ee7d732c7008a5bfbfa993f783ba21bf2c1344e83b7be73475aff9",
       "hard": 2
     },
     "templates/_agents/scripts/check-loop.mjs": {
@@ -71,12 +71,12 @@
       "hard": 0
     },
     "templates/_agents/scripts/compact-ledgers.mjs": {
-      "sha256": "b517a775bcbcaaca8b8e58ed85c611c9fc1a40f64b19ee0f40ea137b40a0042e",
+      "sha256": "99ee805337c9bd11500432f1525985781ad3165e6140e9e354efd9f5418fff78",
       "hard": 1
     },
     "templates/_agents/scripts/confirm-doc.mjs": {
-      "sha256": "8d9f8478fa80be447c8e372a94be4b991c02a9077c7bd087bbf8e77feb65834e",
-      "hard": 12
+      "sha256": "c2e9851a4455a94b97cbd2e4034e8d9779c8d5d7c8eb43494aff96054359c1f1",
+      "hard": 13
     },
     "templates/_agents/scripts/draft-sediment.mjs": {
       "sha256": "a9c51e3fd139adf32755d882e0de53f208784be68a75c1881658c3886605c76d",
@@ -227,7 +227,7 @@
       "hard": 0
     },
     "templates/_githooks/pre-commit": {
-      "sha256": "d65b6bd9adc59582e5209c1ddbdfe11a231d1312362c8f594e2579e7d3700e86",
+      "sha256": "483643fcc4981b71acabb9cdf1353a8ad0220d6a8b3bbac3c1318a811e79c780",
       "hard": 4
     },
     "templates/_githooks/pre-merge-commit": {

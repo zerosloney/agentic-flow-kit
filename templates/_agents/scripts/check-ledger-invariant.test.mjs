@@ -177,5 +177,54 @@ const append = (d, line) => fs.appendFileSync(ledPath(d), line + '\n');
   fs.rmSync(d, { recursive: true, force: true });
 }
 
+// ---- S13-S17：--staged 分片触发面（2026-10-13 ledger-shard-default：分片为默认写入口径，触发面扩大）----
+{
+  const d = mkrepo();
+  const shardDir = path.join(d, '.agents', 'confirmations.d');
+  fs.mkdirSync(shardDir, { recursive: true });
+  const shardP = path.join(shardDir, 'demo.jsonl');
+  fs.writeFileSync(shardP, row({ ts: '2026-10-02T02:00:00.000Z', stage: 'done' }) + '\n');
+  G(d, ['add', '-A']);
+  let r = run(d, ['--staged']);
+  check('S13 --staged 新分片首入库（无 HEAD 基线）→ exit 0', r.code === 0, r.out);
+  commitAll(d, 'shard base');
+  r = run(d);
+  check('S13 分片入库后历史全扫 exit 0（分片历史干净）', r.code === 0, r.out);
+
+  // S14：分片纯追加 → --staged 放行
+  fs.appendFileSync(shardP, row({ ts: '2026-10-02T03:00:00.000Z', stage: 'done' }) + '\n');
+  G(d, ['add', '-A']);
+  r = run(d, ['--staged']);
+  check('S14 --staged 分片纯追加 → exit 0', r.code === 0, r.out);
+  commitAll(d, 'shard append');
+
+  // S15：分片重写 → --staged 拦（分片同受 append-only 前缀不变量约束）
+  const lines = fs.readFileSync(shardP, 'utf8').split('\n').filter(Boolean);
+  lines[0] = lines[0].replace('确认', '篡改后');
+  fs.writeFileSync(shardP, lines.join('\n') + '\n');
+  G(d, ['add', '-A']);
+  r = run(d, ['--staged']);
+  check('S15 --staged 分片重写 → exit 1（报文点名分片重写）', r.code === 1 && r.out.includes('分片重写'), r.out);
+  G(d, ['checkout', 'HEAD', '--', '.agents/confirmations.d/demo.jsonl']); // 还原到 HEAD 基线
+
+  // S16：compact 归并删分片（分片行全部并入暂存主台账）→ --staged 放行
+  fs.appendFileSync(ledPath(d), fs.readFileSync(shardP, 'utf8'));
+  fs.rmSync(shardP);
+  G(d, ['add', '-A']);
+  r = run(d, ['--staged']);
+  check('S16 --staged compact 归并删分片（行全并入暂存主台账）→ exit 0', r.code === 0, r.out);
+  commitAll(d, 'compact merge');
+
+  // S17：未并入即删分片（丢行）→ --staged 拦
+  fs.writeFileSync(shardP, row({ ts: '2026-10-02T04:00:00.000Z', stage: 'done' }) + '\n');
+  G(d, ['add', '-A']);
+  commitAll(d, 'shard again');
+  fs.rmSync(shardP);
+  G(d, ['add', '-A']);
+  r = run(d, ['--staged']);
+  check('S17 --staged 未并入即删分片 → exit 1（报文点名分片删除丢行）', r.code === 1 && r.out.includes('分片删除丢行'), r.out);
+  fs.rmSync(d, { recursive: true, force: true });
+}
+
 console.log(`\n${fail ? `❌ ${fail} failed` : '✅ all passed'}（${pass} passed）`);
 process.exit(fail ? 1 : 0);
