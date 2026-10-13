@@ -4,3 +4,11 @@
 .githooks/* text eol=lf
 .agents/hooks/local-pre-commit text eol=lf
 *.ps1 text eol=crlf
+
+# 台账并集合并（2026-10-12 ledger-merge-driver）：确认台账是「尾部追加 + 多人/多 worktree 并行」形态，
+# 默认三方合并会把它当文本冲突，人工解的常见错法是「整取一侧」——静默丢掉另一侧的确认行，
+# 门禁事后无从发现。本 driver 把合并降级为确定性并集去重：两侧行全保留，无冲突可解。
+# 需配 driver（flow-kit init 自动配）：git config merge.jsonl-union.driver "node .agents/scripts/git-merge-jsonl.mjs %O %A %B"
+# **故意不加 text eol=lf**：给既有 .jsonl 加 text 规则会让下次提交时 git 重新规范化换行 → 台账 blob 字节变化
+#   → check-ledger-invariant 的 append-only 前缀不变量判为「台账重写」而硬拦。台账换行归一由 driver 自身负责。
+.agents/*.jsonl merge=jsonl-union

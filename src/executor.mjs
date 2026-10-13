@@ -1,0 +1,184 @@
+// flow-kit route / run —— 手动路由与自动流水线（2026-10-13 flow-kit-route）
+//
+// 这是引擎从「骨架」到「执行器」的两条新命令。分工（硬约定）：
+//   **代码留在装户 .agents/scripts/**，包 CLI 只做**薄壳转发与判定面**——执行体不搬家（决策 A）。
+//   **md 指令与 md 子代理仍装在装户**（.agents/commands、.agents/roles、modules/hosts）：宿主读它们，
+//   包 CLI 不复制、不改写、不解释它们的正文。
+//
+// ── route（手动路由的机器面）──────────────────────────────────────────
+// 此前定级只以散文存在于 .agents/commands/new-task.md；AI 每次判级都可能不同，门禁无从校验判低守约。
+// 本命令把「能被机器判定的部分」抽出来（判据单源 = .agents/scripts/level-criteria.mjs），
+// 给出：建议档位 + 判据清单 + 下一阶段 + 该读的 md 指令路径。
+// **诚实边界**：级别是**意图面**的语义判定（「一处定义、多处消费」），机器判不了语义——本命令只兜
+//   「就高不就低」与「路径下限」（.agents/level-hints.txt，装户自持、内容项目私有）。
+//   未配置 hints 时按 L1 起步并提示补配置，**绝不假装判得出**。
+//
+// ── run（自动流水线薄壳）─────────────────────────────────────────────
+// 直接转发装户的 pipeline-run 状态机（start/next/status/watch/abort），不复制其逻辑：
+//   状态机唯一实现在 .agents/scripts/pipeline-run.mjs，工单协议与人件门语义见 .agents/commands/pipeline-run.md。
+//   薄壳只做：定位装户脚本 → 透传参数与退出码。**绝不 spawn AI 会话、永不伪造原话、永不带 --no-verify**。
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { pathToFileURL } from 'node:url';
+
+const AGENT_SCRIPTS_REL = '.agents/scripts';
+
+function parseArgs(args) {
+  const o = { _: [] };
+  for (let i = 0; i < args.length; i++) {
+    const a = args[i];
+    if (a.startsWith('--')) {
+      // `--k=v` 与 `--k v` 等价（--dir=<path> 这类写法必须能解析，否则寻址参数被静默忽略）
+      const eq = a.indexOf('=');
+      if (eq > 2) { o[a.slice(2, eq)] = a.slice(eq + 1); continue; }
+      const k = a.slice(2);
+      const next = args[i + 1];
+      if (next === undefined || next.startsWith('--')) o[k] = true;
+      else { o[k] = next; i++; }
+    } else o._.push(a);
+  }
+  return o;
+}
+
+function resolveTarget(o) {
+  return path.resolve(typeof o.dir === 'string' ? o.dir : process.cwd());
+}
+
+function fail(msg, code = 1) { console.error('❌ ' + msg); process.exit(code); }
+
+// 装户脚本存在性判定（薄壳不做「自动 sync 装一遍」——那会静默改用户盘面，fail-loud 指向处置动作）
+function requireInstalledScript(target, rel) {
+  const abs = path.join(target, ...rel.split('/'));
+  if (!fs.existsSync(abs)) {
+    fail(`未找到 ${rel}——当前目录不是已安装 flow-kit 的项目，或安装被部分清理。\n   处置：cd 到项目根，或执行 flow-kit init / flow-kit sync 补齐。`);
+  }
+  return abs;
+}
+
+const STAGE_ENTRY = {
+  require: 'plan.md', fix: 'maintain.md', verify: 'test.md',
+  review: 'review.md', deploy: 'deploy.md',
+};
+
+// laneOfDoc：调装户 stage-gates.mjs 的单源泳道取法。返回 { key, source }
+//   source='stage-gates.mjs' → 真取到单源；source='fallback' → 装户缺该脚本，按档位直接回落（fail-soft，不阻断路由）。
+async function laneOfDoc(target, level) {
+  const p = path.join(target, ...`${AGENT_SCRIPTS_REL}/stage-gates.mjs`.split('/'));
+  try {
+    if (fs.existsSync(p)) {
+      const mod = await import(pathToFileURL(p).href);
+      if (typeof mod.laneOfDoc === 'function') {
+        const key = mod.laneOfDoc(level);
+        if (key === 'low' || key === 'high' || key === 'suspect') return { key, source: 'stage-gates.mjs' };
+      }
+    }
+  } catch { /* 装户脚本缺失/异常 → 回落 */ }
+  const rank = { L0: 0, L1: 1, L2: 2, L3: 3 }[level];
+  return { key: rank >= 2 ? 'high' : 'low', source: 'fallback' };
+}
+
+export async function route(args) {
+  const o = parseArgs(args);
+  const target = resolveTarget(o);
+  const scriptsDir = path.join(target, ...AGENT_SCRIPTS_REL.split('/'));
+
+  // 判据单源在装户面（随模板下发、随 sync 升级）——包不复制判据，避免双源漂移
+  const critPath = path.join(scriptsDir, 'level-criteria.mjs');
+  if (!fs.existsSync(critPath)) {
+    fail(`未找到 .agents/scripts/level-criteria.mjs（级别判据单源）。\n   该文件随 1.7.15+ 下发；若你的项目更早，执行 flow-kit sync 升级。`);
+  }
+  const crit = await import(pathToFileURL(critPath).href);
+
+  // 枚举单源（模块值域 / kind 集合）：同样在装户面
+  let levelList = crit.LEVELS;
+  let modules = [];
+  try {
+    const enumsMod = await import(pathToFileURL(path.join(scriptsDir, 'workflow-enums.mjs')).href);
+    const enums = enumsMod.loadEnums(path.join(scriptsDir, '..', 'workflow-enums.txt'));
+    if (Array.isArray(enums['level.all']) && enums['level.all'].length) levelList = enums['level.all'];
+  } catch { /* 枚举缺失 → 用判据单源自带档位表，不阻断（定级面不该因词表缺失整个挂掉） */ }
+  const modFile = path.join(target, '.agents', 'workflow-modules.txt');
+  if (fs.existsSync(modFile)) {
+    modules = fs.readFileSync(modFile, 'utf8').split(/\r?\n/)
+      .map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
+  }
+
+  const kind = typeof o.kind === 'string' ? o.kind : '';
+  if (kind && !['require', 'fix', 'verify', 'review', 'deploy'].includes(kind)) {
+    fail(`--kind 须为 require|fix|verify|review|deploy（实际「${kind}」）`);
+  }
+
+  const files = typeof o.files === 'string'
+    ? o.files.split(/[,，]/).map((s) => s.trim()).filter(Boolean)
+    : [];
+  const proposed = typeof o.level === 'string' ? o.level.toUpperCase() : '';
+  if (proposed && !levelList.includes(proposed)) {
+    fail(`--level 须为 ${levelList.join('|')}（实际「${proposed}」）`);
+  }
+
+  const a = crit.assessLevel(target, { files, proposed });
+  const level = a.level || 'L1';
+  // 泳道取法沿装户 stage-gates 单源（laneOfDoc：级别单字段协议），不在本文件复刻 low/high 口径。
+  //   装户无 stage-gates.mjs（老版本未升级）→ fail-soft 回退默认（判 L2/L3 → high），并在输出里标明未取到单源。
+  const laneKey = await laneOfDoc(target, level);
+  const lane = laneKey.key === 'high' ? '防御道（同步确认门）' : '协作道（快车道）';
+  const entry = STAGE_ENTRY[kind] || STAGE_ENTRY.require;
+
+  if (o.json) {
+    console.log(JSON.stringify({
+      level, lane, laneKey: laneKey.key, laneSource: laneKey.source, kind: kind || '(未定)',
+      files, proposed: a.proposed, hintLevel: a.hintLevel, matched: a.matched,
+      underHint: a.underHint, hintsConfigured: a.hintsConfigured,
+      nextStage: entry, nextCommand: `.agents/commands/${entry}`,
+      modules,
+    }, null, 2));
+    return;
+  }
+
+  console.log(`flow-kit route — 手动路由判定（机器面）\n`);
+  console.log(crit.routeAdvice(level, a));
+  console.log('');
+  console.log(`泳道：${lane}`);
+  if (laneKey.source === 'fallback') {
+    console.log('  ℹ️  泳道取法未取到装户 stage-gates.mjs 单源，按档位回落判定（建议 flow-kit sync 升级）。');
+  }
+  if (kind) console.log(`入口指令：.agents/commands/${entry}（kind=${kind}）`);
+  else console.log(`入口指令：未定 —— 先判 kind（require 新需求 / fix 修复 / verify 验证 / review 评审 / deploy 上线）`);
+  console.log(`  new-task 阶段索引：.agents/commands/new-task.md`);
+  console.log('');
+  console.log('本命令只给机器可判的部分。**定级仍需语义判断**——按上面自查句逐条判；');
+  console.log('不确定就高不就低。要走全自动六阶段闭环另用：flow-kit run start "<需求>"');
+}
+
+// 薄壳自有参数：这些是包 CLI 的选项，**不**透传给装户状态机（状态机有自己的参数协议）
+const SHELL_ONLY_KEYS = new Set(['dir']);
+
+export function runPipeline(args) {
+  const o = parseArgs(args);
+  const sub = o._[0];
+  // 用法校验先于脚本存在性校验：先告诉用户「怎么用」，再谈装没装（反过来会拿安装问题盖住用法）
+  if (!sub) {
+    fail('用法：flow-kit run <start|next|status|watch|abort> [...]\n' +
+         '   驱动协议与停机点语义见 .agents/commands/pipeline-run.md（该文件是宿主面权威，本命令只透传）。');
+  }
+  const target = resolveTarget(o);
+  const script = requireInstalledScript(target, `${AGENT_SCRIPTS_REL}/pipeline-run.mjs`);
+  // 透传 = 用户给的参数原样交给装户状态机，但**剔除薄壳自有参数**（--dir 是包面寻址，不是状态机参数）
+  const passthrough = [];
+  for (let i = args.indexOf(sub) + 1; i < args.length; i++) {
+    const a = args[i];
+    if (a.startsWith('--')) {
+      const k = a.slice(2).split('=')[0];
+      if (SHELL_ONLY_KEYS.has(k)) {
+        if (!a.includes('=') && args[i + 1] !== undefined && !args[i + 1].startsWith('--')) i++;
+        continue;
+      }
+    }
+    passthrough.push(a);
+  }
+  const r = spawnSync(process.execPath, [script, sub, ...passthrough], {
+    cwd: target, stdio: 'inherit', windowsHide: true,
+  });
+  process.exit(r.status ?? 1);
+}

@@ -7,12 +7,12 @@
 //   ② CI 的机器门跑的是**被测分支自己的** `.agents/scripts/check-loop.mjs`（ci.yml:42）——被改坏的
 //      裁判验证自己的篡改，无外部参照，CI 全绿。
 //
-// 本门的做法：把「门禁本体当前的硬拦面」**冻结进一个入库基线** `.agents/engine-lock.json`，
-//   判定 = HEAD 盘面向量 ↔ 基线逐项比对（哈希 + 硬拦单位数）。它不是签名、也不宣称不可伪造——
+// 本门的做法：把「门禁本体当前的硬拦面」**冻结进一个入库基线** `templates/_agents/engine-lock.json`，
+//   判定 = 包源盘面向量 ↔ 基线逐项比对（哈希 + 硬拦单位数）。它不是签名、也不宣称不可伪造——
 //   它把「静默改弱」变成「必须显式声明的改弱」：
 //     · 硬拦单位数**下降**（删 blocker / 删 exit 1 / 从面清单删行 / 从 CI 删一次门调用）→ 无条件 BLOCK；
 //     · 内容变了但硬拦面没缩 → 须有一份**活跃 L2/L3 入口文档正文点名该文件**，否则 BLOCK；
-//     · 基线本身在受检面内（engine-lock.json 已入 control-surfaces，装户径与包源径两面），
+//     · 基线本身在受检面内（control-surfaces 列了 templates/_agents/engine-lock.json），
 //       改基线同样要过入口门。
 //   于是绕过路径从「编辑一个文件」抬到「编辑两个文件 + 立一份 L2 文档 + 落一条确认台账 + 提交」——
 //   每一环都在 git 历史与台账里留痕，可事后对质。诚实边界：`--no-verify` / 不挂 hooksPath /
@@ -33,7 +33,7 @@
 //   不从时间戳反推过程。
 // 用法：node check-engine-integrity.mjs [--root <dir>] [--update] [--against <dir>] [--against-ref <ref>] [--quiet]
 //   --update  按当前盘面重生成基线（合法演进的最后一步；本身是控制面改动，须与入口文档同批提交）
-// 退出码：0 通过（含基线缺失=未启用）；1 阻断（stderr 出 [标签] 与修法）；2 用法错误（如 --against 目录不存在）
+// 退出码：0 通过（含基线缺失=未启用）；1 阻断（stderr 出 [标签] 与修法，或目标根不是包源仓）；2 用法错误（如 --against 目录不存在）
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -53,24 +53,19 @@ const ROOT = argOf('--root') || (() => {
   const r = spawnSync('git', ['-C', process.cwd(), 'rev-parse', '--show-toplevel'], { encoding: 'utf8' });
   return r.status === 0 ? String(r.stdout || '').trim() : process.cwd();
 })();
-// 引擎基线路径双布局（装户端内容清理后）：盘面已有基线按其径读；两处皆无时按**仓库布局**定
-// 落点——.agents/ 在 = 装户径；否则 templates/_agents/ 在 = 包源径（--update 才不会重建已清理的装户目录）。
-// ⚠️ 包源径在 sync 下发面内（render.mjs 只排除 .agents/cache）：包源基线的键是 templates/_agents/scripts/…
-// 路径，装户盘面是 .agents/scripts/…——一旦把包源基线入库，sync 会把它下发进每个装户的 .agents/，
-// 命名空间错配 → 全员误报「门禁件消失 / 未入基线」。纯包源仓**不得入库包源基线**；要引擎仓自证
-// 完整性，须把基线放到 sync 扫描面之外（如仓库根）再接线 CI，且其豁免出口（L2 入口）在纯包源仓
-// 无 workflow/ 的情况下无处可立——这是设计约束，不是待修缺陷。
-const LOCK_CANDIDATES = ['.agents/engine-lock.json', 'templates/_agents/engine-lock.json'];
-const resolveLock = () => {
-  for (const rel of LOCK_CANDIDATES) {
-    if (fs.existsSync(path.join(ROOT, rel))) return { rel, abs: path.join(ROOT, rel) };
-  }
-  const fallback = fs.existsSync(path.join(ROOT, '.agents'))
-    ? LOCK_CANDIDATES[0]
-    : LOCK_CANDIDATES[1];
-  return { rel: fallback, abs: path.join(ROOT, fallback) };
-};
-const { rel: LOCK_REL, abs: LOCK_ABS } = resolveLock();
+// 只认包源。基线固定 templates/_agents/engine-lock.json。受检面只扫包源模板
+// （scripts / _githooks / templates/_github / .github/workflows / templates/AGENTS.md / templates/_agents/*.txt）。
+// `.github/workflows/*.yml` 是包源自身的 CI 编排——本门的调用点在那儿，不纳入就等于门可被无声关闭。
+// 不扫 .agents、不扫项目根 .githooks、不按「有没有 .agents」猜布局。
+// 无 templates/_agents 时所有模式都拒绝：静默扫到 0 个文件会看起来像通过。
+// render.mjs 排除 .agents/engine-lock.json，避免把包源基线下发进装户。
+const pkgAgents = path.join(ROOT, 'templates', '_agents');
+if (!fs.existsSync(pkgAgents)) {
+  console.error(`check-engine-integrity 只在包源仓运行（需要 templates/_agents）。目标根 ${ROOT} 不是包源仓。`);
+  process.exit(1);
+}
+const LOCK_REL = 'templates/_agents/engine-lock.json';
+const LOCK_ABS = path.join(ROOT, LOCK_REL);
 
 // ---- 受检面（单源：本函数；基线与比对同一份清单，防「基线少记一项」的静默空洞）----
 const gateFiles = () => {
@@ -86,18 +81,20 @@ const gateFiles = () => {
     }
   };
   addDir('templates/_agents/scripts', (r) => /\.mjs$/.test(r) && !r.endsWith('.test.mjs'));
-  addDir('.agents/scripts', (r) => /\.mjs$/.test(r) && !r.endsWith('.test.mjs'));
   addDir('templates/_githooks');
-  addDir('.githooks');
-  addDir('.agents/hooks');
-  addDir('.github/workflows', (r) => r.endsWith('.yml'));
   addDir('templates/_github/workflows', (r) => r.endsWith('.yml'));
+  // 包源自身的机器门编排（.github/workflows/*.yml）。**刻意纳入**：本门是「唯一能防改弱门禁本体」的检查，
+  //   而门要成为门就得有人调用它——调用点只存在于 CI 编排里。不纳入的话，删掉编排里的本门调用
+  //   （或整个 job）没有任何检查会发现：被保护面之外的空白，正是它自身失效的那条路径。
+  addDir('.github/workflows', (r) => r.endsWith('.yml'));
   for (const f of ['lane-surfaces.txt', 'control-surfaces.txt', 'workflow-enums.txt', 'workflow-modules.txt',
-    'scripts-test-exempt.txt', 'rule-budgets.txt', 'metric-claims.txt']) {
-    add(`.agents/${f}`);
+    'scripts-test-exempt.txt', 'rule-budgets.txt', 'metric-claims.txt',
+    // level-hints.txt（2026-10-13 flow-kit-route 补录）：风险级别的**路径下限**清单，直接驱动
+    //   flow-kit route 定级结果，且语法错会 fail-loud 抛 LEVEL_HINTS_INVALID 改判级结论。
+    //   与 lane-surfaces.txt / workflow-modules.txt 同属「喂判据的输入面」，此前漏在受检面外。
+    'level-hints.txt']) {
     add(`templates/_agents/${f}`);
   }
-  add('AGENTS.md');
   add('templates/AGENTS.md');
   return [...out].sort();
 };
@@ -223,14 +220,10 @@ for (const rel of gateFiles()) current[rel] = { sha256: shaOf(path.join(ROOT, re
 // ---- 跨提交锚（先于本地基线判定：恶意分支把盘面 engine-lock.json 删掉也逃不掉这一层——参照物读自 git 对象库）----
 if (argOf('--against-ref')) {
   const ref = argOf('--against-ref');
-  // 两候选径都试（装户径 / 包源径）——纯包源仓的基线在 templates/_agents/ 下，锚须读得到
   let anchor = null;
-  for (const rel of LOCK_CANDIDATES) {
-    const r = spawnSync('git', ['-C', ROOT, 'show', `${ref}:${rel}`], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
-    try { anchor = JSON.parse(String(r.stdout || '')); } catch { /* 该候选径在此 ref 无基线 → 试下一个 */ }
-    if (anchor && anchor.files) break;
-    anchor = null;
-  }
+  const r = spawnSync('git', ['-C', ROOT, 'show', `${ref}:${LOCK_REL}`], { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  try { anchor = JSON.parse(String(r.stdout || '')); } catch { /* 该 ref 无基线 */ }
+  if (!anchor || !anchor.files) anchor = null;
   if (!anchor) {
     if (!QUIET) console.log(`ℹ️  跨提交锚缺失（${ref} 无 ${LOCK_REL}）——该层跳过（首个入账提交/浅克隆）`);
   } else {
@@ -247,7 +240,7 @@ if (argOf('--against-ref')) {
 }
 
 if (!lock || !lock.files) {
-  if (!QUIET) console.log(`ℹ️ 引擎基线未启用（无 ${LOCK_REL}）——跑 node .agents/scripts/check-engine-integrity.mjs --update 生成（跨提交锚与外部副本锚照常执行）`);
+  if (!QUIET) console.log(`ℹ️ 引擎基线未启用（无 ${LOCK_REL}）——跑 node templates/_agents/scripts/check-engine-integrity.mjs --update 生成（跨提交锚与外部副本锚照常执行）`);
 } else {
   for (const [rel, want] of Object.entries(lock.files)) {
     const got = current[rel];
@@ -280,7 +273,7 @@ if (argOf('--against')) {
 
 if (problems.length) {
   console.error(`引擎完整性 — HARD-BLOCK:\n\n${problems.map((p) => `- ${p}`).join('\n')}\n`);
-  console.error(`  修法：确属门禁演进 → 立 L2 入口（正文 §改动面 点名上述文件）+ 判据更新后跑 node .agents/scripts/check-engine-integrity.mjs --update，三者同批提交`);
+  console.error(`  修法：确属门禁演进 → 立 L2 入口（正文 §改动面 点名上述文件）+ 判据更新后跑 node templates/_agents/scripts/check-engine-integrity.mjs --update，三者同批提交`);
   console.error('  修法：非演进（误改/被他人改动）→ git diff 核对并回退，勿改基线绕过（基线本身在控制面清单内）');
   process.exit(1);
 }

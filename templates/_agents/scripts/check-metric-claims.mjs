@@ -17,14 +17,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { createRequire } from 'node:module';
+import { readLedgerLines } from './ledger-loader.mjs';
 
 export function runCheck16(ctx) {
   const { ROOT, ENUMS, docFiles, fmGet, inSet, isTracked, linesOf, readdirOrNull, warnings } = ctx;
   const mcFile = path.join(ROOT, '.agents', 'metric-claims.txt');
   if (fs.existsSync(mcFile)) {
     const ledgerLines = () => {
-      const p = path.join(ROOT, '.agents', 'confirmations.jsonl');
-      const ls = (linesOf(p) || []).filter((l) => l.trim());
+      // 读法收敛 ledger-loader（2026-10-12 ledger-loader-p1）：本指标按**原始文本行**计数
+      // （total / 含 "batch" 字段的行数），故用 lines 视图而非 rows 视图。
+      const ls = readLedgerLines(ROOT);
       return { total: ls.length, withBatch: ls.filter((l) => /"batch"/.test(l)).length };
     };
     // 内置取数器：全部本地确定性、零网络。**装户零配置即用**（不依赖任何装户文件）。

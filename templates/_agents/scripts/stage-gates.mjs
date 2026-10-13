@@ -25,6 +25,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { loadKitPolicy } from './policy.mjs';
+import { readLedgerRows } from './ledger-loader.mjs';
 
 export const ENTRY_STATUSES = ['approved', 'done'];
 export const INCIDENT_STATUSES = ['open', 'fixed', 'closed'];
@@ -48,16 +49,10 @@ function readBody(abs) {
 }
 
 // readLedger：confirmations.jsonl 追加式台账（坏行容忍跳过；与 check-loop 检查 15 同容错口径）
+// 读法收敛到 ledger-loader 单源（2026-10-12 ledger-loader-p1）：本函数此前自持 readFileSync+parse
+// 复刻，与其余 5 处各写各的——分片台账落地时逐处加分支必然漏改。签名与返回值不变。
 export function readLedger(root) {
-  const p = path.join(root, '.agents', 'confirmations.jsonl');
-  let text = '';
-  try { text = fs.readFileSync(p, 'utf8'); } catch { return []; }
-  const out = [];
-  for (const line of text.split('\n')) {
-    if (!line.trim()) continue;
-    try { out.push(JSON.parse(line)); } catch { /* 坏行跳过 */ }
-  }
-  return out;
+  return readLedgerRows(root);
 }
 
 // judgeDoc：状态枚举 + 机器事实源判定（供入口 / spec 复用）

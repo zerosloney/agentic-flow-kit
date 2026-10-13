@@ -139,7 +139,7 @@ const STAGES = parseStages(`| id | after | role | step | task | files | accept |
     const j = path.join(os.tmpdir(), `wfj-real-${Date.now()}.jsonl`);
     const r = spawnSync(process.execPath, [JOURNAL_CLI, 'status', '--wf', 'pipeline-closing', '--journal', j], { encoding: 'utf8', cwd: ROOT });
     check('S9 真实 pipeline-closing：confirm 为 human 形态且无 journal 时 author 首层就绪',
-      !!confirm && confirm.human && !confirm.role && stages.length >= 10
+      !!confirm && confirm.human && !confirm.role && stages.length >= 9
         && r.status === 0 && /就绪（第 0 层.*author/.test(r.stdout),
       JSON.stringify({ confirm, out: r.stdout }));
     fs.rmSync(j, { force: true });

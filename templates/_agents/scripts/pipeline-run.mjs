@@ -271,7 +271,9 @@ function changedFiles(ctx, run) {
 }
 
 // 脚本自身管理的运行态路径——confirm/gate/gen-index 副产物，不属宿主越权面（沙箱演练实证，2026-10-02）
-const RUNTIME_OWNED = ['.agents/cache/', '.agents/confirmations.jsonl', 'workflow/INDEX.md'];
+// confirmations.d/ 亦为运行态副产物（2026-10-12 ledger-shard-write 的 `--shard` 写入面）——
+// 不加会让 --shard 的确认行被沙箱越权检查误判为「宿主改了台账」。
+const RUNTIME_OWNED = ['.agents/cache/', '.agents/confirmations.jsonl', '.agents/confirmations.d/', 'workflow/INDEX.md'];
 
 function checkAuthorized(ctx, run, filesCsv) {
   const listed = String(filesCsv || '').split(/[,，]/).map((s) => s.trim().replace(/\\/g, '/')).filter(Boolean);
@@ -338,7 +340,7 @@ function advance(ctx, run, opt) {
           issueWO(ctx, run, wo(run, {
             kind: 'triage', title: '判级与分类', goal: '读需求与 new-task.md 判级闭集，输出 kind/level/module/topic',
             instructions: [
-              '1. 读 .agents/commands/new-task.md §级别判断（L2 触达面闭集 / L1 默认档 / L3 结构面）',
+              '1. 读 .agents/scripts/level-criteria.mjs 判据单源（L2_SURFACES 触达面闭集 / L1 默认档 / L3_SURFACES 结构面；new-task.md 只承载流程表，判据一律看单源；机器面可先跑 `flow-kit route --kind require` 取路径下限提示）',
               `2. 对需求定级：「${run.requirement}」${run.hint ? `（预判参考：${run.hint}）` : ''}`,
               '3. 回填：next --triage "kind=require|fix|verify|review|deploy level=L0-L3 module=<词表> topic=<英文kebab>"',
             ],

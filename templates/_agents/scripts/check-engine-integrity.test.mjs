@@ -37,8 +37,8 @@ const mkfix = ({ withEntry = false, entryNames = 'gate.mjs' } = {}) => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'engine-integrity-test-'));
   w(d, 'templates/_agents/scripts/gate.mjs',
     '// 门禁样例\nblockers.push(`A`);\nblockers.push(`B`);\nif (bad) process.exit(1);\n');
-  w(d, '.githooks/pre-commit', '#!/bin/sh\nif ! node check.mjs; then\n  echo blocked >&2\n  exit 1\nfi\nexit 0\n');
-  w(d, 'AGENTS.md', '# 协议\n- 规则一\n- 规则二\n');
+  w(d, 'templates/_githooks/pre-commit', '#!/bin/sh\nif ! node check.mjs; then\n  echo blocked >&2\n  exit 1\nfi\nexit 0\n');
+  w(d, 'templates/AGENTS.md', '# 协议\n- 规则一\n- 规则二\n');
   if (withEntry) {
     w(d, 'workflow/intents/2026-10-09-ctrl.md',
       `---\n状态: approved\n级别: L2\n日期: 2026-10-09\n模块: gate\n---\n# INTENT\n改动面：templates/_agents/scripts/${entryNames}\n`);
@@ -56,14 +56,13 @@ const mkfix = ({ withEntry = false, entryNames = 'gate.mjs' } = {}) => {
 {
   const d = mkfix();
   const u = run(d, ['--update']);
-  // fixture 无 .agents/ → 基线落包源径（resolveLock 布局回落，见 T9/T10）
   const lockPath = path.join(d, 'templates', '_agents', 'engine-lock.json');
   let lock = null;
   try { lock = JSON.parse(fs.readFileSync(lockPath, 'utf8')); } catch { /* 断言兜 */ }
   const r = run(d);
   check('T2a --update → exit 0 且基线入账受检面', u.code === 0 && !!lock && !!lock.files['templates/_agents/scripts/gate.mjs'], u.out);
   check('T2b 基线记 hard=3（2 blocker + 1 exit(1)）', !!lock && lock.files['templates/_agents/scripts/gate.mjs'].hard === 3, JSON.stringify(lock && lock.files['templates/_agents/scripts/gate.mjs']));
-  check('T2c 钩子入面 hard=1（exit 1 计数）', !!lock && lock.files['.githooks/pre-commit'].hard === 1, JSON.stringify(lock && lock.files['.githooks/pre-commit']));
+  check('T2c 钩子入面 hard=1（exit 1 计数）', !!lock && lock.files['templates/_githooks/pre-commit'].hard === 1, JSON.stringify(lock && lock.files['templates/_githooks/pre-commit']));
   check('T2d 盘面未变 → exit 0 且报「与基线一致」', r.code === 0 && r.out.includes('盘面与基线一致'), r.out);
 }
 
@@ -190,18 +189,18 @@ if (haveGit) {
   check('T8 --quiet 通过时不打印 ✅ 行', r.code === 0 && !r.out.includes('✅'), r.out);
 }
 
-// --- T9 装户布局：.agents/ 在 → 基线落装户径，不新建 templates/_agents/engine-lock.json ---
+// --- T9 非包源根：拒绝，不写基线、不建 templates/_agents ---
 {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'engine-integrity-test-'));
   w(d, '.agents/scripts/gate.mjs', 'blockers.push(`A`);\nblockers.push(`B`);\nif (bad) process.exit(1);\n');
   w(d, 'AGENTS.md', '# 协议\n- 规则一\n');
   const u = run(d, ['--update']);
-  let lock = null;
-  try { lock = JSON.parse(fs.readFileSync(path.join(d, '.agents', 'engine-lock.json'), 'utf8')); } catch { /* 断言兜 */ }
-  check('T9a .agents/ 在 → --update 落 .agents/engine-lock.json（装户径行为不变）',
-    u.code === 0 && !!lock && !!lock.files['.agents/scripts/gate.mjs'], u.out);
-  check('T9b 装户布局不新建 templates/_agents/engine-lock.json',
-    !fs.existsSync(path.join(d, 'templates', '_agents', 'engine-lock.json')), '');
+  const plain = run(d);
+  check('T9a 非包源根 --update 拒绝', u.code !== 0 && /只在包源仓运行/.test(u.out), u.out);
+  check('T9b 非包源根默认模式同样拒绝', plain.code !== 0 && /只在包源仓运行/.test(plain.out), plain.out);
+  check('T9c 不写 .agents/engine-lock.json，不建 templates/_agents',
+    !fs.existsSync(path.join(d, '.agents', 'engine-lock.json'))
+    && !fs.existsSync(path.join(d, 'templates', '_agents')), '');
   fs.rmSync(d, { recursive: true, force: true });
 }
 

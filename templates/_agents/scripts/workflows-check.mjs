@@ -27,7 +27,7 @@
 //        到首个非 `|` 行截止；仅此一张表——编排脚本按机制文档只允许一张 stages 表。
 // 用法：node .agents/scripts/workflows-check.mjs [--root <目标根>] [--json]
 //       默认根 = process.cwd()（doctor 以 cwd=target 调用；仓库根直跑即自扫）
-// 零依赖；只报告不修复（B-b 决策口径，同 source-sync-check）
+// 零依赖；只报告不修复（B-b 决策口径）
 // 测试：node templates/_agents/scripts/workflows-check.test.mjs（fixture + 真实仓库 baseline）
 import fs from 'node:fs';
 import path from 'node:path';

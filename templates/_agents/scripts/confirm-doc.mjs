@@ -25,6 +25,8 @@
 //       node .agents/scripts/confirm-doc.mjs <doc...> --delegated "<用户对话原话>"（委托代录）
 //       node .agents/scripts/confirm-doc.mjs <doc...> --delegated "<原话>" --batch（协作道批量：L0/L1 多份一次代录）
 //       node .agents/scripts/confirm-doc.mjs <doc...> --to superseded|cancelled（放弃态：取代/取消，留指纹与台账）
+//       node .agents/scripts/confirm-doc.mjs <doc...> --shard（分片写入：多 worktree 并行时各写各的
+//         .agents/confirmations.d/<doc>.jsonl，避免同文件并发覆盖；里程碑跑 compact-ledgers.mjs 归并）
 //   多文档一次传入：TTY 模式天然逐份过目键入；--delegated 默认一次仅一份（2026-09-27
 //   confirm-gate-one-per-call：多份并录曾系统性塌掉 build.md「逐件确认」三道门），L0/L1 协作道可
 //   `--batch` 多份一次代录（2026-09-30 hybrid-governance-risk-lanes）：逐份读「级别」，L2/L3 逐份拒绝
@@ -39,8 +41,9 @@ import path from 'node:path';
 import readline from 'node:readline';
 import { createHash, randomBytes } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
+import { readLedgerEntries } from './ledger-loader.mjs';
 import { confirmGateFor, clarifyGateFor, doneGateFor, laneOfEntry, laneOfDoc } from './stage-gates.mjs';
-import { loadKitPolicy, hasFreshVerifyLine, ledgerChainHash, scopeDigest } from './policy.mjs';
+import { loadKitPolicy, hasFreshVerifyLine, ledgerChainHash, ledgerDocChainActive, ledgerDocChainPrev, scopeDigest } from './policy.mjs';
 
 // hasFreshVerify(root, doc)：读 <root>/.agents/verifications.jsonl 判 24h 窗口绿行（判定单源
 // policy.hasFreshVerifyLine）。只读，台账缺失/不可读一律 false（=无凭证，advisory 层 fail-open）。
@@ -148,22 +151,38 @@ export function applyTransition(text, targetStage, fingerprint16) {
 }
 
 // appendLedger(root, entry)：追加一行 JSON（目录不存在自动建；只 append 不重写）
-// 哈希链（2026-10-09 engine-quality-round2 D）：每行追加 prevHash（末行 hash，末行无 hash/空文件 → ''）
-//   与 hash（ledgerChainHash 单源计算，check-loop 15 同函数验链）——「就地改/删中间行」必留断链痕迹；
-//   历史行零回填（无 hash 行后链重启），整文件重写不可机器防（边界声明见 policy.ledgerChainHash）。
-export function appendLedger(root, entry) {
-  const p = path.join(root, '.agents', 'confirmations.jsonl');
+// 哈希链（2026-10-09 engine-quality-round2 D）：每行追加 prevHash 与 hash（ledgerChainHash 单源计算，
+//   check-loop 15 同函数验链）——「就地改/删中间行」必留断链痕迹；历史行零回填（无 hash 行后链重启），
+//   整文件重写不可机器防（边界声明见 policy.ledgerChainHash）。
+// 链域（2026-10-12 ledger-doc-chain）：policy.ledgerDocChainSince 存在且合法 → prevHash 取**同行 doc 的
+//   最后一个带 hash 行**（ledgerDocChainPrev），不再取物理末行。理由见 POLICIES v8 注释：物理链隐含
+//   「单写者顺序追加」前提，而并发 append / git 并集合并 / 分片归并三种**正常协作**都会打断它。
+//   缺键（v1-v7）→ 走旧物理链口径，存量零变化。
+// shard（2026-10-12 ledger-shard-write）：多 worktree 并行时两个进程同时 append 同一台账文件会互相覆盖
+//   （各自读到同一末行 → 同 prevHash → 后写者覆盖前写者）。--shard 把本行写入分片
+//   `.agents/confirmations.d/<doc基名>.jsonl`，各 worktree 各写各的、互不冲突；里程碑跑 compact-ledgers.mjs
+//   归并回主台账。**默认仍写主台账**——分片是有意的并发开关，不设则零影响。
+export function appendLedger(root, entry, { shard = false } = {}) {
+  const p = shard && entry.doc
+    ? path.join(root, '.agents', 'confirmations.d', `${path.basename(entry.doc, '.md')}.jsonl`)
+    : path.join(root, '.agents', 'confirmations.jsonl');
   fs.mkdirSync(path.dirname(p), { recursive: true });
   let prevHash = '';
   try {
-    if (fs.existsSync(p)) {
+    if (ledgerDocChainActive(loadKitPolicy(root))) {
+      // doc 链取前驱走**台账视图**（主台账 + 分片）而非单个文件：--shard 写入时，该 doc 的历史行
+      // 很可能在主台账里，只读分片文件会从 '' 重启 → 链断裂。视图取法天然跨来源衔接。
+      const rows = readLedgerEntries(root).map((e) => e.row);
+      prevHash = ledgerDocChainPrev(rows, entry.doc);
+    } else if (fs.existsSync(p)) {
+      // 旧物理链口径：取**本次写入目标文件**的末行 hash（v1-v7 存量行为，逐字不变）
       const lines = fs.readFileSync(p, 'utf8').split(/\r?\n/).filter((l) => l.trim());
       if (lines.length) {
         const last = JSON.parse(lines[lines.length - 1]);
         prevHash = last && typeof last.hash === 'string' ? last.hash : '';
       }
     }
-  } catch { /* 末行不可解析 → prevHash ''（链从本行重启；断裂由 check-loop 15 出账） */ }
+  } catch { /* 不可解析 → prevHash ''（链从本行重启；断裂由 check-loop 15 出账） */ }
   const { hash: _h, prevHash: _p, ...rest } = entry;
   const row = { ...rest, prevHash, hash: ledgerChainHash(rest, prevHash) };
   fs.appendFileSync(p, JSON.stringify(row) + '\n');
@@ -190,6 +209,7 @@ if (isMain) {
   let toTarget = null; // null = 默认前向跳转；superseded|cancelled = 放弃态显式目标
   let autoMode = false; // AI 自治模式（信任等级授权，2026-09-30 ai-autonomy-trust）
   let batchMode = false; // 协作道批量代录（--batch，2026-09-30 hybrid-governance-risk-lanes：仅 --delegated + L0/L1）
+  let shardWrite = false; // 分片写入（--shard，2026-10-12 ledger-shard-write）：多 worktree 并行时各写各的分片，避免互相覆盖
   const docs = [];
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--root') root = path.resolve(argv[++i]);
@@ -197,12 +217,21 @@ if (isMain) {
     else if (argv[i] === '--to') toTarget = argv[++i] ?? '';
     else if (argv[i] === '--auto') autoMode = true;
     else if (argv[i] === '--batch') batchMode = true;
+    else if (argv[i] === '--shard') shardWrite = true;
     else docs.push(argv[i].replace(/\\/g, '/'));
   }
   if (toTarget !== null && !ABANDON_TARGETS.includes(toTarget)) {
     console.error(`用法：--to 仅接受 superseded|cancelled（现「${toTarget}」）——cancelled 自 draft/approved/open/fixed；superseded 自 approved/done/fixed/closed（未确认态只能 cancelled；终态间仅允许 done/closed→superseded）`);
     process.exit(1);
   }
+  // --shard 与 doc 链口径绑定（2026-10-12 ledger-shard-write）：分片与主台账分属不同文件，
+//   只有 doc 链能跨来源接续；旧物理链口径下分片行的 prevHash 会与主台账末行失配 → 提交即断链。
+//   故缺锚时**参数期直接拒**（友好报错），而不是让用户写完台账再被门禁拦。
+if (shardWrite && !ledgerDocChainActive(loadKitPolicy(root))) {
+    console.error('❌ --shard 需要台账 doc 链口径（policy.ledgerDocChainSince），当前 policyVersion 无此键。\n   原因：分片与主台账是不同文件，只有 doc 链能跨来源接续；旧物理链口径下分片行会与主台账断链。\n   修法：在 .agents/kit.json 设 policyVersion: 8（或更高的支持版本）后重试。');
+    process.exit(1);
+  }
+
   const delegated = delegatedQuote !== null;
   if (delegated && autoMode) {
     console.error('❌ --auto 与 --delegated 互斥：自治模式是用户预先授权的机器放行，委托代录是单次对话确认');
@@ -420,7 +449,7 @@ if (isMain) {
       }
       fs.writeFileSync(abs, applyTransition(text, target, fp.slice(0, 16)));
       appendLedger(root, {
-        ts: new Date().toISOString(), doc, stage: target, fingerprint: fp, prev: st,
+        shard: shardWrite, ts: new Date().toISOString(), doc, stage: target, fingerprint: fp, prev: st,
         source: `ai-auto-trust-L${trustConfig.level}`, quote: `AI 自治放行 (Trust Level ${trustConfig.level})`,
         batch, seq, of: docs.length, scope,
       });
@@ -441,7 +470,7 @@ if (isMain) {
       }
       fs.writeFileSync(abs, applyTransition(text, target, fp.slice(0, 16)));
       appendLedger(root, {
-        ts: new Date().toISOString(), doc, stage: target, fingerprint: fp, prev: st,
+        shard: shardWrite, ts: new Date().toISOString(), doc, stage: target, fingerprint: fp, prev: st,
         source: 'chat-delegated', quote: String(delegatedQuote),
         // 调用事实（batch-ledger-audit）：seq=本次调用内件序（从 1），of=本次调用总份数
         batch, seq, of: docs.length,
@@ -471,7 +500,7 @@ if (isMain) {
     }
     fs.writeFileSync(abs, applyTransition(text, target, fp.slice(0, 16)));
     appendLedger(root, {
-      ts: new Date().toISOString(), doc, stage: target, fingerprint: fp, prev: st,
+        shard: shardWrite, ts: new Date().toISOString(), doc, stage: target, fingerprint: fp, prev: st,
       source: 'tty',
       batch, seq, of: docs.length, // 调用事实（形态无关：TTY 多文档天然逐件过目，of>1 不构成违规）
     });

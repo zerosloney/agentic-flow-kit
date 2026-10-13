@@ -8,10 +8,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const SRC = path.join(SCRIPT_DIR, 'agg-delegations.cjs');
+// 夹具闭包（2026-10-12 fixture-closure-rootfix）：入口 agg-delegations.cjs 的传递依赖自动带入（当前无，
+// 但日后加 import 不必回来改这里——漏拷 = 假绿）。
+const { copyScriptClosure } = await import(pathToFileURL(path.join(SCRIPT_DIR, 'fixture-scripts.mjs')).href);
 const USAGE = '用法：node .agents/scripts/agg-delegations.test.mjs';
 
 let pass = 0;
@@ -26,7 +28,7 @@ const mkfix = (ledgerText) => {
   fs.mkdirSync(path.join(root, '.agents', 'scripts'), { recursive: true });
   fs.mkdirSync(path.join(root, 'workflow', 'incidents'), { recursive: true });
   fs.writeFileSync(path.join(root, 'workflow', 'delegations.md'), ledgerText, 'utf8');
-  fs.copyFileSync(SRC, path.join(root, '.agents', 'scripts', 'agg-delegations.cjs'));
+  copyScriptClosure(path.join(root, '.agents', 'scripts'), ['agg-delegations.cjs']);
   return root;
 };
 const runAgg = (root) => spawnSync(process.execPath, [path.join(root, '.agents', 'scripts', 'agg-delegations.cjs')], { cwd: root, encoding: 'utf8' });

@@ -40,6 +40,31 @@ jobs:
       - name: 引擎自检（lint + 全量套件）
         run: npm test
 
+  # 引擎本体完整性门（check-engine-integrity）——本仓唯一能防「改弱门禁本体」的检查。
+  # 此前它是**死代码**：脚本在库、但基线 templates/_agents/engine-lock.json 从未入库，
+  # 且 ci.yml / .githooks / npm test 三处都没有调用点（git grep 只命中 render.mjs 注释与它自己的单测）
+  # → 本地基线层、跨提交锚层双层跳过，只剩「硬拦单位数不收缩」计数，等于从未作为门跑过。
+  # 本 job 把两层判据接成机器门：
+  #   ① 盘面 ↔ 入库基线：逐项 sha256 + 硬拦单位数。改内容而无活跃 L2/L3 入口点名 → 拦；
+  #     硬拦单位数下降（删 blocker / exit 1 / 判据行）→ 无条件拦。
+  #   ② 跨提交锚（--against-ref HEAD~1）：参照物读自 git 对象库，兜「恶意分支同时改弱门禁
+  #     并 --update 重写基线」这一自洽形态（本地层对这种操作是自洽的，CI 会全绿）。
+  # fetch-depth: 2 —— 默认浅克隆下 HEAD~1 不可解析，锚层会被静默跳过（不误报，但也白跑）。
+  # 诚实边界：HEAD~1 在多提交 PR 上不等于 merge-base（严格应比 base.sha，这里取更保守的近邻提交）；
+  #   --no-verify / 删掉本脚本 / 不启用本 job 仍可绕过——本地信任边界内不可机器防，沿文件头口径。
+  # 独立于 test job（不占 4 宫格）：本门只读 fs 与 git 对象库，无矩阵差异、无依赖安装需求。
+  engine-integrity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: 引擎完整性门（入库基线 + 跨提交锚）
+        run: node templates/_agents/scripts/check-engine-integrity.mjs --against-ref HEAD~1
+
   # 手动触发才跑；恒 exit 0（advisory 报告器）——阈值触达不红，报告贴进 run summary 供人判。
   jscpd-drift:
     if: github.event_name == 'workflow_dispatch'

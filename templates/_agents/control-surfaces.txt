@@ -15,7 +15,7 @@
 #   不宣称关闭「刻意绕过」。事后对质面 = 台账 + git 历史 + check-engine-integrity 的基线比对。
 #
 # 覆盖哪些面（为什么各条目都在控制面上）：
-#   引擎判据本体（包源 + 装副本两面都列——单边改动同样要过门）
+#   引擎判据本体（同一份清单随模板下发：包源仓命中 templates/ 前缀，装户仓命中 .agents/ 前缀）
 ^templates/_agents/scripts/
 ^\.agents/scripts/
 #   git 钩子面（本地唯一机器门的编排）与钩子内的门禁实现件

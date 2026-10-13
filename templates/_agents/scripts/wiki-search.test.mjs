@@ -6,22 +6,21 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
 
-const SRC = path.dirname(fileURLToPath(import.meta.url));
 let pass = 0, fail = 0;
 const check = (name, cond, detail = '') => {
   if (cond) { pass++; console.log(`PASS ${name}`); }
   else { fail++; console.log(`FAIL ${name}${detail ? `——${detail}` : ''}`); }
 };
 
-const COPIED = ['wiki-search.mjs', 'kb-search.mjs', 'workflow-enums.mjs'];
+// 夹具闭包（2026-10-12 fixture-closure-rootfix）：入口只写 wiki-search.mjs，kb-search 及其传递依赖
+// （workflow-enums.mjs 等）由闭包自动带入——此前手写枚举，漏拷即 import 失败 → 假绿。
+const { copyScriptClosure, copyAgentsFiles } = await import('./fixture-scripts.mjs');
 function mkFixture() {
   const fx = fs.mkdtempSync(path.join(os.tmpdir(), 'ws-'));
   fs.mkdirSync(path.join(fx, '.agents', 'scripts'), { recursive: true });
-  for (const f of COPIED) fs.copyFileSync(path.join(SRC, f), path.join(fx, '.agents', 'scripts', f));
-  for (const f of ['workflow-enums.txt', 'workflow-modules.txt'])
-    fs.copyFileSync(path.join(SRC, '..', f), path.join(fx, '.agents', f));
+  copyScriptClosure(path.join(fx, '.agents', 'scripts'), ['wiki-search.mjs']);
+  copyAgentsFiles(path.join(fx, '.agents'), ['workflow-enums.txt', 'workflow-modules.txt']);
   fs.mkdirSync(path.join(fx, 'wiki', '测试主题'), { recursive: true });
   fs.writeFileSync(path.join(fx, 'wiki', '测试主题', '说明.md'), '# 说明\n\n编码模板的领域知识条目。\n');
   fs.mkdirSync(path.join(fx, 'workflow', 'intents'), { recursive: true });

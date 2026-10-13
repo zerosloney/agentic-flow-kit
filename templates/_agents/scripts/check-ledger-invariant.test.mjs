@@ -92,7 +92,11 @@ const append = (d, line) => fs.appendFileSync(ledPath(d), line + '\n');
   append(d, row({ ts: '2026-10-01T00:00:00.000Z', stage: 'done' })); // 早于首行
   commitAll(d, 'append out-of-order');
   const r = run(d);
-  check('S5 ts 非单调 → 行级 exit 1', r.code === 1 && r.out.includes('非单调'), r.out);
+  // S5：ts 乱序追加 → 行级拦。措辞随 2026-10-12 口径修正由「非单调」改为「追加时序倒挂」
+  // （判据从「全表非降序」收窄为「同 doc 内非降序」，跨 doc 乱序是并集合并的正常形态）。
+  // 本例两行同 doc（demo.md），故仍在新口径下 hard 拦。
+  check('S5 ts 非单调（同 doc 内倒挂）→ 行级 exit 1',
+    r.code === 1 && r.out.includes('追加时序倒挂'), r.out);
 }
 // S6：伪指纹（非 64-hex）→ 行级拦
 {

@@ -176,7 +176,7 @@ if (isExperiment) {
 for (const a of advisories) console.error(`泳道完整性（增量）— advisory:\n${a}\n`);
 if (blocks.length) {
   for (const b of blocks) console.error(`泳道完整性（增量）— BLOCK:\n${b}\n`);
-  console.error('pre-commit: 泳道完整性未通过，提交已阻止（判据见 .agents/commands/new-task.md §级别判断）');
+  console.error('pre-commit: 泳道完整性未通过，提交已阻止（判据单源见 .agents/scripts/level-criteria.mjs）');
   process.exit(1);
 }
 process.exit(0);

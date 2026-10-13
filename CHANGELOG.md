@@ -2,10 +2,220 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.7.16
+
+- feat(cli)+refactor(criteria)：**包从「引擎骨架」升级为「引擎执行器」——`route` 手动路由 + `run` 自动流水线**
+  （2026-10-13 flow-kit-route）。此前包 CLI 只有 init / sync / sync-hosts / add-host / add-gate / doctor /
+  validate 七条**生命周期**命令：装完之后引擎只能由宿主 AI 顺着 md 自己走，包没有执行面。
+  本版给包补上执行面，但**执行代码一步都不搬家**（决策：executor-home = shell）。
+
+  **① 级别判据的机器单源**——新增 `templates/_agents/scripts/level-criteria.mjs`。
+  背景：风险级别 L0-L3 此前只以**散文**形态存在于 `.agents/commands/new-task.md`「级别判断」节
+  （L2 四类触达面 / L3 结构面 / 判低负例 / 自查句），后果有二：定级是纯自由心证，AI 每次判级都可能不同，
+  门禁无从校验「判低」是否守约；想让 CLI 接管路由，就没有可执行的判据可调，只能复读 md。
+  本文件把**能被机器判定的部分**代码化成单源，`new-task.md` §4 改为引用它——md 不再承载判据散文
+  （删的是散文，留的是流程表与「本表只承载流程」的纪律）。
+  **诚实边界（写在文件头，也写在 CLI 输出里）**：机器只兜两件事——**就高不就低**（混档取高）与**路径下限**；
+  「一处定义、多处消费」是**语义**性质，机器判不了，对该面只输出判据清单与自查句、不产出断言。
+  漏判由 lane-surface 触达面门在提交面兜底。
+
+  **② 路径下限清单** `.agents/level-hints.txt`（**owned**，`sync` 永不覆盖，登记进 `profiles.mjs` 的 `isOwned()`）。
+  格式每行 `L2 <ERE>` / `L3 <ERE>`，ERE 为 grep -E 兼容正则、匹配仓库相对路径。
+  **默认空**（刻意）：内容是项目私有的，按自己的代码布局登记——照抄别人的清单等于没登记。
+  缺文件或清单为空 → 纯语义定级，判据面全程静默不阻断。
+  与 `lane-surfaces.txt` 的分工写进文件头：那是**提交面**的触达判据，本清单是**意图面**的档位提示，两者不同档。
+  **非法档位 / 正则语法错一律 fail-loud 抛 `LEVEL_HINTS_INVALID`**——写错配置比没配置危险：没配置会提示补，
+  写错会误判。报错带清单路径与行号。
+
+  **③ `flow-kit route`（手动路由的机器面）**——新增 `src/executor.mjs`。给出建议档位 + 判据清单 + 泳道 +
+  `kind` 对应的入口 md 路径（`require→plan.md` / `fix→maintain.md` / `verify→test.md` /
+  `review→review.md` / `deploy→deploy.md`），支持 `--json` 机读面。
+  **判据单源在装户面**（随模板下发、随 sync 升级），包 CLI 解析 `--dir` 后**动态 import**，不在包内拷一份——
+  避免包/装户双源漂移。缺单源时 fail-loud 指向 `sync`。
+  泳道取法**沿装户 `stage-gates.mjs` 的 `laneOfDoc` 单源**，薄壳不按档位写死 low/high；单源缺失或返回非法值时
+  fail-soft 回落并在输出里标明 `laneSource: fallback`（不假装取到单源）。
+  枚举值域优先读装户 `workflow-enums.txt`，缺失回退判据单源自带表且不阻断（定级面不该因词表缺失整个挂掉）。
+
+  **④ `flow-kit run`（自动流水线薄壳）**——转发装户 `pipeline-run.mjs` 状态机的
+  `start` / `next` / `status` / `watch` / `abort`，**参数与退出码原样透传**；不复制状态机逻辑（零迁移、
+  不动 sync 台账、存量装户零影响）。薄壳纪律三条，测试锁死：**绝不 spawn AI 会话、永不伪造用户原话、
+  永不带 `--no-verify`**。参数纪律两处修正：`--dir` 是包面寻址参数，**被薄壳消费、不透传**给状态机
+  （此前会漏传，装户状态机收到不认识的 `--dir`）；用法校验**先于**脚本存在性校验（反过来会拿「没装」
+  盖住「怎么用」）。`--k=v` 与 `--k v` 两种写法等价（此前 `--dir=<path>` 被静默忽略）。
+
+  **⑤ 过期指针清扫（改写 §级别判断 的连带面）**——该节改为引用单源后，指向它「去看判据」的地方全部失效。
+  一处不扫，日后 AI 顺着失效指针读到的就是**只有流程、没有判据**的空壳章节。连带修四处：
+  `design.md` 与 `fill-intent.mjs` 两处判据指针、`pipeline-run.mjs` 的 triage 工单（「读 new-task.md §级别判断
+  判级闭集」——这条正驱动着自动流水线的语义面，改漏即等于 route 的语义判断失据）、
+  `check-lane-surface.mjs` 的门禁失败报文与 `lane-surfaces.txt` 头注释。
+  测试把扫描面扩到**整个装户面**（`.mjs`/`.txt`/`.md`/`.json`，排除测试自身）——首轮只扫 `commands/*.md`
+  就漏掉了后三处，说明面窄了就是假护栏。
+
+  **新增测试 2 套件 131 场景**：`level-criteria.test.mjs`（69）、`executor.test.mjs`（63）。
+  后者用**哨兵 stub** 测「薄壳真的在问装户」：把装户 `laneOfDoc` 写成「L2 返回 low」（与常规口径相反），
+  薄壳若自带实现就会露馅。套件同时以子进程隔离 `process.exit`，才能测退出码与 stdout。
+  `level-criteria.test.mjs` 另含**单源纪律回归**：`new-task.md` 不得再出现触达面/负例/自查句散文、
+  装户面不得再出现指向 §级别判断 的过期指针、模板 `level-hints.txt` 须默认无有效条目——
+  防止判据日后又长回 md 里。
+
+  **宿主薄适配同步**：`design.md` / `new-task.md` 两份权威源改动 → 10 份薄适配正文漂移，
+  经 `sync-hosts --apply` 单向同步归零（薄适配 frontmatter 不动）。
+
+  **文档收口**：README 新增「执行面：route + run」段（含单源归属表与诚实边界），「当前能力」补第四点；
+  ARCHITECTURE §5 双入口执行器补包 CLI 转发面与判据单源说明。
+
+- feat(gate)+chore(ci)：**门禁本体完整性门从死代码接成真机器门 + 受检面补两项**（2026-10-13 engine-integrity-live）。
+  背景（复核结论）：`check-engine-integrity.mjs` 是本仓唯一能防「改弱门禁本体」的检查，但它**从未真正作为门跑过**——
+  ① 基线 `templates/_agents/engine-lock.json` 从未入库（`git log --all` 无该路径），本地基线层与跨提交锚层双层静默跳过，
+  只剩「硬拦单位数不收缩」计数；② `ci.yml` / `.githooks` / `npm test` 三处都没有调用点（git grep 只命中
+  `render.mjs` 注释与它自己的单测）。即文件头宣称的「改内容须有活跃 L2/L3 入口点名 + 确认台账留痕」两层判据实际不生效。
+  本版两处收口：
+  ① **基线入库 + 接线**：`--update` 生成 60 件基线（逐项 sha256 + 硬拦单位数，0 CR、无 BOM）；
+     `.github/workflows/ci.yml` 新增独立 job `engine-integrity`，跑 `--against-ref HEAD~1`（`fetch-depth: 2`），
+     把「盘面↔入库基线」与「跨提交锚」两层判据接成机器门。锚层参照物读自 git 对象库，兜「同时改弱门禁并 `--update`
+     重写基线」这一自洽形态（本地层对该操作自洽，CI 会全绿）。诚实边界：HEAD~1 在多提交 PR 上不等于 merge-base；
+     `--no-verify` / 删掉本脚本 / 不启用本 job 仍可绕过——沿文件头本地信任边界口径。
+  ② **受检面补两项**（`gateFiles()`）：`.github/workflows/*.yml`（本门的调用点就在编排里，不纳入等于门可被无声关闭）
+     与 `templates/_agents/level-hints.txt`（定级路径下限输入面，语法错 fail-loud 抛 `LEVEL_HINTS_INVALID` 改判级结论，
+     此前漏在防改锚之外）。
+  实测：两处新面各做一次负例探针（各改一个字节 → `[控制面改动无入口]` hard-block exit 1），按字节复原后回到
+  `盘面与基线一致`；完整性门单测 28/28，lint 与 pack / fresh-init / jscpd-drift 三套件全绿。
+  **诚实记录**：本批按用户明令直提，**未**立 §改动面 点名受检件的 L2 入口文档——故从下一批起，触及受检面
+  （含本门脚本、ci.yml、engine-lock.json、level-hints.txt）若无活跃 L2/L3 入口点名，会被本门以
+  `控制面改动无入口` 拦下。这是设计代价，不是缺陷。
+
 ## 1.7.15
 
 - chore(ci)：**恢复 npm 发布管线并补发**（2026-10-12）——Release 工作流（`.github/workflows/release.yml`）在 v1.7.1「装户端内容清理」时随 `.github/` 一并删除后未重建。此后 v1.7.1~v1.7.14 的 tag 正常推送到 GitHub，但无任何 workflow 监听，**发布静默失效约 14 个版本**——npm `latest` 停滞在 1.7.0，git 与 npm 双源脱节。本版恢复该工作流（与删除前逐字一致：`push: tags v*` → tag 与 package.json 版本一致性 fail-fast → `npm test` → `npm publish --provenance`），因工作区有并发在途改动，release.yml 单独先行提交（889c8a1），本提交仅随动版本号与本条目。
   **诚实边界**：npm 不允许补发历史版本号，**1.7.1~1.7.14 在 npm 上永久缺失**；本版 1.7.15 的 tarball 一次性包含 git 侧 1.7.1~1.7.14 的全部改动——CHANGELOG 各版本条目仍是那些改动的真实记录，npm 版本号与 CHANGELOG 版本号从此恢复同步。`--provenance` 需 `id-token: write`（workflow 已含）+ public 包，均满足。
+
+- refactor(layout)：**卸掉「同一仓库同时是包源又是装户」**（2026-10-12）。包源仓只保留 `templates/_agents` + `modules/hosts`。装到别的项目（`init` / `sync` / `doctor` / `add-host` / `add-gate` 写入目标仓 `.agents/`）不变。
+
+  **去掉的同仓兼容枝**
+  - 删除 `source-sync-check`（脚本、测试、命令、五份宿主薄适配 `wf-source-sync-check.md`、编排 `source-sync-repair`）。`pipeline-closing` 去掉 `gate-sync`，静态门剩 npm test 与 doctor。
+  - `templates/_githooks/pre-commit` 去掉「`templates/_agents` 与 `.agents` 同时在」才跑的双源块，以及同一条件下的 `check-ledger.mjs` 块。脚本与测试一并删除：工作树对账由 doctor §4 自己做，无其他调用方。确认台账不变量（`check-ledger-invariant.mjs`）仍在钩子里。
+  - `sync-hosts` 只认包源：缺 `templates/_agents` 或 `modules/hosts` 即拒绝，不再把 `.agents` 当权威源，也不再扫项目根宿主点（`.zcode` 等）。
+  - `check-engine-integrity` 只扫包源面，基线固定 `templates/_agents/engine-lock.json`。无 `templates/_agents` 的根（含 `--update`）拒绝，且不创建 `.agents/`。
+  - `gate-checklist` 的 check-loop、`gen-workflow-metrics` 的枚举文件改为脚本相对路径（拷进装户 `.agents/scripts/` 后仍指向同级兄弟），不再先找 `.agents` 再回退包源。
+
+  **装户侧仍在的产品行为**
+  - doctor §6.7 仍检查装户薄适配正文漂移；包源仓（同时有 `templates/_agents` 与 `modules/hosts`）仍跳过。漂移修复改为 `flow-kit add-host <宿主> --force`。`flow-kit sync` 不更新宿主适配，`sync-hosts` 不在装户根运行。
+  - `control-surfaces.txt` 仍同时列出 `templates/_agents` 与 `.agents` 前缀：一份清单随模板下发，包源仓与装户仓各命中自己的前缀。
+
+- feat(gate)：**台账并发与授权修剪（第一至三步）**（2026-10-12 ledger-loader-p1 / ledger-merge-driver / ledger-doc-chain）。
+  背景：确认台账 `confirmations.jsonl` 是「尾部追加 + 多人/多 worktree 并行」形态，但原设计与实现隐含
+  **单写者顺序追加**前提。三种正常协作都会打断它，而当时唯一的修法是 `--no-verify`——门禁被自己的误拦
+  逼退，治理失效。本次分三步偿还该技术债，**每步独立可验证，判据面零扩张**（20 项检查编号不变，扩容门仍 6 项）。
+
+  **① 台账读取单源化（Step 1，纯重构）**——新增 `ledger-loader.mjs`，把此前 6 处生产代码各自
+  `readFileSync`+`JSON.parse` 的复刻读法收成单源（`stage-gates` / `check-loop` ×3 / `check-metric-claims` /
+  `gen-workflow-dashboard` / `gen-workflow-metrics`）。两个视图：`readLedgerLines`（原始文本行，给按行计数）
+  与 `readLedgerRows`（解析后行，坏行跳过）。**刻意不去重**——去重会改 `gen-workflow-metrics` 漏斗的
+  `ledgerRows` 计数口径，属口径变更，须随分片功能同批生效。刻意保留两处直读并注释锁死：检查 15 哈希链
+  （需物理行号对齐 + 物理顺序）、`check-ledger-invariant`（审盘面字节而非台账语义）。新增套件 21 场景。
+
+  **② 台账并集合并驱动（Step 2）**——新增 `git-merge-jsonl.mjs` + `.gitattributes` 的
+  `.agents/*.jsonl merge=jsonl-union` + `init` 自动配 driver。合并降级为确定性**并集去重**，两侧行全保留、
+  无冲突可解。此前人工解冲突的常见错法是「整取一侧」——静默丢掉另一侧的确认行，门禁事后无从发现。
+  **故意不给 `.jsonl` 加 `text eol=lf`**：加 text 规则会让下次提交 git 重新规范化换行 → 台账 blob 字节变化
+  → append-only 前缀不变量判为「台账重写」而硬拦自己的提交。换行归一由 driver 自身负责。
+  新增套件 17 场景，含「union 不破坏哈希链」互证（去重按整行文本、行内字段不改写 → `JSON.stringify` 键序
+  不变 → `ledgerChainHash` 重算不变——这条被破坏会导致台账链整片失效，已在驱动头部标「勿破坏」）。
+
+  **③ 哈希链链域改造：物理序 → 按 doc 的逻辑序（Step 3）**——`policy.mjs` 加 v8 生效日锚
+  `ledgerDocChainSince` 与两个单源函数 `ledgerDocChainActive` / `ledgerDocChainPrev`；写入侧
+  `confirm-doc.appendLedger` 与校验侧 `check-loop` 检查 15 双侧改口径。台账行的天然主键是 `doc`，
+  **同一 doc 内的先后有语义、doc 之间的先后没有语义**——原判据把「文件里恰好排在前面」当成了语义。
+  **按行分域灰度**：锚前行（存量）维持物理链判定、缺键（v1-v7）写入与校验双侧都走旧口径 → 存量零变化、
+  零新增告警；`byDoc` 对两种域的行都更新，保证跨域衔接不断链。粒度取**时刻**而非日期（沿 `scopeSince` /
+  `verifyDocSince` 的教训）。防伪能力实测未削弱：就地改行 / 删中间行 / 插行三类篡改在 doc 链下一律仍被抓
+  （删除某 doc 的**末行**抓不到是链式防伪的固有上限，物理链同样如此，兜底仍是历史全扫）。新增套件 20 场景。
+
+  **存量装户迁移动作（必读）**：② 的 `.gitattributes` 规则属 **owned**（装户自持、`sync` 永不覆盖），
+  故**存量装户 `sync` 后不会自动获得 `merge=jsonl-union`**——需自行在目标仓 `.gitattributes` 补一行：
+  `.agents/*.jsonl merge=jsonl-union`。driver 是本机态配置、不跨机共享（漏配则退化为文本冲突，
+  **不静默丢数据但要人工解**），与 `core.hooksPath` 同款性质。
+
+  **④ 台账特许修剪通道（Step 4）**——新增 `ledger-prune.mjs` 判据单源 + `.agents/ledger-prune-manifest.json`
+  凭据格式；`check-ledger-invariant` 的 `--staged` 与历史全扫两条前缀破坏路径接入，`check-loop` 检查 15 接入
+  链段重启凭据。**背景**：append-only 之上此前**无任何合法删行出口**——所有者明令删除某批 workflow 文档时，
+  台账对应行不删则行级④「doc 在当前树存在」持续报红，退路只剩手改台账（即 `--no-verify`）。这不是「缺个功能」，
+  而是一条把使用者逼向绕过的死路。判据四条缺一不可：manifest 存在且 removes 非空；每哈希恰命中一行；
+  新内容 == 旧内容 − manifest 所列行（保序）；被删行 doc ∈ manifest.docs。**无 manifest 的删/改/重排仍全拦**
+  ——append-only 红线对其余一切场景不变。**诚实边界**：manifest 是可写文件，刻意伪造即可让任意删行合法化，
+  与「台账本地可写」同级（见 README 确认门诚实边界）；本通道不宣称防伪，只把「顺手手改」抬到「提交一份带授权
+  与理由、可被 git 历史对质的凭据」。删除某 doc 的行会让其后继行的哈希链断裂，本批同时给链校验开
+  「prevHash ∈ manifest 声明的被删哈希 ⇒ 合法链段重启」的口子，否则修剪后的台账会被检查 15 永久判断链。
+  新增套件 19 场景（四条判据逐条 + 真 git `--staged` 端到端放行/拦截 + 历史全扫认领）。
+
+  **⑤ 行级校验 ts 口径修正 + 分片覆盖（Step 5，②的必要补丁）**——`check-ledger-invariant` 行级校验①由
+  「ts 全表非降序」收窄为「**同一 doc 内**非降序」，跨 doc 物理序乱序改为计数出账、不阻断；行级取数改走
+  `ledger-loader` 视图（主台账 + 分片），**分片内的行不再逃逸行级校验**。
+  为什么必须改：②的并集合会把「别的 doc 的新行」追加到本文件尾部，而那些行的 ts 可能早于本文件末行的 ts
+  → 必然触发原判据。这是正常协作形态不是篡改；让门禁因正常协作报红，只会逼出 `--no-verify`。
+  **未放松的部分**：同 doc 内的 ts 倒挂仍 hard 拦（该 doc 的确认时序倒挂是真问题），跨 doc 的插行/改行由
+  检查 15 哈希链兜（doc 链对每个 doc 独立接续，见 ③）。视图序 = 主台账在前、分片在后，故既有
+  `.agents/ledger-line-exempt.json` 的行号**不因引入分片而漂移**（有回归用例锁死）。新增套件 10 场景。
+  既有套件 `check-ledger-invariant.test.mjs` 的 S5 断言措辞随口径修正由「非单调」改为「追加时序倒挂」
+  （两行同 doc，判定行为不变）。
+
+  **⑥ 分片写入与 compact 归并（Step 6）**——补上前五步留下的最后一块：**单机多 worktree 并行**场景
+  （两个 worktree 同时 append 同一台账文件会各自读到同一末行 → 同 prevHash → 后写者覆盖前写者；git 并集合并
+  要到 push 才介入，管不到 push 之前）。新增 `compact-ledgers.mjs` 归并器，`confirm-doc` 加 `--shard`
+  写入开关（**默认仍写主台账，分片是有意的并发开关，不设零影响**）。
+
+  - **`--shard` 与 doc 链口径绑定**：分片与主台账是不同文件，只有 doc 链（③）能跨来源接续。旧物理链口径下
+    分片行会与主台账断链，故缺锚时**参数期直接拒**（友好报错指向 `policyVersion: 8`），而不是让用户写完
+    台账再被门禁拦。写入侧取前驱走**台账视图**而非单个文件——否则该 doc 的历史行在主台账时，分片会从 `''`
+    重启而断链。
+  - **compact 三条安全设计**：默认 dry-run（必须显式 `--execute`）；同目录临时文件 + rename 原子覆写（中途
+    崩溃 = 主台账原样、分片未删、可安全重跑）；并集按整行文本去重（幂等）。任一分片读失败立即中止。
+    归并严格保持 append-only 前缀不变式：主台账既有行保序不动，分片行只追加末尾。
+  - **检查 15 改走 loader 的带来源行号视图**：分片里的行**同样受链校验**——否则 `--shard` 等于给台账开了
+    一个防伪盲区（门禁看得见分片行、却不验它们的链）。断裂报文定位从「单文件物理行号」改为 `rel:行号`
+    （跨来源后单一行号已无法定位）。此处曾是多源化的「刻意例外」，该理由随分片引入失效，注释已订正。
+  - **分片纳入历史全扫 + 删除豁免**（`check-ledger-invariant`）：分片同受 append-only 前缀不变量约束；
+    但**分片被 compact 删除是合法形态**，不能照抄主台账那条「删文件即 hard fail」。豁免判据：该分片被删时的
+    内容**每一行都已出现在同提交的主台账里**（并集归并的必然结果）→ 认领为 compact 归并；否则（行未并入 =
+    丢行）仍 hard fail。分片路径清单取自 git 全历史枚举（compact 删掉后仍扫得到）。
+  - `pipeline-run` 的 `RUNTIME_OWNED` 补 `.agents/confirmations.d/`，否则 `--shard` 的确认行会被沙箱越权
+    检查误判为「宿主改了台账」。
+  - 新增套件 17 场景（跨来源链衔接 / dry-run 不动盘 / 前缀不变式 / 幂等 / 删除豁免 vs 丢行拦截）。
+
+  **本批遗留**：①夹具拷贝白名单陷阱——见下方「遗留①已偿还」段（已根治）。②文档收口（README 确认门口径 /
+  ARCHITECTURE §3 / `workflow/README.md` 硬规则 6 扩写分片与修剪通道）尚未做。③CHANGELOG 未记版本号变更
+  ——1.7.15 本就是未发布批次（HEAD 为 1.7.14），故本批内容并入该节而非新开版本。
+  （2026-10-13 更正：本节已随恢复的发布管线发布到 npm 1.7.15；其后的引擎执行器改动另开 1.7.16 节。）
+
+  **遗留①已偿还（2026-10-12 fixture-closure-rootfix）——夹具拷贝白名单陷阱根治**
+  背景：上文①原判「只做逐处补齐」。补齐是止血不是根治——那份白名单必须与被测脚本真实的依赖闭包一致，
+  两者互不校验，而**滞后表现为静默绿**：漏拷 → ESM resolve 失败 → 被测脚本根本没跑 → 断言面为空 → 套件判绿。
+  假绿比红危险（门禁没跑却报告「门禁全绿」）。本次做两件事，各自独立成立：
+
+  - **闭包自动解析，删掉手工清单**：新增 `templates/_agents/scripts/fixture-scripts.mjs`（夹具工具件），
+    从入口递归求**同目录依赖传递闭包**并整闭包拷入夹具。依赖发现取三种形态：静态 `import/export from`、
+    动态 `import()`、**裸文件名字面量**（`path.join(here, 'kb-search.mjs')` 这类 spawn 依赖——`wiki-search.mjs`
+    只靠这一条挂住 `kb-search`；`check-hygiene` 靠它挂住 `rule-budget.sh` 与两个生成器）。裸文件名只在解析到
+    同目录真实文件时计入，故跨目录字面量天然排除。**取舍口径：宁可多拷，不可漏拷**——多一个文件不会让测试变假绿。
+    改造 9 个调用点（`check-loop.test` / `edit-face-check.test` / `ledger-prune.test` / `ledger-ts-monotonic.test` /
+    `compact-ledgers.test` / `wiki-search.test` / `check-loop-rev.test` / `agg-delegations.test`），
+    **维护面归零**：日后给任一引擎脚本加 import，夹具自动跟随。
+    （未取「整目录拷贝」——60+ 脚本 × 每场景一 tmpdir 的 I/O 与耗时不可接受，且会丢失「本测试需要哪些脚本」这条信息。）
+  - **漏拷防线（不依赖上一条，独立成立）**：`assertFixtureScripts` 在目标目录**独立复扫**全部脚本的依赖，
+    任一解析不到即抛错并报**全量**缺失清单。纵深防御：即使将来有人又手写枚举（或绕过 helper 直接拷），
+    漏拷会在建夹具那一刻响亮炸掉，而不是几十个场景之后以「门禁静默不跑」的形式悄悄绿掉。
+  - **实现上踩过一个坑（值得记）**：注释剥离**不能用正则**。正则版把 `confirmations.d/*.jsonl` 这类**注释里**
+    的 `/*` 当块注释起点，跨注释一路吃到下一个真 `*/`，把后面的 import 整段吃掉（`check-ledger-invariant`
+    实测 12141 字符被砍到 4198，43 行的 import 直接消失 → 闭包漏依赖 → 绕回假绿）。改为逐字符状态机，
+    只认三种真形态，字符串内容不抹（我们要的就是字面量里的文件名）。另收一条边界：点开头的隐藏名不作依赖
+    （`check-loop.mjs` 里 `.replace(/\.mjs$/, '.test.mjs')` 的 `'.test.mjs'` 是**后缀字面量**不是文件名，
+    按名解析必然扑空，会对每个夹具误报「漏拷」）。两条都有回归用例锁死。
+  - 新增套件 `fixture-scripts.test.mjs`（12 场景：多层传递依赖 / `node:` 内建与长路径排除 / 注释不误收 /
+    后缀字面量不误报 / spawn 依赖收进闭包 / 缺失即炸且报全量清单 / 闭包自洽 + 真跑一次确认不是「文件齐了但跑不起来」）。
+    **命名取 `fixture-scripts.mjs` 而非 `_fixture-scripts.mjs`**：仓库 `.gitignore` 有 `_*.mjs` 规则（一次性
+    诊断脚本用），带下划线会同时被 **git 与 npm 打包**排除——而 `files` 白名单外的忽略项会被 npm 拿来当
+    排除清单，等于**发出去的包缺这个工具件**，装户跑引擎套件直接 `ERR_MODULE_NOT_FOUND`。检查 20
+    （脚本测试覆盖）也因此自动满足（有同名套件），无需登记 `scripts-test-exempt`。
 
 ## 1.7.14
 

@@ -43,8 +43,8 @@ export function renderTree(srcRoot, targetRoot, vars, { force = false, protectSe
         continue;
       }
       const rel = relOf(abs, srcRoot);
-      // 引擎基线不是模板：包源径基线的键命名空间与装户盘面不一致（见 check-engine-integrity.mjs
-      // resolveLock 注释）——下发会致装户全员误报。包源跑 --update 落盘时排除，杜绝入库即污染
+      // 引擎基线不是模板：键在 templates/_agents/…，下发成 .agents/engine-lock.json 会让装户
+      // 拿包源路径对账。排除该落点，包源基线留在模板目录。
       if (rel === '.agents/engine-lock.json') continue;
       const target = path.join(targetRoot, rel);
       fs.mkdirSync(path.dirname(target), { recursive: true });
@@ -61,7 +61,7 @@ export function renderTree(srcRoot, targetRoot, vars, { force = false, protectSe
       if (raw.length < 512 * 1024 && !raw.includes(0)) {
         // 文本面 LF 归一（2026-09-27 closing-coverage）：模板盘面 CRLF（autocrlf 检出 / 编辑器写入）与
         // LF 克隆渲染出同一字节、同一 sha——fresh sha、装户落盘、kit.json 台账三方跨环境稳定；
-        // sync/doctor/source-sync-check 的读取侧归一（shaText）与本处写盘归一同口径闭合
+        // sync/doctor 的读取侧归一（shaText）与本处写盘归一同口径闭合
         const replaced = renderContent(raw.toString('utf8').replace(/\r\n/g, '\n'), vars);
         if (replaced.includes('{{')) {
           for (const m of replaced.matchAll(/\{\{([A-Z][A-Z0-9_]*)\}\}/g)) {

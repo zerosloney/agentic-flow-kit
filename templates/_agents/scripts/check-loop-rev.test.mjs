@@ -24,6 +24,9 @@ const HOOK = [
 ].find((p) => fs.existsSync(p)) || null;
 const git = process.platform === 'win32' ? 'git.exe' : 'git';
 const Z = '0'.repeat(40);
+// 夹具闭包（2026-10-12 fixture-closure-rootfix）：本文件此前三处手写依赖枚举（tree 场景最险——漏拷
+// ledger-loader 会让看板漂移门恒绿而非报错）。改为按入口自动求传递闭包，新增依赖自动跟随。
+const { copyScriptClosure, copyAgentsFiles } = await import('./fixture-scripts.mjs');
 
 let pass = 0;
 let fail = 0;
@@ -215,10 +218,9 @@ try {
   gitRun(tree, ['config', 'user.email', 't@example.com']);
   gitRun(tree, ['config', 'user.name', 't']);
   fs.mkdirSync(path.join(tree, '.agents', 'scripts'), { recursive: true });
-  fs.copyFileSync(ENUMS, path.join(tree, '.agents', 'workflow-enums.txt'));
-  fs.copyFileSync(path.join(HERE, 'gen-workflow-index.mjs'), path.join(tree, '.agents', 'scripts', 'gen-workflow-index.mjs'));
-  fs.copyFileSync(path.join(HERE, 'workflow-enums.mjs'), path.join(tree, '.agents', 'scripts', 'workflow-enums.mjs'));
-  fs.copyFileSync(path.join(HERE, 'rule-budget.sh'), path.join(tree, '.agents', 'scripts', 'rule-budget.sh'));
+  copyAgentsFiles(path.join(tree, '.agents'), ['workflow-enums.txt']);
+  // 索引生成器 + 预算判定件的整闭包（含 workflow-enums.mjs 与日后新增依赖）
+  copyScriptClosure(path.join(tree, '.agents', 'scripts'), ['gen-workflow-index.mjs', 'rule-budget.sh']);
   fs.writeFileSync(path.join(tree, '.agents', 'rule-budgets.txt'), 'big.txt 10\n');
   fs.writeFileSync(path.join(tree, 'big.txt'), 'ok\n');
   for (const sub of ['intents', 'specs', 'plans', 'incidents']) {

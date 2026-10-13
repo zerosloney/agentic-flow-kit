@@ -16,17 +16,21 @@
 
 ```
 templates/（包源，唯一改这里）
-   │ flow-kit sync（三态覆盖 + kit.json managed 台账，109 份）
+   │ flow-kit sync（三态覆盖 + kit.json managed 台账）
    ▼
 .agents/（装副本 —— 装户仓才有；本仓为纯包源，不持装副本）
-   │ flow-kit sync-hosts --apply（单向：正文段对齐，frontmatter 保留宿主特化）
+   │ flow-kit add-host（写入宿主文件；--force 刷新）
    ▼
-modules/hosts/{claude,codex,cursor,omp,opencode,trae,zcode}/ + 项目根宿主点（.zcode/ 等）
+装户项目根宿主点（.zcode/ 等）
+
+包源仓内另一条：templates/_agents/{commands,roles}
+   │ flow-kit sync-hosts --apply（只在包源仓；单向正文段对齐，frontmatter 保留）
+   ▼
+modules/hosts/{claude,codex,cursor,omp,opencode,trae,zcode}/
 ```
 
-- 直改 `.agents/` → doctor 台账漂移告警（检查 §6.6）；双源差异三道兜底：`source-sync-check`
-  （结构比对）/ doctor §6.6（owned 哈希）/ §6.7（薄适配正文漂移）。
-- sync-hosts 对账面自描述（`--diff` 输出「对账面：」行）——对账覆盖哪些根一目了然（B1 教训）。
+- 直改装户 `.agents/` → doctor 台账漂移告警（检查 §6.6）。装户薄适配正文漂移由 doctor §6.7 报告，刷新走 `add-host <宿主> --force`（`sync` 不更新宿主适配）。
+- 包源命令/角色正文与 `modules/hosts` 由 `sync-hosts --diff` 对账（输出「对账面：」行）。
 
 ## 3. 闭环模型（任务如何流动）
 
@@ -38,13 +42,48 @@ modules/hosts/{claude,codex,cursor,omp,opencode,trae,zcode}/ + 项目根宿主�
 
 **确认门 `confirm-doc.mjs`**：全部状态流转唯一入口。两跳闭环禁单跳；TTY / `--delegated "<原话>"`
 双形态（台账记 source+quote 供对质）；内容绑定（关单即冻结，编辑触发检查 15 hard）；approved
-留痕前置。台账 append-only + **哈希链**（每行 prevHash/hash，就地改/删必留断链痕迹——整文件
-重写不可机器防，兜底 = 台账自身 git 历史，边界见 `policy.mjs#ledgerChainHash`）。
+留痕前置。
+
+## 3.1 台账并发与授权修剪（2026-10-12）
+
+台账 `.agents/confirmations.jsonl` 是**尾部追加**形态，天然撞三种正常协作：多人/多 worktree 并行 append、
+`git merge`、分片归并。引擎把这三件事拆成各自独立的机制，判据一律按「正常协作不报红、篡改照拦」设计。
+
+```
+写入 confirm-doc.appendLedger ── 取前驱（doc 链见下）──▶ confirmations.jsonl   ← 默认
+                              └─ --shard ─────────────▶ confirmations.d/<doc>.jsonl
+读   ledger-loader ─▶ readLedgerRows / readLedgerLines / readLedgerEntries（带 rel:行号）
+合并 git-merge-jsonl ─▶ .gitattributes: .agents/*.jsonl merge=jsonl-union（并集去重）
+收敛 compact-ledgers ─▶ 分片并回主台账（保序追加），再删分片
+删除 特许修剪 ─▶ .agents/ledger-prune-manifest.json（逐行 sha256 + 授权 + 理由）
+```
+
+- **哈希链的域是「按 doc 的逻辑序」**，不是文件物理序（`policy.ledgerDocChainSince` 生效日锚，缺键则回退
+  旧物理链口径，存量零变化）。同 doc 内的先后有语义，doc 之间的先后没有语义——把「文件里恰好排在前面」
+  当语义，会让并发 append / 并集合并 / 分片归并这三种**正常协作**持续撞 hard 门，而门禁被自己的误拦逼出
+  `--no-verify` 时，治理即失效。就地改行 / 删行 / 插行三类篡改在 doc 链下一律仍被抓住（重算失配 /
+  后继 `prevHash` 失配）。
+- **并集合并**：`.gitattributes` 关联 `merge=jsonl-union`，合并降级为确定性并集去重，两侧行全保留、无冲突
+  可解。此前人工解冲突的常见错法是「整取一侧」——静默丢掉另一侧的确认行，门禁事后无从发现。
+  **故意不给 `.jsonl` 加 `text eol=lf`**：加 text 规则会让下次提交 git 重新规范化换行 → 台账 blob 字节变化
+  → append-only 前缀不变量判为「台账重写」而硬拦自己的提交。换行归一由 driver 自身负责。
+- **分片写入 `--shard`**：只解决「单机多 worktree 并行 append」（git 并集要到 push 才介入，管不到 push 之前）。
+  默认关闭。分片与主台账是不同文件，**只有 doc 链能跨来源接续**，故缺锚时参数期直接拒。分片内的行同样受
+  检查 15 链校验与行级校验——否则 `--shard` 等于开一个防伪盲区。
+- **特许修剪**：append-only 之上唯一的合法删行出口。场景是所有者明令删除某批 workflow 文档——台账对应行
+  不删则行级「doc 在当前树存在」持续报红，退路只剩手改台账（即 `--no-verify`）。判据逐行对账四条
+  （`ledger-prune.mjs#matchPrune`）：manifest 存在且 `removes` 非空；每哈希恰命中一行；新内容 ==
+  旧内容 − manifest 所列行（保序）；被删行 `doc` ∈ `manifest.docs`。**无 manifest 的删/改/重排仍全拦。**
+  删行会让该 doc 的链断裂，故链校验同时认「本行 `prevHash` ∈ manifest 声明的被删哈希」为合法链段重启。
+- **诚实边界**：manifest 是可写文件，**刻意伪造即可让任意删行合法化**——与「台账本地可写」同级信任边界
+  （见 README 确认门段）。本通道不宣称防伪，只把「顺手手改」抬到「提交一份带授权与理由、可被 git 历史
+  对质的凭据」。另：driver 是本机态配置不跨机共享（漏配退化为文本冲突，**不静默丢数据但要人工解**）；
+  `merge=jsonl-union` 属 `.gitattributes`，而该文件是 **owned**（`sync` 永不覆盖）→ **存量装户需手动补一行**。
 
 ## 4. 门禁体系（20 项检查 + 三层布防）
 
 ```
-.githooks/pre-commit（闭环配对/泳道/wiki台账/规则预算/双源/敏感扫描）
+.githooks/pre-commit（闭环配对/泳道/wiki台账/规则预算/确认台账不变量/敏感扫描）
    ↓
 check-loop.mjs（20 项检查，237 断言）——闭环完整性总裁判
    ├─ check-hygiene.mjs（2/9/11/12/13）   ├─ check-stage-index.mjs（7）
@@ -66,13 +105,24 @@ CI（ci.yml：五道机器门 + npm install + npm test + shipped 装户视角 + 
 
 ## 5. 双入口执行器
 
-| 入口 | 形态 |
-| :- | :-- |
-| 手动路由 `new-task.md` | AI 读阶段索引 + 级别判据，逐阶段走命令文档 |
-| 自动化 `pipeline-run.mjs` | 状态机六阶段（882 行），AI 槽位走工单协议，人件门 `PIPELINE-STOP` 停机 |
+| 入口 | 形态 | 包 CLI 转发面 |
+| :- | :-- | :-- |
+| 手动路由 `new-task.md` | AI 读阶段索引 + 级别判据，逐阶段走命令文档 | `flow-kit route`：定级机器面（判据单源 + 路径下限 + 泳道单源）+ 该读的 md 路径 |
+| 自动化 `pipeline-run.mjs` | 状态机六阶段（882 行），AI 槽位走工单协议，人件门 `PIPELINE-STOP` 停机 | `flow-kit run`：薄壳转发五子命令，参数与退出码原样透传 |
 
 内部三层单向：CLI 编排 → `pipeline-run-run.mjs`（run 存储）→ `pipeline-run-docs.mjs`（文档纯函数）；
 契约（五子命令输出/exit/四注入点）逐字节稳定。
+
+**执行代码全部留在装户**（`templates/_agents/scripts/` 随模板下发、随 `sync` 升级），包 CLI 不复制、不改写、
+不解释装户正文（决策：executor-home = shell）。薄壳纪律三条：不 spawn AI 会话、不伪造用户原话、
+不带 `--no-verify`；装户缺脚本时 **fail-loud 指向 `init`/`sync`**，不静默装一遍（那会改用户盘面）。
+
+**级别判据的机器单源** `templates/_agents/scripts/level-criteria.mjs`（2026-10-13）：把此前只以散文存在于
+`new-task.md` 的 L2 四类触达面 / L3 结构面 / 判低负例 / 自查句代码化，md 改为引用而非承载判据。分工诚实声明——
+机器只兜**就高不就低**（混档取高）与**路径下限**（`.agents/level-hints.txt`，owned、默认空、内容项目私有）；
+「一处定义、多处消费」是语义性质，机器不裁决，只输出判据清单与自查句；未配 hints 时按 L1 起步并提示补配置，
+不假装判得出。非法 hints 配置 fail-loud（写错配置比没配置危险：没配置会提示，写错会误判）。
+判低纪律最终仍由 lane-surface 触达面门在提交面兜底。
 
 ## 6. 自我度量
 

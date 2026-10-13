@@ -7,27 +7,22 @@ description: 跨宿主适配层同步（正文段 sha 比对 + 用户拍板 + �
 
 # Sync-Hosts · 跨宿主适配层正文段同步
 
-> 改权威源（`templates/_agents/{commands,roles}/*.md`）后薄适配（`modules/hosts/<h>/{agents,commands}/*.md`）要同步——薄适配正文 = 权威源正文，frontmatter 各自保留宿主特化（commands 层文件名 = 宿主命令名，opencode / trae 同用 `wf-` 前缀，单源见 `src/profiles.mjs#HOSTS.commandPrefix`；trae 另有 `name: wf-X`，zcode/omp 各自原描述）。
-> 装户视角：`flow-kit doctor` §7.x 跑同名检查（仅装户，包源环境跳过——包源下永远是 drift）；**修漂移用同一条命令**
-> `flow-kit sync-hosts --apply`——2026-10-07 起按**目标根**自动判布局（含 `templates/_agents` + `modules/hosts` → 包源：
-> 比 `templates/_agents` ↔ `modules/hosts/<宿主键>/`；含 `.agents` → 装户：比 `.agents` ↔ 项目根下 `<宿主点目录>/`），
-> 目标根取 `--dir <目录>` > 当前目录。
+> 本命令只在包源仓运行（需要 `templates/_agents` 与 `modules/hosts`）。改权威源（`templates/_agents/{commands,roles}/*.md`）后薄适配（`modules/hosts/<h>/{agents,commands}/*.md`）要同步——薄适配正文 = 权威源正文，frontmatter 各自保留宿主特化（commands 层文件名 = 宿主命令名，opencode / trae 同用 `wf-` 前缀，单源见 `src/profiles.mjs#HOSTS.commandPrefix`；trae 另有 `name: wf-X`，zcode/omp 各自原描述）。
+> 装户的宿主文件由 `init` / `add-host` 写入。装户漂移由 `flow-kit doctor` §6.7 报告（包源环境跳过）；刷新用 `flow-kit add-host <宿主> --force`。`flow-kit sync` 不更新宿主适配。
 
 ## 1. 何时跑
 
 - 改 `templates/_agents/commands/*.md` 正文后（11 个 commands 文件）
 - 改 `templates/_agents/roles/*.md` 正文后（3 个 roles 文件）
-- 装户跑 `flow-kit doctor` 报"跨宿主薄适配正文漂移 N 对" WARN 时
-- 不跑：仅改 frontmatter；改 trae 钩子/规则；改包源其他文件
+- 不跑：装户仓（本命令会拒绝）；仅改 frontmatter；改 trae 钩子/规则；改包源其他文件
 
 ## 2. 怎么跑
 
 ### 2.1 默认 `--diff`（仅报告）
 
 ```
-node bin/flow-kit.mjs sync-hosts --diff      # 包源仓（在包源根跑）
+node bin/flow-kit.mjs sync-hosts --diff      # 包源仓（在包源根跑，或 --dir <包源根>）
 node bin/flow-kit.mjs sync-hosts --json      # 机器可读
-flow-kit sync-hosts --diff                   # 装户仓（在装户根跑；或用 --dir <项目根> 指定）
 ```
 
 输出三类：
@@ -47,9 +42,8 @@ node bin/flow-kit.mjs sync-hosts --apply
 ### 2.3 自验
 
 ```
-npm test                                       # 含 sync-hosts.test.mjs 8 场景
-node bin/flow-kit.mjs doctor                   # 装户跑 §7.x PASS；包源跑 §7.x skipped
-sh .agents/scripts/check-loop.sh                # Windows 无 sh 时 doctor 已探测分流
+npm test                                       # 含 sync-hosts.test.mjs
+node bin/flow-kit.mjs doctor                   # 包源环境 §6.7 skipped
 ```
 
 ## 3. 边界（不要做）
@@ -64,7 +58,7 @@ sh .agents/scripts/check-loop.sh                # Windows 无 sh 时 doctor 已�
 
 - trae 钩子（`modules/hosts/trae/hooks/*.cjs`）— 独立演进的工程件
 - trae 规则（`modules/hosts/trae/rules/*.md`）— 同上
-- 包源 .agents/scripts/*.cjs（pre-commit 等钩子）— 同步由 `flow-kit sync` 走 managed 台账负责
+- 门禁脚本与钩子（`templates/_agents/scripts`、`templates/_githooks`）— 由 `flow-kit sync` 按 managed 台账下发，不走 sync-hosts
 
 ## 5. 相关留痕
 

@@ -4,7 +4,7 @@
 // 判据：①全对齐 → inSync=28, drift 空 ②权威源改 → drift 列 ③apply → 正文一致，frontmatter 各自保留
 // ④薄适配 frontmatter 手改 → 不进 drift ⑤薄适配正文手改 → drift 列，apply 覆盖
 // ⑥薄适配缺失 → authorityMissing 列；apply 不自动创建
-// ⑦--json ⑧孤儿薄适配 ⑨装户布局（--dir / cwd 指向装户根 → 按 .agents ↔ 宿主目录比对）
+// ⑦--json ⑧孤儿薄适配 ⑨非包源根拒绝（不把 .agents 当权威源）
 // 用法：node src/sync-hosts.test.mjs
 import fs from 'node:fs';
 import path from 'node:path';
@@ -78,7 +78,7 @@ syncHosts(process.argv.slice(2), root);
   return spawnSync(process.execPath, [driver, '--dir', fixtureRoot, ...extra], { encoding: 'utf8', ...opts });
 }
 
-// 不传 --dir 形态：把 cwd 设为 fixture（验「默认当前目录」解析；装户布局靠 cwd 判定）
+// 不传 --dir 形态：把 cwd 设为 fixture（验「默认当前目录」解析）
 function runSyncHostsByCwd(fixtureRoot, extra = []) {
   const driver = path.join(fixtureRoot, 'driver.mjs');
   W(driver, `import { syncHosts } from ${JSON.stringify(pathToFileURL(path.join(SRC_ROOT, 'sync-hosts.mjs')).href)};
@@ -192,39 +192,23 @@ syncHosts(process.argv.slice(2), root);
   check('S8 apply 不删孤儿薄适配', fs.existsSync(path.join(fx, 'modules/hosts/opencode/commands/orphan.md')) && fs.existsSync(path.join(fx, 'modules/hosts/opencode/commands/wf-legacy.md')));
 }
 
-// ============ 场景 9：装户布局（.agents 为权威源 + 宿主目录为薄适配，无 templates/modules）============
-// 2026-10-07 sync-hosts-target-fix：此前目标根恒为 pkgRoot（= 包安装目录），装户跑 sync-hosts
-// 会去改包源仓。本场景钉住「--dir / cwd 指向装户根 → 按装户布局比对」。
+// ============ 场景 9：非包源根拒绝（.agents 不再当权威源，宿主文件保持原样）============
 {
  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-synchosts-inst-'));
  W(path.join(root, '.agents/commands/test.md'),
  `---\ndescription: Test 阶段\n---\n\n# Test · v2\n\n权威源正文 test v2\n`);
- W(path.join(root, '.opencode/commands/wf-test.md'),
- `---\ndescription: Test · opencode\n---\n\n# Test · v1\n\n旧正文 test v1\n`);
- W(path.join(root, '.trae/commands/wf-test.md'),
- `---\nname: wf-test\ndescription: Test · trae\n---\n\n# Test · v1\n\n旧正文 test v1\n`);
+ const hostBody = `---\ndescription: Test · opencode\n---\n\n# Test · v1\n\n旧正文 test v1\n`;
+ W(path.join(root, '.opencode/commands/wf-test.md'), hostBody);
 
- // 9a：--dir 指向装户根 → 布局判定「装户」，列出 2 处漂移
  const r1 = runSyncHosts(root, ['--diff']);
  const out1 = r1.stdout + r1.stderr;
- check('S9 装户布局：--dir 指向装户根 → 头部标「装户布局」', /装户布局/.test(out1), out1);
- check('S9 装户布局：列出 2 处正文漂移', /正文段漂移（2/.test(out1), out1);
- // 未装宿主（claude/cursor/codex）目录不存在 → 不算「缺失」（否则装户刷屏 + apply 恒 exit 1）
- check('S9 装户布局：未装宿主不进「权威源声明但薄适配缺失」', !/权威源声明但薄适配缺失/.test(out1), out1);
+ check('S9 非包源根 --diff：拒绝且点明只在包源仓运行', r1.status !== 0 && /只在包源仓运行/.test(out1), out1);
+ check('S9 非包源根 --diff：不改宿主文件', R(path.join(root, '.opencode/commands/wf-test.md')) === hostBody, out1);
 
- // 9b：不传 --dir（cwd = 装户根）→ 同样命中装户布局（旧行为会误指包源）
- const r2 = runSyncHostsByCwd(root, ['--diff']);
+ const r2 = runSyncHostsByCwd(root, ['--apply']);
  const out2 = r2.stdout + r2.stderr;
- check('S9 cwd 默认：装户布局解析正确（不再误指包源）', /装户布局/.test(out2) && !/包源布局/.test(out2), out2);
-
- // 9c：apply → 正文段对齐、薄适配 frontmatter 保留
- const r3 = runSyncHosts(root, ['--apply']);
- const out3 = r3.stdout + r3.stderr;
- const bodyOf = (p) => { const t = R(p); const m = t.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n/); return t.slice(m ? m[0].length : 0); };
- check('S9 装户布局 apply：opencode 正文段对齐', bodyOf(path.join(root, '.opencode/commands/wf-test.md')) === bodyOf(path.join(root, '.agents/commands/test.md')), out3);
- check('S9 装户布局 apply：trae frontmatter 保留（name: wf-test）', /^---\nname: wf-test/m.test(R(path.join(root, '.trae/commands/wf-test.md'))), out3);
- // 未装宿主不计缺失 → apply 摘要「权威源缺失：0」且 exit 0
- check('S9 装户布局 apply：未装宿主不计缺失 → 权威源缺失 0 且 exit 0', /权威源缺失：0/.test(out3) && r3.status === 0, `status=${r3.status}\n${out3}`);
+ check('S9 cwd 为装户根 --apply：同样拒绝', r2.status !== 0 && /只在包源仓运行/.test(out2), out2);
+ check('S9 cwd 为装户根 --apply：宿主文件未被改写', R(path.join(root, '.opencode/commands/wf-test.md')) === hostBody, out2);
 }
 
 {
@@ -237,43 +221,17 @@ syncHosts(process.argv.slice(2), root);
   check('实仓薄适配无缺失无正文漂移', r.authorityMissing.length === 0 && r.drift.length === 0, `missing=${r.authorityMissing.length} drift=${r.drift.length} ${sample}`);
 }
 
-// ============ 场景 10-12：包源布局多根对账（2026-10-09 sync-hosts-root-coverage，B1）============
-// 根因教训（bb69e19「81 对全对齐」漏 .zcode 三份，独立复核 P2-3）：包源布局此前只扫 modules/hosts，
-// 项目根 HOSTS.dir 形态宿主点（本仓 .zcode/）不在扫描面。三场景钉住：漂移可检出 / apply 可修复且
-// frontmatter 保留 / 对账面自描述行在案。
+// ============ 场景 10：包源仓不扫描项目根宿主点（.zcode 等不是第二对账面）============
 {
-  // S10：包源 fixture + 项目根 .zcode/agents 漂移（正文旧 + frontmatter zcode 风格）→ --diff 报漂移
   const fx = mkFixture();
-  W(path.join(fx, '.zcode/agents/implementer.md'),
-    `---\nname: implementer\ndescription: zcode 本仓风格\n---\n\n# Implementer · v0\n\n旧版正文 implementer v0\n`);
+  const zcodeBody = `---\nname: implementer\ndescription: zcode 本仓风格\n---\n\n# Implementer · v0\n\n旧版正文 implementer v0\n`;
+  W(path.join(fx, '.zcode/agents/implementer.md'), zcodeBody);
   const r = runSyncHosts(fx, ['--diff']);
   const out = r.stdout + r.stderr;
-  check('S10 项目根宿主点漂移：--diff 报 .zcode/agents/implementer.md',
-    out.includes('.zcode/agents/implementer.md') && /正文段漂移/.test(out), out.slice(0, 600));
-  check('S10 对账面自描述：含「项目根宿主点（1 宿主）」', /对账面：.*项目根宿主点（1 宿主）/.test(out), out.split('\n').slice(0, 4).join('\n'));
-
-  // S11：--apply 修复项目根漂移——正文覆盖为权威源、frontmatter 保留、漂移归零
-  const r2 = runSyncHosts(fx, ['--apply']);
-  const out2 = r2.stdout + r2.stderr;
-  const synced = /- \.zcode\/agents\/implementer\.md/.test(out2);
-  const fixed = R(path.join(fx, '.zcode/agents/implementer.md'));
-  check('S11 --apply 同步清单含 .zcode 条目', synced, out2.slice(0, 500));
-  check('S11 --apply 正文覆盖 + frontmatter 保留',
-    fixed.includes('权威源正文 implementer v1') && fixed.includes('description: zcode 本仓风格'),
-    fixed.slice(0, 200));
-  check('S11 --apply 后漂移归零', /正文漂移：\s*0/.test(out2), out2.slice(-300));
-}
-
-{
-  // S12：装户布局 faces 自描述（回归钉住——装户单根 label=项目根宿主点，行为不变）
-  const fx = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-synchosts-adopter-'));
-  W(path.join(fx, '.agents/roles/implementer.md'),
-    `---\ndescription: Implementer 角色契约\n---\n\n# Implementer · v1\n\n权威源正文 implementer v1\n`);
-  W(path.join(fx, '.zcode/agents/implementer.md'),
-    `---\nname: implementer\ndescription: zcode\n---\n\n# Implementer · v1\n\n权威源正文 implementer v1\n`);
-  const r = runSyncHostsByCwd(fx, ['--diff']);
-  const out = r.stdout + r.stderr;
-  check('S12 装户布局：faces 单根自描述 + 对齐 1 对', /对账面：项目根宿主点（1 宿主）/.test(out) && /正文对齐：\s*1\s*对/.test(out), out.slice(0, 400));
+  check('S10 对账面只有 modules/hosts', /对账面：modules\/hosts/.test(out) && !/项目根宿主点/.test(out), out.split('\n').slice(0, 6).join('\n'));
+  check('S10 项目根 .zcode 漂移不入报告', !out.includes('.zcode/agents/implementer.md'), out.slice(0, 500));
+  runSyncHosts(fx, ['--apply']);
+  check('S10 --apply 不改写项目根 .zcode', R(path.join(fx, '.zcode/agents/implementer.md')) === zcodeBody);
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${failCount}`);

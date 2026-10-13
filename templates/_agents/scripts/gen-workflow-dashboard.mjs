@@ -19,6 +19,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
+import { readLedgerRows } from './ledger-loader.mjs';
 
 const require = createRequire(import.meta.url);
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -82,17 +83,13 @@ function collectDoneIntents(root) {
 // collectDoneMap：台账 earliest done 行（坏行容忍，doc 正斜杠根相对——沿检查 14/15 口径）
 function collectDoneMap(root) {
   const doneMap = new Map();
-  const ledgerPath = path.join(root, '.agents', 'confirmations.jsonl');
-  if (!fs.existsSync(ledgerPath)) return doneMap;
-  for (const line of fs.readFileSync(ledgerPath, 'utf8').split(/\r?\n/)) {
-    if (!line.trim()) continue;
-    try {
-      const e = JSON.parse(line);
-      if (e && e.stage === 'done' && typeof e.doc === 'string' && e.doc.startsWith('workflow/intents/')) {
-        const prev = doneMap.get(e.doc);
-        if (prev === undefined || e.ts < prev) doneMap.set(e.doc, e.ts);
-      }
-    } catch { /* 坏行容忍跳过 */ }
+  // 读法收敛 ledger-loader（2026-10-12 ledger-loader-p1）：earliest done 行取自时间戳比较，
+  // 与行序无关，故并入台账视图不改变本函数语义（分片行同样参与「最早」判定）
+  for (const e of readLedgerRows(root)) {
+    if (e && e.stage === 'done' && typeof e.doc === 'string' && e.doc.startsWith('workflow/intents/')) {
+      const prev = doneMap.get(e.doc);
+      if (prev === undefined || e.ts < prev) doneMap.set(e.doc, e.ts);
+    }
   }
   return doneMap;
 }

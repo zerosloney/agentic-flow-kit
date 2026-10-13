@@ -36,16 +36,17 @@ check('globToRe：目录前缀', globToRe('.agents/cache/').test('.agents/cache/
 }
 
 // ---- ② 端到端 fixture ----
-const SCRIPTS = ['check-loop.mjs', 'policy.mjs', 'stage-gates.mjs', 'check-metric-claims.mjs', 'check-hygiene.mjs', 'check-stage-index.mjs', 'gate-seg.mjs', 'workflow-enums.mjs', 'edit-face-check.mjs'];
+// 夹具闭包（2026-10-12 fixture-closure-rootfix）：此前手写 SCRIPTS 枚举，漏拷 ledger-loader / ledger-prune
+// 就让 check-loop import 失败 → 门禁静默不跑 → **假绿**。改为按入口自动求传递闭包，新增依赖自动跟随。
+const { copyScriptClosure, copyAgentsFiles } = await import('./fixture-scripts.mjs');
 // 引用完整性哑文件（检查 4/6/7 的存在性判据——避免 fixture 结构性 WARN 淹没断言面）
 const REF_COMMANDS = ['new-task', 'plan', 'design', 'build', 'test', 'deploy', 'maintain', 'review'];
 const REF_ROLES = ['implementer', 'independent-reviewer', 'ui-verifier'];
 function mkFixture({ breakStageIndex, overBudget }) {
   const fx = fs.mkdtempSync(path.join(os.tmpdir(), 'efc-'));
   fs.mkdirSync(path.join(fx, '.agents', 'scripts'), { recursive: true });
-  for (const f of SCRIPTS) fs.copyFileSync(path.join(SRC, f), path.join(fx, '.agents', 'scripts', f));
-  for (const f of ['kit.json', 'workflow-modules.txt', 'workflow-enums.txt'])
-    if (fs.existsSync(path.join(SRC, '..', f))) fs.copyFileSync(path.join(SRC, '..', f), path.join(fx, '.agents', f));
+  copyScriptClosure(path.join(fx, '.agents', 'scripts'), ['edit-face-check.mjs', 'check-loop.mjs']);
+  copyAgentsFiles(path.join(fx, '.agents'), ['kit.json', 'workflow-modules.txt', 'workflow-enums.txt']);
   fs.mkdirSync(path.join(fx, 'workflow', 'intents'), { recursive: true });
   for (const d of ['specs', 'plans', 'incidents']) fs.mkdirSync(path.join(fx, 'workflow', d), { recursive: true });
   for (const c of REF_COMMANDS) { fs.mkdirSync(path.join(fx, '.agents', 'commands'), { recursive: true }); fs.writeFileSync(path.join(fx, '.agents', 'commands', `${c}.md`), `# ${c}\n`); }

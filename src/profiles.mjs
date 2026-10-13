@@ -113,6 +113,9 @@ export function isOwned(rel) {
   return rel === 'AGENTS.md' || rel === '.gitattributes' || rel.startsWith('workflow/') || rel.startsWith('wiki/')
     || rel.startsWith('.agents/notes/')
     || rel === '.agents/workflow-modules.txt' || rel === '.agents/rule-budgets.txt'
+    // level-hints.txt（2026-10-13 flow-kit-route）：风险级别**路径下限**清单，内容项目私有（照抄别人的
+    //   清单等于没登记），故归装户自持、sync 永不覆盖——与 lane-surfaces.txt 同款性质。
+    || rel === '.agents/level-hints.txt'
     || rel === '.agents/metric-claims.txt' || rel === '.agents/metric-derivers.cjs'
     || rel === '.agents/metric-derivers.mjs'
     || rel === '.agents/hooks/local-pre-commit'

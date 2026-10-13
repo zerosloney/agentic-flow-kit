@@ -119,6 +119,34 @@ export const POLICIES = {
     // 消费方：check-loop 检查 15 的 scope 子项（台账行 ts ≥ 本值才判）。
     scopeSince: '2026-10-09T11:24:43Z',
   },
+  // 版本 8 = 版本 7 的全部键 + ledgerDocChainSince（台账哈希链的**链域**从「文件物理序」改为
+  // 「按 doc 的逻辑序」，2026-10-12 ledger-doc-chain）。
+  // 为什么改：原链 prevHash = 物理上一行的 hash，隐含「台账是单写者顺序追加」的前提。三种并发形态
+  //   全部破坏它——① 两进程并发 append 读到同一末行 → 同 prevHash 分叉；② git merge 并集（见
+  //   git-merge-jsonl.mjs）后 B 侧行被追加到 A 尾部之后 → A 侧链被劈开；③ 分片归并 compact 把分片行
+  //   插进主台账中部 → 断链。且这三者都是**正常协作**,不是篡改——让正常协作长期撞 hard 门,门禁就会被
+  //   绕过（--no-verify），治理失效。
+  // 为什么按 doc 分域：台账行的天然主键是 doc（每行 = 某份文档的一次确认）。**同一 doc 内的先后有语义，
+  //   doc 之间的先后没有语义**。把链的域对齐语义域是对既有判据的修正，不是削弱——就地改行、删行、
+  //   插行三类篡改在 doc 链下一律仍被抓住（见 check-loop 检查 15）。
+  // 本版本只加一个开关键：**缺键（v1-v7）时写入侧与校验侧都走旧物理链口径**，存量台账零变化、零新增告警。
+  // 粒度取「时刻」而非日期（同 scopeSince / verifyDocSince 的教训）：本日已有一批旧口径行写入，
+  //   日期粒度会把它们纳入新受审范围、产出不可消退告警。
+  // 消费方：confirm-doc appendLedger（写入侧取前驱）+ check-loop 检查 15（校验侧按行分域）。
+  8: {
+    moduleSince: '2026-09-22',
+    check14Since: '2026-09-26',
+    confirmDocsEffective: '2026-09-27',
+    confirmIncidentsEffective: '2026-09-28',
+    bindingTs: '2026-09-28',
+    check17UnclosedAfter: '0.8.0',
+    stageGateSince: '2026-09-29',
+    riskLevelSince: '2026-10-01',
+    verifySince: '2026-10-07',
+    verifyDocSince: '2026-10-08T09:37:35Z',
+    scopeSince: '2026-10-09T11:24:43Z',
+    ledgerDocChainSince: '2026-10-12T07:20:00Z',
+  },
 };
 
 export function loadKitPolicy(root) {
@@ -178,6 +206,25 @@ export function hasFreshVerifyLine(lines, now = Date.now(), doc = null) {
 //   把主动伪造从静默可行抬到必留断链痕迹。
 export function ledgerChainHash(row, prevHash) {
   return createHash('sha256').update((prevHash || '') + JSON.stringify(row)).digest('hex');
+}
+
+// ---- 台账 doc 链前驱（2026-10-12 ledger-doc-chain）----
+// 单源：confirm-doc appendLedger（写入侧取前驱）与 check-loop 检查 15（校验侧判接续）共用同一语义。
+//   ledgerDocChainActive(policy)：锚存在且为合法 ISO 时刻 → 新口径生效；缺键（v1-v7）→ 旧物理链。
+//   ledgerDocChainPrev(rows, doc)：rows 为物理序的已解析台账行，返回该 doc **最后一个带 hash 行**的
+//   hash，无则 ''（链段重启）。取不到带 hash 的行时返回 ''，与旧口径「末行无 hash → ''」同向。
+// 为什么不做去重/合并：去重是**口径变更**（会改漏斗计数），属分片功能同批生效，不在本步。
+export function ledgerDocChainActive(policy) {
+  const s = policy && policy.ledgerDocChainSince;
+  return typeof s === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/.test(s);
+}
+
+export function ledgerDocChainPrev(rows, doc) {
+  for (let i = (rows && rows.length ? rows.length : 0) - 1; i >= 0; i--) {
+    const r = rows[i];
+    if (r && r.doc === doc && typeof r.hash === 'string') return r.hash;
+  }
+  return '';
 }
 
 // ---- 台账 scope（机器派生改动面，2026-10-09 审查 A1 干净版）----

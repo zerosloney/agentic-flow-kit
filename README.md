@@ -1,6 +1,6 @@
 # agentic-flow-kit
 
-AI-Native 闭环工作流 + wiki 知识层脚手架。`flow-kit init` 一条命令为新项目装好整套项目级 AI 工作流引擎：8 个阶段命令、3 个子智能体角色契约、git 门禁钩子（闭环配对 / 敏感信息扫描 / 条件构建 / 规则面预算）、kb 跨语料检索、workflow 实时看板、intents→specs→plans→incidents 文档闭环、wiki 知识库三件套。
+AI-Native 闭环工作流 + wiki 知识层脚手架。`flow-kit init` 一条命令为新项目装好整套项目级 AI 工作流引擎：8 个阶段命令、3 个子智能体角色契约、git 门禁钩子（闭环配对 / 敏感信息扫描 / 条件构建 / 规则面预算）、kb 跨语料检索、workflow 实时看板、intents→specs→plans→incidents 文档闭环、wiki 知识库三件套、**多人/多 worktree 台账并发治理**（并集合并 / 分片归并 / 特许修剪）。
 
 **装完本地可跑**：日常闭环（门禁钩子 / check-loop / fill-* / confirm-doc / kb 检索 / 看板）走项目内 `.agents/scripts/`，零 npm 运行时依赖，Node ≥ 18 即可跑；升级 / 体检 / 装门禁（`sync` / `doctor` / `add-host` / `add-gate`）走 `npx agentic-flow-kit`。clone 后只差 `git config core.hooksPath .githooks`——init 会自动挂好。
 
@@ -39,6 +39,18 @@ node .agents/scripts/confirm-doc.mjs workflow/intents/<文件>.md   # 终端里�
 
 **关于「确认门」的诚实边界**：确认门是**留痕机制，不是防伪机制**。`confirm-doc.mjs` 把确认事件写进 `.agents/confirmations.jsonl`（append-only，入 git），check-loop 据此对账——但台账是本地可写文件，**刻意手改台账仍可伪造**。门禁的实际作用是把「顺手绕过」抬到「主动伪造」（两者性质不同、可事后对质），而非关闭通道。引擎注释对此有完整声明（见包源 `templates/_agents/scripts/stage-gates.mjs` 头部信任边界段；装户径同份在 `.agents/scripts/stage-gates.mjs`）。委托代录（`--delegated`）的台账行如实记 `source` 与用户原话供事后对质，永不伪装 TTY 确认。
 
+**台账并发（三形态，2026-10-12）**：台账是尾部追加形态，天然撞三种**正常协作**。引擎对每种各有机制，且一律按「正常协作不报红、篡改照拦」设计——门禁若因正常协作持续 hard 拦，唯一出路就是 `--no-verify`，那等于门禁自己废掉自己。
+
+| 形态 | 机制 |
+|---|---|
+| 多人/多分支合并冲突 | `.gitattributes` 的 `merge=jsonl-union` → 并集去重，两侧行全保留、无冲突可解（此前人工解的常见错法是「整取一侧」——静默丢掉另一侧的确认行） |
+| 单机多 worktree 并行 append | `confirm-doc --shard` 写 `.agents/confirmations.d/<doc>.jsonl`，各写各的；里程碑跑 `compact-ledgers.mjs --execute` 并回主台账 |
+| 所有者明令删某批文档 | **特许修剪**：同笔提交 `.agents/ledger-prune-manifest.json`（逐行 sha256 + 授权 + 理由），门禁逐行对账放行；无 manifest 的删/改/重排仍全拦 |
+
+哈希链的域是「**同一 doc 的逻辑序**」而非文件物理序（生效日锚，缺键回退旧口径，存量零变化），因此上面三种协作都不打断它；就地改行、删行、插行三类篡改照拦。诚实边界：manifest 是可写文件，**刻意伪造即可让任意删行合法化**——与「台账本地可写」同级，本通道只把「顺手手改」抬到「提交一份可被 git 历史对质的凭据」。
+
+> **存量装户迁移动作（升级后必做）**：`merge=jsonl-union` 属 `.gitattributes`，而该文件是**项目自持（owned）**、`sync` 永不覆盖——升级后**不会自动获得**。需手动在目标仓 `.gitattributes` 补一行 `.agents/*.jsonl merge=jsonl-union`。driver 是本机态配置、不跨机共享，`init` 会自动配；漏配则退化为文本冲突（**不静默丢数据，但需人工解**）。
+
 ## 快速开始
 
 ```bash
@@ -61,6 +73,30 @@ npx agentic-flow-kit add-host opencode
 npx agentic-flow-kit add-gate dotnet-ca
 ```
 
+## 执行面：route（手动路由）+ run（自动流水线）
+
+装完之后，CLI 不止管装，还管跑。**md 指令与 md 子代理仍装在装户项目里**（`.agents/commands/`、`.agents/roles/`），宿主读它们；执行代码也留在装户 `.agents/scripts/`，包只做**薄壳转发与判定面**——不复制、不改写、不解释装户的正文。
+
+```bash
+# 手动路由的机器面：定级 + 判据清单 + 泳道 + 下一阶段 + 该读哪个 md
+npx agentic-flow-kit route --kind require --level L1 --files "src/a.ts,src/b.ts"
+npx agentic-flow-kit route --files "src/db/migrations/001_init.sql" --json   # 机读面
+
+# 自动流水线：薄壳转发装户 pipeline-run 状态机（参数与退出码原样透传）
+npx agentic-flow-kit run start "给导入功能加审计字段"
+npx agentic-flow-kit run next --delegated "可以"
+```
+
+| 命令 | 干什么 | 谁是单源 |
+|------|--------|----------|
+| `route` | 按改动文件给出建议档位、判据清单、泳道（协作道 / 防御道）、`kind` 对应的入口 md | 判据 = `.agents/scripts/level-criteria.mjs`；泳道 = `.agents/scripts/stage-gates.mjs` 的 `laneOfDoc` |
+| `run` | `start` / `next` / `status` / `watch` / `abort` 五个子命令原样转发 | 状态机 = `.agents/scripts/pipeline-run.mjs`；驱动协议 = `.agents/commands/pipeline-run.md` |
+
+**诚实边界（重要）**：级别是**意图面**的语义判定（「一处定义、多处消费」），机器判不了语义。机器只兜两件它真能兜的事——**就高不就低**（混档取高）与**路径下限**。路径下限登记在 `.agents/level-hints.txt`（装户自持、内容项目私有、`sync` 永不覆盖、**默认空**）；未配置时 `route` 按 L1 起步并提示补配置，**绝不假装判得出**。该清单写错会直接报错退出——写错配置比没配置危险：没配置会提示，写错会误判。
+
+定级纪律最终仍由 lane-surface 触达面门在**提交面**兜底：`route` 漏判语义，钩子照样拦。
+
+
 | 选项 | 说明 |
 |------|------|
 | `--stack` | `dotnet` / `node` / `python` / `go` / `none`（默认 none）——**门禁配置三处**：commit-check 条件编译检查（暂存对应扩展名时 commit 前自动构建）+ **质量检测**（`checks`：lint / 类型检查 / vet 等秒级确定性检查，存在对应配置文件（tsconfig / eslint / ruff / go.mod 等）才启用，没有则自动跳过；测试不放提交门——关单在 test.md 阶段门）、settings.json 自检验命令权限、AGENTS.md「项目适配区」命令预填 |
@@ -75,6 +111,7 @@ init 不问项目名 / 描述：`AGENTS.md` 只生成「AI工作流 + Wiki」两
 
 ```
 .agents/            阶段命令×8 / 角色契约×3 / 门禁钩子 / 引擎脚本（检索·索引·看板·预算·聚合）/ 技能×2 / settings.json / kit.json 台账
+                    + level-criteria.mjs（级别判据机器单源）/ level-hints.txt（项目自持的路径下限清单，默认空）
 .githooks/          pre-commit（通用门禁编排+项目门禁挂载点）/ pre-push（闭环断档）/ commit-msg / post-commit / pre-merge-commit
 workflow/           intents/specs/plans/incidents 模板×4 + README 协议 + 台账三件（delegations/papercuts/regression-checklist）
 wiki/               INDEX 骨架 + 知识沉淀总览 + drafts-archive
@@ -124,10 +161,11 @@ npm install ./agentic-flow-kit-<版本>.tgz          # 项目内：之后用 npx
 
 **能力清单的单一真相源是 `CHANGELOG.md`**——每个已发布版本带什么、为什么这么带，都在那里。本节只讲当前语义，不重复枚举版本特性（此前列举导致 README 与实际发布内容长期漂移，2026-10-08 已收敛到单源）。
 
-当前语义三点：
+当前语义四点：
 
 - **门禁面**：check-loop 20 项检查 + `.githooks/` 五个钩子（pre-commit / pre-push / commit-msg / post-commit / pre-merge-commit），门禁逻辑不依赖 agent 客户端自觉。
-- **闭环面**：intents → specs → plans → incidents 四态文档链 + 确认台账（`.agents/confirmations.jsonl`）+ 逐阶段前置门（起草门 / 确认门 / done 前置门）。
+- **闭环面**：intents → specs → plans → incidents 四态文档链 + 确认台账（`.agents/confirmations.jsonl`）+ 逐阶段前置门（起草门 / 确认门 / done 前置门）+ **台账并发三形态**（并集合并 / 分片写入与 compact 归并 / 特许修剪）与按 doc 逻辑序的哈希链（见上文「台账并发」段）。
 - **观测面**：`workflow/INDEX.md`（检索索引）、`workflow/DASHBOARD.md`（红绿灯仪表盘）、`workflow/metrics.md`（月度快照）——**观测面非门禁**，红灯是「看」的不是「拦」的。
+- **执行面**：`route`（手动路由的机器面：定级 + 泳道 + 下一阶段 + 入口 md）与 `run`（自动流水线薄壳转发装户状态机）；判据单源在装户 `.agents/scripts/level-criteria.mjs`，md 改为引用它而非承载判据散文（见上文「执行面」段）。
 
 版本号与已发布能力看 `package.json` 的 `version` 与 `CHANGELOG.md`；仓库当前工作流实况看 `workflow/INDEX.md`。

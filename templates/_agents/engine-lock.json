@@ -1,0 +1,246 @@
+{
+  "schema": 1,
+  "generatedAt": "2026-10-13T05:39:20.494Z",
+  "files": {
+    ".github/workflows/ci.yml": {
+      "sha256": "57d51fed7452f04919166e7397d373fe476d6bb6df7bef40576684b3d9687bd2",
+      "hard": 3
+    },
+    ".github/workflows/release.yml": {
+      "sha256": "c8032a042da93974d7481b37a5a51eefa421b1eacc065424f35095ccd00b7c6b",
+      "hard": 0
+    },
+    "templates/AGENTS.md": {
+      "sha256": "013df60e0236f3bbd22ca9d8140cc922cdfd603a3efdf58b13a95a6e561d0017",
+      "hard": 27
+    },
+    "templates/_agents/control-surfaces.txt": {
+      "sha256": "ae6072b58fde4cf2ad65ce27d0216133dabbd189b0542a0dbf11bbd9e0608407",
+      "hard": 29
+    },
+    "templates/_agents/lane-surfaces.txt": {
+      "sha256": "e378c19f5a85bd9118a1e2e04fb18645482990e886df32ea97c4d65411d850e6",
+      "hard": 5
+    },
+    "templates/_agents/level-hints.txt": {
+      "sha256": "307f0534358f21c93490cd0a3331b0eb7683b16f1a3e349b1e2435260309ed06",
+      "hard": 0
+    },
+    "templates/_agents/metric-claims.txt": {
+      "sha256": "e668589d817d589b9f81ba73460c0bd024d6d34203c9f1fa36bb9019d5e8b3ce",
+      "hard": 8
+    },
+    "templates/_agents/rule-budgets.txt": {
+      "sha256": "cd5fee0ae3eebe0398f2b15d4c801bc7f30c4ec20d46508033eeebb4a417a960",
+      "hard": 3
+    },
+    "templates/_agents/scripts-test-exempt.txt": {
+      "sha256": "05a96ae19289deb074392ca4de212aa277dabf2ea8bc7be8bceb9f3c7a234fbd",
+      "hard": 5
+    },
+    "templates/_agents/scripts/agg-gate-stats.mjs": {
+      "sha256": "488517dfdc37b79b327e1f47603c94fc1fc236145d12df213e6ce2de60f11730",
+      "hard": 0
+    },
+    "templates/_agents/scripts/check-engine-integrity.mjs": {
+      "sha256": "8aee8af68d08705039633b91623523835dba97e1f28b7018b97a56ff2c3e0045",
+      "hard": 2
+    },
+    "templates/_agents/scripts/check-hygiene.mjs": {
+      "sha256": "0fecd44c28f1b5759a4bb01f3c19213cace48a162e27802f2f1c1df67eec15ff",
+      "hard": 0
+    },
+    "templates/_agents/scripts/check-lane-surface.mjs": {
+      "sha256": "7f1fb766e36bb0d31408c3ccb4c03507002e79152017cb19c7e34e485be537e9",
+      "hard": 2
+    },
+    "templates/_agents/scripts/check-ledger-invariant.mjs": {
+      "sha256": "2d187a82781a5e076985d91f1a4734b45cd507c1b87942064bad949bd0b3f806",
+      "hard": 2
+    },
+    "templates/_agents/scripts/check-loop.mjs": {
+      "sha256": "a7af1f7c065b20e81b137027d02762d1414ea2ead778e45b5f17dcb7c14017f4",
+      "hard": 32
+    },
+    "templates/_agents/scripts/check-metric-claims.mjs": {
+      "sha256": "2c2d8615e9418117d43202dc67cd4131e43fb6c095686363dfcd2fd2cb542f2a",
+      "hard": 0
+    },
+    "templates/_agents/scripts/check-stage-index.mjs": {
+      "sha256": "9118b8fe57b80b5d36a0db38ed141c08036629895c143a64f0c29e301b2218c8",
+      "hard": 0
+    },
+    "templates/_agents/scripts/compact-ledgers.mjs": {
+      "sha256": "b517a775bcbcaaca8b8e58ed85c611c9fc1a40f64b19ee0f40ea137b40a0042e",
+      "hard": 1
+    },
+    "templates/_agents/scripts/confirm-doc.mjs": {
+      "sha256": "8d9f8478fa80be447c8e372a94be4b991c02a9077c7bd087bbf8e77feb65834e",
+      "hard": 12
+    },
+    "templates/_agents/scripts/draft-sediment.mjs": {
+      "sha256": "a9c51e3fd139adf32755d882e0de53f208784be68a75c1881658c3886605c76d",
+      "hard": 1
+    },
+    "templates/_agents/scripts/edit-face-check.mjs": {
+      "sha256": "24faba555101f0aacd652e3728c99982f95461cd57de844f9483df6a6923d1fa",
+      "hard": 0
+    },
+    "templates/_agents/scripts/ensure-board.mjs": {
+      "sha256": "8d2211ddaa5f29e961d6ad435fa780baca45722dc79cdd9a01931f8688a5359c",
+      "hard": 0
+    },
+    "templates/_agents/scripts/fill-intent.mjs": {
+      "sha256": "796af3754a771dbb2ffeeac1f94ec520fd40cfd6ae4e01f978e70571346a7e21",
+      "hard": 1
+    },
+    "templates/_agents/scripts/fill-plan.mjs": {
+      "sha256": "ea60a3e478236e4fc3b25c84bb74217f3eb5130968d3165665e17ae7cc2329af",
+      "hard": 1
+    },
+    "templates/_agents/scripts/fill-spec.mjs": {
+      "sha256": "27aa4d55a9c17be40b8c3a89191b3336661340ca975cf04397dd62afe4ec2431",
+      "hard": 1
+    },
+    "templates/_agents/scripts/fixture-scripts.mjs": {
+      "sha256": "9f27ff097b8a4172de5f96aa23c1c625801bc5625e2434c332c30482b1761380",
+      "hard": 0
+    },
+    "templates/_agents/scripts/gate-checklist.mjs": {
+      "sha256": "d57ae04b4ce84515cbc81620dde65846c474460cf4eed24af5e525a438d5e97e",
+      "hard": 1
+    },
+    "templates/_agents/scripts/gate-seg.mjs": {
+      "sha256": "b579593ff67e7876e4e1051f62c9a7451032fb2255a2efe5e437a6a2e2c1ce9f",
+      "hard": 0
+    },
+    "templates/_agents/scripts/gen-wiki-board.mjs": {
+      "sha256": "c0e86110c8b686b591080f836d7cde6dc4a933820541ceb35928ac249b5d0fb6",
+      "hard": 6
+    },
+    "templates/_agents/scripts/gen-workflow-dashboard.mjs": {
+      "sha256": "335485bf6979b43f642e613abae951b69ad4d6b6ed0b026dfdde7f14cd2aebdc",
+      "hard": 0
+    },
+    "templates/_agents/scripts/gen-workflow-index.mjs": {
+      "sha256": "5e8bcab656c056d2e07b3286b9869705bff3deebbc97a131f731c360236fe9dd",
+      "hard": 3
+    },
+    "templates/_agents/scripts/gen-workflow-metrics.mjs": {
+      "sha256": "c91b6ff9fd5e3b391c8c50af1d68f35058286ef432dddb325f284e0d60833d56",
+      "hard": 2
+    },
+    "templates/_agents/scripts/git-merge-jsonl.mjs": {
+      "sha256": "e8c037dcce1f9e52dd9d63ef812ce3ace03f1ecf3e55cb363e58bd8b50352655",
+      "hard": 2
+    },
+    "templates/_agents/scripts/kb-cache-evict.mjs": {
+      "sha256": "bd74ac72e611142e839df76e80e22d8e9c6b351dc498c7bb07e807d2e32e7fdb",
+      "hard": 0
+    },
+    "templates/_agents/scripts/kb-search.mjs": {
+      "sha256": "3439e59cdafc8a52549fc8cee3bab8eaec384e4761d3f87a7f18db0a8e289d0c",
+      "hard": 7
+    },
+    "templates/_agents/scripts/ledger-loader.mjs": {
+      "sha256": "855619ec778eae07540f71ebab0c2f30de0e6b97b522ad69e4d1757cc4202713",
+      "hard": 0
+    },
+    "templates/_agents/scripts/ledger-prune.mjs": {
+      "sha256": "82ca3086bf76087ece4436bf2c23a2e102c22dffd6c987c08096286c3d16a0b7",
+      "hard": 0
+    },
+    "templates/_agents/scripts/level-criteria.mjs": {
+      "sha256": "05f2e6ab666e2f02ca9a06aa83c2c5e12ad17093cb3bd7ac4600b17de3f43e5b",
+      "hard": 0
+    },
+    "templates/_agents/scripts/pipeline-run-docs.mjs": {
+      "sha256": "d54085b21d857f4db6df7d5fc7b6a65ffc2391c9e0f100754d1e76a844a318c1",
+      "hard": 0
+    },
+    "templates/_agents/scripts/pipeline-run-run.mjs": {
+      "sha256": "b5bda64bee55dcd1fc44170a5e3ab5a5c96c404529d19885fd5b2d6b9d5143bf",
+      "hard": 0
+    },
+    "templates/_agents/scripts/pipeline-run.mjs": {
+      "sha256": "6cdf2de3bcbf94d59ccf5e6c4015e89b6032c844c2cc540fdc4f9e02244faa9c",
+      "hard": 0
+    },
+    "templates/_agents/scripts/policy.mjs": {
+      "sha256": "eab1a54334d83b93f276593be4e10a17af7734a7c44f8c28a6383946f735613e",
+      "hard": 0
+    },
+    "templates/_agents/scripts/solidify-task.mjs": {
+      "sha256": "5e5983b9ab6ae4eaaeced150018592b2501c4d6885b4913d03c6f29138630825",
+      "hard": 3
+    },
+    "templates/_agents/scripts/stage-gates.mjs": {
+      "sha256": "6c70ff01f785d19dfa7206cc01c1608baa3249ba59f57190b19b64f318e34e72",
+      "hard": 0
+    },
+    "templates/_agents/scripts/trust-mode.mjs": {
+      "sha256": "5800b52af787d6b3fd9a8ea314b36466e19a3adc90f70e93c5054cd530c68bff",
+      "hard": 1
+    },
+    "templates/_agents/scripts/verify-wiki-consistency.mjs": {
+      "sha256": "1f58ace65b6bab02eba5df1c69f5b55528df5c098e6d06f8197594912d764c32",
+      "hard": 4
+    },
+    "templates/_agents/scripts/verify.mjs": {
+      "sha256": "a40a23193dae79e189c9c7b1f8b1c4c6e1865baa94052c85ed59802864aa46b9",
+      "hard": 3
+    },
+    "templates/_agents/scripts/wf-journal.mjs": {
+      "sha256": "b14620e5c9f9c930f4a916084543ce190a135216f11bc4150dcb246c8cdb0e83",
+      "hard": 1
+    },
+    "templates/_agents/scripts/wiki-search.mjs": {
+      "sha256": "a493c85924644613619b83334b6f8e4db40ebf0d398960738422116d3afd3015",
+      "hard": 0
+    },
+    "templates/_agents/scripts/workflow-board-server.mjs": {
+      "sha256": "1ef41d13f192f119cd7307dcf59710be9e185308333a60067d3e1ebfb149e9f4",
+      "hard": 1
+    },
+    "templates/_agents/scripts/workflow-enums.mjs": {
+      "sha256": "540ce00ec954f90a67d886dcf10f2ebb0661056187f563ba55ec34bf9c0afecd",
+      "hard": 0
+    },
+    "templates/_agents/scripts/workflows-check.mjs": {
+      "sha256": "d29f5df709bb3d95b227202bb44a9e056af33bbe4f3afb87eefb94d96a2205cc",
+      "hard": 1
+    },
+    "templates/_agents/workflow-enums.txt": {
+      "sha256": "b28a83418133e24f3e4daee7f454c4f31ac98a943a94aa33008a944ae751d25a",
+      "hard": 8
+    },
+    "templates/_agents/workflow-modules.txt": {
+      "sha256": "d03593598f6b0495ebc650019c474da0d6538da06c6f58ccc00bd5a9cdc760f1",
+      "hard": 7
+    },
+    "templates/_githooks/commit-msg": {
+      "sha256": "3e946cbf3f59a469ec977a036ff8bfc960be7febe36318a0fd112b7adaadfc75",
+      "hard": 1
+    },
+    "templates/_githooks/post-commit": {
+      "sha256": "cb97b622a957027e6cfc04c3b7220da476e64d4c3ec902ea00ee14e570c6f3f1",
+      "hard": 0
+    },
+    "templates/_githooks/pre-commit": {
+      "sha256": "d65b6bd9adc59582e5209c1ddbdfe11a231d1312362c8f594e2579e7d3700e86",
+      "hard": 4
+    },
+    "templates/_githooks/pre-merge-commit": {
+      "sha256": "ab6d11707e78ac19261bc7d667056f7721466456d443cabf85ad7ba24dc797ac",
+      "hard": 1
+    },
+    "templates/_githooks/pre-push": {
+      "sha256": "c28d0c19204f0202dd270bbdb8e9b5d0362e56d67e2fbfbff33267ec7f592c9f",
+      "hard": 2
+    },
+    "templates/_github/workflows/kit-ci.yml": {
+      "sha256": "08c6e09992df9c1c3805ded11f01d33cea49ee64c4c5950ba3de15a8227e6464",
+      "hard": 3
+    }
+  }
+}

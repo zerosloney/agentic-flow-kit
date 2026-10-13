@@ -126,8 +126,10 @@ import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { loadEnums } from './workflow-enums.mjs';
 import { runCheck16 } from './check-metric-claims.mjs';
-import { auditEnabled, loadKitPolicy, hasFreshVerifyLine, ledgerChainHash, scopeMatches } from './policy.mjs';
+import { auditEnabled, loadKitPolicy, hasFreshVerifyLine, ledgerChainHash, ledgerDocChainActive, scopeMatches } from './policy.mjs';
 import { laneOfEntry } from './stage-gates.mjs';
+import { readLedgerRows, readLedgerEntries, LEDGER_REL } from './ledger-loader.mjs';
+import { prunedHashes as prunedHashesOf } from './ledger-prune.mjs';
 // MARK_RE：incident 留痕形态的单源（第七轮复核 N3——此前 check-loop 内联复制一份同口径字面量，
 // 两处靠注释与人工同步；改为复用 stage-gates.mjs 的导出，从结构上消除漂移可能）
 import { MARK_RE, approvedTraceHit } from './stage-gates.mjs';
@@ -805,16 +807,10 @@ export function runCheckLoop(opts = {}) {
     const doneTsOf = (() => {
       const map = new Map();
       try {
-        const lp = path.join(ROOT, '.agents', 'confirmations.jsonl');
-        if (fs.existsSync(lp)) {
-          for (const line of fs.readFileSync(lp, 'utf8').split(/\r?\n/)) {
-            if (!line.trim()) continue;
-            try {
-              const e = JSON.parse(line);
-              // append-only 取末次 done 跳转（同一 doc 多次 done 取最后一条 ts）
-              if (e && e.doc && ['done', 'closed'].includes(e.stage)) map.set(e.doc, e.ts || '');
-            } catch { /* 坏行跳过（同检查 15 口径） */ }
-          }
+        // 读法收敛 ledger-loader（2026-10-12 ledger-loader-p1）：末次 done 跳转取自物理读序，
+        // loader 保持读序返回故「取末次」语义与逐处直读一致（分片按文件名序排在主台账之后＝较新）
+        for (const e of readLedgerRows(ROOT)) {
+          if (e && e.doc && ['done', 'closed'].includes(e.stage)) map.set(e.doc, e.ts || '');
         }
       } catch { /* 台账不可读 → 无锚 → 全走全局布尔（fail-open，不误报 hard） */ }
       return map;
@@ -1024,15 +1020,8 @@ export function runCheckLoop(opts = {}) {
     // 台账 approved 文档集合：单次读取（坏行容忍跳过，与检查 15 同口径）；缺失视为空集（git 判据仍守门）
     const ledgerApproved = new Set();
     try {
-      const lp = path.join(ROOT, '.agents', 'confirmations.jsonl');
-      if (fs.existsSync(lp)) {
-        for (const line of fs.readFileSync(lp, 'utf8').split(/\r?\n/)) {
-          if (!line.trim()) continue;
-          try {
-            const e = JSON.parse(line);
-            if (e && typeof e.doc === 'string' && e.stage === 'approved') ledgerApproved.add(e.doc);
-          } catch { /* 坏行容忍跳过 */ }
-        }
+      for (const e of readLedgerRows(ROOT)) {
+        if (typeof e.doc === 'string' && e.stage === 'approved') ledgerApproved.add(e.doc);
       }
     } catch { /* 台账不可读视为无 approved 行 */ }
     for (const sub of ['specs', 'plans']) {
@@ -1071,18 +1060,26 @@ export function runCheckLoop(opts = {}) {
   // 台账坏行容忍跳过（审计件，jsonl 追加式）；frontmatter 存 16 位、台账存 64 位，按前 16 位配对。
   {
     const EFFECTIVE = kitPolicy.confirmDocsEffective;
-    const ledgerPath = path.join(ROOT, '.agents', 'confirmations.jsonl');
+    // 取数走 ledger-loader 的**带来源行号视图**（2026-10-12 ledger-shard-write）：主台账 + 分片
+    // `.agents/confirmations.d/*.jsonl`。分片里的行同样受链校验——否则 `--shard` 写入就等于给台账开了
+    // 一个防伪盲区（门禁看得见分片行、却不验它们的链）。
+    // **此处曾刻意不走 loader**（单源化时留的例外，因当时要物理行号对齐）；引入分片后该理由已不成立
+    // ——单一行号跨来源无法定位，故改用带 rel 的定位。第二处例外仍是 check-ledger-invariant.mjs
+    // （它审的是**盘面字节**的 append-only 前缀不变量，不是台账语义，见该文件头部）。
     const ledger = [];
-    const ledgerBadLines = []; // 坏行（JSON.parse 失败）的物理行号（复核 P2-1：报文行号须对齐物理行）
-    if (fs.existsSync(ledgerPath)) {
-      for (const [lineNo, line] of (linesOf(ledgerPath) || []).entries()) {
-        if (!line.trim()) continue;
-        try { ledger.push(JSON.parse(line)); } catch { ledgerBadLines.push(lineNo + 1); }
-      }
+    const ledgerRefs = [];   // 与 ledger 同下标：{rel, no}——断裂报文的定位来源
+    for (const e of readLedgerEntries(ROOT)) {
+      if (e.row === null) continue; // 坏行跳过（容错口径同前；它占物理行号但不入 ledger 下标）
+      ledger.push(e.row);
+      ledgerRefs.push({ rel: e.rel, no: e.no });
     }
-    // 台账哈希链校验（2026-10-09 engine-quality-round2 D；写入侧=confirm-doc appendLedger，哈希单源
-    // policy.ledgerChainHash——判定零复刻）。判据：连续带 hash 行段内，① prevHash 须等于前一带 hash
-    // 行的 hash（无 hash 行后链段重启 ''，与写入侧读末行口径一致）；② hash 须可重算一致。
+    // 台账哈希链校验（2026-10-09 engine-quality-round2 D；2026-10-12 ledger-doc-chain 改链域；
+    // 写入侧=confirm-doc appendLedger，哈希单源 policy.ledgerChainHash——判定零复刻）。
+    // **链域已从「文件物理序」改为「按 doc 的逻辑序」**（锚后生效，理由与不追溯口径见 POLICIES v8）：
+    //   原判据 ① prevHash = 前一带 hash 行（物理）的 hash；新判据 ① = **同行 doc** 最后一个带 hash 行的
+    //   hash。两者都要求 ② hash 可重算一致。无 hash 行仍按「链段重启」处理。
+    //   并发 append / git 并集合并 / 分片归并这三种**正常协作**都会打断物理链——门禁若继续据此 hard 拦，
+    //   必然被 --no-verify 绕过，治理失效；而 doc 链对就地改行 / 删行 / 插行三类篡改的检出能力不变。
     // **坏行口径（复核 P2-1 勘误，此前注释误称「与写入侧一致」）**：坏行被本解析整体剔除、不重置游标
     // ——坏行后写入的链行（写入侧读末行遇坏行 prevHash=''）验链必失配出账。这是**预期 fail-loud**
     // （坏行本身即台账完整性事故，应人工查验），非口径一致场景。
@@ -1093,19 +1090,36 @@ export function runCheckLoop(opts = {}) {
       let prevHash = '';
       let brokenAt = 0;
       let brokenCount = 0;
+      // 链域分界（2026-10-12 ledger-doc-chain）：doc 链锚存在且合法时，**按行分域**验链——
+      //   锚前行（ts < 锚）维持物理链口径（存量零变化）；锚后行（ts ≥ 锚）按「同行 doc 的最后一个
+      //   带 hash 行」接续，并同样要求 hash 可重算一致。锚缺键（v1-v7）→ 全表走物理链（= 旧行为）。
+      // byDoc 对**两种域的行都更新**：锚后行需要接到锚前该 doc 的最后一行，跨域才能连续。
+      const docChainOn = ledgerDocChainActive(kitPolicy);
+      const docChainSince = docChainOn ? kitPolicy.ledgerDocChainSince : '';
+      const byDoc = new Map();
+      const prunedHashSet = prunedHashesOf(ROOT); // 特许修剪凭据（无 manifest 时为空集，零 IO 成本）
       ledger.forEach((row, idx) => {
         if (!row || typeof row.hash !== 'string') { prevHash = ''; return; } // 存量行/无链字段 → 链段重启
         const { hash, prevHash: p, ...rest } = row;
-        const ok = (p ?? '') === prevHash && ledgerChainHash(rest, p ?? '') === hash;
+        const inDocChain = docChainOn && typeof row.ts === 'string' && row.ts >= docChainSince;
+        const expected = inDocChain ? (byDoc.get(row.doc) ?? '') : prevHash;
+        // 特许修剪链段重启（2026-10-12 ledger-prune-manifest）：删掉某 doc 的链行后，其后继行仍带被删行
+        //   的 prevHash，而该行已不在表内 → 必然失配。本行的 prevHash 若出现在 manifest 声明的被删哈希里，
+        //   即视为**有凭据的合法重启点**而非篡改（凭据 = .agents/ledger-prune-manifest.json，入库可对质）。
+        const prunedRestart = (p ?? '') !== expected && prunedHashSet.has(p ?? '');
+        const ok = ((p ?? '') === expected || prunedRestart) && ledgerChainHash(rest, p ?? '') === hash;
         if (!ok) {
-          if (!brokenAt) brokenAt = idx + 1;
+          if (!brokenAt) brokenAt = idx + 1; // 1-based 下标，供 ledgerRefs 定位
           brokenCount++;
         }
         prevHash = hash;
+        if (typeof row.doc === 'string') byDoc.set(row.doc, hash);
       });
       if (brokenAt) {
-        const physical = brokenAt + ledgerBadLines.filter((n) => n <= brokenAt).length; // 物理行号（复核 P2-1：剔除坏行会令数组下标漂移）
-        blockers.push(`- [台账链断裂] confirmations.jsonl 自第 ${physical} 行（物理）起哈希链校验失败（共 ${brokenCount} 行不一致——append-only 台账出现就地改/删痕迹；prevHash 接续或内容重算不符。整文件重写不可机器防，对质走台账自身 git 历史）`);
+        // 定位用 ledgerRefs（来源 + 行号）：跨来源后单一行号无法定位；坏行占位不计入 ledger 下标
+        const at = ledgerRefs[brokenAt - 1] || { rel: LEDGER_REL, no: brokenAt };
+        const domain = docChainOn ? '锚前物理链 / 锚后 doc 链' : '物理链';
+        blockers.push(`- [台账链断裂] 自 ${at.rel}:${at.no} 起哈希链校验失败（${domain}，共 ${brokenCount} 行不一致——append-only 台账出现就地改/删痕迹；prevHash 接续或内容重算不符。整文件重写不可机器防，对质走台账自身 git 历史）`);
       }
     }
     // scope 子项（2026-10-09 审查 A1 干净版）：受管台账行须带**机器派生**的改动面 scope{files,sha256}。
@@ -1335,13 +1349,7 @@ export function runCheckLoop(opts = {}) {
     if (typeof since === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(since)) {
       const ledgerRows = [];
       {
-        const lp = path.join(ROOT, '.agents', 'confirmations.jsonl');
-        if (fs.existsSync(lp)) {
-          for (const line of linesOf(lp) || []) {
-            if (!line.trim()) continue;
-            try { ledgerRows.push(JSON.parse(line)); } catch { /* 坏行跳过（同检查 15 口径） */ }
-          }
-        }
+        for (const e of readLedgerRows(ROOT)) ledgerRows.push(e);
       }
       const hasRow = (rel) => ledgerRows.some((e) => e && e.doc === rel && (e.stage === 'approved' || e.stage === 'done'));
       const docConfirmed = (rel, abs) => {

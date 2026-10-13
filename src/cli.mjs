@@ -7,6 +7,7 @@ import { sync } from './sync.mjs';
 import { syncHosts } from './sync-hosts.mjs';
 import { addHost } from './add-host.mjs';
 import { addGate } from './add-gate.mjs';
+import { route, runPipeline } from './executor.mjs';
 import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
@@ -45,6 +46,22 @@ export const HELP = `flow-kit — AI-Native 闭环工作流 + wiki 知识层脚�
                             与 doctor 的分工：doctor 查「装得健不健康」（含装户侧引擎校验后执行），
                             validate 查「盘面内容合不合规」（判定引擎随包版本走）
 
+  ── 执行面（引擎执行器：手动路由 + 自动流水线）─────────────────────────
+                            md 指令与 md 子代理仍装在装户项目（.agents/commands、.agents/roles），
+                            宿主读它们；本 CLI 不复制、不改写它们的正文。执行代码亦留在装户
+                            .agents/scripts/，包只做薄壳转发与判定面。
+  flow-kit route            手动路由的机器面：定级（就高不就低 + 路径下限）+ 判据清单 + 泳道 + 下一阶段
+                            + 该读的 md 指令路径。判据单源 = .agents/scripts/level-criteria.mjs；
+                            路径下限清单 = .agents/level-hints.txt（装户自持、内容项目私有，默认空）。
+                            **诚实边界**：级别是意图面的语义判定（「一处定义、多处消费」），机器判不了语义；
+                            未配 hints 时按 L1 起步并提示补配置，绝不假装判得出。
+                            选项：--kind require|fix|verify|review|deploy ｜ --level L0|L1|L2|L3
+                                  --files "a,b"（改动文件，参与路径下限判定）｜ --dir <目录> ｜ --json
+  flow-kit run <子命令>     自动流水线：薄壳转发装户 pipeline-run 状态机
+                            （start / next / status / watch / abort），参数与退出码原样透传。
+                            驱动协议与停机点语义见 .agents/commands/pipeline-run.md（宿主面权威）。
+                            本命令绝不 spawn AI 会话 / 不伪造原话 / 不带 --no-verify。
+
 init 选项（全部可选，均有默认值）：
   --stack <技术栈>     dotnet | node（ts/js） | python | go | none（默认 none；ts/js/typescript/javascript
                        归一为 node）——门禁配置三处：commit-check
@@ -59,8 +76,10 @@ init 选项（全部可选，均有默认值）：
 sync / add-host 选项：--dir <目录>、--force（覆盖本地已改 / 已装内容）；add-gate 选项：--dir <目录>、--force。
 validate 选项：--strict（advisory warning 也判红）/ --json（机器可读，stdout）/ --dir <目录>（目标项目根，默认当前目录）。
 sync-hosts 选项：--diff（默认，仅报告，不修改）/ --apply（单向同步到薄适配）/ --json（机器可读输出）/ --dir <目录>（目标项目根，默认当前目录）。
-sync-hosts 双布局（2026-10-07）：包源仓（含 templates/_agents + modules/hosts）比对 templates/_agents ↔ modules/hosts；
-装户仓（含 .agents）比对 .agents ↔ 各宿主目录（.opencode/.trae/.omp/.zcode…）——同一命令两处都可用。
+sync-hosts 只在包源仓运行（需要 templates/_agents 与 modules/hosts）：比对 templates/_agents ↔ modules/hosts。
+装户的宿主文件由 init / add-host 写入；刷新用 add-host <宿主> --force。
+route 选项：--kind / --level / --files / --dir <目录>（目标项目根，默认当前目录）/ --json（机器可读）。
+run 参数：除 --dir 外原样透传给装户 pipeline-run（--hint / --triage / --delegated / --files / --run / --json / --adopt / --to / --interval）。
 
 示例：
   npx agentic-flow-kit init                        # 交互模式：宿主 → 技术栈 → 端口 → 确认安装
@@ -72,6 +91,9 @@ sync-hosts 双布局（2026-10-07）：包源仓（含 templates/_agents + modul
   npx agentic-flow-kit validate --strict            # 只读结构校验（CI 可用，0/1 退出码）
   npx agentic-flow-kit sync-hosts --diff           # 看权威源 vs 薄适配漂移
   npx agentic-flow-kit sync-hosts --apply          # 单向同步到薄适配
+  npx agentic-flow-kit route --kind require --level L1 --files "src/a.ts,src/b.ts"
+  npx agentic-flow-kit run start "给导入功能加审计字段"
+  npx agentic-flow-kit run next --delegated "可以"
 
 装完本地可跑：日常闭环走项目内 .agents/scripts/（零 npm 运行时依赖）；升级 / 体检 / 装门禁用 npx agentic-flow-kit（sync / doctor / add-host / add-gate）；AGENTS.md 生成「AI工作流 + Wiki」骨架，项目细节在「项目适配区」自填。`;
 
@@ -119,6 +141,17 @@ export function run(argv) {
       console.error(`❌ ${e?.message || e}`);
       process.exit(1);
     });
+    return;
+  }
+  if (cmd === 'route') {
+    route(argv.slice(1)).catch((e) => {
+      console.error(`❌ ${e?.message || e}`);
+      process.exit(1);
+    });
+    return;
+  }
+  if (cmd === 'run') {
+    runPipeline(argv.slice(1));
     return;
   }
   console.error(`未知命令：${cmd}\n\n${HELP}`);

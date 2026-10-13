@@ -47,10 +47,8 @@ function listMd(dir) {
 // pairsFor：权威源文件 → 薄适配 rel 列表（映射单源见 profiles.mjs#HOSTS.commandPrefix）
 //   commands 权威源 → 带 commandPrefix 的宿主各一份（<dir>/commands/<prefix><name>.md）
 //   roles    权威源 → 全部宿主 agents 各一份
-// hostDirOf：宿主 → 适配目录名。包源布局 = 宿主键（modules/hosts/opencode/…）；装户布局 = HOSTS[h].dir
-// （项目根下 .opencode/…，带点）——2026-10-07 sync-hosts-target-fix 加装户支持时引入。
-// hostFilter（2026-10-09 sync-hosts-root-coverage）：宿主级过滤（多根模式下「项目根宿主点」根只扫
-//   实际存在 dir 的宿主——不存在=没装该宿主点，不算缺失不算漂移）。
+// hostDirOf：宿主 → 适配目录名。包源调用传入 (h) => h，配对落在 modules/hosts/<宿主键>/。
+// hostFilter：宿主级过滤。调用方只扫实际存在的宿主目录时传入。
 function pairsFor(authRel, hostDirOf = (h) => h, hostFilter = null) {
   const out = [];
   const norm = authRel.split(path.sep).join('/');
@@ -74,12 +72,9 @@ function pairsFor(authRel, hostDirOf = (h) => h, hostFilter = null) {
 
 // diffHosts：权威源正文段 vs 薄适配正文段的漂移分析（B-b 语义；pure function）。
 // authorityRoot：权威源根（含 commands/ + roles/）
-// 多根对账（2026-10-09 sync-hosts-root-coverage）：adapterRoots = [{root, hostDirOf, hostFilter?, label?}]——
-//   包源布局传两根（modules/hosts 宿主键形态 + 项目根 HOSTS.dir 形态宿主点）；装户布局单根。
-//   向后兼容：旧单根入参 adaptersRoot/hostDirOf 归一为单元素数组。
-//   根因教训（engine-quality-round2 B1）：包源布局此前只扫 modules/hosts，项目根宿主点（本仓 .zcode/）
-//   完全不在扫描面——bb69e19「81 对全对齐」声明漏掉 .zcode 三份（独立复核 P2-3 实证）。
-// hostDirOf：宿主 → 适配目录名（默认宿主键 = 包源布局；装户布局传 (h) => HOSTS[h].dir）
+// adapterRoots = [{root, hostDirOf, hostFilter?, label?}]。只扫 modules/hosts。
+// 向后兼容：旧单根入参 adaptersRoot/hostDirOf 归一为单元素数组。
+// hostDirOf：宿主 → 适配目录名（默认宿主键）
 // 返回：{ drift, inSync, authorityMissing, adapterOrphans, faces }
 // drift 条目自带 root（applyForward 按它定位适配文件）；faces = 对账面自描述行（防不可解释的「N 对」）
 export function diffHosts(opts) {
@@ -207,44 +202,22 @@ export function syncHosts(args, pkgRoot) {
   }
   if (!pkgRoot) fail('sync-hosts 缺少 pkgRoot（开发模式入口）');
 
-  // 目标根：--dir > cwd > pkgRoot（兜底）。
-  // 2026-10-07 sync-hosts-target-fix：此前恒用 pkgRoot——装户里跑 `flow-kit sync-hosts` 时 pkgRoot
-  // 解析为**包安装目录**，于是 doctor §7.x 报漂移、照提示跑 `--apply` 会去改包源仓（装户自己的适配层纹丝不动）。
+  // 目标根：--dir > cwd > pkgRoot。只认包源仓（templates/_agents + modules/hosts）。
+  // 装户仓的宿主文件由 init / add-host 写入，不在这里把 .agents 再当成第二份权威源。
   const target = path.resolve(dir || process.cwd() || pkgRoot);
-  // 布局判定（与 doctor.checkAdapterDrift 同口径）：
-  //   包源（templates/_agents 与 modules/hosts 同时存在）→ 权威源 = <target>/templates/_agents
-  //     薄适配根（2026-10-09 sync-hosts-root-coverage 多根）= ① modules/hosts（宿主键形态，全宿主）
-  //     + ② 项目根 HOSTS.dir 实际存在的宿主点（如本仓 .zcode/——此前不在扫描面，bb69e19「81 对全对齐」
-  //     漏掉其三份，独立复核 P2-3 实证）；不存在 = 没装该宿主点，不算缺失。
-  //   装户（其余）→ 权威源 = <target>/.agents，薄适配根 = <target>（宿主目录 .opencode/.trae/… 直接位于项目根）
-  const isSourceRepo = fs.existsSync(path.join(target, 'templates', '_agents'))
-    && fs.existsSync(path.join(target, 'modules', 'hosts'));
-  const authorityRoot = isSourceRepo ? path.join(target, 'templates', '_agents') : path.join(target, '.agents');
-  const adapterRoots = isSourceRepo
-    ? [
-        { root: path.join(target, 'modules', 'hosts'), hostDirOf: (h) => h, label: 'modules/hosts' },
-        {
-          root: target,
-          hostDirOf: (h) => (HOSTS[h] && HOSTS[h].dir) || h,
-          hostFilter: (h) => HOSTS[h] && fs.existsSync(path.join(target, HOSTS[h].dir)),
-          label: '项目根宿主点',
-        },
-      ]
-    : [{
-        root: target,
-        hostDirOf: (h) => (HOSTS[h] && HOSTS[h].dir) || h,
-        hostFilter: (h) => HOSTS[h] && fs.existsSync(path.join(target, HOSTS[h].dir)),
-        label: '项目根宿主点',
-      }];
-  if (!fs.existsSync(authorityRoot)) {
-    fail(`未找到权威源目录：${authorityRoot}——目标根 ${target} 既非包源（无 templates/_agents）也非装户（无 .agents）；用 --dir <项目根> 指定`);
+  const authorityRoot = path.join(target, 'templates', '_agents');
+  const hostsRoot = path.join(target, 'modules', 'hosts');
+  if (!fs.existsSync(authorityRoot) || !fs.existsSync(hostsRoot)) {
+    fail(`sync-hosts 只在包源仓运行（需要 templates/_agents 与 modules/hosts）。目标根 ${target} 不是包源仓。装户的宿主文件由 init / add-host 写入。`);
   }
-  const layout = isSourceRepo ? '包源' : '装户';
+  const adapterRoots = [
+    { root: hostsRoot, hostDirOf: (h) => h, label: 'modules/hosts' },
+  ];
   const result = diffHosts({ authorityRoot, adapterRoots });
 
   if (apply && result.drift.length > 0) {
     const { synced } = applyForward({ authorityRoot }, result.drift);
-    console.log(`▶ flow-kit sync-hosts --apply → ${target}（${layout}布局）`);
+    console.log(`▶ flow-kit sync-hosts --apply → ${target}（包源）`);
     console.log(`  对账面：${result.faces.join(' + ')}`);
     console.log(`  按权威源正文覆盖薄适配正文段 ${synced.length} 份（薄适配 frontmatter 不动）：`);
     for (const rel of synced) console.log(`    - ${rel}`);
@@ -256,7 +229,7 @@ export function syncHosts(args, pkgRoot) {
   if (json) {
     process.stdout.write(JSON.stringify(result, null, 2) + '\n');
   } else {
-    console.log(`▶ flow-kit sync-hosts --diff → ${target}（${layout}布局）`);
+    console.log(`▶ flow-kit sync-hosts --diff → ${target}（包源）`);
     printDiff(result);
   }
   return 0;

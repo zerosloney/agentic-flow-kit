@@ -28,6 +28,10 @@ const check = (desc, cond, detail = '') => {
   else { fail++; console.log(`FAIL  ${desc}${detail ? '\n      ' + detail : ''}`); }
 };
 
+// 夹具闭包工具（2026-10-12 fixture-closure-rootfix）：本文件此前 5 处手写依赖枚举，2026-10-12 那批
+// 台账改动漏拷 ledger-loader.mjs 就假绿过（看板漂移门恒绿）。改为按入口自动求传递闭包——新增依赖自动跟随。
+const { copyScriptClosure, copyAgentsFiles } = await import('./fixture-scripts.mjs');
+
 // mkfix：空 fixture 根（四目录 + 枚举单源内联 8 键——fixture 自包含，测消费逻辑而非当前词表值）
 const ENUMS_FIXTURE = [
   'doc.status.all=draft approved done superseded cancelled',
@@ -383,9 +387,8 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
 {
   const T = mkfix();
   fs.mkdirSync(path.join(T, '.agents', 'scripts'), { recursive: true });
-  fs.copyFileSync(path.join(SCRIPT_DIR, 'gen-workflow-index.mjs'), path.join(T, '.agents', 'scripts', 'gen-workflow-index.mjs'));
-  fs.copyFileSync(path.join(SCRIPT_DIR, 'workflow-enums.mjs'), path.join(T, '.agents', 'scripts', 'workflow-enums.mjs'));
-  fs.copyFileSync(path.join(SCRIPT_DIR, '..', 'workflow-modules.txt'), path.join(T, '.agents', 'workflow-modules.txt'));
+  copyScriptClosure(path.join(T, '.agents', 'scripts'), ['gen-workflow-index.mjs']);
+  copyAgentsFiles(path.join(T, '.agents'), ['workflow-modules.txt']);
   w(T, 'workflow/intents/2026-09-22-mod-ok.md', INTENT('mod ok', '状态: approved\n级别: L1\n日期: 2026-09-22\n模块: pipeline', '\n## 验收标准（可测试）\n- [ ] 用例通过\n'));
   w(T, 'workflow/plans/2026-09-22-mod-ok.md', PLAN('mod ok', '状态: approved\n级别: L1\n模块: pipeline'));
   spawnSync(process.execPath, ['.agents/scripts/gen-workflow-index.mjs'], { cwd: T });
@@ -412,9 +415,8 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
 {
   const T = mkfix();
   fs.mkdirSync(path.join(T, '.agents', 'scripts'), { recursive: true });
-  fs.copyFileSync(path.join(SCRIPT_DIR, 'gen-workflow-index.mjs'), path.join(T, '.agents', 'scripts', 'gen-workflow-index.mjs'));
-  fs.copyFileSync(path.join(SCRIPT_DIR, 'workflow-enums.mjs'), path.join(T, '.agents', 'scripts', 'workflow-enums.mjs'));
-  fs.copyFileSync(path.join(SCRIPT_DIR, '..', 'workflow-modules.txt'), path.join(T, '.agents', 'workflow-modules.txt'));
+  copyScriptClosure(path.join(T, '.agents', 'scripts'), ['gen-workflow-index.mjs']);
+  copyAgentsFiles(path.join(T, '.agents'), ['workflow-modules.txt']);
   w(T, 'workflow/intents/2026-09-22-drift.md', INTENT('drift', '状态: approved\n级别: L1\n日期: 2026-09-22\n模块: pipeline'));
   w(T, 'workflow/plans/2026-09-22-drift.md', PLAN('drift', '状态: approved\n级别: L1\n模块: pipeline'));
   spawnSync(process.execPath, ['.agents/scripts/gen-workflow-index.mjs'], { cwd: T });
@@ -430,10 +432,10 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   const mkDashFix = () => {
     const T = mkfix();
     fs.mkdirSync(path.join(T, '.agents', 'scripts'), { recursive: true });
-    for (const f of ['gen-workflow-index.mjs', 'gen-workflow-dashboard.mjs', 'agg-delegations.cjs', 'workflow-enums.mjs']) {
-      fs.copyFileSync(path.join(SCRIPT_DIR, f), path.join(T, '.agents', 'scripts', f));
-    }
-    fs.copyFileSync(path.join(SCRIPT_DIR, '..', 'workflow-modules.txt'), path.join(T, '.agents', 'workflow-modules.txt'));
+    // 看板/索引生成器的台账读取依赖（ledger-loader 等）由闭包自动带入——此前手写枚举漏拷过，
+    // 表现是「import 失败 → 看板静默不生成 → 漂移门恒绿」，即假绿比红危险（2026-10-12 已修，见 fixture-scripts.mjs）
+    copyScriptClosure(path.join(T, '.agents', 'scripts'), ['gen-workflow-index.mjs', 'gen-workflow-dashboard.mjs']);
+    copyAgentsFiles(path.join(T, '.agents'), ['workflow-modules.txt']);
     w(T, 'workflow/intents/2026-09-22-dash.md', INTENT('dash', '状态: approved\n级别: L1\n日期: 2026-09-22\n模块: pipeline'));
     w(T, 'workflow/plans/2026-09-22-dash.md', PLAN('dash', '状态: approved\n级别: L1\n模块: pipeline'));
     spawnSync(process.execPath, ['.agents/scripts/gen-workflow-index.mjs'], { cwd: T });
@@ -460,7 +462,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   const T = mkfix();
   fs.mkdirSync(path.join(T, '.agents', 'scripts'), { recursive: true });
   fs.copyFileSync(path.join(SCRIPT_DIR, 'rule-budget.sh'), path.join(T, '.agents', 'scripts', 'rule-budget.sh'));
-  fs.copyFileSync(path.join(SCRIPT_DIR, '..', 'rule-budgets.txt'), path.join(T, '.agents', 'rule-budgets.txt'));
+  copyAgentsFiles(path.join(T, '.agents'), ['rule-budgets.txt']);
   // 超限样本自校准：从拷入的预算表读 AGENTS.md 上限（预算可上调，硬编码样本会随上调失效——2026-10-06-v114-backflow-batch）
   const agLimit = Number(fs.readFileSync(path.join(T, '.agents', 'rule-budgets.txt'), 'utf8').split(/\r?\n/).find((l) => l.startsWith('AGENTS.md ')).trim().split(' ').pop());
   w(T, 'AGENTS.md', '# AGENTS 小体积 fixture\n');
@@ -488,7 +490,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
     const T = mkfix();
     fs.mkdirSync(path.join(T, '.agents', 'scripts'), { recursive: true });
     fs.copyFileSync(path.join(SCRIPT_DIR, 'rule-budget.sh'), path.join(T, '.agents', 'scripts', 'rule-budget.sh'));
-    fs.copyFileSync(path.join(SCRIPT_DIR, '..', 'rule-budgets.txt'), path.join(T, '.agents', 'rule-budgets.txt'));
+    copyAgentsFiles(path.join(T, '.agents'), ['rule-budgets.txt']);
     const agLimit = Number(fs.readFileSync(path.join(T, '.agents', 'rule-budgets.txt'), 'utf8').split(/\r?\n/).find((l) => l.startsWith('AGENTS.md ')).trim().split(' ').pop());
     gitInit(T);
     w(T, 'AGENTS.md', 'x'.repeat(agLimit + 512));
@@ -2919,8 +2921,11 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   writeLedger(T, [tampered, row2]);
   let r = run(T);
   let out = outOf(r);
+  // 定位措辞随 2026-10-12 ledger-shard-write 由「第 N 行（物理）」改为 `rel:行号`——
+  // 台账视图含主台账 + 分片后，单一行号跨来源无法定位，必须带来源。首断行号仍须精确指向第 1 行。
   check('场景 21a 链断裂：中间行篡改 → hard 台账链断裂（指首断行号）',
-    r.status !== 0 && out.includes('台账链断裂') && /第 1 行/.test(out), `exit=${r.status}\n${out.slice(-400)}`);
+    r.status !== 0 && out.includes('台账链断裂') && /\.agents\/confirmations\.jsonl:1\b/.test(out),
+    `exit=${r.status}\n${out.slice(-400)}`);
   // 反证还原：篡改行恢复原 quote → 链复通（断言非恒绿）
   writeLedger(T, [row1, row2]);
   r = run(T);

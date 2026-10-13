@@ -263,6 +263,13 @@ export async function init(args, pkgRoot) {
       execSync('git config merge.ours.driver true', { cwd: target, stdio: 'pipe' });
       console.log('  已启用 merge.ours driver（.gitattributes 的 merge=ours 生效）');
     } catch { /* 可选配置，失败不阻断 */ }
+    try {
+      // 台账并集合并 driver（2026-10-12 ledger-merge-driver）：确认台账是尾部追加形态，多人/多 worktree
+      // 并行时默认合并会给文本冲突，人工「整取一侧」会静默丢确认行。配了 driver 后合并 = 并集去重。
+      // 本机态配置不跨机共享（与 core.hooksPath 同款性质）——漏配则退化为文本冲突，不静默丢数据。
+      execSync('git config merge.jsonl-union.driver "node .agents/scripts/git-merge-jsonl.mjs %O %A %B"', { cwd: target, stdio: 'pipe' });
+      console.log('  已启用 merge.jsonl-union driver（台账 .agents/*.jsonl 合并走并集去重，不再文本冲突）');
+    } catch { /* 可选配置，失败不阻断 */ }
   } catch {
     console.log('  ⚠️ 目标不是 git 仓库——钩子未挂载；git init 后手动执行：git config core.hooksPath .githooks');
   }

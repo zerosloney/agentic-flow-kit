@@ -269,7 +269,7 @@ export function doctor(args, pkgRoot) {
   } else if (adapterRes.drift === 0) {
     add('PASS', `跨宿主薄适配 ${adapterRes.total} 对无正文漂移（装副本引擎 vs 注册表内宿主薄适配，B-b 语义）`);
   } else {
-    add('WARN', `跨宿主薄适配正文漂移 ${adapterRes.drift} 对——权威源与薄适配正文段 sha 不一致；按 .agents/commands/sync-hosts.md 跑 flow-kit sync-hosts --apply 单向同步薄适配正文（frontmatter 不动）；装户可在 bin/flow-kit.mjs sync 时一并修复`);
+    add('WARN', `跨宿主薄适配正文漂移 ${adapterRes.drift} 对——权威源 .agents 与宿主薄适配正文段 sha 不一致。刷新用 flow-kit add-host <宿主> --force（flow-kit sync 不更新宿主适配；sync-hosts 只在包源仓比对 templates/_agents 与 modules/hosts）。`);
   }
 
   // 6.8 workflows 编排脚本 lint（stages 表解析校验：role/step/after 引用、无环、三形态互斥、数值枚举；

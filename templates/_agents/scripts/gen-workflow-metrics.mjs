@@ -13,6 +13,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadEnums } from './workflow-enums.mjs';
+import { readLedgerRows as loadLedgerRows } from './ledger-loader.mjs';
 
 const USAGE = `用法：node .agents/scripts/gen-workflow-metrics.mjs [--month YYYY-MM] [--dry-run] [--help]
 
@@ -43,34 +44,10 @@ const WORKFLOW = 'workflow';
 const METRICS_P = path.join(WORKFLOW, 'metrics.md');
 const BUDGETS = path.join('.agents', 'rule-budgets.txt');
 const DOC_TYPES = ['intents', 'specs', 'plans', 'incidents'];
-// 活跃口径单源（board-kb-p1：枚举字面量硬编码退役——workflow-enums.txt 是唯一源）；
-// 枚举路径锚定脚本位置（fixture 测试 cwd 在临时目录，按 cwd 解析会 ENOENT）。
-// **不能用固定上溯级数**（2026-09-28 修正）：本脚本在两处运行、深度不同——
-//   包源 `templates/_agents/scripts/` → 上溯 3 级到仓库根
-//   装户 `.agents/scripts/`          → 上溯 2 级到安装根
-// 首版硬编码 3 级，故**在每个装户安装里都解析不到枚举文件**（报错路径 `<install>/../.agents/…`）。
-// 实测暴露路径：CI 新增「shipped 套件」步骤后，`.agents/scripts/gen-workflow-metrics.test.mjs`
-// 场景 1 即 exit 1（workflow-enums 单源文件不可读），而包源侧同字节跑出全绿。
-// 改为**逐级上溯探测**：找到含 `.agents/workflow-enums.txt` 的那一级即用，找不到则回退标准位置让
-// loadEnums fail-loud（保持「缺失即响亮」的既有纪律，不静默兜底）。
-// 包源仓布局补丁（装户端内容清理后）：纯包源仓无 `.agents/`，枚举单源在 `templates/_agents/` 下——
-// 上一级目录名是 `_agents` 而非 `.agents`。探测同步认这两种布局，回退仍走 fail-loud。
-const resolveEnumsPath = () => {
-  const scriptDir = path.dirname(fileURLToPath(import.meta.url));
-  let dir = scriptDir;
-  for (let i = 0; i < 6; i++) {
-    const cand = path.join(dir, '.agents', 'workflow-enums.txt');
-    if (fs.existsSync(cand)) return cand;
-    const parent = path.dirname(dir);
-    if (parent === dir) break; // 到根
-    dir = parent;
-  }
-  // 包源径：脚本在 templates/_agents/scripts/，枚举在 templates/_agents/workflow-enums.txt
-  const pkgSrc = path.join(scriptDir, '..', 'workflow-enums.txt');
-  if (fs.existsSync(pkgSrc)) return pkgSrc;
-  return path.join(scriptDir, '..', '..', '.agents', 'workflow-enums.txt');
-};
-const ENUMS = loadEnums(resolveEnumsPath());
+// 活跃口径单源（workflow-enums.txt）。与脚本同层的上一级：
+// 包源 templates/_agents/workflow-enums.txt，装户副本 .agents/workflow-enums.txt。
+// 拷贝后相对位置不变，不按仓库根猜测另一套目录。
+const ENUMS = loadEnums(path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'workflow-enums.txt'));
 const ACTIVE_STATUS = [...ENUMS['doc.status.active'], ...ENUMS['incident.status.active']];
 const BEGIN = '<!-- GENERATED:BEGIN — gen-workflow-metrics.mjs 整段重写，手工说明写在本行之前 -->';
 const END = '<!-- GENERATED:END -->';
@@ -176,12 +153,11 @@ const idxActive = Number((idxText.match(/^## 活跃（(\d+)）/m) || [])[1] ?? N
 
 // ---- 闭环漏斗（2026-10-02 ledger-funnel-metrics 立法）----
 // 只读台账一手字段（doc/stage/ts/source），坏行跳过（与检查 15/19 同容错）；观测面不挂门禁、不新增文档断言（检查 16 零接触）。
-const LEDGER_P = path.join('.agents', 'confirmations.jsonl');
+// 台账读取收敛 ledger-loader 单源（2026-10-12 ledger-loader-p1）——口径不变（只读一手字段 doc/stage/ts/source、
+// 坏行跳过，与检查 15/19 同容错）。**本步刻意保留「全量行不去重」**：去重会改漏斗 ledgerRows 计数口径，
+// 属口径变更，须随分片功能同批生效，不得混入单源化本步。
 function readLedgerRows() {
-  if (!fs.existsSync(LEDGER_P)) return [];
-  return fs.readFileSync(LEDGER_P, 'utf8').split(/\r?\n/)
-    .map((l) => { try { return JSON.parse(l); } catch { return null; } })
-    .filter((e) => e && typeof e === 'object');
+  return loadLedgerRows();
 }
 
 function funnelFromLedger(entries, month) {

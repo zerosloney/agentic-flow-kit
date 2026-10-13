@@ -54,6 +54,17 @@
 4. **敏感信息**：pre-commit 的 commit-check 扫描密钥。
 5. **双源与台账**：doctor 核对 managed / owned 的 sha；引擎改动改包源 `templates/` 再 `sync`。
 6. **台账不可变**（2026-10-02 ledger-ci-invariant）：`confirmations.jsonl` 历史行禁删改（append-only 前缀不变量，机器门 = CI 历史全扫 + pre-commit `--staged` 前置）；误写/修正只能**追加补偿行**，篡改历史属审计事件（`git revert` 整个提交后重新追加）。
+7. **台账并发三形态与修剪通道**（2026-10-12，台账是尾部追加形态，撞三种正常协作）：
+
+   | 形态 | 机制 | 用法 |
+   |---|---|---|
+   | 多人/多分支合并冲突 | `.gitattributes` 的 `.agents/*.jsonl merge=jsonl-union` → `git-merge-jsonl.mjs` 并集去重（两侧行全保留，无冲突可解） | 需目标仓 `.gitattributes` 有该行 + 本机 `git config merge.jsonl-union.driver "node .agents/scripts/git-merge-jsonl.mjs %O %A %B"`（`init` 自动配） |
+   | 单机多 worktree 并行 append | `confirm-doc --shard` 写 `.agents/confirmations.d/<doc>.jsonl`，各写各的互不覆盖；里程碑跑 `compact-ledgers.mjs [--execute]` 并回主台账 | `--shard` **依赖 doc 链口径**（`kit.json` 须 `policyVersion: 8`+），缺锚时参数期直接拒 |
+   | 所有者明令删某批文档 | **特许修剪**：同笔提交 `.agents/ledger-prune-manifest.json`（`{ts, authority, reason, removes:[被删行 sha256], docs:[家族名]}`），门禁逐行对账放行 | 无 manifest 的删/改/重排**仍全拦** |
+
+   哈希链的域是「同一 doc 的逻辑序」而非文件物理序——并发 append / 并集合并 / 分片归并都不会打断它；就地改行、删行、插行三类篡改照拦。诚实边界：manifest 是可写文件，**刻意伪造即可让任意删行合法化**（与「台账本地可写」同级），本通道只把「顺手手改」抬到「提交一份可被 git 历史对质的凭据」。
+
+   > **存量装户迁移动作**：`merge=jsonl-union` 属 `.gitattributes`，而该文件是**项目自持（owned）**、`sync` 永不覆盖——升级后**不会自动获得**，需手动在目标仓 `.gitattributes` 补一行 `.agents/*.jsonl merge=jsonl-union`。driver 是本机态配置、不跨机共享（漏配退化为文本冲突，不静默丢数据但要人工解）。
 
 其余检查（占位符、引用、模块字段、常驻面预算、量化签名、阶段索引、适配器断线、引擎脚本测试覆盖（检查 20，包源环境——新增引擎脚本默认必须带 `.test.mjs`，库件/工具须登记 `.agents/scripts-test-exempt.txt`，2026-10-01 gate-script-test-coverage））只在 `audit` 不是 `false` 时出警告。
 
