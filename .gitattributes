@@ -7,3 +7,16 @@
 templates/_githooks/* text eol=lf
 templates/_agents/hooks/local-pre-commit text eol=lf
 templates/_agents/hooks/check-pairing-incremental.sh text eol=lf
+
+# 门禁本体完整性门的受检面（除 .mjs 外）必须 LF——2026-10-13 engine-integrity-live
+# 本门的判据是「盘面工作树字节的 sha256 ↔ 入库基线 engine-lock.json」。core.autocrlf=true
+# 的 Windows 机检出时，`* text=auto` 只保证**入库**归一，**工作树**仍被转成 CRLF——
+# 于是受检面里非 .mjs 的件（.yml / .md / .txt / .json）检出后字节与基线失配，
+# 本门报 `[控制面改动无入口]` 假红（实测 60 件中 12 件失配）。
+# 修法是显式 eol=lf，让工作树与索引、与基线三处同字节。
+# 刻意不加 `*.jsonl`：台账 append-only 前缀不变量判据对 blob 字节敏感，
+# 加 text 规则会在下次提交时重新规范化换行 → 判为「台账重写」而硬拦自己的提交（见 ARCHITECTURE §3.1）。
+*.yml text eol=lf
+*.md text eol=lf
+*.txt text eol=lf
+*.json text eol=lf
