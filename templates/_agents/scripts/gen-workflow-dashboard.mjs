@@ -20,6 +20,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRequire } from 'node:module';
 import { readLedgerRows } from './ledger-loader.mjs';
+// 委派台账分片感知读（2026-10-13 ledger-shard-ledgers 回灌）：合并文本（主台账 ∪ delegations.d/*.md）
+// 由本件经 readLedgerText 取（读侧单源），经 opts.text 注入 agg.readLedger——.cjs 库模式无法自装载 .mjs。
+import { readLedgerText } from './ledger-shards.mjs';
 
 const require = createRequire(import.meta.url);
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -96,7 +99,9 @@ function collectDoneMap(root) {
 
 // qualityRows：月度质量行（判据全部复用 agg——本函数只做分组与格式化）
 export function qualityRows(root) {
-  const rows = agg.readLedger(root, { soft: true });
+  // 分片感知（2026-10-13 ledger-shard-ledgers）：text = 主台账 ∪ delegations.d/*.md；空文本（无台账
+  // 装户）→ rows []，soft 优雅降级语义不变。
+  const rows = agg.readLedger(root, { soft: true, text: readLedgerText(root, 'delegations') });
   const byMonth = {};
   for (const r of rows) (byMonth[r.date.slice(0, 7)] ||= []).push(r);
   const months = Object.keys(byMonth).sort();
@@ -130,9 +135,9 @@ export function qualityRows(root) {
 //   故本节恒为静态文案：**任何时候生成本文件，字节恒等**（测试 ⑤ 的两条 --check exit 0 钉的就是这条）。
 export function gateRoiLines() {
   return [
-    '- 采集：`node .agents/scripts/check-loop.mjs --gate-stats`（数据落 `.agents/cache/gate-stats.jsonl`，该目录已 gitignore；不带 flag 时零写入、输出逐字节不变）',
+    '- 采集：`node .agents/scripts/check-loop.mjs --all --gate-stats`（--all 全段成本面——2026-10-13 分道后裸跑只记硬门段；数据落 `.agents/cache/gate-stats.jsonl`，该目录已 gitignore；不带 flag 时零写入、输出逐字节不变）',
     '- 看数值：`node .agents/scripts/agg-gate-stats.mjs [--days 30]`——输出成本排序 + 两类决策依据：噪声率 top（该收窄或该修）、死检查（该拆或该降级）；无采集数据时该命令自己提示「未采集」并给出采集命令',
-    '- 口径：耗时**含子进程时间**（检查 11 调两个生成器 `--check`、检查 13 调 `sh rule-budget.sh`）——门禁真实成本，不做剔除；样本 <5 次时只作线索，不作决策依据',
+    '- 口径：耗时**含子进程时间**（检查 11 调两个生成器 `--check`、检查 13 调 `rule-budget.mjs`）——门禁真实成本，不做剔除；样本 <5 次时只作线索，不作决策依据',
     '- 本节为何不铺数值：本文件被检查 11 漂移门覆盖，运行数据每跑一次门禁即变一次，铺进来会让每次采集都产一条漂移 WARN（不可消除噪声）',
   ];
 }

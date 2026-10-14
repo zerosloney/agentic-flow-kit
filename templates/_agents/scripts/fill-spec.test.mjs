@@ -12,12 +12,20 @@ function check(name, cond, detail = '') {
   else { failCount++; console.log('FAIL ' + name + (detail ? '——' + detail : '')); }
 }
 
-// ---- 场景 1：5 节正文齐 ----
+// ---- 场景 1：6 节正文齐 ----
 {
   const { body } = renderSpec({ topic: 'test', level: 'L2' });
-  const expectedSections = ['功能行为', '数据流', '系统改动', '约束遵守映射', '风险评估', '确认与复核'];
+  const expectedSections = ['功能行为', '数据流', '系统改动', '约束遵守映射', '验收判据', '风险评估', '确认与复核'];
   for (const s of expectedSections) check('S1 含节 ## ' + s, body.includes('## ' + s));
-  check('S1 共 6 节标题', (body.match(/^##\s/gm) || []).length === 6);
+  check('S1 共 7 节标题', (body.match(/^##\s/gm) || []).length === 7);
+}
+
+// ---- 场景 1b：验收判据表骨架（2026-10-13 自 Shipyard 回灌——对账段机器输入，表头签名固定）----
+{
+  const { body } = renderSpec({ topic: 't', level: 'L2' });
+  check('S1b 验收判据表头三列签名', body.includes('| 判据（可观察行为） | 证据（测试文件 / 命令 / 证据文件） | 状态 |'));
+  check('S1b 验收判据表分隔行', body.includes('|---|---|---|'));
+  check('S1b 验收判据占位行', body.includes('| <行为 1> | <路径或命令> | <覆盖 / 未覆盖 / 人工> |'));
 }
 
 // ---- 场景 2：frontmatter 含 5 字段 ----
@@ -94,7 +102,7 @@ const runTool = (root, base) => spawnSync(process.execPath,
   fs.rmSync(root, { recursive: true, force: true });
 }
 {
-  // S9b 探索泳道（2026-09-30 hybrid-governance-explore-hardening）：L0/L1 draft intent → 放行 spec 起草
+  // S9b 探索泳道（2026-09-30 hybrid-governance-explore-hardening）：L1 draft intent → 放行 spec 起草
   // （「先起草后确认」；L2/L3 防御道维持入口确认前置——S9 照旧）
   const root = mkws({ entryFile: 'intents/2026-09-30-exp.md', entryBody: '---\n状态: draft\n级别: L1\nrisk_level: L1\n日期: 2026-09-30\n---\n# I\n' });
   const r = runTool(root, '2026-09-30-exp');

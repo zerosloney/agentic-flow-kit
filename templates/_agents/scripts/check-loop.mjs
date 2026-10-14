@@ -13,9 +13,19 @@
 // 违例输出到 stderr 并 exit 1；只剩警告时 exit 0。
 //
 // 检查项清单（编号/标题/severity 逐条沿 sh 版头部——gate-checklist 配对登记表按 id 消费，不得增删改号）:
-//   1. 入口文档/spec/plan 同名配对(L1 必须有 plan;L2/L3 必须有 spec+plan;L0 协作道豁免 plan;
-//      L0/L1 勾触达红线 → 「红线判低」hard——协作道不受理 STOP 级改动,就高不就低,
-//      2026-09-30 hybrid-governance-risk-lanes)                                        [hard-block]
+// 分道 lane 表（2026-10-13 B6b-1/B6b-2，源仓 SECTIONS 同款语义；机读单源 = LANE_OF 表，判据零变化只归属运行面）:
+//   hard（默认关单/pre-push 面）: 1 配对（清单 5 状态/L3 复核在同遍循环实现，随 1 同道）、3 复盘三件套+回路、
+//     3x 防复发验证证据门、8 验收对账、14 确认留痕、15 指纹链、17 发版收口、
+//     23 判据级收敛对账（hard 档随 convergenceHardSince）、25 路由预判一致性（内容纯 WARN 不阻断）
+//   hygiene（--hygiene / --all 的 WARN 面）: 2 模板占位、4 引用、6 角色契约与 Adapter（段 id '5'）、
+//     7 阶段索引（段 id '6'）、9 kebab、10 迁移、11 生成物漂移、12 模块词表、13 体积预算、16 指标签名、
+//     18 委派、19 逐阶段、20 引擎脚本测试覆盖、21 spec 验证落地 / 22 机制台账 / 24 归因 / 26 漏斗协议前
+//     （21–26 六段检查 2026-10-13 B6b-2 落地，见下方清单与 LANE_OF）
+//   1. 入口文档/spec/plan 同名配对(plan 配对全级别强制(2026-10-13 L0 退役,自源仓收敛系列 1 回灌——
+//      原 L0 协作道豁免随级别退役删除);L2/L3 必须有 spec;
+//      L1 plan 可即入口(级别恰为 L1 的 plan 无同名 intent/incident 不拦;级别缺失/L2/L3 落单照拦,
+//      2026-10-13 B6b-2 自源仓 s01 回灌);L1 勾触达红线 → 「红线判低」hard——协作道不受理 STOP 级改动,
+//      就高不就低,2026-09-30 hybrid-governance-risk-lanes)                            [hard-block]
 //   2. 模板字段占位符残留(YYYY-MM-DD / <主题> 等未替换;<主题> 与 .md 同行 = 命名约定描述,豁免)  [warning]
 //   3. incidents 复盘三件套完整性 + 状态严格枚举 + 新 intent 回路(回路断档=hard,其他=warning)
 //   4. 引用有效性(文档/指令中引用的 .agents/ 路径必须存在;支持 fill-{a,b,c}.mjs 花括号展开与 fill-*.mjs 通配;
@@ -40,8 +50,7 @@
 //      wiki 侧（wiki/INDEX.md + 看板 DATA）由 doctor §6b 经 gen-wiki-board --check 校验，不在此重复
 //      （2026-10-10：wiki 生成区此前零机器校验，现与 workflow 侧对称为 doctor 单路）；
 //  12. frontmatter「模块:」合法性(枚举非法 / 2026-09-22 起新建缺字段=warning;词表单源 .agents/workflow-modules.txt)
-//  13. 常驻面体积预算(超限=warning;判定单源 rule-budget.sh——经 sh 调用,
-//      无 sh 环境静默跳过:advisory 级且 pre-commit 侧在 git 钩子 sh 环境照常硬拦)
+//  13. 常驻面体积预算(超限=warning;判定单源 rule-budget.mjs——node 直跑,恒可跑)
 //  14. 新 done 的 spec/plan 须在 git 历史里出现过 `状态: approved`(确认环节留痕,2026-09-22;恒 advisory 永不升级 hard)
 //  15. 确认指纹对账(2026-09-27 起:approved/done 须 confirm-doc.mjs 确认指纹+台账配对,缺=hard-block;
 //      两形态——TTY 亲手 / --delegated 对话委托代录,台账 source 如实区分,配对判据与 source 无关)
@@ -99,6 +108,23 @@
 // 代价是覆盖面依赖作者登记。签名收窄为小写点分形态——装户模板占位符走全大写 SCREAMING_CASE
 // (由 init 渲染替换,如构建/端口/项目名三类,不属本检查面)。未登记签名 / 取数器缺失 → fail-loud 出账
 // (静默会让「登记了却没查」不可见);登记表不存在 → 静默跳过(未启用该检查的装户不应被噪声打扰)。
+//  21. spec 验证落地核查(L2/L3 done spec 且 git 建档日 ≥ specVerifSince,「测试用例/验证计划/验证方式」
+//      节无测试文件/验证命令引用 = warning;存量豁免;锚键缺 → 整段跳过)                            [warning]
+//  22. 机制使用量台账(.agents/mechanism-registry.md 在场才启用;数据行行列数≠7/状态非法/待退役缺
+//      处置期限/表无数据行 = warning;纯 WARN 永不 hard)                                            [warning]
+//  23. 判据级收敛对账(L2/L3 done spec 锚后「验收判据」表逐判据×证据对账;advisory 档 convergenceSince
+//      起证据无效 = warning,hard 档 convergenceHardSince 起路径不存在/命令不在全量门/无对应全绿行 =
+//      hard-block;人工+空证据合法;无判据表两档都 = warning;存量豁免)                            [hard-block]
+//  24. incident 归因字段核查(发现日 ≥ attributionSince 的新建件「来源/影响环境」必填且值在
+//      incident.source.all / incident.env.all 枚举 = warning;legacy 回填件与存量豁免)              [warning]
+//  25. 路由预判一致性(frontmatter「预判: kind= level=」在场才检;类型不符 intents≡require/incidents≡fix、
+//      级别与「级别」字段不符、词表/枚举非法 = warning,不阻断;缺字段零告警;内容纯 WARN,lane=hard
+//      随源仓 SECTIONS)                                                                          [advisory]
+//  26. 闭环漏斗「协议前」占比动作阈值(workflow/metrics.md 漏斗表日历相邻两月协议前占比均 >30% =
+//      warning,要求一轮归因;收口=0 的月不判;单月波动不触发)                                       [warning]
+//  3x(编号沿源仓 3x 写法，非独立清单号——gate-checklist 按 `N.` 解析，本条不入其配对面). incident 防复发
+//      验证证据门(fixed/closed 且 git 建档日 ≥ incidentRegrSince,正文无自动化用例/回归清单引用 =
+//      hard-block;存量豁免;锚键缺 → 整段跳过)                                                  [hard-block]
 //
 // 注：清单条目 5（状态字段+L3 复核）与 1（配对）在同一遍 intents/specs/plans 循环里实现（沿 sh 版代码结构）；
 //    条目 6 的旧委派残留/钉死模型子项在「角色契约与 Adapter」代码段实现。
@@ -108,17 +134,22 @@
 //   (并行会话未跟踪半成品不拦别人的 push;ls-tree 失败退化为全扫,门禁不失效)。
 //   --rev <sha>：把该提交剥到 commit 后挂到临时 detached worktree，ROOT 改到那里再扫。
 //   原工作区的未提交改动不进入这次扫描。与 CHECK_LOOP_ROOT 同时出现则 exit 1。全 0 sha exit 1。
+//   --all | --hygiene：分道运行面（2026-10-13 B6b-1，机读单源 LANE_OF）——缺省只跑硬门，口径见头部「用法」。
 // 文档协议:机器字段一律由文件头 YAML frontmatter(受限子集:每行 `键: 值`)承载,本脚本只扫 frontmatter 取字段;
 //   叙述性字段(独立复核/复盘三件套/验收勾验)按正文行锚定。枚举单源 .agents/workflow-enums.txt
 //   (缺文件/缺键 fail-loud exit 1;经 workflow-enums.mjs 读取,CRLF 天然容忍)。
 // 已确认状态: approved/done=已批或闭环; superseded/cancelled=放弃留档(仍算确认,不挡 push); incident: fixed/closed
-// 用法:node .agents/scripts/check-loop.mjs [--rev <sha>] [--hardening]   （或经 check-loop.sh shim）
+// 用法:node .agents/scripts/check-loop.mjs [--rev <sha>] [--all | --hygiene] [--hardening] [--gate-stats]   （或经 check-loop.sh shim）
+//   分道（2026-10-13 B6b-1，源仓 check-loop SECTIONS 同款口径）：默认只跑硬门（配对/判低/指纹/证据/
+//   发版未收口）——关单/pre-push 门；--hygiene 只跑卫生段（索引/宿主/词表/指标签名/委派/体积预算等
+//   WARN 面，不进关单——要看时另跑）；--all 两段都跑（= 分道前的裸跑全量）。--all 与 --hygiene 同给
+//   报用法错。每段判据零变化，lane 只决定段归属哪个运行面；机读单源 = 本文件 LANE_OF 表。
 //   --hardening：追加「加固门」（experiment 泳道 exploring 任务入 main 的转正门槛，hard-block；
 //     .githooks/pre-push 对 remote=refs/heads/main 的推送传入；不占 1-20 编号，gate-checklist 登记表
 //     按号配对面不变，门体说明见加固门段注释）
 // 测试:node templates/_agents/scripts/check-loop.test.mjs（fixture 注入 CHECK_LOOP_ROOT）
 // import 契约（2026-10-08 checkloop-importable）：import { runCheckLoop, delegationResultRows, versionGreater, fmStatus, bindingSha256 }
-//   ——零副作用；runCheckLoop({root?, rev?, hardening?}) 返回 { exitCode, blockers, warnings }（输出打印照旧，静默断言自行重定向 stderr）
+//   ——零副作用；runCheckLoop({root?, rev?, mode?, hardening?}) 返回 { exitCode, blockers, warnings }（输出打印照旧，静默断言自行重定向 stderr）
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -130,6 +161,8 @@ import { auditEnabled, loadKitPolicy, hasFreshVerifyLine, ledgerChainHash, ledge
 import { laneOfEntry } from './stage-gates.mjs';
 import { readLedgerRows, readLedgerEntries, LEDGER_REL } from './ledger-loader.mjs';
 import { prunedHashes as prunedHashesOf } from './ledger-prune.mjs';
+// 委派台账分片感知读（2026-10-13 ledger-shard-ledgers 回灌）：主台账 ∪ delegations.d/*.md 文本单源。
+import { readDelegationsText } from './ledger-shards.mjs';
 // MARK_RE：incident 留痕形态的单源（第七轮复核 N3——此前 check-loop 内联复制一份同口径字面量，
 // 两处靠注释与人工同步；改为复用 stage-gates.mjs 的导出，从结构上消除漂移可能）
 import { MARK_RE, approvedTraceHit } from './stage-gates.mjs';
@@ -139,36 +172,87 @@ import { MARK_RE, approvedTraceHit } from './stage-gates.mjs';
 import { runCheckHygiene } from './check-hygiene.mjs';
 // 检查 7 拆模块（2026-10-09 engine-quality-round2 A1）：阶段索引同步迁 check-stage-index.mjs
 import { runCheckStageIndex } from './check-stage-index.mjs';
+// 六段检查模块（2026-10-13 B6b-2，自 Shipyard.Material check-loop-sections s21–s26 回灌；出处沿革
+// 留痕在包源仓 git 历史与 CHANGELOG）。模块形态 = 各文件 export run(ctx)：判定语义单源在段内，
+// ctx 只传本文件既有共享面（helper 零复刻）；段体调 wall 位置即输出顺序位（稳定输出契约）。
+import { run as runSpecVerif } from './check-spec-verif.mjs';
+import { run as runRegistry } from './check-registry.mjs';
+import { run as runConvergence } from './check-convergence.mjs';
+import { run as runAttribution } from './check-attribution.mjs';
+import { run as runPrejudgment } from './check-prejudgment.mjs';
+import { run as runFunnel } from './check-funnel.mjs';
 import { gateSeg, finishSegs, makeCollector } from './gate-seg.mjs';
+// 判定流水落账（2026-10-11 judgment-ledger）：每次真实运行追加一行 per-rule 计数（观测面，fail-open）
+import { recordRun } from './judgment-ledger.mjs';
 
 // CHECK_LOOP_GIT：测试注入钩子（指向不存在/不可执行路径可稳定触发 spawn 异常）；未设置时与原行为逐字节一致（2026-10-05-gitout-fail-open）
 const GIT = process.env.CHECK_LOOP_GIT || (process.platform === 'win32' ? 'git.exe' : 'git');
 
+// usage：用法错误统一出口（2026-10-13 分道随源仓 usage() 口径逐字对齐；行 1 追加 kit 自有旗标）。
+// 未知参数 / --rev 缺值 / --all 与 --hygiene 同给 → 此处 exit 1（CLI 专属路径；runCheckLoop import 面
+// 不经此，mode 由 opts.mode 直给）。
+function usage() {
+  console.error('check-loop: 用法 node check-loop.mjs [--rev <sha>] [--all | --hygiene] [--hardening] [--gate-stats]');
+  console.error('  默认只跑硬门（配对/判低/指纹/证据/发版未收口）。--hygiene 只跑卫生段。--all 两段都跑。');
+  process.exit(1);
+}
 function takeOpts() {
   const args = process.argv.slice(2);
-  const opts = { rev: null, hardening: false, gateStats: false };
+  const opts = { rev: null, mode: 'hard', hardening: false, gateStats: false };
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--rev') {
       opts.rev = args[++i] ?? '';
-      if (!opts.rev) {
-        console.error('check-loop: 用法 node check-loop.mjs [--rev <sha>] [--hardening] [--gate-stats]');
-        process.exit(1);
-      }
+      if (!opts.rev) usage();
+    } else if (args[i] === '--all') {
+      if (opts.mode === 'hygiene') usage(); // 互斥组合报用法错（源仓 takeOpts 同款）
+      opts.mode = 'all';
+    } else if (args[i] === '--hygiene') {
+      if (opts.mode === 'all') usage();
+      opts.mode = 'hygiene';
     } else if (args[i] === '--hardening') {
       opts.hardening = true; // 加固门（2026-09-30 hybrid-governance-explore-hardening）：pre-push 对 main 目标传入
     } else if (args[i] === '--gate-stats') {
       opts.gateStats = true; // 门禁 ROI 落盘（2026-10-08 gate-roi-metrics）：默认路径输出逐字节不变
-    } else {
-      console.error('check-loop: 用法 node check-loop.mjs [--rev <sha>] [--hardening] [--gate-stats]');
-      process.exit(1);
-    }
+    } else usage();
   }
   return opts;
 }
 
+// ---- 分道 lane 表（2026-10-13 B6b-1，源仓 check-loop.mjs SECTIONS 同款语义；机读单源）----
+// id = 段插桩 id（markGate / check-hygiene / check-stage-index / runCheck16 的 gateSeg 同名），
+// 值 = 运行面。守卫只决定段跑不跑，段体判据零变化。清单 5（状态/L3 复核）在检查 1 循环内实现、
+// 无独立段 id，随 '1' 同道（hard）。§21–26 与 '3x' 已随 B6b-2 落地登记（2026-10-13）。
+const LANE_OF = {
+  1: 'hard',     // 清单 1+5：配对 + 状态确认 + L3 复核 + 红线判低
+  2: 'hygiene', 9: 'hygiene', 11: 'hygiene', 12: 'hygiene', 13: 'hygiene', // check-hygiene.mjs 五段
+  3: 'hard',     // 复盘三件套 + 新 intent 回路
+  4: 'hygiene',  // 引用有效性
+  5: 'hygiene',  // 角色契约与宿主 Adapter（清单 6）
+  6: 'hygiene',  // 阶段索引同步（清单 7；check-stage-index.mjs）
+  8: 'hard',     // 验收标准对账
+  10: 'hygiene', // 级别 vs 迁移文件
+  14: 'hard',    // 确认留痕（approved 快照）
+  15: 'hard',    // 确认指纹对账（指纹链）
+  16: 'hygiene', // 量化断言签名对账
+  17: 'hard',    // 发版树未收口
+  18: 'hygiene', // 委派台账对账
+  19: 'hygiene', // 逐阶段审计
+  20: 'hygiene', // 引擎脚本测试覆盖
+  // B6b-2 六段（2026-10-13 自源仓 SECTIONS 回灌；lane 沿源仓：21/22/24/26 hygiene，23/25 hard）
+  21: 'hygiene', // spec 验证落地核查（§21；锚 specVerifSince）
+  22: 'hygiene', // 机制使用量台账（§22；.agents/mechanism-registry.md 在场才启用）
+  23: 'hard',    // 判据级收敛对账（§23；hard 档随 convergenceHardSince，锚前 advisory WARN）
+  24: 'hygiene', // incident 归因字段核查（§24；锚 attributionSince）
+  25: 'hard',    // 路由预判一致性（§25；内容纯 WARN 不阻断，lane=hard 随源仓 SECTIONS）
+  26: 'hygiene', // 闭环漏斗「协议前」占比动作阈值（§26）
+  '3x': 'hard',  // incident 防复发验证证据门（§3 扩展，编号沿源仓 3x 写法；锚 incidentRegrSince）
+};
+
 // ---- runCheckLoop：门禁主流程可 import 化（2026-10-08 checkloop-importable；2026-10-04 isMain 行点名单独立项）----
-// import 本模块零副作用（isMain 主守卫，board-kb-p1 先例）；opts = { root?, rev?, hardening? }——root 显式参数
-// 优先于 CHECK_LOOP_ROOT env 优先于 git toplevel（CLI 缺省行为逐字节不变）；返回 { exitCode, blockers, warnings }，
+// import 本模块零副作用（isMain 主守卫，board-kb-p1 先例）；opts = { root?, rev?, mode?, hardening? }——root 显式参数
+// 优先于 CHECK_LOOP_ROOT env 优先于 git toplevel（CLI 缺省行为逐字节不变）；mode = 运行面（2026-10-13 分道：
+// 'hard'（缺省，关单/pre-push 面）| 'hygiene'（只卫生段）| 'all'（两段都跑=分道前裸跑全量）；CLI 由 takeOpts
+// 注入，import 面按需显式给——需要全量语义的消费方传 'all'，勿依赖缺省）；返回 { exitCode, blockers, warnings }，
 // 输出打印照旧在本函数内（稳定输出契约：banner 后空行、条目 `- ` 前缀、HARD-BLOCK/WARN 两段式——消费者 .githooks/pre-push）。
 // opts.rev 的 worktree 清理挂 process.on('exit')——进程内多次调用累计监听器（测试场景 ≤3 次，可接受）。
 // ---- 门禁 ROI 插桩件已抽至 gate-seg.mjs（2026-10-08 gate-roi-metrics）----
@@ -197,6 +281,9 @@ export function writeGateStats(root, segs) {
 export function runCheckLoop(opts = {}) {
   const REV_ARG = opts.rev ?? null;
   const HARDENING = !!opts.hardening;
+  const LOOP_MODE = opts.mode || 'hard'; // 分道运行面（2026-10-13 B6b-1）：hard（缺省）| hygiene | all
+  // laneOn(id)：本运行面是否执行该段——all 全跑；hard/hygiene 只跑同名面（源仓 SECTIONS 过滤同款）。
+  const laneOn = (id) => LOOP_MODE === 'all' || LANE_OF[id] === LOOP_MODE;
   if (REV_ARG && (opts.root || process.env.CHECK_LOOP_ROOT)) {
     console.error('check-loop: --rev 不能同时使用 root 参数 / CHECK_LOOP_ROOT');
     return { exitCode: 1, blockers: [], warnings: [] };
@@ -380,6 +467,7 @@ export function runCheckLoop(opts = {}) {
   };
 
   // --- 1. intent/spec/plan 同名配对 + 状态确认 + L3 确认三件 + 风险泳道一致性 [hard-block] ---
+  if (laneOn(1)) { // lane=hard：默认关单/pre-push 面（清单 5 随本段循环实现，同 lane）
   markGate('1', '意图/spec/plan 配对');
   for (const intent of docFiles('intents')) {
     const base = path.basename(intent);
@@ -396,8 +484,8 @@ export function runCheckLoop(opts = {}) {
         blockers.push(`- [配对断裂] intent 缺 spec:${base}（应在 ${WF}/specs/ 下同名）`);
       }
     }
-    // 协作道（L0）豁免 plan 配对——异步审计兜底（hybrid-governance-risk-lanes）；L1 仍须 plan，L2/L3 须 spec+plan
-    if (lvl !== 'L0' && !fs.existsSync(path.join(ROOT, WF, 'plans', base))) {
+    // plan 配对全级别强制（2026-10-13 L0 退役，自源仓收敛系列 1 回灌：原 L0 协作道豁免随级别退役删除；L2/L3 另须 spec）
+    if (!fs.existsSync(path.join(ROOT, WF, 'plans', base))) {
       blockers.push(`- [配对断裂] intent 缺 plan:${base}（应在 ${WF}/plans/ 下同名）`);
     }
     // 风险泳道一致性（2026-10-02 caliber-convergence 起单源 laneOfEntry·方案 C 分歧双严）：非 high
@@ -431,6 +519,18 @@ export function runCheckLoop(opts = {}) {
         blockers.push(`- [L3 复核缺失] ${base} 必须记录新会话独立复核结论`);
       }
     }
+    // 独立复核上下文标识（2026-10-13 B6b-2 自源仓 s01 回灌，policy v12 reviewerSince advisory）：
+    // 独立性声明须带可证伪基底——复核行落「复核上下文：<会话/子代理 id>」，使「主智能体自查冒充」
+    // 从遗漏升级为积极伪造。只扫有独立复核行的 spec；锚前存量豁免不回填；缺键（v1–v11）→ 本子检整体跳过。
+    if (kitPolicy.reviewerSince) {
+      const rvDate = fmGet(spec, '日期') || (/^\d{4}-\d{2}-\d{2}$/.test(base.slice(0, 10)) ? base.slice(0, 10) : '');
+      if (rvDate >= kitPolicy.reviewerSince) {
+        const rvLine = (linesOf(spec) || []).find((l) => /^- 独立复核：/.test(l));
+        if (rvLine && !/复核上下文：/.test(rvLine)) {
+          warnings.push(`- [WARN 复核上下文缺失] ${base} 独立复核行缺「复核上下文：<会话/子代理 id>」——独立性声明无可证伪基底（C2，reviewerSince ${kitPolicy.reviewerSince}）`);
+        }
+      }
+    }
   }
 
   for (const plan of docFiles('plans')) {
@@ -438,13 +538,16 @@ export function runCheckLoop(opts = {}) {
     const st = fmGet(plan, '状态');
     const lvl = fmGet(plan, '级别');
     const hasEntry = fs.existsSync(path.join(ROOT, WF, 'intents', base)) || fs.existsSync(path.join(ROOT, WF, 'incidents', base));
-    if (!hasEntry) blockers.push(`- [配对断裂] plan 缺 intent/incident:${base}（应在 ${WF}/intents/ 或 ${WF}/incidents/ 下同名）`);
+    // L1 plan 即入口（2026-10-13 B6b-2 自源仓 s01 回灌）：级别恰好为 L1 的 plan 自己就是入口，无同名
+    // intent/incident 不拦。级别缺失或 L2/L3 仍要求入口（fail-closed）。已写的 intent 不论级别仍要求同名 plan。
+    if (lvl !== 'L1' && !hasEntry) blockers.push(`- [配对断裂] plan 缺 intent/incident:${base}（应在 ${WF}/intents/ 或 ${WF}/incidents/ 下同名）`);
     if (!stOkDoc(st)) {
       const msg = `${base}（frontmatter 状态键当前值:『${st || '缺失'}』）`;
       if (lvl === 'L3') blockers.push(`- [状态未确认] L3 plan 必须为 approved/done/superseded/cancelled:${msg}`);
       else warnings.push(`- [WARN 状态未确认] plan 必须为 approved/done/superseded/cancelled:${msg}`);
     }
   }
+  } // laneOn(1) 守卫闭合
 
   // --- 卫生类检查 2 / 9 / 11 / 12 / 13（2026-10-08 selfmeasure-and-modularize 拆出）---
   // ⚠️ 调用点位置即输出顺序位：原实现分处五处，逐条顺序 2 → 9 → 11 → 12 → 13，而 warnings 按插入序输出、
@@ -454,8 +557,11 @@ export function runCheckLoop(opts = {}) {
   // ctx 只传既有 helper、模块内零复刻：docFiles 的 tracked 过滤、fmGet 的 frontmatter 受限子集、
   // linesOf 的读异常响亮出账各自承载不可漂移语义，复刻即造口径分叉。audit:false 下 warnings.push 是
   // no-op，卫生项因此不出账（硬规则语义保持）。
-  warnings.push(...runCheckHygiene({ root: ROOT, WF, DOC_DIRS, docFiles, linesOf, fmGet, isTracked, readdirOrNull, kitPolicy, gateStats }));
+  // 分道（2026-10-13）：本调用是卫生段（2/9/11/12/13，lane=hygiene）唯一入口——硬门默认面整段跳过
+  // （连带省掉检查 11/13 的生成器子进程）；--hygiene / --all 才执行。
+  if (laneOn(2)) warnings.push(...runCheckHygiene({ root: ROOT, WF, DOC_DIRS, docFiles, linesOf, fmGet, isTracked, readdirOrNull, kitPolicy, gateStats }));
   // --- 3. incidents 复盘三件套 + 状态严格枚举 + 新 intent 回路（回路断档 = hard）---
+  if (laneOn(3)) { // lane=hard
   markGate('3', 'incidents 复盘三件套');
   for (const inc of docFiles('incidents')) {
     const name = path.basename(inc);
@@ -469,7 +575,7 @@ export function runCheckLoop(opts = {}) {
 
     if (fmGet(inc, '流程') !== 'legacy') {
       if (!inSet(incLvl, ENUMS['level.all'])) {
-        warnings.push(`- [WARN 级别缺失] ${name} 必须填写 L0/L1/L2/L3（配对检查已跳过——补级别后重跑本脚本校验配对）`);
+        warnings.push(`- [WARN 级别缺失] ${name} 必须填写 L1/L2/L3（配对检查已跳过——补级别后重跑本脚本校验配对）`);
       } else {
         if (['L1', 'L2', 'L3'].includes(incLvl) && !fs.existsSync(path.join(ROOT, WF, 'plans', name))) {
           blockers.push(`- [配对断裂] incident 缺 plan:${name}（应在 ${WF}/plans/ 下同名）`);
@@ -515,8 +621,10 @@ export function runCheckLoop(opts = {}) {
       else if (!fs.existsSync(path.join(ROOT, WF, ref))) blockers.push(`- [回路断档] ${name} 引用的 intent 不存在:${ref}`);
     }
   }
+  } // laneOn(3) 守卫闭合
 
   // --- 4. 引用有效性 [warning]（.agents/ 路径须存在；skills 特例允许用户级 ~/.agents/skills）---
+  if (laneOn(4)) { // lane=hygiene
   markGate('4', '引用有效性');
   {
     // 引用可带 {a,b,c} 花括号展开（仓库通写法 `fill-{intent,spec,plan}.mjs`）或 `*` 通配（`fill-*.mjs`）——
@@ -579,8 +687,10 @@ export function runCheckLoop(opts = {}) {
       }
     }
   }
+  } // laneOn(4) 守卫闭合
 
   // --- 5. 子智能体角色契约 + 宿主 Adapter 一致性 + 旧委派残留 + 钉死模型 [warning] ---
+  if (laneOn(5)) { // lane=hygiene（清单 6：角色契约与 Adapter）
   markGate('5', '角色契约与宿主 Adapter');
   {
     const cmdFiles = () => (readdirOrNull(path.join(ROOT, '.agents', 'commands')) || [])
@@ -638,11 +748,12 @@ export function runCheckLoop(opts = {}) {
     }
     if (modelHits.length) warnings.push(`- [WARN 宿主耦合] 薄 Adapter 不应固定模型:\n${modelHits.join('\n')}`);
   }
+  } // laneOn(5) 守卫闭合
 
   // --- 6. 阶段索引同步 [warning]（2026-10-09 engine-quality-round2 A1：实现迁 check-stage-index.mjs——
   //     先例 check-hygiene / check-metric-claims；段 id 沿 sh 版 '6'，清单编号 7 与文案逐字不动；
   //     调用点位置即输出顺序契约）---
-  warnings.push(...runCheckStageIndex({ root: ROOT, linesOf, gateStats }));
+  if (laneOn(6)) warnings.push(...runCheckStageIndex({ root: ROOT, linesOf, gateStats })); // lane=hygiene（清单 7）
 
   // --- 共享：文件「首次加入 git」的日期索引（2026-09-28 check8-git-anchor）---
   // 用途：检查 8 的生效日锚从**可手填的文件名前缀**（项目命名规范本身即 `YYYY-MM-DD-<主题>`，作者
@@ -777,7 +888,38 @@ export function runCheckLoop(opts = {}) {
     return { ok: true, type: 'sha' };
   }
 
+  // --- 3 扩展（§3x，编号沿源仓 3x 写法——gate-checklist 按 `N.` 解析，本段不入配对面）.
+  //     incident 防复发验证证据门 [hard-block]（2026-10-13 B6b-2 自源仓 s03x 回灌；出处沿革留痕在包源仓
+  //     git 历史与 CHANGELOG）。调用点位置 = 源仓 SECTIONS 段序（s03x 居卫生 4/5/6 之后、检查 8 之前），
+  //     亦为本段消费 addedDateOf 的前置依赖位（git 建档日锚单源定义于上）---
+  // incidents 模板「防复发验证」强制项的机器面：防复发验证必须落到自动化用例或回归清单条目，禁「只写已人工验证」。
+  // fixed/closed 且 git 建档日 ≥ incidentRegrSince（policy v9；v1–v8 缺键 → 整体跳过）的 incident，
+  // 正文无自动化用例 / 回归清单引用 → hard。判据 = 宽匹配正则（引擎 .test.mjs / 回归清单 / 冒烟 / 测试命令）
+  // ——门的是「落到可复跑的验证资产」，不是猜具体测试名；存量（< 锚）豁免（不可判定亦不拦——无判定依据不出 hard）。
+  // kit 适配（源仓→kit 逐条）：证据正则剔除源仓实例路径面（backend/…Tests.cs、frontend/__tests__），
+  //   kit 口径保留通用形态（.test.mjs / workflow/regression-checklist.md（kit 模板同款件）/ 测试与门命令）。
+  if (laneOn('3x')) { // lane=hard：防复发证据门
+  markGate('3x', 'incident 防复发验证证据门');
+  {
+    const regrAnchor = kitPolicy.incidentRegrSince;
+    if (regrAnchor) {
+      const REGR_EVIDENCE_RE = /\.test\.mjs|workflow\/regression-checklist\.md|regression-smoke|npm\s+test|dotnet\s+test|run-tests|verify\.mjs/;
+      for (const inc of docFiles('incidents')) {
+        const incSt = fmGet(inc, '状态');
+        if (!['fixed', 'closed'].includes(incSt)) continue;
+        const add = addedDateOf(inc);
+        if (!add || add < regrAnchor) continue; // 存量豁免（不可判定亦不拦——无判定依据不出 hard）
+        const lines = linesOf(inc) || [];
+        if (!lines.some((l) => REGR_EVIDENCE_RE.test(l))) {
+          blockers.push(`- [回归证据缺失] ${path.basename(inc)} 已 ${incSt} 但防复发验证未落自动化用例/回归清单引用（模板强制项，禁「已人工验证」）`);
+        }
+      }
+    }
+  }
+  } // laneOn('3x') 守卫闭合
+
   // --- 8. intent 验收标准对账（done 须逐条勾验并补证据；新建 hard，存量聚合 warning）---
+  if (laneOn(8)) { // lane=hard：验收对账
   markGate('8', '验收标准对账');
   // 生效日锚 2026-09-28 改「git 首次加入日期」（此前取文件名前 10 字符——命名规范强制的字段、
   // 写早零成本）。非 git → 不可判定 → 走存量口径（不误报 hard）。
@@ -980,8 +1122,10 @@ export function runCheckLoop(opts = {}) {
       warnings.push(`- [WARN 验收对账存量] ${legacyUnaccounted} 个存量 done intent 验收标准未对账（生效日锚之前加入仓库，豁免 hard，不回填）`);
     }
   }
+  } // laneOn(8) 守卫闭合
 
   // --- 10. 级别 vs 迁移文件一致性 [warning]（启发式：入口文档加入提交触及迁移 SQL/Migrations → 疑似判低；非 git 跳过）---
+  if (laneOn(10)) { // lane=hygiene
   markGate('10', '级别 vs 迁移文件');
   if (gitOut(['rev-parse', '--git-dir']) !== null) {
     const log = gitOut(['log', '--diff-filter=A', '--format=@%H', '--name-only']);
@@ -1010,8 +1154,10 @@ export function runCheckLoop(opts = {}) {
       }
     }
   }
+  } // laneOn(10) 守卫闭合
 
   // --- 14. 新 done 的 spec/plan 须有确认留痕：git 历史「状态: approved」 或 confirmations.jsonl 台账 approved 行 [warning]（恒 advisory；非 git 跳过）---
+  if (laneOn(14)) { // lane=hard：确认留痕
   markGate('14', '确认留痕（approved 快照）');
   // 2026-10-08 papercuts-cleanup-batch 修 3：两跳确认同批提交时 git 历史不出现行首「状态: approved」曾误报，
   // 而台账已证明两跳均走（2026-09-28-adopter-derivers 实证）——判据改 OR 并集（git 判据保留不弱化，
@@ -1043,10 +1189,12 @@ export function runCheckLoop(opts = {}) {
       }
     }
   }
+  } // laneOn(14) 守卫闭合
 
   // --- 15. 确认指纹对账 [hard-block]（2026-09-26 confirm-gate-machine；2026-09-27 confirm-gate-delegated 两形态；
   //     生效日锚 2026-09-28 改台账 ts——此前锚取自文档自报「日期/发现」，新档只要把日期写早即整段跳过判定，
   //     incident 2026-09-28-confirm-gate-effective-date-anchor 实证）---
+  if (laneOn(15)) { // lane=hard：指纹链
   markGate('15', '确认指纹对账');
   // 确认两形态（confirm-doc.mjs）：TTY 亲手键入「可以」/ --delegated 对话委托代录（用户对话内明确放行后
   // AI 代录，台账行如实记 source=chat-delegated + quote 原话，永不伪装 TTY）。intents/specs/plans 凡
@@ -1240,7 +1388,7 @@ export function runCheckLoop(opts = {}) {
         // of > 1 = 一次调用落多份态。delegated 形态下这正是「并录」（入口已拒多份，此处抓历史/绕行）；
         // TTY 形态天然逐份过目（用户亲手键入），of>1 不构成违规——故只对 delegated 行报。
         if (!rows.some((r) => r.source === 'chat-delegated')) continue;
-        // 协作道批量豁免（2026-09-30 hybrid-governance-risk-lanes）：confirm-doc --batch 仅受理 L0/L1
+        // 协作道批量豁免（2026-09-30 hybrid-governance-risk-lanes）：confirm-doc --batch 仅受理 L1
         // （逐份读级别，L2/L3 逐份拒绝），台账行带 brief:true——全行带标记的批次是 sanctioned 泳道行为
         // （异步审计兜底），不出「确认并录」；缺标记（旧版脚本/手造台账）照旧告警，判据偏严不偏松。
         if (rows.every((r) => r.brief === true)) continue;
@@ -1250,8 +1398,10 @@ export function runCheckLoop(opts = {}) {
       }
     }
   }
+  } // laneOn(15) 守卫闭合
 
   // --- 16. 量化断言指标签名对账 [warning]（2026-09-28 claim-exceeds-fix；登记表单源 .agents/metric-claims.txt）---
+  if (laneOn(16)) { // lane=hygiene
   markGate('16', '量化断言签名对账');
   // 判据要点：活跃态文档（draft/approved/open）中的 `{{指标名}}`（小写点分）签名须替换为实时值，留签名=未回填=
   //   warning；只查显式签名、不全文扫数字（历史叙述假阳性恒 0）；未登记签名 / 取数器缺失 → fail-loud 出账；
@@ -1261,8 +1411,10 @@ export function runCheckLoop(opts = {}) {
   //   （ROOT/ENUMS/docFiles/fmGet/inSet/isTracked/linesOf/readdirOrNull/warnings，以代码实际引用集为准）；
   //   调用位置须保持在检查 15 之后、输出段之前——warnings 按插入序输出，位置变化会改变输出行序。
   runCheck16({ ROOT, ENUMS, docFiles, fmGet, inSet, isTracked, linesOf, readdirOrNull, warnings });
+  } // laneOn(16) 守卫闭合
 
   // --- 17. 发版提交树上仍未收口的 intent/spec/plan [hard-block] ---
+  if (laneOn(17)) { // lane=hard：发版收口
   markGate('17', '发版树未收口文档');
   // 最近一次 package.json version 发生变化的提交里，当时状态已是 draft 或 approved 的
   // intent/spec/plan，被扫描的树上仍是 draft 或 approved 则阻断。
@@ -1301,13 +1453,17 @@ export function runCheckLoop(opts = {}) {
       }
     }
   }
+  } // laneOn(17) 守卫闭合
 
   // --- 18. 委派台账对账 [warning] ---
+  if (laneOn(18)) { // lane=hygiene
   markGate('18', '委派台账对账');
   // L2/L3 的 intent、spec、plan 状态为 done，或同级别 incident 状态为 fixed 或 closed 时，
   // 「委派结果」表与「自做任务结果」表均没有日期不早于文档日期、且含该文件名（带/不带 .md 均匹配）的一行，则警告。
   // 缺级别、缺日期、以及其他状态不警告。audit:false 时 warnings.push 已被换成空函数。
   // 两表解析口径与 agg-delegations.cjs splitTables 保持一致，一边改另一边须跟。
+  // 分片感知（2026-10-13 ledger-shard-ledgers）：delegationResultRows 走 ledger-shards.readDelegationsText
+  // 合并读（主台账 ∪ delegations.d/*.md），分片行与本表行同一对账口径，判据零改动。
   {
     const rows = delegationResultRows(path.join(ROOT, WF, 'delegations.md'));
     for (const sub of ['intents', 'specs', 'plans', 'incidents']) {
@@ -1331,8 +1487,10 @@ export function runCheckLoop(opts = {}) {
       }
     }
   }
+  } // laneOn(18) 守卫闭合
 
   // --- 19. 逐阶段审计 [warning]（2026-09-30 stage-gate-machine；口径与 stage-gates.mjs / fill-* / confirm-doc 前置门互引） ---
+  if (laneOn(19)) { // lane=hygiene
   markGate('19', '逐阶段审计');
   // 判据 A（在途扫描）：同名 spec/plan 为 draft 且其日期 ≥ stageGateSince 时——入口未确认（intent：状态非
   //   approved/done、或缺台账行且非存量；incident：「时间线」小节缺行首「用户确认」条目）→ warning；
@@ -1340,8 +1498,8 @@ export function runCheckLoop(opts = {}) {
   //   plan 另判（入口级别 L2/L3 且 spec 未确认或缺失）→ warning。
   // 判据 B（台账顺序）：同主题 {intents,specs,plans} 的 approved 行（每 doc 取最早）时间须非降序；仅对
   //   组内最早 ts 日期 ≥ stageGateSince 的主题判定；含更早 ts 的主题整组跳过（历史豁免）。
-  // 协作道豁免（2026-09-30 hybrid-governance-risk-lanes）：入口 intent 为 draft 且级别 L0/L1 → 判据 A 静默
-  //   （「先动手后确认」是泳道语义；approved/done 无台账行仍照报）；判据 B 对入口 L0/L1 的主题豁免顺序
+  // 协作道豁免（2026-09-30 hybrid-governance-risk-lanes）：入口 intent 为 draft 且级别 L1 → 判据 A 静默
+  //   （「先动手后确认」是泳道语义；approved/done 无台账行仍照报）；判据 B 对入口 L1 的主题豁免顺序
   //   倒置判定（入口文件缺失不豁免）。
   // stageGateSince 缺键（policy v1）→ 本检查整体跳过；全部 warning、不 hard-block。
   {
@@ -1408,7 +1566,7 @@ export function runCheckLoop(opts = {}) {
           const ent = entryConfirmed19(base);
           if (!ent.ok) {
             // 协作道异步审计豁免（2026-09-30 hybrid-governance-risk-lanes；2026-10-02 caliber-convergence
-            // 起单源 laneOfEntry·方案 C）：入口 intent 仍为 draft 且泳道 low（两字段一致 L0/L1）→「先动手后
+            // 起单源 laneOfEntry·方案 C）：入口 intent 仍为 draft 且泳道 low（级别 L1）→「先动手后
             // 确认」是泳道语义，不告警；suspect（缺失/非法/分歧）不豁免；approved/done 却无台账行仍照报
             // （防手改状态冒充确认，与交叉一致性口径同）；incident 入口不豁免（过目留痕本就轻量）。
             if (ent.entryDraft && laneOfEntry(ent.level, ent.risk, kitPolicy.riskLevelSince, ent.date) === 'low') continue;
@@ -1437,7 +1595,7 @@ export function runCheckLoop(opts = {}) {
       for (const [base, rec] of firstApproved) {
         const seq = ['intents', 'specs', 'plans'].filter((k) => rec[k]);
         if (seq.length < 2) continue;
-        // 协作道豁免（2026-09-30 hybrid-governance-risk-lanes）：入口 L0/L1 的审批顺序倒置（如 plan 先于
+        // 协作道豁免（2026-09-30 hybrid-governance-risk-lanes）：入口 L1 的审批顺序倒置（如 plan 先于
         // intent approved——「动手后确认」）是异步审计泳道语义，非流程违规；入口文件缺失（纯台账历史行 /
         // incident 侧）不豁免，维持既有判据。
         // existsSync 守卫（2026-10-06-check19-entry-enoent）：incident 闭环主题无同名 intent，「读空判级」
@@ -1446,7 +1604,7 @@ export function runCheckLoop(opts = {}) {
         // 与下方 spec 读取。
         const iabsB = path.join(ROOT, WF, 'intents', `${base}.md`);
         const ilvlB = fs.existsSync(iabsB) ? fmGet(iabsB, '级别') : '';
-        if (ilvlB === 'L0' || ilvlB === 'L1') continue;
+        if (ilvlB === 'L1') continue;
         const earliest = seq.map((k) => rec[k]).sort()[0];
         if (!(earliest.slice(0, 10) >= since)) continue;
         let ordered = true;
@@ -1455,13 +1613,14 @@ export function runCheckLoop(opts = {}) {
       }
     }
   }
+  } // laneOn(19) 守卫闭合
 
   // --- 加固门（仅 --hardening 启用；2026-09-30 hybrid-governance-explore-hardening）[hard-block] ---
   // 探索泳道（experiment/* 分支 + intent frontmatter「阶段: exploring」标记；「状态: exploring」亦认——
   // 非法状态本就会在检查 5 出账）允许「先动手后确认」快速 PoC；成果转正（合入 main）前必须完成加固：
   //   ① intent 状态离开 draft → approved/done（探索作废走显式放弃态 superseded/cancelled——留档即出列，
   //      不加固：放弃态无代码应随行）；
-  //   ② 同名 plan 在场且状态收口（∈ doc.status.confirmed；L0 亦不豁免——本门是转正门槛，不是配对门）；
+  //   ② 同名 plan 在场且状态收口（∈ doc.status.confirmed——本门是转正门槛，不是配对门）；
   //   ③ 泳道 L2/L3（级别优先、缺失/非法回落 risk_level，与 stage-gates 起草门同款取法）另须同名 spec
   //      在场且收口。
   // 触发面：.githooks/pre-push 对 remote=refs/heads/main 的推送以 --hardening 运行本脚本（hard 失败即阻断
@@ -1489,7 +1648,7 @@ export function runCheckLoop(opts = {}) {
         blockers.push(`- [加固未过] exploring 任务入 main 的 plan 未收口:${base}（plan 状态『${planSt || '缺失'}』须为 approved/done）`);
       }
       // 泳道单源（2026-10-02 caliber-convergence 方案 C；复核 P1-1 修正）：suspect（缺失/非法/分歧）与
-      // high 同样另须同名 spec——仅 low（两字段一致 L0/L1）免 spec，只增不松。
+      // high 同样另须同名 spec——仅 low（级别 L1）免 spec，只增不松。
       if (lane !== 'low') {
         const specAbs = path.join(ROOT, WF, 'specs', base);
         const specSt = fs.existsSync(specAbs) ? fmGet(specAbs, '状态') : '';
@@ -1503,6 +1662,7 @@ export function runCheckLoop(opts = {}) {
   }
 
   // --- 20. 引擎脚本测试覆盖 [warning]（2026-10-01 gate-script-test-coverage；仅包源环境） ---
+  if (laneOn(20)) { // lane=hygiene
   markGate('20', '引擎脚本测试覆盖');
   // 包源开发纪律：templates/_agents/scripts/ 下每个非 *.test.mjs 引擎脚本须有同名兄弟 .test.mjs，
   // 或在 .agents/scripts-test-exempt.txt 登记豁免（managed 下发）。装户（无 templates/）整体跳过。
@@ -1525,11 +1685,31 @@ export function runCheckLoop(opts = {}) {
       }
     }
   }
+  } // laneOn(20) 守卫闭合
+
+  // --- §21–§26 六段检查（2026-10-13 B6b-2 自源仓 s21–s26 回灌；段序沿源仓 SECTIONS 21→26，接在 §20 后）---
+  // ctx 只传既有共享面（与 check-hygiene / check-stage-index 的 ctx 同纪律：判定语义单源在段模块内，
+  // helper 单源在本文件——复刻即造口径分叉）。段体直接 push 进共享 warnings/blockers（不返回数组，
+  // check-16 先例），故 markGate 记账走共享收集器、增量天然正确（无需 appendSegs 中转）。
+  // 各段判据与适配清单见各模块文件头注。
+  const sharedCtx = { ROOT, WF, DOC_DIRS, ENUMS, inSet, docFiles, fmGet, linesOf, isTracked, readdirOrNull, addedDateOf, kitPolicy, warnings, blockers };
+  if (laneOn(21)) { markGate('21', 'spec 验证落地核查'); runSpecVerif(sharedCtx); } // lane=hygiene（锚 specVerifSince）
+  if (laneOn(22)) { markGate('22', '机制使用量台账'); runRegistry(sharedCtx); }     // lane=hygiene（mechanism-registry 在场才启用）
+  if (laneOn(23)) { markGate('23', '判据级收敛对账'); runConvergence(sharedCtx); } // lane=hard（hard 档随 convergenceHardSince）
+  if (laneOn(24)) { markGate('24', 'incident 归因字段'); runAttribution(sharedCtx); } // lane=hygiene（锚 attributionSince）
+  if (laneOn(25)) { markGate('25', '路由预判一致性'); runPrejudgment(sharedCtx); } // lane=hard（内容纯 WARN 不阻断）
+  if (laneOn(26)) { markGate('26', '闭环漏斗协议前占比'); runFunnel(sharedCtx); }  // lane=hygiene（metrics.md 在场才启用）
 
   // --- 输出（banner 沿 sh 版字样与格式 = 稳定输出契约：banner 后空行、条目 '- ' 前缀）---
   // 门禁 ROI 收口（2026-10-08 gate-roi-metrics）：末段结算（末段之后无下次 gateSeg 调用）+ 可选落盘。
   // ⚠️ 结算在输出**之前**：否则检查 20 之后的段不计入。落盘只在 --gate-stats 时发生。
   if (opts.gateStats) writeGateStats(ROOT, finishSegs(gateStats));
+  // --- 判定流水落账（2026-10-11 judgment-ledger，灰度消费端数据底座）---
+  // 每次真实运行追加一行 per-rule 判定计数到 .agents/judgments.jsonl（本地 gitignore；fixture 经
+  // CHECK_LOOP_ROOT 守卫自动跳过）——mechanism-registry 月度对账与 advisory→hard 升格判定的数据源
+  // 由「人工 grep 输出」升级为 agg-judgments.mjs 查账。fail-open：落账失败不改变门禁裁决与输出契约。
+  // mode 随分道传真实运行面（2026-10-13 B6b-1：hard/hygiene/all——原 'all' 硬编码随分道退役）。
+  recordRun({ root: ROOT, mode: LOOP_MODE, blockers, warnings });
   if (blockers.length) {
     process.stderr.write(`闭环骨架断档（check-loop.sh）— HARD-BLOCK:\n\n${blockers.join('\n')}\n\n`);
     if (warnings.length) process.stderr.write(`WARN（advisory,不阻断）:\n\n${warnings.join('\n')}\n`);
@@ -1546,8 +1726,9 @@ const isMain = process.argv[1] && process.argv[1].replace(/\\/g, '/').endsWith('
 if (isMain) process.exit(runCheckLoop(takeOpts()).exitCode);
 
 export function delegationResultRows(file) {
-  let text = '';
-  try { text = fs.readFileSync(file, 'utf8'); } catch { return []; }
+  // 分片感知读（2026-10-13 ledger-shard-ledgers）：主台账 ∪ delegations.d/*.md，单源 = ledger-shards。
+  // file 为显式注入路径时只读该文件（测试语义不变）；传默认主台账路径 → 走分片合并。
+  const text = readDelegationsText(path.dirname(path.dirname(file)), file);
   const lines = text.split(/\r?\n/);
   // 两表识别与 agg-delegations.cjs splitTables 表头签名同口径（一边改另一边须跟，2026-10-08 papercuts-cleanup-batch 修 2）：
   // 委派表头=含「被委派方」列；自做表头=首列「日期」且含「任务一句话」列——节标题只服务人类阅读，

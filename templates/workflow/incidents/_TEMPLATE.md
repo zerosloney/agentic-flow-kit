@@ -2,12 +2,15 @@
 状态: open
 级别: L1
 发现: YYYY-MM-DD
+来源: <self | user | test | monitor——谁发现，见 .agents/workflow-enums.txt incident.source.all>
+影响环境: <dev | staging | prod | none——缺陷触达的环境，none=未触达运行环境>
 模块: <词表之一，见 .agents/workflow-modules.txt>
 沉淀: <可选：复盘沉淀到 wiki 的相对仓根路径，如 wiki/项目规范/权限收敛方案.md；不沉淀写「无」，留空待 check-loop 提醒；关单时可跑 node .agents/scripts/draft-sediment.mjs 自动抽草稿并回写本字段>
 ---
 # INCIDENT — <日期 主题>
 <!-- 复制为 YYYY-MM-DD-<主题>.md；线上或实测发现的功能缺陷都记录，历史 BUG 可回填 -->
-<!-- frontmatter 受限子集（2026-09-13）：状态∈open/fixed/closed（严格枚举，附注写备注键）；级别∈L0/L1/L2/L3；闭环引擎启用前的回填件加一行 `流程: legacy`（豁免级别/配对检查）；正文不再写状态/级别/发现行 -->
+<!-- frontmatter 受限子集（2026-09-13）：状态∈open/fixed/closed（严格枚举，附注写备注键）；级别∈L1/L2/L3；闭环引擎启用前的回填件加一行 `流程: legacy`（豁免级别/配对检查；存量 L0 件同样改 L1 或标 `流程: legacy`）；正文不再写状态/级别/发现行 -->
+<!-- 归因两键（2026-10-13 自 Shipyard 回灌 incident-attribution；归因检查 B6b 落地后编号以 check-loop.mjs 头部清单为准）：新建件必填、锚前存量不回填；「来源」是缺陷发现方（供来源×环境交叉表机器复算，替代逐件人工判读），「影响环境」写实际触达环境（未触达写 none） -->
 
 ## 时间线
 - <发现 → 定位 → 止血 → 恢复，带时刻>

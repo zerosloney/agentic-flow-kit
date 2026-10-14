@@ -7,6 +7,8 @@ tmp/
 .zcode/plans/
 .agents/trust-mode.json
 .agents/cache/
+# 本机运行态留痕（在仓库根误跑 kb-search 探针会落 .agents/notes/，不入库）
+.agents/notes/
 templates/_agents/cache/
 *.tgz
 # 仓库根临时诊断/重写脚本（一次性工具，跑完即可；例：_resync-adapters.mjs、_inspect.mjs）

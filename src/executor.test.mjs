@@ -182,7 +182,10 @@ const run = (args, cwd) => runCli(['run', ...args], cwd);
   check('S5 非法 kind exit=1', k.status === 1);
   check('S5 非法 kind 报文列合法值', k.stderr.includes('require|fix|verify|review|deploy'), k.stderr);
   const l = route(['--level', 'L9'], r);
-  check('S5 非法 level exit=1 且列闭集', l.status === 1 && l.stderr.includes('L0|L1|L2|L3'), l.stderr);
+  check('S5 非法 level exit=1 且列闭集', l.status === 1 && l.stderr.includes('L1|L2|L3'), l.stderr);
+  // L0 已退役（2026-10-13 自源仓收敛系列 1 回灌）：--level L0 按非法档 fail-loud（枚举 fixture 已收敛 L1-L3）
+  const l0 = route(['--level', 'L0'], r);
+  check('S5b 已退役的 L0 exit=1 且报文即闭集', l0.status === 1 && l0.stderr.includes('--level 须为 L1|L2|L3'), l0.stderr);
   const nc = mkProject({ withCrit: false });
   const n = route([], nc);
   check('S5 缺判据单源 exit=1', n.status === 1);

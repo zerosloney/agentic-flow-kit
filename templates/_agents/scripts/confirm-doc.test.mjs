@@ -7,6 +7,8 @@
 //          L2/L3 时同名 spec）已确认；未过 → exit 2 + 未落盘未记账（S19-S22）
 //       ⑧ done 前置门（2026-09-30 confirm-gate-approved-history）：→done 须 git 历史已留 approved 态
 //          （先 done 后提交 / 两跳同批提交 → 拒绝）；非 git / legacy / 存量豁免声明 → 跳过（S25-S29）
+//       ⑨ 关单即归档（2026-10-13 archive-on-close，B9 自源仓回灌）：终态家族即时 git mv 进 archive、
+//          未涉及家族不越权清理、无归档约定不启用、CONFIRM_DOC_NO_ARCHIVE 逃生门（S43-S45）
 // 用法：node templates/_agents/scripts/confirm-doc.test.mjs（npm test 随跑）
 import fs from 'node:fs';
 import os from 'node:os';
@@ -615,17 +617,17 @@ const gitHead = (root) => {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
-// ---- S30【协作道批量】--batch：delegated 多份 L0/L1 一次代录 → 全部落态 + 台账 brief:true（2026-09-30 hybrid-governance-risk-lanes）----
+// ---- S30【协作道批量】--batch：delegated 多份 L1 一次代录 → 全部落态 + 台账 brief:true（2026-09-30 hybrid-governance-risk-lanes）----
 {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-bt1-'));
   fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
   fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-bt1.md'), '---\n状态: draft\n级别: L1\n日期: 2026-09-30\n---\n# I1\n');
-  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-bt2.md'), '---\n状态: draft\n级别: L0\n日期: 2026-09-30\n---\n# I2\n');
+  fs.writeFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-bt2.md'), '---\n状态: draft\n级别: L1\n日期: 2026-09-30\n---\n# I2\n');
   const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-30-bt1.md', 'workflow/intents/2026-09-30-bt2.md', '--delegated', '批量放行', '--batch'], { cwd: root, encoding: 'utf8' });
   const led = readLedgerOf(root);
   const st1 = fs.readFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-bt1.md'), 'utf8');
   const st2 = fs.readFileSync(path.join(root, 'workflow', 'intents', '2026-09-30-bt2.md'), 'utf8');
-  check('S30 --batch：2 份 L0/L1 一次代录 → 全部 approved + 台账 brief:true / of=2 / seq 递增',
+  check('S30 --batch：2 份 L1 一次代录 → 全部 approved + 台账 brief:true / of=2 / seq 递增',
     r.status === 0 && led.length === 2
       && led.every((e) => e.brief === true && e.source === 'chat-delegated' && e.of === 2 && e.stage === 'approved')
       && led[0].seq === 1 && led[1].seq === 2
@@ -694,7 +696,7 @@ const gitHead = (root) => {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
-// ---- S33 简洁审计：单份 delegated L0/L1（无 --batch）→ 台账 brief:true + 紧凑输出；L2 份不带 brief ----
+// ---- S33 简洁审计：单份 delegated L1（无 --batch）→ 台账 brief:true + 紧凑输出；L2 份不带 brief ----
 {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-bt4-'));
   fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
@@ -956,6 +958,102 @@ const writeTrust = (root, cfg) => {
       JSON.stringify({ status: r.status, stderr: r.stderr }));
     fs.rmSync(root, { recursive: true, force: true });
   }
+}
+
+// ---- S43 关单即归档（2026-10-13 archive-on-close；B9 自源仓回灌随件测试）：终态家族超窗 → git mv 进 archive ----
+// 需真实 git 仓库（归档走 git mv）；家族原子：intent+plan 同进同退。月份断言锚定「实时今月」——
+// 与源仓同口径（台账终态锚 = 实时 now，归档月 = 家族最晚终态月），跨月运行需随今月更新断言。
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-arch-'));
+  const git = (...a) => spawnSync(process.platform === 'win32' ? 'git.exe' : 'git', a, { cwd: root, encoding: 'utf8' });
+  git('init', '-q');
+  git('config', 'user.email', 't@t');
+  git('config', 'user.name', 't');
+  const ip = path.join(root, 'workflow', 'intents');
+  const pp = path.join(root, 'workflow', 'plans');
+  fs.mkdirSync(ip, { recursive: true });
+  fs.mkdirSync(pp, { recursive: true });
+  fs.mkdirSync(path.join(root, 'workflow', 'archive'), { recursive: true }); // 归档约定在场（启用条件）
+  // 家族：intent（本次关单）+ plan（已 done 且正文变更在 30 天前 → 超窗）
+  fs.writeFileSync(path.join(ip, '2026-09-01-fam.md'), '---\n状态: approved\n级别: L1\n确认指纹: aaaa1111aaaa1111\n---\n# I\n\n## 验收标准（可测试）\n- [x] 通过（证据:测试全绿）\n', 'utf8');
+  fs.writeFileSync(path.join(pp, '2026-09-01-fam.md'), '---\n状态: done\n级别: L1\n---\n# P\n\n## 改动方案\n- 正文\n', 'utf8');
+  git('add', '-A');
+  spawnSync(process.platform === 'win32' ? 'git.exe' : 'git', ['commit', '-q', '-m', 'c1'], { cwd: root, env: { ...process.env, GIT_AUTHOR_DATE: '2026-09-01T10:00:00+08:00', GIT_COMMITTER_DATE: '2026-09-01T10:00:00+08:00' } });
+  const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-01-fam.md', '--delegated', '可以'],
+    { cwd: root, encoding: 'utf8', env: { ...process.env, CONFIRM_DOC_TEST_NOW: '2026-10-13' } });
+  const intentArchived = fs.existsSync(path.join(root, 'workflow', 'archive', '2026-10', 'intents', '2026-09-01-fam.md'));
+  const planArchived = fs.existsSync(path.join(root, 'workflow', 'archive', '2026-10', 'plans', '2026-09-01-fam.md'));
+  check('S43 关单即归档：终态家族整族 git mv 进 archive（intent+plan 同批）',
+    r.status === 0 && intentArchived && planArchived && /📦 归档/.test(r.stdout),
+    JSON.stringify({ status: r.status, stdout: String(r.stdout).slice(-300), stderr: String(r.stderr).slice(-200), intentArchived, planArchived }));
+  check('S43b 归档后活跃目录不再留该家族', !fs.existsSync(path.join(ip, '2026-09-01-fam.md')) && !fs.existsSync(path.join(pp, '2026-09-01-fam.md')));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- S44 归档边界：本次确认的家族即时归档（窗口对其冗余）；未涉及的家族不越权清理 ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-arch2-'));
+  const git = (...a) => spawnSync(process.platform === 'win32' ? 'git.exe' : 'git', a, { cwd: root, encoding: 'utf8' });
+  git('init', '-q');
+  git('config', 'user.email', 't@t');
+  git('config', 'user.name', 't');
+  const ip = path.join(root, 'workflow', 'intents');
+  fs.mkdirSync(ip, { recursive: true });
+  fs.mkdirSync(path.join(root, 'workflow', 'archive'), { recursive: true }); // 归档约定在场（启用条件）
+  // 本次确认的家族（刚落终态 → 即时归档，窗口不适用）
+  fs.writeFileSync(path.join(ip, '2026-10-12-fresh.md'), '---\n状态: approved\n级别: L1\n确认指纹: bbbb2222bbbb2222\n---\n# I\n\n## 验收标准（可测试）\n- [x] 通过（证据:测试全绿）\n', 'utf8');
+  // 未涉及的家族（同为终态、超窗、零引用——但不在本次确认范围，须留守）
+  fs.writeFileSync(path.join(ip, '2026-09-01-other.md'), '---\n状态: done\n级别: L1\n---\n# I2\n\n## 验收标准（可测试）\n- [x] 通过（证据:测试全绿）\n', 'utf8');
+  git('add', '-A');
+  spawnSync(process.platform === 'win32' ? 'git.exe' : 'git', ['commit', '-q', '-m', 'c1'], { cwd: root, env: { ...process.env, GIT_AUTHOR_DATE: '2026-10-12T10:00:00+08:00', GIT_COMMITTER_DATE: '2026-10-12T10:00:00+08:00' } });
+  const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-10-12-fresh.md', '--delegated', '可以'],
+    { cwd: root, encoding: 'utf8', env: { ...process.env, CONFIRM_DOC_TEST_NOW: '2026-10-13' } });
+  check('S44 本次确认家族即时归档（窗口对刚过确认门的终态件冗余）',
+    r.status === 0 && fs.existsSync(path.join(root, 'workflow', 'archive', '2026-10', 'intents', '2026-10-12-fresh.md')) && /📦 归档/.test(r.stdout),
+    JSON.stringify({ status: r.status, stdout: String(r.stdout).slice(-200), stderr: String(r.stderr).slice(-200) }));
+  check('S44b 未涉及的家族不越权清理（历史积压走 archive-sweep 手工批次）',
+    fs.existsSync(path.join(ip, '2026-09-01-other.md')),
+    JSON.stringify({ exists: fs.existsSync(path.join(ip, '2026-09-01-other.md')) }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- S45 归档约定缺席 → 不启用（未采纳归档的仓库不凭空造目录）；env 逃生门 CONFIRM_DOC_NO_ARCHIVE ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-arch3-'));
+  const git = (...a) => spawnSync(process.platform === 'win32' ? 'git.exe' : 'git', a, { cwd: root, encoding: 'utf8' });
+  git('init', '-q');
+  git('config', 'user.email', 't@t');
+  git('config', 'user.name', 't');
+  const ip = path.join(root, 'workflow', 'intents');
+  fs.mkdirSync(ip, { recursive: true });
+  fs.writeFileSync(path.join(ip, '2026-09-01-noconv.md'), '---\n状态: approved\n级别: L1\n确认指纹: cccc3333cccc3333\n---\n# I\n\n## 验收标准（可测试）\n- [x] 通过（证据:测试全绿）\n', 'utf8');
+  git('add', '-A');
+  spawnSync(process.platform === 'win32' ? 'git.exe' : 'git', ['commit', '-q', '-m', 'c1'], { cwd: root, env: { ...process.env, GIT_AUTHOR_DATE: '2026-09-01T10:00:00+08:00', GIT_COMMITTER_DATE: '2026-09-01T10:00:00+08:00' } });
+  const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-01-noconv.md', '--delegated', '可以'],
+    { cwd: root, encoding: 'utf8', env: { ...process.env, CONFIRM_DOC_TEST_NOW: '2026-10-13' } });
+  check('S45 无 workflow/archive/ 约定 → 不归档、不造目录',
+    r.status === 0 && fs.existsSync(path.join(ip, '2026-09-01-noconv.md')) && !fs.existsSync(path.join(root, 'workflow', 'archive')) && !/📦 归档/.test(r.stdout),
+    JSON.stringify({ status: r.status, stdout: String(r.stdout).slice(-200) }));
+  // S45b 有归档约定 + CONFIRM_DOC_NO_ARCHIVE=1 → 逃生门生效（关单不归档）
+  const root2 = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-arch4-'));
+  const git2 = (...a) => spawnSync(process.platform === 'win32' ? 'git.exe' : 'git', a, { cwd: root2, encoding: 'utf8' });
+  git2('init', '-q');
+  git2('config', 'user.email', 't@t');
+  git2('config', 'user.name', 't');
+  const ip2 = path.join(root2, 'workflow', 'intents');
+  fs.mkdirSync(ip2, { recursive: true });
+  fs.mkdirSync(path.join(root2, 'workflow', 'archive'), { recursive: true });
+  fs.writeFileSync(path.join(ip2, '2026-09-01-optout.md'), '---\n状态: approved\n级别: L1\n确认指纹: dddd4444dddd4444\n---\n# I\n\n## 验收标准（可测试）\n- [x] 通过（证据:测试全绿）\n', 'utf8');
+  git2('add', '-A');
+  spawnSync(process.platform === 'win32' ? 'git.exe' : 'git', ['commit', '-q', '-m', 'c1'], { cwd: root2, env: { ...process.env, GIT_AUTHOR_DATE: '2026-09-01T10:00:00+08:00', GIT_COMMITTER_DATE: '2026-09-01T10:00:00+08:00' } });
+  const r2 = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-01-optout.md', '--delegated', '可以'],
+    { cwd: root2, encoding: 'utf8', env: { ...process.env, CONFIRM_DOC_TEST_NOW: '2026-10-13', CONFIRM_DOC_NO_ARCHIVE: '1' } });
+  check('S45b CONFIRM_DOC_NO_ARCHIVE 逃生门：关单成功且不归档（状态已置 done）',
+    r2.status === 0 && /状态: done/.test(fs.readFileSync(path.join(ip2, '2026-09-01-optout.md'), 'utf8'))
+      && !fs.existsSync(path.join(root2, 'workflow', 'archive', 'intents')) && !/📦 归档/.test(r2.stdout),
+    JSON.stringify({ status: r2.status, stdout: String(r2.stdout).slice(-200) }));
+  fs.rmSync(root, { recursive: true, force: true });
+  fs.rmSync(root2, { recursive: true, force: true });
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

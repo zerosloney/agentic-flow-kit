@@ -26,7 +26,7 @@ import { spawnSync } from 'node:child_process';
 import { gateSeg, finishSegs, makeCollector, appendSegs } from './gate-seg.mjs';
 
 // 门禁 ROI 插桩（2026-10-08 gate-roi-metrics）：本模块承载的检查 2/9/11/12/13 同样需要计入门禁成本
-// 统计——尤其检查 11（调两个生成器 --check 的 spawn 子进程）与检查 13（调 sh rule-budget.sh）是耗时大户，
+// 统计——尤其检查 11（调两个生成器 --check 的 spawn 子进程）与检查 13（调 rule-budget.mjs）是耗时大户，
 // 不插桩就等于把最贵的两段排除在度量之外。collector 由 check-loop 传入（它持有全局 warnings/blockers），
 // 未传时跳过插桩（纯函数直测场景零副作用）。判据单源见 gate-seg.mjs。
 
@@ -43,7 +43,7 @@ export function runCheckHygiene(ctx) {
   // --- 2. 模板字段占位符残留 [warning]（排除运行时文件名格式与协议样板，口径沿 sh 版）---
   markGate('2', '模板字段占位符残留');
   {
-    const phRe = /YYYY-MM-DD|<主题>|<日期 主题>|L0 \/ L1 \/ L2 \/ L3|draft \/ approved \/ done|open \/ fixed \/ closed/;
+    const phRe = /YYYY-MM-DD|<主题>|<日期 主题>|L1 \/ L2 \/ L3|draft \/ approved \/ done|open \/ fixed \/ closed/;
     const boilerRe = /\.\.\/specs\/[A-Za-z0-9-]*\.md|写明如何满足|防复发验证|_YYYY-MM-DD\.|format\('YYYY-MM-DD'\)|value-format="YYYY-MM-DD"|确认结果：approved（YYYY-MM-DD 用户对话内确认）；done（YYYY-MM-DD 关单，随入口文档置终态）/;
     // plan 确认节样板豁免（2026-10-03 plan-confirm-boiler）：plan 模板「确认与复核」节自带
     // 「确认结果：approved（YYYY-MM-DD 用户对话内确认）；done（YYYY-MM-DD 关单，随入口文档置终态）」
@@ -145,13 +145,13 @@ export function runCheckHygiene(ctx) {
     }
   }
 
-  // --- 13. 常驻面体积预算 [warning]（判定单源 rule-budget.sh；无 sh 环境静默跳过——advisory，pre-commit 硬拦兜底）---
+  // --- 13. 常驻面体积预算 [warning]（判定单源 rule-budget.mjs——2026-10-13 自 .sh 移植 node，恒可跑）---
   markGate('13', '常驻面体积预算');
   {
-    const rb = path.join(ROOT, '.agents', 'scripts', 'rule-budget.sh');
+    const rb = path.join(ROOT, '.agents', 'scripts', 'rule-budget.mjs');
     const budgets = path.join(ROOT, '.agents', 'rule-budgets.txt');
     if (fs.existsSync(rb) && fs.existsSync(budgets)) {
-      const r = spawnSync('sh', [rb, '--all'], { cwd: ROOT, encoding: 'utf8' });
+      const r = spawnSync(process.execPath, [rb, '--all'], { cwd: ROOT, encoding: 'utf8' });
       if (!r.error && r.status !== 0) {
         const head = `${r.stdout || ''}${r.stderr || ''}`.split('\n').slice(0, 5).map((l) => '    ' + l).join('\n');
         warnings.push(`- [WARN 常驻面超限] 常驻面体积超预算(先删除或下沉被取代条目再增——一进一出):\n${head}`);

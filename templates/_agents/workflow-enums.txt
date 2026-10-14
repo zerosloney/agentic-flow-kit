@@ -16,4 +16,11 @@ doc.status.terminal=done superseded cancelled
 doc.status.abandoned=superseded cancelled
 incident.status.all=open fixed closed
 incident.status.active=open
-level.all=L0 L1 L2 L3
+# 归因枚举（2026-10-13 自 Shipyard 回灌 incident-attribution）：归因检查（B6b 落地后编号以 check-loop.mjs 头部清单为准）校验 incident frontmatter 的「来源:」/「影响环境:」。
+#   source = 谁发现（self=AI 自查 / user=用户报出 / test=测试或实测暴露 / monitor=监控告警）
+#   env    = 缺陷触达的环境（none=未触达任何运行环境，如仅静态检查发现）
+# 锚前存量不回填；新 open 件必填（生效锚随 B6b 归因检查落地）。
+incident.source.all=self user test monitor
+incident.env.all=dev staging prod none
+# 级别三档（2026-10-13 L0 退役自源仓收敛系列 1 回灌）：L1 = 一份 plan 即入口（协作道）；L2/L3 = 防御道。
+level.all=L1 L2 L3

@@ -5,25 +5,30 @@
 ---
 # PLAN — <与入口文档同名主题>
 <!-- 与 intents/ 或 incidents/ 下同名入口文档配对；L2/L3 必须先有 ../specs/ 同名 spec 确认通过；AI 起草、用户对话内确认后开工 -->
-<!-- frontmatter 受限子集（2026-09-13）：状态∈draft/approved/done/superseded/cancelled（严格枚举，附注写备注键）；级别∈L0/L1/L2/L3；正文不再写状态/级别行 -->
+<!-- frontmatter 受限子集（2026-09-13）：状态∈draft/approved/done/superseded/cancelled（严格枚举，附注写备注键）；级别∈L1/L2/L3；正文不再写状态/级别行 -->
 <!-- L1 极简形态（Quick-Plan，与 fill-plan.mjs 单源一致）：单/少文件微改动只填「改动方案」+「约束与风险」+「验证计划」三节（L1 主节标题模板正文用「改动面」，fill-plan 生成「改动方案」——check-loop 证据校验对 改动面/任务拆解/改动方案 三种节名均识别为声明文件来源）——改动方案逐条列改哪个文件做什么（判据细节直接写进条目），验证计划一行静态门 + 按需 UI 实测；任务拆解/执行顺序仅 L1 多文件多步骤时保留 -->
+<!-- L1 直达（2026-10-13 自 Shipyard 回灌）：新单用 fill-plan.mjs --level L1，本文件即入口，不另立 intent（无同名 intent/incident 时起草门放行；文件已在则级别以文件为准，禁用 --level L1 放行存量 L2 plan）。修复类另保留 ../incidents/ 同名件 -->
 <!-- 待澄清标记（2026-10-12 needs-clarification）：判据不明 / 依赖不确定 / 用户没说的细节，照实写一行
      `- 待澄清：<你卡在哪>`，不要猜（语义说明同 specs 模板：占位符=忘了填，本标记=我不知道）。
      起草不拦，draft→approved 确认时仍挂着会被 confirm-doc 拒绝；解决后改行首为 `- 已澄清：` 或删行。 -->
 
-对应入口：../intents/YYYY-MM-DD-<主题>.md 或 ../incidents/YYYY-MM-DD-<主题>.md（保留实际一项）
-对应 spec：../specs/YYYY-MM-DD-<主题>.md（L1 可省略）
+对应入口：L1 = 本 plan。修复类另保留 ../incidents/YYYY-MM-DD-<主题>.md。L2/L3 = ../intents/YYYY-MM-DD-<主题>.md
+对应 spec：../specs/YYYY-MM-DD-<主题>.md（仅 L2/L3）
 
 ## 改动面（L1 极简形态主节；L2/L3 可作任务拆解的汇总或删本节）
 - <文件/组件>：<做什么；判据细节直接写进条目，如「L771 message.success 改『更新成功』」>
+<!-- build.md 确认的改动清单确认后回填本节落盘（对话留痕仅供当次）——改动面 + 任务勾选态 + git status = 会话重入三锚（2026-10-11 session-context，自 Shipyard 回灌） -->
 
 ## 任务拆解（L2/L3 必填；L1 仅多文件多步骤时用，单任务微改动删本节）
-1. <任务>
+<!-- 任务即勾选态（2026-10-11 session-context，自 Shipyard 回灌）：完成一项立刻勾选并回填留痕；压缩 / 新会话续作先读本表勾选态 + git status 重建进度，禁凭记忆补勾 -->
+- [ ] 1. <任务>
    - 判据：<怎样算完成；尽量对应一个测试或可复现操作>
    - 风险：低 / 中 / 高（<原因>）
-2. <任务>
+   - 留痕：（勾选时回填 commit SHA / 测试名 / 实测输出）
+- [ ] 2. <任务>
    - 判据：…
    - 风险：…
+   - 留痕：…
 
 ## 执行顺序（L2/L3 必填；L1 单文件微改动删本节）
 <1 → 2 → 3；标注依赖关系>

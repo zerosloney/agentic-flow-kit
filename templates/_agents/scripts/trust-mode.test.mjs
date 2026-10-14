@@ -30,7 +30,7 @@ const mkfix = () => {
   fs.writeFileSync(path.join(d, '.agents', 'workflow-enums.txt'),
     ['doc.status.all=draft approved done superseded cancelled', 'doc.status.confirmed=approved done superseded cancelled',
       'doc.status.active=draft approved', 'doc.status.terminal=done superseded cancelled', 'doc.status.abandoned=superseded cancelled',
-      'incident.status.all=open fixed closed', 'incident.status.active=open', 'level.all=L0 L1 L2 L3'].join('\n') + '\n');
+      'incident.status.all=open fixed closed', 'incident.status.active=open', 'level.all=L1 L2 L3'].join('\n') + '\n');
   fs.writeFileSync(path.join(d, '.agents', 'workflow-modules.txt'), '# modules\npipeline\nui\n');
   return d;
 };

@@ -24,7 +24,7 @@ const r = spawnSync(process.execPath, [
 const out = `${r.stdout || ''}${r.stderr || ''}`;
 check('fresh init exit 0', r.status === 0, `exit=${r.status}\n${out.split('\n').slice(-30).join('\n')}`);
 const kit = JSON.parse(fs.readFileSync(path.join(dir, '.agents', 'kit.json'), 'utf8'));
-check('新装 audit 为 false 且 policyVersion 为 8（2026-10-13 ledger-shard-default：新装即带 doc 链锚，分片默认写入口径的前提）', kit.audit === false && kit.policyVersion === 8, JSON.stringify({ audit: kit.audit, policyVersion: kit.policyVersion }));
+check('新装 audit 为 false 且 policyVersion 为 12（2026-10-13 B6b-2 回灌对齐源仓 v12：新装即带全锚——§21–26 六段 + §3x + 复核上下文；新装空台账零回溯）', kit.audit === false && kit.policyVersion === 12, JSON.stringify({ audit: kit.audit, policyVersion: kit.policyVersion }));
 // 模板下发感知初始锚（2026-10-06 template-downstream）：有包源模板对应的 owned 条目带 srcSha256＝
 // 包源模板原文 LF 归一 sha；生成器目标（INDEX.md 类）排除出感知面无该键
 {

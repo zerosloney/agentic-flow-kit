@@ -42,6 +42,14 @@ const W = (root, rel, content) => { fs.mkdirSync(path.join(root, path.dirname(re
   // root 不可访问 → exit 1（不抛异常）
   const r3 = runCheckLoop({ root: path.join(root, '不存在目录') });
   check('run：root 不可访问 → exit 1（同款报错语义）', r3.exitCode === 1, `exit=${r3.exitCode}`);
+  // 分道 mode opt（2026-10-13 B6b-1）：缺省=硬门（上方缺配对即拦）；'hygiene' 只跑卫生段（硬违例不出）；
+  // 'all' 两段都跑（等价分道前裸跑全量）。
+  const rHy = runCheckLoop({ root, mode: 'hygiene' });
+  check('run：mode=hygiene 只跑卫生段——L2 缺配对不出（exit 0 blockers 空）',
+    rHy.exitCode === 0 && rHy.blockers.length === 0, `exit=${rHy.exitCode} b=${rHy.blockers.length}`);
+  const rAll = runCheckLoop({ root, mode: 'all' });
+  check('run：mode=all 两段都跑——同样拦 L2 缺配对',
+    rAll.exitCode === 1 && rAll.blockers.some((b) => b.includes('配对断裂')), `exit=${rAll.exitCode}`);
   fs.rmSync(root, { recursive: true, force: true });
 }
 

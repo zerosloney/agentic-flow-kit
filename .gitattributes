@@ -6,7 +6,6 @@
 *.cjs text eol=lf
 templates/_githooks/* text eol=lf
 templates/_agents/hooks/local-pre-commit text eol=lf
-templates/_agents/hooks/check-pairing-incremental.sh text eol=lf
 
 # 门禁本体完整性门的受检面（除 .mjs 外）必须 LF——2026-10-13 engine-integrity-live
 # 本门的判据是「盘面工作树字节的 sha256 ↔ 入库基线 engine-lock.json」。core.autocrlf=true

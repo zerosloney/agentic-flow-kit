@@ -21,7 +21,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
 const KINDS = ['require', 'fix', 'verify', 'review', 'deploy'];
-const LEVELS = ['L0', 'L1', 'L2', 'L3'];
+const LEVELS = ['L1', 'L2', 'L3']; // L0 已退役（2026-10-13 自源仓收敛系列 1 回灌）——级别三档，L1 = 一份 plan 即入口
 const TERMINAL = ['done', 'superseded', 'cancelled', 'closed'];
 const FIX_CAP = 3;
 const GIT_NEVER_FLAGS = ['--no-verify', '-n']; // 不变量：任何 git 调用不得携带（防御性断言，正常路径不会拼出）
@@ -122,7 +122,7 @@ export function stageBar(run) {
         : [['Plan', ['intent-fill', 'intent-draft', 'intent-confirm', 'incident-fill', 'incident-draft', 'incident-confirm', 'triage'].includes(s)],
           ['Design', ['spec-fill', 'spec-draft', 'spec-review', 'spec-confirm'].includes(s)],
           ['Build', ['plan-fill', 'plan-draft', 'plan-confirm', 'changes-confirm', 'implement', 'fix', 'changes-verify'].includes(s)],
-          ['Test', ['verify', 'review', 'closeout', 'done-confirm', 'incident-fixed-confirm', 'incident-closed-confirm', 'direct-commit', 'direct-edit'].includes(s) || s === 'done']];
+          ['Test', ['verify', 'review', 'closeout', 'done-confirm', 'incident-fixed-confirm', 'incident-closed-confirm', 'direct-commit'].includes(s) || s === 'done']];
   const curIdx = seq.findIndex(([, cur]) => cur);
   return seq.map(([name], i) => mk(name, i < curIdx ? 'past' : i === curIdx ? 'cur' : 'future')).join(' ');
 }
@@ -342,7 +342,7 @@ function advance(ctx, run, opt) {
             instructions: [
               '1. 读 .agents/scripts/level-criteria.mjs 判据单源（L2_SURFACES 触达面闭集 / L1 默认档 / L3_SURFACES 结构面；new-task.md 只承载流程表，判据一律看单源；机器面可先跑 `flow-kit route --kind require` 取路径下限提示）',
               `2. 对需求定级：「${run.requirement}」${run.hint ? `（预判参考：${run.hint}）` : ''}`,
-              '3. 回填：next --triage "kind=require|fix|verify|review|deploy level=L0-L3 module=<词表> topic=<英文kebab>"',
+              '3. 回填：next --triage "kind=require|fix|verify|review|deploy level=L1-L3 module=<词表> topic=<英文kebab>"',
             ],
             context: { docPath: '.agents/commands/new-task.md', kbHits: [], stderrTail: '', relatedDocs: ['workflow/INDEX.md'] },
             constraints: ['判级就高不就低；勾红线必 L2+；module 取 .agents/workflow-modules.txt 词表'],
@@ -360,8 +360,7 @@ function advance(ctx, run, opt) {
         run.docs = run.docs || { entry: null, spec: null, plan: null };
         // 路由
         run.stage = K() === 'verify' ? 'verify' : K() === 'review' ? 'review-only' : K() === 'deploy' ? 'deploy-check'
-          : K() === 'require' && L() === 'L0' ? 'direct-edit'
-            : K() === 'fix' ? 'incident-fill' : 'intent-fill';
+          : K() === 'fix' ? 'incident-fill' : 'intent-fill';
         continue;
       }
       run.stage = 'intent-fill'; continue;
@@ -489,7 +488,7 @@ function advance(ctx, run, opt) {
       const rel = `workflow/plans/${today()}-${topic()}.md`;
       run.docs.plan = rel;
       if (!docState(ctx, rel)) {
-        const r = runNode(ctx, run, 'fill-plan.mjs', ['--level', L() === 'L0' ? 'L1' : L(), '--topic', topic(), '--output', rel]);
+        const r = runNode(ctx, run, 'fill-plan.mjs', ['--level', L(), '--topic', topic(), '--output', rel]);
         if (r.exit !== 0) stopGateFail(ctx, run, s, [`fill-plan exit ${r.exit}（G1 前置门或参数）：${(r.stderr || r.stdout).split(/\r?\n/).slice(-3).join(' | ')}`]);
       }
       run.stage = 'plan-draft';
@@ -667,22 +666,7 @@ function advance(ctx, run, opt) {
       stopConfirm(ctx, run, rest[0], `${label}——逐份原话，一次一份（余 ${rest.length} 份）`, true);
     }
 
-    if (s === 'direct-edit') {
-      if (!opt.files) {
-        issueWO(ctx, run, wo(run, {
-          kind: 'implement', title: `L0 直改：${briefReq(run)}`, goal: 'docs/样式微调，无行为影响——直接改后提交',
-          instructions: ['1. 按需求直接修改目标文件', '2. 完成后回填：next --files "…"（脚本核对改动面并走 pre-commit 提交）'],
-          context: { docPath: '', kbHits: run.lastKbHits || [], stderrTail: '', relatedDocs: [] },
-          constraints: ['L0 语义：无行为影响；越此范围=判级错误，停机上报改判'],
-          acceptance: ['git 改动 ⊆ 回填清单', 'pre-commit 门通过'],
-        }), 'direct-edit');
-      }
-      const a = checkAuthorized(ctx, run, opt.files);
-      if (!a.ok) stopGateFail(ctx, run, s, a.problems);
-      const c = docsCommit(ctx, run, run.lastFiles, `docs(${run.triage.module}): ${briefReq(run)}（L0，pipeline-run ${run.runId}）`);
-      if (!c.ok) stopGateFail(ctx, run, s, [c.msg]);
-      stopDone(ctx, run);
-    }
+    // direct-edit 分支随 L0 退役删除（2026-10-13 自源仓收敛系列 1 回灌）——最低档 L1 走 intent+plan 闭环。
 
     if (s === 'verify-only') { run.stage = 'verify'; continue; }
     if (s === 'review-only') {

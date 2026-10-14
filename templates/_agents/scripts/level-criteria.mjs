@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // level-criteria.mjs — 风险级别判定的**机器单源**（2026-10-13 flow-kit-route）
 //
-// 为什么有它：风险级别（L0-L3）此前只以**散文**形态存在于 `new-task.md`「级别判断」节——
+// 为什么有它：风险级别（L1-L3；2026-10-13 L0 退役，自源仓收敛系列 1 回灌）此前只以**散文**形态存在于 `new-task.md`「级别判断」节——
 // L2 四类触达面、L3 结构面、负例、自查句全都写给人读。后果有二：
 //   ① 定级是纯自由心证，AI 每次判级都可能不同，门禁无从校验「判低」是否守约；
 //   ② 想让 CLI 接管路由（`flow-kit route`），就没有可执行的判据可调，只能复读 md。
@@ -19,13 +19,12 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-export const LEVELS = ['L0', 'L1', 'L2', 'L3'];
+export const LEVELS = ['L1', 'L2', 'L3'];
 export const HINTS_REL = '.agents/level-hints.txt';
 
 // 档位语义（new-task.md 引用本段，不复述——单源纪律）
 export const LEVEL_MEANING = {
-  L0: '文档/样式微调（无行为影响）——直接 commit，豁免 intent',
-  L1: '实现级改动（未命中 L2/L3）——快车道：轻量 intent/plan + 实现',
+  L1: '实现级改动（未命中 L2/L3）——一份 plan 即入口（协作道，不另立 intent）',
   L2: '规则/契约（一处改、多处依赖）——入口文档 + spec + plan 三件套',
   L3: '数据与运行时结构（schema / 迁移 SQL / DI 链 / 认证与中间件管线）——同 L2 + spec 新会话独立复核',
 };
@@ -71,10 +70,10 @@ export function maxLevel(a, b) {
 // parseLevelHints：读 hints 清单。行格式 `L3 <ERE>`，ERE 为 grep -E 兼容正则，匹配仓库相对路径（/ 分隔）。
 //   非法档位 / 语法错误的行 → fail-loud 抛错（防静默空洞：写错配置比没配置更危险——没配置会提示，写错会误判）。
 // 三条收紧（2026-10-13 executor-review，全部来自实测复现，不是假想）：
-//   ① **只收 L2 / L3**。本清单语义是「哪些路径一碰就至少是 L2/L3」，L0/L1 行不构成任何门槛——
+//   ① **只收 L2 / L3**。本清单语义是「哪些路径一碰就至少是 L2/L3」，L1 行不构成任何门槛——
 //      而此前接受 L0 会被提交面判低门当真：`L0 ^docs/` 会让纯文档提交被硬拦，修法还让人
-//      「升级至 L0 及以上」（L0 即最低档，荒谬）。写这种行的人本意多半是「这里是 L0 区」，
-//      那正是不该登记的面——故按写错配置处理，fail-loud 点名。
+//      「升级至 L0 及以上」（L0 即最低档，荒谬；该档位已随 2026-10-13 L0 退役整体消失）。
+//      写这种行的人本意多半是「这里是低风险区」，那正是不该登记的面——故按写错配置处理，fail-loud 点名。
 //   ② **行内 `#` 注释 fail-loud**。ERE 取整行剩余部分（`(\S.*)$`），所以 `L3 ^a\.sql$  # 注释`
 //      会把注释编进正则：若路径含 `$` 锚点，该条**永不命中**且无任何报错——路径下限与提交面兜底
 //      同时静默失效，而 `--check` 还报「N 条有效」。这正是随包模板原先示例的写法（评审实测）。
@@ -92,7 +91,7 @@ export function parseLevelHints(text) {
     const re = m[2];
     if (level !== 'L2' && level !== 'L3') {
       errs.push(`第 ${i + 1} 行：档位只能是 L2 或 L3（实际 ${level}）——本清单只登记「一碰就至少是中/高风险面」的路径下限；`
-        + `L0/L1 不构成门槛，登记了只会让提交面判低门对无关改动出手。若本意是「这里是低风险区」，那就不该登记`);
+        + `L1 不构成门槛（L0 已退役），登记了只会让提交面判低门对无关改动出手。若本意是「这里是低风险区」，那就不该登记`);
       return;
     }
     // 行内注释检测：空白后的未转义 #。ERE 里的 `#` 若被转义（\#）或前面不是空白（形如 `^src/#old/`）则放行。
@@ -171,7 +170,7 @@ export function routeAdvice(level, _ctx = {}) {
     lines.push(`【L3 结构面】`);
     for (const s of L3_SURFACES) lines.push(`  · ${s}`);
   }
-  if (L === 'L1' || L === 'L0') {
+  if (L === 'L1') {
     lines.push('');
     lines.push(`【负例 · 命中即不得升 L2/L3】`);
     for (const s of L1_NEGATIVES) lines.push(`  · ${s}`);
@@ -220,7 +219,7 @@ if (process.argv[1] && path.resolve(process.argv[1]).endsWith(path.join('scripts
     const r = checkHintsFile(path.resolve(file));
     if (r.ok === false) {
       console.error(`[level-hints 配置有误] ${file}\n${String(r.error).split('\n').map((l) => `  ${l}`).join('\n')}`);
-      console.error('  修法：按 `<档位> <ERE>` 格式修正（档位 ∈ L0-L3，ERE 为 grep -E 兼容正则）——'
+      console.error('  修法：按 `<档位> <ERE>` 格式修正（档位 ∈ L2|L3，ERE 为 grep -E 兼容正则）——'
         + '写错配置比没配置危险：没配置会提示补配置，写错会误判档位');
       process.exit(1);
     }

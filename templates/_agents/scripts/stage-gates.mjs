@@ -6,15 +6,18 @@
 //   incident 入口 = 文件存在 + 「时间线」小节内、行首列表条目含「用户确认」（原 maintain.md §3 约定；
 //     2026-09-30 复核 P2-1 收窄为小节内行首条目；第三轮复核 P1-1 起接受日期前缀形态，与模板样例一致）；
 //     状态 ∈ {open, fixed, closed}（spec/plan 须先于 fixed 起草，故 open 即为有效态）。
-//   入口「级别」须 ∈ L0-L3；缺失即拒（fail-closed）——**但库存量形态短路**（`流程: legacy` 或 日期早于
+//   入口「级别」须 ∈ L1-L3（2026-10-13 L0 退役，自源仓收敛系列 1 回灌；L0 → suspect 走 fail-closed）；
+//     缺失即拒（fail-closed）——**但库存量形态短路**（`流程: legacy` 或 日期早于
 //     确认门生效日）：跳过级别校验与 spec 档（2026-09-30 增量复核 N1——存量最可能缺级别，硬拒会锁死
 //     spec 起草与确认）。
 //   注意：**库存量信号本身即等于「入口已确认」**（judgeDoc：`台账行 || 存量口径`，与检查 15 / 检查 1 /
 //     配对门的既有口径一致——早于确认门生效日的自报日期即存量豁免，不要求另有台账行）；此处「短路」
 //     只额外豁免**级别前置与 spec 档**，不是对台账要求的二次豁免（P2-1：原注释把二者写反，已订正）。
 //   plan 门追加：入口级别（取入口 frontmatter 级别，不取工具 --level）为 L2/L3 时，同名 spec 须已确认（同口径）。
+//   L1 即入口例外（2026-10-13 自 Shipyard 回灌）：同名 intent/incident 均无时，级别 L1 的 plan 自身即入口，
+//     起草/确认门放行（文件已在则级别以文件 frontmatter 为准，禁用 --level L1 放行存量 L2 plan）。
 //   探索泳道豁免（2026-09-30 hybrid-governance-explore-hardening）：同名 intent 仍为 draft 且风险泳道为
-//     L0/L1（级别优先；级别缺失或非法时回落 risk_level——fill-intent 双写同值）→「先起草后确认」是协作道
+//     L1（级别优先；级别缺失或非法时回落 risk_level——fill-intent 双写同值）→「先起草后确认」是协作道
 //     语义（check-loop 检查 19 同款豁免口径），放行 spec/plan 起草与确认；L2/L3 防御道维持入口确认前置。
 //     incident 入口不豁免（过目留痕本就轻量）。收口由 check-loop --hardening 加固门兜底（入 main 前须
 //     intent approved/done + spec/plan 在场）。
@@ -146,31 +149,50 @@ export function specConfirmed(root, base) {
 // suspect 消费规则（双严）：红线类检查按 low 执行（拦红线）；豁免类门（起草豁免/--batch/--auto/加固门
 // lane/泳道豁免/逐阶段深度）按 high 执行（不豁免）。取代原三处并存语义（任一低即低 / 级别优先回落 / 仅级别）。
 export function laneOfEntry(level, risk, riskLevelSince, date) {
-  const L = /^L[0-3]$/.test(level || '') ? level : '';
+  const L = /^L[1-3]$/.test(level || '') ? level : '';
   if (!L) return 'suspect';
-  const R = /^L[0-3]$/.test(risk || '') ? risk : '';
+  const R = /^L[1-3]$/.test(risk || '') ? risk : '';
   const dualProtocol = !!riskLevelSince && /^\d{4}-\d{2}-\d{2}$/.test(date || '') && date >= riskLevelSince;
-  if (dualProtocol) return (R && R === L) ? ((L === 'L0' || L === 'L1') ? 'low' : 'high') : 'suspect';
+  if (dualProtocol) return (R && R === L) ? (L === 'L1' ? 'low' : 'high') : 'suspect';
   if (R && R !== L) return 'suspect';
-  return (L === 'L0' || L === 'L1') ? 'low' : 'high';
+  return L === 'L1' ? 'low' : 'high';
 }
 
 // laneOfDoc：非 intent 件（spec/plan/incident——级别单字段协议）：合法按值判，非法 → suspect。
 export function laneOfDoc(level) {
-  if (!/^L[0-3]$/.test(level || '')) return 'suspect';
-  return (level === 'L0' || level === 'L1') ? 'low' : 'high';
+  if (!/^L[1-3]$/.test(level || '')) return 'suspect';
+  return level === 'L1' ? 'low' : 'high';
 }
 
 // draftGateFor：起草门总判（kind = 'spec' | 'plan'，fill 工具与 confirm-doc 逐阶段门共用）
-export function draftGateFor(kind, root, base) {
+// opts.level（可选，2026-10-13 自 Shipyard 回灌）：仅供 plan「L1 即入口」例外取级别——文件未落盘时认
+// fill 工具传入的 --level；confirm-doc 调用（confirmGateFor）不传，落盘后级别一律以文件 frontmatter 为准。
+export function draftGateFor(kind, root, base, opts = {}) {
   const entry = entryConfirmed(root, base);
   if (!entry.ok) {
-    // 探索泳道豁免（2026-09-30 hybrid-governance-explore-hardening）：L0/L1 draft intent 放行起草
+    // 探索泳道豁免（2026-09-30 hybrid-governance-explore-hardening）：L1 draft intent 放行起草
     // ——「先动手后确认」；泳道取法自 2026-10-02 caliber-convergence 起单源 laneOfEntry（方案 C 分歧
     // 双严：suspect 不豁免——级别/risk_level 缺失、非法或分歧均按防御道走入口确认）。
     const lane = laneOfEntry(entry.level, entry.risk, loadKitPolicy(root).riskLevelSince, entry.date);
     if (entry.kind === 'intent' && entry.status === 'draft' && lane === 'low') {
       return { ok: true, entry, laneBypass: true };
+    }
+    // L1 plan 即入口（2026-10-13 自 Shipyard 回灌）：没有 intent/incident 时，这份 plan 自己就是入口。
+    // 文件已在则级别以文件为准（禁止用 --level L1 把已有 L2 plan 放行）；尚未落盘才认 opts.level。
+    if (kind === 'plan' && entry.kind === null) {
+      const planAbs = path.join(root, 'workflow', 'plans', `${base}.md`);
+      const declared = fs.existsSync(planAbs) ? readFm(planAbs, '级别') : (opts.level || '');
+      if (declared === 'L1') {
+        return {
+          ok: true,
+          entry: {
+            ok: true, kind: 'plan', rel: `workflow/plans/${base}.md`, level: 'L1',
+            status: fs.existsSync(planAbs) ? (readFm(planAbs, '状态') || 'draft') : 'draft',
+            selfEntry: true, legacy: false,
+          },
+          laneBypass: true,
+        };
+      }
     }
     return {
       ok: false,
@@ -183,11 +205,11 @@ export function draftGateFor(kind, root, base) {
   // spec 起草与确认。注意：库存量信号**本身即等于入口已确认**（judgeDoc 的 `台账行 || 存量口径`，
   // 与检查 1 / 15 / 配对门同口径）——台账豁免发生在 judgeDoc，不在本处；本处不做二次豁免
   // （第三轮复核 P2-1：原句「台账要求不豁免」把两件事写反，已订正）。
-  if (!entry.storageLegacy && !/^L[0-3]$/.test(entry.level)) {
+  if (!entry.storageLegacy && !/^L[1-3]$/.test(entry.level)) {
     return {
       ok: false,
       reason: `入口缺合法「级别」字段（现「${entry.level || '缺失'}」，无法判定前置深度）`,
-      hint: '先给入口补「级别: L0-L3」字段，再继续',
+      hint: '先给入口补「级别: L1-L3」字段，再继续',
     };
   }
   if (kind === 'plan' && !entry.storageLegacy && (entry.level === 'L2' || entry.level === 'L3')) {

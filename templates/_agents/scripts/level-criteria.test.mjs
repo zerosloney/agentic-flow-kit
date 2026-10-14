@@ -29,14 +29,14 @@ const throwsCode = (fn, code) => {
 
 // ============ 场景 1：档位闭集与排序原语 ============
 {
-  check('S1 档位闭集为 L0-L3', JSON.stringify(C.LEVELS) === JSON.stringify(['L0', 'L1', 'L2', 'L3']));
-  check('S1 rankOf 大小写不敏感', C.rankOf('l2') === 2 && C.rankOf('L3') === 3 && C.rankOf('L0') === 0);
-  check('S1 rankOf 非法档返回 null', C.rankOf('L9') === null && C.rankOf('') === null && C.rankOf(undefined) === null);
+  check('S1 档位闭集为 L1-L3（L0 已退役）', JSON.stringify(C.LEVELS) === JSON.stringify(['L1', 'L2', 'L3']));
+  check('S1 rankOf 大小写不敏感', C.rankOf('l2') === 1 && C.rankOf('L3') === 2);
+  check('S1 rankOf 非法档返回 null（含已退役的 L0）', C.rankOf('L9') === null && C.rankOf('L0') === null && C.rankOf('') === null && C.rankOf(undefined) === null);
   check('S1 maxLevel 取高', C.maxLevel('L1', 'L3') === 'L3' && C.maxLevel('L3', 'L1') === 'L3');
   check('S1 maxLevel 同档幂等', C.maxLevel('L2', 'L2') === 'L2');
   check('S1 maxLevel 单边非法时取合法侧', C.maxLevel('L9', 'L2') === 'L2' && C.maxLevel('L1', 'L9') === 'L1');
   check('S1 maxLevel 双边非法返回空串（不假装判得出）', C.maxLevel('L9', 'X') === '');
-  check('S1 maxLevel 小写输入归一为大写', C.maxLevel('l0', 'l2') === 'L2');
+  check('S1 maxLevel 小写输入归一为大写', C.maxLevel('l1', 'l2') === 'L2');
 }
 
 // ============ 场景 2：hints 解析 —— 注释/空行/CRLF/档位前缀 ============
@@ -160,8 +160,10 @@ const throwsCode = (fn, code) => {
   const l3 = C.routeAdvice('L3', { hintsConfigured: true });
   check('S7 L3 同时输出 L2 触达面与 L3 结构面', C.L2_SURFACES.every((s) => l3.includes(s)) && C.L3_SURFACES.every((s) => l3.includes(s)));
 
+  // L0 已退役（2026-10-13 自源仓收敛系列 1 回灌）：不在 LEVELS 闭集 → routeAdvice 只报「未知档」，
+  // 不再有语义行、也不产生下溢（下溢概念随 L0 退役消失）。
   const l0 = C.routeAdvice('L0', { hintsConfigured: true });
-  check('S7 L0 归一为语义行（无下溢）', l0.includes('建议级别：L0'));
+  check('S7 已退役的 L0 → 无语义行（未知档），不产生下溢', l0.includes('建议级别：L0 —— （未知档）') && !l0.includes('【负例'));
 
   // 2026-10-13 executor-review：hints 未配置 / 低于下限两条**状态**信息已移出 routeAdvice，
   //   改由 route 的降级块（executor.mjs degradations）单一输出——原实现把同一事实在文本面打两遍。

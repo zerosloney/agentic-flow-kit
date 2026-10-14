@@ -7,7 +7,7 @@
 // 默认路径（无 --gate-stats）下 segs 只在内存里攒、不打印不写盘 → 输出契约逐字节不变（硬约束：
 // pre-push / pre-commit 消费者 + doctor 的 WARN 行计数 + check-loop.test.mjs 223 断言全依赖它）。
 //
-// 耗时口径**刻意包含子进程时间**（检查 11 调两个生成器 --check、检查 13 调 sh rule-budget.sh）——
+// 耗时口径**刻意包含子进程时间**（检查 11 调两个生成器 --check、检查 13 调 rule-budget.mjs）——
 // 门禁真实成本本就要含子进程；不做剔除，但看板与 spec 均显式声明该口径防误读。
 export function gateSeg(collector, id, label) {
   const now = Date.now();

@@ -4,8 +4,11 @@
 #   正则语法错误行 → 门禁 fail-closed 阻断（防静默空洞，修配置后重试）。
 # 语义：命中任一模式 = 本次改动触及「一处定义、多处消费」的契约 / 规则面（L2 触达面，
 #   判据单源见 .agents/scripts/level-criteria.mjs 的 L2_SURFACES）。此时须有活跃（draft/approved / open/fixed）
-#   L2/L3 入口罩着；活跃入口全为 L0/L1 会被 pre-commit「触达面判低」拦截（三选修法见门禁消息）。
+#   L2/L3 入口罩着；活跃入口全为 L1 会被 pre-commit「触达面判低」拦截（三选修法见门禁消息）。
 #   无任何活跃入口时仅 advisory——docs / bootstrap 豁免类改动（new-task.md §intent 豁免）不受阻。
+# 漏登面审计：node .agents/scripts/lane-surface-audit.mjs（advisory，恒 exit 0）——近窗口（默认 30 天）
+#   L2/L3 任务反复触及（≥3 个不同入口文档）却无文件被本清单命中的目录 = 候选漏登面，供人工评估补登；
+#   月度手跑，改共享契约频繁期可随时跑（候选 ≠ 必登——高频触及 ≠ 契约面，机器不猜语义）。
 # 本仓默认面（引擎 / 契约面，行为承载目录——commands/roles 纯提示文本属 docs 级不列入；按项目自行改）：
 ^templates/
 ^\.agents/(scripts|hooks)/

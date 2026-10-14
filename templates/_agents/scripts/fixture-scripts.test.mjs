@@ -83,7 +83,12 @@ const synth = (files) => {
 {
   const dest = path.join(tmpRoot('copy'), 'scripts');
   const copied = copyScriptClosure(dest, ['check-loop.mjs']);
-  check('S7 check-loop 闭包含新台账依赖', ['check-loop.mjs', 'ledger-loader.mjs', 'ledger-prune.mjs'].every((f) => copied.includes(f)), copied.join(','));
+  check('S7 check-loop 闭包含新台账依赖（含 policy.mjs——B6b-1 分道/policy 锚随闭包自动跟随）', ['check-loop.mjs', 'ledger-loader.mjs', 'ledger-prune.mjs', 'policy.mjs'].every((f) => copied.includes(f)), copied.join(','));
+  // B6b-2 六段模块（2026-10-13）：check-loop.mjs import 的段模块须随闭包自动带上——漏拷 = 被测脚本
+  // 在夹具里 resolve 失败 → 门禁静默不跑（本文件头注的假绿形态）。显式断言六件在场，不靠运气。
+  check('S7 check-loop 闭包含 B6b-2 六段模块（import 闭包自动跟随）',
+    ['check-spec-verif.mjs', 'check-registry.mjs', 'check-convergence.mjs', 'check-attribution.mjs', 'check-prejudgment.mjs', 'check-funnel.mjs'].every((f) => copied.includes(f)),
+    copied.join(','));
   check('S7 拷贝后 assertFixtureScripts 不炸（闭包自洽）', assertFixtureScripts(dest) === true);
   // 真跑一次被测脚本，确认夹具不是「文件齐了但跑不起来」
   const fx = path.dirname(dest);

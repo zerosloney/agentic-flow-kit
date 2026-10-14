@@ -1,9 +1,9 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-13T10:16:59.729Z",
+  "generatedAt": "2026-10-14T02:35:42.200Z",
   "files": {
     ".github/workflows/ci.yml": {
-      "sha256": "ae6b751a29ce08f28f8831fc9b64770acce4d42fc6a5bd60286eca67e8488bd9",
+      "sha256": "e9cffb90dec8f0a49bfe231a13fb8df375a2494cc75c38d991b5eb7c7be104b5",
       "hard": 3
     },
     ".github/workflows/release.yml": {
@@ -11,7 +11,7 @@
       "hard": 0
     },
     "templates/AGENTS.md": {
-      "sha256": "013df60e0236f3bbd22ca9d8140cc922cdfd603a3efdf58b13a95a6e561d0017",
+      "sha256": "521b8549ce077278f31074db10f1934bc7f63788d43a6bb68f1c1510ad31cf82",
       "hard": 27
     },
     "templates/_agents/control-surfaces.txt": {
@@ -19,11 +19,11 @@
       "hard": 29
     },
     "templates/_agents/lane-surfaces.txt": {
-      "sha256": "e378c19f5a85bd9118a1e2e04fb18645482990e886df32ea97c4d65411d850e6",
+      "sha256": "5bc5f0738a4a5d618a3f20ac052cd7f7dc41e4da45f4d0015567a4bc3dd63ddf",
       "hard": 5
     },
     "templates/_agents/level-hints.txt": {
-      "sha256": "6cb3a2c9f2bdd9b0f859c3eb67c310e2dab12d8777a5bd82a31a8634890b0a43",
+      "sha256": "4f665117af0b82a9856b3c03056e30b13496f864ca8398538ca43c38be32f50c",
       "hard": 0
     },
     "templates/_agents/metric-claims.txt": {
@@ -31,39 +31,79 @@
       "hard": 8
     },
     "templates/_agents/rule-budgets.txt": {
-      "sha256": "cd5fee0ae3eebe0398f2b15d4c801bc7f30c4ec20d46508033eeebb4a417a960",
+      "sha256": "300a79e35ae7c2e5caf824b95a71e1eaf4755ecc0ade1d25374533abacf8ab16",
       "hard": 3
     },
     "templates/_agents/scripts-test-exempt.txt": {
-      "sha256": "05a96ae19289deb074392ca4de212aa277dabf2ea8bc7be8bceb9f3c7a234fbd",
-      "hard": 5
+      "sha256": "7fba8ab2a2d0c40b9211165beb832dc81b1ac4ddb4d4fdc9fe35010a6159cbf7",
+      "hard": 6
     },
     "templates/_agents/scripts/agg-gate-stats.mjs": {
-      "sha256": "488517dfdc37b79b327e1f47603c94fc1fc236145d12df213e6ce2de60f11730",
+      "sha256": "80d10a917a864910f62714423d0740e4bee6cc4e4621a01384e67f77409e4d82",
       "hard": 0
     },
+    "templates/_agents/scripts/agg-judgments.mjs": {
+      "sha256": "3967acc21b247045cca8c1549a19f9b7fccf610696496128e824335d3e6e7958",
+      "hard": 0
+    },
+    "templates/_agents/scripts/archive-sweep.mjs": {
+      "sha256": "2d7270d0ded58d0639d1b1eefb8b521895a702f9dec43f9fa4cd485432e56bda",
+      "hard": 0
+    },
+    "templates/_agents/scripts/check-attribution.mjs": {
+      "sha256": "6ac53c734112fda2516eaaf7be50f22c8975e49faa07aefdc374021517c5aa24",
+      "hard": 0
+    },
+    "templates/_agents/scripts/check-convergence.mjs": {
+      "sha256": "e82743bc750f2d22b32ae97a56245b74440efbc4c7862e7345f97632769d5a28",
+      "hard": 1
+    },
     "templates/_agents/scripts/check-engine-integrity.mjs": {
-      "sha256": "e62a23c861d060ee74f15aae57410cfce8e644e29517ebc5b1c1c3d85e5935c1",
+      "sha256": "ec90678bcee52bfa475ff277d2743f3af751d372ea52f09ecb91226f5af8f89d",
       "hard": 2
     },
+    "templates/_agents/scripts/check-funnel.mjs": {
+      "sha256": "629036bdf08a48fc14076a11d8c95f7f7a5465fdb9bf3263d0ae049cf47b9fa3",
+      "hard": 0
+    },
     "templates/_agents/scripts/check-hygiene.mjs": {
-      "sha256": "0fecd44c28f1b5759a4bb01f3c19213cace48a162e27802f2f1c1df67eec15ff",
+      "sha256": "cfcd35e29ee42e9096804e7a34872fa2259bf3856944aa9fd7b776c220e9bccc",
       "hard": 0
     },
     "templates/_agents/scripts/check-lane-surface.mjs": {
-      "sha256": "c22ad9ab80070051d2c9db344f407c70e9d9a2815dc0c73066f43bc16592bf98",
+      "sha256": "419a46ac34a25ab4f2ccff51e52b91e6212991bc6898b9d3c92cce4f49f6c116",
       "hard": 2
     },
     "templates/_agents/scripts/check-ledger-invariant.mjs": {
-      "sha256": "ad078ef238ee7d732c7008a5bfbfa993f783ba21bf2c1344e83b7be73475aff9",
+      "sha256": "56e66f0e066f889383a71415cc02f6268cbfbca8a80671454cca61a2aad25d33",
       "hard": 2
     },
     "templates/_agents/scripts/check-loop.mjs": {
-      "sha256": "a7af1f7c065b20e81b137027d02762d1414ea2ead778e45b5f17dcb7c14017f4",
+      "sha256": "0ee83322c22ab5300976ede2593c98c0d20abf840850191257833c9ef79490a5",
       "hard": 32
     },
     "templates/_agents/scripts/check-metric-claims.mjs": {
       "sha256": "2c2d8615e9418117d43202dc67cd4131e43fb6c095686363dfcd2fd2cb542f2a",
+      "hard": 0
+    },
+    "templates/_agents/scripts/check-prejudgment.mjs": {
+      "sha256": "8f83a97ed907441cdf7819e64282bd04f65588991c63b491404d62e5d2644bec",
+      "hard": 0
+    },
+    "templates/_agents/scripts/check-registry.mjs": {
+      "sha256": "0033655ef873230d94820300ea6c86529b87d2506903b7f42fb91cfbf5beda63",
+      "hard": 0
+    },
+    "templates/_agents/scripts/check-scope.mjs": {
+      "sha256": "241dcd001ce2afa3ccfd7aeba79cd1f8d33ded34efcd3b119f2f811311d1c68c",
+      "hard": 1
+    },
+    "templates/_agents/scripts/check-scripts-syntax.mjs": {
+      "sha256": "0a6db271a1e02dae8e10ef197ff51376d256da844e9d83df4806d3cf50ac0454",
+      "hard": 3
+    },
+    "templates/_agents/scripts/check-spec-verif.mjs": {
+      "sha256": "5a3d719bcc2d4e506609259f5e5b9412e2bf206ddc8bbd9154129ac8e0c95ebf",
       "hard": 0
     },
     "templates/_agents/scripts/check-stage-index.mjs": {
@@ -75,7 +115,7 @@
       "hard": 1
     },
     "templates/_agents/scripts/confirm-doc.mjs": {
-      "sha256": "c2e9851a4455a94b97cbd2e4034e8d9779c8d5d7c8eb43494aff96054359c1f1",
+      "sha256": "d3011a109b7e9af6d01314911c3c5f4d8de52a39c57e98fafc4541389d2b9d74",
       "hard": 13
     },
     "templates/_agents/scripts/draft-sediment.mjs": {
@@ -83,7 +123,7 @@
       "hard": 1
     },
     "templates/_agents/scripts/edit-face-check.mjs": {
-      "sha256": "24faba555101f0aacd652e3728c99982f95461cd57de844f9483df6a6923d1fa",
+      "sha256": "83b23ae5cd3b147c06e18d1e1c63c834b9deb9173101ba526c2f329fd697e20f",
       "hard": 0
     },
     "templates/_agents/scripts/ensure-board.mjs": {
@@ -91,35 +131,43 @@
       "hard": 0
     },
     "templates/_agents/scripts/fill-intent.mjs": {
-      "sha256": "b5e386e2a088c2cfbb9101379233295ce199d668866ddef596140fc76db6d766",
+      "sha256": "a1af15bb10f01678ad70cc2fffe803909cc48571bb123b5c1e9a0c1a2f0ef9ca",
       "hard": 1
     },
     "templates/_agents/scripts/fill-plan.mjs": {
-      "sha256": "ea60a3e478236e4fc3b25c84bb74217f3eb5130968d3165665e17ae7cc2329af",
+      "sha256": "aeeaf9a39e0faebb56b5626ac2dbd5dc3e80635799a52ce2f52d0a17fb1241a5",
       "hard": 1
     },
     "templates/_agents/scripts/fill-spec.mjs": {
-      "sha256": "27aa4d55a9c17be40b8c3a89191b3336661340ca975cf04397dd62afe4ec2431",
+      "sha256": "0b583862ce06fa2d8a31d64a1e2283d383bfc24d511bbe881630e4a5aaf7cfc8",
       "hard": 1
     },
     "templates/_agents/scripts/fixture-scripts.mjs": {
-      "sha256": "9f27ff097b8a4172de5f96aa23c1c625801bc5625e2434c332c30482b1761380",
+      "sha256": "4652c35fbc0a34f1782707d06c1b332d4202034ee3519a098ac6c4afdb1afe7d",
       "hard": 0
     },
     "templates/_agents/scripts/gate-checklist.mjs": {
-      "sha256": "99ec369fddee6867a2baeced610760e58a3f85506f95f8a4131bcc584a3a3109",
+      "sha256": "8617dcb996ec15fc1a607beaec6970fee4890df79bd5ac96298c1545ef36c9c9",
       "hard": 1
     },
     "templates/_agents/scripts/gate-seg.mjs": {
-      "sha256": "b579593ff67e7876e4e1051f62c9a7451032fb2255a2efe5e437a6a2e2c1ce9f",
+      "sha256": "bf0b7957ef5e5b7d62c225fc8484392af8ce82ff79b6e59da733a134a4a836f9",
       "hard": 0
+    },
+    "templates/_agents/scripts/gen-effective-policy.mjs": {
+      "sha256": "25da0aadb569708770e8d2ee9492a480ed71da12d70e505871e06964c4ed6d13",
+      "hard": 1
+    },
+    "templates/_agents/scripts/gen-verify-evidence.mjs": {
+      "sha256": "54a9ba0beed820d5a37de7a7762cdb37076871e260506e54b6987b6631bb9804",
+      "hard": 1
     },
     "templates/_agents/scripts/gen-wiki-board.mjs": {
       "sha256": "c0e86110c8b686b591080f836d7cde6dc4a933820541ceb35928ac249b5d0fb6",
       "hard": 6
     },
     "templates/_agents/scripts/gen-workflow-dashboard.mjs": {
-      "sha256": "335485bf6979b43f642e613abae951b69ad4d6b6ed0b026dfdde7f14cd2aebdc",
+      "sha256": "699cd362e78baef7a52df96bcfb85b26db5870d26cadc4250b05b77fbca19804",
       "hard": 0
     },
     "templates/_agents/scripts/gen-workflow-index.mjs": {
@@ -127,20 +175,32 @@
       "hard": 3
     },
     "templates/_agents/scripts/gen-workflow-metrics.mjs": {
-      "sha256": "c91b6ff9fd5e3b391c8c50af1d68f35058286ef432dddb325f284e0d60833d56",
+      "sha256": "80cb5b1ede6400e118f92abea35416ed7a480f9c9ed78dd3fa68210dd2c85da9",
       "hard": 2
+    },
+    "templates/_agents/scripts/git-core.mjs": {
+      "sha256": "a74de2c43a5f4ab0444411f2164828b5e92794b2594723f1b6fd6e13d84156cc",
+      "hard": 0
     },
     "templates/_agents/scripts/git-merge-jsonl.mjs": {
       "sha256": "e8c037dcce1f9e52dd9d63ef812ce3ace03f1ecf3e55cb363e58bd8b50352655",
       "hard": 2
+    },
+    "templates/_agents/scripts/judgment-ledger.mjs": {
+      "sha256": "b98e5f06541c180bf5fc4479f40c06310c707eb8f4e090ed65fe0c8d37f5d2fb",
+      "hard": 0
     },
     "templates/_agents/scripts/kb-cache-evict.mjs": {
       "sha256": "bd74ac72e611142e839df76e80e22d8e9c6b351dc498c7bb07e807d2e32e7fdb",
       "hard": 0
     },
     "templates/_agents/scripts/kb-search.mjs": {
-      "sha256": "3439e59cdafc8a52549fc8cee3bab8eaec384e4761d3f87a7f18db0a8e289d0c",
+      "sha256": "b80b843fec87053058f4e8ca442c2d12ce5f5cd9b2377903ef9d5270b60142ca",
       "hard": 7
+    },
+    "templates/_agents/scripts/lane-surface-audit.mjs": {
+      "sha256": "3fc9157219de4c35a8828902c4bdb223fee41a9fbc3db79e7d9fb4bbb677dcbb",
+      "hard": 0
     },
     "templates/_agents/scripts/ledger-loader.mjs": {
       "sha256": "855619ec778eae07540f71ebab0c2f30de0e6b97b522ad69e4d1757cc4202713",
@@ -150,9 +210,21 @@
       "sha256": "82ca3086bf76087ece4436bf2c23a2e102c22dffd6c987c08096286c3d16a0b7",
       "hard": 0
     },
+    "templates/_agents/scripts/ledger-shards.mjs": {
+      "sha256": "2f925919aa88e4ac53bca54706d04e3dbda8f4d51c23120924b32d8b73e5961d",
+      "hard": 0
+    },
     "templates/_agents/scripts/level-criteria.mjs": {
-      "sha256": "384fc339ba1d24815a1db226cb8be165b4c042b983bc7af6c6623114ddc35234",
+      "sha256": "fe605f053aee21804e5a2d920830e17f7ef1c2935bd8ec3e0ca9aeca0de181c1",
       "hard": 1
+    },
+    "templates/_agents/scripts/papercut-debt-controller.mjs": {
+      "sha256": "4e96b4fcb9500c42598afa54d0f3b9f515c11c4512dc4da180830c896e2d564a",
+      "hard": 0
+    },
+    "templates/_agents/scripts/papercut-debt-sensor.mjs": {
+      "sha256": "c4a1376d0e09dcb3e62bbf1019d10ed5f950cf3073c8096bba4e746035ff8cd4",
+      "hard": 0
     },
     "templates/_agents/scripts/pipeline-run-docs.mjs": {
       "sha256": "d54085b21d857f4db6df7d5fc7b6a65ffc2391c9e0f100754d1e76a844a318c1",
@@ -163,23 +235,39 @@
       "hard": 0
     },
     "templates/_agents/scripts/pipeline-run.mjs": {
-      "sha256": "6cdf2de3bcbf94d59ccf5e6c4015e89b6032c844c2cc540fdc4f9e02244faa9c",
+      "sha256": "d3c964c132f3a085f84589447e6f700dead02b441f012511ab913bf975955f79",
       "hard": 0
     },
     "templates/_agents/scripts/policy.mjs": {
-      "sha256": "eab1a54334d83b93f276593be4e10a17af7734a7c44f8c28a6383946f735613e",
+      "sha256": "b51e1b4ca949b25d9c26df512612ff05ff82031890d0b8dbc7beb7aa34270f1b",
       "hard": 0
+    },
+    "templates/_agents/scripts/resolve-merge-conflicts.mjs": {
+      "sha256": "da2a4438414b440fb2e7f3fa3579589f2eb9148550925e8736022736c3016e9f",
+      "hard": 0
+    },
+    "templates/_agents/scripts/rewrite-file.mjs": {
+      "sha256": "690de4ddf6c521646c197e138f9adb4c50ad9dd53fb448cef7a6565419361651",
+      "hard": 4
+    },
+    "templates/_agents/scripts/rule-budget.mjs": {
+      "sha256": "34b90d916632d7b44bf4283da364117d128e0f30255a064e57bb50b35a493905",
+      "hard": 0
+    },
+    "templates/_agents/scripts/run-tests.mjs": {
+      "sha256": "3fe3fa3f7b31a7e93878ae08cd4d4db4a5fc2abf2013feeba637f369b49f6d2a",
+      "hard": 3
     },
     "templates/_agents/scripts/solidify-task.mjs": {
       "sha256": "5e5983b9ab6ae4eaaeced150018592b2501c4d6885b4913d03c6f29138630825",
       "hard": 3
     },
     "templates/_agents/scripts/stage-gates.mjs": {
-      "sha256": "6c70ff01f785d19dfa7206cc01c1608baa3249ba59f57190b19b64f318e34e72",
+      "sha256": "ed9bfe9e239cc087fadc8ec14f3bf61df6b11f6bf76596bce40e2cf2432bb71a",
       "hard": 0
     },
     "templates/_agents/scripts/trust-mode.mjs": {
-      "sha256": "5800b52af787d6b3fd9a8ea314b36466e19a3adc90f70e93c5054cd530c68bff",
+      "sha256": "ad5d784056fc2d6436ac5c9e0b5beee8bd5e6a5dc94987f06cf8d5e71eb24aff",
       "hard": 1
     },
     "templates/_agents/scripts/verify-wiki-consistency.mjs": {
@@ -187,11 +275,11 @@
       "hard": 4
     },
     "templates/_agents/scripts/verify.mjs": {
-      "sha256": "a40a23193dae79e189c9c7b1f8b1c4c6e1865baa94052c85ed59802864aa46b9",
+      "sha256": "193d50f69ddca0e4044ecb3dd55b6f524c4920e0b75a929df2d1f2371254c107",
       "hard": 3
     },
     "templates/_agents/scripts/wf-journal.mjs": {
-      "sha256": "b14620e5c9f9c930f4a916084543ce190a135216f11bc4150dcb246c8cdb0e83",
+      "sha256": "302e9f6deb96d4b40b8a220f7ae773e44b59abd3313c8dd62a27eb239f11f4c1",
       "hard": 1
     },
     "templates/_agents/scripts/wiki-search.mjs": {
@@ -211,8 +299,8 @@
       "hard": 1
     },
     "templates/_agents/workflow-enums.txt": {
-      "sha256": "b28a83418133e24f3e4daee7f454c4f31ac98a943a94aa33008a944ae751d25a",
-      "hard": 8
+      "sha256": "bf42380a5ad11d418717af1847a8d9ba8bfca5eafe320959603d4d76103410b2",
+      "hard": 10
     },
     "templates/_agents/workflow-modules.txt": {
       "sha256": "d03593598f6b0495ebc650019c474da0d6538da06c6f58ccc00bd5a9cdc760f1",
@@ -227,19 +315,19 @@
       "hard": 0
     },
     "templates/_githooks/pre-commit": {
-      "sha256": "483643fcc4981b71acabb9cdf1353a8ad0220d6a8b3bbac3c1318a811e79c780",
-      "hard": 4
+      "sha256": "4300376c2b68a6ce8c2cab664358159e9256857907a907cc66b9715d4c50b6da",
+      "hard": 6
     },
     "templates/_githooks/pre-merge-commit": {
-      "sha256": "ab6d11707e78ac19261bc7d667056f7721466456d443cabf85ad7ba24dc797ac",
-      "hard": 1
+      "sha256": "7b283e7779a53ee036098443afcc774ad5e3efa849734ac50de42c4cf8866a80",
+      "hard": 2
     },
     "templates/_githooks/pre-push": {
-      "sha256": "c28d0c19204f0202dd270bbdb8e9b5d0362e56d67e2fbfbff33267ec7f592c9f",
+      "sha256": "308f2f30e071d0f8e39f085cbb67bc9a21fab94172da6fc0b05013df50336030",
       "hard": 2
     },
     "templates/_github/workflows/kit-ci.yml": {
-      "sha256": "08c6e09992df9c1c3805ded11f01d33cea49ee64c4c5950ba3de15a8227e6464",
+      "sha256": "7cb738f9b1dda787e541e5aab104ef9a651fe18a420fdc55bd761d3c077529b0",
       "hard": 3
     }
   }

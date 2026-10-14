@@ -8,7 +8,7 @@
 // 门禁数与质量指标负相关，但此前无任何数据能回答「该加门还是该拆门」（metrics/DASHBOARD 全部指标
 // 100% 指向产出物、0 条指向门禁自身）。加门是焦虑驱动的唯一理性反应，因为拆门没有依据。
 //
-// 耗时口径**含子进程时间**（检查 11 调两个生成器 --check、检查 13 调 sh rule-budget.sh）——
+// 耗时口径**含子进程时间**（检查 11 调两个生成器 --check、检查 13 调 rule-budget.mjs）——
 // 门禁真实成本本就要含子进程，不做剔除；输出中显式标注防误读为「纯计算耗时」。
 // 坏行容忍跳过（与 confirmations.jsonl / delegations 台账同容错口径）。
 // 用法：node .agents/scripts/agg-gate-stats.mjs [--days 30]
@@ -84,13 +84,13 @@ function main() {
   const { runs, list, noiseTop, dead, costTotal } = aggregate(rows, Date.now(), Number.isFinite(days) ? days : null);
 
   if (!runs || !list.length) {
-    console.log('门禁 ROI：未采集——跑 `node .agents/scripts/check-loop.mjs --gate-stats` 后重试');
+    console.log('门禁 ROI：未采集——跑 `node .agents/scripts/check-loop.mjs --all --gate-stats` 后重试（--all 全段成本面；2026-10-13 分道后裸跑只记硬门段）');
     console.log('（数据落 .agents/cache/gate-stats.jsonl，该目录已 gitignore；首次采集后本表才有内容）');
     return;
   }
 
   console.log(`# 门禁 ROI 聚合（窗口 ${days} 天 / 有效样本 ${runs} 次运行）\n`);
-  console.log('耗时口径**含子进程时间**（检查 11 调生成器 --check、检查 13 调 sh rule-budget.sh）——门禁真实成本，不做剔除。\n');
+  console.log('耗时口径**含子进程时间**（检查 11 调生成器 --check、检查 13 调 rule-budget.mjs）——门禁真实成本，不做剔除。\n');
   console.log('| 检查 | 名称 | 命中/运行 | 拦截 | 警告 | 累计耗时 | 均耗时 | 每次命中警告数 |');
   console.log('|------|------|-----------|------|------|----------|--------|----------------|');
   for (const a of list) {

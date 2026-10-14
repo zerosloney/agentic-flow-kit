@@ -163,8 +163,9 @@ const INTENT = (fm) => `---\n${fm}\n---\n# INTENT — x\n`;
 
   // 无采集态（先于造 cache 生成）：节恒为静态文案，故与有无数据无关
   const rl = gateRoiLines();
+  // 采集命令随 2026-10-13 分道带 --all（全段成本面；裸 --gate-stats 只记硬门段）
   check('门禁ROI：节内容给出采集命令 + 看数值命令 + 无数据时 CLI 自带「未采集」提示（优雅降级不落空节）',
-    rl.join('\n').includes('check-loop.mjs --gate-stats') && rl.join('\n').includes('agg-gate-stats.mjs') && rl.join('\n').includes('未采集'), rl.join('\n'));
+    rl.join('\n').includes('check-loop.mjs --all --gate-stats') && rl.join('\n').includes('agg-gate-stats.mjs') && rl.join('\n').includes('未采集'), rl.join('\n'));
   check('门禁ROI：节内容不含任何耗时/次数运行数值（防检查 11 每次采集报漂移的设计核心）',
     !/\d+\s*(ms|s)\b/.test(rl.join('\n')) && !/运行\s*\d/.test(rl.join('\n')), rl.join('\n'));
   run();

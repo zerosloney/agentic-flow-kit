@@ -4,6 +4,7 @@
 # 新增引擎脚本默认必须带同名 .test.mjs（README 规范条目）；确属库件/工具才登记本文件。
 # 2026-10-09 A2 评估：verify-wiki-consistency 已移出（补测 3 场景）；wiki-search 已移出（转发壳，判定单源 kb-search.test 覆盖）。
 check-metric-claims.mjs | 经 check-loop.mjs 消费 | 由 check-loop.test.mjs 间接覆盖其调用路径
+rule-budget.mjs | 判定器（2026-10-13 自 .sh 移植 node；经 check-hygiene 检查 13 与 pre-commit 消费，Shipyard 侧同无直测） | check-loop.test.mjs 场景 28-30（含 --staged 硬拦两态）+ check-loop-rev.test.mjs 间接覆盖；src/rule-budget.test.mjs 平行实现作口径对照
 ensure-board.mjs | 看板启动器 | 永久工具豁免（需真实端口/进程环境，自动化覆盖无性价比——2026-10-09 engine-quality-round2 A2 评估定性）
 policy.mjs | 库件 | 被 check-loop.test.mjs 直接 import 覆盖
 # 2026-10-12 needs-clarification：stage-gates.mjs 已建同名直测（stage-gates.test.mjs 15 断言），

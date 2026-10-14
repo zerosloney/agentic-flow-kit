@@ -7,6 +7,9 @@ import { createHash } from 'node:crypto';
 import { listTree, scriptTrusted } from './render.mjs';
 import { isOwned, HOSTS, pickStackVars, srcTemplatePath, templateDriftOf, TEMPLATE_DRIFT_EXCLUDE } from './profiles.mjs';
 import { bodySha } from './sync-hosts.mjs';
+// 委派台账分片感知读（2026-10-13 ledger-shard-ledgers 回灌）：快照新鲜度判读的台账文本
+// = 主台账 ∪ delegations.d/*.md，读侧单源复用随包模板模块（§6.5 数据行迁入分片后仍可判陈旧）。
+import { readLedgerText } from '../templates/_agents/scripts/ledger-shards.mjs';
 
 // 宿主目录映射（与 src/profiles.mjs#HOSTS 同源：装副本目录名前缀带点）
 const HOST_DIR = Object.fromEntries(Object.entries(HOSTS).map(([k, v]) => [k, v.dir]));
@@ -328,7 +331,11 @@ export function doctor(args, pkgRoot) {
   if (!clGuard.ok) {
     add('WARN', `check-loop 跳过——${clGuard.note}（供应链防线：目标侧脚本与包源渲染值不符，不执行不下结论）`);
   } else {
-    const cl = spawnSync(process.execPath, ['.agents/scripts/check-loop.mjs'], { cwd: target, encoding: 'utf8' });
+    // 判定流水守卫（2026-10-13 judgment-ledger 回灌 B4）：doctor 是体检探针而非门裁决点，
+    // 不落 .agents/judgments.jsonl（同 validate.mjs 口径；裁决链 = CLI/pre-push/CI/verify 正常落账）
+    // --all 显式全量（2026-10-13 分道后裸跑=默认硬门）：doctor 是体检面，advisory 计数沿分道前全量口径。
+    const cl = spawnSync(process.execPath, ['.agents/scripts/check-loop.mjs', '--all'],
+      { cwd: target, encoding: 'utf8', env: { ...process.env, CHECK_LOOP_NO_LEDGER: '1' } });
     if (cl.status === 0) {
       const warnTxt = String(cl.stderr || '').trim();
       add('PASS', `check-loop 干净${warnTxt ? `（${warnTxt.split('\n').filter((l) => l.includes('WARN')).length} 条 advisory 警告）` : ''}`);
@@ -591,7 +598,9 @@ export function checkDelegationSnapshotFreshness(target) {
   const file = path.join(target, 'workflow', 'delegations.md');
   if (!fs.existsSync(file)) return { stale: false, ledgerMonth: null, snapshotMonth: null, skipped: true, note: 'delegations.md 不存在' };
   let text;
-  try { text = fs.readFileSync(file, 'utf8'); } catch { return { stale: false, ledgerMonth: null, snapshotMonth: null, skipped: true, note: 'delegations.md 不可读' }; }
+  // 分片感知读（2026-10-13 ledger-shard-ledgers）：text = 主台账 ∪ delegations.d/*.md——数据行迁入
+  // 分片后 ledgerMonth 仍取全量数据行最大月，快照陈旧判定不失效（读侧单源 = ledger-shards.readLedgerText）。
+  try { text = readLedgerText(target, 'delegations'); } catch { return { stale: false, ledgerMonth: null, snapshotMonth: null, skipped: true, note: 'delegations.md 不可读' }; }
   const lines = text.split(/\r?\n/);
   let ledgerMonth = null;
   let snapshotMonth = null;

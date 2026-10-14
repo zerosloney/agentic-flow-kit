@@ -15,6 +15,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseStages } from './workflows-check.mjs';
+// 委派台账分片感知读（2026-10-13 ledger-shard-ledgers 回灌）：单源 = ledger-shards.readDelegationsText。
+import { readDelegationsText as readDelegationsShardText } from './ledger-shards.mjs';
 
 function fail(msg) { console.error('❌ ' + msg); process.exit(1); }
 
@@ -162,8 +164,9 @@ if (isMain) {
   fail(`未知命令：${a.cmd ?? ''}（add | status，用法见文件头注释）`);
 }
 function readDelegationsText(file) {
-  const p = file || path.join(process.cwd(), 'workflow', 'delegations.md');
-  try { return fs.readFileSync(p, 'utf8'); } catch { return ''; }
+  // 分片感知读（2026-10-13 ledger-shard-ledgers 回灌）：单源 = ledger-shards.readDelegationsText。
+  //（file 为显式注入路径时只读该文件——测试语义不变；null/默认路径 → 主台账 ∪ delegations.d/*.md）
+  return readDelegationsShardText(process.cwd(), file || null);
 }
 
 function delegationSectionRows(text) {
@@ -172,8 +175,9 @@ function delegationSectionRows(text) {
   const rows = [];
   for (const line of lines) {
     if (/^##\s+/.test(line)) {
-      if (inSec) break;
-      if (/^##\s+委派结果\s*$/.test(line)) inSec = true;
+      // 不 break：合并文本（主台账 ∪ 分片）里 `## 委派结果` 会出现多次，break 会漏掉后续分片的行
+      // （2026-10-13 源仓实测踩中：分片行读不到 → 静默漏报「委派台账未记录」）。
+      inSec = /^##\s+委派结果\s*$/.test(line);
       continue;
     }
     if (!inSec || !/^\s*\|/.test(line)) continue;

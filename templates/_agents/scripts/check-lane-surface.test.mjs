@@ -44,7 +44,7 @@ const base = (root, { level = 'L1', status = 'approved', extra = null } = {}) =>
   w(root, 'workflow/intents/2026-09-28-old-l1.md', intent('x', `状态: ${status}\n级别: ${level}\n日期: 2026-09-28\n模块: pipeline`));
   if (extra) w(root, extra[0], intent('y', extra[1]));
 };
-const FM_L0_NEW = '状态: draft\n级别: L0\n日期: 2026-10-01\n模块: ui';
+const FM_LOW_NEW = '状态: draft\n级别: L1\n日期: 2026-10-01\n模块: ui';
 
 // --- S1：命中 + 活跃 L2 存在 → 豁免放行 ---
 {
@@ -53,7 +53,7 @@ const FM_L0_NEW = '状态: draft\n级别: L0\n日期: 2026-10-01\n模块: ui';
   const r = run(d, { staged: ['templates/_agents/scripts/x.mjs'] });
   check('S1 命中面+活跃 L2 入口 → 放行且无触达面判低输出', r.code === 0 && !r.out.includes('触达面判低'), r.out);
 }
-// --- S2：命中 + 活跃全为 L0/L1 → 阻断 ---
+// --- S2：命中 + 活跃全为 L1（低泳道）→ 阻断 ---
 {
   const d = mkfix();
   base(d);
@@ -63,12 +63,12 @@ const FM_L0_NEW = '状态: draft\n级别: L0\n日期: 2026-10-01\n模块: ui';
       && r.out.includes('workflow/intents/2026-09-28-old-l1.md') && r.out.includes('修法'),
     r.out);
 }
-// --- S2b：多个 L0/L1 活跃 → 点名最新（日期排序）---
+// --- S2b：多个低泳道（L1）活跃 → 点名最新（日期排序）---
 {
   const d = mkfix();
-  base(d, { extra: ['workflow/intents/2026-10-01-new-l0.md', FM_L0_NEW] });
+  base(d, { extra: ['workflow/intents/2026-10-01-new-low.md', FM_LOW_NEW] });
   const r = run(d, { staged: ['templates/t.md'] });
-  check('S2b 多活跃 L0/L1 → 关联入口取最新日期件', r.code === 1 && r.out.includes('2026-10-01-new-l0') && r.out.includes('共 2 件'), r.out);
+  check('S2b 多活跃 L1 → 关联入口取最新日期件', r.code === 1 && r.out.includes('2026-10-01-new-low') && r.out.includes('共 2 件'), r.out);
 }
 // --- S2c：experiment 分支 → 检查 A 降级 advisory ---
 {

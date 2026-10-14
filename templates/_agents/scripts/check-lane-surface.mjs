@@ -8,7 +8,7 @@
 // 检查 A「触达面判低」：暂存 diff 命中项目 L2 触达面（.agents/lane-surfaces.txt，ERE 逐行；
 //   # 注释与空行忽略；文件缺失或清单为空 = 检查跳过，装户无感）时——
 //   存在活跃 L2/L3 入口 → 放行（归因歧义为已知边界：机器不猜「哪个入口在干这批改动」）；
-//   活跃入口全为 L0/L1（含级别缺失）→ hard 拦，点名最新 L0/L1 入口 + 三选修法；
+//   活跃入口全为 L1（含级别缺失）→ hard 拦，点名最新 L1 入口 + 三选修法（2026-10-13 L0 退役，低泳道=L1 专属）；
 //   无任何活跃入口 → 仅 advisory（docs / bootstrap 豁免类改动的合法形态）。
 //   活跃 = intents draft/approved + incidents open/fixed（incident≡intent 等价口径）。
 //   experiment/* 分支降级 advisory（泳道哲学：PoC 免闭环纪律，转正由 pre-push 加固门兜底）。
@@ -17,7 +17,7 @@
 //   标记是加固门覆盖率的前提且补写零成本——advisory 免的是纪律负担，不免标记本身。
 // 判据原则（2026-09-28 台账批量代录事故教训）：只用一手事实——暂存文件清单、
 //   当前分支名、工作区 frontmatter 字段；不用时间戳 / 字符串相等反推过程事实。
-// 边界：git 调用一律 -c core.quotepath=off（非 ASCII 路径教训，同 check-pairing-incremental.sh）；
+// 边界：git 调用一律 -c core.quotepath=off（非 ASCII 路径教训，同 check-pairing-incremental.mjs）；
 //   frontmatter 读取容忍 CRLF（显式按 \r?\n 切分）；detached HEAD 分支不可判 → A 按 strict、
 //   B 跳过（沿 pairing 门先例）；配置行正则语法错误 → fail-closed（防静默空洞）。
 // 已知边界：commit-time 门禁，CI / pre-push 复跑面无对应全量检查（push 时刻无暂存 diff 一手事实，

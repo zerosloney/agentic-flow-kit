@@ -7,6 +7,8 @@
 // 落在目标仓——tracked 过滤按目标仓 HEAD 算，与 git 钩子看到的提交面一致。
 // 只读范围：check-loop 自身仅有的两处落盘都在 .agents/cache/ 运行时缓存（gate-stats 需 --gate-stats
 // 才触发、added-dates 缓存 best-effort），且该目录已 gitignore——本命令不改任何文档与台账。
+// 判定流水（2026-10-13 judgment-ledger 回灌 B4）：check-loop 真实运行会追加 .agents/judgments.jsonl，
+// validate 是探针而非门裁决点（init 装后自检同路径）——挂 CHECK_LOOP_NO_LEDGER 守卫保持只读契约。
 // 不暴露 --rev：runCheckLoop 中 rev 与 root 互斥（提交时点判定属钩子链职责，validate 只看盘面现状）。
 // 输出契约：check-loop 的 HARD-BLOCK/WARN 两段式原样走 stderr（稳定输出契约，消费者 .githooks/pre-push）；
 // stdout 只承载本命令的汇总行 / --json——机器消费者按 stdout 解析，人按 stderr 读明细。
@@ -49,7 +51,10 @@ export async function validate(args, pkgRoot) {
   // 动态 import 包内置引擎：pkgRoot = npx 缓存 / 全局安装 / 仓内直跑三种形态下都指向包源模板
   const engineUrl = pathToFileURL(path.join(pkgRoot, 'templates', '_agents', 'scripts', 'check-loop.mjs')).href;
   const { runCheckLoop } = await import(engineUrl);
-  const result = runCheckLoop({ root: target });
+  process.env.CHECK_LOOP_NO_LEDGER = '1'; // 探针不落判定流水（守卫开关见 judgment-ledger.mjs recordRun）
+  // mode:'all' 显式全量（2026-10-13 分道后裸跑=默认硬门）——validate 自述「全部 20 项检查」且 --strict
+  // 判红的是全量 warning 面，随分道保留原语义须显式声明，勿依赖缺省。
+  const result = runCheckLoop({ root: target, mode: 'all' });
   const code = validateExit(result, strict);
 
   if (json) {

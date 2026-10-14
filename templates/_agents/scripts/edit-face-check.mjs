@@ -4,7 +4,7 @@
 //   工作树编辑期零反馈（实测：常驻面重构砍掉阶段索引，到提交才被检查 7 报警）。本脚本把判定左移到编辑时。
 // 判定零复刻铁律：闭环判定**单源**复用 check-loop——以 CHECK_LOOP_ROOT=<root>（全扫模式，扫工作树
 //   非 HEAD）子进程消费其裁决，本脚本不实现任何门判定；唯一自算是常驻面字节预算 advisory（工作树
-//   LF 字节 vs rule-budgets.txt 上限——提交门口径走 git index/HEAD（rule-budget.sh），两者判据不同面，
+//   LF 字节 vs rule-budgets.txt 上限——提交门口径走 git index/HEAD（rule-budget.mjs），两者判据不同面，
 //   此处为编辑时 advisory，冲突时以提交门为准）。
 // exit 语义：check-loop hard（exit≠0）→ 2；预算 advisory 超限 → 1；其余 → 0。
 //   WARN **不进 exit**（打印明细供 AI/人对照）——绝对 WARN 计数会让带存量 advisory 的仓库恒非零
@@ -53,9 +53,11 @@ export function budgetAdvisory(files, budgetsText) {
 }
 
 // runCheck：工作树面 check-loop（CHECK_LOOP_ROOT 全扫）。返回 { code, output, ms }。
+// --all 显式全量（2026-10-13 分道后裸跑=默认硬门）：本工具的动机就是编辑期暴露卫生面 WARN
+// （如阶段索引漂移——头部动机段），硬门子集满足不了，须显式声明全量。
 function runCheck(root, scriptDir) {
   const t0 = Date.now();
-  const r = spawnSync(process.execPath, [path.join(scriptDir, 'check-loop.mjs')], {
+  const r = spawnSync(process.execPath, [path.join(scriptDir, 'check-loop.mjs'), '--all'], {
     cwd: root, encoding: 'utf8', windowsHide: true,
     env: { ...process.env, CHECK_LOOP_ROOT: root },
   });
@@ -84,7 +86,7 @@ export function main(root = process.cwd(), scriptDir = path.dirname(fileURLToPat
     if (/\[WARN /.test(line)) console.log('  ' + line.trim().slice(0, 200));
   }
   for (const { rel, limit, actual } of over) {
-    console.log(`  ⚠️ 预算 advisory：${rel} 工作树 ${actual}B > 上限 ${limit}B（编辑时口径；提交门以 rule-budget.sh 为准）`);
+    console.log(`  ⚠️ 预算 advisory：${rel} 工作树 ${actual}B > 上限 ${limit}B（编辑时口径；提交门以 rule-budget.mjs 为准）`);
   }
   if (ck.code !== 0) {
     console.error('❌ 闭环判定 hard 未过——先修复再提交（判定单源 check-loop，详见上方输出）');

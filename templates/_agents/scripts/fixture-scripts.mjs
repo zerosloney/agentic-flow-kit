@@ -14,7 +14,7 @@
 //
 // 依赖发现口径（刻意取宽）：**静态 import/export from**、**动态 import()**、以及**裸文件名字面量**
 // （形如 path.join(here, 'kb-search.mjs') 的 spawn 依赖——wiki-search.mjs 就只靠这一条挂住 kb-search；
-// check-hygiene 靠它挂住 rule-budget.sh 与两个生成器）。裸文件名只在**解析到同目录真实文件**时才计入，
+// check-hygiene 靠它挂住 rule-budget.mjs 与两个生成器）。裸文件名只在**解析到同目录真实文件**时才计入，
 // 故 `'../hooks/commit-check.cjs'` 这类跨目录字面量天然被排除（scripts/ 下不存在同名文件）。
 // 宁可多拷（多一个文件不会让测试变假绿），不可漏拷（漏拷就是假绿）。
 import fs from 'node:fs';
@@ -102,7 +102,7 @@ export function scriptClosure(entries, { from = SCRIPT_DIR } = {}) {
 }
 
 // copyScriptClosure：把入口的整个依赖闭包拷进 destScriptsDir，返回实际拷入的文件名。
-// opts.extra —— 额外要拷的同级非脚本件（如 rule-budget.sh 之外的 .txt 词表由 copyAgentsFiles 负责）。
+// opts.extra —— 额外要拷的同级非脚本件（如 rule-budget.mjs 之外的 .txt 词表由 copyAgentsFiles 负责）。
 export function copyScriptClosure(destScriptsDir, entries, opts = {}) {
   const from = opts.from || SCRIPT_DIR;
   fs.mkdirSync(destScriptsDir, { recursive: true });

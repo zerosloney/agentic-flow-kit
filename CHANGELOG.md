@@ -2,6 +2,231 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.8.0
+
+协议级回灌收口（B1–B10b，自 Shipyard.Material 参考实现）：引擎通用能力整体对齐参考仓——门禁面、判定面、
+台账面、观测面、执行面五线同批演进，取 minor 位。本条按能力面组织（不逐批流水账）；各件适配点与源仓
+沿革留痕在包源仓 git 历史，装户径不引实例路径。
+
+- feat(gate)：**门禁去 sh 化 + pre-commit node 化（B2）**——动机：Windows CI / 无 git-bash 装户侧
+  sh 门会静默跳过。① 移植 `templates/_agents/scripts/rule-budget.mjs`（唯一适配：预算表路径
+  `.agents/config/rule-budgets.txt` → kit 平铺 `.agents/rule-budgets.txt`；--all/--staged、退出码、
+  git cat-file 字节口径、缺表 exit 0 逐字对齐），删除 sh 版；`check-hygiene` 检查 13 改 node 直跑
+  （删「无 sh 环境静默跳过」分支，恒可跑）。② 移植 `hooks/check-pairing-incremental.mjs` /
+  `hooks/check-wiki-ledger.mjs`（逐字），删除对应 .sh。③ 新增 `hooks/check-index-incremental.mjs`
+  （workflow/INDEX.md 漂移增量硬拦：暂存触及 workflow 四目录/归档/INDEX.md 时跑 `gen-workflow-index
+  --check`）+ 同名直测 9 断言。④ `.githooks/pre-commit` / `pre-merge-commit` 整体 node 化
+  （CommonJS、无扩展名、shebang 即 node，门脚本缺失 fail-closed）：门序 = 闭环配对(增量) →
+  泳道完整性(增量) → wiki 台账(增量) → 索引漂移(增量，新) → 常驻面体积预算(增量) → 确认台账不变量
+  (暂存触台账，kit 独有：主台账 ∪ `confirmations.d/<doc>.jsonl` 分片触发面与专有文案) → 项目门禁
+  挂载点 → 敏感信息扫描+条件构建（`commit-check.cjs`，MERGE_HEAD 补 `--full`）。适配点：源仓
+  「叙事承重(增量)」门不移植（kit 无对应叙事单源）；`local-pre-commit` **保持 sh 挂载点形态**
+  （add-gate 生态按行写 sh——sh 缺则 bash 执行、存在即执行、缺失 advisory）；experiment/* advisory
+  文案沿 kit（转正由 pre-push 加固门兜底）；泳道完整性/预算门自「旧装副本缺失自然跳过」改
+  fail-closed。⑤ 判据随动：`check-engine-integrity.mjs` 的 `hardUnits` 钩子分支并计 CJS 硬拦形态
+  `process.exit(非零)` 与 sh 形态 `exit 1`（sh 侧计数不变、exit(0) 不计；node 版 pre-commit 计 6 ≥
+  冻结值 4 无收缩）——本门文件头「改判据基线并走评审」的合法演进路径，与 CHANGELOG 同批留痕；
+  `scripts-test-exempt.txt` 登记 `rule-budget.mjs`（判定器，check-loop.test 场景 28-30 间接覆盖）；
+  `engine-lock.json` `--update` 入账（受检面 60→65 件）。⑥ 文案随动：`maintain.md` + 5 宿主
+  `wf-maintain.md`（预算门 `sh … --staged` → `node … rule-budget.mjs --staged`）、`edit-face-check` /
+  `agg-gate-stats` / `gate-seg` / `gen-workflow-dashboard` / `gen-workflow-metrics` / `fixture-scripts` /
+  `check-lane-surface` 引用与注释、两份 `.gitattributes`（删随 .sh 注销的 eol 行）。负例探针：
+  干净合规树 `--staged` exit 0；预算限值压小后 `--staged` exit 1 并点名超限件。
+
+- feat(tools)：**独立工具件四件入库**——① `rewrite-file.mjs`：按行字面替换 + `--expect` 命中数对账 +
+  写后回读校验 + 同目录临时文件原子写——堵 `node -e "s.replace(A,B)"` 对 **CRLF 检出文件**用 `\n`
+  锚串定位时**静默无操作**却照样打印「落盘 OK」的假成功形态（假成功比响亮失败危险：台账/文档被以为
+  改了；0 命中即非零退出且不写盘；另防 find === replace 无操作与目标文件不存在静默建空文件；
+  `--dry-run` 预览、`--allow-multi` 显式声明多命中）。② `git-core.mjs`：引擎 git 调用单源——spawn
+  参数数组不走 shell、win32 `git.exe` 显式解析、`CHECK_LOOP_GIT` 测试注入钩子、瞬时类错误
+  （EAGAIN/EPERM/EMFILE/EINTR）单次重试且重试终败响亮出账、只读查询记忆化（带 error 的基础设施失败
+  不缓存）、maxBuffer 32MB；收编 check-loop 与 stage-gates 的「同口径两份实现」。③
+  `check-scripts-syntax.mjs`：守护者受守护——对 `.agents/scripts` 与 `.agents/hooks` 全部 .mjs/.cjs
+  逐个 `node --check`，任一不可解析判红（先例教训：一处 SyntaxError 带病进 CI，全链门静默失效）；
+  检查目录缺失或可检文件数为 0 一律判红（fail-closed，防「改坏/删脚本即去门」）；只读裁决、零依赖
+  独立调度，verify GATES 首门。④ `run-tests.mjs`：装户侧引擎测试统一入口——`.agents/scripts/
+  *.test.mjs` 并行执行（默认并发 6）、每套件输出缓冲完成即回放、stderr 红套件尾部回放、聚合计数与
+  机器可读汇总行；与包源 `npm test` 同构（逐个 node 直跑，不引 node:test）。四件均同名带测。
+
+- feat(gate)：**越界门与触达面审计（B3）**——两件 advisory 级工具进包。① 移植
+  `templates/_agents/scripts/check-scope.mjs`（+ 同名直测 8 断言）：plan「改动面 / 任务拆解 / 改动方案」
+  节声明清单 ↔ git 变更集双向对账——越界件（改了未声明）advisory 报告、`--strict` 时 exit 1、
+  plan 不可读 exit 2（fail-loud），补 check-loop 检查 8 单向交集不拦夹带的缺口；白名单逐字保留
+  （workflow 四目录 / INDEX.md / confirmations.jsonl / confirmations.d/ 分片 / package-lock.json——
+  kit 装户台账同名）；接线：`build.md` §1.3 自验步点名 `node .agents/scripts/check-scope.mjs
+  workflow/plans/YYYY-MM-DD-<主题>.md`，随 sync-hosts 下发 5 宿主薄适配。② 移植
+  `templates/_agents/scripts/lane-surface-audit.mjs`（+ 同名直测 5 断言）：L2 触达面闭集防漂移审计
+  （恒 exit 0）——近窗口 L2/L3 任务反复触及却无面清单命中的目录 = 候选漏登面；适配 4 处：面清单路径
+  改 kit 平铺 `.agents/lane-surfaces.txt`（主体 + 提示消息）、审计登记行落该文件头注释、面清单解析
+  注释改 kit 口径（kit 无 engine/product 段协议，段标题行同为注释不参与命中）、判据提醒改指 kit 单源
+  「level-criteria.mjs 的 L2_SURFACES」。两件均同名带测、不入 scripts-test-exempt；
+  `engine-lock.json --update` 入账（受检面 +2 件）。
+
+- feat(metrics)：**judgments 判定流水体系**——① `judgment-ledger.mjs`：check-loop 每次真实运行追加
+  一行 per-rule 计数（ts / mode / rev / blockers / warnings / 按标签分规则计数）到
+  `.agents/judgments.jsonl`（本地 gitignore——「本机机器事实不跨机共享」口径，同 verifications.jsonl）；
+  **fail-open**：落账失败只打 stderr，不改门禁裁决（观测面不得挡住裁决面）。② `agg-judgments.mjs`：
+  月度 × 规则聚合查询。③ `templates/_agents/mechanism-registry.md`：机制使用量台账单源（装户自持，
+  sync 永不覆盖）——每个门禁机制登记「触发统计口径 + 退役阈值 + 状态」，**一进一出**（新增机制须点名
+  它替代/合并的既有机制），月度对账由「人工 grep check-loop 输出」改查判定流水；达到阈值的行改
+  「待退役」并填处置期限，退役当日删机制代码 + 测试 + 表更新同一提交完成（不留死代码）；
+  check-loop 检查 22 对本表做 WARN 级格式校验（列数 / 状态枚举 / 待退役处置期限，纯 WARN 永不 hard，
+  对账纪律靠表头「维护纪律」人工执行）。语义：给「advisory→hard 升格」与「机制退役」两条治理动作
+  提供 per-rule 判定数据底座。
+
+- feat(verify)：**绿凭证入库与生效规则视图**——① `gen-verify-evidence.mjs`：verifications.jsonl 是
+  gitignore 的本地台账（跨机不可见），本生成器把全绿行按 headShort 去重渲染进仓内
+  `workflow/verify-evidence.md`——绿凭证从易失升为随库持久、跨机可对质；**追加保全**（仓内既有行不因
+  本地台账缺失被抹掉，同 headShort 取更新 ts——「重跑刷新凭证」语义）；一行 = 「验证时刻的工作树过
+  verify 全量门禁全绿（门数/套件计数）」，归因提醒：短 SHA 只是**基线提交**，不等于被测内容，关单应
+  「先提交、后跑门」；非证据链签名（本地台账可伪造的诚实边界不变），入库摘要只是把「曾有凭证」从
+  易失升为难失。② `gen-effective-policy.mjs`：把 policy.mjs 单源渲染为人可读的
+  `workflow/effective-policy.md`（当前生效 policyVersion、逐锚生效日 / 消费检查项 / hard·advisory·
+  未到期分级现状，锚时 > 今日标注「待升级」）——「存量豁免 vs 受管」的合成语义此前只活在 check-loop
+  源码里，规则空间永久二分且不可读；判定单源仍是 policy.mjs POLICIES / loadKitPolicy（本脚本只读
+  只渲染，不写日期、不读第二份配置）。③ 接线：verify 全绿尾部自动重生成 verify-evidence.md
+  （绿事实与仓内摘要同刻生成，消除「本地台账已绿、committed 摘要滞后」双真相分叉；生成失败响亮告警
+  不推翻绿裁决）；`effective-policy --check` 进 verify 门序——policy 变更后必须重生成并随同提交。
+
+- feat(verify)：**verify 重写为七门 GATES 编排**——`verify.mjs` 改门表驱动（序即执行序、遇红即停）：
+  scripts-syntax（语法自检）→ engine-tests（npm test；当前目录无根 package.json 显式跳过且**不落
+  测试绿凭证**——跳过≠通过，凭证语义 = 测试真跑绿，防假绿，提示 `--test-cmd`）→ workflows-check
+  （编排脚本检查）→ rule-budget --all（常驻面预算）→ effective-policy --check（生效规则视图漂移）→
+  check-loop（闭环硬门）→ ledger-invariant（确认台账不变量历史全扫）。逐门 pass/fail、fail-fast、
+  尾部输出**未执行门清单**（fail-fast 后序门状态未知≠通过——「没跑」与「过了」可区分）；任一门红落
+  失败行（suite=门 id）供根因分析，消费方只认 exitCode===0；绿凭证行新增 gates / headShort 字段
+  （非 git 环境解析失败则省略、不伪造）；计数捕获只认编排器权威行 `[run-tests] 合计:`。本地 verify
+  与装户远端门（kit-ci.yml 同一条命令）行为 100% 一致（单源口径，防两处编排漂移）。诚实边界：七门
+  照搬源仓 engine cohort——product cohort（frontend/backend 门）是源仓项目私有不搬；lane-surface-ci
+  门留后续批次评估；源仓 `--engine` 增量语义不移植（本表已全为引擎段，「部分绿 ≠ 全量凭证」的分野
+  不存在）。`--list` 按执行序打印门 id；`--doc` 绑定（归一基准 = ROOT，与 confirm-doc / 检查 8
+  三处同源）与 `--test-cmd` 夹具注入缝保留。
+
+- feat(gate)：**policy v9–v12 与 check-loop 硬门/卫生分道（B6b-1）**——① `policy.mjs` 版本 9–12：
+  构造式改 **merge 链（基线 + 显式差异）**，kit v1–v8 键史原样保留——消除「全量手抄日期键、漏抄即
+  静默改语义」的脆弱点（v2 注释自警同源）；键名与源仓逐字一致。v9 = `incidentRegrSince`（检查 3x）/
+  `specVerifSince`（检查 21）/ `attributionSince`（检查 24）；v10 = `convergenceSince`（检查 23
+  advisory 档）；v11 = `convergenceHardSince`（检查 23 hard 档）；v12 = `reviewerSince`（检查 1
+  独立复核上下文标识）。kit 无源仓 check14HardSince / verifyHardSince——该两处消费段 kit 恒 advisory，
+  未落地不引入。锚日期 = kit 落地日口径：发布当日 = advisory 档锚，发布次日 = hard 档锚（当日在途件
+  不追溯，沿源仓「发布次日」先例）。缺键（v1–v8）→ 对应消费段整体跳过，存量零新增告警。② check-loop
+  **分道**（机读单源 LANE_OF，判据零变化只归属运行面）：默认只跑**硬门**（关单 / pre-push 面：配对
+  判低 / 复盘三件套+回路 / 3x 防复发证据 / 验收对账 / 确认留痕 / 指纹链 / 发版收口 / 收敛对账 hard
+  档）；`--hygiene` 只跑**卫生段**（索引 / 宿主 / 词表 / 预算 / 委派等 WARN 面，不进关单——要看时
+  另跑）；`--all` 两段都跑（= 分道前的裸跑全量）。③ init 新装 `policyVersion: 12`（全锚——新装空
+  台账零回溯负担；存量装户 kit.json 属 owned、sync 不动，升级时机自选）。
+
+- feat(gate)+feat(tpl)：**check-loop 检查 21–26 + 3x 六段与新判据（B6b-2）**——编号空间 1–20 扩为
+  **1–26 + 3x**（gate-checklist 配对登记表随动；3x 编号沿源仓写法、不入按号配对面）：21 spec 验证
+  落地核查（L2/L3 done spec 的「测试用例/验证计划/验证方式」节无测试文件/验证命令引用 = warning）；
+  22 机制使用量台账格式校验（见上条）；23 判据级收敛对账（L2/L3 done spec「验收判据」表逐判据 × 证据
+  对账——advisory 档证据无效 = warning，hard 档路径不存在 / 命令不在全量门 / 无对应全绿凭证行 =
+  hard-block；人工执行 + 空证据合法）；24 incident 归因字段核查（新建件「来源 / 影响环境」必填且在
+  枚举 = warning，legacy 回填件与存量豁免）；25 路由预判一致性（frontmatter「预判: kind= level=」
+  在场才检，与实际落位 / 级别不符 = warning 留账；缺字段零告警——advisory 灰度，不做强制前置）；
+  26 闭环漏斗「协议前」占比动作阈值（metrics 漏斗表日历相邻两月协议前占比均 >30% = warning，要求
+  一轮归因；收口 = 0 的月不判、单月波动不触发）。**3x**：incident 防复发验证证据门（fixed/closed 且
+  git 建档日 ≥ 锚、正文无自动化用例/回归清单引用 = hard-block）。各锚前建档件存量豁免。
+
+- feat(gate)+feat(tpl)：**L0 退役、L1 直达与模板字段并集**——① 级别收敛三档 **L1/L2/L3**（L0 退役，
+  自源仓收敛系列 1 回灌）：`workflow-enums.txt` 级别三档；L1 = 实现级改动，**一份 plan 即入口**
+  （协作道不另立 intent：级别恰为 L1 的 plan 无同名 intent/incident 不拦；级别缺失 / L2/L3 落单照拦）；
+  plan 配对升**全级别强制**（原 L0 协作道豁免随级别退役删除）；L1 勾触达红线 → 「红线判低」hard
+  （协作道不受理 STOP 级改动，就高不就低）。② 模板字段并集：`intents/_TEMPLATE.md` 增可选字段
+  「预判: kind=<require|fix|verify|review|deploy> level=<L1|L2|L3>」（定级时结构化预判、结果如实留账，
+  与实际落位不符由检查 25 出 WARN；缺字段零告警——存量宽容不回填）；`incidents/_TEMPLATE.md` 增归因
+  两键「来源」「影响环境」（供来源×环境交叉表机器复算，替代逐件人工判读；新建件必填、锚前存量不回填、
+  未触达运行环境写 none）。③ 存量装户迁移：frontmatter `级别: L0` 改 `L1`，或行首加 `流程: legacy`
+  （存量豁免通路，跳过级别/配对检查）——不改会被级别枚举校验 WARN「级别缺失」，`--batch` / `--auto`
+  自治门按 suspect 拒（fail-closed）。
+
+- feat(gate)：**台账不变量深水区（合并感知 / 补登追认 / DAG）**——`check-ledger-invariant` 深水判据自
+  多 worktree 合并丢行事故后的实战实现逐字回灌，把「台账本地可写」的伪造面从事后对质级升为机器可
+  检出级（能力评审审计维度扣分项）：① **合并感知删片**：分片删除的合法性对账取分片内容**各父提交
+  并集**——合并解析收口删片时，分片可能只在第二父侧（单看首父会把合法收口误判成「增删同提交」）；
+  「分片删除丢行」（行未并入主台账）仍 hard 拦。② **终态补登追认**：合并删片缺行、但缺失行已原样
+  回 append 到终树主台账（补偿行 = 新 ts + note 引原 ts）→ 视为丢失已追认放行——历史事实不可改写，
+  终态无丢失即审计实质成立。③ **补登语义身份比对**：补偿行与被删行的等价判定用语义三元组
+  `{doc, stage, fingerprint}`——补偿行本就允许改 ts 加 note，逐字节比对会漏掉全部合法补偿行。
+  ④ **DAG 感知与历史基线**：多父提交不按线性链假设；全历史扫描支持基线比对（基线 = HEAD 豁免过且
+  loud 出账、无基线的改写拦）。主台账自身永不因归并被删。
+
+- feat(ledger)：**三活文档月分片（B8）**——`ledger-shards.mjs`：`workflow/{regression-checklist,
+  delegations,papercuts}.md` 三个 append-only 活台账按月分片 `workflow/<ledger>.d/<YYYY-MM>.md`——
+  此前每次追加全量重写整文件，blob 膨胀与多 worktree 合并冲突面是「全历史」（源仓实测单文件
+  14.0 MiB 级）；月边界 = 天然分片键（数据行首列日期），同月并发冲突面缩到当月、跨月并发零冲突。
+  读侧 = 主台账 ∪ 全部分片（按文件名排序，月序即时间序）；写侧 = 追加进当月分片；主台账保留头部
+  说明 / 维护规则 / 表头等人类阅读面，数据行迁入分片。表头签名对齐 kit 模板形态（delegations 两表
+  末列「合入结论」；分片同时带节标题——check-loop 检查 18 走表头签名、wf-journal 按「## 委派结果」
+  节门读行，节标题 + 表头都带则两边读侧全兼容；两表归属判据 = 原节标题，不用列数——末列可缺省、
+  列数无法区分）。CLI 三态：`--check` 巡检（主台账残留数据行 / 分片可读性）/ `--split` 按月迁移
+  （幂等）/ `--append` 追加。消费方（papercut-debt-sensor / wf-journal / agg-delegations 等）读侧
+  自动合并，无分片时等价原读法、传感器零额外逻辑；regression-checklist 只迁「防复发验证」节
+  （其余模块节是稳定参考内容，节标题限定）。
+
+- feat(gate)+feat(kb)：**归档体系（archive-sweep + 关单即归档 + kb 归档检索）**——① `archive-sweep.mjs`：
+  终态件滚动归档。归档单位 = **同名家族**（intent/spec/plan/incident 同进同退：任一成员非终态 /
+  未满窗 / 被活跃引用 / 无日期，整族留守——检查 1 的结构配对是「家族双向在场」审计，单篇准入产生
+  数十处配对断裂的返工实证）；终态时间**三级锚** = 确认台账终态行 ts（精确）→ 内容 last-touch
+  （回退）→ 文件名日期（回退级曾用 git last-touch，被批量 frontmatter 迁移系统性污染——数百文件
+  last-touch 集体刷成当日、21 天窗口恒不满足、活跃目录只进不出；修法 = 改「最后一次**正文**变更」，
+  frontmatter-only 提交不刷新——其不改变文档实质内容与归档安全性）；落点
+  `workflow/archive/<家族最晚终态月>/<类型>/`（git mv；缺省 dry-run，`--window 21 --execute` 执行）。
+  ② **关单即归档**（confirm-doc 接线）：确认终态时自动归档本次确认涉及的家族——archive-sweep 是
+  手工工具、无人跑则活跃目录只进不出；判定单源 = archive-sweep.analyze（禁第二套口径）；只归档本次
+  确认涉及的家族，不越权清理历史积压（积压仍走手工批次 + 21 天窗口）。③ **kb 归档检索**：kb-search
+  语料面扩 `workflow/archive/<批次>/<type>/`——归档件退出活跃目录但不退出检索面（防复发不丢历史）。
+  归档不产生配对断裂：INDEX / check-loop 配对门 / kb 活跃语料只扫四目录直下；check-ledger-invariant
+  已归档感知（台账行原路径未命中再探 archive）。
+
+- feat(gate)：**冲突自愈（B9）**——`resolve-merge-conflicts.mjs`：台账与派生生成物合并冲突一键自愈器。
+  第一道防线是 `.gitattributes` 的 `merge=jsonl-union`（台账类冲突确定性并集，两侧行全保留）；driver /
+  gitattributes 行漏配退化成文本冲突、或 INDEX.md 这类生成物仍要人工解时，本工具一键消化**派生面**，
+  把人留在业务冲突上：扫描 unmerged（UU/AA/DD/AU/UA 等）文件——`workflow/INDEX.md` 冲突 →
+  `checkout --ours` 后调 gen-workflow-index 全量重生成并 `git add`；`.agents/*.jsonl` 台账冲突
+  （主台账 + `confirmations.d/` 分片同判据面——分片是确认行默认写入口径）且双方内容都在（UU/AA）→
+  并集合并后 `git add`；删除 / 改删型（DD/AU/UD/UA/DU）**不做任何写入**（自动并集会复活被删文件或
+  凭空建空文件），仅提示人工裁决。恒 exit 0 出处理清单。
+
+- feat(loop)：**papercut 债务回路（B10a）**——把 `workflow/papercuts.md` 未升级存量债驱动到 0 的
+  传感器-控制器-执行器闭环。① `templates/_agents/loop/papercut-debt/DESIGN.md`：回路**设计单一
+  真相源**（改口径先改本文件，脚本只实现）——设定点 = 未消债 → 0；已消债判定 = `✅` 真修完 **或**
+  `⏸ 暂缓（日期）：理由`（人读过、判失效）——「标个符号清零」的路堵死；环境约束类 `[env]` 条目
+  不进债池单列（环境自愈不由回路轮询发现）；首轮「⏸ 不消债 → 完成判据恒不达成 → 回路空转」的设计
+  教训单源保留。② `papercut-debt-sensor.mjs` 存量债传感器：只读、零子进程（托管 Node 环境 spawnSync
+  对任意 exe 可返 EBUSY，依赖 git 历史的传感器在该环境不可用）；分片感知（读侧走 ledger-shards
+  自动合并，无分片时等价原读法）。③ `papercut-debt-controller.mjs` 回路控制器：把测量变成「本轮修
+  哪一条」——排序键 = 命中次数降序 → 日期降序 → 原行序（确定性、无随机、无 LLM 判断）；scope gate =
+  拟修明确指向代码面 / 数据库的条目本轮跳过照列，供人工决定单独授权；单轮只取 1 条（独立复核有
+  成本，一次给 3 条审不动）。④ `skills/papercut-fix/`：执行器技能（单条目标、禁顺手修相邻条目、
+  文档面 scope、禁凭台账描述臆测现状——先读权威文件验证症状、禁 `node -e` 脚本批量替换）。
+  kit 不为回路接线 CI / 定时：执行器为对话内手动触发（沿源仓口径）。
+
+- docs(readme)：**存量装户升级指引**——升级到本版的三项一次性动作（README「存量装户迁移指引」汇总）：
+  ① `.gitattributes` 手动补 `.agents/*.jsonl merge=jsonl-union`（owned，sync 永不覆盖；漏配退化为
+  文本冲突，不静默丢数据）；② 存量 `级别: L0` 改 `L1` 或标 `流程: legacy`（L0 退役）；③ `kit.json`
+  的 `policyVersion` 升 12，并跑一次 `node .agents/scripts/gen-effective-policy.mjs` 把生成的
+  `workflow/effective-policy.md` 随同提交——kit.json 属 owned、sync 不动 policyVersion，升级时机
+  自选；不跑生成器则 verify 的生效规则视图门对缺文件判红一次（新装由 init 首跑种子，存量补跑即绿）。
+  v12 全锚生效日 = 发布当日（advisory 档三锚）/ 发布次日（hard 档三锚），锚前存量不追溯。
+
+- **不回灌清单（摘要）**——下列源仓件本批评估后**不回灌**，一句理由（完整版见 ARCHITECTURE §8
+  「不回灌清单」）：`check-query-contract` / `check-schema-residue` / `check-audit-fields` /
+  `check-delete-guard` / `check-notify-guard` / `check-local-gates`——dotnet 工具链专用，kit 由
+  doctor + add-gate 生态等价覆盖；`ci-push-before`——Azure DevOps 编排，kit 远端门形态 = kit-ci.yml +
+  「同入口命令 + 服务端分支策略」等价接入；`gen-narrative-claims` + `check-narrative-incremental`——
+  实践手册承重面，kit 无消费方，等价覆盖 = 检查 11/16 + index-incremental 门 + effective-policy 门；
+  `skills/shipyard-workflow-closeout`——源仓品牌关单序列，kit 由 gate-checklist 命令承担；
+  CodeBuddy 宿主适配——kit 七宿主清单不含该宿主；`check-loop-sections` 目录化拆分——kit 保持
+  单体 check-loop.mjs + 模块化检查件形态（分道由 LANE_OF 承担）；`engine.json`——kit 的 kit.json 等价。
+
+  **测试**：npm test 76 套件 0 失败（回灌起点 65 套件；新增判定器均有同名直测，或在
+  scripts-test-exempt 登记并注明间接覆盖）；eslint 0 error；`npm pack --dry-run` 成功（prepack 跑
+  check-pack-eol）；`sync-hosts --diff --strict` 零漂移；fresh init 端到端：doctor 全绿、
+  `verify --list` 七门、`check-loop --all` 空台账跑通、`level.all = L1 L2 L3`、新装
+  `policyVersion: 12`；`check-engine-integrity --update` 终次重锚（受检面 82 件，硬拦单位总数
+  213 → 218 无收缩）后本地层全绿。
+
 ## 1.7.17
 
 - feat(ledger)：**确认行分片升为默认写入口径**（2026-10-13 ledger-shard-default，协议对齐 Shipyard.Material
@@ -380,7 +605,7 @@
   - **闭包自动解析，删掉手工清单**：新增 `templates/_agents/scripts/fixture-scripts.mjs`（夹具工具件），
     从入口递归求**同目录依赖传递闭包**并整闭包拷入夹具。依赖发现取三种形态：静态 `import/export from`、
     动态 `import()`、**裸文件名字面量**（`path.join(here, 'kb-search.mjs')` 这类 spawn 依赖——`wiki-search.mjs`
-    只靠这一条挂住 `kb-search`；`check-hygiene` 靠它挂住 `rule-budget.sh` 与两个生成器）。裸文件名只在解析到
+    只靠这一条挂住 `kb-search`；`check-hygiene` 靠它挂住 `rule-budget` 门与两个生成器）。裸文件名只在解析到
     同目录真实文件时计入，故跨目录字面量天然排除。**取舍口径：宁可多拷，不可漏拷**——多一个文件不会让测试变假绿。
     改造 9 个调用点（`check-loop.test` / `edit-face-check.test` / `ledger-prune.test` / `ledger-ts-monotonic.test` /
     `compact-ledgers.test` / `wiki-search.test` / `check-loop-rev.test` / `agg-delegations.test`），
@@ -553,7 +778,7 @@
   check-loop 13 --all warning），v1.7.1 起本仓纯包源两处皆不跑——bb69e19/418960a 重构净增 78B 把
   .agents/commands/ 推到 65581B > 65536B 包源侧零暴露（同日 S1 冒烟实测发现，装户首提被硬拦）。
   新增 src/rule-budget.test.mjs：同一张预算表映射到包源路径核对（run-tests 盘面 glob 自动挂载）——
-  字节 = LF 归一（等价 fsize 的 git cat-file 口径）、目录合计 = 扁平 glob 不入子目录（rule-budget.sh
+  字节 = LF 归一（等价 fsize 的 git cat-file 口径）、目录合计 = 扁平 glob 不入子目录（rule-budget 脚本
   同口径勿两处漂移）、AGENTS.md 按全部技术栈 profile 渲染取 max（单源复用 STACKS/renderContent，
   BOARD_PORT 按最坏 5 位端口）；预算表缺失 / 解析 0 行 / 映射目标失踪 / 文件 glob 零命中 fail-loud
   （装户侧这些是 skip，包源侧是打包回归），装户侧专属面 SKIP 注记。实测：npm test 51 套件 0 失败；
@@ -745,7 +970,7 @@
 ## 1.4.0
 
 - fix(gate)：**测试绿凭证按单绑定**（2026-10-08 verify-doc-binding，AI SDLC 演进方向 1 切口②）——凭证与被证明对象此前**零绑定**：`verifications.jsonl` 的行只有 `{ts,exitCode,suite,passed,failed}`，**没有任何字段能承载「它是为哪一单落的」**，而 confirm-doc 置 done 前置与检查 8 对账都只问 `hasFreshVerifyLine()` = *全仓任意一份 24h 内绿行* → **跑一次 verify 就能给全仓任意一单的「测试绿」声明背书**（本仓 8 行凭证实证无一指明对象）。修法三件：① `verify.mjs` 增 `--doc <path>`，落账行增 `doc`（**相对仓库根的 posix 相对路径**，resolve+relative+分隔符归一，故反斜杠 / posix / 绝对路径三种写法落同一值；基准取 ROOT 而非 cwd —— CI / 钩子 / 夹具注入下 cwd 常在仓库根外，基准三处必须同源）；**不带 `--doc` 仍落行但无 `doc` 键**（`kit-ci.yml` 无单次上下文，强制必填会打断远端门；这样的行不给任何单背书）；② `policy.hasFreshVerifyLine(lines, now, doc)` 增第三参，`doc` 非空时要求 `e.doc === doc`（**精确等值**，不做前缀/子串匹配——放宽即给跨单背书开后门），`doc` 缺省则**逐字维持 v5 行为**；③ 两个消费方改为按本 doc 过滤（检查 8 的 `verifyFresh` 由「循环外算一次全局布尔」改为按 doc 查，台账内容仍循环外读一次缓存，**零新增子进程、门禁成本零增加**）。**向后兼容**：`POLICIES[6]` = v5 全键 + `verifyDocSince`，两消费方**仅 v6+ 才按 doc 过滤**，缺键（v1–v5）维持原全局行为，存量装户零新增告警（沿 `2026-10-06` `delegationSince` 补锚先例）。**存量不回填**：无从判定那 8 行是为哪单而跑，无据补数即造数。**实测证据**：本仓升 v6 后 4 个存量 intent 新增 8 条 `测试绿缺凭证` WARN——逐条对质确认这 4 单关单时**确实各自跑过 verify 且全绿**，但凭证从未指名，门禁当时**在原理上无法区分**「本单的绿」与「别的单的绿」；这是「无法验证」的诚实判定而非造假，用户拍板**保留不补跑**（补跑只证明当下全绿、回溯不了关单当时全绿，事后追认与本单要消灭的自证同构）。测试：verify.test 12→17/0、confirm-doc.test 54/0（新增 S40 四条含 **v5+他单绿行→静默**的兼容反例）、check-loop.test 231→**234/0**（既有 231 条断言**零改动**，文案锚点子串「测试绿缺凭证」/「无测试绿凭证」+`verify.mjs` 全部保持连续）；policyVersion 5→6
-- feat(gate)：**门禁自我度量（门禁 ROI）**（2026-10-08 gate-roi-metrics）——补上「没有能力判断哪道门该留」这个缺口。① `gate-seg.mjs` 插桩共用件：在段边界记 `warnings.length` / `blockers.length` 与时间戳，由**长度差**推 `{id,label,warns,blocks,ms}`，**不动任何 `warnings.push` / `blockers.push` 调用点**（判定逻辑与文案零改动，回归面最小）；抽独立件是因为 check-loop 已 import check-hygiene，后者再反向 import 即循环依赖，两者都要插桩故判据须单源。**模块化插桩须用局部收集器 + `appendSegs` 并入**（自查抓到并实证复现）：check-hygiene 产出的是局部数组、执行期间全局长度不动，直接共用游标会让该模块各段恒记 0 且末段整段丢失，增量还会被误记到模块之后的第一个检查上。② check-loop **19 段插桩**（主流程 14 + check-hygiene 5）与 `--gate-stats` flag：落 `.agents/cache/gate-stats.jsonl`（append-only 运行时数据，已 gitignore、不进 kit.json managed 台账、刻意避开 papercuts 2026-10-05「探针临时件被 sync 收编」的事故面），IO 失败只出账不阻断。③ 新增 `agg-gate-stats.mjs` 聚合器：按检查 ID 出 命中/拦截/警告/累计与均耗时（默认按耗时降序），派生**噪声率 top**（警告数 ÷ 命中次数）与**死检查**（声明了但从未命中）两类决策依据，`--days N` 窗口（默认 30），坏行跳过不抛，空数据降级为「未采集」提示。④ `workflow/DASHBOARD.md` 增「门禁 ROI」节。**三条硬契约**：默认路径 stdout+stderr+退出码**逐字节不变**（统计默认静默，只在显式 flag 下落盘）；耗时口径**含子进程时间**（检查 11 调两个生成器 `--check`、检查 13 调 `sh rule-budget.sh`）——门禁真实成本本就要含子进程，不做剔除；**DASHBOARD 节刻意不铺运行数值**——该文件被检查 11 `--check` 覆盖，采集数据每跑一次门禁就变一次，铺进去等于每次采集必产一条漂移 WARN（与 audit-gate-hardening P3 的防噪红线正面冲突），故节内只放口径与采集/查看命令，数值走命令行。**首轮实仓数据（3 次运行，累计 77.4s）**：检查 8 验收标准对账 26.1s / 17 发版树未收口 21.5s / 14 确认留痕 19.2s / 13 常驻面体积预算 4.2s——四段吃掉 **92% 门禁耗时且样本内零命中**，其余 15 段合计 6.4s；噪声侧无一条超过 2 条。数据**推翻了立项时的预测**（原判「检查 4 和 11 噪声率最高」，实测二者仅 14ms / 213ms 且零命中）——聚合器自带「样本 <5 次只作线索不作决策依据」告警，本单据此**不拆任何门**。测试：gate-seg 15/0、agg-gate-stats 15/0、gen-workflow-dashboard 25→30/0、check-hygiene 10→15/0、check-loop 223→**231/0**（既有 223 条断言零改动即最强输出契约钉子 + 新增 8 条）；段归属实证：真实输出仅 1 条 WARN（三件套不全 = 检查 3），落盘数据唯一非零段即 `id=3 warns=1`，其余 18 段全零——无错记、无漏记；把插桩还原成修复前实现跑同一套测试 → 新增 5 条断言红 4 条（只入账 4 段、warns 全 0 而实际产出 2 条），确认断言非恒绿
+- feat(gate)：**门禁自我度量（门禁 ROI）**（2026-10-08 gate-roi-metrics）——补上「没有能力判断哪道门该留」这个缺口。① `gate-seg.mjs` 插桩共用件：在段边界记 `warnings.length` / `blockers.length` 与时间戳，由**长度差**推 `{id,label,warns,blocks,ms}`，**不动任何 `warnings.push` / `blockers.push` 调用点**（判定逻辑与文案零改动，回归面最小）；抽独立件是因为 check-loop 已 import check-hygiene，后者再反向 import 即循环依赖，两者都要插桩故判据须单源。**模块化插桩须用局部收集器 + `appendSegs` 并入**（自查抓到并实证复现）：check-hygiene 产出的是局部数组、执行期间全局长度不动，直接共用游标会让该模块各段恒记 0 且末段整段丢失，增量还会被误记到模块之后的第一个检查上。② check-loop **19 段插桩**（主流程 14 + check-hygiene 5）与 `--gate-stats` flag：落 `.agents/cache/gate-stats.jsonl`（append-only 运行时数据，已 gitignore、不进 kit.json managed 台账、刻意避开 papercuts 2026-10-05「探针临时件被 sync 收编」的事故面），IO 失败只出账不阻断。③ 新增 `agg-gate-stats.mjs` 聚合器：按检查 ID 出 命中/拦截/警告/累计与均耗时（默认按耗时降序），派生**噪声率 top**（警告数 ÷ 命中次数）与**死检查**（声明了但从未命中）两类决策依据，`--days N` 窗口（默认 30），坏行跳过不抛，空数据降级为「未采集」提示。④ `workflow/DASHBOARD.md` 增「门禁 ROI」节。**三条硬契约**：默认路径 stdout+stderr+退出码**逐字节不变**（统计默认静默，只在显式 flag 下落盘）；耗时口径**含子进程时间**（检查 11 调两个生成器 `--check`、检查 13 调 `rule-budget`，当时为 sh 调用、2026-10-13 起 node 直跑）——门禁真实成本本就要含子进程，不做剔除；**DASHBOARD 节刻意不铺运行数值**——该文件被检查 11 `--check` 覆盖，采集数据每跑一次门禁就变一次，铺进去等于每次采集必产一条漂移 WARN（与 audit-gate-hardening P3 的防噪红线正面冲突），故节内只放口径与采集/查看命令，数值走命令行。**首轮实仓数据（3 次运行，累计 77.4s）**：检查 8 验收标准对账 26.1s / 17 发版树未收口 21.5s / 14 确认留痕 19.2s / 13 常驻面体积预算 4.2s——四段吃掉 **92% 门禁耗时且样本内零命中**，其余 15 段合计 6.4s；噪声侧无一条超过 2 条。数据**推翻了立项时的预测**（原判「检查 4 和 11 噪声率最高」，实测二者仅 14ms / 213ms 且零命中）——聚合器自带「样本 <5 次只作线索不作决策依据」告警，本单据此**不拆任何门**。测试：gate-seg 15/0、agg-gate-stats 15/0、gen-workflow-dashboard 25→30/0、check-hygiene 10→15/0、check-loop 223→**231/0**（既有 223 条断言零改动即最强输出契约钉子 + 新增 8 条）；段归属实证：真实输出仅 1 条 WARN（三件套不全 = 检查 3），落盘数据唯一非零段即 `id=3 warns=1`，其余 18 段全零——无错记、无漏记；把插桩还原成修复前实现跑同一套测试 → 新增 5 条断言红 4 条（只入账 4 段、warns 全 0 而实际产出 2 条），确认断言非恒绿
 - feat(gate)：**DASHBOARD 生成物漂移门**（2026-10-08 selfmeasure-and-modularize）——`gen-workflow-dashboard.mjs` 新增 `--check`（不写盘，与磁盘不一致 exit 1 + 差异行号 + 修复命令）；check-loop 检查 11 从「仅 workflow/INDEX.md」扩为「生成物漂移（INDEX + DASHBOARD）」，两物各自独立出账并指名修复命令。**双归一是门禁可用性的前提**（照 `gen-workflow-index.mjs:180` 2026-09-30 同坑先例）：① 行尾 CRLF→LF（fresh clone 检出 CRLF 会假阳性「漂移」）；②「生成于 <ISO>」行抹平（每次运行必变，不归一则门禁恒红 = 不可消退噪声，违反 audit-gate-hardening P3）。**装户跳过语义**：生成器脚本不存在（旧装副本）或 `workflow/DASHBOARD.md` 不存在（从未生成过看板）→ 跳过不报，新装用户不得因未生成过看板而每次 push 吃 WARN。测试 +14（归一三态纯函数直测 + 端到端缺失/一致/漂移/不写盘四态 + check-loop 端到端两场景）
 - feat(gate)：**台账门禁噪声返工归因拆分**（2026-10-08 selfmeasure-and-modularize）——`delegations.md` 结果列新增取值 `返工×N（门禁噪声）`，`agg-delegations.cjs` 的 `parseResult` / `metrics` 双列累计（`reworkSum` 只吃设计返工、`reworkNoiseSum` 吃噪声），扩容门第 3 项「月度返工次数 = 0」改为**只对设计返工判 0**、门禁噪声返工在同条描述里单列可见。动机：本仓 DASHBOARD 自报质量门连续两月红（一次通过率 55% / 61%，门槛 ≥90%），根因是两档混列——门禁噪声（预算超限 / 双源漏刷 / 节名不一致 / 门禁误报）与设计返工同判一项，指标永远红且不指示改进方向。**存量行零回填**（旧四档解析逐条不变，与 batch/seq/of 纯增字段先例同款）；`avgRework` 仍含噪声 → `delegations.md` 快照表结构零改动。防标签滥用：该取值由作者手写、机器无法判真伪（同 `--delegated` 信任边界），口径与边界写入台账头部，判据拿不准时写 `返工×N`。测试 +7（含反例：设计返工 1 + 噪声 1 → 门 3 仍 ❌）
 - refactor(gate)：**check-loop 卫生类检查拆模块**（2026-10-08 selfmeasure-and-modularize）——检查 2 / 9 / 11 / 12 / 13 迁入新模块 `check-hygiene.mjs`（`runCheckHygiene(ctx)`），check-loop.mjs 1473 → 1383 行。先例 = `check-metric-claims.mjs` 承载检查 16；耦合高的检查 1/5（共享文档循环）、8（证据核验）、15（指纹对账）留后续批次（拆它们需先解耦，不与本批混——`2026-10-08-checkloop-importable` 教训：1600+ 行变换与行为修复混批不可审）。**判定零复刻铁律**：ctx 传入既有 helper（`docFiles` 的 tracked 过滤 / `fmGet` 的 frontmatter 受限子集 / `linesOf` 的读异常出账），模块内不得重新实现。**输出契约不变量**：原顺序 2 → 9 → 11 → 12 → 13（warnings 按插入序输出、行序是稳定契约），拆成一次调用后由模块内保证，测试钉住。新增 `check-hygiene.test.mjs` 10 断言（五检查正反 + ctx 降级 + 装户跳过 + 输出顺序）；**拆分前后 CLI stdout+stderr 逐字节对账 diff 为空**（作关单证据）

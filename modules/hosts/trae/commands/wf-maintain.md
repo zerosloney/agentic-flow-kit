@@ -46,7 +46,7 @@ description: Maintain 阶段 · 立 incident + 复盘三件套（incident 在 L1
 **3. 规范条目**(必须有可追溯落点)
 - 落点优先级(取最前者可行即止):`workflow/regression-checklist.md` 回归条目 / `.agents/hooks/` 或 `tests/` 断言(机器门)→ `.agents/skills/`、`.agents/notes/` → `workflow/` 文档 → `.agents/commands/`
 - **根 `AGENTS.md` 不再是落点**;**入册门槛**:已由机器门强制的内容只留一行指针,禁止在常驻面复述;**一进一出**:落点为常驻面时须在本 commit 内删除或下沉一条被取代条目
-- 常驻面体积预算由 pre-commit 硬拦(`sh .agents/scripts/rule-budget.sh --staged`,表 `.agents/rule-budgets.txt`)——超限先删再增
+- 常驻面体积预算由 pre-commit 硬拦(`node .agents/scripts/rule-budget.mjs --staged`,表 `.agents/rule-budgets.txt`)——超限先删再增
 - 引用:commit <SHA> / 文件:<路径>#L<行>;若无新增条目,理由:<已有条目覆盖,说明条目位置>
 
 ### 1.4 起草后停下

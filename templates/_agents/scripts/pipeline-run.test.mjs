@@ -47,7 +47,7 @@ console.log('✅ intent 草稿：' + out);
 fs.writeFileSync(out, body);
 console.log('✅ spec 草稿：' + out);
 `);
-  fake('fill-plan.mjs', FILL_HEAD + `const body = '---\\n状态: draft\\n级别: ' + (lv === 'L0' ? 'L1' : lv) + '\\n模块: pipeline\\n---\\n# PLAN — ' + t + '\\n\\n## 改动方案\\n\\n- src/app.mjs：实现功能\\n\\n## 约束与风险\\n\\n- 风险低\\n\\n## 任务拆解\\n\\n1. 实现\\n\\n## 执行顺序\\n\\n1\\n\\n## 验证计划\\n\\n- 静态门：npm test\\n\\n## 确认与复核\\n- 待\\n';
+  fake('fill-plan.mjs', FILL_HEAD + `const body = '---\\n状态: draft\\n级别: ' + lv + '\\n模块: pipeline\\n---\\n# PLAN — ' + t + '\\n\\n## 改动方案\\n\\n- src/app.mjs：实现功能\\n\\n## 约束与风险\\n\\n- 风险低\\n\\n## 任务拆解\\n\\n1. 实现\\n\\n## 执行顺序\\n\\n1\\n\\n## 验证计划\\n\\n- 静态门：npm test\\n\\n## 确认与复核\\n- 待\\n';
 fs.writeFileSync(out, body);
 console.log('✅ plan 草稿：' + out);
 `);
@@ -289,22 +289,13 @@ test('修复环 cap 3 → 超限 gate-fail exit 2', () => {
   assert.match(out(p), /修复环超限/);
 });
 
-test('L0 路径：直改 → 提交 → done', () => {
-  const f = buildFixture();
-  prun(f, ['start', '改一处文案']);
-  prun(f, ['next', '--triage', 'kind=require level=L0 module=wiki topic=copy1']);
-  const pw = prun(f, ['next']); // 无 --files：重发工单
-  assert.match(out(pw), /PIPELINE-STOP work-order/);
-  const p = prun(f, ['next', '--files', 'README.md'], { FIXTURE_GIT_STATUS: ' M README.md' });
-  assert.equal(p.status, 0, out(p));
-  assert.match(out(p), /PIPELINE-STOP done/);
-  assert.match(fs.readFileSync(f.gitLog, 'utf8'), /commit -m docs\(wiki\): 改一处文案/);
-});
+// （2026-10-13 L0 退役，自源仓收敛系列 1 回灌：原「L0 路径：直改 → 提交 → done」场景随 direct-edit
+// 分支删除——最低档 L1 走 intent+plan 闭环，无直改通道。）
 
 test('verify-only 短路径直达 done', () => {
   const f = buildFixture();
   prun(f, ['start', '跑下 verify']);
-  const p = prun(f, ['next', '--triage', 'kind=verify level=L0 module=pipeline topic=v1']);
+  const p = prun(f, ['next', '--triage', 'kind=verify level=L1 module=pipeline topic=v1']);
   assert.equal(p.status, 0, out(p));
   assert.match(out(p), /PIPELINE-STOP done/);
   assert.ok(runFile(f, latestId(f)).events.some((e) => e.type === 'gate' && e.cmd.includes('verify.mjs') && e.exit === 0));
@@ -313,7 +304,7 @@ test('verify-only 短路径直达 done', () => {
 test('review-only：工单 → --done 收尾可达（复核 P1-1 回归）', () => {
   const f = buildFixture();
   prun(f, ['start', '评审一下']);
-  const pw = prun(f, ['next', '--triage', 'kind=review level=L0 module=pipeline topic=rv1']);
+  const pw = prun(f, ['next', '--triage', 'kind=review level=L1 module=pipeline topic=rv1']);
   assert.match(out(pw), /PIPELINE-STOP work-order/);
   const pd = prun(f, ['next', '--done']);
   assert.equal(pd.status, 0, out(pd));
@@ -332,7 +323,7 @@ test('deploy 路径：三件 done → prep 工单 → 机器校验 → 授权 �
   const f = buildFixture();
   seedDeployDocs(f, { intentState: 'done', planState: 'done' });
   prun(f, ['start', '可以上了']);
-  const pw = prun(f, ['next', '--triage', 'kind=deploy level=L0 module=pipeline topic=dep1']);
+  const pw = prun(f, ['next', '--triage', 'kind=deploy level=L1 module=pipeline topic=dep1']);
   assert.equal(pw.status, 0, out(pw));
   assert.match(out(pw), /deploy-prep/);
   assert.match(out(pw), /PIPELINE-STOP work-order/);
@@ -350,7 +341,7 @@ test('deploy 三件缺口 → gate-fail 列缺口 exit 2（P1-2）', () => {
   const f = buildFixture();
   seedDeployDocs(f, { intentState: 'done', planState: 'approved' }); // plan 未关单
   prun(f, ['start', '可以上了']);
-  prun(f, ['next', '--triage', 'kind=deploy level=L0 module=pipeline topic=dep1']);
+  prun(f, ['next', '--triage', 'kind=deploy level=L1 module=pipeline topic=dep1']);
   const p = prun(f, ['next']);
   assert.equal(p.status, 2);
   assert.match(out(p), /须 done/);
@@ -362,7 +353,7 @@ test('deploy 边界：incident closed 但 plan 缺失 → gate-fail（复核 P2-
   fs.writeFileSync(path.join(f.root, 'workflow', 'incidents', '2026-10-02-incd.md'),
     '---\n状态: closed\n发现: 2026-10-02\n模块: pipeline\n---\n# INCIDENT — incd\n\n## 时间线\n\n- x\n\n## 根因\n\nx\n\n## 复盘三件套\n\nx\n');
   prun(f, ['start', '可以上了']);
-  prun(f, ['next', '--triage', 'kind=deploy level=L0 module=pipeline topic=incd']);
+  prun(f, ['next', '--triage', 'kind=deploy level=L1 module=pipeline topic=incd']);
   const p = prun(f, ['next']);
   assert.equal(p.status, 2);
   assert.match(out(p), /plans\/2026-10-02-incd\.md（缺失——须 done）/);
@@ -372,32 +363,26 @@ test('deploy 边界：topic 子串不再误匹配（复核 P2-C 收紧回归）'
   const f = buildFixture();
   seedDeployDocs(f, { intentState: 'done', planState: 'done', topic: 'dep1' });
   prun(f, ['start', '可以上了']);
-  const p = prun(f, ['next', '--triage', 'kind=deploy level=L0 module=pipeline topic=dep']); // 旧版 includes 会误命中 dep1
+  const p = prun(f, ['next', '--triage', 'kind=deploy level=L1 module=pipeline topic=dep']); // 旧版 includes 会误命中 dep1
   assert.equal(p.status, 2);
   assert.match(out(p), /找不到可上线的对象/);
 });
 
 // P2-4 A′：提交命中 managed 面的处理（装户降级 WARN / 包源自愈 sync）
+// （2026-10-13 L0 退役：原用例经 direct-edit 直改通道驱动；该通道随级别退役删除，改由 L1 闭环的
+//   workflow 文档提交（plan-confirm 批次一 docsCommit）驱动同一 managedFaceCheck 判定面。）
 test('P2-4 A′：命中台账件且无 flow-kit → 装户降级 WARN + 台账随提交（复核回归）', () => {
   const f = buildFixture();
-  fs.mkdirSync(path.join(f.root, '.agents', 'notes'), { recursive: true });
-  fs.writeFileSync(path.join(f.root, '.agents', 'notes', 'runtime-env.md'), 'notes\n');
-  fs.writeFileSync(path.join(f.root, '.agents', 'kit.json'), JSON.stringify({ managed: [{ rel: '.agents/notes/runtime-env.md', sha256: 'x' }] }));
-  prun(f, ['start', '改一处文案']);
-  prun(f, ['next', '--triage', 'kind=require level=L0 module=wiki topic=mng1']);
-  editDoc(f, '.agents/notes/runtime-env.md', (t) => t + '\n- 演练追加一行\n');
-  const p = prun(f, ['next', '--files', '.agents/notes/runtime-env.md'], { FIXTURE_GIT_STATUS: ' M .agents/notes/runtime-env.md' });
-  assert.equal(p.status, 0, out(p));
-  assert.match(out(p), /⚠️ 触及 managed 面/);
-  const addLine = fs.readFileSync(f.gitLog, 'utf8').split('\n').find((l) => l.startsWith('add '));
-  assert.equal(addLine, 'add .agents/notes/runtime-env.md', '装户降级只 WARN：add 面不含 kit.json（复核 P2-D 断言改实）');
+  fs.writeFileSync(path.join(f.root, '.agents', 'kit.json'), JSON.stringify({ managed: [{ rel: 'workflow/intents/2026-10-02-mng1.md', sha256: 'x' }] }));
+  driveToImplement(f, 'L1', 'mng1');
+  const run = runFile(f, latestId(f));
+  assert.ok(run.events.some((e) => e.type === 'warn' && /触及 managed 面/.test(e.note)), '装户环境降级 WARN 出账');
+  assert.doesNotMatch(fs.readFileSync(f.gitLog, 'utf8'), /add .*\.agents\/kit\.json/, '装户降级只 WARN：add 面不含 kit.json（复核 P2-D 断言改实）');
 });
 
 test('P2-4 A′：包源环境自动 sync——flow-kit 假件被调 + 产物入提交（复核回归）', () => {
   const f = buildFixture();
-  fs.mkdirSync(path.join(f.root, '.agents', 'notes'), { recursive: true });
-  fs.writeFileSync(path.join(f.root, '.agents', 'notes', 'runtime-env.md'), 'notes\n');
-  fs.writeFileSync(path.join(f.root, '.agents', 'kit.json'), JSON.stringify({ managed: [{ rel: '.agents/notes/runtime-env.md', sha256: 'x' }] }));
+  fs.writeFileSync(path.join(f.root, '.agents', 'kit.json'), JSON.stringify({ managed: [{ rel: 'workflow/intents/2026-10-02-mng2.md', sha256: 'x' }] }));
   fs.mkdirSync(path.join(f.root, 'bin'), { recursive: true });
   const syncLog = path.join(f.root, 'flowkit-sync.log');
   fs.writeFileSync(path.join(f.root, 'bin', 'flow-kit.mjs'), `#!/usr/bin/env node
@@ -408,11 +393,7 @@ const kit = JSON.parse(fs.readFileSync(kp, 'utf8'));
 kit.managed[0].sha256 = 'refreshed';
 fs.writeFileSync(kp, JSON.stringify(kit));
 `);
-  prun(f, ['start', '改一处文案']);
-  prun(f, ['next', '--triage', 'kind=require level=L0 module=wiki topic=mng2']);
-  editDoc(f, '.agents/notes/runtime-env.md', (t) => t + '\n- 演练追加一行\n');
-  const p = prun(f, ['next', '--files', '.agents/notes/runtime-env.md'], { FIXTURE_GIT_STATUS: ' M .agents/notes/runtime-env.md' });
-  assert.equal(p.status, 0, out(p));
+  driveToImplement(f, 'L1', 'mng2');
   assert.match(fs.readFileSync(syncLog, 'utf8'), /sync-called/);
   const run = runFile(f, latestId(f));
   assert.ok(run.events.some((e) => e.type === 'gate' && e.cmd.includes('flow-kit.mjs sync') && e.exit === 0));
@@ -423,11 +404,10 @@ fs.writeFileSync(kp, JSON.stringify(kit));
 test('P2-4 A′：未命中台账面 → 不触发 sync/告警', () => {
   const f = buildFixture();
   fs.writeFileSync(path.join(f.root, '.agents', 'kit.json'), JSON.stringify({ managed: [{ rel: '.agents/notes/runtime-env.md', sha256: 'x' }] }));
-  prun(f, ['start', '改一处文案']);
-  prun(f, ['next', '--triage', 'kind=require level=L0 module=wiki topic=mng3']);
-  const p = prun(f, ['next', '--files', 'README.md'], { FIXTURE_GIT_STATUS: ' M README.md' });
-  assert.equal(p.status, 0, out(p));
-  assert.doesNotMatch(out(p), /managed 面/);
+  driveToImplement(f, 'L1', 'mng3');
+  const run = runFile(f, latestId(f));
+  assert.ok(!run.events.some((e) => e.type === 'warn' && /managed 面/.test(e.note)), '未命中台账面不出告警');
+  assert.ok(!run.events.some((e) => e.type === 'gate' && String(e.cmd).includes('flow-kit.mjs sync')), '未命中台账面不触发 sync');
 });
 
 test('rename 行 old+new 双收录防逃逸（复核 P2-2 回归）', () => {

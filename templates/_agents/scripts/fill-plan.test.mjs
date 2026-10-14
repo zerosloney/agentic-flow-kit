@@ -31,6 +31,10 @@ function check(name, cond, detail = '') {
   check('S2 L2 含节 ## 执行顺序', body.includes('## 执行顺序'));
   check('S2 L2 含节 ## 验证计划', body.includes('## 验证计划'));
   check('S2 L2 共 5 节（4 节 + 确认与复核）', sections.length === 5, '实际 ' + sections.length + ' 节');
+  // 任务即勾选态（2026-10-13 自 Shipyard 回灌 session-context）
+  check('S2 任务即勾选态：复选框编号形态', /- \[ \] 1\. <任务>/.test(body));
+  check('S2 任务即勾选态：留痕行', body.includes('留痕：（勾选时回填 commit SHA / 测试名 / 实测输出）'));
+  check('S2 任务即勾选态：三锚注释', body.includes('会话重入三锚'));
 }
 
 // ---- 场景 3：L3 与 L2 同结构 ----
@@ -86,10 +90,22 @@ const runTool = (root, base, level) => spawnSync(process.execPath,
   [CLI, '--topic', base, '--level', level, '--output', path.join(root, 'workflow', 'plans', `${base}.md`)],
   { cwd: root, encoding: 'utf8' });
 {
+  // S8（2026-10-13 自 Shipyard 回灌 L1 即入口）：无同名入口 + --level L1 → plan 自己就是入口，放行生成；
+  // 对照 S8b：L2 无同名入口仍拒（直达语义只对 L1 开）。
   const root = mkws();
   const r = runTool(root, '2026-09-30-none', 'L1');
-  check('S8 起草门：无同名入口 → exit 2 且零文件产出',
-    r.status === 2 && /起草门未过/.test(r.stderr) && !fs.existsSync(path.join(root, 'workflow', 'plans', '2026-09-30-none.md')),
+  const f = path.join(root, 'workflow', 'plans', '2026-09-30-none.md');
+  check('S8 L1 即入口：无同名入口 + --level L1 → 放行生成（plan 即入口）',
+    r.status === 0 && fs.existsSync(f)
+    && fs.readFileSync(f, 'utf8').includes('对应入口：本 plan（L1 不再另立 intent）'),
+    JSON.stringify({ status: r.status, stderr: r.stderr }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+{
+  const root = mkws();
+  const r = runTool(root, '2026-09-30-none2', 'L2');
+  check('S8b 起草门：无同名入口 + --level L2 → exit 2 且零文件产出（直达仅限 L1）',
+    r.status === 2 && /起草门未过/.test(r.stderr) && !fs.existsSync(path.join(root, 'workflow', 'plans', '2026-09-30-none2.md')),
     JSON.stringify({ status: r.status, stderr: r.stderr }));
   fs.rmSync(root, { recursive: true, force: true });
 }
@@ -113,7 +129,7 @@ const runTool = (root, base, level) => spawnSync(process.execPath,
   fs.rmSync(root, { recursive: true, force: true });
 }
 {
-  // S10b 探索泳道（2026-09-30 hybrid-governance-explore-hardening）：L0/L1 draft intent → 放行 plan 起草
+  // S10b 探索泳道（2026-09-30 hybrid-governance-explore-hardening）：L1 draft intent → 放行 plan 起草
   // （「先起草后确认」；收口由 check-loop --hardening 加固门兜底）
   const root = mkws({ 'workflow/intents/2026-09-30-exp.md': '---\n状态: draft\n级别: L1\nrisk_level: L1\n日期: 2026-09-30\n---\n# I\n' });
   const r = runTool(root, '2026-09-30-exp', 'L1');

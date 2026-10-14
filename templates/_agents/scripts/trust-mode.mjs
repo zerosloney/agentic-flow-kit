@@ -1,10 +1,10 @@
 #!/usr/bin/env node
 // trust-mode: AI 自治信任等级管理（2026-09-30 ai-autonomy-trust；同日 hybrid-governance-risk-lanes 加名称双轨）
-// 管理 .agents/trust-mode.json，授权 AI 对 L0/L1 文档进行自治放行（--auto）。
+// 管理 .agents/trust-mode.json，授权 AI 对 L1 文档进行自治放行（--auto）。
 // 等级语义（名称 ↔ 数值双轨：confirm-doc.mjs 读数值 enabled/level，人机接口名称与数值皆收）：
 //   Strict   (level 0, enabled=false): AI 自治关闭（默认）——confirm-doc --auto 一律拒绝
-//   Standard (level 1): AI 可自批 L0/L1 draft -> approved
-//   Trusted  (level 2): AI 可自批 L0/L1 draft -> approved 及 approved -> done（全闭环）
+//   Standard (level 1): AI 可自批 L1 draft -> approved
+//   Trusted  (level 2): AI 可自批 L1 draft -> approved 及 approved -> done（全闭环）
 // 安全默认值：未开启（enabled: false）时，confirm-doc.mjs --auto 一律拒绝。
 import fs from 'node:fs';
 import path from 'node:path';
@@ -45,7 +45,7 @@ function main() {
     }
     writeConfig({ enabled: true, level, name: NAME_BY_LEVEL[level], enabledAt: new Date().toISOString() });
     console.log(`✅ AI 自治模式已开启 (${NAME_BY_LEVEL[level]} / Level ${level})`);
-    console.log(level === 1 ? '   授权范围：L0/L1 文档 draft -> approved' : '   授权范围：L0/L1 文档全闭环 (approved + done)');
+    console.log(level === 1 ? '   授权范围：L1 文档 draft -> approved' : '   授权范围：L1 文档全闭环 (approved + done)');
     return;
   }
 

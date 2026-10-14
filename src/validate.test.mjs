@@ -35,7 +35,7 @@ const ENUMS_FIXTURE = [
   'doc.status.abandoned=superseded cancelled',
   'incident.status.all=open fixed closed',
   'incident.status.active=open',
-  'level.all=L0 L1 L2 L3',
+  'level.all=L1 L2 L3',
 ].join('\n') + '\n';
 
 const mkfix = () => {

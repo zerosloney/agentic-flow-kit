@@ -10,6 +10,7 @@
 3. **模块上线/走查后**：为该模块补关键路径条目
 4. 条目过时（功能下线/行为变更）时删除或改写，不保留失效条目
 5. **新增防复发条目落点优先级**：自动化用例 > 脚本化断言 > 人工步骤（仅剩视觉/交互断言无法脚本化时）
+6. **分片（2026-10-13 ledger-shard-ledgers）**：「防复发验证」节的数据行按月存 `workflow/regression-checklist.d/<YYYY-MM>.md`（该节是唯一 append-only 追加区；上方模块节为稳定参考内容，留守本文件）。追加一行用 `node .agents/scripts/ledger-shards.mjs --append regression-checklist --row "<行>"`；读侧自动合并主台账 ∪ 全部分片。
 
 ## 回归必过
 

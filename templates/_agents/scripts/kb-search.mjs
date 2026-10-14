@@ -5,6 +5,7 @@
 // 语料与口径
 //   workflow（流程留痕）：只搜 frontmatter + H1 + 指定节（背景 / 目标 / 根因 / 复盘三件套 / 验收标准 / 影响面），
 //     默认全状态可命中、活跃（draft/approved/open）排序 ×1.3 优先；输出带「节名 + 行号」便于节级读取。
+//     语料面含归档批次 workflow/archive/<批次>/<type>/（B10a 自源仓随动回灌）——归档件仍可检索（防复发不丢历史）。
 //   wiki（领域知识）：沿用 2026-09-21 降噪口径——默认跳过 .json/.csv、*.visual-check.* 与 >180KB bulk 文件。
 //   两侧排序均为 命中数/√文件KB（防大文件靠体量霸榜）；`-n` 为每语料展示上限。
 // 结构缓存（2026-09-23 intent kb-search-structure-cache）：可检索子集预提取进 .agents/cache/kb-index.json，
@@ -231,9 +232,22 @@ function saveCache() {
 function searchWorkflow(words) {
   const results = [];
   for (const type of (typeFilter || DOC_TYPES)) {
-    const dir = path.join('workflow', type);
-    if (!fs.existsSync(dir)) continue;
-    for (const f of fs.readdirSync(dir)) {
+    // 活跃目录 + 归档批次（workflow/archive/<批次>/<type>/，2026-10-09；B10a 自源仓随动回灌）——
+    // 归档件仍可检索（防复发不丢历史），标签用相对 workflow/ 的路径，活跃目录标签与旧口径逐字一致。
+    // 缓存键/失效语义随动：归档件按自身路径独立入缓存键，git mv 后旧活跃路径键由 saveCache
+    // 的 stat 清扫回收（[mtimeMs,size] 逐文件失效不变）；可检索子集提取函数未变 → 口径指纹不变。
+    const dirs = [path.join('workflow', type)];
+    const arcRoot = path.join('workflow', 'archive');
+    if (fs.existsSync(arcRoot)) {
+      for (const batch of fs.readdirSync(arcRoot)) {
+        const d = path.join(arcRoot, batch, type);
+        if (fs.existsSync(d)) dirs.push(d);
+      }
+    }
+    for (const dir of dirs) {
+      if (!fs.existsSync(dir)) continue;
+      const rel = path.relative('workflow', dir).split(path.sep).join('/');
+      for (const f of fs.readdirSync(dir)) {
       if (!f.endsWith('.md') || f === '_TEMPLATE.md') continue;
       const p = path.join(dir, f);
       const e = cachedEntry(p, 'wf', () => {
@@ -252,10 +266,11 @@ function searchWorkflow(words) {
       const kb = e.st[1] / 1024;
       const active = ACTIVE_STATUS.includes(status);
       results.push({
-        file: `${type}/${f}`, title: e.title || '', status, level: meta['级别'] || '—', module,
+        file: `${rel}/${f}`, title: e.title || '', status, level: meta['级别'] || '—', module,
         total: hits.total, shown: hits.shown, kb,
         score: (hits.total / Math.sqrt(Math.max(kb, 0.1))) * (active ? 1.3 : 1),
       });
+      }
     }
   }
   return results.sort((a, b) => b.score - a.score);

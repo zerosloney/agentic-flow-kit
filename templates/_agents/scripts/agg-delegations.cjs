@@ -2,6 +2,7 @@
 /* agg-delegations: 量化证据聚合
  * 读 workflow/delegations.md 两张结果表（按表头签名识别：委派表含「被委派方」列、自做表=日期+任务一句话；不依赖 ## 节标题）+ 扫 workflow/incidents/ 按月计数，
  * 输出各月指标（一次通过率 / 平均返工次数 / 主兜底占比 / **产出接受率**）、并发扩容门判定、可粘贴的月度快照行。
+ * 分片感知（2026-10-13 ledger-shard-ledgers 回灌）：读侧文本 = 主台账 ∪ delegations.d/*.md，单源 = ledger-shards.mjs。
  * 结果取值：一次通过 | 返工×N | 返工×N（门禁噪声）| 主兜底 | 返工待修（未闭环，不计入率）。
  *   门禁噪声档（2026-10-08 selfmeasure-and-modularize）：剥离「返工由门禁面而非设计面触发」的形态——
  *   扩容门第 3 项只对设计返工判 =0，门禁噪声返工单列观测。存量行零回填（旧四档解析逐条不变）。
@@ -95,15 +96,28 @@ function splitTables(text) {
   return tables;
 }
 
+// 分片读侧文本（2026-10-13 ledger-shard-ledgers 回灌）：单源 = ledger-shards.readLedgerText
+// （主台账 ∪ delegations.d/*.md，月序即时间序）。.cjs 不能静态 import .mjs、require(esm) 需
+// Node≥20.19（engines ≥18 不假设）——CLI 入口以 import() 装载后注入此变量再进 main；
+// 库调用方（gen-workflow-dashboard）经 opts.text 显式注入合并文本。两者都缺位 → 回落主台账直读
+// （与旧签名行为一致，不静默造数）。
+let shardReadText = null;
 // readLedger：root 显式参数 + soft 模式（2026-10-08 workflow-dashboard 使能导出，判据单源复用——
 // 仪表盘 require 本函数取行，不重写表解析；缺省 root/无 soft 行为与原签名完全一致，main() 零变化）
 function readLedger(root = ROOT, opts = {}) {
   const ledger = path.join(root, 'workflow', 'delegations.md');
-  if (!fs.existsSync(ledger)) {
+  let text;
+  if (typeof opts.text === 'string') {
+    text = opts.text; // 库调用方注入的合并文本（读侧单源 = ledger-shards.readLedgerText）
+  } else if (!fs.existsSync(ledger)) {
     if (opts.soft) return [];
     fail(`找不到 ${ledger}`);
+  } else if (shardReadText) {
+    try { text = shardReadText(root, 'delegations'); } // 分片感知读（fail-loud 包装：单分片读失败不静默吞）
+    catch (err) { if (opts.soft) return []; fail(`台账读取失败: ${ledger} (${err.message})`); }
+  } else {
+    text = fs.readFileSync(ledger, 'utf8');
   }
-  const text = fs.readFileSync(ledger, 'utf8');
   const tables = splitTables(text);
   const delegated = parseTableRows(tables.delegated.join('\n')).map((c) => ({
     scope: '委派',
@@ -278,7 +292,11 @@ function main() {
 
 // isMain 守卫 + 纯函数导出（board-kb-p1：gateMonth / expansionVerdict 供测试 import，import 不执行 main）
 if (require.main === module) {
-  main();
+  // 分片读侧装载（2026-10-13 ledger-shard-ledgers）：动态 import 后进 main；装载失败 fail-loud
+  // （指标缺数会喂错扩容门，不静默退化主台账直读）。
+  import('./ledger-shards.mjs')
+    .then((m) => { shardReadText = m.readLedgerText; main(); })
+    .catch((err) => fail(`ledger-shards.mjs 装载失败: ${err.message}`));
 } else {
   module.exports = { parseResult, parseVerdict, metrics, gateMonth, expansionVerdict, fmtAccept, GATE, ACCEPT_MIN_SAMPLE, readLedger };
 }

@@ -1,5 +1,5 @@
 // flow-kit fill-intent：起草 intent 草稿（背景与问题/历史教训防复发/目标/非目标/约束/影响面/触达红线/验收标准 8 节正文 + 确认与复核 共 9 节）
-// 读 workflow/intents/_TEMPLATE.md 的节标题 → 输出符合 frontmatter 受限子集（6 字段，含 risk_level 风险泳道）的草稿到指定文件
+// 读 workflow/intents/_TEMPLATE.md 的节标题 → 输出符合 frontmatter 受限子集（7 字段，含 risk_level 风险泳道与预判路由）的草稿到指定文件
 // 用法：node .agents/scripts/fill-intent.mjs --module pipeline --level L1 --topic "test" --output /tmp/x.md
 // 零依赖；CLI 解析用最简字符串匹配；不替代 AI 起草——本工具只输出模板与提示句
 import fs from 'node:fs';
@@ -41,10 +41,12 @@ const SECTIONS = [
 // renderIntent：骨架渲染（纯函数）。kbHits（2026-10-09 engine-quality-round3 W2）：kb-search 命中行
 // 数组（📄 行原文）——非空时替换「历史教训/防复发」节的检索占位行为实际命中列表（历史坑强制注入，
 // 手动路由与 pipeline-run 工单同权）；空/缺省保留占位（fail-open 口径）。子进程调用在 main，本函数保持无 IO。
+// 预判（2026-10-13 自 Shipyard §25 prejudgment-ledger 回灌）：intents≡require 恒真、level 与「级别」双写
+// 同值——机器可推导字段直出（与 B6b 路由预判一致性检查对账零 WARN）；advisory 灰度，缺字段零告警。
 export function renderIntent({ topic, module, level, notes, date = TODAY, kbHits = [], kbFailNote = '' }) {
   if (!LEVELS.includes(level)) throw new Error('level 不在枚举 ' + LEVELS.join('|') + '：' + level);
-  const fm = '---\n状态: draft\n级别: ' + level + '\nrisk_level: ' + level + '\n日期: ' + date + '\n模块: ' + module + '\n备注: ' + (notes || '<可选：附注自由文本，check-loop 不解析>') + '\n---\n';
-  let body = '# INTENT — ' + topic + '\n\n<!-- 复制本模板为 YYYY-MM-DD-<主题>.md 后填写；plans/ 下同名文件与本文件配对 -->\n<!-- frontmatter 受限子集（2026-09-13）：每行 键: 值；状态∈draft/approved/done/superseded/cancelled（严格枚举，附注写备注键）；级别∈L0/L1/L2/L3；risk_level=级别（混合治理风险泳道选道：L0/L1 协作道异步审计 / L2/L3 防御道同步确认）；check-loop 只扫 frontmatter 取机器字段，正文不再写状态/级别行 -->\n\n';
+  const fm = '---\n状态: draft\n级别: ' + level + '\n预判: kind=require level=' + level + '\nrisk_level: ' + level + '\n日期: ' + date + '\n模块: ' + module + '\n备注: ' + (notes || '<可选：附注自由文本，check-loop 不解析>') + '\n---\n';
+  let body = '# INTENT — ' + topic + '\n\n<!-- 复制本模板为 YYYY-MM-DD-<主题>.md 后填写；plans/ 下同名文件与本文件配对 -->\n<!-- frontmatter 受限子集（2026-09-13）：每行 键: 值；状态∈draft/approved/done/superseded/cancelled（严格枚举，附注写备注键）；级别∈L1/L2/L3（2026-10-13 L0 退役）；risk_level=级别（混合治理风险泳道选道：L1 协作道异步审计 / L2/L3 防御道同步确认）；check-loop 只扫 frontmatter 取机器字段，正文不再写状态/级别行 -->\n\n';
   for (const { title, hint } of SECTIONS) {
     let section = hint;
     if (title === '历史教训/防复发') {

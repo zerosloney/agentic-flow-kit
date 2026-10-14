@@ -114,7 +114,10 @@ const hardUnits = (rel, text) => {
   const count = (re) => (text.match(re) || []).length;
   if (/\.m?c?js$/.test(rel) && !rel.endsWith('.test.mjs')) return count(/blockers\.push\(/g) + count(/process\.exit\(1\)/g);
   if (/^(\.githooks|templates\/_githooks)\//.test(rel) || /\.sh$/.test(rel) || rel.endsWith('local-pre-commit')) {
-    return count(/\bexit\s+1\b/g);
+    // 硬拦单位数 = 钩子内可阻断提交的退出点。2026-10-13 门禁去 sh 化（B2）：无扩展名钩子改 CommonJS 后
+    // 硬拦形态从 sh 的 `exit 1` 变为 process.exit(非零字面/状态表达式)——两种形态并计，sh 侧计数不变
+    // （sh 无 process.exit；exit(0) 成功路径不计）。此为改判据基线的合法演进（本文件头口径），与 CHANGELOG 同批。
+    return count(/\bexit\s+1\b/g) + count(/process\.exit\((?!0\b)/g);
   }
   if (rel.endsWith('.yml')) return count(/node [^\s]*scripts\/[^\s]*\.(mjs|cjs|sh)/g); // CI 里每道门的调用
   if (/\.(txt|json)$/.test(rel)) {

@@ -1,6 +1,6 @@
 // workflow-enums.test.mjs — 枚举单源读取器测试（2026-09-25 enum-single-source）
 // 判据：① 真实单源文件解析 + 不变量通过 ② 坏数据（坏行/重复键/重复值/缺键/子集破/重叠）fail-loud
-//       ③ 缺文件 fail-loud ④ sh 消费方同口径（sed 可取到全部 8 键）
+//       ③ 缺文件 fail-loud ④ sh 消费方同口径（sed 可取到全部键）
 // 用法：node templates/_agents/scripts/workflow-enums.test.mjs（npm test 随跑）
 import path from 'node:path';
 import { execSync } from 'node:child_process';
@@ -20,12 +20,20 @@ const throwsWith = (fn, kw) => {
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ENUMS_TXT = path.join(SCRIPT_DIR, '..', 'workflow-enums.txt');
 
-// ---- S1 模块级 ENUMS 即加载即校验（真实文件），8 键齐 ----
+// ---- S1 模块级 ENUMS 即加载即校验（真实文件），10 键齐（2026-10-13 自 Shipyard 回灌归因两键）----
 {
   const keys = Object.keys(ENUMS).sort();
-  check('S1 真实单源文件加载成功且 8 键齐',
-    keys.length === 8 && keys.join(',') === 'doc.status.abandoned,doc.status.active,doc.status.all,doc.status.confirmed,doc.status.terminal,incident.status.active,incident.status.all,level.all',
+  check('S1 真实单源文件加载成功且 10 键齐',
+    keys.length === 10 && keys.join(',') === 'doc.status.abandoned,doc.status.active,doc.status.all,doc.status.confirmed,doc.status.terminal,incident.env.all,incident.source.all,incident.status.active,incident.status.all,level.all',
     JSON.stringify(keys));
+}
+
+// ---- S1b 归因两键值域逐字对齐 Shipyard（incident.source.all / incident.env.all）----
+{
+  check('S1b 归因两键值域：source=self user test monitor、env=dev staging prod none',
+    ENUMS['incident.source.all'].join('+') === 'self+user+test+monitor'
+      && ENUMS['incident.env.all'].join('+') === 'dev+staging+prod+none',
+    JSON.stringify(ENUMS));
 }
 
 // ---- S2 真实文件关键值口径（check-loop/看板/检索的行为锚点，值变更须连本测试一起改）----
@@ -35,7 +43,8 @@ const ENUMS_TXT = path.join(SCRIPT_DIR, '..', 'workflow-enums.txt');
       && ENUMS['doc.status.active'].join('+') === 'draft+approved'
       && ENUMS['doc.status.terminal'].includes('done')
       && ENUMS['doc.status.abandoned'].every((v) => ENUMS['doc.status.terminal'].includes(v))
-      && ENUMS['level.all'].length === 4,
+      // level.all=L1 L2 L3——L0 已退役（2026-10-13 自源仓收敛系列 1 回灌）
+      && ENUMS['level.all'].join('+') === 'L1+L2+L3',
     JSON.stringify(ENUMS));
 }
 

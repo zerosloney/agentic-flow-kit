@@ -71,10 +71,28 @@ function check(name, cond, detail = '') {
 
 // ---- 场景 8：risk_level 风险泳道字段（混合治理，= 级别，全枚举落 frontmatter）----
 {
-  for (const level of ['L0', 'L1', 'L2', 'L3']) {
+  for (const level of ['L1', 'L2', 'L3']) { // L0 已退役——L0 现走 renderIntent 抛「level 不在枚举」（S8b）
     const { body } = renderIntent({ topic: 't', module: 'pipeline', level });
     const fm = body.match(/^---([\s\S]*?)---/)[1];
     check('S8 risk_level=' + level + ' 写入 frontmatter', new RegExp('^risk_level:\\s*' + level + '$', 'm').test(fm));
+  }
+}
+
+// ---- 场景 8b：L0 已退役（2026-10-13 自源仓收敛系列 1 回灌）→ renderIntent fail-loud ----
+{
+  let threw = '';
+  try { renderIntent({ topic: 't', module: 'pipeline', level: 'L0' }); } catch (e) { threw = e.message; }
+  check('S8b level=L0 → 抛 level 不在枚举 L1|L2|L3', threw.includes('level 不在枚举 L1|L2|L3'), threw);
+}
+
+// ---- 场景 9：预判键 scaffold（2026-10-13 自 Shipyard §25 prejudgment-ledger 回灌）----
+// intents≡require 恒真；level 与「级别」双写同值——与路由预判一致性检查对账零 WARN（advisory 灰度）
+{
+  for (const level of ['L1', 'L2', 'L3']) { // L0 已退役——L0 现走 renderIntent 抛「level 不在枚举」（S8b）
+    const { body } = renderIntent({ topic: 't', module: 'pipeline', level });
+    const fm = body.match(/^---([\s\S]*?)---/)[1];
+    check('S9 预判=' + level + ' scaffold（kind=require level=级别）',
+      new RegExp('^预判:\\s*kind=require level=' + level + '$', 'm').test(fm));
   }
 }
 

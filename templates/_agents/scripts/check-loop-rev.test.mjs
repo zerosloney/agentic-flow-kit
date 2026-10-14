@@ -220,7 +220,7 @@ try {
   fs.mkdirSync(path.join(tree, '.agents', 'scripts'), { recursive: true });
   copyAgentsFiles(path.join(tree, '.agents'), ['workflow-enums.txt']);
   // 索引生成器 + 预算判定件的整闭包（含 workflow-enums.mjs 与日后新增依赖）
-  copyScriptClosure(path.join(tree, '.agents', 'scripts'), ['gen-workflow-index.mjs', 'rule-budget.sh']);
+  copyScriptClosure(path.join(tree, '.agents', 'scripts'), ['gen-workflow-index.mjs', 'rule-budget.mjs']);
   fs.writeFileSync(path.join(tree, '.agents', 'rule-budgets.txt'), 'big.txt 10\n');
   fs.writeFileSync(path.join(tree, 'big.txt'), 'ok\n');
   for (const sub of ['intents', 'specs', 'plans', 'incidents']) {
@@ -239,7 +239,8 @@ try {
   gitRun(tree, ['add', '--', '.']);
   gitRun(tree, ['commit', '-q', '-m', 'drift']);
   const drift = gitRun(tree, ['rev-parse', 'HEAD']);
-  const drifted = loop(tree, ['--rev', drift]);
+  // --all 显式全量（2026-10-13 分道：本场景断言的是卫生面「索引漂移」告警）
+  const drifted = loop(tree, ['--rev', drift, '--all']);
   check('被推送提交索引损坏：--rev 报索引漂移', outOf(drifted).includes('索引漂移'), outOf(drifted));
   fs.writeFileSync(path.join(tree, 'big.txt'), 'x'.repeat(100));
   const restored = spawnSync(process.execPath, [path.join(tree, '.agents', 'scripts', 'gen-workflow-index.mjs')], { cwd: tree, encoding: 'utf8' });
@@ -250,8 +251,9 @@ try {
   fs.writeFileSync(path.join(tree, 'big.txt'), 'ok\n');
   gitRun(tree, ['add', '--', '.']);
   gitRun(tree, ['commit', '-q', '-m', 'slim']);
-  const atFat = loop(tree, ['--rev', fat]);
-  const atSlim = loop(tree, []);
+  // --all 同上：预算/索引漂移都是卫生面告警，须全量面才可见
+  const atFat = loop(tree, ['--rev', fat, '--all']);
+  const atSlim = loop(tree, ['--all']);
   check('预算只在被推送提交里超限：--rev 报 100B', outOf(atFat).includes('常驻面超限') && outOf(atFat).includes('100B'), outOf(atFat));
   check('工作区预算未超限：不带 --rev 不报常驻面超限，也不报索引漂移',
     !outOf(atSlim).includes('常驻面超限') && !outOf(atSlim).includes('索引漂移'), outOf(atSlim));
@@ -315,7 +317,8 @@ try {
 |------|----------|------------|------|------|
 | 2026-09-12 | x | y | 一次通过 | ${name} |
 `);
-    const atOld = loop(repo, ['--rev', sha]);
+    // --all：委派台账对账是卫生面（检查 18），--rev 硬门面不含它
+  const atOld = loop(repo, ['--rev', sha, '--all']);
     check('委派行只在工作区：--rev 旧提交仍输出委派台账',
       outOf(atOld).includes('委派台账') && outOf(atOld).includes(`intents/${name}`),
       outOf(atOld));

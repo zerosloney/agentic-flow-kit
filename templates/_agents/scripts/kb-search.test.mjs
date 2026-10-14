@@ -258,6 +258,39 @@ const files = (out) => (out.match(/^📄 (workflow\/\S+)/gm) || []).map((l) => l
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- 场景 13：归档扩面（B10a 自源仓随动回灌）——workflow/archive/<批次>/<type>/ 参与检索 ----
+//    归档件命中带归档路径标签；无归档语料时行为与旧口径逐字一致；缓存键随动（归档件独立入键）
+{
+  const root = mkfix();
+  // 造归档批次：与活跃件同词命中（含终态件 frontmatter，可命中）
+  fs.mkdirSync(path.join(root, 'workflow', 'archive', '2026-09', 'plans'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'workflow', 'archive', '2026-09', 'plans', '2026-09-01-arch.md'),
+    doc('状态: done\n级别: L1\n模块: purchase', 'PLAN — 归档件', [['目标', '- 归档批次里的编码模板历史档']]), 'utf8');
+  const r = run(root, ['--scope', 'workflow', '编码模板']);
+  check('场景 13a 归档件参与检索且带归档路径标签',
+    r.status === 0 && files(r.stdout).some((f) => f === 'workflow/archive/2026-09/plans/2026-09-01-arch.md'), r.stdout);
+  check('场景 13b 活跃目录标签与旧口径逐字一致（不带 archive 段）',
+    files(r.stdout).some((f) => f === 'workflow/plans/2026-09-20-ccc.md'), files(r.stdout).join('\n'));
+  // 归档件状态 done → --status active 时被状态过滤排除（过滤口径对归档件照常生效）
+  const a = run(root, ['--scope', 'workflow', '--status', 'active', '编码模板']);
+  check('场景 13c --status active 排除终态归档件',
+    !a.stdout.includes('2026-09-01-arch.md') && a.stdout.includes('2026-09-21-bbb.md'), a.stdout);
+  // 缓存随动：warm 复跑与冷扫逐字节一致（归档件已入缓存键）
+  const warm = run(root, ['--scope', 'workflow', '编码模板']);
+  check('场景 13d 归档件入缓存后 warm ≡ 前次输出（逐字节）', warm.status === 0 && warm.stdout === r.stdout,
+    `warm:\n${warm.stdout}\nfirst:\n${r.stdout}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 14：无归档语料 → 行为不变（对照锚——扩面不得扰动既有输出）----
+{
+  const root = mkfix(); // mkfix 不建 workflow/archive/
+  const before = run(root, ['--scope', 'workflow', '编码模板']);
+  check('场景 14 无 archive 目录时输出照旧（3 篇活跃件命中）',
+    before.status === 0 && files(before.stdout).length === 3 && !before.stdout.includes('archive/'), before.stdout);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 if (fail) {
   console.log(`\n${USAGE}`);

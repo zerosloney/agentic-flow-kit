@@ -64,7 +64,7 @@ const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
     'doc.status.abandoned=superseded cancelled',
     'incident.status.all=open fixed closed',
     'incident.status.active=open',
-    'level.all=L0 L1 L2 L3',
+    'level.all=L1 L2 L3',
   ].join('\n') + '\n');
   const w = (rel, c) => fs.writeFileSync(path.join(T, rel), c);
   // 回路断档：incident 三件套选「是」但引用 intent 不存在
@@ -169,7 +169,7 @@ const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
     requirement: '在 runtime-env.md 补记 pipeline-run 运行态',
     stage: 'done',
     stopType: 'done',
-    triage: { kind: 'require', level: 'L0', module: 'pipeline', topic: 'runtime-note', decidedBy: 'ai' },
+    triage: { kind: 'require', level: 'L1', module: 'pipeline', topic: 'runtime-note', decidedBy: 'ai' },
     updatedAt: '2026-10-02T10:19:22.566Z',
     events: [
       { t: '2026-10-02T10:19:02.680Z', type: 'run-created', requirement: 'x' },

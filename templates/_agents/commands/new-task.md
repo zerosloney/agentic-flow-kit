@@ -42,16 +42,18 @@ flow-kit route --files <预计改动面…> --kind require|fix|verify|review|dep
   **诚实边界**:机器**无法**发现你没跑 route——定级发生在改动面确定之前,没有可比对的记录面,
   详见 [ARCHITECTURE §5](../ARCHITECTURE.md) 与 CHANGELOG 1.7.16 B3 条。
 
-动工前按下表定风险级 L0-L3(就高不就低;判据细则见下节「级别判断」),级别即风险级,决定走哪条泳道——确认放事前,还是审计补事后:
+动工前按下表定风险级 L1-L3(就高不就低;判据细则见下节「级别判断」,单源 level-criteria.mjs),级别即风险级,决定走哪条泳道——确认放事前,还是审计补事后:
 
 | 泳道 | 级别 | 确认与审计口径 |
 |------|------|---------------|
-| **协作道**(敏捷优先,审计异步补) | L0 例行 / L1 实现级 | L0 直接 commit,豁免 intent;L1 快车道(intent 一句话确认 + 极简 plan)即动工。独立复核不设同步前置,check-loop 与事后 review 兜底;确认/代录可 `--batch` 批量(仅 L0/L1) |
+| **协作道**(敏捷优先,审计异步补) | L1 实现级 | 一份 plan 即入口(来源 / 目标 / 红线 / 改动 / 验证 / 验收),不另立 intent。独立复核不设同步前置,check-loop 与事后 review 兜底;确认/代录可 `--batch` 批量(仅 L1) |
 | **防御道**(严谨优先,确认同步拦) | L2 规则/契约 / L3 数据与运行时结构 | 同步确认门:spec 确认通过方可起草 plan,plan 确认后方可动手;L3 加新会话独立复核,未确认不放行 |
 
-> **L2/L3 起草期合并预览**：三件套起草按 [design.md §0](design.md) 一次呈现要点总览（逐件确认代录不变）。
+> **两问定级**（2026-10-13 L0 退役,自源仓收敛系列 1 回灌）:结构面(schema / 迁移 SQL / DI / 认证管线)→ L3;契约或共享口径 → L2;两者都没有 → L1。不要按严重程度从 L1 往上滑。
+> **落位**: L1 写在 plan frontmatter `级别`;L2/L3 写在 intent(intent 另以 `risk_level`=级别双写,`fill-intent.mjs` 自动写入,机器选道用)。
+> **判低拦截**: 入口勾触达红线 → check-loop「红线判低」hard 拦 → 升到 L2/L3 并补同名 spec。
 >
-> 定级结果落 intent frontmatter `risk_level`(=级别,`fill-intent.mjs` 自动写入,机器选道用);协作道勾触达红线会被 check-loop 判「红线判低」hard 拦(就高升级 L2/L3 并补同名 spec)。
+> **L2/L3 起草期合并预览**：三件套起草按 [design.md §0](design.md) 一次呈现要点总览（逐件确认代录不变）。
 
 ## 3. 路由判断
 
@@ -62,7 +64,7 @@ flow-kit route --files <预计改动面…> --kind require|fix|verify|review|dep
 - **自动化驱动（并列入口,可选）**:一句话全程走 [pipeline-run.md](pipeline-run.md)——状态机驱动+工单协议+原话代录,与下述手动路由二选一,同一任务不混用
 - **新需求 / 功能**:从 `plan.md` 进,立 **intent**(`workflow/intents/`)
 - **修复类任务 / 事故**:从 `maintain.md` 进,立 **incident**(`workflow/incidents/`);incident 在 L1+ 即 **intent 等价物**(check-loop 认 incident≡intent),不必另立 intent。先检索同类历史(`node .agents/scripts/kb-search.mjs "<关键词>" --scope workflow --type incidents,plans`),有同类先读其历史三件套;再按级别走:
-  - L0 → 直接修复;L1 → 立 incident 后进 `build.md` 起草并确认同名 Quick-Plan → `test.md`
+  - L1 → 立 incident 后进 `build.md` 起草并确认同名 Quick-Plan → `test.md`
   - L2/L3 → 立 incident 后进 `design.md` 起草并确认同名 spec,再进 `build.md` 起草并确认同名 plan → `test.md`
   - 仅当根因属系统性 / 门禁缺位(maintain.md 三件套「是否需要新 intent」选"是")才另立 `workflow/intents/` 同名 intent
 - **改完代码要验证**:直接进 `test.md`（验证通过即关单；L1 到此结束）
@@ -87,8 +89,7 @@ flow-kit route --files <预计改动面…> --kind require|fix|verify|review|dep
 
 | 级别 | 单源语义(摘要) | 流程 |
 |------|-----------------|------|
-| L0 | 文档/样式微调(无行为影响) | 直接 commit,豁免 intent |
-| L1 | 实现级改动(未命中 L2/L3) | 快车道:液态草稿(.zcode/drafts) → 实现 → 固化(`solidify-task.mjs`)——用户确认后带 `--delegated "<原话>"` 执行;无确认来源只迁移不落账 |
+| L1 | 实现级改动(未命中 L2/L3) | 快车道:液态草稿(.zcode/drafts) → 实现 → 固化(`solidify-task.mjs`)——用户确认后带 `--delegated "<原话>"` 执行;无确认来源只迁移不落账;亦可一份 plan 即入口(不另立 intent) |
 | L2 | 规则 / 契约(一处改、多处依赖) | 入口文档(intent / incident) + spec + plan 三件套 |
 | L3 | 数据与运行时结构(结构面闭集见单源 `L3_SURFACES`) | 同 L2 + spec 新会话独立复核 |
 
@@ -99,7 +100,7 @@ flow-kit route --files <预计改动面…> --kind require|fix|verify|review|dep
 
 ## 5. intent 豁免(避免小改动也走完整闭环)
 
-- **L0 新需求**:可直接处理；**L1 新需求**:立轻量 intent + plan(不必 spec)
+- **L1 新需求**:一份 plan 即入口,不另立 intent(不必 spec)
 - **docs 级改动**(AGENTS.md / workflow/ 模板 / .agents/ 脚本与 commands / yaml):豁免 intent,走 Conventional Commits 直接 commit;若同时触及代码,按代码部分级别立 intent
 - **bootstrap 类改动**(引入规则本身):豁免 intent,commit message 显式声明 `bootstrap`
 

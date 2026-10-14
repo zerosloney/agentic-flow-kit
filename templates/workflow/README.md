@@ -12,14 +12,17 @@
 | `specs/` | 设计规格：功能行为、数据流、系统改动、约束遵守映射 | 与入口文档（intent / incident）同名 |
 | `plans/` | 计划文档：与入口文档同名配对，任务拆解 + 判据 + 风险 | 与入口文档（intent / incident）同名 |
 | `incidents/` | 事故复盘：时间线、根因、为什么没拦住、复盘三件套 | `YYYY-MM-DD-<主题>.md` |
+| `archive/` | 终态件归档（`<YYYY-MM>/<类型>/`）：同名家族滚动归档的落点，整族退出活跃面——INDEX、check-loop 配对门与 kb 活跃语料只扫四目录直下，台账行原路径未命中时 check-ledger-invariant 会探到此处 | `YYYY-MM/` |
 
 **命名一律英文 kebab-case**（如 `2026-09-07-<主题>.md`），**禁中文文件名**——check-loop 对非 ASCII 文件名给 warning。文档内容（标题/正文）不受此限。
 
-**文档协议（frontmatter 受限子集）**：四类文档头部一律为 YAML frontmatter（每行 `键: 值`，机器字段唯一来源）——`状态`（intent/spec/plan：draft/approved/done/superseded/cancelled；incident：open/fixed/closed，**严格枚举，单源 `.agents/workflow-enums.txt`**——check-loop / 看板 / 检索 / fill-* 一律读它，改枚举改那边；附注写 `备注:` 键）、`级别`（L0-L3，同单源）、intent 的 `risk_level`（=级别，混合治理风险泳道选道字段，fill-intent 落）、`日期`/`发现`（YYYY-MM-DD）、`模块`（**新建文档必填**，取值见 `.agents/workflow-modules.txt` 词表，单值取主导模块；存量不回填，AI 触碰时顺手补）、L3 spec 的 `确认结果`/`确认时间`、回填件 `流程: legacy`。**`状态` 迁移须经 `approved`**（确认环节的机器可见态，`done` 只在关单出现）：新建的 spec/plan 若已 done 而 git 历史中从未出现行首 `状态: approved`，check-loop 报「确认态缺失」warning。check-loop 只扫 frontmatter 取机器字段（`fm_get` 字段断言），正文不再写「状态：/级别：」行；叙述性字段（独立复核/复盘三件套/验收勾验）仍留正文按节锚定。
+**文档协议（frontmatter 受限子集）**：四类文档头部一律为 YAML frontmatter（每行 `键: 值`，机器字段唯一来源）——`状态`（intent/spec/plan：draft/approved/done/superseded/cancelled；incident：open/fixed/closed，**严格枚举，单源 `.agents/workflow-enums.txt`**——check-loop / 看板 / 检索 / fill-* 一律读它，改枚举改那边；附注写 `备注:` 键）、`级别`（L1-L3，同单源；L0 已退役，存量件改 L1 或标 `流程: legacy`）、intent 的 `risk_level`（=级别，混合治理风险泳道选道字段，fill-intent 落）、`日期`/`发现`（YYYY-MM-DD）、`模块`（**新建文档必填**，取值见 `.agents/workflow-modules.txt` 词表，单值取主导模块；存量不回填，AI 触碰时顺手补）、L3 spec 的 `确认结果`/`确认时间`、回填件 `流程: legacy`。**`状态` 迁移须经 `approved`**（确认环节的机器可见态，`done` 只在关单出现）：新建的 spec/plan 若已 done 而 git 历史中从未出现行首 `状态: approved`，check-loop 报「确认态缺失」warning。check-loop 只扫 frontmatter 取机器字段（`fm_get` 字段断言），正文不再写「状态：/级别：」行；叙述性字段（独立复核/复盘三件套/验收勾验）仍留正文按节锚定。
 
 各子目录内 `_TEMPLATE.md` 为起步模板，复制后填写，不直接改动模板本身。
 
 根目录 `regression-checklist.md` 为**活文档回归清单**：deploy 回归必过条目与 incident 防复发验证的统一落点，随模块上线补充、随 incident 追加。
+
+**三份 append-only 台账已分片**（2026-10-13 ledger-shard-ledgers）：`regression-checklist` / `delegations` / `papercuts` 的数据行按月存 `workflow/<台账>.d/<YYYY-MM>.md`，主台账只留说明、表头与 GENERATED 区——消除「每次追加全量重写整文件」的体积与合并冲突面。读写单源 = `.agents/scripts/ledger-shards.mjs`（读侧自动合并主台账 ∪ 全部分片，既有消费者无需改动）；追加一行用 `node .agents/scripts/ledger-shards.mjs --append <台账> --row "<行>"`。
 
 ## 使用方式
 
@@ -30,11 +33,13 @@
 - **评审**：`.agents/commands/review.md`（按 P0 / P1 / P2 分级：机器兜底 + AI 自查出清单，用户决策定性与合入）
 - **上线**：`.agents/commands/deploy.md`（上线前必跑清单）
 - **量化**：委派/自做结果记 `delegations.md`，聚合跑 `node .agents/scripts/agg-delegations.cjs`（**并发扩容门槛见该文件——数字达标前不扩并发**）；语料与常驻面体积的**月度快照**跑 `node .agents/scripts/gen-workflow-metrics.mjs`（每月一行落 `metrics.md`，同月重跑即更新；明细看 stdout）
+- **归档**：终态件滚动归档跑 `node .agents/scripts/archive-sweep.mjs`（缺省 dry-run 预览；`--window 21 --execute` 执行 git mv）——归档单位 = **同名家族**（intent/spec/plan/incident 同进同退：任一成员非终态 / 未满窗 / 被活跃引用 / 无日期，整族留守）；终态时间三级锚 = 确认台账终态行 ts → 内容 last-touch（frontmatter-only 提交不刷新）→ 文件名日期；落点 `workflow/archive/<家族最晚终态月>/<类型>/`
+- **papercut 回路（存量债清偿，手动触发）**：命令/技能卡壳记 `workflow/papercuts.md` 攒成的未升级条目 = 存量债；要清时跑 `node .agents/scripts/papercut-debt-sensor.mjs`（测 debt）→ `node .agents/scripts/papercut-debt-controller.mjs`（确定性选本轮唯一目标；源码/数据库面条目被 scope gate 拦下等授权）→ 按 `.agents/skills/papercut-fix/SKILL.md` 执行（改完 debt 应恰好 -1）。判定与排序口径单源 `.agents/loop/papercut-debt/DESIGN.md`，改口径先改设计文件
 - **追溯**：git 即审计——文档随代码同 commit、上线打 `release/<日期>` tag，`git log` 全链路可查；多人评审暂缓，git 历史即评审记录
-- **级别**：L0 例行 ｜ L1 实现级（页面 / 交互 / 样式等，未命中 L2/L3）｜ L2 规则 / 契约（编码权威 / 共享契约 / 既有接口语义 / 全局横切口径，触达面闭集见 `.agents/commands/new-task.md` §级别判断）｜ L3 数据与运行时结构（schema / 迁移 SQL / DI 链 / 认证与中间件管线）；混合改动就高不就低
-- **风险泳道（混合治理）**：级别即风险级（L0 最低 → L3 最高），按级选道——**L0 / L1 协作道（敏捷优先）**：L0 豁免 intent 直接 commit；L1 已确认 intent + 极简 plan 即动工，独立复核不设同步前置，审计异步补（check-loop、事后 review 兜底）；**L2 / L3 防御道（严谨优先）**：同步确认门——spec 确认通过方可起草 plan、plan 确认后方可动手（闭环规则 1-2），L3 加新会话独立复核，未确认不放行。intent frontmatter 以 `risk_level`（=级别）落机器可读标记；批量代录与 AI 自治（confirm-doc `--batch` / `--auto`，trust-mode Standard｜Trusted）均限协作道 L0/L1，协作道勾触达红线会被 check-loop 判「红线判低」hard 拦截
-- **探索泳道（experiment/ 前缀分支，Explore-to-Harden，2026-09-30 hybrid-governance-explore-hardening）**：experiment/ 前缀分支上的 PoC 任务在 intent frontmatter 加 `阶段: exploring` 标记——提交/推送门降级 advisory（pre-commit 闭环配对、pre-push 闭环扫描报告不阻断）；L0/L1 的 draft intent 允许 spec/plan 起草与确认先于入口确认（stage-gates 起草门泳道豁免，「先起草后确认」）。**转正（合入 main）必须过加固门**：pre-push 对目标 refs/heads/main 以 `check-loop --hardening` 运行——exploring 任务的 intent 须为 approved/done、同名 plan 在场且收口（L2/L3 另须同名 spec），未收口 hard 阻断；探索作废走显式放弃态 superseded/cancelled（出列不加固）。诚实边界：分支名不进 commit——experiment/* 分支上暂存 intent 缺「阶段: exploring」由 pre-commit「泳道完整性」门禁拦截（2026-10-01 drift-hardening），残余暴露面仅剩绕过本地钩子的提交（`--no-verify` 禁令纪律覆盖）
-- **Trusted 自动泳道（2026-09-30 hybrid-governance-explore-hardening）**：trust-mode.json = Trusted（level 2）时，confirm-doc 的非 TTY 单份调用对 L0/L1 文档**免旗标**（无需 `--delegated` 原话 / `--auto`）自动按 AI 自治放行（台账 source=ai-auto-trust-L2）；L2/L3 与 incidents 仍须人工，Standard / Strict 不隐式（fail-closed）
+- **级别**：L1 实现级（未命中 L2/L3；新需求的入口是 plan）｜ L2 规则 / 契约（编码权威 / 共享契约 / 既有接口语义 / 全局横切口径，触达面闭集见 `.agents/commands/new-task.md` §级别判断）｜ L3 数据与运行时结构（schema / 迁移 SQL / DI 链 / 认证与中间件管线）；混合改动就高不就低
+- **风险泳道（混合治理）**：级别即风险级（L1 最低 → L3 最高），按级选道——**L1 协作道（敏捷优先）**：一份 plan 即入口，不另立 intent，独立复核不设同步前置，审计异步补（check-loop、事后 review 兜底）；**L2 / L3 防御道（严谨优先）**：同步确认门——spec 确认通过方可起草 plan、plan 确认后方可动手（闭环规则 1-2），L3 加新会话独立复核，未确认不放行。intent frontmatter 以 `risk_level`（=级别）落机器可读标记；批量代录与 AI 自治（confirm-doc `--batch` / `--auto`，trust-mode Standard｜Trusted）均限协作道 L1，协作道勾触达红线会被 check-loop 判「红线判低」hard 拦截
+- **探索泳道（experiment/ 前缀分支，Explore-to-Harden，2026-09-30 hybrid-governance-explore-hardening）**：experiment/ 前缀分支上的 PoC 任务在 intent frontmatter 加 `阶段: exploring` 标记——提交/推送门降级 advisory（pre-commit 闭环配对、pre-push 闭环扫描报告不阻断）；L1 的 draft intent 允许 spec/plan 起草与确认先于入口确认（stage-gates 起草门泳道豁免，「先起草后确认」）。**转正（合入 main）必须过加固门**：pre-push 对目标 refs/heads/main 以 `check-loop --hardening` 运行——exploring 任务的 intent 须为 approved/done、同名 plan 在场且收口（L2/L3 另须同名 spec），未收口 hard 阻断；探索作废走显式放弃态 superseded/cancelled（出列不加固）。诚实边界：分支名不进 commit——experiment/* 分支上暂存 intent 缺「阶段: exploring」由 pre-commit「泳道完整性」门禁拦截（2026-10-01 drift-hardening），残余暴露面仅剩绕过本地钩子的提交（`--no-verify` 禁令纪律覆盖）
+- **Trusted 自动泳道（2026-09-30 hybrid-governance-explore-hardening）**：trust-mode.json = Trusted（level 2）时，confirm-doc 的非 TTY 单份调用对 L1 文档**免旗标**（无需 `--delegated` 原话 / `--auto`）自动按 AI 自治放行（台账 source=ai-auto-trust-L2）；L2/L3 与 incidents 仍须人工，Standard / Strict 不隐式（fail-closed）
 
 ## 执行模型
 
@@ -65,6 +70,8 @@
    哈希链的域是「同一 doc 的逻辑序」而非文件物理序——并发 append / 并集合并 / 分片归并都不会打断它；就地改行、删行、插行三类篡改照拦。诚实边界：manifest 是可写文件，**刻意伪造即可让任意删行合法化**（与「台账本地可写」同级），本通道只把「顺手手改」抬到「提交一份可被 git 历史对质的凭据」。
 
    > **存量装户迁移动作**：`merge=jsonl-union` 属 `.gitattributes`，而该文件是**项目自持（owned）**、`sync` 永不覆盖——升级后**不会自动获得**，需手动在目标仓 `.gitattributes` 补两行：`.agents/*.jsonl merge=jsonl-union` 与 `.agents/confirmations.d/*.jsonl merge=jsonl-union`（2026-10-13 ledger-shard-default 起分片为默认写入口径，分片行漏配则并行分支合并分片仍走文本冲突）。driver 是本机态配置、不跨机共享（漏配退化为文本冲突，不静默丢数据但要人工解）。
+
+   > **冲突自愈兜底**：gitattributes 行或 driver 漏配退化为文本冲突时，跑 `node .agents/scripts/resolve-merge-conflicts.mjs` 一键消解派生面——`workflow/INDEX.md` 冲突取当前侧后全量重生成 + `git add`；`.agents/` 下 `*.jsonl`（主台账与 `confirmations.d/` 分片同判定面）UU/AA 双方并集去重 + `git add`；删除/改删型（DD/UD/AU/DU）不写入只提示人工裁决，业务代码冲突原样保留交人收尾。
 
 其余检查（占位符、引用、模块字段、常驻面预算、量化签名、阶段索引、适配器断线、引擎脚本测试覆盖（检查 20，包源环境——新增引擎脚本默认必须带 `.test.mjs`，库件/工具须登记 `.agents/scripts-test-exempt.txt`，2026-10-01 gate-script-test-coverage））只在 `audit` 不是 `false` 时出警告。
 

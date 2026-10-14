@@ -56,7 +56,7 @@ npx agentic-flow-kit doctor                        # §6.5 delegations + §6.6 o
 
 - 输出测试报告(通过项 / 失败项);失败项已修复并复测通过。
 - **关单**（日常闭环点，不依赖是否上 prod）:
-  - 关单前一键过门：`node .agents/scripts/verify.mjs --doc workflow/intents/<本单>.md`（npm test + check-loop 固定编排，任一失败非零退出，非绿不关单）；**`--doc` 把测试绿凭证绑到本单**——不带它落下的绿行不给任何单背书，confirm-doc 前置与检查 8 对账只认带本单 `--doc` 的绿行（仅 v6+ 生效）；**装户仓**（根目录无 `package.json`，工程在子目录）默认 `npm test` 不可跑 → 脚本**显式跳过步骤 1 且不落测试绿凭证**（防假绿）并提示；此时按项目口径手工跑测试，或带 `--test-cmd "<项目测试命令>"` 指定
+  - 关单前一键过门：`node .agents/scripts/verify.mjs --doc workflow/intents/<本单>.md`（七门编排：语法/测试/编排检查/预算/生效规则视图/闭环/台账不变量，fail-fast 失败行留痕，非绿不关单）；**`--doc` 把绿凭证绑到本单**——不带它落下的绿行不给任何单背书，confirm-doc 前置与检查 8 只认带本单 `--doc` 的绿行（仅 v6+ 生效）；**全绿尾部自动落凭证并重生成 `workflow/verify-evidence.md`**（`effective-policy.md` 同为生成物——两者勿手改，policy/台账变更后重生成随同提交）；**装户仓**（当前目录无 `package.json`）测试门显式跳过且**不落测试绿凭证**（防假绿），按项目口径手工跑或带 `--test-cmd "<项目测试命令>"` 指定
   - 新需求：逐条勾验入口 intent「验收标准」，每条补「证据：」（例如：粘贴 CI 运行结果、UI 截图路径、或具体的 commit SHA），intent → done；同名 spec/Quick-Plan（若有）仍 approved → done。**注意：勾选但缺证据会被 check-loop 拦截（hard-block）**
   - **approved 留痕提交**：done 确认前确认**本次关单文档**的 approved 态已进 git 历史（越早越好——approved 后即应提交；若尚未，先补提交再 done；门为逐份校验，三件套均关单时逐份各自满足）——confirm-doc 的 done 前置门硬校验（历史未出现「状态: approved」→ 拒绝落账）；done 后再提交 done 态与其余改动
   - **确认落态**：唯一入口 `node .agents/scripts/confirm-doc.mjs <path>`（两形态 / 逐件代录（摘要可复用——分辨力由 scope+指纹承担）/ done 内容绑定（关单编辑先于 done 确认、confirm-doc 是最后一次写入）/ 台账对质全口径见根 `AGENTS.md` §1.3 确认门）。

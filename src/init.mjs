@@ -243,9 +243,11 @@ export async function init(args, pkgRoot) {
   }
 
   // 4) .gitignore 追加（缺哪条补哪条）。2026-10-05 起七个宿主一律 localOnly:false，
-  // 宿主目录不再自动进 .gitignore——实际只补 .agents/cache/ 这条运行时缓存。
+  // 宿主目录不再自动进 .gitignore——补 .agents/cache/ 运行时缓存与 .agents/judgments.jsonl
+  // 判定流水（2026-10-13 judgment-ledger 回灌 B4：check-loop 每次真实运行追加的本机运行判定，
+  // 各机各自产生不跨机共享，月度聚合经 agg-judgments.mjs）。
   const giPath = path.join(target, '.gitignore');
-  const giNeed = ['.agents/cache/', ...(hosts.filter((h) => HOSTS[h].localOnly).map((h) => `${HOSTS[h].dir}/`))];
+  const giNeed = ['.agents/cache/', '.agents/judgments.jsonl', ...(hosts.filter((h) => HOSTS[h].localOnly).map((h) => `${HOSTS[h].dir}/`))];
   let giText = fs.existsSync(giPath) ? fs.readFileSync(giPath, 'utf8') : '';
   const giAdd = giNeed.filter((l) => !giText.split(/\r?\n/).some((x) => x.trim() === l));
   if (giAdd.length) {
@@ -331,10 +333,11 @@ export async function init(args, pkgRoot) {
   fs.writeFileSync(kitPath, `${JSON.stringify({
     kit: 'agentic-flow-kit',
     version: pkg.version,
-    // policyVersion 8（2026-10-13 ledger-shard-default）：新装即带 doc 链锚（ledgerDocChainSince）——
-    // 确认行分片默认写入口径的前提；v1-v7 存量装户升级模板后 confirm-doc 自动回退主台账（行为零变化），
-    // 想启用分片默认须手动升 .agents/kit.json 的 policyVersion 到 8。
-    policyVersion: 8,
+    // policyVersion 12（2026-10-13 B6b-2 回灌对齐源仓 v12）：新装即带全锚——v9–v12 = incidentRegrSince /
+    // specVerifSince / attributionSince / convergenceSince / convergenceHardSince / reviewerSince
+    // （§21–26 六段 + §3x 防复发证据门 + 复核上下文子检）。新装空台账零回溯：各段锚前存量豁免、空仓零
+    // 噪声；v1–v11 存量装户不受影响（缺键 → 对应消费段整体跳过）。
+    policyVersion: 12,
     // 新装默认只跑硬规则。缺省（旧台账无此字段）在 check-loop 里仍是全量，避免升级后卫生检查突然消失。
     audit: false,
     // 门禁信任档（2026-10-12 gate-trust-level）：默认 'project' —— gate 安装锚失配只 WARN，
@@ -349,6 +352,17 @@ export async function init(args, pkgRoot) {
     owned: ownedFinal,
   }, null, 2)}\n`);
   console.log(`  kit.json 台账：managed ${managed.length} 份 ｜ owned ${ownedFinal.length} 份（版本 ${pkg.version}）`);
+
+  // 生效规则视图种子（2026-10-13 verify-gates 回灌）：verify.mjs `effective-policy` 门 --check 对缺文件
+  // 判漂移（红）——源仓等价物是该生成物随生成器同笔入库；kit 新装由 init 首跑种子，保证 fresh 装户
+  // 首个 verify 不被卡。**必须在 kit.json 落盘之后**：渲染读 loadKitPolicy（.agents/kit.json 的
+  // policyVersion），先跑会按回落 v1 种子、装完即与 v12 视图漂移（fresh 实测）。本文件不入 owned 台账
+  // （生成器重写面，非模板渲染件），不受 P1-2「先跑后记账」约束；视图日期 = 安装日，--check 按磁盘
+  // 视图日期重渲染，跨锚日字节稳定。
+  if (guardRun('.agents/scripts/gen-effective-policy.mjs')) {
+    const genPolicy = runNode(target, '.agents/scripts/gen-effective-policy.mjs');
+    console.log(genPolicy.ok ? '  已生成 workflow/effective-policy.md（生效规则视图——policy 变更后重生成并随同提交）' : `  ⚠️ gen-effective-policy 失败：${genPolicy.out.split('\n')[0]}`);
+  }
 
   // 8) 自检（kit.json 已按生成后盘面记账——doctor §6.6 应全绿，fresh init 以 exit 0 收场）
   // 输出语义（p2-batch1 P2-4）：doctor 打印在异步端口回调里、晚于本横幅——脚本化消费方按退出码判定

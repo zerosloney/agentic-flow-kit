@@ -1,6 +1,7 @@
 ---
 状态: draft
 级别: L1
+预判: <可选：kind=<require|fix|verify|review|deploy> level=<L1|L2|L3>>
 日期: YYYY-MM-DD
 模块: <词表之一，见 .agents/workflow-modules.txt>
 沉淀: <可选：沉淀到 wiki 的相对仓根路径，如 wiki/项目规范/权限收敛方案.md；不沉淀写「无」，留空待 check-loop 提醒；关单时可跑 node .agents/scripts/draft-sediment.mjs 自动抽草稿并回写本字段>
@@ -8,8 +9,9 @@
 ---
 # INTENT — <主题>
 <!-- 复制本模板为 YYYY-MM-DD-<主题>.md 后填写；plans/ 下同名文件与本文件配对 -->
-<!-- frontmatter 受限子集（2026-09-13）：每行 `键: 值`；状态∈draft/approved/done/superseded/cancelled（严格枚举，附注写备注键）；级别∈L0/L1/L2/L3；check-loop 只扫 frontmatter 取机器字段，正文不再写状态/级别行 -->
-<!-- 探索泳道（可选，2026-09-30 hybrid-governance-explore-hardening）：experiment/ 前缀分支上的 PoC 任务在 frontmatter 加「阶段: exploring」——提交/推送门降级 advisory，spec/plan 可先于本入口确认起草（限 L0/L1）；转正合入 main 前须收口（本档 approved/done + 同名 plan/spec 在场，check-loop --hardening 加固门），或显式放弃（superseded/cancelled） -->
+<!-- frontmatter 受限子集（2026-09-13）：每行 `键: 值`；状态∈draft/approved/done/superseded/cancelled（严格枚举，附注写备注键）；级别∈L1/L2/L3；check-loop 只扫 frontmatter 取机器字段，正文不再写状态/级别行 -->
+<!-- 探索泳道（可选，2026-09-30 hybrid-governance-explore-hardening）：experiment/ 前缀分支上的 PoC 任务在 frontmatter 加「阶段: exploring」——提交/推送门降级 advisory，spec/plan 可先于本入口确认起草（限 L1）；转正合入 main 前须收口（本档 approved/done + 同名 plan/spec 在场，check-loop --hardening 加固门），或显式放弃（superseded/cancelled） -->
+<!-- 预判（可选，2026-10-13 自 Shipyard 回灌 prejudgment-ledger）：定级时先做结构化预判，结果如实写「预判: kind=<require|fix|verify|review|deploy> level=<L1|L2|L3>」——intents≡require、incidents≡fix；与实际落位不符时 check-loop 路由预判一致性检查（B6b 落地后编号以 check-loop.mjs 头部清单为准）出 WARN 留账。缺字段零告警（存量宽容不回填，不做强制前置）——advisory 灰度口径 -->
 
 ## 背景与问题
 <为什么做；写明需求来源（工单 / 沟通记录 / 待办事项）>

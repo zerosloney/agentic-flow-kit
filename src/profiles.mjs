@@ -116,9 +116,13 @@ export function isOwned(rel) {
     // level-hints.txt（2026-10-13 flow-kit-route）：风险级别**路径下限**清单，内容项目私有（照抄别人的
     //   清单等于没登记），故归装户自持、sync 永不覆盖——与 lane-surfaces.txt 同款性质。
     || rel === '.agents/level-hints.txt'
-    || rel === '.agents/metric-claims.txt' || rel === '.agents/metric-derivers.cjs'
-    || rel === '.agents/metric-derivers.mjs'
-    || rel === '.agents/hooks/local-pre-commit'
+  || rel === '.agents/metric-claims.txt' || rel === '.agents/metric-derivers.cjs'
+  || rel === '.agents/metric-derivers.mjs'
+  // mechanism-registry.md（2026-10-13 judgment-ledger 回灌 B4）：机制使用量登记表——装户按月对账
+  // 自持运营（增删机制行 / 刷新计数 / 退役处置），若落 managed 则每次对账编辑都报「本地已改」漂移，
+  // 与 metric-claims.txt 同款性质，归 owned（随包附带示例行起步内容，此后归项目）。
+  || rel === '.agents/mechanism-registry.md'
+  || rel === '.agents/hooks/local-pre-commit'
     || rel.startsWith('.github/');
 }
 

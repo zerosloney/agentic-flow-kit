@@ -60,7 +60,7 @@ export const HELP = `flow-kit — AI-Native 闭环工作流 + wiki 知识层脚�
                             路径下限清单 = .agents/level-hints.txt（装户自持、内容项目私有，默认空）。
                             **诚实边界**：级别是意图面的语义判定（「一处定义、多处消费」），机器判不了语义；
                             未配 hints 时按 L1 起步并提示补配置，绝不假装判得出。
-                            选项：--kind ${ROUTE_KIND_LIST} ｜ --level L0|L1|L2|L3
+                            选项：--kind ${ROUTE_KIND_LIST} ｜ --level L1|L2|L3
                                   --files "a,b"（改动文件，参与路径下限判定）｜ --dir <目录> ｜ --json
   flow-kit run <子命令>     自动流水线：薄壳转发装户 pipeline-run 状态机
                             （start / next / status / watch / abort），参数与退出码原样透传。

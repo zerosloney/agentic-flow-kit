@@ -2,8 +2,8 @@
 // check-loop.test.mjs — 闭环门禁 fixture 套件（2026-09-26 check-loop-node：自 check-loop.test.sh 全量移植）
 // 方法：现场构造临时 workflow 根（含枚举单源内联件），spawn node check-loop.mjs（CHECK_LOOP_ROOT 注入，
 //       git 模式场景改 cwd 注入），断言 exit code 与输出关键词——场景集与关键词断言沿 sh 版逐条移植。
-// git 场景用 git init 现场建仓；rule-budget --staged 两场景直调 sh（rule-budget.sh 仍为 sh——
-//       git 钩子环境保证；无 sh 环境打印 SKIP 不算失败）。
+// git 场景用 git init 现场建仓；rule-budget --staged 两场景 node 直跑（2026-10-13 门禁去 sh 化——
+//       rule-budget.mjs 无 sh 依赖）。
 // 用法：node templates/_agents/scripts/check-loop.test.mjs（npm test 随跑）
 import fs from 'node:fs';
 import os from 'node:os';
@@ -32,7 +32,8 @@ const check = (desc, cond, detail = '') => {
 // 台账改动漏拷 ledger-loader.mjs 就假绿过（看板漂移门恒绿）。改为按入口自动求传递闭包——新增依赖自动跟随。
 const { copyScriptClosure, copyAgentsFiles } = await import('./fixture-scripts.mjs');
 
-// mkfix：空 fixture 根（四目录 + 枚举单源内联 8 键——fixture 自包含，测消费逻辑而非当前词表值）
+// mkfix：空 fixture 根（四目录 + 枚举单源内联 10 键——fixture 自包含，测消费逻辑而非当前词表值；
+// 2026-10-13 B6b-2 起 +incident.source.all/incident.env.all 两键：检查 24 归因枚举消费面）
 const ENUMS_FIXTURE = [
   'doc.status.all=draft approved done superseded cancelled',
   'doc.status.confirmed=approved done superseded cancelled',
@@ -41,7 +42,9 @@ const ENUMS_FIXTURE = [
   'doc.status.abandoned=superseded cancelled',
   'incident.status.all=open fixed closed',
   'incident.status.active=open',
-  'level.all=L0 L1 L2 L3',
+  'level.all=L1 L2 L3',
+  'incident.source.all=self user test monitor',
+  'incident.env.all=dev staging prod none',
 ].join('\n') + '\n';
 
 const mkfix = () => {
@@ -73,9 +76,10 @@ ${refs ? '     - 是 → ../intents/2026-09-12-ghost.md\n' : ' - 否 → 理由:
 `;
 
 // run：默认 CHECK_LOOP_ROOT 注入（fixture 模式）；{git:true} 时 cwd 注入（真 git 模式，测 tracked 过滤）；
-// opts.args 追加 CLI 参数（--hardening 等加固门场景用，2026-09-30 hybrid-governance-explore-hardening）；
+// opts.args 替换默认 `--all`（套件默认全量 = 分道前裸跑语义；2026-10-13 分道后裸跑=默认硬门，沿源仓
+// check-loop.test.mjs 同款约定——硬门默认入口用 { args: [] }，分道场景显式传 --hygiene）；
 // opts.env 增量覆盖子进程 env（CHECK_LOOP_GIT 替身注入用，2026-10-05-gitout-fail-open）
-const run = (root, opts = {}) => spawnSync(process.execPath, [CHECK_LOOP, ...(opts.args || [])], {
+const run = (root, opts = {}) => spawnSync(process.execPath, [CHECK_LOOP, ...(opts.args ?? ['--all'])], {
   ...(opts.git
     ? { cwd: root, ...(opts.env ? { env: { ...process.env, ...opts.env } } : {}) }
     : { cwd: ROOT_CWD, env: { ...process.env, ...(opts.env || {}), CHECK_LOOP_ROOT: root } }),
@@ -117,6 +121,14 @@ const gitInit = (root) => {
 const gitCommitAll = (root, msg) => {
   gitRetry(['add', '-A'], root);
   gitRetry(['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', msg], root);
+};
+// gitCommitAllAt：带 author/committer 日期的提交（B6b-2 §21/§3x 场景用——那两段锚取 git 首加日期，
+// 夹具须钉死在锚日/锚后，套件跨日重跑才不翻面；iso 形如 '2026-10-13T01:00:00.000Z'）
+const gitCommitAllAt = (root, msg, iso) => {
+  gitRetry(['add', '-A'], root);
+  const env = { ...process.env, GIT_AUTHOR_DATE: iso, GIT_COMMITTER_DATE: iso };
+  const r = spawnSync(GIT, ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-qm', msg], { cwd: root, encoding: 'utf8', env });
+  if (r.error || r.status !== 0) throw new Error(`fixture git 回溯提交失败: git commit（${iso}）\n${(r.stderr || '').slice(0, 300)}`);
 };
 const rmfix = (root) => fs.rmSync(root, { recursive: true, force: true });
 // writeLedger：fixture 台账辅助（检查 15 配对用；行 schema 同 confirm-doc.mjs appendLedger）
@@ -461,7 +473,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
 {
   const T = mkfix();
   fs.mkdirSync(path.join(T, '.agents', 'scripts'), { recursive: true });
-  fs.copyFileSync(path.join(SCRIPT_DIR, 'rule-budget.sh'), path.join(T, '.agents', 'scripts', 'rule-budget.sh'));
+  fs.copyFileSync(path.join(SCRIPT_DIR, 'rule-budget.mjs'), path.join(T, '.agents', 'scripts', 'rule-budget.mjs'));
   copyAgentsFiles(path.join(T, '.agents'), ['rule-budgets.txt']);
   // 超限样本自校准：从拷入的预算表读 AGENTS.md 上限（预算可上调，硬编码样本会随上调失效——2026-10-06-v114-backflow-batch）
   const agLimit = Number(fs.readFileSync(path.join(T, '.agents', 'rule-budgets.txt'), 'utf8').split(/\r?\n/).find((l) => l.startsWith('AGENTS.md ')).trim().split(' ').pop());
@@ -481,29 +493,24 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   rmfix(T);
 }
 
-// ---- 场景 30:rule-budget --staged 硬拦路径（rule-budget.sh 仍为 sh——无 sh 环境打印 SKIP）----
+// ---- 场景 30:rule-budget --staged 硬拦路径（node 直跑——2026-10-13 去 sh 化后无 sh 依赖）----
 {
-  const probe = spawnSync('sh', ['-c', 'true']);
-  if (probe.error) {
-    console.log('SKIP  rule-budget --staged 两场景（环境无 sh——rule-budget.sh 属 git 钩子 sh 环境面）');
-  } else {
-    const T = mkfix();
-    fs.mkdirSync(path.join(T, '.agents', 'scripts'), { recursive: true });
-    fs.copyFileSync(path.join(SCRIPT_DIR, 'rule-budget.sh'), path.join(T, '.agents', 'scripts', 'rule-budget.sh'));
-    copyAgentsFiles(path.join(T, '.agents'), ['rule-budgets.txt']);
-    const agLimit = Number(fs.readFileSync(path.join(T, '.agents', 'rule-budgets.txt'), 'utf8').split(/\r?\n/).find((l) => l.startsWith('AGENTS.md ')).trim().split(' ').pop());
-    gitInit(T);
-    w(T, 'AGENTS.md', 'x'.repeat(agLimit + 512));
-    gitRetry(['add', 'AGENTS.md'], T);
-    let r = spawnSync('sh', ['.agents/scripts/rule-budget.sh', '--staged'], { cwd: T, encoding: 'utf8' });
-    check('rule-budget --staged:暂存超限 → exit 1（硬拦路径）',
-      r.status === 1 && `${r.stdout}${r.stderr}`.includes('常驻面超限：AGENTS.md'), `${r.stdout}${r.stderr}`);
-    w(T, 'AGENTS.md', '# 小体积\n');
-    gitRetry(['add', 'AGENTS.md'], T);
-    r = spawnSync('sh', ['.agents/scripts/rule-budget.sh', '--staged'], { cwd: T, encoding: 'utf8' });
-    check('rule-budget --staged:合规 → exit 0（不误拦）', r.status === 0, `${r.stdout}${r.stderr}`);
-    rmfix(T);
-  }
+  const T = mkfix();
+  fs.mkdirSync(path.join(T, '.agents', 'scripts'), { recursive: true });
+  fs.copyFileSync(path.join(SCRIPT_DIR, 'rule-budget.mjs'), path.join(T, '.agents', 'scripts', 'rule-budget.mjs'));
+  copyAgentsFiles(path.join(T, '.agents'), ['rule-budgets.txt']);
+  const agLimit = Number(fs.readFileSync(path.join(T, '.agents', 'rule-budgets.txt'), 'utf8').split(/\r?\n/).find((l) => l.startsWith('AGENTS.md ')).trim().split(' ').pop());
+  gitInit(T);
+  w(T, 'AGENTS.md', 'x'.repeat(agLimit + 512));
+  gitRetry(['add', 'AGENTS.md'], T);
+  let r = spawnSync(process.execPath, ['.agents/scripts/rule-budget.mjs', '--staged'], { cwd: T, encoding: 'utf8' });
+  check('rule-budget --staged:暂存超限 → exit 1（硬拦路径）',
+    r.status === 1 && `${r.stdout}${r.stderr}`.includes('常驻面超限：AGENTS.md'), `${r.stdout}${r.stderr}`);
+  w(T, 'AGENTS.md', '# 小体积\n');
+  gitRetry(['add', 'AGENTS.md'], T);
+  r = spawnSync(process.execPath, ['.agents/scripts/rule-budget.mjs', '--staged'], { cwd: T, encoding: 'utf8' });
+  check('rule-budget --staged:合规 → exit 0（不误拦）', r.status === 0, `${r.stdout}${r.stderr}`);
+  rmfix(T);
 }
 
 // ---- 场景 31/32/33:确认态留痕（检查 14）——无 approved 历史 WARN;先 approved 后 done 无 WARN;非 git 跳过 ----
@@ -742,7 +749,7 @@ const evidenceFixture = (slug, declared, createDeclared) => {
   w(T, 'workflow/plans/2026-09-26-pe2.md', PLAN('pe2', '状态: done\n级别: L1\n模块: material', '\n## 改动方案\n\n- src/app.mjs：实现功能\n'));
   fs.mkdirSync(path.join(T, 'notes'), { recursive: true });
   w(T, 'notes/other.md', 'x\n');
-  gitCommitAll(T, 'docs(x): 演练穿越（L0，无标记提交）');
+  gitCommitAll(T, 'docs(x): 演练穿越（L1，无标记提交）');
   const sha = shortSha(T);
   w(T, 'workflow/intents/2026-09-26-pe2.md', INTENT('pe2', '状态: done\n级别: L1\n日期: 2026-09-26', `\n## 验收标准（可测试）\n- [x] 演练穿越（证据:${sha}）\n`));
   expectHard('过程证据:无标记无关提交 → 仍拦 证据无关', T, '证据无关');
@@ -767,7 +774,7 @@ const evidenceFixture = (slug, declared, createDeclared) => {
   w(T, 'workflow/plans/2026-09-26-pe4.md', PLAN('pe4', '状态: done\n级别: L1\n模块: material', '\n## 改动方案\n\n- src/app.mjs：实现功能\n'));
   fs.mkdirSync(path.join(T, 'notes'), { recursive: true });
   w(T, 'notes/other.md', 'x\n');
-  gitCommitAll(T, 'docs(x): 演练穿越（L0，无标记提交）');
+  gitCommitAll(T, 'docs(x): 演练穿越（L1，无标记提交）');
   const sha = shortSha(T);
   w(T, 'workflow/intents/2026-09-26-pe4.md', INTENT('pe4', '状态: done\n级别: L1\n日期: 2026-09-26', `\n## 验收标准（可测试）\n- [x] 演练穿越（证据:${sha}）\n`));
   const r = run(T, { env: { CHECK_LOOP_GIT: 'definitely-not-git-xyz-2026' } });
@@ -801,7 +808,7 @@ const evidenceFixture = (slug, declared, createDeclared) => {
   w(T, 'workflow/plans/2026-09-26-pe5.md', PLAN('pe5', '状态: done\n级别: L1\n模块: material', '\n## 改动方案\n\n- src/app.mjs：实现功能\n'));
   fs.mkdirSync(path.join(T, 'notes'), { recursive: true });
   w(T, 'notes/other.md', 'x\n');
-  gitCommitAll(T, 'docs(x): 演练穿越（L0，无标记提交）');
+  gitCommitAll(T, 'docs(x): 演练穿越（L1，无标记提交）');
   const sha = shortSha(T);
   w(T, 'workflow/intents/2026-09-26-pe5.md', INTENT('pe5', '状态: done\n级别: L1\n日期: 2026-09-26', `\n## 验收标准（可测试）\n- [x] 演练穿越（证据:${sha}）\n`));
   const r = run(T);
@@ -2411,17 +2418,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   }
 }
 
-// ---- 风险泳道（2026-09-30 hybrid-governance-risk-lanes）：L0 配对豁免 + 红线判低 ----
-{
-  // L0 intent 无 plan 无 spec → 协作道配对豁免（异步审计兜底）
-  const T = mkfix();
-  w(T, 'workflow/intents/2026-09-12-l0.md', INTENT('l0', '状态: approved\n级别: L0\nrisk_level: L0\n日期: 2026-09-12'));
-  const r = run(T);
-  check('风险泳道：L0 intent 缺 plan/spec → 配对豁免 exit 0',
-    r.status === 0 && !outOf(r).includes('配对断裂'),
-    `exit=${r.status}\n${outOf(r)}`);
-  rmfix(T);
-}
+// ---- 风险泳道（2026-09-30 hybrid-governance-risk-lanes）：红线判低 ----
+// （2026-10-13 L0 退役，自源仓收敛系列 1 回灌：原「L0 配对豁免」场景随级别退役删除。存量 intent 仍须 plan；L1 plan 可独立成入口。）
 {
   // L1 intent 仍须 plan（协作道不豁免 L1——防倒退回归）
   const T1 = mkfix();
@@ -2429,7 +2427,7 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   expectHard('风险泳道：L1 intent 缺 plan 仍 hard 配对断裂', T1, '配对断裂');
   rmfix(T1);
 
-  // L0/L1 勾触达红线 → hard「红线判低」（级别与 risk_level 任一判定皆拦）
+  // L1 勾触达红线 → hard「红线判低」（级别与 risk_level 任一判定皆拦）
   const T2 = mkfix();
   w(T2, 'workflow/intents/2026-09-12-rl.md', INTENT('rl', '状态: approved\n级别: L1\nrisk_level: L1\n日期: 2026-09-12',
     '\n## 触达红线（对照 AGENTS.md）\n- [x] 规则 / 契约变更（接口签名）→ 级别至少 L2\n'));
@@ -2567,6 +2565,45 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T, { args: ['--bogus'] });
   check('加固门 H6：未知 CLI 参数 → exit 1 用法提示', r.status === 1 && /用法/.test(outOf(r)), outOf(r));
   rmfix(T);
+}
+{
+  // H6b：--all 与 --hygiene 互斥组合 → 用法提示 exit 1（2026-10-13 分道，源仓 takeOpts 口径）
+  const T = mkfix();
+  const r = run(T, { args: ['--all', '--hygiene'] });
+  check('分道 H6b：--all 与 --hygiene 同给 → exit 1 用法提示', r.status === 1 && /用法/.test(outOf(r)), outOf(r));
+  rmfix(T);
+}
+
+// ---- 默认入口 vs 卫生入口 vs 全量（2026-10-13 B6b-1 分道；源仓 check-loop.test.mjs 同名场景移植）----
+{
+  // 卫生违例（模板占位符残留，检查 2 hygiene 面）无硬违例：默认（裸跑=硬门）不出卫生面且 exit 0；
+  // --hygiene 出卫生面且 exit 0；--all 两段都跑 = 分道前的裸跑全量。
+  // （夹具给配对齐全的 intent+plan——kit 检查 1 对 plan 落单即拦配对断裂，无源仓的 L1 豁免。）
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-10-13-ph.md', INTENT('ph', '状态: draft\n级别: L1\n日期: 2026-10-13'));
+  w(T, 'workflow/plans/2026-10-13-ph.md', PLAN('ph', '状态: draft\n级别: L1', '\n## 确认与复核\n\n- 日期: YYYY-MM-DD\n'));
+  const bare = run(T, { args: [] });
+  check('分道：默认入口不跑卫生段——占位符不出「模板未填」且 exit 0',
+    bare.status === 0 && !outOf(bare).includes('模板未填'), `exit=${bare.status}\n${outOf(bare)}`);
+  const hy = run(T, { args: ['--hygiene'] });
+  check('分道：--hygiene 只跑卫生段——同一占位符出「模板未填」且不报配对断裂',
+    hy.status === 0 && outOf(hy).includes('模板未填') && !outOf(hy).includes('配对断裂'), `exit=${hy.status}\n${outOf(hy)}`);
+  const all = run(T, { args: ['--all'] });
+  check('分道：--all 两段都跑（等价分道前裸跑全量）——出「模板未填」且 exit 0',
+    all.status === 0 && outOf(all).includes('模板未填'), `exit=${all.status}\n${outOf(all)}`);
+  rmfix(T);
+  // 硬违例（L1 approved intent 缺同名 plan = 配对断裂，检查 1 hard 面）：默认入口与 --all 都拦；
+  // --hygiene 只跑卫生段、不产 blocker（源仓同款语义：卫生段不进关单）。
+  const T2 = mkfix();
+  w(T2, 'workflow/intents/2026-10-13-gap.md', INTENT('gap', '状态: approved\n级别: L1\n日期: 2026-10-13'));
+  const gapBare = run(T2, { args: [] });
+  check('分道：默认入口仍拦配对断裂', gapBare.status === 1 && outOf(gapBare).includes('配对断裂'), `exit=${gapBare.status}\n${outOf(gapBare)}`);
+  const gapAll = run(T2, { args: ['--all'] });
+  check('分道：--all 同样拦配对断裂', gapAll.status === 1 && outOf(gapAll).includes('配对断裂'), `exit=${gapAll.status}\n${outOf(gapAll)}`);
+  const gapHy = run(T2, { args: ['--hygiene'] });
+  check('分道：--hygiene 不跑硬门——配对断裂不出、exit 0（卫生段不进关单）',
+    gapHy.status === 0 && !outOf(gapHy).includes('配对断裂'), `exit=${gapHy.status}\n${outOf(gapHy)}`);
+  rmfix(T2);
 }
 
 // --- 20. 引擎脚本测试覆盖 [warning]（2026-10-01 gate-script-test-coverage） ---
@@ -2884,7 +2921,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     !outOf(plain).includes('[gate-stats]'), outOf(plain));
   const before = fs.existsSync(path.join(T, statsRel)) ? fs.readFileSync(path.join(T, statsRel), 'utf8') : '';
 
-  const st = run(T, { args: ['--gate-stats'] });
+  // --all 显式带上（2026-10-13 分道：ROI 采集要全段成本面；裸 --gate-stats 只记硬门段）
+  const st = run(T, { args: ['--gate-stats', '--all'] });
   check('门禁ROI：--gate-stats → 落盘 + stderr 摘要行', fs.existsSync(path.join(T, statsRel)) && outOf(st).includes('[gate-stats]'), outOf(st));
   const lines = fs.readFileSync(path.join(T, statsRel), 'utf8').split('\n').filter(Boolean);
   check('门禁ROI：--gate-stats 只 append 一行（每跑一次门禁 = 一条记录）',
@@ -2893,10 +2931,10 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   try { row = JSON.parse(lines[0]); } catch { /* 留给下一条断言报错 */ }
   const ids = row && Array.isArray(row.segs) ? row.segs.map((s) => String(s.id)) : [];
   const uniq = new Set(ids);
-  check('门禁ROI：段 id 唯一且覆盖 19 个插桩点（14 主流程 + 5 hygiene 模块），无重复插桩',
-    ids.length === 19 && uniq.size === 19, `ids=${ids.join(',')}`);
-  const expected = ['1','2','3','4','5','6','8','9','10','11','12','13','14','15','16','17','18','19','20'];
-  check('门禁ROI：段 id 集合 == 现有检查编号（不新增/不遗漏检查项编号）',
+  check('门禁ROI：段 id 唯一且覆盖 26 个插桩点（14 主流程 + 5 hygiene 模块 + 3x/21-26 六段），无重复插桩',
+    ids.length === 26 && uniq.size === 26, `ids=${ids.join(',')}`);
+  const expected = ['1','2','3','3x','4','5','6','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25','26'];
+  check('门禁ROI：段 id 集合 == 现有检查编号+3x（不新增/不遗漏检查项编号）',
     expected.every((e) => uniq.has(e)) && uniq.size === expected.length, `got=${[...uniq].sort().join(',')}`);
   check('门禁ROI：每段都有 label + 非负 ms（成本度量的地基）',
     row && row.segs.every((s) => s.label && Number(s.ms) >= 0 && Number.isInteger(Number(s.ms))), JSON.stringify(row && row.segs.slice(0, 3)));
@@ -3336,6 +3374,489 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('场景 93d spec 无场景节且引用 S1 → 断链 WARN（exit 0）',
     r.status === 0 && outOf(r).includes('场景引用断链') && outOf(r).includes('S1'),
     `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
+}
+
+// ==== B6b-2（2026-10-13 自源仓 check-loop.test.mjs 回灌）：§21–§26 六段 + §3x + 检查 1 L1 plan 即入口 + 复核上下文 ====
+// 场景集与关键词断言沿源仓同段场景移植；锚日期换 kit 口径（v12：specVerifSince/attributionSince/
+// convergenceSince=2026-10-13，convergenceHardSince/reviewerSince/incidentRegrSince=2026-10-14）。
+
+// ---- 检查 1：L1 plan 即入口（源仓 s01，2026-10-10 L1 收成一份 plan）----
+{
+  const T = mkfix();
+  w(T, 'workflow/plans/2026-10-13-solo.md', PLAN('solo', '状态: draft\n级别: L1'));
+  expectOk('检查1 L1 plan 即入口：无同名 intent/incident → exit 0', T);
+  rmfix(T);
+}
+{
+  const T = mkfix();
+  w(T, 'workflow/plans/2026-10-13-hi.md', PLAN('hi', '状态: draft\n级别: L2'));
+  expectHard('检查1 L2 plan 落单 → hard 配对断裂', T, '配对断裂');
+  rmfix(T);
+}
+{
+  const T = mkfix();
+  w(T, 'workflow/plans/2026-10-13-nolvl.md', PLAN('nolvl', '状态: draft'));
+  expectHard('检查1 级别缺失 plan 落单 → 仍 hard（fail-closed）', T, '配对断裂');
+  rmfix(T);
+}
+
+// ---- 检查 1 扩展：独立复核上下文标识（policy v12 reviewerSince，advisory）----
+{
+  const trio = (name, fm, body, pv = 12) => {
+    const T = mkfix();
+    w(T, '.agents/kit.json', `{"policyVersion":${pv}}\n`);
+    w(T, `workflow/intents/${name}.md`, INTENT(name, '状态: draft\n级别: L1\n日期: 2026-10-13'));
+    w(T, `workflow/specs/${name}.md`, SPEC(name, fm, body));
+    w(T, `workflow/plans/${name}.md`, PLAN(name, '状态: draft\n级别: L1\n日期: 2026-09-01'));
+    return T;
+  };
+  let T = trio('2026-10-14-rv1', '状态: draft\n级别: L1\n日期: 2026-10-14', '\n- 独立复核：通过\n');
+  let r = run(T);
+  check('检查1 复核上下文：锚后复核行缺标识 → WARN 且 exit 0',
+    r.status === 0 && outOf(r).includes('复核上下文缺失'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  T = trio('2026-10-14-rv2', '状态: draft\n级别: L1\n日期: 2026-10-14', '\n- 独立复核：通过（复核上下文：session-abc）\n');
+  r = run(T);
+  check('检查1 复核上下文：复核行带「复核上下文：<id>」→ 无告警',
+    r.status === 0 && !outOf(r).includes('复核上下文缺失'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  T = trio('2026-10-14-rv3', '状态: draft\n级别: L1\n日期: 2026-10-13', '\n- 独立复核：通过\n');
+  r = run(T);
+  check('检查1 复核上下文：锚前存量（<reviewerSince）豁免 → 无告警',
+    r.status === 0 && !outOf(r).includes('复核上下文缺失'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  T = trio('2026-10-14-rv4', '状态: draft\n级别: L1\n日期: 2026-10-14', '\n- 独立复核：通过\n', 11);
+  r = run(T);
+  check('检查1 复核上下文：v11 缺键 → 子检整体跳过',
+    r.status === 0 && !outOf(r).includes('复核上下文缺失'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+
+// ---- 检查 3x：incident 防复发验证证据门（hard；锚 incidentRegrSince=2026-10-14，git 建档日锚）----
+{
+  const mkRegr = (verBody, { pv = 12, addIso = '2026-10-14T01:00:00.000Z', name = '2026-10-14-regr' } = {}) => {
+    const T = mkfix();
+    gitInit(T);
+    w(T, '.agents/kit.json', `{"policyVersion":${pv}}\n`);
+    const fm = '状态: fixed\n级别: L1\n发现: 2026-10-14\n流程: standard';
+    const body = `# INCIDENT — ${name}\n\n1. 结构性修复\n - 修复 commit:abc1234\n - 是否需要新 intent:\n - 否 → 理由:单点修复\n\n2. 防复发验证\n${verBody}\n\n3. 规范条目\n - AGENTS.md 某节\n`;
+    const noFp = `---\n状态: open\n级别: L1\n发现: 2026-10-14\n流程: standard\n---\n${body}`;
+    const fp = computeFingerprint(noFp);
+    w(T, `workflow/incidents/${name}.md`, `---\n${fm}\n确认指纹: ${fp.slice(0, 16)}\n---\n${body}`);
+    w(T, `workflow/plans/${name}.md`, PLAN(name, '状态: draft\n级别: L1\n日期: 2026-09-01'));
+    writeLedger(T, [{ ts: addIso, doc: `workflow/incidents/${name}.md`, stage: 'fixed', fingerprint: fp, prev: 'open', source: 'chat-delegated', batch: 't-3x', seq: 1, of: 1 }]);
+    gitCommitAllAt(T, 'incident fixture', addIso);
+    return T;
+  };
+  let T = mkRegr(' - 已人工验证，无自动化\n');
+  let r = run(T, { git: true, args: [] });
+  check('检查3x 锚后 fixed 无回归引用 → hard「回归证据缺失」',
+    r.status === 1 && outOf(r).includes('回归证据缺失'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  T = mkRegr(' - 回归用例 check-scope.test.mjs 已覆盖\n');
+  r = run(T, { git: true });
+  check('检查3x fixed 有 .test.mjs 引用 → 不拦',
+    r.status === 0 && !outOf(r).includes('回归证据缺失'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  T = mkRegr(' - 已人工验证，无自动化\n', { addIso: '2026-10-13T01:00:00.000Z', name: '2026-10-13-regr-pre' });
+  r = run(T, { git: true, args: [] });
+  check('检查3x 锚前存量（建档日 < incidentRegrSince）→ 豁免不拦',
+    r.status === 0 && !outOf(r).includes('回归证据缺失'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  T = mkRegr(' - 已人工验证，无自动化\n', { pv: 8, name: '2026-10-14-regr-v8' });
+  r = run(T, { git: true, args: [] });
+  check('检查3x 缺键（v8）→ 整体跳过不拦',
+    r.status === 0 && !outOf(r).includes('回归证据缺失'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+
+// ---- 检查 21：spec 验证落地核查（锚 specVerifSince=2026-10-13，git 建档日锚）----
+{
+  const mkSpec = (lvl, verBody) => {
+    const T = mkfix();
+    gitInit(T);
+    w(T, '.agents/kit.json', '{"policyVersion":12}\n');
+    w(T, 'workflow/intents/2026-10-13-sp.md', INTENT('sp', '状态: draft\n级别: L1\n日期: 2026-10-13'));
+    w(T, 'workflow/plans/2026-10-13-sp.md', PLAN('sp', '状态: draft\n级别: L1\n日期: 2026-09-01'));
+    const fm = `状态: done\n级别: ${lvl}\n日期: 2026-10-13`;
+    const body = `# SPEC — sp\n\n## 测试用例\n${verBody}\n`;
+    // 指纹按 prev 态（approved）内容计算——检查 15 bindingSha256 以台账 prev 字段复原重算
+    const fp = computeFingerprint(`---\n状态: approved\n级别: ${lvl}\n日期: 2026-10-13\n---\n${body}`);
+    w(T, 'workflow/specs/2026-10-13-sp.md', `---\n${fm}\n确认指纹: ${fp.slice(0, 16)}\n---\n${body}`);
+    writeLedger(T, [{ ts: '2026-10-13T01:00:00.000Z', doc: 'workflow/specs/2026-10-13-sp.md', stage: 'done', fingerprint: fp, prev: 'approved', source: 'chat-delegated', batch: 't-21', seq: 1, of: 1 }]);
+    gitCommitAllAt(T, 'spec fixture', '2026-10-13T01:00:00.000Z');
+    return T;
+  };
+  let T = mkSpec('L2', ' - 人工走查确认\n');
+  let r = run(T, { git: true });
+  check('检查21 锚后 L2 done spec 验证节无引用 → WARN「spec 验证落地」',
+    r.status === 0 && outOf(r).includes('spec 验证落地'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  T = mkSpec('L2', ' - `node .agents/scripts/verify.mjs` 全绿\n');
+  r = run(T, { git: true });
+  check('检查21 验证节有 verify.mjs 引用 → 无 WARN',
+    r.status === 0 && !outOf(r).includes('spec 验证落地'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  T = mkSpec('L1', ' - 人工走查确认\n');
+  r = run(T, { git: true });
+  check('检查21 L1 spec 不核查',
+    r.status === 0 && !outOf(r).includes('spec 验证落地'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+
+// ---- 检查 22：机制使用量台账（格式校验 + 待退役强制处置期限；台账文件在场才启用）----
+{
+  const REG = (rows) => ['# 机制使用量台账', '', '| 机制 | 门禁位置 | 触发统计口径 | 退役阈值 | 最近触发 | 状态 | 处置期限 |', '|---|---|---|---|---|---|---|', ...rows].join('\n');
+  const T0 = mkfix();
+  w(T0, 'workflow/intents/2026-09-12-r0.md', INTENT('r0', '状态: draft\n级别: L1\n日期: 2026-09-12'));
+  w(T0, 'workflow/plans/2026-09-12-r0.md', PLAN('r0', '状态: draft\n级别: L1'));
+  let r = run(T0);
+  check('检查22 台账文件缺失 → 跳过不告警（装户无感）',
+    r.status === 0 && !outOf(r).includes('机制台账'), outOf(r));
+  rmfix(T0);
+
+  const T1 = mkfix();
+  w(T1, '.agents/mechanism-registry.md', REG([
+    '| 三件套配对 | check-loop 检查 3 | WARN 计数 | 6月=0 | 2026-10 | 现役 | — |',
+    '| 某低频机制 | check-loop 检查 9 | WARN 计数 0/219 | =0 | 2026-10-13 | 待退役 | B7 批次 |',
+  ]));
+  r = run(T1);
+  check('检查22 合法台账（现役+待退役带期限）→ 不告警',
+    r.status === 0 && !outOf(r).includes('机制台账'), outOf(r));
+  rmfix(T1);
+
+  const T2 = mkfix();
+  w(T2, '.agents/mechanism-registry.md', REG([
+    '| 某机制 | check-loop 检查 9 | WARN 计数 | 6月=0 | 2026-10 | 待退役 |  |',
+  ]));
+  r = run(T2);
+  check('检查22 待退役缺处置期限 → WARN 强制处置',
+    r.status === 0 && outOf(r).includes('待退役但缺处置期限'), outOf(r));
+  rmfix(T2);
+
+  const T3 = mkfix();
+  w(T3, '.agents/mechanism-registry.md', REG([
+    '| 某机制 | check-loop 检查 9 | WARN 计数 | 6月=0 | 2026-10 | 已删除 | — |',
+    '| 列数不足 | check-loop | — | — | — | 现役 |',
+  ]));
+  r = run(T3);
+  check('检查22 状态非法 + 列数≠7 → 双 WARN（格式防线）',
+    r.status === 0 && outOf(r).includes('状态非法') && outOf(r).includes('行列数'), outOf(r));
+  rmfix(T3);
+}
+
+// ---- 检查 23：判据级收敛对账（advisory 档 convergenceSince=2026-10-13 / hard 档 convergenceHardSince=2026-10-14）----
+{
+  const TABLE = (rows) => [
+    '## 验收判据',
+    '',
+    '| 判据（可观察行为） | 证据（测试文件 / 命令 / 证据文件） | 状态 |',
+    '|---|---|---|',
+    ...rows,
+  ].join('\n');
+  const GREEN_ROW = (iso) => [
+    '# 验证绿凭证摘要',
+    '',
+    '| 提交(短SHA) | 时间(UTC) | 门数 | 套件计数 | 绑定单 | runId |',
+    '|---|---|---|---|---|---|',
+    `| \`abc1234\` | ${iso} | 7 | PASS 3 / FAIL 0 | — | — |`,
+    '',
+  ].join('\n');
+  const mkSpec = (body, date = '2026-10-14', lvl = 'L2', pv = 12) => {
+    const T = mkfix();
+    gitInit(T);
+    w(T, '.agents/kit.json', `{"policyVersion":${pv}}\n`);
+    w(T, 'workflow/intents/2026-10-13-sp.md', INTENT('sp', '状态: draft\n级别: L1\n日期: 2026-10-13'));
+    w(T, 'workflow/plans/2026-10-13-sp.md', PLAN('sp', '状态: draft\n级别: L1\n日期: 2026-09-01'));
+    const full = `# SPEC — sp\n\n${body}\n`;
+    const fp = computeFingerprint(`---\n状态: approved\n级别: ${lvl}\n日期: ${date}\n---\n${full}`);
+    // 两笔提交复刻真实流：approved 留痕（检查 14）→ 置 done + 台账
+    w(T, 'workflow/specs/2026-10-13-sp.md', `---\n状态: approved\n级别: ${lvl}\n日期: ${date}\n确认指纹: ${fp.slice(0, 16)}\n---\n${full}`);
+    gitCommitAll(T, 'spec approved');
+    w(T, 'workflow/specs/2026-10-13-sp.md', `---\n状态: done\n级别: ${lvl}\n日期: ${date}\n确认指纹: ${fp.slice(0, 16)}\n---\n${full}`);
+    writeLedger(T, [{ ts: `${date}T01:00:00.000Z`, doc: 'workflow/specs/2026-10-13-sp.md', stage: 'done', fingerprint: fp, prev: 'approved', source: 'chat-delegated', batch: 't-23', seq: 1, of: 1 }]);
+    gitCommitAll(T, 'spec done');
+    return T;
+  };
+  // ① 判据全覆盖（全量门命令 + 存在文件，hard 档）→ 无收敛告警
+  let T = mkSpec(TABLE([
+    '| 全量套件绿 | npm test | 覆盖 |',
+    '| 守卫拒绝超量 | src/guard.test.mjs | 覆盖 |',
+  ]));
+  fs.mkdirSync(path.join(T, 'src'), { recursive: true });
+  w(T, 'src/guard.test.mjs', '// fixture');
+  w(T, 'workflow/verify-evidence.md', GREEN_ROW('2026-10-14T08:00:00.000Z'));
+  let r = run(T, { git: true, args: [] });
+  check('检查23 硬档判据全覆盖（命令+存在文件+当日全绿行）→ exit 0 无收敛告警',
+    r.status === 0 && !outOf(r).includes('收敛'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  // ② advisory 档：状态自报「覆盖」但文件不存在 → WARN 收敛未覆盖（完成声明不是证据；exit 0 即未升 hard）
+  T = mkSpec(TABLE([
+    '| 守卫拒绝超量 | src/nope.test.mjs | 覆盖 |',
+  ]), '2026-10-13');
+  r = run(T, { git: true });
+  check('检查23 advisory 档自报覆盖但证据不存在 → WARN「收敛未覆盖」',
+    r.status === 0 && outOf(r).includes('[WARN 收敛未覆盖]'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  // ③ 无验收判据节 → 收敛无判据（WARN）
+  T = mkSpec('## 风险评估\n\n- 暂无\n', '2026-10-13');
+  r = run(T, { git: true });
+  check('检查23 无验收判据节 → WARN「收敛无判据」',
+    r.status === 0 && outOf(r).includes('收敛无判据'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  // ④ 表只有占位行 → 收敛无判据
+  T = mkSpec(TABLE(['| <行为 1> | <路径或命令> | <覆盖 / 未覆盖 / 人工> |']), '2026-10-13');
+  r = run(T, { git: true });
+  check('检查23 表仅占位行 → WARN「收敛无判据」',
+    r.status === 0 && outOf(r).includes('收敛无判据'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  // ⑤ 人工判据空证据合法 + 命令声明（advisory 档认声明）→ 无告警
+  T = mkSpec(TABLE([
+    '| 视觉布局走查 |  | 人工 |',
+    '| 全量套件绿 | npm test | 覆盖 |',
+  ]), '2026-10-13');
+  r = run(T, { git: true });
+  check('检查23 人工判据（空证据）+ advisory 命令声明 → 无告警',
+    r.status === 0 && !outOf(r).includes('收敛'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  // ⑥ 锚前存量（日期 < convergenceSince）→ 豁免
+  T = mkSpec('## 风险评估\n\n- 暂无\n', '2026-10-12');
+  r = run(T, { git: true });
+  check('检查23 锚前存量件 → 豁免',
+    r.status === 0 && !outOf(r).includes('收敛'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  // ⑦ v9（有 specVerif/attribution、无 convergenceSince）→ 检查整体跳过
+  T = mkSpec('## 风险评估\n\n- 暂无\n', '2026-10-13', 'L2', 9);
+  r = run(T, { git: true });
+  check('检查23 v9 缺键 → 检查整体跳过',
+    r.status === 0 && !outOf(r).includes('收敛'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  // ⑧ v12 硬锚前一日（advisory 面）无效证据 → 仍 WARN 不升 hard
+  T = mkSpec(TABLE([
+    '| 守卫拒绝超量 | src/nope.test.mjs | 覆盖 |',
+  ]), '2026-10-13');
+  r = run(T, { git: true, args: [] });
+  check('检查23 硬锚前一日无效证据 → 默认硬门仍 WARN 不阻断',
+    r.status === 0 && outOf(r).includes('[WARN 收敛未覆盖]'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  // ⑨ 硬锚起：路径不存在 → 默认硬门 HARD
+  T = mkSpec(TABLE([
+    '| 守卫拒绝超量 | src/nope.test.mjs | 覆盖 |',
+  ]));
+  r = run(T, { git: true, args: [] });
+  check('检查23 硬锚起路径不存在 → 默认硬门 HARD「收敛未覆盖」',
+    r.status !== 0 && outOf(r).includes('[收敛未覆盖]') && !outOf(r).includes('[WARN 收敛未覆盖]'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  // ⑩ 硬锚起：全量门命令但无全绿行 → HARD（声明不是凭证）
+  T = mkSpec(TABLE([
+    '| 全量套件绿 | npm test | 覆盖 |',
+  ]));
+  r = run(T, { git: true });
+  check('检查23 硬锚起命令无全绿行 → HARD',
+    r.status !== 0 && outOf(r).includes('[收敛未覆盖]'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  // ⑪ 全绿行早于 spec 日期 → 仍 HARD
+  T = mkSpec(TABLE([
+    '| 全量套件绿 | npm test | 覆盖 |',
+  ]));
+  w(T, 'workflow/verify-evidence.md', GREEN_ROW('2026-10-13T08:00:00.000Z'));
+  r = run(T, { git: true });
+  check('检查23 全绿行早于 spec 日期 → HARD',
+    r.status !== 0 && outOf(r).includes('[收敛未覆盖]'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  // ⑫ 硬锚起非全量门命令（无对应绿记录通道）→ HARD
+  T = mkSpec(TABLE([
+    '| 页面走查 | run-tests | 覆盖 |',
+  ]));
+  w(T, 'workflow/verify-evidence.md', GREEN_ROW('2026-10-14T08:00:00.000Z'));
+  r = run(T, { git: true });
+  check('检查23 硬锚起非全量门命令有全绿行 → HARD',
+    r.status !== 0 && outOf(r).includes('[收敛未覆盖]'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  // ⑬ 硬锚起路径存在即覆盖（不读正文是否与判据相关）
+  T = mkSpec(TABLE([
+    '| 守卫拒绝超量 | src/guard.test.mjs | 覆盖 |',
+  ]));
+  fs.mkdirSync(path.join(T, 'src'), { recursive: true });
+  w(T, 'src/guard.test.mjs', '// fixture');
+  r = run(T, { git: true });
+  check('检查23 硬锚起路径存在 → 无收敛告警',
+    r.status === 0 && !outOf(r).includes('收敛'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  // ⑭ 硬锚起人工空证据仍合法 + 有当日全绿行的全量门命令 → 无告警；无判据表在硬锚日仍 WARN 不阻断
+  T = mkSpec(TABLE([
+    '| 视觉布局走查 |  | 人工 |',
+    '| 全量套件绿 | npm test | 覆盖 |',
+  ]));
+  w(T, 'workflow/verify-evidence.md', GREEN_ROW('2026-10-14T08:00:00.000Z'));
+  r = run(T, { git: true });
+  check('检查23 硬锚起人工空证据 + 有凭证的命令 → 无告警',
+    r.status === 0 && !outOf(r).includes('收敛'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  T = mkSpec('## 风险评估\n\n- 暂无\n');
+  r = run(T, { git: true });
+  check('检查23 硬锚起无验收判据表 → 仍 WARN 不阻断',
+    r.status === 0 && outOf(r).includes('[WARN 收敛无判据]'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+
+// ---- 检查 24：incident 归因字段核查（锚 attributionSince=2026-10-13；发现日锚）----
+{
+  const mkInc = (name, fm, withPlanDate = '2026-09-01') => {
+    const T = mkfix();
+    w(T, '.agents/kit.json', '{"policyVersion":12}\n'); // 锚经 kit.json policyVersion 供给（v1 缺 attributionSince → 整段跳过）
+    // L1 配对：检查 3 要求 L1 incident 有同名 plan（否则 HARD 掩盖本段 WARN）
+    w(T, `workflow/plans/${name}`, PLAN(name.replace(/\.md$/, ''), `状态: draft\n级别: L1\n日期: ${withPlanDate}`));
+    w(T, `workflow/incidents/${name}`, `---\n${fm}\n---\n# INCIDENT\n\n## 复盘三件套（缺一不可）\n\n1. 结构性修复\n2. 防复发验证\n3. 规范条目\n- 是否需要新 intent：否\n`);
+    return T;
+  };
+  let T = mkInc('2026-10-13-a.md', '状态: open\n级别: L1\n发现: 2026-10-13\n来源: user\n影响环境: dev');
+  let r = run(T);
+  check('检查24 锚后两键合法 → 无归因告警',
+    r.status === 0 && !outOf(r).includes('归因'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  T = mkInc('2026-10-13-b.md', '状态: open\n级别: L1\n发现: 2026-10-13');
+  r = run(T);
+  check('检查24 锚后缺来源/影响环境 → 双 WARN「归因缺字段」',
+    r.status === 0 && (outOf(r).match(/归因缺字段/g) || []).length >= 2, `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  T = mkInc('2026-10-13-c.md', '状态: open\n级别: L1\n发现: 2026-10-13\n来源: robot\n影响环境: qa');
+  r = run(T);
+  check('检查24 锚后值不在枚举 → WARN「归因非法值」',
+    r.status === 0 && outOf(r).includes('归因非法值'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  T = mkInc('2026-10-12-d.md', '状态: open\n级别: L1\n发现: 2026-10-12');
+  r = run(T);
+  check('检查24 锚前存量件缺键 → 豁免不回填',
+    r.status === 0 && !outOf(r).includes('归因'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  T = mkInc('2026-10-13-e.md', '状态: open\n级别: L1\n发现: 2026-10-13\n流程: legacy');
+  r = run(T);
+  check('检查24 legacy 回填件 → 豁免',
+    r.status === 0 && !outOf(r).includes('归因'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+
+// ---- 检查 25：路由预判一致性（advisory 纯 WARN；预判字段在场才检）----
+{
+  // ① 一致 → 零告警
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-12-pj1.md', INTENT('pj1', '状态: done\n级别: L1\n日期: 2026-09-12\n预判: kind=require level=L1', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
+  w(T, 'workflow/plans/2026-09-12-pj1.md', PLAN('pj1', '状态: done\n级别: L1'));
+  let r = run(T);
+  check('检查25 预判与落位一致 → 零告警 exit 0',
+    r.status === 0 && !outOf(r).includes('预判'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  // ② 类型不符：intent（≡require）预判 fix；incident（≡fix）预判 require → 双 WARN 不阻断
+  const T2 = mkfix();
+  w(T2, 'workflow/intents/2026-09-12-pj2.md', INTENT('pj2', '状态: done\n级别: L1\n日期: 2026-09-12\n预判: kind=fix level=L1', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
+  w(T2, 'workflow/plans/2026-09-12-pj2.md', PLAN('pj2', '状态: done\n级别: L1'));
+  w(T2, 'workflow/incidents/2026-09-12-pj3.md', `---\n状态: open\n级别: L1\n发现: 2026-09-12\n预判: kind=require level=L1\n---\n# INCIDENT — pj3\n\n${三件套(false)}`);
+  w(T2, 'workflow/plans/2026-09-12-pj3.md', PLAN('pj3', '状态: draft\n级别: L1'));
+  r = run(T2);
+  check('检查25 类型不符（intent 预判 fix / incident 预判 require）→ 双 WARN「预判类型不符」且 exit 0',
+    r.status === 0 && (outOf(r).match(/预判类型不符/g) || []).length === 2, `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T2);
+  // ③ 级别不符：预判 L2 落位 L1 → WARN「预判级别不符」含判低信号
+  const T3 = mkfix();
+  w(T3, 'workflow/intents/2026-09-12-pj4.md', INTENT('pj4', '状态: done\n级别: L1\n日期: 2026-09-12\n预判: kind=require level=L2', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
+  w(T3, 'workflow/plans/2026-09-12-pj4.md', PLAN('pj4', '状态: done\n级别: L1'));
+  r = run(T3);
+  check('检查25 预判 L2 落位 L1 → WARN「预判级别不符」含判低信号',
+    r.status === 0 && outOf(r).includes('预判级别不符') && outOf(r).includes('判低信号'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T3);
+  // ④ 词表非法 kind / 整字段不可解析 → WARN「预判字段不可解析」
+  const T4 = mkfix();
+  w(T4, 'workflow/intents/2026-09-12-pj5.md', INTENT('pj5', '状态: done\n级别: L1\n日期: 2026-09-12\n预判: kind=bug level=L1', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
+  w(T4, 'workflow/plans/2026-09-12-pj5.md', PLAN('pj5', '状态: done\n级别: L1'));
+  r = run(T4);
+  check('检查25 kind=bug 不在词表 → WARN「预判字段不可解析」',
+    r.status === 0 && outOf(r).includes('预判字段不可解析'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T4);
+  const T5 = mkfix();
+  w(T5, 'workflow/intents/2026-09-12-pj6.md', INTENT('pj6', '状态: done\n级别: L1\n日期: 2026-09-12\n预判: 这是个修复', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
+  w(T5, 'workflow/plans/2026-09-12-pj6.md', PLAN('pj6', '状态: done\n级别: L1'));
+  r = run(T5);
+  check('检查25 预判字段无 kv 形态 → WARN「预判字段不可解析」',
+    r.status === 0 && outOf(r).includes('预判字段不可解析'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T5);
+}
+
+// ---- 检查 26：闭环漏斗「协议前」占比动作阈值（相邻两月均 >30% → WARN；消费 gen-workflow-metrics 产物）----
+{
+  // 漏斗表构造器（kit gen-workflow-metrics.mjs 产出的表头/节名；单元格带占比与裸数字两种形态都测）
+  const mkMetrics = (rows) => `<!-- GENERATED:BEGIN -->
+
+## 闭环漏斗（机器口径，源：.agents/confirmations.jsonl）
+
+| 月份 | 收口 | 完整链 | 协议前 | 一次通过 | 返工件 | 中位周期(天) | 台账行数 |
+|---|---|---|---|---|---|---|---|
+${rows.map((r) => `| ${r} |`).join('\n')}
+
+## 来源与影响环境维度（源：incident frontmatter 枚举）
+
+| 月份 | incident | 来源（谁发现） | 影响环境 |
+|---|---|---|---|
+| 2026-10 | 0 | self 0 / user 0 / test 0 / monitor 0 | dev 0 / staging 0 / prod 0 / none 0 |
+
+<!-- GENERATED:END -->
+`;
+  // ① 无 metrics.md（装户/新仓未启用观测）→ 静默跳过零告警
+  const T = mkfix();
+  let r = run(T);
+  check('检查26 无 metrics.md → 跳过零告警 exit 0',
+    r.status === 0 && !outOf(r).includes('漏斗协议前超标'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+  // ② 相邻两月均 >30% → WARN「漏斗协议前超标」且不阻断（exit 0）
+  const T2 = mkfix();
+  w(T2, 'workflow/metrics.md', mkMetrics([
+    '2026-09 | 10 | 4 | 6（60%） ⚠️ | 3 | 1 | 1.0 | 20',
+    '2026-10 | 10 | 4 | 5（50%） ⚠️ | 4 | 1 | 1.0 | 20',
+  ]));
+  r = run(T2);
+  check('检查26 相邻两月协议前占比均 >30% → WARN 且 exit 0',
+    r.status === 0 && outOf(r).includes('漏斗协议前超标') && outOf(r).includes('2026-09 60% → 2026-10 50%'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T2);
+  // ③ 仅单月 >30%（相邻月正常）→ 零告警
+  const T3 = mkfix();
+  w(T3, 'workflow/metrics.md', mkMetrics([
+    '2026-09 | 10 | 9 | 1（10%） | 8 | 1 | 1.0 | 20',
+    '2026-10 | 10 | 4 | 5（50%） ⚠️ | 4 | 1 | 1.0 | 20',
+  ]));
+  r = run(T3);
+  check('检查26 仅单月超标（相邻月正常）→ 零告警 exit 0',
+    r.status === 0 && !outOf(r).includes('漏斗协议前超标'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T3);
+  // ④ 两月都超标但不相邻（跳月 09→11）→ 零告警（判据是日历相邻）
+  const T4 = mkfix();
+  w(T4, 'workflow/metrics.md', mkMetrics([
+    '2026-09 | 10 | 4 | 6（60%） ⚠️ | 3 | 1 | 1.0 | 20',
+    '2026-11 | 10 | 4 | 5（50%） ⚠️ | 4 | 1 | 1.0 | 20',
+  ]));
+  r = run(T4);
+  check('检查26 超标两月不相邻（跳月）→ 零告警 exit 0',
+    r.status === 0 && !outOf(r).includes('漏斗协议前超标'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T4);
+  // ⑤ 收口=0 的月无占比（0/0 不判），且存量裸数字单元格同样可解析
+  const T5 = mkfix();
+  w(T5, 'workflow/metrics.md', mkMetrics([
+    '2026-09 | 0 | 0 | 0 | 0 | 0 | — | 1',
+    '2026-10 | 10 | 4 | 5 | 4 | 1 | 1.0 | 20',
+  ]));
+  r = run(T5);
+  check('检查26 收口=0 月不判 0/0；裸数字单元格可解析（10 月 50% 单月不触发）',
+    r.status === 0 && !outOf(r).includes('漏斗协议前超标'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T5);
+  // ⑥ 存量裸数字 + 相邻两月超标 → 照判（解析只取首个整数，混合形态可读）
+  const T6 = mkfix();
+  w(T6, 'workflow/metrics.md', mkMetrics([
+    '2026-09 | 10 | 4 | 6 | 3 | 1 | 1.0 | 20',
+    '2026-10 | 10 | 4 | 5 | 4 | 1 | 1.0 | 20',
+  ]));
+  r = run(T6);
+  check('检查26 存量裸数字单元格相邻两月超标 → 照判 WARN',
+    r.status === 0 && outOf(r).includes('漏斗协议前超标') && outOf(r).includes('2026-09 60% → 2026-10 50%'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T6);
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

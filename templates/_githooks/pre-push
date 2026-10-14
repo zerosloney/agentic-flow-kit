@@ -1,8 +1,9 @@
 #!/bin/sh
 # Git 原生 pre-push hook（经 core.hooksPath 挂载，git push 时触发）
-# 跑 .agents/scripts/check-loop.sh：扫 workflow/ 闭环骨架断档
-#   - 硬阻断（exit 1）= 配对断裂 / 回路断档 → push 立即阻断
-#   - 警告（advisory）= 状态未确认 / 模板占位残留 / 引用漂移 等卫生项 → 仅打印提示
+# 跑 .agents/scripts/check-loop.sh：扫 workflow/ 闭环骨架断档（2026-10-13 分道——默认只扫硬门，源仓同款）
+#   - 硬阻断（exit 1）= 配对断裂 / 回路断档 等硬门违例 → push 立即阻断
+#   - 卫生项（索引/宿主/词表/体积预算等 WARN 面）不进 push 门——要看时手跑 check-loop.mjs --hygiene
+#     （--all 两面都跑 = 分道前的裸跑全量）
 # stdin 有行时，每个非删除的本地 sha 用 --rev 扫那棵树。没有行时（手跑钩子）仍无参数扫工作区。
 #
 # experiment/* 泳道（2026-09-30 hybrid-governance-explore-hardening）：**目标分支**为 experiment/* 时，

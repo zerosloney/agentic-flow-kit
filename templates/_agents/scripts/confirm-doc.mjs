@@ -25,12 +25,12 @@
 // 指纹：内容 CRLF 归一 → 剔除「确认指纹:」行（防自引用）→ sha256；frontmatter 存前 16 位，台账存全量。
 // 用法：node .agents/scripts/confirm-doc.mjs <workflow/intents|x.md> [<doc2>...] [--root <仓库根>]
 //       node .agents/scripts/confirm-doc.mjs <doc...> --delegated "<用户对话原话>"（委托代录）
-//       node .agents/scripts/confirm-doc.mjs <doc...> --delegated "<原话>" --batch（协作道批量：L0/L1 多份一次代录）
+//       node .agents/scripts/confirm-doc.mjs <doc...> --delegated "<原话>" --batch（协作道批量：L1 多份一次代录）
 //       node .agents/scripts/confirm-doc.mjs <doc...> --to superseded|cancelled（放弃态：取代/取消，留指纹与台账）
 //       node .agents/scripts/confirm-doc.mjs <doc...> --no-shard（回退主台账 .agents/confirmations.jsonl：
 //         分片已是默认写入口径，环境变量 CONFIRM_SHARDED=0 同效；里程碑可选跑 compact-ledgers.mjs 归并分片）
 //   多文档一次传入：TTY 模式天然逐份过目键入；--delegated 默认一次仅一份（2026-09-27
-//   confirm-gate-one-per-call：多份并录曾系统性塌掉 build.md「逐件确认」三道门），L0/L1 协作道可
+//   confirm-gate-one-per-call：多份并录曾系统性塌掉 build.md「逐件确认」三道门），L1 协作道可
 //   `--batch` 多份一次代录（2026-09-30 hybrid-governance-risk-lanes）：逐份读「级别」，L2/L3 逐份拒绝
 //   （防御道不批量）；台账行带 `brief:true` 简洁审计标记（quote 原话仍入账供对质），check-loop 检查 15
 //   并录审计对全行带标记的批次豁免「确认并录」告警。--auto 一次仍仅一份（自治放行不批量）。
@@ -42,8 +42,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 import { createHash, randomBytes } from 'node:crypto';
-import { spawnSync } from 'node:child_process';
-import { readLedgerEntries } from './ledger-loader.mjs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { readLedgerEntries, readLedgerRows } from './ledger-loader.mjs';
 import { confirmGateFor, clarifyGateFor, doneGateFor, laneOfEntry, laneOfDoc } from './stage-gates.mjs';
 import { loadKitPolicy, hasFreshVerifyLine, ledgerChainHash, ledgerDocChainActive, ledgerDocChainPrev, scopeDigest } from './policy.mjs';
 
@@ -212,7 +212,7 @@ if (isMain) {
   let delegatedQuote = null; // null = TTY 模式；字符串 = 委托代录的用户对话原话
   let toTarget = null; // null = 默认前向跳转；superseded|cancelled = 放弃态显式目标
   let autoMode = false; // AI 自治模式（信任等级授权，2026-09-30 ai-autonomy-trust）
-  let batchMode = false; // 协作道批量代录（--batch，2026-09-30 hybrid-governance-risk-lanes：仅 --delegated + L0/L1）
+  let batchMode = false; // 协作道批量代录（--batch，2026-09-30 hybrid-governance-risk-lanes：仅 --delegated + L1）
   let shardWrite = process.env.CONFIRM_SHARDED !== '0'; // 分片默认写入口径（2026-10-13 ledger-shard-default）：CONFIRM_SHARDED=0 显式回退主台账
   const docs = [];
   for (let i = 0; i < argv.length; i++) {
@@ -266,7 +266,7 @@ if (isMain) {
   }
   // AI 自治门（2026-09-30 ai-autonomy-trust；2026-09-30 hybrid-governance-explore-hardening 加隐式形态）：
   // 读 .agents/trust-mode.json。除显式 --auto 外，Trusted（level=2）下的非 TTY 单份调用在 TTY 门处
-  // 免旗标自动转入本分支（见「Trusted 自动泳道」）——L0/L1 门 / incidents 排除 / 逐阶段与 done 门照常执行。
+  // 免旗标自动转入本分支（见「Trusted 自动泳道」）——L1 门 / incidents 排除 / 逐阶段与 done 门照常执行。
   let trustConfig = null;
   if (autoMode) {
     try {
@@ -284,7 +284,7 @@ if (isMain) {
       console.error('❌ AI 自治模式一次仅接受一份文档（与 --delegated 同口径，逐件放行）');
       process.exit(1);
     }
-    console.error(`⚠️  AI 自治模式（Trust L${trustConfig.level}）：仅限 L0/L1 文档；Level 1 只放行 draft→approved，Level 2 放行至 done`);
+    console.error(`⚠️  AI 自治模式（Trust L${trustConfig.level}）：仅限 L1 文档；Level 1 只放行 draft→approved，Level 2 放行至 done`);
   }
   if (delegated && !String(delegatedQuote).trim()) {
     console.error('用法：--delegated 须带用户对话原话（node .agents/scripts/confirm-doc.mjs <doc...> --delegated "<用户原话>"）——原话入台账供事后对质，不可缺省');
@@ -305,7 +305,7 @@ if (isMain) {
   if (!delegated && !autoMode && !ttyForced && (!process.stdin.isTTY || !process.stdout.isTTY)) {
     // Trusted 自动泳道（2026-09-30 hybrid-governance-explore-hardening）：trust-mode.json 为 Trusted
     // （enabled 且 level=2）时，非 TTY 调用（AI 会话）对文档**免手工触发**（无需 --delegated 原话 /
-    // --auto 旗标）自动转入 AI 自治放行——单份、非放弃态才可隐式（与 --auto 同口径，L0/L1 门与
+    // --auto 旗标）自动转入 AI 自治放行——单份、非放弃态才可隐式（与 --auto 同口径，L1 门与
     // incidents 排除由主循环自治门照常执行）；不满足则维持原拒绝（fail-closed，Standard/Strict 不隐式）。
     let implicitTrust = null;
     try {
@@ -313,8 +313,8 @@ if (isMain) {
     } catch { implicitTrust = { enabled: false, level: 0 }; }
     if (implicitTrust.enabled && implicitTrust.level === 2 && docs.length === 1 && !toTarget) {
       autoMode = true;
-      trustConfig = implicitTrust; // 主循环自治门（L0/L1 与 incidents 排除）直读本配置——顶部 if (autoMode) 块先于 TTY 门执行，须在此补装
-      console.error('⚠️  Trusted 自动泳道（隐式）：单份 L0/L1 文档按 AI 自治放行（Level 2 全闭环，台账 source=ai-auto-trust-L2）；L2/L3 与 incidents 仍须人工确认');
+      trustConfig = implicitTrust; // 主循环自治门（L1 与 incidents 排除）直读本配置——顶部 if (autoMode) 块先于 TTY 门执行，须在此补装
+      console.error('⚠️  Trusted 自动泳道（隐式）：单份 L1 文档按 AI 自治放行（Level 2 全闭环，台账 source=ai-auto-trust-L2）；L2/L3 与 incidents 仍须人工确认');
     } else {
       console.error('确认门须由用户在终端亲手运行（node .agents/scripts/confirm-doc.mjs <workflow/文档>...）——AI 会话内不可代确认；用户对话内明确确认后可用 --delegated "<用户原话>" 委托代录（台账如实记来源）');
       process.exit(1);
@@ -330,14 +330,14 @@ if (isMain) {
     // 单文档默认（2026-09-27 confirm-gate-one-per-call）：delegated 没有TTY「逐份过目」的天然机制——
     // 多文档并录曾系统性塌掉三道阶段门（build.md「逐件确认不得并作一次」）。逐件调用：一次一份、
     // 每次带当次用户原话。TTY 形态不受限（用户亲手逐份过目键入，天然逐件）。
-    // 协作道批量（2026-09-30 hybrid-governance-risk-lanes）：L0/L1 可 `--batch` 多份一次代录——
+    // 协作道批量（2026-09-30 hybrid-governance-risk-lanes）：L1 可 `--batch` 多份一次代录——
     // 逐份读「级别」，L2/L3 逐份拒绝（见主循环协作道门）；台账行带 brief:true，检查 15 据此豁免并录告警。
     if (docs.length > 1) {
       if (!batchMode) {
-        console.error(`❌ --delegated 一次仅接受一份文档（现 ${docs.length} 份：${docs.join(' ')}）——逐件确认口径（build.md）：每份一次调用、每次带当次用户原话；L0/L1 协作道批量可加 --batch`);
+        console.error(`❌ --delegated 一次仅接受一份文档（现 ${docs.length} 份：${docs.join(' ')}）——逐件确认口径（build.md）：每份一次调用、每次带当次用户原话；L1 协作道批量可加 --batch`);
         process.exit(1);
       }
-      console.error(`   批量代录（--batch）：${docs.length} 份，仅受理 L0/L1（协作道，异步审计兜底）；L2/L3 逐份拒绝`);
+      console.error(`   批量代录（--batch）：${docs.length} 份，仅受理 L1（协作道，异步审计兜底）；L2/L3 逐份拒绝`);
     }
   }
   // 调用事实（2026-09-28 batch-ledger-audit）：本次进程调用的批次标识与件序——
@@ -453,7 +453,7 @@ if (isMain) {
     // TTY 形态同样需要（事后对质问的是「放行时盘面上哪些文件在动」，与谁点的确认无关）。
     const scope = machineScope(root, doc);
     // AI 自治放行分支（2026-09-30 ai-autonomy-trust）：
-    // ① 仅 L0/L1（读 frontmatter「级别」，缺级别按不可自治处理——fail-closed）；
+    // ① 仅 L1（读 frontmatter「级别」，缺级别按不可自治处理——fail-closed）；
     // ② Level 1：仅 draft→approved；Level 2：draft→approved 与 approved→done；
     // ③ incidents 永不自治（open→fixed/fixed→closed 必须人工）。
     if (autoMode) {
@@ -462,7 +462,7 @@ if (isMain) {
         ? (target === 'approved' || target === 'done')
         : target === 'approved';
       if (!isLowLevel || !stageAllowed || doc.startsWith('workflow/incidents/')) {
-        console.error(`❌ ${doc} 未过 AI 自治门（级别「${lvl || '缺失'}」/ 泳道「${lane}」/ 目标态「${target}」/ 类型）：Level ${trustConfig.level} 仅授权泳道 low（intent 两字段一致 L0/L1；suspect 须先对齐「级别/risk_level」）的 ${trustConfig.level === 2 ? 'approved/done' : 'approved'} 且不含 incidents`);
+        console.error(`❌ ${doc} 未过 AI 自治门（级别「${lvl || '缺失'}」/ 泳道「${lane}」/ 目标态「${target}」/ 类型）：Level ${trustConfig.level} 仅授权泳道 low（intent 级别 L1；suspect 须先对齐「级别/risk_level」）的 ${trustConfig.level === 2 ? 'approved/done' : 'approved'} 且不含 incidents`);
         refused++;
         continue;
       }
@@ -481,11 +481,11 @@ if (isMain) {
     }
     if (delegated) {
       // 协作道门（2026-09-30 hybrid-governance-risk-lanes；2026-10-02 caliber-convergence 起单源泳道）：
-      // --batch 批量仅受理泳道 low（intent 两字段一致 L0/L1；suspect 拒）——high/suspect 逐份拒绝落账；
+      // --batch 批量仅受理泳道 low（intent 级别 L1；suspect 拒）——high/suspect 逐份拒绝落账；
       // 不带 --batch 的单份代录不限级别（既有口径不变）。
       const low = lane === 'low';
       if (batchMode && !low) {
-        console.error(`❌ ${doc} 泳道「${lane}」（级别「${lvl || '缺失'}」）不在协作道——--batch 批量代录仅限两字段一致的 L0/L1；suspect（级别/risk_level 缺失、非法或分歧）须先对齐两字段，L2/L3 防御道须逐份确认（本份未落账、未写盘）`);
+        console.error(`❌ ${doc} 泳道「${lane}」（级别「${lvl || '缺失'}」）不在协作道——--batch 批量代录仅限级别 L1；suspect（级别/risk_level 缺失、非法或分歧）须先对齐两字段，L2/L3 防御道须逐份确认（本份未落账、未写盘）`);
         refused++;
         continue;
       }
@@ -498,7 +498,7 @@ if (isMain) {
         // 改动面事实（A1 干净版）：quote 降级为「人类可读摘要」，分辨力改由 scope（机器派生）+ fingerprint
         // （文档内容）承担——「不复用同句」纪律据此退役（复用一句摘要不再削弱任何判据）。
         scope,
-        // 简洁审计标记（hybrid-governance-risk-lanes）：L0/L1 协作道行带 brief（quote 仍入账供对质），
+        // 简洁审计标记（hybrid-governance-risk-lanes）：L1 协作道行带 brief（quote 仍入账供对质），
         // 检查 15 并录审计对全 brief 批次豁免「确认并录」告警
         ...(low ? { brief: true } : {}),
       }, { shard: shardWrite });
@@ -530,6 +530,61 @@ if (isMain) {
     seq++;
   }
   if (rl) rl.close();
+  // --- 终态件滚动归档（2026-10-13 archive-on-close；B9 自 Shipyard.Material 回灌，行为边界逐字对齐）---
+  // 关单即归档：本进程刚落终态的文档，其同名家族若已全终态且超窗、无活跃引用 → git mv 进
+  // workflow/archive/<家族最晚终态月>/{类型}/。动机：archive-sweep 是手工工具、无人跑，活跃目录
+  // 无限膨胀（源仓实测 885 篇、733 篇终态零引用——留痕在包源仓 git 历史与 CHANGELOG）；挂进确认门
+  // 后活跃目录恒定。判定单源 = archive-sweep.analyze（禁第二套口径）；归档单位 = 同名家族
+  // （check-loop 检查 1 的结构配对是家族双向在场审计，单篇归档会造配对断裂——源仓首批返工实证）。
+  // 时序：**台账行已写、状态已落盘之后**才 mv——check-loop 检查 15 的内容绑定按台账 doc 路径读
+  // 四目录直下文件，归档后该路径不在 buildDocList() 扫描面内，绑定检查自然跳过（归档件不再受
+  // 内容绑定约束，与既有归档批次同口径）。失败一律 fail-open：归档是卫生动作，不得回滚已完成的
+  // 确认（**归档失败不阻断关单**——与源仓语义逐字一致）。启用锚（照搬源仓，无 policy 锚）：
+  // ① 仓库已建立归档约定（workflow/archive/ 存在）——真实装户仓有，临时 fixture 无，避免测试夹具
+  //   被静默搬走（也避免在未采纳归档的仓库里凭空造目录）；② env 逃生门 CONFIRM_DOC_NO_ARCHIVE。
+  const archiveRoot = path.join(root, 'workflow', 'archive');
+  if (confirmed > 0 && !process.env.CONFIRM_DOC_NO_ARCHIVE && fs.existsSync(archiveRoot)) {
+    try {
+      const { analyze, buildDocList, loadLastTouch, parseStatus, TERMINAL, ACTIVE } = await import('./archive-sweep.mjs');
+      // 台账终态锚：kit 读侧单源 = readLedgerRows（主台账+分片透明合并；源仓走
+      // loadAllConfirmations——「每 doc 终态行最大日期」的 max 判据对去重口径无语义差，
+      // 见 archive-sweep.loadLedgerTs 同款注释）。CONFIRM_DOC_TEST_NOW 仅测试注入，生产不设。
+      const ledgerTs = {};
+      for (const e of readLedgerRows(root)) {
+        if (TERMINAL.has(e.stage) && e.doc) {
+          const d = (e.ts || '').slice(0, 10);
+          if (d && (!ledgerTs[e.doc] || d > ledgerTs[e.doc])) ledgerTs[e.doc] = d;
+        }
+      }
+      const allDocs = buildDocList(root);
+      // 窗口口径：本次确认的文档**刚**落终态，其台账 ts = 今日 → 21 天窗口必然拦下（窗口的用途是
+      // 「防归档仍在编辑的在途件」，而刚过确认门的终态件按定义已定稿，窗口对它冗余）。故对本进程
+      // 确认过的家族用 windowDays=-1（判据 `floor((today-tTime)/864e5) <= windowDays` 恒 false = 窗口
+      // 关闭；注意 0 不等于关闭——0 表示「同日也算未满窗」）；未涉及的家族不在此次归档范围（touched
+      // 过滤），历史积压仍走 archive-sweep 手工批次 + 21 天窗口。
+      const r = analyze({
+        docs: allDocs,
+        ledgerTs,
+        lastTouch: loadLastTouch(root),
+        activeTexts: allDocs.filter((d) => ACTIVE.has(parseStatus(d.text))).map((d) => d.text),
+        windowDays: -1,
+      });
+      // 只归档「本次确认涉及的家族」——不越权清理历史积压（积压走 archive-sweep 手工批次）
+      const touched = new Set(docs.map((d) => path.basename(d)));
+      const mine = r.candidates.filter((x) => touched.has(x.file));
+      if (mine.length) {
+        for (const x of mine) {
+          const destDir = path.join(root, 'workflow', 'archive', x.month, x.dir);
+          fs.mkdirSync(destDir, { recursive: true });
+          execFileSync('git', ['mv', x.rel, path.join('workflow', 'archive', x.month, x.dir, x.file)], { cwd: root });
+        }
+        const fams = new Set(mine.map((x) => x.file));
+        console.log(`📦 归档 ${mine.length} 篇 / ${fams.size} 族 → workflow/archive/<终态月>/（家族原子；活跃目录不再累积终态件）`);
+      }
+    } catch (err) {
+      console.error(`⚠️ 归档跳过（fail-open，不影响已完成的确认）：${err.message}`);
+    }
+  }
   console.log(`\n完成：确认 ${confirmed} 份 / 跳过 ${docs.length - confirmed - refused} 份 / 拒绝 ${refused} 份${delegated ? '（委托代录）' : ''}`);
   process.exit(refused ? 2 : 0);
 }

@@ -4,7 +4,7 @@
 // 两处都不跑——bb69e19/418960a 重构净增 78B 把 .agents/commands/ 推到 65581B > 65536B，包源侧零暴露，
 // 装户首提被硬拦才发现（2026-10-11 S1 冒烟）。本套件把同一张预算表映射到包源路径核对，npm test / CI
 // 直接拦超限——模板增长不再静默入包。run-tests 盘面 glob 自动挂载本套件。
-// 口径（对照 templates/_agents/scripts/rule-budget.sh 单源，勿两处漂移）：
+// 口径（对照 templates/_agents/scripts/rule-budget.mjs 单源，勿两处漂移）：
 //   字节 = LF 归一（工作树读入去 \r\n——等价 fsize 的 git cat-file 口径，core.autocrlf 检出形态无关）；
 //   目录合计 = 扁平 glob（直接子文件，不入子目录）；pat=首空格前 / lim=末空格后；lim 非纯数字行跳过；
 //   # 注释与空行跳过。
@@ -36,7 +36,7 @@ if (!fs.existsSync(BUDGETS)) {
 }
 const rows = [];
 for (const line of fs.readFileSync(BUDGETS, 'utf8').split('\n')) {
-  const t = line.replace(/\r/g, '');   // 表文件检出即 CRLF——显式去 \r（rule-budget.sh 同款）
+  const t = line.replace(/\r/g, '');   // 表文件检出即 CRLF——显式去 \r（rule-budget.mjs 读取同款容 \r）
   if (!t || t.startsWith('#')) continue;
   const i = t.indexOf(' ');
   if (i < 0) continue;
