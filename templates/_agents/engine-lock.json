@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-14T02:35:42.200Z",
+  "generatedAt": "2026-10-15T16:47:55.700Z",
   "files": {
     ".github/workflows/ci.yml": {
       "sha256": "e9cffb90dec8f0a49bfe231a13fb8df375a2494cc75c38d991b5eb7c7be104b5",
@@ -87,7 +87,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/check-prejudgment.mjs": {
-      "sha256": "8f83a97ed907441cdf7819e64282bd04f65588991c63b491404d62e5d2644bec",
+      "sha256": "050227917cc5e5e73a189b23ea7f5ff7b5633b5e265b33e153147409772f7936",
       "hard": 0
     },
     "templates/_agents/scripts/check-registry.mjs": {

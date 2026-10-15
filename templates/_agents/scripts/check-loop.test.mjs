@@ -3765,21 +3765,33 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('检查25 预判 L2 落位 L1 → WARN「预判级别不符」含判低信号',
     r.status === 0 && outOf(r).includes('预判级别不符') && outOf(r).includes('判低信号'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T3);
-  // ④ 词表非法 kind / 整字段不可解析 → WARN「预判字段不可解析」
+  // ④ 词表非法 kind / 整字段不可解析 → WARN「预判字段不可解析」（夹具取 approved 活文档——终态 done
+  //   自 2026-10-15 起形态类告警跳过，见 ⑥）
   const T4 = mkfix();
-  w(T4, 'workflow/intents/2026-09-12-pj5.md', INTENT('pj5', '状态: done\n级别: L1\n日期: 2026-09-12\n预判: kind=bug level=L1', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
-  w(T4, 'workflow/plans/2026-09-12-pj5.md', PLAN('pj5', '状态: done\n级别: L1'));
+  w(T4, 'workflow/intents/2026-09-12-pj5.md', INTENT('pj5', '状态: approved\n级别: L1\n日期: 2026-09-12\n预判: kind=bug level=L1', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
+  w(T4, 'workflow/plans/2026-09-12-pj5.md', PLAN('pj5', '状态: draft\n级别: L1'));
   r = run(T4);
   check('检查25 kind=bug 不在词表 → WARN「预判字段不可解析」',
     r.status === 0 && outOf(r).includes('预判字段不可解析'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T4);
   const T5 = mkfix();
-  w(T5, 'workflow/intents/2026-09-12-pj6.md', INTENT('pj6', '状态: done\n级别: L1\n日期: 2026-09-12\n预判: 这是个修复', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
-  w(T5, 'workflow/plans/2026-09-12-pj6.md', PLAN('pj6', '状态: done\n级别: L1'));
+  w(T5, 'workflow/intents/2026-09-12-pj6.md', INTENT('pj6', '状态: approved\n级别: L1\n日期: 2026-09-12\n预判: 这是个修复', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
+  w(T5, 'workflow/plans/2026-09-12-pj6.md', PLAN('pj6', '状态: draft\n级别: L1'));
   r = run(T5);
   check('检查25 预判字段无 kv 形态 → WARN「预判字段不可解析」',
     r.status === 0 && outOf(r).includes('预判字段不可解析'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T5);
+  // ⑥ 终态跳过（2026-10-15）：done 文档词表/形态类告警不产——终态受检查 15 内容绑定不可修订，
+  //   WARN 永不可消（「不可消除噪声」红线）；类型/级别比对照常（level 一致；类型告警不在本断言面）
+  {
+    const T6 = mkfix();
+    w(T6, 'workflow/intents/2026-09-12-pj7.md', INTENT('pj7', '状态: done\n级别: L1\n日期: 2026-09-12\n预判: kind=bug level=L1', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
+    w(T6, 'workflow/plans/2026-09-12-pj7.md', PLAN('pj7', '状态: done\n级别: L1'));
+    r = run(T6);
+    check('检查25 终态 done 词表外 kind → 形态类告警不产（2026-10-15 终态跳过）',
+      r.status === 0 && !outOf(r).includes('预判字段不可解析'), `exit=${r.status}\n${outOf(r)}`);
+    rmfix(T6);
+  }
 }
 
 // ---- 检查 26：闭环漏斗「协议前」占比动作阈值（相邻两月均 >30% → WARN；消费 gen-workflow-metrics 产物）----

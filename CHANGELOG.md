@@ -2,6 +2,33 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.8.1
+
+自 Shipyard.Material 回灌引擎增量（源仓 2026-10-15 三引擎提交逐件甄别同步；宿主数据与 kit 不适用件
+不带回，甄别记录见第 3 条）。取 patch 位——一个门的 advisory 噪声削减 + 一个方法层文档件，无新能力面。
+
+- fix(gate)：**检查 25 终态跳过（不可消除噪声削减）**（源仓 06b8c79b「§14/§25 不可消除噪声削减」的
+  §25 半，判据逐字对齐 s25-prejudgment）。终态文档（done/superseded/cancelled/fixed/closed——doc 终态
+  与 incident 终态的并集，workflow-enums 无单一键覆盖该并集，故与源仓同款内联声明）跳过形态/词表类
+  告警（「预判字段不可解析」三种：整体不可解析 / kind 不在词表 / level 不在枚举）；**类型/级别比对
+  保留**——那是路由审计的本体信号，judgments 灰度对账照常采集。动机：终态件受检查 15 内容绑定不可
+  修订，此类 WARN 永不可消，违反「不可消除噪声」红线。测试：check-loop §25 场景 ④⑤ 夹具改 approved
+  活文档态（done 自本版起不再产形态类告警）+ 新增 ⑥ 终态跳过场景，341/0。
+- feat(skill)：**review-method 技能——复核走查方法层单源下沉**（源仓 dbbc1998）。新增
+  `templates/_agents/skills/review-method/SKILL.md`：复核三层单源分工（拦什么 = review.md P0/P1 表 /
+  以什么身份 = independent-reviewer / 怎么走查 = 本文件）、Standards×Spec 双轴独立报告禁合并排序、
+  坏味道清单为判断项非硬违规（成文标准优先压制）、结构化修复动作、合入标尺防 P2 纠缠。
+  `commands/review.md` 方法行自「参考 `code-review` 技能」改指仓内单源——摆脱宿主全局技能依赖，
+  宿主有全局 `code-review` 技能时可叠加。render 目录级整拷，装户径零适配（无占位符、无实例路径）。
+- 源仓同批**不同步件甄别记录**：① 06b8c79b 的 §14 半（豁免锚改 `check14HardSince` 优先、advisory
+  窗口并入存量豁免）——kit §14 恒 advisory（policy.mjs v9–v12 注释明载未引入 hard 档与该键），源仓
+  patch 自带兼容口径即「无 check14HardSince 的 policy 维持原 advisory 口径、该档 WARN 是唯一执法面
+  不豁免」，kit 正属该情形且 §14 既有测试钉死现行锚（check14Since）；② 796c3fb6 gitleaks 基线同口径
+  重生成 1221→1227——gitleaks 门整体未回灌 kit（无 check-secrets.mjs，verify GATES 无 secrets-scan），
+  `.gitleaks-baseline.json` 与 1227 口径叙事均为宿主数据；③ d4cf9bc7 委派台账补账——Material 宿主
+  台账数据，非引擎件。
+- `engine-lock.json` `--update` 入账（受检面 82 件不变；1 改动件 = check-prejudgment.mjs）。
+
 ## 1.8.0
 
 协议级回灌收口（B1–B10b，自 Shipyard.Material 参考实现）：引擎通用能力整体对齐参考仓——门禁面、判定面、

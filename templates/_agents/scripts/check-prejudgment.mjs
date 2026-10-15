@@ -29,16 +29,21 @@ export function run(ctx) {
       const pj = fmGet(abs, '预判');
       if (!pj) continue;
       const rel = `${WF}/${sub}/${f}`;
+      // 终态文档（2026-10-15）：形态/词表类告警跳过——终态受检查 15 内容绑定不可修订，此类 WARN 永不可
+      // 消（「不可消除噪声」红线）；类型/级别比对保留——那是路由审计的本体信号，灰度对账照常采集。
+      // （终态并集 = doc 终态 done/superseded/cancelled + incident 终态 fixed/closed——两侧枚举无单一键
+      // 覆盖该并集，故与源仓 s25 同款内联声明。）
+      const terminalDoc = ['done', 'superseded', 'cancelled', 'fixed', 'closed'].includes(fmGet(abs, '状态'));
       const kv = {};
       for (const m of pj.matchAll(/(kind|level)=([^\s]+)/g)) kv[m[1]] = m[2];
       if (!Object.keys(kv).length) {
-        warnings.push(`- [WARN 预判字段不可解析] 须形如「预判: kind=<kind> level=<L1|L2|L3>」:${rel}`);
+        if (!terminalDoc) warnings.push(`- [WARN 预判字段不可解析] 须形如「预判: kind=<kind> level=<L1|L2|L3>」:${rel}`);
         continue;
       }
-      if (kv.kind && !KINDS.includes(kv.kind)) {
+      if (kv.kind && !KINDS.includes(kv.kind) && !terminalDoc) {
         warnings.push(`- [WARN 预判字段不可解析] kind=${kv.kind} 不在词表（${KINDS.join('/')}）:${rel}`);
       }
-      if (kv.level && !inSet(kv.level, ENUMS['level.all'])) {
+      if (kv.level && !inSet(kv.level, ENUMS['level.all']) && !terminalDoc) {
         warnings.push(`- [WARN 预判字段不可解析] level=${kv.level} 不在枚举 level.all:${rel}`);
       }
       // 类型比对：intents ≡ require、incidents ≡ fix（plans/specs 两道共用，不判类型）
