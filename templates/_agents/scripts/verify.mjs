@@ -19,13 +19,18 @@
 //   d) --test-cmd 为 fixture 测试注入缝：替换全部生产门为 [test, check-loop] 两门夹具（夹具根里没有
 //      脚本本体，check-loop 用绝对路径直调，root 归属仍由 CHECK_LOOP_ROOT 裁决）；夹具模式不触发生效规则
 //      视图门与摘要生成（假门凭证只进本地台账，不产 committed 摘要）。
-// 未执行门清单：fail-fast 后序门状态未知≠通过——验证系统输出须完备（「没跑」与「过了」可区分）。
+// 未执行门清单：fail-fast 后序门状态未知≠通过——验证系统输出须完备（「没跑」与「过了」可区分）；
+//   并发编排（2026-10-16 自源仓 verify-parallel 回灌）后该清单按「已出裁决」算：guardian 门
+//   （scripts-syntax）串行先跑、未过即止；其余门进工作池并发（--jobs N / --serial，缺省
+//   clamp(2..4, floor(cpus/4))），各自缓冲输出、完成即整块回放；任一门红 → 停排新门 + taskkill /T
+//   树杀在跑门（Windows shell:true 起的是 cmd.exe，kill 只杀壳不杀孙进程）。
 // 生效规则视图门（effective-policy --check）：policy 变更后必须重生成 workflow/effective-policy.md 随同
 //   提交——新装户由 init 生成器首跑种子该文件，缺文件对 --check 是漂移（红），不静默放行。
 // 绿凭证摘要（gen-verify-evidence.mjs）：全绿尾部自动重生成 workflow/verify-evidence.md——全绿事实与
 //   仓内摘要同刻生成，消除「本地台账已绿、committed 摘要滞后」的双真相分叉；生成失败响亮告警但不推翻绿裁决。
-// 用法：node .agents/scripts/verify.mjs [--list] [--test-cmd "<shell 命令>"] [--stub-gate "<命令>"] [--doc <本单 workflow 路径>]
+// 用法：node .agents/scripts/verify.mjs [--list] [--jobs N | --serial] [--test-cmd "<shell 命令>"] [--stub-gate "<命令>"] [--doc <本单 workflow 路径>]
 //   --list：按执行序打印门 id 后退出，不执行（与 --test-cmd / --stub-gate 互斥）。
+//   --jobs N / --serial：并发档位与串行回退（缺省 clamp(2..4, floor(cpus/4))；--jobs 0 / 非整数 fail-loud）。
 //   --test-cmd 用于测试注入，或在无根 package.json 的装户仓指定项目测试命令；
 //   --stub-gate <命令>（2026-10-16 自源仓回灌）：单门夹具但走**生产尾段**（落凭证 / 生成摘要）——
 //     与 --test-cmd 的差异是不打 testCmd 标记、尾段按生产路径执行；**必须配 CHECK_LOOP_ROOT**（夹具根），
@@ -33,16 +38,21 @@
 //   --doc 把凭证绑到本单，如 --doc workflow/intents/<日期>-<主题>.md
 // 测试：node templates/_agents/scripts/verify.test.mjs（--test-cmd 注入假命令 + CHECK_LOOP_ROOT 注入夹具）
 import fs from 'node:fs';
-import { spawnSync } from 'node:child_process';
+import os from 'node:os';
+import { spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
+import { performance } from 'node:perf_hooks';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
 
 // --- 门禁定义（engine cohort 七门，序即执行序；遇红即停） ---
+// guardian（2026-10-16 并行编排）：本门未过则后序门一并不启动——引擎脚本不可解析时其余门无意义，
+// 且夹具根（CHECK_LOOP_ROOT 指向无脚本目录）下若并行铺开，各门会在假根里乱跑。
+// deps：门间依赖边（本门须待所列门**成功**后才启动；kit 门表当前无边——机制随编排器下发，装户增门可用）。
 const GATES = [
-  { id: 'scripts-syntax', name: '引擎脚本语法自检', cmd: 'node .agents/scripts/check-scripts-syntax.mjs', folder: '.', type: 'shell' },
+  { id: 'scripts-syntax', guardian: true, name: '引擎脚本语法自检', cmd: 'node .agents/scripts/check-scripts-syntax.mjs', folder: '.', type: 'shell' },
   { id: 'engine-tests', name: '测试门 (npm test)', cmd: 'npm test', folder: '.', type: 'shell' },
   { id: 'workflows-check', name: '编排脚本检查', cmd: 'node .agents/scripts/workflows-check.mjs', folder: '.', type: 'shell' },
   { id: 'rule-budget', name: '常驻面预算检查', cmd: 'node .agents/scripts/rule-budget.mjs --all', folder: '.', type: 'shell' },
@@ -127,84 +137,209 @@ const recordFailure = (step, exitInfo, note) => {
   }
 };
 
-console.log(`[verify] 🚀 开始静态门验证 (共 ${gates.length} 项)${explicitTestCmd ? '【fixture 模式】' : ''}${stubCmd ? '【stub 尾段】' : ''}\n`);
+// 并发档位（2026-10-16 并行编排）：门之间无共享状态（各自独立进程 + 独立工作目录），串行编排下
+// 总耗时 = 各门之和；工作池并发后墙钟 ≈ max(最长门, 各门之和 / 并发)——门自身已内部并行
+//（npm test 套件池 / check-loop），档位越高越互相抢核。缺省 = clamp(2..4, floor(cpus/4))；
+// --serial 回退串行（排障/对比）；--jobs N 显式钉档（0 / 非整数 fail-loud）。
+const serial = args.includes('--serial');
+const jobsRaw = args.includes('--jobs') ? Number(args[args.indexOf('--jobs') + 1]) : null;
+if (jobsRaw !== null && (!Number.isInteger(jobsRaw) || jobsRaw < 1)) {
+  console.error(`[verify] --jobs 须为正整数（现 ${args[args.indexOf('--jobs') + 1]}）`);
+  process.exit(2);
+}
+const JOBS = serial ? 1 : Math.min(jobsRaw ?? Math.max(2, Math.min(4, Math.floor(os.cpus().length / 4))), gates.length);
+// 单门输出上限（与旧 spawnSync maxBuffer 同口径）：超限即树杀判红，不静默截断（截断后的输出不可当证据）
+const MAX_GATE_OUTPUT = 32 * 1024 * 1024;
+// 树杀（fail-fast 中止在跑门）：Windows 下 shell:true 起的是 cmd.exe，kill 只杀壳不杀孙进程
+//（npm→node 会成孤儿并占住文件锁）——故走 taskkill /T /F 整树。
+const killTree = (child) => {
+  try {
+    if (process.platform === 'win32' && child.pid) {
+      spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { stdio: 'ignore' });
+    } else {
+      child.kill('SIGTERM');
+    }
+  } catch { /* best-effort：杀不动不改变裁决 */ }
+};
 
-let passedCount = 0;
-const outputs = {};
+console.log(`[verify] 🚀 开始静态门验证 (共 ${gates.length} 项，并发 ${JOBS}${serial ? '·串行' : ''})${explicitTestCmd ? '【fixture 模式】' : ''}${stubCmd ? '【stub 尾段】' : ''}\n`);
 
-for (let i = 0; i < gates.length; i++) {
-  const gate = gates[i];
-  // 装户仓：engine-tests 门显式跳过——跳过≠通过，不计入 passedCount、不算绿（全绿落账段据此不落凭证）
-  if (skipTest && gate.id === 'engine-tests') {
-    console.log(`[verify] ⏭ ${i + 1}/${gates.length} 跳过 ${gate.cmd}：当前目录无 package.json（装户仓）——请按项目口径手工跑测试，或用 --test-cmd "<项目测试命令>" 指定后重跑`);
-    continue;
+async function main() {
+  let passedCount = 0;
+  const outputs = {};
+  const durations = {};
+  const doneIdx = new Set();  // 已出裁决的门序（成功/失败/中止；未列入者 = fail-fast 后状态未知）
+  const aborted = new Set();  // 因他门失败被树杀中止的门序
+  const running = new Map();  // 门序 -> child（树杀目标）
+  let failedIdx = -1;
+
+  const startGate = (i) => {
+    const gate = gates[i];
+    console.log(`[verify] ▶ ${i + 1}/${gates.length} ${gate.name}...`);
+    const t0 = performance.now();
+    const child = spawn(gate.cmd, { shell: true, cwd: path.join(ROOT, gate.folder) });
+    running.set(i, child);
+    const buf = { stdout: '', stderr: '', overflow: false };
+    const pump = (src, key) => {
+      src.setEncoding('utf8');
+      src.on('data', (d) => {
+        if (buf.overflow) return;
+        buf[key] += d;
+        // 与旧 spawnSync maxBuffer 同口径：超限即中止判红（不静默截断——截断后的输出不可当证据）
+        if (buf[key].length > MAX_GATE_OUTPUT) { buf.overflow = true; killTree(child); }
+      });
+    };
+    pump(child.stdout, 'stdout');
+    pump(child.stderr, 'stderr');
+    return new Promise((resolve) => {
+      let settled = false;
+      const settle = (status, error) => {
+        if (settled) return;
+        settled = true;
+        running.delete(i);
+        resolve({ status, error, ...buf, durMs: Math.round(performance.now() - t0) });
+      };
+      child.on('error', (e) => settle(null, e));
+      child.on('close', (status) => settle(status, null));
+    });
+  };
+
+  // 出裁决：先回放该门缓冲输出（并发下输出按门整块回放，逐门可读，与 run-tests 同口径），再打结论行。
+  // 返回 true = 该门红（调用方据此 fail-fast）。
+  const finishGate = (i, r) => {
+    const gate = gates[i];
+    doneIdx.add(i);
+    durations[gate.id] = r.durMs;
+    if (r.stdout) process.stdout.write(r.stdout);
+    if (r.stderr) process.stderr.write(r.stderr);
+    if (aborted.has(i)) {
+      console.error(`[verify] ⏹ ${i + 1}/${gates.length} ${gate.name} 已中止（他门失败触发 fail-fast，状态未知）`);
+      return false;
+    }
+    if (r.overflow) {
+      console.error(`[verify] ❌ ${i + 1}/${gates.length} ${gate.name} 未通过（输出超 ${MAX_GATE_OUTPUT / 1024 / 1024}MB 上限，已中止）`);
+      recordFailure(gate.id, -1, 'output-overflow');
+      return true;
+    }
+    if (r.status !== 0) {
+      const note = `exit ${r.status ?? r.error?.code}`;
+      console.error(`[verify] ❌ ${i + 1}/${gates.length} ${gate.name} 未通过 (${note})`);
+      recordFailure(gate.id, r.status, note);
+      return true;
+    }
+    outputs[gate.id] = r.stdout || '';
+    console.log(`[verify] ✅ ${i + 1}/${gates.length} ${gate.name} 通过 [${r.durMs} ms]\n`);
+    passedCount++;
+    return false;
+  };
+
+  const wallStart = performance.now();
+
+  // 依赖边（deps）：本门须待所列门**成功**后才启动；依赖门红/未跑 → 本门不启动（状态未知，由尾段清单兜底）
+  const idxOf = new Map(gates.map((g, i) => [g.id, i]));
+  const gatePromise = new Map(); // 门序 -> 该门结果 Promise（依赖方 await 用）
+
+  // 守卫段（guardian）：串行先跑、未过即止——后序门一并不启动
+  for (let i = 0; i < gates.length && failedIdx < 0; i++) {
+    if (!gates[i].guardian) continue;
+    const p = startGate(i);
+    gatePromise.set(i, p);
+    if (finishGate(i, await p) && failedIdx < 0) failedIdx = i;
   }
-  console.log(`[verify] ▶ ${i + 1}/${gates.length} ${gate.name}...`);
 
-  const result = spawnSync(gate.cmd, {
-    shell: true,
-    encoding: 'utf8',
-    cwd: path.join(ROOT, gate.folder),
-    maxBuffer: 32 * 1024 * 1024,
-  });
+  if (failedIdx < 0) {
+    // 主体段：工作池并发（完成一个补一个）；任一门红 → 停排新门 + 树杀在跑门（fail-fast 语义保留）
+    const bodyIdx = gates.map((_, i) => i).filter((i) => !gates[i].guardian);
+    let cursor = 0;
+    const worker = async () => {
+      while (failedIdx < 0 && cursor < bodyIdx.length) {
+        const i = bodyIdx[cursor++];
+        const gate = gates[i];
+        // 装户仓：engine-tests 门显式跳过——跳过≠通过，不计入 passedCount、不算绿（全绿落账段据此不落凭证）
+        if (skipTest && gate.id === 'engine-tests') {
+          console.log(`[verify] ⏭ ${i + 1}/${gates.length} 跳过 ${gate.cmd}：当前目录无 package.json（装户仓）——请按项目口径手工跑测试，或用 --test-cmd "<项目测试命令>" 指定后重跑`);
+          doneIdx.add(i);
+          continue;
+        }
+        const deps = gate.deps || [];
+        if (deps.length) {
+          const depResults = await Promise.all(deps.map((d) => gatePromise.get(idxOf.get(d)) ?? Promise.resolve(null)));
+          if (failedIdx >= 0) return;
+          if (depResults.some((r) => !r || r.status !== 0)) continue; // 依赖未过 → 本门不启动
+        }
+        const p = startGate(i);
+        gatePromise.set(i, p);
+        if (finishGate(i, await p) && failedIdx < 0) {
+          failedIdx = i;
+          for (const [j, child] of [...running]) { aborted.add(j); killTree(child); }
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(JOBS, bodyIdx.length) }, worker));
+  }
 
-  if (result.stdout) process.stdout.write(result.stdout);
-  if (result.stderr) process.stderr.write(result.stderr);
-
-  if (result.status !== 0) {
-    const note = `exit ${result.status ?? result.error?.code}`;
-    console.error(`[verify] ❌ ${i + 1}/${gates.length} ${gate.name} 未通过 (${note})`);
-    // 未执行门清单：fail-fast 后序门状态未知≠通过——「没跑」在台账里与「过了」不可区分即输出不完备
-    const remaining = gates.slice(i + 1).map((g) => g.id);
-    if (remaining.length) console.error(`[verify] ⏭️ 未执行门（fail-fast，状态未知）：${remaining.join('、')}`);
-    recordFailure(gate.id, result.status, note);
+  if (failedIdx >= 0) {
+    // 未执行门清单（按「已出裁决」算，已中止的门同样状态未知——被树杀时无结论，一并点名）：
+    // fail-fast 后状态未知≠通过——「没跑」在台账里与「过了」不可区分即输出不完备
+    const remaining = gates.map((g, i) => i).filter((i) => !doneIdx.has(i) || aborted.has(i)).map((i) => gates[i].id);
+    if (remaining.length) console.error(`[verify] ⏭️ 未执行门（fail-fast，状态未知；含被树杀的已中止门）：${remaining.join('、')}`);
     process.exit(1);
   }
-  outputs[gate.id] = result.stdout || '';
-  console.log(`[verify] ✅ ${i + 1}/${gates.length} ${gate.name} 通过\n`);
-  passedCount++;
-}
 
-// 凭证落账：全部门绿才落（任一门红已在上面 fail-fast 退出）；**测试门被跳过同样不落**
-// （测试未跑即无「测试绿」事实，落账即假绿）；IO 失败出账不阻断
-try {
-  if (skipTest) {
-    console.log('[verify] ⚠️ 测试门已跳过——本次不落测试绿凭证（凭证语义 = 测试真跑绿）');
-  } else {
-    const entry = { ts: new Date().toISOString(), exitCode: 0, suite: 'npm test' };
-    // 门数：凭证明此记录「过全量门禁全绿」是几门（fixture 模式 = 2 门夹具，仍如实记）
-    entry.gates = passedCount;
-    // HEAD 短 SHA 钉进绿行本体（源仓回灌）：确定性证据此前只存在于测试夹具、绿行无 SHA 可锚定验证对象；
-    // 非 git 环境（fixture 根在 os.tmpdir）解析失败则省略该键，不伪造。
-    const rev = spawnSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8', cwd: ROOT });
-    if (rev.status === 0 && rev.stdout) entry.headShort = rev.stdout.trim();
-    // 计数行**只认编排器权威前缀**：嵌套套件同形行不回退——非本编排器口径的 --test-cmd
-    //（装户项目自有测试命令）抓不到即省略计数键，不回退到错的事实（宁缺勿错，exitCode 才是硬事实）。
-    const m = [...(outputs['engine-tests'] || outputs['test'] || '').matchAll(/\[run-tests\] 合计: SUITES (\d+) \/ FAILED (\d+)/g)].pop();
-    if (m) { entry.passed = Number(m[1]); entry.failed = Number(m[2]); }
-    if (process.env.PIPELINE_RUN_ID) entry.runId = process.env.PIPELINE_RUN_ID;
-    // doc 键：未传 --doc 时**不写该键**（不是写 null）——消费方按 doc 精确匹配，undefined 与 null 都恒不命中，
-    // 但缺键让「本行没有绑定对象」这件事在台账盘面上直接可读。
-    if (docRel) entry.doc = docRel;
-    fs.mkdirSync(path.join(ROOT, '.agents'), { recursive: true });
-    fs.appendFileSync(path.join(ROOT, '.agents', 'verifications.jsonl'), `${JSON.stringify(entry)}\n`);
-    console.log(`[verify] 🧾 测试绿凭证已落账 verifications.jsonl${entry.passed !== undefined ? `（套件 ${entry.passed} / FAIL ${entry.failed}）` : ''}${docRel ? ` 绑定本单 ${docRel}` : '（未带 --doc：不给任何单背书）'}`);
+  // ---- 全绿尾段（任一门红已在上方 exit 1 返回，能走到这里即全绿）----
+  // 凭证落账：全部门绿才落；**测试门被跳过同样不落**（测试未跑即无「测试绿」事实，落账即假绿）；IO 失败出账不阻断
+  try {
+    if (skipTest) {
+      console.log('[verify] ⚠️ 测试门已跳过——本次不落测试绿凭证（凭证语义 = 测试真跑绿）');
+    } else {
+      const entry = { ts: new Date().toISOString(), exitCode: 0, suite: 'npm test' };
+      // 门数：凭证明此记录「过全量门禁全绿」是几门（fixture 模式 = 2 门夹具，仍如实记）
+      entry.gates = passedCount;
+      // HEAD 短 SHA 钉进绿行本体（源仓回灌）：确定性证据此前只存在于测试夹具、绿行无 SHA 可锚定验证对象；
+      // 非 git 环境（fixture 根在 os.tmpdir）解析失败则省略该键，不伪造。
+      const rev = spawnSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8', cwd: ROOT });
+      if (rev.status === 0 && rev.stdout) entry.headShort = rev.stdout.trim();
+      // 计数行**只认编排器权威前缀**：嵌套套件同形行不回退——非本编排器口径的 --test-cmd
+      //（装户项目自有测试命令）抓不到即省略计数键，不回退到错的事实（宁缺勿错，exitCode 才是硬事实）。
+      const m = [...(outputs['engine-tests'] || outputs['test'] || '').matchAll(/\[run-tests\] 合计: SUITES (\d+) \/ FAILED (\d+)/g)].pop();
+      if (m) { entry.passed = Number(m[1]); entry.failed = Number(m[2]); }
+      // 门禁成本入账（自源仓回灌）：totalMs = 各门之和（并发后已非墙钟，保留以续接历史口径）；
+      // wallMs = 本次实际墙钟——「一次迭代的等待成本」是墙钟，读方以 wallMs 优先。
+      entry.totalMs = Object.values(durations).reduce((a, b) => a + b, 0);
+      entry.wallMs = Math.round(performance.now() - wallStart);
+      entry.durations = durations;
+      if (process.env.PIPELINE_RUN_ID) entry.runId = process.env.PIPELINE_RUN_ID;
+      // doc 键：未传 --doc 时**不写该键**（不是写 null）——消费方按 doc 精确匹配，undefined 与 null 都恒不命中，
+      // 但缺键让「本行没有绑定对象」这件事在台账盘面上直接可读。
+      if (docRel) entry.doc = docRel;
+      fs.mkdirSync(path.join(ROOT, '.agents'), { recursive: true });
+      fs.appendFileSync(path.join(ROOT, '.agents', 'verifications.jsonl'), `${JSON.stringify(entry)}\n`);
+      const top3 = Object.entries(durations).sort((a, b) => b[1] - a[1]).slice(0, 3)
+        .map(([id, ms]) => `${id}(${(ms / 1000).toFixed(1)}s)`).join(' ');
+      console.log(`[verify] 🧾 测试绿凭证已落账 verifications.jsonl${entry.passed !== undefined ? `（套件 ${entry.passed} / FAIL ${entry.failed}）` : ''}${docRel ? ` 绑定本单 ${docRel}` : '（未带 --doc：不给任何单背书）'}`);
+      console.log(`[verify] ⏱️ 门禁成本：墙钟 ${(entry.wallMs / 1000).toFixed(1)}s｜各门合计 ${(entry.totalMs / 1000).toFixed(1)}s｜最慢三门 ${top3}`);
+    }
+  } catch (e) {
+    console.error(`[verify] ⚠️ 凭证落账失败（${e.code || e.message}）——不阻断，关单门前置将按无凭证告警`);
   }
-} catch (e) {
-  console.error(`[verify] ⚠️ 凭证落账失败（${e.code || e.message}）——不阻断，关单门前置将按无凭证告警`);
-}
 
-// 摘要事件原子化：全绿事实与仓内摘要（workflow/verify-evidence.md）同刻生成，消除「本地台账已绿、
-// committed 摘要滞后」的双真相分叉。仅生产模式（fixture 假门凭证不产 committed 摘要；测试门跳过时
-// 本就无凭证）；stub 尾段按生产路径执行（摘要落在 CHECK_LOOP_ROOT 夹具根，不触真实仓）。
-// 生成失败响亮告警但不推翻绿裁决（同落账口径）。
-if (!explicitTestCmd && !skipTest) {
-  const gen = spawnSync(process.execPath, [path.join(SCRIPT_DIR, 'gen-verify-evidence.mjs'), '--root', ROOT], { encoding: 'utf8' });
-  if (gen.status === 0) {
-    if (gen.stdout) process.stdout.write(String(gen.stdout).trimEnd() + '\n');
-  } else {
-    console.error(`[verify] ⚠️ 绿凭证摘要生成失败（${String(gen.stderr || gen.stdout || '').trim().slice(0, 200)}）——绿裁决不变，手动补跑 node .agents/scripts/gen-verify-evidence.mjs`);
+  // 摘要事件原子化：全绿事实与仓内摘要（workflow/verify-evidence.md）同刻生成，消除「本地台账已绿、
+  // committed 摘要滞后」的双真相分叉。仅生产模式（fixture 假门凭证不产 committed 摘要；测试门跳过时
+  // 本就无凭证）；stub 尾段按生产路径执行（摘要落在 CHECK_LOOP_ROOT 夹具根，不触真实仓）。
+  // 生成失败响亮告警但不推翻绿裁决（同落账口径）。
+  if (!explicitTestCmd && !skipTest) {
+    const gen = spawnSync(process.execPath, [path.join(SCRIPT_DIR, 'gen-verify-evidence.mjs'), '--root', ROOT], { encoding: 'utf8' });
+    if (gen.status === 0) {
+      if (gen.stdout) process.stdout.write(String(gen.stdout).trimEnd() + '\n');
+    } else {
+      console.error(`[verify] ⚠️ 绿凭证摘要生成失败（${String(gen.stderr || gen.stdout || '').trim().slice(0, 200)}）——绿裁决不变，手动补跑 node .agents/scripts/gen-verify-evidence.mjs`);
+    }
   }
+
+  console.log(`\n[verify] 🎉 全绿——可以关单（共 ${passedCount} 项通过；逐条勾验验收标准补证据后 intent/plan → done）`);
 }
 
-console.log(`\n[verify] 🎉 全绿——可以关单（共 ${passedCount} 项通过；逐条勾验验收标准补证据后 intent/plan → done）`);
+main().catch((e) => {
+  console.error(`[verify] ❌ 编排器异常：${e && e.stack ? e.stack : e}`);
+  process.exit(1);
+});

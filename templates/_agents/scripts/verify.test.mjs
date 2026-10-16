@@ -350,6 +350,21 @@ const readLedger = (root) => {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- 场景 15：并发档位（2026-10-16 verify-parallel）——--jobs 2 正常绿 / --serial 串行回退 / --jobs 0 fail-loud ----
+{
+  const root = mkfix();
+  const rJ = run(['--test-cmd', `node ${mkCmd(0)}`, '--jobs', '2'], { env: { ...process.env, CHECK_LOOP_ROOT: root } });
+  check('场景 15a：--jobs 2 → exit 0 且头行标注并发档位',
+    rJ.status === 0 && rJ.stdout.includes('并发 2') && rJ.stdout.includes('全绿'), `exit=${rJ.status}\n${rJ.stdout}\n${rJ.stderr}`);
+  const rS = run(['--test-cmd', `node ${mkCmd(0)}`, '--serial'], { env: { ...process.env, CHECK_LOOP_ROOT: root } });
+  check('场景 15b：--serial → exit 0 且头行标注串行（并发 1）',
+    rS.status === 0 && rS.stdout.includes('并发 1·串行'), `exit=${rS.status}\n${rS.stdout}\n${rS.stderr}`);
+  const rO = run(['--test-cmd', `node ${mkCmd(0)}`, '--jobs', '0'], { env: { ...process.env, CHECK_LOOP_ROOT: root } });
+  check('场景 15c：--jobs 0 → exit 2 fail-loud（不静默按缺省跑）',
+    rO.status === 2 && /--jobs 须为正整数/.test(rO.stderr), `exit=${rO.status}\n${rO.stderr}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 if (fail) {
   console.log('\n用法：node templates/_agents/scripts/verify.test.mjs');

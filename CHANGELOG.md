@@ -2,6 +2,40 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.8.4
+
+自 Shipyard.Material 回灌「性能系列」（源仓 76294817「门禁层并行编排 + 台账门/语法门批量化」整件，
+判据与输出语义不变、纯提速；1.8.3 甄别时按体量单独成批）。源仓实测：全量 verify 本机 318s→125s、
+台账不变量门 51.3s→23.6s、语法门 8.1s→4.2s。kit 门表七门体量小于源仓 18 门，收益按装户历史规模
+线性放大——机制随编排器分发，装户增门即受益。
+
+- perf(gate)：**`verify.mjs` 并行编排**。串行 for+spawnSync 改工作池并发：`--jobs N` / `--serial`
+  （缺省 clamp(2..4, floor(cpus/4))，`--jobs 0`/非整数 fail-loud exit 2）；guardian 门
+  （scripts-syntax）串行先跑、未过即止（引擎脚本不可解析时其余门无意义，夹具根下不并行铺开）；
+  **deps 依赖边机制**随门表下发（kit 七门当前无边——源仓用于 backend-test 待 backend-build 防
+  MSBuild obj/bin 文件锁，装户增门可用）；fail-fast 保留：任一门红 → 停排新门 + Windows
+  `taskkill /T /F` 树杀在跑门（shell:true 下 kill 只杀 cmd.exe 壳不杀孙进程）；单门输出缓冲
+  整块回放 + 超 32MB 上限即树杀判红（与旧 maxBuffer 同口径，不静默截断）；「未执行门」清单改按
+  「已出裁决」算，**被树杀的已中止门同样状态未知、一并点名**（kit 对源仓的口径补强——源仓只列
+  未启动门，已中止门逐门 ⏹ 行之外不在汇总清单里）；装户仓跳过测试门（⏭ 2/7）语义原样保留。
+  绿行新增 `wallMs`（并发后 `totalMs`=各门之和已非等待成本，两者并存续接历史口径）+ `durations`
+  逐门毫秒；stdout 增「门禁成本：墙钟 Xs｜各门合计 Ys｜最慢三门」行。测试：场景 15a-15c
+  （--jobs 2 / --serial / --jobs 0 fail-loud），既有 14 场景在并发编排下全部原样通过（断言均为
+  包含式，fail-fast/未执行门/凭证计数/装户跳过语义无回归）。
+- perf(gate)：**`check-ledger-invariant.mjs` git 批量化**。历史全扫原为逐提交 `git show <sha>:<path>`
+  + `git log -1 %P`（O(提交数) 次进程创建，Windows 单次 ~68ms，随历史线性膨胀）；改为一次
+  `git log --full-history` 同取 sha+父（historyEntries 按 rel 缓存并回填 parentMap）+ 每路径一次
+  `cat-file --batch` 预取全部 blob（blobCache，O(路径数)）。**判据与输出逐字不变**（46 场景原样
+  绿）；cat-file --batch 非零属真错误（仓库不可读/spawn 失败），响亮抛出而非静默置 null——静默
+  会让每个 blobOf 都判「对象不可读」，把环境抖动伪装成满屏「台账删除」假硬拦。
+- perf(gate)：**`check-scripts-syntax.mjs` 工作池并发**。node --check 无原地解析 ESM 的 API，逐文件
+  起子进程改 min(8, cpus-2) 并发；判红集合不变，判红输出按路径排序（并发下不回放乱序）。
+- `engine-lock.json --update` 入账（受检面 84 件不变，3 个改动件）。测试：npm test 79 套件 0 失败
+  （verify 套件 32→35）；eslint 0 error；引擎完整性门自洽绿。
+- 源仓同批的 metrics「门禁成本表取 wallMs 优先」不采（甄别在案）：kit 的 metrics.md 无门禁成本表
+  （源仓第六表面），verifications.jsonl 绿行的 wallMs/totalMs/durations 已随本批入账，装户读方
+  按需自取。
+
 ## 1.8.3
 
 自 Shipyard.Material 回灌「度量与协议系列」增量（源仓 2026-10-16 基线 2ff869a9 之后十三个引擎相关

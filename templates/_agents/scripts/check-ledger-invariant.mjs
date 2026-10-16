@@ -5,6 +5,9 @@
 // 判据自多 worktree 合并丢行事故后的实战实现逐字回灌（出处留包源仓 git 历史与 CHANGELOG））
 // 目的：把「台账本地可写」的伪造面从事后对质级升为机器可检出级（能力评审审计维度扣分项）。
 // 台账不可变原则：confirmations 历史行禁删改——修正只能走追加补偿行（README 硬规则 6）。
+// 性能（2026-10-16 自源仓 ledger-git-batch 回灌）：历史全扫原为逐提交 `git show <sha>:<path>` +
+//   `git log -1 %P`，即 O(提交数) 次进程创建（Windows 单次 ~68ms，随历史线性膨胀）；改为一次
+//   `git log` 取 sha+父、一次 `cat-file --batch` 取该路径全部 blob（O(路径数)），判据与输出不变。
 //
 // 分片形态（2026-10-10 中期方案；2026-10-12 起为 confirm-doc 默认写入口径）：
 //   .agents/confirmations.d/<doc 基名>.jsonl —— 按 doc 分片，跨机/跨 worktree 确认不同 doc 时
@@ -103,14 +106,50 @@ const VALID_STAGES = new Set(['approved', 'done', 'fixed', 'closed', 'superseded
 // 历史基线（机制 2026-10-13 ledger-history-baseline，详见头注）：kit 缺省空 = 全量扫描
 const HISTORY_BASELINE = process.env.LEDGER_HISTORY_BASELINE || '';
 
-const git = (args, opts = {}) => execFileSync('git', args, { cwd: ROOT, encoding: 'buffer', maxBuffer: 64 * 1024 * 1024, ...opts });
 const gitText = (args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' });
-const blobOf = (ref) => git(['show', ref]); // ref 必须为完整对象引用（<sha>:<path> / HEAD:<path> / :<path>）
-// tryBlob：安全读 blob，失败返回 null 且**不向 stderr 外泄 git fatal 噪声**（删片场景读当前提交必失败，
-// 那是预期路径不是错误——历史扫描的高频探针路径必须静默）。
+
+// ---- git 对象批量读取（2026-10-16 自源仓 ledger-git-batch 回灌）----
+// 动机：逐提交 `git show <sha>:<path>` 在 Windows 上 ~68ms/次（进程创建主导），主台账提交数 × 2 次
+// （blob + 父列表）随历史线性膨胀；改为「一次 git log 取 sha+父」+「一次 cat-file --batch 取该路径
+// 全部 blob」——spawn 数自 O(提交数) 降到 O(路径数)，判据与输出不变。
+const blobCache = new Map(); // ref -> Buffer | null（null = 对象不可读，与旧 tryBlob 同语义）
+const prefetchBlobs = (refs) => {
+  const want = [...new Set(refs)].filter((r) => !blobCache.has(r));
+  if (!want.length) return;
+  const r = spawnSync('git', ['cat-file', '--batch'], {
+    cwd: ROOT, input: `${want.join('\n')}\n`, maxBuffer: 512 * 1024 * 1024,
+  });
+  // 非零 = 真错误（仓库不可读 / spawn 失败 / 输出超 maxBuffer），不是「对象不存在」——后者由
+  // `<ref> missing` 头表达且 status 仍为 0。此处必须响亮抛出：静默置 null 会让每个 blobOf 都判
+  // 「对象不可读」，把一次环境抖动伪装成满屏「台账删除」的假硬拦（判据失真比崩溃更坏）。
+  if (r.status !== 0) {
+    throw new Error(`git cat-file --batch 失败（exit ${r.status ?? r.error?.code}）：${String(r.stderr || r.error?.message || '').trim().slice(0, 200)}`);
+  }
+  const buf = r.stdout;
+  let off = 0;
+  for (const ref of want) {
+    const nl = buf.indexOf(0x0a, off);
+    if (nl < 0) { blobCache.set(ref, null); continue; }
+    const header = buf.toString('utf8', off, nl);
+    off = nl + 1;
+    const m = /^[0-9a-f]+ \w+ (\d+)$/.exec(header); // 不匹配 = `<ref> missing` / ambiguous
+    if (!m) { blobCache.set(ref, null); continue; }
+    const size = Number(m[1]);
+    blobCache.set(ref, buf.subarray(off, off + size));
+    off += size + 1; // 内容后随一个 LF
+  }
+};
+// blobOf：ref 必须为完整对象引用（<sha>:<path> / HEAD:<path> / :<path>）；不可读即抛（调用方据此判删除）
+const blobOf = (ref) => {
+  if (!blobCache.has(ref)) prefetchBlobs([ref]);
+  const b = blobCache.get(ref);
+  if (b === null) throw new Error(`git cat-file: ${ref} 不可读`);
+  return b;
+};
+// tryBlob：安全读 blob，失败返回 null（缓存 miss 时单点回源；删片场景读当前提交必失败，是预期路径）。
 const tryBlob = (ref) => {
-  const r = spawnSync('git', ['show', ref], { cwd: ROOT, encoding: 'buffer', maxBuffer: 64 * 1024 * 1024 });
-  return r.status === 0 ? r.stdout : null;
+  if (!blobCache.has(ref)) prefetchBlobs([ref]);
+  return blobCache.get(ref);
 };
 const linesOf = (buf) => buf.toString('utf8').split('\n').filter((l, i, a) => !(l === '' && i === a.length - 1) && l !== '');
 const isShard = (rel) => rel.startsWith(`${SHARD_DIR}/`) && rel.endsWith('.jsonl');
@@ -187,13 +226,26 @@ const shardDeleteReason = (sha, rel) => {
 // allowShardDelete：分片允许「已归并后删片（或缺行已终树补登）」这一种合法消失形态；主台账永不因归并被删。
 // 返回该路径的提交史（空 = 从未入库：装户/新仓/尚在暂存区）——零史路径整体跳过，与原实现
 // 「零提交历史即静默」的契约一致（行级校验也只覆盖有史的路径，否则新仓首版会被 doc 不存在误杀）。
-function historyShas(rel) {
+// 2026-10-16 ledger-git-batch：一次 git log 同取 %H 与 %P（父列表原先逐提交另起一次 spawn），
+// 结果按 rel 缓存并回填 parentMap 供 parentShas 免 spawn 查询。
+const historyCache = new Map(); // rel -> [{sha, parents}]
+const parentMap = new Map();    // sha -> parents
+function historyEntries(rel) {
+  if (historyCache.has(rel)) return historyCache.get(rel);
+  let entries = [];
   try {
     // --full-history：不做历史简化——TREESAME 合并也入列，防「ours 合并丢一侧行」被简化隐藏（审计门立场）
-    return gitText(['log', '--full-history', '--format=%H', '--reverse', '--', rel]).split(/\s+/).filter(Boolean);
+    const out = gitText(['log', '--full-history', '--format=%H %P', '--reverse', '--', rel]);
+    entries = out.split(/\r?\n/).filter((l) => l.trim()).map((l) => {
+      const [sha, ...parents] = l.trim().split(/\s+/);
+      return { sha, parents };
+    });
   } catch {
-    return [];
+    entries = [];
   }
+  for (const e of entries) parentMap.set(e.sha, e.parents);
+  historyCache.set(rel, entries);
+  return entries;
 }
 
 // 基线后提交集（含基线可达性探测；无基线声明或基线不在本仓 → null = 基线不生效，全史扫描）
@@ -210,8 +262,9 @@ const postBaselineSet = () => {
   return _postBaseline;
 };
 
-// 多父提交的父列表（%P 全父）
+// 多父提交的父列表（%P 全父）——优先查 historyEntries 回填的 parentMap（免 spawn），未命中才回退 git
 const parentShas = (sha) => {
+  if (parentMap.has(sha)) return parentMap.get(sha);
   try {
     return gitText(['log', '-1', '--format=%P', sha]).split(/\s+/).filter(Boolean);
   } catch {
@@ -274,19 +327,26 @@ const mergePruneProblem = (parents, rel, curBuf, manifest) => {
 };
 
 function scanHistory(rel, { allowShardDelete }) {
-  const allShas = historyShas(rel);
-  if (!allShas.length) return allShas;
-  let shas = allShas;
+  const allEntries = historyEntries(rel);
+  if (!allEntries.length) return [];
+  let entries = allEntries;
   // 历史基线：只走基线后提交（详见头注）——DAG 感知比对下各提交自对己父，无需线性化起点
   const post = postBaselineSet();
   if (post) {
-    const kept = shas.filter((sha) => post.has(sha));
-    if (kept.length !== shas.length) {
-      console.error(`[info] ${rel}：${shas.length - kept.length} 个前基线提交按 HISTORY_BASELINE 声明豁免（owner 授权，见脚本头注）`);
+    const kept = entries.filter((e) => post.has(e.sha));
+    if (kept.length !== entries.length) {
+      console.error(`[info] ${rel}：${entries.length - kept.length} 个前基线提交按 HISTORY_BASELINE 声明豁免（owner 授权，见脚本头注）`);
     }
-    shas = kept;
+    entries = kept;
   }
-  for (const sha of shas) {
+  // 批量预取本路径全部 blob（各提交版本 + 各父版本）——一次 cat-file --batch 取代逐提交 git show
+  const refs = [];
+  for (const e of entries) {
+    refs.push(`${e.sha}:${rel}`);
+    for (const p of e.parents) refs.push(`${p}:${rel}`);
+  }
+  prefetchBlobs(refs);
+  for (const { sha, parents } of entries) {
     let cur;
     try { cur = blobOf(`${sha}:${rel}`); } catch {
       // 删除提交不是静默边界（复核 P2 收口）：主台账在 append-only 世界里永不应删除——任一历史提交删除
@@ -305,13 +365,12 @@ function scanHistory(rel, { allowShardDelete }) {
     }
     // DAG 感知基准：本提交第一父的 blob（dag-aware-base）——线性化「前一承」在分支汇合处会拿
     // 另一侧提交当基准产生伪前缀破坏；根提交（无父）视为新文件起步。
-    const parents = parentShas(sha);
     const base = parents.length ? tryBlob(`${parents[0]}:${rel}`) : null;
     if (base === null) continue; // 首现（父无此路径）：无基线可比，行级校验兜底
     if (parents.length >= 2) {
       // 多父提交无条件走并集对账（前缀通过不得短路——ours-resolution 合并树与第一父逐字节同 blob，
       // 嵌套判法对静默丢行全盲）
-      const unionFail = mergeUnionProblem(parentShas(sha), rel, cur);
+      const unionFail = mergeUnionProblem(parents, rel, cur);
       if (!unionFail) {
         console.error(`[info] ${sha.slice(0, 10)}：合并并集无丢失——union 合并语义认可，续扫`);
         continue;
@@ -338,7 +397,7 @@ function scanHistory(rel, { allowShardDelete }) {
       }
     }
   }
-  return allShas; // 交回该路径的全量提交史，供调用方判定「有史才进行级校验」
+  return allEntries.map((e) => e.sha); // 交回该路径的全量提交史，供调用方判定「有史才进行级校验」
 }
 
 // ---- 台账路径全集：主台账 + 历史上出现过的全部分片 ----

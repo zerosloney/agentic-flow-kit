@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-16T15:48:53.419Z",
+  "generatedAt": "2026-10-16T16:17:56.294Z",
   "files": {
     ".github/workflows/ci.yml": {
       "sha256": "e9cffb90dec8f0a49bfe231a13fb8df375a2494cc75c38d991b5eb7c7be104b5",
@@ -75,7 +75,7 @@
       "hard": 2
     },
     "templates/_agents/scripts/check-ledger-invariant.mjs": {
-      "sha256": "0f62db2d88d4da7f720c5c148d7d461dcc286a5e7c27c41cda591994c1201925",
+      "sha256": "2eca0ca122e09d5c1dda7675d787d08bfcce6a50a93f62019eeebfb28af8b01e",
       "hard": 2
     },
     "templates/_agents/scripts/check-loop.mjs": {
@@ -99,7 +99,7 @@
       "hard": 1
     },
     "templates/_agents/scripts/check-scripts-syntax.mjs": {
-      "sha256": "0a6db271a1e02dae8e10ef197ff51376d256da844e9d83df4806d3cf50ac0454",
+      "sha256": "8d2950ee18327e67471db0993f331ff9688c17390c3fcc7b6adbe6eb0892d1d1",
       "hard": 3
     },
     "templates/_agents/scripts/check-spec-verif.mjs": {
@@ -283,8 +283,8 @@
       "hard": 4
     },
     "templates/_agents/scripts/verify.mjs": {
-      "sha256": "e0e3b4fa415d046375947026b8a37367f8da988bf6c669972e1193c941bc600e",
-      "hard": 3
+      "sha256": "fad5ed87c5539c6a6be3811f489efa7d39157ddab2ace99ccaefb7d072fe388c",
+      "hard": 4
     },
     "templates/_agents/scripts/wf-journal.mjs": {
       "sha256": "302e9f6deb96d4b40b8a220f7ae773e44b59abd3313c8dd62a27eb239f11f4c1",
