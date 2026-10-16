@@ -635,5 +635,5 @@ const mkMergePruneRepo = () => {
   fs.rmSync(d, { recursive: true, force: true });
 }
 
-console.log(`\n${fail ? `❌ ${fail} failed` : '✅ all passed'}（${pass} passed）`);
+console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

@@ -19,6 +19,7 @@ import { analyze, buildDocList, loadLastTouch, loadLedgerTs, parseStatus, ACTIVE
 const USAGE = `用法：node .agents/scripts/gen-workflow-metrics.mjs [--month YYYY-MM] [--dry-run] [--help]
 
 事实源：workflow/{intents,specs,plans,incidents}/*.md（排除 _TEMPLATE.md）+ workflow/INDEX.md + .agents/rule-budgets.txt
+        + workflow/reviews.d/*.md（独立复核效果台账）+ workflow/specs/*.md 与 workflow/archive/*/specs/*.md（spec 体积观察）
 产物：workflow/metrics.md —— 每月一行（同月重跑即更新该行，不重复追加）；明细打印在 stdout，不落表。
 选项：
   --month YYYY-MM   指定月份键（默认取当前月；用于补记历史）
@@ -202,11 +203,133 @@ const sortedDays = [...funnel.days].sort((a, b) => a - b);
 const medianDays = sortedDays.length
   ? (sortedDays.length % 2 ? sortedDays[(sortedDays.length - 1) / 2] : (sortedDays[sortedDays.length / 2 - 1] + sortedDays[sortedDays.length / 2]) / 2)
   : null;
-const funnelRow = `| ${month} | ${funnel.closed} | ${funnel.full} | ${funnel.legacy} | ${funnel.once} | ${funnel.rework} | ${medianDays === null ? '—' : medianDays.toFixed(1)} | ${funnel.ledgerRows} |`;
+// 中位周期渲染：**真实的极小值不得被印成 `0.0`**。建件与确认常在同一会话内完成时，真实周期可 < 0.05 天，
+// `toFixed(1)` 会把它印成 `0.0`——读者无法区分「真实的亚小时周期」与「口径失效」。
+// 修法（最小）：仅当四舍五入会得到 `0.0` 且值 > 0 时改写 `<0.1`；null 写 `—`；恰好为 0 仍写 `0.0`。
+function fmtMedianDays(v) {
+  if (v == null) return '—';
+  const s = v.toFixed(1);
+  return s === '0.0' && v > 0 ? '<0.1' : s;
+}
+const funnelRow = `| ${month} | ${funnel.closed} | ${funnel.full} | ${funnel.legacy} | ${funnel.once} | ${funnel.rework} | ${fmtMedianDays(medianDays)} | ${funnel.ledgerRows} |`;
 
 const docs = scanDocs();
 const surf = scanSurface();
 const row = `| ${month} | ${docs.files}（活跃 ${docs.active} / 终态 ${docs.terminal}） | ${kb(docs.bytes)} | ${docs.withModule}/${docs.files} | ${kb(surf.total)}（峰值 ${surf.peak ? `${surf.peak.pct.toFixed(1)}% ${surf.peak.label}` : '—'}） | ${kb(idxBytes)}（${Number.isNaN(idxActive) ? '—' : idxActive} 行） |`;
+
+// ---- 复核效果（独立复核效果台账）：workflow/reviews.d/ 意见级处置分片按月聚合 ----
+// 口径：一行 = 一次独立复核事件；自洽不变式 = 采纳+拒绝+误报 = 意见数。台账是「门禁制造返工 vs 拦下问题」
+// 的意见级信号源，脏行比缺行更有害——字段非法 / 自洽破坏一律 throw（文案点名分片与行），不做静默跳过
+// （同本脚本 fail-loud 纪律）。目录不存在 = 合法零数据（机制先于数据建账，出占位行）。
+function scanReviews() {
+  const dir = path.join(WORKFLOW, 'reviews.d');
+  if (!fs.existsSync(dir)) return {};
+  const byMonth = {};
+  for (const f of fs.readdirSync(dir)) {
+    if (!f.endsWith('.md')) continue;
+    const p = path.join(dir, f);
+    let text;
+    try {
+      text = fs.readFileSync(p, 'utf8');
+    } catch (e) {
+      throw new Error(`复核效果台账分片不可读：${p}（${e.message}）——坏分片不静默跳过`);
+    }
+    for (const line of text.split(/\r?\n/)) {
+      if (!/^\|\s*\d{4}-\d{2}-\d{2}\s*\|/.test(line)) continue; // 表头/分隔线/注记行跳过
+      const cells = line.split('|').slice(1, -1).map((c) => c.trim());
+      const bad = cells.length < 8 || [3, 4, 5, 6].some((i) => !/^\d+$/.test(cells[i]));
+      if (bad) throw new Error(`复核效果台账行字段非法（8 列起，意见数/采纳/拒绝/误报须为非负整数）：${p}\n  行：${line.trim()}`);
+      const [total, adopted, rejected, misreport] = [3, 4, 5, 6].map((i) => Number(cells[i]));
+      if (adopted + rejected + misreport !== total) {
+        throw new Error(`复核效果台账自洽破坏（采纳 ${adopted} + 拒绝 ${rejected} + 误报 ${misreport} = ${adopted + rejected + misreport} ≠ 意见数 ${total}）：${p}\n  行：${line.trim()}`);
+      }
+      const b = (byMonth[cells[0].slice(0, 7)] ||= { events: 0, total: 0, adopted: 0, rejected: 0, misreport: 0 });
+      b.events++;
+      b.total += total;
+      b.adopted += adopted;
+      b.rejected += rejected;
+      b.misreport += misreport;
+    }
+  }
+  return byMonth;
+}
+const reviews = scanReviews();
+// 复核效果表头（第三表）。源 = workflow/reviews.d/ 意见级处置分片（一行 = 一次独立复核事件，
+// 采纳+拒绝+误报 = 意见数），整表确定性再生、历史行不落盘保留；区分「门禁制造返工 vs 拦下问题」。
+// 声明须在 DRY 出口之前（--dry-run 也打印该表）。
+const REVIEW_HEAD = [
+  '## 复核效果（源：workflow/reviews.d/ 意见级处置台账；存量未建账期无数据）',
+  '',
+  '| 月份 | 复核事件 | 意见数 | 采纳 | 拒绝 | 误报 | 采纳率 | 误报率 |',
+  '|---|---|---|---|---|---|---|---|',
+];
+// 整表由分片确定性再生（历史行不落盘保留，分片即真源）；率列 = 采纳（误报）÷ 意见数，意见数为 0 写 —。
+const reviewRows = Object.keys(reviews).sort().map((ym) => {
+  const b = reviews[ym];
+  const rate = (n) => (b.total ? `${((n / b.total) * 100).toFixed(0)}%` : '—');
+  return `| ${ym} | ${b.events} | ${b.total} | ${b.adopted} | ${b.rejected} | ${b.misreport} | ${rate(b.adopted)} | ${rate(b.misreport)} |`;
+});
+if (!reviewRows.length) reviewRows.push('| （无记录） | 0 | 0 | 0 | 0 | — | — |'); // 零数据占位——表始终输出，机制可见
+
+// ---- spec 体积观察（spec 生命周期口径）：活跃 specs + 归档 specs 分开统计，先观察后设限 ----
+// advisory 上限显式延后（先让体积可见）：本表只出数、不判限。
+// 口径：份数 = .md 数（排除 _TEMPLATE.md，与 scanDocs 一致）；行数 = 换行数（尾换行不生幻影行，对齐 wc -l）；
+//   验收条数 = `- [ ]`/`- [x]` checkbox 行总数（不区分勾选）；中位 = 升序取中，偶数取中间两数均值（可为 x.5）；
+//   归档 = workflow/archive/<月>/specs/ 各月合并。目录不存在 = 合法（该行出全 0，不报错）。
+const medianOf = (arr) => {
+  if (!arr.length) return 0;
+  const s = [...arr].sort((x, y) => x - y);
+  return s.length % 2 ? s[(s.length - 1) / 2] : (s[s.length / 2 - 1] + s[s.length / 2]) / 2;
+};
+function collectSpecMetrics(dir) {
+  if (!fs.existsSync(dir)) return null;
+  const lines = [];
+  const checks = [];
+  for (const f of fs.readdirSync(dir)) {
+    if (!f.endsWith('.md') || f === '_TEMPLATE.md') continue;
+    const text = fs.readFileSync(path.join(dir, f), 'utf8');
+    const ls = text.split(/\r?\n/);
+    if (ls[ls.length - 1] === '') ls.pop();
+    lines.push(ls.length);
+    checks.push((text.match(/^\s*- \[( |x)\]/gm) || []).length);
+  }
+  return { lines, checks };
+}
+const specStats = (m) => (m ? {
+  n: m.lines.length,
+  medLines: medianOf(m.lines),
+  maxLines: m.lines.length ? Math.max(...m.lines) : 0,
+  medChecks: medianOf(m.checks),
+  maxChecks: m.checks.length ? Math.max(...m.checks) : 0,
+} : null);
+const specActiveStats = specStats(collectSpecMetrics(path.join(WORKFLOW, 'specs')));
+const specArchiveMetrics = { lines: [], checks: [] };
+const archiveRoot = path.join(WORKFLOW, 'archive');
+if (fs.existsSync(archiveRoot)) {
+  for (const ent of fs.readdirSync(archiveRoot, { withFileTypes: true })) {
+    if (!ent.isDirectory()) continue;
+    const sub = collectSpecMetrics(path.join(archiveRoot, ent.name, 'specs'));
+    if (sub) {
+      specArchiveMetrics.lines.push(...sub.lines);
+      specArchiveMetrics.checks.push(...sub.checks);
+    }
+  }
+}
+const specArchiveStats = specStats(specArchiveMetrics);
+const fmtSpecNum = (v) => (Number.isInteger(v) ? String(v) : v.toFixed(1));
+const specRow = (label, st) => st
+  ? `| ${label} | ${st.n} | ${fmtSpecNum(st.medLines)} | ${st.maxLines} | ${fmtSpecNum(st.medChecks)} | ${st.maxChecks} |`
+  : `| ${label} | 0 | 0 | 0 | 0 | 0 |`;
+// spec 体积表头（第四表。先观察后设限：advisory 上限延后、不设门——口径单源 = workflow/README.md
+// 「spec 生命周期口径」条目）。整表每次确定性再生。
+const SPEC_HEAD = [
+  '## spec 体积观察（源：specs 活跃+归档全量扫描；advisory 上限延后——口径见 workflow/README.md「spec 生命周期口径」）',
+  '',
+  '| 范围 | 份数 | 行数中位 | 行数最大 | 验收条数中位 | 验收条数最大 |',
+  '|---|---|---|---|---|---|',
+];
+const specRows = [specRow('活跃', specActiveStats), specRow('归档', specArchiveStats)];
+
 
 // ---- 明细（stdout，不落表）：类型分布 + 逐条预算占用 ----
 console.log(`📅 ${month} 快照`);
@@ -215,7 +338,7 @@ for (const [t, v] of Object.entries(docs.perType)) console.log(`    ${t.padEnd(1
 console.log(`  索引：workflow/INDEX.md ${kb(idxBytes)}（活跃 ${Number.isNaN(idxActive) ? '—' : idxActive} 行）`);
 for (const e of surf.entries) console.log(`    ${e.label.padEnd(44)} ${String(e.max).padStart(6)} / ${String(e.lim).padStart(6)} B（${e.pct.toFixed(1)}%）`);
 console.log(`  常驻面合计：${kb(surf.total)}`);
-console.log(`  闭环漏斗：收口 ${funnel.closed}（完整链 ${funnel.full} = 一次通过 ${funnel.once} + 返工 ${funnel.rework}；协议前 ${funnel.legacy}）｜中位周期 ${medianDays === null ? '—' : `${medianDays.toFixed(1)} 天`}｜台账行 ${funnel.ledgerRows}`);
+console.log(`  闭环漏斗：收口 ${funnel.closed}（完整链 ${funnel.full} = 一次通过 ${funnel.once} + 返工 ${funnel.rework}；协议前 ${funnel.legacy}）｜中位周期 ${fmtMedianDays(medianDays)} 天｜台账行 ${funnel.ledgerRows}`);
 for (const it of funnel.items) console.log(`    ${String(it.doc).padEnd(58)} ${it.kind.padEnd(7)} ${it.days} 天`);
 if (funnel.items.length) console.log('  ℹ️ 机器口径可与 workflow/delegations.md 自做表的人工自报交叉对照（差异即信号，不对账）');
 // 归档积压提醒（2026-10-15 减重手段⑥ 自源仓回灌，回路别等人喊）：滚动归档已随确认门自动跑
@@ -236,7 +359,12 @@ try {
 } catch { /* fail-open */ }
 console.log(`  ${DRY ? '（--dry-run，未写盘）' : ''}`);
 
-if (DRY) { console.log(`\n将写入行：\n${row}\n${funnelRow}`); process.exit(0); }
+if (DRY) {
+  console.log(`\n将写入行：\n${row}\n${funnelRow}`);
+  console.log(`\n复核效果表（整表再生）：\n${[...REVIEW_HEAD, ...reviewRows].join('\n')}`);
+  console.log(`\nspec 体积观察表（整表再生）：\n${[...SPEC_HEAD, ...specRows].join('\n')}`);
+  process.exit(0);
+}
 
 // ---- 组装：GENERATED 区内的月表按月份键 upsert（同月重跑覆盖，行序按月升序）----
 const HEADER = `# workflow 规模与规则面月度快照
@@ -248,9 +376,10 @@ const TABLE_HEAD = [
   '| 月份 | 文档（活跃/终态） | 文档字节 | 模块已填/总 | 常驻面字节（预算峰值） | INDEX（活跃行） |',
   '|---|---|---|---|---|---|',
 ];
-// 漏斗表头（第二表）
+// 漏斗表头（第二表）。中位渲染契约：取不到写 —；恰好 0 写 0.0；四舍五入会得 0.0 的真实极小值写 <0.1
+//（建件与确认常在同会话内完成时该列常态即亚小时级，勿读作口径失效）。
 const FUNNEL_HEAD = [
-  '## 闭环漏斗（机器口径，源：.agents/confirmations.jsonl）',
+  '## 闭环漏斗（机器口径，源：.agents/confirmations.jsonl。中位周期 = 该文件首次进入 git 到终态确认；取不到写 —，不写 0.0；真实极小值写 <0.1）',
   '',
   '| 月份 | 收口 | 完整链 | 协议前 | 一次通过 | 返工件 | 中位周期(天) | 台账行数 |',
   '|---|---|---|---|---|---|---|---|',
@@ -260,9 +389,12 @@ let rows = [];
 let funnelRows = [];
 if (existing.includes(BEGIN) && existing.includes(END)) {
   const section = existing.slice(existing.indexOf(BEGIN), existing.indexOf(END));
-  const marker = FUNNEL_HEAD[0];
-  const bodyPart = section.includes(marker) ? section.slice(0, section.indexOf(marker)) : section;
-  const funnelPart = section.includes(marker) ? section.slice(section.indexOf(marker)) : '';
+  // 分段标记用短语而非表头全文——表头措辞会随口径演进，回吸判据须与之解耦（旧文件的旧表头也能正确分段）
+  const funnelMarker = '## 闭环漏斗';
+  const reviewMarker = '## 复核效果'; // 复核行同为 `| YYYY-MM |` 形态，不切出会被误吸进漏斗行
+  const bodyPart = section.includes(funnelMarker) ? section.slice(0, section.indexOf(funnelMarker)) : section;
+  const restPart = section.includes(funnelMarker) ? section.slice(section.indexOf(funnelMarker)) : '';
+  const funnelPart = restPart.includes(reviewMarker) ? restPart.slice(0, restPart.indexOf(reviewMarker)) : restPart;
   rows = bodyPart.split(/\r?\n/).filter((l) => /^\|\s*\d{4}-\d{2}\s*\|/.test(l));
   funnelRows = funnelPart.split(/\r?\n/).filter((l) => /^\|\s*\d{4}-\d{2}\s*\|/.test(l));
 }
@@ -272,7 +404,7 @@ rows.sort((a, b) => a.slice(2, 9).localeCompare(b.slice(2, 9)));
 funnelRows = funnelRows.filter((l) => !l.startsWith(`| ${month} `));
 funnelRows.push(funnelRow);
 funnelRows.sort((a, b) => a.slice(2, 9).localeCompare(b.slice(2, 9)));
-const inner = `${BEGIN}\n\n${[...TABLE_HEAD, ...rows].join('\n')}\n\n${[...FUNNEL_HEAD, ...funnelRows].join('\n')}\n\n${END}`;
+const inner = `${BEGIN}\n\n${[...TABLE_HEAD, ...rows].join('\n')}\n\n${[...FUNNEL_HEAD, ...funnelRows].join('\n')}\n\n${[...REVIEW_HEAD, ...reviewRows].join('\n')}\n\n${[...SPEC_HEAD, ...specRows].join('\n')}\n\n${END}`;
 let out;
 if (existing.includes(BEGIN) && existing.includes(END)) {
   out = existing.slice(0, existing.indexOf(BEGIN)) + inner + existing.slice(existing.indexOf(END) + END.length);

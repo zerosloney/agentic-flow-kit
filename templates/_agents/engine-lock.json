@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-16T08:29:49.685Z",
+  "generatedAt": "2026-10-16T15:48:53.419Z",
   "files": {
     ".github/workflows/ci.yml": {
       "sha256": "e9cffb90dec8f0a49bfe231a13fb8df375a2494cc75c38d991b5eb7c7be104b5",
@@ -179,7 +179,7 @@
       "hard": 3
     },
     "templates/_agents/scripts/gen-workflow-metrics.mjs": {
-      "sha256": "577401cc384f814a5cfc4ec7204b52bab3d11c93697c3ead697594f5a0d5a6b1",
+      "sha256": "c0b6f9e7a67fa60d4ed9e7c90d8693fa1b9e6e8bc90df41b677d8c94ccf620f6",
       "hard": 2
     },
     "templates/_agents/scripts/git-core.mjs": {
@@ -267,7 +267,7 @@
       "hard": 3
     },
     "templates/_agents/scripts/solidify-task.mjs": {
-      "sha256": "5e5983b9ab6ae4eaaeced150018592b2501c4d6885b4913d03c6f29138630825",
+      "sha256": "35c7e307c9b7a10d446c2c75eb77ff316be1939c57bec937e0940b42e6fe1499",
       "hard": 3
     },
     "templates/_agents/scripts/stage-gates.mjs": {

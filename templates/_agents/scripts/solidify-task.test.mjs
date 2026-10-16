@@ -35,7 +35,7 @@ const mkfix = () => {
     fs.mkdirSync(path.join(d, 'workflow', s), { recursive: true });
   }
   fs.mkdirSync(path.join(d, '.agents'), { recursive: true });
-  fs.mkdirSync(path.join(d, '.zcode', 'drafts'), { recursive: true });
+  fs.mkdirSync(path.join(d, '.zcode', 'workflow-drafts'), { recursive: true });
   fs.writeFileSync(path.join(d, '.agents', 'workflow-enums.txt'), ENUMS_FIXTURE);
   fs.writeFileSync(path.join(d, '.agents', 'workflow-modules.txt'), '# modules\npipeline\nui\n');
   return d;
@@ -57,7 +57,7 @@ const migratedPath = (root) => path.join(root, 'workflow', 'intents', `${TODAY}-
 // T1：默认只迁移不落账
 {
   const d = mkfix();
-  fs.writeFileSync(path.join(d, '.zcode', 'drafts', 'demo-task.md'), DRAFT('demo'));
+  fs.writeFileSync(path.join(d, '.zcode', 'workflow-drafts', 'demo-task.md'), DRAFT('demo'));
   const r = run(d, ['--topic', 'demo', '--root', d]);
   check('T1 默认迁移成功 exit 0', r.code === 0, r.out);
   check('T1 草稿已迁移到 intents 且日期前缀正确',
@@ -68,7 +68,7 @@ const migratedPath = (root) => path.join(root, 'workflow', 'intents', `${TODAY}-
 // T2：--delegated 原话原样转发
 {
   const d = mkfix();
-  fs.writeFileSync(path.join(d, '.zcode', 'drafts', 'demo-task.md'), DRAFT('demo'));
+  fs.writeFileSync(path.join(d, '.zcode', 'workflow-drafts', 'demo-task.md'), DRAFT('demo'));
   const r = run(d, ['--topic', 'demo', '--root', d, '--delegated', '固化了可以']);
   check('T2 --delegated 流程 exit 0', r.code === 0, r.out);
   const lines = ledgerLines(d);
@@ -81,7 +81,7 @@ const migratedPath = (root) => path.join(root, 'workflow', 'intents', `${TODAY}-
 // T3：--auto 在 Strict（缺 trust-mode.json）下被拒 → 失败计数并 exit 1
 {
   const d = mkfix();
-  fs.writeFileSync(path.join(d, '.zcode', 'drafts', 'demo-task.md'), DRAFT('demo'));
+  fs.writeFileSync(path.join(d, '.zcode', 'workflow-drafts', 'demo-task.md'), DRAFT('demo'));
   const r = run(d, ['--topic', 'demo', '--root', d, '--auto']);
   check('T3 --auto 在缺省 Strict 下 exit 1（不吞失败）', r.code === 1, r.out);
   check('T3 输出含失败汇总', r.out.includes('确认汇总') && r.out.includes('失败'), r.out);
@@ -90,28 +90,28 @@ const migratedPath = (root) => path.join(root, 'workflow', 'intents', `${TODAY}-
 // T4：缺草稿 → exit 1
 {
   const d = mkfix();
-  fs.writeFileSync(path.join(d, '.zcode', 'drafts', 'other.md'), DRAFT('other'));
+  fs.writeFileSync(path.join(d, '.zcode', 'workflow-drafts', 'other.md'), DRAFT('other'));
   const r = run(d, ['--topic', 'nope', '--root', d]);
   check('T4 缺主题草稿 exit 1 且带指引', r.code === 1 && r.out.includes('未找到主题'), r.out);
 }
 // T5：草稿非可识别文档 → exit 1
 {
   const d = mkfix();
-  fs.writeFileSync(path.join(d, '.zcode', 'drafts', 'demo-note.md'), '# 随手笔记\nnot a workflow doc\n');
+  fs.writeFileSync(path.join(d, '.zcode', 'workflow-drafts', 'demo-note.md'), '# 随手笔记\nnot a workflow doc\n');
   const r = run(d, ['--topic', 'demo', '--root', d]);
   check('T5 无可识别文档 exit 1', r.code === 1 && r.out.includes('未找到可识别'), r.out);
 }
 // T6：--delegated 与 --auto 互斥 → exit 1
 {
   const d = mkfix();
-  fs.writeFileSync(path.join(d, '.zcode', 'drafts', 'demo-task.md'), DRAFT('demo'));
+  fs.writeFileSync(path.join(d, '.zcode', 'workflow-drafts', 'demo-task.md'), DRAFT('demo'));
   const r = run(d, ['--topic', 'demo', '--root', d, '--delegated', 'x', '--auto']);
   check('T6 互斥 exit 1', r.code === 1 && r.out.includes('互斥'), r.out);
 }
 // T7：失败路径退出码传播（确认失败后 exit 1，不吞）
 {
   const d = mkfix();
-  fs.writeFileSync(path.join(d, '.zcode', 'drafts', 'demo-task.md'), DRAFT('demo'));
+  fs.writeFileSync(path.join(d, '.zcode', 'workflow-drafts', 'demo-task.md'), DRAFT('demo'));
   // 让确认失败：用 --auto 触发 Strict 拒绝（缺 trust-mode.json 即 Strict）。
   const r = run(d, ['--topic', 'demo', '--root', d, '--auto']);
   check('T7 失败后 exit 1 且索引仍生成', r.code === 1 && fs.existsSync(path.join(d, 'workflow', 'INDEX.md')), r.out);
@@ -119,11 +119,11 @@ const migratedPath = (root) => path.join(root, 'workflow', 'intents', `${TODAY}-
 // T8：索引更新失败传播退出码（独立于确认失败路径——删除 workflow/plans 目录使 gen-workflow-index 失败）
 {
   const d = mkfix();
-  fs.writeFileSync(path.join(d, '.zcode', 'drafts', 'demo-task.md'), DRAFT('demo'));
+  fs.writeFileSync(path.join(d, '.zcode', 'workflow-drafts', 'demo-task.md'), DRAFT('demo'));
   fs.rmSync(path.join(d, 'workflow', 'plans'), { recursive: true });
   const r = run(d, ['--topic', 'demo', '--root', d]);
   check('T8 索引更新失败 exit 1 且输出指明', r.code === 1 && r.out.includes('索引更新失败'), r.out);
 }
 
-console.log(`\n${fail ? `❌ ${fail} failed` : '✅ all passed'}（${pass} passed）`);
+console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

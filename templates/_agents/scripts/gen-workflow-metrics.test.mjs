@@ -216,6 +216,125 @@ const mkfixLedger = (lines) => {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+{
+  // L8：亚小时真实周期（同会话建件+确认）→ 渲染 <0.1，不印 0.0（「取不到」与「极快」不得同形）
+  const root = mkfixLedger([
+    LROW({ ts: '2026-10-01T00:30:00.000Z' }),
+    LROW({ ts: '2026-10-01T01:00:00.000Z', stage: 'done', prev: 'approved' }),
+  ]);
+  const r = run(root, ['--month', '2026-10']);
+  const md = readMetrics(root);
+  check('漏斗 L8 亚小时真实周期渲染 <0.1（表行与 stdout 同步，不印 0.0）',
+    r.status === 0 && /\| 2026-10 \| 1 \| 1 \| 0 \| 1 \| 0 \| <0\.1 \| 2 \|/.test(md) && /中位周期 <0\.1 天/.test(r.stdout),
+    `${r.stdout}${md}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 复核效果台账：workflow/reviews.d/ 意见级处置分片 → 第三表 ----
+// mkfixReviews：在 mkfix 基础上写复核效果台账分片（shards: { 分片文件名: [数据行...] }，含表头）
+const mkfixReviews = (shards) => {
+  const root = mkfix();
+  fs.mkdirSync(path.join(root, 'workflow', 'reviews.d'), { recursive: true });
+  for (const [name, rows] of Object.entries(shards)) {
+    fs.writeFileSync(path.join(root, 'workflow', 'reviews.d', name), [
+      `# 独立复核效果台账 — ${name.replace(/\.md$/, '')}`,
+      '',
+      '| 日期 | 对象 | 复核员(宿主) | 意见数 | 采纳 | 拒绝 | 误报 | 备注 |',
+      '|------|------|--------------|--------|------|------|------|------|',
+      ...rows,
+      '',
+    ].join('\n'), 'utf8');
+  }
+  return root;
+};
+{
+  // R1：同月两行聚合 + 跨月分片各一行、按月升序（率列 = 采纳/误报 ÷ 意见数，toFixed(0)%）
+  const root = mkfixReviews({
+    '2026-10.md': [
+      '| 2026-10-14 | workflow/specs/2026-10-14-x.md | independent-reviewer(zcode) | 5 | 3 | 1 | 1 | P1 修 1；P2 采纳 3 拒 1 误 1 |',
+      '| 2026-10-16 | diff 318922a9..7c8d9eb7 | independent-reviewer(新会话) | 4 | 2 | 2 | 0 | P2×4 全采纳 |',
+    ],
+    '2026-09.md': [
+      '| 2026-09-30 | workflow/plans/2026-09-30-y.md | independent-reviewer(zcode) | 2 | 1 | 0 | 1 | 误报=指向已被覆盖的代码 |',
+    ],
+  });
+  const r = run(root, ['--month', '2026-10']);
+  const md = readMetrics(root);
+  check('复核 R1：同月两行聚合（事件 2 / 意见 9 / 采纳 5 / 拒绝 3 / 误报 1 / 采纳率 56% / 误报率 11%）',
+    r.status === 0 && /\| 2026-10 \| 2 \| 9 \| 5 \| 3 \| 1 \| 56% \| 11% \|/.test(md), `exit=${r.status}\n${r.stdout}${r.stderr}\n${md}`);
+  check('复核 R1：跨月分片各一行且按月升序（9 月 1/2/1/0/0 → 50%/50% 紧邻 10 月行）',
+    /## 复核效果[\s\S]*?\| 2026-09 \| 1 \| 2 \| 1 \| 0 \| 1 \| 50% \| 50% \|\n\| 2026-10 \|/.test(md), md);
+  check('复核 R1：复核行不被误吸进漏斗表（漏斗段零 2026-09 行——分段回吸切开了同形日期行）',
+    (() => { const seg = md.slice(md.indexOf('## 闭环漏斗'), md.indexOf('## 复核效果')); return !/\| 2026-09 \|/.test(seg); })(), md);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+{
+  // R2：自洽破坏（采纳+拒绝+误报 ≠ 意见数）→ fail-loud（exit 1，报文点名分片与不变式）
+  const root = mkfixReviews({
+    '2026-10.md': [
+      '| 2026-10-14 | workflow/specs/2026-10-14-x.md | independent-reviewer(zcode) | 5 | 2 | 1 | 1 | 2+1+1=4 ≠ 5，应被拦 |',
+    ],
+  });
+  const r = run(root, ['--month', '2026-10']);
+  check('复核 R2：自洽破坏（5 ≠ 2+1+1）→ exit 1 且报文含「自洽破坏」并点名分片 2026-10.md',
+    r.status === 1 && /自洽破坏/.test(r.stderr) && /2026-10\.md/.test(r.stderr), `exit=${r.status}\n${r.stderr}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+{
+  // R3：目录不存在 / 分片存在但空表 → 合法零数据，占位行不崩
+  const rootNone = mkfix(); // 不建 reviews.d
+  const rNone = run(rootNone, ['--month', '2026-10']);
+  const mdNone = readMetrics(rootNone);
+  check('复核 R3：目录不存在 → exit 0 且出「（无记录）」占位行',
+    rNone.status === 0 && /\| （无记录） \| 0 \| 0 \| 0 \| 0 \| — \| — \|/.test(mdNone), `exit=${rNone.status}\n${rNone.stderr}\n${mdNone}`);
+  fs.rmSync(rootNone, { recursive: true, force: true });
+  const rootEmpty = mkfixReviews({ '2026-10.md': [] }); // 分片存在、表为空
+  const rEmpty = run(rootEmpty, ['--month', '2026-10']);
+  const mdEmpty = readMetrics(rootEmpty);
+  check('复核 R3b：分片空表 → exit 0 且出「（无记录）」占位行',
+    rEmpty.status === 0 && /\| （无记录） \| 0 \| 0 \| 0 \| 0 \| — \| — \|/.test(mdEmpty), `exit=${rEmpty.status}\n${rEmpty.stderr}\n${mdEmpty}`);
+  fs.rmSync(rootEmpty, { recursive: true, force: true });
+}
+
+// ---- spec 体积观察（spec 生命周期口径）：活跃 specs + 归档 specs 分开统计 ----
+// mkSpec：生成恰好 lines 行（尾换行对齐 wc -l）、其中 checks 行为 checkbox 的 spec 文本
+const mkSpec = (lines, checks) => {
+  const rows = [`# spec 夹具 ${lines}行${checks}验收`];
+  for (let i = 0; i < checks; i++) rows.push(`- [${i % 2 ? 'x' : ' '}] 验收 ${i + 1}`);
+  while (rows.length < lines) rows.push('填充');
+  return rows.join('\n') + '\n';
+};
+{
+  // S1：活跃 2 份（10 行/3 验收、12 行/5 验收 → 偶数中位取均值）+ 归档 3 份跨单月目录（6/8/10 行 → 奇数中位取中）
+  const root = mkfix();
+  fs.writeFileSync(path.join(root, 'workflow', 'specs', '2026-10-01-a1.md'), mkSpec(10, 3), 'utf8');
+  fs.writeFileSync(path.join(root, 'workflow', 'specs', '2026-10-02-a2.md'), mkSpec(12, 5), 'utf8');
+  fs.writeFileSync(path.join(root, 'workflow', 'specs', '_TEMPLATE.md'), mkSpec(999, 9), 'utf8'); // 模板不计入
+  fs.mkdirSync(path.join(root, 'workflow', 'archive', '2026-09', 'specs'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'workflow', 'archive', '2026-09', 'specs', '2026-09-01-b1.md'), mkSpec(6, 2), 'utf8');
+  fs.writeFileSync(path.join(root, 'workflow', 'archive', '2026-09', 'specs', '2026-09-02-b2.md'), mkSpec(8, 4), 'utf8');
+  fs.writeFileSync(path.join(root, 'workflow', 'archive', '2026-09', 'specs', '2026-09-03-b3.md'), mkSpec(10, 1), 'utf8');
+  const r = run(root, ['--month', '2026-10']);
+  const md = readMetrics(root);
+  check('spec S1：活跃行（2 份 / 行数中位 11 = (10+12)/2 / 最大 12 / 验收中位 4 / 最大 5；_TEMPLATE 不计）',
+    r.status === 0 && /\| 活跃 \| 2 \| 11 \| 12 \| 4 \| 5 \|/.test(md), `exit=${r.status}\n${r.stderr}\n${md}`);
+  check('spec S1：归档行（3 份 / 行数中位 8 取中 / 最大 10 / 验收中位 2 / 最大 4）',
+    /\| 归档 \| 3 \| 8 \| 10 \| 2 \| 4 \|/.test(md), md);
+  check('spec S1：表序正确（复核效果表之后、GENERATED:END 之前）',
+    /## 复核效果[\s\S]*## spec 体积观察[\s\S]*<!-- GENERATED:END -->/.test(md), md);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+{
+  // S2：specs 目录空 + 无 archive 目录 → 两行全 0 不崩（合法零数据）
+  const root = mkfix();
+  const r = run(root, ['--month', '2026-10']);
+  const md = readMetrics(root);
+  check('spec S2：specs 空目录 + 无 archive → 活跃/归档两行全 0，exit 0',
+    r.status === 0 && /\| 活跃 \| 0 \| 0 \| 0 \| 0 \| 0 \|/.test(md) && /\| 归档 \| 0 \| 0 \| 0 \| 0 \| 0 \|/.test(md),
+    `exit=${r.status}\n${r.stderr}\n${md}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 if (fail) {
   console.log(`\n${USAGE}`);

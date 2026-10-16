@@ -32,8 +32,9 @@
 - **验证**：`.agents/commands/test.md`（静态门 + 实测；项目自有验证脚本/门禁如有，见 `.agents/hooks/local-pre-commit` 与根 `AGENTS.md`「项目适配区」）
 - **评审**：`.agents/commands/review.md`（按 P0 / P1 / P2 分级：机器兜底 + AI 自查出清单，用户决策定性与合入）
 - **上线**：`.agents/commands/deploy.md`（上线前必跑清单）
-- **量化**：委派/自做结果记 `delegations.md`，聚合跑 `node .agents/scripts/agg-delegations.cjs`（**并发扩容门槛见该文件——数字达标前不扩并发**）；语料与常驻面体积的**月度快照**跑 `node .agents/scripts/gen-workflow-metrics.mjs`（每月一行落 `metrics.md`，同月重跑即更新；明细看 stdout）
+- **量化**：委派/自做结果记 `delegations.md`，聚合跑 `node .agents/scripts/agg-delegations.cjs`（**并发扩容门槛见该文件——数字达标前不扩并发**）；语料与常驻面体积的**月度快照**跑 `node .agents/scripts/gen-workflow-metrics.mjs`（每月一行落 `metrics.md`，同月重跑即更新；明细看 stdout）；独立复核的**意见级处置**记 `workflow/reviews.d/<YYYY-MM>.md`（一行 = 一次复核事件，八列 `日期|对象|复核员|意见数|采纳|拒绝|误报|备注`，采纳+拒绝+误报=意见数，月度聚合进 metrics「复核效果」表——口径详见 `.agents/commands/review.md` 落账子项）
 - **归档**：终态件滚动归档跑 `node .agents/scripts/archive-sweep.mjs`（缺省 dry-run 预览；`--window 21 --execute` 执行 git mv）——归档单位 = **同名家族**（intent/spec/plan/incident 同进同退：任一成员非终态 / 未满窗 / 被活跃引用 / 无日期，整族留守）；终态时间三级锚 = 确认台账终态行 ts → 内容 last-touch（frontmatter-only 提交不刷新）→ 文件名日期；落点 `workflow/archive/<家族最晚终态月>/<类型>/`
+- **spec 生命周期口径（spec-anchored + 长期维护）**：spec 是**持续对照的事实源，交付后不失效**——代码改动触及某 spec 覆盖的行为时须对照该 spec（含归档件）：行为漂移要么改代码回到 spec，要么同一提交回改 spec；有争议立 incident 裁决。**归档是容量治理不是失效**：归档只把终态件移出活跃扫描面（INDEX 活跃行 / check-loop 四目录扫描 / 月度快照采集），事实源地位与修订权不变——归档 spec 可原地修订，修订不改归档位置。体积治理先观察后设限：spec 行数/验收条数分布由 `gen-workflow-metrics.mjs` 的「spec 体积观察」表采集（advisory 上限显式延后，先让体积可见）
 - **papercut 回路（存量债清偿，手动触发）**：命令/技能卡壳记 `workflow/papercuts.md` 攒成的未升级条目 = 存量债；要清时跑 `node .agents/scripts/papercut-debt-sensor.mjs`（测 debt）→ `node .agents/scripts/papercut-debt-controller.mjs`（确定性选本轮唯一目标；源码/数据库面条目被 scope gate 拦下等授权）→ 按 `.agents/skills/papercut-fix/SKILL.md` 执行（改完 debt 应恰好 -1）。判定与排序口径单源 `.agents/loop/papercut-debt/DESIGN.md`，改口径先改设计文件
 - **追溯**：git 即审计——文档随代码同 commit、上线打 `release/<日期>` tag，`git log` 全链路可查；多人评审暂缓，git 历史即评审记录
 - **级别**：L1 实现级（未命中 L2/L3；新需求的入口是 plan）｜ L2 规则 / 契约（编码权威 / 共享契约 / 既有接口语义 / 全局横切口径，触达面闭集见 `.agents/commands/new-task.md` §级别判断）｜ L3 数据与运行时结构（schema / 迁移 SQL / DI 链 / 认证与中间件管线）；混合改动就高不就低

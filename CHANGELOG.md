@@ -2,6 +2,62 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.8.3
+
+自 Shipyard.Material 回灌「度量与协议系列」增量（源仓 2026-10-16 基线 2ff869a9 之后十三个引擎相关
+提交逐件甄别，六件采纳 / 七件不采）。取 patch 位——两条缺陷修复 + 一组协议口径 + 两处度量扩展，
+无新门；性能线（源仓 76294817 门禁并行编排）体量大，移至 1.8.4 单独回灌。
+
+- fix(tool)：**`solidify-task` 草稿目录纠正**（源仓 8deb032b 的 solidify 半件）。原 `.zcode/drafts`
+  自引入起从未存在（宿主保存工作流草稿的实际目录是 `.zcode/workflow-drafts`）——脚本一跑即
+  「草稿目录不存在」fail，同源缺陷 kit 原样带着。测试 fixture 同步 9 处。同提交其余不采（甄别在案）：
+  dwf 加载契约门在源仓 `check-loop-sections/s05` 布局（kit 无该布局，1.8.2 已同因不采）；两个
+  `.dwf.ts` 修正是源仓 `.zcode/workflows/` 自有工作流件；AGENTS.md 引擎面收口属宿主根文档。
+- fix(test)：**六个套件汇总行对齐 run-tests 解析口径**（源仓 dbfa0f21 的汇总行半件）。kit 的
+  `run-tests.mjs` 只认 `合计: PASS n / FAIL n`（无该行按 0 计），而 check-ledger-invariant /
+  check-lane-surface / solidify-task / lane-surface-audit / pre-push / trust-mode 六套件是历次回灌
+  带来的源仓风格 `✅ all passed（N passed）`——聚合断言计数恒 0/0。逐套件一行修齐。同提交的
+  SCEN 自分片不采：kit 套件规模远小于源仓 54s 场景，且 run-tests 已有套件级并发，自分片只增复杂度。
+- feat(metrics)：**独立复核效果台账（reviews.d）+「复核效果」第三表**（源仓 ae59faa3）。
+  `workflow/reviews.d/<YYYY-MM>.md` 一行 = 一次独立复核事件（八列：日期/对象/复核员/意见数/采纳/
+  拒绝/误报/备注），自洽不变式 采纳+拒绝+误报=意见数——`gen-workflow-metrics` 的 `scanReviews()`
+  读分片，字段非法 / 自洽破坏 fail-loud 点名分片，目录缺失 = 合法零数据出占位行；月度聚合出
+  采纳率/误报率（区分「门禁制造返工 vs 拦下问题」的意见级信号）。同批采纳其捆绑的**中位周期渲染
+  修正**：真实亚小时周期不再被 `toFixed(1)` 印成 `0.0`（改写 `<0.1`；恰好为 0 仍 0.0，null 仍 —）
+  ——「取不到」与「极快」不得同形。kit 适配：分片头注是宿主数据，列格式与自洽约束写进
+  `review.md` 落账子项 + `workflow/README.md`「量化」条目；回吸分段标记与表头文本解耦（短标记
+  `## 闭环漏斗` / `## 复核效果`，表头措辞演进不再破坏旧文件回吸）。测试 R1-R3b + L8。
+- feat(metrics)：**spec 体积观察第四表 + spec 生命周期口径**（源仓 848bc788）。口径（Böckeler 三层
+  分类取 spec-anchored + 长期维护）落 `workflow/README.md`：spec 是持续对照的事实源、交付后不失效，
+  代码触及 spec 覆盖行为须对照（含归档件），漂移要么改回代码要么同提交回改 spec、有争议立 incident；
+  **归档是容量治理不是失效**（只移出活跃扫描面，事实源地位与原地修订权不变）。`gen-workflow-metrics`
+  新增活跃/归档 specs 的份数 / 行数中位 / 最大 / 验收条数中位 / 最大（排除 _TEMPLATE；目录缺失 =
+  合法零数据；整表确定性再生）。advisory 上限显式延后（先观察后设限）。测试 S1-S2。
+- feat(docs)：**机制台账「模型代际触发」维度**（源仓 6d18dcd8 的台账半件）。维护纪律新增：主力模型
+  代际变更（主版本/家族更换）后的下一次月度对账按能力假设五组（A 纪律假设 / B 能力边界 / C 机器判据 /
+  D 宿主生态 / E 测量自举）逐件重评，重评不改状态列（退役仍走既有阈值）；A 组不因代际主动拆门、
+  B 组须主动重评、信任边界与安全主干代际不撤门。kit 适配：A-E 组内机制清单属装户自有（源仓枚举的是
+  其仓机制），改为分组判据 + 首次对账归类指引；同批登记「复核效果台账」示例行。源仓 delegations
+  模型代际基线注不采（kit 无该台账模板面，属装户数据）。
+- feat(docs)：**review-method 技能「校准集」节**（源仓 87ddb7c5 的 SKILL 半件，适配采）。建集方法
+  （正例=应报缺陷 / 负例=应放行、每条带「为何需本仓上下文才可判」、答案锚定闭环时定性、宁缺毋滥）
+  与使用法（上岗盲评自检、月度对账与 reviews.d 互参、命中差连续两月 >20% 登记校准债）随 kit 分发；
+  **25 条样本库不带回**——源自源仓已闭环 incidents，属装户数据，kit 措辞显式声明「装户自建、
+  kit 不随包分发」。
+- **甄别：[NEEDS CLARIFICATION] 模糊点显式阻断标记不采**（源仓 6a7d9ab3）。kit 已有同位**更强**
+  机器面——plans/specs 模板的 `- 待澄清：` 标记（2026-10-12 needs-clarification）起草零阻塞、
+  draft→approved 确认时 confirm-doc 挂未澄清项直接拒绝落账（S19b exit 2）；源仓该件是纯文档约定
+  （grep 自检），移植即同位双机制，违反单源纪律。
+- **甄别（不采在案）**：源仓 34cd1dc1 台账不变量复位——基线前移值与特许重排属装户 owner 声明的
+  数据操作，matchRebuild 放宽依赖 kit 未分发的 ledger-rebuild-manifest 机制，无落点；c71e3111 +
+  223d4d4e + 9de5b680 依赖审计门换源→三门退役→威胁情报登记——kit 门表从未有 nuget/frontend 审计门
+  （退役判据「内网镜像不代理漏洞数据面→判据既可假绿也可假红」留作装户判例）；e93c64cb AI-Native
+  范式对标笔记是对源仓自身的评估，kit notes 模板是机制文档；a604c3cf 段数预算 26→23 登记依附源仓
+  sections 布局（底层合并 1.8.2 已甄别不采）；其余为宿主台账数据提交。
+- `review.md` 权威源改动经 `flow-kit sync-hosts --apply` 单向同步五宿主薄适配
+  （claude/codex/cursor/opencode/trae 的 wf-review.md）；`engine-lock.json --update` 入账
+  （受检面 84 件不变，2 个改动件）。测试：npm test 79 套件 0 失败（metrics 套件 23→35）；eslint 0 error。
+
 ## 1.8.2
 
 自 Shipyard.Material 回灌「减重系列」增量（源仓 2026-10-15/16 九个引擎提交逐件甄别）。取 patch 位——

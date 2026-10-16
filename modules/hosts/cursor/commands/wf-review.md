@@ -44,6 +44,6 @@ description: 代码评审标准（按风险分级：机器兜底 + AI 自查出�
 ## 4. 审查分工（用户决策 + AI 协作）
 
 - **机器兜底**（pre-commit / pre-push / test 自动拦，无需人守）：门禁清单与判据以 `.githooks/`、`.agents/hooks/`、`check-loop.sh` 头部注释为准；`项目测试命令` 跑自动化用例。
-- **AI 复核**：机器门禁完成后优先委派 `independent-reviewer`，聚焦 P0 hook 未覆盖项 + 全部 P1（P2 视精力）——产出分级问题清单 + 修复建议。复核方法走 `.agents/skills/review-method/SKILL.md`（Standards×Spec 双轴 + 坏味道走查 + 合入标尺；有全局 `code-review` 技能时可叠加）；每条 finding 报告前过 `review-verification-protocol` 防误报门（锚定 file:line、给出证据、校准严重级，不确定就降级为提问）。
+- **AI 复核**：机器门禁完成后优先委派 `independent-reviewer`，聚焦 P0 hook 未覆盖项 + 全部 P1（P2 视精力）——产出分级问题清单 + 修复建议。复核方法走 `.agents/skills/review-method/SKILL.md`（Standards×Spec 双轴 + 坏味道走查 + 合入标尺；有全局 `code-review` 技能时可叠加）；每条 finding 报告前过 `review-verification-protocol` 防误报门（锚定 file:line、给出证据、校准严重级，不确定就降级为提问）。**落账**：复核收口时在 `workflow/reviews.d/<当月>.md` 追加一行事件记录——八列 `| 日期 | 对象 | 复核员(宿主) | 意见数 | 采纳 | 拒绝 | 误报 | 备注 |`，自洽约束 采纳+拒绝+误报=意见数（gen-workflow-metrics 按此校验，破坏即拦）；月度聚合进 metrics「复核效果」表
 - **独立性**：L2 / L3 必须用独立子智能体，宿主不支持时另开新会话，不得由原作者自查冒充；L1 且宿主不支持子智能体时可由主智能体按同一复核契约执行。
 - **用户决策**：问题定性（误报驳回 / P0 成立必修 / P1、P2 处置裁量）+ 合入时机；git 历史即评审记录，追溯靠 commit 与 tag。

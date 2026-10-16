@@ -89,5 +89,5 @@ const run = (root, ...args) => {
   check('场景 4：incident（发现键）×3 → db/procs 候选', r.code === 0 && r.out.includes('db/procs'), r.out);
 }
 
-console.log(`\n${fail ? `❌ ${fail} failed` : '✅ all passed'}（${pass} passed）`);
+console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

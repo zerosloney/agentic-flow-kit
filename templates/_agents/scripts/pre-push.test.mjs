@@ -101,5 +101,5 @@ check('experiment→experiment argv 不含 --hardening', !line3.includes('--hard
 check('experiment→experiment 构建门仍按范围跑（advisory 不阻断）',
   /^--range [0-9a-f]{40} /.test(ccArgs(root)[2] || ''), ccArgs(root).join('|'));
 
-console.log(`\n${fail ? `❌ ${fail} failed` : '✅ all passed'}（${pass} passed）`);
+console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

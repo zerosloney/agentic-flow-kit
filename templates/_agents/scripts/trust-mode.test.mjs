@@ -106,5 +106,5 @@ const DRAFT = (level = 'L1') => `---\n状态: draft\n级别: ${level}\nrisk_leve
     `${r.stdout}${r.stderr}\n${lines.join('|')}`);
 }
 
-console.log(`\n${fail ? `❌ ${fail} failed` : '✅ all passed'}（${pass} passed）`);
+console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);
