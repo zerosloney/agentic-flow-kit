@@ -1056,5 +1056,48 @@ const writeTrust = (root, cfg) => {
   fs.rmSync(root2, { recursive: true, force: true });
 }
 
+// ---- S45c/S45d 特性分支默认不归档（2026-10-16 自源仓 13f67ef7 回灌）----
+// 分支上先关单再合并时 diff 只剩 archive/ 路径，泳道/配对增量门只认 workflow 活跃直路径；
+// main/master/develop 与游离 HEAD 维持关单即归档。CONFIRM_DOC_ARCHIVE=1 可在特性分支强制归档。
+{
+  const mkRepoBranch = (branchName) => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-branch-'));
+    const git = (...a) => spawnSync(process.platform === 'win32' ? 'git.exe' : 'git', a, { cwd: root, encoding: 'utf8' });
+    git('init', '-q');
+    git('config', 'user.email', 't@t');
+    git('config', 'user.name', 't');
+    git('checkout', '-q', '-b', branchName);
+    const ip = path.join(root, 'workflow', 'intents');
+    fs.mkdirSync(ip, { recursive: true });
+    fs.mkdirSync(path.join(root, 'workflow', 'archive'), { recursive: true });
+    const fp = branchName === 'main' ? 'eeee5555eeee5555' : 'ffff6666ffff6666';
+    fs.writeFileSync(path.join(ip, '2026-09-01-branch.md'), `---\n状态: approved\n级别: L1\n确认指纹: ${fp}\n---\n# I\n\n## 验收标准（可测试）\n- [x] 通过（证据:测试全绿）\n`, 'utf8');
+    git('add', '-A');
+    spawnSync(process.platform === 'win32' ? 'git.exe' : 'git', ['commit', '-q', '-m', 'c1'], { cwd: root, env: { ...process.env, GIT_AUTHOR_DATE: '2026-09-01T10:00:00+08:00', GIT_COMMITTER_DATE: '2026-09-01T10:00:00+08:00' } });
+    return { root, ip };
+  };
+  // S45c：特性分支关单 → 不归档（保持 workflow 活跃直路径），但状态照常 done
+  {
+    const { root, ip } = mkRepoBranch('feature/x');
+    const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-01-branch.md', '--delegated', '可以'],
+      { cwd: root, encoding: 'utf8', env: { ...process.env, CONFIRM_DOC_TEST_NOW: '2026-10-13' } });
+    check('S45c 特性分支关单默认不归档（状态置 done、文档留活跃路径）',
+      r.status === 0 && /状态: done/.test(fs.readFileSync(path.join(ip, '2026-09-01-branch.md'), 'utf8'))
+        && !fs.existsSync(path.join(root, 'workflow', 'archive', 'intents')) && /不归档/.test(r.stdout),
+      JSON.stringify({ status: r.status, stdout: String(r.stdout).slice(-260) }));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+  // S45d：特性分支 + CONFIRM_DOC_ARCHIVE=1 → 强制归档
+  {
+    const { root } = mkRepoBranch('feature/y');
+    const r = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-09-01-branch.md', '--delegated', '可以'],
+      { cwd: root, encoding: 'utf8', env: { ...process.env, CONFIRM_DOC_TEST_NOW: '2026-10-13', CONFIRM_DOC_ARCHIVE: '1' } });
+    check('S45d 特性分支 CONFIRM_DOC_ARCHIVE=1 强制归档',
+      r.status === 0 && /📦 归档/.test(r.stdout),
+      JSON.stringify({ status: r.status, stdout: String(r.stdout).slice(-260) }));
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

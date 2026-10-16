@@ -26,7 +26,11 @@ const CMD_RE = /npm\s+(run\s+)?test|verify\.mjs/;
 const CITE_RE = /npm\s+(?:run\s+)?test|verify\.mjs/g;
 // verify.mjs 全绿行（verifications.jsonl 绿凭证）实际覆盖的命令。不在此集的白名单命令没有对应绿记录。
 const GATE_CMD = new Set(['npm test', 'npm run test', 'verify.mjs']);
-const PATH_RE = /[\w.@\-\\/]+\.(mjs|js|ts|tsx|cs|md|json|html|sql)/g;
+// 路径提取（2026-10-16 自源仓 13f67ef7 回灌）：路径体 = ASCII 路径字符 + 字母（中文目录放行），
+// 扩展名加 .vue。单字符类 + 前置分隔锚，避免 (A|B)+ 在长说明上回溯；标点（如路径后的「（说明）」）
+// 不在类内，仍截断。matchAll 取捕获组（剥前导分隔符），路径分隔符归一 posix。
+const PATH_EXT = 'mjs|js|ts|tsx|vue|cs|md|json|html|sql';
+const PATH_RE = new RegExp(`(?:^|[\\s\`'"（(])([\\w.@\\-\\\\/\\p{L}]+\\.(?:${PATH_EXT}))`, 'gu');
 const SEC_RE = /^##\s+.*验收判据/;
 // 与 gen-verify-evidence.mjs 数据行同形态（kit 六列：短 SHA | ISO 时间 | 门数 | 套件计数 | 绑定单 | runId）。
 // 只取日期，不复述门数。
@@ -102,7 +106,8 @@ export function run(ctx) {
             if (hard && CMD_RE.test(ev)) ok = commandCovered(ev, d, greenDates);
             else if (CMD_RE.test(ev)) ok = true; // advisory：命令白名单认声明
             else {
-              const cands = ev.match(PATH_RE) || [];
+              const cands = [];
+              for (const m of ev.matchAll(PATH_RE)) cands.push(m[1].replace(/\\/g, '/'));
               ok = cands.some((p) => fs.existsSync(path.join(ROOT, p)));
             }
           }
@@ -110,7 +115,7 @@ export function run(ctx) {
         }
         if (missed.length) {
           const detail = `${base} ${rows.length} 条判据中 ${missed.length} 条证据无效（${missed.join('; ')}）`;
-          if (hard) blockers.push(`- [收敛未覆盖] ${detail}——状态列自报不作数；命令须是全量门（npm test / verify.mjs）且 workflow/verify-evidence.md 有不早于本 spec 日期的全绿行；路径只认存在（检查 23）。若本 spec 已标 done：先标后补会与本门互为前提（verify 门序含 check-loop）——解锁序：状态临时改回非 done → 跑 node .agents/scripts/verify.mjs 全量门（全绿尾部自动重生成 workflow/verify-evidence.md 全绿行）→ 再标 done`);
+          if (hard) blockers.push(`- [收敛未覆盖] ${detail}——状态列自报不作数；命令须是全量门（npm test / verify.mjs）且 workflow/verify-evidence.md 有不早于本 spec 日期的全绿行；路径只认存在（检查 23，含 .vue 与中文目录）。若本 spec 已标 done：先标后补会与本门互为前提（verify 门序含 check-loop）——解锁序：改正文 → 状态改回 approved（勿改 draft，L3 必须 approved/done）→ confirm-doc 重录指纹 → 再标 done。中间态不要提交`);
           else warnings.push(`- [WARN 收敛未覆盖] ${detail}——状态列自报不作数，证据须存在或为验证命令（检查 23）`);
         }
       }

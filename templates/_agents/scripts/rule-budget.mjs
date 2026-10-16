@@ -8,6 +8,10 @@
 // 「提交后树」= 索引（index）内容：staged 版优先于 HEAD；无 git（fixture）回退工作区文件。
 // 字节口径 = 索引 / HEAD 内容（git cat-file，LF 归一）。禁用工作区 wc -c 口径（CRLF 膨胀系统性偏大，
 // 2026-09-21 实测差 ~500B 一度误判超限）——本脚本所有字节数都走 cat-file，仅无 git 时才落工作区。
+// 条目数预算（2026-10-15 减重手段② 自源仓回灌）：上限字段形如 `<N>#count` 时按「匹配文件条数」执法
+//   而非字节——规则面一进一出（新增一条须先退役一条，退役判定 agg-judgments --retire-candidates）。
+//   旧格式行（纯数字）不受影响；`#count` 行对旧读者（未升级的脚本副本）因上限非纯数字被跳过——
+//   fail-open，不误拦。
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -60,13 +64,22 @@ const expand = (pat) => {
 
 let viol = 0;
 const over = (what, bytes, lim) => { console.log(`常驻面超限：${what} ${bytes}B > 上限 ${lim}B`); viol = 1; };
+const overCount = (pat, n, lim) => { console.log(`常驻面超限（条目数）：${pat} ${n} 项 > 上限 ${lim} 项——一进一出：新增须先退役一条（退役判定 agg-judgments --retire-candidates）`); viol = 1; };
 
 for (const line of fs.readFileSync(BUDGETS, 'utf8').split(/\r?\n/)) {
   const sp = line.lastIndexOf(' ');
   if (sp < 0) continue;
   const pat = line.slice(0, sp), lim = line.slice(sp + 1);
   if (pat === '' || pat.startsWith('#')) continue;
-  if (!/^\d+$/.test(lim)) continue;
+  // 条目数预算（2026-10-15 减重手段②）：`<N>#count` = 匹配文件数上限（一进一出的执法面）
+  const cnt = /^(\d+)#count$/.exec(lim);
+  if (!cnt && !/^\d+$/.test(lim)) continue;
+  if (cnt) {
+    if (mode === '--staged' && !staged.some((sf) => sf.startsWith(pat))) continue;
+    const n = expand(pat).length;
+    if (n > Number(cnt[1])) overCount(pat, n, cnt[1]);
+    continue;
+  }
   if (pat.endsWith('/')) {
     // 目录合计：--staged 下仅当暂存触及该目录内文件才查（字面前缀匹配，同 sh 版 2026-09-24 口径）
     if (mode === '--staged' && !staged.some((sf) => sf.startsWith(pat))) continue;

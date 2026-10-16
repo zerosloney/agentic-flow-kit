@@ -35,14 +35,6 @@ const check = (name, cond, detail = '') => {
   else { fail++; console.log(`FAIL  ${name}${detail ? `\n      ${String(detail).slice(0, 800)}` : ''}`); }
 };
 
-function shBin() {
-  for (const bin of ['sh', 'bash']) {
-    const r = spawnSync(bin, ['-c', 'echo ok'], { encoding: 'utf8' });
-    if (!r.error && r.status === 0) return bin;
-  }
-  return null;
-}
-
 function gitRun(cwd, args) {
   const r = spawnSync(git, args, { cwd, encoding: 'utf8' });
   if (r.status !== 0) throw new Error(`${args.join(' ')}\n${r.stderr || r.stdout}`);
@@ -145,17 +137,19 @@ try {
     console.log('SKIP doctor 契约核对（装户位置无包源 src/）');
   }
 
-  const sh = shBin();
-  check('找到 sh 以跑 pre-push', !!sh);
-  if (sh && !HOOK) console.log('SKIP pre-push 相关场景（未找到 _githooks / .githooks 下的 pre-push）');
-  if (sh && HOOK) {
+  // pre-push 已 node 化（2026-10-16 自源仓回灌）：直调 node 跑钩子，桩改 check-loop.mjs / commit-check.cjs
+  if (!HOOK) console.log('SKIP pre-push 相关场景（未找到 _githooks / .githooks 下的 pre-push）');
+  if (HOOK) {
     fs.mkdirSync(path.join(root, '.agents', 'scripts'), { recursive: true });
+    fs.mkdirSync(path.join(root, '.agents', 'hooks'), { recursive: true });
     const node = process.execPath.replace(/\\/g, '/');
     const loopSh = LOOP.replace(/\\/g, '/');
-    fs.writeFileSync(path.join(root, '.agents', 'scripts', 'check-loop.sh'), `#!/bin/sh\nexec "${node}" "${loopSh}" "$@"\n`);
+    fs.writeFileSync(path.join(root, '.agents', 'scripts', 'check-loop.mjs'), `import { spawnSync } from 'node:child_process';\nconst r = spawnSync(${JSON.stringify(node)}, [${JSON.stringify(loopSh)}, ...process.argv.slice(2)], { stdio: 'inherit' });\nprocess.exit(r.status ?? 1);\n`);
+    // 构建门桩：零退出占位——本套件测 --rev 扫描面，不测构建触发
+    fs.writeFileSync(path.join(root, '.agents', 'hooks', 'commit-check.cjs'), 'process.exit(0);\n');
     const hookPath = path.join(root, 'pre-push');
     fs.copyFileSync(HOOK, hookPath);
-    const push = (input) => spawnSync(sh, [hookPath], { cwd: root, input, encoding: 'utf8', timeout: 120000 });
+    const push = (input) => spawnSync(process.execPath, [hookPath], { cwd: root, input, encoding: 'utf8', timeout: 120000 });
     const onlyDelete = push(`refs/heads/old ${Z} refs/heads/old ${'b'.repeat(40)}\n`);
     check('stdin 只有删除行：不阻断', onlyDelete.status === 0, outOf(onlyDelete));
     const mixed = push(

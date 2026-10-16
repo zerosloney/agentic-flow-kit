@@ -541,9 +541,21 @@ if (isMain) {
   // 内容绑定约束，与既有归档批次同口径）。失败一律 fail-open：归档是卫生动作，不得回滚已完成的
   // 确认（**归档失败不阻断关单**——与源仓语义逐字一致）。启用锚（照搬源仓，无 policy 锚）：
   // ① 仓库已建立归档约定（workflow/archive/ 存在）——真实装户仓有，临时 fixture 无，避免测试夹具
-  //   被静默搬走（也避免在未采纳归档的仓库里凭空造目录）；② env 逃生门 CONFIRM_DOC_NO_ARCHIVE。
+  //   被静默搬走（也避免在未采纳归档的仓库里凭空造目录）；② env 逃生门 CONFIRM_DOC_NO_ARCHIVE；
+  //   ③ 特性分支默认不归档（2026-10-16 自源仓 13f67ef7 回灌）：分支上先关单再合并时，diff 只剩
+  //   archive/ 路径，泳道/配对增量门只认 workflow 活跃直路径，合法合并被拦。main/master/develop 与
+  //   游离 HEAD 维持关单即归档。CONFIRM_DOC_NO_ARCHIVE=1 仍强制关；CONFIRM_DOC_ARCHIVE=1 可在特性分支强制归档。
   const archiveRoot = path.join(root, 'workflow', 'archive');
-  if (confirmed > 0 && !process.env.CONFIRM_DOC_NO_ARCHIVE && fs.existsSync(archiveRoot)) {
+  let featureHold = false;
+  if (confirmed > 0 && !process.env.CONFIRM_DOC_NO_ARCHIVE && process.env.CONFIRM_DOC_ARCHIVE !== '1') {
+    let branch = '';
+    try { branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: root, encoding: 'utf8' }).trim(); } catch { branch = ''; }
+    featureHold = !!branch && branch !== 'HEAD' && !['main', 'master', 'develop'].includes(branch);
+    if (featureHold && fs.existsSync(archiveRoot)) {
+      console.log(`📦 特性分支 ${branch} 不归档（合并前保持 workflow 活跃路径；main/develop 关单才归档）。CONFIRM_DOC_ARCHIVE=1 可强制`);
+    }
+  }
+  if (confirmed > 0 && !process.env.CONFIRM_DOC_NO_ARCHIVE && !featureHold && fs.existsSync(archiveRoot)) {
     try {
       const { analyze, buildDocList, loadLastTouch, parseStatus, TERMINAL, ACTIVE } = await import('./archive-sweep.mjs');
       // 台账终态锚：kit 读侧单源 = readLedgerRows（主台账+分片透明合并；源仓走

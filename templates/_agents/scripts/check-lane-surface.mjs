@@ -22,7 +22,7 @@
 //   B 跳过（沿 pairing 门先例）；配置行正则语法错误 → fail-closed（防静默空洞）。
 // 已知边界：commit-time 门禁，CI / pre-push 复跑面无对应全量检查（push 时刻无暂存 diff 一手事实，
 //   树级反推违背判据原则）——沿增量门禁 pre-commit-only 先例，声明于 spec 风险评估 R2。
-// 用法：node check-lane-surface.mjs [--root <dir>] [--branch <名>] [--staged-file <清单文件>]
+// 用法：node check-lane-surface.mjs [--merge] [--root <dir>] [--branch <名>] [--staged-file <清单文件>]
 //   （--root/--branch/--staged-file 为测试注入位；缺省自 git 发现。staged-file 每行一个仓库相对路径）
 // 退出码：0 放行（含 advisory）；1 阻断（stderr 出 [标签] 消息与修法）
 import fs from 'node:fs';
@@ -52,6 +52,10 @@ const STAGED = stagedArg
   : gitOut(ROOT, ['diff', '--cached', '--name-only', '--diff-filter=ACMR']).split(/\r?\n/).filter(Boolean);
 
 const isExperiment = /^experiment\//.test(BRANCH);
+// 合并进行中（2026-10-15 自源仓 13f67ef7 回灌）：pre-merge-commit 显式传 --merge（git merge 自动提交
+// 窗口 MERGE_HEAD 已不可靠，只认显式旗标）；冲突解决后的手动 commit 由 MERGE_HEAD 探测兜底（此时
+// 合并仍在进行、MERGE_HEAD 确定存在）。合并提交不引入新首发改动，各笔已在自身提交时刻过门 → 检查 A 跳过。
+const FORCE_MERGE = argv.includes('--merge');
 // 泳道协议锚（单源 policy.mjs）：无 kit.json 的测试夹具回落 v1（无键=双字段协议从未生效，单字段判）
 const RISK_LEVEL_SINCE = loadKitPolicy(ROOT).riskLevelSince;
 
@@ -175,7 +179,10 @@ const hits = patterns.length ? STAGED.filter((p) => patterns.some((re) => re.tes
 // 本次提交触达到的**最低应然档位**：lane-surfaces 命中隐含 L2（沿原口径），hints 命中按登记档取。
 // 混档取高——与 level-criteria maxLevel 同一口径（就高不就低在提交面同样成立）。
 const requiredLevel = maxLevel(hits.length ? 'L2' : '', hintLevel);
-if (requiredLevel) {
+const merging = FORCE_MERGE || gitOut(ROOT, ['rev-parse', '-q', '--verify', 'MERGE_HEAD']).trim() !== '';
+if (requiredLevel && merging) {
+  advisories.push(`[触达面判低]（advisory）合并进行中（${FORCE_MERGE ? '--merge 显式标记' : 'MERGE_HEAD 在场'}）——检查 A 跳过：合并提交不引入新首发改动，各笔已在自身提交时刻过门`);
+} else if (requiredLevel) {
   const active = collectActive();
   const requiredRank = rankOf(requiredLevel) ?? 1;
   // 入口是否够格：级别 rank ≥ 应然档。**suspect（级别/risk_level 缺失、非法或分歧）一律不够格**——

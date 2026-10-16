@@ -2,6 +2,65 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.8.2
+
+自 Shipyard.Material 回灌「减重系列」增量（源仓 2026-10-15/16 九个引擎提交逐件甄别）。取 patch 位——
+均为源仓既有能力的对齐回灌，非 kit 新能力设计；两处行为变更（构建门后移、特性分支不归档）见下。
+
+- **甄别：规则段合并 26→23 不采**（源仓 95352f55）。该重构的动机是源仓 `check-loop-sections/` 目录
+  在 `#count` 条目数预算下的减重，kit 无该目录布局（检查段执行体在单体 check-loop.mjs 与
+  check-hygiene 模块内，见 ARCHITECTURE §8.1）；且源仓「编号承重不重排、留疤不回收」——两侧编号空间
+  保持同构，未来源仓提交按旧编号引用无需映射表。宿主数据（分片清理 33 个 jsonl、台账归并、wiki html）
+  不带回。**采纳其 §17 无 version 快径**：当前树 package.json 无 version 字段（装户非 node 仓 / 快照树）
+  → §17 整段跳过，省去全历史 git log+show 扫描（无 version 则「版本变化提交」永不存在）。适配点：
+  源仓 s17 为独立模块函数用 `return` 快返，kit 单体函数内改 if 包裹，保后续段照常执行。
+- feat(gate)：**条目数预算 `<N>#count`**（源仓 d6dd5032）。`rule-budget.mjs` 上限字段支持
+  `<N>#count` = 匹配文件**条数**上限（区别于字节），`--staged` 门控与 glob 形态同字节口径；
+  旧格式行零影响，`#count` 行对旧读者因上限非纯数字被跳过（fail-open 不误拦）。补同名直测黑盒套件
+  T1-T8（字节语义不回归 / 超限与压线 / 混合表互扰 / 缺表 exit 0 / staged 门控 / glob 条数），
+  `scripts-test-exempt.txt` 中 rule-budget.mjs 登记随之撤除。**kit 模板未预设条目数锚行**——kit 无源仓
+  `check-loop-sections/` 面，规则面锚对象属装户自有决策（格式说明随表下发）。
+- feat(tool)：**`agg-judgments --retire-candidates`（规则死亡机制）**（源仓 ee77a25e）。连续 N 个
+  **有数据月**零命中（WARN+BLOCK=0）的规则列为退役候选，按全历史命中升序输出；断档月不按零命中计
+  （防漏跑误判），数据月不足窗口不产候选（年轻遥测防假候选）。测试 S4-S7。
+- feat(tool)：**`mechanism-retire-watch.mjs` 机制退役催办**（源仓 L5 自举接线批，kit 补采）。读机制
+  台账「退役阈值」+ judgments 聚合，阈值触达/待退役逾期自动产动作项；**缺月不算零命中**（日历窗口
+  内有缺月即交人工判）。纯函数 evaluate 套件 S1-S8。kit 适配：台账路径平铺 `.agents/mechanism-registry.md`。
+- feat(tool)：**`closeout-l1.mjs` L1 关单一把编排**（源仓 93c95ce1）。预检快筛（级别/状态/勾验/绿凭证）
+  → `--delegated` 原样转发 confirm-doc（强门全在彼处）→ INDEX 重生成 → 提交清单；L2/L3 与 incidents
+  不受理（不做捷径）。**kit 修源仓一处缺陷**：源仓提交清单拼 `<基名.md>.jsonl`，与写入口径
+  `confirmations.d/<基名去.md>.jsonl` 错位（其测试只盖纯函数未暴露）——kit 抽 `shardOf` 纯函数修正
+  并以 A7 断言钉死。verify 预检镜像 kit done 前置口径（policy v6+ 按 verifyDocSince 绑定本单绿行）。
+- feat(tool)：**`gen-workflow-metrics` 增归档积压提醒**（源仓 60d1e9e2）。月度 stdout 报「候选 N 篇 /
+  M 族（21 天窗）」，判定单源 `archive-sweep.analyze`（禁第二套口径）；`loadLedgerTs` 导出供复用；
+  异常 fail-open 静默——观测提醒不挡快照。
+- feat(docs)：**`notes/engine-internals.md` 维护者单页**（源仓 bafa4f55 终态）。收深水区：预判对账机理、
+  kind 词表单源、规则生灭机制（退役候选 + 条目数一进一出）；`new-task.md` 增「预判留痕」指针行
+  （使用者面只留两问定级 + 路由表）。预算随动：`commands/*.md` 单篇 8704→9216B（512B 步进，实测 8914B）。
+- fix(gate)：**合入与关单六处缺口**（源仓 13f67ef7）。① `check-lane-surface --merge`：合并提交时
+  检查 A 跳过（git merge 自动提交窗口 MERGE_HEAD 已不可靠，pre-merge-commit 显式传旗标；冲突解决后
+  手动 commit 仍由 MERGE_HEAD 探测兜底）；② **confirm-doc 特性分支默认不归档**（分支上先关单再合并
+  时 diff 只剩 archive/ 路径、增量门只认活跃直路径；main/master/develop 与游离 HEAD 维持归档；
+  `CONFIRM_DOC_ARCHIVE=1` 可强制）；③ §23 解锁序改为「改正文 → 状态改回 approved → confirm-doc
+  重录指纹 → 再标 done」，路径面放行 `.vue` 与中文目录（`PATH_RE` 单字符类 + 前缀锚，防回溯）；
+  ④ `verify --stub-gate`：单门夹具走生产尾段（落凭证），必须配 `CHECK_LOOP_ROOT`（禁在真实仓落无关单
+  凭证）；⑤ `ledger-shards --append --section`：带节标题的行插入对应节而非落到文末自表；⑥ pre-push
+  每本地日跑回路日检（退役催办 + papercut 报债，advisory，摘要落 `.agents/cache/loop-watch.jsonl`）。
+  另**补 kit 缺失的合并态台账对账**：`--staged` 路径此前只有前缀判据，多父合并（暂存=父母并集）必然
+  误拦——移植 `mergeUnionProblem`/`mergePruneProblem` 集合对账（签名自 sha 改收 parents 数组，历史
+  全扫与 `--staged` 共用同判据），补 M12 夹具（删双父共有行仍拦）。
+- feat(gate)：**构建门自 pre-commit 后移 pre-push**（源仓 2ff869a9）。`commit-check.cjs` 增
+  `--no-build`（常规提交只做敏感扫描）与 `--range <old> <new>`（推送范围文件面；全零 old = 新分支
+  首推取全量构建语义；范围模式跳过敏感扫描——逐提交时刻已扫）；pre-commit 常规提交传 `--no-build`、
+  合并提交仍 `--full`；**pre-push 整体 node 化**（保留 kit 加固门：源仓已于 2026-10-10 退役该门，
+  kit 维持自身决策不跟）并按推送范围跑构建门（experiment/* 目标降级 advisory）。测试：
+  commit-check-trigger S10-S13、pre-push 构建门三态断言。
+- 源仓差异不跟（甄别在案）：绿行 suite 名 kit 维持 `'npm test'`（源仓为 `'all-gates'`，各自与
+  `gen-verify-evidence` 消费口径自洽）；papercut 报债复用 kit 既有 `papercut-debt-sensor --json`，
+  不移植源仓 `papercut-debt-report.mjs`（kit 无该件、能力等价）。
+- `engine-lock.json` `--update` 入账（受检面 82→84 件：新增 closeout-l1 / mechanism-retire-watch；
+  18 个改动件）。测试：npm test 79 套件 0 失败；eslint 0 error。
+
 ## 1.8.1
 
 自 Shipyard.Material 回灌引擎增量（源仓 2026-10-15 三引擎提交逐件甄别同步；宿主数据与 kit 不适用件

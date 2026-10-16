@@ -24,9 +24,12 @@
 //   提交——新装户由 init 生成器首跑种子该文件，缺文件对 --check 是漂移（红），不静默放行。
 // 绿凭证摘要（gen-verify-evidence.mjs）：全绿尾部自动重生成 workflow/verify-evidence.md——全绿事实与
 //   仓内摘要同刻生成，消除「本地台账已绿、committed 摘要滞后」的双真相分叉；生成失败响亮告警但不推翻绿裁决。
-// 用法：node .agents/scripts/verify.mjs [--list] [--test-cmd "<shell 命令>"] [--doc <本单 workflow 路径>]
-//   --list：按执行序打印门 id 后退出，不执行（与 --test-cmd 互斥）。
+// 用法：node .agents/scripts/verify.mjs [--list] [--test-cmd "<shell 命令>"] [--stub-gate "<命令>"] [--doc <本单 workflow 路径>]
+//   --list：按执行序打印门 id 后退出，不执行（与 --test-cmd / --stub-gate 互斥）。
 //   --test-cmd 用于测试注入，或在无根 package.json 的装户仓指定项目测试命令；
+//   --stub-gate <命令>（2026-10-16 自源仓回灌）：单门夹具但走**生产尾段**（落凭证 / 生成摘要）——
+//     与 --test-cmd 的差异是不打 testCmd 标记、尾段按生产路径执行；**必须配 CHECK_LOOP_ROOT**（夹具根），
+//     禁止在真实仓库写出可被当成关单凭证的绿行。
 //   --doc 把凭证绑到本单，如 --doc workflow/intents/<日期>-<主题>.md
 // 测试：node templates/_agents/scripts/verify.test.mjs（--test-cmd 注入假命令 + CHECK_LOOP_ROOT 注入夹具）
 import fs from 'node:fs';
@@ -59,6 +62,24 @@ const fixtureGates = (cmd) => [
 const args = process.argv.slice(2);
 const explicitTestCmd = args.includes('--test-cmd') ? args[args.indexOf('--test-cmd') + 1] : null;
 
+// --stub-gate（2026-10-16 自源仓 13f67ef7 回灌）：单门夹具但走**生产尾段**（落凭证 / 生成摘要）。
+// 与 --test-cmd 的关键差异：不打 testCmd 标记（fixture 模式绿行带 testCmd:true，生产凭证不与之混淆）。
+// **必须配 CHECK_LOOP_ROOT**——禁止在真实仓库写出可被当成关单凭证的绿行（信任边界：夹具单门不是关单凭证）。
+const stubIdx = args.indexOf('--stub-gate');
+const stubCmd = stubIdx >= 0 ? args[stubIdx + 1] : null;
+if (stubIdx >= 0 && !stubCmd) {
+  console.error('[verify] --stub-gate 需要一条命令');
+  process.exit(2);
+}
+if (stubCmd && explicitTestCmd) {
+  console.error('[verify] --stub-gate 与 --test-cmd 互斥');
+  process.exit(2);
+}
+if (stubCmd && !process.env.CHECK_LOOP_ROOT) {
+  console.error('[verify] --stub-gate 只允许配合 CHECK_LOOP_ROOT 夹具根（禁止在真实仓库落无关单凭证）');
+  process.exit(2);
+}
+
 // --doc 解析（沿 --test-cmd 同款取下一 argv 的写法；缺值报用法错误 exit 1 与 --test-cmd 对称）。
 // 归一基准 = **ROOT**（不是 cwd）——消费方两处都以仓库根为基准（check-loop 检查 8 用
 // path.relative(ROOT, intent)；confirm-doc 的 docRelOf 用 path.resolve(root, doc)）。若这里按 cwd
@@ -78,12 +99,14 @@ const docRel = docArg
 // 装户仓判定：engine-tests 门只在**当前目录**有 package.json 时才跑（npm test 亦在该目录执行）。
 // 跳过时后续不落测试绿凭证（见全绿落账段）。显式 --test-cmd 不受此判定影响。
 const hasRootPackageJson = fs.existsSync(path.join(process.cwd(), 'package.json'));
-const skipTest = explicitTestCmd === null && !hasRootPackageJson;
-const gates = explicitTestCmd ? fixtureGates(explicitTestCmd) : GATES;
+const skipTest = explicitTestCmd === null && stubCmd === null && !hasRootPackageJson;
+const gates = explicitTestCmd ? fixtureGates(explicitTestCmd)
+  : stubCmd ? [{ id: 'stub', name: '夹具单门', cmd: stubCmd, folder: '.', type: 'shell' }]
+  : GATES;
 
 if (args.includes('--list')) {
-  if (explicitTestCmd) {
-    console.error('[verify] --list 与 --test-cmd 互斥');
+  if (explicitTestCmd || stubCmd) {
+    console.error('[verify] --list 与 --test-cmd / --stub-gate 互斥');
     process.exit(1);
   }
   for (const g of gates) console.log(g.id);
@@ -104,7 +127,7 @@ const recordFailure = (step, exitInfo, note) => {
   }
 };
 
-console.log(`[verify] 🚀 开始静态门验证 (共 ${gates.length} 项)${explicitTestCmd ? '【fixture 模式】' : ''}\n`);
+console.log(`[verify] 🚀 开始静态门验证 (共 ${gates.length} 项)${explicitTestCmd ? '【fixture 模式】' : ''}${stubCmd ? '【stub 尾段】' : ''}\n`);
 
 let passedCount = 0;
 const outputs = {};
@@ -173,7 +196,8 @@ try {
 
 // 摘要事件原子化：全绿事实与仓内摘要（workflow/verify-evidence.md）同刻生成，消除「本地台账已绿、
 // committed 摘要滞后」的双真相分叉。仅生产模式（fixture 假门凭证不产 committed 摘要；测试门跳过时
-// 本就无凭证）；生成失败响亮告警但不推翻绿裁决（同落账口径）。
+// 本就无凭证）；stub 尾段按生产路径执行（摘要落在 CHECK_LOOP_ROOT 夹具根，不触真实仓）。
+// 生成失败响亮告警但不推翻绿裁决（同落账口径）。
 if (!explicitTestCmd && !skipTest) {
   const gen = spawnSync(process.execPath, [path.join(SCRIPT_DIR, 'gen-verify-evidence.mjs'), '--root', ROOT], { encoding: 'utf8' });
   if (gen.status === 0) {

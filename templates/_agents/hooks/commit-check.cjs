@@ -2,6 +2,12 @@
 // 1) 敏感信息扫描（暂存区新增行含疑似密钥 -> BLOCK）
 // 2) 条件构建验证（按 .agents/hooks/commit-check.config.json 的 builds 配置；--full 不做 ext/prefix 裁剪，仍尊重 when）
 // 3) 质量检测（config.checks：lint / 类型检查 / vet 等秒级确定性检查；--full 不做 ext/prefix 裁剪，仍尊重 when）
+// 旗标（2026-10-16 构建门后移 pre-push，自源仓 2ff869a9 回灌）：
+//   --no-build：跳过段 2 条件构建——pre-commit 常规提交用（提交内环提速）；构建在 pre-push 按推送范围
+//     执法，合并提交仍走 --full 全量构建（合并结果是没人验证过的新状态）。
+//   --range <old> <new>：推送范围模式（pre-push 用）——文件面取 git diff --name-only old new；
+//     old 为全零 sha（新分支首推）= 全量匹配语义（等价 --full 的构建面）；段 1 敏感扫描跳过
+//     （逐提交时刻 pre-commit 已扫，范围重扫无增量价值）。默认（无旗标）暂存区模式行为不变。
 // config 由 flow-kit init 按技术栈生成初值，项目可自行增改；缺失或无 builds/checks 时跳过对应段。
 // 配置示例（.agents/hooks/commit-check.config.json）：
 //   {
@@ -43,12 +49,27 @@ function sh(cmd, cwd) {
   }
 }
 
+// --- 模式旗标（2026-10-16 构建门后移 pre-push；sha 经 git 管道来仍做白名单校验——信任边界） ---
+const NO_BUILD = process.argv.includes('--no-build');
+const rangeIdx = process.argv.indexOf('--range');
+const RANGE = rangeIdx >= 0 ? process.argv.slice(rangeIdx + 1, rangeIdx + 3) : null;
+if (RANGE && (RANGE.length < 2 || !/^[0-9a-f]{4,40}$/i.test(RANGE[0]) || !/^[0-9a-f]{4,40}$/i.test(RANGE[1]))) {
+  console.log(`BLOCK: --range 参数须为两个 git sha（现「${(RANGE || []).join(' ')}」）`);
+  process.exit(1);
+}
+// 全零 old = 新分支首推：git diff 对全零 sha 无从执行，且本就取全量匹配语义——文件面置空即可
+const RANGE_ZERO_OLD = RANGE !== null && /^0+$/.test(RANGE[0]);
+
 let staged = [];
 try {
-  staged = execSync('git diff --cached --name-only', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
-    .split('\n').map(s => s.trim()).filter(Boolean);
+  const listCmd = !RANGE ? 'git diff --cached --name-only'
+    : RANGE_ZERO_OLD ? null
+    : `git diff --name-only ${RANGE[0]} ${RANGE[1]}`;
+  staged = listCmd === null ? []
+    : execSync(listCmd, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] })
+      .split('\n').map(s => s.trim()).filter(Boolean);
 } catch (e) {
-  console.log('BLOCK: 无法读取暂存区（git diff --cached 失败）');
+  console.log('BLOCK: 无法读取变更文件面（git diff 失败）');
   process.exit(1);
 }
 
@@ -74,16 +95,18 @@ try {
 } catch (e) { /* 空暂存 */ }
 const added = diffText.split('\n').filter(l => l.startsWith('+') && !l.startsWith('+++'));
 const hits = added.filter(l => SECRET.test(l) && !(KNOWN && KNOWN.test(l)) && !SELF.test(l));
-if (hits.length) {
-  console.log('BLOCK: 暂存区疑似包含敏感信息（密钥/连接串/令牌），请检查:\n' + hits.slice(0, 5).join('\n'));
-  process.exit(1);
-}
+  if (hits.length) {
+    console.log('BLOCK: 暂存区疑似包含敏感信息（密钥/连接串/令牌），请检查:\n' + hits.slice(0, 5).join('\n'));
+    process.exit(1);
+  }
+  if (RANGE) console.log('SKIP: --range 模式跳过敏感扫描（逐提交时刻 pre-commit 已扫，2026-10-16 构建门后移）');
 
 // --- 2) 条件构建验证 ---
 // --full：合并提交（pre-merge-commit / 冲突解决后手动 commit）使用——合并结果是没人验证过的新状态，
 // 按 ext/prefix 裁剪可能漏掉需要重跑的一侧，故不做路径裁剪。when 仍生效：没有对应能力就不跑。
+// --range 全零 old sha（新分支首推）同取全量匹配语义。
 // 引擎自身文件（.agents/、.githooks/）不参与构建匹配——工作流引擎不是项目构建产物。
-const FULL = process.argv.includes('--full');
+const FULL = process.argv.includes('--full') || RANGE_ZERO_OLD;
 const stagedForBuild = staged.filter(f => !f.startsWith('.agents/') && !f.startsWith('.githooks/'));
 
 // whenSatisfied：任一谓词满足即启用。pkg: 读 cwd 下的 package.json；其余谓词相对仓库根。
@@ -117,30 +140,34 @@ function skipWhen(kind, item) {
   console.log(`SKIP: ${item.name}（未找到 ${shown}，跳过${kind}——配置好后自动启用）`);
 }
 
-let consideredBuild = false;
-for (const b of (config.builds || [])) {
-  if (!b || !b.command) continue;
-  const exts = Array.isArray(b.ext) ? b.ext : [];
-  const match = FULL || stagedForBuild.some(f => exts.some(e => f.endsWith(e)) || (b.prefix ? f.startsWith(b.prefix) : false));
-  if (!match) continue;
-  consideredBuild = true;
-  if (!whenSatisfied(b.when, b.cwd)) { skipWhen('构建', b); continue; }
-  const r = sh(b.command, b.cwd);
-  if (!r.ok) {
-    if (b.lockPattern && new RegExp(b.lockPattern).test(r.out)) {
-      console.log(`BLOCK: ${b.name} 构建被文件锁拦下（与代码无关）。${b.lockHint || '停掉占用进程后原路重试'}\n` +
-        '锁冲突行：\n' + r.out.split(/\r?\n/).filter(l => new RegExp(b.lockPattern).test(l)).slice(0, 3).join('\n'));
-    } else {
-      console.log(`BLOCK: ${b.name} 构建失败（${b.command}）\n` + r.out.slice(0, 1500));
+if (NO_BUILD) {
+  console.log('SKIP: --no-build（2026-10-16 构建门后移 pre-push——常规提交不再构建，推送时按范围执法）');
+} else {
+  let consideredBuild = false;
+  for (const b of (config.builds || [])) {
+    if (!b || !b.command) continue;
+    const exts = Array.isArray(b.ext) ? b.ext : [];
+    const match = FULL || stagedForBuild.some(f => exts.some(e => f.endsWith(e)) || (b.prefix ? f.startsWith(b.prefix) : false));
+    if (!match) continue;
+    consideredBuild = true;
+    if (!whenSatisfied(b.when, b.cwd)) { skipWhen('构建', b); continue; }
+    const r = sh(b.command, b.cwd);
+    if (!r.ok) {
+      if (b.lockPattern && new RegExp(b.lockPattern).test(r.out)) {
+        console.log(`BLOCK: ${b.name} 构建被文件锁拦下（与代码无关）。${b.lockHint || '停掉占用进程后原路重试'}\n` +
+          '锁冲突行：\n' + r.out.split(/\r?\n/).filter(l => new RegExp(b.lockPattern).test(l)).slice(0, 3).join('\n'));
+      } else {
+        console.log(`BLOCK: ${b.name} 构建失败（${b.command}）\n` + r.out.slice(0, 1500));
+      }
+      process.exit(1);
     }
-    process.exit(1);
+    console.log(`OK: ${b.name} 构建通过（${b.command}）`);
   }
-  console.log(`OK: ${b.name} 构建通过（${b.command}）`);
-}
-if (!consideredBuild) {
-  console.log(config.builds && config.builds.length
-    ? 'SKIP: 无匹配的源码变更，跳过构建验证'
-    : 'SKIP: 未配置 builds（.agents/hooks/commit-check.config.json），跳过构建验证');
+  if (!consideredBuild) {
+    console.log(config.builds && config.builds.length
+      ? 'SKIP: 无匹配的源码变更，跳过构建验证'
+      : 'SKIP: 未配置 builds（.agents/hooks/commit-check.config.json），跳过构建验证');
+  }
 }
 
 // --- 3) 质量检测（checks：lint / 类型检查 / vet 等秒级确定性检查；测试不放这里——关单在 test.md 阶段门） ---

@@ -221,10 +221,12 @@ const parentShas = (sha) => {
 
 // 合并并集对账：cur 行集须恰为各父行集之并（无丢失、无凭空新增）。返回 null = 认可；否则返回原因。
 // 父提交无此路径（单侧新增）跳过该父；行比对按整行字符串（与 linesOf/前缀判据同粒度）。
-const mergeUnionProblem = (sha, rel, curBuf) => {
+// 2026-10-16 自源仓回灌：签名自 sha 改收 parents 数组——--staged 合并态无提交 sha，由调用方传
+// [HEAD, MERGE_HEAD…]；历史全扫（传 parentShas(sha)）与 --staged 共用本判据（不新开口子）。
+const mergeUnionProblem = (parents, rel, curBuf) => {
   const curLines = new Set(linesOf(curBuf));
   const parentLines = new Set();
-  for (const p of parentShas(sha)) {
+  for (const p of parents) {
     const b = tryBlob(`${p}:${rel}`);
     if (b === null) continue;
     for (const l of linesOf(b)) parentLines.add(l);
@@ -309,7 +311,7 @@ function scanHistory(rel, { allowShardDelete }) {
     if (parents.length >= 2) {
       // 多父提交无条件走并集对账（前缀通过不得短路——ours-resolution 合并树与第一父逐字节同 blob，
       // 嵌套判法对静默丢行全盲）
-      const unionFail = mergeUnionProblem(sha, rel, cur);
+      const unionFail = mergeUnionProblem(parentShas(sha), rel, cur);
       if (!unionFail) {
         console.error(`[info] ${sha.slice(0, 10)}：合并并集无丢失——union 合并语义认可，续扫`);
         continue;
@@ -363,6 +365,18 @@ function ledgerPaths() {
 }
 
 // ---- --staged：暂存台账面 ⊇ HEAD 前缀，或携带 manifest 的特许修剪；分片删除须已并入暂存主台账 ----
+// 合并态口径（2026-10-16 自源仓 13f67ef7 回灌 staged-merge-union）：MERGE_HEAD 在场时暂存内容是**多父
+// 合并结果**，单看 HEAD 一父不够——合法合并形态下暂存 = 父母并集（− manifest removes），严格前缀等式
+// 必然不等而误拦。此时在严格等格外**再试父母并集集合对账**——与历史全扫同一函数 mergeUnionProblem /
+// mergePruneProblem、同一口径，不新开口子：并集须无丢失、无凭空行（既禁丢行也禁凭空行）。非合并态不启用。
+const mergeParents = (() => {
+  const r = spawnSync('git', ['rev-parse', 'MERGE_HEAD'], { cwd: ROOT, encoding: 'utf8' }); // octopus 可多行
+  if (r.status !== 0) return null; // 非合并态；spawnSync 吞 stderr，不外泄 fatal 噪声
+  const shas = String(r.stdout || '').split(/\s+/).filter(Boolean);
+  if (!shas.length) return null;
+  const h = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: ROOT, encoding: 'utf8' });
+  return [String(h.stdout || '').trim(), ...shas];
+})();
 if (staged) {
   const stagedHit = gitText(['-c', 'core.quotepath=off', 'diff', '--cached', '--name-only']).split(/\r?\n/).filter(Boolean);
   const touched = ledgerPaths().filter((rel) => stagedHit.includes(rel));
@@ -388,9 +402,21 @@ if (staged) {
           console.log(`台账不变量（--staged）— ${rel} 特许修剪通过：移除 ${m.removed} 行（${m.docs.length} 家族）——凭据 ${PRUNE_REL} 随笔入库，被删行可在 git 历史对质`);
           continue;
         }
+        // 合并态（2026-10-16 回灌）：严格前缀不适用 → 先纯并集对账，再落 manifest 修剪集合对账
+        // （与历史全扫的判定顺序一致）。非合并态两者皆拒。
+        const unionFail = mergeParents ? mergeUnionProblem(mergeParents, rel, cur) : '非合并态';
+        if (!unionFail) {
+          console.log(`台账不变量（--staged）— ${rel} 合并并集无丢失认可（${mergeParents.length} 父）——暂存行集恰为父母行集之并（无丢失、无凭空行），union 语义与历史全扫同口径`);
+          continue;
+        }
+        const setErr = mergeParents ? mergePruneProblem(mergeParents, rel, cur, loadManifestFromRef(`:${PRUNE_REL}`, ROOT)) : '非合并态';
+        if (!setErr) {
+          console.log(`台账不变量（--staged）— ${rel} 合并携带特许修剪通过：父母并集集合对账认可（${mergeParents.length} 父）——凭据 ${PRUNE_REL} 随笔入库，被删行可在 git 历史对质`);
+          continue;
+        }
         let off = 0;
         while (off < Math.min(head.length, cur.length) && head[off] === cur[off]) off++;
-        problems.push(`- [台账重写] ${rel} 暂存内容不是 HEAD 的前缀扩展（首异偏移 ${off}，HEAD ${head.length}B → 暂存 ${cur.length}B）${m && m.err ? `；特许修剪对账失败：${m.err}` : ''}`);
+        problems.push(`- [台账重写] ${rel} 暂存内容不是 HEAD 的前缀扩展（首异偏移 ${off}，HEAD ${head.length}B → 暂存 ${cur.length}B）${m && m.err ? `；特许修剪对账失败：${m.err}` : ''}${mergeParents ? `；合并并集集合对账亦失败：${setErr}` : ''}${mergeParents ? `；合并纯并集对账失败：${unionFail}` : ''}`);
       }
       continue;
     }

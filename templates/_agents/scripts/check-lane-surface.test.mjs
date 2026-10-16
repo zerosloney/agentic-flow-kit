@@ -31,10 +31,10 @@ const w = (root, rel, content) => fs.writeFileSync(path.join(root, rel), content
 // eol='\r\n' 时整文件按 CRLF 写（平台边界：frontmatter 读取容忍性）
 const intent = (name, fm, eol = '\n') => `---${eol}${fm}${eol}---${eol}# INTENT — ${name}${eol}`;
 const incident = (fm) => `---\n${fm}\n---\n# INCIDENT\n`;
-const run = (root, { branch = 'main', staged = [] } = {}) => {
+const run = (root, { branch = 'main', staged = [], args = [] } = {}) => {
   const listFile = path.join(root, 'staged.txt');
   fs.writeFileSync(listFile, staged.join('\n') + '\n');
-  const r = spawnSync(process.execPath, [SCRIPT, '--root', root, '--branch', branch, '--staged-file', listFile], { encoding: 'utf8' });
+  const r = spawnSync(process.execPath, [SCRIPT, '--root', root, '--branch', branch, '--staged-file', listFile, ...args], { encoding: 'utf8' });
   return { code: r.status, out: `${r.stdout || ''}${r.stderr || ''}` };
 };
 
@@ -76,6 +76,20 @@ const FM_LOW_NEW = '状态: draft\n级别: L1\n日期: 2026-10-01\n模块: ui';
   base(d);
   const r = run(d, { branch: 'experiment/poc', staged: ['templates/t.md'] });
   check('S2c experiment 分支检查 A → advisory 放行', r.code === 0 && r.out.includes('advisory·experiment'), r.out);
+}
+// --- S2d/S2e：合并进行中 → 检查 A 跳过（2026-10-16 自源仓 13f67ef7 回灌）---
+// git merge 自动提交窗口 MERGE_HEAD 已不可靠 → pre-merge-commit 显式传 --merge（fixture 无 MERGE_HEAD，
+// 恰验证 --merge 独生效）；对照：同夹具不带 --merge 时命中面+仅活跃 L1 照拦。
+{
+  const d = mkfix();
+  base(d);
+  const r = run(d, { staged: ['templates/_agents/scripts/x.mjs'], args: ['--merge'] });
+  check('S2d --merge 显式标记 → 检查 A 跳过且明示来源',
+    r.code === 0 && r.out.includes('合并进行中（--merge 显式标记）') && !r.out.includes('[触达面判低] 暂存命中高风险面'),
+    r.out);
+  const r2 = run(d, { staged: ['templates/_agents/scripts/x.mjs'] });
+  check('S2e 无 --merge 同夹具照拦（对照：跳过仅由旗标/MERGE_HEAD 触发）',
+    r2.code === 1 && r2.out.includes('[触达面判低]'), r2.out);
 }
 // --- S3：命中 + 无活跃入口 → advisory 放行（done 不算活跃）---
 {

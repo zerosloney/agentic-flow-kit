@@ -226,8 +226,30 @@ export function renderShard(name, rows, eol = '\n') {
   return out.length ? `${out.join(eol)}${eol}` : '';
 }
 
+// insertIntoSection(text, section, lines)：把行插进已有分片的对应 ## 节（下一节标题之前）。
+// 节不存在则整节追加到文末。无 section 的行不走这里（保持追加到文末 = 末表）。
+function insertIntoSection(text, section, lines) {
+  const eol = text.includes('\r\n') ? '\r\n' : '\n';
+  const parts = text.split(/\r?\n/);
+  if (parts.length && parts[parts.length - 1] === '') parts.pop();
+  const start = parts.findIndex((l) => l.startsWith('## ') && l.includes(section));
+  if (start < 0) {
+    return `${parts.join(eol)}${eol}${eol}## ${section}${eol}${eol}${lines.join(eol)}${eol}`;
+  }
+  let end = parts.length;
+  for (let i = start + 1; i < parts.length; i++) {
+    if (parts[i].startsWith('## ')) { end = i; break; }
+  }
+  let at = end;
+  while (at > start && parts[at - 1].trim() === '') at--;
+  parts.splice(at, 0, ...lines);
+  return `${parts.join(eol)}${eol}`;
+}
+
 // appendRows(root, name, rows, { month, section })：把数据行追加进指定月分片（缺省取行内日期月）。
 // rows 可为字符串数组或 { line, section } 数组（多表台账须带 section 才能归对表）。
+// 分片已存在时：带 section 的行插入该节（不落到文末自做表）；不带 section 的行仍追加到文末
+// （2026-10-16 自源仓 13f67ef7 回灌——修「合并丢共有行」时新增行误落末表）。
 // 返回实际写入的分片路径列表。写失败 fail-loud（不静默吞）。
 export function appendRows(root, name, rows, { month, section = '' } = {}) {
   const written = [];
@@ -247,9 +269,21 @@ export function appendRows(root, name, rows, { month, section = '' } = {}) {
     const existingRows = new Set(existing.split(/\r?\n/).filter((l) => l.trim()));
     const fresh = rs.filter((r) => !existingRows.has(r.line));
     if (!fresh.length) { written.push(p); continue; } // 已在分片 → 幂等跳过
-    const next = existing
-      ? `${existing.replace(/\s*$/, '')}\n${fresh.map((r) => r.line).join('\n')}\n`
-      : renderShard(name, fresh, '\n');
+    let next;
+    if (!existing) next = renderShard(name, fresh, '\n');
+    else {
+      const placed = fresh.filter((r) => r.section);
+      const tail = fresh.filter((r) => !r.section);
+      let text = existing;
+      const bySec = new Map();
+      for (const r of placed) {
+        if (!bySec.has(r.section)) bySec.set(r.section, []);
+        bySec.get(r.section).push(r.line);
+      }
+      for (const [sec, lines] of bySec) text = insertIntoSection(text, sec, lines);
+      if (tail.length) text = `${text.replace(/\s*$/, '')}\n${tail.map((r) => r.line).join('\n')}\n`;
+      next = text.endsWith('\n') ? text : `${text}\n`;
+    }
     fs.writeFileSync(p, next, 'utf8');
     written.push(p);
   }
@@ -296,11 +330,14 @@ function main() {
     if (!row) { console.error('--append 须带 --row "<数据行>"'); process.exit(2); }
     const mIdx = argv.indexOf('--month');
     const month = mIdx >= 0 ? argv[mIdx + 1] : undefined;
-    const written = appendRows(root, name, [row], { month });
+    const sIdx = argv.indexOf('--section');
+    const section = sIdx >= 0 ? argv[sIdx + 1] : '';
+    if (sIdx >= 0 && !section) { console.error('--section 须带节标题（如 委派结果）'); process.exit(2); }
+    const written = appendRows(root, name, [row], { month, section });
     console.log(`✓ 追加 1 行 → ${written.map((p) => path.relative(root, p).split(path.sep).join('/')).join(', ')}`);
     return;
   }
-  console.error('用法：node .agents/scripts/ledger-shards.mjs --check | --split <ledger> [--dry-run] | --append <ledger> --row "<行>" [--month YYYY-MM]');
+  console.error('用法：node .agents/scripts/ledger-shards.mjs --check | --split <ledger> [--dry-run] | --append <ledger> --row "<行>" [--month YYYY-MM] [--section <节标题>]');
   process.exit(2);
 }
 

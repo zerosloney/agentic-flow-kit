@@ -591,6 +591,34 @@ const mkMergeRepo = () => {
   fs.rmSync(d, { recursive: true, force: true });
 }
 
+// M12（2026-10-16 自源仓 13f67ef7 回灌补夹具）：合并态 --staged 删掉两父母共有行（不在 manifest
+// removes 里）→ 仍拦。共享行被删是 union 语义下的真丢失——manifest 只申报了分支侧行，共有行无凭据消失。
+const mkMergePruneRepo = () => {
+  const d = mkrepo();
+  const BR = G(d, ['symbolic-ref', '--short', 'HEAD']).stdout.trim();
+  const r2 = row({ ts: '2026-10-02T01:00:00.000Z', stage: 'done', doc: 'workflow/intents/gone.md' });
+  const comp = row({ ts: '2026-10-13T00:00:00.000Z', stage: 'done', note: '补偿行：doc 仍在' });
+  append(d, r2); commitAll(d, 'main r2');
+  G(d, ['checkout', '-qb', 'br']);
+  fs.writeFileSync(ledPath(d), [row(), comp].join('\n') + '\n');
+  writeManifest(d, { ts: '2026-10-13T00:00:00.000Z', authority: 't', reason: 'branch prune', removes: [sha256Of(r2)], docs: ['gone'] });
+  commitAll(d, 'br prune + compensation');
+  G(d, ['checkout', '-q', BR]);
+  fs.writeFileSync(path.join(d, 'other.txt'), 'x');
+  commitAll(d, 'main unrelated change');
+  G(d, ['merge', '--no-commit', 'br']);
+  return { d, r2, comp };
+};
+{
+  const { d, comp } = mkMergePruneRepo();
+  fs.writeFileSync(ledPath(d), comp + '\n'); // 双父共有行 row() 被删，comp 也不在 removes 内
+  G(d, ['add', '-A']);
+  const r = run(d, ['--staged']);
+  check('M12 合并态 --staged 删双父共有行 → exit 1',
+    r.code === 1 && /合并仍丢失 manifest 外/.test(r.out), r.out);
+  fs.rmSync(d, { recursive: true, force: true });
+}
+
 // ---- 历史基线（2026-10-13 ledger-history-baseline）：owner 声明豁免前基线时代 ----
 // B1：前基线改写无凭据——无基线全史扫描拦；LEDGER_HISTORY_BASELINE 指到 HEAD 后豁免过
 //     （kit 缺省无基线 = 全量扫描，与源实现「缺省基线指向自身仓提交、外来仓退化为全扫」同语义）

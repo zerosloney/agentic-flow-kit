@@ -247,6 +247,23 @@ const wf = (root, ...p) => path.join(root, 'workflow', ...p);
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- S20 appendRows --section（2026-10-16 自源仓 13f67ef7 回灌）：已有双表时委派行插入委派节，
+//      不带 section 仍落文末（修「合并丢共有行」时新增行误落末表）----
+{
+  const root = mkroot();
+  appendRows(root, 'delegations', ['| 2026-10-15 | model | 委派甲 | 一次通过 | 备注 | |'], { section: '委派结果' });
+  appendRows(root, 'delegations', ['| 2026-10-15 | 自做甲 | 一次通过 | 备注 | |'], { section: '自做任务结果' });
+  appendRows(root, 'delegations', ['| 2026-10-15 | model | 委派乙 | 一次通过 | 备注 | |'], { section: '委派结果' });
+  appendRows(root, 'delegations', ['| 2026-10-15 | 自做乙 | 一次通过 | 备注 | |']);
+  const shard = fs.readFileSync(shardPathFor(root, 'delegations', '2026-10'), 'utf8');
+  const iSelf = shard.indexOf('## 自做任务结果');
+  const iDelegRow = shard.indexOf('委派乙');
+  const iSelfRow = shard.indexOf('自做乙');
+  check('S20 后追加的委派行仍在自做节之前', iDelegRow >= 0 && iDelegRow < iSelf, shard);
+  check('S20b 不带 section 的行落在文末', iSelf >= 0 && iSelf < iSelfRow, shard);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 // ---- S18 appendRows 幂等：同行走两次只落一次 ----
 {
   const root = mkroot();

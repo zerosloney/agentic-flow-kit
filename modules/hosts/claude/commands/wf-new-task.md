@@ -44,6 +44,7 @@ flow-kit route --files <预计改动面…> --kind require|fix|verify|review|dep
 > **两问定级**（2026-10-13 L0 退役,自源仓收敛系列 1 回灌）:结构面(schema / 迁移 SQL / DI / 认证管线)→ L3;契约或共享口径 → L2;两者都没有 → L1。不要按严重程度从 L1 往上滑。
 > **落位**: L1 写在 plan frontmatter `级别`;L2/L3 写在 intent(intent 另以 `risk_level`=级别双写,`fill-intent.mjs` 自动写入,机器选道用)。
 > **判低拦截**: 入口勾触达红线 → check-loop「红线判低」hard 拦 → 升到 L2/L3 并补同名 spec。
+> **预判留痕**（§25 advisory）: 定级先做结构化预判（有结构化判定工具则对齐本仓判据，无则按两问自判），结果写进入口文档 frontmatter「预判: kind=<kind> level=<L1|L2|L3>」——与实际落位不符 check-loop 出 WARN 留账。kind 词表与对账机理见 `.agents/notes/engine-internals.md`（维护者面）。
 >
 > **L2/L3 起草期合并预览**：三件套起草按 [design.md §0](design.md) 一次呈现要点总览（逐件确认代录不变）。
 

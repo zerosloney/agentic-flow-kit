@@ -149,6 +149,55 @@ for (const [label, writePkg] of unsatisfied) {
     r.status === 0 && !ran(f.marks, 'build') && r.out.includes('pkg:scripts.build') && !r.out.includes('无匹配的源码变更'), r.out);
 }
 
+// 场景 10：--no-build 跳过全部构建（2026-10-16 构建门后移 pre-push）——ext 命中也不跑
+f = mkfix();
+stage(f.root, 'src/a.xyz', 'x');
+r = runHook(f.root, ['--no-build']);
+check('S10 --no-build 命中 ext 也不构建（后移 pre-push）',
+  r.status === 0 && !ran(f.marks, 'extbuild') && r.out.includes('--no-build'), r.out);
+
+// 场景 11：--range 推送范围模式——范围内 .xyz 触发 extbuild；敏感扫描跳过有提示
+f = mkfix();
+fs.writeFileSync(path.join(f.root, 'old.txt'), 'old\n');
+git(f.root, ['add', 'old.txt']);
+git(f.root, ['commit', '-q', '-m', 'old']);
+stage(f.root, 'src/ranged.xyz', 'x');
+const shaOld = git(f.root, ['rev-parse', 'HEAD']).stdout.trim();
+git(f.root, ['commit', '-q', '-m', 'ranged']);
+const shaNew = git(f.root, ['rev-parse', 'HEAD']).stdout.trim();
+r = runHook(f.root, ['--range', shaOld, shaNew]);
+check('S11 --range 范围内 .xyz 触发 extbuild 且提示跳过敏感扫描',
+  r.status === 0 && ran(f.marks, 'extbuild') && r.out.includes('SKIP: --range 模式跳过敏感扫描'), r.out);
+
+// 场景 11b：--range 范围只含非触发文件 → 零构建
+f = mkfix();
+fs.writeFileSync(path.join(f.root, 'a.txt'), 'a\n');
+git(f.root, ['add', 'a.txt']);
+git(f.root, ['commit', '-q', '-m', 'a']);
+const s1 = git(f.root, ['rev-parse', 'HEAD']).stdout.trim();
+fs.writeFileSync(path.join(f.root, 'b.txt'), 'b\n');
+git(f.root, ['add', 'b.txt']);
+git(f.root, ['commit', '-q', '-m', 'b']);
+const s2 = git(f.root, ['rev-parse', 'HEAD']).stdout.trim();
+r = runHook(f.root, ['--range', s1, s2]);
+check('S11b --range 范围无触发文件 → 零构建',
+  r.status === 0 && !ran(f.marks, 'extbuild') && !ran(f.marks, 'prefixbuild'), r.out);
+
+// 场景 12：--range 全零 old sha（新分支首推）→ 全量构建语义（等价 --full 构建面）
+f = mkfix();
+fs.writeFileSync(path.join(f.root, 'seed.txt'), 'seed\n');
+git(f.root, ['add', 'seed.txt']);
+git(f.root, ['commit', '-q', '-m', 'seed']);
+const shaHead = git(f.root, ['rev-parse', 'HEAD']).stdout.trim();
+r = runHook(f.root, ['--range', '0'.repeat(40), shaHead]);
+check('S12 --range 全零 old = 全量构建语义',
+  r.status === 0 && ran(f.marks, 'extbuild') && ran(f.marks, 'prefixbuild'), r.out);
+
+// 场景 13：--range sha 非法 → BLOCK（信任边界：sha 来自 git 管道仍校验）
+f = mkfix();
+r = runHook(f.root, ['--range', 'not-a-sha', 'HEAD']);
+check('S13 --range 非 sha 参数 → BLOCK exit 1', r.status === 1 && r.out.includes('BLOCK'), r.out);
+
 for (const d of fs.readdirSync(os.tmpdir()).filter((x) => x.startsWith('cc-trigger-test-'))) {
   fs.rmSync(path.join(os.tmpdir(), d), { recursive: true, force: true });
 }

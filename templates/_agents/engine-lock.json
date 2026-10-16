@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-15T16:47:55.700Z",
+  "generatedAt": "2026-10-16T08:29:49.685Z",
   "files": {
     ".github/workflows/ci.yml": {
       "sha256": "e9cffb90dec8f0a49bfe231a13fb8df375a2494cc75c38d991b5eb7c7be104b5",
@@ -31,23 +31,23 @@
       "hard": 8
     },
     "templates/_agents/rule-budgets.txt": {
-      "sha256": "300a79e35ae7c2e5caf824b95a71e1eaf4755ecc0ade1d25374533abacf8ab16",
+      "sha256": "48f31a386019b7c427ed3244939d7c455fb33ec79d634d47141695e2308bcb6b",
       "hard": 3
     },
     "templates/_agents/scripts-test-exempt.txt": {
-      "sha256": "7fba8ab2a2d0c40b9211165beb832dc81b1ac4ddb4d4fdc9fe35010a6159cbf7",
-      "hard": 6
+      "sha256": "cc99a42bb30207b00302bddd75e19a22e6f07fb4a96e561dedf389d09e45fb21",
+      "hard": 5
     },
     "templates/_agents/scripts/agg-gate-stats.mjs": {
       "sha256": "80d10a917a864910f62714423d0740e4bee6cc4e4621a01384e67f77409e4d82",
       "hard": 0
     },
     "templates/_agents/scripts/agg-judgments.mjs": {
-      "sha256": "3967acc21b247045cca8c1549a19f9b7fccf610696496128e824335d3e6e7958",
+      "sha256": "ac8ed6a89b7650657890b7eacfffc1989a05a7de5cb3a06b94cc7ff1a73d3a77",
       "hard": 0
     },
     "templates/_agents/scripts/archive-sweep.mjs": {
-      "sha256": "2d7270d0ded58d0639d1b1eefb8b521895a702f9dec43f9fa4cd485432e56bda",
+      "sha256": "f5f562d2ad95dc48a282b0225fd960449393d96c03634a01719d9868f41038d5",
       "hard": 0
     },
     "templates/_agents/scripts/check-attribution.mjs": {
@@ -55,7 +55,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/check-convergence.mjs": {
-      "sha256": "e82743bc750f2d22b32ae97a56245b74440efbc4c7862e7345f97632769d5a28",
+      "sha256": "65485f4ca91f886a1bc3d1723dd6d93ffcf888612d11f315bc498a8bd258616f",
       "hard": 1
     },
     "templates/_agents/scripts/check-engine-integrity.mjs": {
@@ -71,15 +71,15 @@
       "hard": 0
     },
     "templates/_agents/scripts/check-lane-surface.mjs": {
-      "sha256": "419a46ac34a25ab4f2ccff51e52b91e6212991bc6898b9d3c92cce4f49f6c116",
+      "sha256": "a18f3cab4a345ae47583bfc4656f36d367c57db8f953dfe029f1baed6c4508a8",
       "hard": 2
     },
     "templates/_agents/scripts/check-ledger-invariant.mjs": {
-      "sha256": "56e66f0e066f889383a71415cc02f6268cbfbca8a80671454cca61a2aad25d33",
+      "sha256": "0f62db2d88d4da7f720c5c148d7d461dcc286a5e7c27c41cda591994c1201925",
       "hard": 2
     },
     "templates/_agents/scripts/check-loop.mjs": {
-      "sha256": "0ee83322c22ab5300976ede2593c98c0d20abf840850191257833c9ef79490a5",
+      "sha256": "e4e8843248d0a14e349f29dc9b4c1f0bbdbe1e5bd3c0745c723721c117e58f5a",
       "hard": 32
     },
     "templates/_agents/scripts/check-metric-claims.mjs": {
@@ -110,12 +110,16 @@
       "sha256": "9118b8fe57b80b5d36a0db38ed141c08036629895c143a64f0c29e301b2218c8",
       "hard": 0
     },
+    "templates/_agents/scripts/closeout-l1.mjs": {
+      "sha256": "76a2bc846f76cdb82fb3ce10b38df37882de727af8641841d2e01664c43962e1",
+      "hard": 0
+    },
     "templates/_agents/scripts/compact-ledgers.mjs": {
       "sha256": "99ee805337c9bd11500432f1525985781ad3165e6140e9e354efd9f5418fff78",
       "hard": 1
     },
     "templates/_agents/scripts/confirm-doc.mjs": {
-      "sha256": "d3011a109b7e9af6d01314911c3c5f4d8de52a39c57e98fafc4541389d2b9d74",
+      "sha256": "7829a2af4476bf5cddfbc123f3d1a9a95b2e1fa0337c4e0382875cb3e3ddb74a",
       "hard": 13
     },
     "templates/_agents/scripts/draft-sediment.mjs": {
@@ -175,7 +179,7 @@
       "hard": 3
     },
     "templates/_agents/scripts/gen-workflow-metrics.mjs": {
-      "sha256": "80cb5b1ede6400e118f92abea35416ed7a480f9c9ed78dd3fa68210dd2c85da9",
+      "sha256": "577401cc384f814a5cfc4ec7204b52bab3d11c93697c3ead697594f5a0d5a6b1",
       "hard": 2
     },
     "templates/_agents/scripts/git-core.mjs": {
@@ -211,12 +215,16 @@
       "hard": 0
     },
     "templates/_agents/scripts/ledger-shards.mjs": {
-      "sha256": "2f925919aa88e4ac53bca54706d04e3dbda8f4d51c23120924b32d8b73e5961d",
+      "sha256": "45ce305d4f0b7c878095a9db79971a0ea7d3685f5b6fa2e69b5212b8df4254e3",
       "hard": 0
     },
     "templates/_agents/scripts/level-criteria.mjs": {
       "sha256": "fe605f053aee21804e5a2d920830e17f7ef1c2935bd8ec3e0ca9aeca0de181c1",
       "hard": 1
+    },
+    "templates/_agents/scripts/mechanism-retire-watch.mjs": {
+      "sha256": "038f39997a193cea689bea1781980e2d83f64367e339cfa0bd9c1e3bda236551",
+      "hard": 0
     },
     "templates/_agents/scripts/papercut-debt-controller.mjs": {
       "sha256": "4e96b4fcb9500c42598afa54d0f3b9f515c11c4512dc4da180830c896e2d564a",
@@ -251,7 +259,7 @@
       "hard": 4
     },
     "templates/_agents/scripts/rule-budget.mjs": {
-      "sha256": "34b90d916632d7b44bf4283da364117d128e0f30255a064e57bb50b35a493905",
+      "sha256": "2cbda7e83dea2f745986294d1a73147f1bfc831da4fdfbd6548ea7cd4ed4ae09",
       "hard": 0
     },
     "templates/_agents/scripts/run-tests.mjs": {
@@ -275,7 +283,7 @@
       "hard": 4
     },
     "templates/_agents/scripts/verify.mjs": {
-      "sha256": "193d50f69ddca0e4044ecb3dd55b6f524c4920e0b75a929df2d1f2371254c107",
+      "sha256": "e0e3b4fa415d046375947026b8a37367f8da988bf6c669972e1193c941bc600e",
       "hard": 3
     },
     "templates/_agents/scripts/wf-journal.mjs": {
@@ -315,16 +323,16 @@
       "hard": 0
     },
     "templates/_githooks/pre-commit": {
-      "sha256": "4300376c2b68a6ce8c2cab664358159e9256857907a907cc66b9715d4c50b6da",
+      "sha256": "c27a24beed41d452aeafcd1ff2c6ae82aa986b1488b8f49478d65d16c23bde01",
       "hard": 6
     },
     "templates/_githooks/pre-merge-commit": {
-      "sha256": "7b283e7779a53ee036098443afcc774ad5e3efa849734ac50de42c4cf8866a80",
+      "sha256": "960ec2248ed6eb7f43b3db9e8ae65c8b0492fce66b22288c2711760ff69a0f04",
       "hard": 2
     },
     "templates/_githooks/pre-push": {
-      "sha256": "308f2f30e071d0f8e39f085cbb67bc9a21fab94172da6fc0b05013df50336030",
-      "hard": 2
+      "sha256": "9b78ef895fecfad6fecff005763336f65bfb214459b6093c43321458aabbc9ea",
+      "hard": 5
     },
     "templates/_github/workflows/kit-ci.yml": {
       "sha256": "7cb738f9b1dda787e541e5aab104ef9a651fe18a420fdc55bd761d3c077529b0",

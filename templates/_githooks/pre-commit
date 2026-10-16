@@ -3,7 +3,7 @@
 // 2026-10-13 门禁去 sh 化（B2，自 Shipyard.Material 参考实现回灌）：钩子体不再含 sh 逻辑——git 仍以自带
 // sh 启动本文件（钩子机制要求），但 shebang 即 node，PATH 无 sh 不再影响任何逻辑；语言单化后 CI 代理/
 // 本地行为一致。写法为 CommonJS——无扩展名文件 node 缺省按 CJS 解析，不依赖 ≥22.7 的 ESM 语法探测。
-// 通用门禁序：闭环配对(增量) → 泳道完整性(增量) → wiki 台账(增量) → 索引漂移(增量) → 常驻面体积预算(增量) → 确认台账不变量(暂存触台账) → 项目门禁(local-pre-commit) → 敏感信息扫描+条件构建(commit-check.cjs)
+// 通用门禁序：闭环配对(增量) → 泳道完整性(增量) → wiki 台账(增量) → 索引漂移(增量) → 常驻面体积预算(增量) → 确认台账不变量(暂存触台账) → 项目门禁(local-pre-commit) → 敏感信息扫描+条件构建(commit-check.cjs；2026-10-16 起常规提交 --no-build——条件构建后移 pre-push 按推送范围执法，合并提交仍 --full 全量构建)
 // 项目专属门禁（架构红线/业务守卫等）放 .agents/hooks/local-pre-commit——sh 挂载点（add-gate 生态按行接线），
 // 存在即在本钩子内以 sh（缺则 bash）执行，返回非零即阻断提交
 // 合并提交场景由 .githooks/pre-merge-commit 原样转发到本脚本（合并时 git 调的是 pre-merge-commit，
@@ -58,7 +58,10 @@ if (branchName.startsWith('experiment/')) {
 //   检查 B「探索标记缺失」——experiment/* 分支暂存 intent 缺「阶段: exploring」→ 拦（标记零成本，
 //   advisory 免纪律不免标记——标记是加固门覆盖率的前提）。
 //   脚本缺失 fail-closed 阻断（见 gate()）。
-gate('泳道完整性（增量）', '.agents/scripts/check-lane-surface.mjs');
+//   `git merge` 自动提交由 pre-merge-commit 传入 `--merge`（此时 MERGE_HEAD 已不可靠，不能靠探测）；
+//   冲突解决后的手动 `git commit` 仍由脚本自己看 MERGE_HEAD（2026-10-16 自源仓回灌）。
+const mergeCommit = process.argv.includes('--merge');
+gate('泳道完整性（增量）', '.agents/scripts/check-lane-surface.mjs', mergeCommit ? ['--merge'] : []);
 
 // wiki 台账门禁（增量，check-wiki-ledger.mjs：暂存区触及 wiki/ 时跑 verify-wiki-consistency 三方一致性；
 // 无 wiki/ 变更即跳过。脚本缺失 fail-closed）
@@ -105,12 +108,14 @@ if (fs.existsSync('.agents/hooks/local-pre-commit')) {
 }
 
 // 合并提交 → 构建验证覆盖【完整合并树】，不做按扩展名的条件裁剪。
+// 常规提交 --no-build（2026-10-16 构建门后移 pre-push，自源仓回灌）：提交内环只跑敏感扫描，条件构建在
+// 推送时按 old..new 范围执法（.githooks/pre-push）；合并结果是没人验证过的新状态，仍全量构建。
 // 两条路径：`git merge` 自动提交由 .githooks/pre-merge-commit 显式传 `--full` 转发到本脚本；
 // 冲突解决后手动 `git commit` 由 git 直接调本脚本，此处按 MERGE_HEAD 探测补上（此时合并仍在进行）。
-let fullArgs = process.argv.slice(2);
+let fullArgs = process.argv.slice(2).filter((a) => a !== '--merge');
 if (fullArgs.length === 0) {
   const mergeHead = spawnSync('git', ['rev-parse', '-q', '--verify', 'MERGE_HEAD'], { encoding: 'utf8' });
-  if (mergeHead.status === 0) fullArgs = ['--full'];
+  fullArgs = mergeHead.status === 0 ? ['--full'] : ['--no-build'];
 }
 
 const cc = spawnSync(process.execPath, ['.agents/hooks/commit-check.cjs', ...fullArgs], { stdio: 'inherit' });

@@ -257,6 +257,35 @@ const readLedger = (root) => {
   fs.rmSync(root10, { recursive: true, force: true });
 }
 
+// ---- 场景 12：--stub-gate 走生产尾段（落凭证；2026-10-16 自源仓 13f67ef7 回灌）----
+// 单门夹具但按生产路径落绿行（不打 testCmd 标记）；必须配 CHECK_LOOP_ROOT。
+{
+  const root = mkfix();
+  fs.mkdirSync(path.join(root, 'workflow'), { recursive: true });
+  const git = (args) => spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+  git(['init', '-q']);
+  git(['config', 'user.email', 't@t']);
+  git(['config', 'user.name', 't']);
+  fs.writeFileSync(path.join(root, 'README.md'), 'stub\n');
+  git(['add', '-A']);
+  git(['commit', '-qm', 'base']);
+  const r = run(['--stub-gate', `node ${mkCmd(0)}`], { env: { ...process.env, CHECK_LOOP_ROOT: root, RUN_E2E: '' } });
+  const l = readLedger(root)[0] || null;
+  check('场景 12：stub 单门 exit 0', r.status === 0, `exit=${r.status}\n${r.stdout}\n${r.stderr}`);
+  check('场景 12：落绿行（suite=npm test）且无 testCmd 标记',
+    l !== null && l.suite === 'npm test' && l.exitCode === 0 && !('testCmd' in l), JSON.stringify(l));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+// 场景 12b：无 CHECK_LOOP_ROOT → exit 2，不跑门（信任边界：夹具单门不得当真实凭证）
+{
+  const env = { ...process.env, RUN_E2E: '' };
+  delete env.CHECK_LOOP_ROOT;
+  const r = run(['--stub-gate', 'node -e "process.exit(0)"'], { env });
+  check('场景 12b：--stub-gate 无 CHECK_LOOP_ROOT → exit 2 且不跑门',
+    r.status === 2 && String(r.stderr).includes('CHECK_LOOP_ROOT') && !String(r.stdout).includes('全绿'),
+    `exit=${r.status}\n${r.stdout}\n${r.stderr}`);
+}
+
 // ---- 场景 11：--list 锁定 engine cohort 七门序，不执行门 ----
 {
   const expect = ['scripts-syntax', 'engine-tests', 'workflows-check', 'rule-budget', 'effective-policy', 'check-loop', 'ledger-invariant'];

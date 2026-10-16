@@ -111,7 +111,9 @@ export function buildDocList(root, dirs = DIRS) {
   return docs;
 }
 
-function loadLedgerTs(root) {
+// loadLedgerTs(root)：每篇文档的终态台账行最新日期（YYYY-MM-DD）。主台账+分片统一视图；
+// 2026-10-15 起导出（gen-workflow-metrics 归档积压提醒复用——新消费方零复制）。
+export function loadLedgerTs(root) {
   const out = {};
   // 台账统一视图（主台账+分片透明合并，坏行跳过）。源仓走 ledger-loader.loadAllConfirmations
   // （同 doc|stage|fingerprint 键去重取末次）；kit 读侧单源 = readLedgerRows（不去重）。对本判据
