@@ -65,6 +65,6 @@ description: Build 阶段 · 起 plan + 实现代码 + 自验（两道确认门�
 
 ## 5. 确认后
 
-- plan 状态 → done（实现完成；intent / spec 关单在 test）
+- plan 状态保持 `approved`，**不在此置 `done`**——实现完成 ≠ 关单；`done` 在 `test.md` §6 验收勾验后经 confirm-doc 置（intent / spec / 修复的同名 plan 亦在 test 一并收口；build 直跳 `done` 会绕过确认门、触发检查 15 指纹对账）
 - commit：L1+ 入口文档 / spec / plan 随代码同一提交（Conventional Commits 中文 feat/fix/refactor/perf）；docs 豁免与 bootstrap 可单独 `docs(*)`
 - 进 `next: .agents/commands/test.md`

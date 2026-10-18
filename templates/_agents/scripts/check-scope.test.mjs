@@ -4,8 +4,11 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
-const CLI = path.join(path.dirname(new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')), 'check-scope.mjs');
+// fileURLToPath 而非手搓 pathname 解码（源仓 fdded128）：URL pathname 对非 ASCII 路径百分号编码，
+// Windows 中文 worktree 路径下子进程「Cannot find module」静默红。
+const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), 'check-scope.mjs');
 let pass = 0, fail = 0;
 const check = (name, cond, detail = '') => {
   if (cond) { pass++; console.log(`PASS  ${name}`); }

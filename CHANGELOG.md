@@ -2,6 +2,48 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.8.5
+
+自 Shipyard.Material 回灌「时序与校准系列」增量（源仓 1.8.4 基线 76294817 之后引擎提交逐件甄别，
+三个提交各取其半件/整件采纳）。取 patch 位——一条测试 harness 缺陷收口 + 一处关单时序协议修正 +
+一组校准方法论升级，无新门、无行为面变更。源仓 44390bde「关单活文档一致性门」为有锚新门但需适配
+设计（资产定位器泛化 + 单体 check-loop 接线），体量与决策单独成批，甄别在案、本批不带。
+
+- fix(test)：**两个测试 harness 的 CLI 路径改 `fileURLToPath`**（源仓 fdded128 整件）。手搓
+  `new URL(import.meta.url).pathname.replace(/^\/([A-Za-z]:)/, '$1')` 解码在 Windows 非 ASCII
+  worktree 路径下被 URL 百分号编码坑坏——子进程 `Cannot find module` 静默红（源仓中文路径 worktree
+  实证；kit 主仓 ASCII 路径对照绿，属同源潜伏缺陷）。kit 侧全仓扫得两处：模板件
+  `check-scope.test.mjs` 与源仓逐字同源；kit 自有件 `src/jscpd-drift.test.mjs` 同根因一并修。
+  源仓另两个套件（compact-ledgers / git-merge-jsonl）kit 已是 `fileURLToPath` 写法，无需动。
+- fix(docs)：**build.md §5 plan 关单时序统一**（源仓 e0a53288 的 build.md 半件，适配采）。原「plan
+  状态 → done（实现完成）」与本文件 §4「`done` 只在关单出现」自相矛盾，也与 test.md §6「同族收尾时
+  plan 一并置 done」时序打架——build 阶段置 done = 绕过 test 验收勾验与 confirm-doc 确认门、触发
+  检查 15 指纹对账。改法：plan 保持 `approved`，done 在 test.md §6 验收勾验后经 confirm-doc 置
+  （intent / spec / 修复的同名 plan 亦在 test 一并收口）。权威源改动经 `flow-kit sync-hosts --apply`
+  单向同步五宿主薄适配（claude/codex/cursor/opencode/trae 的 wf-build.md）。同提交其余不采（甄别在案）：
+  pre-push 门数
+  注释 7→8 与 AGENTS.md 引擎面枚举补齐是源仓自身漂移修复，kit 的 pre-push 无门数注释、test.md
+  「七门」与实际七门一致，无对应面。
+- feat(docs)：**校准集「双臂盲评 + 方差复跑 + 月度留痕表」口径**（源仓 24178a42 的黄金集半件，
+  适配采——1.8.3 已采「校准集」节的本体升级）。A 臂（默认）装载本技能复核、B 臂（对照，月度抽
+  5–8 条）同样题面给干净会话只给样本内联上下文——**Δ = A 命中差 − B 命中差**才是「上下文注入起
+  作用」的证据（两臂同样准 = 校准力来自样本内联；两臂同样差 = 已知答案不可判，两种情形都记留痕表
+  「臂」列不互相冒充）；可疑判定**方差复跑**（同会话原样再评，翻转计题面歧义不计校准差、另开
+  papercut 修题面）；校准债（命中差连续两月 >20%）前提是先剔方差翻转的判定；月度留痕表列架随
+  SKILL.md 下发（月份｜参评样本数｜臂｜命中/误报/漏报｜Δ｜方差翻转次数｜与 reviews.d 互参谋注）。
+  同批采纳 mechanism-registry 维护纪律补笔：**数据面机制「现役」≠「有数据」**——未产生数据的月记
+  「无跑数」，退役阈值只数有数据月（年轻遥测不造假候选，口径同 `agg-judgments
+  --retire-candidates`）。同提交其余不采（甄别在案）：agg-delegations 未记分列——kit 的
+  `agg-delegations.cjs` 是「产出接受率」谱系、无返工原因列机制，其锚 `2026-10-11` 是源仓台账数据，
+  无落点；解散 engine-internals——kit 的 notes 件存在且被 new-task.md / rule-budgets.txt 正常引用，
+  非悬空引用；`.gitignore` 忽略 research/ 属宿主面。
+- **甄别（不采在案）**：f00f5abf / 5b111320（gitleaks 基线豁免、叙事门数改条件口径）——kit 无
+  gitleaks 机制，kit 门数恒七门无叙事漂移面，改动全在宿主数据文件；8adcdab3（集成清理超时 + E2E
+  冒烟选择器收口）——源仓 C# 测试栈特化；f2abcda9（check-loop-rev 断言随 s06 退役）——挂起随
+  44390bde 单独批；其余源仓提交为业务（purchase/inventory）与宿主台账数据，非引擎件。
+- engine-lock 受检面 84 件不变——本批改动件（模板 test 件、命令/技能/登记册文档面）均在受检面外，
+  基线无哈希变更。测试：npm test 79 套件 0 失败；eslint 0 error；引擎完整性门自洽绿。
+
 ## 1.8.4
 
 自 Shipyard.Material 回灌「性能系列」（源仓 76294817「门禁层并行编排 + 台账门/语法门批量化」整件，
