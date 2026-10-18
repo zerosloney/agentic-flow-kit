@@ -928,6 +928,12 @@ export function runCheckLoop(opts = {}) {
   {
     const accCutoff = '2026-09-12';
     let legacyUnaccounted = 0;
+    // 测试绿缺凭证聚合面（2026-10-18 告警聚合口径批）：**判据不变**（同一批文档/证据项照常检出），
+    // 只改输出形态——单文档多证据项只计一份；跨运行当日去重（同文档当日只逐份点名一次，已点名的
+    // 进一条聚合计数行，防静默被误读为已修）。背景：源仓 9 天遥测该 WARN 占全部告警 61%
+    //（1062/1738，文档密集期 14.8 条/运行）——复读刷屏稀释 WARN 信号价值。状态面放 os.tmpdir()
+    // 按 ROOT 派生键（本地机判、不进装户仓、无 gitignore 依赖、fail-open：读失败=全点名，落失败不影响裁决）。
+    const verifyMissingDocs = new Map(); // rel -> base（去重键 = 仓内相对路径）
     // 测试绿凭证状态（2026-10-07 verify-evidence）：台账读一次循环外缓存；policy 缺 verifySince
     //（v1-v4）→ ctxBase null → 对账整体跳过（向后兼容）
     const verifySinceOf = kitPolicy.verifySince;
@@ -1029,9 +1035,7 @@ export function runCheckLoop(opts = {}) {
         const hasImplEvidence = results.some((r) => r.t.ok && (r.t.type === 'sha' || r.t.type === 'process'));
         for (const r of results) {
           if (r.t.ok && r.t.type === 'verify-missing') {
-            // ⚠️ 文案锚点硬约束（既有 check-loop.test.mjs:2743 锚定「测试绿缺凭证」四字连续，零改动前提）：
-            // doc 与修复命令只能追加在整句之后，不得插进这四个字中间。
-            warnings.push(`- [WARN 测试绿缺凭证] ${base} 验收证据声明「测试绿」但 24h 内无 verify 凭证（verifications.jsonl${verifyDocBound ? `；本单须带 --doc 落账` : ''}）——跑 node .agents/scripts/verify.mjs${verifyDocBound ? ` --doc ${rel}` : ''} 后重跑（advisory，灰度第一档）`);
+            verifyMissingDocs.set(rel, base); // 出账统一在循环外（聚合/当日去重，见声明处注释）
             continue;
           }
           if (r.t.ok) continue;
@@ -1119,6 +1123,31 @@ export function runCheckLoop(opts = {}) {
         } else if (!ex) {
           legacyUnaccounted++;
         }
+    }
+    // 测试绿缺凭证出账（判据见 collector；⚠️ 文案锚点硬约束：既有 check-loop.test.mjs 锚定
+    // 「测试绿缺凭证」四字连续，doc 与修复命令只能追加在整句之后，不得插进四字中间）：
+    // 当日首次命中的文档逐份点名（可操作明细）；当日已点名的聚合成一条计数行。
+    if (verifyMissingDocs.size) {
+      const today = new Date().toISOString().slice(0, 10);
+      const statePath = path.join(os.tmpdir(), `agentic-flow-kit-check8-warn-${ROOT.replace(/[^A-Za-z0-9]/g, '-').slice(-60)}.json`);
+      let warnedToday = {};
+      try { warnedToday = JSON.parse(fs.readFileSync(statePath, 'utf8')); } catch { /* 无状态/坏状态 = 空集 → 全部点名 */ }
+      const silent = [];
+      for (const [rel, base] of verifyMissingDocs) {
+        if (warnedToday[rel] === today) silent.push({ rel, base });
+        else {
+          warnings.push(`- [WARN 测试绿缺凭证] ${base} 验收证据声明「测试绿」但 24h 内无 verify 凭证（verifications.jsonl${verifyDocBound ? `；本单须带 --doc 落账` : ''}）——跑 node .agents/scripts/verify.mjs${verifyDocBound ? ` --doc ${rel}` : ''} 后重跑（advisory，灰度第一档）`);
+        }
+      }
+      if (silent.length) {
+        warnings.push(`- [WARN 测试绿缺凭证] 另有 ${silent.length} 份在飞文档同日已点名、去重静默（${silent.slice(0, 5).map((d) => d.base).join('、')}${silent.length > 5 ? '…' : ''}）——修法同上：跑 node .agents/scripts/verify.mjs${verifyDocBound ? ' --doc <本单>' : ''} 后重跑（advisory，灰度第一档）`);
+      }
+      try {
+        // 只留当日命中（隔日自动失效，状态面自洁；本机各 ROOT 独立键，互不串扰）
+        const next = {};
+        for (const [rel] of verifyMissingDocs) next[rel] = today;
+        fs.writeFileSync(statePath, JSON.stringify(next));
+      } catch { /* 落状态失败不影响裁决与输出（fail-open，advisory 层不因状态面故障改行为面） */ }
     }
     if (legacyUnaccounted > 0) {
       warnings.push(`- [WARN 验收对账存量] ${legacyUnaccounted} 个存量 done intent 验收标准未对账（生效日锚之前加入仓库，豁免 hard，不回填）`);

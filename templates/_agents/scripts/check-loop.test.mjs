@@ -2792,6 +2792,43 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   rmfix(T2);
 }
 
+// ---- 检查 8 测试绿缺凭证聚合口径（2026-10-18 告警聚合批）：判据不变、只改输出形态 ----
+// ① 单文档多「测试绿」证据项 → 首跑只出一份明细（per-doc 去重，不再逐项刷屏）；
+// ② 同一夹具当日第二次运行 → 明细静默 + 聚合计数行点名（跨运行当日去重——不是不报，是不复读；
+//    静默必须被计数行点名，防「没输出」被误读为「已修」）。
+{
+  const mkVeAgg = () => {
+    const T = mkfix();
+    gitInit(T);
+    w(T, '.agents/kit.json', JSON.stringify({ policyVersion: 5 }));
+    const iBody = '# INTENT — vea\n\n## 验收标准（可测试）\n- [x] 用例A通过（证据:测试全绿）\n- [x] 用例B通过（证据:测试全绿）\n';
+    const pBody = '# PLAN — vea\n';
+    const fpI = computeFingerprint(`---\n状态: approved\n级别: L1\n日期: 2026-10-18\n---\n${iBody}`);
+    const fpP = computeFingerprint(`---\n状态: approved\n级别: L1\n---\n${pBody}`);
+    w(T, 'workflow/intents/2026-10-18-vea.md', `---\n状态: done\n级别: L1\n日期: 2026-10-18\n确认指纹: ${fpI.slice(0, 16)}\n---\n${iBody}`);
+    w(T, 'workflow/plans/2026-10-18-vea.md', `---\n状态: done\n级别: L1\n确认指纹: ${fpP.slice(0, 16)}\n---\n${pBody}`);
+    const now = new Date().toISOString();
+    writeLedger(T, [
+      { ts: now, doc: 'workflow/intents/2026-10-18-vea.md', stage: 'done', fingerprint: fpI, prev: 'approved' },
+      { ts: now, doc: 'workflow/plans/2026-10-18-vea.md', stage: 'done', fingerprint: fpP, prev: 'approved' },
+    ]);
+    gitCommitAll(T, 'feat: vea fixture');
+    return T;
+  };
+  const T = mkVeAgg();
+  let r = run(T);
+  const first = outOf(r).split('\n').filter((l) => l.includes('测试绿缺凭证'));
+  check('检查 8 聚合口径:单文档多「测试绿」项 → 首跑只出一份明细',
+    r.status === 0 && first.length === 1 && first[0].includes('2026-10-18-vea.md'),
+    `exit=${r.status}\n${outOf(r)}`);
+  r = run(T);
+  const second = outOf(r).split('\n').filter((l) => l.includes('测试绿缺凭证'));
+  check('检查 8 聚合口径:同日二跑 → 明细静默 + 聚合计数行（去重不吞债）',
+    r.status === 0 && second.length === 1 && second[0].includes('另有 1 份在飞文档同日已点名') && second[0].includes('2026-10-18-vea.md'),
+    `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
+}
+
 // ---- 检查 8 凭证按 doc 绑定（2026-10-08 verify-doc-binding）：v6 收紧 / v5 不变 ----
 // 漏洞本体：凭证行不带 doc 字段 + 判定只看「全仓任意一份 24h 内绿行」→ 跑一次 verify 就能给全仓
 // 任意一单的「测试绿」声明背书。本组三条：① v6 + 只有他单绿行 → 仍出 WARN（漏洞已堵）；
