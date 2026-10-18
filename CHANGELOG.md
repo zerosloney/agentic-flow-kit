@@ -2,6 +2,34 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## 1.8.6
+
+立项质量批（kit 自研立法，非源仓回灌）。前置分析：「草稿 → 立项 → 转 spec」三跳中立项跳最薄——
+spec/plan 确认有待澄清门而 intent 确认没有；工程品味条款（简洁 / 反过度设计类）整条起草链无落点。
+两件落地，均属「给既有时刻喂一条线」，无新文件、无新层。
+
+- feat(gate)：**待澄清门扩到 intents（立项跳对称化）**。confirm-doc 的 clarify 挂载点从 specs/plans
+  扩到 intents（判据单源 `stage-gates.mjs#openClarifications` 不变——纯正文标记行扫描，文档类型无关）。
+  **推翻旧判例**「澄清天然发生在需求单处」（S19c 旧断言随之退役）：intent 是后链全部文档的种子，
+  立项时被含混带过的不确定项到 spec/plan 跳已无人能补标。存量 intent 无标记零回溯（标记驱动而非
+  日期驱动，不占 policyVersion）；incidents 生命周期无 approved 态、不在门面。stage-gate 与 clarify
+  拆为两个独立 if——前置门仍只适用 specs/plans（入口文档无「前置」概念），文案锚点「未过逐阶段前置门」
+  子串原样保留。intents/_TEMPLATE.md 补待澄清起草指引；README 范围表述同步。测试：S19c 重写为
+  intent 三态（挂未澄清项 exit 2 + 点名内容 + 未落盘 / 已澄清放行 / 无标记存量口径放行）。
+- feat(docs)：**AGENTS.md 项目适配区新登「工程原则」节**——内容质量引导融入起草链的装户落点
+  （外部对标：GitHub Spec Kit 的 constitution 是同位物，kit 侧定为装户自填自持、不入 managed 同步面）。
+  品味条款示例四条（简洁优先直接用平台能力不另包一层 / 新依赖须证不可替代 / 禁 speculative 功能 /
+  spec 写 WHAT/WHY 不写 HOW）；消费方三处：起草 intent / spec 自查、spec「约束遵守映射」表（表头改
+  「红线 / 工程原则」）、独立复核 Standards 轴。**与红线的区别显式声明：违反红线 = 判低升档（机器）、
+  违反本节 = 复核意见（人工判）——本节不进任何机器判据**。design.md 起草指令同步点名（权威源经
+  `flow-kit sync-hosts --apply` 同步五宿主 wf-design.md）。
+- **撞门在案**：工程原则节使 templates/AGENTS.md 实测 8546B 超 8192 预算（src/rule-budget 套件
+  R-file/R-render 双红）——先压缩新增段措辞，再沿 2026-10-07 同文件先例（合法结构增长）512B 步进
+  上调 8192→8704，理由行随表入档。
+- engine-lock --update 入账（受检面 84 件不变，改动件 3 个：confirm-doc.mjs / design.md /
+  rule-budgets.txt；confirm-doc.mjs 硬拦单位数随新拒绝路径 +1）。测试：npm test 79 套件 0 失败；
+  eslint 0 error；引擎完整性门自洽绿。
+
 ## 1.8.5
 
 自 Shipyard.Material 回灌「时序与校准系列」增量（源仓 1.8.4 基线 76294817 之后引擎提交逐件甄别，

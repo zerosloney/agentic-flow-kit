@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-16T16:17:56.294Z",
+  "generatedAt": "2026-10-18T04:55:03.053Z",
   "files": {
     ".github/workflows/ci.yml": {
       "sha256": "e9cffb90dec8f0a49bfe231a13fb8df375a2494cc75c38d991b5eb7c7be104b5",
@@ -11,8 +11,8 @@
       "hard": 0
     },
     "templates/AGENTS.md": {
-      "sha256": "521b8549ce077278f31074db10f1934bc7f63788d43a6bb68f1c1510ad31cf82",
-      "hard": 27
+      "sha256": "6462975ff6242f6b99435dab26833e9c930e44ae274bbe3f3225652c51263380",
+      "hard": 28
     },
     "templates/_agents/control-surfaces.txt": {
       "sha256": "ae6072b58fde4cf2ad65ce27d0216133dabbd189b0542a0dbf11bbd9e0608407",
@@ -31,7 +31,7 @@
       "hard": 8
     },
     "templates/_agents/rule-budgets.txt": {
-      "sha256": "48f31a386019b7c427ed3244939d7c455fb33ec79d634d47141695e2308bcb6b",
+      "sha256": "32f5115af858802bad4dca711a7308abc594c23477eaeef51fd976b48d84f9b1",
       "hard": 3
     },
     "templates/_agents/scripts-test-exempt.txt": {
@@ -119,7 +119,7 @@
       "hard": 1
     },
     "templates/_agents/scripts/confirm-doc.mjs": {
-      "sha256": "7829a2af4476bf5cddfbc123f3d1a9a95b2e1fa0337c4e0382875cb3e3ddb74a",
+      "sha256": "d30b918d8a20ec87cdaf7eca4deaa2b8d724788e5fc9c338cce61fe4612f661f",
       "hard": 13
     },
     "templates/_agents/scripts/draft-sediment.mjs": {

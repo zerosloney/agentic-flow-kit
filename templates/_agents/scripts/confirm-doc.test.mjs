@@ -436,15 +436,31 @@ const readLedgerOf = (root) => {
       JSON.stringify({ status: r.status, stderr: r.stderr }));
     fs.rmSync(root, { recursive: true, force: true });
   }
-  // intents 不受本门约束（歧义标记的落点是 spec/plan 的设计判据；intent 是需求单，澄清天然发生在此处）
-  const root3 = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-cl3-'));
-  fs.mkdirSync(path.join(root3, 'workflow', 'intents'), { recursive: true });
-  fs.writeFileSync(path.join(root3, 'workflow', 'intents', '2026-10-12-p.md'), '---\n状态: draft\n级别: L1\n---\n# I\n\n- 待澄清：范围含不含移动端？\n');
-  const r3 = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-10-12-p.md', '--delegated', '可以'], { cwd: root3, encoding: 'utf8' });
-  check('S19c 待澄清门：intent 不受本门约束（澄清天然发生在需求单处）',
-    r3.status === 0 && fs.readFileSync(path.join(root3, 'workflow', 'intents', '2026-10-12-p.md'), 'utf8').includes('状态: approved'),
-    JSON.stringify({ status: r3.status, stderr: r3.stderr }));
-  fs.rmSync(root3, { recursive: true, force: true });
+  // intents 挂门（2026-10-18 立项跳对称化，推翻旧判例「澄清天然发生在需求单处」——intent 是后链
+  // 全部文档的种子，立项时被含混带过的不确定项到 spec/plan 跳已无人能补标；存量无标记零回溯）
+  {
+    const root3 = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-cl3-'));
+    fs.mkdirSync(path.join(root3, 'workflow', 'intents'), { recursive: true });
+    const ip = path.join(root3, 'workflow', 'intents', '2026-10-12-p.md');
+    fs.writeFileSync(ip, '---\n状态: draft\n级别: L1\n---\n# I\n\n- 待澄清：范围含不含移动端？\n');
+    const r3 = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-10-12-p.md', '--delegated', '可以'], { cwd: root3, encoding: 'utf8' });
+    check('S19c 待澄清门：intent 挂未澄清项 → exit 2 + 点名内容 + 未落盘（立项跳对称化）',
+      r3.status === 2 && /needs-clarification/.test(r3.stderr) && /移动端/.test(r3.stderr)
+        && !/逐阶段前置门/.test(r3.stderr)
+        && fs.readFileSync(ip, 'utf8').includes('状态: draft'),
+      JSON.stringify({ status: r3.status, stderr: r3.stderr }));
+    fs.writeFileSync(ip, '---\n状态: draft\n级别: L1\n---\n# I\n\n- 已澄清：范围仅桌面端（用户 10-12 拍板）\n');
+    const r4 = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-10-12-p.md', '--delegated', '可以'], { cwd: root3, encoding: 'utf8' });
+    check('S19c 待澄清门：intent 已澄清 → 放行落态',
+      r4.status === 0 && fs.readFileSync(ip, 'utf8').includes('状态: approved'),
+      JSON.stringify({ status: r4.status, stderr: r4.stderr }));
+    fs.writeFileSync(ip, '---\n状态: draft\n级别: L1\n---\n# I\n\n## 目标\n- 无标记存量件\n');
+    const r5 = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-10-12-p.md', '--delegated', '可以'], { cwd: root3, encoding: 'utf8' });
+    check('S19c 待澄清门：intent 无标记（存量口径）→ 放行零回溯',
+      r5.status === 0 && fs.readFileSync(ip, 'utf8').includes('状态: approved'),
+      JSON.stringify({ status: r5.status, stderr: r5.stderr }));
+    fs.rmSync(root3, { recursive: true, force: true });
+  }
 }
 
 // ---- S20【逐阶段门】入口存在但未确认（draft）→ 拒绝 ----

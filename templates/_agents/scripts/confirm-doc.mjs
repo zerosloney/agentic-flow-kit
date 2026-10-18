@@ -406,12 +406,19 @@ if (isMain) {
         refused++;
         continue;
       }
-      // 待澄清项门（2026-10-12 needs-clarification）：起草期挂「待澄清」标记**不阻断**（零阻塞），
-      // 但 draft→approved 确认时若仍挂着未澄清项则拒绝——确认即「认可这份文档」，文档里还写着
-      // 「这里我不知道」，确认就没有意义。与上面的前置门分开出账：拒绝原因必须指向真正的原因
-      // （合并会让作者去查「前置」，而前置其实是好的）。
-      // ⚠️ 文案锚点硬约束：本段禁止并入上方 gate 分支的输出契约（既有 confirm-doc.test.mjs 断言
-      // 锚定「未过逐阶段前置门（stage-gates）」子串），故单列独立分支。
+    }
+    // 待澄清项门（2026-10-12 needs-clarification；2026-10-18 立项跳对称化扩到 intents）：起草期挂
+    // 「待澄清」标记**不阻断**（零阻塞），但 draft→approved 确认时若仍挂着未澄清项则拒绝——确认即
+    // 「认可这份文档」，文档里还写着「这里我不知道」，确认就没有意义。intents 原不挂本门（旧判例
+    // 「澄清天然发生在需求单处」，S19c 旧断言），2026-10-18 推翻：intent 是后链全部文档的种子，
+    // 立项时被含混带过的不确定项到 spec/plan 跳已无人能补标——与 specs/plans 同口径挂门。判据与
+    // 文档类型无关（clarifyGateFor 只扫正文标记行），存量 intent 无标记零回溯；incidents 生命周期
+    // 无 approved 态，不在本门面。与上面的前置门分开出账：拒绝原因必须指向真正的原因（合并会让
+    // 作者去查「前置」，而前置其实是好的；前置门只适用于 specs/plans——入口文档无「前置」概念）。
+    // ⚠️ 文案锚点硬约束：本段禁止并入上方 gate 分支的输出契约（既有 confirm-doc.test.mjs 断言
+    // 锚定「未过逐阶段前置门（stage-gates）」子串），故单列独立分支。
+    if (target === 'approved' && (doc.startsWith('workflow/specs/') || doc.startsWith('workflow/plans/')
+      || doc.startsWith('workflow/intents/'))) {
       const cl = clarifyGateFor(abs);
       if (!cl.ok) {
         console.error(`❌ ${doc} 含未澄清项（needs-clarification）：${cl.reason}`);
