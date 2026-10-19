@@ -1,5 +1,5 @@
 // commit-check: git commit 前置验证（agentic-flow-kit 通用版）
-// 1) 敏感信息扫描（暂存区新增行含疑似密钥 -> BLOCK）
+// 1) 敏感信息扫描（暂存区新增行含疑似密钥 -> BLOCK；只报 文件:行号 + 键名 + 掩码，绝不复述原文）
 // 2) 条件构建验证（按 .agents/hooks/commit-check.config.json 的 builds 配置；--full 不做 ext/prefix 裁剪，仍尊重 when）
 // 3) 质量检测（config.checks：lint / 类型检查 / vet 等秒级确定性检查；--full 不做 ext/prefix 裁剪，仍尊重 when）
 // 旗标（2026-10-16 构建门后移 pre-push，自源仓 2ff869a9 回灌）：
@@ -81,7 +81,9 @@ try {
 } catch (e) { /* 无配置 = 敏感扫描用基线白名单 + 跳过构建验证 */ }
 
 // --- 1) 敏感信息扫描：暂存区新增行是否含疑似密钥（只认带引号的字符串字面量；排除类型/空值关键字） ---
-const SECRET = /(password|passwd|pwd|secret|token|apikey|api[_ -]?key|connectionstring|server=|bearer)["']?\s*[:=]\s*["'](?!["']?(string|number|boolean|unknown|any|never|void|object|null|undefined|true|false)\b)[^"'\r\n]{6,}["']/i;
+// 第 2 捕获组 = 密钥值本体，仅用于掩码，绝不回显（2026-10-19 secret-redaction）
+// 负向先行里的类型/空值关键字用非捕获组——否则捕获编号会把值组挤到 3，掩码取错组
+const SECRET = /(password|passwd|pwd|secret|token|apikey|api[_ -]?key|connectionstring|server=|bearer)["']?\s*[:=]\s*["'](?!["']?(?:string|number|boolean|unknown|any|never|void|object|null|undefined|true|false)\b)([^"'\r\n]{6,})["']/i;
 // 判据/白名单自身的定义行长得就像密钥赋值，须自豁免
 const SELF = /const (SECRET|KNOWN) = \//i;
 // KNOWN：项目已知种子与代码标识符白名单（config.knownPatterns 注入；本文件基线为空——通用包不带项目种子）
@@ -93,10 +95,37 @@ let diffText = '';
 try {
   diffText = execSync('git diff --cached', { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
 } catch (e) { /* 空暂存 */ }
-const added = diffText.split('\n').filter(l => l.startsWith('+') && !l.startsWith('+++'));
-const hits = added.filter(l => SECRET.test(l) && !(KNOWN && KNOWN.test(l)) && !SELF.test(l));
+
+// 命中只报「文件:行号 + 键名 + 掩码」，绝不复述原文——终端回滚、CI 日志、复制粘贴同样是泄露面。
+// 判据仍是整行（KNOWN 白名单按行匹配），报出面才收敛到键与长度。
+function maskValue(s) {
+  if (s.length < 12) return `***（${s.length} 字符）`;
+  return `${s.slice(0, 3)}***（${s.length} 字符）`;
+}
+function scanSecrets(diff) {
+  const out = [];
+  let file = '';
+  let lineNo = 0;
+  for (const raw of diff.split('\n')) {
+    const hunk = raw.match(/^@@ -\d+(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+    if (hunk) { lineNo = Number(hunk[1]); continue; }
+    if (raw.startsWith('+++')) { file = raw.slice(3).trim().replace(/^b\//, ''); continue; }
+    if (raw.startsWith('-') || raw.startsWith('\\')) continue; // 删除行与 "\ 无末尾换行" 不占新文件行号
+    const body = raw.startsWith('+') ? raw.slice(1) : raw.startsWith(' ') ? raw.slice(1) : raw;
+    const at = lineNo;
+    lineNo += 1;
+    if (!SECRET.test(body)) continue;
+    if (SELF.test(body)) continue;
+    if (KNOWN && KNOWN.test(body)) continue;
+    const m = body.match(SECRET);
+    out.push({ file, line: at, key: m[1].toLowerCase(), mask: maskValue(m[2]) });
+  }
+  return out;
+}
+const hits = scanSecrets(diffText);
   if (hits.length) {
-    console.log('BLOCK: 暂存区疑似包含敏感信息（密钥/连接串/令牌），请检查:\n' + hits.slice(0, 5).join('\n'));
+    const shown = hits.slice(0, 5).map(h => `  ${h.file}:${h.line}  ${h.key}=${h.mask}`);
+    console.log(`BLOCK: 暂存区疑似包含敏感信息（密钥/连接串/令牌）${hits.length} 处（已脱敏，只报位置；请自行核对原文）:\n${shown.join('\n')}`);
     process.exit(1);
   }
   if (RANGE) console.log('SKIP: --range 模式跳过敏感扫描（逐提交时刻 pre-commit 已扫，2026-10-16 构建门后移）');

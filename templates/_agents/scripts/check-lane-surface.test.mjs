@@ -298,5 +298,94 @@ const FM_LOW_NEW = '状态: draft\n级别: L1\n日期: 2026-10-01\n模块: ui';
     `${r.stdout || ''}${r.stderr || ''}`);
 }
 
+// --- S-ctrl（2026-10-19 检查 C 控制面判低）------------------------------------------------
+// 背景：control-surfaces.txt 自 2026-10-09 P0-A 起就是单源，但本体一直缺位——「有单源、无消费方」。
+//   本次落实。C 与 A 判据相同、只差「无任何活跃入口」这一档（A advisory / C BLOCK），故场景刻意
+//   与 S1/S2/S-hints-④ 同构对照，专门盯那一个差别 + 「C 真的在读自己的清单」。
+{
+  // 共用清单内容（装户侧 + 包源模板侧两半都列——与真实 control-surfaces.txt 同构，
+  //   且 ^templates/ 这类 lane-surfaces 常用模式**不在**其内，用来分辨两个检查各读各的）
+  const CTRL = '^\\.agents/scripts/\n^modules/gates/\n^templates/_agents/scripts/\n';
+
+  // C1 命中控制面 + 活跃 L2 入口 → 放行（归因：入口够格即豁免）
+  {
+    const d = mkfix();
+    w(d, '.agents/control-surfaces.txt', CTRL);
+    w(d, 'workflow/intents/2026-10-19-ctrl-l2.md', intent('x', '状态: approved\n级别: L2\n日期: 2026-10-19\n模块: pipeline'));
+    const r = run(d, { staged: ['.agents/scripts/check-loop.mjs'] });
+    check('C1 命中控制面+活跃 L2 入口 → 放行且无控制面判低输出', r.code === 0 && !r.out.includes('控制面判低'), r.out);
+  }
+  // C2 命中控制面 + 活跃全为 L1 → BLOCK（与检查 A 同档，不因是控制面就降级）
+  {
+    const d = mkfix();
+    w(d, '.agents/control-surfaces.txt', CTRL);
+    w(d, 'workflow/intents/2026-09-28-old-l1.md', intent('x', '状态: approved\n级别: L1\n日期: 2026-09-28\n模块: pipeline'));
+    const r = run(d, { staged: ['.agents/scripts/check-loop.mjs'] });
+    check('C2 命中控制面+仅活跃 L1 → 阻断且点名入口与修法',
+      r.code === 1 && r.out.includes('[控制面判低]') && r.out.includes('.agents/scripts/check-loop.mjs')
+        && r.out.includes('workflow/intents/2026-09-28-old-l1.md') && r.out.includes('修法'), r.out);
+  }
+  // C3 命中控制面 + **无任何活跃入口** → BLOCK（与检查 A 的唯一差别，P0-A 的本体）
+  {
+    const d = mkfix();
+    w(d, '.agents/control-surfaces.txt', CTRL);
+    const r = run(d, { staged: ['.agents/scripts/check-loop.mjs'] });
+    check('C3 命中控制面+无活跃入口 → BLOCK（A 此档只 advisory，C 硬拦）',
+      r.code === 1 && r.out.includes('[控制面判低]') && r.out.includes('不适用该豁免')
+        && r.out.includes('control-surfaces.txt'), r.out);
+  }
+  // C3b 对照组：同样的「无活跃入口」，但只命中 lane-surfaces（非控制面）→ 仍 advisory 不阻断
+  //    这条守住 A 的原口径不被 C 的实现顺手改严（否则 docs/bootstrap 类合法提交会被误拦）
+  {
+    const d = mkfix();
+    w(d, '.agents/lane-surfaces.txt', '^src/db/\n');
+    w(d, '.agents/control-surfaces.txt', CTRL);
+    const r = run(d, { staged: ['src/db/x.sql'] });
+    check('C3b 对照组：非控制面命中+无入口 → 仍 advisory（A 口径未被 C 改严）',
+      r.code === 0 && r.out.includes('[触达面判低]') && r.out.includes('advisory') && !r.out.includes('[控制面判低]'), r.out);
+  }
+  // C4 experiment/* 分支 → C 同样降级 advisory（泳道哲学统一；转正由 pre-push 加固门兜底）
+  {
+    const d = mkfix();
+    w(d, '.agents/control-surfaces.txt', CTRL);
+    const r = run(d, { branch: 'experiment/poc', staged: ['.agents/scripts/check-loop.mjs'] });
+    check('C4 experiment 分支命中控制面+无入口 → advisory 不阻断',
+      r.code === 0 && r.out.includes('[控制面判低]') && r.out.includes('advisory'), r.out);
+  }
+  // C5 control-surfaces.txt 缺失 → 检查 C 整体跳过（装户无感升级，同 lane-surfaces 口径）
+  {
+    const d = mkfix();
+    const r = run(d, { staged: ['.agents/scripts/check-loop.mjs', 'modules/gates/x/y.mjs'] });
+    check('C5 无 control-surfaces.txt → 检查 C 跳过（零影响）', r.code === 0 && !r.out.includes('控制面判低'), r.out);
+  }
+  // C6 control-surfaces.txt 含非法 ERE → fail-closed（写错配置比没配置危险）
+  {
+    const d = mkfix();
+    w(d, '.agents/control-surfaces.txt', '^ok/\n[bad(\n');
+    const r = run(d, { staged: ['ok/a.ts'] });
+    check('C6 control-surfaces 含非法 ERE → fail-closed 阻断并指出坏行',
+      r.code === 1 && r.out.includes('[面清单语法错误]') && r.out.includes('control-surfaces.txt') && r.out.includes('[bad('), r.out);
+  }
+  // C7 分辨性断言：暂存文件只命中 lane-surfaces 而不命中 control-surfaces → C 不响，
+  //    只由 A 响应。这条证明 C 真的在读自己的清单（否则任何 A 的场景都会误触发 C）。
+  {
+    const d = mkfix();
+    w(d, '.agents/lane-surfaces.txt', '^templates/\n');
+    w(d, '.agents/control-surfaces.txt', CTRL);
+    w(d, 'workflow/intents/2026-10-19-l2.md', intent('x', '状态: approved\n级别: L2\n日期: 2026-10-19\n模块: pipeline'));
+    const r = run(d, { staged: ['templates/AGENTS.md'] });
+    check('C7 只命中 lane-surfaces（templates/AGENTS.md 不在控制面清单）→ C 不响', !r.out.includes('[控制面判低]'), r.out);
+  }
+  // C8 反向分辨：包源模板前缀命中控制面清单（templates/_agents/scripts/ 在清单内）→ C 响。
+  //    守住「包源仓也有半边兜底」——文件头 :4-7 原说纯包源仓两处皆无，此条钉住实际情况。
+  {
+    const d = mkfix();
+    w(d, '.agents/control-surfaces.txt', CTRL);
+    const r = run(d, { staged: ['templates/_agents/scripts/check-loop.mjs'] });
+    check('C8 包源模板前缀（templates/_agents/scripts/）在控制面清单内 → C 同样拦',
+      r.code === 1 && r.out.includes('[控制面判低]') && r.out.includes('templates/_agents/scripts/check-loop.mjs'), r.out);
+  }
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);

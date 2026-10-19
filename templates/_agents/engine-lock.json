@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-18T07:42:40.254Z",
+  "generatedAt": "2026-10-19T05:53:06.767Z",
   "files": {
     ".github/workflows/ci.yml": {
       "sha256": "e9cffb90dec8f0a49bfe231a13fb8df375a2494cc75c38d991b5eb7c7be104b5",
@@ -47,7 +47,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/archive-sweep.mjs": {
-      "sha256": "f5f562d2ad95dc48a282b0225fd960449393d96c03634a01719d9868f41038d5",
+      "sha256": "19d9c87918ff0b70bf6192ed169fedb708db22f4aadb93130e54fc2a954cc777",
       "hard": 0
     },
     "templates/_agents/scripts/check-attribution.mjs": {
@@ -71,7 +71,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/check-lane-surface.mjs": {
-      "sha256": "a18f3cab4a345ae47583bfc4656f36d367c57db8f953dfe029f1baed6c4508a8",
+      "sha256": "89163a88d3b90b487181c59873c6cc5b0a161f670352f63f8e607a0e6596aa4c",
       "hard": 2
     },
     "templates/_agents/scripts/check-ledger-invariant.mjs": {
@@ -79,7 +79,7 @@
       "hard": 2
     },
     "templates/_agents/scripts/check-loop.mjs": {
-      "sha256": "12aea495fd78e8c5c2927c9400ce5c34c90cfaefa1e0c106571a1cf13aa8b2d4",
+      "sha256": "e44afe8f8fedd69ccf6661c03ff527f193bf531951a5a35ceb1266d57ac9f521",
       "hard": 32
     },
     "templates/_agents/scripts/check-metric-claims.mjs": {
@@ -87,7 +87,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/check-prejudgment.mjs": {
-      "sha256": "050227917cc5e5e73a189b23ea7f5ff7b5633b5e265b33e153147409772f7936",
+      "sha256": "fea3b070b1fdcd87bac1ce9c9df49e70d76846aa1419d94f0b2b51b6db3242b1",
       "hard": 0
     },
     "templates/_agents/scripts/check-registry.mjs": {
@@ -119,7 +119,7 @@
       "hard": 1
     },
     "templates/_agents/scripts/confirm-doc.mjs": {
-      "sha256": "d30b918d8a20ec87cdaf7eca4deaa2b8d724788e5fc9c338cce61fe4612f661f",
+      "sha256": "68467623c5e90e027767a6b67c53680983e2ee9c05a7ba910acb841ba00ab857",
       "hard": 13
     },
     "templates/_agents/scripts/draft-sediment.mjs": {
@@ -219,7 +219,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/level-criteria.mjs": {
-      "sha256": "fe605f053aee21804e5a2d920830e17f7ef1c2935bd8ec3e0ca9aeca0de181c1",
+      "sha256": "f7f547dc1be93025ee33e2e1986f7552a94688520198f663f8ce0a03710ffa0e",
       "hard": 1
     },
     "templates/_agents/scripts/mechanism-retire-watch.mjs": {
@@ -243,7 +243,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/pipeline-run.mjs": {
-      "sha256": "d3c964c132f3a085f84589447e6f700dead02b441f012511ab913bf975955f79",
+      "sha256": "7ee5613de9c9a9eb3b45cec9f9c97d9feb1c38ea29e1e96009e5e39f79568aa8",
       "hard": 0
     },
     "templates/_agents/scripts/policy.mjs": {
@@ -271,12 +271,12 @@
       "hard": 3
     },
     "templates/_agents/scripts/stage-gates.mjs": {
-      "sha256": "ed9bfe9e239cc087fadc8ec14f3bf61df6b11f6bf76596bce40e2cf2432bb71a",
+      "sha256": "ff9abdd822d2a739940a9071f956b65e30b2035ab35b575d983b469850663bb1",
       "hard": 0
     },
     "templates/_agents/scripts/trust-mode.mjs": {
-      "sha256": "ad5d784056fc2d6436ac5c9e0b5beee8bd5e6a5dc94987f06cf8d5e71eb24aff",
-      "hard": 1
+      "sha256": "22ff792202af214245dc67d3d5f8efb407cb61cd27cb306e833db79a8b3d8b60",
+      "hard": 3
     },
     "templates/_agents/scripts/verify-wiki-consistency.mjs": {
       "sha256": "1f58ace65b6bab02eba5df1c69f5b55528df5c098e6d06f8197594912d764c32",
@@ -287,7 +287,7 @@
       "hard": 4
     },
     "templates/_agents/scripts/wf-journal.mjs": {
-      "sha256": "302e9f6deb96d4b40b8a220f7ae773e44b59abd3313c8dd62a27eb239f11f4c1",
+      "sha256": "f361adb72eac7c965fc961749de6a5db9fb2c8d41edc615f7c295266b7c7e277",
       "hard": 1
     },
     "templates/_agents/scripts/wiki-search.mjs": {
@@ -299,11 +299,11 @@
       "hard": 1
     },
     "templates/_agents/scripts/workflow-enums.mjs": {
-      "sha256": "540ce00ec954f90a67d886dcf10f2ebb0661056187f563ba55ec34bf9c0afecd",
+      "sha256": "4661e95cd8114f0ee77f4fc69c5ee7f728b7c62b439c0e9a55903b3fcd387c86",
       "hard": 0
     },
     "templates/_agents/scripts/workflows-check.mjs": {
-      "sha256": "d29f5df709bb3d95b227202bb44a9e056af33bbe4f3afb87eefb94d96a2205cc",
+      "sha256": "7c3a4f2c22d6a802901cfdc1baa9309e9b2769ac11fb5e33d0bd6c02375a9d67",
       "hard": 1
     },
     "templates/_agents/workflow-enums.txt": {

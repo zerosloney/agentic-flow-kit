@@ -1312,6 +1312,9 @@ export function runCheckLoop(opts = {}) {
     //      边界内的手改痕迹；哈希链本已覆盖就地改，本项兜住「整文件重写重建链」后二次篡改的场景）
     // 注：scope 证明的是「放行时盘面上哪些文件在动」，**不是**「这些改动语义正确」——后者由 fingerprint
     //   （文档内容绑定）+ commit diff（事后对质）承担。不越界宣称（沿本检查既有口径纪律）。
+// 形态口径（2026-10-19 补齐 TTY 缺口）：三形态（TTY / chat-delegated / ai-auto-trust-Lx）一律记 scope，
+//   判定按形态**一致**——确认的是「放行时盘面上哪些文件在动」，与谁点的确认无关。TTY 是最常见形态
+//   （本仓 406 行里 400 行 tty），此前只 delegated / ai-auto 带 scope，缺口让最常见形态吃最多告警。
     {
       const since = loadKitPolicy(ROOT).scopeSince;
       if (typeof since === 'string' && Number.isFinite(Date.parse(since))) {

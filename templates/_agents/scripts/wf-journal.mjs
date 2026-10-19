@@ -24,6 +24,12 @@ const DEFAULT_JOURNAL = () => path.join(process.cwd(), '.agents', 'cache', 'orch
 const DEFAULT_WF_ROOT = () => path.join(process.cwd(), '.agents', 'workflows');
 const STATUSES = ['pass', 'fail', 'blocked'];
 const FORMS = ['role', 'step', 'gate', 'human'];
+// 2026-10-19 单源审查结论：这两个词表**不**收敛到 workflow-enums.txt——理由是各只有唯一消费点
+//   （STATUSES 仅本文件校验 --status；FORMS 仅 :116 校验 --form），且 workflow-enums.txt 是 workflow
+//   文档状态机的单源，与编排 run journal 的运行态词表不是同一个状态空间，混入会污染那个文件的语义。
+//   workflows-check.mjs 的 E3/E9 报文里那四个词是**散文**（列名从表头动态解析，无常量），故不存在
+//   「两侧各抄一份」的漂移面。四形态的权威定义在 .agents/workflows/_TEMPLATE.md，本常量只是它的
+//   入参校验子集——若将来新增第五形态，改这里 + _TEMPLATE.md 两处，workflows-check 无需改（列驱动）。
 
 // 读 journal 原始行（文件不存在/空 → []；目录不存在自动可建由 add 处理）
 export function readJournalLines(journalFile) {

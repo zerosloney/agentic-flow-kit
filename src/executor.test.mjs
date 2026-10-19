@@ -30,7 +30,16 @@ const W = (p, content) => { fs.mkdirSync(path.dirname(p), { recursive: true }); 
 function mkProject({ withCrit = true, withStageGates = true, withEnums = true, withRouteTable = true, laneKey = null, hints = null, modules = null } = {}) {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-exec-'));
   const S = path.join(root, '.agents', 'scripts');
-  if (withCrit) fs.mkdirSync(S, { recursive: true }), fs.copyFileSync(REAL_CRIT, path.join(S, 'level-criteria.mjs'));
+  // 2026-10-19：level-criteria.mjs 起 import workflow-enums.mjs（LEVELS 从单源派生），而后者启动即读
+  //   `.agents/workflow-enums.txt`——故判据单源真拷时必须连「读取器 + 数据文件」一起给，否则 route 的
+  //   动态 import 会以「单源文件不可读」fail-loud 崩掉，而不是回落到「缺判据单源」提示
+  //   （那正是 fixture-scripts 头部说的假绿形态：崩栈被当成 FAIL 事实）。该组合与 withEnums 同开关：
+  //   缺数据文件的读取器本身没有存在意义。
+  if (withCrit && withEnums) {
+    fs.mkdirSync(S, { recursive: true });
+    fs.copyFileSync(REAL_CRIT, path.join(S, 'level-criteria.mjs'));
+    fs.copyFileSync(REAL_ENUMS_MJS, path.join(S, 'workflow-enums.mjs'));
+  }
   if (withStageGates) {
     // 默认哨兵：按 L2/L3 → high 的常规口径（写在被写入的 stub 文件里，在装户侧求值）
     const body = laneKey
@@ -158,8 +167,13 @@ const run = (args, cwd) => runCli(['run', ...args], cwd);
   })());
 
   // 枚举单源缺失 → enums-fallback（此前静默用自带表）
+  // 注：2026-10-19 起 withEnums=false 也意味着 level-criteria.mjs 缺位（该文件的 LEVELS 改从 workflow-enums
+  //   派生，没有数据文件它 fail-loud 而非静默回落）——故本场景退化为「判据单源缺失 → 缺件降级」，
+  //   exit 1、stdout 无 JSON。断言改为「降级码登记在 stderr 且非零退出」，不再解析 stdout JSON。
   const noEnums = mkProject({ withEnums: false });
-  check('S4b 枚举缺失 → 降级登记 enums-fallback', codesOf(noEnums, ['--level', 'L1']).includes('enums-fallback'), JSON.stringify(codesOf(noEnums, ['--level', 'L1'])));
+  const rNo = route(['--level', 'L1', '--json'], noEnums);
+  check('S4b 枚举缺失 → exit 1 且登记降级码（不解析 stdout JSON）',
+    rNo.status === 1 && /enums-fallback|level-criteria/.test(rNo.stderr), rNo.stderr.slice(0, 160));
 
   // 建议档低于 hints 下限 → under-hint-proposed（此前仅 warning 字段，无统一出口）
   const under = mkProject();
@@ -244,6 +258,12 @@ const run = (args, cwd) => runCli(['run', ...args], cwd);
   check('S8 缺脚本指向 init/sync（不静默装一遍）', miss.stderr.includes('flow-kit init') && miss.stderr.includes('flow-kit sync'), miss.stderr);
   const notInstalled = run(['status'], mkProject({ withCrit: false }));
   check('S8 非装户目录 → 明确报未安装', notInstalled.stderr.includes('不是已安装 flow-kit 的项目'), notInstalled.stderr);
+  // 2026-10-19：判据单源在场但枚举数据缺失 → level-criteria 的 import 链断，route 以 exit 1 + 「跑
+  //   flow-kit sync 恢复」收尾（fail-loud），不静默回落自带表——否则「缺件」会被洗成「合法」。
+  const broken = mkProject();
+  fs.rmSync(path.join(broken, '.agents', 'workflow-enums.txt'));
+  const br = route([], broken);
+  check('S8b 判据单源在场但枚举数据缺失 → exit 1 且指向 sync', br.status === 1 && br.stderr.includes('flow-kit sync'), br.stderr.slice(0, 200));
 }
 
 // ============ 场景 9：薄壳纪律 —— 包面不复制判据/不自带实现 ============

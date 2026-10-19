@@ -23,15 +23,23 @@
 //     intent approved/done + spec/plan 在场）。
 // 信任边界声明（沿 2026-09-28 audit-gate-hardening 口径）：本地可写台账 / 手改状态仍可伪造——本模块只把
 //   「顺手绕过」抬到「主动伪造」，不宣称通道关闭；事后对质靠 git 历史与台账。
-// 设计先例：fill-* 已 import 同目录 workflow-enums.mjs；check-loop 检查 19 内联同口径（门禁脚本自包含、防兄弟依赖）。
+// 设计先例（2026-10-19 已落实）：fill-* 与本文件均 import 同目录 workflow-enums.mjs，状态词表从单源派生；
+//   check-loop 检查 19 仍内联同口径（门禁脚本自包含、防兄弟依赖——那是有意为之的例外，见 check-loop 头）。
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { loadKitPolicy } from './policy.mjs';
 import { readLedgerRows } from './ledger-loader.mjs';
 
-export const ENTRY_STATUSES = ['approved', 'done'];
-export const INCIDENT_STATUSES = ['open', 'fixed', 'closed'];
+// 状态词表（2026-10-19 enum-single-source 收敛）：文件头 :26 写着「设计先例：fill-* 已 import 同目录
+//   workflow-enums.mjs」却自己内联一份——正是该修的口径。两处均改为从单源派生，语义逐键留痕：
+//   ENTRY_STATUSES = doc.status.confirmed（已确认：approved/done/superseded/cancelled）**减** doc.status.abandoned
+//     （已放弃：superseded/cancelled）→ 剩 approved/done。放弃态是终态，不能当有效入口，故须相减。
+//   INCIDENT_STATUSES = incident.status.all（open/fixed/closed）原样—— incident 无 abandoned 键，
+//     三态皆可作入口（spec/plan 须先于 fixed 起草，故 open 即有效态，见文件头 :8）。
+import { ENUMS } from './workflow-enums.mjs';
+export const ENTRY_STATUSES = ENUMS['doc.status.confirmed'].filter((s) => !ENUMS['doc.status.abandoned'].includes(s));
+export const INCIDENT_STATUSES = ENUMS['incident.status.all'];
 
 // readFm：frontmatter 区（首 --- 至闭合 ---）取单字段值；无 frontmatter / 无该键 → ''
 export function readFm(abs, key) {

@@ -2,6 +2,73 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## Unreleased
+
+治理审查 P0/P1 收口批（kit 自研立法，非源仓回灌）。源起：对本仓做的一次深度代码实现分析
+（8 个面、逐文件读码）列出 3 项安全缺口与 5 项正确性缺口，本批逐条落地。共性主题是
+**「注释声称的口径与代码实际写的不一致」**——这类缺口不产生红，只在真出事时让「我以为有保护」
+变成没有保护。
+
+- fix(gate)：**敏感信息扫描不再复述密钥原文**（P0-1）。`commit-check.cjs` 命中 SECRET 后把
+  **整行原始 diff** 打到 stdout——密钥于是同时进了终端回滚、CI 日志和复制粘贴历史，而这道门的
+  全部意义就是阻止值扩散。改为只报 `文件:行号 键名=掩码`：掩码取前三字符 + `***（N 字符）`，
+  判据（KNOWN 白名单 / SELF 自豁免）仍看整行不变，报告面收窄到位置。SECRET 正则补值捕获组，
+  同时把负向先行里的类型/空值关键字改成**非捕获组**——它是捕获组时会把值组挤到 3，掩码取错组。
+  测试：`commit-check-trigger.test.mjs` 补 R1–R5（真密钥命中 / hunk 行号跟随 / 白名单抑制 /
+  SELF 自豁免及其反例 / 仅出现在删除行的密钥不拦），断言 `N 字符` 从被断言常量长度算出而非写死。
+- fix(gate)：**TTY 确认补记机器改动面**（P0-3）。`confirm-doc.mjs` 的 TTY 分支落账漏了
+  `scope{files,sha256}`，而注释声称三形态一律记入——TTY 恰是最常用形态（源仓台账约 400/406 行），
+  于是最常用的那条路永久吃着「缺机器改动面」告警。check 15 的 scope 子项追问的是「放行那一刻
+  盘上有哪些文件在动」，与谁点了确认无关。测试：新增 `tty-scope.test.mjs`（S1 真 TTY 落账带
+  scope / S2 委托形态仍带 / S3 篡改 scope.sha256 → check-loop 报「台账 scope 失配」，干净确认后
+  不再出「缺机器改动面」）。**测试教训**：check 15 在 hard lane，`--hygiene` 根本到不了它，
+  S3 守卫一度是空转的（改坏的行不产生 blocker、断言因错误的原因通过）；且缺同名 plan 会先被
+  检查 1 配对断裂淹掉。
+- fix(gate)：**doctor 不再执行未校验的目标侧代码**（P0-2，三处）。§6.10 的 level-hints 体检是
+  doctor 里唯一不过 `scriptGuard` 就 spawn 目标侧脚本的地方，也是唯一以 FAIL 级跑未校验代码的
+  检查——一个被篡改的 `level-criteria.mjs` 永远返回 ok，就能把「配置错了」洗成「配置合法」。
+  改为先过 guard，拒则返回 PASS + 显式「校验跳过」note（可见地不跑、不下合格结论）。另外
+  `scriptGuard` 的 `!pkgRoot` 分支从 `{ok:true}`（无包源模板可比对 ⇒ 放任任意目标代码）改为
+  `{ok:false}`，5 个调用点本就按 !ok 走 WARN-skip。测试：新增 `src/doctor-level-hints.test.mjs`
+  （G1 guard 拒绝 → 不 spawn / G2 放行后仍能抓非法 ERE / G3 合法放行 / G4 旧签名兼容 /
+  G5 无脚本时 guard 压根不调）。
+- fix(gate)：**泳道完整性门新增检查 C——控制面无入口落地即拦**（P1-4）。`control-surfaces.txt`
+  此前只有注释里的 P0-A 依据，没有任何代码读它。`.agents/scripts/`、`.githooks/`、`.github/`、
+  `settings.json`、`engine-lock.json` 等 25 类路径命中清单且无任何活跃 L2/L3 入口 ⇒ HARD-BLOCK；
+  实验分支与检查 A 同样降级 advisory（无活跃入口的既有 all-L1 档位语义不动，零影响存量场景）。
+  实现为 `check-lane-surface.mjs` 的第三段，复用同一批 `stagedFiles`/`fmOf`/`requiredFor` 原语，
+  不新开扫描。测试：`check-lane-surface.test.mjs` 38 → 40（C1 命中+无入口拦 / C2 有入口放行 /
+  C3 清单缺失跳过 / C4 实验分支 advisory / C5 清单内自列（清单自指）/ C6 修法含收窄清单路径 /
+  C7 普通路径不误触 / C8 包源模板前缀同样拦）。**修测试时暴露一个真 bug**：noEntryBlock 分支
+  此前没走 experiment 降级，实验分支上的门禁改动会被硬拦，与检查 A 的处置不一致。
+- fix(engine)：**TTL 落到 trust-mode**（P1-6）。`trust-mode.mjs` 记了 `enabledAt` 却没有任何
+  消费方——「临时开一下」实际是永久有效，直到有人记得跑 `--disable`。新增 `parseTtlMs`
+  （30m/8h/2d/裸数字=小时，不可解析 fail-loud，绝不「解析不了就当不过期」）、`--enable --ttl`
+  写 `expiresAt`、`--status` 报 `expired`。**执行点单设在 `confirm-doc.readTrustConfig`**：到期
+  把 `enabled` 折成 false（第一版只置 `expired` 不改 `enabled`，`!enabled` 守卫直接放行——
+  是 T9 抓出来的）；不可解析的 `expiresAt` 同样按已到期算（fail-closed）；无 TTL 的老装户
+  行为零变化。doctor §6.9b 直接读该文件（不 spawn，无供应链面）把唯一允许 AI 自治的开关
+  变成可见项。测试：trust-mode 16/16（T9 到期拒录 / T10 未到期放行 / T11 无 TTL 永不过期 /
+  T12a 非法 TTL 不落盘 / T12b 30m / T12c/d 关停即清 / T13 status）。
+- fix(docs)：**workflows-check 形态口径与它自己的检查对齐**（P1-8）。E3 报文说「三形态各至少
+  一行」而 E9 实际校验四形态（role/step/gate/human）；示例工作流同样只示范三个。改为四形态，
+  示例补一行 `ship-gate`（human 形态）让示例自己覆盖全四种。
+- fix(engine)：**级别/终态枚举从单源派生**（P1-5）。`pipeline-run.mjs` 自带第二份 LEVELS、
+  `level-criteria.mjs` 自带第三份（而它自己被 new-task.md:77 称为判据单源）、`check-prejudgment.mjs`
+  第四份终态、`archive-sweep.mjs` 第五六份、`wf-journal.mjs` 两份而全仓没有任何单源文件。
+  其中 `pipeline-run.mjs:25` 的 `TERMINAL = ['done','superseded','cancelled','closed']` 与
+  `doc.status.terminal`（不含 closed——closed 是 incident 态）**语义不同却长得一样**，是最危险
+  的一份。改为 `import { LEVELS, DOC_STATUS, TERMINAL_STATUSES } from './workflow-enums.mjs'`
+  （该文件自带 fail-loud 的键/值重复与缺键校验），并顺手把 KINDS 导出给 check-prejudgment 复用。
+  **连带修复（真 bug）**：level-criteria.mjs 自此 import workflow-enums.mjs，而后者启动即读
+  `.agents/workflow-enums.txt`——`src/executor.test.mjs` 与 `doctor.test.mjs` 的夹具原先只拷
+  level-criteria.mjs，import 链一断，route/doctor 的 spawn 会以崩栈收尾而不是「缺判据单源」
+  提示（fixture-scripts 头部说的假绿形态：崩栈被当成 FAIL 事实）。夹具改为连读取器 + 数据文件
+  一起拷，并补 S8b 断言「判据单源在场但枚举数据缺失 → exit 1 且指向 sync」。
+- chore(repo)：清掉两个调试期探针（`debug-closure.mjs` / `debug-deps.mjs`，根目录未入 files[]，
+  但会让 `npm test` 首步 eslint 报 3 个 unused-vars 而整套假红）；engine-lock --update 入账
+  （受检面 84 件，改动件 12 个；trust-mode.mjs 硬拦单位数 1 → 3，是新增两条 fail-loud 的加硬）。
+
 ## 1.8.7
 
 告警聚合口径批（kit 自研立法，非源仓回灌；治理审查 B 项收口）。审查依据源仓 9 天判定流水遥测

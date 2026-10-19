@@ -198,6 +198,52 @@ f = mkfix();
 r = runHook(f.root, ['--range', 'not-a-sha', 'HEAD']);
 check('S13 --range 非 sha 参数 → BLOCK exit 1', r.status === 1 && r.out.includes('BLOCK'), r.out);
 
+// 场景 14：敏感信息扫描脱敏（2026-10-19 secret-redaction）——命中必 BLOCK，但输出绝不含密钥原文。
+// 这一组是包侧回归：回显面（终端回滚 / CI 日志 / 复制粘贴）与暂存区同级，都是泄露面。
+const RAW = 'supersecretvalue12345';
+f = mkfix();
+stage(f.root, 'src/config.js', `const a = 1\nconst password = "${RAW}"\nconst b = 2\n`);
+r = runHook(f.root, ['--no-build']);
+check('R1 密钥命中 → BLOCK exit 1', r.status === 1 && r.out.includes('BLOCK'), r.out);
+check('R1b 报出文件:行号（密钥在第 2 行）', r.out.includes('src/config.js:2'), r.out);
+check('R1c 值已掩码（前缀 + 长度）', r.out.includes('password=sup***') && r.out.includes(`${RAW.length} 字符`), r.out);
+check('R1d 输出不含密钥原文', !r.out.includes(RAW), `泄露: ${r.out}`);
+
+// 场景 15：行号跟 hunk 走——同文件前面插入一行，密钥行号应随动
+f = mkfix();
+stage(f.root, 'src/config.js', `// header\nconst password = "${RAW}"\n`);
+r = runHook(f.root, ['--no-build']);
+check('R2 行号随 hunk 前移（密钥在第 2 行）', r.status === 1 && r.out.includes('src/config.js:2'), r.out);
+
+// 场景 16：knownPatterns 白名单按行豁免
+f = mkfix();
+fs.writeFileSync(path.join(f.root, '.agents', 'hooks', 'commit-check.config.json'), JSON.stringify({
+  knownPatterns: ['knownseedvalue123'],
+  builds: [], checks: [],
+}));
+stage(f.root, 'src/config.js', `const token = "knownseedvalue123"\n`);
+r = runHook(f.root, ['--no-build']);
+check('R3 knownPatterns 白名单命中 → 不拦', r.status === 0 && !r.out.includes('BLOCK'), r.out);
+
+// 场景 17：SELF 自豁免——判据/白名单自身的定义行长得像密钥赋值
+f = mkfix();
+stage(f.root, 'src/defs.js', 'const SECRET = /x/; // token = "abcdefghijkl"\n');
+r = runHook(f.root, ['--no-build']);
+check('R4 判据定义行自豁免 → 不拦', r.status === 0 && !r.out.includes('BLOCK'), r.out);
+f = mkfix();
+stage(f.root, 'src/defs.js', 'const OTHER = /x/; // token = "abcdefghijkl"\n');
+r = runHook(f.root, ['--no-build']);
+check('R4b 去掉 const SECRET = / 前缀 → 照拦', r.status === 1 && r.out.includes('BLOCK'), r.out);
+
+// 场景 18：删除行不计——密钥只出现在被删的旧行里时不拦
+f = mkfix();
+stage(f.root, 'src/gone.js', 'const token = "supersecretvalue12345"\n');
+git(f.root, ['commit', '-q', '-m', 'seed']);
+fs.writeFileSync(path.join(f.root, 'src/gone.js'), 'const token = ""\n');
+git(f.root, ['add', 'src/gone.js']);
+r = runHook(f.root, ['--no-build']);
+check('R5 密钥仅存于删除行 → 不拦', r.status === 0 && !r.out.includes('BLOCK'), r.out);
+
 for (const d of fs.readdirSync(os.tmpdir()).filter((x) => x.startsWith('cc-trigger-test-'))) {
   fs.rmSync(path.join(os.tmpdir(), d), { recursive: true, force: true });
 }

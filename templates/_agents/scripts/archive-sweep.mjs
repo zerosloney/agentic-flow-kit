@@ -25,10 +25,20 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { readLedgerRows } from './ledger-loader.mjs';
+import { ENUMS } from './workflow-enums.mjs';
 
 const DIRS = ['intents', 'specs', 'plans', 'incidents'];
-export const TERMINAL = new Set(['done', 'superseded', 'cancelled', 'closed']);
-export const ACTIVE = new Set(['draft', 'approved', 'open', 'fixed']);
+// 终态/活跃态并集（2026-10-19 enum-single-source 收敛）：家族跨 intents/specs/plans（doc 状态机）与
+// incidents（incident 状态机）两类状态空间，单侧任一键都覆盖不了，故各键取并集。此前本文件内联
+// 字面量 ['done','superseded','cancelled','closed'] / ['draft','approved','open','fixed']——
+// 字面量不会随单源演进，且读者无从判断 'closed'/'open' 属于哪一侧。两处枚举无单一键覆盖并集，
+// 派生表达式本身即文档（现在可从代码看出各自来源）。
+const TERMINAL_STATES = [...ENUMS['doc.status.terminal'],
+  ...ENUMS['incident.status.all'].filter((s) => !ENUMS['incident.status.active'].includes(s))];
+const ACTIVE_STATES = [...ENUMS['doc.status.active'],
+  ...ENUMS['incident.status.all'].filter((s) => ENUMS['incident.status.active'].includes(s))];
+export const TERMINAL = new Set(TERMINAL_STATES);
+export const ACTIVE = new Set(ACTIVE_STATES);
 
 export function parseStatus(text) {
   const lines = text.split(/\r?\n/);

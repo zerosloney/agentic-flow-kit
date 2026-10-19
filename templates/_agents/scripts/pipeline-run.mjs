@@ -20,9 +20,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-const KINDS = ['require', 'fix', 'verify', 'review', 'deploy'];
-const LEVELS = ['L1', 'L2', 'L3']; // L0 已退役（2026-10-13 自源仓收敛系列 1 回灌）——级别三档，L1 = 一份 plan 即入口
-const TERMINAL = ['done', 'superseded', 'cancelled', 'closed'];
+export const KINDS = ['require', 'fix', 'verify', 'review', 'deploy']; // 导出留口：check-prejudgment 检查 25 的 kind 词表与本常量同值但**刻意不 import**（见该文件头「刻意维持两份字面量」段——本文件 876 行的编排器依赖闭包太重，挂一个纯 advisory 小段不划算）；此处 export 只为将来若真需要时少一次改动
+// 级别词表与终态词表一律走单源读取器（2026-10-19 enum-single-source 收敛）：
+//   此前本文件各抄一份字面量（LEVELS / TERMINAL），而 workflow-enums.mjs:7 明令
+//   「禁止在任何消费方内再抄一份枚举字面量」——抄的那份不会随单源演进，是静默漂移源。
+//   LEVELS 取自 level-criteria.mjs（定级判定的机器单源，其自身零文件依赖、只多读一个 workflow-enums 叶子）；
+//   TERMINAL 取自 workflow-enums 的 doc.status.terminal——**不再含 'closed'**：
+//   'closed' 是 incident.status.all 的值，plan/spec/entry 的 doc 状态永远到不了它，
+//   旧字面量把它混进来只会误导读者以为文档能关到 closed（真正的 incident 两跳在 :646-649 单独判）。
+import { LEVELS } from './level-criteria.mjs';
+import { ENUMS } from './workflow-enums.mjs';
+const TERMINAL = ENUMS['doc.status.terminal']; // done superseded cancelled
+const INCIDENT_NON_OPEN = ENUMS['incident.status.all'].filter((s) => !ENUMS['incident.status.active'].includes(s)); // fixed closed
 const FIX_CAP = 3;
 const GIT_NEVER_FLAGS = ['--no-verify', '-n']; // 不变量：任何 git 调用不得携带（防御性断言，正常路径不会拼出）
 
@@ -645,7 +654,7 @@ function advance(ctx, run, opt) {
         const pend = [];
         if (K() === 'fix') {
           const st = docState(ctx, entry());
-          if (!['fixed', 'closed'].includes(st)) pend.push(entry());
+          if (!INCIDENT_NON_OPEN.includes(st)) pend.push(entry());
           if (st === 'fixed') pend.push(entry()); // 两跳：fixed 之后还需 closed
           if (run.docs.plan && !TERMINAL.includes(docState(ctx, run.docs.plan))) pend.push(run.docs.plan);
         } else {

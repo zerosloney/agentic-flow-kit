@@ -732,6 +732,13 @@ const GATE_BODY = '// gate v1\n';
     fs.mkdirSync(path.join(root, '.agents', 'scripts'), { recursive: true });
     fs.copyFileSync(path.join(ROOT, 'templates/_agents/scripts/level-criteria.mjs'),
       path.join(root, '.agents/scripts/level-criteria.mjs'));
+    // 2026-10-19：level-criteria.mjs 起 import workflow-enums.mjs（LEVELS 从单源派生），而后者启动即读
+    //   `.agents/workflow-enums.txt`——漏拷任一个，spawn 都会以 fail-loud 崩栈作结（detail 是崩栈而非
+    //   校验结论），三个场景全部假红。装户盘面这两件本就跟 level-criteria.mjs 同包下发，一起拷才构得成真盘。
+    fs.copyFileSync(path.join(ROOT, 'templates/_agents/scripts/workflow-enums.mjs'),
+      path.join(root, '.agents/scripts/workflow-enums.mjs'));
+    fs.copyFileSync(path.join(ROOT, 'templates/_agents/workflow-enums.txt'),
+      path.join(root, '.agents/workflow-enums.txt'));
     if (hintsText !== null) fs.writeFileSync(path.join(root, '.agents/level-hints.txt'), hintsText);
     return root;
   };

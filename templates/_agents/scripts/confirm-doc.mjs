@@ -206,6 +206,28 @@ export function fmLevel(nl) {
 }
 
 const isMain = process.argv[1] && process.argv[1].endsWith('confirm-doc.mjs');
+
+// readTrustConfig(root)（2026-10-19 TTL 补漏）：读 .agents/trust-mode.json，并算出**当前是否真生效**。
+// 此前两个读点各自 try/catch 裸 parse，enabledAt 只记不消费——授权事实永久有效。现在统一走本函数：
+//   expired = expiresAt 存在、可解析、且已过 → **enabled 直接压成 false**（单点生效，未来新增消费方
+//   不可能忘记判过期）；expired 标记保留，供错误分支区分「从没开过」与「开过但已到期」。
+// 缺/坏文件 → {enabled:false, level:0, expired:false}（fail-closed，与旧口径一致）。
+export function readTrustConfig(root) {
+  let c = null;
+  try {
+    c = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'trust-mode.json'), 'utf8'));
+  } catch { c = null; }
+  if (!c || typeof c !== 'object') return { enabled: false, level: 0, expired: false, expiresAt: null };
+  let expired = false;
+  if (c.enabled && typeof c.expiresAt === 'string' && c.expiresAt) {
+    const t = Date.parse(c.expiresAt);
+    // expiresAt 不可解析 → 视为过期（fail-closed：看不懂的时间不当作永久授权）
+    expired = !Number.isFinite(t) || Date.now() >= t;
+  }
+  // 到期 = 未开启：调用方只看 enabled 就得到正确结论，过期判据不依赖每个调用点自觉
+  return { ...c, expired, enabled: c.enabled === true && !expired };
+}
+
 if (isMain) {
   const argv = process.argv.slice(2);
   let root = process.cwd();
@@ -269,11 +291,13 @@ if (isMain) {
   // 免旗标自动转入本分支（见「Trusted 自动泳道」）——L1 门 / incidents 排除 / 逐阶段与 done 门照常执行。
   let trustConfig = null;
   if (autoMode) {
-    try {
-      trustConfig = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'trust-mode.json'), 'utf8'));
-    } catch { trustConfig = { enabled: false, level: 0 }; }
+    trustConfig = readTrustConfig(root);
     if (!trustConfig.enabled || ![1, 2].includes(trustConfig.level)) {
-      console.error('❌ AI 自治未开启或等级非法（.agents/trust-mode.json enabled=false 或 level∉[1,2]）——跑 node .agents/scripts/trust-mode.mjs --enable --level <1|2> 开启');
+      if (trustConfig.expired) {
+        console.error(`❌ AI 自治授权已于 ${trustConfig.expiresAt} 到期，现按 Strict 拒绝——到期不静默续期（TTL 2026-10-19 补漏：enabledAt 此前只记不消费，授权事实永久有效）。重新开启：node .agents/scripts/trust-mode.mjs --enable --level <1|2>`);
+      } else {
+        console.error('❌ AI 自治未开启或等级非法（.agents/trust-mode.json enabled=false 或 level∉[1,2]）——跑 node .agents/scripts/trust-mode.mjs --enable --level <1|2> 开启');
+      }
       process.exit(1);
     }
     if (toTarget) {
@@ -307,10 +331,7 @@ if (isMain) {
     // （enabled 且 level=2）时，非 TTY 调用（AI 会话）对文档**免手工触发**（无需 --delegated 原话 /
     // --auto 旗标）自动转入 AI 自治放行——单份、非放弃态才可隐式（与 --auto 同口径，L1 门与
     // incidents 排除由主循环自治门照常执行）；不满足则维持原拒绝（fail-closed，Standard/Strict 不隐式）。
-    let implicitTrust = null;
-    try {
-      implicitTrust = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'trust-mode.json'), 'utf8'));
-    } catch { implicitTrust = { enabled: false, level: 0 }; }
+    let implicitTrust = readTrustConfig(root);
     if (implicitTrust.enabled && implicitTrust.level === 2 && docs.length === 1 && !toTarget) {
       autoMode = true;
       trustConfig = implicitTrust; // 主循环自治门（L1 与 incidents 排除）直读本配置——顶部 if (autoMode) 块先于 TTY 门执行，须在此补装
@@ -458,6 +479,7 @@ if (isMain) {
     const fp = computeFingerprint(text);
     // 改动面事实（2026-10-09 审查 A1 干净版）：机器派生，三形态（TTY / 委托代录 / AI 自治）一律记入——
     // TTY 形态同样需要（事后对质问的是「放行时盘面上哪些文件在动」，与谁点的确认无关）。
+    // 2026-10-19：本注释此前声称三形态都有，实际 TTY 分支漏记——见 :530-538 的补齐注释。
     const scope = machineScope(root, doc);
     // AI 自治放行分支（2026-09-30 ai-autonomy-trust）：
     // ① 仅 L1（读 frontmatter「级别」，缺级别按不可自治处理——fail-closed）；
@@ -531,6 +553,10 @@ if (isMain) {
         ts: new Date().toISOString(), doc, stage: target, fingerprint: fp, prev: st,
       source: 'tty',
       batch, seq, of: docs.length, // 调用事实（形态无关：TTY 多文档天然逐件过目，of>1 不构成违规）
+      // 改动面事实（2026-10-19 补齐 TTY 缺口）：三形态一律记 scope。此前只 delegated / ai-auto 带，
+      // 而 :459-460 的注释声称三形态都有——缺口使 TTY 行在 check 15 scope 段恒报「缺机器改动面」，
+      // 是最常见形态吃最多告警。对质问的是「放行时盘面上哪些文件在动」，与谁点的确认无关。
+      scope,
     }, { shard: shardWrite });
     console.log(`✓ ${doc} → ${target}（指纹 ${fp.slice(0, 16)}，台账已记）`);
     confirmed++;
@@ -607,4 +633,4 @@ if (isMain) {
   console.log(`\n完成：确认 ${confirmed} 份 / 跳过 ${docs.length - confirmed - refused} 份 / 拒绝 ${refused} 份${delegated ? '（委托代录）' : ''}`);
   process.exit(refused ? 2 : 0);
 }
-export default { computeFingerprint, nextStage, applyTransition, appendLedger, fmLevel };
+export default { computeFingerprint, nextStage, applyTransition, appendLedger, fmLevel, readTrustConfig };

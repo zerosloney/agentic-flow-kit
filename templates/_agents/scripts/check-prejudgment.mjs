@@ -9,16 +9,30 @@
 // incidents(≡fix) 执法——plans/specs 是两道共用件不判类型、只比对级别。
 // 缺字段零告警（存量宽容不回填，不做强制前置）——灰度数据经 judgments.jsonl（WARN 预判* 计数）
 // 月度对账后再议升格，退役/升格阈值由 mechanism-registry §25 行承载。
-// kit 适配（源仓→kit 逐条）：无判据改动。kind 词表沿源仓 s25 等价落——pipeline-run.mjs 的 KINDS 为
-//   模块内常量、无导出（两侧同状），故本文件按源仓同款内联声明 + 注释互引（改任一侧须同步，见下）。
+// kit 适配（源仓→kit 逐条）：无判据改动。kind 词表与 pipeline-run.mjs 的 KINDS 同值——**刻意维持两份
+//   字面量 + 注释互引**（2026-10-19 先改成 import，同日回退）：代价实测后确认不值得。pipeline-run.mjs
+//   是 867 行编排器，其依赖闭包含 pipeline-run-run/docs、level-criteria、confirm-doc、kb-search、
+//   fill-{intent,spec,plan}、archive-sweep 等十余个文件，还有一个 `bin/flow-kit.mjs` 的裸文件名字面量
+//   （跨目录、夹具闭包扫不到）——把检查 25 这个纯 advisory 小段挂上去，等于让每次跑 check-loop 都
+//   为 5 个短字符串拉整条编排链，且 fixture-scripts 的 assertFixtureScripts 会因那个字面量在建夹具
+//   时炸掉。5 个字符串的漂移风险 << 这条依赖边的重量，故留字面量、留互引注释。
+// 终态并集（doc 终态 + incident 终态）从 workflow-enums 派生，不再内联字面量（2026-10-19 同批收敛）。
+//   这一处值得收敛：并集本身无单一键覆盖，派生表达式即文档，且 workflow-enums.mjs 是零依赖叶子模块。
 import path from 'node:path';
 
 export function run(ctx) {
   const { ROOT, WF, DOC_DIRS, ENUMS, inSet, fmGet, isTracked, readdirOrNull, warnings } = ctx;
   // --- 25. 路由预判一致性 [warning] ---
-  // kind 词表单源 = pipeline-run.mjs KINDS（该处为模块内常量、未导出——源仓 s25 同款内联等价落）；
-  // 两侧各一份靠本注释互引，改词表须同步（pipeline-run 校验文案 `kind 须为 …` 同步）。
+  // kind 词表单源 = pipeline-run.mjs KINDS（该处为模块内常量、已导出，但本文件刻意不 import——
+  //   理由见文件头「刻意维持两份字面量」段：依赖边重量 >> 5 个字符串的漂移风险）。两侧各一份靠本注释
+  //   互引，改词表须同步（pipeline-run 校验文案 `kind 须为 …` 同步）。
   const KINDS = ['require', 'fix', 'verify', 'review', 'deploy'];
+  // 终态并集（2026-10-15）：形态/词表类告警跳过——终态受检查 15 内容绑定不可修订，此类 WARN 永不可
+  // 消（「不可消除噪声」红线）；类型/级别比对保留——那是路由审计的本体信号，灰度对账照常采集。
+  // 并集 = doc 终态（done/superseded/cancelled）∪ incident 终态（fixed/closed）——两侧枚举无单一键
+  // 覆盖，故从 workflow-enums 两个键派生（不再内联字面量：字面量不会随单源演进）。
+  const TERMINAL_ALL = [...ENUMS['doc.status.terminal'],
+    ...ENUMS['incident.status.all'].filter((s) => !ENUMS['incident.status.active'].includes(s))];
   const rankOf = (lv) => Number(String(lv).replace(/^L/, '')) || 0;
   for (const sub of DOC_DIRS) {
     const dir = path.join(ROOT, WF, sub);
@@ -29,11 +43,7 @@ export function run(ctx) {
       const pj = fmGet(abs, '预判');
       if (!pj) continue;
       const rel = `${WF}/${sub}/${f}`;
-      // 终态文档（2026-10-15）：形态/词表类告警跳过——终态受检查 15 内容绑定不可修订，此类 WARN 永不可
-      // 消（「不可消除噪声」红线）；类型/级别比对保留——那是路由审计的本体信号，灰度对账照常采集。
-      // （终态并集 = doc 终态 done/superseded/cancelled + incident 终态 fixed/closed——两侧枚举无单一键
-      // 覆盖该并集，故与源仓 s25 同款内联声明。）
-      const terminalDoc = ['done', 'superseded', 'cancelled', 'fixed', 'closed'].includes(fmGet(abs, '状态'));
+      const terminalDoc = TERMINAL_ALL.includes(fmGet(abs, '状态'));
       const kv = {};
       for (const m of pj.matchAll(/(kind|level)=([^\s]+)/g)) kv[m[1]] = m[2];
       if (!Object.keys(kv).length) {

@@ -151,8 +151,13 @@ export function doctor(args, pkgRoot) {
   // scriptGuard（init-p1-batch P1-3 供应链防线）：spawn 目标侧脚本前校验其与包源渲染值（LF 归一）一致——
   // 失配说明预置/被改动，不可信：调用方记 WARN 跳过（fail-visible，不执行也不下通过结论）。
   // 无 pkgRoot（理论路径）不设防；vars 从 kit.json options 重建（与 sync 同源构造）。
+  // 2026-10-19 收紧：!pkgRoot 时原返回 {ok:true}＝「无包源 ⇒ 放行任意目标侧代码」。包源缺失
+  // 只应降级为「无法校验」，不该升级为「免检」——改为 {ok:false}，调用方一律 WARN 跳过
+  // （与失配同口径，fail-visible：不执行也不下通过结论）。
+  // kit.json 无/坏时 readFileSync 抛错被下面的 catch 吞掉、退回默认 vars——这是既有设计
+  // （defaults are safe），保留；脚本路径按包源渲染值比对，变量只影响 BOARD_PORT/stack 两槽。
   const scriptGuard = (rel) => {
-    if (!pkgRoot) return { ok: true, note: '' };
+    if (!pkgRoot) return { ok: false, note: '无包源模板可比对（pkgRoot 缺失），无法校验目标侧脚本' };
     let opts = null;
     try { opts = JSON.parse(fs.readFileSync(kitPath, 'utf8')).options; } catch { /* 无/坏台账→用默认 vars */ }
     const vars = { BOARD_PORT: String(opts?.boardPort || '8933'), ...pickStackVars(opts?.stack) };
@@ -299,6 +304,39 @@ export function doctor(args, pkgRoot) {
     }
   }
 
+  // 6.9b AI 自治信任档位（2026-10-19 TTL 补漏的可见性半边）：此前 doctor 完全不回显 trust-mode 状态，
+  //     而它是唯一能「让 AI 自己批 L1 文档」的开关——一个体检工具看不见自己身上最危险的旋钮。
+  //     判据直接读 .agents/trust-mode.json（**不 spawn 目标侧脚本**，无供应链面）；到期态按
+  //     confirm-doc.readTrustConfig 的同一条判据算（fail-closed：expiresAt 不可解析视为已过期）。
+  {
+    const tmPath = path.join(target, '.agents', 'trust-mode.json');
+    if (!fs.existsSync(tmPath)) {
+      add('PASS', 'AI 自治关闭（Strict，无 trust-mode.json——默认态）');
+    } else {
+      let tm = null;
+      try { tm = JSON.parse(fs.readFileSync(tmPath, 'utf8')); } catch { /* 坏 JSON 走下面 fail-closed 分支 */ }
+      if (!tm || typeof tm !== 'object') {
+        add('FAIL', 'trust-mode.json 解析失败——按 Strict 处理（fail-closed），AI 自治不可用');
+      } else if (tm.enabled !== true || ![1, 2].includes(tm.level)) {
+        add('PASS', `AI 自治关闭（Strict，${tm.name || 'level 0'}）`);
+      } else {
+        let expired = false;
+        if (typeof tm.expiresAt === 'string' && tm.expiresAt) {
+          const t = Date.parse(tm.expiresAt);
+          expired = !Number.isFinite(t) || Date.now() >= t;
+        }
+        if (expired) {
+          add('WARN', `AI 自治授权已于 ${tm.expiresAt} 到期——现按 Strict 拒绝（到期不静默续期）；重开：node .agents/scripts/trust-mode.mjs --enable --level <1|2>`);
+        } else {
+          const ttlNote = (typeof tm.expiresAt === 'string' && tm.expiresAt)
+            ? `，${tm.expiresAt} 到期`
+            : '，无 TTL（永久有效至显式 --disable）';
+          add('WARN', `AI 自治开启（Trust L${tm.level}${ttlNote}）——AI 可自批 L1 文档；确认：flow-kit doctor 之后跑 node .agents/scripts/trust-mode.mjs --status`);
+        }
+      }
+    }
+  }
+
   // 6.9 模板下发感知（2026-10-06 template-downstream，只读 advisory——与 sync 出账同判据
   //     profiles.templateDriftOf 单源；doctor 不写 kit.json，两次 sync 之间持续回显，sync 后自然消隐）。
   //     语义：源仓模板已演进且盘面未跟随 → WARN 提醒（owned 归项目所有，不自动覆盖）；首次引入 WARN。
@@ -318,7 +356,7 @@ export function doctor(args, pkgRoot) {
   //     口径纪律：doctor 不复刻解析器（复刻＝判据双源漂移），spawn 装户 level-criteria.mjs 的 --check
   //     入口（判据单源仍是 parseLevelHints 一份）。
   {
-    const hr = checkLevelHints(target);
+    const hr = checkLevelHints(target, scriptGuard);
     if (hr.skipped) add('PASS', `level-hints 体检跳过（${hr.note}）`);
     else if (hr.ok) add('PASS', `level-hints 配置合法（${hr.note}）`);
     else add('FAIL', `level-hints 配置有误——非法档位或正则会让 flow-kit route fail-loud 抛错、按错误下限定级：\n${hr.detail}`);
@@ -362,9 +400,17 @@ export function doctor(args, pkgRoot) {
 // 口径纪律：doctor **不复刻解析器**（复刻＝判据双源漂移），改为 spawn 装户 .agents/scripts/
 //   level-criteria.mjs 的 --check 入口——parseLevelHints 永远只有一份实现。
 // 三态：skipped（无判据单源＝1.7.15 前旧装户，不产出告警）/ ok（含未配置=默认空）/ 配置有误。
-export function checkLevelHints(target) {
+export function checkLevelHints(target, guard) {
   const script = path.join(target, '.agents', 'scripts', 'level-criteria.mjs');
   if (!fs.existsSync(script)) return { skipped: true, ok: true, note: '无 .agents/scripts/level-criteria.mjs——1.7.15 之前版本无此判据单源' };
+  // 供应链同款校验（2026-10-19 补齐）：此处是**唯一**不经 scriptGuard 就 spawn 目标侧脚本的位置，
+  // 而它恰恰是 doctor 里唯一会 spawn 失配也能继续跑完的 FAIL 级检查——预置/被改写的
+  // level-criteria.mjs 可以让体检恒返回 ok，从而把「配置有误」洗成「配置合法」。
+  // 纪律与 :151-160 的 scriptGuard 完全一致：失配 → 记 PASS 但注明跳过（fail-visible，不执行也不下通过结论）。
+  if (guard) {
+    const g = guard('.agents/scripts/level-criteria.mjs');
+    if (!g.ok) return { skipped: false, ok: true, note: `校验跳过：${g.note || '脚本与包源渲染值不一致'}` };
+  }
   const r = spawnSync(process.execPath, [script, '--check', path.join(target, '.agents', 'level-hints.txt')], {
     cwd: target, encoding: 'utf8',
   });

@@ -18,8 +18,15 @@
 //   语义参照 `lane-surfaces.txt`（那是「提交面」的触达判据，本文件是「意图面」的档位提示，两者不同档）。
 import fs from 'node:fs';
 import path from 'node:path';
+import { ENUMS } from './workflow-enums.mjs';
 
-export const LEVELS = ['L1', 'L2', 'L3'];
+// 档位闭集（2026-10-19 enum-single-source 收敛）：词表单源是 .agents/workflow-enums.txt 的 level.all
+//   键——本文件是「定级判据」的机器单源，不是「档位词表」的单源。此前此处内联 ['L1','L2','L3']，
+//   与 workflow-enums 的 level.all 构成两份同值事实；且 workflow-enums.mjs:7 明令「禁止在任何消费方
+//   内再抄一份枚举字面量」。改为从单源派生：新增/退役档位时只改一处。
+//   非空保证由 workflow-enums.mjs 的 validateEnums（NEED_KEYS 含 level.all，空值即抛错）单点承担，
+//   此处不再重复设防——重复设防正是本次要收敛掉的模式。
+export const LEVELS = ENUMS['level.all'];
 export const HINTS_REL = '.agents/level-hints.txt';
 
 // 档位语义（new-task.md 引用本段，不复述——单源纪律）

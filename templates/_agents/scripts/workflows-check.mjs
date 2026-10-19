@@ -112,7 +112,7 @@ export function lintWorkflowText({ file, text, roles, steps }) {
 
   const rows = parseStages(text);
   if (!rows) {
-    errors.push('E3 缺 stages 表（表头须含 id / after / gate 列——三形态各至少一行的可执行编排才有效）');
+    errors.push('E3 缺 stages 表（表头须含 id / after / gate 列——四形态（role/step/gate/human）各至少一行的可执行编排才有效）');
     return { file, errors, warnings };
   }
 

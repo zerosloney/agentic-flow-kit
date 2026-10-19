@@ -104,7 +104,7 @@ const fm = (extra = '') => `---\nname: t\ndescription: t\n${extra}---\n\n# w\n\n
   fs.rmSync(root, { recursive: true, force: true });
 }
 
-// ---- S6 三形态全空 / 双填 → E9 ×2 ----
+// ---- S6 四形态全空 / 双填 → E9 ×2 ----
 {
   const root = mkfix({
     'forms.md': fm() + HEAD + '\n' + SEP + '\n' +
@@ -113,7 +113,7 @@ const fm = (extra = '') => `---\nname: t\ndescription: t\n${extra}---\n\n# w\n\n
   });
   const r = lintWorkflows({ root });
   const e9 = r.files[0].errors.filter((e) => e.startsWith('E9'));
-  check('S6 三形态全空与双填 → E9 ×2',
+  check('S6 四形态全空与双填 → E9 ×2',
     r.errorCount === 2 && e9.length === 2 && e9[0].includes('nothing') && e9[1].includes('both'),
     JSON.stringify(r.files[0].errors));
   fs.rmSync(root, { recursive: true, force: true });
