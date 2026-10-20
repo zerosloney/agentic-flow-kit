@@ -13,7 +13,7 @@
 <!-- 探索泳道（可选，2026-09-30 hybrid-governance-explore-hardening）：experiment/ 前缀分支上的 PoC 任务在 frontmatter 加「阶段: exploring」——提交/推送门降级 advisory，spec/plan 可先于本入口确认起草（限 L1）；转正合入 main 前须收口（本档 approved/done + 同名 plan/spec 在场，check-loop --hardening 加固门），或显式放弃（superseded/cancelled） -->
 <!-- 预判（可选，2026-10-13 自 Shipyard 回灌 prejudgment-ledger）：定级时先做结构化预判，结果如实写「预判: kind=<require|fix|verify|review|deploy> level=<L1|L2|L3>」——intents≡require、incidents≡fix；与实际落位不符时 check-loop 路由预判一致性检查（B6b 落地后编号以 check-loop.mjs 头部清单为准）出 WARN 留账。缺字段零告警（存量宽容不回填，不做强制前置）——advisory 灰度口径 -->
 <!-- 待澄清标记（2026-10-12 needs-clarification；2026-10-18 立项跳对称化扩到本模板）：起草时
-     不确定的地方照实写一行 `- 待澄清：<你卡在哪>`，不要猜一个填上去——立项是后链全部文档的种子，
+     不确定的地方照实写一行 `- 待澄清：<你卡在哪>`，禁猜——立项是后链全部文档的种子，
      「我不知道」是负责，猜是失职。起草门不拦（不阻塞继续写）；但 draft→approved 确认时仍挂着
      未澄清项会被 confirm-doc 拒绝落账。解决后把行首改成 `- 已澄清：…`（保留该行留痕）或直接删行。
      判据单源：stage-gates.mjs#openClarifications / clarifyGateFor。存量 intent 无标记零回溯。 -->

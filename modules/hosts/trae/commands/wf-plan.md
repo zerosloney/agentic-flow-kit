@@ -18,8 +18,8 @@ description: Plan 阶段 · 立 intent（AI 起草、用户确认；本阶段不
    - 复制 `workflow/intents/_TEMPLATE.md` → `workflow/intents/YYYY-MM-DD-<主题>.md`
    - frontmatter 填 `模块:`（词表见 `.agents/workflow-modules.txt`，新建文档必填，check-loop 会警告）
    - 按 8 节填写:背景与问题 / 历史教训防复发 / 目标(可验证) / 非目标 / 约束 / 影响面 / 触达红线 / 验收标准（L1 微改动可省非目标/约束两节，不硬填）
-   - 红线勾选对照根 `AGENTS.md` 红线/约束相关节（如「项目适配区」「门禁与提交」）+ 改动域目录级 `AGENTS.md`（如有）;**没触及就全不勾**,不要硬填
-3. 写不出可测试判据 = 还没想清楚 → 反问澄清,不要硬填。
+   - 红线勾选对照根 `AGENTS.md` 红线/约束相关节（如「项目适配区」「门禁与提交」）+ 改动域目录级 `AGENTS.md`（如有）;**没触及就全不勾**,禁硬填
+3. 写不出可测试判据 = 还没想清楚 → 反问澄清,禁硬填。
 4. 起草后停下,输出草稿全文给用户过目,一句"可以"即确认。
    **确认落态**：唯一入口 `node .agents/scripts/confirm-doc.mjs <path>`（draft→approved / approved→done；TTY 两形态 / 逐件代录（摘要可复用——分辨力由 scope+指纹承担）/ 台账对质全口径见根 `AGENTS.md` §1.3 确认门）。
 

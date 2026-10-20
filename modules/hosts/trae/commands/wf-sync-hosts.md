@@ -46,12 +46,12 @@ npm test                                       # 含 sync-hosts.test.mjs
 node bin/flow-kit.mjs doctor                   # 包源环境 §6.7 skipped
 ```
 
-## 3. 边界（不要做）
+## 3. 边界（禁做）
 
-- 不要 `--apply` 反向同步（写权威源）：权威源是真相，薄适配手改会被覆盖——这是设计，apply 前先看 `--diff`
-- 不要删除孤儿薄适配：可能是宿主特化或历史残留，apply 不动
-- 不要改 frontmatter 让 sha 凑齐：frontmatter 是宿主特化字段（trae name: wf-X 等），工具不参与
-- 不要把「避免与权威版本漂移」明文加回去——这是旧契约的指针风格，已被 B-b 正文副本取代
+- 禁 `--apply` 反向同步（写权威源）:权威源是真相,薄适配手改会被覆盖——设计如此;apply 前先看 `--diff`
+- 禁删孤儿薄适配（可能是宿主特化或历史残留,apply 不动）
+- 禁改 frontmatter 让 sha 凑齐（frontmatter 是宿主特化字段,如 trae name: wf-X,工具不参与）
+- 禁把「避免与权威版本漂移」明文加回（旧契约的指针风格,已被 B-b 正文副本取代）
 - 装了新宿主后跑 `--apply`：新宿主目录空白，apply 不会自动创建薄适配（薄适配须经 `add-host <h>` 接管）
 
 ## 4. 不在本次同步范围

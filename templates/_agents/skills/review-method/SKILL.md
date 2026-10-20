@@ -27,7 +27,7 @@ description: 代码复核走查方法（Standards×Spec 双轴 + 坏味道清单
 
 两轴独立成立：合规范但做错事（Standards 过、Spec 挂）与做对事但破规范（Spec 过、Standards 挂）都存在——分开报告防一轴掩盖另一轴。Spec 轴报三类发现：承诺缺失/部分落地、超范围（scope creep）、实现走样。
 
-### 派发前自检与轴隔离（2026-10-19 自源仓 520b281a 回灌）
+### 派发前自检与轴隔离（源仓 520b281a）
 
 - **基准自检先行**：派复核（或自查）前 `git rev-parse <基准>` 可解析 + `git diff <基准>...HEAD` 非空——坏引用/空 diff 在派发前失败，不在两个轴的走查中途爆。
 - **Spec 源发现序**：commit 消息里的 workflow 引用 → 用户给的路径 → 入口文档同名家族（intent/spec/plan）→ 都没有则问用户；找不到时 Spec 轴显式报「无 spec 可依」，禁静默跳过整轴。

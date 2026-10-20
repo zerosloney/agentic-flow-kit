@@ -73,12 +73,12 @@ node .agents/scripts/gate-checklist.test.mjs   # 13 场景全过
 npm test                                       # 含 gate-checklist 套件
 ```
 
-## 4. 边界（不要做）
+## 4. 边界（禁做）
 
-- 不要把「登记完整」当作强制门 —— B-b 决策「只报告不修复」：断档/未登记暴露给 follow-up，exit 恒 0
-- 不要改 doctor / check-loop 检查项来消音 —— 登记表才是该改的地方（配对 / 独有 / 经 §7 三选一）
-- 不要扩展到看板告警 —— 看板当前无告警规则（gen-wiki-board.mjs 不做判定），扩展超出范围
-- 不要绕过登记直接改解析正则 —— 解析面只认 doctor `// N.` 节注释与 check-loop `// N.` 项注释（.mjs 头部清单，fallback 旧装户 .sh `# N.`）
+- 禁把「登记完整」当强制门（B-b 决策「只报告不修复」:断档/未登记暴露给 follow-up,exit 恒 0）
+- 禁改 doctor / check-loop 检查项来消音（该改的是登记表:配对 / 独有 / 经 §7 三选一）
+- 禁扩展到看板告警（gen-wiki-board.mjs 不做判定,扩展超出范围）
+- 禁绕过登记直改解析正则（解析面只认 doctor `// N.` 节注释与 check-loop `// N.` 项注释:.mjs 头部清单,fallback 旧装户 .sh `# N.`）
 
 ## 5. 不在本次同步范围
 

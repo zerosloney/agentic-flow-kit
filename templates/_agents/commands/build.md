@@ -44,7 +44,7 @@ next: .agents/commands/test.md
 
 ### 1.2 进计划模式列改动
 
-5. **不要直接动代码**。先进「计划模式」:
+5. **禁直改代码**——先进「计划模式」:
    - **先拉同模块历史坑**：按入口文档 `模块:` 跑 `node .agents/scripts/kb-search.mjs --scope workflow --module <token> "<关键词>"`——命中 incident 的根因 / 防复发条目列入改动自查
    - 列改动文件清单(读后改 vs 新建)
    - 列步骤(改 X 文件做 Y → 改 Z 文件做 W)
@@ -54,7 +54,7 @@ next: .agents/commands/test.md
 
 ### 1.3 实现
 
-7. 确认后按 plan 依赖推进——**frontier = 任务拆解中「依赖」行无未决阻塞的任务**（2026-10-19 自源仓 5248747e 回灌 blocking edges），可并行派发（多 worktree 各自分支 / 委派「新开+合并范围」），纯顺序链即自上而下;每完成一项立刻回填勾选与留痕并解锁依赖它的下游任务,每个任务对照判据自验。若任务满足 `.agents/roles/implementer.md` 的边界,主智能体可将单个工作包连同必读材料、授权文件和验收条件委派给 `implementer`;否则由主智能体执行。
+7. 确认后按 plan 依赖推进——**frontier = 任务拆解中「依赖」行无未决阻塞的任务**（源仓 5248747e blocking edges），可并行派发（多 worktree 各自分支 / 委派「新开+合并范围」），纯顺序链即自上而下;每完成一项立刻回填勾选与留痕并解锁依赖它的下游任务,每个任务对照判据自验。若任务满足 `.agents/roles/implementer.md` 的边界,主智能体可将单个工作包连同必读材料、授权文件和验收条件委派给 `implementer`;否则由主智能体执行。
 8. 自验:按改动域跑 `项目构建命令` / `项目类型检查命令` / `项目测试命令`(对应编译 / 前端类型检查 / 自动化测试;静态门全集见 `test.md` §1);范围对账 `node .agents/scripts/check-scope.mjs workflow/plans/YYYY-MM-DD-<主题>.md`——越界件(改了未声明)即收口(回填 plan 或回滚),plan 不可读 exit 2;默认 advisory exit 0,`--strict` 供门禁化调用。
 9. **项目架构红线**:数据访问模式、公共字段写入等以根与目录级 `AGENTS.md`(如有)红线为准,不自创旁路。
 10. **L3 且含 schema 变更时**:schema 变更走项目约定的维护方式(人工 SQL / 迁移工具,以目录级 `AGENTS.md` 或 spec 约束为准),不得擅自引入项目未采用的迁移机制（仅运行时 / 管线类 L3 无此约束）。

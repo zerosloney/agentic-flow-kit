@@ -82,7 +82,7 @@ node .agents/scripts/verify-wiki-consistency.mjs
 
 - **同名不同扩展**：例如 `数据字典-修复.sql` 与 `数据字典-修复.md` —— 文件名可重复，但 `INDEX.md` 与看板 `DATA` 用 `file` 字段存完整文件名（含扩展）以区分。
 - **跨主题歧义**：用户说"X 放哪"拿不准时，读首行 + 第一段判断；仍无法判定就先与用户确认主题，不预设兜底主题、不自造归类。
-- **二进制（xlsx/csv/sql/json）**：允许直接归位到对应主题；不要为它们新建 markdown 索引——需要说明用途时写进 `wiki/INDEX.md` 速览表的「用途」列（唯一人工维护位，用例描述一句话；该表计数与映射表、看板 DATA 均为生成区，会被 `gen-wiki-board.mjs` 重写）。`wiki/数据维护/` 下的脚本与批次目录则在 `wiki/数据维护/README.md` 台账加登记行（verify 会拦未登记目录）。
+- **二进制（xlsx/csv/sql/json）**：允许直接归位到对应主题；禁为它们新建 markdown 索引——需要说明用途时写进 `wiki/INDEX.md` 速览表的「用途」列（唯一人工维护位，用例描述一句话；该表计数与映射表、看板 DATA 均为生成区，会被 `gen-wiki-board.mjs` 重写）。`wiki/数据维护/` 下的脚本与批次目录则在 `wiki/数据维护/README.md` 台账加登记行（verify 会拦未登记目录）。
 
 ## 6. 已知边界
 

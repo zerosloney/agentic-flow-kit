@@ -33,7 +33,7 @@ next: .agents/commands/build.md
    - **L1**（未命中 L2/L3）→ 快车道：省略 spec，直接跳 `next: build.md` 起草 Quick-Plan
    - **L2**（触达面闭集见单源 `L2_SURFACES`）→ 必须有 spec
    - **L3**（结构面闭集见单源 `L3_SURFACES`）→ 必须有 spec + **新会话独立复核**
-   - 判哪一档：逐条对照单源的 `L2_SURFACES` / `L3_SURFACES` / `L1_NEGATIVES`，不要凭记忆——判据只读单源一处
+   - 判哪一档：逐条对照单源的 `L2_SURFACES` / `L3_SURFACES` / `L1_NEGATIVES`，禁凭记忆（判据只读单源一处）
 3. 起草 spec:
    - **填空工具先跑**：`node .agents/scripts/fill-spec.mjs --level <L1|L2|L3> --topic <主题> --output workflow/specs/<date>-<主题>.md`——输出含 frontmatter 5 字段 + 5 节正文（功能行为/数据流/系统改动/约束遵守映射/风险评估）的草稿；AI 据此填实
    - 复制 `workflow/specs/_TEMPLATE.md` → `workflow/specs/YYYY-MM-DD-<主题>.md`(与入口文档同名)

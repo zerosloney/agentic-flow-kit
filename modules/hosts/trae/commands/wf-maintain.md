@@ -7,7 +7,7 @@ description: Maintain 阶段 · 立 incident + 复盘三件套（incident 在 L1
 
 > 修复走 incident 流程;incident 在 L1+ 即 **intent 等价物**(check-loop 已认 incident≡intent),不必另造 intent。spec/plan 与 incident 同名即闭环。
 
-> 事故回到 Plan。复盘三件套缺一不可,防复发承诺不留在文档里。
+> 事故回流 Plan:复盘三件套缺一不可;防复发承诺禁停留在文档。
 
 ## 1. 执行
 
@@ -46,7 +46,7 @@ description: Maintain 阶段 · 立 incident + 复盘三件套（incident 在 L1
 
 **3. 规范条目**(必须有可追溯落点)
 - 落点优先级(取最前者可行即止):`workflow/regression-checklist.md` 回归条目 / `.agents/hooks/` 或 `tests/` 断言(机器门)→ `.agents/skills/`、`.agents/notes/` → `workflow/` 文档 → `.agents/commands/`
-- **修复强度阶梯**（源仓 48b65997）:落点序是位置序,强度序另判——架构收口/钩子/CI > 自动化用例 > 规范文本;落规范文本时必须在复盘写明「为什么更强的层级拦不住」（agent 跳过文档时,没有任何东西会失败）
+- **修复强度阶梯**（源仓 48b65997）:落点按位置序取,强度序另判——架构收口/钩子/CI > 自动化用例 > 规范文本;落规范文本时必须在复盘写明「为什么更强的层级拦不住」（agent 跳过文档时,没有任何东西会失败）
 - **根 `AGENTS.md` 不再是落点**;**入册门槛**:已由机器门强制的内容只留一行指针,禁止在常驻面复述;**一进一出**:落点为常驻面时须在本 commit 内删除或下沉一条被取代条目
 - 常驻面体积预算由 pre-commit 硬拦(`node .agents/scripts/rule-budget.mjs --staged`,表 `.agents/rule-budgets.txt`)——超限先删再增
 - 引用:commit <SHA> / 文件:<路径>#L<行>;若无新增条目,理由:<已有条目覆盖,说明条目位置>
