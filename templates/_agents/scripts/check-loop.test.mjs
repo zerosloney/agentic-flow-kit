@@ -3635,6 +3635,18 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('检查23 advisory 档自报覆盖但证据不存在 → WARN「收敛未覆盖」',
     r.status === 0 && outOf(r).includes('[WARN 收敛未覆盖]'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
+  // ②b 扩展名最长优先回归（源仓 cca68879 同源缺陷）：.json 证据路径存在 → 不截断成 .js、不误报收敛未覆盖
+  T = mkSpec(TABLE([
+    '| 全量套件绿 | npm test | 覆盖 |',
+    '| 报文快照在库 | workflow/evidence/ui-results.json | 覆盖 |',
+  ]));
+  fs.mkdirSync(path.join(T, 'workflow', 'evidence'), { recursive: true });
+  w(T, 'workflow/evidence/ui-results.json', '{}');
+  w(T, 'workflow/verify-evidence.md', GREEN_ROW('2026-10-14T08:00:00.000Z'));
+  r = run(T, { git: true, args: [] });
+  check('检查23 扩展名最长优先：.json 证据路径存在 → 不截断、无收敛告警',
+    r.status === 0 && !outOf(r).includes('收敛'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
   // ③ 无验收判据节 → 收敛无判据（WARN）
   T = mkSpec('## 风险评估\n\n- 暂无\n', '2026-10-13');
   r = run(T, { git: true });

@@ -46,6 +46,7 @@ npx agentic-flow-kit doctor                        # §6.5 delegations + §6.6 o
 - L2/L3 改动必须由 `independent-reviewer` 在独立上下文复核;宿主不支持子智能体时另开新会话,避免沿用原修改思路盲区
 - 复核者读入口文档(intent / incident) + spec + plan + diff,判断变更意图与风险
 - 复核意见交用户定性(采纳 / 驳回);采纳项回 `build.md` 修改
+- **意见级落账**（2026-10-20 自源仓 2555f16b 回灌接线）: 复核收口时在 `workflow/reviews.d/<当月>.md` 追加一行（八列口径见 review.md 落账子项；采纳+拒绝+误报=意见数）——`gen-workflow-metrics` 读该目录出「复核效果」月度表。建账不落账 = 台账零数据（源仓实证：建账两日零落账系执行缺口，复核活动散落在提交说明里无处聚合——本条堵该缺口）
 
 ## 5. 子代理调用约定
 

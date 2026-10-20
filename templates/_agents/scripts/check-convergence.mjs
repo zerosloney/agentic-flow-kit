@@ -26,10 +26,11 @@ const CMD_RE = /npm\s+(run\s+)?test|verify\.mjs/;
 const CITE_RE = /npm\s+(?:run\s+)?test|verify\.mjs/g;
 // verify.mjs 全绿行（verifications.jsonl 绿凭证）实际覆盖的命令。不在此集的白名单命令没有对应绿记录。
 const GATE_CMD = new Set(['npm test', 'npm run test', 'verify.mjs']);
-// 路径提取（2026-10-16 自源仓 13f67ef7 回灌）：路径体 = ASCII 路径字符 + 字母（中文目录放行），
-// 扩展名加 .vue。单字符类 + 前置分隔锚，避免 (A|B)+ 在长说明上回溯；标点（如路径后的「（说明）」）
+// 扩展名交替**最长优先**（2026-10-20 自源仓 cca68879 回灌：原 `mjs|js|ts|tsx|...|json` 中 js/ts 是
+// mjs/json/tsx 的前缀且交替无尾锚，`.json`/`.tsx` 路径被截断成 `.js`/`.ts` → existsSync 恒 false →
+// 证据永不可验）。单字符类 + 前置分隔锚，避免 (A|B)+ 在长说明上回溯；标点（如路径后的「（说明）」）
 // 不在类内，仍截断。matchAll 取捕获组（剥前导分隔符），路径分隔符归一 posix。
-const PATH_EXT = 'mjs|js|ts|tsx|vue|cs|md|json|html|sql';
+const PATH_EXT = 'tsx|mjs|json|html|sql|vue|cs|md|ts|js';
 const PATH_RE = new RegExp(`(?:^|[\\s\`'"（(])([\\w.@\\-\\\\/\\p{L}]+\\.(?:${PATH_EXT}))`, 'gu');
 const SEC_RE = /^##\s+.*验收判据/;
 // 与 gen-verify-evidence.mjs 数据行同形态（kit 六列：短 SHA | ISO 时间 | 门数 | 套件计数 | 绑定单 | runId）。

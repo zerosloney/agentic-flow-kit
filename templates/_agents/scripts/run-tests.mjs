@@ -49,13 +49,17 @@ if (!suites.length) {
 
 // 工作池调度（完成一个补一个——分块会让最慢套件阻塞同块槽位，2026-10-09 实测 check-loop.test 独占 ~1/3 时长）
 let totalPass = 0, totalFail = 0, red = 0;
+const slow = []; // Top3 慢套件（2026-10-20 自源仓 2555f16b 回灌：耗时分布可见性；源仓同批的默认并发
+//   clamp(4..12) 不采——kit 的 check-loop.test 未分片、73.8s 地板前提未变，且 Windows spawn 密集有
+//   EBUSY 偶发红前科，默认 6 的既有定案维持）
 const runSuite = (s) => new Promise((resolve) => {
+  const t0 = Date.now();
   const child = spawn(process.execPath, [path.join(dir, s)]);
   let out = '', err = '';
   child.stdout.on('data', (d) => { out += d; });
   child.stderr.on('data', (d) => { err += d; });
-  child.on('close', (code) => resolve({ stdout: out, stderr: err, status: code, error: null }));
-  child.on('error', (e) => resolve({ stdout: out, stderr: err, status: null, error: e }));
+  child.on('close', (code) => resolve({ stdout: out, stderr: err, status: code, error: null, ms: Date.now() - t0 }));
+  child.on('error', (e) => resolve({ stdout: out, stderr: err, status: null, error: e, ms: Date.now() - t0 }));
 });
 const replay = (s, r) => {
   const m = [...String(r.stdout || '').matchAll(/合计: PASS (\d+) \/ FAIL (\d+)/g)].pop();
@@ -64,13 +68,17 @@ const replay = (s, r) => {
   totalPass += p;
   totalFail += f;
   const ok = r.status === 0 && f === 0;
+  slow.push({ s, ms: r.ms || 0 });
+  slow.sort((a, b) => b.ms - a.ms);
+  if (slow.length > 3) slow.length = 3;
+  const sec = ((r.ms || 0) / 1000).toFixed(1);
   process.stdout.write(`\n[run-tests] ▶ ${s}\n`);
   if (r.stdout) process.stdout.write(r.stdout);
   if (ok) {
-    console.log(`[run-tests] OK ${s}（PASS ${p} / FAIL ${f}）`);
+    console.log(`[run-tests] OK ${s}（PASS ${p} / FAIL ${f}，${sec}s）`);
   } else {
     red++;
-    console.log(`[run-tests] RED ${s}${r.status != null ? `（exit ${r.status}）` : r.error ? `（spawn ${r.error.code || r.error.message}）` : ''}${m ? `（PASS ${p} / FAIL ${f}）` : ''}`);
+    console.log(`[run-tests] RED ${s}${r.status != null ? `（exit ${r.status}）` : r.error ? `（spawn ${r.error.code || r.error.message}）` : ''}${m ? `（PASS ${p} / FAIL ${f}，${sec}s）` : ''}`);
     if (r.stderr) process.stderr.write(String(r.stderr).split('\n').slice(-5).join('\n') + '\n');
   }
 };
@@ -96,4 +104,5 @@ const replay = (s, r) => {
   }
 }
 console.log(`\n[run-tests] 套件 ${suites.length}（红 ${red}，并发 ${CONC}）｜断言合计 PASS ${totalPass} / FAIL ${totalFail}${red ? '——红套件见上，修复后原路重跑' : '——全绿'}`);
+if (slow.length) console.log(`[run-tests] 最慢${slow.length > 1 ? ` Top${slow.length}` : ''}：${slow.map((x) => `${x.s} ${(x.ms / 1000).toFixed(1)}s`).join(' · ')}`);
 process.exit(red ? 1 : 0);

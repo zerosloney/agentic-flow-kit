@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-19T05:53:06.767Z",
+  "generatedAt": "2026-10-20T13:56:34.962Z",
   "files": {
     ".github/workflows/ci.yml": {
       "sha256": "e9cffb90dec8f0a49bfe231a13fb8df375a2494cc75c38d991b5eb7c7be104b5",
@@ -55,7 +55,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/check-convergence.mjs": {
-      "sha256": "65485f4ca91f886a1bc3d1723dd6d93ffcf888612d11f315bc498a8bd258616f",
+      "sha256": "9f5eb494eca3e58c182c7bd0888572a73ae5cf8ffbdb9bc9d9d93ad47990b7da",
       "hard": 1
     },
     "templates/_agents/scripts/check-engine-integrity.mjs": {
@@ -250,6 +250,10 @@
       "sha256": "b51e1b4ca949b25d9c26df512612ff05ff82031890d0b8dbc7beb7aa34270f1b",
       "hard": 0
     },
+    "templates/_agents/scripts/regen-ledgers.mjs": {
+      "sha256": "443de177cbea620eb5a674421929c2f5b397ab6c8ee5fa47215a1846b5e2f349",
+      "hard": 1
+    },
     "templates/_agents/scripts/resolve-merge-conflicts.mjs": {
       "sha256": "da2a4438414b440fb2e7f3fa3579589f2eb9148550925e8736022736c3016e9f",
       "hard": 0
@@ -263,7 +267,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/run-tests.mjs": {
-      "sha256": "3fe3fa3f7b31a7e93878ae08cd4d4db4a5fc2abf2013feeba637f369b49f6d2a",
+      "sha256": "8ebbc1eab18b0ac3c355e205f543e5e2e12a4517ab5d03dca6fec3a35839268f",
       "hard": 3
     },
     "templates/_agents/scripts/solidify-task.mjs": {

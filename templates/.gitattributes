@@ -15,3 +15,14 @@
 # 分片目录（2026-10-13 ledger-shard-default）：上面的 glob 不跨目录层级，confirmations.d/ 下的分片
 # 须单列——分片已是默认写入口径，漏配则并行分支合并分片时仍走文本冲突（整取一侧 = 静默丢确认行）。
 .agents/confirmations.d/*.jsonl merge=jsonl-union
+
+# 工作流台账合并策略（2026-10-20 自源仓 0bc69a24 回灌，消「每合并必冲突」——四件是每任务必写的
+# 共享计数器，双分支并行各自改同一计数行必撞）。三个生成物 merge=ours 保留本侧：真值源在别处
+# （workflow 文档树 / verifications.jsonl），合并后跑 node .agents/scripts/regen-ledgers.mjs 重生成
+# 即含两侧事实；stale 由 check-loop 检查 11 / verify 生成物一致性门兜底拦下。delegations.md 手工行
+# 纯追加 → 行级并集（复用 jsonl-union；快照区两侧并存由 agg-delegations 重算、打印回贴口径清理）。
+# merge=ours 需本地配 merge.ours.driver（flow-kit init 自动配，同 jsonl-union 性质：本机态不跨机共享）。
+workflow/INDEX.md merge=ours
+workflow/metrics.md merge=ours
+workflow/verify-evidence.md merge=ours
+workflow/delegations.md merge=jsonl-union

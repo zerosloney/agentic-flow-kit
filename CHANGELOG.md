@@ -69,6 +69,43 @@
   但会让 `npm test` 首步 eslint 报 3 个 unused-vars 而整套假红）；engine-lock --update 入账
   （受检面 84 件，改动件 12 个；trust-mode.mjs 硬拦单位数 1 → 3，是新增两条 fail-loud 的加硬）。
 
+### 台账合并与判据修复系列（自 Shipyard.Material 回灌·技术批，2026-10-20）
+
+源仓 1.8.5 基线 38817459 之后 294 提交逐件甄别、两批采纳之一（批 2 为 pstack/matt 协议件）。五件：
+
+- fix(gate)：**检查 23 证据路径提取扩展名交替改最长优先**（源仓 cca68879 整件）。原
+  `mjs|js|ts|tsx|…|json` 中 js/ts 是 mjs/json/tsx 的前缀且交替无尾锚——`.json`/`.tsx` 判据表证据
+  路径被截断成 `.js`/`.ts`，`existsSync` 恒 false，**证据永不可验**（源仓 po-close 关单实证）；
+  kit 的 check-convergence.mjs 与源仓逐字同源、带着同一缺陷。改 `tsx|mjs|json|html|sql|vue|cs|md|ts|js`。
+  测试：检查 23 新增 ②b 场景（.json 证据路径存在 → 不截断、无收敛误报）。
+- feat(tool)：**regen-ledgers.mjs 四台账一键重生成 + .gitattributes 台账合并策略**（源仓 0bc69a24
+  整件，kit 适配）。根因：INDEX/metrics/verify-evidence/delegations 是每任务必写的共享计数器，
+  双分支并行合并必在计数行撞车（结构性）。`.gitattributes` 三生成物 `merge=ours`（真值源在别处，
+  任取一侧 + 重生成 = 两侧并集的正确版本；stale 由检查 11 / verify 生成物一致性门兜底）、
+  delegations.md 复用 `jsonl-union` 行级并集——driver 均为 init 既有本机配置，零新增。**kit 适配**：
+  第四步走 kit 的 `agg-delegations.cjs` 打印回贴口径（源仓 --write 自动回写是其自有能力，kit 快照
+  为人工回贴 + doctor §6.5 陈旧检测兜底），头注如实声明差异。测试：regen-ledgers.test 三场景。
+- fix(test)：**pipeline-run.test 尾行并入「合计: PASS/FAIL」契约 + FAIL 计数器**（源仓 cda8c7ea 的
+  pipeline-run 半件；kit 1.8.3 已修六套件，本件是 kit 仅剩的非契约尾行）。旧「N 组断言全过」双态
+  尾行使该套件断言计数恒 0/0；套件本有软失败包裹，补 FAIL 计数零结构改动。
+- feat(tool)：**run-tests 逐套件耗时回放 + Top3 慢套件汇总**（源仓 2555f16b① 的观测半件）。OK/RED
+  行附 `X.Xs`、末行汇总 Top3。同批默认并发 `clamp(4..12)` **不采**（甄别在案）：源仓前提是
+  check-loop.test 分片后地板 73.8s→28.9s，kit 未分片、地板未变，且 Windows spawn 密集有 EBUSY
+  偶发红前科——默认 6 既有定案维持，注释留判据。
+- feat(docs)：**test.md §4 独立复核补「意见级落账」接线**（源仓 2555f16b③）。reviews.d 建账
+  （1.8.3）无落账动作 = 台账零数据（源仓实证：建账两日零落账系执行缺口）。权威源经 sync-hosts
+  --apply 同步五宿主 wf-test.md。
+- **甄别（不采在案）**：e83bf7f7（fileURLToPath 三套件）kit 1.8.5 已修同款；bc65fd8c（夹具 git
+  身份 env 注入）kit 无 git config 子进程模式、无同源成本；2555f16b②（L1 plan 随首个实现提交）
+  kit 本已同口径、源仓在向 kit 收敛；34b7a44f + c88ee652（gate-diet：pre-commit 六门降 advisory、
+  体积预算恢复硬拦、钩子内并行）源仓多门钩子架构向 kit 单 check-loop 硬道形态收敛，kit 无此面、
+  体积预算 kit 本就 --staged 硬拦；存量日期批注清理 ×4 属源仓 owner 风格裁定（kit 日期批注是判据
+  事故锚承载体，不跟）；a2a90147（命令式重构）风格整建留案；6cc028aa/8ffa6e29/a5ea50aa 宿主台账
+  数据操作无 kit 落点；44390bde（关单活文档一致性门）维持前批甄别挂起（待资产定位器泛化决策）。
+- engine-lock --update 入账（受检面 84→85 件：regen-ledgers.mjs 新入；另 check-convergence.mjs /
+  run-tests.mjs 改动件）。测试：npm test 82 套件 0 失败（含并行 P0/P1 批新增套件）；eslint 0 error；
+  引擎完整性门自洽绿。
+
 ## 1.8.7
 
 告警聚合口径批（kit 自研立法，非源仓回灌；治理审查 B 项收口）。审查依据源仓 9 天判定流水遥测

@@ -119,9 +119,10 @@ function editDoc(f, rel, fn) { const p = docP(f, rel); fs.writeFileSync(p, fn(fs
 const fillValid = (t) => t.replace(/<为什么做>|<时间线>|<根因>|<三件套>/g, '已填实的正文内容。');
 
 let PASS = 0;
+let FAIL = 0; // 契约行 FAIL 计数器（2026-10-20 自源仓 cda8c7ea 回灌：尾行并入「合计: PASS/FAIL」单源契约）
 function test(name, fn) {
   try { fn(); console.log(`✅ ${name}`); PASS++; }
-  catch (e) { console.error(`❌ ${name}\n${(e && e.stack) || e}`); process.exitCode = 1; }
+  catch (e) { console.error(`❌ ${name}\n${(e && e.stack) || e}`); FAIL++; process.exitCode = 1; }
 }
 
 // 通用推进器：L1/L2 到 implement 工单停机（返回 fixture）
@@ -513,5 +514,7 @@ test('status --adopt：run 文件丢失后按文档重建', () => {
   assert.equal(runFile(f, id).stage, 'adopted');
 });
 
-console.log(`\npipeline-run.test：${PASS} 组断言全过${process.exitCode ? '（有失败）' : '，绿'}`);
+// 契约行（2026-10-20 自源仓 cda8c7ea 回灌）：run-tests 聚合器只认「合计: PASS n / FAIL n」——
+// 旧「N 组断言全过」双态尾行使本套件断言计数恒 0/0，绿凭证少计真实断言。
+console.log(`\n合计: PASS ${PASS} / FAIL ${FAIL}`);
 process.exit(process.exitCode || 0);
