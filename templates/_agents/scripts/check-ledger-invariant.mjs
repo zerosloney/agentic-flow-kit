@@ -5,7 +5,7 @@
 // 判据自多 worktree 合并丢行事故后的实战实现逐字回灌（出处留包源仓 git 历史与 CHANGELOG））
 // 目的：把「台账本地可写」的伪造面从事后对质级升为机器可检出级（能力评审审计维度扣分项）。
 // 台账不可变原则：confirmations 历史行禁删改——修正只能走追加补偿行（README 硬规则 6）。
-// 性能（2026-10-16 自源仓 ledger-git-batch 回灌）：历史全扫原为逐提交 `git show <sha>:<path>` +
+// 性能（2026-10-16）：历史全扫原为逐提交 `git show <sha>:<path>` +
 //   `git log -1 %P`，即 O(提交数) 次进程创建（Windows 单次 ~68ms，随历史线性膨胀）；改为一次
 //   `git log` 取 sha+父、一次 `cat-file --batch` 取该路径全部 blob（O(路径数)），判据与输出不变。
 //
@@ -108,7 +108,7 @@ const HISTORY_BASELINE = process.env.LEDGER_HISTORY_BASELINE || '';
 
 const gitText = (args) => execFileSync('git', args, { cwd: ROOT, encoding: 'utf8' });
 
-// ---- git 对象批量读取（2026-10-16 自源仓 ledger-git-batch 回灌）----
+// ---- git 对象批量读取（2026-10-16）----
 // 动机：逐提交 `git show <sha>:<path>` 在 Windows 上 ~68ms/次（进程创建主导），主台账提交数 × 2 次
 // （blob + 父列表）随历史线性膨胀；改为「一次 git log 取 sha+父」+「一次 cat-file --batch 取该路径
 // 全部 blob」——spawn 数自 O(提交数) 降到 O(路径数)，判据与输出不变。
@@ -274,7 +274,7 @@ const parentShas = (sha) => {
 
 // 合并并集对账：cur 行集须恰为各父行集之并（无丢失、无凭空新增）。返回 null = 认可；否则返回原因。
 // 父提交无此路径（单侧新增）跳过该父；行比对按整行字符串（与 linesOf/前缀判据同粒度）。
-// 2026-10-16 自源仓回灌：签名自 sha 改收 parents 数组——--staged 合并态无提交 sha，由调用方传
+// 2026-10-16：签名自 sha 改收 parents 数组——--staged 合并态无提交 sha，由调用方传
 // [HEAD, MERGE_HEAD…]；历史全扫（传 parentShas(sha)）与 --staged 共用本判据（不新开口子）。
 const mergeUnionProblem = (parents, rel, curBuf) => {
   const curLines = new Set(linesOf(curBuf));
@@ -424,7 +424,7 @@ function ledgerPaths() {
 }
 
 // ---- --staged：暂存台账面 ⊇ HEAD 前缀，或携带 manifest 的特许修剪；分片删除须已并入暂存主台账 ----
-// 合并态口径（2026-10-16 自源仓 13f67ef7 回灌 staged-merge-union）：MERGE_HEAD 在场时暂存内容是**多父
+// 合并态口径（2026-10-16 staged-merge-union）：MERGE_HEAD 在场时暂存内容是**多父
 // 合并结果**，单看 HEAD 一父不够——合法合并形态下暂存 = 父母并集（− manifest removes），严格前缀等式
 // 必然不等而误拦。此时在严格等格外**再试父母并集集合对账**——与历史全扫同一函数 mergeUnionProblem /
 // mergePruneProblem、同一口径，不新开口子：并集须无丢失、无凭空行（既禁丢行也禁凭空行）。非合并态不启用。

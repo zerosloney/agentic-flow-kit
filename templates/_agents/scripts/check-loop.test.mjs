@@ -76,7 +76,7 @@ ${refs ? '     - 是 → ../intents/2026-09-12-ghost.md\n' : ' - 否 → 理由:
 `;
 
 // run：默认 CHECK_LOOP_ROOT 注入（fixture 模式）；{git:true} 时 cwd 注入（真 git 模式，测 tracked 过滤）；
-// opts.args 替换默认 `--all`（套件默认全量 = 分道前裸跑语义；2026-10-13 分道后裸跑=默认硬门，沿源仓
+// opts.args 替换默认 `--all`（套件默认全量 = 分道前裸跑语义；2026-10-13 分道后裸跑=默认硬门，沿上游
 // check-loop.test.mjs 同款约定——硬门默认入口用 { args: [] }，分道场景显式传 --hygiene）；
 // opts.env 增量覆盖子进程 env（CHECK_LOOP_GIT 替身注入用，2026-10-05-gitout-fail-open）
 const run = (root, opts = {}) => spawnSync(process.execPath, [CHECK_LOOP, ...(opts.args ?? ['--all'])], {
@@ -2419,7 +2419,7 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
 }
 
 // ---- 风险泳道（2026-09-30 hybrid-governance-risk-lanes）：红线判低 ----
-// （2026-10-13 L0 退役，自源仓收敛系列 1 回灌：原「L0 配对豁免」场景随级别退役删除。存量 intent 仍须 plan；L1 plan 可独立成入口。）
+// （2026-10-13 L0 退役：原「L0 配对豁免」场景随级别退役删除。存量 intent 仍须 plan；L1 plan 可独立成入口。）
 {
   // L1 intent 仍须 plan（协作道不豁免 L1——防倒退回归）
   const T1 = mkfix();
@@ -2574,7 +2574,7 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   rmfix(T);
 }
 
-// ---- 默认入口 vs 卫生入口 vs 全量（2026-10-13 B6b-1 分道；源仓 check-loop.test.mjs 同名场景移植）----
+// ---- 默认入口 vs 卫生入口 vs 全量（2026-10-13 B6b-1 分道）----
 {
   // 卫生违例（模板占位符残留，检查 2 hygiene 面）无硬违例：默认（裸跑=硬门）不出卫生面且 exit 0；
   // --hygiene 出卫生面且 exit 0；--all 两段都跑 = 分道前的裸跑全量。
@@ -3413,11 +3413,11 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
 }
 
-// ==== B6b-2（2026-10-13 自源仓 check-loop.test.mjs 回灌）：§21–§26 六段 + §3x + 检查 1 L1 plan 即入口 + 复核上下文 ====
-// 场景集与关键词断言沿源仓同段场景移植；锚日期换 kit 口径（v12：specVerifSince/attributionSince/
+// ==== B6b-2（2026-10-13）：§21–§26 六段 + §3x + 检查 1 L1 plan 即入口 + 复核上下文 ====
+// 场景集与关键词断言沿上游同段场景移植；锚日期换 kit 口径（v12：specVerifSince/attributionSince/
 // convergenceSince=2026-10-13，convergenceHardSince/reviewerSince/incidentRegrSince=2026-10-14）。
 
-// ---- 检查 1：L1 plan 即入口（源仓 s01，2026-10-10 L1 收成一份 plan）----
+// ---- 检查 1：L1 plan 即入口（2026-10-10 L1 收成一份 plan）----
 {
   const T = mkfix();
   w(T, 'workflow/plans/2026-10-13-solo.md', PLAN('solo', '状态: draft\n级别: L1'));
@@ -3635,7 +3635,7 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('检查23 advisory 档自报覆盖但证据不存在 → WARN「收敛未覆盖」',
     r.status === 0 && outOf(r).includes('[WARN 收敛未覆盖]'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-  // ②b 扩展名最长优先回归（源仓 cca68879 同源缺陷）：.json 证据路径存在 → 不截断成 .js、不误报收敛未覆盖
+  // ②b 扩展名最长优先回归：.json 证据路径存在 → 不截断成 .js、不误报收敛未覆盖
   T = mkSpec(TABLE([
     '| 全量套件绿 | npm test | 覆盖 |',
     '| 报文快照在库 | workflow/evidence/ui-results.json | 覆盖 |',

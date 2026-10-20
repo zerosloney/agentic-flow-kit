@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// closeout-l1 — L1 关单一把编排（2026-10-15 减重手段④ 自源仓回灌：记录性动作一把生成，判断留给人）
+// closeout-l1 — L1 关单一把编排（2026-10-15 减重手段④：记录性动作一把生成，判断留给人）
 // 把 test.md §6 的 L1 关单链（预检 → confirm-doc 代录 → INDEX 重生成 → 提交清单）收进一条命令。
 // 用法：node .agents/scripts/closeout-l1.mjs <workflow/plans/xxx.md>              # 预检模式：只查差距，不落任何状态
 //       node .agents/scripts/closeout-l1.mjs <plan> --delegated "<用户对话原话>"   # 执行模式：预检过 → confirm-doc 代录 → 重生成 INDEX

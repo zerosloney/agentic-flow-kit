@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// closeout-l1.test.mjs — L1 关单编排纯函数套件（2026-10-15 减重手段④ 自源仓回灌随附）
+// closeout-l1.test.mjs — L1 关单编排纯函数套件（2026-10-15 减重手段④ 随附）
 // parseArgs / fmOf / acceptanceOf / preflight / shardOf 进程内断言：快筛差距逐项暴露、
 // L2/L3 与终态件不受理、勾验缺一即拦、verify 凭证缺失即拦、分片路径与写入口径同形。
 // 运行：node templates/_agents/scripts/closeout-l1.test.mjs

@@ -1,4 +1,4 @@
-// regen-ledgers.test.mjs — 重生成步骤单源与执行缝回归（2026-10-20 自源仓 0bc69a24 回灌，kit 适配）
+// regen-ledgers.test.mjs — 重生成步骤单源与执行缝回归（2026-10-20，kit 适配）
 // 钉死三件事：①四步骤齐全且顺序稳定（INDEX → metrics → verify-evidence → delegations 快照打印）
 // ②执行按序逐个 spawn、全绿才汇总成功 ③fail-fast：首败即停不再 spawn 下游。
 // kit 适配点：第四步是 agg-delegations.cjs 打印回贴口径（源仓为 --write 自动回写），无 --write 参数。

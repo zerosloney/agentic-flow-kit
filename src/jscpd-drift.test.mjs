@@ -9,7 +9,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-// fileURLToPath 而非手搓 pathname 解码（源仓 fdded128 同根因）：非 ASCII 路径经 URL 百分号编码后解析错路径。
+// fileURLToPath 而非手搓 pathname 解码：非 ASCII 路径经 URL 百分号编码后解析错路径。
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPT = path.join(ROOT, 'scripts', 'jscpd-drift.mjs');
 

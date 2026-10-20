@@ -43,7 +43,7 @@ const CONSUMERS = {
   verifyDocSince: ['检查 8', '凭证按 doc 精确绑定的生效时刻（→done 前置与对账按 doc 匹配，不带 --doc 的行不给任何单背书）', 'advisory'],
   scopeSince: ['检查 15', 'scope 子项（机器派生改动面 scope{files,sha256}——缺 scope 灰度 warning、摘要不符 hard）', 'hard'],
   ledgerDocChainSince: ['检查 15', '台账哈希链域从物理序改为按 doc 逻辑序（写入侧 confirm-doc 同批生效）', 'hard'],
-  // B6b-2 六段 + §3x + 复核上下文（2026-10-13 自源仓回灌，消费面自本批起在场）
+  // B6b-2 六段 + §3x + 复核上下文（2026-10-13，消费面自本批起在场）
   incidentRegrSince: ['检查 3x', 'incident 防复发验证证据门（fixed/closed 须落自动化用例/回归清单引用）', 'hard'],
   specVerifSince: ['检查 21', 'spec 验证落地核查（验证节无测试文件/命令引用——advisory）', 'advisory'],
   attributionSince: ['检查 24', 'incident 归因字段（来源/影响环境必填且在枚举——advisory）', 'advisory'],
@@ -88,7 +88,7 @@ if (argv.includes('--check')) {
   try {
     disk = fs.readFileSync(OUT, 'utf8');
   } catch { /* 缺文件视作空——走漂移分支（新装户由 init 生成器首跑种子本文件） */ }
-  // 锚日时间炸弹拆除（源仓 2026-10-12 CI 实证：锚日当天重渲染按当日判「已生效」→ 与仓内视图必差
+  // 锚日时间炸弹拆除（2026-10-12 CI 实证：锚日当天重渲染按当日判「已生效」→ 与仓内视图必差
   // → --check 必红——任何未来日期锚都会在锚日引爆）。修法：--check 对**磁盘文件自带的视图日期**重渲染
   // （生成物与自身生成日自洽，跨锚日字节稳定）；显式重生成（默认模式）才前进视图日期并翻转状态列。
   // 视图日期行缺失的存量件回落当日口径。

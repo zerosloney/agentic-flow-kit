@@ -1,8 +1,8 @@
 #!/usr/bin/env node
-// ledger-shards.test.mjs — 分片读写单源 fixture（2026-10-13 ledger-shard-ledgers，自源仓回灌）
+// ledger-shards.test.mjs — 分片读写单源 fixture（2026-10-13 ledger-shard-ledgers）
 // 覆盖：数据行判定（含节限定）/ 月提取 / 主台账∪分片读 / 迁移幂等 / 追加 / 表头自带 / fail-loud
 // kit 适配：表头签名用 kit 模板形态（delegations 末列「合入结论」、regression-checklist「incident | 条目 | 落点」）；
-//   S22 钉住 kit 适配（分片渲染须出 kit 表头、不出源仓表头——防再同步漂移）。
+//   S22 钉住 kit 适配（分片渲染须出 kit 表头、不出上游表头——防再同步漂移）。
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -247,7 +247,7 @@ const wf = (root, ...p) => path.join(root, 'workflow', ...p);
   fs.rmSync(root, { recursive: true, force: true });
 }
 
-// ---- S20 appendRows --section（2026-10-16 自源仓 13f67ef7 回灌）：已有双表时委派行插入委派节，
+// ---- S20 appendRows --section（2026-10-16）：已有双表时委派行插入委派节，
 //      不带 section 仍落文末（修「合并丢共有行」时新增行误落末表）----
 {
   const root = mkroot();
@@ -342,9 +342,9 @@ const wf = (root, ...p) => path.join(root, 'workflow', ...p);
   fs.rmSync(root, { recursive: true, force: true });
 }
 
-// ---- S22 kit 适配钉子：分片渲染出 kit 表头、不出源仓表头 ----
+// ---- S22 kit 适配钉子：分片渲染出 kit 表头、不出上游表头 ----
 // （kit delegations 两表末列 =「合入结论」、regression-checklist 表头 =「incident | 条目 | 落点」；
-//   再自源仓同步本模块时若把源仓表头带回来，此组先红）
+//   再与上游同步本模块时若把上游表头带回来，此组先红）
 {
   const deleg = renderShard('delegations', []);
   check('S22a delegations 分片骨架出「合入结论」表头', deleg.includes('合入结论') && !deleg.includes('返工原因'));

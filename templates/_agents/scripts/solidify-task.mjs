@@ -46,7 +46,7 @@ const classify = (content) => {
 function run() {
   const { topic, root, delegated, auto } = parseArgs();
   // 草稿暂存区 = .zcode/workflow-drafts（宿主保存工作流草稿的实际目录；
-  // 2026-10-16 自源仓 8deb032b 回灌纠正：原 .zcode/drafts 自引入起从未存在，脚本一跑即 fail）
+  // 2026-10-16 纠正：原 .zcode/drafts 自引入起从未存在，脚本一跑即 fail）
   const draftsDir = path.join(root, '.zcode', 'workflow-drafts');
   if (!fs.existsSync(draftsDir)) fail(`草稿目录 ${draftsDir} 不存在`);
   const files = fs.readdirSync(draftsDir).filter((f) => f.includes(topic) && f.endsWith('.md'));

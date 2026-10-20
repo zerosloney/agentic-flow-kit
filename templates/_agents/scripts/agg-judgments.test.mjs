@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // agg-judgments.test.mjs — 判定流水聚合纯函数套件（2026-10-11 judgment-ledger）
 // aggFromRows 进程内断言：按月分桶 / --month 过滤 / WARN·BLOCK 计数 / 坏 rules 字段容忍。
-// retireCandidates（2026-10-15 减重手段① 自源仓回灌）：零命中窗口候选 / 数据不充分守卫 / 断档月不按零计。
+// retireCandidates（2026-10-15 减重手段①）：零命中窗口候选 / 数据不充分守卫 / 断档月不按零计。
 import { aggFromRows, retireCandidates } from './agg-judgments.mjs';
 
 let pass = 0;

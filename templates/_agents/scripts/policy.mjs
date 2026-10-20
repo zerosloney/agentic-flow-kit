@@ -149,15 +149,15 @@ export const POLICIES = {
   },
 };
 
-// ---- 版本 9–12（2026-10-13 B6b-1，自源仓 policy v9–v12 对齐回灌）----
-// 构造式沿源仓 2026-10-10 收敛系列 6 的 merge 链（基线 + 显式差异）：kit v1–v8 键史原样保留不动，
+// ---- 版本 9–12（2026-10-13 B6b-1）----
+// 构造式沿上游 2026-10-10 收敛系列 6 的 merge 链（基线 + 显式差异）：kit v1–v8 键史原样保留不动，
 // 新版本在 kit v8 之上做超集追加，消除「全量手抄日期键、漏抄即静默改语义」的脆弱点（v2 注释自警同源）。
 // 键名与源仓逐字一致；kit 无源仓 v6–v8 的 check14HardSince / verifyHardSince——那两个键的消费段
 // （检查 14 hard 档 / 凭证 hard 档）kit 仍为恒 advisory 面，未落地不引入。incidentRegrSince 随 B6b-2
 //（§21–26 同批）落地并激活其消费段 §3x 防复发证据门。各锚日期 = kit 落地日口径：
-//   发布当日（2026-10-13）= specVerifSince / attributionSince / convergenceSince（advisory 档沿源仓
+//   发布当日（2026-10-13）= specVerifSince / attributionSince / convergenceSince（advisory 档沿上游
 //     convergenceSince「发布当日」先例——当日起、存量不追溯）；
-//   发布次日（2026-10-14）= convergenceHardSince / reviewerSince / incidentRegrSince（沿源仓
+//   发布次日（2026-10-14）= convergenceHardSince / reviewerSince / incidentRegrSince（沿上游
 //     check14HardSince「发布次日」先例——当日在途件不追溯、维持 advisory 留痕，锚起新违例才升格）。
 // 缺键（v1–v8）→ 对应消费段整体跳过（存量零噪声）。抄全键仍是铁律。
 const merge = (base, over) => ({ ...base, ...over });

@@ -119,7 +119,7 @@ function editDoc(f, rel, fn) { const p = docP(f, rel); fs.writeFileSync(p, fn(fs
 const fillValid = (t) => t.replace(/<为什么做>|<时间线>|<根因>|<三件套>/g, '已填实的正文内容。');
 
 let PASS = 0;
-let FAIL = 0; // 契约行 FAIL 计数器（2026-10-20 自源仓 cda8c7ea 回灌：尾行并入「合计: PASS/FAIL」单源契约）
+let FAIL = 0; // 契约行 FAIL 计数器（2026-10-20 尾行并入「合计: PASS/FAIL」单源契约）
 function test(name, fn) {
   try { fn(); console.log(`✅ ${name}`); PASS++; }
   catch (e) { console.error(`❌ ${name}\n${(e && e.stack) || e}`); FAIL++; process.exitCode = 1; }
@@ -290,7 +290,7 @@ test('修复环 cap 3 → 超限 gate-fail exit 2', () => {
   assert.match(out(p), /修复环超限/);
 });
 
-// （2026-10-13 L0 退役，自源仓收敛系列 1 回灌：原「L0 路径：直改 → 提交 → done」场景随 direct-edit
+// （2026-10-13 L0 退役：原「L0 路径：直改 → 提交 → done」场景随 direct-edit
 // 分支删除——最低档 L1 走 intent+plan 闭环，无直改通道。）
 
 test('verify-only 短路径直达 done', () => {
@@ -514,7 +514,7 @@ test('status --adopt：run 文件丢失后按文档重建', () => {
   assert.equal(runFile(f, id).stage, 'adopted');
 });
 
-// 契约行（2026-10-20 自源仓 cda8c7ea 回灌）：run-tests 聚合器只认「合计: PASS n / FAIL n」——
+// 契约行（2026-10-20）：run-tests 聚合器只认「合计: PASS n / FAIL n」——
 // 旧「N 组断言全过」双态尾行使本套件断言计数恒 0/0，绿凭证少计真实断言。
 console.log(`\n合计: PASS ${PASS} / FAIL ${FAIL}`);
 process.exit(process.exitCode || 0);

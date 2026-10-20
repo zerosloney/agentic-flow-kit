@@ -675,7 +675,7 @@ function advance(ctx, run, opt) {
       stopConfirm(ctx, run, rest[0], `${label}——逐份原话，一次一份（余 ${rest.length} 份）`, true);
     }
 
-    // direct-edit 分支随 L0 退役删除（2026-10-13 自源仓收敛系列 1 回灌）——最低档 L1 走 intent+plan 闭环。
+    // direct-edit 分支随 L0 退役删除（2026-10-13）——最低档 L1 走 intent+plan 闭环。
 
     if (s === 'verify-only') { run.stage = 'verify'; continue; }
     if (s === 'review-only') {

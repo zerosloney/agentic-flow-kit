@@ -43,7 +43,7 @@ const ENUMS_TXT = path.join(SCRIPT_DIR, '..', 'workflow-enums.txt');
       && ENUMS['doc.status.active'].join('+') === 'draft+approved'
       && ENUMS['doc.status.terminal'].includes('done')
       && ENUMS['doc.status.abandoned'].every((v) => ENUMS['doc.status.terminal'].includes(v))
-      // level.all=L1 L2 L3——L0 已退役（2026-10-13 自源仓收敛系列 1 回灌）
+      // level.all=L1 L2 L3——L0 已退役（2026-10-13）
       && ENUMS['level.all'].join('+') === 'L1+L2+L3',
     JSON.stringify(ENUMS));
 }

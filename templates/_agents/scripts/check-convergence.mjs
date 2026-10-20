@@ -26,7 +26,7 @@ const CMD_RE = /npm\s+(run\s+)?test|verify\.mjs/;
 const CITE_RE = /npm\s+(?:run\s+)?test|verify\.mjs/g;
 // verify.mjs 全绿行（verifications.jsonl 绿凭证）实际覆盖的命令。不在此集的白名单命令没有对应绿记录。
 const GATE_CMD = new Set(['npm test', 'npm run test', 'verify.mjs']);
-// 扩展名交替**最长优先**（2026-10-20 自源仓 cca68879 回灌：原 `mjs|js|ts|tsx|...|json` 中 js/ts 是
+// 扩展名交替**最长优先**（2026-10-20 原 `mjs|js|ts|tsx|...|json` 中 js/ts 是
 // mjs/json/tsx 的前缀且交替无尾锚，`.json`/`.tsx` 路径被截断成 `.js`/`.ts` → existsSync 恒 false →
 // 证据永不可验）。单字符类 + 前置分隔锚，避免 (A|B)+ 在长说明上回溯；标点（如路径后的「（说明）」）
 // 不在类内，仍截断。matchAll 取捕获组（剥前导分隔符），路径分隔符归一 posix。

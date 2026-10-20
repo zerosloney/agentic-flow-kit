@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-20T14:43:38.229Z",
+  "generatedAt": "2026-10-20T15:53:52.089Z",
   "files": {
     ".github/workflows/ci.yml": {
       "sha256": "e9cffb90dec8f0a49bfe231a13fb8df375a2494cc75c38d991b5eb7c7be104b5",
@@ -11,7 +11,7 @@
       "hard": 0
     },
     "templates/AGENTS.md": {
-      "sha256": "6462975ff6242f6b99435dab26833e9c930e44ae274bbe3f3225652c51263380",
+      "sha256": "9b7ce09f8be0c169aba4d840caddaedabe54d7e8d22196bc02cafdc2fecbe9c5",
       "hard": 28
     },
     "templates/_agents/control-surfaces.txt": {
@@ -31,7 +31,7 @@
       "hard": 8
     },
     "templates/_agents/rule-budgets.txt": {
-      "sha256": "beb3a326e1df8fb261c6d7946004bdbe25be15a17bc15c5cbeedb0765f9e950c",
+      "sha256": "fd98b09268c9324e13c539a57ae19571bd9eae0188ad36dbd31ef6d55e00fcba",
       "hard": 3
     },
     "templates/_agents/scripts-test-exempt.txt": {
@@ -43,7 +43,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/agg-judgments.mjs": {
-      "sha256": "ac8ed6a89b7650657890b7eacfffc1989a05a7de5cb3a06b94cc7ff1a73d3a77",
+      "sha256": "70440d3c467f6fb82e1f9bbd70b2a39707719100b6f33851ea100b358adc0883",
       "hard": 0
     },
     "templates/_agents/scripts/archive-sweep.mjs": {
@@ -55,7 +55,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/check-convergence.mjs": {
-      "sha256": "9f5eb494eca3e58c182c7bd0888572a73ae5cf8ffbdb9bc9d9d93ad47990b7da",
+      "sha256": "b9b9b1dc6b06d8f1fbb1536d3a8cddc8ebda3a5359efbb663f216e4700393243",
       "hard": 1
     },
     "templates/_agents/scripts/check-engine-integrity.mjs": {
@@ -71,15 +71,15 @@
       "hard": 0
     },
     "templates/_agents/scripts/check-lane-surface.mjs": {
-      "sha256": "89163a88d3b90b487181c59873c6cc5b0a161f670352f63f8e607a0e6596aa4c",
+      "sha256": "858903ddc762056dfc02ac57accdc277f2fb02c183bf17d7e36d4b40dbd6721d",
       "hard": 2
     },
     "templates/_agents/scripts/check-ledger-invariant.mjs": {
-      "sha256": "2eca0ca122e09d5c1dda7675d787d08bfcce6a50a93f62019eeebfb28af8b01e",
+      "sha256": "35d61f9b786447ecf45243c2edc7f77916ae116a7386ffa0ae976e769355bb35",
       "hard": 2
     },
     "templates/_agents/scripts/check-loop.mjs": {
-      "sha256": "e44afe8f8fedd69ccf6661c03ff527f193bf531951a5a35ceb1266d57ac9f521",
+      "sha256": "bbf08a2df08cac6607d4afb03df2c4b1e08a399d1cfaca5f5c1658506089bfb9",
       "hard": 32
     },
     "templates/_agents/scripts/check-metric-claims.mjs": {
@@ -99,7 +99,7 @@
       "hard": 1
     },
     "templates/_agents/scripts/check-scripts-syntax.mjs": {
-      "sha256": "8d2950ee18327e67471db0993f331ff9688c17390c3fcc7b6adbe6eb0892d1d1",
+      "sha256": "f946b5f179cd2143a5101e90bec437703afb5bb203d1984f3a75509a2b6e7376",
       "hard": 3
     },
     "templates/_agents/scripts/check-spec-verif.mjs": {
@@ -111,7 +111,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/closeout-l1.mjs": {
-      "sha256": "76a2bc846f76cdb82fb3ce10b38df37882de727af8641841d2e01664c43962e1",
+      "sha256": "c45be45f7d60f57a99ba5192fff51f345705590cb37340993da54ee31a8019ce",
       "hard": 0
     },
     "templates/_agents/scripts/compact-ledgers.mjs": {
@@ -119,7 +119,7 @@
       "hard": 1
     },
     "templates/_agents/scripts/confirm-doc.mjs": {
-      "sha256": "68467623c5e90e027767a6b67c53680983e2ee9c05a7ba910acb841ba00ab857",
+      "sha256": "c518dc2783d7f76905db8d98b783c11f0c6c7a0fe3f7f5e031cd7d57c37e37f8",
       "hard": 13
     },
     "templates/_agents/scripts/draft-sediment.mjs": {
@@ -159,7 +159,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/gen-effective-policy.mjs": {
-      "sha256": "25da0aadb569708770e8d2ee9492a480ed71da12d70e505871e06964c4ed6d13",
+      "sha256": "af03c6bca7d6f06d742569efe717e0e197447c7a4bf1f334edf5a427513eeefa",
       "hard": 1
     },
     "templates/_agents/scripts/gen-verify-evidence.mjs": {
@@ -179,7 +179,7 @@
       "hard": 3
     },
     "templates/_agents/scripts/gen-workflow-metrics.mjs": {
-      "sha256": "c0b6f9e7a67fa60d4ed9e7c90d8693fa1b9e6e8bc90df41b677d8c94ccf620f6",
+      "sha256": "03823b8d9fbdc3b9d294cd7ec56b23f901a4181258706fe4c21f170c97fc86fc",
       "hard": 2
     },
     "templates/_agents/scripts/git-core.mjs": {
@@ -199,7 +199,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/kb-search.mjs": {
-      "sha256": "b80b843fec87053058f4e8ca442c2d12ce5f5cd9b2377903ef9d5270b60142ca",
+      "sha256": "619252be0d81431d85e685bccfddaed8df208cd95837854aedc949cf340b0275",
       "hard": 7
     },
     "templates/_agents/scripts/lane-surface-audit.mjs": {
@@ -215,11 +215,11 @@
       "hard": 0
     },
     "templates/_agents/scripts/ledger-shards.mjs": {
-      "sha256": "45ce305d4f0b7c878095a9db79971a0ea7d3685f5b6fa2e69b5212b8df4254e3",
+      "sha256": "5f198c28e07eced794af9d59447d3dbd7db0481087a9d17d5da9c4e588422ea2",
       "hard": 0
     },
     "templates/_agents/scripts/level-criteria.mjs": {
-      "sha256": "f7f547dc1be93025ee33e2e1986f7552a94688520198f663f8ce0a03710ffa0e",
+      "sha256": "f5b862cf39fae5e6f132f107d29f6f1775988a5abe2bf278e4b27d69324a69ac",
       "hard": 1
     },
     "templates/_agents/scripts/mechanism-retire-watch.mjs": {
@@ -243,15 +243,15 @@
       "hard": 0
     },
     "templates/_agents/scripts/pipeline-run.mjs": {
-      "sha256": "7ee5613de9c9a9eb3b45cec9f9c97d9feb1c38ea29e1e96009e5e39f79568aa8",
+      "sha256": "ad5e79a202588316e85b49ded9cf55f1e01988ec3210869973dfa553a13d740a",
       "hard": 0
     },
     "templates/_agents/scripts/policy.mjs": {
-      "sha256": "b51e1b4ca949b25d9c26df512612ff05ff82031890d0b8dbc7beb7aa34270f1b",
+      "sha256": "678be920ceb0499cfb013b853e1cc401018090242e5d302afe3f07476655cd23",
       "hard": 0
     },
     "templates/_agents/scripts/regen-ledgers.mjs": {
-      "sha256": "443de177cbea620eb5a674421929c2f5b397ab6c8ee5fa47215a1846b5e2f349",
+      "sha256": "4d7f21543450ce2facf2daaf73a980cc68c1ea071d7a1e1445e88bb7b64b93cd",
       "hard": 1
     },
     "templates/_agents/scripts/resolve-merge-conflicts.mjs": {
@@ -263,19 +263,19 @@
       "hard": 4
     },
     "templates/_agents/scripts/rule-budget.mjs": {
-      "sha256": "2cbda7e83dea2f745986294d1a73147f1bfc831da4fdfbd6548ea7cd4ed4ae09",
+      "sha256": "338df73504545e226b51c00f8204d119300ddad278365ddb39ba5a3f01664b22",
       "hard": 0
     },
     "templates/_agents/scripts/run-tests.mjs": {
-      "sha256": "8ebbc1eab18b0ac3c355e205f543e5e2e12a4517ab5d03dca6fec3a35839268f",
+      "sha256": "6f86a811d815e92f2755cac1865854dd1c4c3217c8193697a919f039a797f3c0",
       "hard": 3
     },
     "templates/_agents/scripts/solidify-task.mjs": {
-      "sha256": "35c7e307c9b7a10d446c2c75eb77ff316be1939c57bec937e0940b42e6fe1499",
+      "sha256": "45f55a33f77365449b811a2ab7dc1e5e2483d1faac8d3f2ff2cfd8aed107f7cd",
       "hard": 3
     },
     "templates/_agents/scripts/stage-gates.mjs": {
-      "sha256": "ff9abdd822d2a739940a9071f956b65e30b2035ab35b575d983b469850663bb1",
+      "sha256": "e2a942b70f6ae5d8f6ebe39f25f07b53f7388d912b92d06e89c298d49154ea9f",
       "hard": 0
     },
     "templates/_agents/scripts/trust-mode.mjs": {
@@ -287,7 +287,7 @@
       "hard": 4
     },
     "templates/_agents/scripts/verify.mjs": {
-      "sha256": "fad5ed87c5539c6a6be3811f489efa7d39157ddab2ace99ccaefb7d072fe388c",
+      "sha256": "72c8fc460e4cb4536a808c6abbf8130794a8843715b0d686f51cf016adbcb632",
       "hard": 4
     },
     "templates/_agents/scripts/wf-journal.mjs": {
@@ -311,7 +311,7 @@
       "hard": 1
     },
     "templates/_agents/workflow-enums.txt": {
-      "sha256": "bf42380a5ad11d418717af1847a8d9ba8bfca5eafe320959603d4d76103410b2",
+      "sha256": "0f568b02674fedebc76bbc069f80dd424867c6190d3b421b81c732f498991d2d",
       "hard": 10
     },
     "templates/_agents/workflow-modules.txt": {
@@ -327,15 +327,15 @@
       "hard": 0
     },
     "templates/_githooks/pre-commit": {
-      "sha256": "c27a24beed41d452aeafcd1ff2c6ae82aa986b1488b8f49478d65d16c23bde01",
+      "sha256": "5ea9c8b0ac60b886ba7e2fb49579978293b73ba16f5f5b0052b01d337ac3a15a",
       "hard": 6
     },
     "templates/_githooks/pre-merge-commit": {
-      "sha256": "960ec2248ed6eb7f43b3db9e8ae65c8b0492fce66b22288c2711760ff69a0f04",
+      "sha256": "95adfb82a573f5e376aa8f89c67905d8e5208d73bcd27bf47383f8b78f4bfed9",
       "hard": 2
     },
     "templates/_githooks/pre-push": {
-      "sha256": "9b78ef895fecfad6fecff005763336f65bfb214459b6093c43321458aabbc9ea",
+      "sha256": "9874f643e93ebd3ae1304dd2cf19f6e30735eaad4c5f8b5f66b71101b14d1481",
       "hard": 5
     },
     "templates/_github/workflows/kit-ci.yml": {

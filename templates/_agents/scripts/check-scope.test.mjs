@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-// fileURLToPath 而非手搓 pathname 解码（源仓 fdded128）：URL pathname 对非 ASCII 路径百分号编码，
+// fileURLToPath 而非手搓 pathname 解码：URL pathname 对非 ASCII 路径百分号编码，
 // Windows 中文 worktree 路径下子进程「Cannot find module」静默红。
 const CLI = path.join(path.dirname(fileURLToPath(import.meta.url)), 'check-scope.mjs');
 let pass = 0, fail = 0;

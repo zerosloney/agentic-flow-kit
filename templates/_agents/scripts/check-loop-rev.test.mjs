@@ -137,7 +137,7 @@ try {
     console.log('SKIP doctor 契约核对（装户位置无包源 src/）');
   }
 
-  // pre-push 已 node 化（2026-10-16 自源仓回灌）：直调 node 跑钩子，桩改 check-loop.mjs / commit-check.cjs
+  // pre-push 已 node 化（2026-10-16）：直调 node 跑钩子，桩改 check-loop.mjs / commit-check.cjs
   if (!HOOK) console.log('SKIP pre-push 相关场景（未找到 _githooks / .githooks 下的 pre-push）');
   if (HOOK) {
     fs.mkdirSync(path.join(root, '.agents', 'scripts'), { recursive: true });

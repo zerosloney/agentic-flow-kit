@@ -12,7 +12,7 @@
 //   a) 装户仓判定——cwd 无 package.json → engine-tests 门显式跳过（跳过≠通过，不计入门数）且**不落
 //      测试绿凭证**（凭证语义 = 测试真跑绿，防假绿），提示 --test-cmd；
 //   b) 凭证行形状 = {ts, exitCode:0, suite:'npm test', gates, headShort?, passed?, failed?, doc?, runId?}
-//      （gates/headShort 自源仓回灌新增——非 git 环境解析失败则省略、不伪造；消费方只读 ts/exitCode/doc，
+//      （gates/headShort 新增——非 git 环境解析失败则省略、不伪造；消费方只读 ts/exitCode/doc，
 //       增量字段零影响）；计数捕获只认编排器权威行 `[run-tests] 合计: SUITES n / FAILED m`
 //       （嵌套套件同形行不回退——宁缺勿错，exitCode 才是硬事实）；
 //   c) --doc 绑定语义保留（归一基准 = ROOT，与 confirm-doc / 检查 8 三处同源）；
@@ -20,7 +20,7 @@
 //      脚本本体，check-loop 用绝对路径直调，root 归属仍由 CHECK_LOOP_ROOT 裁决）；夹具模式不触发生效规则
 //      视图门与摘要生成（假门凭证只进本地台账，不产 committed 摘要）。
 // 未执行门清单：fail-fast 后序门状态未知≠通过——验证系统输出须完备（「没跑」与「过了」可区分）；
-//   并发编排（2026-10-16 自源仓 verify-parallel 回灌）后该清单按「已出裁决」算：guardian 门
+//   并发编排（2026-10-16）后该清单按「已出裁决」算：guardian 门
 //   （scripts-syntax）串行先跑、未过即止；其余门进工作池并发（--jobs N / --serial，缺省
 //   clamp(2..4, floor(cpus/4))），各自缓冲输出、完成即整块回放；任一门红 → 停排新门 + taskkill /T
 //   树杀在跑门（Windows shell:true 起的是 cmd.exe，kill 只杀壳不杀孙进程）。
@@ -32,7 +32,7 @@
 //   --list：按执行序打印门 id 后退出，不执行（与 --test-cmd / --stub-gate 互斥）。
 //   --jobs N / --serial：并发档位与串行回退（缺省 clamp(2..4, floor(cpus/4))；--jobs 0 / 非整数 fail-loud）。
 //   --test-cmd 用于测试注入，或在无根 package.json 的装户仓指定项目测试命令；
-//   --stub-gate <命令>（2026-10-16 自源仓回灌）：单门夹具但走**生产尾段**（落凭证 / 生成摘要）——
+//   --stub-gate <命令>（2026-10-16）：单门夹具但走**生产尾段**（落凭证 / 生成摘要）——
 //     与 --test-cmd 的差异是不打 testCmd 标记、尾段按生产路径执行；**必须配 CHECK_LOOP_ROOT**（夹具根），
 //     禁止在真实仓库写出可被当成关单凭证的绿行。
 //   --doc 把凭证绑到本单，如 --doc workflow/intents/<日期>-<主题>.md
@@ -72,7 +72,7 @@ const fixtureGates = (cmd) => [
 const args = process.argv.slice(2);
 const explicitTestCmd = args.includes('--test-cmd') ? args[args.indexOf('--test-cmd') + 1] : null;
 
-// --stub-gate（2026-10-16 自源仓 13f67ef7 回灌）：单门夹具但走**生产尾段**（落凭证 / 生成摘要）。
+// --stub-gate（2026-10-16）：单门夹具但走**生产尾段**（落凭证 / 生成摘要）。
 // 与 --test-cmd 的关键差异：不打 testCmd 标记（fixture 模式绿行带 testCmd:true，生产凭证不与之混淆）。
 // **必须配 CHECK_LOOP_ROOT**——禁止在真实仓库写出可被当成关单凭证的绿行（信任边界：夹具单门不是关单凭证）。
 const stubIdx = args.indexOf('--stub-gate');
@@ -303,7 +303,7 @@ async function main() {
       //（装户项目自有测试命令）抓不到即省略计数键，不回退到错的事实（宁缺勿错，exitCode 才是硬事实）。
       const m = [...(outputs['engine-tests'] || outputs['test'] || '').matchAll(/\[run-tests\] 合计: SUITES (\d+) \/ FAILED (\d+)/g)].pop();
       if (m) { entry.passed = Number(m[1]); entry.failed = Number(m[2]); }
-      // 门禁成本入账（自源仓回灌）：totalMs = 各门之和（并发后已非墙钟，保留以续接历史口径）；
+      // 门禁成本入账：totalMs = 各门之和（并发后已非墙钟，保留以续接历史口径）；
       // wallMs = 本次实际墙钟——「一次迭代的等待成本」是墙钟，读方以 wallMs 优先。
       entry.totalMs = Object.values(durations).reduce((a, b) => a + b, 0);
       entry.wallMs = Math.round(performance.now() - wallStart);

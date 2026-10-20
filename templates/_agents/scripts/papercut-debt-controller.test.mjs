@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// papercut-debt-controller.test.mjs — 回路控制器 fixture（B10a 自源仓回灌随件测试；源仓无直测，
+// papercut-debt-controller.test.mjs — 回路控制器 fixture（B10a 随件测试；上游无直测，
 //   kit 侧按「新增引擎脚本默认必须带同名 .test.mjs」立——排序键与 scope gate 防再同步漂移）
 // 覆盖：排序键三序（命中次数降序 > 日期降序 > 原行序升序）/ scope gate（源码/数据库面拦下照列）/
 //   stale 与「同上」承接行转待人工定性 / debt=0 达成态 / 全员被拦警示态 / 口径单源（不复制判定正则）/

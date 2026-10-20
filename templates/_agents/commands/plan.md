@@ -7,7 +7,7 @@ triggers:
   - "新需求 <主题>"
   - "要做个 <功能>"
 approval_required: true
-next: L1 → .agents/commands/build.md (起草 Quick-Plan) ；L2/L3 → .agents/commands/design.md
+next: L1 → .agents/commands/build.md (起草 Quick-Plan)；L2/L3 → .agents/commands/design.md
 ---
 
 # Plan · 立 intent

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// ledger-shards.mjs — 三个 append-only 台账的分片读写单源（2026-10-13 ledger-shard-ledgers，自源仓回灌）
+// ledger-shards.mjs — 三个 append-only 台账的分片读写单源（2026-10-13 ledger-shard-ledgers）
 //
 // 背景：workflow/{regression-checklist,delegations,papercuts}.md 是 append-only 活文档，每次追加
 // 全量重写整文件——源仓实测 blob 膨胀（regression-checklist 单文件 14.0 MiB、delegations 11.5 MiB，
@@ -249,7 +249,7 @@ function insertIntoSection(text, section, lines) {
 // appendRows(root, name, rows, { month, section })：把数据行追加进指定月分片（缺省取行内日期月）。
 // rows 可为字符串数组或 { line, section } 数组（多表台账须带 section 才能归对表）。
 // 分片已存在时：带 section 的行插入该节（不落到文末自做表）；不带 section 的行仍追加到文末
-// （2026-10-16 自源仓 13f67ef7 回灌——修「合并丢共有行」时新增行误落末表）。
+// （2026-10-16 ——修「合并丢共有行」时新增行误落末表）。
 // 返回实际写入的分片路径列表。写失败 fail-loud（不静默吞）。
 export function appendRows(root, name, rows, { month, section = '' } = {}) {
   const written = [];

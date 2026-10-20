@@ -2,7 +2,7 @@
 // 1) 敏感信息扫描（暂存区新增行含疑似密钥 -> BLOCK；只报 文件:行号 + 键名 + 掩码，绝不复述原文）
 // 2) 条件构建验证（按 .agents/hooks/commit-check.config.json 的 builds 配置；--full 不做 ext/prefix 裁剪，仍尊重 when）
 // 3) 质量检测（config.checks：lint / 类型检查 / vet 等秒级确定性检查；--full 不做 ext/prefix 裁剪，仍尊重 when）
-// 旗标（2026-10-16 构建门后移 pre-push，自源仓 2ff869a9 回灌）：
+// 旗标（2026-10-16 构建门后移 pre-push）：
 //   --no-build：跳过段 2 条件构建——pre-commit 常规提交用（提交内环提速）；构建在 pre-push 按推送范围
 //     执法，合并提交仍走 --full 全量构建（合并结果是没人验证过的新状态）。
 //   --range <old> <new>：推送范围模式（pre-push 用）——文件面取 git diff --name-only old new；

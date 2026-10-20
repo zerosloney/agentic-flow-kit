@@ -78,7 +78,7 @@ function check(name, cond, detail = '') {
   }
 }
 
-// ---- 场景 8b：L0 已退役（2026-10-13 自源仓收敛系列 1 回灌）→ renderIntent fail-loud ----
+// ---- 场景 8b：L0 已退役（2026-10-13）→ renderIntent fail-loud ----
 {
   let threw = '';
   try { renderIntent({ topic: 't', module: 'pipeline', level: 'L0' }); } catch (e) { threw = e.message; }

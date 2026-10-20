@@ -258,7 +258,7 @@ const files = (out) => (out.match(/^📄 (workflow\/\S+)/gm) || []).map((l) => l
   fs.rmSync(root, { recursive: true, force: true });
 }
 
-// ---- 场景 13：归档扩面（B10a 自源仓随动回灌）——workflow/archive/<批次>/<type>/ 参与检索 ----
+// ---- 场景 13：归档扩面（B10a）——workflow/archive/<批次>/<type>/ 参与检索 ----
 //    归档件命中带归档路径标签；无归档语料时行为与旧口径逐字一致；缓存键随动（归档件独立入键）
 {
   const root = mkfix();

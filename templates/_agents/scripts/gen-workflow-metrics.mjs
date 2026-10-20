@@ -341,7 +341,7 @@ console.log(`  常驻面合计：${kb(surf.total)}`);
 console.log(`  闭环漏斗：收口 ${funnel.closed}（完整链 ${funnel.full} = 一次通过 ${funnel.once} + 返工 ${funnel.rework}；协议前 ${funnel.legacy}）｜中位周期 ${fmtMedianDays(medianDays)} 天｜台账行 ${funnel.ledgerRows}`);
 for (const it of funnel.items) console.log(`    ${String(it.doc).padEnd(58)} ${it.kind.padEnd(7)} ${it.days} 天`);
 if (funnel.items.length) console.log('  ℹ️ 机器口径可与 workflow/delegations.md 自做表的人工自报交叉对照（差异即信号，不对账）');
-// 归档积压提醒（2026-10-15 减重手段⑥ 自源仓回灌，回路别等人喊）：滚动归档已随确认门自动跑
+// 归档积压提醒（2026-10-15 减重手段⑥，回路别等人喊）：滚动归档已随确认门自动跑
 // （confirm-doc archive-on-close），历史积压走 archive-sweep 手工批次——月度 stdout 报候选数使积压可见。
 // 判定单源 = archive-sweep.analyze（21 天窗，禁第二套口径）；analyze/loadLastTouch 抛错（如
 // 浅克隆无 git 历史）fail-open 静默——观测提醒不挡快照。

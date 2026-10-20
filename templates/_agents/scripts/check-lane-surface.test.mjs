@@ -77,7 +77,7 @@ const FM_LOW_NEW = '状态: draft\n级别: L1\n日期: 2026-10-01\n模块: ui';
   const r = run(d, { branch: 'experiment/poc', staged: ['templates/t.md'] });
   check('S2c experiment 分支检查 A → advisory 放行', r.code === 0 && r.out.includes('advisory·experiment'), r.out);
 }
-// --- S2d/S2e：合并进行中 → 检查 A 跳过（2026-10-16 自源仓 13f67ef7 回灌）---
+// --- S2d/S2e：合并进行中 → 检查 A 跳过（2026-10-16）---
 // git merge 自动提交窗口 MERGE_HEAD 已不可靠 → pre-merge-commit 显式传 --merge（fixture 无 MERGE_HEAD，
 // 恰验证 --merge 独生效）；对照：同夹具不带 --merge 时命中面+仅活跃 L1 照拦。
 {

@@ -18,7 +18,7 @@ delegation:
     required: true
     fallback: new-session
 approval_required: true
-next: L1 关单结束 ；L2/L3 上 prod 时 → .agents/commands/deploy.md
+next: L1 关单结束；L2/L3 上 prod 时 → .agents/commands/deploy.md
 ---
 
 > **装户边界**：本文档中 `src/`、`bin/flow-kit.mjs`、`templates/_agents/`、`modules/hosts/` 为 kit 包源仓视角引用——装户仓（无 `templates/` 包源）对应命令不适用，本仓以 `.agents/` 装副本为准。
@@ -61,10 +61,10 @@ npx agentic-flow-kit doctor                        # §6.5 delegations + §6.6 o
 
 ## 4. 独立复核(L2/L3 强制)
 
-- L2/L3 改动必须由 `independent-reviewer` 在独立上下文复核;宿主不支持子智能体时另开新会话,避免沿用原修改思路盲区。**跨模型优先**（源仓 a8f1f88e）:优先指派与执行方不同代/不同家族的模型（同模型新会话有共模盲区）,做不到时复核结论记原因
+- L2/L3 改动必须由 `independent-reviewer` 在独立上下文复核;宿主不支持子智能体时另开新会话,避免沿用原修改思路盲区。**跨模型优先**:优先指派与执行方不同代/不同家族的模型（同模型新会话有共模盲区）,做不到时复核结论记原因
 - 复核者读入口文档(intent / incident) + spec + plan + diff,判断变更意图与风险
 - 复核意见交用户定性(采纳 / 驳回);采纳项回 `build.md` 修改;复核结论首行署名 `reviewed by <模型名>`（署名不可省,可追责——「无问题」也须留名）
-- **意见级落账**（源仓 2555f16b 接线）: 复核收口时在 `workflow/reviews.d/<当月>.md` 追加一行（口径见 review.md 落账子项）——`gen-workflow-metrics` 据此出「复核效果」月度表。建账不落账 = 台账零数据（源仓实证：零落账系执行缺口）
+- **意见级落账**: 复核收口时在 `workflow/reviews.d/<当月>.md` 追加一行（口径见 review.md 落账子项）——`gen-workflow-metrics` 据此出「复核效果」月度表。建账不落账 = 台账零数据（源仓实证：零落账系执行缺口）
 
 ## 5. 子代理调用约定
 
@@ -84,6 +84,6 @@ npx agentic-flow-kit doctor                        # §6.5 delegations + §6.6 o
   - **同族收尾**：入口置终态时，同名 plan 一并置 `done`（spec 见上条），不留 `approved` 孤儿（口径同看板「入口已 done，本 plan 未终态」告警）
   - 主智能体自做的 L1+ 新需求在 `workflow/delegations.md`「自做任务结果表」记一行（修复类不重复记）
   - **委派快照回写**：关单后若 `workflow/delegations.md` §月度聚合快照缺当月行或 doctor §6.5 报陈旧 → 跑 `node .agents/scripts/agg-delegations.cjs` 并回贴当月快照行
-  - **顺事回灌**（源仓 c90b025b 试挂）:非事故关单时回顾本次构建的摩擦信号，列 0-3 条**环境**改进候选（改环境不改代码）——检查未接线/未执法、导航指针缺失、工具经济、no-op 指令清退；有意向走 `workflow/papercuts.d/` 当月片挂债（落点按 maintain.md 修复强度阶梯），无候选记一句「无候选」。不设门，观察命中率再定去留
+  - **顺事回灌**（试挂）:非事故关单时回顾本次构建的摩擦信号，列 0-3 条**环境**改进候选（改环境不改代码）——检查未接线/未执法、导航指针缺失、工具经济、no-op 指令清退；有意向走 `workflow/papercuts.d/` 当月片挂债（落点按 maintain.md 修复强度阶梯），无候选记一句「无候选」。不设门，观察命中率再定去留
 - L1：本阶段结束，不进 deploy
 - L2/L3：仅当用户确认要上 prod 时进 `.agents/commands/deploy.md`

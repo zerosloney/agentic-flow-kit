@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // pre-push.test.mjs — 加固门目标分支判定 + 构建门 fixture 套件
 // （2026-10-01 v09-review-defects 建；2026-10-16 随 pre-push node 化更新：桩改 .agents/scripts/check-loop.mjs
-// 直调，补 commit-check 构建门桩与 --range 断言——自源仓 2ff869a9 回灌面）
+// 直调，补 commit-check 构建门桩与 --range 断言——面）
 // 真仓端到端：临时仓库挂载真实 pre-push，check-loop.mjs 与 commit-check.cjs 以桩记录 argv。
 // 断言三态 refspec：
 //   main→main                  → argv 含 --hardening（加固门）；构建门 --range 新分支首推=全量零 sha

@@ -257,7 +257,7 @@ const readLedger = (root) => {
   fs.rmSync(root10, { recursive: true, force: true });
 }
 
-// ---- 场景 12：--stub-gate 走生产尾段（落凭证；2026-10-16 自源仓 13f67ef7 回灌）----
+// ---- 场景 12：--stub-gate 走生产尾段（落凭证；2026-10-16）----
 // 单门夹具但按生产路径落绿行（不打 testCmd 标记）；必须配 CHECK_LOOP_ROOT。
 {
   const root = mkfix();

@@ -333,7 +333,7 @@ export async function init(args, pkgRoot) {
   fs.writeFileSync(kitPath, `${JSON.stringify({
     kit: 'agentic-flow-kit',
     version: pkg.version,
-    // policyVersion 12（2026-10-13 B6b-2 回灌对齐源仓 v12）：新装即带全锚——v9–v12 = incidentRegrSince /
+    // policyVersion 12（2026-10-13 B6b-2 对齐 policy v12）：新装即带全锚——v9–v12 = incidentRegrSince /
     // specVerifSince / attributionSince / convergenceSince / convergenceHardSince / reviewerSince
     // （§21–26 六段 + §3x 防复发证据门 + 复核上下文子检）。新装空台账零回溯：各段锚前存量豁免、空仓零
     // 噪声；v1–v11 存量装户不受影响（缺键 → 对应消费段整体跳过）。

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Git 原生 pre-push hook（经 core.hooksPath 挂载，git push 时触发）— agentic-flow-kit 通用编排
-// 2026-10-16 node 化（自源仓 2ff869a9/13f67ef7 回灌 pre-push 面）：钩子体不再含 sh 逻辑——git 仍以自带
+// 2026-10-16 node 化（pre-push 面）：钩子体不再含 sh 逻辑——git 仍以自带
 // sh 启动本文件（钩子机制要求），但 shebang 即 node，PATH 无 sh 不影响任何逻辑。写法为 CommonJS——
 // 无扩展名文件 node 缺省按 CJS 解析，不依赖 ≥22.7 的 ESM 语法探测。
 // 跑 .agents/scripts/check-loop.mjs：扫 workflow/ 闭环骨架断档（默认只扫硬门）
@@ -18,7 +18,7 @@
 // （无论来源分支——experiment/* 直推 main 同样覆盖），exploring 任务须先收口（intent approved/done +
 // 同名 plan 在场 + L2/L3 另须同名 spec；判据见 check-loop.mjs 加固门段），hard 失败即阻断 push。
 //
-// 回路日检（2026-10-16 自源仓 13f67ef7 回灌）：退役催办与 papercut 报债此前无调度，机制空转。每个
+// 回路日检（2026-10-16）：退役催办与 papercut 报债此前无调度，机制空转。每个
 // 本地日在推送成功路径跑一次，advisory，失败不改退出码。摘要落 .agents/cache/loop-watch.jsonl（gitignore）。
 //
 // 机器门：本地钩子跑 check-loop.mjs。装户仓的远端门是随包下发的 .github/workflows/kit-ci.yml（verify.mjs）。
@@ -95,7 +95,7 @@ if (rc !== 0) {
   process.exit(rc);
 }
 
-// 回路日检（2026-10-16 自源仓 13f67ef7 回灌）：每个本地日在推送成功路径跑一次，advisory，失败不改退出码。
+// 回路日检（2026-10-16）：每个本地日在推送成功路径跑一次，advisory，失败不改退出码。
 try {
   const cacheDir = '.agents/cache';
   const stampPath = `${cacheDir}/loop-watch-stamp`;

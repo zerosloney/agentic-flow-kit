@@ -575,7 +575,7 @@ if (isMain) {
   // 确认（**归档失败不阻断关单**——与源仓语义逐字一致）。启用锚（照搬源仓，无 policy 锚）：
   // ① 仓库已建立归档约定（workflow/archive/ 存在）——真实装户仓有，临时 fixture 无，避免测试夹具
   //   被静默搬走（也避免在未采纳归档的仓库里凭空造目录）；② env 逃生门 CONFIRM_DOC_NO_ARCHIVE；
-  //   ③ 特性分支默认不归档（2026-10-16 自源仓 13f67ef7 回灌）：分支上先关单再合并时，diff 只剩
+  //   ③ 特性分支默认不归档（2026-10-16）：分支上先关单再合并时，diff 只剩
   //   archive/ 路径，泳道/配对增量门只认 workflow 活跃直路径，合法合并被拦。main/master/develop 与
   //   游离 HEAD 维持关单即归档。CONFIRM_DOC_NO_ARCHIVE=1 仍强制关；CONFIRM_DOC_ARCHIVE=1 可在特性分支强制归档。
   const archiveRoot = path.join(root, 'workflow', 'archive');

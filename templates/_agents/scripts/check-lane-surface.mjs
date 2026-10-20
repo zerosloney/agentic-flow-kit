@@ -60,7 +60,7 @@ const STAGED = stagedArg
   : gitOut(ROOT, ['diff', '--cached', '--name-only', '--diff-filter=ACMR']).split(/\r?\n/).filter(Boolean);
 
 const isExperiment = /^experiment\//.test(BRANCH);
-// 合并进行中（2026-10-15 自源仓 13f67ef7 回灌）：pre-merge-commit 显式传 --merge（git merge 自动提交
+// 合并进行中（2026-10-15）：pre-merge-commit 显式传 --merge（git merge 自动提交
 // 窗口 MERGE_HEAD 已不可靠，只认显式旗标）；冲突解决后的手动 commit 由 MERGE_HEAD 探测兜底（此时
 // 合并仍在进行、MERGE_HEAD 确定存在）。合并提交不引入新首发改动，各笔已在自身提交时刻过门 → 检查 A 跳过。
 const FORCE_MERGE = argv.includes('--merge');

@@ -10,7 +10,7 @@
 
 **kind 词表**（单源 `pipeline-run.mjs` KINDS——§25 执法面 check-prejudgment.mjs 同款内联声明，注释互引、改任一侧须同步；任何列举处系摘录，增删以单源为准；非任务类型词）：`require`（新需求，落 intents）/ `fix`（修复，落 incidents）/ `verify` / `review` / `deploy`。intents 只判 `require`、incidents 只判 `fix`；plans/specs 是两道共用件，不判类型只比对级别。终态文档（done/superseded/cancelled/fixed/closed）跳过形态/词表类告警——终态受检查 15 内容绑定不可修订，此类 WARN 永不可消；类型/级别比对照常。
 
-## 规则生灭机制（2026-10-15 减重立项 自源仓回灌：锚日只升不降的对冲面）
+## 规则生灭机制（2026-10-15 减重立项：锚日只升不降的对冲面）
 
 - **生**：新检查以 advisory 灰度进入 → `effective-policy.md` 锚表按 policyVersion 升 hard。
 - **死**（退役候选）：`node .agents/scripts/agg-judgments.mjs --retire-candidates`——连续 6 个有数据月零命中（WARN+BLOCK=0）的规则列为候选；月度对账按 `.agents/mechanism-registry.md`「退役判据」列逐条裁决（安全主干/级别闭环主干等「不退役」行除外，附加停滞条件由人判）。

@@ -54,5 +54,5 @@
 - **构建 / 测试 / 类型检查命令**（静态门，各阶段命令引用此处口径）：构建 = {{BUILD_CMD}}；测试 = {{TEST_CMD}}；类型检查 = {{TYPECHECK_CMD}}
 - **运行时环境**（端口 / 进程 / 终端差异）：`.agents/notes/runtime-env.md`
 - **目录级规则**：如 `backend/AGENTS.md`、`frontend/AGENTS.md`（如有）——目录级约定不回填本文件
-- **工程原则**（起草 / 复核对照用，不入机器判据——2026-10-18 立项质量批）：项目品味条款逐行列此——示例：简洁优先、直接用平台能力不另包一层｜新增依赖须证不可替代｜禁 speculative 功能（「非目标」节能省则省）｜spec 写 WHAT/WHY，HOW 落 plan。消费：起草 intent / spec 对照自查（「约束遵守映射」逐行对账）与独立复核 Standards 轴；违反本节是复核意见（人工判），违反红线才判低升档（机器）。条款装户自填自持
+- **工程原则**（起草 / 复核对照用，不入机器判据）：项目品味条款逐行列此——示例：简洁优先、直接用平台能力不另包一层｜新增依赖须证不可替代｜禁 speculative 功能（「非目标」节能省则省）｜spec 写 WHAT/WHY，HOW 落 plan。消费：起草 intent / spec 对照自查（「约束遵守映射」逐行对账）与独立复核 Standards 轴；违反本节是复核意见（人工判），违反红线才判低升档（机器）。条款装户自填自持
 - **权限与提交验证配置**：`.agents/settings.json`（allow / deny / ask）、`.agents/hooks/commit-check.config.json`（条件构建 / 质量检测命令与密钥白名单——质量检测只放秒级确定性检查（lint / 类型检查 / vet），测试不放提交门，关单在 test 阶段门）

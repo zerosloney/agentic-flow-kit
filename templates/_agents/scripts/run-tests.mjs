@@ -49,7 +49,7 @@ if (!suites.length) {
 
 // 工作池调度（完成一个补一个——分块会让最慢套件阻塞同块槽位，2026-10-09 实测 check-loop.test 独占 ~1/3 时长）
 let totalPass = 0, totalFail = 0, red = 0;
-const slow = []; // Top3 慢套件（2026-10-20 自源仓 2555f16b 回灌：耗时分布可见性；源仓同批的默认并发
+const slow = []; // Top3 慢套件（2026-10-20 耗时分布可见性；上游同批的默认并发
 //   clamp(4..12) 不采——kit 的 check-loop.test 未分片、73.8s 地板前提未变，且 Windows spawn 密集有
 //   EBUSY 偶发红前科，默认 6 的既有定案维持）
 const runSuite = (s) => new Promise((resolve) => {

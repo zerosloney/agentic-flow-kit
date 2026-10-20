@@ -6,7 +6,7 @@
 //     缺文件 = 尚无运行记录，提示后 exit 0——与 delegations 台账「必在」不同，这是渐积数据）。
 // 消费：mechanism-registry 月度对账（.agents/mechanism-registry.md「触发统计口径」列的 WARN/BLOCK 计数）
 //     与 advisory→hard 升格 / 退役判定的直接查账面——替代原「人工 grep check-loop 输出」。
-// --retire-candidates（2026-10-15 减重手段① 自源仓回灌，规则的死亡机制）：列出「连续 N 个有数据月
+// --retire-candidates（2026-10-15 减重手段①，规则的死亡机制）：列出「连续 N 个有数据月
 //     零命中（WARN+BLOCK 全为 0）」的规则作为退役候选——月度对账时按 mechanism-registry「退役判据」
 //     列逐条裁决（安全主干/级别闭环主干等「不退役」行除外；「且 X 停滞」类附加条件由人判）。
 //     台账不足 N 个数据月 → 数据不充分，不产候选（年轻遥测不得制造假候选）。判定口径 = 尾部

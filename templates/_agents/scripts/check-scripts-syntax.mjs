@@ -4,7 +4,7 @@
 //       任何文件不可解析即判红（先例教训：verify.mjs:31 SyntaxError 带病进 CI，全链门静默失效）。
 // 语义与红线：只读裁决，不改任何状态；检查目录缺失或可检文件数为 0 一律判红（fail-closed，
 //       防「改名/删除脚本即去门」）；不 import 任何引擎件，零依赖可独立调度。
-// 性能（2026-10-16 自源仓 scripts-syntax-parallel 回灌）：node --check 无原地解析 ESM 的 API，
+// 性能（2026-10-16）：node --check 无原地解析 ESM 的 API，
 //       只能逐文件起子进程（单次 ~70ms × 全量脚本）；改工作池并发（min(8, cpus-2)），判红集合不变。
 // 测试：node .agents/scripts/check-scripts-syntax.test.mjs
 // 用法：node .agents/scripts/check-scripts-syntax.mjs [目录...]（相对仓库根；缺省 .agents/scripts .agents/hooks；

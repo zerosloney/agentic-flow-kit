@@ -37,7 +37,7 @@ description: Maintain 阶段 · 立 incident + 复盘三件套（incident 在 L1
 - 是否需要新 intent(本 incident 即 intent 等价物,check-loop 已认 incident≡intent,spec/plan 与 incident 同名即闭环):
   - 否 → 理由:<根因属实现 bug、单点修复已完成,incident 已含目标/约束,等同 intent>
   - 是 → 根因属「门禁缺位 / 规范未落地 / 系统性问题」时强制立 `workflow/intents/YYYY-MM-DD-<主题>.md` 追踪(即使结构性修复已完成)
-- **攻击前提**（源仓 2c342bf1）:同一前提下两种修法都过不了同一道验证时,停下把前提本身写下来直接测试——防「换皮修复」混过复盘
+- **攻击前提**:同一前提下两种修法都过不了同一道验证时,停下把前提本身写下来直接测试——防「换皮修复」混过复盘
 
 **2. 防复发验证**(必须落到自动化用例或回归条目,禁止只写「已人工验证」)
 - 自动化用例:项目测试套件 `<文件>`(`<用例名 / 数量>`)
@@ -46,7 +46,7 @@ description: Maintain 阶段 · 立 incident + 复盘三件套（incident 在 L1
 
 **3. 规范条目**(必须有可追溯落点)
 - 落点优先级(取最前者可行即止):`workflow/regression-checklist.md` 回归条目 / `.agents/hooks/` 或 `tests/` 断言(机器门)→ `.agents/skills/`、`.agents/notes/` → `workflow/` 文档 → `.agents/commands/`
-- **修复强度阶梯**（源仓 48b65997）:落点按位置序取,强度序另判——架构收口/钩子/CI > 自动化用例 > 规范文本;落规范文本时必须在复盘写明「为什么更强的层级拦不住」（agent 跳过文档时,没有任何东西会失败）
+- **修复强度阶梯**:落点按位置序取,强度序另判——架构收口/钩子/CI > 自动化用例 > 规范文本;落规范文本时必须在复盘写明「为什么更强的层级拦不住」（agent 跳过文档时,没有任何东西会失败）
 - **根 `AGENTS.md` 不再是落点**;**入册门槛**:已由机器门强制的内容只留一行指针,禁止在常驻面复述;**一进一出**:落点为常驻面时须在本 commit 内删除或下沉一条被取代条目
 - 常驻面体积预算由 pre-commit 硬拦(`node .agents/scripts/rule-budget.mjs --staged`,表 `.agents/rule-budgets.txt`)——超限先删再增
 - 引用:commit <SHA> / 文件:<路径>#L<行>;若无新增条目,理由:<已有条目覆盖,说明条目位置>

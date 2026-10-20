@@ -7,7 +7,7 @@
 //          L2/L3 时同名 spec）已确认；未过 → exit 2 + 未落盘未记账（S19-S22）
 //       ⑧ done 前置门（2026-09-30 confirm-gate-approved-history）：→done 须 git 历史已留 approved 态
 //          （先 done 后提交 / 两跳同批提交 → 拒绝）；非 git / legacy / 存量豁免声明 → 跳过（S25-S29）
-//       ⑨ 关单即归档（2026-10-13 archive-on-close，B9 自源仓回灌）：终态家族即时 git mv 进 archive、
+//       ⑨ 关单即归档（2026-10-13 archive-on-close，B9）：终态家族即时 git mv 进 archive、
 //          未涉及家族不越权清理、无归档约定不启用、CONFIRM_DOC_NO_ARCHIVE 逃生门（S43-S45）
 // 用法：node templates/_agents/scripts/confirm-doc.test.mjs（npm test 随跑）
 import fs from 'node:fs';
@@ -976,7 +976,7 @@ const writeTrust = (root, cfg) => {
   }
 }
 
-// ---- S43 关单即归档（2026-10-13 archive-on-close；B9 自源仓回灌随件测试）：终态家族超窗 → git mv 进 archive ----
+// ---- S43 关单即归档（2026-10-13 archive-on-close；B9 随件测试）：终态家族超窗 → git mv 进 archive ----
 // 需真实 git 仓库（归档走 git mv）；家族原子：intent+plan 同进同退。月份断言锚定「实时今月」——
 // 与源仓同口径（台账终态锚 = 实时 now，归档月 = 家族最晚终态月），跨月运行需随今月更新断言。
 {
@@ -1072,7 +1072,7 @@ const writeTrust = (root, cfg) => {
   fs.rmSync(root2, { recursive: true, force: true });
 }
 
-// ---- S45c/S45d 特性分支默认不归档（2026-10-16 自源仓 13f67ef7 回灌）----
+// ---- S45c/S45d 特性分支默认不归档（2026-10-16）----
 // 分支上先关单再合并时 diff 只剩 archive/ 路径，泳道/配对增量门只认 workflow 活跃直路径；
 // main/master/develop 与游离 HEAD 维持关单即归档。CONFIRM_DOC_ARCHIVE=1 可在特性分支强制归档。
 {

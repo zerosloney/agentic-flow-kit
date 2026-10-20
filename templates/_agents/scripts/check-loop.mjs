@@ -21,10 +21,10 @@
 //     7 阶段索引（段 id '6'）、9 kebab、10 迁移、11 生成物漂移、12 模块词表、13 体积预算、16 指标签名、
 //     18 委派、19 逐阶段、20 引擎脚本测试覆盖、21 spec 验证落地 / 22 机制台账 / 24 归因 / 26 漏斗协议前
 //     （21–26 六段检查 2026-10-13 B6b-2 落地，见下方清单与 LANE_OF）
-//   1. 入口文档/spec/plan 同名配对(plan 配对全级别强制(2026-10-13 L0 退役,自源仓收敛系列 1 回灌——
+//   1. 入口文档/spec/plan 同名配对(plan 配对全级别强制(2026-10-13 L0 退役——
 //      原 L0 协作道豁免随级别退役删除);L2/L3 必须有 spec;
 //      L1 plan 可即入口(级别恰为 L1 的 plan 无同名 intent/incident 不拦;级别缺失/L2/L3 落单照拦,
-//      2026-10-13 B6b-2 自源仓 s01 回灌);L1 勾触达红线 → 「红线判低」hard——协作道不受理 STOP 级改动,
+//      2026-10-13 B6b-2);L1 勾触达红线 → 「红线判低」hard——协作道不受理 STOP 级改动,
 //      就高不就低,2026-09-30 hybrid-governance-risk-lanes)                            [hard-block]
 //   2. 模板字段占位符残留(YYYY-MM-DD / <主题> 等未替换;<主题> 与 .md 同行 = 命名约定描述,豁免)  [warning]
 //   3. incidents 复盘三件套完整性 + 状态严格枚举 + 新 intent 回路(回路断档=hard,其他=warning)
@@ -124,7 +124,7 @@
 //      随源仓 SECTIONS)                                                                          [advisory]
 //  26. 闭环漏斗「协议前」占比动作阈值(workflow/metrics.md 漏斗表日历相邻两月协议前占比均 >30% =
 //      warning,要求一轮归因;收口=0 的月不判;单月波动不触发)                                       [warning]
-//  3x(编号沿源仓 3x 写法，非独立清单号——gate-checklist 按 `N.` 解析，本条不入其配对面). incident 防复发
+//  3x(编号沿上游 3x 写法，非独立清单号——gate-checklist 按 `N.` 解析，本条不入其配对面). incident 防复发
 //      验证证据门(fixed/closed 且 git 建档日 ≥ incidentRegrSince,正文无自动化用例/回归清单引用 =
 //      hard-block;存量豁免;锚键缺 → 整段跳过)                                                  [hard-block]
 //
@@ -206,7 +206,7 @@ function takeOpts() {
       opts.rev = args[++i] ?? '';
       if (!opts.rev) usage();
     } else if (args[i] === '--all') {
-      if (opts.mode === 'hygiene') usage(); // 互斥组合报用法错（源仓 takeOpts 同款）
+      if (opts.mode === 'hygiene') usage(); // 互斥组合报用法错
       opts.mode = 'all';
     } else if (args[i] === '--hygiene') {
       if (opts.mode === 'all') usage();
@@ -240,14 +240,14 @@ const LANE_OF = {
   18: 'hygiene', // 委派台账对账
   19: 'hygiene', // 逐阶段审计
   20: 'hygiene', // 引擎脚本测试覆盖
-  // B6b-2 六段（2026-10-13 自源仓 SECTIONS 回灌；lane 沿源仓：21/22/24/26 hygiene，23/25 hard）
+  // B6b-2 六段（2026-10-13；lane 沿上游：21/22/24/26 hygiene，23/25 hard）
   21: 'hygiene', // spec 验证落地核查（§21；锚 specVerifSince）
   22: 'hygiene', // 机制使用量台账（§22；.agents/mechanism-registry.md 在场才启用）
   23: 'hard',    // 判据级收敛对账（§23；hard 档随 convergenceHardSince，锚前 advisory WARN）
   24: 'hygiene', // incident 归因字段核查（§24；锚 attributionSince）
   25: 'hard',    // 路由预判一致性（§25；内容纯 WARN 不阻断，lane=hard 随源仓 SECTIONS）
   26: 'hygiene', // 闭环漏斗「协议前」占比动作阈值（§26）
-  '3x': 'hard',  // incident 防复发验证证据门（§3 扩展，编号沿源仓 3x 写法；锚 incidentRegrSince）
+  '3x': 'hard',  // incident 防复发验证证据门（§3 扩展，编号沿上游 3x 写法；锚 incidentRegrSince）
 };
 
 // ---- runCheckLoop：门禁主流程可 import 化（2026-10-08 checkloop-importable；2026-10-04 isMain 行点名单独立项）----
@@ -284,7 +284,7 @@ export function runCheckLoop(opts = {}) {
   const REV_ARG = opts.rev ?? null;
   const HARDENING = !!opts.hardening;
   const LOOP_MODE = opts.mode || 'hard'; // 分道运行面（2026-10-13 B6b-1）：hard（缺省）| hygiene | all
-  // laneOn(id)：本运行面是否执行该段——all 全跑；hard/hygiene 只跑同名面（源仓 SECTIONS 过滤同款）。
+  // laneOn(id)：本运行面是否执行该段——all 全跑；hard/hygiene 只跑同名面。
   const laneOn = (id) => LOOP_MODE === 'all' || LANE_OF[id] === LOOP_MODE;
   if (REV_ARG && (opts.root || process.env.CHECK_LOOP_ROOT)) {
     console.error('check-loop: --rev 不能同时使用 root 参数 / CHECK_LOOP_ROOT');
@@ -486,7 +486,7 @@ export function runCheckLoop(opts = {}) {
         blockers.push(`- [配对断裂] intent 缺 spec:${base}（应在 ${WF}/specs/ 下同名）`);
       }
     }
-    // plan 配对全级别强制（2026-10-13 L0 退役，自源仓收敛系列 1 回灌：原 L0 协作道豁免随级别退役删除；L2/L3 另须 spec）
+    // plan 配对全级别强制（2026-10-13 L0 退役：原 L0 协作道豁免随级别退役删除；L2/L3 另须 spec）
     if (!fs.existsSync(path.join(ROOT, WF, 'plans', base))) {
       blockers.push(`- [配对断裂] intent 缺 plan:${base}（应在 ${WF}/plans/ 下同名）`);
     }
@@ -521,7 +521,7 @@ export function runCheckLoop(opts = {}) {
         blockers.push(`- [L3 复核缺失] ${base} 必须记录新会话独立复核结论`);
       }
     }
-    // 独立复核上下文标识（2026-10-13 B6b-2 自源仓 s01 回灌，policy v12 reviewerSince advisory）：
+    // 独立复核上下文标识（2026-10-13 B6b-2，policy v12 reviewerSince advisory）：
     // 独立性声明须带可证伪基底——复核行落「复核上下文：<会话/子代理 id>」，使「主智能体自查冒充」
     // 从遗漏升级为积极伪造。只扫有独立复核行的 spec；锚前存量豁免不回填；缺键（v1–v11）→ 本子检整体跳过。
     if (kitPolicy.reviewerSince) {
@@ -540,7 +540,7 @@ export function runCheckLoop(opts = {}) {
     const st = fmGet(plan, '状态');
     const lvl = fmGet(plan, '级别');
     const hasEntry = fs.existsSync(path.join(ROOT, WF, 'intents', base)) || fs.existsSync(path.join(ROOT, WF, 'incidents', base));
-    // L1 plan 即入口（2026-10-13 B6b-2 自源仓 s01 回灌）：级别恰好为 L1 的 plan 自己就是入口，无同名
+    // L1 plan 即入口（2026-10-13 B6b-2）：级别恰好为 L1 的 plan 自己就是入口，无同名
     // intent/incident 不拦。级别缺失或 L2/L3 仍要求入口（fail-closed）。已写的 intent 不论级别仍要求同名 plan。
     if (lvl !== 'L1' && !hasEntry) blockers.push(`- [配对断裂] plan 缺 intent/incident:${base}（应在 ${WF}/intents/ 或 ${WF}/incidents/ 下同名）`);
     if (!stOkDoc(st)) {
@@ -890,8 +890,8 @@ export function runCheckLoop(opts = {}) {
     return { ok: true, type: 'sha' };
   }
 
-  // --- 3 扩展（§3x，编号沿源仓 3x 写法——gate-checklist 按 `N.` 解析，本段不入配对面）.
-  //     incident 防复发验证证据门 [hard-block]（2026-10-13 B6b-2 自源仓 s03x 回灌；出处沿革留痕在包源仓
+  // --- 3 扩展（§3x，编号沿上游 3x 写法——gate-checklist 按 `N.` 解析，本段不入配对面）.
+  //     incident 防复发验证证据门 [hard-block]（2026-10-13 B6b-2；出处沿革留痕在包源仓
   //     git 历史与 CHANGELOG）。调用点位置 = 源仓 SECTIONS 段序（s03x 居卫生 4/5/6 之后、检查 8 之前），
   //     亦为本段消费 addedDateOf 的前置依赖位（git 建档日锚单源定义于上）---
   // incidents 模板「防复发验证」强制项的机器面：防复发验证必须落到自动化用例或回归清单条目，禁「只写已人工验证」。
@@ -1456,7 +1456,7 @@ export function runCheckLoop(opts = {}) {
   // policy.check17UnclosedAfter 时阻断。版本 1 没有该键，因此不启用后两格。
   // 版本按主、次、修订三段整数比较。沿 package.json 的全部历史查找，不设次数上限。
   // 该提交之后新建的文件不在范围内。open 的 incident 不在此列。
-  // 快径（2026-10-16 减重 自源仓回灌）：当前树 package.json 无 version 字段（装户非 node 仓 / 快照树）
+  // 快径（2026-10-16 减重）：当前树 package.json 无 version 字段（装户非 node 仓 / 快照树）
   // → 整段跳过——无 version 则「version 变化的提交」永不存在，本段恒不触发，省去全历史 git log+show
   // 扫描。适配点：源仓 s17 为独立模块函数用 return 快返；kit 单体函数内改 if 包裹，保后续段照常执行。
   {
@@ -1728,7 +1728,7 @@ export function runCheckLoop(opts = {}) {
   }
   } // laneOn(20) 守卫闭合
 
-  // --- §21–§26 六段检查（2026-10-13 B6b-2 自源仓 s21–s26 回灌；段序沿源仓 SECTIONS 21→26，接在 §20 后）---
+  // --- §21–§26 六段检查（2026-10-13 B6b-2；段序沿上游 SECTIONS 21→26，接在 §20 后）---
   // ctx 只传既有共享面（与 check-hygiene / check-stage-index 的 ctx 同纪律：判定语义单源在段模块内，
   // helper 单源在本文件——复刻即造口径分叉）。段体直接 push 进共享 warnings/blockers（不返回数组，
   // check-16 先例），故 markGate 记账走共享收集器、增量天然正确（无需 appendSegs 中转）。

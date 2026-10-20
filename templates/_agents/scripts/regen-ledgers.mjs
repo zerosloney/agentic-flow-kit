@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// regen-ledgers.mjs — 工作流台账一键重生成（2026-10-20 自源仓 0bc69a24 回灌，kit 适配）
+// regen-ledgers.mjs — 工作流台账一键重生成（2026-10-20，kit 适配）
 //
 // 背景：workflow/INDEX.md、metrics.md、verify-evidence.md、delegations.md 是每个任务必写的
 // 共享计数器/生成物，两条并行分支各自推进后合并必在计数行撞车（结构性，非偶然）。.gitattributes

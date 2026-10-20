@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// papercut-debt-sensor.test.mjs — 存量债传感器 fixture（B10a 自源仓回灌随件测试；源仓无直测，
+// papercut-debt-sensor.test.mjs — 存量债传感器 fixture（B10a 随件测试；上游无直测，
 //   kit 侧按「新增引擎脚本默认必须带同名 .test.mjs」立——判定面与传感器单源，防再同步漂移）
 // 覆盖：三态计数（未升级 / ✅ 已消债 / ⏸ 暂缓无理由仍计债）/ ⏸带理由消债 / [env] 前缀单列 envPending
 //   不入债池 / 命中次数抽取 / stale 只标不排 / 分片合并读（主台账 ∪ papercuts.d）/ CRLF 容忍 /

@@ -591,7 +591,7 @@ const mkMergeRepo = () => {
   fs.rmSync(d, { recursive: true, force: true });
 }
 
-// M12（2026-10-16 自源仓 13f67ef7 回灌补夹具）：合并态 --staged 删掉两父母共有行（不在 manifest
+// M12（2026-10-16 补夹具）：合并态 --staged 删掉两父母共有行（不在 manifest
 // removes 里）→ 仍拦。共享行被删是 union 语义下的真丢失——manifest 只申报了分支侧行，共有行无凭据消失。
 const mkMergePruneRepo = () => {
   const d = mkrepo();

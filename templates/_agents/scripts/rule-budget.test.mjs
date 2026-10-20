@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// rule-budget.test.mjs — 常驻面预算黑盒套件（2026-10-15 减重手段② 自源仓回灌随附：#count 条目数指令）
+// rule-budget.test.mjs — 常驻面预算黑盒套件（2026-10-15 减重手段② 随附：#count 条目数指令）
 // 夹具：os.tmpdir 下临时目录（非 git 环境——脚本 git rev-parse 失败留在 fixture 目录，
 // 字节口径回退工作区文件；与真实仓「索引/HEAD」口径的差异不影响指令语义判定）。
 // 覆盖：字节超限/未超、#count 超限/压线、旧格式行不受 #count 影响、缺预算表 exit 0、

@@ -59,7 +59,7 @@ if (branchName.startsWith('experiment/')) {
 //   advisory 免纪律不免标记——标记是加固门覆盖率的前提）。
 //   脚本缺失 fail-closed 阻断（见 gate()）。
 //   `git merge` 自动提交由 pre-merge-commit 传入 `--merge`（此时 MERGE_HEAD 已不可靠，不能靠探测）；
-//   冲突解决后的手动 `git commit` 仍由脚本自己看 MERGE_HEAD（2026-10-16 自源仓回灌）。
+//   冲突解决后的手动 `git commit` 仍由脚本自己看 MERGE_HEAD（2026-10-16）。
 const mergeCommit = process.argv.includes('--merge');
 gate('泳道完整性（增量）', '.agents/scripts/check-lane-surface.mjs', mergeCommit ? ['--merge'] : []);
 
@@ -108,7 +108,7 @@ if (fs.existsSync('.agents/hooks/local-pre-commit')) {
 }
 
 // 合并提交 → 构建验证覆盖【完整合并树】，不做按扩展名的条件裁剪。
-// 常规提交 --no-build（2026-10-16 构建门后移 pre-push，自源仓回灌）：提交内环只跑敏感扫描，条件构建在
+// 常规提交 --no-build（2026-10-16 构建门后移 pre-push）：提交内环只跑敏感扫描，条件构建在
 // 推送时按 old..new 范围执法（.githooks/pre-push）；合并结果是没人验证过的新状态，仍全量构建。
 // 两条路径：`git merge` 自动提交由 .githooks/pre-merge-commit 显式传 `--full` 转发到本脚本；
 // 冲突解决后手动 `git commit` 由 git 直接调本脚本，此处按 MERGE_HEAD 探测补上（此时合并仍在进行）。

@@ -160,7 +160,7 @@ const throwsCode = (fn, code) => {
   const l3 = C.routeAdvice('L3', { hintsConfigured: true });
   check('S7 L3 同时输出 L2 触达面与 L3 结构面', C.L2_SURFACES.every((s) => l3.includes(s)) && C.L3_SURFACES.every((s) => l3.includes(s)));
 
-  // L0 已退役（2026-10-13 自源仓收敛系列 1 回灌）：不在 LEVELS 闭集 → routeAdvice 只报「未知档」，
+  // L0 已退役（2026-10-13）：不在 LEVELS 闭集 → routeAdvice 只报「未知档」，
   // 不再有语义行、也不产生下溢（下溢概念随 L0 退役消失）。
   const l0 = C.routeAdvice('L0', { hintsConfigured: true });
   check('S7 已退役的 L0 → 无语义行（未知档），不产生下溢', l0.includes('建议级别：L0 —— （未知档）') && !l0.includes('【负例'));
