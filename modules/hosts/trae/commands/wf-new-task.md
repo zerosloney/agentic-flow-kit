@@ -49,6 +49,8 @@ flow-kit route --files <预计改动面…> --kind require|fix|verify|review|dep
 >
 > **L2/L3 起草期合并预览**：三件套起草按 [design.md §0](design.md) 一次呈现要点总览（逐件确认代录不变）。
 
+> **提问分型**（源仓 2c342bf1 试挂）:向用户提问前先分类——答案能跑出来/查出来的（行为/时序/布局/输出/存量数据/eval 可分）是**可实验的**,预算内先原型/查库/跑 eval 让结果说话,禁停下来问;「任何实验都定不了」的产品或偏好判断才升级确认。与 STOP 线正交:可实验不豁免红线。
+
 ## 3. 路由判断
 
 <!-- route-kinds: require=plan.md | fix=maintain.md | verify=test.md | review=review.md | deploy=deploy.md -->

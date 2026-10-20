@@ -106,6 +106,45 @@
   run-tests.mjs 改动件）。测试：npm test 82 套件 0 失败（含并行 P0/P1 批新增套件）；eslint 0 error；
   引擎完整性门自洽绿。
 
+### pstack / matt 协议件系列（自 Shipyard.Material 回灌·协议批，2026-10-20）
+
+源仓 d3775f9b「AI-Native 引擎面 20 笔」合入批逐件甄别，九件采纳——全部为协议 / 模板文本面，
+无新机器门；三件带试挂观察语义（顺事回灌 / 提问分型 / 特性地图保活），命中不足再退：
+
+- feat(docs)：**plan 任务拆解增「依赖」行 + build.md frontier 判据**（源仓 5248747e，blocking
+  edges）：显式声明阻塞关系后「依赖行所指任务已勾选」即可开工——无未决阻塞的任务集 = frontier，
+  可并行派发（多 worktree / 委派「新开+合并范围」）；纯顺序链依赖行退化为「任务 N-1」零额外成本。
+- feat(docs)：**独立复核跨模型优先 + reviewed by 署名**（源仓 a8f1f88e）：优先指派与执行方不同
+  代/不同家族的模型（同模型新会话有共模盲区）；复核结论首行署名模型名（「无问题」也须留名）。
+- feat(docs)：**test.md 关单步增「顺事回灌」**（源仓 c90b025b，试挂 advisory）：非事故关单时列
+  0-3 条环境改进候选走 papercuts 挂债——补「顺事后回灌」（incident 复盘是坏事后回灌）；不设门。
+- feat(docs)：**maintain.md 增修复强度阶梯 + 攻击前提**（源仓 48b65997 + 2c342bf1 半件）：落点序
+  ≠ 强度序（架构收口/钩子/CI > 自动化用例 > 规范文本，落文本须写明「为什么更强层级拦不住」）；
+  同一前提下两种修法都过不了同一道验证时停下测前提本身（防换皮修复）。
+- feat(docs)：**new-task.md 增提问分型**（源仓 2c342bf1 半件，试挂）：可实验的（答案能跑出来/查
+  出来）先让结果说话禁停下来问，只有「任何实验都定不了」的产品/偏好判断才升级确认；与 STOP 线正交。
+- feat(docs)：**review-method 增「派发前自检与轴隔离」节**（源仓 520b281a）：基准自检先行（坏
+  引用/空 diff 派发前失败）、Spec 源发现序（找不到时显式报「无 spec 可依」禁静默跳轴）、双轴
+  可分派两个只读子代理并行走查。
+- feat(docs)：**review.md 增「PR 体三件套」节**（源仓 f82875b3）：Summary=最小视觉 / Evidence=
+  Before-After 对照 / Merge Danger=门向+影响面一词；写不出「双向+局部」即触发定级复核。适配：
+  Blast Radius 例词避开判级单源保留词（level-criteria S8 拦下后改「跨模块」）。
+- feat(docs)：**regression-checklist 增「执法者」列 + 规则 7**（源仓 516175e1）：防复发行指认
+  「复发时谁会红」，无执法资产标 `[prompt-only]` 并挂 papercuts 债；存量不回填随触碰补配对；
+  条目级退役复用机制退役逻辑。
+- feat(docs)：**verify-ui 特性地图机制**（源仓 bc7a0f14）：`features/` 用户 POV 四段（到达路径/
+  驱动/可观察终态/Gotchas），选点按地图取覆盖、Never weaken the journey、结论附「特性地图覆盖
+  M/N」。**种子 5 件不带回**（源仓采购域装户数据），地图随包机制、种子装户自建。
+- **撞门在案 ×2**：①常驻面预算双红（test.md 9814B / new-task.md 9290B 超 9216）——先压缩回灌
+  标注措辞，再沿 10-16 先例 512B 步进上调单篇 9216→9728（目录合计 65077B 未超不动）；②判级
+  单源门（level-criteria S8）拦下 review.md 使用保留词「共享契约」——改「跨模块」，判据词表
+  单源纪律零妥协。
+- **甄别（不采在案）**：a2a90147（commands 命令式重构 11 处）——风格整建，kit 命令文风自成一体，
+  留案待装户侧反馈；bc7a0f14 的种子特性文件、516175e1 的存量行回填——装户数据不带回。
+- 权威源改动（test/build/maintain/new-task/review 五命令）经 sync-hosts --apply 同步五宿主；
+  engine-lock --update 入账（受检面 85 件不变，rule-budgets.txt 改动件）。测试：npm test 82 套件
+  0 失败；eslint 0 error；引擎完整性门自洽绿。
+
 ## 1.8.7
 
 告警聚合口径批（kit 自研立法，非源仓回灌；治理审查 B 项收口）。审查依据源仓 9 天判定流水遥测

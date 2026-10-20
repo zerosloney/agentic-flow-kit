@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-20T13:56:34.962Z",
+  "generatedAt": "2026-10-20T14:26:49.271Z",
   "files": {
     ".github/workflows/ci.yml": {
       "sha256": "e9cffb90dec8f0a49bfe231a13fb8df375a2494cc75c38d991b5eb7c7be104b5",
@@ -31,7 +31,7 @@
       "hard": 8
     },
     "templates/_agents/rule-budgets.txt": {
-      "sha256": "32f5115af858802bad4dca711a7308abc594c23477eaeef51fd976b48d84f9b1",
+      "sha256": "beb3a326e1df8fb261c6d7946004bdbe25be15a17bc15c5cbeedb0765f9e950c",
       "hard": 3
     },
     "templates/_agents/scripts-test-exempt.txt": {
