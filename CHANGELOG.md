@@ -4,6 +4,17 @@
 
 ## Unreleased
 
+- chore(retire)：**零消费脚本清理——4 脚本 + 3 测试件退役**（856 行）。全脚本面逐件消费链矩阵
+  审计（59 个非测试脚本，引用来源覆盖七门/check-loop 导入/五钩子/命令文档/台账工具链），零消费
+  仅四件：`closeout-l1.mjs`（源仓 1.8.2 回灌的 L1 关单编排，源仓接进了自家 test.md，kit 的 test.md
+  §6 一直手工链、从未接线——「装户错位」同款孤儿）；`git-core.mjs`（收敛系列时代 git 调用单源，
+  钩子 node 化后各件自带 spawnGit，零导入且无测试）；`rewrite-file.mjs`（源仓「脚本化改写文档必走
+  rewrite-file」纪律工具件，kit 命令面零引用、纪律条文未随批 adopting）；`edit-face-check.mjs`
+  （常驻面编辑时快检，无钩子/命令接线，仅 ARCHITECTURE 一行介绍）。假阳性甄别：`regen-ledgers`
+  零代码引用但锚在 .gitattributes 注释（合并恢复指定工具）保留；`check-loop.sh` 被 new-task.md
+  §6 点名保留。连带：ARCHITECTURE §6「编辑时防护」行删、check-loop.mjs addedDates 注释与
+  fixture-scripts.mjs 事故史举例清词。engine-lock 受检面 84→80。测试：npm test 78 套件 0 失败；
+  eslint 0 error。脚本面收敛至 55 件非测试脚本、每件有活消费方。
 - chore(retire)：**移除 `gate-checklist` / `sync-hosts` 两个命令**（14 件：两命令 md + gate-checklist.mjs
   209 行机器 + 其测试 201 行 + 五宿主各两份薄适配）。共同根因是**维护者工具误装进装户面**：
   sync-hosts CLI 明示只在包源仓运行（装户仓 fail-loud，src/cli.mjs:84 / sync-hosts.mjs:213），命令

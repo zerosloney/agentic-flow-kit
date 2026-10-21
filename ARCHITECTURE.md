@@ -136,8 +136,6 @@ CI（.github/workflows/ci.yml，纯包源仓的**唯一**机器门——本仓�
   **权威清单 = check-loop.mjs 头部**——段数/断言数是派生量，不在此硬编码。
 - **生效日锚**：机制上线前的存量单不被新机制追责（`verifySince`/`verifyDocSince`/`delegationSince` 等）——
   「不追溯」与「不伪造」是门禁可信度的两根柱子。
-- **编辑时防护**：`edit-face-check.mjs`（工作树面 CHECK_LOOP_ROOT 全扫 + 预算 advisory）——
-  常驻面约束左移到编辑期（check-loop 仓库模式只扫 HEAD，编辑期原为零反馈）。
 - **判定流水落账**：check-loop 每次真实运行经 `judgment-ledger.mjs` 向 `.agents/judgments.jsonl`
   （本地 gitignore）追加一行 per-rule 计数——机制月度对账（`mechanism-registry.md`）与 advisory→hard
   升格、机制退役的数据底座；fail-open，观测面不挡裁决面。

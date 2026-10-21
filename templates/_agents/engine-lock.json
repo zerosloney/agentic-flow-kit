@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-21T01:21:10.978Z",
+  "generatedAt": "2026-10-21T01:43:43.030Z",
   "files": {
     ".github/workflows/ci.yml": {
       "sha256": "e9cffb90dec8f0a49bfe231a13fb8df375a2494cc75c38d991b5eb7c7be104b5",
@@ -79,7 +79,7 @@
       "hard": 2
     },
     "templates/_agents/scripts/check-loop.mjs": {
-      "sha256": "5d242a4659cf97a345f9758800dcee7df1596b50abd450cd7e91ee88eda759f7",
+      "sha256": "a5605bff80c307e92fa9ef25fcaecd369b2397ec99ee2459caa286998e52d443",
       "hard": 32
     },
     "templates/_agents/scripts/check-metric-claims.mjs": {
@@ -110,10 +110,6 @@
       "sha256": "97561f370793cf4df7982e902518f344b0c375221c7ae3f6f822f5203f918ee5",
       "hard": 0
     },
-    "templates/_agents/scripts/closeout-l1.mjs": {
-      "sha256": "c45be45f7d60f57a99ba5192fff51f345705590cb37340993da54ee31a8019ce",
-      "hard": 0
-    },
     "templates/_agents/scripts/compact-ledgers.mjs": {
       "sha256": "99ee805337c9bd11500432f1525985781ad3165e6140e9e354efd9f5418fff78",
       "hard": 1
@@ -125,10 +121,6 @@
     "templates/_agents/scripts/draft-sediment.mjs": {
       "sha256": "a9c51e3fd139adf32755d882e0de53f208784be68a75c1881658c3886605c76d",
       "hard": 1
-    },
-    "templates/_agents/scripts/edit-face-check.mjs": {
-      "sha256": "83b23ae5cd3b147c06e18d1e1c63c834b9deb9173101ba526c2f329fd697e20f",
-      "hard": 0
     },
     "templates/_agents/scripts/ensure-board.mjs": {
       "sha256": "8d2211ddaa5f29e961d6ad435fa780baca45722dc79cdd9a01931f8688a5359c",
@@ -147,7 +139,7 @@
       "hard": 1
     },
     "templates/_agents/scripts/fixture-scripts.mjs": {
-      "sha256": "4652c35fbc0a34f1782707d06c1b332d4202034ee3519a098ac6c4afdb1afe7d",
+      "sha256": "278a4f295fe2bb5b70fffb4c84b86a3c924182f8618af29830ae7d3c0cfccfd1",
       "hard": 0
     },
     "templates/_agents/scripts/gate-seg.mjs": {
@@ -177,10 +169,6 @@
     "templates/_agents/scripts/gen-workflow-metrics.mjs": {
       "sha256": "03823b8d9fbdc3b9d294cd7ec56b23f901a4181258706fe4c21f170c97fc86fc",
       "hard": 2
-    },
-    "templates/_agents/scripts/git-core.mjs": {
-      "sha256": "a74de2c43a5f4ab0444411f2164828b5e92794b2594723f1b6fd6e13d84156cc",
-      "hard": 0
     },
     "templates/_agents/scripts/git-merge-jsonl.mjs": {
       "sha256": "e8c037dcce1f9e52dd9d63ef812ce3ace03f1ecf3e55cb363e58bd8b50352655",
@@ -253,10 +241,6 @@
     "templates/_agents/scripts/resolve-merge-conflicts.mjs": {
       "sha256": "da2a4438414b440fb2e7f3fa3579589f2eb9148550925e8736022736c3016e9f",
       "hard": 0
-    },
-    "templates/_agents/scripts/rewrite-file.mjs": {
-      "sha256": "690de4ddf6c521646c197e138f9adb4c50ad9dd53fb448cef7a6565419361651",
-      "hard": 4
     },
     "templates/_agents/scripts/rule-budget.mjs": {
       "sha256": "338df73504545e226b51c00f8204d119300ddad278365ddb39ba5a3f01664b22",

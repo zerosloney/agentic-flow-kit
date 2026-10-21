@@ -769,7 +769,7 @@ export function runCheckLoop(opts = {}) {
   // 注：检查 10 需要的是「文件→加入 commit」+「commit→文件清单」两份映射（判断同提交是否触及迁移 SQL），
   // 与本索引「文件→日期」不同构，故**不合并**——避免把两处判据耦死。
   // addedDates（2026-10-09 engine-quality-round3 W1）：全史解析走持久缓存（HEAD 键）——
-  // 同 HEAD 多入口复跑（verify/edit-face-check/pre-commit/CI）不再重复全算；git-dir 探测保留在前。
+  // 同 HEAD 多入口复跑（verify/pre-commit/CI）不再重复全算；git-dir 探测保留在前。
   const addedDates = gitOut(['rev-parse', '--git-dir']) === null ? null : addedDatesWithCache({
     head: gitOut(['rev-parse', 'HEAD']),
     gitLog: () => gitOut(['log', '--diff-filter=A', '--format=@%aI', '--name-only']),
