@@ -15,6 +15,7 @@
 | 确认指纹对账（示例行） | check-loop 检查 15 | hard「指纹不配对/确认内容漂移」计数（月，经 agg-judgments 查判定流水） | 不退役（防伪造确认主干） | 示例：建门留档见包源仓 git 历史与 CHANGELOG | 现役 | — |
 | 触达面判低门（示例行） | check-lane-surface（pre-commit/CI 泳道完整性） | hard「触达面判低/产品契约面」计数（月） | 不退役（级别闭环主干） | 示例：在用 | 现役 | — |
 | 复核效果台账（示例行） | workflow/reviews.d/ 意见级处置（采纳/拒绝/误报）→ gen-workflow-metrics.mjs 月度聚合 | metrics.md「复核效果」表（采纳率/误报率；区分「门禁制造返工 vs 拦下问题」的意见级信号源） | 连续 6 个有数据月零记录且 delegations 复核采纳行恒 0 → 评估退役（数据面非门禁） | 示例：随 1.8.3 分发，建账口径见 review.md 落账子项 | 现役 | — |
+| 回归清单引用一致性门（示例行） | check-regression-consistency（check-loop 检查 27 WARN + confirm-doc done/closed 前置） | 悬空引用/易失缺失计数（月，经 agg-judgments 查判定流水） | 装户无回归清单台账面且连续 6 个有数据月零命中 → 评估退役 | 示例：随关单活文档门批分发 | 现役 | — |
 
 > 以上两行为**示例行**，只示范登记口径，不参与装户对账；装户按自有机制增删行，
 > 首次对账时可将示例行替换为真实运营数据。

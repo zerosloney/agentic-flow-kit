@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-21T04:28:17.044Z",
+  "generatedAt": "2026-10-21T04:43:15.386Z",
   "files": {
     ".github/workflows/ci.yml": {
       "sha256": "e9cffb90dec8f0a49bfe231a13fb8df375a2494cc75c38d991b5eb7c7be104b5",
@@ -79,7 +79,7 @@
       "hard": 2
     },
     "templates/_agents/scripts/check-loop.mjs": {
-      "sha256": "a5605bff80c307e92fa9ef25fcaecd369b2397ec99ee2459caa286998e52d443",
+      "sha256": "34980bc66cd701226deac96610d4a280baa3511cc848b1c294d3e42956a07f4b",
       "hard": 32
     },
     "templates/_agents/scripts/check-metric-claims.mjs": {
@@ -93,6 +93,10 @@
     "templates/_agents/scripts/check-registry.mjs": {
       "sha256": "0033655ef873230d94820300ea6c86529b87d2506903b7f42fb91cfbf5beda63",
       "hard": 0
+    },
+    "templates/_agents/scripts/check-regression-consistency.mjs": {
+      "sha256": "2919599e16af2e0a7e710d9dd40dfa544c6f0b135bcde80fe72eaf557b1d4cfc",
+      "hard": 1
     },
     "templates/_agents/scripts/check-scope.mjs": {
       "sha256": "241dcd001ce2afa3ccfd7aeba79cd1f8d33ded34efcd3b119f2f811311d1c68c",
@@ -115,7 +119,7 @@
       "hard": 1
     },
     "templates/_agents/scripts/confirm-doc.mjs": {
-      "sha256": "c518dc2783d7f76905db8d98b783c11f0c6c7a0fe3f7f5e031cd7d57c37e37f8",
+      "sha256": "c85c3187485cbc701d900aa95d40ebb5e926ec0c486b8fcaa6eaadfc0c91ade2",
       "hard": 13
     },
     "templates/_agents/scripts/draft-sediment.mjs": {

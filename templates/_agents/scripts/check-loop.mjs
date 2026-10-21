@@ -124,6 +124,9 @@
 //      随源仓 SECTIONS)                                                                          [advisory]
 //  26. 闭环漏斗「协议前」占比动作阈值(workflow/metrics.md 漏斗表日历相邻两月协议前占比均 >30% =
 //      warning,要求一轮归因;收口=0 的月不判;单月波动不触发)                                       [warning]
+//  27. 回归清单活文档引用一致性(主台账 ∪ 分片中引用的仓库相对路径/workflow 文档须存在;弱档存在性
+//      不猜语义;gitignore 易失前缀只 NOTE;判定单源 check-regression-consistency.mjs;关单时另有
+//      confirm-doc done/closed 硬前置,本段是提交时可见面)                                          [warning]
 //  3x(编号沿上游 3x 写法，非独立清单号——不入 1-N 配对面). incident 防复发
 //      验证证据门(fixed/closed 且 git 建档日 ≥ incidentRegrSince,正文无自动化用例/回归清单引用 =
 //      hard-block;存量豁免;锚键缺 → 整段跳过)                                                  [hard-block]
@@ -182,6 +185,7 @@ import { run as runConvergence } from './check-convergence.mjs';
 import { run as runAttribution } from './check-attribution.mjs';
 import { run as runPrejudgment } from './check-prejudgment.mjs';
 import { run as runFunnel } from './check-funnel.mjs';
+import { run as runRegressionConsistency } from './check-regression-consistency.mjs';
 import { gateSeg, finishSegs, makeCollector } from './gate-seg.mjs';
 // 判定流水落账（2026-10-11 judgment-ledger）：每次真实运行追加一行 per-rule 计数（观测面，fail-open）
 import { recordRun } from './judgment-ledger.mjs';
@@ -246,6 +250,7 @@ const LANE_OF = {
   24: 'hygiene', // incident 归因字段核查（§24；锚 attributionSince）
   25: 'hard',    // 路由预判一致性（§25；内容纯 WARN 不阻断，lane=hard 随源仓 SECTIONS）
   26: 'hygiene', // 闭环漏斗「协议前」占比动作阈值（§26）
+  27: 'hygiene', // 回归清单活文档引用一致性（§27；弱档存在性，判定单源 check-regression-consistency.mjs）
   '3x': 'hard',  // incident 防复发验证证据门（§3 扩展，编号沿上游 3x 写法；锚 incidentRegrSince）
 };
 
@@ -1739,6 +1744,7 @@ export function runCheckLoop(opts = {}) {
   if (laneOn(24)) { markGate('24', 'incident 归因字段'); runAttribution(sharedCtx); } // lane=hygiene（锚 attributionSince）
   if (laneOn(25)) { markGate('25', '路由预判一致性'); runPrejudgment(sharedCtx); } // lane=hard（内容纯 WARN 不阻断）
   if (laneOn(26)) { markGate('26', '闭环漏斗协议前占比'); runFunnel(sharedCtx); }  // lane=hygiene（metrics.md 在场才启用）
+  if (laneOn(27)) { markGate('27', '回归清单引用一致性'); runRegressionConsistency(sharedCtx); }  // lane=hygiene（台账在场才产出；关单时另有 confirm-doc 硬前置）
 
   // --- 输出（banner 沿 sh 版字样与格式 = 稳定输出契约：banner 后空行、条目 '- ' 前缀）---
   // 门禁 ROI 收口（2026-10-08 gate-roi-metrics）：末段结算（末段之后无下次 gateSeg 调用）+ 可选落盘。

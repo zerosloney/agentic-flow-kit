@@ -2974,9 +2974,9 @@ SCEN(async () => {
   try { row = JSON.parse(lines[0]); } catch { /* 留给下一条断言报错 */ }
   const ids = row && Array.isArray(row.segs) ? row.segs.map((s) => String(s.id)) : [];
   const uniq = new Set(ids);
-  check('门禁ROI：段 id 唯一且覆盖 26 个插桩点（14 主流程 + 5 hygiene 模块 + 3x/21-26 六段），无重复插桩',
-    ids.length === 26 && uniq.size === 26, `ids=${ids.join(',')}`);
-  const expected = ['1','2','3','3x','4','5','6','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25','26'];
+  check('门禁ROI：段 id 唯一且覆盖 27 个插桩点（14 主流程 + 6 hygiene 模块 + 3x/21-27），无重复插桩',
+    ids.length === 27 && uniq.size === 27, `ids=${ids.join(',')}`);
+  const expected = ['1','2','3','3x','4','5','6','8','9','10','11','12','13','14','15','16','17','18','19','20','21','22','23','24','25','26','27'];
   check('门禁ROI：段 id 集合 == 现有检查编号+3x（不新增/不遗漏检查项编号）',
     expected.every((e) => uniq.has(e)) && uniq.size === expected.length, `got=${[...uniq].sort().join(',')}`);
   check('门禁ROI：每段都有 label + 非负 ms（成本度量的地基）',
@@ -3924,6 +3924,17 @@ ${rows.map((r) => `| ${r} |`).join('\n')}
   check('检查26 存量裸数字单元格相邻两月超标 → 照判 WARN',
     r.status === 0 && outOf(r).includes('漏斗协议前超标') && outOf(r).includes('2026-09 60% → 2026-10 50%'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T6);
+});
+
+// ---- 检查 27：回归清单引用一致性（弱档存在性；悬空路径/文档 → WARN；泛化自源仓 44390bde）----
+SCEN(async () => {
+  const T = mkfix();
+  fs.mkdirSync(path.join(T, 'workflow'), { recursive: true });
+  w(T, 'workflow/regression-checklist.md', '# 回归清单\n\n| incident | 条目 | 落点 | 执法者 |\n|---|---|---|---|\n| x | 老条目 | src/gone27.ts | [prompt-only] |\n| x | 文档引用 | workflow/plans/none27.md | plan |\n');
+  const r = run(T);
+  check('检查27 悬空引用 → WARN 点名路径与流程文档（提交时可见面）',
+    r.status === 0 && outOf(r).includes('回归清单悬空引用') && outOf(r).includes('src/gone27.ts') && outOf(r).includes('workflow/plans/none27.md'), `exit=${r.status}\n${outOf(r)}`);
+  rmfix(T);
 });
 
 // ---- 分片驱动（端口自源仓 shard-check-loop-test；场景间零共享态 → idx % K round-robin 并行安全）----

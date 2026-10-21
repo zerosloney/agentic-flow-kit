@@ -4,6 +4,17 @@
 
 ## Unreleased
 
+- feat(gate)：**检查 27「回归清单活文档引用一致性」+ 关单活文档一致性门**（泛化自源仓 44390bde，
+  1.8.5 起挂起三轮的待决件落地）。动机：回归清单是自由文本，独立复核反复抓到「清单残留旧口径」
+  （引用的资产已删/改名）却只在复核阶段可见——把「清单引用的资产还在吗」前移到提交 + 关单双闸。
+  **泛化点（kit 与源仓差异如实声明）**：源仓检查①是 C# 栈特化（`*Tests` 类名对 tests/*.cs）；kit
+  改为**语言无关的仓库相对路径存在性检查**——扩展名交替最长优先（沿用 PATH_EXT 截断教训）、
+  `workflow/**.md` 文档引用须存在、gitignore 易失前缀（tmp/ 等）只 advisory。**双闸接线**：
+  check-loop 检查 27（hygiene WARN，提交时可见）+ confirm-doc done/closed 前置拒绝（防残留进归档；
+  fail-open：检查器异常不拦）。读侧走 ledger-shards 主台账 ∪ 分片合并。连带：检查索引 26→27
+  （ARCHITECTURE 同步、门禁 ROI 插桩自审期望集更新）、regression-checklist 模板补引用一致性指引、
+  mechanism-registry 登记示例行。测试：新套件 check-regression-consistency.test（提取/扫描/CLI
+  10 断言）+ confirm-doc S27 两态（悬空拒/修复放行）+ check-loop 检查 27 场景。
 - perf(test)：**check-loop.test 场景注册表化 + 自分裂分片**（端口自源仓 shard-check-loop-test）。
   172 个顶层场景块包装为 `SCEN` 注册回调（codemod 完成、顺序语义逐点等价），`--shard=i/K` 子进程
   round-robin 并行（场景间零共享态）、parent 聚合各片「合计」；`CHECK_LOOP_TEST_SHARDS` 钉死并发度、

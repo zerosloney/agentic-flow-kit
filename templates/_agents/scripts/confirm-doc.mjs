@@ -476,6 +476,27 @@ if (isMain) {
         console.error(`   跑 node .agents/scripts/verify.mjs${bound ? ` --doc ${rel}` : ''} 后重新关单；本次不拦截（advisory，灰度第一档）`);
       }
     }
+    // 关单活文档一致性前置门（泛化自源仓 44390bde）：done/closed 关单时，回归清单引用的
+    // 代码路径/流程文档须仍存在（判定单源 check-regression-consistency.mjs——语言无关路径存在性，
+    // 易失前缀只 advisory）。独立复核反复抓到「清单残留旧口径」类债却只在复核阶段可见——前移到
+    // 关单，防残留进归档。fail-open：检查器异常不拦截（本门属防残留 advisory 族，异常非残留）。
+    if (target === 'done' || target === 'closed') {
+      try {
+        const { scanRegressionRefs } = await import('./check-regression-consistency.mjs');
+        const rr = scanRegressionRefs(root);
+        const dangling = [...rr.danglingPaths, ...rr.danglingDocs];
+        if (dangling.length) {
+          console.error(`❌ ${doc} 未过关单活文档一致性门：回归清单引用了不存在的资产（${dangling.length} 处）——`);
+          for (const d of dangling.slice(0, 10)) console.error(`   - ${d}`);
+          if (dangling.length > 10) console.error(`   … 另 ${dangling.length - 10} 处`);
+          console.error('   处理：按回归清单维护规则 4 删除/改写过时条目，或恢复被误删的资产（本份未落账、未写盘）');
+          refused++;
+          continue;
+        }
+      } catch (err) {
+        console.error(`⚠️  ${doc} 活文档一致性检查执行失败（${err.message}）——不拦截（fail-open），但须人工确认清单无残留`);
+      }
+    }
     const fp = computeFingerprint(text);
     // 改动面事实（2026-10-09 审查 A1 干净版）：机器派生，三形态（TTY / 委托代录 / AI 自治）一律记入——
     // TTY 形态同样需要（事后对质问的是「放行时盘面上哪些文件在动」，与谁点的确认无关）。

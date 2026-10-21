@@ -2,6 +2,7 @@
 
 > 用途：deploy 清单「回归必过」与 incidents 复盘「防复发验证」的统一落点。
 > 本清单是**活文档**：随模块上线补充、随 incident 追加、随功能演进修订；代码演进后以本清单与实际行为为准。
+> **引用一致性**（关单活文档门）：条目引用的仓库相对路径（代码/证据文件）与 `workflow/**.md` 文档须仍存在——提交时 check-loop 检查 27 出 WARN，关单（done/closed）时被 confirm-doc 拒绝落账（判定单源 `check-regression-consistency.mjs`，弱档存在性；tmp/ 等 gitignore 易失前缀只提示不拦）。
 
 ## 维护规则
 

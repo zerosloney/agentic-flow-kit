@@ -1115,5 +1115,26 @@ const writeTrust = (root, cfg) => {
   }
 }
 
+// ---- S27【关单活文档一致性门】回归清单悬空引用 → done 拒绝；修复后放行（泛化自源仓 44390bde）----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-rc-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'plans'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'workflow', 'regression-checklist.md'), '# 回归清单\n\n| incident | 条目 | 落点 | 执法者 |\n|---|---|---|---|\n| x | 老条目 | src/gone.ts | [prompt-only] |\n');
+  const pp = path.join(root, 'workflow', 'plans', '2026-10-20-rc.md');
+  fs.writeFileSync(pp, '---\n状态: approved\n级别: L1\n---\n# P\n');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/plans/2026-10-20-rc.md', '--delegated', '关单'], { cwd: root, encoding: 'utf8' });
+  check('S27 关单活文档门：清单悬空引用 → done 拒绝（exit 2 + 点名路径 + 未落盘）',
+    r.status === 2 && /活文档一致性门/.test(r.stderr) && r.stderr.includes('src/gone.ts') && fs.readFileSync(pp, 'utf8').includes('状态: approved'),
+    JSON.stringify({ status: r.status, stderr: r.stderr }));
+  fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'src', 'exists.ts'), '// ok');
+  fs.writeFileSync(path.join(root, 'workflow', 'regression-checklist.md'), '# 回归清单\n\n| incident | 条目 | 落点 | 执法者 |\n|---|---|---|---|\n| x | 条目 | src/exists.ts | 用例 |\n');
+  const r2 = spawnSync(process.execPath, [CLI, 'workflow/plans/2026-10-20-rc.md', '--delegated', '关单'], { cwd: root, encoding: 'utf8' });
+  check('S27 关单活文档门：清单修复后 → done 放行',
+    r2.status === 0 && fs.readFileSync(pp, 'utf8').includes('状态: done'),
+    JSON.stringify({ status: r2.status, stderr: r2.stderr }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 process.exit(fail ? 1 : 0);
