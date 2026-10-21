@@ -2,6 +2,23 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## Unreleased
+
+- perf(test)：**check-loop.test 场景注册表化 + 自分裂分片**（端口自源仓 shard-check-loop-test）。
+  172 个顶层场景块包装为 `SCEN` 注册回调（codemod 完成、顺序语义逐点等价），`--shard=i/K` 子进程
+  round-robin 并行（场景间零共享态）、parent 聚合各片「合计」；`CHECK_LOOP_TEST_SHARDS` 钉死并发度、
+  =1 即顺序等价；逐场景异常捕获（夹具/环境错误转 FAIL + 消息头，不再零诊断击穿）。实测独跑
+  **73.8s → 27.1s（-63%）**，双态断言数一致（344/344）。
+- perf(test)：**run-tests 默认并发解锁自适应**（上批甄别挂起半件，前提现已成立）：默认 6 →
+  `clamp(4..12, 逻辑核数)`，沿革三段注（6 定案 → 膝点复测 → 分片后前提推翻）如实留痕。
+- perf(test)：**src/run-tests（npm test）池化**——发现包装层一直 spawnSync 串行跑全部 78 套件，
+  templates 编排器的并发机器从未被它使用（那套池服务于装户 verify 门）。改为委托两池
+  （templates 大池 → src 小池），复用已测工作池；压轴 SUITES/FAILED 行仍由包装层打印（verify
+  凭证只认该行，子池同形行在前不染末次口径）。实测 **npm test 4m39s → 1m39s（-64%）**。
+  templates 池 Top3 可见性顺带生效：check-ledger-invariant 39.7s / check-loop 35.3s /
+  pipeline-run 34.3s 为新地板。
+- engine-lock --update 入账。测试：npm test 78 套件 0 失败；eslint 0 error；完整性门自洽绿。
+
 ## 1.8.9
 
 - docs(repo)：**README 设计原则补「引擎仓不自举」诚实边界**——本仓纯包源形态、自身不带 workflow/

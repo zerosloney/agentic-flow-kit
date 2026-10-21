@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-21T01:43:43.030Z",
+  "generatedAt": "2026-10-21T04:28:17.044Z",
   "files": {
     ".github/workflows/ci.yml": {
       "sha256": "e9cffb90dec8f0a49bfe231a13fb8df375a2494cc75c38d991b5eb7c7be104b5",
@@ -247,7 +247,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/run-tests.mjs": {
-      "sha256": "6f86a811d815e92f2755cac1865854dd1c4c3217c8193697a919f039a797f3c0",
+      "sha256": "e752bf2afdb435976a97091747cca0cd3051dbe46bb20ff4d97e099fb207e2d5",
       "hard": 3
     },
     "templates/_agents/scripts/solidify-task.mjs": {

@@ -40,9 +40,15 @@ if (eslintEntry.status !== 0) {
   if (r.status !== 0) failed++;
 }
 
-for (const rel of nodeSuites) {
-  console.log(`\n===== ${rel} =====`);
-  const r = spawnSync(process.execPath, [path.join(ROOT, rel)], { cwd: ROOT, stdio: 'inherit' });
+// 套件执行：委托 templates 编排器的并发工作池（两池顺序：templates 大池 → src 小池；池内并发
+// clamp(4..12, 核数) 自适应、逐套件耗时 Top3 可见）。此前本层 spawnSync 逐套件串行——check-loop.test
+// 分片后单套件地板已降，串行总墙钟反成瓶颈（实测串行 4m39s → 池化后大幅缩短）。编排器自带逐套件
+// 回放与红套件点名；本层只看子进程退出码。最终 SUITES/FAILED 行仍由本层压轴打印（verify 凭证计数
+// 只认本行——子池的同形行在前，末次口径不受染）。
+const POOL = path.join(ROOT, 'templates/_agents/scripts/run-tests.mjs');
+for (const dir of ['templates/_agents/scripts', 'src']) {
+  console.log(`\n===== 池：${dir} =====`);
+  const r = spawnSync(process.execPath, [POOL, '--dir', path.join(ROOT, dir)], { cwd: ROOT, stdio: 'inherit' });
   if (r.status !== 0) failed++;
 }
 

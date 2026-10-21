@@ -8,7 +8,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { computeFingerprint } from './confirm-doc.mjs';
 import { POLICIES, loadKitPolicy } from './policy.mjs';
@@ -146,55 +146,61 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
 };
 
 // ---- 场景 1:全合法闭环（intent+plan,L1,done 全勾验带证据）→ exit 0 ----
-{
+// 场景注册表（分片化改造，端口自源仓 shard-check-loop-test）：顶层场景块包装为注册回调，
+// 顺序驱动执行——语义与包装前逐块顺序执行等价（包装仅为给分片器提供可枚举单元）；
+// async 回调统一形态（块内含动态 import 时亦兼容）。
+const SCENARIOS = [];
+const SCEN = (fn) => { SCENARIOS.push(fn); };
+
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-12-ok.md', INTENT('ok', '状态: done\n级别: L1\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:dotnet test 全绿）\n'));
   w(T, 'workflow/plans/2026-09-12-ok.md', PLAN('ok', '状态: done\n级别: L1'));
   expectOk('全合法闭环(L1 done 勾验带证据) → exit 0', T);
   rmfix(T);
-}
+});
 
 // ---- 场景 2:intent 缺 plan → hard ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-12-a.md', INTENT('a', '状态: approved\n级别: L1\n日期: 2026-09-12'));
   expectHard('intent 缺 plan → hard 配对断裂', T, '配对断裂');
   rmfix(T);
-}
+});
 
 // ---- 场景 3:L2 intent 缺 spec → hard ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-12-b.md', INTENT('b', '状态: approved\n级别: L2\n日期: 2026-09-12'));
   w(T, 'workflow/plans/2026-09-12-b.md', PLAN('b', '状态: approved\n级别: L2'));
   expectHard('L2 intent 缺 spec → hard 配对断裂', T, 'intent 缺 spec');
   rmfix(T);
-}
+});
 
 // ---- 场景 4:L3 spec 缺确认三件 → hard ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-12-c.md', INTENT('c', '状态: approved\n级别: L3\n日期: 2026-09-12'));
   w(T, 'workflow/specs/2026-09-12-c.md', SPEC('c', '状态: approved\n级别: L3', '\n## 确认与复核\n'));
   w(T, 'workflow/plans/2026-09-12-c.md', PLAN('c', '状态: approved\n级别: L3'));
   expectHard('L3 spec 缺确认三件 → hard', T, 'L3 确认缺失');
   rmfix(T);
-}
+});
 
 // ---- 场景 5:L3 spec 确认三件齐全 → exit 0 ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-12-d.md', INTENT('d', '状态: approved\n级别: L3\n日期: 2026-09-12'));
   w(T, 'workflow/specs/2026-09-12-d.md', SPEC('d', '状态: approved\n级别: L3\n确认结果: approved\n确认时间: 2026-09-12', '\n## 确认与复核\n- 独立复核：已由 independent-reviewer 新会话完成,结论 approved\n'));
   w(T, 'workflow/plans/2026-09-12-d.md', PLAN('d', '状态: approved\n级别: L3'));
   expectOk('L3 确认三件齐全(frontmatter 2 件+正文独立复核) → exit 0', T);
   rmfix(T);
-}
+});
 
 // ---- 场景 6:新建 done intent 验收未勾验 → hard;带附注不影响判定（papercut #4 回归）----
 // 换锚（2026-09-28 check8-git-anchor）后「新建」由 **git 首次加入日期**判定（文件名字段不再作锚），
 // 故本场景须为真 git 仓——否则不可判定、走存量口径而不再 hard。**意图与断言强度均不变**。
-{
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, 'workflow/intents/2026-09-13-e.md', INTENT('e', '状态: done\n级别: L1\n日期: 2026-09-13\n备注: 回溯补档,原工作 2026-09-12 完成', '\n## 验收标准（可测试）\n- [ ] 用例通过\n'));
@@ -202,57 +208,57 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   gitCommitAll(T, 'add');
   expectHard('新建 done 未勾验(附注在备注键) → hard 验收未对账', T, '验收未对账');
   rmfix(T);
-}
+});
 
 // ---- 场景 7:存量(<2026-09-12) done 未勾验 → warning,exit 0 ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-01-f.md', INTENT('f', '状态: done\n级别: L1\n日期: 2026-09-01', '\n## 验收标准（可测试）\n- [ ] 用例通过\n'));
   w(T, 'workflow/plans/2026-09-01-f.md', PLAN('f', '状态: done\n级别: L1'));
   expectOk('存量 done 未勾验 → warning 不阻断', T);
   rmfix(T);
-}
+});
 
 // ---- 场景 8:incident 选「是」但 intent 不存在 → hard 回路断档 ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/incidents/2026-09-12-g.md', `---\n状态: fixed\n级别: L2\n发现: 2026-09-12\n---\n# INCIDENT — g\n\n${三件套(true)}`);
   w(T, 'workflow/plans/2026-09-12-g.md', PLAN('g', '状态: done\n级别: L2'));
   w(T, 'workflow/specs/2026-09-12-g.md', SPEC('g', '状态: approved\n级别: L2'));
   expectHard('incident 回路引用不存在 intent → hard 回路断档', T, '回路断档');
   rmfix(T);
-}
+});
 
 // ---- 场景 9:incident 流程 legacy → 豁免级别/配对检查,exit 0 ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/incidents/2026-08-27-h.md', `---\n状态: closed\n流程: legacy\n发现: 2026-08-27\n---\n# INCIDENT — h（legacy 回填,无级别无配对）\n\n${三件套(false)}`);
   expectOk('incident legacy 豁免配对 → exit 0', T);
   rmfix(T);
-}
+});
 
 // ---- 场景 10:无 frontmatter → 状态键缺失 warning,exit 0（非 L3） ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-12-i.md', '# INTENT — i（未迁移旧格式）\n\n状态：draft\n');
   w(T, 'workflow/plans/2026-09-12-i.md', PLAN('i', '状态: approved\n级别: L1'));
   const r = run(T);
   check('无 frontmatter → warning 提示状态键缺失', r.status === 0 && /WARN 状态未确认.*i\.md/.test(outOf(r)), outOf(r));
   rmfix(T);
-}
+});
 
 // ---- 场景 11:frontmatter 状态值域外（自造值）→ warning 带当前值,exit 0 ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-12-j.md', INTENT('j', '状态: 进行中\n级别: L1\n日期: 2026-09-12'));
   w(T, 'workflow/plans/2026-09-12-j.md', PLAN('j', '状态: approved\n级别: L1'));
   const r = run(T);
   check('状态值域外 → warning 且带当前值提示', r.status === 0 && /WARN 状态未确认.*j\.md.*进行中/.test(outOf(r)), outOf(r));
   rmfix(T);
-}
+});
 
 // ---- 场景 12:无 frontmatter 的旧格式 L3 声明 → warning 引导补 frontmatter（不回退读正文,双源防回归）----
-{
+SCEN(async () => {
   const T = mkfix();
   for (const s of ['intents', 'plans', 'specs']) {
     w(T, `workflow/${s}/2026-09-12-k.md`, `# ${s.toUpperCase().slice(0, -1)} — k\n\n级别：L3\n状态：approved\n`);
@@ -261,10 +267,10 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   check('无 frontmatter 旧格式 → warning 引导补 frontmatter(不回退读正文)',
     r.status === 0 && /WARN 状态未确认.*k\.md（frontmatter 状态键当前值:『缺失』）/.test(outOf(r)), outOf(r));
   rmfix(T);
-}
+});
 
 // ---- 场景 13:git fixture——L1 intent 与迁移 SQL 同 commit → warning 疑似判低（检查 10）----
-{
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, 'workflow/intents/2026-09-12-m.md', INTENT('m', '状态: done\n级别: L1\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 场景构造项（证据:fixture）\n'));
@@ -275,10 +281,10 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   const r = run(T);
   check('L1 入口文档提交触及迁移 SQL → warning 疑似判低', r.status === 0 && /WARN 级别疑似判低.*m\.md/.test(outOf(r)), outOf(r));
   rmfix(T);
-}
+});
 
 // ---- 场景 14:git fixture——L3 intent 与迁移 SQL 同 commit → 级别一致不告警 ----
-{
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, 'workflow/intents/2026-09-12-n.md', INTENT('n', '状态: done\n级别: L3\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 场景构造项（证据:fixture）\n'));
@@ -290,10 +296,10 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   const r = run(T);
   check('L3 入口文档提交触及迁移 SQL → 级别一致不告警', r.status === 0 && !outOf(r).includes('级别疑似判低'), outOf(r));
   rmfix(T);
-}
+});
 
 // ---- 场景 15:ZCode Adapter 缺失不告警(宿主未装),存在且断线仍告警 ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-12-o.md', INTENT('o', '状态: done\n级别: L1\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:全绿）\n'));
   w(T, 'workflow/plans/2026-09-12-o.md', PLAN('o', '状态: done\n级别: L1'));
@@ -305,10 +311,10 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   check('ZCode 缺失跳过/存在断线仍告警',
     r.status === 0 && outOf(r).includes('ZCode implementer 未引用公共角色') && !outOf(r).includes('ZCode 缺'), outOf(r));
   rmfix(T);
-}
+});
 
 // ---- 场景 16:skills 引用仓库内与用户级均不存在 → 仍报引用断档 ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/README.md', '# WF README\n\n技能见 .agents/skills/fake-skill（仓库内与用户级均不存在）\n');
   w(T, 'workflow/intents/2026-09-12-p.md', INTENT('p', '状态: done\n级别: L1\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:全绿）\n'));
@@ -316,20 +322,20 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   const r = run(T);
   check('skills 引用仓库内与用户级均无 → 仍报引用断档', r.status === 0 && /引用断档.*fake-skill/.test(outOf(r)), outOf(r));
   rmfix(T);
-}
+});
 
 // ---- 场景 17:存量 done 含「存量对账豁免」声明 → 出账,无验收对账 warning ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-01-q.md', INTENT('q', '状态: done\n级别: L1\n日期: 2026-09-01', '\n## 验收标准（可测试）\n> **存量对账豁免（2026-09-12，用户拍板不追溯）**：下方未勾项均为第二轮 UI/浏览器实测项。\n- [ ] 用例通过\n'));
   w(T, 'workflow/plans/2026-09-01-q.md', PLAN('q', '状态: done\n级别: L1'));
   const r = run(T);
   check('存量含豁免声明 → 出账不计未对账', r.status === 0 && !outOf(r).includes('验收对账存量'), outOf(r));
   rmfix(T);
-}
+});
 
 // ---- 场景 18:新建 done intent 缺「## 验收标准」节 → hard（2026-09-16 补口回归）----
-{
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, 'workflow/intents/2026-09-13-r.md', INTENT('r', '状态: done\n级别: L1\n日期: 2026-09-13', '\n## 目标\n关单前未写验收标准节。\n'));
@@ -337,10 +343,10 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   gitCommitAll(T, 'add');
   expectHard('新建 done 缺验收标准节 → hard 验收未对账', T, '缺「## 验收标准」节');
   rmfix(T);
-}
+});
 
 // ---- 场景 19:新建 done 勾选项缩进写法 → hard（口径放宽后仍拦）----
-{
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, 'workflow/intents/2026-09-13-s.md', INTENT('s', '状态: done\n级别: L1\n日期: 2026-09-13', '\n## 验收标准（可测试）\n  - [ ] 缩进未勾项（此前后静默通过）\n'));
@@ -348,39 +354,39 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   gitCommitAll(T, 'add');
   expectHard('新建 done 勾选项缩进 → hard 验收未对账', T, '验收未对账');
   rmfix(T);
-}
+});
 
 // ---- 场景 20:incident 状态值域外 → warning 带当前值 ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/incidents/2026-09-13-t.md', `---\n状态: 已修复\n级别: L1\n发现: 2026-09-13\n---\n# INCIDENT — t\n\n${三件套(false)}`);
   w(T, 'workflow/plans/2026-09-13-t.md', PLAN('t', '状态: done\n级别: L1'));
   const r = run(T);
   check('incident 状态值域外 → warning 且带当前值', r.status === 0 && /WARN 状态非法.*t\.md.*已修复/.test(outOf(r)), outOf(r));
   rmfix(T);
-}
+});
 
 // ---- 场景 21:incident 缺级别 → warning 明示配对检查已跳过 ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/incidents/2026-09-13-u.md', `---\n状态: open\n发现: 2026-09-13\n---\n# INCIDENT — u\n\n${三件套(false)}`);
   const r = run(T);
   check('incident 缺级别 → warning 明示配对已跳过', r.status === 0 && /WARN 级别缺失.*u\.md.*配对检查已跳过/.test(outOf(r)), outOf(r));
   rmfix(T);
-}
+});
 
 // ---- 场景 22:存量 done 缺验收标准节 → 聚合 warning 不 hard ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-01-v.md', INTENT('v', '状态: done\n级别: L1\n日期: 2026-09-01', '\n## 目标\n存量旧格式,缺验收标准节。\n'));
   w(T, 'workflow/plans/2026-09-01-v.md', PLAN('v', '状态: done\n级别: L1'));
   const r = run(T);
   check('存量 done 缺节 → 聚合 warning 不 hard', r.status === 0 && outOf(r).includes('验收对账存量'), outOf(r));
   rmfix(T);
-}
+});
 
 // ---- 场景 23/24:git 仓库模式——未跟踪并行半成品不拦 push;提交进 HEAD 后仍 hard ----
-{
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, 'workflow/intents/2026-09-12-ok2.md', INTENT('ok2', '状态: done\n级别: L1\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 场景构造项（证据:fixture）\n'));
@@ -393,10 +399,10 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   r = run(T, { git: true });
   check('仓库模式:已提交的入口缺 plan 断档仍 hard-block', r.status === 1 && /缺 plan.*parallel-wip/.test(outOf(r)), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
 // ---- 场景 25:检索层——模块合法 + INDEX 一致 → exit 0 无新告警（拷真实生成器+读取器+词表测接线）----
-{
+SCEN(async () => {
   const T = mkfix();
   fs.mkdirSync(path.join(T, '.agents', 'scripts'), { recursive: true });
   copyScriptClosure(path.join(T, '.agents', 'scripts'), ['gen-workflow-index.mjs']);
@@ -408,10 +414,10 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   check('检索层:模块合法+INDEX 一致 → exit 0 无新告警',
     r.status === 0 && !outOf(r).includes('WARN 模块元数据') && !outOf(r).includes('WARN 索引漂移'), outOf(r));
   rmfix(T);
-}
+});
 
 // ---- 场景 26:模块枚举非法 + 2026-09-22 起新建缺字段 → WARN 不阻断 ----
-{
+SCEN(async () => {
   const T = mkfix();
   fs.copyFileSync(path.join(SCRIPT_DIR, '..', 'workflow-modules.txt'), path.join(T, '.agents', 'workflow-modules.txt'));
   w(T, 'workflow/intents/2026-09-22-mod-bad.md', INTENT('mod bad', '状态: approved\n级别: L1\n日期: 2026-09-22\n模块: 不存在的模块'));
@@ -421,10 +427,10 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   check('检索层:模块非法/缺字段 → WARN 且 exit 0',
     r.status === 0 && o.includes('WARN 模块元数据') && o.includes('不在词表') && o.includes('缺「模块:」字段'), o);
   rmfix(T);
-}
+});
 
 // ---- 场景 27:INDEX 漂移 → WARN 索引漂移,exit 0（调生成器 --check 口径）----
-{
+SCEN(async () => {
   const T = mkfix();
   fs.mkdirSync(path.join(T, '.agents', 'scripts'), { recursive: true });
   copyScriptClosure(path.join(T, '.agents', 'scripts'), ['gen-workflow-index.mjs']);
@@ -436,11 +442,11 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   const r = run(T);
   check('检索层:INDEX 漂移 → WARN 且 exit 0', r.status === 0 && outOf(r).includes('WARN 索引漂移'), outOf(r));
   rmfix(T);
-}
+});
 
 // ---- 场景 27b:DASHBOARD 漂移门（2026-10-08 selfmeasure-and-modularize 检查 11 扩覆盖面）----
 // 三态：陈旧盘面 → WARN；盘面缺失（装户从未生成过看板）→ 不报（防常驻噪声）；一致 → 不报。
-{
+SCEN(async () => {
   const mkDashFix = () => {
     const T = mkfix();
     fs.mkdirSync(path.join(T, '.agents', 'scripts'), { recursive: true });
@@ -467,10 +473,10 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   check('观测面:DASHBOARD 漂移 → WARN 仪表盘漂移 且 exit 0',
     r.status === 0 && outOf(r).includes('WARN 仪表盘漂移') && outOf(r).includes('gen-workflow-dashboard.mjs'), outOf(r));
   rmfix(T);
-}
+});
 
 // ---- 场景 28/29:常驻面预算——合规无告警;AGENTS.md 超限 → WARN 含一进一出 ----
-{
+SCEN(async () => {
   const T = mkfix();
   fs.mkdirSync(path.join(T, '.agents', 'scripts'), { recursive: true });
   fs.copyFileSync(path.join(SCRIPT_DIR, 'rule-budget.mjs'), path.join(T, '.agents', 'scripts', 'rule-budget.mjs'));
@@ -491,10 +497,10 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   const o = outOf(r);
   check('常驻面预算:超限 → WARN(含一进一出提示) 且 exit 0', r.status === 0 && o.includes('WARN 常驻面超限') && o.includes('一进一出'), o);
   rmfix(T);
-}
+});
 
 // ---- 场景 30:rule-budget --staged 硬拦路径（node 直跑——2026-10-13 去 sh 化后无 sh 依赖）----
-{
+SCEN(async () => {
   const T = mkfix();
   fs.mkdirSync(path.join(T, '.agents', 'scripts'), { recursive: true });
   fs.copyFileSync(path.join(SCRIPT_DIR, 'rule-budget.mjs'), path.join(T, '.agents', 'scripts', 'rule-budget.mjs'));
@@ -511,10 +517,10 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   r = spawnSync(process.execPath, ['.agents/scripts/rule-budget.mjs', '--staged'], { cwd: T, encoding: 'utf8' });
   check('rule-budget --staged:合规 → exit 0（不误拦）', r.status === 0, `${r.stdout}${r.stderr}`);
   rmfix(T);
-}
+});
 
 // ---- 场景 31/32/33:确认态留痕（检查 14）——无 approved 历史 WARN;先 approved 后 done 无 WARN;非 git 跳过 ----
-{
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, 'workflow/incidents/2026-09-23-confirm-gate.md', `---\n状态: closed\n级别: L1\n发现: 2026-09-23\n模块: material\n---\n# INCIDENT — confirm gate\n\n${三件套(false)}`);
@@ -524,8 +530,8 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   check('新 done 无 approved 历史 → WARN 确认态缺失 且 exit 0',
     r.status === 0 && /WARN 确认态缺失.*2026-09-23-confirm-gate\.md/.test(outOf(r)), outOf(r));
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, 'workflow/incidents/2026-09-23-confirm-ok.md', `---\n状态: closed\n级别: L1\n发现: 2026-09-23\n模块: material\n---\n# INCIDENT — confirm ok\n\n${三件套(false)}`);
@@ -536,32 +542,32 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   const r = run(T);
   check('approved → done 留痕 → 无确认态缺失告警', r.status === 0 && !outOf(r).includes('WARN 确认态缺失'), outOf(r));
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/incidents/2026-09-23-confirm-nogit.md', `---\n状态: closed\n级别: L1\n发现: 2026-09-23\n模块: material\n---\n# INCIDENT — confirm nogit\n\n${三件套(false)}`);
   w(T, 'workflow/plans/2026-09-23-confirm-nogit.md', PLAN('confirm nogit', '状态: done\n级别: L1\n模块: material'));
   const r = run(T);
   check('非 git fixture → 检查项 14 跳过,不误报', r.status === 0 && !outOf(r).includes('WARN 确认态缺失'), outOf(r));
   rmfix(T);
-}
+});
 
 // ---- 场景 34/35/36:枚举单源——缺文件 fail-loud;缺键 fail-loud;CRLF 容忍 ----
-{
+SCEN(async () => {
   const T = mkfix();
   fs.rmSync(path.join(T, '.agents', 'workflow-enums.txt'));
   w(T, 'workflow/intents/2026-09-12-ok.md', INTENT('ok', '状态: done\n级别: L1\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:全绿）\n'));
   expectHard('枚举单源文件缺失 → exit 1 fail-loud(不静默退化)', T, '枚举单源');
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   const f = path.join(T, '.agents', 'workflow-enums.txt');
   fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/^doc\.status\.confirmed=.*\n/m, ''));
   expectHard('枚举单源缺键 → exit 1 fail-loud', T, '缺键');
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   fs.writeFileSync(path.join(T, '.agents', 'workflow-enums.txt'), ENUMS_FIXTURE.replace(/\n/g, '\r\n'));
   w(T, 'workflow/intents/2026-09-12-ok.md', INTENT('ok', '状态: approved\n级别: L1\n日期: 2026-09-12'));
@@ -569,17 +575,17 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   const r = run(T);
   check('枚举单源 CRLF 行尾 → approved/done 判定不受 \\r 影响', r.status === 0 && !outOf(r).includes('状态未确认'), outOf(r));
   rmfix(T);
-}
+});
 
 // ---- 场景 37/38/39/40:检查 15 确认指纹对账——无指纹拦 / 配对齐过 / 指纹不符拦 / 生效日前豁免 ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-27-cg.md', INTENT('cg', '状态: approved\n级别: L1\n日期: 2026-09-27'));
   w(T, 'workflow/plans/2026-09-27-cg.md', PLAN('cg', '状态: draft\n级别: L1'));
   expectHard('检查15:生效日起新档 approved 无指纹无台账 → hard 确认未对账', T, '确认未对账');
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   const i1 = mkConfirmedDoc(T, 'workflow/intents/2026-09-27-ok15.md', '状态: approved\n级别: L1\n日期: 2026-09-27');
   const p1 = mkConfirmedDoc(T, 'workflow/plans/2026-09-27-ok15.md', '状态: approved\n级别: L1');
@@ -589,16 +595,16 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   ]);
   expectOk('检查15:指纹+台账配对齐 → exit 0', T);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   const i1 = mkConfirmedDoc(T, 'workflow/intents/2026-09-27-bad15.md', '状态: approved\n级别: L1\n日期: 2026-09-27');
   w(T, 'workflow/plans/2026-09-27-bad15.md', PLAN('bad15', '状态: draft\n级别: L1'));
   writeLedger(T, [{ ts: 'T', doc: i1.rel, stage: 'approved', fingerprint: 'e'.repeat(64), prev: 'draft' }]); // 指纹不符
   expectHard('检查15:指纹与台账不配对 → hard 确认未对账', T, '确认未对账');
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   // 豁免理由（2026-09-28 锚改台账 ts 后）：**台账无行** ⇒ 存量未受管，与文档自报日期无关。
   // 本场景构造的正是「日期早 + 无台账」——换锚前后结论一致，但理由已从「日期早于生效日」变为「无台账行」。
@@ -606,10 +612,10 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   w(T, 'workflow/plans/2026-09-26-old15.md', PLAN('old15', '状态: draft\n级别: L1'));
   expectOk('检查15:存量 approved 无台账行 → 豁免 exit 0', T);
   rmfix(T);
-}
+});
 
 // ---- 场景 40:检查 8——证据写在 [x] 续行（仓库通写法「（证据：…）」另起一行）→ 不报缺证据 ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-12-ev1.md', INTENT('ev1', '状态: done\n级别: L1\n日期: 2026-09-12',
     '\n## 验收标准（可测试）\n- [x] 用例通过\n（证据：commit fixture；套件全绿）\n- [x] 文档补齐\n（证据：AGENTS.md 第 1 行）\n'));
@@ -618,10 +624,10 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   check('证据在续行（全角冒号）→ 不报验收缺证据',
     r.status === 0 && !outOf(r).includes('验收缺证据'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 // ---- 场景 41:检查 8——[x] 无证据且续行也无 → 报验收缺证据（hard 拦；回归：不可把豁免放大成漏检）----
 // 换锚后须真 git 仓：否则不可判定 → 走存量口径，「验收缺证据」这条 blocker 也不再产出。
-{
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, 'workflow/intents/2026-09-12-ev2.md', INTENT('ev2', '状态: done\n级别: L1\n日期: 2026-09-12',
@@ -632,7 +638,7 @@ const mkConfirmedDoc = (root, rel, fmBody) => {
   check('[x] 续行仍无证据 → 报验收缺证据（hard 拦 exit 1）',
     r.status === 1 && outOf(r).includes('验收缺证据'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 // evidenceFixture：场景 43/44/47 共用脚手架——git 仓 + L1 done 三件（plan「改动方案」节声明 declared）+
 // intent 证据引用唯一内容提交，返回 { T, sha }。createDeclared=false 时声明【从未存在】的文件（唯一内容
 // 提交必然不触及，判定确定——2026-10-04 实测原「二次提交区分触及/不触及」方案在 npm test 环境偶发失败
@@ -656,30 +662,30 @@ const evidenceFixture = (slug, declared, createDeclared) => {
 };
 
 // ---- 场景 43:检查 8 证据真相——L1 plan「改动方案」节（fill-plan 输出）+ 证据 SHA 触及声明文件 → 不报「证据无关」（2026-10-04 plan-section-name-evidence 回归）----
-{
+SCEN(async () => {
   const { T } = evidenceFixture('ev3', 'src/foo.js', true);
   const r = run(T);
   // fixture 不构造确认记录 → done 必触「确认未对账」hard（exit 1 预期）；核心断言是证据面不出现「证据无关」
   check('L1 plan「改动方案」节 + 证据触及声明文件 → 不报证据无关',
     !outOf(r).includes('证据无关'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
 // ---- 场景 44:检查 8 证据真相——L1 plan「改动方案」节 + 证据 SHA 不触及声明文件 → 仍报「证据无关」（负例，防过度豁免）----
-{
+SCEN(async () => {
   const { T } = evidenceFixture('ev4', 'src/ghost.js', false);
   const r = run(T);
   check('L1 plan「改动方案」节 + 证据不触及声明文件 → 仍报证据无关（负例）',
     outOf(r).includes('证据无关'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
 // ---- 场景 47:检查 8 证据真相——证据 SHA 触及声明文件 → 校验通过 exit 0（2026-10-04 review-fix-batch：
 // 补 spec 2026-10-04-plan-section-name-evidence §49「校验通过（type=sha）」断言强度——场景 43 的 fixture
 // 触「确认未对账」hard 只能间接断言无「证据无关」；本场景沿场景 5x 造法（锚前自报日期豁免存量面）走满
 // type=sha 放行路径：证据为真实 SHA + 声明文件被提交触及 + 提交无执行器标记 → exit 0 只能经 type=sha 达成
 // （text 需无 hex 串 / process 需 runId 标记 / forged·irrelevant 均 exit 1，三条岔路均被构造排除）----
-{
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, 'workflow/plans/2026-09-26-sh1.md', PLAN('sh1', '状态: done\n级别: L1\n日期: 2026-09-26\n模块: material', '\n## 改动方案\n\n- src/app.mjs：实现功能\n'));
@@ -690,10 +696,10 @@ const evidenceFixture = (slug, declared, createDeclared) => {
   w(T, 'workflow/intents/2026-09-26-sh1.md', INTENT('sh1', '状态: done\n级别: L1\n日期: 2026-09-26', `\n## 验收标准（可测试）\n- [x] 用例通过（证据:${sha}）\n`));
   expectOk('证据 SHA 触及声明文件（无执行器标记）→ type=sha 校验通过 exit 0', T);
   rmfix(T);
-}
+});
 
 // ---- 场景 42:检查 4——fill-{intent,spec,plan}.mjs 花括号展开，三路皆存在 → 不报引用断档 ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'AGENTS.md', '# AGENTS\n\n起草先跑 `node .agents/scripts/fill-{intent,spec,plan}.mjs` 拿结构化草稿。\n');
   fs.mkdirSync(path.join(T, '.agents', 'scripts'), { recursive: true });
@@ -704,9 +710,9 @@ const evidenceFixture = (slug, declared, createDeclared) => {
   check('花括号展开三路存在 → 不报引用断档',
     r.status === 0 && !outOf(r).includes('引用断档'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 // ---- 场景 45（原 43，2026-10-04 review-fix-batch 改号避让证据真相场景重号；旧号无文档按号引用）:检查 4——花括号展开三路皆不存在 → 仍报引用断档（带完整展开式文案）----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'AGENTS.md', '# AGENTS\n\n起草先跑 `node .agents/scripts/fill-{alpha,beta,gamma}.mjs` 拿结构化草稿。\n');
   w(T, 'workflow/intents/2026-09-12-br2.md', INTENT('br2', '状态: done\n级别: L1\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
@@ -715,9 +721,9 @@ const evidenceFixture = (slug, declared, createDeclared) => {
   check('花括号展开三路皆无 → 仍报引用断档',
     r.status === 0 && /引用断档.*fill-\{alpha,beta,gamma\}\.mjs/.test(outOf(r)), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 // ---- 场景 46（原 44，同场景 45 缘由改号）:检查 2——<主题> 与 .md 同行 = 命名约定描述 → 不报模板未填 ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-01-nm1.md', INTENT('nm1', '状态: done\n级别: L1\n日期: 2026-09-01',
     '\n编排脚本（`.agents/workflows/<主题>.md`）：frontmatter + stages 表。\n复制本模板为 YYYY-MM-DD-<主题>.md 后填写。\n'));
@@ -726,12 +732,12 @@ const evidenceFixture = (slug, declared, createDeclared) => {
   check('<主题>+.md 命名约定行 → 不报模板未填',
     r.status === 0 && !outOf(r).includes('模板未填'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
 // ---- 场景 5x/5y/5z:检查 8 证据核验——过程证据形态（2026-10-03 check-evidence-process）----
 // 造法：gitInit（激活证据核验的 rev-parse 路径）+ 锚前自报日期（豁免检查 15 存量面）；
 // 证据引用「改动面外文件的提交」：带执行器标记 → process 放行；无标记 → irrelevant 拦；SHA 不存在 → forged 拦。
-{
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, 'workflow/plans/2026-09-26-pe1.md', PLAN('pe1', '状态: done\n级别: L1\n模块: material', '\n## 改动方案\n\n- src/app.mjs：实现功能\n'));
@@ -742,8 +748,8 @@ const evidenceFixture = (slug, declared, createDeclared) => {
   w(T, 'workflow/intents/2026-09-26-pe1.md', INTENT('pe1', '状态: done\n级别: L1\n日期: 2026-09-26', `\n## 验收标准（可测试）\n- [x] 演练穿越（证据:${sha}）\n`));
   expectOk('过程证据:提交信息带执行器标记（改动面外）→ 放行 exit 0', T);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, 'workflow/plans/2026-09-26-pe2.md', PLAN('pe2', '状态: done\n级别: L1\n模块: material', '\n## 改动方案\n\n- src/app.mjs：实现功能\n'));
@@ -754,21 +760,21 @@ const evidenceFixture = (slug, declared, createDeclared) => {
   w(T, 'workflow/intents/2026-09-26-pe2.md', INTENT('pe2', '状态: done\n级别: L1\n日期: 2026-09-26', `\n## 验收标准（可测试）\n- [x] 演练穿越（证据:${sha}）\n`));
   expectHard('过程证据:无标记无关提交 → 仍拦 证据无关', T, '证据无关');
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, 'workflow/plans/2026-09-26-pe3.md', PLAN('pe3', '状态: done\n级别: L1\n模块: material', '\n## 改动方案\n\n- src/app.mjs：实现功能\n'));
   w(T, 'workflow/intents/2026-09-26-pe3.md', INTENT('pe3', '状态: done\n级别: L1\n日期: 2026-09-26', '\n## 验收标准（可测试）\n- [x] 演练穿越（证据:deadbee）\n'));
   expectHard('过程证据:SHA 不存在 → forged 仍拦（防伪线不放松）', T, '证据伪造');
   rmfix(T);
-}
+});
 // ---- 场景 5v:git 基础设施异常 fail-loud（2026-10-05-gitout-fail-open）----
 // CHECK_LOOP_GIT 指向不存在路径 → spawnSync 跨平台稳定 r.error（ENOENT）→ 响亮出账恰一条（进程去重）
 // + 证据核验降级（exit 语义不变、无业务裁决误报）；正常 git 零出账（防误报负例）
 // 注（L2 复核 P2-2）：出账断言不构成 :581 接入 spawnGit 的独立钉死——探测门与 :581 共用去重 flag，
 // 变异（:581 改回裸 spawnSync）三断言仍绿；:581 接线由代码走读 + CI 覆盖，瞬时重试路径静态替身不可测
-{
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, 'workflow/plans/2026-09-26-pe4.md', PLAN('pe4', '状态: done\n级别: L1\n模块: material', '\n## 改动方案\n\n- src/app.mjs：实现功能\n'));
@@ -783,8 +789,8 @@ const evidenceFixture = (slug, declared, createDeclared) => {
   check('git 基础设施异常:持续异常仍 fail-closed（伪造拦不放松，防静默降级）', r.status === 1 && outOf(r).includes('证据伪造'), `exit=${r.status}\n${outOf(r)}`);
   check('git 基础设施异常:基础设施异常不冒充业务裁决（无证据无关误报）', !outOf(r).includes('证据无关'), outOf(r));
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   // 纯数字短 sha × 通道坏死（2026-10-07 v1.3.0 Release CI ubuntu 实证）：fixture 短 sha 恰全数字
   //（`--short` 7 位 ≈4%/run）时，rev-parse 实证分流在 CHECK_LOOP_GIT 整体坏死下不可能——
   // 纯数字 text 豁免曾把 fail-closed 漏成 exit 0。守卫后：通道坏死（spawn 异常）→ forged 拦；
@@ -801,8 +807,8 @@ const evidenceFixture = (slug, declared, createDeclared) => {
   check('git 基础设施异常:纯数字假 sha × 通道健康 → text 豁免语义保持（misfire 防线不回归）',
     rAlive.status === 0 && outOf(rAlive).includes('证据豁免 text'), `exit=${rAlive.status}\n${outOf(rAlive)}`);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, 'workflow/plans/2026-09-26-pe5.md', PLAN('pe5', '状态: done\n级别: L1\n模块: material', '\n## 改动方案\n\n- src/app.mjs：实现功能\n'));
@@ -815,11 +821,11 @@ const evidenceFixture = (slug, declared, createDeclared) => {
   check('git 基础设施异常:正常 git 零出账（防误报负例）', !outOf(r).includes('git 探测异常'), outOf(r));
   check('git 基础设施异常:正常 git 行为不变（无标记无关提交仍拦证据无关）', r.status === 1 && outOf(r).includes('证据无关'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 // ---- 场景 5u:检查 8 全数字证据串——rev-parse 实证分流（2026-10-05-check8-digit-sha-misfire）----
 // 纯数字证据串曾由 /^\d+$/ 形态守卫抢先 text 豁免（全数字短 SHA≈4.4%/夹具 静默漏检）；改为实证分流：
 // 能解析成提交（含同名 ref/tag）→ 走真相核验；解析失败 → 维持 text 豁免。构造性钉子：git tag 数字名，不依赖哈希运气
-{
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, 'workflow/plans/2026-10-04-ev5.md', PLAN('ev5', '状态: done\n级别: L1', '\n## 改动方案\n- src/ghost.js：声明文件（实际不存在，证据必不触及）\n'));
@@ -830,8 +836,8 @@ const evidenceFixture = (slug, declared, createDeclared) => {
   check('全数字证据串可解析成提交（同名 ref）→ 按真相核验报证据无关（数字形态不豁免）',
     outOf(r).includes('证据无关'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, 'workflow/plans/2026-10-04-ev6.md', PLAN('ev6', '状态: done\n级别: L1', '\n## 改动方案\n- src/ghost.js：声明文件（实际不存在，证据必不触及）\n'));
@@ -841,10 +847,10 @@ const evidenceFixture = (slug, declared, createDeclared) => {
   check('纯数字时间戳证据（无同名 ref）→ 维持文本豁免不误报',
     !outOf(r).includes('证据无关') && !outOf(r).includes('证据伪造'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
 // ---- 场景 45:检查 2——真未填占位（标题 <主题>，无 .md）→ 仍报模板未填 ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-01-nm2.md', INTENT('<主题>', '状态: done\n级别: L1\n日期: 2026-09-01', '\n正文无占位。\n'));
   w(T, 'workflow/plans/2026-09-01-nm2.md', PLAN('nm2', '状态: done\n级别: L1'));
@@ -852,9 +858,9 @@ const evidenceFixture = (slug, declared, createDeclared) => {
 check('标题 <主题>（无 .md）→ 仍报模板未填',
   r.status === 0 && outOf(r).includes('模板未填'), `exit=${r.status}\n${outOf(r)}`);
 rmfix(T);
-}
+});
 // ---- 场景 45b:检查 2——plan 确认节模板样板豁免；真实占位仍报（2026-10-03 plan-confirm-boiler）----
-{
+SCEN(async () => {
 const T = mkfix();
 w(T, 'workflow/intents/2026-09-01-bo1.md', INTENT('bo1', '状态: done\n级别: L1\n日期: 2026-09-01', '\n## 验收标准（可测试）\n- [x] 用例通过\n'));
 w(T, 'workflow/plans/2026-09-01-bo1.md', PLAN('bo1', '状态: done\n级别: L1', '\n## 确认与复核\n\n- 确认结果：approved（YYYY-MM-DD 用户对话内确认）；done（YYYY-MM-DD 关单，随入口文档置终态）\n'));
@@ -862,8 +868,8 @@ const r1 = run(T);
 check('检查2 plan 确认节样板句 → 不报模板未填',
   r1.status === 0 && !outOf(r1).includes('模板未填'), `exit=${r1.status}\n${outOf(r1)}`);
 rmfix(T);
-}
-{
+});
+SCEN(async () => {
 const T = mkfix();
 w(T, 'workflow/intents/2026-09-01-bo2.md', INTENT('bo2', '状态: done\n级别: L1\n日期: 2026-09-01', '\n## 验收标准（可测试）\n- [x] 用例通过\n'));
 w(T, 'workflow/plans/2026-09-01-bo2.md', PLAN('bo2', '状态: done\n级别: L1', '\n## 确认与复核\n\n- 日期: YYYY-MM-DD\n'));
@@ -871,10 +877,10 @@ const r2 = run(T);
 check('检查2 plan 真实未填占位（日期: YYYY-MM-DD）→ 仍报模板未填',
   r2.status === 0 && outOf(r2).includes('模板未填'), `exit=${r2.status}\n${outOf(r2)}`);
 rmfix(T);
-}
+});
 // ---- 场景 45c:检查 2——日期显示格式字面量豁免；纯占位仍报（2026-10-06 check2-datetime-literal-exempt）----
 // 日期取 2026-09-26（< 确认门 v1 锚 2026-09-27，豁免检查 15 存量面——沿 5x 块先例），避免 hard 干扰本断言
-{
+SCEN(async () => {
 const T = mkfix();
 w(T, 'workflow/intents/2026-09-26-dt1.md', INTENT('dt1', '状态: done\n级别: L1\n日期: 2026-09-26',
   '\n匹配时间列格式简化为 YYYY-MM-DD HH:mm；同款括号形态（YYYY-MM-DD HH:mm）与秒级 YYYY-MM-DD HH:mm:ss 均为格式描述。\n'));
@@ -883,8 +889,8 @@ const r1 = run(T);
 check('检查2 裸写 YYYY-MM-DD HH:mm(:ss) 显示格式描述 → 不报模板未填',
   r1.status === 0 && !outOf(r1).includes('模板未填'), `exit=${r1.status}\n${outOf(r1)}`);
 rmfix(T);
-}
-{
+});
+SCEN(async () => {
 const T = mkfix();
 w(T, 'workflow/intents/2026-09-26-dt2.md', INTENT('dt2', '状态: done\n级别: L1\n日期: 2026-09-26',
   '\n匹配时间列格式简化为 YYYY-MM-DD HH:mm（合法格式描述）；另有真占位 日期: YYYY-MM-DD 在同文档。\n'));
@@ -893,9 +899,9 @@ const r2 = run(T);
 check('检查2 同文档混真占位（无时间后缀）→ 格式描述豁免不吞真占位，仍报',
   r2.status === 0 && outOf(r2).includes('模板未填'), `exit=${r2.status}\n${outOf(r2)}`);
 rmfix(T);
-}
+});
 // ---- 场景 46:检查 6——薄适配正文含 .agents/roles/<role>.md 引用 → 不报 Adapter 断线 ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-12-ad1.md', INTENT('ad1', '状态: done\n级别: L1\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
   w(T, 'workflow/plans/2026-09-12-ad1.md', PLAN('ad1', '状态: done\n级别: L1'));
@@ -907,9 +913,9 @@ rmfix(T);
   check('薄适配含角色引用 → 不报 Adapter 断线',
     r.status === 0 && !outOf(r).includes('Adapter 断线'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 // ---- 场景 47:检查 4——fill-*.mjs 星号通配，目录内有匹配文件 → 不报引用断档；无匹配 → 仍报 ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'AGENTS.md', '# AGENTS\n\n起草先跑 `node .agents/scripts/fill-*.mjs`；孤儿引用 `.agents/scripts/ghost-*.mjs`。\n');
   fs.mkdirSync(path.join(T, '.agents', 'scripts'), { recursive: true });
@@ -920,9 +926,9 @@ rmfix(T);
   check('星号通配有匹配 → 不报；无匹配 → 仍报引用断档',
     r.status === 0 && !/引用断档.*fill-\*/.test(outOf(r)) && /引用断档.*ghost-\*\.mjs/.test(outOf(r)), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 // ---- 场景 48:检查 15——委托代录台账行（source/quote 额外字段）照常配对放行（两形态口径，2026-09-27 confirm-gate-delegated）----
-{
+SCEN(async () => {
   const T = mkfix();
   const i1 = mkConfirmedDoc(T, 'workflow/intents/2026-09-27-del15.md', '状态: approved\n级别: L1\n日期: 2026-09-27');
   const p1 = mkConfirmedDoc(T, 'workflow/plans/2026-09-27-del15.md', '状态: approved\n级别: L1');
@@ -932,13 +938,13 @@ rmfix(T);
   ]);
   expectOk('检查15:委托代录台账行（source+quote）照常配对 → exit 0', T);
   rmfix(T);
-}
+});
 
 // ---- 场景 49-54:检查 15 done 内容绑定（2026-09-27 audit-gate-hardening；同日 p2-batch 改锚台账 ts + 保分隔符复原）----
 //     done 形态复刻真实时序：approved 内容（含 approved 指纹）→ done 指纹在其上计算 → 落 done 文档 + 台账 done 行
 //     opt.ts：台账 done 行 ts（默认 2026-09-28T02:00Z——生效锚后）；opt.sep：状态行键值分隔符（默认单空格，
 //     '  ' 复刻两跳间手工改成双空格的非规范格式）
-{
+SCEN(async () => {
   const mkDoneFixture = (T, date, tamper, opt = {}) => {
     const sep = opt.sep || ' ';
     const ts = opt.ts || '2026-09-28T02:00:00.000Z';
@@ -998,10 +1004,10 @@ rmfix(T);
     expectOk('检查15:状态行双空格（非规范分隔符）绑定仍过——保分隔符复原不误伤', T);
     rmfix(T);
   }
-}
+});
 
 // ---- 场景 55-56:检查 4 引用扫描收窄活跃态（2026-09-27 audit-gate-hardening）----
-{
+SCEN(async () => {
   const T = mkfix();
   // 日期取生效日前（2026-09-26）：superseded 现入 15 配对集（closing-coverage），无台账行 ⇒ 免配对
   // （2026-09-28 锚改台账 ts 后，豁免理由 = 无台账行），场景焦点保持在「终态退出引用扫描」本身
@@ -1011,8 +1017,8 @@ rmfix(T);
   check('检查4:终态文档引用断链不再报（历史叙述退出扫描）',
     r.status === 0 && !outOf(r).includes('引用断档'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-26-reflive.md', INTENT('reflive', '状态: approved\n级别: L1\n日期: 2026-09-26', '\n引用 .agents/scripts/ghost-gone.mjs\n'));
   w(T, 'workflow/plans/2026-09-26-reflive.md', PLAN('reflive', '状态: draft\n级别: L1'));
@@ -1020,11 +1026,11 @@ rmfix(T);
   check('检查4:活跃文档引用断链仍报（收窄只放终态）',
     r.status === 0 && outOf(r).includes('引用断档') && outOf(r).includes('ghost-gone.mjs'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
 // ---- 场景 57-60:检查 15 incidents 确认门（2026-09-27 gate-coverage，配对自 2026-09-28 起）----
 //     fixed/closed 须指纹+台账配对；closed 与 done 同口径内容绑定（ts 锚 + 保分隔符）；open 起草态不加门
-{
+SCEN(async () => {
   const mkIncFixture = (T, st, tamper, opt = {}) => {
     const ts = opt.ts || '2026-09-28T02:00:00.000Z';
     const body = 三件套(false);
@@ -1068,10 +1074,10 @@ rmfix(T);
       r.status === 0 && !outOf(r).includes('确认未对账'), `exit=${r.status}\n${outOf(r)}`);
     rmfix(T);
   }
-}
+});
 
 // ---- 场景 61-63:检查 15 放弃态覆盖（2026-09-27 closing-coverage：superseded/cancelled 配对 + 四终态绑定）----
-{
+SCEN(async () => {
   const mkAbandonFixture = (T, st, tamper) => {
     const ts = '2026-09-28T02:00:00.000Z';
     const body = '\n正文行\n';
@@ -1106,7 +1112,7 @@ rmfix(T);
     expectOk('检查15:cancelled 配对+绑定一致 → exit 0', T);
     rmfix(T);
   }
-}
+});
 
 // ---- 场景 64-66:检查 15 并录批次审计（2026-09-28 batch-ledger-audit 改判据：读 batch/of 事实）----
 // 判据演进：原「同 quote + 相邻 ts 差 < 2s」反推调用次数（已被实证假阳性+假阴性，整段退役）；
@@ -1116,7 +1122,7 @@ rmfix(T);
 //   · 原「异 quote / >2s 不聚组」→ 现「不同 batch（或 of=1）→ 不报」；且**新增反向场景**：同 batch
 //     但换 quote、或人为延迟跨 2s，仍须被拦——这正是旧判据的盲区（旧判据下会漏报）
 //   · 原「revert-draft 注记行不参与」→ 现由 VALID_STAGES 过滤承接（同意图）
-{
+SCEN(async () => {
   const mk2LedgerDocs = (T) => {
     // 两份全配对绑定的 done 文档（复用 mkDoneFixture 的构造口径）
     const mkOne = (slug, date) => {
@@ -1267,14 +1273,14 @@ rmfix(T);
       `exit=${r.status}\n${outOf(r)}`);
     rmfix(T);
   }
-}
+});
 
 // ---- 场景 67-71:检查 15 受管准入两条件取或（2026-09-28 incident confirm-gate-effective-date-anchor）----
 // 换锚前：受管准入仅「自报日期 ≥ 生效日」——新档把日期写早即整段跳过判定（确认门静默不开）。
 // 换锚后：受管 = ①台账有合法跳转行 ∨ ②自报日期 ≥ 生效日；两者皆不满足才豁免（存量）。
 // ①独立于自报日期成立 → 堵死「确认过却写早日期逃掉对账」；②保留 → 兜住「新档完全没跑 confirm-doc」。
 // 本块自包含构造（不复用他块作用域内的 mkDoneFixture，避免跨块引用）。
-{
+SCEN(async () => {
   const mkAnchorFixture = (T, date, tamper, opt = {}) => {
     const ts = opt.ts || '2026-09-28T02:00:00.000Z';
     const body = `\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n`;
@@ -1344,7 +1350,7 @@ rmfix(T);
     expectOk('检查15:仅 revert-open 注记行（非合法跳转 stage）→ 不构成台账条件，日期早 → 存量豁免 exit 0', T);
     rmfix(T);
   }
-}
+});
 
 // ---- 场景 72-74:检查 8 生效日锚改 git 首次加入日期（2026-09-28 check8-git-anchor）----
 // 换锚前锚取**文件名前 10 字符**——项目命名规范本身即 YYYY-MM-DD-<主题>，作者日常手写该前缀，
@@ -1352,7 +1358,7 @@ rmfix(T);
 // 换锚后锚取 git 首次加入日期（**日常不可顺手改动**的事实）→ 关掉「改文件名」零成本通道；
 // **诚实边界（复核 P1 更正）**：该锚取 `%aI` = author date（作者自报时间戳），`git commit --date=<过去>`
 // 仍可伪造 → **不宣称「通道关闭」**，仅把伪造成本从「改文件名」抬到「主动伪造时间戳」。
-{
+SCEN(async () => {
   {
     // 【核心回归】文件名日期写早（2026-09-01 < accCutoff 2026-09-12），但**实际是新建档**
     // （git 首次加入在生效日之后）→ 仍须 hard 拦。换锚前此场景被 `filedate >= accCutoff` 跳过（静默放行）。
@@ -1386,13 +1392,13 @@ rmfix(T);
     expectHard('检查8:文件名日期够新 + git 加入够新 + 未勾验 → hard 拦（对照）', T, '验收未对账');
     rmfix(T);
   }
-}
+});
 
 // ---- 场景 75-79:检查 16 量化断言指标签名对账（2026-09-28 claim-exceeds-fix）----
 // 设计要点：本检查**只查显式签名**（`{{小写.点分}}`），不全文扫数字——理由是本仓「N 行/N 条/N 份」
 // 类表述多为历史叙述（描述某次提交当时的规模），全文扫描会产生不可消退的假阳性（P3 红线）。
 // 故本组用例的核心断言是**假阳性恒 0**：无签名时零告警；装户模板占位符（全大写）不误报。
-{
+SCEN(async () => {
   const MC = 'ledger.lines = ledger.lines\ndocs.count.plans = docs.count.plans\n';
   const seedLedger = (T, lines) => w(T, '.agents/confirmations.jsonl', lines.join('\n') + '\n');
   // T2 口径适配（2026-09-28 check16-inline-debt）：scanFiles16 统一走 docFiles（.md ∧ 数字前缀 ∧ tracked），
@@ -1560,12 +1566,12 @@ rmfix(T);
       r.status === 0 && !outOf(r).includes('指标'), `exit=${r.status}\n${outOf(r)}`);
     rmfix(T);
   }
-}
+});
 
 // ---- 场景 80-90:检查 16 装户侧 derivers 动态载入（2026-09-28 adopter-derivers）----
 // 本组核心是**三条假绿防线**：装户模块坏掉时必须响亮出账，绝不静默降级成「只用内置指标」。
 // 对照：模块**缺失**是正常态（零告警）——两组行为必须可区分，否则装户无法判断自己错在哪。
-{
+SCEN(async () => {
   const MC2 = 'ledger.lines = ledger.lines\nmy.custom = my.custom\n';
   const MCB = 'ledger.lines = ledger.lines\ndocs.count.plans = docs.count.plans\n'; // 仅内置指标
   const seedLedger = (T, lines) => w(T, '.agents/confirmations.jsonl', lines.join('\n') + '\n');
@@ -1886,13 +1892,13 @@ rmfix(T);
       }
     }
   }
-}
+});
 
 // ---- 场景 91:检查 16 tracked-only 口径双向（2026-09-28 check16-inline-debt T2）----
 // scanFiles16 与取数器统一走 docFiles（.md ∧ 数字前缀 ∧ tracked）：并行会话的未跟踪半成品即便含
 // 未回填签名也不进扫描面（别人的草稿不拦我的 push，沿检查 1-15 仓库模式「只扫已提交(HEAD)」口径）；
 // 提交进 HEAD 后照常出账。跑法沿场景 23/24 先例（{git:true} + cwd 注入真 git 模式）。
-{
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, '.agents/metric-claims.txt', 'ledger.lines = ledger.lines\n');
@@ -1915,10 +1921,10 @@ rmfix(T);
     r.status === 0 && outOf(r).includes('指标待回填') && outOf(r).includes('wip16') && outOf(r).includes('root-wip16'),
     `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
 // ---- audit 档：false 只留阻断；缺省仍出卫生警告 ----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, '.agents/kit.json', '{"audit":false,"policyVersion":1}\n');
   w(T, 'workflow/intents/2026-09-12-ph.md', INTENT('ph', '状态: draft\n级别: L1\n日期: YYYY-MM-DD'));
@@ -1926,25 +1932,25 @@ rmfix(T);
   const r = run(T);
   check('audit false：占位符不出账且 exit 0', r.status === 0 && !outOf(r).includes('模板未填'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   w(T, '.agents/kit.json', '{"audit":false,"policyVersion":1}\n');
   w(T, 'workflow/intents/2026-09-12-np.md', INTENT('np', '状态: approved\n级别: L1\n日期: 2026-09-12'));
   expectHard('audit false：缺 plan 仍阻断', T, '配对断裂');
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-12-ph2.md', INTENT('ph2', '状态: draft\n级别: L1\n日期: YYYY-MM-DD'));
   w(T, 'workflow/plans/2026-09-12-ph2.md', PLAN('ph2', '状态: draft\n级别: L1'));
   const r = run(T);
   check('audit 缺省：占位符仍警告', r.status === 0 && outOf(r).includes('模板未填'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
 // ---- 检查 17：发版提交树上的 draft 仍 draft 才阻断；发版之后新建的不拦 ----
-{
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, 'package.json', '{"name":"t","version":"0.1.0"}\n');
@@ -1963,8 +1969,8 @@ rmfix(T);
   r = run(T, { git: true });
 check('检查17 发版之后新建的 draft 不拦', r.status === 0 && !outOf(r).includes('发版草稿'), `exit=${r.status}\n${outOf(r)}`);
 rmfix(T);
-}
-{
+});
+SCEN(async () => {
 const T = mkfix();
 gitInit(T);
 w(T, 'package.json', '{"name":"t","version":"0.1.0"}\n');
@@ -1974,8 +1980,8 @@ gitCommitAll(T, 'v0.1.0');
 const r = run(T, { git: true });
 check('检查17 发版树上的 open incident 不参与（阻断由 plan 触发且不含 incident 路径）', r.status === 1 && outOf(r).includes('发版草稿') && !outOf(r).includes('workflow/incidents/2026-09-12-inc17.md'), `exit=${r.status}\n${outOf(r)}`);
 rmfix(T);
-}
-{
+});
+SCEN(async () => {
 const T = mkfix();
 gitInit(T);
 w(T, 'package.json', '{"name":"t","version":"0.1.0"}\n');
@@ -1989,10 +1995,10 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T, { git: true });
   check('检查17 版本变更早于 40 次 package.json 触碰仍阻断', r.status === 1 && outOf(r).includes('发版草稿'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
 // ---- 检查 17：approved 锚在 policy 版本 2；draft 改为 approved 不看锚 ----
-{
+SCEN(async () => {
   const sameKeys = ['moduleSince', 'confirmDocsEffective', 'confirmIncidentsEffective', 'bindingTs'];
   check('policy 版本 2 的四个共享日期与版本 1 相同',
     sameKeys.every((k) => POLICIES[1][k] === POLICIES[2][k]));
@@ -2005,8 +2011,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const p = loadKitPolicy(T);
   check('未知 policyVersion 回退版本 1', p.policyVersion === 1 && p.check17UnclosedAfter === undefined);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, 'package.json', '{"name":"t","version":"0.1.0"}\n');
@@ -2021,8 +2027,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     r.status === 1 && outOf(r).includes('发版草稿') && outOf(r).includes('已是 draft') && outOf(r).includes('仍是 approved'),
     `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const doneBody = '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n';
   const T = mkfix();
   gitInit(T);
@@ -2043,8 +2049,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   r = run(T, { git: true });
   check('检查17 同一文件已是 done → 不拦', r.status === 0 && !outOf(r).includes('发版草稿'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, '.agents/kit.json', '{"policyVersion":2}\n');
@@ -2055,8 +2061,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T, { git: true });
   check('检查17 锚之前 approved 仍是 approved → 不拦', r.status === 0 && !outOf(r).includes('发版草稿'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, '.agents/kit.json', '{"policyVersion":2}\n');
@@ -2068,8 +2074,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('检查17 0.10.0 按整数比较大于 0.8.0 → hard',
     r.status === 1 && outOf(r).includes('发版草稿'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, '.agents/kit.json', '{"policyVersion":1}\n');
@@ -2080,8 +2086,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T, { git: true });
   check('检查17 版本 1 不启用 approved 锚', r.status === 0 && !outOf(r).includes('发版草稿'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, '.agents/kit.json', '{"policyVersion":2}\n');
@@ -2093,10 +2099,10 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('检查17 发版版本拆不成三段整数时不触发 approved 规则',
     r.status === 0 && !outOf(r).includes('发版草稿'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
 // ---- 检查 18：委派台账对账 [warning]，退出码仍为 0 ----
-{
+SCEN(async () => {
   const T = mkfix();
   const gap = '2026-09-12-gap.md';
   w(T, `workflow/intents/${gap}`, INTENT('gap', '状态: done\n级别: L2\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
@@ -2158,8 +2164,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     r.status === 0 && ledgerOf(r).some((l) => l.includes(`intents/${gap}`)),
     `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   // 检查 18 delegationSince 生效日豁免（policy v4，2026-10-06 loop-audit-remediation）。
   // 「缺键回退原行为」由上方既有场景群天然覆盖（fixture 不写 kit.json → loadKitPolicy 回退 v1 无该键）。
   const T = mkfix();
@@ -2185,8 +2191,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
       && outOf(r).split('\n').some((l) => l.includes('委派台账') && l.includes(`intents/${post}`)),
     `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   const body = 三件套(false);
   w(T, 'workflow/incidents/2026-09-12-closed.md', `---\n状态: closed\n级别: L2\n发现: 2026-09-12\n---\n# INCIDENT — closed\n\n${body}`);
@@ -2205,8 +2211,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
       && lines.every((l) => !l.includes('l1c.md') && !l.includes('open.md')),
     `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-12-nodate.md', INTENT('nodate', '状态: done\n级别: L2'));
   w(T, 'workflow/specs/2026-09-12-nodate.md', SPEC('nodate', '状态: approved\n级别: L2'));
@@ -2216,8 +2222,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     r.status === 0 && !outOf(r).includes('委派台账'),
     `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   w(T, '.agents/kit.json', '{"audit":false,"policyVersion":1}\n');
   w(T, 'workflow/intents/2026-09-12-quiet.md', INTENT('quiet', '状态: done\n级别: L2\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
@@ -2228,10 +2234,10 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     r.status === 0 && !outOf(r).includes('委派台账'),
     `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
 // ---- 检查 19：逐阶段审计 [warning]（2026-09-30 stage-gate-machine）----
-{
+SCEN(async () => {
   // 判据 A：spec/plan 为 draft 且日期 ≥ stageGateSince，入口未确认 → 告警（spec 与 plan 各一条）
   const T = mkfix();
   w(T, '.agents/kit.json', '{"policyVersion":2}\n');
@@ -2246,8 +2252,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
       && lines.some((l) => l.includes('plans/2026-09-30-pair.md')),
     `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   // 判据 A 日期门：draft 日期早于 stageGateSince → 静默（历史豁免）
   const T = mkfix();
   w(T, '.agents/kit.json', '{"policyVersion":2}\n');
@@ -2258,8 +2264,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     r.status === 0 && !outOf(r).includes('逐阶段'),
     `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   // 判据 A 放行侧：入口已确认（台账行 + 指纹配对）→ plan draft 静默（L1 免 spec 档）
   const T = mkfix();
   w(T, '.agents/kit.json', '{"policyVersion":2}\n');
@@ -2272,8 +2278,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     r.status === 0 && !outOf(r).includes('逐阶段'),
     `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   // 判据 B：台账顺序倒置（spec 早于 intent）→ 告警；行无对应文件也可判（读台账事实）
   const T = mkfix();
   w(T, '.agents/kit.json', '{"policyVersion":2}\n');
@@ -2287,8 +2293,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     r.status === 0 && outOf(r).includes('逐阶段') && outOf(r).includes('倒置') && outOf(r).includes('2026-09-29-ord'),
     `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   // 判据 B：顺序合规 → 静默；组内最早 ts 早于 stageGateSince → 整组跳过
   const T1 = mkfix();
   w(T1, '.agents/kit.json', '{"policyVersion":2}\n');
@@ -2314,8 +2320,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     r2.status === 0 && !outOf(r2).includes('逐阶段'),
     `exit=${r2.status}\n${outOf(r2)}`);
   rmfix(T2);
-}
-{
+});
+SCEN(async () => {
   // policy v1（无 stageGateSince 键）→ 检查 19 整体跳过
   const T = mkfix();
   w(T, '.agents/kit.json', '{"policyVersion":1}\n');
@@ -2328,9 +2334,9 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     r.status === 0 && !outOf(r).includes('逐阶段'),
     `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
-{
+SCEN(async () => {
   // 判据 A 的 plan→spec 分支（复核 P2-4②）：入口 L2 已确认 + spec 为 draft → plan 出「起草先于 spec 确认」
   const T = mkfix();
   w(T, '.agents/kit.json', '{"policyVersion":2}\n');
@@ -2344,8 +2350,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     r.status === 0 && outOf(r).includes('起草先于 spec 确认'),
     `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   // 交叉一致性（复核 P2-8）：stage-gates.entryConfirmed 与检查 19 内联判据同口径——反例：
   // approved 但无台账行且日期 ≥ 生效日 → 两处皆判「未确认」（check15 亦会 hard-block，断言只取逐阶段警示）
   const T = mkfix();
@@ -2372,9 +2378,9 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     e2.ok === true && !outOf(r2).includes('逐阶段'),
     `sg.ok=${e2.ok}\n${outOf(r2)}`);
   rmfix(T2);
-}
+});
 
-{
+SCEN(async () => {
   // N1 存量短路（检查 19 同口径）：legacy 入口（无级别）+ plan draft → 零「逐阶段」告警
   const T = mkfix();
   w(T, '.agents/kit.json', '{"policyVersion":2}\n');
@@ -2385,9 +2391,9 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     r.status === 0 && !outOf(r).includes('逐阶段'),
     `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
-{
+SCEN(async () => {
   // 检查 19 判据 A 的 **incident 入口**分支（第五轮复核 P2：该分支此前零形态覆盖——
   // 注入验证证明：把 MARK_RE19 改为恒 false，套件仍全绿 → 正则改动不会被拦下）
   {
@@ -2416,11 +2422,11 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
       `exit=${r2.status}\n${outOf(r2)}`);
     rmfix(T2);
   }
-}
+});
 
 // ---- 风险泳道（2026-09-30 hybrid-governance-risk-lanes）：红线判低 ----
 // （2026-10-13 L0 退役：原「L0 配对豁免」场景随级别退役删除。存量 intent 仍须 plan；L1 plan 可独立成入口。）
-{
+SCEN(async () => {
   // L1 intent 仍须 plan（协作道不豁免 L1——防倒退回归）
   const T1 = mkfix();
   w(T1, 'workflow/intents/2026-09-12-l1.md', INTENT('l1', '状态: approved\n级别: L1\nrisk_level: L1\n日期: 2026-09-12'));
@@ -2447,10 +2453,10 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     r3.status === 0 && !outOf(r3).includes('红线判低'),
     `exit=${r3.status}\n${outOf(r3)}`);
   rmfix(T3);
-}
+});
 
 // ---- 检查 15 并录豁免：--batch sanctioned 批次（delegated of>1 + 全行 brief:true）→ 零「确认并录」----
-{
+SCEN(async () => {
   const T = mkfix();
   const fpI = 'a'.repeat(64);
   const fpP = 'b'.repeat(64);
@@ -2465,10 +2471,10 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     r.status === 0 && !outOf(r).includes('确认并录'),
     `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
 // ---- 检查 19 协作道豁免（2026-09-30 hybrid-governance-risk-lanes）----
-{
+SCEN(async () => {
   // L1 intent draft + plan draft（日期 ≥ stageGateSince）→ 「先动手后确认」是泳道语义，零告警
   const T = mkfix();
   w(T, '.agents/kit.json', '{"policyVersion":2}\n');
@@ -2479,8 +2485,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     r.status === 0 && !outOf(r).includes('起草先于入口确认'),
     `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   // 防倒退：L1 intent approved 却无台账行（非 draft）→ 仍告警（豁免仅限 draft 态，防手改状态冒充确认）
   const T = mkfix();
   w(T, '.agents/kit.json', '{"policyVersion":2}\n');
@@ -2491,10 +2497,10 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     outOf(r).includes('起草先于入口确认'),
     outOf(r));
   rmfix(T);
-}
+});
 
 // ---- 加固门（2026-09-30 hybrid-governance-explore-hardening；仅 --hardening 启用，不占 1-20 编号）----
-{
+SCEN(async () => {
   // H1：未标记 exploring 的 draft 件 → 带/不带 --hardening 均不拦（本门只管「已标记未收口」，
   //  常规流程的 draft 中间态不受影响——intent approved 后 plan 起草属正常在途）
   const T = mkfix();
@@ -2505,8 +2511,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('加固门 H1：未标记 exploring 的 draft 件 → 带/不带 --hardening 均 exit 0',
     rOff.status === 0 && rOn.status === 0, `off=${rOff.status}\non=${outOf(rOn)}`);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   // H2：已标记 exploring、intent 仍 draft（配同名 plan 防 check 1 配对拦）→ --hardening hard 拦；
   //  不带旗标 exit 0（泳道内推送/日常扫描不受影响）
   const T = mkfix();
@@ -2517,8 +2523,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('加固门 H2：exploring 件 intent 仍 draft → --hardening exit 1「加固未过」；不带旗标 exit 0',
     rOn.status === 1 && outOf(rOn).includes('加固未过') && rOff.status === 0, outOf(rOn));
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   // H3：已收口（intent approved + plan approved，均带真实指纹 + 台账配对防检查 15 先拦）→ 放行；L1 不索 spec
   const T = mkfix();
   const ent = mkConfirmedDoc(T, 'workflow/intents/2026-09-30-h2.md', '状态: approved\n级别: L1\nrisk_level: L1\n阶段: exploring\n日期: 2026-09-30');
@@ -2531,8 +2537,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('加固门 H3：exploring 件已收口（intent/plan approved + 台账配对）→ --hardening exit 0',
     r.status === 0, outOf(r));
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   // H4：intent 已收口但 plan 仍 draft → hard「加固未过」（plan 未收口；L2 缺 spec 由检查 1 同步出账）
   const T = mkfix();
   const ent = mkConfirmedDoc(T, 'workflow/intents/2026-09-30-h3.md', '状态: approved\n级别: L2\n阶段: exploring\n日期: 2026-09-30');
@@ -2542,8 +2548,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('加固门 H4：exploring 件 plan 未收口（draft）→ --hardening exit 1「加固未过」',
     r.status === 1 && outOf(r).includes('加固未过'), outOf(r));
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   // H5：放弃态出列——intent 已 superseded 的 exploring 件 → --hardening 不拦（探索作废留档，无代码随行）。
   //  台账指纹按 confirm-doc 前向语义复刻：fp = 跳转前（approved 态）内容的指纹，当前盘面 superseded + 指纹行
   //  ——检查 15 的内容绑定（superseded 受绑）按 prev=approved 复原重算须能对上。
@@ -2558,24 +2564,24 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('加固门 H5：exploring 件显式放弃（superseded + 台账绑定）→ --hardening exit 0（出列不加固）',
     r.status === 0, outOf(r));
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   // H6：未知参数 → 用法提示 exit 1（arg 解析收紧后的防倒退）
   const T = mkfix();
   const r = run(T, { args: ['--bogus'] });
   check('加固门 H6：未知 CLI 参数 → exit 1 用法提示', r.status === 1 && /用法/.test(outOf(r)), outOf(r));
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   // H6b：--all 与 --hygiene 互斥组合 → 用法提示 exit 1（2026-10-13 分道，源仓 takeOpts 口径）
   const T = mkfix();
   const r = run(T, { args: ['--all', '--hygiene'] });
   check('分道 H6b：--all 与 --hygiene 同给 → exit 1 用法提示', r.status === 1 && /用法/.test(outOf(r)), outOf(r));
   rmfix(T);
-}
+});
 
 // ---- 默认入口 vs 卫生入口 vs 全量（2026-10-13 B6b-1 分道）----
-{
+SCEN(async () => {
   // 卫生违例（模板占位符残留，检查 2 hygiene 面）无硬违例：默认（裸跑=硬门）不出卫生面且 exit 0；
   // --hygiene 出卫生面且 exit 0；--all 两段都跑 = 分道前的裸跑全量。
   // （夹具给配对齐全的 intent+plan——kit 检查 1 对 plan 落单即拦配对断裂，无源仓的 L1 豁免。）
@@ -2604,10 +2610,10 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('分道：--hygiene 不跑硬门——配对断裂不出、exit 0（卫生段不进关单）',
     gapHy.status === 0 && !outOf(gapHy).includes('配对断裂'), `exit=${gapHy.status}\n${outOf(gapHy)}`);
   rmfix(T2);
-}
+});
 
 // --- 20. 引擎脚本测试覆盖 [warning]（2026-10-01 gate-script-test-coverage） ---
-{
+SCEN(async () => {
   // C20-1：缺测试报 warning、有测试与豁免登记不报（包源环境）
   const T = mkfix();
   const sd = path.join(T, 'templates', '_agents', 'scripts');
@@ -2622,15 +2628,15 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('检查20 C20-1 缺测试报 warning、有测试与豁免不报',
     r1.status === 0 && o1.includes('[WARN 脚本测试缺失] bar.mjs') && !o1.includes('foo.mjs') && !o1.includes('baz.mjs'), o1);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   // C20-2：装户环境（无 templates/）整体跳过
   const T = mkfix();
   const r2 = run(T);
   check('检查20 C20-2 装户（无 templates/）跳过', !outOf(r2).includes('[WARN 脚本测试缺失]'), outOf(r2));
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   // C20-3：豁免文件缺失时全量列出（无豁免兜底）
   const T = mkfix();
   const sd = path.join(T, 'templates', '_agents', 'scripts');
@@ -2639,10 +2645,10 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r3 = run(T);
   check('检查20 C20-3 无豁免文件时缺测试脚本被列出', outOf(r3).includes('[WARN 脚本测试缺失] zeta.mjs'), outOf(r3));
   rmfix(T);
-}
+});
 
 // --- 方案 C：laneOfEntry 单源三态 + 检查 1 suspect 红线 + 检查 2 样例豁免（2026-10-02 caliber-convergence） ---
-{
+SCEN(async () => {
   check('laneOfEntry 一致 low / 一致 high',
     laneOfEntry('L1', 'L1', '2026-10-01', '2026-10-02') === 'low' && laneOfEntry('L2', 'L2', '2026-10-01', '2026-10-02') === 'high');
   check('laneOfEntry 协议期：分歧 / risk 缺失 / 级别缺失 → suspect',
@@ -2653,8 +2659,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     laneOfEntry('L2', '', '2026-10-01', '2026-09-28') === 'high'
     && laneOfEntry('L2', 'L1', '2026-10-01', '2026-09-28') === 'suspect');
   check('laneOfDoc 单字段三态', laneOfDoc('L1') === 'low' && laneOfDoc('L3') === 'high' && laneOfDoc('') === 'suspect');
-}
-{
+});
+SCEN(async () => {
   // 检查 1：协议期分歧件（L2/L1）勾红线 → suspect 按 low 拦红线（hard）
   const T = mkfix();
   fs.writeFileSync(path.join(T, 'workflow', 'intents', '2026-10-02-x.md'),
@@ -2664,8 +2670,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T);
   check('检查1 分歧件勾红线 → hard-block（suspect 拦红线）', r.status === 1 && outOf(r).includes('[红线判低]') && outOf(r).includes('两字段对齐'), outOf(r));
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   // 检查 1 对照：协议前存量（级别 L2 无 risk_level）勾红线 → 不拦（单字段 high）
   const T = mkfix();
   fs.writeFileSync(path.join(T, 'workflow', 'intents', '2026-09-28-y.md'),
@@ -2675,8 +2681,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T);
   check('检查1 协议前 L2 单字段勾红线 → 不拦（存量零新增损害）', !outOf(r).includes('[红线判低]'), outOf(r));
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   // 检查 2：样例豁免三态——反引号/围栏块内不报，正文裸占位符照报
   const T = mkfix();
   fs.writeFileSync(path.join(T, 'workflow', 'intents', '2026-10-02-z.md'),
@@ -2689,9 +2695,9 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('检查2 反引号/围栏样例不报、裸占位符照报',
     zWarn.includes('裸占位') && !zWarn.includes('行内样例') && !zWarn.includes('```'), o);
   rmfix(T);
-}
+});
 
-{
+SCEN(async () => {
   // H7（2026-10-02 caliber-convergence 复核 P1-1）：suspect（级别 L2/risk_level L1 分歧，协议期）转正
   // → 与 high 同样另须同名 spec——缺 spec 即拦（只增不松：suspect 不得逃 spec 前置）。
   const T = mkfix();
@@ -2702,10 +2708,10 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('加固门 H7：suspect（L2/L1 分歧）转正 → 缺同名 spec 即拦',
     r.status === 1 && outOf(r).includes('缺同名 spec'), outOf(r));
   rmfix(T);
-}
+});
 
 // ---- 场景:检查 8 记录型提交豁免——docs 系证据 + 实现证据在场 → 豁免;仅 docs 证据 → hard（2026-10-06-v114-backflow-batch）----
-{
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   w(T, 'workflow/plans/2026-09-12-rec.md', PLAN('rec', '状态: done\n级别: L1\n日期: 2026-09-12', '\n## 改动面\n- src/impl.txt: 实现改动\n'));
@@ -2723,10 +2729,10 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   r = run(T);
   check('检查 8 记录型豁免:仅 docs 证据无实现证据 → 仍 hard 证据无关', r.status === 1 && outOf(r).includes('证据无关'), outOf(r));
   rmfix(T);
-}
+});
 
 // ---- 场景:检查 19 判据 B——台账 approved 行在、入口 intent 缺件（incident 闭环主题）→ 无 ENOENT 出账，顺序判定不放松（2026-10-06-check19-entry-enoent）----
-{
+SCEN(async () => {
   const ledgerRows = (specTs, planTs) => [
     { doc: 'workflow/specs/2026-10-06-noent.md', stage: 'approved', ts: specTs },
     { doc: 'workflow/plans/2026-10-06-noent.md', stage: 'approved', ts: planTs },
@@ -2749,10 +2755,10 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('检查 19 判据 B:入口 intent 缺件 → 顺序倒置照报（守卫不放松判定）',
     r.status === 0 && outOf(r).includes('审批顺序倒置'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T2);
-}
+});
 
 // ---- 场景:检查 8 测试绿声明对账（2026-10-07 verify-evidence）——v5 锚后无 SHA「测试绿」声明须有凭证 ----
-{
+SCEN(async () => {
   // 配对构造（检查 15 须过）：approved 态全文算指纹 → done 态落盘 + 台账 done 行（prev=approved，
   // ts=今天 ≥ bindingTs）——与 bindingSha256 复原口径对称
   const mkVe = (withLedger) => {
@@ -2790,13 +2796,13 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     r.status === 0 && outOf(r).includes('证据豁免 verify') && !outOf(r).includes('测试绿缺凭证'),
     `exit=${r.status}\n${outOf(r)}`);
   rmfix(T2);
-}
+});
 
 // ---- 检查 8 测试绿缺凭证聚合口径（2026-10-18 告警聚合批）：判据不变、只改输出形态 ----
 // ① 单文档多「测试绿」证据项 → 首跑只出一份明细（per-doc 去重，不再逐项刷屏）；
 // ② 同一夹具当日第二次运行 → 明细静默 + 聚合计数行点名（跨运行当日去重——不是不报，是不复读；
 //    静默必须被计数行点名，防「没输出」被误读为「已修」）。
-{
+SCEN(async () => {
   const mkVeAgg = () => {
     const T = mkfix();
     gitInit(T);
@@ -2827,13 +2833,13 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     r.status === 0 && second.length === 1 && second[0].includes('另有 1 份在飞文档同日已点名') && second[0].includes('2026-10-18-vea.md'),
     `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
 // ---- 检查 8 凭证按 doc 绑定（2026-10-08 verify-doc-binding）：v6 收紧 / v5 不变 ----
 // 漏洞本体：凭证行不带 doc 字段 + 判定只看「全仓任意一份 24h 内绿行」→ 跑一次 verify 就能给全仓
 // 任意一单的「测试绿」声明背书。本组三条：① v6 + 只有他单绿行 → 仍出 WARN（漏洞已堵）；
 // ② v6 + 本单绿行 → 豁免零 WARN；③ **v5 + 只有他单绿行 → 无 WARN**（兼容反例，收紧只对 v6+ 生效）。
-{
+SCEN(async () => {
   const mkVeDoc = (pv, docField) => {
     const T = mkfix();
     gitInit(T);
@@ -2875,12 +2881,12 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('检查8 凭证绑定:v5 + 只有他单绿行 → **无 WARN**（兼容反例：收紧只对 v6+ 生效）',
     r.status === 0 && !outOf(r).includes('测试绿缺凭证') && outOf(r).includes('证据豁免 verify'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(D3);
-}
+});
 
 // ---- 检查 18 表头签名识别（2026-10-08 papercuts-cleanup-batch 修 2）：节标题漂移不再静默停解析 ----
 // 修前按 `## 委派结果|自做任务结果` 精确节标题切段，装户把标题写成「委派结果表」即静默停解析该表
 // → L2/L3 done 回流无告警；修后按表头签名（与 agg-delegations.cjs splitTables 同口径）识别。
-{
+SCEN(async () => {
   const T = mkfix();
   const gap = '2026-09-12-drift.md';
   w(T, `workflow/intents/${gap}`, INTENT('drift', '状态: done\n级别: L2\n日期: 2026-09-12', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
@@ -2898,12 +2904,12 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('检查18 表头也漂移（无签名列）→ 不收集 → 警告仍在（识别不过宽负例）',
     r.status === 0 && ledgerWarn(r), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
 // ---- 检查 14 台账 OR（2026-10-08 papercuts-cleanup-batch 修 3）：git 历史无 approved 行而台账有 → 不再误报 ----
 // 两跳确认同批提交时 git 历史不出现行首「状态: approved」（2026-09-28-adopter-derivers 实证）——
 // confirmations.jsonl 已证明两跳均走；判据改 OR 并集（git 判据保留，台账为第二通道）。
-{
+SCEN(async () => {
   const T = mkfix();
   gitInit(T);
   const base = '2026-09-23-confirm-ledger';
@@ -2922,11 +2928,11 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('检查14 台账无该文档 approved 行 → 仍 WARN（git 判据未被弱化）',
     r.status === 0 && /WARN 确认态缺失.*2026-09-23-confirm-ledger\.md/.test(outOf(r)), outOf(r));
   rmfix(T);
-}
+});
 
 // ---- 检查 4 全角逗号（2026-10-08 papercuts-cleanup-batch 修 4）：路径引用后跟「，」不再吞入引用串 ----
 // 中文文档「`.agents/...`，以及…」写法曾把「，」并入引用 → 引用断档误报（p0-gate-noise-batch 实证 2 条）。
-{
+SCEN(async () => {
   const T = mkfix();
   fs.mkdirSync(path.join(T, '.agents', 'commands'), { recursive: true });
   w(T, '.agents/commands/plan.md', '# 小命令\n');
@@ -2942,13 +2948,13 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('检查4 全角逗号后的真断档 → 仍拦（判据不放松）',
     r.status === 0 && /引用断档.*missing-broken\.md/.test(outOf(r)), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
 // ---- 门禁 ROI 插桩（2026-10-08 gate-roi-metrics）----
 // 断言两件事：① 默认路径不落盘、stderr 无 gate-stats 行（输出契约零污染）；
 //           ② --gate-stats 落一行 jsonl 且段覆盖全部检查（判据不漏插）。
 // 既有 223 条断言零改动本身即最强钉子——任何 push 到 warnings 的插桩副作用都会把它们打红。
-{
+SCEN(async () => {
   const T = mkfix();
   const statsRel = path.join('.agents', 'cache', 'gate-stats.jsonl');
   const plain = run(T);
@@ -2978,10 +2984,10 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('门禁ROI：行顶层含 ts / root / totalMs（聚合器的窗口过滤依赖 ts）',
     row && typeof row.ts === 'string' && typeof row.root === 'string' && Number(row.totalMs) >= 0, JSON.stringify({ ts: row && row.ts, totalMs: row && row.totalMs }));
   rmfix(T);
-}
+});
 
 // ---- 场景 21:台账哈希链（2026-10-09 engine-quality-round2 D）——篡改必抓 / 存量零告警 ----
-{
+SCEN(async () => {
   // 21a：连续带 hash 行中间被篡改（改 quote 不动链字段）→ hard「台账链断裂」
   const T = mkfix();
   const { ledgerChainHash } = await import('./policy.mjs');
@@ -3006,8 +3012,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   r = run(T);
   check('场景 21b 反证还原：篡改修复 → 链校验通过', !outOf(r).includes('台账链断裂'), outOf(r).slice(-300));
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   // 21c：全无 hash 的存量台账（v1.5.0 前形态）→ 零链告警（向后兼容）
   const T = mkfix();
   writeLedger(T, [
@@ -3017,13 +3023,13 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T);
   check('场景 21c 存量无 hash 行：零链告警（不追溯）', !outOf(r).includes('台账链断裂'), outOf(r).slice(-300));
   rmfix(T);
-}
+});
 
 
 // ---- 场景 23:台账 scope 子项（2026-10-09 审查 A1 干净版）——缺 scope 出账 / 摘要失配 hard / 存量与旧 policy 零告警 ----
 // 背景：委托代录的授权凭据原是「用户原话」（自由文本、AI 可零成本复用）。干净版改记机器派生的
 // scope{files,sha256}（AI 无输入面），本子项校验受管行带该字段且摘要自洽。
-{
+SCEN(async () => {
   const AFTER = '2026-10-09T12:00:00Z'; // ≥ policy v7 scopeSince（生效时刻锚）
   const BEFORE = '2026-10-01T00:00:00Z'; // 存量（生效前）：豁免、不追溯
   const { scopeDigest } = await import('./policy.mjs');
@@ -3073,15 +3079,15 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('场景 23e 旧 policy 跳过：v6 无 scopeSince 键 → 子项整体跳过（装户零新增告警）',
     !outOf(re).includes('缺机器改动面') && !outOf(re).includes('台账 scope 失配'), outOf(re).slice(-300));
   rmfix(Te);
-}
+});
 
 // ---- 场景 22:addedDates 持久缓存（2026-10-09 engine-quality-round3 W1）----
-{
+SCEN(async () => {
   const log = '@2026-10-02T10:00:00+08:00\nworkflow/intents/a.md\nworkflow/plans/a.md\n@2026-10-01T09:00:00+08:00\nworkflow/intents/a.md\n';
   const m = parseAddedDatesLog(log);
   check('场景 22a 提取：新→旧序首遇 = 最新一次加入（原 IIFE 语义零复刻；注释「最早」为历史误述）', m.get('workflow/intents/a.md') === '2026-10-02T10:00:00+08:00' && m.get('workflow/plans/a.md') === '2026-10-02T10:00:00+08:00', JSON.stringify([...m]));
-}
-{
+});
+SCEN(async () => {
   const cacheP = path.join(os.tmpdir(), 'adc-' + Date.now() + '.json');
   let gitLogCalls = 0;
   const gitLog = () => { gitLogCalls++; return '@2026-10-01T09:00:00+08:00\nworkflow/intents/a.md\n'; };
@@ -3101,11 +3107,11 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   addedDatesWithCache({ head: null, gitLog, cachePath: cacheP });
   check('场景 22e 无 head：不读缓存直接全算（gitLog 再调 1 次）', gitLogCalls === before2 + 1, 'calls=' + gitLogCalls);
   fs.rmSync(cacheP, { force: true });
-}
+});
 
 // ---- 场景 23：场景覆盖子判据（2026-10-10 scenario-coverage，灰度 warning）----
 // scenarioIdsOf 纯函数 + 端到端（spec 有「验收场景」节 → done intent 须逐场景引用；缺 = warning 不阻断）
-{
+SCEN(async () => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'scen-ids-'));
   fs.writeFileSync(path.join(d, 's1.md'),
     '---\n状态: draft\n---\n# SPEC\n## 功能行为\n### S0 不该被提取（节外）\n## 验收场景（可选）\n### S1 折扣\n- GIVEN x\n- WHEN y\n- THEN z\n### S2 退款\n- GIVEN a\n## 数据流\n### S3 也不提取（节外）\n');
@@ -3115,8 +3121,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('场景 24b scenarioIdsOf：无「验收场景」节 → 空数组', scenarioIdsOf(path.join(d, 's2.md')).length === 0);
   check('场景 24c scenarioIdsOf：文件不可读 → 空数组（fail-open）', scenarioIdsOf(path.join(d, 'nope.md')).length === 0);
   fs.rmSync(d, { recursive: true, force: true });
-}
-{
+});
+SCEN(async () => {
   // 端到端：spec 两场景 + intent 全引用 → exit 0 且无「场景未覆盖」warning
   const T = mkfix();
   w(T, 'workflow/specs/2026-09-12-sc.md', '---\n状态: approved\n级别: L1\n---\n# SPEC — sc\n## 验收场景（可选）\n### S1 折扣\n- GIVEN x\n- WHEN y\n- THEN z\n### S2 退款\n- GIVEN a\n');
@@ -3125,8 +3131,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   w(T, 'workflow/plans/2026-09-12-sc.md', PLAN('sc', '状态: done\n级别: L1'));
   const r = run(T);
   check('场景 24d spec 有场景且 intent 全引用 → exit 0 无告警', r.status === 0 && !outOf(r).includes('场景未覆盖'), `exit=${r.status}\n${outOf(r).slice(0, 400)}`);
-}
-{
+});
+SCEN(async () => {
   // 端到端：缺 S2 引用 → warning（灰度，不阻断：exit 仍 0）
   const T = mkfix();
   w(T, 'workflow/specs/2026-09-12-sc.md', '---\n状态: approved\n级别: L1\n---\n# SPEC — sc\n## 验收场景（可选）\n### S1 折扣\n- GIVEN x\n### S2 退款\n- GIVEN a\n');
@@ -3136,8 +3142,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T);
   check('场景 24e 缺场景引用 → warning 且不阻断（exit 0）',
     r.status === 0 && outOf(r).includes('场景未覆盖') && outOf(r).includes('缺 S2'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
-}
-{
+});
+SCEN(async () => {
   // 端到端：spec 无场景节 → 零变化（不出现「场景未覆盖」）
   const T = mkfix();
   w(T, 'workflow/specs/2026-09-12-sc.md', '---\n状态: approved\n级别: L1\n---\n# SPEC — sc\n## 功能行为\n普通 spec\n');
@@ -3146,12 +3152,12 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   w(T, 'workflow/plans/2026-09-12-sc.md', PLAN('sc', '状态: done\n级别: L1'));
   const r = run(T);
   check('场景 24f spec 无场景节 → 零变化（无场景告警，exit 0）', r.status === 0 && !outOf(r).includes('场景未覆盖'), `exit=${r.status}\n${outOf(r).slice(0, 400)}`);
-}
+});
 
 // ---- 场景 25：沉淀追踪子判据（2026-10-10 sediment-tracking，灰度 warning）----
 // sectionHasBody 纯函数 + 端到端（done intent 含影响面/触达红线 且 frontmatter 无「沉淀」→ WARN 未沉淀；
 // incident closed 且三件套齐全 → 同款；「沉淀: 无」豁免；路径断档 → WARN 沉淀断档）
-{
+SCEN(async () => {
   check('场景 25a sectionHasBody：标题后有实质行 → true',
     sectionHasBody(['## 影响面', '- 页面 A', ''], '影响面') === true);
   check('场景 25b sectionHasBody：光标题（模板未填）→ false',
@@ -3160,8 +3166,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     sectionHasBody(['## 目标', '做 X'], '影响面') === false);
   check('场景 25d sectionHasBody：前缀匹配 + 节外有同名行不算',
     sectionHasBody(['## 目标', '提影响面', '## 影响面与边界', '- 内容'], '影响面') === true);
-}
-{
+});
+SCEN(async () => {
   // intent 侧：done + 影响面有内容 + 无沉淀字段 → WARN 未沉淀（不阻断）
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-12-sed.md', INTENT('sed', '状态: done\n级别: L1\n日期: 2026-09-12',
@@ -3170,8 +3176,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T);
   check('场景 25e done intent 高价值无沉淀 → WARN 未沉淀且不阻断',
     r.status === 0 && outOf(r).includes('未沉淀') && outOf(r).includes('2026-09-12-sed.md'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
-}
-{
+});
+SCEN(async () => {
   // 「沉淀: 无」显式豁免 → 无未沉淀告警
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-12-sed.md', INTENT('sed', '状态: done\n级别: L1\n日期: 2026-09-12\n沉淀: 无',
@@ -3180,8 +3186,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T);
   check('场景 25f 「沉淀: 无」显式豁免 → 无未沉淀告警',
     r.status === 0 && !outOf(r).includes('未沉淀'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
-}
-{
+});
+SCEN(async () => {
   // 沉淀字段指向不存在的文件 → WARN 沉淀断档
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-12-sed.md', INTENT('sed', '状态: done\n级别: L1\n日期: 2026-09-12\n沉淀: wiki/项目规范/不存在.md',
@@ -3190,8 +3196,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T);
   check('场景 25g 沉淀字段指向缺失文件 → WARN 沉淀断档',
     r.status === 0 && outOf(r).includes('沉淀断档') && !outOf(r).includes('未沉淀'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
-}
-{
+});
+SCEN(async () => {
   // intent 无影响面/触达红线 → 零变化（不出现未沉淀告警）
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-12-sed.md', INTENT('sed', '状态: done\n级别: L1\n日期: 2026-09-12',
@@ -3199,8 +3205,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   w(T, 'workflow/plans/2026-09-12-sed.md', PLAN('sed', '状态: done\n级别: L1'));
   const r = run(T);
   check('场景 25h intent 无高价值节 → 零变化', r.status === 0 && !outOf(r).includes('未沉淀'), `exit=${r.status}\n${outOf(r).slice(0, 400)}`);
-}
-{
+});
+SCEN(async () => {
   // incident 侧：closed 且三件套齐全 且无沉淀 → WARN 未沉淀
   const T = mkfix();
   w(T, 'workflow/incidents/2026-09-12-inc.md',
@@ -3209,8 +3215,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T);
   check('场景 25i closed incident 三件套齐全无沉淀 → WARN 未沉淀',
     r.status === 0 && outOf(r).includes('未沉淀') && outOf(r).includes('2026-09-12-inc.md'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
-}
-{
+});
+SCEN(async () => {
   // incident 三件套不全 → 沉淀子判据不触发（不出未沉淀，只出三件套不全）
   const T = mkfix();
   w(T, 'workflow/incidents/2026-09-12-inc.md',
@@ -3219,12 +3225,12 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T);
   check('场景 25j incident 三件套不全 → 只告三件套不全，不出未沉淀',
     r.status === 0 && outOf(r).includes('三件套不全') && !outOf(r).includes('未沉淀'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
-}
+});
 
 // ---- 场景 25 续：落点真实性（2026-10-11 landing-reality，P1-3，灰度 warning）----
 // sedimentLandingIsShell 纯函数 + 端到端（落点只有标题/占位 → WARN 落点空壳；带「来源:」frontmatter
 // 或 ≥3 行非占位正文 → 不出；不存在 → 仍 WARN 沉淀断档（回归）；指向目录（读取失败）→ 空壳并注明读取失败）
-{
+SCEN(async () => {
   check('场景 25k sedimentLandingIsShell：只有标题+占位（空壳）→ true',
     sedimentLandingIsShell('---\n标题: 某主题\n---\n# 某主题\n<状态:待整理>\n') === true);
   check('场景 25l sedimentLandingIsShell：frontmatter 有「来源:」→ false',
@@ -3235,8 +3241,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     sedimentLandingIsShell('# 某主题\n- 要点一\n- 要点二\n') === true);
   check('场景 25o sedimentLandingIsShell：读取失败（null）→ true',
     sedimentLandingIsShell(null) === true);
-}
-{
+});
+SCEN(async () => {
   // incident 侧：closed + 三件套齐全 + 沉淀指向只有标题/占位的文件 → WARN 落点空壳（不阻断）
   const T = mkfix();
   w(T, 'workflow/incidents/2026-09-12-inc.md',
@@ -3248,8 +3254,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('场景 25p incident 沉淀落点为标题/占位空壳 → WARN 落点空壳',
     r.status === 0 && outOf(r).includes('落点空壳') && outOf(r).includes('2026-09-12-inc.md')
     && !outOf(r).includes('沉淀断档') && !outOf(r).includes('未沉淀'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
-}
-{
+});
+SCEN(async () => {
   // intent 侧对称：done + 影响面有内容 + 沉淀指向空壳文件 → WARN 落点空壳（不阻断）
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-12-sed.md', INTENT('sed', '状态: done\n级别: L1\n日期: 2026-09-12\n沉淀: wiki/项目规范/shell.md',
@@ -3261,8 +3267,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('场景 25q intent 沉淀落点为标题/占位空壳 → WARN 落点空壳',
     r.status === 0 && outOf(r).includes('落点空壳') && outOf(r).includes('2026-09-12-sed.md')
     && !outOf(r).includes('沉淀断档') && !outOf(r).includes('未沉淀'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
-}
-{
+});
+SCEN(async () => {
   // 落点带「来源:」frontmatter → 非空壳（无落点空壳告警）
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-12-sed.md', INTENT('sed', '状态: done\n级别: L1\n日期: 2026-09-12\n沉淀: wiki/项目规范/real.md',
@@ -3273,8 +3279,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T);
   check('场景 25r 沉淀落点带来源 frontmatter → 不出落点空壳',
     r.status === 0 && !outOf(r).includes('落点空壳') && !outOf(r).includes('沉淀断档'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
-}
-{
+});
+SCEN(async () => {
   // 落点有 ≥3 行非占位正文 → 非空壳（incident 侧非空壳路径）
   const T = mkfix();
   w(T, 'workflow/incidents/2026-09-12-inc.md',
@@ -3285,8 +3291,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T);
   check('场景 25s 沉淀落点有 ≥3 行非占位正文 → 不出落点空壳',
     r.status === 0 && !outOf(r).includes('落点空壳') && !outOf(r).includes('沉淀断档'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
-}
-{
+});
+SCEN(async () => {
   // 回归：沉淀指向不存在的文件 → 仍是 WARN 沉淀断档（incident 侧；intent 侧由既有 25g 锚定）
   const T = mkfix();
   w(T, 'workflow/incidents/2026-09-12-inc.md',
@@ -3295,8 +3301,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T);
   check('场景 25t 沉淀指向缺失文件 → 仍 WARN 沉淀断档（不出落点空壳）',
     r.status === 0 && outOf(r).includes('沉淀断档') && !outOf(r).includes('落点空壳'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
-}
-{
+});
+SCEN(async () => {
   // 落点指向目录（readFileSync 抛异常）→ 按空壳出账并在文案注明读取失败
   const T = mkfix();
   w(T, 'workflow/incidents/2026-09-12-inc.md',
@@ -3306,12 +3312,12 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T);
   check('场景 25u 沉淀落点读取失败（目录）→ WARN 落点空壳并注明读取失败',
     r.status === 0 && outOf(r).includes('落点空壳') && outOf(r).includes('读取失败'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
-}
+});
 
 // ---- 场景 92：THEN 断言抽取（2026-10-11 then-assertion，P2-2，灰度 warning）----
 // extractThenByScenario 纯函数 + 端到端（声明场景缺 THEN 行 = 空壳场景 → WARN 场景无断言，聚合一条；
 // 验收场景节本身可选——节不存在零变化）
-{
+SCEN(async () => {
   const spec = [
     '## 验收场景（可选）',
     '<说明行，不属于任何场景块>',
@@ -3335,8 +3341,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     extractThenByScenario('# SPEC\n## 功能行为\n- THEN 节外不认\n').size === 0);
   check('场景 92d extractThenByScenario：非字符串（读取失败）→ 空 Map（不可判定不误报）',
     extractThenByScenario(null).size === 0);
-}
-{
+});
+SCEN(async () => {
   // 端到端：全场景带 THEN → 无「场景无断言」
   const T = mkfix();
   w(T, 'workflow/specs/2026-09-12-thn.md', '---\n状态: approved\n级别: L1\n---\n# SPEC — thn\n## 验收场景（可选）\n### S1 折扣\n- GIVEN x\n- WHEN y\n- THEN z\n### S2 退款\n- GIVEN a\n- THEN b\n');
@@ -3346,8 +3352,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   const r = run(T);
   check('场景 92e 全场景带 THEN → 无场景无断言告警（exit 0）',
     r.status === 0 && !outOf(r).includes('场景无断言'), `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
-}
-{
+});
+SCEN(async () => {
   // 端到端：S2/S3 缺 THEN → 聚合一条 WARN，S1（有断言）不在列
   const T = mkfix();
   w(T, 'workflow/specs/2026-09-12-thn.md', '---\n状态: approved\n级别: L1\n---\n# SPEC — thn\n## 验收场景（可选）\n### S1 折扣\n- GIVEN x\n- THEN z\n### S2 退款\n- GIVEN a\n### S3 对账\n- WHEN c\n');
@@ -3358,8 +3364,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('场景 92f 场景缺 THEN → 聚合 WARN 且只列缺断言的 ID（S2、S3）',
     r.status === 0 && outOf(r).includes('场景无断言') && outOf(r).includes('缺 THEN 断言：S2、S3'),
     `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
-}
-{
+});
+SCEN(async () => {
   // 端到端：spec 无验收场景节 → THEN 对账不适用（零变化）
   const T = mkfix();
   w(T, 'workflow/specs/2026-09-12-thn.md', '---\n状态: approved\n级别: L1\n---\n# SPEC — thn\n## 功能行为\n普通 spec，无场景节\n');
@@ -3370,11 +3376,11 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('场景 92g spec 无验收场景节 → 零场景告警（exit 0）',
     r.status === 0 && !outOf(r).includes('场景无断言') && !outOf(r).includes('场景引用断链'),
     `exit=${r.status}\n${outOf(r).slice(0, 400)}`);
-}
+});
 
 // ---- 场景 93：引用断链反向对账（2026-10-11 dangling-ref，P2-1，灰度 warning）----
 // 端到端（与「场景未覆盖」共用同一次解析）：验收标准引用 spec 未声明的场景 ID → WARN 场景引用断链
-{
+SCEN(async () => {
   // 引用 S1（已声明且覆盖）+ S9（未声明）→ 只出断链，不出未覆盖
   const T = mkfix();
   w(T, 'workflow/specs/2026-09-12-dr.md', '---\n状态: approved\n级别: L1\n---\n# SPEC — dr\n## 验收场景（可选）\n### S1 折扣\n- GIVEN x\n- THEN z\n');
@@ -3387,8 +3393,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
     `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
   check('场景 93b 已覆盖的 S1 不触发未覆盖（两方向互不误伤）',
     !outOf(r).includes('场景未覆盖'), outOf(r).slice(0, 400));
-}
-{
+});
+SCEN(async () => {
   // 引用与声明完全一致 → 无断链
   const T = mkfix();
   w(T, 'workflow/specs/2026-09-12-dr.md', '---\n状态: approved\n级别: L1\n---\n# SPEC — dr\n## 验收场景（可选）\n### S1 折扣\n- GIVEN x\n- THEN z\n### S2 退款\n- GIVEN a\n- THEN b\n');
@@ -3399,8 +3405,8 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('场景 93c 引用与声明一致 → 无断链无未覆盖（exit 0）',
     r.status === 0 && !outOf(r).includes('场景引用断链') && !outOf(r).includes('场景未覆盖'),
     `exit=${r.status}\n${outOf(r).slice(0, 400)}`);
-}
-{
+});
+SCEN(async () => {
   // spec 无场景节但 intent 引用 S1 → 同样算断链（引用了不存在的场景）
   const T = mkfix();
   w(T, 'workflow/specs/2026-09-12-dr.md', '---\n状态: approved\n级别: L1\n---\n# SPEC — dr\n## 功能行为\n普通 spec，无场景节\n');
@@ -3411,34 +3417,34 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('场景 93d spec 无场景节且引用 S1 → 断链 WARN（exit 0）',
     r.status === 0 && outOf(r).includes('场景引用断链') && outOf(r).includes('S1'),
     `exit=${r.status}\n${outOf(r).slice(0, 500)}`);
-}
+});
 
 // ==== B6b-2（2026-10-13）：§21–§26 六段 + §3x + 检查 1 L1 plan 即入口 + 复核上下文 ====
 // 场景集与关键词断言沿上游同段场景移植；锚日期换 kit 口径（v12：specVerifSince/attributionSince/
 // convergenceSince=2026-10-13，convergenceHardSince/reviewerSince/incidentRegrSince=2026-10-14）。
 
 // ---- 检查 1：L1 plan 即入口（2026-10-10 L1 收成一份 plan）----
-{
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/plans/2026-10-13-solo.md', PLAN('solo', '状态: draft\n级别: L1'));
   expectOk('检查1 L1 plan 即入口：无同名 intent/incident → exit 0', T);
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/plans/2026-10-13-hi.md', PLAN('hi', '状态: draft\n级别: L2'));
   expectHard('检查1 L2 plan 落单 → hard 配对断裂', T, '配对断裂');
   rmfix(T);
-}
-{
+});
+SCEN(async () => {
   const T = mkfix();
   w(T, 'workflow/plans/2026-10-13-nolvl.md', PLAN('nolvl', '状态: draft'));
   expectHard('检查1 级别缺失 plan 落单 → 仍 hard（fail-closed）', T, '配对断裂');
   rmfix(T);
-}
+});
 
 // ---- 检查 1 扩展：独立复核上下文标识（policy v12 reviewerSince，advisory）----
-{
+SCEN(async () => {
   const trio = (name, fm, body, pv = 12) => {
     const T = mkfix();
     w(T, '.agents/kit.json', `{"policyVersion":${pv}}\n`);
@@ -3467,10 +3473,10 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('检查1 复核上下文：v11 缺键 → 子检整体跳过',
     r.status === 0 && !outOf(r).includes('复核上下文缺失'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
 // ---- 检查 3x：incident 防复发验证证据门（hard；锚 incidentRegrSince=2026-10-14，git 建档日锚）----
-{
+SCEN(async () => {
   const mkRegr = (verBody, { pv = 12, addIso = '2026-10-14T01:00:00.000Z', name = '2026-10-14-regr' } = {}) => {
     const T = mkfix();
     gitInit(T);
@@ -3505,10 +3511,10 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('检查3x 缺键（v8）→ 整体跳过不拦',
     r.status === 0 && !outOf(r).includes('回归证据缺失'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
 // ---- 检查 21：spec 验证落地核查（锚 specVerifSince=2026-10-13，git 建档日锚）----
-{
+SCEN(async () => {
   const mkSpec = (lvl, verBody) => {
     const T = mkfix();
     gitInit(T);
@@ -3539,10 +3545,10 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('检查21 L1 spec 不核查',
     r.status === 0 && !outOf(r).includes('spec 验证落地'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
 // ---- 检查 22：机制使用量台账（格式校验 + 待退役强制处置期限；台账文件在场才启用）----
-{
+SCEN(async () => {
   const REG = (rows) => ['# 机制使用量台账', '', '| 机制 | 门禁位置 | 触发统计口径 | 退役阈值 | 最近触发 | 状态 | 处置期限 |', '|---|---|---|---|---|---|---|', ...rows].join('\n');
   const T0 = mkfix();
   w(T0, 'workflow/intents/2026-09-12-r0.md', INTENT('r0', '状态: draft\n级别: L1\n日期: 2026-09-12'));
@@ -3580,10 +3586,10 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('检查22 状态非法 + 列数≠7 → 双 WARN（格式防线）',
     r.status === 0 && outOf(r).includes('状态非法') && outOf(r).includes('行列数'), outOf(r));
   rmfix(T3);
-}
+});
 
 // ---- 检查 23：判据级收敛对账（advisory 档 convergenceSince=2026-10-13 / hard 档 convergenceHardSince=2026-10-14）----
-{
+SCEN(async () => {
   const TABLE = (rows) => [
     '## 验收判据',
     '',
@@ -3747,10 +3753,10 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('检查23 硬锚起无验收判据表 → 仍 WARN 不阻断',
     r.status === 0 && outOf(r).includes('[WARN 收敛无判据]'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
 // ---- 检查 24：incident 归因字段核查（锚 attributionSince=2026-10-13；发现日锚）----
-{
+SCEN(async () => {
   const mkInc = (name, fm, withPlanDate = '2026-09-01') => {
     const T = mkfix();
     w(T, '.agents/kit.json', '{"policyVersion":12}\n'); // 锚经 kit.json policyVersion 供给（v1 缺 attributionSince → 整段跳过）
@@ -3784,10 +3790,10 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
   check('检查24 legacy 回填件 → 豁免',
     r.status === 0 && !outOf(r).includes('归因'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T);
-}
+});
 
 // ---- 检查 25：路由预判一致性（advisory 纯 WARN；预判字段在场才检）----
-{
+SCEN(async () => {
   // ① 一致 → 零告警
   const T = mkfix();
   w(T, 'workflow/intents/2026-09-12-pj1.md', INTENT('pj1', '状态: done\n级别: L1\n日期: 2026-09-12\n预判: kind=require level=L1', '\n## 验收标准（可测试）\n- [x] 用例通过（证据:fixture）\n'));
@@ -3841,10 +3847,10 @@ w(T, 'workflow/intents/2026-09-12-deep.md', INTENT('deep', '状态: draft\n级�
       r.status === 0 && !outOf(r).includes('预判字段不可解析'), `exit=${r.status}\n${outOf(r)}`);
     rmfix(T6);
   }
-}
+});
 
 // ---- 检查 26：闭环漏斗「协议前」占比动作阈值（相邻两月均 >30% → WARN；消费 gen-workflow-metrics 产物）----
-{
+SCEN(async () => {
   // 漏斗表构造器（kit gen-workflow-metrics.mjs 产出的表头/节名；单元格带占比与裸数字两种形态都测）
   const mkMetrics = (rows) => `<!-- GENERATED:BEGIN -->
 
@@ -3918,7 +3924,69 @@ ${rows.map((r) => `| ${r} |`).join('\n')}
   check('检查26 存量裸数字单元格相邻两月超标 → 照判 WARN',
     r.status === 0 && outOf(r).includes('漏斗协议前超标') && outOf(r).includes('2026-09 60% → 2026-10 50%'), `exit=${r.status}\n${outOf(r)}`);
   rmfix(T6);
-}
+});
 
-console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
-process.exit(fail ? 1 : 0);
+// ---- 分片驱动（端口自源仓 shard-check-loop-test；场景间零共享态 → idx % K round-robin 并行安全）----
+// --shard=i/K = 子进程态：只跑本片场景后落合计；parent 态起 K 个子进程、回放输出并聚合合计，
+// 任一红即 exit 1（parent 未跑场景，模块级计数器恒 0，不走文件尾合计）。K = clamp(1..6, floor(cpus/2))，
+// CHECK_LOOP_TEST_SHARDS 钉死（调试/单线程顺序复现）。
+const SHARD_ARG = process.argv.find((a) => a.startsWith('--shard='));
+const tail = () => { console.log(`\n合计: PASS ${pass} / FAIL ${fail}`); process.exit(fail ? 1 : 0); };
+if (SHARD_ARG) {
+  const m = SHARD_ARG.match(/^--shard=(\d+)\/(\d+)$/);
+  const si = m && Number(m[1]), sk = m && Number(m[2]);
+  if (!m || !Number.isInteger(si) || !Number.isInteger(sk) || sk < 1 || si >= sk) {
+    console.error(`check-loop.test: --shard 形态须为 i/K 且 i<K（现 ${SHARD_ARG}）`);
+    process.exit(1);
+  }
+  // 逐场景异常捕获：环境/夹具异常原样击穿会零诊断信息——转 FAIL + 消息头，其余场景照常执行
+  for (const [idx, s] of SCENARIOS.entries()) {
+    if (idx % sk !== si) continue;
+    try { await s(); }
+    catch (e) {
+      const head = String((e && e.message) || e).split('\n').slice(0, 10).join('\n');
+      fail++;
+      console.log(`FAIL  场景异常（非断言失败——夹具/环境错误，SCEN 总序第 ${idx + 1} 个）：\n      ${head}`);
+    }
+  }
+  tail();
+}
+const K = (() => {
+  const env = Number(process.env.CHECK_LOOP_TEST_SHARDS);
+  if (Number.isInteger(env) && env >= 1) return Math.min(env, SCENARIOS.length);
+  return Math.min(6, Math.max(1, Math.floor(os.cpus().length / 2)));
+})();
+if (K <= 1) {
+  for (const s of SCENARIOS) await s(); // 顺序等价（小核 CI / 环境钉死 1）
+  tail();
+}
+const kids = [];
+for (let i = 0; i < K; i++) {
+  kids.push(new Promise((resolve) => {
+    const c = spawn(process.execPath, [fileURLToPath(import.meta.url), `--shard=${i}/${K}`]);
+    let out = '', err = '';
+    c.stdout.on('data', (d) => { out += d; });
+    c.stderr.on('data', (d) => { err += d; });
+    c.on('close', (code) => resolve({ i, out, err, code }));
+    c.on('error', (e) => resolve({ i, out, err, code: null, err_obj: e }));
+  }));
+}
+let tp = 0, tf = 0, red = 0;
+for (const r of await Promise.all(kids)) {
+  const m = [...String(r.out).matchAll(/合计: PASS (\d+) \/ FAIL (\d+)/g)].pop();
+  const p = m ? Number(m[1]) : 0;
+  const f = m ? Number(m[2]) : 0;
+  tp += p; tf += f;
+  const ok = r.code === 0 && f === 0 && !!m;
+  if (!ok) red++;
+  process.stdout.write(`\n[check-loop.test ▶ shard ${r.i + 1}/${K}]\n${r.out}`);
+  if (!ok) {
+    console.log(`[check-loop.test] RED shard ${r.i + 1}${r.code != null ? `（exit ${r.code}）` : r.err_obj ? `（spawn ${r.err_obj.code || r.err_obj.message}）` : ''}`);
+    if (r.err) {
+      const lines = String(r.err).split('\n');
+      process.stderr.write([...lines.slice(0, 12), ...(lines.length > 20 ? ['……（中略）'] : []), ...lines.slice(-5)].join('\n') + '\n');
+    }
+  }
+}
+console.log(`\n合计: PASS ${tp} / FAIL ${tf}${red ? '——红 shard 见上' : '——全绿（分片聚合）'}`);
+process.exit(red || tf ? 1 : 0);
