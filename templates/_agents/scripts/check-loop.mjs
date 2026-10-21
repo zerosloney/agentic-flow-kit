@@ -12,7 +12,7 @@
 //   - warning(打印提示,exit 0):其余卫生项（状态未确认 / 模板占位残留 / 引用漂移 / Adapter 一致性等）
 // 违例输出到 stderr 并 exit 1；只剩警告时 exit 0。
 //
-// 检查项清单（编号/标题/severity 逐条沿 sh 版头部——gate-checklist 配对登记表按 id 消费，不得增删改号）:
+// 检查项清单（编号/标题/severity 逐条沿 sh 版头部；编号承重——被引侧按 id 消费，不得增删改号）:
 // 分道 lane 表（2026-10-13 B6b-1/B6b-2，源仓 SECTIONS 同款语义；机读单源 = LANE_OF 表，判据零变化只归属运行面）:
 //   hard（默认关单/pre-push 面）: 1 配对（清单 5 状态/L3 复核在同遍循环实现，随 1 同道）、3 复盘三件套+回路、
 //     3x 防复发验证证据门、8 验收对账、14 确认留痕、15 指纹链、17 发版收口、
@@ -124,7 +124,7 @@
 //      随源仓 SECTIONS)                                                                          [advisory]
 //  26. 闭环漏斗「协议前」占比动作阈值(workflow/metrics.md 漏斗表日历相邻两月协议前占比均 >30% =
 //      warning,要求一轮归因;收口=0 的月不判;单月波动不触发)                                       [warning]
-//  3x(编号沿上游 3x 写法，非独立清单号——gate-checklist 按 `N.` 解析，本条不入其配对面). incident 防复发
+//  3x(编号沿上游 3x 写法，非独立清单号——不入 1-N 配对面). incident 防复发
 //      验证证据门(fixed/closed 且 git 建档日 ≥ incidentRegrSince,正文无自动化用例/回归清单引用 =
 //      hard-block;存量豁免;锚键缺 → 整段跳过)                                                  [hard-block]
 //
@@ -147,8 +147,7 @@
 //   WARN 面，不进关单——要看时另跑）；--all 两段都跑（= 分道前的裸跑全量）。--all 与 --hygiene 同给
 //   报用法错。每段判据零变化，lane 只决定段归属哪个运行面；机读单源 = 本文件 LANE_OF 表。
 //   --hardening：追加「加固门」（experiment 泳道 exploring 任务入 main 的转正门槛，hard-block；
-//     .githooks/pre-push 对 remote=refs/heads/main 的推送传入；不占 1-20 编号，gate-checklist 登记表
-//     按号配对面不变，门体说明见加固门段注释）
+//     .githooks/pre-push 对 remote=refs/heads/main 的推送传入；不占 1-20 编号，门体说明见加固门段注释）
 // 测试:node templates/_agents/scripts/check-loop.test.mjs（fixture 注入 CHECK_LOOP_ROOT）
 // import 契约（2026-10-08 checkloop-importable）：import { runCheckLoop, delegationResultRows, versionGreater, fmStatus, bindingSha256 }
 //   ——零副作用；runCheckLoop({root?, rev?, mode?, hardening?}) 返回 { exitCode, blockers, warnings }（输出打印照旧，静默断言自行重定向 stderr）
@@ -890,7 +889,7 @@ export function runCheckLoop(opts = {}) {
     return { ok: true, type: 'sha' };
   }
 
-  // --- 3 扩展（§3x，编号沿上游 3x 写法——gate-checklist 按 `N.` 解析，本段不入配对面）.
+  // --- 3 扩展（§3x，编号沿上游 3x 写法——不入 1-N 配对面）.
   //     incident 防复发验证证据门 [hard-block]（2026-10-13 B6b-2；出处沿革留痕在包源仓
   //     git 历史与 CHANGELOG）。调用点位置 = 源仓 SECTIONS 段序（s03x 居卫生 4/5/6 之后、检查 8 之前），
   //     亦为本段消费 addedDateOf 的前置依赖位（git 建档日锚单源定义于上）---

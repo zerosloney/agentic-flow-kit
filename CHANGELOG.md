@@ -4,6 +4,16 @@
 
 ## Unreleased
 
+- chore(retire)：**移除 `gate-checklist` / `sync-hosts` 两个命令**（14 件：两命令 md + gate-checklist.mjs
+  209 行机器 + 其测试 201 行 + 五宿主各两份薄适配）。共同根因是**维护者工具误装进装户面**：
+  sync-hosts CLI 明示只在包源仓运行（装户仓 fail-loud，src/cli.mjs:84 / sync-hosts.mjs:213），命令
+  md 的唯一安装去处恰是装户仓——描述一个在安装环境拒绝运行的工具；gate-checklist 配对登记表的
+  对端 doctor 是 CLI 侧组件（不在装户仓），PAIRS 烘死在装户副本且「不在 managed 范围」永不升级，
+  对 kit 演进必然假漂移且装户不可修。两者均不在阶段索引（检查 7）/路由/控制面，维护者纪律已有
+  承载：review.md「跨宿主薄适配正文漂移」条目 + modules/hosts/README + CLI help。连带：check-loop.mjs
+  ×4 / check-stage-index.mjs ×1 注释清词（编号承重纪律自持表述，不依赖该工具）；ARCHITECTURE §4/§8.1
+  两处同步。engine-lock 受检面 85→84。测试：npm test 81 套件 0 失败；eslint 0 error；sync-hosts
+  66 对无漂移；命令面 9 件、预算余量扩大。
 - chore(docs)：**规则面/注释面「源仓出处」标注全量摘除**（178 处，67 文件）。出处沿革单源回归
   CHANGELOG 与 git 历史——机制登记册示例行的既有口径「建门留档见包源仓 git 历史与 CHANGELOG」
   本就是唯一指定落点，行内标注属重复面且对装户/运行时零语义。剥除范围：templates/（命令/模板/

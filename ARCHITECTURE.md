@@ -128,7 +128,7 @@ CI（.github/workflows/ci.yml，纯包源仓的**唯一**机器门——本仓�
    └─ `jscpd-drift`：**手动触发**的 advisory 报告器，恒 exit 0，不在 push/PR 路径上
 ```
 
-- **检查索引**：编号空间 1–26 + 3x（gate-checklist 按 id 消费配对登记表）。1 配对（hard；L1 直达 / 红线判低 /
+- **检查索引**：编号空间 1–26 + 3x（编号承重，被引侧按 id 消费）。1 配对（hard；L1 直达 / 红线判低 /
   状态+L3 复核随 1 同遍实现）2 占位符 3 复盘三件套+回路 4 引用 5 状态+L3复核 6 角色契约 7 阶段索引
   8 验收对账（凭证/SHA/场景覆盖） 9 文件名 10 迁移一致 11 生成物漂移 12 模块词表 13 体积预算 14 确认留痕
   15 指纹+台账+哈希链（hard） 16 量化签名 17 发版收口（hard） 18 委派对账 19 逐阶段审计 20 测试覆盖；
@@ -207,7 +207,7 @@ gate-seg 插桩（按段计时/计数）→ `agg-gate-stats`（噪声率 top/死
 | `check-query-contract` / `check-schema-residue` / `check-audit-fields` / `check-delete-guard` / `check-notify-guard` / `check-local-gates` | dotnet 工具链专用守卫——kit 的 doctor + add-gate 生态承担等价职责 |
 | `ci-push-before` | Azure DevOps 编排件——kit 远端门形态 = kit-ci.yml + 「同入口命令 + 服务端分支策略」等价接入 |
 | `gen-narrative-claims` + `check-narrative-incremental` | 实践手册承重面、kit 无消费方——等价覆盖 = 检查 11/16 + index-incremental 门 + effective-policy 门 |
-| `skills/shipyard-workflow-closeout` | 源仓品牌关单序列——kit 由 gate-checklist 命令承担关单核对面 |
+| `skills/shipyard-workflow-closeout` | 源仓品牌关单序列——kit 关单核对面由 test.md §6 关单链承担 |
 | CodeBuddy 宿主适配 | kit 七宿主清单（claude/codex/cursor/omp/opencode/trae/zcode）不含该宿主，无适配基面 |
 | `check-loop-sections` 目录化拆分 | kit 保持单体 check-loop.mjs + 模块化检查件形态——分道由 LANE_OF 承担，不搬目录结构 |
 | `engine.json` | kit 的 `kit.json`（policyVersion 台账）已承担等价职责，双台账即双源 |

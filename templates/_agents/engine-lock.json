@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-20T15:53:52.089Z",
+  "generatedAt": "2026-10-21T01:21:10.978Z",
   "files": {
     ".github/workflows/ci.yml": {
       "sha256": "e9cffb90dec8f0a49bfe231a13fb8df375a2494cc75c38d991b5eb7c7be104b5",
@@ -79,7 +79,7 @@
       "hard": 2
     },
     "templates/_agents/scripts/check-loop.mjs": {
-      "sha256": "bbf08a2df08cac6607d4afb03df2c4b1e08a399d1cfaca5f5c1658506089bfb9",
+      "sha256": "5d242a4659cf97a345f9758800dcee7df1596b50abd450cd7e91ee88eda759f7",
       "hard": 32
     },
     "templates/_agents/scripts/check-metric-claims.mjs": {
@@ -107,7 +107,7 @@
       "hard": 0
     },
     "templates/_agents/scripts/check-stage-index.mjs": {
-      "sha256": "9118b8fe57b80b5d36a0db38ed141c08036629895c143a64f0c29e301b2218c8",
+      "sha256": "97561f370793cf4df7982e902518f344b0c375221c7ae3f6f822f5203f918ee5",
       "hard": 0
     },
     "templates/_agents/scripts/closeout-l1.mjs": {
@@ -149,10 +149,6 @@
     "templates/_agents/scripts/fixture-scripts.mjs": {
       "sha256": "4652c35fbc0a34f1782707d06c1b332d4202034ee3519a098ac6c4afdb1afe7d",
       "hard": 0
-    },
-    "templates/_agents/scripts/gate-checklist.mjs": {
-      "sha256": "8617dcb996ec15fc1a607beaec6970fee4890df79bd5ac96298c1545ef36c9c9",
-      "hard": 1
     },
     "templates/_agents/scripts/gate-seg.mjs": {
       "sha256": "bf0b7957ef5e5b7d62c225fc8484392af8ce82ff79b6e59da733a134a4a836f9",

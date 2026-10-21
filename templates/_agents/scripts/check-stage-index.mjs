@@ -3,7 +3,7 @@
 //   ctx 传入既有 helper（linesOf——读异常响亮出账 + 按空文档降级的语义承载者，零复刻），
 //   模块只返回 warnings 数组，不打印、不 exit、不改 ctx。
 // 输出顺序契约：调用点位置即 warnings 插入序（check-loop 原位调用，段 id 沿 sh 版 '6'——清单编号 7
-//   不动，gate-checklist 按 id 消费面不受影响）。
+//   不动）。
 // 判据（沿 sh 版逐条）：AGENTS.md 与 .agents/commands/new-task.md 须各含全部阶段指令路径串
 //   `.agents/commands/<cmd>.md`（双向索引）；缺任一 = WARN。两文件可合法缺失（text 判空预期缺失态）。
 // 测试：node templates/_agents/scripts/check-stage-index.test.mjs
