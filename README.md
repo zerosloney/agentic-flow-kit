@@ -159,6 +159,7 @@ npm install ./agentic-flow-kit-<版本>.tgz          # 项目内：之后用 npx
 - **门禁即 git 钩子**：不依赖任何 agent 客户端自觉；项目专属门禁挂 `.agents/hooks/local-pre-commit`。
 - **中文优先**：文档协议、命令、检查输出全中文；frontmatter 受限子集供机器断言。
 - 抽取自真实项目长期运转的引擎（某真实项目），dogfooding 是后续路线（sync 升级 / add-host / add-gate / npm 发布）的一部分。
+- **引擎仓不自举（诚实边界）**：本仓是纯包源形态——自身不带 `workflow/` 台账与 `.githooks/` 本地钩子，闭环治理面只随包装到装户仓运行。引擎仓的机器门 = 双平台 CI 矩阵（ubuntu/windows × node 18/22 全量套件）+ 引擎完整性门（`check-engine-integrity` 两层锚：盘面 sha256 ↔ 入库基线、跨提交硬拦单位数）——防的是「改弱门禁本体」，与装户侧防「跳步交付」是两件事。
 - **威胁模型（2026-09-27 init-p1-batch）**：勿在不可信仓库运行 `init` / `doctor` / `sync`——三命令在执行目标侧 `.agents/scripts/` 脚本（生成器 / 校验器）前有供应链防线：脚本内容与包源渲染值（LF 归一 sha）一致才执行，失配即显式跳过提示，不执行不下结论。**防线不覆盖 git 钩子面**：预植的 `.githooks/`、`.agents/hooks/` 仍会被保留挂载，并在你自己的首次 git 操作时执行——不可信仓库请先审查/清除预置件再 init。
 
 ## 当前能力
