@@ -3,9 +3,12 @@
  * 读 workflow/delegations.md 两张结果表（按表头签名识别：委派表含「被委派方」列、自做表=日期+任务一句话；不依赖 ## 节标题）+ 扫 workflow/incidents/ 按月计数，
  * 输出各月指标（一次通过率 / 平均返工次数 / 主兜底占比 / **产出接受率**）、并发扩容门判定、可粘贴的月度快照行。
  * 分片感知（2026-10-13 ledger-shard-ledgers 回灌）：读侧文本 = 主台账 ∪ delegations.d/*.md，单源 = ledger-shards.mjs。
- * 结果取值：一次通过 | 返工×N | 返工×N（门禁噪声）| 主兜底 | 返工待修（未闭环，不计入率）。
+ * 结果取值：一次通过 | 返工×N | 返工×N（门禁噪声）| 返工×N（原因）| 主兜底（原因）| 返工待修（未闭环，不计入率）。
  *   门禁噪声档（2026-10-08 selfmeasure-and-modularize）：剥离「返工由门禁面而非设计面触发」的形态——
  *   扩容门第 3 项只对设计返工判 =0，门禁噪声返工单列观测。存量行零回填（旧四档解析逐条不变）。
+ *   原因谱系（2026-10-20 谱系统一，自源仓 agg-delegations causeSummary 谱系回灌）：结果格可带
+ *   （原因）——零 schema 变更（复用括号位，不加列）；词表与「2026-10-20 起新行必填、存量不回填、
+ *   未记分列（锚前存量/锚后待记）」以 workflow/delegations.md 记法为准；复核采纳行不计门 3 设计返工。
  *   取值定义与边界（何为门禁噪声 / 不得用于给设计返工贴标签）以 workflow/delegations.md 头部记法为准。
  * 用法：node .agents/scripts/agg-delegations.cjs [--month=YYYY-MM]（默认输出全部月份 + 全量累计）
  * 门槛定义见 workflow/delegations.md §并发扩容门槛（doc 为权威，脚本向文档对齐——2026-09-27 board-kb-p1）。
@@ -52,6 +55,12 @@ function parseResult(raw) {
   // （一次通过率 55% / 61%，门槛 ≥90%），根因是两档混列——指标永远红且不指示该改什么。
   const mn = r.match(/^返工×(\d+)（门禁噪声）$/);
   if (mn) return { kind: 'rework-noise', rework: 0, reworkNoise: parseInt(mn[1], 10) };
+  // 原因括号（2026-10-20 谱系统一）：词表外原因也收（直方图照实显示，词表只做排序优先）；
+  // 「门禁噪声」已在上一分支消费——括号位互斥，语义就近声明。
+  const rc = r.match(/^返工×(\d+)（(.+?)）$/);
+  if (rc) return { kind: 'rework', rework: parseInt(rc[1], 10), reworkNoise: 0, cause: rc[2] };
+  const fc = r.match(/^主兜底（(.+?)）$/);
+  if (fc) return { kind: 'fallback', rework: 1, reworkNoise: 0, cause: fc[1] };
   const m = r.match(/^返工×(\d+)$/);
   if (m) return { kind: 'rework', rework: parseInt(m[1], 10), reworkNoise: 0 };
   if (/^主兜底$/.test(r)) return { kind: 'fallback', rework: 1, reworkNoise: 0 };
@@ -77,6 +86,36 @@ function parseVerdict(raw) {
 // ACCEPT_MIN_SAMPLE：接受率最小样本护栏（样本 <5 不出率，沿 agg 既有护栏口径——
 // 样本过小的比率是噪声不是信号，且一旦进门禁就会产出不可消退的告警）。
 const ACCEPT_MIN_SAMPLE = 5;
+
+// ---- 原因谱系（2026-10-20 谱系统一，自源仓 causeSummary 谱系回灌，kit 零 schema 适配）----
+// 词表（排序优先用，词表外自由文本照收进直方图）；复核采纳是修饰性原因——该行不计门 3 设计返工
+// （评审机制在工作的信号，惩罚它等于惩罚「有复核」；源仓同口径）。
+const CAUSES = ['角色契约', '任务边界', '需求歧义', '环境', '其他', '复核采纳'];
+const ADOPT_CAUSE = '复核采纳';
+// 原因生效锚：锚前行留空是本仓政策（存量零回填），锚后留空才是真欠记——混报会让「未记」读起来像欠账
+const CAUSE_ANCHOR = '2026-10-20';
+
+// causeSummary(rows)：返工/主兜底行的原因直方图 + 未记分列（pure，供测试）。
+// unrecorded = 总数（兼容口径）；unrecordedPre = 锚前存量；unrecordedSince = 锚后待记（含无日期行）。
+function causeSummary(rows) {
+  const hist = {};
+  let unrecorded = 0, unrecordedPre = 0, unrecordedSince = 0;
+  for (const r of rows) {
+    const p = parseResult(r.result);
+    if (p.kind !== 'rework' && p.kind !== 'fallback') continue; // 噪声/混合/待修/一次通过不进原因面
+    if (p.cause) hist[p.cause] = (hist[p.cause] || 0) + 1;
+    else {
+      unrecorded += 1;
+      if (r.date && r.date < CAUSE_ANCHOR) unrecordedPre += 1;
+      else unrecordedSince += 1; // 无日期行（fixture/历史残缺）按待记对待，不静默归入存量
+    }
+  }
+  const text = [
+    ...CAUSES.filter((c) => hist[c]).map((c) => `${c}${hist[c]}`),
+    ...Object.keys(hist).filter((k) => !CAUSES.includes(k)).sort().map((k) => `${k}${hist[k]}`),
+  ].join('·');
+  return { hist, unrecorded, unrecordedPre, unrecordedSince, text };
+}
 
 // splitTables：按表头签名识别两张结果表——节标题只服务人类阅读，表头才是数据边界
 // （2026-09-24 修复：曾按 `## 委派结果` 节标题定位，节结构漂移时已有记录被静默读成「台账为空」）
@@ -164,7 +203,7 @@ function metrics(rows) {
   const valid = rows.filter((_, i) => kinds[i] !== 'pending' && kinds[i] !== 'unknown');
   const pending = kinds.filter((k) => k === 'pending').length;
   const unknown = kinds.filter((k) => k === 'unknown').length;
-  let pass = 0, reworkSum = 0, reworkNoiseSum = 0, fallback = 0;
+  let pass = 0, reworkSum = 0, reworkNoiseSum = 0, fallback = 0, adoptedRework = 0;
   for (const r of valid) {
     const p = parseResult(r.result);
     if (p.kind === 'pass') pass += 1;
@@ -173,7 +212,9 @@ function metrics(rows) {
     // 2026-10-08 rework-attribution-split 加行内混合档）。
     // 显式列 kind 而非 `reworkSum += p.rework`——否则后续新增 kind 会被静默并入设计返工，
     // 且混合档的两个分量必须各走各的累加器（只加 rework 会漏掉噪声）。
-    if (p.kind === 'rework' || p.kind === 'rework-mixed') reworkSum += p.rework;
+    // 谱系统一（2026-10-20）：复核采纳行不计设计返工（单列观测），门 3 随 reworkSum 自动豁免。
+    if (p.kind === 'rework' && p.cause === ADOPT_CAUSE) adoptedRework += 1;
+    else if (p.kind === 'rework' || p.kind === 'rework-mixed') reworkSum += p.rework;
     if (p.kind === 'rework-noise' || p.kind === 'rework-mixed') reworkNoiseSum += p.reworkNoise;
   }
   const delegatedValid = valid.filter((r) => r.scope === '委派');
@@ -197,6 +238,7 @@ function metrics(rows) {
     passRate: valid.length ? pass / valid.length : null,
     reworkSum,
     reworkNoiseSum,
+    adoptedRework,
     avgRework: valid.length ? (reworkSum + reworkNoiseSum) / valid.length : null,
     delegatedValid: delegatedValid.length,
     fallback,
@@ -269,11 +311,16 @@ function main() {
     const prevYm = (() => { const [y, mo] = ym.split('-').map(Number); const d = new Date(Date.UTC(y, mo - 2, 1)); return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`; })();
     const verdict = expansionVerdict(monthOk, monthResults.get(prevYm), !months.includes(prevYm), items);
     console.log(`## ${ym}`);
-    console.log(`  有效任务 ${m.total}（待修 ${m.pending}${m.unknown ? `、未知结果 ${m.unknown}` : ''}）｜一次通过 ${m.pass}（${fmtRate(m.passRate)}）｜设计返工 ${m.reworkSum} 次 / 门禁噪声返工 ${m.reworkNoiseSum} 次（合计返工 ${m.reworkSum + m.reworkNoiseSum}，平均 ${fmtNum(m.avgRework)}）｜主兜底 ${m.fallback}/${m.delegatedValid}（${fmtRate(m.fallbackRate)}）｜产出接受率 ${fmtAccept(m)}｜incident ${incidents[ym] || 0} 起`);
+    console.log(`  有效任务 ${m.total}（待修 ${m.pending}${m.unknown ? `、未知结果 ${m.unknown}` : ''}）｜一次通过 ${m.pass}（${fmtRate(m.passRate)}）｜设计返工 ${m.reworkSum} 次 / 门禁噪声返工 ${m.reworkNoiseSum} 次（合计返工 ${m.reworkSum + m.reworkNoiseSum + m.adoptedRework}，平均 ${fmtNum(m.avgRework)}）｜主兜底 ${m.fallback}/${m.delegatedValid}（${fmtRate(m.fallbackRate)}）｜产出接受率 ${fmtAccept(m)}｜incident ${incidents[ym] || 0} 起`);
+    const causes = causeSummary(byMonth[ym]);
+    if (causes.unrecorded || causes.text) console.log(`  返工原因 ${causes.text || '—'}${causes.unrecorded ? `${causes.text ? '·' : ''}未记${causes.unrecorded}（锚前存量 ${causes.unrecordedPre}·锚后待记 ${causes.unrecordedSince}；${CAUSE_ANCHOR} 起新行必填，存量不回填）` : ''}${m.adoptedRework ? `｜复核采纳 ${m.adoptedRework} 次（不计门 3）` : ''}`);
     console.log(`  接受率说明（观测项，非门槛）：已记录合入结论 ${m.verdictRecorded} 行｜合入 ${m.accepted}｜未合入 ${m.rejected}｜留空未记录行不入分母`);
     for (const i of items) console.log(`  门${i.no}[${i.kind}] ${i.ok === null ? '[人工]' : i.ok ? '✅' : '❌'} ${i.desc}`);
     console.log(`  扩容门判定：${verdict}\n`);
-    snapshotRows.push(`| ${ym} | ${m.total} | ${fmtRate(m.passRate)} | ${fmtNum(m.avgRework)} | ${fmtRate(m.fallbackRate)} | ${incidents[ym] || 0} | ${fmtAccept(m)} | ${verdict} | 样本含待修${m.pending}${m.unknown ? `、未知${m.unknown}` : ''} |`);
+    const unrecNote = causes.unrecordedSince
+      ? `、返工原因锚后待记 ${causes.unrecordedSince}${causes.unrecordedPre ? `（另有存量 ${causes.unrecordedPre} 按政策不回填）` : ''}`
+      : (causes.unrecordedPre ? `、返工原因未记 ${causes.unrecordedPre} 全为锚前存量（政策不回填，非欠账）` : '');
+    snapshotRows.push(`| ${ym} | ${m.total} | ${fmtRate(m.passRate)} | ${fmtNum(m.avgRework)} | ${fmtRate(m.fallbackRate)} | ${incidents[ym] || 0} | ${fmtAccept(m)} | ${verdict} | 样本含待修${m.pending}${m.unknown ? `、未知${m.unknown}` : ''}${unrecNote}${m.adoptedRework ? `、复核采纳 ${m.adoptedRework} 不计门 3` : ''} |`);
   }
 
   if (!argMonth && rows.length) {
@@ -298,5 +345,5 @@ if (require.main === module) {
     .then((m) => { shardReadText = m.readLedgerText; main(); })
     .catch((err) => fail(`ledger-shards.mjs 装载失败: ${err.message}`));
 } else {
-  module.exports = { parseResult, parseVerdict, metrics, gateMonth, expansionVerdict, fmtAccept, GATE, ACCEPT_MIN_SAMPLE, readLedger };
+  module.exports = { parseResult, parseVerdict, metrics, gateMonth, expansionVerdict, fmtAccept, GATE, ACCEPT_MIN_SAMPLE, readLedger, causeSummary, CAUSES, ADOPT_CAUSE, CAUSE_ANCHOR };
 }

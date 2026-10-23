@@ -274,6 +274,37 @@ const { metrics, gateMonth, expansionVerdict, parseResult, parseVerdict, fmtAcce
   fs.rmSync(root2, { recursive: true, force: true });
 }
 
+// ---- 场景 10：原因谱系（2026-10-20 谱系统一，自源仓 causeSummary 回灌）——纯函数直测 ----
+{
+  const { createRequire } = await import('node:module');
+  const requireCjs = createRequire(import.meta.url);
+  const agg = requireCjs('./agg-delegations.cjs');
+  const P = (s) => agg.parseResult(s);
+  check('场景 10：返工（原因）解析带 cause', P('返工×2（需求歧义）').cause === '需求歧义' && P('返工×2（需求歧义）').rework === 2, '');
+  check('场景 10：主兜底（原因）解析带 cause', P('主兜底（环境）').cause === '环境' && P('主兜底（环境）').kind === 'fallback', '');
+  check('场景 10：门禁噪声括号位不与原因混（互斥优先）', P('返工×1（门禁噪声）').kind === 'rework-noise' && P('返工×1（门禁噪声）').cause === undefined, '');
+  check('场景 10：裸返工无 cause（存量口径）', P('返工×1').cause === undefined && P('返工×1').kind === 'rework', '');
+  const cs = agg.causeSummary([
+    { date: '2026-10-19', result: '返工×1' },
+    { date: '2026-10-21', result: '返工×1' },
+    { date: '2026-10-21', result: '返工×2（需求歧义）' },
+    { date: '2026-10-21', result: '主兜底（环境）' },
+    { date: '2026-10-21', result: '一次通过' },
+  ]);
+  check('场景 10：直方图 + 锚前/锚后分列（存量不回填≠欠账）',
+    cs.hist['需求歧义'] === 1 && cs.hist['环境'] === 1 && cs.unrecorded === 2 && cs.unrecordedPre === 1 && cs.unrecordedSince === 1
+    && cs.text.includes('需求歧义1') && cs.text.includes('环境1'), JSON.stringify(cs));
+  const met = agg.metrics([
+    { scope: '委派', date: '2026-10-21', result: '返工×1（复核采纳）', verdict: '合入' },
+    { scope: '委派', date: '2026-10-21', result: '返工×1（需求歧义）', verdict: '返工后合入' },
+    { scope: '委派', date: '2026-10-21', result: '主兜底（环境）', verdict: '' },
+  ]);
+  check('场景 10：复核采纳不计门 3 设计返工（主兜底写原因仍计门 4）',
+    met.reworkSum === 1 && met.adoptedRework === 1 && met.fallback === 1
+    && agg.gateMonth(met).items.find((i) => i.no === 3).ok === false
+    && agg.gateMonth(met).items.find((i) => i.no === 4).ok === false, JSON.stringify({ rs: met.reworkSum, ad: met.adoptedRework }));
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 if (fail) {
   console.log(`\n${USAGE}`);
