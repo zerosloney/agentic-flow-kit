@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-21T04:43:15.386Z",
+  "generatedAt": "2026-10-23T06:06:29.391Z",
   "files": {
     ".github/workflows/ci.yml": {
       "sha256": "e9cffb90dec8f0a49bfe231a13fb8df375a2494cc75c38d991b5eb7c7be104b5",
@@ -59,8 +59,9 @@
       "hard": 1
     },
     "templates/_agents/scripts/check-engine-integrity.mjs": {
-      "sha256": "ec90678bcee52bfa475ff277d2743f3af751d372ea52f09ecb91226f5af8f89d",
-      "hard": 2
+      "sha256": "83ede087513b0d15f602b6520bf6bba191078ce39a28e593d55ca96e230d60c1",
+      "hard": 3,
+      "note": "锚层收口：跨提交锚补 sha 比对 + note 凭据机制（--update 无凭据拒、锚层剥凭据拦、逐文件粘性）"
     },
     "templates/_agents/scripts/check-funnel.mjs": {
       "sha256": "629036bdf08a48fc14076a11d8c95f7f7a5465fdb9bf3263d0ae049cf47b9fa3",
@@ -80,7 +81,8 @@
     },
     "templates/_agents/scripts/check-loop.mjs": {
       "sha256": "34980bc66cd701226deac96610d4a280baa3511cc848b1c294d3e42956a07f4b",
-      "hard": 32
+      "hard": 32,
+      "note": "回填凭据：B 批检查 27 接线（头注/LANE_OF/import/调用点，先于凭据设施，C 批回填）"
     },
     "templates/_agents/scripts/check-metric-claims.mjs": {
       "sha256": "2c2d8615e9418117d43202dc67cd4131e43fb6c095686363dfcd2fd2cb542f2a",
@@ -120,7 +122,8 @@
     },
     "templates/_agents/scripts/confirm-doc.mjs": {
       "sha256": "c85c3187485cbc701d900aa95d40ebb5e926ec0c486b8fcaa6eaadfc0c91ade2",
-      "hard": 13
+      "hard": 13,
+      "note": "回填凭据：B 批关单活文档一致性前置门（done/closed 拒绝，先于凭据设施，C 批回填）"
     },
     "templates/_agents/scripts/draft-sediment.mjs": {
       "sha256": "a9c51e3fd139adf32755d882e0de53f208784be68a75c1881658c3886605c76d",

@@ -87,7 +87,8 @@ const mkfix = ({ withEntry = false, entryNames = 'gate.mjs' } = {}) => {
     drift.code === 1 && drift.out.includes('[控制面改动未入基线]') && drift.out.includes('gate.mjs'), drift.out);
   check('T4a 修法指向 --update（不再宣传不可达的「立 L2 入口」）',
     drift.out.includes('--update') && !drift.out.includes('立 L2 入口'), drift.out);
-  check('T4a --update 入账后放行', run(d, ['--update']).code === 0 && run(d).code === 0);
+  check('T4a --update 无凭据 → 拒（须 --note）', run(d, ['--update']).code === 1 && run(d, ['--update']).out.includes('--note'), '');
+  check('T4a --update --note 入账后放行', run(d, ['--update', '--note', '改写文案，判据不变']).code === 0 && run(d).code === 0);
 }
 // --- T4e 入口面即便存在也不豁免（锁死新口径）---
 // 1.7.15 卸掉同仓双身份后，包源仓没有 workflow/intents —— 旧「立入口即放行」退路在本仓不可达。
@@ -119,8 +120,8 @@ const mkfix = ({ withEntry = false, entryNames = 'gate.mjs' } = {}) => {
   const r = run(d);
   check('T5b 新受检件未入账 → [门禁件未入基线]，--update 后放行',
     r.code === 1 && r.out.includes('[门禁件未入基线]') && r.out.includes('newgate.mjs'), r.out);
-  run(d, ['--update']);
-  check('T5c --update 把新件入账后 exit 0', run(d).code === 0);
+  run(d, ['--update', '--note', '新增 newgate 判据']);
+  check('T5c --update --note 把新件入账后 exit 0', run(d).code === 0);
 }
 
 // --- T6 外部副本锚 ---
@@ -144,9 +145,9 @@ if (haveGit) {
   run(d, ['--update']);
   git(d, ['add', '-A']);
   git(d, ['commit', '-q', '-m', 'chore: 基线入账']);
-  // 改弱门禁 + 同批刷基线：本地层完全自洽（这正是 CI 自指的形态）
+  // 改弱门禁 + 同批刷基线：本地层完全自洽（这正是 CI 自指的形态）——凭据不豁免硬拦收缩
   w(d, 'templates/_agents/scripts/gate.mjs', '// 退役一条判据\nblockers.push(`A`);\nif (bad) process.exit(1);\n');
-  run(d, ['--update']);
+  run(d, ['--update', '--note', '退役 B 判据']);
   const local = run(d);
   check('T7a 改弱 + 刷基线 → 本地层自洽放行（缺陷场景复现）', local.code === 0, local.out);
   const anchored = run(d, ['--against-ref', 'HEAD']);
@@ -209,6 +210,68 @@ if (haveGit) {
   check('T10c 基线启用 → 「盘面与基线一致」且未启用提示点包源径',
     r.code === 0 && r.out.includes('盘面与基线一致'), r.out);
   fs.rmSync(d, { recursive: true, force: true });
+}
+
+// --- T8 锚层 sha 比对 + note 凭据（2026-10-20 收口：原「保计数改语义 + --update」结构窗关闭）---
+if (haveGit) {
+  // T8a 合法演进全链：保计数改语义 → --update 无凭据拒 → --note 入账 → 锚层放行
+  {
+    const d = mkfix();
+    git(d, ['init', '-q']);
+    git(d, ['config', 'user.email', 't@example.com']);
+    git(d, ['config', 'user.name', 'fixture']);
+    run(d, ['--update']); // 首次入账：prev 为空、零变更件，不要求凭据
+    git(d, ['add', '-A']);
+    git(d, ['commit', '-q', '-m', 'chore: 基线入账']);
+    // 保计数改语义：内容变、硬拦单位数不变（3→3）
+    w(d, 'templates/_agents/scripts/gate.mjs', '// 语义改写：提示词与判定顺序调整\nblockers.push(`A`);\nblockers.push(`B`);\nif (bad) process.exit(1);\n');
+    const refused = run(d, ['--update']);
+    check('T8a-1 保计数改语义 + --update 无凭据 → 拒并指向 --note',
+      refused.code === 1 && refused.out.includes('--note') && refused.out.includes('凭据'), refused.out);
+    const u = run(d, ['--update', '--note', '语义改写：判定顺序调整，硬拦计数不变']);
+    let lock1 = null;
+    try { lock1 = JSON.parse(fs.readFileSync(path.join(d, 'templates', '_agents', 'engine-lock.json'), 'utf8')); } catch { /* 断言兜 */ }
+    check('T8a-2 --note 入账 → 凭据写入变更件条目',
+      u.code === 0 && lock1.files['templates/_agents/scripts/gate.mjs'].note === '语义改写：判定顺序调整，硬拦计数不变', JSON.stringify(lock1.files['templates/_agents/scripts/gate.mjs']));
+    git(d, ['add', '-A']);
+    git(d, ['commit', '-q', '-m', 'feat: 语义演进（带凭据）']);
+    const anchored = run(d, ['--against-ref', 'HEAD~1']);
+    check('T8a-3 锚层：sha 变更但带凭据 → 放行（合法演进的显式代价）',
+      anchored.code === 0 && anchored.out.includes('盘面与基线一致'), anchored.out);
+    // T8b 攻击形态：手剥凭据后，锚层拦（本地层仍自洽绿——只有祖先参照物能出账）
+    const lockPath = path.join(d, 'templates/_agents/engine-lock.json');
+    let strippedLock = null;
+    try { strippedLock = JSON.parse(fs.readFileSync(lockPath, 'utf8')); } catch { /* 断言兜 */ }
+    delete strippedLock.files['templates/_agents/scripts/gate.mjs'].note;
+    fs.writeFileSync(lockPath, JSON.stringify(strippedLock, null, 2) + '\n');
+    const localAfter = run(d);
+    check('T8b-1 剥凭据后本地层自洽绿（缺陷只有锚层能看见）', localAfter.code === 0, localAfter.out);
+    const stripped = run(d, ['--against-ref', 'HEAD~1']);
+    check('T8b-2 锚层：sha 变更且无凭据 → [锚层 sha 变更无凭据]',
+      stripped.code === 1 && stripped.out.includes('[锚层 sha 变更无凭据]'), stripped.out);
+    fs.rmSync(d, { recursive: true, force: true });
+  }
+  // T8c 逐文件粘性：新一轮只更新变更件凭据，未变更件的既有凭据沿用
+  {
+    const d = mkfix();
+    git(d, ['init', '-q']);
+    git(d, ['config', 'user.email', 't@example.com']);
+    git(d, ['config', 'user.name', 'fixture']);
+    run(d, ['--update']);
+    git(d, ['add', '-A']);
+    git(d, ['commit', '-q', '-m', 'chore: 基线入账']);
+    w(d, 'templates/_agents/scripts/gate.mjs', '// r1\nblockers.push(`A`);\nblockers.push(`B`);\nif (bad) process.exit(1);\n');
+    run(d, ['--update', '--note', 'r1 演进']);
+    w(d, 'templates/_githooks/pre-commit', '#!/bin/sh\nif ! node check.mjs; then\n  echo blocked >&2\n  exit 1\nfi\nif ! node check2.mjs; then\n  exit 1\nfi\nexit 0\n');
+    run(d, ['--update', '--note', 'r2 钩子加固']);
+    let lock2 = null;
+    try { lock2 = JSON.parse(fs.readFileSync(path.join(d, 'templates', '_agents', 'engine-lock.json'), 'utf8')); } catch { /* 断言兜 */ }
+    check('T8c 粘性凭据：gate 保留 r1、pre-commit 写入 r2',
+      lock2.files['templates/_agents/scripts/gate.mjs'].note === 'r1 演进'
+      && lock2.files['templates/_githooks/pre-commit'].note === 'r2 钩子加固',
+      JSON.stringify({ g: lock2.files['templates/_agents/scripts/gate.mjs'].note, h: lock2.files['templates/_githooks/pre-commit'].note }));
+    fs.rmSync(d, { recursive: true, force: true });
+  }
 }
 
 console.log(`\ncheck-engine-integrity: ${pass} PASS / ${fail} FAIL`);

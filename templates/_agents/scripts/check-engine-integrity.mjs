@@ -23,9 +23,12 @@
 //   但 1.7.15「卸掉同仓双身份」后**包源仓已无该目录**（装户端内容清理），退路在本仓结构性不可达：
 //   门消息让包源维护者去「立 L2 入口」，而立不了——不可达的能力等于误导。故整体移除（连带
 //   T4b/T4c/T4d 与锚层严格档测试）：本仓只认 --update 这一条显式演进路径，语义更少、更可核对。
-//   **代价（诚实记录）**：跨提交锚只比对**硬拦单位数**、不比 sha，故「改写某检查的语义但保住
-//   exit 1 计数 + --update」这一形态两层都绿。补法是让锚层也比对 sha，代价是每次合法演进都需一份
-//   显式凭据（改判据面，未决）。
+//   **锚层 sha 比对（2026-10-20 收口，原「保计数改语义 + --update」结构窗关闭）**：跨提交锚此前
+//   只比硬拦单位数——改写检查语义但保住 exit 1 计数 + --update 即两层全绿。现在锚层同时比 sha：
+//   锚 sha ≠ 盘面 sha 的受检件，须在该件基线条目上带 `note` 凭据（--update --note "<理由>" 写入，
+//   逐文件粘性——只随该件再次变更而更新，连续多轮演进不误伤）。凭据可伪造（本地信任边界，与
+//   台账防伪同模型）：不宣称不可伪造，让改弱必须留下**随提交 diff 可评审**的显式痕迹——静默改弱
+//   从「机械 --update」抬到「必须留下可对质凭据」。
 //
 // 可选外部锚两条（都是「不受被测对象控制的参照物」，缺省不启用=无外部副本/无历史时不误报）：
 //   --against <目录>      逐字比对包源件与外部副本（装户/发布仓：node_modules/agentic-flow-kit）
@@ -127,11 +130,18 @@ const hardUnits = (rel, text) => {
   return 0;
 };
 
-const buildLock = () => {
+const buildLock = (prev, note) => {
   const files = {};
   for (const rel of gateFiles()) {
     const abs = path.join(ROOT, rel);
-    files[rel] = { sha256: shaOf(abs), hard: hardUnits(rel, fs.readFileSync(abs, 'utf8')) };
+    const entry = { sha256: shaOf(abs), hard: hardUnits(rel, fs.readFileSync(abs, 'utf8')) };
+    // 逐文件粘性凭据（2026-10-20 锚层 sha 比对配套）：变更件写本次 --note；未变更件沿用旧凭据
+    //   （连续多轮演进时早先的凭据不丢——锚层比的是「锚 sha ≠ 盘面 sha」，凭据须跨轮次在场）。
+    const prevNote = prev && prev.files && prev.files[rel] && typeof prev.files[rel].note === 'string' ? prev.files[rel].note : undefined;
+    const changedNow = !prev || !prev.files || !prev.files[rel] || prev.files[rel].sha256 !== entry.sha256;
+    if (changedNow && note) entry.note = note;
+    else if (prevNote) entry.note = prevNote;
+    files[rel] = entry;
   }
   return { schema: 1, generatedAt: new Date().toISOString(), files };
 };
@@ -143,13 +153,19 @@ const readJson = (p) => {
 
 if (UPDATE) {
   fs.mkdirSync(path.dirname(LOCK_ABS), { recursive: true });
-  const lock = buildLock();
   const prev = readJson(LOCK_ABS);
-  const changed = prev ? Object.keys(lock.files).filter((k) => !prev.files[k] || prev.files[k].sha256 !== lock.files[k].sha256) : Object.keys(lock.files);
-  const removed = prev ? Object.keys(prev.files).filter((k) => !lock.files[k]) : [];
-  fs.writeFileSync(LOCK_ABS, JSON.stringify(lock, null, 2) + '\n');
-  console.log(`引擎基线已更新：${LOCK_REL}（受检面 ${Object.keys(lock.files).length} 个文件）`);
-  if (changed.length) console.log(`  本次入账为改动件：${changed.length} 个`);
+  const note = argOf('--note');
+  const next = buildLock(prev, note);
+  const changed = prev && prev.files ? Object.keys(next.files).filter((k) => !prev.files[k] || prev.files[k].sha256 !== next.files[k].sha256) : [];
+  const removed = prev && prev.files ? Object.keys(prev.files).filter((k) => !next.files[k]) : [];
+  if (changed.length && !note) {
+    console.error(`引擎基线更新需要凭据：${changed.length} 个受检件 sha 变更（${changed.map((c) => path.basename(c)).slice(0, 5).join('、')}${changed.length > 5 ? '…' : ''}）——`);
+    console.error('  重跑加 --note "<演进理由>"（凭据写入各变更件条目、随提交 diff 评审；跨提交锚对无凭据的 sha 变更判红）');
+    process.exit(1);
+  }
+  fs.writeFileSync(LOCK_ABS, JSON.stringify(next, null, 2) + '\n');
+  console.log(`引擎基线已更新：${LOCK_REL}（受检面 ${Object.keys(next.files).length} 个文件）`);
+  if (changed.length) console.log(`  本次入账为改动件：${changed.length} 个${note ? '（凭据已随件写入）' : ''}`);
   if (removed.length) console.log(`  本次移除（文件已不在盘）：${removed.join(' ')}`);
   console.log('  ⚠️ 基线更新本身是控制面改动：须与该次演进的 CHANGELOG 记录同批提交（改基线 = 受检面内容变更，不入新基线即被本门拦）');
   process.exit(0);
@@ -173,7 +189,14 @@ if (argOf('--against-ref')) {
     for (const [rel, was] of Object.entries(anchor.files)) {
       const got = current[rel];
       if (!got) { problems.push(`[门禁件消失（跨提交锚）] ${rel} 在 ${ref} 的基线内但盘面不存在——删除一道门等于禁用该检查`); continue; }
-      if (typeof was.hard !== 'number' || got.hard >= was.hard) continue;
+      if (typeof was.hard !== 'number' || got.hard >= was.hard) {
+        // 锚层 sha 比对（2026-10-20 收口）：锚 sha ≠ 盘面 sha 的件须带 note 凭据（--update --note 写入、
+        //   逐文件粘性）。硬拦收缩在上面无条件拦；这里拦的是「保计数改语义」形态。
+        if (got.sha256 !== was.sha256 && !(lock && lock.files && lock.files[rel] && typeof lock.files[rel].note === 'string' && lock.files[rel].note)) {
+          problems.push(`[锚层 sha 变更无凭据] ${rel} sha 与 ${ref} 的基线不一致且基线条目无 note 凭据——合法演进须 --update --note "<理由>"（凭据随提交 diff 评审；无凭据的语义改写一律拦）`);
+        }
+        continue;
+      }
       problems.push(`[硬拦面收缩（跨提交锚）] ${rel} 硬拦单位数 ${was.hard}（见 ${ref}）→ 盘面 ${got.hard}，减少 ${was.hard - got.hard}——祖先提交是参照物，本分支改不动它。本门无声明式豁免出口（2026-10-13 移除：入口退路在本仓结构性不可达，详见文件头），收缩一律拦`);
     }
   }
