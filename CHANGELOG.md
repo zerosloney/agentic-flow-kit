@@ -2,7 +2,7 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
-## Unreleased
+## 1.8.10
 
 - feat(repo)：**引擎自举**——本仓安装自身引擎（装户身份 dogfood，README「自己装一份 dogfood」
   预期路线落地）：.agents/（managed 169 份）+ workflow/ 台账 + .githooks（core.hooksPath 挂载）+
