@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-20
 模块: infra
-确认指纹: f9d1bb5bdbf8185d
+确认指纹: a7f6a9deb63cd7cb
 ---
 # INTENT — 委派台账原因谱系统一（源仓 causeSummary 回灌）
 
@@ -15,10 +15,10 @@ kit 的 agg-delegations.cjs 与源仓 .mjs 两年线分叉：源仓有「返工�
 复用「返工×N（门禁噪声）」同形形态），不新增台账列、存量行天然兼容。
 
 ## 目标
-- [ ] parseResult 支持原因括号（返工/主兜底），门禁噪声括号位互斥不混
-- [ ] causeSummary 回灌（直方图 + 未记分列 + CAUSE_ANCHOR=2026-10-20）
-- [ ] 复核采纳行不计门 3 设计返工（单列观测；主兜底写原因仍计门 4）
-- [ ] delegations.md 记法节 + 测试场景 10（7 断言）
+- [x] parseResult 支持原因括号（返工/主兜底），门禁噪声括号位互斥不混
+- [x] causeSummary 回灌（直方图 + 未记分列 + CAUSE_ANCHOR=2026-10-20）
+- [x] 复核采纳行不计门 3 设计返工（单列观测；主兜底写原因仍计门 4）
+- [x] delegations.md 记法节 + 测试场景 10（7 断言）
 
 ## 非目标
 - 不动接受率谱系（产出接受率是 kit 自有能力，保留）
@@ -36,5 +36,5 @@ kit 的 agg-delegations.cjs 与源仓 .mjs 两年线分叉：源仓有「返工�
 - [ ] 规则 / 契约变更（台账记法 + 门 3 判据收窄）→ L2
 
 ## 验收标准（可测试）
-- [ ] agg-delegations 套件全绿（含场景 10 七断言）（证据：npm test）
-- [ ] 本仓七门全绿（证据：verify --doc 本单）
+- [x] agg-delegations 套件全绿（含场景 10 七断言）（证据：套件 49/0；verify --doc 本单七门全绿，绿凭证 3 行）
+- [x] 本仓七门全绿（证据：verify --doc workflow/intents/2026-10-20-agg-cause-lineage.md 🎉 7 项）

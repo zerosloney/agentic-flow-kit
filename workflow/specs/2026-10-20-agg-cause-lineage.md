@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: infra
-确认指纹: 379c2141c0bcb6e8
+确认指纹: c3b35d7f2763efa9
 ---
 # SPEC — 委派台账原因谱系统一
 
