@@ -4,6 +4,27 @@
 
 ## Unreleased
 
+- feat(repo)：**引擎自举**——本仓安装自身引擎（装户身份 dogfood，README「自己装一份 dogfood」
+  预期路线落地）：.agents/（managed 169 份）+ workflow/ 台账 + .githooks（core.hooksPath 挂载）+
+  kit-ci.yml（远端七门）+ AGENTS.md + wiki 骨架；audit=true。自举首日三捉（全部产品级修复随批）：
+  ① workflows 示例模板表头缺 human 列（检查器新增形态后示例未跟，ship-gate 行撞 E9）；
+  ② `package.json type:module` 仓使无扩展名钩子被 Node 按 ESM 解析、CJS require 崩溃——
+  `.githooks/` 与 `.agents/hooks/` 各下发 `package.json {type:commonjs}` 作用域钉（零钩子代码变更）；
+  ③ 活文档一致性门把清单行文裸文件名误判悬空——判据修「裸名不抓、路径须含分隔符」。
+  另记首笔 papercut（bootstrap 提交无机器通道——安装时序缝，检查 C 的合法盲区）。
+- feat(gate)：**委派台账原因谱系统一**（源仓 causeSummary 谱系回灌，两年线分叉收口）。
+  零 schema 变更：原因编码进结果格括号位（`返工×N（原因）`/`主兜底（原因）`，复用门禁噪声
+  同形形态，不加列、存量天然兼容）；词表（角色契约/任务边界/需求歧义/环境/其他/复核采纳，
+  词表外照收）+ CAUSE_ANCHOR=2026-10-20 + 未记分列（锚前存量=政策不回填/锚后待记=真欠记）；
+  **复核采纳行不计门 3 设计返工**（评审机制在工作的信号，惩罚它等于惩罚「有复核」；主兜底
+  写原因仍计门 4——源仓同口径）、单列 adoptedRework 观测。kit 自有的产出接受率谱系保留不动。
+  delegations.md 记法节随批（模板+装户副本）；测试场景 10 七断言。
+- 自举后的工程流程实录：三个 L2 循环全走自托管机器门（泳道完整性 C 检查 / 索引漂移 / 关单活文档
+  一致性 / 台账不变量 / confirm-doc 确认链 / verify --doc 绑单七门绿凭证）——「装户端内容清理」
+  时代的跨代台账边界以 `LEDGER_HISTORY_BASELINE=5ca9e8c2`（ledger-history-baseline 既有机制）
+  持久化进 kit-ci env 收口。测试：npm test 79 套件 0 失败（agg 套件 42→49）；eslint 0 error；
+  engine-lock 凭据机制产品实战两批（--note 随件入账）。
+
 - feat(gate)：**引擎完整性门锚层收口——跨提交锚补 sha 比对 + note 凭据机制**（审计高危项 #1：
   原「保计数改语义 + `--update` 重写基线」在本地层自洽、仅 CI 近邻兜底的结构窗关闭）。机制：
   ① `--update` 对 sha 变更件**强制凭据**——无 `--note "<理由>"` 拒绝入账（首次入账/零变更件豁免）；
