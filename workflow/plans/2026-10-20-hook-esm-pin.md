@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: infra
-确认指纹: b15449591a73388f
+确认指纹: 2a626448bafafa3d
 ---
 # PLAN — 钩子 ESM 作用域钉（type:module 仓修复）
 

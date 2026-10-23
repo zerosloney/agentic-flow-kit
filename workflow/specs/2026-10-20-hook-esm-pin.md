@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: infra
-确认指纹: 2723893ec95b420d
+确认指纹: 4e416e70b11a1a88
 ---
 # SPEC — 钩子 ESM 作用域钉（type:module 仓修复）
 

@@ -17,6 +17,10 @@ on:
 jobs:
   gate:
     runs-on: ubuntu-latest
+    env:
+      # 台账历史基线（ledger-history-baseline，装户自定）：本仓 2026-10-20 重自举，上一代台账
+      # 终结于 v1.7.1 装户端清理（5ca9e8c）——append-only 扫描自该提交之后起算（跨代删除非抹账）。
+      LEDGER_HISTORY_BASELINE: "5ca9e8c2"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

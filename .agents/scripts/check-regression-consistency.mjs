@@ -41,6 +41,7 @@ export function extractRefs(text) {
   const PATH_RE = new RegExp('(?:^|[\\s`\'"（(｜；：，。、])([\\w.@\\-/\\p{L}]+\\.(?:' + PATH_EXT + '))', 'gu');
   for (const m of t.matchAll(PATH_RE)) {
     const p = m[1].replace(/\\/g, '/');
+    if (!p.includes('/')) continue; // 裸文件名不抓（行文提及的 tool.mjs 误报面——仓库相对路径须含路径分隔符，源仓「刻意不含裸标识符」同判据哲学；自举首捉实证）
     if (p.startsWith('workflow/') && p.endsWith('.md')) continue; // workflow/**.md 归 docRefs 面，不双计（workflow/evidence/*.json 等受管证据仍走存在性检查）
     if (VOLATILE_PREFIXES.some((v) => p.startsWith(v))) volatilePaths.add(p);
     else codePaths.add(p);

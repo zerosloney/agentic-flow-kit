@@ -1,0 +1,7 @@
+{"ts":"2026-10-23T07:18:08.560Z","exitCode":1,"suite":"ledger-invariant","note":"exit 1"}
+{"ts":"2026-10-23T07:18:28.300Z","exitCode":1,"suite":"ledger-invariant","note":"exit 1"}
+{"ts":"2026-10-23T07:23:45.861Z","exitCode":1,"suite":"engine-tests","note":"exit 1"}
+{"ts":"2026-10-23T07:25:41.147Z","exitCode":1,"suite":"engine-tests","note":"exit 1"}
+{"ts":"2026-10-23T07:29:34.139Z","exitCode":1,"suite":"engine-tests","note":"exit 1"}
+{"ts":"2026-10-23T07:31:39.392Z","exitCode":0,"suite":"npm test","gates":7,"headShort":"8187d68","passed":79,"failed":0,"totalMs":103539,"wallMs":101044,"durations":{"scripts-syntax":3978,"workflows-check":97,"effective-policy":91,"check-loop":504,"ledger-invariant":549,"rule-budget":1286,"engine-tests":97034},"doc":"workflow/intents/2026-10-20-hook-esm-pin.md"}
+{"ts":"2026-10-23T07:35:12.219Z","exitCode":0,"suite":"npm test","gates":7,"headShort":"8187d68","passed":79,"failed":0,"totalMs":102387,"wallMs":99862,"durations":{"scripts-syntax":4041,"workflows-check":108,"effective-policy":95,"check-loop":490,"ledger-invariant":546,"rule-budget":1323,"engine-tests":95784},"doc":"workflow/intents/2026-10-20-hook-esm-pin.md"}
