@@ -1,0 +1,55 @@
+{
+  "knownPatterns": [],
+  "builds": [
+    {
+      "name": "build",
+      "command": "npm run build",
+      "ext": [
+        ".ts",
+        ".tsx",
+        ".vue",
+        ".js",
+        ".jsx",
+        ".mjs",
+        ".cjs"
+      ],
+      "when": [
+        "pkg:scripts.build"
+      ]
+    }
+  ],
+  "checks": [
+    {
+      "name": "typecheck",
+      "command": "npx tsc --noEmit",
+      "ext": [
+        ".ts",
+        ".tsx"
+      ],
+      "when": [
+        "tsconfig.json"
+      ]
+    },
+    {
+      "name": "lint",
+      "command": "npx eslint .",
+      "ext": [
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx",
+        ".vue"
+      ],
+      "when": [
+        "eslint.config.js",
+        "eslint.config.mjs",
+        "eslint.config.cjs",
+        ".eslintrc.js",
+        ".eslintrc.cjs",
+        ".eslintrc.json",
+        ".eslintrc.yml",
+        ".eslintrc"
+      ]
+    }
+  ]
+}

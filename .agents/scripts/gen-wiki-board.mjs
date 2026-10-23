@@ -1,0 +1,276 @@
+// wiki 索引生成器：磁盘 + INDEX 速览表「用途」列 → 自动重生成 INDEX 速览计数/映射表 + 看板 DATA
+// 2026-09-13 引入：消除三层手工双写（短板①）。人工只维护两样：磁盘文件本身 + 速览表用途列。
+// 用法：node .agents/scripts/gen-wiki-board.mjs [--dry-run] [--check] [--help]
+//   （收录/删除/移动 wiki 文件后必跑，随后跑 verify-wiki-consistency.mjs）
+//   --check 不写盘；INDEX/看板与磁盘不一致时 exit 1 并打印差异（供 doctor 漂移告警）
+// 测试：node .agents/scripts/gen-wiki-board.test.mjs（fixture 回归，须全绿）
+// 生成范围（锚点内整段重写，锚点外字节原样保留）：
+//   INDEX.md 速览表数据行 / 「合计」行数字 / 「## 文件 → 主题 → 归属目录 映射表」到「## 命名规则」之间
+//   看板 知识沉淀总览.html 的 `const DATA = {...};` 整块
+// 注意：映射表节内的手工注记会被清除——背景说明请写进速览表「用途」列（人工列，生成器不覆盖）。
+import fs from 'node:fs';
+import path from 'node:path';
+import { execSync } from 'node:child_process';
+
+const USAGE = `用法：node .agents/scripts/gen-wiki-board.mjs [--dry-run] [--check] [--help]
+
+事实源：磁盘 wiki/<主题>/ 一层文件 + INDEX.md 速览表「用途」列（人工列）。重生成：
+  - wiki/INDEX.md：速览表数据行与文件计数、「合计」行数字、映射表节
+    （「## 文件 → 主题 → 归属目录 映射表」到「## 命名规则」之间整段）
+  - wiki/知识沉淀总览.html：const DATA = {...} 整块（summary 统计 + topics 文件清单 + dir 链接）
+两处生成区手改会被覆盖；锚点外内容原样保留。人工只维护磁盘文件 + 速览表「用途」列。
+
+选项：
+  --dry-run   只打印将生成内容的摘要与逐行差异，不写盘
+  --check     不写盘；INDEX/看板与磁盘不一致时 exit 1 并打印差异（供 doctor 漂移告警）
+  --help      打印本说明`;
+
+const args = process.argv.slice(2);
+if (args.includes('--help') || args.includes('-h')) {
+  console.log(USAGE);
+  process.exit(0);
+}
+const unknown = args.filter((a) => a !== '--dry-run' && a !== '--check');
+if (unknown.length) {
+  console.error(`❌ 未知参数：${unknown.join(' ')}\n\n${USAGE}`);
+  process.exit(1);
+}
+const DRY = args.includes('--dry-run');
+const CHECK = args.includes('--check');
+
+const WIKI = 'wiki';
+const INDEX_P = path.join(WIKI, 'INDEX.md');
+const BOARD_P = path.join(WIKI, '知识沉淀总览.html');
+
+// ---- 磁盘枚举（事实源：文件在哪个主题目录就属于哪个主题）----
+// 登记口径（2026-09-17 起，与 verify-wiki-consistency.mjs 保持一致）：
+//   主题目录顶层：全量文件登记（现状不变）；
+//   直属子目录：仅登记 md/html 知识文档（排除 *.visual-check.* 工具产物；.json/.png 不计入）；
+//   数据维护主题例外——其子目录（schema变更/<批次>/ 等）走 README.md 台账，不参与登记。
+// gitignore 豁免（F4，incident 2026-09-23-code-review-f3-f4-closeout；p2-batch2 扩面到全 wiki/——
+// 活跃主题目录内的本机文件（如 *.xlsx）同样会造成生成物计数在 fresh clone 漂移）：
+// 排除 .gitignore 忽略的本机文件，git 不可用时退化为全量计数
+const gitIgnoredArchive = (() => {
+  try {
+    const out = execSync('git -c core.quotepath=false status --ignored=matching --porcelain -uall -- wiki',
+      { encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] });
+    const prefix = 'wiki/';
+    return new Set(out.split(/\r?\n/)
+      .filter((l) => l.startsWith('!! '))
+      .map((l) => l.slice(3).trim().replace(/\/$/, ''))
+      .filter((p) => p.startsWith(prefix))
+      .map((p) => p.slice(prefix.length)));
+  } catch {
+    return new Set();
+  }
+})();
+const isKnowledgeDoc = (f) => /\.(md|html)$/i.test(f) && !/\.visual-check\./i.test(f);
+const diskTopics = new Map(); // name -> [{ name: '文件名或 子目录/文件名', dir: 'wiki/主题[/子目录]/' }]
+for (const d of fs.readdirSync(WIKI)) {
+  const p = path.join(WIKI, d);
+  if (!fs.statSync(p).isDirectory() || d === 'drafts-archive') continue;
+  // gitignore 豁免消费（p2-batch2 扩面落点）：gitIgnoredArchive 集合现为全 wiki/ 的忽略件相对路径——
+  // 活跃区 entries 构建处按「主题/文件」与「主题/子目录/文件」过滤（复核 P1-2：扩面集合此前无消费点=死代码）
+  const isIgnored = (rel) => { const k = rel.endsWith('/') ? rel.slice(0, -1) : rel; return gitIgnoredArchive.has(`${d}/${k}`) || gitIgnoredArchive.has(`${d}/${k}/`); }; // 尾斜杠归一（复核 P2-a；endsWith 替代正则——此文件转义层过于嘈杂）
+  const entries = fs.readdirSync(p)
+    .filter((f) => fs.statSync(path.join(p, f)).isFile() && !isIgnored(f))
+    .map((f) => ({ name: f, dir: `wiki/${d}/` }));
+  if (d !== '数据维护') {
+    for (const sub of fs.readdirSync(p)) {
+      const sp = path.join(p, sub);
+      if (!fs.statSync(sp).isDirectory() || isIgnored(`${sub}/`)) continue;
+      for (const f of fs.readdirSync(sp)) {
+        if (fs.statSync(path.join(sp, f)).isFile() && isKnowledgeDoc(f) && !isIgnored(`${sub}/${f}`)) {
+          entries.push({ name: `${sub}/${f}`, dir: `wiki/${d}/${sub}/` });
+        }
+      }
+    }
+  }
+  entries.sort((a, b) => a.name.localeCompare(b.name, 'zh'));
+  diskTopics.set(d, entries);
+}
+
+// ---- 草稿超龄提醒（P1-2）：drafts-archive/<YYYY-MM-DD-主题>/ 落盘超龄未归类 → stdout WARN ----
+// advisory 档：只提醒不阻断（与 B1 沉淀追踪同档），不改归档统计口径与任何生成物，exit code 不受影响。
+// 目录名不带日期前缀（人工建的目录）→ 静默跳过，不 WARN 也不报错。
+const DRAFT_AGE_DAYS = 14; // 超龄档位（天）：与 B1 沉淀追踪同档 advisory，只提醒不阻断
+const TODAY = (() => {
+  // FLOW_KIT_TODAY=YYYY-MM-DD 仅测试/演练用：覆盖「今天」便于构造超龄/未超龄用例；未设置或格式不合法时用系统当前日期
+  const env = process.env.FLOW_KIT_TODAY;
+  if (env && /^\d{4}-\d{2}-\d{2}$/.test(env)) return env;
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  return `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`;
+})();
+const utcMs = (s) => { // 'YYYY-MM-DD' → 当日 UTC 零点毫秒（与 TODAY 同构换算，天数差恒为精确整数）
+  const [y, m, d] = s.split('-').map(Number);
+  return Date.UTC(y, m - 1, d);
+};
+// rel：相对 drafts-archive 的 '/' 分隔路径（如 '2026-09-01-主题/主题.md'，与上方 walk 的 rel 拼法一致）
+const warnIfDraftAged = (rel) => {
+  if (!rel.includes('/')) return; // 直接躺在 drafts-archive 根（无日期目录包裹）→ 静默跳过
+  const dirName = rel.split('/')[0];
+  const m = dirName.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (!m) return; // 目录名不带日期前缀（人工建的目录）→ 静默跳过
+  const days = (utcMs(TODAY) - utcMs(m[1])) / 86400000;
+  if (!(days > DRAFT_AGE_DAYS)) return; // 未超龄（恰 14 天不提醒，超过才提醒）；NaN 同样落此静默跳过
+  const topic = dirName.slice('YYYY-MM-DD-'.length) || dirName; // 目录名 = 日期-主题；无主题段则退回目录名
+  console.log(`[WARN 草稿超龄] drafts-archive/${rel} 落于 ${m[1]} 未归类——草稿是中间态，归类到 wiki/${topic}/ 后跑 gen-wiki-board + verify-wiki-consistency`);
+};
+
+const archiveCount = (() => {
+  let n = 0;
+  const walk = (dir, rel = '') => {
+    for (const e of fs.readdirSync(dir)) {
+      const p = path.join(dir, e);
+      // 集合键带 drafts-archive/ 前缀（扫描面扩全 wiki/ 后），walk rel 须拼前缀比对（复核 P2-b）
+      const r = rel ? `drafts-archive/${rel}/${e}` : `drafts-archive/${e}`;
+      if (fs.statSync(p).isDirectory()) walk(p, rel ? `${rel}/${e}` : e);
+      else if (!gitIgnoredArchive.has(r)) {
+        n++;
+        warnIfDraftAged(rel ? `${rel}/${e}` : e); // 超龄提醒挂在计数控分支：口径一致（ignored 件不提醒），不影响计数
+      }
+    }
+  };
+  if (fs.existsSync(path.join(WIKI, 'drafts-archive'))) walk(path.join(WIKI, 'drafts-archive'));
+  else console.error('⚠️ wiki/drafts-archive/ 不存在，归档计数按 0 处理（wiki 协议目录，建议恢复）');
+  return n;
+})();
+
+// ---- 读 INDEX 现速览表：主题顺序 + 用途列（人工，不覆盖）----
+// 切行须容忍 CRLF：按 '\n' 切会在行尾留 '\r'，速览表行锚定正则（\|$）整表失配 →
+// 「用途」列（唯一人工维护位）被静默重置为 <待补>（papercut 2026-09-17；fixture 见 gen-wiki-board.test.mjs 场景 1）
+// 用途列管道转义（p2-batch2）：生成侧对单元格 `|` → `\|`（行内码 \`|\`），解析侧容忍转义——
+// 否则含管道的用途描述会切坏表格行、下次生成该行解析失配走「新主题追加」把人工文本静默重置
+const BS = String.fromCharCode(92); // 反斜杠字符（转义写法在此文件里反复出错，用 charCode 表达）
+const PIPE_CH = '|';
+const escCell = (s) => String(s).split(PIPE_CH).join(BS + PIPE_CH);
+const unescCell = (s) => String(s).split(BS + PIPE_CH).join(PIPE_CH);
+const indexText = fs.readFileSync(INDEX_P, 'utf8');
+const overview = []; // {name, usage}
+// 解析正则（p2-batch2）：用途列允许转义管道 \|--`(?:\\.|[^|])*` 吃掉「转义字符+任一字符」或普通字符，
+// 裸管道才是列分隔。unescCell 还原人工原文。
+for (const line of indexText.split(/\r?\n/)) {
+  const m = line.match(/^\| ([^|]+) \| (\d+) \|((?:\\.|[^|])*)\|$/);
+  if (m && m[1].trim() !== '主题') overview.push({ name: m[1].trim(), usage: unescCell(m[3].trim()) });
+}
+// 主题顺序 = 速览表现顺序在前，磁盘新主题按中文排序追加
+const ordered = [...overview.filter((o) => diskTopics.has(o.name))];
+for (const t of [...diskTopics.keys()].sort((a, b) => a.localeCompare(b, 'zh'))) {
+  if (!ordered.some((o) => o.name === t)) ordered.push({ name: t, usage: '<待补：新主题用途描述>' });
+}
+
+const totalFiles = [...diskTopics.values()].reduce((n, f) => n + f.length, 0);
+
+// ---- 生成 INDEX 三段 ----
+const eol = indexText.includes('\r\n') ? '\r\n' : '\n';
+const overviewRows = ordered.map((o) => `| ${o.name} | ${diskTopics.get(o.name).length} | ${escCell(o.usage)} |`);
+const mappingSection = ordered.map((o) => {
+  const rows = diskTopics.get(o.name).map((e) => `| ${e.name} | ${o.name} | ${e.dir} |`);
+  return [`### ${o.name}（${diskTopics.get(o.name).length}）`, '', '| 文件名 | 主题 | 归属目录 |', '|---|---|---|', ...rows].join(eol);
+}).join(eol + eol);
+
+let out = indexText;
+// 速览表数据行（表头「| 主题 |」+ 分隔行之后的连续数据行整组替换）
+{
+  const lines = out.split(/\r?\n/);
+  const headIdx = lines.findIndex((l) => /^\| 主题 \|/.test(l));
+  if (headIdx < 0 || !/^[|:\-\s]+$/.test(lines[headIdx + 1] || '')) {
+    console.error('❌ INDEX 速览表表头未找到，未写盘');
+    process.exit(1);
+  }
+  let lastData = headIdx + 1;
+  while (lastData + 1 < lines.length && lines[lastData + 1].startsWith('|')) lastData++;
+  const fixedRows = [...overviewRows, '| drafts-archive | — | 原文档备份（按 日期-主题 分目录） |'];
+  out = [...lines.slice(0, headIdx), '| 主题 | 文件数 | 用途 |', '|---|---|---|', ...fixedRows, ...lines.slice(lastData + 1)].join(eol);
+}
+// 合计行数字（锚点缺失即 fail-loud——静默 no-op 会让合计行悄悄陈旧，2026-09-24 审查修复）
+const totalRe = /合计：\*\*\d+ 份\*\*知识文档，\*\*\d+ 个主题\*\*/;
+if (!totalRe.test(out)) {
+  console.error('❌ INDEX「合计」行锚点未找到（须形如「合计：**N 份**知识文档，**M 个主题**」），未写盘');
+  process.exit(1);
+}
+out = out.replace(totalRe, `合计：**${totalFiles} 份**知识文档，**${diskTopics.size} 个主题**`);
+// 映射表区（节标题之间整段重写）
+{
+  const lines = out.split(/\r?\n/);
+  const s = lines.findIndex((l) => l.startsWith('## 文件 → 主题 → 归属目录 映射表'));
+  const e = lines.findIndex((l) => l.startsWith('## 命名规则'));
+  if (s >= 0 && e > s) {
+    out = [...lines.slice(0, s + 1), '', mappingSection, '', '---', '', ...lines.slice(e)].join(eol);
+  } else {
+    // 锚点缺失即 fail-loud（对齐速览表/合计行口径）——曾静默跳过致映射表悄悄陈旧仍报 ✅（2026-09-24 审查修复）
+    console.error('❌ INDEX 映射表锚点未找到（须有「## 文件 → 主题 → 归属目录 映射表」与其后的「## 命名规则」），未写盘');
+    process.exit(1);
+  }
+}
+
+// ---- 生成看板 DATA ----
+const boardText = fs.readFileSync(BOARD_P, 'utf8');
+const topicsJs = ordered.map((o) => {
+  // dir 相对看板自身（wiki/）——旧值带 wiki/ 前缀会被解析为 wiki/wiki/... 死链
+  const files = diskTopics.get(o.name).map((e) => `      { "file": ${JSON.stringify(e.name)}, "topic": ${JSON.stringify(o.name)}, "dir": ${JSON.stringify(`./${e.dir.slice('wiki/'.length)}`)} }`);
+  return `    { "name": ${JSON.stringify(o.name)}, "files": [\n${files.join(',\n')}\n    ]}`;
+}).join(',\n');
+const dataJs = `const DATA = {\n  "summary": { "total": ${totalFiles}, "topics": ${diskTopics.size}, "files": ${totalFiles}, "archive": ${archiveCount} },\n  "topics": [\n${topicsJs}\n  ]\n};`;
+const boardOut = boardText.replace(/const DATA = \{[\s\S]*?\n\};/, dataJs);
+if (boardOut === boardText && !/const DATA = \{[\s\S]*?\n\};/.test(boardText)) {
+  console.error('❌ 看板中未找到 const DATA = {...} 块，未写盘');
+  process.exit(1);
+}
+
+// ---- 写盘（dry-run 只预览差异；--check 只比对不写盘）----
+// 行尾归一比较（与 gen-workflow-index.mjs 同款：fresh clone 检出 CRLF、生成段恒 LF——
+// 直接字符串相等会在克隆环境假阳性「漂移」；仅内容差异才算漂移）
+const normEol = (s) => String(s).replace(/\r\n/g, '\n');
+const indexOk = normEol(out) === normEol(indexText);
+const boardOk = normEol(boardOut) === normEol(boardText);
+const summary = `文件 ${totalFiles} 份 / 主题 ${diskTopics.size} 个 / 归档 ${archiveCount} 份`;
+if (CHECK) {
+  if (indexOk && boardOk) {
+    console.log(`✅ wiki/INDEX.md 与看板均与磁盘一致（${summary}）`);
+    process.exit(0);
+  }
+  if (!indexOk) {
+    console.error(`❌ wiki/INDEX.md 与磁盘不一致（${summary}）——跑 node .agents/scripts/gen-wiki-board.mjs 重新生成`);
+    previewDiff('wiki/INDEX.md', indexText, out);
+  }
+  if (!boardOk) {
+    console.error(`❌ wiki/知识沉淀总览.html 与磁盘不一致（${summary}）——跑 node .agents/scripts/gen-wiki-board.mjs 重新生成`);
+    previewDiff('wiki/知识沉淀总览.html', boardText, boardOut);
+  }
+  process.exit(1);
+}
+if (DRY) {
+  console.log('🔎 --dry-run：未写盘，差异预览如下');
+  previewDiff('wiki/INDEX.md', indexText, out);
+  previewDiff('wiki/知识沉淀总览.html', boardText, boardOut);
+} else {
+  fs.writeFileSync(INDEX_P, out, 'utf8');
+  fs.writeFileSync(BOARD_P, boardOut, 'utf8');
+}
+
+const tail = DRY ? '将重写' : '已重写';
+console.log(`${DRY ? '🔎 [dry-run] 将生成' : '✅ 已生成'}：${summary}；速览表 ${overviewRows.length} 行、映射表 ${ordered.length} 节、看板 DATA ${tail}`);
+console.log('   人工仅维护：磁盘文件 + 速览表「用途」列（新主题为 <待补> 的请补描述后重跑本脚本）');
+
+// dry-run 差异预览：首尾对齐后取中段变更块（逐行），各方向最多显示 10 行
+function previewDiff(label, before, after) {
+  if (before === after) {
+    console.log(`• ${label}：无变化`);
+    return;
+  }
+  const b = before.split(/\r?\n/);
+  const a = after.split(/\r?\n/);
+  let head = 0;
+  while (head < b.length && head < a.length && b[head] === a[head]) head++;
+  let tailN = 0;
+  while (tailN < b.length - head && tailN < a.length - head && b[b.length - 1 - tailN] === a[a.length - 1 - tailN]) tailN++;
+  const removed = b.slice(head, b.length - tailN);
+  const added = a.slice(head, a.length - tailN);
+  console.log(`• ${label}：第 ${head + 1} 行起变更，删 ${removed.length} 行 / 增 ${added.length} 行`);
+  for (const l of removed.slice(0, 10)) console.log(`    - ${l.slice(0, 120)}`);
+  if (removed.length > 10) console.log(`    - …（其余 ${removed.length - 10} 行略）`);
+  for (const l of added.slice(0, 10)) console.log(`    + ${l.slice(0, 120)}`);
+  if (added.length > 10) console.log(`    + …（其余 ${added.length - 10} 行略）`);
+}

@@ -1,0 +1,309 @@
+#!/usr/bin/env node
+// check-lane-surface.mjs — 泳道完整性门禁（pre-commit 增量；2026-10-01 drift-hardening）
+// 布局前提：本门读 .agents/lane-surfaces.txt，豁免出口是 workflow/intents 的活跃 L2/L3 入口——
+//   二者都是**装户侧**件。纯包源仓（装户端内容清理后）两处皆无：清单缺失 = 检查 A/C 按既定
+//   「装户无感」口径跳过，本门整体惰性。此时把清单解析改双路径**只会让门跑起来而不会可用**——
+//   无 L2 入口机器时，任何控制面改动都走「无活跃入口」分支（A 出 advisory / C 出 BLOCK），
+//   纯包源仓的控制面保护改由 npm test（47 套件覆盖门禁逻辑）+ 评审 + CHANGELOG 承担。
+//   （2026-10-19 注：包源仓命中 templates/ 前缀的那半边清单——control-surfaces.txt 自身列了
+//    ^templates/_agents/scripts/ 等条目，故包源仓并非全无兜底，见检查 C 段末注。）
+// 检查 A「触达面判低」：暂存 diff 命中项目 L2 触达面（.agents/lane-surfaces.txt，ERE 逐行；
+//   # 注释与空行忽略；文件缺失或清单为空 = 检查跳过，装户无感）时——
+//   存在活跃 L2/L3 入口 → 放行（归因歧义为已知边界：机器不猜「哪个入口在干这批改动」）；
+//   活跃入口全为 L1（含级别缺失）→ hard 拦，点名最新 L1 入口 + 三选修法（2026-10-13 L0 退役，低泳道=L1 专属）；
+//   无任何活跃入口 → 仅 advisory（docs / bootstrap 豁免类改动的合法形态）。
+//   活跃 = intents draft/approved + incidents open/fixed（incident≡intent 等价口径）。
+//   experiment/* 分支降级 advisory（泳道哲学：PoC 免闭环纪律，转正由 pre-push 加固门兜底）。
+// 检查 C「控制面判低」（2026-10-19 落实本体）：暂存命中 .agents/control-surfaces.txt（门禁/授权/
+//   权限系统本身——引擎判据、git 钩子、CI 门定义、权限与豁免配置、AGENTS.md 规则面、可装门禁模块）
+//   ⇒ 必须有活跃 L2/L3 入口罩着。与检查 A 的唯一差别是「无任何活跃入口」这一档：A 出 advisory
+//   （docs/bootstrap 豁免的合法形态），C 出 BLOCK。完整理由与边界见 control-surfaces.txt:6-15。
+// 检查 B「探索标记缺失」：experiment/* 分支暂存的 workflow/intents/*.md（排除 _TEMPLATE）
+//   frontmatter 无「阶段: exploring」且无「状态: exploring」（口径同 check-loop 加固门）→ hard 拦。
+//   标记是加固门覆盖率的前提且补写零成本——advisory 免的是纪律负担，不免标记本身。
+// 判据原则（2026-09-28 台账批量代录事故教训）：只用一手事实——暂存文件清单、
+//   当前分支名、工作区 frontmatter 字段；不用时间戳 / 字符串相等反推过程事实。
+// 边界：git 调用一律 -c core.quotepath=off（非 ASCII 路径教训，同 check-pairing-incremental.mjs）；
+//   frontmatter 读取容忍 CRLF（显式按 \r?\n 切分）；detached HEAD 分支不可判 → A 按 strict、
+//   B 跳过（沿 pairing 门先例）；配置行正则语法错误 → fail-closed（防静默空洞）。
+// 已知边界：commit-time 门禁，CI / pre-push 复跑面无对应全量检查（push 时刻无暂存 diff 一手事实，
+//   树级反推违背判据原则）——沿增量门禁 pre-commit-only 先例，声明于 spec 风险评估 R2。
+// 用法：node check-lane-surface.mjs [--merge] [--root <dir>] [--branch <名>] [--staged-file <清单文件>]
+//   （--root/--branch/--staged-file 为测试注入位；缺省自 git 发现。staged-file 每行一个仓库相对路径）
+// 退出码：0 放行（含 advisory）；1 阻断（stderr 出 [标签] 消息与修法）
+// 检查清单：A0 level-hints 路径下限对账 / A 触达面判低 / B 探索标记缺失 / C 控制面判低
+//   （A 与 C 共用一个 surfaceCheck 本体，判据逐字相同，只差清单文件、无入口档处置与修法文案）
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { laneOfEntry, laneOfDoc } from './stage-gates.mjs';
+import { loadKitPolicy } from './policy.mjs';
+import { loadLevelHints, hintLevelFor, rankOf, maxLevel } from './level-criteria.mjs';
+
+const argv = process.argv.slice(2);
+const argOf = (k) => {
+  const i = argv.indexOf(k);
+  return i >= 0 && i + 1 < argv.length ? argv[i + 1] : '';
+};
+
+const gitOut = (cwd, gitArgs) => {
+  const r = spawnSync('git', ['-c', 'core.quotepath=off', ...gitArgs], { cwd, encoding: 'utf8' });
+  return r.status === 0 ? String(r.stdout || '') : '';
+};
+
+const ROOT = argOf('--root') || gitOut(process.cwd(), ['rev-parse', '--show-toplevel']).trim() || process.cwd();
+// detached HEAD 时 abbrev-ref 返回 'HEAD' → 不匹配 experiment/* → A strict / B 跳过
+const BRANCH = argOf('--branch') || gitOut(ROOT, ['rev-parse', '--abbrev-ref', 'HEAD']).trim();
+const stagedArg = argOf('--staged-file');
+const STAGED = stagedArg
+  ? fs.readFileSync(stagedArg, 'utf8').split(/\r?\n/).filter(Boolean)
+  : gitOut(ROOT, ['diff', '--cached', '--name-only', '--diff-filter=ACMR']).split(/\r?\n/).filter(Boolean);
+
+const isExperiment = /^experiment\//.test(BRANCH);
+// 合并进行中（2026-10-15）：pre-merge-commit 显式传 --merge（git merge 自动提交
+// 窗口 MERGE_HEAD 已不可靠，只认显式旗标）；冲突解决后的手动 commit 由 MERGE_HEAD 探测兜底（此时
+// 合并仍在进行、MERGE_HEAD 确定存在）。合并提交不引入新首发改动，各笔已在自身提交时刻过门 → 检查 A 跳过。
+const FORCE_MERGE = argv.includes('--merge');
+// 泳道协议锚（单源 policy.mjs）：无 kit.json 的测试夹具回落 v1（无键=双字段协议从未生效，单字段判）
+const RISK_LEVEL_SINCE = loadKitPolicy(ROOT).riskLevelSince;
+
+// frontmatter 读取（CRLF 容忍；口径同 check-loop fmGet：--- 包夹、键行前缀匹配）
+const fmOf = (file) => {
+  const fm = {};
+  let lines;
+  try {
+    lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
+  } catch {
+    return fm;
+  }
+  if (!/^---\s*$/.test(lines[0] || '')) return fm;
+  for (let i = 1; i < lines.length; i++) {
+    if (/^---\s*$/.test(lines[i])) break;
+    const m = lines[i].match(/^([^:]+):\s*(.*)$/);
+    if (m) fm[m[1].trim()] = m[2].trim();
+  }
+  return fm;
+};
+
+// 面清单读取（检查 A 的 lane-surfaces.txt 与检查 C 的 control-surfaces.txt 共用）：
+// 缺失/空 → []（对应检查跳过，装户无感升级）；语法错误 → fail-closed。
+const loadPatterns = (registryRel) => {
+  const file = path.join(ROOT, '.agents', registryRel);
+  if (!fs.existsSync(file)) return [];
+  const bad = [];
+  const pats = fs.readFileSync(file, 'utf8')
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter((l) => l && !l.startsWith('#'))
+    .map((l) => {
+      try {
+        return new RegExp(l);
+      } catch {
+        bad.push(l);
+        return null;
+      }
+    })
+    .filter(Boolean);
+  if (bad.length) {
+    console.error(`泳道完整性（增量）— BLOCK:\n  [面清单语法错误] .agents/${registryRel} 存在非法 ERE 行：${bad.join(' | ')}\n  修法：修正或删除该行后重试（fail-closed，防静默空洞）`);
+    process.exit(1);
+  }
+  return pats;
+};
+
+// 活跃入口收集（incident≡intent 等价；日期键 intent=日期 / incident=发现）。
+// 泳道单源（2026-10-02 caliber-convergence 方案 C 分歧双严）：intent 走 laneOfEntry（双字段三态，
+// 协议锚 policy.riskLevelSince），其余走 laneOfDoc（级别单字段）——suspect（缺失/非法/分歧）不计
+// high（不作豁免依据）、计入拦截集（消息按 suspect 给「两字段对齐」指引）。
+const ACTIVE = {
+  intent: new Set(['draft', 'approved']),
+  incident: new Set(['open', 'fixed']),
+};
+const collectActive = () => {
+  const out = [];
+  for (const [dir, kind, dateKey] of [['intents', 'intent', '日期'], ['incidents', 'incident', '发现']]) {
+    const dirPath = path.join(ROOT, 'workflow', dir);
+    if (!fs.existsSync(dirPath)) continue;
+    for (const f of fs.readdirSync(dirPath).sort()) {
+      if (!f.endsWith('.md') || f === '_TEMPLATE.md') continue;
+      const fm = fmOf(path.join(dirPath, f));
+      if (!ACTIVE[kind].has(fm['状态'] || '')) continue;
+      const lane = kind === 'intent'
+        ? laneOfEntry(fm['级别'] || '', fm['risk_level'] || '', RISK_LEVEL_SINCE, fm['日期'] || '')
+        : laneOfDoc(fm['级别'] || '');
+      out.push({ rel: `workflow/${dir}/${f}`, base: f.replace(/\.md$/, ''), level: fm['级别'] || '', risk: fm['risk_level'] || '', lane, date: fm[dateKey] || '', kind });
+    }
+  }
+  return out;
+};
+
+const blocks = [];
+const advisories = [];
+
+// --- 检查 A0：level-hints 路径下限对账（2026-10-13 hints-backstop）----------------
+// 背景：此前「就高不就低」只在 flow-kit route 输出 advisory，而提交面判低门只认 lane-surfaces.txt
+//   → 两份清单各管一头、**无机器对账**：项目在 hints 里登记了「改这些面至少 L2/L3」，提交面却可能
+//   靠一个 L1 活跃入口放行（判低有机可乘）。本段把 hints 接进提交面：
+//   ① hints 命中 → 要求存在**级别 ≥ 命中档**的活跃入口（不只「有个 high 入口」），否则 hard 拦；
+//   ② hints 已登记高风险面、lane-surfaces.txt 却缺失/为空 → advisory 提示「意图面登记了、提交面无兜底」。
+//   fail-closed：hints 语法错 → hard 拦（写错配置比没配置危险，见 level-criteria parseLevelHints）。
+const hintsState = (() => {
+  try {
+    const { hints } = loadLevelHints(ROOT);
+    return { hints, invalid: null };
+  } catch (e) {
+    return { hints: [], invalid: e.message };
+  }
+})();
+
+if (hintsState.invalid) {
+  blocks.push([
+    '[level-hints 配置错误] .agents/level-hints.txt 非法（档位只收 L2/L3；ERE 不得带行内注释）——配置面坏了整条兜底不可信：',
+    ...String(hintsState.invalid).split('\n').map((l) => `  ${l}`),
+    '  修法：修正清单后重试（fail-closed，防静默空洞——写错配置比没配置危险：没配置会提示，写错会误判档位）',
+  ].join('\n'));
+}
+
+// 命中判定复用判据单源的 hintLevelFor（2026-10-13 executor-review）：此前本文件手写了一遍
+//   「路径归一化 + 多条命中取高档」，与 level-criteria.mjs:104 的实现同形但独立演进——
+//   双源漂移是本仓硬规则（doctor 段就写着「不复刻解析器」），一旦归一化口径调整，
+//   route 会判 L1 而本门拦 L3，且没有任何测试能发现。
+const hintHits = hintsState.hints.length
+  ? STAGED
+    .map((p) => ({ p, lv: hintLevelFor(hintsState.hints, [p]).level }))
+    .filter((x) => x.lv)
+  : [];
+const hintLevel = hintHits.reduce((acc, x) => maxLevel(acc, x.lv), '');
+
+// --- 检查 A：触达面判低 ---
+const patterns = loadPatterns('lane-surfaces.txt');
+
+if (hintLevel && !patterns.length) {
+  advisories.push(
+    `[level-hints 无提交面兜底] .agents/level-hints.txt 登记了 ${hintHits.length} 个命中（${hintHits.slice(0, 5).map((x) => `${x.p}→${x.lv}`).join(' ')}）——`
+    + '但 .agents/lane-surfaces.txt 缺失或为空，触达面判低检查整体跳过：意图面登记了高风险面，提交面却无兜底',
+  );
+}
+const hits = patterns.length ? STAGED.filter((p) => patterns.some((re) => re.test(p))) : [];
+
+// 提交面判低本体（检查 A「触达面」与检查 C「控制面」共用）——判据逐字相同，只差三处：
+//   ① 清单文件（lane-surfaces.txt / control-surfaces.txt）；
+//   ② 「无任何活跃入口」这一档的处置：A 出 advisory（docs / bootstrap 豁免类改动的合法形态），
+//      C 出 BLOCK（改门禁/授权/权限系统本身不能无入口落地——2026-10-09 P0-A：docs 级豁免 +
+//      检查 A 无入口只 advisory，两条各自合理的规则组合起来等于「削弱 check-loop.mjs → 不需入口
+//      文档 → 不触发同步确认门 → 提交通过」，而 CI 又跑被测分支自己的 check-loop（自指裁判））；
+//   ③ 修法文案点名的清单名。
+// 抽共体而非复制两份：两份同形判据独立演进正是本仓红线（同 :158「不复刻解析器」的教训）。
+// experiment/* 一律降级 advisory（泳道哲学：PoC 免闭环纪律，转正由 pre-push 加固门兜底）——控制面
+//   同样适用：实验分支上的削弱到不了 main，进 main 前须过 intent approved/done + spec/plan 在场。
+const surfaceCheck = ({ tag, hitList, requiredLevel, noEntryBlock, fixTarget, judgeNotes }) => {
+  if (!requiredLevel || !hitList.length) return;
+  const merging = FORCE_MERGE || gitOut(ROOT, ['rev-parse', '-q', '--verify', 'MERGE_HEAD']).trim() !== '';
+  if (merging) {
+    advisories.push(`[${tag}]（advisory）合并进行中（${FORCE_MERGE ? '--merge 显式标记' : 'MERGE_HEAD 在场'}）——检查跳过：合并提交不引入新首发改动，各笔已在自身提交时刻过门`);
+    return;
+  }
+  const active = collectActive();
+  const requiredRank = rankOf(requiredLevel) ?? 1;
+  // 入口是否够格：级别 rank ≥ 应然档。**suspect（级别/risk_level 缺失、非法或分歧）一律不够格**——
+  //   沿用原口径「suspect 不作豁免依据」：分歧（L2/L1）这类看似够档的入口，机器无法确认它真罩着这批改动。
+  const enough = (e) => e.lane !== 'suspect' && (rankOf(e.level) ?? -1) >= requiredRank;
+  const insufficient = active.filter((e) => !enough(e));
+  if (insufficient.length) {
+    const newest = [...insufficient].sort((a, b) => (b.date || '').localeCompare(a.date || '') || b.rel.localeCompare(a.rel))[0];
+    const fixVerb = newest.lane === 'suspect'
+      ? `① 对齐该入口「级别」与「risk_level」两字段至一致的 ${requiredLevel}（fill-intent 双写口径；现两值缺失/非法/分歧）并补同名 spec（.agents/commands/design.md）`
+      : `① 升级该入口「级别」与「risk_level」两字段至 ${requiredLevel} 及以上并补同名 spec（.agents/commands/design.md）`;
+    const text = [
+      `[${tag}] 暂存命中高风险面，但活跃入口无 ${requiredLevel} 及以上（存在更低档/low/suspect）：`,
+      `  命中: ${hitList.join(' ')}`,
+      `  关联入口: ${newest.rel}（级别 ${newest.level || '缺失'}/risk_level ${newest.risk || '缺失'}→ 泳道 ${newest.lane}${newest.date ? `，${newest.date}` : ''}；活跃不足共 ${insufficient.length} 件）`,
+      ...(judgeNotes || []),
+      `  修法（三选一）: ${fixVerb}`,
+      `    ② 该入口已完成则关单（done）或显式放弃（superseded/cancelled）——不留活跃残留`,
+      `    ③ 清单误配则修 .agents/${fixTarget}`,
+    ].join('\n');
+    if (isExperiment) advisories.push(`（advisory·experiment 泳道，不阻断；转正由 pre-push 加固门兜底）\n${text}`);
+    else blocks.push(text);
+  } else if (!active.length) {
+    const base = `[${tag}] 暂存命中高风险面（${hitList.length} 个文件，应然 ${requiredLevel}），但当前无任何活跃入口——若非 docs / bootstrap 豁免类改动（.agents/commands/new-task.md §intent 豁免），请先立入口文档`;
+    // noEntryBlock（检查 C）才追加控制面专属说明；检查 A 此档保持原文案（零影响存量场景）。
+    const ctrlNote = noEntryBlock
+      ? '；控制面改动（门禁/授权/权限系统本身）不适用该豁免——无入口落地即无同步确认门，见 .agents/control-surfaces.txt:6-12'
+      : '';
+    // experiment/* 一律降级 advisory（泳道哲学统一：PoC 免闭环纪律，转正由 pre-push 加固门兜底）——
+    //   控制面同样适用，否则实验分支上的任何门禁改动都会被硬拦，与 A 的处置不一致。
+    if (isExperiment) {
+      advisories.push(`（advisory·experiment 泳道，不阻断；转正由 pre-push 加固门兜底）\n${base}${ctrlNote}`);
+    } else if (noEntryBlock) {
+      blocks.push([
+        `${base}${ctrlNote}`,
+        `  命中: ${hitList.join(' ')}`,
+        `  修法（二选一）: ① 立 workflow/intents/ 活跃 L2/L3 入口（.agents/commands/new-task.md）并过同步确认门`,
+        `    ② 确认该面不属门禁/授权/权限系统——则修 .agents/${fixTarget} 收窄清单`,
+      ].join('\n'));
+    } else {
+      advisories.push(base);
+    }
+  }
+};
+
+// 本次提交触达到的**最低应然档位**：lane-surfaces 命中隐含 L2（沿原口径），hints 命中按登记档取。
+// 混档取高——与 level-criteria maxLevel 同一口径（就高不就低在提交面同样成立）。
+const requiredLevel = maxLevel(hits.length ? 'L2' : '', hintLevel);
+
+surfaceCheck({
+  tag: '触达面判低',
+  hitList: [...hits.map((p) => `${p}（触达面）`), ...hintHits.map((x) => `${x.p}（hints→${x.lv}）`)],
+  requiredLevel,
+  noEntryBlock: false,
+  fixTarget: 'lane-surfaces.txt',
+  judgeNotes: hintLevel ? ['  判据：.agents/level-hints.txt 登记的路径下限——就高不就低在提交面同样成立（此前只 advisory，无门）'] : [],
+});
+
+// --- 检查 C：控制面判低（2026-10-19 落实——文件头与 control-surfaces.txt 自 2026-10-09 起就写着
+//    「检查 C」，此前本体一直缺位，控制面清单处于「有单源、无消费方」状态）---
+// 语义与检查 A 的唯一差别在「无任何活跃入口」这一档：A 出 advisory，C 出 BLOCK。理由见
+//   control-surfaces.txt:6-12——命中本清单 = 改动门禁/授权/权限系统本身，此时必须有活跃 L2/L3
+//   入口罩着。不读 level-hints：hints 是「意图面路径下限」，由检查 A0/A 承担；控制面命中按定义
+//   恒为 L2 及以上，再叠加 hints 只会让两条机制在同一批文件上重复拦。
+// 边界（诚实声明，随 control-surfaces.txt:13-15）：仍是本地信任边界内的归因机制——整文件删清单
+//   即可摘掉本门（该文件本身在清单内，删它同样要过门），且门可被 --no-verify / 不挂 hooksPath
+//   绕过；堵的是「顺手改弱」，不宣称关闭「刻意绕过」。事后对质面 = 台账 + git 历史 +
+//   check-engine-integrity 的基线比对。
+const ctrlPatterns = loadPatterns('control-surfaces.txt');
+const ctrlHits = ctrlPatterns.length ? STAGED.filter((p) => ctrlPatterns.some((re) => re.test(p))) : [];
+surfaceCheck({
+  tag: '控制面判低',
+  hitList: ctrlHits.map((p) => `${p}（控制面）`),
+  requiredLevel: ctrlHits.length ? 'L2' : '',
+  noEntryBlock: true,
+  fixTarget: 'control-surfaces.txt',
+  judgeNotes: [],
+});
+
+// --- 检查 B：探索标记缺失（仅 experiment/* 分支）---
+if (isExperiment) {
+  const missing = STAGED
+    .filter((p) => /^workflow\/intents\/[^/]+\.md$/.test(p) && path.basename(p) !== '_TEMPLATE.md')
+    .filter((p) => {
+      const fm = fmOf(path.join(ROOT, p));
+      return fm['阶段'] !== 'exploring' && fm['状态'] !== 'exploring';
+    });
+  if (missing.length) {
+    blocks.push([
+      `[探索标记缺失] experiment/* 分支暂存的 intent 缺「阶段: exploring」标记：`,
+      ...missing.map((p) => `  ${p}`),
+      `  修法（二选一）: ① frontmatter 补一行「阶段: exploring」（advisory 免纪律不免标记——标记是 pre-push 加固门覆盖率的前提）`,
+      `    ② 该件不属探索——换正式分支走标准泳道`,
+    ].join('\n'));
+  }
+}
+
+for (const a of advisories) console.error(`泳道完整性（增量）— advisory:\n${a}\n`);
+if (blocks.length) {
+  for (const b of blocks) console.error(`泳道完整性（增量）— BLOCK:\n${b}\n`);
+  console.error('pre-commit: 泳道完整性未通过，提交已阻止（判据单源见 .agents/scripts/level-criteria.mjs）');
+  process.exit(1);
+}
+process.exit(0);

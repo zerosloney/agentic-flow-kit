@@ -1,0 +1,126 @@
+#!/usr/bin/env node
+// Git 原生 pre-commit hook（经 core.hooksPath 挂载）— agentic-flow-kit 通用编排
+// 2026-10-13 门禁去 sh 化（B2，自 Shipyard.Material 参考实现回灌）：钩子体不再含 sh 逻辑——git 仍以自带
+// sh 启动本文件（钩子机制要求），但 shebang 即 node，PATH 无 sh 不再影响任何逻辑；语言单化后 CI 代理/
+// 本地行为一致。写法为 CommonJS——无扩展名文件 node 缺省按 CJS 解析，不依赖 ≥22.7 的 ESM 语法探测。
+// 通用门禁序：闭环配对(增量) → 泳道完整性(增量) → wiki 台账(增量) → 索引漂移(增量) → 常驻面体积预算(增量) → 确认台账不变量(暂存触台账) → 项目门禁(local-pre-commit) → 敏感信息扫描+条件构建(commit-check.cjs；2026-10-16 起常规提交 --no-build——条件构建后移 pre-push 按推送范围执法，合并提交仍 --full 全量构建)
+// 项目专属门禁（架构红线/业务守卫等）放 .agents/hooks/local-pre-commit——sh 挂载点（add-gate 生态按行接线），
+// 存在即在本钩子内以 sh（缺则 bash）执行，返回非零即阻断提交
+// 合并提交场景由 .githooks/pre-merge-commit 原样转发到本脚本（合并时 git 调的是 pre-merge-commit，
+// 不是 pre-commit）——门禁清单只此一份，避免两处分叉
+// fail-closed（沿 Shipyard 2026-10-09 口径；node 化后天然成立——本进程即 node）：门脚本缺失 = 拒提交；
+// 仅 local-pre-commit 保留「存在即执行」挂载点语义（缺失打 advisory）。
+const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
+
+const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' });
+if (top.status !== 0 || !top.stdout.trim()) {
+  console.error('pre-commit: 无法定位仓库根（git rev-parse --show-toplevel 失败）——提交已阻止');
+  process.exit(1);
+}
+process.chdir(top.stdout.trim());
+
+// gate(label, script, args)：node 直跑门脚本，非零即阻断（含 fail-closed 缺失检查）
+const requireScript = (rel) => {
+  if (!fs.existsSync(rel)) {
+    console.error(`pre-commit: 门脚本缺失 ${rel}——提交已阻止（脚本随包下发；flow-kit sync 恢复后重试）`);
+    process.exit(1);
+  }
+};
+const gate = (label, script, args = []) => {
+  requireScript(script);
+  const r = spawnSync(process.execPath, [script, ...args], { stdio: 'inherit' });
+  if (r.status !== 0) {
+    console.error(`pre-commit: ${label} 未通过，提交已阻止`);
+    process.exit(r.status === null ? 1 : r.status);
+  }
+};
+
+// 闭环配对门禁（增量版，check-pairing-incremental.mjs：本次暂存的 intents/incidents 入口须已有同名 plan；
+// L2/L3 另须同名 spec）。experiment/* 泳道分支（2026-09-30 hybrid-governance-explore-hardening）：
+// 降级为 advisory——快速 PoC 迭代不因闭环文档断档被拦（断档报告照出），转正合入 main 由 pre-push
+// 加固门（check-loop --hardening）兜底。仅降级闭环文档面：常驻面 / 台账 / 敏感信息扫描等门禁不豁免。
+// 分支不可判（detached HEAD 等）走严格模式。
+const branch = spawnSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf8' });
+const branchName = branch.status === 0 ? branch.stdout.trim() : '';
+if (branchName.startsWith('experiment/')) {
+  console.error('pre-commit: experiment/* 泳道分支——闭环配对门禁降级为 advisory（报告不阻断；转正入 main 须过加固门）');
+  const adv = spawnSync(process.execPath, ['.agents/hooks/check-pairing-incremental.mjs'], { stdio: 'inherit' });
+  if (adv.status !== 0) console.error('pre-commit: （advisory）闭环配对断档已在上方列出——experiment 泳道不阻断提交');
+} else {
+  gate('闭环配对（增量）', '.agents/hooks/check-pairing-incremental.mjs');
+}
+
+// 泳道完整性（增量，check-lane-surface.mjs——2026-10-01 drift-hardening）：
+//   检查 A「触达面判低」——暂存命中项目 L2 触达面（.agents/lane-surfaces.txt，ERE 逐行；缺失/空=跳过，
+//   装户无感）且活跃入口（draft/approved / open/fixed）全为 L0/L1 → 拦；有活跃 L2/L3 → 放行；无活跃入口 →
+//   仅 advisory（docs/bootstrap 豁免类）。experiment/* 分支降级 advisory（转正由 pre-push 加固门兜底）。
+//   检查 B「探索标记缺失」——experiment/* 分支暂存 intent 缺「阶段: exploring」→ 拦（标记零成本，
+//   advisory 免纪律不免标记——标记是加固门覆盖率的前提）。
+//   脚本缺失 fail-closed 阻断（见 gate()）。
+//   `git merge` 自动提交由 pre-merge-commit 传入 `--merge`（此时 MERGE_HEAD 已不可靠，不能靠探测）；
+//   冲突解决后的手动 `git commit` 仍由脚本自己看 MERGE_HEAD（2026-10-16）。
+const mergeCommit = process.argv.includes('--merge');
+gate('泳道完整性（增量）', '.agents/scripts/check-lane-surface.mjs', mergeCommit ? ['--merge'] : []);
+
+// wiki 台账门禁（增量，check-wiki-ledger.mjs：暂存区触及 wiki/ 时跑 verify-wiki-consistency 三方一致性；
+// 无 wiki/ 变更即跳过。脚本缺失 fail-closed）
+gate('wiki 台账（增量）', '.agents/hooks/check-wiki-ledger.mjs');
+
+// 索引漂移（增量硬拦，check-index-incremental.mjs）：暂存触及 workflow 四目录 / 归档 / INDEX.md 时，
+// gen-workflow-index.mjs --check 不一致即拒。卫生段检查 11 仍是 WARN，挡不住关单提交。
+// 未触及这些路径则脚本内跳过。脚本缺失 fail-closed。
+gate('索引漂移（增量）', '.agents/hooks/check-index-incremental.mjs');
+
+// 常驻面体积预算（增量硬拦，rule-budget.mjs --staged：只查本次暂存触及的条目与触及目录的合计；
+// 超限即阻断——常驻面只增不减，须先删除或下沉一条被取代条目再增。预算登记表缺失同样 fail-closed）
+requireScript('.agents/rule-budgets.txt');
+gate('常驻面体积预算', '.agents/scripts/rule-budget.mjs', ['--staged']);
+
+// 确认台账不变量前置（--staged，2026-10-02 ledger-ci-invariant）：暂存的 confirmations.jsonl 与分片
+// confirmations.d/*.jsonl（2026-10-13 ledger-shard-default 起分片为默认写入口径，触发面同步扩大）必须
+// 是 HEAD 的逐字节前缀扩展（append-only）——本地提交时刻即拦「顺手重写台账」，CI 历史全扫兜底。
+// 暂存未触台账静默；触台账而脚本缺失 fail-closed 阻断。
+const staged = spawnSync('git', ['-c', 'core.quotepath=off', 'diff', '--cached', '--name-only'], { encoding: 'utf8' });
+const stagedFiles = String(staged.stdout || '').split(/\r?\n/).filter(Boolean).map((f) => f.replace(/\\/g, '/'));
+const touchesLedger = stagedFiles.some((f) => /^\.agents\/confirmations\.jsonl$|^\.agents\/confirmations\.d\/[^/]+\.jsonl$/.test(f));
+if (touchesLedger) {
+  requireScript('.agents/scripts/check-ledger-invariant.mjs');
+  const li = spawnSync(process.execPath, ['.agents/scripts/check-ledger-invariant.mjs', '--staged'], { stdio: 'inherit' });
+  if (li.status !== 0) {
+    console.error('pre-commit: 确认台账不变量未通过，提交已阻止——历史行禁删改（append-only），修正走追加补偿行');
+    process.exit(li.status === null ? 1 : li.status);
+  }
+}
+
+// 项目门禁挂载点：.agents/hooks/local-pre-commit（项目自建门禁/门禁模块接线处，add-gate 生态往里写行）。
+// 保持 sh 形态：以 sh（缺则 bash）执行；存在即执行、缺失打 advisory 不阻断（挂载点可选语义），
+// 但缺失不再无声——该文件随包下发，advisory 即误删信号。
+if (fs.existsSync('.agents/hooks/local-pre-commit')) {
+  const shBin = spawnSync('sh', ['-c', 'true']).status === 0 ? 'sh' : 'bash';
+  const lp = spawnSync(shBin, ['.agents/hooks/local-pre-commit'], { stdio: 'inherit' });
+  if (lp.status !== 0) {
+    console.error('pre-commit: 项目门禁（local-pre-commit）未通过，提交已阻止');
+    process.exit(lp.status === null ? 1 : lp.status);
+  }
+} else {
+  console.error('pre-commit: （advisory）项目门禁挂载点 .agents/hooks/local-pre-commit 不在场——add-gate 接线处随包下发，若为误删请 flow-kit sync 恢复');
+}
+
+// 合并提交 → 构建验证覆盖【完整合并树】，不做按扩展名的条件裁剪。
+// 常规提交 --no-build（2026-10-16 构建门后移 pre-push）：提交内环只跑敏感扫描，条件构建在
+// 推送时按 old..new 范围执法（.githooks/pre-push）；合并结果是没人验证过的新状态，仍全量构建。
+// 两条路径：`git merge` 自动提交由 .githooks/pre-merge-commit 显式传 `--full` 转发到本脚本；
+// 冲突解决后手动 `git commit` 由 git 直接调本脚本，此处按 MERGE_HEAD 探测补上（此时合并仍在进行）。
+let fullArgs = process.argv.slice(2).filter((a) => a !== '--merge');
+if (fullArgs.length === 0) {
+  const mergeHead = spawnSync('git', ['rev-parse', '-q', '--verify', 'MERGE_HEAD'], { encoding: 'utf8' });
+  fullArgs = mergeHead.status === 0 ? ['--full'] : ['--no-build'];
+}
+
+const cc = spawnSync(process.execPath, ['.agents/hooks/commit-check.cjs', ...fullArgs], { stdio: 'inherit' });
+if (cc.status !== 0) {
+  console.error('pre-commit: 验证未通过，提交已阻止');
+  process.exit(cc.status === null ? 1 : cc.status);
+}
+process.exit(0);

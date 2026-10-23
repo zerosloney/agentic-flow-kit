@@ -1,0 +1,299 @@
+#!/usr/bin/env node
+// kb-search.mjs 的 fixture 驱动测试
+// 现场构造临时 workflow 语料（换 cwd 运行被测脚本，脚本按相对路径 'workflow/' 读盘）。
+// 断言：①AND 语义与「节限定」（指定节外的内容不参与命中）；②活跃优先排序（同命中近同体积时 active 在前）；
+//       ③过滤与上限（--type / --module / --status / -n）；④失败路径（非法模块、无词 → exit 1）；
+//       ⑤结构缓存三路逐字节等值（cold/warm/--no-cache）；⑥增量失效（改 1 文件仅该文件重解析）；
+//       ⑦口径指纹变化整份作废；⑧缓存损坏静默回退全扫。
+// 用法：node .agents/scripts/kb-search.test.mjs（在仓库任意目录执行均可）
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const KB = path.join(SCRIPT_DIR, 'kb-search.mjs');
+// 注入式缓存（board-kb-p1）：--cache 指向 fixture 内路径——测试不再触碰真实 .agents/cache/kb-index.json
+// （旧 CACHE_FILE 直跑会清空真实开发缓存并遗留孤儿条目，审查 P2-2）
+const USAGE = '用法：node .agents/scripts/kb-search.test.mjs';
+const rootCache = (root) => path.join(root, 'kb-cache.json');
+
+let pass = 0;
+let fail = 0;
+const check = (desc, cond, detail = '') => {
+  if (cond) { pass++; console.log(`PASS  ${desc}`); }
+  else { fail++; console.log(`FAIL  ${desc}${detail ? `\n${detail}` : ''}`); }
+};
+
+const doc = (fm, title, sections) =>
+  `---\n${fm}\n---\n# ${title}\n\n${sections.map(([h, body]) => `## ${h}\n${body}\n`).join('\n')}\n`;
+
+// mkfix：甲（closed，incidents）/ 乙（approved，intents）同命中近同体积（验活跃优先）；
+//       丙（approved，plans）只含单词（验 AND）、其「非目标」节含标记词（验节限定）
+const mkfix = () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-search-test-'));
+  for (const d of ['intents', 'plans', 'incidents']) fs.mkdirSync(path.join(root, 'workflow', d), { recursive: true });
+  const w = path.join(root, 'workflow');
+  const hit = (tag) => [
+    ['目标', `- 统一口径：编码模板与分类层级，冲突处理见 A/B${tag}`],
+    ['非目标', '- MARKER_ONLY_OUTSIDE_SECTIONS（本节不参与检索，词：编码模板）'],
+  ];
+  fs.writeFileSync(path.join(w, 'incidents', '2026-09-01-aaa.md'), doc('状态: closed\n级别: L2\n发现: 2026-09-01\n模块: material', 'INCIDENT — 甲事故', hit('甲')), 'utf8');
+  fs.writeFileSync(path.join(w, 'intents', '2026-09-21-bbb.md'), doc('状态: approved\n级别: L1\n日期: 2026-09-21\n模块: pipeline', 'INTENT — 乙需求', hit('乙')), 'utf8');
+  fs.writeFileSync(path.join(w, 'plans', '2026-09-20-ccc.md'), doc('状态: approved\n级别: L1\n模块: purchase', 'PLAN — 丙计划', [['目标', '- 只讲编码模板，不提另一个词'], ['非目标', '- MARKER_ONLY_OUTSIDE_SECTIONS（本节不参与检索）']]), 'utf8');
+  // wiki 侧最小语料（验结构缓存对 wiki 行数组的存取路径）
+  fs.mkdirSync(path.join(root, 'wiki', '测试主题'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'wiki', '测试主题', '说明.md'), '# 说明\n\n编码模板的领域知识条目。\n', 'utf8');
+  return root;
+};
+
+const run = (root, args) => spawnSync(process.execPath, [KB, '--cache', rootCache(root), ...args], { cwd: root, encoding: 'utf8' });
+const files = (out) => (out.match(/^📄 (workflow\/\S+)/gm) || []).map((l) => l.replace('📄 ', ''));
+
+// ---- 场景 1：主路径——AND 语义 / 节限定 / 输出字段 / 活跃优先 ----
+{
+  const root = mkfix();
+  const r = run(root, ['--scope', 'workflow', '编码模板', '冲突']);
+  check('场景 1：检索 exit 0', r.status === 0, `exit=${r.status}\n${r.stderr}`);
+  check('场景 1：AND——两词齐全才命中（甲/乙，丙被排除）', files(r.stdout).length === 2 && !r.stdout.includes('2026-09-20-ccc.md'), r.stdout);
+  check('场景 1：活跃优先——approved 的乙排在 closed 的甲之前', files(r.stdout)[0]?.includes('2026-09-21-bbb.md'), files(r.stdout).join('\n'));
+  check('场景 1：输出行含 状态·级别·模块', /📄 workflow\/intents\/2026-09-21-bbb\.md — approved · L1 · pipeline ·/.test(r.stdout), r.stdout);
+  check('场景 1：命中带节名与行号', /\[目标\] L\d+: /.test(r.stdout), r.stdout);
+  const outside = run(root, ['--scope', 'workflow', 'MARKER_ONLY_OUTSIDE_SECTIONS']);
+  check('场景 1：节外内容不参与检索（仅标记词 → 无命中）', files(outside.stdout).length === 0 && /（无命中）/.test(outside.stdout), outside.stdout);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 2：过滤与上限（--type / --module / --status / -n）----
+{
+  const root = mkfix();
+  const t = run(root, ['--scope', 'workflow', '--type', 'plans', '编码模板']);
+  check('场景 2：--type plans 仅出 plans', files(t.stdout).length === 1 && files(t.stdout)[0].includes('plans/'), t.stdout);
+  const m = run(root, ['--scope', 'workflow', '--module', 'pipeline', '编码模板']);
+  check('场景 2：--module pipeline 仅出该模块', files(m.stdout).length === 1 && files(m.stdout)[0].includes('2026-09-21-bbb.md'), m.stdout);
+  const a = run(root, ['--scope', 'workflow', '--status', 'active', '编码模板']);
+  check('场景 2：--status active 排除终态', !a.stdout.includes('2026-09-01-aaa.md') && a.stdout.includes('2026-09-21-bbb.md'), a.stdout);
+  const term = run(root, ['--scope', 'workflow', '--status', 'terminal', '编码模板']);
+  check('场景 2：--status terminal 仅终态', term.stdout.includes('2026-09-01-aaa.md') && !term.stdout.includes('2026-09-21-bbb.md'), term.stdout);
+  const n1 = run(root, ['--scope', 'workflow', '-n', '1', '编码模板']);
+  check('场景 2：-n 1 只展示 1 个文件', files(n1.stdout).length === 1, n1.stdout);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 3：失败路径（非法模块 / 无词 / 无命中）----
+{
+  const root = mkfix();
+  const bad = run(root, ['--module', '不存在的模块', '编码模板']);
+  check('场景 3：非法 --module exit 1 且提示词表', bad.status === 1 && /未知模块/.test(bad.stderr), `exit=${bad.status}\n${bad.stderr}`);
+  const empty = run(root, []);
+  check('场景 3：无词 exit 1', empty.status === 1, `exit=${empty.status}`);
+  const none = run(root, ['--scope', 'workflow', 'zzz-绝不存在-zzz']);
+  check('场景 3：无命中 exit 0 且提示', none.status === 0 && /（无命中）/.test(none.stdout), none.stdout);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 4：结构缓存三路逐字节等值（cold 首建 / warm 命中 / --no-cache），workflow+wiki 双侧 ----
+{
+  const root = mkfix();
+  const cold = run(root, ['编码模板']);                                   // 该临时根 ns 无条目 → cold
+  const warm = run(root, ['编码模板']);                                   // 全命中缓存
+  const nocache = run(root, ['--no-cache', '编码模板']);
+  check('场景 4：cold/warm exit 0 且 warm 确有缓存回写', cold.status === 0 && warm.status === 0 && fs.existsSync(rootCache(root)), `cold=${cold.status} warm=${warm.status}`);
+  check('场景 4：cold ≡ warm（逐字节）', cold.stdout === warm.stdout, `cold:\n${cold.stdout}\nwarm:\n${warm.stdout}`);
+  check('场景 4：cold ≡ --no-cache（逐字节）', cold.stdout === nocache.stdout, `cold:\n${cold.stdout}\nnocache:\n${nocache.stdout}`);
+  check('场景 4：双侧均有命中（workflow 3 + wiki 1）', files(cold.stdout).length === 3 && /wiki\/测试主题/.test(cold.stdout), cold.stdout);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 5：增量失效——warm 后改 1 个源文件，仅该文件重解析且输出与纯扫一致 ----
+{
+  const root = mkfix();
+  run(root, ['编码模板']);
+  const planP = path.join(root, 'workflow', 'plans', '2026-09-20-ccc.md');
+  fs.appendFileSync(planP, '\n## 影响面\n- 新标记NEWWORD：编码模板修订\n', 'utf8');
+  const after = run(root, ['编码模板', 'NEWWORD']);
+  const scan = run(root, ['--no-cache', '编码模板', 'NEWWORD']);
+  check('场景 5：改动文件被重解析（NEWWORD 命中该篇）', after.status === 0 && after.stdout.includes('2026-09-20-ccc.md'), after.stdout);
+  check('场景 5：增量结果与纯扫逐字节一致', after.stdout === scan.stdout, `after:\n${after.stdout}\nscan:\n${scan.stdout}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 6：口径指纹变化 → 整份作废重建，无旧口径残留 ----
+{
+  const root = mkfix();
+  run(root, ['编码模板']); // 建缓存
+  const j = JSON.parse(fs.readFileSync(rootCache(root), 'utf8'));
+  const fpBefore = j.fp;
+  j.fp = 'ffffffffffffffff';
+  fs.writeFileSync(rootCache(root), JSON.stringify(j), 'utf8');
+  const after = run(root, ['编码模板']);
+  const scan = run(root, ['--no-cache', '编码模板']);
+  check('场景 6：指纹不符 → 输出仍与纯扫逐字节一致', after.status === 0 && after.stdout === scan.stdout, `after:\n${after.stdout}\nscan:\n${scan.stdout}`);
+  const j2 = JSON.parse(fs.readFileSync(rootCache(root), 'utf8'));
+  check('场景 6：回写恢复正确指纹', j2.fp === fpBefore && j2.fp !== 'ffffffffffffffff', `fp=${j2.fp}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 7：缓存损坏 → 静默回退全扫（不报错、输出与 --no-cache 一致） ----
+{
+  const root = mkfix();
+  fs.mkdirSync(path.dirname(rootCache(root)), { recursive: true });
+  fs.writeFileSync(rootCache(root), 'not-json{{{', 'utf8');
+  const r = run(root, ['编码模板']);
+  const scan = run(root, ['--no-cache', '编码模板']);
+  check('场景 7：损坏缓存 exit 0（stderr 无泄漏）', r.status === 0 && !r.stderr, `exit=${r.status}\n${r.stderr}`);
+  check('场景 7：损坏后输出与纯扫逐字节一致', r.stdout === scan.stdout, `r:\n${r.stdout}\nscan:\n${scan.stdout}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 8：结构损坏（JSON 合法但 lines 非数组 / 元素非数组）→ 静默回退（board-kb-p1 P1-1）----
+//     此前 reviveLines 直接 .map 抛 TypeError exit 1，违背「任何读写异常静默回退」声明契约
+{
+  for (const [tag, lines] of [['lines-字符串', 'corrupted'], ['lines-元素非数组', ['not-array']]]) {
+    const root = mkfix();
+    run(root, ['编码模板']); // 建缓存
+    const j = JSON.parse(fs.readFileSync(rootCache(root), 'utf8'));
+    const key = Object.keys(j.files).find((k) => k.endsWith('2026-09-01-aaa.md'));
+    j.files[key].lines = lines;
+    fs.writeFileSync(rootCache(root), JSON.stringify(j), 'utf8');
+    const r = run(root, ['编码模板']);
+    const scan = run(root, ['--no-cache', '编码模板']);
+    check(`场景 8：结构损坏（${tag}）exit 0 静默回退`, r.status === 0 && !r.stderr, `exit=${r.status}\n${r.stderr}`);
+    check(`场景 8：结构损坏（${tag}）输出与纯扫一致`, r.stdout === scan.stdout, `r:\n${r.stdout}\nscan:\n${scan.stdout}`);
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+}
+
+// ---- 场景 9：空 query（空串 / 纯空白）→ 参数错误 exit 1（board-kb-p1：includes('') 恒真曾全量命中）----
+{
+  const root = mkfix();
+  const r1 = run(root, ['']);
+  const r2 = run(root, ['  ', ' ']);
+  check('场景 9：空串 query exit 1', r1.status === 1 && /检索词不能为空/.test(r1.stderr), `exit=${r1.status}\n${r1.stderr}`);
+  check('场景 9：纯空白 query exit 1', r2.status === 1 && /检索词不能为空/.test(r2.stderr), `exit=${r2.status}\n${r2.stderr}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 10：A1 wiki 侧节级提取 + 主题路径加权（2026-10-10）----
+//    wiki 命中带节名（骨架节或无小节兜底）；主题目录命中查询词时排序提前；长文节外内容不参与检索
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-a1-'));
+  fs.mkdirSync(path.join(root, 'wiki', '项目规范'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'wiki', '杂项'), { recursive: true });
+  // 长文：命中在白名单节内（## 结论）+ 节外（## 历史流水，不应被索引）
+  fs.writeFileSync(path.join(root, 'wiki', '项目规范', '权限收敛.md'),
+    '# 权限收敛方案\n\n## 结论\n- 权限收敛后只读接口不再放行写操作。\n\n## 历史流水\n- 2026-09 某次发布也提到权限收敛但属节外内容\n', 'utf8');
+  // 短文：无任何 ## —— 正文兜底全收
+  fs.writeFileSync(path.join(root, 'wiki', '杂项', '说明.md'), '# 说明\n\n权限收敛的领域知识条目。\n', 'utf8');
+  const r = run(root, ['--scope', 'wiki', '--cache', rootCache(root), '权限收敛']);
+  check('场景 10a wiki 长文命中带节名（结论节）',
+    r.status === 0 && /wiki\/项目规范\/权限收敛.md/.test(r.stdout) && /\[结论\]/.test(r.stdout), `exit=${r.status}\n${r.stdout}`);
+  check('场景 10b wiki 长文节外内容不参与检索（历史流水行不进命中摘录）',
+    !/历史流水/.test(r.stdout), r.stdout);
+  check('场景 10c wiki 短文无小节兜底（正文命中，节名 (正文)）',
+    /wiki\/杂项\/说明.md/.test(r.stdout) && /\(正文\)/.test(r.stdout), `exit=${r.status}\n${r.stdout}`);
+  // 主题加权：两文件命中数同量级时，主题名含查询词的「项目规范」排前
+  const order = (r.stdout.match(/^📄 (wiki\/\S+)/gm) || []).map((l) => l.replace('📄 ', ''));
+  check('场景 10d 主题路径加权：主题名命中查询词的文件排前',
+    order.length === 2 && order[0].includes('项目规范'), `order=${JSON.stringify(order)}\n${r.stdout}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 11：B3 来源血缘显示（2026-10-10）----
+//    wiki frontmatter「来源: workflow/<类型>/<文件>」→ 结果行带「· 来源 …」；无来源老文件零变化
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-b3-'));
+  fs.mkdirSync(path.join(root, 'wiki', '项目规范'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
+  // 带来源的 wiki 文件（B2 生成的草稿/人工沉淀都是这个形态）
+  fs.writeFileSync(path.join(root, 'wiki', '项目规范', '权限收敛.md'),
+    '---\n来源: workflow/intents/2026-09-12-perm-shrink.md\n---\n# 权限收敛方案\n\n## 结论\n- 权限收敛后只读接口不再放行写操作。\n', 'utf8');
+  // 无 frontmatter 的老 wiki 文件（零行为变化对照）
+  fs.writeFileSync(path.join(root, 'wiki', '项目规范', '老规范.md'), '# 老规范\n\n权限收敛的旧条目。\n', 'utf8');
+  const r = run(root, ['--scope', 'wiki', '--cache', rootCache(root), '权限收敛']);
+  check('场景 11a 有来源的 wiki 结果行显示来源血缘',
+    r.status === 0 && /来源 workflow\/intents\/2026-09-12-perm-shrink\.md/.test(r.stdout), `exit=${r.status}\n${r.stdout}`);
+  check('场景 11b 无 frontmatter 老文件正常命中且无来源行干扰',
+    r.status === 0 && /wiki\/项目规范\/老规范\.md/.test(r.stdout), `exit=${r.status}\n${r.stdout}`);
+  // 来源字段本身可被检索（frontmatter 已进可检索面——双向找链：从 wiki 侧反查 workflow 来源）
+  const r2 = run(root, ['--scope', 'wiki', '--cache', rootCache(root), 'perm-shrink']);
+  check('场景 11c 来源路径本身参与检索（frontmatter 命中）',
+    r2.status === 0 && /wiki\/项目规范\/权限收敛\.md/.test(r2.stdout), `exit=${r2.status}\n${r2.stdout}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 12：检索留痕（P1-1）——每次检索后 ledger 追加一行 / --no-ledger 退出 / notes 目录自动创建 ----
+//    ledger 落在 <临时根>/.agents/notes/kb-search-ledger.jsonl（与 workflow/、wiki/ 索引根同 ROOT）
+{
+  const ledgerOf = (root) => path.join(root, '.agents', 'notes', 'kb-search-ledger.jsonl');
+  const ledgerLines = (root) => fs.readFileSync(ledgerOf(root), 'utf8').split('\n').filter(Boolean);
+  const root = mkfix();
+  check('场景 12 前置：.agents/notes 尚不存在', !fs.existsSync(path.join(root, '.agents')));
+  // a) 首次检索 → 恰 1 行、JSON 合法、字段齐全、hits 为数字
+  const r1 = run(root, ['--scope', 'workflow', '编码模板', '冲突']);
+  const lines1 = ledgerLines(root);
+  check('场景 12a 检索后 ledger 存在且恰 1 行', r1.status === 0 && lines1.length === 1, `exit=${r1.status}\n${r1.stderr}`);
+  const entry = JSON.parse(lines1[0]);
+  check('场景 12a ledger 行字段齐全（ts/query/scope/hits/top）',
+    typeof entry.ts === 'string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(entry.ts)
+    && entry.query === '编码模板 冲突' && entry.scope === 'workflow'
+    && entry.hits === 2 && entry.top === 'workflow/intents/2026-09-21-bbb.md', lines1[0]);
+  // b) 已有 ledger 再跑 → 追加成 2 行且旧行原样
+  const r2 = run(root, ['--scope', 'wiki', '编码模板']);
+  const lines2 = ledgerLines(root);
+  check('场景 12b 再次检索追加成 2 行且旧行原样',
+    r2.status === 0 && lines2.length === 2 && lines2[0] === lines1[0]
+    && JSON.parse(lines2[1]).scope === 'wiki' && JSON.parse(lines2[1]).top === 'wiki/测试主题/说明.md', lines2.join('\n'));
+  // c) --no-ledger → 不追加（仍 2 行）
+  const r3 = run(root, ['--no-ledger', '--scope', 'workflow', '编码模板']);
+  check('场景 12c --no-ledger 不追加不新建', r3.status === 0 && ledgerLines(root).length === 2, r3.stderr);
+  // d) 无命中检索也留痕（top=null、hits=0）
+  const r4 = run(root, ['--scope', 'workflow', 'zzz-绝不存在-zzz']);
+  const lines4 = ledgerLines(root);
+  const entry4 = JSON.parse(lines4[2]);
+  check('场景 12d 无命中留痕 top=null 且 hits=0',
+    r4.status === 0 && entry4.query === 'zzz-绝不存在-zzz' && entry4.hits === 0 && entry4.top === null, lines4.join('\n'));
+  check('场景 12e .agents/notes 目录由检索自动创建', fs.statSync(path.join(root, '.agents', 'notes')).isDirectory());
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 13：归档扩面（B10a）——workflow/archive/<批次>/<type>/ 参与检索 ----
+//    归档件命中带归档路径标签；无归档语料时行为与旧口径逐字一致；缓存键随动（归档件独立入键）
+{
+  const root = mkfix();
+  // 造归档批次：与活跃件同词命中（含终态件 frontmatter，可命中）
+  fs.mkdirSync(path.join(root, 'workflow', 'archive', '2026-09', 'plans'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'workflow', 'archive', '2026-09', 'plans', '2026-09-01-arch.md'),
+    doc('状态: done\n级别: L1\n模块: purchase', 'PLAN — 归档件', [['目标', '- 归档批次里的编码模板历史档']]), 'utf8');
+  const r = run(root, ['--scope', 'workflow', '编码模板']);
+  check('场景 13a 归档件参与检索且带归档路径标签',
+    r.status === 0 && files(r.stdout).some((f) => f === 'workflow/archive/2026-09/plans/2026-09-01-arch.md'), r.stdout);
+  check('场景 13b 活跃目录标签与旧口径逐字一致（不带 archive 段）',
+    files(r.stdout).some((f) => f === 'workflow/plans/2026-09-20-ccc.md'), files(r.stdout).join('\n'));
+  // 归档件状态 done → --status active 时被状态过滤排除（过滤口径对归档件照常生效）
+  const a = run(root, ['--scope', 'workflow', '--status', 'active', '编码模板']);
+  check('场景 13c --status active 排除终态归档件',
+    !a.stdout.includes('2026-09-01-arch.md') && a.stdout.includes('2026-09-21-bbb.md'), a.stdout);
+  // 缓存随动：warm 复跑与冷扫逐字节一致（归档件已入缓存键）
+  const warm = run(root, ['--scope', 'workflow', '编码模板']);
+  check('场景 13d 归档件入缓存后 warm ≡ 前次输出（逐字节）', warm.status === 0 && warm.stdout === r.stdout,
+    `warm:\n${warm.stdout}\nfirst:\n${r.stdout}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 14：无归档语料 → 行为不变（对照锚——扩面不得扰动既有输出）----
+{
+  const root = mkfix(); // mkfix 不建 workflow/archive/
+  const before = run(root, ['--scope', 'workflow', '编码模板']);
+  check('场景 14 无 archive 目录时输出照旧（3 篇活跃件命中）',
+    before.status === 0 && files(before.stdout).length === 3 && !before.stdout.includes('archive/'), before.stdout);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
+if (fail) {
+  console.log(`\n${USAGE}`);
+  process.exit(1);
+}
+process.exit(0);

@@ -1,0 +1,11 @@
+# workflow 文档模块词表（单源：check-loop.sh 与 .agents/scripts/gen-workflow-index.mjs、kb-search.mjs 共读）
+# 用法：workflow/{intents,specs,plans,incidents} 文档 frontmatter `模块:` 取下列之一（单值，取主导模块；
+#       跨模块任务取承载任务意图的模块，检索面由 kb-search 全文兜住）。
+# 新建文档必填；check-loop 只警告不阻断。按项目模块自行改这张表（改后同步 workflow/README.md「文档协议」段说明）。
+backend
+frontend
+ui
+infra
+integration
+pipeline
+wiki

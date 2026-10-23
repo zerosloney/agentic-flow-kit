@@ -1,0 +1,249 @@
+#!/usr/bin/env node
+// gen-wiki-board.mjs 的 fixture 驱动测试（2026-09-21 随 CRLF 解析缺陷修复引入）
+// 现场构造临时 wiki 根，以「换 cwd」方式运行被测脚本（脚本按相对路径 'wiki/' 读盘，无需注入口）。
+// 断言：①CRLF 下速览表「用途」列（唯一人工维护位）重生成后保持——papercut 2026-09-17 缺陷回归；
+//       ②行尾保持（CRLF 不被改写成 LF）；③新增 wiki 文件后速览计数 / 合计行 / 看板 DATA 同步。
+// 用法：node .agents/scripts/gen-wiki-board.test.mjs（在仓库任意目录执行均可）
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const GEN = path.join(SCRIPT_DIR, 'gen-wiki-board.mjs');
+const USAGE = '用法：node .agents/scripts/gen-wiki-board.test.mjs';
+
+const USAGE_COL = '主题A 用途说明（人工列）';
+
+let pass = 0;
+let fail = 0;
+const check = (desc, cond, detail = '') => {
+  if (cond) { pass++; console.log(`PASS  ${desc}`); }
+  else { fail++; console.log(`FAIL  ${desc}${detail ? `\n${detail}` : ''}`); }
+};
+
+// 行尾统计：验证 CRLF fixture 不被改写成 LF
+const eolStats = (p) => {
+  const b = fs.readFileSync(p);
+  let crlf = 0;
+  let lf = 0;
+  for (let i = 0; i < b.length; i++) {
+    if (b[i] === 10) { if (i > 0 && b[i - 1] === 13) crlf++; else lf++; }
+  }
+  return { crlf, lf };
+};
+
+// mkfix：建临时 wiki 根（INDEX 按 eol 拼装；看板 DATA 块固定 LF——与仓库现状一致）
+const mkfix = (eol) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'gen-wiki-board-test-'));
+  fs.mkdirSync(path.join(root, 'wiki', '主题A'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'wiki', 'drafts-archive'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'wiki', '主题A', 'a.md'), '# a\n', 'utf8');
+  fs.writeFileSync(path.join(root, 'wiki', 'INDEX.md'), [
+    '# wiki 索引（fixture）',
+    '',
+    '| 主题 | 文件数 | 用途 |',
+    '|---|---|---|',
+    `| 主题A | 1 | ${USAGE_COL} |`,
+    '| drafts-archive | — | 原文档备份（按 日期-主题 分目录） |',
+    '',
+    '合计：**1 份**知识文档，**1 个主题**',
+    '',
+    '---',
+    '',
+    '## 文件 → 主题 → 归属目录 映射表',
+    '',
+    '### 主题A（1）',
+    '',
+    '| 文件名 | 主题 | 归属目录 |',
+    '|---|---|---|',
+    '| a.md | 主题A | wiki/主题A/ |',
+    '',
+    '---',
+    '',
+    '## 命名规则',
+    '',
+    '- fixture',
+    '',
+  ].join(eol), 'utf8');
+  fs.writeFileSync(path.join(root, 'wiki', '知识沉淀总览.html'), [
+    '<!doctype html><html><body>',
+    '<script>',
+    'const DATA = {',
+    '  "summary": { "total": 1, "topics": 1, "files": 1, "archive": 0 },',
+    '  "topics": [',
+    '    { "name": "主题A", "files": [',
+    '      { "file": "a.md", "topic": "主题A", "dir": "./主题A/" }',
+    '    ]}',
+    '  ]',
+    '};',
+    '</script>',
+    '</body></html>',
+    '',
+  ].join('\n'), 'utf8');
+  return root;
+};
+
+// extraEnv：注入被测脚本环境变量（场景 8/9 用 FLOW_KIT_TODAY 固定「今天」，默认继承父进程环境不变）
+const runGen = (root, extraArgs = [], extraEnv = {}) => spawnSync(process.execPath, [GEN, ...extraArgs], { cwd: root, encoding: 'utf8', env: { ...process.env, ...extraEnv } });
+
+// ---- 场景 1：CRLF INDEX ——「用途」列重生成后保持 + 行尾保持（缺陷回归）----
+{
+  const root = mkfix('\r\n');
+  const r = runGen(root);
+  const out = fs.readFileSync(path.join(root, 'wiki', 'INDEX.md'), 'utf8');
+  const { crlf, lf } = eolStats(path.join(root, 'wiki', 'INDEX.md'));
+  check('场景 1：CRLF INDEX 生成器 exit 0', r.status === 0, `exit=${r.status}\n${r.stdout}${r.stderr}`);
+  check(`场景 1：「用途」列保持（CRLF 致整表解析为空即丢——papercut 2026-09-17）`, out.includes(USAGE_COL), out.split('\n').slice(0, 10).join('\n'));
+  check('场景 1：未退化为 <待补>', !out.includes('<待补'), out.split('\n').slice(0, 10).join('\n'));
+  check('场景 1：行尾保持 CRLF（未被改写为 LF）', crlf > 0 && lf === 0, `crlf=${crlf} bareLF=${lf}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 2：LF INDEX 对照 —— 用途保持（证明解析不依赖行尾）----
+{
+  const root = mkfix('\n');
+  const r = runGen(root);
+  const out = fs.readFileSync(path.join(root, 'wiki', 'INDEX.md'), 'utf8');
+  const { crlf, lf } = eolStats(path.join(root, 'wiki', 'INDEX.md'));
+  check('场景 2：LF INDEX 生成器 exit 0', r.status === 0, `exit=${r.status}\n${r.stdout}${r.stderr}`);
+  check('场景 2：「用途」列保持', out.includes(USAGE_COL), out.split('\n').slice(0, 10).join('\n'));
+  check('场景 2：行尾保持 LF', lf > 0 && crlf === 0, `crlf=${crlf} bareLF=${lf}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 3：新增 wiki 文件 —— 速览计数 / 合计行 / 看板 DATA 同步 ----
+{
+  const root = mkfix('\r\n');
+  fs.writeFileSync(path.join(root, 'wiki', '主题A', 'b.md'), '# b\n', 'utf8');
+  const r = runGen(root);
+  const index = fs.readFileSync(path.join(root, 'wiki', 'INDEX.md'), 'utf8');
+  const board = fs.readFileSync(path.join(root, 'wiki', '知识沉淀总览.html'), 'utf8');
+  check('场景 3：新增文件后生成器 exit 0', r.status === 0, `exit=${r.status}\n${r.stdout}${r.stderr}`);
+  check('场景 3：速览表计数同步为 2', /\| 主题A \| 2 \|/.test(index), index.split('\n').slice(0, 8).join('\n'));
+  check('场景 3：合计行同步为 2 份', index.includes('合计：**2 份**知识文档，**1 个主题**'), index.split('\n').slice(0, 12).join('\n'));
+  check('场景 3：看板 DATA 同步 total=2', /"summary": \{ "total": 2/.test(board), '');
+  check('场景 3：「用途」列保持', index.includes(USAGE_COL), '');
+  check('场景 3：映射表节收录新文件', index.includes('| b.md | 主题A | wiki/主题A/ |'), '');
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 4：映射表锚点缺失 → fail-loud（2026-09-24 审查修复：原静默跳过致映射表悄悄陈旧仍报成功）----
+{
+  const root = mkfix('\n');
+  const idx = path.join(root, 'wiki', 'INDEX.md');
+  fs.writeFileSync(idx, fs.readFileSync(idx, 'utf8').replace(/^## 文件 → 主题 → 归属目录 映射表$/m, '## 映射（锚点被改）'), 'utf8');
+  const r = runGen(root);
+  check('场景 4：映射表锚点缺失 → exit 1', r.status === 1, `exit=${r.status}\n${r.stdout}${r.stderr}`);
+  check('场景 4：报错点名映射表锚点', (r.stderr || '').includes('映射表锚点'), r.stderr);
+  check('场景 4：未写盘（INDEX 原样保留）', fs.readFileSync(idx, 'utf8').includes('## 映射（锚点被改）'), '');
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 5：drafts-archive 缺失 → 不崩栈，警告 + 归档按 0（2026-09-24 审查修复）----
+{
+  const root = mkfix('\n');
+  fs.rmSync(path.join(root, 'wiki', 'drafts-archive'), { recursive: true });
+  const r = runGen(root);
+  check('场景 5：drafts-archive 缺失 → exit 0（不崩栈）', r.status === 0, `exit=${r.status}\n${r.stdout}${r.stderr}`);
+  check('场景 5：stderr 有缺失警告', (r.stderr || '').includes('drafts-archive'), r.stderr);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 6：用途列含管道符 → 转义保 round-trip（p2-batch2：含管道的用途描述曾切坏表格行、
+//      下次生成把人工文本静默重置为 <待补>）----
+{
+  const root = mkfix('\n');
+  const BS = String.fromCharCode(92); // 反斜杠字符（JS 字符串 '\|' 中 \| 就是裸管道无转义语义——须显式拼）
+  const USAGE_WITH_PIPE = '用于 A' + BS + '|B 两类（含竖线）'; // 转义形态输入（反斜杠+管道）
+  const idx = path.join(root, 'wiki', 'INDEX.md');
+  fs.writeFileSync(idx, fs.readFileSync(idx, 'utf8').replace(USAGE_COL, USAGE_WITH_PIPE), 'utf8');
+  const r1 = runGen(root);
+  const out1 = fs.readFileSync(idx, 'utf8');
+  check('场景 6：含转义管道用途生成 exit 0 且原样保留', r1.status === 0 && out1.includes(USAGE_WITH_PIPE), `exit=${r1.status}\n${out1.split('\n').slice(0, 8).join('\n')}`);
+  const r2 = runGen(root);
+  const out2 = fs.readFileSync(idx, 'utf8');
+  check('场景 6：二次生成用途文本保持（round-trip 不重置为 <待补>）',
+    r2.status === 0 && out2.includes(USAGE_WITH_PIPE) && !out2.includes('<待补'), out2.split('\n').slice(0, 8).join('\n'));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 7：--check 漂移判定（2026-10-10 wiki-index-drift：供 doctor §6 镜像 workflow INDEX 检查）----
+//      不写盘；一致 exit 0，任一生成区漂移 exit 1 + 差异预览。行尾归一（CRLF clone 不假阳性）
+{
+  const root = mkfix('\r\n');
+  // 先跑一次正规生成，把 INDEX/看板对齐到磁盘事实
+  const r0 = runGen(root);
+  check('场景 7：前置生成 exit 0', r0.status === 0, `exit=${r0.status}\n${r0.stdout}${r0.stderr}`);
+  // 对齐后 --check 须一致（CRLF INDEX 尤其不能因行尾假阳性）
+  const r1 = runGen(root, ['--check']);
+  check('场景 7a --check 对齐态 → exit 0 且提示一致',
+    r1.status === 0 && (r1.stdout || '').includes('一致'), `exit=${r1.status}\n${r1.stdout}${r1.stderr}`);
+  check('场景 7a --check 不写盘（INDEX 内容字节不变）',
+    fs.readFileSync(path.join(root, 'wiki', 'INDEX.md'), 'utf8').includes(USAGE_COL), '');
+  // 磁盘新增文件 → 生成区与磁盘不一致 → exit 1
+  fs.writeFileSync(path.join(root, 'wiki', '主题A', 'b.md'), '# b\n', 'utf8');
+  const r2 = runGen(root, ['--check']);
+  check('场景 7b --check 漂移（磁盘新增文件未重生成）→ exit 1',
+    r2.status === 1 && (r2.stderr || '').includes('不一致'), `exit=${r2.status}\n${r2.stdout}${r2.stderr}`);
+  check('场景 7b --check 不写盘（漂移时仍不覆盖磁盘文件）',
+    !fs.readFileSync(path.join(root, 'wiki', 'INDEX.md'), 'utf8').includes('| b.md | 主题A |'), '');
+  // 修复后 --check 恢复 exit 0
+  const r3 = runGen(root);
+  const r4 = runGen(root, ['--check']);
+  check('场景 7c 重生成后 --check 恢复 exit 0', r3.status === 0 && r4.status === 0, `exit3=${r3.status} exit4=${r4.status}\n${r4.stdout}${r4.stderr}`);
+  // 看板 DATA 被手改 → exit 1（与 INDEX 漂移同档）
+  const board = path.join(root, 'wiki', '知识沉淀总览.html');
+  fs.writeFileSync(board, fs.readFileSync(board, 'utf8').replace('"total": 2', '"total": 99'), 'utf8');
+  const r5 = runGen(root, ['--check']);
+  check('场景 7d --check 看板 DATA 漂移 → exit 1',
+    r5.status === 1 && (r5.stderr || '').includes('知识沉淀总览.html'), `exit=${r5.status}\n${r5.stdout}${r5.stderr}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 8：草稿超龄 WARN（P1-2：drafts-archive/<YYYY-MM-DD-主题>/ 落盘超 14 天未归类 → stdout 提醒）----
+//      advisory 档只提醒不阻断：exit 0、INDEX/看板 DATA 不因 WARN 有任何变化；FLOW_KIT_TODAY 固定「今天」保证时间可控
+{
+  const root = mkfix('\n');
+  const DRAFT_DIR = '2026-09-01-登录优化';
+  const DRAFT_DATE = '2026-09-01';
+  fs.mkdirSync(path.join(root, 'wiki', 'drafts-archive', DRAFT_DIR));
+  fs.writeFileSync(path.join(root, 'wiki', 'drafts-archive', DRAFT_DIR, '登录优化.md'), '# 登录优化草稿\n', 'utf8');
+  const board = path.join(root, 'wiki', '知识沉淀总览.html');
+  const warnLine = `[WARN 草稿超龄] drafts-archive/${DRAFT_DIR}/登录优化.md 落于 ${DRAFT_DATE} 未归类——草稿是中间态，归类到 wiki/登录优化/ 后跑 gen-wiki-board + verify-wiki-consistency`;
+
+  // a) 「今天」= 草稿日期 + 15 天（> 14 天档）→ WARN 整行点名该草稿
+  const ra = runGen(root, [], { FLOW_KIT_TODAY: '2026-09-16' });
+  check('场景 8a：超龄 15 天 → exit 0（advisory 不阻断）', ra.status === 0, `exit=${ra.status}\n${ra.stdout}${ra.stderr}`);
+  check('场景 8a：stdout 含超龄 WARN 且整行点名草稿', (ra.stdout || '').includes(warnLine), ra.stdout);
+  check('场景 8a：生成物不受影响（看板归档计数仍为文件数 1）', /"archive": 1/.test(fs.readFileSync(board, 'utf8')), '');
+
+  // b) 「今天」= 同日 / 恰 14 天 → 未超龄，无 WARN（超过才提醒）
+  const rb = runGen(root, [], { FLOW_KIT_TODAY: DRAFT_DATE });
+  check('场景 8b：同日 → 无超龄 WARN', rb.status === 0 && !(rb.stdout || '').includes('[WARN 草稿超龄]'), rb.stdout);
+  const rb14 = runGen(root, [], { FLOW_KIT_TODAY: '2026-09-15' });
+  check('场景 8b：恰 14 天 → 无超龄 WARN（边界）', rb14.status === 0 && !(rb14.stdout || '').includes('[WARN 草稿超龄]'), rb14.stdout);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- 场景 9：目录名无日期前缀（人工建的目录）→ 静默跳过：不 WARN、不报错、生成物不受影响（P1-2）----
+{
+  const root = mkfix('\n');
+  fs.mkdirSync(path.join(root, 'wiki', 'drafts-archive', '临时素材'));
+  fs.writeFileSync(path.join(root, 'wiki', 'drafts-archive', '临时素材', 'x.md'), '# x\n', 'utf8');
+  // 「今天」取远期（2027-01-01）：若误把无日期目录判成超龄必触发 WARN，可当场暴露缺陷
+  const r = runGen(root, [], { FLOW_KIT_TODAY: '2027-01-01' });
+  const board = fs.readFileSync(path.join(root, 'wiki', '知识沉淀总览.html'), 'utf8');
+  check('场景 9：无日期前缀目录 → exit 0（不报错）', r.status === 0, `exit=${r.status}\n${r.stdout}${r.stderr}`);
+  check('场景 9：无超龄 WARN（静默跳过）', !(r.stdout || '').includes('[WARN 草稿超龄]'), r.stdout);
+  check('场景 9：看板输出不受影响（归档计数仍为文件数 1）', /"archive": 1/.test(board), '');
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
+if (fail) {
+  console.log(`\n${USAGE}`);
+  process.exit(1);
+}
+process.exit(0);

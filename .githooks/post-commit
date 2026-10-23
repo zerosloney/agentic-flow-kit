@@ -1,0 +1,10 @@
+#!/bin/sh
+# Git 原生 post-commit hook（经 core.hooksPath 挂载，git commit 后触发）
+# 非阻断缓存维护：把本次提交触及的 workflow/、wiki/ 文件从 kb-search 结构缓存
+#   （.agents/cache/kb-index.json）摘除，收敛 [mtimeMs,size] 两元组的
+#   「同刻同尺寸」失效盲区至提交时点。
+# 判据与设计：workflow/intents/2026-09-23-kb-cache-post-commit-evict.md
+# 失败绝不影响提交结果：post-commit 本身非阻断 + evict 脚本坏输入静默 exit 0 + 此处 || true 三重兜底。
+git diff-tree --no-commit-id --name-only -r HEAD \
+  | node .agents/scripts/kb-cache-evict.mjs 2>/dev/null || true
+exit 0
