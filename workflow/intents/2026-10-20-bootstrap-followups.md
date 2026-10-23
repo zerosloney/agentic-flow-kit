@@ -1,10 +1,10 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 日期: 2026-10-20
 模块: infra
-确认指纹: 09d2dcf0c9ec2617
+确认指纹: b21f075dca062c23
 ---
 # INTENT — 自举连带修复批（活文档门裸名误报 / S14 baseline / CI 台账基线）
 
@@ -15,9 +15,9 @@ risk_level: L2
 台账边界（上一代台账终结于 5ca9e8c）使历史全扫误红。
 
 ## 目标
-- [ ] 裸名不抓（提取路径须含分隔符），+1 断言钉住
-- [ ] S14 baseline 改锚 0 error 不锚件数
-- [ ] kit-ci env 持久化台账基线 5ca9e8c2
+- [x] 裸名不抓（提取路径须含分隔符），+1 断言钉住
+- [x] S14 baseline 改锚 0 error 不锚件数
+- [x] kit-ci env 持久化台账基线 5ca9e8c2
 
 ## 非目标
 - 不改 append-only 红线与基线机制本身
@@ -34,5 +34,5 @@ risk_level: L2
 - [ ] 规则 / 契约变更（门禁判据收窄——有实证误报）→ L2
 
 ## 验收标准（可测试）
-- [ ] consistency 套件 10 断言全绿（含裸名新断言）（证据：npm test）
-- [ ] 本仓七门全绿（证据：verify --doc 本单）
+- [x] consistency 套件 10 断言全绿（含裸名新断言）（证据：verify --doc 本单七门全绿，verify-evidence.md 绿凭证 2 行）
+- [x] 本仓七门全绿（证据：verify --doc workflow/intents/2026-10-20-bootstrap-followups.md 🎉 全绿 7 项）

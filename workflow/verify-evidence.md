@@ -7,5 +7,6 @@
 | 提交(短SHA) | 时间(UTC) | 门数 | 套件计数 | 绑定单 | runId |
 |---|---|---|---|---|---|
 | `8187d68` | 2026-10-23T07:35:12.219Z | 7 | PASS 79 / FAIL 0 | workflow/intents/2026-10-20-hook-esm-pin.md | — |
+| `bd63a44` | 2026-10-23T12:44:18.993Z | 7 | PASS 79 / FAIL 0 | workflow/intents/2026-10-20-bootstrap-followups.md | — |
 
-<!-- GENERATED:END — 共 1 行；gen-verify-evidence.mjs 生成（既有行追加保全，勿手改） -->
+<!-- GENERATED:END — 共 2 行；gen-verify-evidence.mjs 生成（既有行追加保全，勿手改） -->

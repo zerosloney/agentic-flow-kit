@@ -5,22 +5,19 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（3）
+## 活跃（0）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
-| INTENT | L2 | approved | 2026-10-20 | infra | 自举连带修复批（活文档门裸名误报 / S14 baseline / CI 台账基线） | ☑0/2 |
-| PLAN | L2 | approved | 2026-10-20 | infra | 自举连带修复批 | — |
-| SPEC | L2 | approved | 2026-10-20 | infra | 自举连带修复批 | — |
 
-## 档案计数（3，不进表）
+## 档案计数（6，不进表）
 
 | 类型 | 模块 | 数量 |
 |---|---|---|
-| INTENT | infra | 1 |
-| PLAN | infra | 1 |
-| SPEC | infra | 1 |
+| INTENT | infra | 2 |
+| PLAN | infra | 2 |
+| SPEC | infra | 2 |
 
-终态构成：done 3；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
+终态构成：done 6；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
 
 <!-- GENERATED:END -->

@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: infra
-确认指纹: f31a31f5085f7434
+确认指纹: e768b655f84fb9bb
 ---
 # SPEC — 自举连带修复批
 
