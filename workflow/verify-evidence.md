@@ -10,5 +10,6 @@
 | `bd63a44` | 2026-10-23T12:44:18.993Z | 7 | PASS 79 / FAIL 0 | workflow/intents/2026-10-20-bootstrap-followups.md | — |
 | `9ba0b79` | 2026-10-23T12:56:33.765Z | 7 | PASS 79 / FAIL 0 | workflow/intents/2026-10-20-agg-cause-lineage.md | — |
 | `5637482` | 2026-10-25T07:26:51.288Z | 8 | PASS 81 / FAIL 0 | workflow/plans/2026-10-25-source-port-batch.md | — |
+| `4a2eac5` | 2026-10-25T09:27:50.454Z | 8 | PASS 82 / FAIL 0 | workflow/plans/2026-10-25-source-port-batch-2.md | — |
 
-<!-- GENERATED:END — 共 4 行；gen-verify-evidence.mjs 生成（既有行追加保全，勿手改） -->
+<!-- GENERATED:END — 共 5 行；gen-verify-evidence.mjs 生成（既有行追加保全，勿手改） -->

@@ -1,12 +1,12 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 预判: kind=require level=L2
 日期: 2026-10-25
 模块: infra
 沉淀: 无
-确认指纹: 06256a02b7f245df
+确认指纹: 26e3b2545ee1189d
 ---
 # INTENT — 源仓策略分歧批回灌二（补偿行生成器 / 关单完成度门收窄版）
 
@@ -21,9 +21,9 @@ reviewLineFor hard 化（本仓 L2 spec 模板本无独立复核行——升 har
 policyVersion 演进另批）。
 
 ## 目标
-- [ ] ① append-compensation.mjs 常驻补偿行生成器：指纹 bindingSha256 单源 + 末次行选取 + 四类拒绝面（fail-loud）+ maintain.md §4 落「关单后裁定回填」条
-- [ ] ② stage-gates.planConfirmedFor（归档感知）+ confirm-doc L2/L3 intent →done 前置「同名 plan 必已确认」门（superseded plan 恒拒并指向正确处置）
-- [ ] ③ 检查 15 漂移 blocker 文案补补偿行通道指引（判据零变化，末次生效口径不动）
+- [x] ① append-compensation.mjs 常驻补偿行生成器：指纹 bindingSha256 单源 + 末次行选取 + 四类拒绝面（fail-loud）+ maintain.md §4 落「关单后裁定回填」条
+- [x] ② stage-gates.planConfirmedFor（归档感知）+ confirm-doc L2/L3 intent →done 前置「同名 plan 必已确认」门（superseded plan 恒拒并指向正确处置）
+- [x] ③ 检查 15 漂移 blocker 文案补补偿行通道指引（判据零变化，末次生效口径不动）
 
 ## 非目标
 - 不收编台账指针存在性门（check-ledger-doc-presence）——verify 八门已兜底，决策留痕见背景

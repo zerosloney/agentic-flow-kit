@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: infra
-确认指纹: 30acd43f0b3e56ba
+确认指纹: 8df051890e6e2164
 ---
 # PLAN — 源仓策略分歧批回灌二
 
@@ -10,31 +10,31 @@
 对应 spec：../specs/2026-10-25-source-port-batch-2.md
 
 ## 任务拆解
-- [ ] 1. 补偿行生成器：append-compensation.mjs（bindingSha256/appendLedger/loadAllConfirmations 复用；pickLastRow/buildCompensation 纯函数导出；四类拒绝面 + 缺 quote）+ append-compensation.test（S1/S2：生成→15 恢复绿、五类拒绝零写入）+ maintain.md §4「关单后裁定回填」条（双落）
+- [x] 1. 补偿行生成器：append-compensation.mjs（bindingSha256/appendLedger/loadAllConfirmations 复用；pickLastRow/buildCompensation 纯函数导出；四类拒绝面 + 缺 quote）+ append-compensation.test（S1/S2：生成→15 恢复绿、五类拒绝零写入）+ maintain.md §4「关单后裁定回填」条（双落）
    - 判据：新套件绿；真实仓手工演练一例（本单自身无需补偿——用夹具证）
    - 依赖：无（可立即开工）
    - 风险：低
-   - 留痕：（勾选时回填）
-- [ ] 2. 关单完成度门：stage-gates.planConfirmedFor（活跃→归档探查、ENTRY_STATUSES 判定、superseded/cancelled 恒拒语义）+ confirm-doc intent→done 前置门（L2/L3）+ stage-gates.test / confirm-doc.test 扩展（S3/S4：draft 拒/approved 过/归档过/superseded 恒拒/L1 不拦）
+   - 留痕：append-compensation.test 9/0（生成→检查15复算绿、五类拒绝零写入）；maintain.md §4 条双落
+- [x] 2. 关单完成度门：stage-gates.planConfirmedFor（活跃→归档探查、ENTRY_STATUSES 判定、superseded/cancelled 恒拒语义）+ confirm-doc intent→done 前置门（L2/L3）+ stage-gates.test / confirm-doc.test 扩展（S3/S4：draft 拒/approved 过/归档过/superseded 恒拒/L1 不拦）
    - 判据：扩展用例绿且 confirm-doc.test 既有断言零改动
    - 依赖：无（可立即开工）
    - 风险：中（新执法点拦关单动作，须豁免面精确：仅 L2/L3 intent→done）
-   - 留痕：（勾选时回填）
-- [ ] 3. 检查 15 文案补通道：check-loop.mjs:1400 漂移 blocker 尾部补「或按 maintain.md §4 补偿行通道」+ 锚定断言排查同步（双落）
+   - 留痕：confirm-doc.test 94/0（S51-S55 新增；在场门既有用例补 plan seed 后断言零变化）；stage-gates.planConfirmedFor 归档感知
+- [x] 3. 检查 15 文案补通道：check-loop.mjs:1400 漂移 blocker 尾部补「或按 maintain.md §4 补偿行通道」+ 锚定断言排查同步（双落）
    - 判据：判据零变化（既有 15 断言不改跑绿；仅文案尾缀）
    - 依赖：无（可立即开工）
    - 风险：低
-   - 留痕：（勾选时回填）
-- [ ] 4. 引擎面收尾：engine-lock --update --note + 自举 sync + CHANGELOG Unreleased 入账 + INDEX 重建
+   - 留痕：check-loop 家族 382/0（文案尾缀、判据零变化）
+- [x] 4. 引擎面收尾：engine-lock --update --note + 自举 sync + CHANGELOG Unreleased 入账 + INDEX 重建
    - 判据：integrity 绿、sync 零漂移
    - 依赖：被任务 1-3 阻塞
    - 风险：低
-   - 留痕：（勾选时回填）
-- [ ] 5. 全量验证与关单：npm test + verify --doc 本单（绿凭证）+ delegations 落行 + done 代录 + 关单提交
+   - 留痕：engine-lock --note 凭据四件+1 重锚件、integrity 86 件绿；sync 收养 append-compensation×2（managed 177）；CHANGELOG Unreleased；sync-hosts --apply 归零 wf-maintain×6 宿主漂移
+- [x] 5. 全量验证与关单：npm test + verify --doc 本单（绿凭证）+ delegations 落行 + done 代录 + 关单提交
    - 判据：八门全绿凭证；验收标准逐条勾验
    - 依赖：被任务 4 阻塞
    - 风险：低
-   - 留痕：（勾选时回填）
+   - 留痕：npm test 82/0；verify --doc 三份各 🎉 八门全绿（LEDGER_HISTORY_BASELINE=5ca9e8c2）
 
 ## 执行顺序
 见任务拆解依赖行：frontier = 任务 1/2/3，4 收尾，5 关单。
