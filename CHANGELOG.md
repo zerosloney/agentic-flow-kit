@@ -2,6 +2,31 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## Unreleased
+
+- feat(gate)：**源仓闭环优化批回灌（四件）**（2026-10-25 source-port-batch，L2 三件套；源仓
+  97b9b247 + b38f9f60 优化1/4/5 通用面收编）：
+  ① **语法门递归扫描 + 每目录非空 fail-closed**——原实现只 readdirSync 顶层，脚本子目录化/
+  目录清空即静默去门（源仓复核实证形态）；SKIP_DIRS=node_modules/.git/tmp、符号链接防环，
+  每目录递归后无可检文件判红；
+  ② **委派台账在场门**——新单源模块 `delegation-presence.mjs`（表头签名解析 + rowCovers 在场
+  判据，检查 18 与 confirm-doc 共用、事后 WARN 与写入拦截不漂移），confirm-doc 终态跳转
+  （intents/specs/plans→done、incidents→fixed/closed）前置拦截，「该写而未写」从事后 hygiene
+  WARN 前移到关单动作时刻；豁免口径与检查 18 逐条一致（delegationSince 锚沿用、缺键全量对账）；
+  incidents 族按本仓检查 18 口径纳入（源仓门只盖新需求族）；
+  ③ **deploy-observations 第四台账**（生而分片零迁移）——deploy.md §6 观察落账步 + metrics
+  「发布观察」节（月度聚合；零数据占位行保机制可见、结果列枚举外脏行 fail-loud）+ ledger-shards
+  LEDGERS 第四员，闭环漏斗延伸到部署后，「有 release 无行」即挂债；台账主表属 owned（sync 记账
+  不约束，新装户由 init 从模板起装）；
+  ④ **本地门禁挂载自检门**——`check-local-gate-config.mjs` 挂 verify 引擎段第 4 位（七门→八门；
+  默认 WARN 档、--strict 升格开关、CI（GITHUB_ACTIONS）/非 git 仓 loud-skip），判据 kit 面适配
+  （core.hooksPath + jsonl-union driver + .gitattributes 行 + 五钩子在位；剔除源仓私有 merge.ours），
+  core.hooksPath 不随 clone 传播的静默失效面从「人记得跑 doctor」变为每次关单自动对质——
+  **首跑即捉本仓自举漏配的 .gitattributes jsonl-union 行**（README 明示的存量迁移动作，随批补挂）。
+  配套：engine-lock --note 凭据八件随批入账；verify.test 门数断言同步（--list 八门序 / 凭证钉门数 8）；
+  装户夹具 .agents/hooks 补可检脚本（新判据下空目录 fail-closed）。明确不收编：补偿行机制 /
+  关单完成度门 / 台账指针存在性门（策略分歧待拍板）、page-refactor 技能、--fast 分层语义。
+
 ## 1.8.10
 
 - feat(repo)：**引擎自举**——本仓安装自身引擎（装户身份 dogfood，README「自己装一份 dogfood」

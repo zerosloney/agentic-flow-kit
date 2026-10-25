@@ -44,6 +44,8 @@ import readline from 'node:readline';
 import { createHash, randomBytes } from 'node:crypto';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { readLedgerEntries, readLedgerRows } from './ledger-loader.mjs';
+// 委派台账在场判据单源（2026-10-25 source-port-batch）：与检查 18 共用，事后 WARN 与写入拦截不漂移。
+import { delegationRowsOf, rowCovers } from './delegation-presence.mjs';
 import { confirmGateFor, clarifyGateFor, doneGateFor, laneOfEntry, laneOfDoc } from './stage-gates.mjs';
 import { loadKitPolicy, hasFreshVerifyLine, ledgerChainHash, ledgerDocChainActive, ledgerDocChainPrev, scopeDigest } from './policy.mjs';
 
@@ -457,6 +459,33 @@ if (isMain) {
         console.error(`   ${gate.hint}（本份未落账、未写盘）`);
         refused++;
         continue;
+      }
+    }
+    // 委派台账在场门（2026-10-25 source-port-batch，自源仓优化4 回灌）：终态跳转写入时拦截——
+    // L2/L3 须 delegations 台账（主表 ∪ 分片）已有覆盖行。「该写而未写」从事后检查 18 hygiene WARN
+    // 前移到关单动作时刻当场拦（与 done 前置门同一执法位置：门退了，闭环不退）。
+    // 豁免口径与检查 18 逐条一致（单源 delegation-presence.rowCovers）：非 L2/L3、缺/非法日期、
+    // 日期 < delegationSince 锚前存量；缺锚键（v1-v3）→ 全量对账不豁免（沿检查 18 向后兼容口径）。
+    // incidents 族按本仓检查 18 口径纳入（fixed/closed 两跳，日期键 发现||日期）——源仓门只盖新需求族。
+    {
+      const isIncident = doc.startsWith('workflow/incidents/');
+      const terminalTarget = isIncident ? (target === 'fixed' || target === 'closed') : target === 'done';
+      if (terminalTarget && (lvl === 'L2' || lvl === 'L3')) {
+        const dDate = isIncident ? (fmOf('发现') || fmOf('日期')) : fmOf('日期');
+        if (/^\d{4}-\d{2}-\d{2}$/.test(dDate)) {
+          const since = loadKitPolicy(root).delegationSince;
+          if (!(typeof since === 'string' && dDate < since)) {
+            const base = path.basename(doc);
+            if (!rowCovers(delegationRowsOf(root), base, dDate)) {
+              console.error(`❌ ${doc} 未过委派台账在场门：delegations 台账（主表∪分片）没有日期 ≥ ${dDate} 且含「${base.replace(/\.md$/, '')}」的结果行`);
+              console.error('   先落一行再关单（委派走「委派结果」表、自做走「自做任务结果」表，任务一句话含文件名）：');
+              console.error('   node .agents/scripts/ledger-shards.mjs --append delegations --section 自做任务结果 --row "| YYYY-MM-DD | …任务一句话（含文件名）… | 一次通过 | 备注 | 合入结论 |"');
+              console.error('   （判据与检查 18 对账一致；锚前存量/缺日期/非 L2/L3 豁免，记法见 workflow/delegations.md 头部）（本份未落账、未写盘）');
+              refused++;
+              continue;
+            }
+          }
+        }
       }
     }
     // 测试绿凭证前置（2026-10-07 verify-evidence，advisory 不拦）：→done 且文档含「验收标准」节且

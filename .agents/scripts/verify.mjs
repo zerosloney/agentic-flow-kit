@@ -1,13 +1,16 @@
 #!/usr/bin/env node
 // verify.mjs — 关单/CI 统一静态门编排（GATES 表版；2026-10-13 自 Shipyard.Material 参考实现回灌，
 // 源仓沿革留痕在包源仓 git 历史与 CHANGELOG——装户径不引实例路径）
-// 用途：关单或 CI 前一键过门——engine cohort 七门按表执行、逐项输出 pass/fail，任一门红即 fail-fast exit 1。
+// 用途：关单或 CI 前一键过门——engine cohort 八门按表执行、逐项输出 pass/fail，任一门红即 fail-fast exit 1。
 // 语义：单源口径。本地 verify 与装户远端门（kit-ci.yml 同一条命令）行为 100% 一致。
 // 凭证落账：全绿才落绿凭证；任一门红即落失败行（suite=门 id），供根因分析——消费方（confirm-doc 前置 /
 //   check-loop 检查 8）只认 exitCode===0 的行，失败行零污染凭证判定。
 // 七门照搬源仓 engine cohort（不搬 product cohort——frontend/backend 门是源仓项目私有；lane-surface-ci 门
 //   依赖 kit 侧 --ci 支持核实，留后续批次评估）。源仓 --engine 增量语义不移植：本表已全为引擎段，
 //   「部分绿 ≠ 全量凭证」的分野不存在。
+//   第八门 local-gate-config（2026-10-25 source-port-batch，自源仓优化1 回灌）：本地门禁挂载自检，
+//   WARN 档（缺配告警不拦，--strict 升格开关在门脚本侧）——core.hooksPath 不随 clone 传播的静默
+//   失效面从「人记得跑 doctor」变为每次关单自动对质；CI（GITHUB_ACTIONS）与非 git 仓 loud-skip。
 // kit 特有语义（沿现口径保留）：
 //   a) 装户仓判定——cwd 无 package.json → engine-tests 门显式跳过（跳过≠通过，不计入门数）且**不落
 //      测试绿凭证**（凭证语义 = 测试真跑绿，防假绿），提示 --test-cmd；
@@ -47,7 +50,7 @@ import { fileURLToPath } from 'node:url';
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
 
-// --- 门禁定义（engine cohort 七门，序即执行序；遇红即停） ---
+// --- 门禁定义（engine cohort 八门，序即执行序；遇红即停） ---
 // guardian（2026-10-16 并行编排）：本门未过则后序门一并不启动——引擎脚本不可解析时其余门无意义，
 // 且夹具根（CHECK_LOOP_ROOT 指向无脚本目录）下若并行铺开，各门会在假根里乱跑。
 // deps：门间依赖边（本门须待所列门**成功**后才启动；kit 门表当前无边——机制随编排器下发，装户增门可用）。
@@ -55,6 +58,9 @@ const GATES = [
   { id: 'scripts-syntax', guardian: true, name: '引擎脚本语法自检', cmd: 'node .agents/scripts/check-scripts-syntax.mjs', folder: '.', type: 'shell' },
   { id: 'engine-tests', name: '测试门 (npm test)', cmd: 'npm test', folder: '.', type: 'shell' },
   { id: 'workflows-check', name: '编排脚本检查', cmd: 'node .agents/scripts/workflows-check.mjs', folder: '.', type: 'shell' },
+  // 本地门禁挂载自检（2026-10-25 source-port-batch，源仓优化1 同位第 4 门）：WARN 档放行、
+  // --strict 才拦——门表 cmd 保持无参（升格由 owner 拍板改 cmd，判据单源在门脚本）。
+  { id: 'local-gate-config', name: '本地门禁挂载自检', cmd: 'node .agents/scripts/check-local-gate-config.mjs', folder: '.', type: 'shell' },
   { id: 'rule-budget', name: '常驻面预算检查', cmd: 'node .agents/scripts/rule-budget.mjs --all', folder: '.', type: 'shell' },
   { id: 'effective-policy', name: '生效规则视图漂移检查', cmd: 'node .agents/scripts/gen-effective-policy.mjs --check', folder: '.', type: 'shell' },
   // 默认硬门。卫生段不进关单（2026-10-13 B6b-1 分道随源仓口径）：要看时另跑 check-loop.mjs --hygiene。

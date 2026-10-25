@@ -335,6 +335,51 @@ const mkSpec = (lines, checks) => {
   fs.rmSync(root, { recursive: true, force: true });
 }
 
+// ---- 场景 5：发布观察节（2026-10-25 source-port-batch）——聚合 / 零数据占位 / 脏行 fail-loud ----
+{
+  // 5a：分片两行（通过+异常）→ 月度聚合行
+  const root = mkfix();
+  fs.mkdirSync(path.join(root, 'workflow', 'deploy-observations.d'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'workflow', 'deploy-observations.md'), '# 发布观察台账\n\n| 日期 | release | 结果 | incident | 确认方式 |\n|------|---------|------|----------|----------|\n', 'utf8');
+  fs.writeFileSync(path.join(root, 'workflow', 'deploy-observations.d', '2026-10.md'), [
+    '| 日期 | release | 结果 | incident | 确认方式 |',
+    '|------|---------|------|----------|----------|',
+    '| 2026-10-05 | release/2026-10-05 | 通过 | - | 用户确认 |',
+    '| 2026-10-20 | release/2026-10-20 | 异常 | 2026-10-20-x.md | 监控告警 |',
+  ].join('\n'), 'utf8');
+  const r = run(root, ['--month', '2026-10']);
+  const md = readMetrics(root);
+  check('场景 5a：分片两行聚合为 | 2026-10 | 2 | 1 | 1 |',
+    r.status === 0 && /## 发布观察[\s\S]*\| 2026-10 \| 2 \| 1 \| 1 \|/.test(md),
+    `exit=${r.status}\n${r.stderr}\n${(md.match(/## 发布观察[\s\S]*?(?=\n\n|$)/) || [''])[0]}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+{
+  // 5b：台账全缺 = 合法零数据 → 占位行（表恒输出）
+  const root = mkfix();
+  const r = run(root, ['--month', '2026-10']);
+  const md = readMetrics(root);
+  check('场景 5b：零数据占位行 | （无记录） | 0 | 0 | 0 |',
+    r.status === 0 && /## 发布观察[\s\S]*?\| （无记录） \| 0 \| 0 \| 0 \|/.test(md),
+    `exit=${r.status}\n${(md.match(/## 发布观察[\s\S]*?(?=\n\n|$)/) || [''])[0]}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+{
+  // 5c：结果列枚举外脏行 → fail-loud（exit 非零，点名脏行）
+  const root = mkfix();
+  fs.mkdirSync(path.join(root, 'workflow', 'deploy-observations.d'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'workflow', 'deploy-observations.d', '2026-10.md'), [
+    '| 日期 | release | 结果 | incident | 确认方式 |',
+    '|------|---------|------|----------|----------|',
+    '| 2026-10-05 | release/2026-10-05 | 部分通过 | - | 用户确认 |',
+  ].join('\n'), 'utf8');
+  const r = run(root, ['--month', '2026-10']);
+  check('场景 5c：脏行（枚举外结果）→ exit 非零且 fail-loud 点名',
+    r.status !== 0 && /发布观察台账脏行/.test(String(r.stderr) + String(r.stdout)),
+    `exit=${r.status}\n${r.stderr}\n${r.stdout}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 if (fail) {
   console.log(`\n${USAGE}`);

@@ -178,9 +178,9 @@ const wf = (root, ...p) => path.join(root, 'workflow', ...p);
   fs.rmSync(root, { recursive: true, force: true });
 }
 
-// ---- S14 台账清单单源：三个台账都在册 ----
+// ---- S14 台账清单单源：四个台账都在册（2026-10-25 source-port-batch 增 deploy-observations）----
 {
-  check('S14 三台账在册', Object.keys(LEDGERS).sort().join(',') === 'delegations,papercuts,regression-checklist');
+  check('S14 四台账在册', Object.keys(LEDGERS).sort().join(',') === 'delegations,deploy-observations,papercuts,regression-checklist');
 }
 
 // ---- S15 delegations 双表分组：分片须两张表头都带且行归入正确表 ----
@@ -350,6 +350,22 @@ const wf = (root, ...p) => path.join(root, 'workflow', ...p);
   check('S22a delegations 分片骨架出「合入结论」表头', deleg.includes('合入结论') && !deleg.includes('返工原因'));
   const regr = renderShard('regression-checklist', []);
   check('S22b regression-checklist 分片骨架出 kit 表头', regr.includes('| incident | 条目 | 落点 |') && !regr.includes('来源 incident'));
+}
+
+// ---- S23 deploy-observations：生而分片台账（2026-10-25 source-port-batch，自源仓优化5 回灌）----
+{
+  check('S23a LEDGERS 收录第四台账且数据行判定命中',
+    !!LEDGERS['deploy-observations'] && isDataRow('deploy-observations', '| 2026-10-25 | release/2026-10-25 | 通过 | - | 用户确认 |')
+    && !isDataRow('deploy-observations', '| 日期 | release | 结果 | incident | 确认方式 |'));
+  const root = mkroot();
+  fs.writeFileSync(wf(root, 'deploy-observations.md'), '# 发布观察台账\n\n| 日期 | release | 结果 | incident | 确认方式 |\n|------|---------|------|----------|----------|\n', 'utf8');
+  appendRows(root, 'deploy-observations', [{ line: '| 2026-10-25 | release/2026-10-25 | 通过 | - | 用户对话内确认 |' }]);
+  const shardTxt = fs.readFileSync(shardPathFor(root, 'deploy-observations', '2026-10'), 'utf8');
+  check('S23b 追加行落当月分片且分片自带表头', shardTxt.includes('| 日期 | release | 结果 | incident | 确认方式 |') && shardTxt.includes('release/2026-10-25'));
+  check('S23c 主表零数据行（生而分片不污染主表）', !fs.readFileSync(wf(root, 'deploy-observations.md'), 'utf8').includes('release/2026-10-25'));
+  check('S23d 读侧合并可见（主 ∪ 分片）', readLedger(root, 'deploy-observations').all.includes('release/2026-10-25'));
+  check('S23e renderShard 骨架带表头', renderShard('deploy-observations', []).includes('| 日期 | release | 结果 | incident | 确认方式 |'));
+  fs.rmSync(root, { recursive: true, force: true });
 }
 
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);

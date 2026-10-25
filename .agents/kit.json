@@ -1,6 +1,6 @@
 {
   "kit": "agentic-flow-kit",
-  "version": "1.8.9",
+  "version": "1.8.10",
   "policyVersion": 12,
   "audit": true,
   "gateTrust": "project",
@@ -27,7 +27,7 @@
     },
     {
       "rel": ".agents/commands/deploy.md",
-      "sha256": "1919d1c6134f73fd336b63721c356a9274817163132368a9372f4e4408f51c86"
+      "sha256": "213ed71220e274b304d768564616dc18bbb23f444de5cc0ca81283ce91ac05d4"
     },
     {
       "rel": ".agents/commands/design.md",
@@ -78,6 +78,10 @@
       "sha256": "defe4bf65e8cbee518500c6f5ef2ab601b1a3f8eb72a4b44a4b787e76ed5c12c"
     },
     {
+      "rel": ".agents/hooks/package.json",
+      "sha256": "e179b268aaf4c5101440955a6a1020cdceadc512008a287e86f7137fddb90f21"
+    },
+    {
       "rel": ".agents/lane-surfaces.txt",
       "sha256": "5bc5f0738a4a5d618a3f20ac052cd7f7dc41e4da45f4d0015567a4bc3dd63ddf"
     },
@@ -98,12 +102,16 @@
       "sha256": "527cb06eaa6ad192696b3833cd04ecd93dbddb422eda139254b0a8c60667111a"
     },
     {
+      "rel": ".agents/scripts-test-exempt.txt",
+      "sha256": "cc99a42bb30207b00302bddd75e19a22e6f07fb4a96e561dedf389d09e45fb21"
+    },
+    {
       "rel": ".agents/scripts/agg-delegations.cjs",
-      "sha256": "91bb77b06ad8802a7fe9133f71cb2d9235755137bb462f0c50f03656248efbf4"
+      "sha256": "928b80cb2d667100ce8525568a241dc437b516680ec15f05c9f75077b985001a"
     },
     {
       "rel": ".agents/scripts/agg-delegations.test.mjs",
-      "sha256": "63337231e2b6926e161600ed7824cdd89a98c8bab934a3d366e29ec790325d60"
+      "sha256": "20bb44c6651d8181f9dcea6915fbc5aa36a4400c14ae7770cdb4b6fad0dd6c30"
     },
     {
       "rel": ".agents/scripts/agg-gate-stats.mjs",
@@ -178,6 +186,14 @@
       "sha256": "0a1353ba2989ddd0bf9b99a9fd4640e0b1b97784455b878b731c01537a87dcc4"
     },
     {
+      "rel": ".agents/scripts/check-local-gate-config.mjs",
+      "sha256": "6e1006fdae559f0f76e68835dfa831cd4d98d4117da7031dfb869db41aee69bb"
+    },
+    {
+      "rel": ".agents/scripts/check-local-gate-config.test.mjs",
+      "sha256": "c1b3b68520bb7390a731b38cb0aae3e48a2b9d6dbbb05f176e0fa4cc2b2a8878"
+    },
+    {
       "rel": ".agents/scripts/check-loop-rev.test.mjs",
       "sha256": "2e6c1a7e958c28512df82a0441180bbef3aaded680c2fd527accc18898874107"
     },
@@ -187,7 +203,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "34980bc66cd701226deac96610d4a280baa3511cc848b1c294d3e42956a07f4b"
+      "sha256": "6e9be02438cc31e67e4f5b8cf455a5c773516b7d09829e660ca59ad1312185ba"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -211,11 +227,11 @@
     },
     {
       "rel": ".agents/scripts/check-regression-consistency.mjs",
-      "sha256": "2919599e16af2e0a7e710d9dd40dfa544c6f0b135bcde80fe72eaf557b1d4cfc"
+      "sha256": "116269e8989381f4dbfd0a30964f6c8f4ea957c0774acc6f516242d5f2a5553b"
     },
     {
       "rel": ".agents/scripts/check-regression-consistency.test.mjs",
-      "sha256": "1e6ae42e143eba431ebf2b1dc44d66bb3a219fc5444107e3fcaad493fda65208"
+      "sha256": "cc0efef70467abe30fe44d2ed7ed38334d974fde7d64ca35147a2bf37f7d92fe"
     },
     {
       "rel": ".agents/scripts/check-scope.mjs",
@@ -227,11 +243,11 @@
     },
     {
       "rel": ".agents/scripts/check-scripts-syntax.mjs",
-      "sha256": "f946b5f179cd2143a5101e90bec437703afb5bb203d1984f3a75509a2b6e7376"
+      "sha256": "5003d9aaa4a66d0616ef830ef50a3cff2423178234e34e5fdacc6f79450d348e"
     },
     {
       "rel": ".agents/scripts/check-scripts-syntax.test.mjs",
-      "sha256": "6c1ab9714218e7d8bdf695e18bc2dea32fed68fc23dd5c22500df5f779beda6e"
+      "sha256": "1c1b27ca7a68ee8f12e0b36a51a9646652ad3c0fc4af5d83d4e6eb780b8c4ba3"
     },
     {
       "rel": ".agents/scripts/check-spec-verif.mjs",
@@ -259,11 +275,19 @@
     },
     {
       "rel": ".agents/scripts/confirm-doc.mjs",
-      "sha256": "c85c3187485cbc701d900aa95d40ebb5e926ec0c486b8fcaa6eaadfc0c91ade2"
+      "sha256": "e93c0ff99189cd66dc79c2744303f2838d280e4c57da5bf54cf7d128738b048c"
     },
     {
       "rel": ".agents/scripts/confirm-doc.test.mjs",
-      "sha256": "bb73ff48b39c0d04148cb720e2d12b30e45a615071aaa19f1ab04ee056aac68c"
+      "sha256": "dbc31bccfe6cfe814d6f295be07823f0b7e3852665e10019918d4380f0ba18df"
+    },
+    {
+      "rel": ".agents/scripts/delegation-presence.mjs",
+      "sha256": "2e3fb89b01520ea97830f1fccc74d70558d63ad1d77517d8fe6bf8304e44dab1"
+    },
+    {
+      "rel": ".agents/scripts/delegation-presence.test.mjs",
+      "sha256": "964d07e0c5de172620e65b56eb4bdd24df0b5da6e16174c06fc8e21125f8aefe"
     },
     {
       "rel": ".agents/scripts/doctor.test.mjs",
@@ -363,11 +387,11 @@
     },
     {
       "rel": ".agents/scripts/gen-workflow-metrics.mjs",
-      "sha256": "03823b8d9fbdc3b9d294cd7ec56b23f901a4181258706fe4c21f170c97fc86fc"
+      "sha256": "a61ab0152cd9336a658f1502eaa4f4d148fa4a3fb67d7780e1bea49a3773555e"
     },
     {
       "rel": ".agents/scripts/gen-workflow-metrics.test.mjs",
-      "sha256": "fcaa56e48e39e7f6127485228eb4e957f6ab5d28d383c88acf3f74b7ffbc129b"
+      "sha256": "8b01ad2d32f63d140abb1d5de85b7e3f4245c39b42c612da9efa152d676e9091"
     },
     {
       "rel": ".agents/scripts/git-merge-jsonl.mjs",
@@ -431,11 +455,11 @@
     },
     {
       "rel": ".agents/scripts/ledger-shards.mjs",
-      "sha256": "5f198c28e07eced794af9d59447d3dbd7db0481087a9d17d5da9c4e588422ea2"
+      "sha256": "733fb38ce793aa3c00f025fae34d8ab753ff6229cdf6c8b2e167e3447cc0aa95"
     },
     {
       "rel": ".agents/scripts/ledger-shards.test.mjs",
-      "sha256": "9950f592acf927edf7b5cf252e99c36ed4cc16a7610265f2666ad59b6c3557e7"
+      "sha256": "f767f44ef323149d3ba1fffe8ce37002ba2e7648a49b18ccee8c321d69adb2e6"
     },
     {
       "rel": ".agents/scripts/ledger-ts-monotonic.test.mjs",
@@ -567,11 +591,11 @@
     },
     {
       "rel": ".agents/scripts/verify.mjs",
-      "sha256": "72c8fc460e4cb4536a808c6abbf8130794a8843715b0d686f51cf016adbcb632"
+      "sha256": "e52032e3ec31bdebc8453d32c7e098b352a2544147910c55bf8a75527de327f2"
     },
     {
       "rel": ".agents/scripts/verify.test.mjs",
-      "sha256": "c93afb813041ccc2b61a3420bdac82218c2c8e52e91c250a5b775e61a6367b7d"
+      "sha256": "46b7dccb4ab6b854f0c6455c14891a5ab31fa17bd7a4380b20729804f89e096c"
     },
     {
       "rel": ".agents/scripts/wf-journal.mjs",
@@ -611,11 +635,7 @@
     },
     {
       "rel": ".agents/scripts/workflows-check.test.mjs",
-      "sha256": "2bd3b962b9e22136fb47f998c37b35334f296875cf588a75442983718bba738d"
-    },
-    {
-      "rel": ".agents/scripts-test-exempt.txt",
-      "sha256": "cc99a42bb30207b00302bddd75e19a22e6f07fb4a96e561dedf389d09e45fb21"
+      "sha256": "676b2d6717717e161c67b2e9a6f9e710d3c42528ba03d1d83ec1540f5a4b610e"
     },
     {
       "rel": ".agents/skills/papercut-fix/references/response-template.md",
@@ -642,6 +662,14 @@
       "sha256": "0f568b02674fedebc76bbc069f80dd424867c6190d3b421b81c732f498991d2d"
     },
     {
+      "rel": ".agents/workflows/_TEMPLATE.md",
+      "sha256": "cfaa1813a217909c2477fab0c1198535d42825e52578aee07e21cf8e7457181c"
+    },
+    {
+      "rel": ".agents/workflows/示例-并行实现评审.md",
+      "sha256": "607c82d9224e8d229a118f0589cec07d9dcdc66371f2ed95868fe373fd159582"
+    },
+    {
       "rel": ".agents/workflows/pipeline-closing.md",
       "sha256": "d39e884302885ea6c6e5e788cb92fe6889e1f68978853489f2853e39057c1b82"
     },
@@ -650,16 +678,12 @@
       "sha256": "657a8e714d17f866b70d087375040466b16b68d063c9879f7c017509eb3fd430"
     },
     {
-      "rel": ".agents/workflows/_TEMPLATE.md",
-      "sha256": "cfaa1813a217909c2477fab0c1198535d42825e52578aee07e21cf8e7457181c"
-    },
-    {
-      "rel": ".agents/workflows/示例-并行实现评审.md",
-      "sha256": "87b063916eb9fcf6ef6f02ba618e8b0d76facaeb7689f675ceb7519558784f98"
-    },
-    {
       "rel": ".githooks/commit-msg",
       "sha256": "3e946cbf3f59a469ec977a036ff8bfc960be7febe36318a0fd112b7adaadfc75"
+    },
+    {
+      "rel": ".githooks/package.json",
+      "sha256": "af3d5c6943353826e6d6a5275460ea9631d780379b4090fdba774fe5a29d27ae"
     },
     {
       "rel": ".githooks/post-commit",
@@ -746,8 +770,8 @@
     },
     {
       "rel": "workflow/delegations.md",
-      "sha256": "d828711e10a3fcee508c07e8d86121ba06e5899f5892bab883c09286aebc66e0",
-      "srcSha256": "d828711e10a3fcee508c07e8d86121ba06e5899f5892bab883c09286aebc66e0"
+      "sha256": "96c8cd00f6015a46a04cd9e2f12b7a553ef27ca912d1f4009340057956365010",
+      "srcSha256": "96c8cd00f6015a46a04cd9e2f12b7a553ef27ca912d1f4009340057956365010"
     },
     {
       "rel": "workflow/incidents/_TEMPLATE.md",
@@ -771,8 +795,8 @@
     },
     {
       "rel": "workflow/README.md",
-      "sha256": "1f07330fd694717241b9293296aa10fb8d81259eac1131c2e2c0c85c239dac24",
-      "srcSha256": "14d8f5b8f248de8ff461669adbaded709d0af510d5543b2ffc53d6e5fca208f1"
+      "sha256": "bf8bbbb7b64ff6a4dab543657650e73dbc66030c39b12daeaca037b6e63e2560",
+      "srcSha256": "bf8bbbb7b64ff6a4dab543657650e73dbc66030c39b12daeaca037b6e63e2560"
     },
     {
       "rel": "workflow/regression-checklist.md",
@@ -826,7 +850,7 @@
     },
     {
       "rel": ".github/workflows/kit-ci.yml",
-      "sha256": "7cb738f9b1dda787e541e5aab104ef9a651fe18a420fdc55bd761d3c077529b0",
+      "sha256": "85006921aee51763a9864f94604e3f69c8c4db8cc385f0260f8ffcc0e4e77343",
       "srcSha256": "7cb738f9b1dda787e541e5aab104ef9a651fe18a420fdc55bd761d3c077529b0"
     },
     {

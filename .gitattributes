@@ -19,3 +19,6 @@ templates/_agents/hooks/local-pre-commit text eol=lf
 *.md text eol=lf
 *.txt text eol=lf
 *.json text eol=lf
+
+# 台账 jsonl 并发并集合并（owned 文件，sync 不覆盖；README「台账并发」——2026-10-25 source-port-batch 经挂载自检门补挂）
+.agents/*.jsonl merge=jsonl-union

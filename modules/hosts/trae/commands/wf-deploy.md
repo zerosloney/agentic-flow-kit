@@ -45,6 +45,9 @@ description: Deploy 阶段 · prod 上线清单（静态门 / 配对 / 回归 / 
 - 异常判据(观察期退出规则):项目口径填 `workflow/regression-checklist.md`——无监控时的最低判据:错误日志 / 异常告警 / 关键业务流失败**任一出现即触发 §5 回滚预案,不等 24h**;无异常满 24h 方可闭环
 - 闭环宣告:用户确认无异常后才算闭环;AI 不得自行宣告
 - 异常回落:超阈值 → 生成 `workflow/incidents/YYYY-MM-DD-<主题>.md`,进 `maintain.md`(止血方案用户拍板,见 maintain.md §0)
+- 观察落账(2026-10-25 source-port-batch):闭环宣告或异常回落出结论时追加一行进当月分片(一行 = 一次 release;结果枚举 `通过`/`异常`,异常行必须在 incident 列关联文件名,记法见 `workflow/deploy-observations.md` 头部):
+  `node .agents/scripts/ledger-shards.mjs --append deploy-observations --row "| YYYY-MM-DD | release/<日期> | 通过 | - | <确认方式摘要> |"`
+  月度聚合进 `metrics.md`「发布观察」表(`gen-workflow-metrics.mjs`)——闭环漏斗延伸到部署后,上线了却长期无行即挂债
 - 事故响应:单用途账号 + 最小权限;不得跨智能体协作推送修复(参考 Anthropic 教训)
 
 ## 7. 子代理调用约定
@@ -55,5 +58,5 @@ description: Deploy 阶段 · prod 上线清单（静态门 / 配对 / 回归 / 
 
 - 打 `release/<日期>` tag（commit SHA 可追溯）
 - 上线 + 用户观察 24h
-- 用户确认无异常 → prod 闭环（文档 done 应已在 test 写好；若漏写在此补勾验收并置 done）
-- 异常 → 进 `next: .agents/commands/maintain.md`
+- 用户确认无异常 → prod 闭环（文档 done 应已在 test 写好；若漏写在此补勾验收并置 done）+ 观察结论落账（§6 观察落账）
+- 异常 → 进 `next: .agents/commands/maintain.md`（观察结论同样落账，异常行关联 incident）

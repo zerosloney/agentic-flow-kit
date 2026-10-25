@@ -1,9 +1,11 @@
 #!/usr/bin/env node
-// ledger-shards.mjs — 三个 append-only 台账的分片读写单源（2026-10-13 ledger-shard-ledgers）
+// ledger-shards.mjs — 四个 append-only 台账的分片读写单源（2026-10-13 ledger-shard-ledgers；2026-10-25 source-port-batch 收编 deploy-observations）
 //
 // 背景：workflow/{regression-checklist,delegations,papercuts}.md 是 append-only 活文档，每次追加
 // 全量重写整文件——源仓实测 blob 膨胀（regression-checklist 单文件 14.0 MiB、delegations 11.5 MiB，
 // 膨胀/冲突实测数据出处留痕在包源仓 git 历史与 CHANGELOG），且多 worktree 并行时每次合并都可能冲突。
+// deploy-observations（2026-10-25，自源仓优化5 回灌）：发布观察台账**生而分片**——主表只留说明与
+// 表头，数据行从首日起就进当月分片，无存量迁移面。
 //
 // 分片形态（沿 confirmations.d 先例，2026-10-12 ledger-shard-default）：
 //   workflow/<ledger>.d/<YYYY-MM>.md —— 按月切分，每月一个文件
@@ -48,6 +50,11 @@ export const LEDGERS = {
   papercuts: {
     row: /^\s*\|\s*\d{4}-\d{2}-\d{2}/,
   },
+  // 发布观察台账（2026-10-25 source-port-batch，自源仓优化5 回灌）：deploy.md §6 的 24h 观察结论，
+  // 一行 = 一次 release。生而分片（主表只留说明+表头，数据行从首日起就进 .d/<YYYY-MM>.md，无存量迁移）。
+  'deploy-observations': {
+    row: /^\s*\|\s*\d{4}-\d{2}-\d{2}/,
+  },
 };
 
 // 表格式台账的表头签名（分片须自带表头——读侧按表头识别数据边界，见 agg-delegations.splitTables）。
@@ -67,6 +74,9 @@ const TABLE_HEADERS = {
   ],
   'regression-checklist': [
     { section: null, header: ['| incident | 条目 | 落点 |', '|----------|------|------|'] },
+  ],
+  'deploy-observations': [
+    { section: null, header: ['| 日期 | release | 结果 | incident | 确认方式 |', '|------|---------|------|----------|----------|'] },
   ],
 };
 

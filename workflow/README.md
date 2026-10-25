@@ -22,7 +22,7 @@
 
 根目录 `regression-checklist.md` 为**活文档回归清单**：deploy 回归必过条目与 incident 防复发验证的统一落点，随模块上线补充、随 incident 追加。
 
-**三份 append-only 台账已分片**（2026-10-13 ledger-shard-ledgers）：`regression-checklist` / `delegations` / `papercuts` 的数据行按月存 `workflow/<台账>.d/<YYYY-MM>.md`，主台账只留说明、表头与 GENERATED 区——消除「每次追加全量重写整文件」的体积与合并冲突面。读写单源 = `.agents/scripts/ledger-shards.mjs`（读侧自动合并主台账 ∪ 全部分片，既有消费者无需改动）；追加一行用 `node .agents/scripts/ledger-shards.mjs --append <台账> --row "<行>"`。
+**四份 append-only 台账已分片**（2026-10-13 ledger-shard-ledgers；2026-10-25 source-port-batch 收编 `deploy-observations`）：`regression-checklist` / `delegations` / `papercuts` / `deploy-observations` 的数据行按月存 `workflow/<台账>.d/<YYYY-MM>.md`，主台账只留说明、表头与 GENERATED 区——消除「每次追加全量重写整文件」的体积与合并冲突面。读写单源 = `.agents/scripts/ledger-shards.mjs`（读侧自动合并主台账 ∪ 全部分片，既有消费者无需改动）；追加一行用 `node .agents/scripts/ledger-shards.mjs --append <台账> --row "<行>"`。`deploy-observations` 生而分片（deploy.md §6 的 24h 观察结论，一行 = 一次 release，见该主表头部记法）。
 
 ## 使用方式
 

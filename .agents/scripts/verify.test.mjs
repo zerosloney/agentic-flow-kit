@@ -4,9 +4,9 @@
 // ③步骤 2 配对断裂夹具 exit 1（verify 自身标记断言）；④凭证落账（绿行 + 计数捕获）；
 // ④b fixture 绿不产 committed 摘要；⑤check-loop 红失败行留痕、无绿行；
 // ⑥无汇总行省略计数键；⑦装户仓（cwd 无 package.json）跳过测试门、不落凭证、其余门全过 → exit 0；
-// ⑧--doc 绑定五态；⑨⑩嵌套套件同形汇总行不得被误取；⑪--list 七门序；⑫--list 与 --test-cmd 互斥；
+// ⑧--doc 绑定五态；⑨⑩嵌套套件同形汇总行不得被误取；⑪--list 八门序；⑫--list 与 --test-cmd 互斥；
 // ⑬生产模式中段红 → fail-fast + 未执行门清单 + 失败行留痕；
-// ⑭生产模式全绿端到端（七门 + 凭证含门数/headShort/套件计数 + 绿凭证摘要生成）。
+// ⑭生产模式全绿端到端（八门 + 凭证含门数/headShort/套件计数 + 绿凭证摘要生成）。
 // 生产模式夹具经 fixture-scripts.mjs#copyScriptClosure 把门脚本依赖闭包拷进临时根（并种子
 // workflow/effective-policy.md——生效规则视图门对缺文件判漂移，与 init 生成器首跑同款）。
 // 用法：node templates/_agents/scripts/verify.test.mjs
@@ -66,9 +66,13 @@ const run = (argv, opts = {}) => spawnSync(process.execPath, [VERIFY, ...argv], 
 // workflow/effective-policy.md 种子（生效规则视图门对缺文件判漂移——与 init §6 生成器首跑同款）
 const provision = (root) => {
   fs.mkdirSync(path.join(root, '.agents', 'hooks'), { recursive: true });
+  // 语法门每目录非空 fail-closed（2026-10-25 source-port-batch）：hooks 目录须至少一个可检脚本
+  //（真实装户 .agents/hooks 自带；夹具空目录会被新判据判红）
+  fs.writeFileSync(path.join(root, '.agents', 'hooks', 'fixture-probe.mjs'), 'export {};\n', 'utf8');
   copyScriptClosure(path.join(root, '.agents', 'scripts'), [
     'check-scripts-syntax.mjs', 'workflows-check.mjs', 'rule-budget.mjs',
     'gen-effective-policy.mjs', 'check-ledger-invariant.mjs', 'check-loop.mjs',
+    'check-local-gate-config.mjs',
   ]);
   const gen = spawnSync(process.execPath, [path.join(root, '.agents', 'scripts', 'gen-effective-policy.mjs'), '--root', root], { encoding: 'utf8' });
   if (gen.status !== 0) throw new Error(`夹具种子生成失败：${gen.stdout}${gen.stderr}`);
@@ -173,7 +177,7 @@ const readLedger = (root) => {
   const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'verify-bare-'));
   const r = run([], { cwd: bare, env: { ...process.env, CHECK_LOOP_ROOT: root } });
   check('场景 7：exit 0', r.status === 0, `exit=${r.status}\n${r.stdout}\n${r.stderr}`);
-  check('场景 7：测试门显式跳过（⏭ 2/7）、末门通过且全绿', r.stdout.includes('⏭ 2/7') && r.stdout.includes('✅ 7/7') && r.stdout.includes('全绿'), r.stdout);
+  check('场景 7：测试门显式跳过（⏭ 2/8）、末门通过且全绿', r.stdout.includes('⏭ 2/8') && r.stdout.includes('✅ 8/8') && r.stdout.includes('全绿'), r.stdout);
   check('场景 7：跳过时不落测试绿凭证（防假绿）且不生成摘要',
     readLedger(root).length === 0 && !fs.existsSync(path.join(root, 'workflow', 'verify-evidence.md')) && r.stdout.includes('不落测试绿凭证'),
     r.stdout);
@@ -286,12 +290,12 @@ const readLedger = (root) => {
     `exit=${r.status}\n${r.stdout}\n${r.stderr}`);
 }
 
-// ---- 场景 11：--list 锁定 engine cohort 七门序，不执行门 ----
+// ---- 场景 11：--list 锁定 engine cohort 八门序，不执行门 ----
 {
-  const expect = ['scripts-syntax', 'engine-tests', 'workflows-check', 'rule-budget', 'effective-policy', 'check-loop', 'ledger-invariant'];
+  const expect = ['scripts-syntax', 'engine-tests', 'workflows-check', 'local-gate-config', 'rule-budget', 'effective-policy', 'check-loop', 'ledger-invariant'];
   const r = run(['--list'], {});
   const ids = (r.stdout || '').trim().split(/\r?\n/).filter(Boolean);
-  check('场景 11：--list exit 0 且恰七门、序不变、不执行',
+  check('场景 11：--list exit 0 且恰八门、序不变、不执行',
     r.status === 0 && ids.length === expect.length && expect.every((id, i) => ids[i] === id)
       && !String(r.stdout).includes('开始静态门'),
     `exit=${r.status}\n${r.stdout}`);
@@ -312,8 +316,8 @@ const readLedger = (root) => {
   const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'verify-bare-ff-'));
   const r = run([], { cwd: bare, env: { ...process.env, CHECK_LOOP_ROOT: root } });
   check('场景 13：exit 1 且不出全绿', r.status === 1 && !r.stdout.includes('全绿'), `exit=${r.status}\n${r.stdout}\n${r.stderr}`);
-  check('场景 13：fail-fast 点名未执行门（rule-budget、effective-policy、check-loop、ledger-invariant）',
-    r.stderr.includes('未执行门') && ['rule-budget', 'effective-policy', 'check-loop', 'ledger-invariant'].every((id) => r.stderr.includes(id)),
+  check('场景 13：fail-fast 点名未执行门（local-gate-config、rule-budget、effective-policy、check-loop、ledger-invariant）',
+    r.stderr.includes('未执行门') && ['local-gate-config', 'rule-budget', 'effective-policy', 'check-loop', 'ledger-invariant'].every((id) => r.stderr.includes(id)),
     r.stderr);
   const lines = readLedger(root);
   check('场景 13：失败行留痕（suite=workflows-check）且无绿行',
@@ -323,7 +327,7 @@ const readLedger = (root) => {
   fs.rmSync(bare, { recursive: true, force: true });
 }
 
-// ---- 场景 14：生产模式全绿端到端——七门按序全过、凭证钉门数/headShort/套件计数、摘要生成 ----
+// ---- 场景 14：生产模式全绿端到端——八门按序全过、凭证钉门数/headShort/套件计数、摘要生成 ----
 {
   const root = provision(mkfix());
   // 根 package.json（装户带根 package.json 的形态）：测试命令打印编排器权威汇总行
@@ -335,17 +339,17 @@ const readLedger = (root) => {
   fs.writeFileSync(path.join(root, '.agents', 'probe-test.mjs'), "console.log('[run-tests] 合计: SUITES 3 / FAILED 0');\n", 'utf8');
   const headShort = gitify(root);
   const r = run([], { cwd: root, env: { ...process.env, CHECK_LOOP_ROOT: root } });
-  check('场景 14：exit 0 且七门逐门输出 + 全绿',
-    r.status === 0 && ['✅ 1/7', '✅ 2/7', '✅ 3/7', '✅ 4/7', '✅ 5/7', '✅ 6/7', '✅ 7/7'].every((s) => r.stdout.includes(s)) && r.stdout.includes('全绿'),
+  check('场景 14：exit 0 且八门逐门输出 + 全绿',
+    r.status === 0 && ['✅ 1/8', '✅ 2/8', '✅ 3/8', '✅ 4/8', '✅ 5/8', '✅ 6/8', '✅ 7/8', '✅ 8/8'].every((s) => r.stdout.includes(s)) && r.stdout.includes('全绿'),
     `exit=${r.status}\n${r.stdout}\n${r.stderr}`);
   const line = readLedger(root)[0] || null;
-  check('场景 14：绿凭证钉门数 7 + headShort + 套件计数',
-    line !== null && line.exitCode === 0 && line.gates === 7 && line.headShort === headShort && line.passed === 3 && line.failed === 0,
+  check('场景 14：绿凭证钉门数 8 + headShort + 套件计数',
+    line !== null && line.exitCode === 0 && line.gates === 8 && line.headShort === headShort && line.passed === 3 && line.failed === 0,
     `headShort=${line && line.headShort} expect=${headShort} line=${JSON.stringify(line)}`);
   const ev = path.join(root, 'workflow', 'verify-evidence.md');
   const evText = fs.existsSync(ev) ? fs.readFileSync(ev, 'utf8') : '';
   check('场景 14：绿凭证摘要已生成且含本 SHA 一行（自动重生成接线）',
-    fs.existsSync(ev) && evText.includes(`\`${headShort}\``) && evText.includes('| 7 | PASS 3 / FAIL 0 |'),
+    fs.existsSync(ev) && evText.includes(`\`${headShort}\``) && evText.includes('| 8 | PASS 3 / FAIL 0 |'),
     evText);
   fs.rmSync(root, { recursive: true, force: true });
 }

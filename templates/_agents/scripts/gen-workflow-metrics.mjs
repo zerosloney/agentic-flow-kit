@@ -14,12 +14,14 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadEnums } from './workflow-enums.mjs';
 import { readLedgerRows as loadLedgerRows } from './ledger-loader.mjs';
+import { readLedger } from './ledger-shards.mjs';
 import { analyze, buildDocList, loadLastTouch, loadLedgerTs, parseStatus, ACTIVE } from './archive-sweep.mjs';
 
 const USAGE = `用法：node .agents/scripts/gen-workflow-metrics.mjs [--month YYYY-MM] [--dry-run] [--help]
 
 事实源：workflow/{intents,specs,plans,incidents}/*.md（排除 _TEMPLATE.md）+ workflow/INDEX.md + .agents/rule-budgets.txt
         + workflow/reviews.d/*.md（独立复核效果台账）+ workflow/specs/*.md 与 workflow/archive/*/specs/*.md（spec 体积观察）
+        + workflow/deploy-observations.d/（发布观察台账，2026-10-25 source-port-batch 建账）
 产物：workflow/metrics.md —— 每月一行（同月重跑即更新该行，不重复追加）；明细打印在 stdout，不落表。
 选项：
   --month YYYY-MM   指定月份键（默认取当前月；用于补记历史）
@@ -330,6 +332,35 @@ const SPEC_HEAD = [
 ];
 const specRows = [specRow('活跃', specActiveStats), specRow('归档', specArchiveStats)];
 
+// ---- 发布观察（2026-10-25 source-port-batch，第五节）：deploy-observations 台账（主表 ∪ .d/ 分片）按月聚合 ----
+// 口径：一行 = 一次 release 的 24h 观察结论（deploy.md §6 落账）；结果枚举 通过|异常，枚举外脏行
+// throw（fail-loud 纪律：脏行比缺行更有害）。台账全缺 = 合法零数据（机制先于数据建账，出占位行
+// 保机制可见）。读侧分片合并单源 = ledger-shards.readLedger；「上线了却长期无行」即挂债形态。
+const scanDeploys = () => {
+  const { all } = readLedger(process.cwd(), 'deploy-observations');
+  const byMonth = {};
+  for (const line of all.split(/\r?\n/)) {
+    if (!/^\s*\|\s*\d{4}-\d{2}-\d{2}\s*\|/.test(line)) continue;
+    const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
+    const result = cells[2] ?? '';
+    if (result !== '通过' && result !== '异常') {
+      throw new Error(`发布观察台账脏行（结果列须为 通过|异常）：${line.slice(0, 120)}`);
+    }
+    const b = (byMonth[cells[0].slice(0, 7)] ||= { releases: 0, passed: 0, abnormal: 0 });
+    b.releases++;
+    if (result === '通过') b.passed++; else b.abnormal++;
+  }
+  return byMonth;
+};
+const deploys = scanDeploys();
+const DEPLOY_HEAD = [
+  '## 发布观察（源：workflow/deploy-observations.d/ 24h 观察结论台账，2026-10-25 建账；deploy.md §6 落账，一行 = 一次 release 结论）',
+  '',
+  '| 月份 | release 数 | 通过 | 异常 |',
+  '|---|---|---|---|',
+];
+const deployRows = Object.keys(deploys).sort().map((ym) => `| ${ym} | ${deploys[ym].releases} | ${deploys[ym].passed} | ${deploys[ym].abnormal} |`);
+if (!deployRows.length) deployRows.push('| （无记录） | 0 | 0 | 0 |'); // 零数据占位——表始终输出，机制可见
 
 // ---- 明细（stdout，不落表）：类型分布 + 逐条预算占用 ----
 console.log(`📅 ${month} 快照`);
@@ -357,12 +388,18 @@ try {
   const fams = new Set(arch.candidates.map((x) => x.file));
   console.log(`  归档积压：候选 ${arch.candidates.length} 篇 / ${fams.size} 族（21 天窗）${arch.candidates.length ? '——node .agents/scripts/archive-sweep.mjs 查看，--execute 执行' : ''}`);
 } catch { /* fail-open */ }
+{
+  const dm = Object.keys(deploys).sort();
+  const tot = dm.reduce((a, ym) => { a.r += deploys[ym].releases; a.p += deploys[ym].passed; a.b += deploys[ym].abnormal; return a; }, { r: 0, p: 0, b: 0 });
+  console.log(`  发布观察：累计 ${tot.r} 次 release（通过 ${tot.p} / 异常 ${tot.b}）${tot.r ? '' : '——零记录（上线后 24h 结论未落账即挂债，落账见 deploy.md §6）'}`);
+}
 console.log(`  ${DRY ? '（--dry-run，未写盘）' : ''}`);
 
 if (DRY) {
   console.log(`\n将写入行：\n${row}\n${funnelRow}`);
   console.log(`\n复核效果表（整表再生）：\n${[...REVIEW_HEAD, ...reviewRows].join('\n')}`);
   console.log(`\nspec 体积观察表（整表再生）：\n${[...SPEC_HEAD, ...specRows].join('\n')}`);
+  console.log(`\n发布观察表（整表再生）：\n${[...DEPLOY_HEAD, ...deployRows].join('\n')}`);
   process.exit(0);
 }
 
@@ -404,7 +441,7 @@ rows.sort((a, b) => a.slice(2, 9).localeCompare(b.slice(2, 9)));
 funnelRows = funnelRows.filter((l) => !l.startsWith(`| ${month} `));
 funnelRows.push(funnelRow);
 funnelRows.sort((a, b) => a.slice(2, 9).localeCompare(b.slice(2, 9)));
-const inner = `${BEGIN}\n\n${[...TABLE_HEAD, ...rows].join('\n')}\n\n${[...FUNNEL_HEAD, ...funnelRows].join('\n')}\n\n${[...REVIEW_HEAD, ...reviewRows].join('\n')}\n\n${[...SPEC_HEAD, ...specRows].join('\n')}\n\n${END}`;
+const inner = `${BEGIN}\n\n${[...TABLE_HEAD, ...rows].join('\n')}\n\n${[...FUNNEL_HEAD, ...funnelRows].join('\n')}\n\n${[...REVIEW_HEAD, ...reviewRows].join('\n')}\n\n${[...SPEC_HEAD, ...specRows].join('\n')}\n\n${[...DEPLOY_HEAD, ...deployRows].join('\n')}\n\n${END}`;
 let out;
 if (existing.includes(BEGIN) && existing.includes(END)) {
   out = existing.slice(0, existing.indexOf(BEGIN)) + inner + existing.slice(existing.indexOf(END) + END.length);

@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-23T12:53:34.824Z",
+  "generatedAt": "2026-10-25T07:16:06.946Z",
   "files": {
     ".github/workflows/ci.yml": {
       "sha256": "e9cffb90dec8f0a49bfe231a13fb8df375a2494cc75c38d991b5eb7c7be104b5",
@@ -84,10 +84,15 @@
       "sha256": "35d61f9b786447ecf45243c2edc7f77916ae116a7386ffa0ae976e769355bb35",
       "hard": 2
     },
+    "templates/_agents/scripts/check-local-gate-config.mjs": {
+      "sha256": "6e1006fdae559f0f76e68835dfa831cd4d98d4117da7031dfb869db41aee69bb",
+      "hard": 0,
+      "note": "source-port-batch：语法门递归+fail-closed / 委派在场门 / deploy-observations 第四台账 / verify 第八门挂载自检——源仓 97b9b247+b38f9f60 优化1/4/5 回灌"
+    },
     "templates/_agents/scripts/check-loop.mjs": {
-      "sha256": "34980bc66cd701226deac96610d4a280baa3511cc848b1c294d3e42956a07f4b",
+      "sha256": "6e9be02438cc31e67e4f5b8cf455a5c773516b7d09829e660ca59ad1312185ba",
       "hard": 32,
-      "note": "回填凭据：B 批检查 27 接线（头注/LANE_OF/import/调用点，先于凭据设施，C 批回填）"
+      "note": "source-port-batch：语法门递归+fail-closed / 委派在场门 / deploy-observations 第四台账 / verify 第八门挂载自检——源仓 97b9b247+b38f9f60 优化1/4/5 回灌"
     },
     "templates/_agents/scripts/check-metric-claims.mjs": {
       "sha256": "2c2d8615e9418117d43202dc67cd4131e43fb6c095686363dfcd2fd2cb542f2a",
@@ -111,8 +116,9 @@
       "hard": 1
     },
     "templates/_agents/scripts/check-scripts-syntax.mjs": {
-      "sha256": "f946b5f179cd2143a5101e90bec437703afb5bb203d1984f3a75509a2b6e7376",
-      "hard": 3
+      "sha256": "5003d9aaa4a66d0616ef830ef50a3cff2423178234e34e5fdacc6f79450d348e",
+      "hard": 4,
+      "note": "source-port-batch：语法门递归+fail-closed / 委派在场门 / deploy-observations 第四台账 / verify 第八门挂载自检——源仓 97b9b247+b38f9f60 优化1/4/5 回灌"
     },
     "templates/_agents/scripts/check-spec-verif.mjs": {
       "sha256": "5a3d719bcc2d4e506609259f5e5b9412e2bf206ddc8bbd9154129ac8e0c95ebf",
@@ -127,9 +133,14 @@
       "hard": 1
     },
     "templates/_agents/scripts/confirm-doc.mjs": {
-      "sha256": "c85c3187485cbc701d900aa95d40ebb5e926ec0c486b8fcaa6eaadfc0c91ade2",
+      "sha256": "e93c0ff99189cd66dc79c2744303f2838d280e4c57da5bf54cf7d128738b048c",
       "hard": 13,
-      "note": "回填凭据：B 批关单活文档一致性前置门（done/closed 拒绝，先于凭据设施，C 批回填）"
+      "note": "source-port-batch：语法门递归+fail-closed / 委派在场门 / deploy-observations 第四台账 / verify 第八门挂载自检——源仓 97b9b247+b38f9f60 优化1/4/5 回灌"
+    },
+    "templates/_agents/scripts/delegation-presence.mjs": {
+      "sha256": "2e3fb89b01520ea97830f1fccc74d70558d63ad1d77517d8fe6bf8304e44dab1",
+      "hard": 0,
+      "note": "source-port-batch：语法门递归+fail-closed / 委派在场门 / deploy-observations 第四台账 / verify 第八门挂载自检——源仓 97b9b247+b38f9f60 优化1/4/5 回灌"
     },
     "templates/_agents/scripts/draft-sediment.mjs": {
       "sha256": "a9c51e3fd139adf32755d882e0de53f208784be68a75c1881658c3886605c76d",
@@ -180,8 +191,9 @@
       "hard": 3
     },
     "templates/_agents/scripts/gen-workflow-metrics.mjs": {
-      "sha256": "03823b8d9fbdc3b9d294cd7ec56b23f901a4181258706fe4c21f170c97fc86fc",
-      "hard": 2
+      "sha256": "a61ab0152cd9336a658f1502eaa4f4d148fa4a3fb67d7780e1bea49a3773555e",
+      "hard": 2,
+      "note": "source-port-batch：语法门递归+fail-closed / 委派在场门 / deploy-observations 第四台账 / verify 第八门挂载自检——源仓 97b9b247+b38f9f60 优化1/4/5 回灌"
     },
     "templates/_agents/scripts/git-merge-jsonl.mjs": {
       "sha256": "e8c037dcce1f9e52dd9d63ef812ce3ace03f1ecf3e55cb363e58bd8b50352655",
@@ -212,8 +224,9 @@
       "hard": 0
     },
     "templates/_agents/scripts/ledger-shards.mjs": {
-      "sha256": "5f198c28e07eced794af9d59447d3dbd7db0481087a9d17d5da9c4e588422ea2",
-      "hard": 0
+      "sha256": "733fb38ce793aa3c00f025fae34d8ab753ff6229cdf6c8b2e167e3447cc0aa95",
+      "hard": 0,
+      "note": "source-port-batch：语法门递归+fail-closed / 委派在场门 / deploy-observations 第四台账 / verify 第八门挂载自检——源仓 97b9b247+b38f9f60 优化1/4/5 回灌"
     },
     "templates/_agents/scripts/level-criteria.mjs": {
       "sha256": "f5b862cf39fae5e6f132f107d29f6f1775988a5abe2bf278e4b27d69324a69ac",
@@ -280,8 +293,9 @@
       "hard": 4
     },
     "templates/_agents/scripts/verify.mjs": {
-      "sha256": "72c8fc460e4cb4536a808c6abbf8130794a8843715b0d686f51cf016adbcb632",
-      "hard": 4
+      "sha256": "e52032e3ec31bdebc8453d32c7e098b352a2544147910c55bf8a75527de327f2",
+      "hard": 4,
+      "note": "source-port-batch：语法门递归+fail-closed / 委派在场门 / deploy-observations 第四台账 / verify 第八门挂载自检——源仓 97b9b247+b38f9f60 优化1/4/5 回灌"
     },
     "templates/_agents/scripts/wf-journal.mjs": {
       "sha256": "f361adb72eac7c965fc961749de6a5db9fb2c8d41edc615f7c295266b7c7e277",

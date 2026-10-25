@@ -166,7 +166,10 @@ import { laneOfEntry } from './stage-gates.mjs';
 import { readLedgerRows, readLedgerEntries, LEDGER_REL } from './ledger-loader.mjs';
 import { prunedHashes as prunedHashesOf } from './ledger-prune.mjs';
 // 委派台账分片感知读（2026-10-13 ledger-shard-ledgers 回灌）：主台账 ∪ delegations.d/*.md 文本单源。
-import { readDelegationsText } from './ledger-shards.mjs';
+// 2026-10-25 source-port-batch：行解析与在场判据迁 delegation-presence.mjs 单源（检查 18 与
+// confirm-doc 终态前置门共用同一判据，事后 WARN 与写入拦截不漂移）——本文件不再直接 import
+// readDelegationsText（消费点改走 delegationRowsOf）。
+import { delegationRowsOf, rowCovers } from './delegation-presence.mjs';
 // MARK_RE：incident 留痕形态的单源（第七轮复核 N3——此前 check-loop 内联复制一份同口径字面量，
 // 两处靠注释与人工同步；改为复用 stage-gates.mjs 的导出，从结构上消除漂移可能）
 import { MARK_RE, approvedTraceHit } from './stage-gates.mjs';
@@ -1507,7 +1510,7 @@ export function runCheckLoop(opts = {}) {
   // 「委派结果」表与「自做任务结果」表均没有日期不早于文档日期、且含该文件名（带/不带 .md 均匹配）的一行，则警告。
   // 缺级别、缺日期、以及其他状态不警告。audit:false 时 warnings.push 已被换成空函数。
   // 两表解析口径与 agg-delegations.cjs splitTables 保持一致，一边改另一边须跟。
-  // 分片感知（2026-10-13 ledger-shard-ledgers）：delegationResultRows 走 ledger-shards.readDelegationsText
+  // 分片感知（2026-10-13 ledger-shard-ledgers）：delegationResultRows 走 delegation-presence（主 ∪ 分片）
   // 合并读（主台账 ∪ delegations.d/*.md），分片行与本表行同一对账口径，判据零改动。
   {
     const rows = delegationResultRows(path.join(ROOT, WF, 'delegations.md'));
@@ -1525,8 +1528,7 @@ export function runCheckLoop(opts = {}) {
         // （v1-v3）→ 维持原全量对账行为（向后兼容，检查面不放松）
         if (typeof kitPolicy.delegationSince === 'string' && date < kitPolicy.delegationSince) continue;
         const base = path.basename(abs);
-        const stripped = base.replace(/\.md$/, '');
-        if (rows.some((r) => r.date >= date && (r.line.includes(base) || r.line.includes(stripped)))) continue;
+        if (rowCovers(rows, base, date)) continue; // 在场判据单源（2026-10-25 source-port-batch：与 confirm-doc 终态前置门共用）
         const rel = path.relative(ROOT, abs).split(path.sep).join('/');
         warnings.push(`- [WARN 委派台账] ${rel} 在 ${date} 及之后的委派结果/自做任务结果表中没有该文件名`);
       }
@@ -1772,28 +1774,10 @@ const isMain = process.argv[1] && process.argv[1].replace(/\\/g, '/').endsWith('
 if (isMain) process.exit(runCheckLoop(takeOpts()).exitCode);
 
 export function delegationResultRows(file) {
-  // 分片感知读（2026-10-13 ledger-shard-ledgers）：主台账 ∪ delegations.d/*.md，单源 = ledger-shards。
+  // 单源抽取（2026-10-25 source-port-batch）：行解析与在场判据迁 delegation-presence.mjs（检查 18 与
+  // confirm-doc 终态前置门共用）；本导出保持签名与语义逐字不变（import 契约 2026-10-08 checkloop-importable）。
   // file 为显式注入路径时只读该文件（测试语义不变）；传默认主台账路径 → 走分片合并。
-  const text = readDelegationsText(path.dirname(path.dirname(file)), file);
-  const lines = text.split(/\r?\n/);
-  // 两表识别与 agg-delegations.cjs splitTables 表头签名同口径（一边改另一边须跟，2026-10-08 papercuts-cleanup-batch 修 2）：
-  // 委派表头=含「被委派方」列；自做表头=首列「日期」且含「任务一句话」列——节标题只服务人类阅读，
-  // 表头才是数据边界（节标题漂移不再静默停解析）；「##」节边界仍作收集终止符（表不跨节）。
-  let inTable = false;
-  const rows = [];
-  for (const line of lines) {
-    if (/^##\s+/.test(line)) { inTable = false; continue; }
-    if (!/^\s*\|/.test(line)) continue;
-    const cells = line.trim().replace(/^\|/, '').replace(/\|$/, '').split('|').map((c) => c.trim());
-    if (!cells.length || cells.every((c) => /^[-: ]*$/.test(c))) continue;
-    if (cells.some((c) => c.startsWith('被委派方')) || (cells[0] === '日期' && cells.some((c) => c.startsWith('任务一句话')))) {
-      inTable = true;
-      continue;
-    }
-    if (!inTable || !/^\d{4}-\d{2}-\d{2}$/.test(cells[0])) continue;
-    rows.push({ date: cells[0], line });
-  }
-  return rows;
+  return delegationRowsOf(path.dirname(path.dirname(file)), file);
 }
 
 export function versionGreater(a, b) {
