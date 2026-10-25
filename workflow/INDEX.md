@@ -5,10 +5,13 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（0）
+## 活跃（3）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
+| INCIDENT | L2 | open | 2026-10-25 | infra | 流程自审修复批（挂载自检两行口径 / incident 放弃态枚举收口 / 升级指引 / release 前置 CI） | ☑0/6 |
+| PLAN | L2 | approved | 2026-10-25 | infra | 流程自审修复批 | — |
+| SPEC | L2 | approved | 2026-10-25 | infra | 流程自审修复批 | — |
 
 ## 档案计数（21，不进表）
 

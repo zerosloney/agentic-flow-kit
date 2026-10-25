@@ -42,6 +42,7 @@ const ENUMS_FIXTURE = [
   'doc.status.abandoned=superseded cancelled',
   'incident.status.all=open fixed closed',
   'incident.status.active=open',
+  'incident.status.abandoned=superseded cancelled',
   'level.all=L1 L2 L3',
   'incident.source.all=self user test monitor',
   'incident.env.all=dev staging prod none',

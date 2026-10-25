@@ -1,6 +1,6 @@
 {
   "kit": "agentic-flow-kit",
-  "version": "1.8.10",
+  "version": "1.8.11",
   "policyVersion": 12,
   "audit": true,
   "gateTrust": "project",
@@ -23,7 +23,7 @@
     },
     {
       "rel": ".agents/commands/build.md",
-      "sha256": "ed902822ba2a31cc83489d1e9d80ea9fe0931a216723d0e131b52a7f2f3a1106"
+      "sha256": "5f7b7d11478d3ab400ebaa91bb8ff1b6105ef64ff85be61f0710a21a326b0d9e"
     },
     {
       "rel": ".agents/commands/deploy.md",
@@ -31,11 +31,11 @@
     },
     {
       "rel": ".agents/commands/design.md",
-      "sha256": "00a3d4b316684b7ea69bcb02287242b45b81a76821d97b5499e2b2cdc0047399"
+      "sha256": "9cfbf0dfeaf8f5122f2368d3dc9fe8e100a0ebb42a15fbd875f1a4e0c78d9365"
     },
     {
       "rel": ".agents/commands/maintain.md",
-      "sha256": "8541903c725f4c914346e7f6256c960cfd120fcbed5ab0bddb090e0dc484254f"
+      "sha256": "713adf00eace3db0c83c3b9bcdeac60320c48e51faebfdcbf9d7ff0a1f6a9c00"
     },
     {
       "rel": ".agents/commands/new-task.md",
@@ -47,7 +47,7 @@
     },
     {
       "rel": ".agents/commands/plan.md",
-      "sha256": "d5316c342d754d6661be0f9141ff245f52777e44849ce05f2aa7295ff803ccca"
+      "sha256": "99c6c9bf567eb5b669fc18adbe704e95c790e1af83e0ba4e20ca474fbae4b2ae"
     },
     {
       "rel": ".agents/commands/review.md",
@@ -55,7 +55,7 @@
     },
     {
       "rel": ".agents/commands/test.md",
-      "sha256": "7e80a1a8538e9d32cdf78490f39d1edcc622c8b4dab17e52af1274002874c9fc"
+      "sha256": "6685d1d34d0cda15fd9e00a9c14500ba09f7fd41374643cf0f264653bcafb06a"
     },
     {
       "rel": ".agents/control-surfaces.txt",
@@ -131,11 +131,11 @@
     },
     {
       "rel": ".agents/scripts/append-compensation.mjs",
-      "sha256": "3556216d3a5ddab170d87fd374bf8611334b245e4cb56c57380141960c25557e"
+      "sha256": "6e67da581e2b06ef6ccda87c2058a24f9fc7d2870eec15044a6bbc127cd04b0b"
     },
     {
       "rel": ".agents/scripts/append-compensation.test.mjs",
-      "sha256": "da1d3a1739d8e4f2098f885f288315b7cff35135d8f3dc500184ef4ae4a62861"
+      "sha256": "170627f5cd9f05395b83ace2f2a05f129f144ea8010e29aa5b1f22eee46bcf91"
     },
     {
       "rel": ".agents/scripts/archive-sweep.mjs",
@@ -211,7 +211,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "f2bb63de1da292ba64b6c8f16819bc4afbb122cd40b6c64f725f867912471cbe"
+      "sha256": "d27bc6a8a30d116728c7955f137f7d3d11c4b7752b6a37e1c854a89b83d910e2"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -219,7 +219,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "950c9efa20cb791816cf7abc551b4638354c458633bd6b454a17a54d5ad54e14"
+      "sha256": "508b7695d4ae33853443e12630746bba4736484fbac3ec573b79723ddbd14e33"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -415,7 +415,7 @@
     },
     {
       "rel": ".agents/scripts/judgment-ledger.test.mjs",
-      "sha256": "7f1ba15e57bf98f72023f565c82fc613c24fdfebc8525837eca7fd7314c96370"
+      "sha256": "6a188c4d34c2ad89b46352d8fefe6779cd027ca30337172071bfeb8e358998df"
     },
     {
       "rel": ".agents/scripts/kb-cache-evict.mjs",
@@ -567,11 +567,11 @@
     },
     {
       "rel": ".agents/scripts/solidify-task.test.mjs",
-      "sha256": "45798fafe82b6fb7a8ef7fd44d6d0d01e0d6a3381ca7a015c9b01e51f4ad4b7c"
+      "sha256": "f0d934d8cc07c27b0d8317b87686bad312399b1092fdd9f6bf5259b20790f646"
     },
     {
       "rel": ".agents/scripts/stage-gates.mjs",
-      "sha256": "1a89b34383142b897439af0a0a468223bfaa4802e8128c9b1c27c3f6c11b5856"
+      "sha256": "5fc53c3a1a91c7c749d6047b5c59c43fb2678add791cc0ae4b3c0f0e6c2a00b8"
     },
     {
       "rel": ".agents/scripts/stage-gates.test.mjs",
@@ -583,7 +583,7 @@
     },
     {
       "rel": ".agents/scripts/trust-mode.test.mjs",
-      "sha256": "5c8d32c6eb5d34735bfb6571191278755d1b09a242f9ad477054e5aaff87d2fd"
+      "sha256": "38b38545a02ea3d8fd0a0b9c3efe8e906171b937ab68ecc956de17209d84c59b"
     },
     {
       "rel": ".agents/scripts/tty-scope.test.mjs",
@@ -603,7 +603,7 @@
     },
     {
       "rel": ".agents/scripts/verify.test.mjs",
-      "sha256": "46b7dccb4ab6b854f0c6455c14891a5ab31fa17bd7a4380b20729804f89e096c"
+      "sha256": "3c293ce31904275cdb7c82e818cf51d60c52190cd4fe0fe0dfce1b12d42776f1"
     },
     {
       "rel": ".agents/scripts/wf-journal.mjs",
@@ -627,15 +627,15 @@
     },
     {
       "rel": ".agents/scripts/workflow-board-server.test.mjs",
-      "sha256": "649fecd236d6d9e934861fa4e96fab825798b91e3c14ccb1e9a61b1c8b59f588"
+      "sha256": "28a79b7790448a750a22c1e666dd76d0c8c92120d8795dba24eb792aa1852e4a"
     },
     {
       "rel": ".agents/scripts/workflow-enums.mjs",
-      "sha256": "4661e95cd8114f0ee77f4fc69c5ee7f728b7c62b439c0e9a55903b3fcd387c86"
+      "sha256": "51171a7d2917b18a33cdbc5710e4f0f3e6abeec0b8866e3bda0af11dd45b3fd0"
     },
     {
       "rel": ".agents/scripts/workflow-enums.test.mjs",
-      "sha256": "b0d126d64064f847a24d187daba321bea33e1fdb4a72232ddca6939ad42d5aa9"
+      "sha256": "519b8a416d35c82f9f608f5a78ab7304141205ab6f7464dbdbf4df9b7b1232f5"
     },
     {
       "rel": ".agents/scripts/workflows-check.mjs",
@@ -667,7 +667,7 @@
     },
     {
       "rel": ".agents/workflow-enums.txt",
-      "sha256": "0f568b02674fedebc76bbc069f80dd424867c6190d3b421b81c732f498991d2d"
+      "sha256": "23e9623b63acccea4f3289a3949cd098dc90d8dc74348ab765d3c744ebece6c5"
     },
     {
       "rel": ".agents/workflows/_TEMPLATE.md",
@@ -725,8 +725,8 @@
   "owned": [
     {
       "rel": "AGENTS.md",
-      "sha256": "ce5d7fc5afa28e71873a9e146998db8159c5f475d03dac746378b050cd7779d6",
-      "srcSha256": "9b7ce09f8be0c169aba4d840caddaedabe54d7e8d22196bc02cafdc2fecbe9c5"
+      "sha256": "3d6af32327b7bec0816227b833a36aeb3164a121a70b24de70076e2daee036a2",
+      "srcSha256": "4a96797dce26df2c10e10bb49ee0f86ae68e00a7ab713e49d54f5a074aeee039"
     },
     {
       "rel": "wiki/drafts-archive/README.md",
@@ -803,8 +803,8 @@
     },
     {
       "rel": "workflow/README.md",
-      "sha256": "bf8bbbb7b64ff6a4dab543657650e73dbc66030c39b12daeaca037b6e63e2560",
-      "srcSha256": "bf8bbbb7b64ff6a4dab543657650e73dbc66030c39b12daeaca037b6e63e2560"
+      "sha256": "7c2d1e35ce64e52aaff25d70a67a264301db1cdb1828dd4c29abfcb1f0c44f6d",
+      "srcSha256": "7c2d1e35ce64e52aaff25d70a67a264301db1cdb1828dd4c29abfcb1f0c44f6d"
     },
     {
       "rel": "workflow/regression-checklist.md",
@@ -858,8 +858,8 @@
     },
     {
       "rel": ".github/workflows/kit-ci.yml",
-      "sha256": "85006921aee51763a9864f94604e3f69c8c4db8cc385f0260f8ffcc0e4e77343",
-      "srcSha256": "7cb738f9b1dda787e541e5aab104ef9a651fe18a420fdc55bd761d3c077529b0"
+      "sha256": "482f11bb767cc2dea30fe9b119ad36e4f602b0a5cc55e0c6ced1b0f67b967e61",
+      "srcSha256": "c2525614ff7e58c51de7a17e0e23ffbf6aab8de5655765789a83875500d89587"
     },
     {
       "rel": ".agents/settings.json",

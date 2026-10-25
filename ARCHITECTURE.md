@@ -7,7 +7,7 @@
 ## 1. 一句话定位
 
 把软件工程治理（门禁、确认、溯源）编译成「机器可执行的文件系统协议」：AI 干活，机器把门，
-用户只在风险决策点出现。引擎零运行时依赖纯 JS（node ≥18）；引擎本体约 **1.55 万行**
+用户只在风险决策点出现。引擎零运行时依赖纯 JS（node ≥18）；引擎本体约 **1.66 万行**
 （口径：`src/` + `templates/_agents/scripts/` 的非测试 .mjs；随演进变动，**不是判据**）。
 测试套件数是盘面派生量
 （`src/` + `templates/_agents/scripts/` 两面 glob 枚举），随套件增删变动——权威数见 `npm test` 的
@@ -20,7 +20,7 @@
 templates/（包源，唯一改这里）
    │ flow-kit sync（三态覆盖 + kit.json managed 台账）
    ▼
-.agents/（装副本 —— 装户仓才有；本仓为纯包源，不持装副本）
+.agents/（装副本 —— 装户仓与本仓自举面均有；本仓 2026-10-23 起自举双身份：包源 + 装户 dogfood）
    │ flow-kit add-host（写入宿主文件；--force 刷新）
    ▼
 装户项目根宿主点（.zcode/ 等）
@@ -81,7 +81,7 @@ modules/hosts/{claude,codex,cursor,omp,opencode,trae,zcode}/
   2026-10-13 起分片升为**默认写入口径**（`--no-shard` / `CONFIRM_SHARDED=0` 显式回退主台账）。分片与主台账是
   不同文件，**只有 doc 链能跨来源接续**，故缺锚时参数期直接拒。分片内的行同样受
   检查 15 链校验与行级校验——否则分片等于开一个防伪盲区。
-- **三活文档月分片（ledger-shards.mjs）**：`workflow/{regression-checklist,delegations,papercuts}.md`
+- **四活文档月分片（ledger-shards.mjs）**：`workflow/{regression-checklist,delegations,papercuts,deploy-observations}.md`（deploy-observations 生而分片，2026-10-25）
   三个 append-only 活台账按月分片 `workflow/<ledger>.d/<YYYY-MM>.md`——每次追加全量重写整文件的 blob 膨胀与
   合并冲突面从「全历史」缩到「当月」。读侧 = 主台账 ∪ 全部分片（月序），写侧 = 当月分片；主台账保留头部
   说明/维护规则/表头等人类阅读面。消费方读侧自动合并，无分片时等价原读法。
@@ -102,14 +102,14 @@ modules/hosts/{claude,codex,cursor,omp,opencode,trae,zcode}/
   对质的凭据」。另：driver 是本机态配置不跨机共享（漏配退化为文本冲突，**不静默丢数据但要人工解**）；
   `merge=jsonl-union` 属 `.gitattributes`，而该文件是 **owned**（`sync` 永不覆盖）→ **存量装户需手动补一行**。
 
-## 4. 门禁体系（26 项检查 + 3x + 三层布防）
+## 4. 门禁体系（27 项检查 + 3x + 三层布防）
 
 ```
 .githooks/pre-commit（node 化门序，门脚本缺失 fail-closed；前六道按暂存面增量触发）：
    闭环配对 → 泳道完整性 → wiki 台账 → 索引漂移（暂存触 workflow 面跑 gen-workflow-index --check）→
    常驻面体积预算 → 确认台账不变量（暂存触主台账 ∪ confirmations.d/ 分片）→ 项目门禁挂载点 → 敏感扫描+条件构建
    ↓
-check-loop.mjs（26 项检查 + 3x，断言数随演进变动、不在此硬编码——权威判据看该文件头部清单）——闭环完整性总裁判
+check-loop.mjs（27 项检查 + 3x，断言数随演进变动、不在此硬编码——权威判据看该文件头部清单）——闭环完整性总裁判
    ├─ check-hygiene.mjs（2/9/11/12/13）        ├─ check-stage-index.mjs（7）
    ├─ check-metric-claims.mjs（16）             ├─ 模块化检查件：21 spec 验证落地 / 22 机制台账 / 23 收敛对账
    │                                             （advisory+hard 两档）/ 24 归因 / 25 预判一致 / 26 漏斗阈值
@@ -117,12 +117,12 @@ check-loop.mjs（26 项检查 + 3x，断言数随演进变动、不在此硬编�
    分道（机读单源 LANE_OF，判据零变化只归属运行面）：缺省只跑硬门（关单/pre-push 面）；
    --hygiene 只跑卫生段（WARN 面不进关单）；--all 两段都跑
    ↓
-verify.mjs（七门 GATES 编排：scripts-syntax → engine-tests → workflows-check → rule-budget --all →
+verify.mjs（八门 GATES 编排：scripts-syntax → engine-tests → workflows-check → local-gate-config → rule-budget --all →
    effective-policy --check → check-loop → ledger-invariant；逐门 pass/fail、fail-fast、尾部输出未执行门清单；
    全绿落绿凭证 verifications.jsonl + 自动重生成 workflow/verify-evidence.md，--doc 绑单）
    ——关单与装户远端门（kit-ci.yml）跑同一条命令，本地/远端单源
    ↓
-CI（.github/workflows/ci.yml，纯包源仓的**唯一**机器门——本仓无本地钩子，故每道门都在编排里点名）：
+CI/自举机器门三件套（.github/workflows/ci.yml 四宫格矩阵 + kit-ci.yml 自举装户面 verify + 本地 .githooks/，2026-10-23 自举后本仓本地钩子在位）：
    ├─ `test`：四宫格矩阵（node 18/22 × ubuntu/windows）跑 `npm test`（eslint + 全量套件）
    ├─ `engine-integrity`：门禁本体完整性门（入库基线 + 跨提交锚，见 §8）+ 跨宿主薄适配漂移门（--strict）
    └─ `jscpd-drift`：**手动触发**的 advisory 报告器，恒 exit 0，不在 push/PR 路径上
@@ -132,7 +132,7 @@ CI（.github/workflows/ci.yml，纯包源仓的**唯一**机器门——本仓�
   状态+L3 复核随 1 同遍实现）2 占位符 3 复盘三件套+回路 4 引用 5 状态+L3复核 6 角色契约 7 阶段索引
   8 验收对账（凭证/SHA/场景覆盖） 9 文件名 10 迁移一致 11 生成物漂移 12 模块词表 13 体积预算 14 确认留痕
   15 指纹+台账+哈希链（hard） 16 量化签名 17 发版收口（hard） 18 委派对账 19 逐阶段审计 20 测试覆盖；
-  21–26 与 3x（incident 防复发验证证据门，hard）为 2026-10-13 B6b-2 自源仓回灌段。
+  21–26 与 3x（incident 防复发验证证据门，hard）为 2026-10-13 B6b-2 自源仓回灌段；27（回归清单活文档引用一致性）为 2026-10-21 泛化落地段。
   **权威清单 = check-loop.mjs 头部**——段数/断言数是派生量，不在此硬编码。
 - **生效日锚**：机制上线前的存量单不被新机制追责（`verifySince`/`verifyDocSince`/`delegationSince` 等）——
   「不追溯」与「不伪造」是门禁可信度的两根柱子。
@@ -176,8 +176,7 @@ CI（.github/workflows/ci.yml，纯包源仓的**唯一**机器门——本仓�
 ## 6. 自我度量
 
 gate-seg 插桩（按段计时/计数）→ `agg-gate-stats`（噪声率 top/死检查）；`delegations.md`
-双归因（返工×N / 门禁噪声×M）→ 月度一次通过率（门槛 ≥90%）；DASHBOARD/metrics 生成物带
-`--check` 漂移门。判定流水：check-loop 真实运行自动落账 `.agents/judgments.jsonl` →
+双归因（返工×N / 门禁噪声×M）→ 月度一次通过率（门槛 ≥90%）；DASHBOARD 生成物带 `--check` 漂移门（metrics 快照 by design 不设门——历史记录不做漂移校验）。判定流水：check-loop 真实运行自动落账 `.agents/judgments.jsonl` →
 `agg-judgments`（月度×规则聚合）+ `mechanism-registry.md`（机制使用量台账：一进一出、退役阈值、
 月度对账——机制该升格还是该退役从此查账不查印象）。papercut 债务回路（`papercut-debt-sensor` →
 `papercut-debt-controller` → `skills/papercut-fix` 技能，口径单源 `loop/papercut-debt/DESIGN.md`，
@@ -192,7 +191,7 @@ gate-seg 插桩（按段计时/计数）→ `agg-gate-stats`（噪声率 top/死
 
 - 台账可伪造的完整边界见 §3 与 policy.mjs 注释（本地信任边界的诚实口径）。
 - 缓做（papercuts 在案）：MCP server 化、多仓 fleet 视图、门禁增量缓存（样本<5 不决策）、
-  stage-gates 机器层 L2 快车道（治理语义留拍板）；verify 的 lane-surface-ci 门（第八门候补——kit 侧
+  stage-gates 机器层 L2 快车道（治理语义留拍板）；verify 的 lane-surface-ci 门（第九门候补——第八门位已被 local-gate-config 占用；kit 侧
   `--ci` 支持核实后评估）；跨提交锚只比硬拦单位数、不比 sha（「保计数改语义 + `--update`」两层全绿，
   补法 = 锚层也比对 sha，代价是每次合法演进付一份显式凭据，改判据面未决）。
 
@@ -202,7 +201,8 @@ gate-seg 插桩（按段计时/计数）→ `agg-gate-stats`（噪声率 top/死
 
 | 源件 | 不回灌理由 |
 |---|---|
-| `check-query-contract` / `check-schema-residue` / `check-audit-fields` / `check-delete-guard` / `check-notify-guard` / `check-local-gates` | dotnet 工具链专用守卫——kit 的 doctor + add-gate 生态承担等价职责 |
+| `check-query-contract` / `check-schema-residue` / `check-audit-fields` / `check-delete-guard` / `check-notify-guard` | dotnet 工具链专用守卫——kit 的 doctor + add-gate 生态承担等价职责 |
+| `check-local-gates` | （2026-10-25 更新）同职责通用面已回灌为 `check-local-gate-config.mjs`（kit 判据适配，verify 第 4 门）——不回灌结论就此作废 |
 | `ci-push-before` | Azure DevOps 编排件——kit 远端门形态 = kit-ci.yml + 「同入口命令 + 服务端分支策略」等价接入 |
 | `gen-narrative-claims` + `check-narrative-incremental` | 实践手册承重面、kit 无消费方——等价覆盖 = 检查 11/16 + index-incremental 门 + effective-policy 门 |
 | `skills/shipyard-workflow-closeout` | 源仓品牌关单序列——kit 关单核对面由 test.md §6 关单链承担 |

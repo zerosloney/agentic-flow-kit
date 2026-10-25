@@ -23,10 +23,10 @@
 
 ### 门禁与提交
 
-- `.githooks/`（经 `core.hooksPath` 挂载，本地 clone 后执行 `git config core.hooksPath .githooks`）：pre-commit（闭环配对 / 泳道完整性 / wiki 台账 / 规则面预算 / 确认台账不变量 / 敏感信息扫描与条件构建）、pre-push（闭环断档扫描）、commit-msg、post-commit、pre-merge-commit。
+- `.githooks/`（经 `core.hooksPath` 挂载，本地 clone 后执行 `git config core.hooksPath .githooks`）：pre-commit（闭环配对 / 泳道完整性 / wiki 台账 / 索引漂移 / 规则面预算 / 确认台账不变量 / 敏感信息扫描与条件构建）、pre-push（闭环断档扫描）、commit-msg、post-commit、pre-merge-commit。
 - **CI 远端门（2026-10-07 起）**：`.github/workflows/kit-ci.yml`（owned）在 GitHub runner 复跑 `node .agents/scripts/verify.mjs`（云端兜底本地钩子）；非 GitHub 装户可删，等价门 = 同入口命令 + 服务端分支策略（人工一次性配置，机器不校验）。
 - **`git commit` / `git merge` / `git push` 三处一律禁 `--no-verify`**——被拦说明产出不合规，按提示修完原路重试。
-- 项目专属门禁挂 `.agents/hooks/local-pre-commit`。装户五条硬规则（配对、验收、确认留痕、敏感信息、双源台账）与 `audit` 档见 `workflow/README.md`「硬规则」。
+- 项目专属门禁挂 `.agents/hooks/local-pre-commit`。装户七条硬规则（配对、验收、确认留痕、敏感信息、双源台账、台账不可变、台账并发与修剪）与 `audit` 档见 `workflow/README.md`「硬规则」。
 - 提交遵循 Conventional Commits 中文（feat / fix / docs / style / refactor / perf）。L1+ 三段式闭环链：`docs(*)` approved 留痕 → 代码 → 关单 `docs(*)`，相邻提交即同一闭环（2026-10-04 修订）。
 - **确认门（2026-09-27 起）**：intent/spec/plan 的 approved/done 与 incident 的 fixed/closed（两跳、无单跳）唯一入口 = `node .agents/scripts/confirm-doc.mjs <path>`，放弃态走显式 `--to superseded|cancelled`（合法前态见脚本提示；四终态同样内容绑定），两形态：① 用户终端亲手运行键入「可以」（TTY，AI 会话内被拒）；② **对话委托代录**——用户在对话内明确确认后，AI 跑 `confirm-doc.mjs <path> --delegated "<授权摘要>"` 逐件代录（默认一次一份，多份并录被拒），台账如实记 `source: chat-delegated`，永不伪装 TTY 行（check-loop 15 指纹+台账对账拦截，与 source 无关）；L1 协作道可 `--batch` 多份一次代录（台账 `brief:true`，15 并录告警豁免；L2/L3 仍逐份）。
 - **改动面 scope = 授权的机器事实（2026-10-09 起）**：confirm-doc 落账自动记 `scope{files,sha256}`（被确认文档 + `git status` 实测未提交改动集，机器派生、**AI 无输入面**）。分辨力由 scope + 指纹承担，`--delegated` 的摘要降级为人类可读留痕——**「每次换一句原话」纪律退役**，复用同一句摘要不再削弱任何判据。check-loop 15 校验受管行带 scope 且摘要自洽（`policyVersion ≥ 7` 起，旧版本与存量行零新增告警）。
@@ -51,7 +51,7 @@
 
 ## 项目适配区（项目自填）
 
-- **构建 / 测试 / 类型检查命令**（静态门，各阶段命令引用此处口径）：构建 = npm run build；测试 = npm test；类型检查 = npx tsc --noEmit（或 npm run typecheck）
+- **构建 / 测试 / 类型检查命令**（静态门，各阶段命令引用此处口径）：纯 JS 包无构建步与类型检查；测试 = npm test（引擎套件全量）；发布产物由 prepack 生成
 - **运行时环境**（端口 / 进程 / 终端差异）：`.agents/notes/runtime-env.md`
 - **目录级规则**：如 `backend/AGENTS.md`、`frontend/AGENTS.md`（如有）——目录级约定不回填本文件
 - **工程原则**（起草 / 复核对照用，不入机器判据）：项目品味条款逐行列此——示例：简洁优先、直接用平台能力不另包一层｜新增依赖须证不可替代｜禁 speculative 功能（「非目标」节能省则省）｜spec 写 WHAT/WHY，HOW 落 plan。消费：起草 intent / spec 对照自查（「约束遵守映射」逐行对账）与独立复核 Standards 轴；违反本节是复核意见（人工判），违反红线才判低升档（机器）。条款装户自填自持

@@ -579,7 +579,7 @@ export function runCheckLoop(opts = {}) {
     const incSt = fmGet(inc, '状态');
 
     if (!inSet(incSt, ENUMS['incident.status.all'])) {
-      warnings.push(`- [WARN 状态非法] incident 状态必须为 open/fixed/closed:${name}（frontmatter 状态键当前值:『${incSt || '缺失'}』）`);
+      warnings.push(`- [WARN 状态非法] incident 状态必须为 ${ENUMS['incident.status.all'].join('/')}:${name}（frontmatter 状态键当前值:『${incSt || '缺失'}』）`);
     }
 
     if (fmGet(inc, '流程') !== 'legacy') {

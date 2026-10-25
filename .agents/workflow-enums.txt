@@ -14,8 +14,12 @@ doc.status.confirmed=approved done superseded cancelled
 doc.status.active=draft approved
 doc.status.terminal=done superseded cancelled
 doc.status.abandoned=superseded cancelled
-incident.status.all=open fixed closed
+incident.status.all=open fixed closed superseded cancelled
 incident.status.active=open
+# incident 放弃态（2026-10-25 audit-fixes 枚举收口）：--to superseded/cancelled 是 confirm-doc 合法跳转（测试钉死），
+#   all 扩全集后检查 3 认这两态（消「状态非法」永不可消退 WARN）；入口确认集（stage-gates）= all 减 abandoned——
+#   与 doc 侧 ENTRY_STATUSES=confirmed 减 abandoned 对称（未确认即放弃的 incident 不给 spec 背书）。
+incident.status.abandoned=superseded cancelled
 # 归因枚举（2026-10-13 自 Shipyard 回灌 incident-attribution）：归因检查（B6b 落地后编号以 check-loop.mjs 头部清单为准）校验 incident frontmatter 的「来源:」/「影响环境:」。
 #   source = 谁发现（self=AI 自查 / user=用户报出 / test=测试或实测暴露 / monitor=监控告警）
 #   env    = 缺陷触达的环境（none=未触达任何运行环境，如仅静态检查发现）

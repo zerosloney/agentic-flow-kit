@@ -1,23 +1,26 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-25T10:40:38.508Z",
+  "generatedAt": "2026-10-25T17:06:14.961Z",
   "files": {
     ".github/workflows/ci.yml": {
-      "sha256": "e9cffb90dec8f0a49bfe231a13fb8df375a2494cc75c38d991b5eb7c7be104b5",
-      "hard": 3
+      "sha256": "95f066f55051bfdb581b930b202e70084566e6f49da37a326362048bfe9e50d9",
+      "hard": 3,
+      "note": "audit-fixes：挂载自检两行口径 / incident 枚举收口 / release 前置 CI 门（自审修复批）"
     },
     ".github/workflows/kit-ci.yml": {
-      "sha256": "85006921aee51763a9864f94604e3f69c8c4db8cc385f0260f8ffcc0e4e77343",
+      "sha256": "482f11bb767cc2dea30fe9b119ad36e4f602b0a5cc55e0c6ced1b0f67b967e61",
       "hard": 3,
-      "note": "自举连带修复批：活文档门裸名误报判据收窄（+断言）、S14 baseline 改锚、kit-ci 台账基线 env"
+      "note": "audit-fixes：挂载自检两行口径 / incident 枚举收口 / release 前置 CI 门（自审修复批）"
     },
     ".github/workflows/release.yml": {
-      "sha256": "c8032a042da93974d7481b37a5a51eefa421b1eacc065424f35095ccd00b7c6b",
-      "hard": 0
+      "sha256": "7a4db4bdd2e488b639c89dea0668ab801bff78a509937e01b59513376e41ab01",
+      "hard": 0,
+      "note": "audit-fixes：挂载自检两行口径 / incident 枚举收口 / release 前置 CI 门（自审修复批）"
     },
     "templates/AGENTS.md": {
-      "sha256": "9b7ce09f8be0c169aba4d840caddaedabe54d7e8d22196bc02cafdc2fecbe9c5",
-      "hard": 28
+      "sha256": "4a96797dce26df2c10e10bb49ee0f86ae68e00a7ab713e49d54f5a074aeee039",
+      "hard": 28,
+      "note": "audit-fixes：挂载自检两行口径 / incident 枚举收口 / release 前置 CI 门（自审修复批）"
     },
     "templates/_agents/control-surfaces.txt": {
       "sha256": "ae6072b58fde4cf2ad65ce27d0216133dabbd189b0542a0dbf11bbd9e0608407",
@@ -95,9 +98,9 @@
       "note": "source-port-batch：语法门递归+fail-closed / 委派在场门 / deploy-observations 第四台账 / verify 第八门挂载自检——源仓 97b9b247+b38f9f60 优化1/4/5 回灌"
     },
     "templates/_agents/scripts/check-loop.mjs": {
-      "sha256": "f2bb63de1da292ba64b6c8f16819bc4afbb122cd40b6c64f725f867912471cbe",
+      "sha256": "d27bc6a8a30d116728c7955f137f7d3d11c4b7752b6a37e1c854a89b83d910e2",
       "hard": 32,
-      "note": "source-port-batch-2：补偿行生成器 append-compensation + planConfirmedFor 关单完成度门（源仓 d134be8f/97b9b247 收窄回灌）"
+      "note": "audit-fixes：挂载自检两行口径 / incident 枚举收口 / release 前置 CI 门（自审修复批）"
     },
     "templates/_agents/scripts/check-metric-claims.mjs": {
       "sha256": "2c2d8615e9418117d43202dc67cd4131e43fb6c095686363dfcd2fd2cb542f2a",
@@ -286,9 +289,9 @@
       "hard": 3
     },
     "templates/_agents/scripts/stage-gates.mjs": {
-      "sha256": "1a89b34383142b897439af0a0a468223bfaa4802e8128c9b1c27c3f6c11b5856",
+      "sha256": "5fc53c3a1a91c7c749d6047b5c59c43fb2678add791cc0ae4b3c0f0e6c2a00b8",
       "hard": 0,
-      "note": "source-port-batch-2：补偿行生成器 append-compensation + planConfirmedFor 关单完成度门（源仓 d134be8f/97b9b247 收窄回灌）"
+      "note": "audit-fixes：挂载自检两行口径 / incident 枚举收口 / release 前置 CI 门（自审修复批）"
     },
     "templates/_agents/scripts/trust-mode.mjs": {
       "sha256": "22ff792202af214245dc67d3d5f8efb407cb61cd27cb306e833db79a8b3d8b60",
@@ -316,16 +319,18 @@
       "hard": 1
     },
     "templates/_agents/scripts/workflow-enums.mjs": {
-      "sha256": "4661e95cd8114f0ee77f4fc69c5ee7f728b7c62b439c0e9a55903b3fcd387c86",
-      "hard": 0
+      "sha256": "51171a7d2917b18a33cdbc5710e4f0f3e6abeec0b8866e3bda0af11dd45b3fd0",
+      "hard": 0,
+      "note": "audit-fixes：挂载自检两行口径 / incident 枚举收口 / release 前置 CI 门（自审修复批）"
     },
     "templates/_agents/scripts/workflows-check.mjs": {
       "sha256": "7c3a4f2c22d6a802901cfdc1baa9309e9b2769ac11fb5e33d0bd6c02375a9d67",
       "hard": 1
     },
     "templates/_agents/workflow-enums.txt": {
-      "sha256": "0f568b02674fedebc76bbc069f80dd424867c6190d3b421b81c732f498991d2d",
-      "hard": 10
+      "sha256": "23e9623b63acccea4f3289a3949cd098dc90d8dc74348ab765d3c744ebece6c5",
+      "hard": 11,
+      "note": "audit-fixes：挂载自检两行口径 / incident 枚举收口 / release 前置 CI 门（自审修复批）"
     },
     "templates/_agents/workflow-modules.txt": {
       "sha256": "d03593598f6b0495ebc650019c474da0d6538da06c6f58ccc00bd5a9cdc760f1",
@@ -357,8 +362,9 @@
       "hard": 5
     },
     "templates/_github/workflows/kit-ci.yml": {
-      "sha256": "7cb738f9b1dda787e541e5aab104ef9a651fe18a420fdc55bd761d3c077529b0",
-      "hard": 3
+      "sha256": "c2525614ff7e58c51de7a17e0e23ffbf6aab8de5655765789a83875500d89587",
+      "hard": 3,
+      "note": "audit-fixes：挂载自检两行口径 / incident 枚举收口 / release 前置 CI 门（自审修复批）"
     }
   }
 }

@@ -28,7 +28,7 @@ const fullSetup = (root) => {
   for (const h of ['pre-commit', 'pre-merge-commit', 'commit-msg', 'pre-push', 'post-commit']) {
     fs.writeFileSync(path.join(root, '.githooks', h), '#!/bin/sh\nexit 0\n', 'utf8');
   }
-  fs.writeFileSync(path.join(root, '.gitattributes'), '.agents/*.jsonl merge=jsonl-union\n', 'utf8');
+  fs.writeFileSync(path.join(root, '.gitattributes'), '.agents/*.jsonl merge=jsonl-union\n.agents/confirmations.d/*.jsonl merge=jsonl-union\n', 'utf8');
   gitAt(root, 'init', '-q');
   gitAt(root, 'config', 'core.hooksPath', '.githooks');
   gitAt(root, 'config', 'merge.jsonl-union.driver', 'node .agents/scripts/git-merge-jsonl.mjs %O %A %B');
@@ -92,6 +92,20 @@ const run = (root, args = [], env = {}) => spawnSync(process.execPath, [CHECKER,
   check('场景 5：非 git 仓库 → loud-skip exit 0',
     r.status === 0 && r.stdout.includes('非 git 仓库'),
     `exit=${r.status}\n${r.stdout}\n${r.stderr}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- ⑥ 两行口径（2026-10-25 audit-fixes）：缺分片行 → WARN / --strict 拦 ----
+{
+  const root = mkroot();
+  fullSetup(root);
+  fs.writeFileSync(path.join(root, '.gitattributes'), '.agents/*.jsonl merge=jsonl-union\n', 'utf8'); // 只有一行（旧口径形态）
+  const r = run(root);
+  check('场景 6：缺分片行 → WARN 点名两行口径',
+    r.status === 0 && r.stdout.includes('两行') && r.stdout.includes('⚠️ WARN'),
+    `exit=${r.status}\n${r.stdout}\n${r.stderr}`);
+  const r2 = run(root, ['--strict']);
+  check('场景 6：缺分片行 --strict → exit 1', r2.status === 1, `exit=${r2.status}`);
   fs.rmSync(root, { recursive: true, force: true });
 }
 

@@ -2,6 +2,25 @@
 
 已发布版本的摘要。**能力清单的单一真相源即本文件**——README「当前能力」节只讲语义并指向此处，不重复枚举（2026-10-08 收敛：两处各自枚举导致 README 长期停在 0.8.0 的过期特性清单）。
 
+## Unreleased
+
+- fix(gate)：**流程自审修复批**（2026-10-25 audit-fixes，incident L2 闭环；自审发现 32 项中的实现级
+  四项 + 文档对齐批 20 项随批）：
+  ① **挂载自检两行口径**——glob 不跨目录，`.gitattributes` 须主台账与 `confirmations.d/` 分片各一行
+  `merge=jsonl-union`（此前一处口径分裂且无门能验，本仓自身即处于分片合并退化文本冲突态）——判据
+  改验两行 + 测试场景 6 + 本仓 .gitattributes 补第二行 + README/ARCHITECTURE 口径统一；
+  ② **incident 放弃态枚举收口**——`--to superseded/cancelled` 是 confirm-doc 合法跳转（测试钉死）而
+  枚举单源不含 → 落盘即检查 3「状态非法」WARN 永不可消退（违「无不可消除噪声」红线）。收口：
+  `incident.status.all` 扩全集 + 新增 `incident.status.abandoned` 键（入口确认集 = all 减 abandoned，
+  与 doc 侧对称——未确认即放弃的 incident 不给 spec 背书）+ 检查 3 文案动态化；
+  ③ **release 前置 CI 门**——release.yml 增「该提交的 ci.yml conclusion 须 success」步骤（1.8.11
+  首推实录：CI 已红 tag 照发，靠 release 自带 npm test 二道拦截侥幸兜住）；
+  ④ **deploy-observations 升级指引**——主表属 owned、sync 不下发，README「存量装户迁移指引」补条
+  （managed 指向 owned 件的悬空指针收口）。
+  文档对齐批（20 项）：ARCHITECTURE/README/AGENTS/ci.yml/kit-ci.yml 注释随自举与两批回灌对齐
+  （「纯包源不自举/无本地钩子」反转为自举双身份、七门→八门、26→27 项、台账三→四件、§1.3 断锚、
+  不回灌清单作废行等）。测试：npm test 82 套件 0 失败（13 个内联枚举夹具随键扩展）。
+
 ## 1.8.11
 
 - feat(gate)：**源仓策略分歧批回灌二（两件）**（2026-10-25 source-port-batch-2，L2 三件套；前单遗留

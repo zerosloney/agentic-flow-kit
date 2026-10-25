@@ -21,6 +21,18 @@ jobs:
       - name: 校验 tag 与 package.json 版本一致
         run: |
           node -e "const v=require('./package.json').version;const t=process.env.GITHUB_REF_NAME.replace(/^v/,'');if(v!==t){console.error('tag v'+t+' != package.json '+v+'——先改版本再打 tag');process.exit(1)}"
+      # CI conclusion 门（2026-10-25 audit-fixes）：CI 红不发布——tag 推送不构成对 push CI 的
+      # workflow 依赖，在此显式查该提交的 ci.yml 最新结论（1.8.11 首推实录：CI 已红 tag 照发）。
+      - name: CI 前置门（该提交的 ci workflow 须 success）
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -e
+          C="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/ci.yml/runs?head_sha=${GITHUB_SHA}&per_page=1" --jq '.workflow_runs[0].conclusion // "none"')"
+          echo "ci.yml conclusion for ${GITHUB_SHA}: ${C}"
+          if [ "${C}" != "success" ]; then
+            echo "CI 未通过（conclusion=${C}）——先修 CI 再发版；本 tag 作废，修后删重打"; exit 1
+          fi
       - run: npm test
       - run: npm publish --provenance
         env:

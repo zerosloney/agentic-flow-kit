@@ -2,7 +2,7 @@
 // check-local-gate-config.mjs — 本地门禁挂载自检（verify 门 WARN 档；2026-10-25 source-port-batch，自源仓优化1 回灌）
 //
 // 动机：core.hooksPath 不随 clone 传播，漏配 = 全部门禁静默失效。doctor 是 npx 手动面（「人记得跑」），
-//   本门把同一 git 面（① core.hooksPath ② merge.jsonl-union driver ③ .gitattributes 的 jsonl-union 行
+//   本门把同一 git 面（① core.hooksPath ② merge.jsonl-union driver ③ .gitattributes 的 jsonl-union 两行（主台账+分片）
 //   ④ .githooks 五钩子文件在位）挂进 verify 门表，每次关单 / CI 自动对质。
 //   kit 判据适配（对比源仓）：源仓另有 merge.ours / appsettings.json 两项（业务私有），kit 面只保留
 //   引擎通用四项；doctor.mjs 的 hooksPath 检查与本门 ① 单源对齐（一边改另一边须跟）。
@@ -64,8 +64,11 @@ const results = [
     fix: `git config merge.jsonl-union.driver "${JSONL_DRIVER}"`,
   },
   {
-    ok: /^\.agents\/\*\.jsonl\s+merge=jsonl-union$/m.test(gaText),
-    name: '.gitattributes 含 .agents/*.jsonl merge=jsonl-union 行（owned 文件，sync 不覆盖——存量装户须手动补）',
+    // 两行口径（2026-10-25 audit-fixes）：glob 不跨目录——主台账与 confirmations.d/ 分片各需一行
+    //（单行时分片冲突退化为文本冲突，不丢数据但需人工解；workflow/README 迁移指引同口径）
+    ok: /^\.agents\/\*\.jsonl\s+merge=jsonl-union$/m.test(gaText)
+      && /^\.agents\/confirmations\.d\/\*\.jsonl\s+merge=jsonl-union$/m.test(gaText),
+    name: '.gitattributes 含主台账与分片两行 merge=jsonl-union（owned 文件，sync 不覆盖——存量装户须手动补两行）',
     fix: null, // 仓库侧文件：git checkout -- .gitattributes 恢复（被删时）
   },
   {

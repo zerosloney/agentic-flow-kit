@@ -20,11 +20,11 @@ const throwsWith = (fn, kw) => {
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ENUMS_TXT = path.join(SCRIPT_DIR, '..', 'workflow-enums.txt');
 
-// ---- S1 模块级 ENUMS 即加载即校验（真实文件），10 键齐（2026-10-13 自 Shipyard 回灌归因两键）----
+// ---- S1 模块级 ENUMS 即加载即校验（真实文件），11 键齐（2026-10-13 归因两键；2026-10-25 audit-fixes 增 incident abandoned）----
 {
   const keys = Object.keys(ENUMS).sort();
-  check('S1 真实单源文件加载成功且 10 键齐',
-    keys.length === 10 && keys.join(',') === 'doc.status.abandoned,doc.status.active,doc.status.all,doc.status.confirmed,doc.status.terminal,incident.env.all,incident.source.all,incident.status.active,incident.status.all,level.all',
+  check('S1 真实单源文件加载成功且 11 键齐',
+    keys.length === 11 && keys.join(',') === 'doc.status.abandoned,doc.status.active,doc.status.all,doc.status.confirmed,doc.status.terminal,incident.env.all,incident.source.all,incident.status.abandoned,incident.status.active,incident.status.all,level.all',
     JSON.stringify(keys));
 }
 
@@ -73,7 +73,7 @@ const ENUMS_TXT = path.join(SCRIPT_DIR, '..', 'workflow-enums.txt');
   const bad = {
     'doc.status.all': ['draft', 'approved', 'done'], 'doc.status.confirmed': ['approved', 'done', 'ghost'],
     'doc.status.active': ['draft'], 'doc.status.terminal': ['done'], 'doc.status.abandoned': ['cancelled'],
-    'incident.status.all': ['open'], 'incident.status.active': ['open'], 'level.all': ['L0'],
+    'incident.status.all': ['open', 'cancelled'], 'incident.status.active': ['open'], 'incident.status.abandoned': ['cancelled'], 'level.all': ['L0'],
   };
   check('S7 子集不变量破抛错', throwsWith(() => validateEnums(bad), '不变量破'));
 }

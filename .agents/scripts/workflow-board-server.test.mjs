@@ -64,6 +64,7 @@ const CHECK_LOOP = path.join(SCRIPT_DIR, 'check-loop.mjs');
     'doc.status.abandoned=superseded cancelled',
     'incident.status.all=open fixed closed',
     'incident.status.active=open',
+  'incident.status.abandoned=superseded cancelled',
     'level.all=L1 L2 L3',
   ].join('\n') + '\n');
   const w = (rel, c) => fs.writeFileSync(path.join(T, rel), c);

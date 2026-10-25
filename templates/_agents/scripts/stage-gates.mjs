@@ -35,11 +35,14 @@ import { readLedgerRows } from './ledger-loader.mjs';
 //   workflow-enums.mjs」却自己内联一份——正是该修的口径。两处均改为从单源派生，语义逐键留痕：
 //   ENTRY_STATUSES = doc.status.confirmed（已确认：approved/done/superseded/cancelled）**减** doc.status.abandoned
 //     （已放弃：superseded/cancelled）→ 剩 approved/done。放弃态是终态，不能当有效入口，故须相减。
-//   INCIDENT_STATUSES = incident.status.all（open/fixed/closed）原样—— incident 无 abandoned 键，
+//   INCIDENT_STATUSES = incident.status.all 减 abandoned（2026-10-25 audit-fixes 收口；原样 all 已含放弃态）——
 //     三态皆可作入口（spec/plan 须先于 fixed 起草，故 open 即有效态，见文件头 :8）。
 import { ENUMS } from './workflow-enums.mjs';
 export const ENTRY_STATUSES = ENUMS['doc.status.confirmed'].filter((s) => !ENUMS['doc.status.abandoned'].includes(s));
-export const INCIDENT_STATUSES = ENUMS['incident.status.all'];
+export const INCIDENT_STATUSES =
+  // 2026-10-25 audit-fixes：all 扩全集（含放弃态）后，入口确认集仍排除 abandoned——与 doc 侧
+  // ENTRY_STATUSES = confirmed 减 abandoned 对称（未确认即放弃的 incident 不给 spec 背书）。
+  ENUMS['incident.status.all'].filter((s) => !ENUMS['incident.status.abandoned'].includes(s));
 
 // readFm：frontmatter 区（首 --- 至闭合 ---）取单字段值；无 frontmatter / 无该键 → ''
 export function readFm(abs, key) {

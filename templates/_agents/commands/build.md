@@ -39,7 +39,7 @@ next: .agents/commands/test.md
    - L2/L3 按 4 节填写:改动方案 / 任务拆解(每个任务有判据) / 执行顺序 / 验证计划（与 fill-plan.mjs 单源一致）
    - L1 使用 Quick-Plan 极简三节:改动方案 / 约束与风险(原 Spec 核心) / 验证计划；多文件多步骤时可补任务拆解/执行顺序
 3. 停下,输出 plan 草稿全文给用户过目,一句"可以"即确认。**逐件确认**:入口文档 / spec / plan 各自的确认点不得并作一次,plan 草稿须全文过目(不接受摘要代替)。**逐件代录**:`--delegated "<授权摘要>"` 每件单独一次——摘要为人类可读留痕,复用同句不削弱判据(分辨力由落账自动记录的改动面 `scope{files,sha256}` 与文档指纹承担,2026-10-09 起)。
-   **确认落态**：唯一入口 `node .agents/scripts/confirm-doc.mjs <path>`（draft→approved / approved→done；TTY 两形态 / 一次一份多份并录被拒 / 台账对质全口径见根 `AGENTS.md` §1.3 确认门）。
+   **确认落态**：唯一入口 `node .agents/scripts/confirm-doc.mjs <path>`（draft→approved / approved→done；TTY 两形态 / 一次一份多份并录被拒 / 台账对质全口径见根 `AGENTS.md`「门禁与提交」确认门）。
 4. 确认后 → plan 状态 draft → approved,并在 plan 内补「确认与复核」节(确认结果 + 日期)。确认环节须在文档留痕:`approved` 是确认的机器可见态,`done` 只在关单出现,禁从 `draft` 直跳 `done`;确认后立即 `docs(workflow)` 单独提交留痕(根 `AGENTS.md` 提交约定;check-loop 检查 14 口径)。
 
 ### 1.2 进计划模式列改动

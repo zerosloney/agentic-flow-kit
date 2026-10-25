@@ -45,6 +45,6 @@ description: Design 阶段 · 起 spec（L2/L3 强制，L1 可省略直接进 wf
 ## 4. 确认后
 
 - spec 状态 draft → approved
-- **确认落态**：唯一入口 `node .agents/scripts/confirm-doc.mjs <path>`（draft→approved / approved→done；TTY 两形态 / 逐件代录（摘要可复用——分辨力由 scope+指纹承担）/ 台账对质全口径见根 `AGENTS.md` §1.3 确认门）。
+- **确认落态**：唯一入口 `node .agents/scripts/confirm-doc.mjs <path>`（draft→approved / approved→done；TTY 两形态 / 逐件代录（摘要可复用——分辨力由 scope+指纹承担）/ 台账对质全口径见根 `AGENTS.md`「门禁与提交」确认门）。
 - 立即 `docs(workflow)` 单独提交留痕(根 `AGENTS.md` 提交约定;check-loop 检查 14 口径)
 - 进 `next: .agents/commands/build.md`

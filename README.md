@@ -49,9 +49,12 @@ node .agents/scripts/confirm-doc.mjs workflow/intents/<文件>.md   # 终端里�
 
 哈希链的域是「**同一 doc 的逻辑序**」而非文件物理序（生效日锚，缺键回退旧口径，存量零变化），因此上面三种协作都不打断它；就地改行、删行、插行三类篡改照拦。诚实边界：manifest 是可写文件，**刻意伪造即可让任意删行合法化**——与「台账本地可写」同级，本通道只把「顺手手改」抬到「提交一份可被 git 历史对质的凭据」。
 
-> **存量装户迁移动作（升级后必做）**：`merge=jsonl-union` 属 `.gitattributes`，而该文件是**项目自持（owned）**、`sync` 永不覆盖——升级后**不会自动获得**。需手动在目标仓 `.gitattributes` 补一行 `.agents/*.jsonl merge=jsonl-union`。driver 是本机态配置、不跨机共享，`init` 会自动配；漏配则退化为文本冲突（**不静默丢数据，但需人工解**）。
+> **存量装户迁移动作（升级后必做）**：`merge=jsonl-union` 属 `.gitattributes`，而该文件是**项目自持（owned）**、`sync` 永不覆盖——升级后**不会自动获得**。需手动在目标仓 `.gitattributes` 补**两行**（glob 不跨目录，主台账与分片各一行）：
+`.agents/*.jsonl merge=jsonl-union` 与 `.agents/confirmations.d/*.jsonl merge=jsonl-union`（2026-10-25 audit-fixes 收口两行口径；漏分片行则分片合并退化文本冲突——不丢数据但需人工解；挂载自检门验两行）。driver 是本机态配置、不跨机共享，`init` 会自动配。
 
 > **存量装户迁移指引（级别 L0 退役，`level.all` 收敛为 `L1 L2 L3`）**：升级前已按 L0 定级的存量文档，`sync` 升级后把 frontmatter `级别: L0` 改为 `L1`，或在行首加 `流程: legacy`（存量豁免通路，跳过级别/配对检查）——不改会被 incident 级别枚举校验出 WARN「级别缺失」，且 `--batch` / `--auto` 自治门按 suspect 拒（fail-closed）。
+
+> **存量装户迁移指引（deploy-observations 发布观察台账，2026-10-25 起）**：主表 `workflow/deploy-observations.md` 属项目自持（owned）、`sync` 不下发——升级后 `deploy.md`（managed）§6 的落账步骤依赖它在场，须从 `templates/workflow/deploy-observations.md` 手动复制一份到 `workflow/`（或自建同表头主表）。缺主表不断流（`--append` 只写月分片），但记法指针悬空。
 
 > **存量装户迁移指引（policyVersion 升 12 + 生效规则视图）**：`kit.json` 属项目自持（owned）、`sync` 永不覆盖——`policyVersion` 升 12 由装户自选时机（v12 全锚生效日 = 发布当日 advisory 档 / 发布次日 hard 档，锚前存量不追溯）。升级后跑一次 `node .agents/scripts/gen-effective-policy.mjs` 把生成的 `workflow/effective-policy.md` 随同提交：该文件是生效规则的入库视图，`verify` 的 effective-policy 门对缺文件判漂移（新装由 init 首跑种子；存量不补跑则该门红一次，补跑即绿）。
 
@@ -114,10 +117,10 @@ init 不问项目名 / 描述：`AGENTS.md` 只生成「AI工作流 + Wiki」两
 ## 装了什么
 
 ```
-.agents/            阶段命令×8 / 角色契约×3 / 门禁钩子 / 引擎脚本（检索·索引·看板·预算·聚合·判定流水）/ 技能×3 / settings.json / kit.json 台账
+.agents/            阶段命令×8 / 角色契约×3 / 门禁钩子 / 引擎脚本（检索·索引·看板·预算·聚合·判定流水）/ 技能×4 / settings.json / kit.json 台账
                     + level-criteria.mjs（级别判据机器单源）/ level-hints.txt（项目自持的路径下限清单，默认空）
 .githooks/          pre-commit（通用门禁编排+项目门禁挂载点）/ pre-push（闭环断档）/ commit-msg / post-commit / pre-merge-commit
-workflow/           intents/specs/plans/incidents 模板×4 + README 协议 + 台账三件（delegations/papercuts/regression-checklist）
+workflow/           intents/specs/plans/incidents 模板×4 + README 协议 + 台账四件（delegations/papercuts/regression-checklist/deploy-observations）
 wiki/               INDEX 骨架 + 知识沉淀总览 + drafts-archive
 AGENTS.md           项目规范骨架（项目段占位待填）
 modules/gates/      可选门禁模块（dotnet-ca：Clean Architecture 参考实现，装进项目后归项目）
@@ -127,7 +130,7 @@ modules/gates/      可选门禁模块（dotnet-ca：Clean Architecture 参考�
 
 ## CI 远端门与离线安装
 
-**CI 远端门**：init 已把 `.github/workflows/kit-ci.yml` 写进装户仓（GitHub Actions：checkout 后复跑统一入口 `node .agents/scripts/verify.mjs`——七门 GATES 编排：语法自检 / 测试【有根 package.json 才跑】/ 编排脚本检查 / 常驻面预算 / 生效规则视图漂移 / check-loop 闭环硬门 / 台账不变量历史全扫，逐门 pass/fail、任一门红即红；门清单见 `node .agents/scripts/verify.mjs --list`）。本地 git 钩子可被 `--no-verify` 绕过，远端门兜底；该文件归装户自持（owned），`flow-kit sync` 永不覆盖，非 GitHub 装户可删。其他 CI（GitLab / Jenkins / Azure DevOps…）等价接入 = 同一入口命令 + 服务端分支策略：
+**CI 远端门**：init 已把 `.github/workflows/kit-ci.yml` 写进装户仓（GitHub Actions：checkout 后复跑统一入口 `node .agents/scripts/verify.mjs`——八门 GATES 编排：语法自检 / 测试【有根 package.json 才跑】/ 编排脚本检查 / 本地门禁挂载自检【WARN 档】/ 常驻面预算 / 生效规则视图漂移 / check-loop 闭环硬门 / 台账不变量历史全扫，逐门 pass/fail、任一门红即红；门清单见 `node .agents/scripts/verify.mjs --list`）。本地 git 钩子可被 `--no-verify` 绕过，远端门兜底；该文件归装户自持（owned），`flow-kit sync` 永不覆盖，非 GitHub 装户可删。其他 CI（GitLab / Jenkins / Azure DevOps…）等价接入 = 同一入口命令 + 服务端分支策略：
 
 ```bash
 node .agents/scripts/verify.mjs                    # 远端门本体（工程在子目录时加 --test-cmd "<项目测试命令>"）
@@ -159,7 +162,7 @@ npm install ./agentic-flow-kit-<版本>.tgz          # 项目内：之后用 npx
 - **门禁即 git 钩子**：不依赖任何 agent 客户端自觉；项目专属门禁挂 `.agents/hooks/local-pre-commit`。
 - **中文优先**：文档协议、命令、检查输出全中文；frontmatter 受限子集供机器断言。
 - 抽取自真实项目长期运转的引擎（某真实项目），dogfooding 是后续路线（sync 升级 / add-host / add-gate / npm 发布）的一部分。
-- **引擎仓不自举（诚实边界）**：本仓是纯包源形态——自身不带 `workflow/` 台账与 `.githooks/` 本地钩子，闭环治理面只随包装到装户仓运行。引擎仓的机器门 = 双平台 CI 矩阵（ubuntu/windows × node 18/22 全量套件）+ 引擎完整性门（`check-engine-integrity` 两层锚：盘面 sha256 ↔ 入库基线、跨提交硬拦单位数）——防的是「改弱门禁本体」，与装户侧防「跳步交付」是两件事。
+- **引擎仓自举（2026-10-23 起，dogfood）**：本仓安装自身引擎（.agents/ + workflow/ 台账 + .githooks/ + kit-ci.yml），装户身份亲跑闭环治理——「门禁自己拦自己」是常态而非边界案例。包源面的机器门 = 双平台 CI 矩阵（ubuntu/windows × node 18/22 全量套件）+ 引擎完整性门（`check-engine-integrity` 两层锚：盘面 sha256 ↔ 入库基线、跨提交硬拦单位数）——防的是「改弱门禁本体」，与装户侧防「跳步交付」互补。
 - **威胁模型（2026-09-27 init-p1-batch）**：勿在不可信仓库运行 `init` / `doctor` / `sync`——三命令在执行目标侧 `.agents/scripts/` 脚本（生成器 / 校验器）前有供应链防线：脚本内容与包源渲染值（LF 归一 sha）一致才执行，失配即显式跳过提示，不执行不下结论。**防线不覆盖 git 钩子面**：预植的 `.githooks/`、`.agents/hooks/` 仍会被保留挂载，并在你自己的首次 git 操作时执行——不可信仓库请先审查/清除预置件再 init。
 
 ## 当前能力
@@ -168,7 +171,7 @@ npm install ./agentic-flow-kit-<版本>.tgz          # 项目内：之后用 npx
 
 当前语义四点：
 
-- **门禁面**：check-loop 26 项检查 + 3x（分道：默认硬门 / `--hygiene` 卫生段 / `--all`，权威清单见引擎头部）+ `.githooks/` 五个钩子（pre-commit / pre-push / commit-msg / post-commit / pre-merge-commit），门禁逻辑不依赖 agent 客户端自觉。
+- **门禁面**：check-loop 27 项检查 + 3x（分道：默认硬门 / `--hygiene` 卫生段 / `--all`，权威清单见引擎头部）+ `.githooks/` 五个钩子（pre-commit / pre-push / commit-msg / post-commit / pre-merge-commit），门禁逻辑不依赖 agent 客户端自觉。
 - **闭环面**：intents → specs → plans → incidents 四态文档链 + 确认台账（`.agents/confirmations.jsonl` 及默认分片）+ 逐阶段前置门（起草门 / 确认门 / done 前置门）+ **台账并发三形态**（并集合并 / 分片写入与 compact 归并 / 特许修剪）与按 doc 逻辑序的哈希链（见上文「台账并发」段）+ 终态件同名家族滚动归档（关单即归档，kb 检索覆盖归档件）。
 - **观测面**：`workflow/INDEX.md`（检索索引）、`workflow/DASHBOARD.md`（红绿灯仪表盘）、`workflow/metrics.md`（月度快照）、`workflow/effective-policy.md`（生效规则视图）与判定流水 `.agents/judgments.jsonl`（机制月度对账数据底座）——**观测面非门禁**，红灯是「看」的不是「拦」的。
 - **执行面**：`route`（手动路由的机器面：定级 + 泳道 + 下一阶段 + 入口 md）与 `run`（自动流水线薄壳转发装户状态机）；判据单源在装户 `.agents/scripts/level-criteria.mjs`，md 改为引用它而非承载判据散文（见上文「执行面」段）。

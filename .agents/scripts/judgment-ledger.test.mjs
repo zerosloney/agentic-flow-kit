@@ -113,6 +113,7 @@ const check = (desc, cond, detail = '') => {
     'doc.status.abandoned=superseded cancelled',
     'incident.status.all=open fixed closed',
     'incident.status.active=open',
+  'incident.status.abandoned=superseded cancelled',
     'level.all=L1 L2 L3',
     '',
   ].join('\n'), 'utf8');

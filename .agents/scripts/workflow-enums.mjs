@@ -38,7 +38,7 @@ export function parseEnums(text) {
 
 const NEED_KEYS = [
   'doc.status.all', 'doc.status.confirmed', 'doc.status.active', 'doc.status.terminal', 'doc.status.abandoned',
-  'incident.status.all', 'incident.status.active', 'level.all',
+  'incident.status.all', 'incident.status.active', 'incident.status.abandoned', 'level.all',
 ];
 
 // validateEnums(enums)：跨键不变量（子集关系 + 活跃/终态互斥 + 关键态在位）——坏数据尽早抛错

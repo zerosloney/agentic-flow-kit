@@ -1,6 +1,6 @@
 # kit-ci —— agentic-flow-kit 装户远端门（GitHub Actions 薄模板，2026-10-07 adopter-ci-github）
 # 语义：本地 git hooks 可被 --no-verify / 未配 hooksPath 的克隆绕过——本工作流在 GitHub runner 上复跑
-# 统一入口 node .agents/scripts/verify.mjs（七门 GATES 编排：语法自检 / 测试【有根 package.json 才跑】/
+# 统一入口 node .agents/scripts/verify.mjs（八门 GATES 编排：语法自检 / 测试【有根 package.json 才跑】/
 # 编排脚本检查 / 常驻面预算 / 生效规则视图漂移 / check-loop 闭环硬门 / 台账不变量历史全扫——门清单见
 # verify.mjs --list），任一门红即红；不在 YAML 里复制门禁逻辑（本地/远端单源，防口径漂移）。
 # 本文件归装户自持（owned）：触发分支 / node 版本 / 测试命令可自改，flow-kit sync 永不覆盖。
@@ -29,7 +29,7 @@ jobs:
       - name: 安装依赖（有根 package.json 才跑；私有源在此加 registry 配置）
         if: hashFiles('package.json') != ''
         run: npm ci || npm install || npm install --registry=https://registry.npmjs.org # 末级官方源兜底（2026-10-09 engine-quality-round3 W3：镜像故障不阻塞 CI）
-      - name: 远端门（verify 七门编排）
+      - name: 远端门（verify 八门编排）
         run: node .agents/scripts/verify.mjs
       - name: CI 红回溯点名（2026-10-09 engine-quality-round2 B3：红时列出最近关单，复核优先）
         if: failure()
