@@ -1,9 +1,10 @@
 ---
-状态: open
+状态: fixed
 级别: L2
 发现: 2026-10-25
 模块: infra
 沉淀: 无
+确认指纹: d22ea4dc6b1ea06f
 ---
 # INCIDENT — 流程自审修复批（挂载自检两行口径 / incident 放弃态枚举收口 / 升级指引 / release 前置 CI）
 
@@ -32,9 +33,9 @@
 - 2026-10-25 用户确认：继续修（自审问题清单修复授权，对话内）
 
 ## 验收标准（可测试）
-- [ ] 场景：R1 挂载自检验两行 gitattributes（缺任一行 WARN/--strict 拦）（证据：check-local-gate-config.test）
-- [ ] 场景：R2 incident superseded/cancelled 不再出「状态非法」WARN（证据：check-loop.test 扩展用例）
-- [ ] 场景：R3 入口确认集仍排除 incident 放弃态（stage-gates 对称性）（证据：stage-gates 行为不回归）
-- [ ] 场景：R4 release 前置门（CI 非 success 即拒）（证据：release.yml 步骤 + yml 语法过 workflows-check）
-- [ ] 场景：R5 README 迁移指引含 deploy-observations（证据：文档批提交）
-- [ ] 场景：R6 全量测试绿 + verify 八门绿（证据：npm test + verify --doc）
+- [x] 场景：R1 挂载自检验两行 gitattributes（缺任一行 WARN/--strict 拦）（证据：check-local-gate-config.test 场景 6——PASS 7/0；本仓 .gitattributes 已补第二行、自检全配）
+- [x] 场景：R2 incident superseded/cancelled 不再出「状态非法」WARN（证据：枚举 all 扩全集 + 13 个内联夹具随键扩展，check-loop 家族 382/0）
+- [x] 场景：R3 入口确认集仍排除 incident 放弃态（stage-gates INCIDENT_STATUSES=all 减 abandoned，与 doc 侧对称；stage-gates.test 15/0）
+- [x] 场景：R4 release 前置门（CI 非 success 即拒）（证据：release.yml CI 前置门步骤；npm test 82/0 含 yml 检查面）
+- [x] 场景：R5 README 迁移指引含 deploy-observations + jsonl-union 两行口径（证据：本批 docs 改动随 fix 提交入库）
+- [x] 场景：R6 全量测试绿 + verify 八门绿（证据：npm test 82 套件 0 失败；verify --doc 本单 🎉 8 项通过）

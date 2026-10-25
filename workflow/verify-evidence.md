@@ -13,5 +13,6 @@
 | `4a2eac5` | 2026-10-25T09:27:50.454Z | 8 | PASS 82 / FAIL 0 | workflow/plans/2026-10-25-source-port-batch-2.md | — |
 | `6f97f76` | 2026-10-25T10:51:53.356Z | 8 | PASS 82 / FAIL 0 | workflow/incidents/2026-10-25-append-compensation-shard.md | — |
 | `48babc4` | 2026-10-25T11:02:24.567Z | 8 | PASS 82 / FAIL 0 | workflow/incidents/2026-10-25-ci-env-leak.md | — |
+| `4ce4862` | 2026-10-25T17:12:39.063Z | 8 | PASS 82 / FAIL 0 | workflow/incidents/2026-10-25-audit-fixes.md | — |
 
-<!-- GENERATED:END — 共 7 行；gen-verify-evidence.mjs 生成（既有行追加保全，勿手改） -->
+<!-- GENERATED:END — 共 8 行；gen-verify-evidence.mjs 生成（既有行追加保全，勿手改） -->

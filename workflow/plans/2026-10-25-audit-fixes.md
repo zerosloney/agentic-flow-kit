@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: infra
-确认指纹: cde87db4fbaa8881
+确认指纹: 56de97fcf109e631
 ---
 # PLAN — 流程自审修复批
 
