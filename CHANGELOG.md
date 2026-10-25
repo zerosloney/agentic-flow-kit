@@ -21,6 +21,10 @@
   明确不收编（决策留痕）：台账指针存在性门（check-ledger-doc-presence——verify 八门关单时已兜底
   悬空行，提交时刻增量面小）；reviewLineFor hard 化（本仓 L2 spec 模板无复核行，升 hard 属
   policyVersion 演进另批）。
+  发版收口 hotfix（2026-10-25 append-compensation-shard）：补偿行首用实测落错主台账（appendLedger
+  缺省 shard=false，与 confirm-doc CLI 层「分片默认+doc 链激活才分片」口径不一致——doc 链倒挂 +
+  检查 15 末次行误取），写入口径修正为单源 + 用例补 v12 分片断言（incident L2 闭环关单）；
+  同批补 batch-2 intent 验收 S1-S5 勾验（关单勾验正则失配漏勾，补偿行通道绑定补正）。
   配套：engine-lock --note 凭据四件随批入账；自举 sync 收养 append-compensation 两件（managed 177）；
   confirm-doc.test 既有在场门用例夹具补同名 plan seed（新执法点前置所致，用例断言零变化，S51-S55
   五新用例钉关单完成度门）。
