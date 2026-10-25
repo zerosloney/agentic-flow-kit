@@ -5,10 +5,13 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（0）
+## 活跃（3）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
+| INTENT | L2 | approved | 2026-10-26 | infra | 关单执法点前移批（验收勾验前置门 / 放弃态配对豁免 / 装户形态测试） | ☑0/5 |
+| PLAN | L2 | approved | 2026-10-26 | infra | 关单执法点前移批 | — |
+| SPEC | L2 | approved | 2026-10-26 | infra | 关单执法点前移批 | — |
 
 ## 档案计数（24，不进表）
 
