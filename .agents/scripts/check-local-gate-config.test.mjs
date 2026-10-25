@@ -35,7 +35,9 @@ const fullSetup = (root) => {
 };
 const run = (root, args = [], env = {}) => spawnSync(process.execPath, [CHECKER, '--root', root, ...args], {
   encoding: 'utf8',
-  env: { ...process.env, ...env },
+  // env 隔离（CI 盲区修复）：非 CI 场景显式剥 GITHUB_ACTIONS——否则 CI 里被测进程全走 loud-skip
+  // 分支，WARN/--strict/非 git 断言结构性失败（v1.8.10 发布失败同因；仅场景 4 显式注入 'true'）
+  env: { ...process.env, GITHUB_ACTIONS: '', ...env },
 });
 
 // ---- ① 全配根 → exit 0 且逐项 OK ----

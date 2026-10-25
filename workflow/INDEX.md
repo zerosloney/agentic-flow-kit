@@ -5,10 +5,13 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（0）
+## 活跃（3）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
+| INCIDENT | L2 | open | 2026-10-25 | infra | CI 环境变量泄漏进被测进程（v1.8.10/v1.8.11 两番发布失败同因） | ☑0/2 |
+| PLAN | L2 | approved | 2026-10-25 | infra | CI 环境变量泄漏测试隔离修复 | — |
+| SPEC | L2 | approved | 2026-10-25 | infra | CI 环境变量泄漏测试隔离修复 | — |
 
 ## 档案计数（18，不进表）
 

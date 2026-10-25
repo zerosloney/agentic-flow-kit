@@ -316,8 +316,12 @@ const readLedger = (root) => {
   const bare = fs.mkdtempSync(path.join(os.tmpdir(), 'verify-bare-ff-'));
   const r = run([], { cwd: bare, env: { ...process.env, CHECK_LOOP_ROOT: root } });
   check('场景 13：exit 1 且不出全绿', r.status === 1 && !r.stdout.includes('全绿'), `exit=${r.status}\n${r.stdout}\n${r.stderr}`);
-  check('场景 13：fail-fast 点名未执行门（local-gate-config、rule-budget、effective-policy、check-loop、ledger-invariant）',
-    r.stderr.includes('未执行门') && ['local-gate-config', 'rule-budget', 'effective-policy', 'check-loop', 'ledger-invariant'].every((id) => r.stderr.includes(id)),
+  // 断言环境无关（CI 盲区修复）：CI 里 local-gate-config 门 loud-skip（exit 0）不触发 fail-fast，
+  // 故它是否在「未执行门」清单随环境漂移——恒断言四门，local-gate-config 仅本地（非 GITHUB_ACTIONS）加查
+  const expectUnrun = ['rule-budget', 'effective-policy', 'check-loop', 'ledger-invariant'];
+  if (!process.env.GITHUB_ACTIONS) expectUnrun.unshift('local-gate-config');
+  check('场景 13：fail-fast 点名未执行门（环境无关恒四门；本地另含 local-gate-config）',
+    r.stderr.includes('未执行门') && expectUnrun.every((id) => r.stderr.includes(id)),
     r.stderr);
   const lines = readLedger(root);
   check('场景 13：失败行留痕（suite=workflows-check）且无绿行',
