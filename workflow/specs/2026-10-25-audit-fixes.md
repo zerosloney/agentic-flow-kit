@@ -1,8 +1,9 @@
 ---
 状态: done
 级别: L2
+日期: 2026-10-25
 模块: infra
-确认指纹: 439130d342a143b3
+确认指纹: 701457457167cdba
 ---
 # SPEC — 流程自审修复批
 
@@ -28,8 +29,8 @@ workflow-enums.mjs REQUIRED_KEYS 增键。③ README「存量装户迁移指引�
 | 判据（可观察行为） | 证据（测试文件 / 命令 / 证据文件） | 状态 |
 |---|---|---|
 | 两行口径门+测试绿 | npm test | 覆盖 |
-| 放弃态 WARN 消除 | npm test | 覆盖 |
-| 八门全绿 | node .agents/scripts/verify.mjs | 覆盖 |
+| 放弃态 WARN 消除 | node .agents/scripts/verify.mjs | 覆盖 |
+| 八门全绿 | node .agents/scripts/verify.mjs --doc workflow/incidents/2026-10-25-audit-fixes.md | 覆盖 |
 
 ## 确认与复核
 - 确认结果 / 确认时间写在文件头 frontmatter。
