@@ -1,9 +1,9 @@
 ---
 状态: done
 级别: L2
-日期: 2026-10-26
+日期: 2026-10-25
 模块: infra
-确认指纹: fad2f8f5ce77d4f9
+确认指纹: b295598c361eb5b6
 ---
 # SPEC — 关单执法点前移批
 
@@ -37,7 +37,7 @@ confirmations.d/ 分片；done 行 doc 链 prevHash 接续 approved 行；在场
 | 判据（可观察行为） | 证据（测试文件 / 命令 / 证据文件） | 状态 |
 |---|---|---|
 | 勾验门+豁免+v12 冒烟全绿 | npm test | 覆盖 |
-| 八门全绿 | node .agents/scripts/verify.mjs --doc workflow/intents/2026-10-26-closeout-enforcement.md | 覆盖 |
+| 八门全绿 | node .agents/scripts/verify.mjs | 覆盖 |
 
 ## 风险评估
 - 勾验门拦住合法关单（节内有意保留未勾项）｜应对：协议本就要求全勾（检查 8 hard 同判据），门只前移时点；文案指向检查 8 修法

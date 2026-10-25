@@ -16,5 +16,6 @@
 | `4ce4862` | 2026-10-25T17:12:39.063Z | 8 | PASS 82 / FAIL 0 | workflow/incidents/2026-10-25-audit-fixes.md | — |
 | `89cbc95` | 2026-10-25T17:18:49.584Z | 8 | PASS 82 / FAIL 0 | workflow/incidents/2026-10-25-audit-fixes.md | — |
 | `bf7897d` | 2026-10-25T23:43:17.281Z | 8 | PASS 82 / FAIL 0 | workflow/plans/2026-10-26-closeout-enforcement.md | — |
+| `10dcea1` | 2026-10-25T23:47:16.446Z | 8 | PASS 82 / FAIL 0 | workflow/specs/2026-10-26-closeout-enforcement.md | — |
 
-<!-- GENERATED:END — 共 10 行；gen-verify-evidence.mjs 生成（既有行追加保全，勿手改） -->
+<!-- GENERATED:END — 共 11 行；gen-verify-evidence.mjs 生成（既有行追加保全，勿手改） -->
