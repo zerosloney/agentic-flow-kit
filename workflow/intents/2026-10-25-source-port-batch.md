@@ -1,12 +1,12 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 预判: kind=require level=L2
 日期: 2026-10-25
 模块: infra
 沉淀: 无
-确认指纹: ddaad5dcb2de7b5c
+确认指纹: 4ba4262216008c99
 ---
 # INTENT — 源仓闭环优化批回灌（语法门加固 / 委派在场门 / 发布观察台账 / 挂载自检门）
 
@@ -19,10 +19,10 @@ risk_level: L2
 策略分歧三件（补偿行 / 关单完成度门 / 台账指针门）未拍板不入本批。
 
 ## 目标
-- [ ] ① check-scripts-syntax 递归扫描 + 每目录非空 fail-closed（源仓 97b9b247 同款修复）
-- [ ] ② confirm-doc 终态前置「委派台账在场门」——判据/豁免与检查 18 单源（新模块 delegation-presence.mjs）
-- [ ] ③ deploy-observations 第四台账（生而分片）+ deploy.md §6 落账步 + metrics「发布观察」节
-- [ ] ④ check-local-gate-config 挂 verify 引擎段第 4 位（WARN 档 + --strict + CI/非 git loud-skip，判据适配 kit 面）
+- [x] ① check-scripts-syntax 递归扫描 + 每目录非空 fail-closed（源仓 97b9b247 同款修复）
+- [x] ② confirm-doc 终态前置「委派台账在场门」——判据/豁免与检查 18 单源（新模块 delegation-presence.mjs）
+- [x] ③ deploy-observations 第四台账（生而分片）+ deploy.md §6 落账步 + metrics「发布观察」节
+- [x] ④ check-local-gate-config 挂 verify 引擎段第 4 位（WARN 档 + --strict + CI/非 git loud-skip，判据适配 kit 面）
 
 ## 非目标
 - 不收编补偿行机制 / 关单完成度门 / 台账指针存在性门（策略分歧，待另批拍板）
@@ -45,10 +45,10 @@ risk_level: L2
 - [ ] schema / 迁移 SQL / DI 链 / 认证与中间件管线 → 级别 L3（不触及）
 
 ## 验收标准（可测试）
-- [ ] 场景：S1 语法门递归命中与空目录 fail-closed（证据：check-scripts-syntax.test 新断言）
-- [ ] 场景：S2 委派在场门拦截与放行（证据：confirm-doc.test 扩展用例）
-- [ ] 场景：S3 豁免口径与检查 18 一致（证据：confirm-doc.test 边界用例）
-- [ ] 场景：S4 观察台账生而分片与合并读（证据：ledger-shards.test 扩展用例）
-- [ ] 场景：S5 metrics 发布观察节零数据占位 / 脏行 fail-loud（证据：gen-workflow-metrics.test 扩展用例）
-- [ ] 场景：S6 挂载自检 WARN / --strict / loud-skip 三档（证据：check-local-gate-config.test 新套件）
-- [ ] 场景：S7 verify 引擎段八门全绿（证据：verify --doc 本单输出）
+- [x] 场景：S1 语法门递归命中与空目录 fail-closed（证据：check-scripts-syntax.test 场景 4/5/6——PASS 9/0，feat 5637482）
+- [x] 场景：S2 委派在场门拦截与放行（证据：confirm-doc.test S46/S47——PASS 89/0）
+- [x] 场景：S3 豁免口径与检查 18 一致（证据：confirm-doc.test S48（v4 锚前豁免）/S49（incidents 族）/S50（分片感知））
+- [x] 场景：S4 观察台账生而分片与合并读（证据：ledger-shards.test S23a-e——PASS 57/0）
+- [x] 场景：S5 metrics 发布观察节零数据占位 / 脏行 fail-loud（证据：gen-workflow-metrics.test 场景 5a/5b/5c——PASS 38/0）
+- [x] 场景：S6 挂载自检 WARN / --strict / loud-skip 三档（证据：check-local-gate-config.test 场景 1-5——PASS 5/0）
+- [x] 场景：S7 verify 引擎段八门全绿（证据：verify --doc 本单 🎉 共 8 项通过，全量 npm test 81 套件 0 失败）
