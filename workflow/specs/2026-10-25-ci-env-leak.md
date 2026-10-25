@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: infra
-确认指纹: b20cd7f7967254f2
+确认指纹: bd73dd8f20fc138e
 ---
 # SPEC — CI 环境变量泄漏测试隔离修复
 

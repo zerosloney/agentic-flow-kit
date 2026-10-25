@@ -1,9 +1,10 @@
 ---
-状态: open
+状态: fixed
 级别: L2
 发现: 2026-10-25
 模块: infra
 沉淀: 无
+确认指纹: bb393718090c65da
 ---
 # INCIDENT — CI 环境变量泄漏进被测进程（v1.8.10/v1.8.11 两番发布失败同因）
 
@@ -24,5 +25,5 @@ verify 场景 13 的「未执行门」清单在 CI 里不含 local-gate-config�
 - 2026-10-25 用户确认：按「提交 打版本推送」指令链收口发布失败（对话内）
 
 ## 验收标准（可测试）
-- [ ] 场景：R1 双环境（本地+GITHUB_ACTIONS=true 模拟）两套件全绿（证据：npm test）
-- [ ] 场景：R2 verify --doc 八门全绿（证据：verify --doc 本单输出）
+- [x] 场景：R1 双环境（本地+GITHUB_ACTIONS=true 模拟）两套件全绿（证据：npm test 82 套件 0 失败 + 双环境直跑 5/0、35/0）
+- [x] 场景：R2 verify --doc 八门全绿（证据：关单批 verify --doc 本单 🎉 8 项通过）
