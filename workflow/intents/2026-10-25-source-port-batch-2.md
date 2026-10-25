@@ -45,8 +45,8 @@ policyVersion 演进另批）。
 - [ ] schema / 迁移 SQL / DI 链 / 认证与中间件管线 → 级别 L3（不触及）
 
 ## 验收标准（可测试）
-- [ ] 场景：S1 补偿行生成与检查 15 恢复绿（证据：append-compensation.test 新套件）
-- [ ] 场景：S2 四类拒绝面 + 缺 --quote 拒跑（证据：append-compensation.test 拒绝面用例）
-- [ ] 场景：S3 关单完成度门拦截/放行/归档感知/superseded 恒拒（证据：confirm-doc.test 扩展 + stage-gates 单测）
-- [ ] 场景：S4 L1 intent 不拦 + 既有门文案锚点零改动（证据：confirm-doc.test 全量绿）
-- [ ] 场景：S5 verify 八门全绿（证据：verify --doc 本单输出）
+- [x] 场景：S1 补偿行生成与检查 15 恢复绿（证据：append-compensation.test 场景 1——指纹 bindingSha256 同函数复算即绿，PASS 9/0，feat 4a2eac5）
+- [x] 场景：S2 四类拒绝面 + 缺 --quote 拒跑（证据：append-compensation.test 场景 2a-2e，五类拒绝零写入）
+- [x] 场景：S3 关单完成度门拦截/放行/归档感知/superseded 恒拒（证据：confirm-doc.test S51/S52/S55/S53——PASS 94/0）
+- [x] 场景：S4 L1 intent 不拦 + 既有门文案锚点零改动（证据：confirm-doc.test S54 + S46-S50 既有断言零变化）
+- [x] 场景：S5 verify 八门全绿（证据：verify --doc 三份各 🎉 8 项通过；npm test 82 套件 0 失败）

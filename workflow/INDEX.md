@@ -5,10 +5,13 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（0）
+## 活跃（3）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
+| INCIDENT | L2 | open | 2026-10-25 | infra | append-compensation 补偿行落错主台账（doc 链倒挂） | ☑0/3 |
+| PLAN | L2 | approved | 2026-10-25 | infra | append-compensation 分片口径修正 | — |
+| SPEC | L2 | approved | 2026-10-25 | infra | append-compensation 补偿行分片口径修正 | — |
 
 ## 档案计数（15，不进表）
 

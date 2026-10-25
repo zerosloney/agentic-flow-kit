@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-25T09:20:29.098Z",
+  "generatedAt": "2026-10-25T10:40:38.508Z",
   "files": {
     ".github/workflows/ci.yml": {
       "sha256": "e9cffb90dec8f0a49bfe231a13fb8df375a2494cc75c38d991b5eb7c7be104b5",
@@ -52,9 +52,9 @@
       "hard": 0
     },
     "templates/_agents/scripts/append-compensation.mjs": {
-      "sha256": "3556216d3a5ddab170d87fd374bf8611334b245e4cb56c57380141960c25557e",
+      "sha256": "6e67da581e2b06ef6ccda87c2058a24f9fc7d2870eec15044a6bbc127cd04b0b",
       "hard": 0,
-      "note": "source-port-batch-2：补偿行生成器 append-compensation + planConfirmedFor 关单完成度门（源仓 d134be8f/97b9b247 收窄回灌）"
+      "note": "source-port-batch-2 收尾：append-compensation 写入口径与 confirm-doc 分片默认单源（错落主台账致 doc 链倒挂，重做修正）"
     },
     "templates/_agents/scripts/archive-sweep.mjs": {
       "sha256": "19d9c87918ff0b70bf6192ed169fedb708db22f4aadb93130e54fc2a954cc777",

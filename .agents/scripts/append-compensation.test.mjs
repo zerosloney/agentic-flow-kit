@@ -88,6 +88,31 @@ const doneLines = (extra = '') => `---\n状态: done\n级别: L2\n日期: 2026-1
   check('场景 3b：fmStatusOf 无 frontmatter → 空串', fmStatusOf(['# 无 frontmatter']) === '' && fmStatusOf(doneLines()) === 'done');
 }
 
+// ---- ④ 分片口径（2026-10-25 hotfix，incident 2026-10-25-append-compensation-shard）：v12 装户形态落分片 ----
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'acomp-sh-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'plans'), { recursive: true });
+  fs.mkdirSync(path.join(root, '.agents', 'confirmations.d'), { recursive: true });
+  const doc = 'workflow/plans/2026-10-25-s1.md';
+  const original = doneLines();
+  fs.writeFileSync(path.join(root, doc), original.join('\n'), 'utf8');
+  const prev = 'approved';
+  const seedFp = bindingSha256(original, prev);
+  // v8+ doc 链激活形态：该 doc 历史行在分片
+  fs.writeFileSync(path.join(root, '.agents', 'confirmations.d', '2026-10-25-s1.jsonl'),
+    JSON.stringify({ ts: '2026-10-25T02:00:00.000Z', doc, stage: 'done', fingerprint: seedFp, prev, source: 'tty' }) + '\n', 'utf8');
+  fs.writeFileSync(path.join(root, '.agents', 'kit.json'), JSON.stringify({ kit: 'agentic-flow-kit', policyVersion: 12 }), 'utf8');
+  const edited = [...original.slice(0, -1), '回填一行', ''];
+  fs.writeFileSync(path.join(root, doc), edited.join('\n'), 'utf8');
+  const r = spawnSync(process.execPath, [CLI, doc, '--quote', 'q'], { cwd: root, encoding: 'utf8' });
+  const shardRows = fs.readFileSync(path.join(root, '.agents', 'confirmations.d', '2026-10-25-s1.jsonl'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  const noMain = !fs.existsSync(path.join(root, '.agents', 'confirmations.jsonl'));
+  check('场景 4：v12 形态补偿行落分片（与既有行同域、doc 链接续）且主台账不新建',
+    r.status === 0 && shardRows.length === 2 && shardRows[1].stage === 'done' && noMain,
+    `exit=${r.status}\n${r.stdout}${r.stderr}\n${JSON.stringify(shardRows)}`);
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
 console.log(`\n合计: PASS ${pass} / FAIL ${fail}`);
 if (fail) process.exit(1);
 process.exit(0);

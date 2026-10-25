@@ -21,6 +21,7 @@ import { randomBytes } from 'node:crypto';
 import { bindingSha256 } from './check-loop.mjs';
 import { readLedgerRows } from './ledger-loader.mjs';
 import { appendLedger } from './confirm-doc.mjs';
+import { loadKitPolicy, ledgerDocChainActive } from './policy.mjs';
 
 export const TERMINAL_STAGES = ['done', 'closed', 'superseded', 'cancelled'];
 
@@ -100,7 +101,11 @@ function main() {
       fail++;
       continue;
     }
-    appendLedger(root, r.row);
+    // 写入口径与 confirm-doc 生产侧单源（2026-10-25 修正）：分片默认（CONFIRM_SHARDED=0 回退主台账）
+    // 且 doc 链激活（policyVersion ≥ 8）才落分片——补偿行须与该 doc 既有确认行同域，错落主台账会
+    // 造成 doc 链时序倒挂（链断裂）与检查 15 末次行误取。夹具无 kit.json → v1 → 自动回退主台账。
+    const shardWrite = process.env.CONFIRM_SHARDED !== '0' && ledgerDocChainActive(loadKitPolicy(root));
+    appendLedger(root, r.row, { shard: shardWrite });
     console.log(`✓ ${rel} ${stage} 补偿行（prev=${r.row.prev}，指纹 ${r.row.fingerprint.slice(0, 16)}，quote=「${quote}」）`);
   }
   if (fail) console.error(`完成：${docs.length - fail} 成功 / ${fail} 拒绝`);
