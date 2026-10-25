@@ -488,14 +488,19 @@ export function runCheckLoop(opts = {}) {
       if (lvl === 'L3') blockers.push(`- [状态未确认] L3 intent 必须为 approved/done/superseded/cancelled:${msg}`);
       else warnings.push(`- [WARN 状态未确认] intent 必须为 approved/done/superseded/cancelled:${msg}`);
     }
-    if (lvl === 'L2' || lvl === 'L3') {
-      if (!fs.existsSync(path.join(ROOT, WF, 'specs', base))) {
-        blockers.push(`- [配对断裂] intent 缺 spec:${base}（应在 ${WF}/specs/ 下同名）`);
+    // 放弃态×结构配对豁免（2026-10-26 closeout-enforcement）：superseded/cancelled 是 confirm-doc
+    // 合法终态，「立了入口即取消、plan/spec 未建」是常态结构——配对 hard 对放弃件豁免（状态检查
+    // 口径不变，abandoned 本在 confirmed 集合法；检查 15 内容绑定照常拦篡改）。
+    if (!ENUMS['doc.status.abandoned'].includes(st)) {
+      if (lvl === 'L2' || lvl === 'L3') {
+        if (!fs.existsSync(path.join(ROOT, WF, 'specs', base))) {
+          blockers.push(`- [配对断裂] intent 缺 spec:${base}（应在 ${WF}/specs/ 下同名）`);
+        }
       }
-    }
-    // plan 配对全级别强制（2026-10-13 L0 退役：原 L0 协作道豁免随级别退役删除；L2/L3 另须 spec）
-    if (!fs.existsSync(path.join(ROOT, WF, 'plans', base))) {
-      blockers.push(`- [配对断裂] intent 缺 plan:${base}（应在 ${WF}/plans/ 下同名）`);
+      // plan 配对全级别强制（2026-10-13 L0 退役：原 L0 协作道豁免随级别退役删除；L2/L3 另须 spec）
+      if (!fs.existsSync(path.join(ROOT, WF, 'plans', base))) {
+        blockers.push(`- [配对断裂] intent 缺 plan:${base}（应在 ${WF}/plans/ 下同名）`);
+      }
     }
     // 风险泳道一致性（2026-10-02 caliber-convergence 起单源 laneOfEntry·方案 C 分歧双严）：非 high
     // （low 或 suspect——级别/risk_level 缺失、非法、分歧）勾选触达红线 = 自认触及规则/契约或数据/运行时
@@ -514,7 +519,8 @@ export function runCheckLoop(opts = {}) {
     const st = fmGet(spec, '状态');
     const lvl = fmGet(spec, '级别');
     const hasEntry = fs.existsSync(path.join(ROOT, WF, 'intents', base)) || fs.existsSync(path.join(ROOT, WF, 'incidents', base));
-    if (!hasEntry) blockers.push(`- [配对断裂] spec 缺 intent/incident:${base}（应在 ${WF}/intents/ 或 ${WF}/incidents/ 下同名）`);
+    // 放弃态豁免（2026-10-26 closeout-enforcement，同 intent 侧口径）
+    if (!hasEntry && !ENUMS['doc.status.abandoned'].includes(st)) blockers.push(`- [配对断裂] spec 缺 intent/incident:${base}（应在 ${WF}/intents/ 或 ${WF}/incidents/ 下同名）`);
     if (!stOkDoc(st)) {
       const msg = `${base}（frontmatter 状态键当前值:『${st || '缺失'}』）`;
       if (lvl === 'L3') blockers.push(`- [状态未确认] L3 spec 必须为 approved/done/superseded/cancelled:${msg}`);
@@ -549,7 +555,7 @@ export function runCheckLoop(opts = {}) {
     const hasEntry = fs.existsSync(path.join(ROOT, WF, 'intents', base)) || fs.existsSync(path.join(ROOT, WF, 'incidents', base));
     // L1 plan 即入口（2026-10-13 B6b-2）：级别恰好为 L1 的 plan 自己就是入口，无同名
     // intent/incident 不拦。级别缺失或 L2/L3 仍要求入口（fail-closed）。已写的 intent 不论级别仍要求同名 plan。
-    if (lvl !== 'L1' && !hasEntry) blockers.push(`- [配对断裂] plan 缺 intent/incident:${base}（应在 ${WF}/intents/ 或 ${WF}/incidents/ 下同名）`);
+    if (lvl !== 'L1' && !hasEntry && !ENUMS['doc.status.abandoned'].includes(st)) blockers.push(`- [配对断裂] plan 缺 intent/incident:${base}（应在 ${WF}/intents/ 或 ${WF}/incidents/ 下同名）`); // 放弃态豁免 2026-10-26
     if (!stOkDoc(st)) {
       const msg = `${base}（frontmatter 状态键当前值:『${st || '缺失'}』）`;
       if (lvl === 'L3') blockers.push(`- [状态未确认] L3 plan 必须为 approved/done/superseded/cancelled:${msg}`);
@@ -582,7 +588,11 @@ export function runCheckLoop(opts = {}) {
       warnings.push(`- [WARN 状态非法] incident 状态必须为 ${ENUMS['incident.status.all'].join('/')}:${name}（frontmatter 状态键当前值:『${incSt || '缺失'}』）`);
     }
 
-    if (fmGet(inc, '流程') !== 'legacy') {
+    // incident 放弃态豁免（2026-10-26 closeout-enforcement）：--to superseded/cancelled 是合法
+    // 跳转（2026-10-25 audit-fixes 枚举收口已认），放弃件不建 plan/spec、不补复盘三件套——配对与
+    // 三件套要求对其豁免，防「永不可消退噪声/分支被自家门拦」。状态枚举检查在前照常（放弃态已合法）。
+    const incAbandoned = ENUMS['incident.status.abandoned'] && ENUMS['incident.status.abandoned'].includes(incSt);
+    if (fmGet(inc, '流程') !== 'legacy' && !incAbandoned) {
       if (!inSet(incLvl, ENUMS['level.all'])) {
         warnings.push(`- [WARN 级别缺失] ${name} 必须填写 L1/L2/L3（配对检查已跳过——补级别后重跑本脚本校验配对）`);
       } else {
@@ -595,12 +605,15 @@ export function runCheckLoop(opts = {}) {
       }
     }
 
-    // 三件套：正文行锚定 /^1\. /^2\. /^3\. （sh awk 同款）
+    // 三件套：正文行锚定 /^1\. /^2\. /^3\. （sh awk 同款）。放弃态豁免（2026-10-26）：
+    // 放弃件不补复盘——三件套 WARN 对其是不可消噪声，跳过（trioOk 置 true 防下游沉淀判定误报）。
     let trioOk = true;
-    for (const n of [1, 2, 3]) {
-      if (!lines.some((l) => l.startsWith(`${n}. `))) {
-        warnings.push(`- [WARN 三件套不全] ${name} 缺复盘三件套之 ${n}`);
-        trioOk = false;
+    if (!incAbandoned) {
+      for (const n of [1, 2, 3]) {
+        if (!lines.some((l) => l.startsWith(`${n}. `))) {
+          warnings.push(`- [WARN 三件套不全] ${name} 缺复盘三件套之 ${n}`);
+          trioOk = false;
+        }
       }
     }
     // 沉淀追踪（incident 侧，与检查 8 intent 侧对称）：closed 且三件套齐全 = 最高价值沉淀源。

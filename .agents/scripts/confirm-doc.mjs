@@ -38,6 +38,7 @@
 //   （plan 另须入口级别 L2/L3 时同名 spec 已确认；判定口径见 stage-gates.mjs）——未过拒绝落账：
 //   不写盘、不 append 台账、该份计为「拒绝」，任一被拒进程 exit 2。
 // 测试：node templates/_agents/scripts/confirm-doc.test.mjs（纯函数逐项 + 非 TTY spawn 拒绝断言 + 委托场景）
+// 跨形态纪律（2026-10-26 closeout-enforcement）：分片/doc 链/锚相关改动须带 policyVersion 12 夹具用例——裸仓夹具=v1 是已知盲区（补偿行首用实证）。
 import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
@@ -472,6 +473,25 @@ if (isMain) {
         console.error('   先走 build.md 完成同名 plan 并确认（approved），再关本 intent；plan 已废弃则本 intent 同步 superseded（本份未落账、未写盘）');
         refused++;
         continue;
+      }
+    }
+    // 验收勾验前置门（2026-10-26 closeout-enforcement）：→done（docs 三类）且正文含「验收标准」节
+    // 时，节内不得有行首未勾项——检查 8 的判据前移到落账时点（此前漏勾可顺利 done，单机不 push
+    // 则无兜底，2026-10-25 batch-2 亲历）。节边界 = 「## 验收标准」行到下一「## 」行；无节不拦
+    // （沿检查 8「含节才判」）；incidents 不在门面（其闭环执法点 = 防复发证据门 3x，职责不混）。
+    if (target === 'done' && !doc.startsWith('workflow/incidents/')) {
+      const lines = text.replace(/\r\n/g, '\n').split('\n');
+      const head = lines.findIndex((l) => /^##\s*[^#]*验收标准/.test(l));
+      if (head >= 0) {
+        const end = lines.findIndex((l, i) => i > head && /^##\s/.test(l));
+        const section = lines.slice(head + 1, end === -1 ? undefined : end);
+        const unchecked = section.filter((l) => /^-\s+\[ \]/.test(l)).length;
+        if (unchecked) {
+          console.error(`❌ ${doc} 未过验收勾验门：「验收标准」节内有 ${unchecked} 个未勾项——关单前逐条勾验并补证据（- [x] 判据（证据：…），口径见检查 8）`);
+          console.error('   勾验后重试；确属不适用项应删行而非留空勾（本份未落账、未写盘）');
+          refused++;
+          continue;
+        }
       }
     }
     // 委派台账在场门（2026-10-25 source-port-batch，自源仓优化4 回灌）：终态跳转写入时拦截——

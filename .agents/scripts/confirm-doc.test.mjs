@@ -13,6 +13,8 @@
 //          台账覆盖行；锚前存量/缺日期豁免；incidents 族纳入；分片感知读（S46-S50）
 //       ⑪ 关单完成度门（2026-10-25 source-port-batch-2）：L2/L3 intent→done 须同名 plan 已确认
 //          （归档感知；plan 放弃态恒拒指引同步放弃；L1 不拦）（S51-S55）
+//       ⑫ 验收勾验门（2026-10-26 closeout-enforcement）：→done 含验收标准节时未勾项拒（检查 8 前移；S56-S57）
+//       ⑬ v12 装户形态冒烟（closeout-enforcement）：分片落账+doc 链接续+在场门全量对账（S58）——跨形态改动须带 v12 用例
 // 用法：node templates/_agents/scripts/confirm-doc.test.mjs（npm test 随跑）
 import fs from 'node:fs';
 import os from 'node:os';
@@ -1353,6 +1355,95 @@ const mkL2IntentRoot = (planFm) => {
   check('S55 完成度门：plan 仅存于 archive → 归档感知放行（done 落账，家族随归档约定入 archive）',
     r.status === 0 && intentDone,
     JSON.stringify({ status: r.status, stderr: String(r.stderr).slice(0, 300) }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+
+// ---- S56–S58【验收勾验门】→done 前置（2026-10-26 closeout-enforcement；检查 8 判据前移） ----
+// S56：plan 含验收标准节且节内有未勾项 → 拒；全勾 → 放行
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-ac1-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'plans'), { recursive: true });
+  const p = path.join(root, 'workflow', 'plans', '2026-10-26-ac.md');
+  fs.writeFileSync(p, '---\n状态: approved\n级别: L1\n日期: 2026-10-26\n---\n# P\n\n## 验收标准（可测试）\n- [x] 用例 A（证据：npm test）\n- [ ] 用例 B 待勾\n\n## 其他\n- [ ] 别节未勾不算\n', 'utf8');
+  gitHead(root);
+  gitAt(root, 'add', '-A');
+  gitAt(root, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'approved');
+  const before = fs.readFileSync(p, 'utf8');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/plans/2026-10-26-ac.md', '--delegated', '关单'], { cwd: root, encoding: 'utf8' });
+  check('S56 勾验门：节内未勾项 → exit 2 + 点名 1 个未勾（他节未勾不算）+ 未落盘',
+    r.status === 2 && /验收勾验门/.test(r.stderr) && r.stderr.includes('1 个未勾项') && fs.readFileSync(p, 'utf8') === before,
+    JSON.stringify({ status: r.status, stderr: String(r.stderr).slice(0, 300) }));
+  fs.writeFileSync(p, '---\n状态: approved\n级别: L1\n日期: 2026-10-26\n---\n# P\n\n## 验收标准（可测试）\n- [x] 用例 A（证据：npm test）\n- [x] 用例 B（证据：npm test）\n\n## 其他\n- [ ] 别节未勾不算\n', 'utf8');
+  gitAt(root, 'add', '-A');
+  gitAt(root, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'checked');
+  const r2 = spawnSync(process.execPath, [CLI, 'workflow/plans/2026-10-26-ac.md', '--delegated', '关单'], { cwd: root, encoding: 'utf8' });
+  check('S56 勾验门：全勾 → done 放行（他节未勾不拦）',
+    r2.status === 0 && fs.readFileSync(p, 'utf8').includes('状态: done'),
+    JSON.stringify({ status: r2.status, stderr: String(r2.stderr).slice(0, 200) }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+// S57：正文无验收标准节 → 勾验门不拦（沿检查 8「含节才判」；incidents 不在门面由既有 S49 隐式覆盖）
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-ac2-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'plans'), { recursive: true });
+  const p = path.join(root, 'workflow', 'plans', '2026-10-26-ac2.md');
+  fs.writeFileSync(p, '---\n状态: approved\n级别: L1\n---\n# P\n（无验收标准节）\n', 'utf8');
+  gitHead(root);
+  gitAt(root, 'add', '-A');
+  gitAt(root, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'approved');
+  const r = spawnSync(process.execPath, [CLI, 'workflow/plans/2026-10-26-ac2.md', '--delegated', '关单'], { cwd: root, encoding: 'utf8' });
+  check('S57 勾验门：无验收标准节 → 不拦放行',
+    r.status === 0 && fs.readFileSync(p, 'utf8').includes('状态: done'),
+    JSON.stringify({ status: r.status, stderr: String(r.stderr).slice(0, 200) }));
+  fs.rmSync(root, { recursive: true, force: true });
+}
+// S58：v12 装户形态关单冒烟（2026-10-26 closeout-enforcement P1-8）——分片落账 + doc 链接续 + 在场门全量对账
+{
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'confirm-ac3-'));
+  fs.mkdirSync(path.join(root, 'workflow', 'intents'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'workflow', 'plans'), { recursive: true });
+  fs.mkdirSync(path.join(root, '.agents', 'confirmations.d'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.agents', 'kit.json'), JSON.stringify({ kit: 'agentic-flow-kit', policyVersion: 12 }));
+  fs.writeFileSync(path.join(root, '.agents', 'confirmations.jsonl'),
+    JSON.stringify({ ts: '2026-10-26T01:00:00.000Z', doc: 'workflow/specs/2026-10-26-ac3.md', stage: 'approved', fingerprint: 'f'.repeat(64), prev: 'draft', source: 'tty' }) + '\n', 'utf8');
+  fs.writeFileSync(path.join(root, 'workflow', 'delegations.md'), [
+    '# 台账', '', '## 自做任务结果', '',
+    '| 日期 | 任务一句话 | 结果 | 备注 | 合入结论 |',
+    '|------|------------|------|------|----------|',
+    '| 2026-10-26 | 自做 2026-10-26-ac3.md 全程 | 一次通过 | - | 合入 |',
+  ].join('\n'), 'utf8');
+  fs.mkdirSync(path.join(root, 'workflow', 'specs'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'workflow', 'specs', '2026-10-26-ac3.md'), '---\n状态: approved\n级别: L2\n日期: 2026-10-26\n---\n# S\n', 'utf8');
+  const ip = path.join(root, 'workflow', 'intents', '2026-10-26-ac3.md');
+  const pp = path.join(root, 'workflow', 'plans', '2026-10-26-ac3.md');
+  fs.writeFileSync(ip, '---\n状态: draft\n级别: L2\n日期: 2026-10-26\n---\n# I\n', 'utf8');
+  fs.writeFileSync(pp, '---\n状态: draft\n级别: L2\n日期: 2026-10-26\n---\n# P\n', 'utf8');
+  gitHead(root);
+  gitAt(root, 'add', '-A');
+  gitAt(root, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'init');
+  const shardOf = (doc) => path.join(root, '.agents', 'confirmations.d', doc.replace(/^.*\//, '').replace(/\.md$/, '') + '.jsonl');
+  // 第一跳：intent draft→approved（须落分片）
+  const r1 = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-10-26-ac3.md', '--delegated', '立项'], { cwd: root, encoding: 'utf8' });
+  const iRows = fs.readFileSync(shardOf('workflow/intents/2026-10-26-ac3.md'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l));
+  // 主断言=「intent 的行只落分片」——主台账在位（夹具预置了 spec 的 approved 行），判主台账不含 intent doc
+  const mainNoIntent = !fs.readFileSync(path.join(root, '.agents', 'confirmations.jsonl'), 'utf8').includes('workflow/intents/2026-10-26-ac3.md');
+  check('S58 v12 第一跳：approved 行落分片（主台账无 intent 行）',
+    r1.status === 0 && iRows.length === 1 && iRows[0].stage === 'approved' && mainNoIntent,
+    JSON.stringify({ status: r1.status, rows: iRows }));
+  // plan 两跳 + intent done（每跳 approved 态先 git 提交过 done 前置门；关单完成度门须 plan 先 done；在场门全量对账——台账行已在场）
+  spawnSync(process.execPath, [CLI, 'workflow/plans/2026-10-26-ac3.md', '--delegated', '批准'], { cwd: root, encoding: 'utf8' });
+  gitAt(root, 'add', '-A');
+  gitAt(root, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'plan approved');
+  const r2 = spawnSync(process.execPath, [CLI, 'workflow/plans/2026-10-26-ac3.md', '--delegated', '关单'], { cwd: root, encoding: 'utf8' });
+  gitAt(root, 'add', '-A');
+  gitAt(root, '-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'intent approved');
+  const r3 = spawnSync(process.execPath, [CLI, 'workflow/intents/2026-10-26-ac3.md', '--delegated', '关单'], { cwd: root, encoding: 'utf8' });
+  // 同名家族共用分片文件（<基名>.jsonl，intent+plan 行混居，doc 链按 doc 字段分组自洽）——过滤本 doc
+  const iRows2 = fs.readFileSync(shardOf('workflow/intents/2026-10-26-ac3.md'), 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)).filter((e) => e.doc === 'workflow/intents/2026-10-26-ac3.md');
+  check('S58 v12 全链：plan done + intent done 放行、intent 分片两行、doc 链接续（第二行 prevHash=第一行 hash）',
+    r2.status === 0 && r3.status === 0 && iRows2.length === 2 && iRows2[1].stage === 'done'
+      && typeof iRows2[0].hash === 'string' && iRows2[1].prevHash === iRows2[0].hash,
+    JSON.stringify({ r2: r2.status, r2err: String(r2.stderr).slice(0, 500), r3: r3.status, r3err: String(r3.stderr).slice(0, 300), rows: iRows2 }));
   fs.rmSync(root, { recursive: true, force: true });
 }
 

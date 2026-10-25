@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-25T17:06:14.961Z",
+  "generatedAt": "2026-10-25T23:37:47.531Z",
   "files": {
     ".github/workflows/ci.yml": {
       "sha256": "95f066f55051bfdb581b930b202e70084566e6f49da37a326362048bfe9e50d9",
@@ -98,9 +98,9 @@
       "note": "source-port-batch：语法门递归+fail-closed / 委派在场门 / deploy-observations 第四台账 / verify 第八门挂载自检——源仓 97b9b247+b38f9f60 优化1/4/5 回灌"
     },
     "templates/_agents/scripts/check-loop.mjs": {
-      "sha256": "d27bc6a8a30d116728c7955f137f7d3d11c4b7752b6a37e1c854a89b83d910e2",
+      "sha256": "808f8d12f5bfe4c4c4dd362ccccf81aa1c92bbc1fb140bd515729b6e3691ff18",
       "hard": 32,
-      "note": "audit-fixes：挂载自检两行口径 / incident 枚举收口 / release 前置 CI 门（自审修复批）"
+      "note": "closeout-enforcement：验收勾验前置门/放弃态配对豁免/v12 装户形态冒烟（自审单2机制演进批）"
     },
     "templates/_agents/scripts/check-metric-claims.mjs": {
       "sha256": "2c2d8615e9418117d43202dc67cd4131e43fb6c095686363dfcd2fd2cb542f2a",
@@ -141,9 +141,9 @@
       "hard": 1
     },
     "templates/_agents/scripts/confirm-doc.mjs": {
-      "sha256": "19e1c6dea83fd695cab4685351f136a1c47ed219d393ab642916316ae7051d17",
+      "sha256": "59ca6e799d7ace7c751de07237c01cb2522b262c62a9e7bc6d4b20c4211d543c",
       "hard": 13,
-      "note": "source-port-batch-2：补偿行生成器 append-compensation + planConfirmedFor 关单完成度门（源仓 d134be8f/97b9b247 收窄回灌）"
+      "note": "closeout-enforcement：验收勾验前置门/放弃态配对豁免/v12 装户形态冒烟（自审单2机制演进批）"
     },
     "templates/_agents/scripts/delegation-presence.mjs": {
       "sha256": "2e3fb89b01520ea97830f1fccc74d70558d63ad1d77517d8fe6bf8304e44dab1",

@@ -169,6 +169,28 @@ SCEN(async () => {
   rmfix(T);
 });
 
+// ---- 场景 2b:放弃态 intent 无 plan → 配对豁免（2026-10-26 closeout-enforcement）----
+// ---- 场景 2c:放弃态 incident 无 plan/三件套 → 豁免（2026-10-26 closeout-enforcement）----
+SCEN(async () => {
+  const T = mkfix();
+  w(T, 'workflow/incidents/2026-09-12-x3.md', '---\n状态: cancelled\n级别: L2\n发现: 2026-09-12\n---\n# INCIDENT — x3\n');
+  expectOk('cancelled L2 incident 无 plan/spec/三件套 → 配对与三件套豁免', T);
+  rmfix(T);
+});
+
+SCEN(async () => {
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-12-x1.md', INTENT('x1', '状态: cancelled\n级别: L1\n日期: 2026-09-12'));
+  expectOk('cancelled intent 无 plan → 配对豁免（立了入口即取消是合法形态）', T);
+  rmfix(T);
+});
+SCEN(async () => {
+  const T = mkfix();
+  w(T, 'workflow/intents/2026-09-12-x2.md', INTENT('x2', '状态: superseded\n级别: L2\n日期: 2026-09-12'));
+  expectOk('superseded L2 intent 无 plan/spec → 配对豁免', T);
+  rmfix(T);
+});
+
 // ---- 场景 3:L2 intent 缺 spec → hard ----
 SCEN(async () => {
   const T = mkfix();

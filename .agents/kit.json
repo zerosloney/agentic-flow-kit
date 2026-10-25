@@ -211,7 +211,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "d27bc6a8a30d116728c7955f137f7d3d11c4b7752b6a37e1c854a89b83d910e2"
+      "sha256": "808f8d12f5bfe4c4c4dd362ccccf81aa1c92bbc1fb140bd515729b6e3691ff18"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -219,7 +219,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.test.mjs",
-      "sha256": "508b7695d4ae33853443e12630746bba4736484fbac3ec573b79723ddbd14e33"
+      "sha256": "2d72b40342f7cfa30662fdf6c324bb02acf48fceb6fc82805aaaf0e163edc211"
     },
     {
       "rel": ".agents/scripts/check-metric-claims.mjs",
@@ -283,11 +283,11 @@
     },
     {
       "rel": ".agents/scripts/confirm-doc.mjs",
-      "sha256": "19e1c6dea83fd695cab4685351f136a1c47ed219d393ab642916316ae7051d17"
+      "sha256": "59ca6e799d7ace7c751de07237c01cb2522b262c62a9e7bc6d4b20c4211d543c"
     },
     {
       "rel": ".agents/scripts/confirm-doc.test.mjs",
-      "sha256": "ad4148e35df5f51bcfb0b3cc576750666ae112d54b06b6e45c0af0f9b9174756"
+      "sha256": "2a9f2d9bb544f09eaa6a9dfa0aa93cd92ec2357a381b93feb184aaa903b4c36e"
     },
     {
       "rel": ".agents/scripts/delegation-presence.mjs",
