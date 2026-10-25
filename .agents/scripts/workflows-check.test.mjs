@@ -240,7 +240,8 @@ const fm = (extra = '') => `---\nname: t\ndescription: t\n${extra}---\n\n# w\n\n
     check('S14 真实仓库自扫 SKIP（本环境无 .agents/workflows/ 可执行件——装户径，沿 doctor.test 同口径）', true);
   } else {
     check('S14 真实仓库 .agents/workflows/ 自扫 0 error（扫描面：' + names + '）',
-      r.errorCount === 0 && r.files.length >= 3,
+    // baseline 锚「全量 0 error」不锚件数——可执行件数随包源 workflows/ 目录演化（2026-10-20 起为 2 份）
+      r.errorCount === 0 && r.files.length >= 1,
       JSON.stringify(r.files.filter((f) => f.errors.length).map((f) => ({ f: f.file, e: f.errors }))));
   }
 }

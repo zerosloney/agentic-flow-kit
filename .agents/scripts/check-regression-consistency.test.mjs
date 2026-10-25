@@ -23,8 +23,8 @@ const check = (name, cond, detail = '') => {
   check('提取：tmp/ 前缀归易失面', r.volatilePaths.includes('tmp/probe.mjs') && !r.codePaths.includes('tmp/probe.mjs'), JSON.stringify(r));
 }
 {
-  const r = extractRefs('<!-- 模板说明：src/example.mjs 是示例 -->IntegrationTests 审计与 OrdersController 无路径');
-  check('提取：HTML 注释不计 + 裸标识符不抓', r.codePaths.length === 0, JSON.stringify(r));
+  const r = extractRefs('<!-- 模板说明：src/example.mjs 是示例 -->IntegrationTests 审计与 OrdersController 无路径；判定单源 `check-regression-consistency.mjs` 为裸名提及');
+  check('提取：HTML 注释不计 + 裸标识符不抓 + 裸文件名不抓（自举首捉误报面）', r.codePaths.length === 0, JSON.stringify(r));
 }
 
 // ---- 夹具：scanRegressionRefs ----
