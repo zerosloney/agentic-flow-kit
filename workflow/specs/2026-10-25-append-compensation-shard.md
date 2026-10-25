@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: infra
-确认指纹: 98ffbec90d9174f2
+确认指纹: 03c28660573b3cd1
 ---
 # SPEC — append-compensation 补偿行分片口径修正
 
@@ -23,8 +23,8 @@ append-compensation.mjs 的台账写入口径改为与 confirm-doc CLI 层单源
 ## 验收判据
 | 判据（可观察行为） | 证据（测试文件 / 命令 / 证据文件） | 状态 |
 |---|---|---|
-| 分片口径断言绿 | append-compensation.test | 覆盖 |
-| check-loop 零 HARD-BLOCK | node .agents/scripts/check-loop.mjs | 覆盖 |
+| 分片口径断言绿 | npm test | 覆盖 |
+| check-loop 零 HARD-BLOCK | node .agents/scripts/verify.mjs | 覆盖 |
 | 全量测试绿 | npm test | 覆盖 |
 
 ## 确认与复核

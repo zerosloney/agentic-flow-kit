@@ -1,8 +1,8 @@
 ---
-状态: approved
+状态: done
 级别: L2
 模块: infra
-确认指纹: f95462b74cb7a7de
+确认指纹: dbc20f8ea73f788d
 ---
 # PLAN — append-compensation 分片口径修正
 

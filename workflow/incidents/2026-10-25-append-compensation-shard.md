@@ -1,9 +1,10 @@
 ---
-状态: open
+状态: fixed
 级别: L2
 发现: 2026-10-25
 模块: infra
 沉淀: 无
+确认指纹: 94ee8055b16ffc0e
 ---
 # INCIDENT — append-compensation 补偿行落错主台账（doc 链倒挂）
 
@@ -20,13 +21,13 @@ append-compensation.mjs 直接调 appendLedger(root, r.row) 用了函数层缺�
 
 ## 防复发
 1. 跨形态回灌须核对「写入域」差异（分片/主台账、doc 链/物理链），不能只对齐判据函数
-2. 补偿行通道用例补「分片仓形态」（夹具带 kit.json v8+ 断言落分片）
+2. 补偿行通道用例补「分片仓形态」（夹具带 kit.json v8+ 断言落分片）——已落：append-compensation.test.mjs 场景 4（npm test 随跑）
 3. 根因在「回灌适配差异」非「补偿行判据」——bindingSha256/prev/quote 语义未被推翻
 
 ## 时间线
 - 2026-10-25 用户确认：按「按照你建议来→提交 打版本推送」授权链收口 hotfix（对话内）
 
 ## 验收标准（可测试）
-- [ ] 场景：R1 append-compensation 分片口径与 confirm-doc 单源（证据：append-compensation.test 夹具 v12 分片断言）
-- [ ] 场景：R2 勾验补正后 check-loop 零 HARD-BLOCK（证据：本单提交前 check-loop 输出）
-- [ ] 场景：R3 全量测试绿（证据：npm test 82 套件 0 失败）
+- [x] 场景：R1 append-compensation 分片口径与 confirm-doc 单源（证据：append-compensation.test 场景 4——PASS 10/0，fix 6f97f76）
+- [x] 场景：R2 勾验补正后 check-loop 零 HARD-BLOCK（证据：补偿行分片重落后 check-loop HARD-BLOCK=0）
+- [x] 场景：R3 全量测试绿（证据：npm test 82 套件 0 失败（hotfix 前基线）；勾验补正与口径修正为局部改动，关单前 verify 八门全绿复核）
