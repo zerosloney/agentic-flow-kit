@@ -1,12 +1,12 @@
 ---
-状态: approved
+状态: done
 级别: L2
 risk_level: L2
 预判: kind=require level=L2
 日期: 2026-10-26
 模块: infra
 沉淀: 无
-确认指纹: d70c2b59a740618a
+确认指纹: 2d2dc01e64b9dbb6
 ---
 # INTENT — 关单执法点前移批（验收勾验前置门 / 放弃态配对豁免 / 装户形态测试）
 
@@ -20,9 +20,9 @@ hard 拦（特性分支 featureHold 不归档 → 分支 push 被自家门拦到
 锚行为差异）零覆盖，补偿行首用即断（亲历）。
 
 ## 目标
-- [ ] ① confirm-doc →done 前置「验收勾验门」：正文含「## 验收标准」节且节内有未勾行 → 拒（判据与检查 8 同口径，执法时点前移）
-- [ ] ② 检查 1/3 结构配对放弃态豁免：st ∈ abandoned（superseded/cancelled）跳过配对 hard（状态检查口径不变——abandoned 本就合法）
-- [ ] ③ confirm-doc.test 补 v12 装户形态关单冒烟组（分片落账/doc 链接续/在场门全量对账）+ 头注纪律「跨形态改动须带 v12 用例」
+- [x] ① confirm-doc →done 前置「验收勾验门」：正文含「## 验收标准」节且节内有未勾行 → 拒（判据与检查 8 同口径，执法时点前移）（证据：confirm-doc.test S56/S57——PASS 99/0，feat bf7897d）
+- [x] ② 检查 1/3 结构配对放弃态豁免（证据：check-loop.test 场景 2b/2c 三用例——346/0）
+- [x] ③ v12 冒烟组 + 头注纪律（证据：S58 全链断言——家族共分片/doc 链分组接续；confirm-doc.mjs 头注）
 
 ## 非目标
 - 不动检查 8 判据（勾验对账语义不变，只前移执法点）
@@ -43,8 +43,8 @@ hard 拦（特性分支 featureHold 不归档 → 分支 push 被自家门拦到
 - [ ] schema / 迁移 SQL / DI 链 / 认证与中间件管线 → 级别 L3（不触及）
 
 ## 验收标准（可测试）
-- [ ] 场景：S1 勾验门拦截/放行（含节未勾拒、全勾过、无节不拦）（证据：confirm-doc.test 扩展）
-- [ ] 场景：S2 incidents →fixed 不受勾验门影响（证据：既有用例零回归）
-- [ ] 场景：S3 放弃态豁免（cancelled intent 无 plan 不拦 / cancelled incident 无 plan 不拦 / 放弃态状态检查口径不变）（证据：check-loop.test 扩展）
-- [ ] 场景：S4 v12 装户形态关单冒烟（分片+链+在场门）（证据：confirm-doc.test 新组）
-- [ ] 场景：S5 全量测试绿 + verify 八门绿（证据：npm test + verify --doc 本单）
+- [x] 场景：S1 勾验门拦截/放行（证据：S56 未勾拒+全勾过、S57 无节不拦）
+- [x] 场景：S2 incidents →fixed 不受勾验门影响（证据：既有 S49 等零回归，99/0）
+- [x] 场景：S3 放弃态豁免（证据：场景 2b cancelled/superseded intent、2c cancelled incident——expectOk 全过）
+- [x] 场景：S4 v12 冒烟（证据：S58——intent 行落分片主台账无、doc 链接续、plan/intent 关单放行）
+- [x] 场景：S5 全量测试绿 + verify 八门绿（证据：npm test 82 套件 0 失败；verify --doc 三份各 🎉 8 项通过）
