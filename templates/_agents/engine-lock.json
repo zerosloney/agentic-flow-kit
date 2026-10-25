@@ -1,6 +1,6 @@
 {
   "schema": 1,
-  "generatedAt": "2026-10-25T07:16:06.946Z",
+  "generatedAt": "2026-10-25T09:20:29.098Z",
   "files": {
     ".github/workflows/ci.yml": {
       "sha256": "e9cffb90dec8f0a49bfe231a13fb8df375a2494cc75c38d991b5eb7c7be104b5",
@@ -51,6 +51,11 @@
       "sha256": "70440d3c467f6fb82e1f9bbd70b2a39707719100b6f33851ea100b358adc0883",
       "hard": 0
     },
+    "templates/_agents/scripts/append-compensation.mjs": {
+      "sha256": "3556216d3a5ddab170d87fd374bf8611334b245e4cb56c57380141960c25557e",
+      "hard": 0,
+      "note": "source-port-batch-2：补偿行生成器 append-compensation + planConfirmedFor 关单完成度门（源仓 d134be8f/97b9b247 收窄回灌）"
+    },
     "templates/_agents/scripts/archive-sweep.mjs": {
       "sha256": "19d9c87918ff0b70bf6192ed169fedb708db22f4aadb93130e54fc2a954cc777",
       "hard": 0
@@ -90,9 +95,9 @@
       "note": "source-port-batch：语法门递归+fail-closed / 委派在场门 / deploy-observations 第四台账 / verify 第八门挂载自检——源仓 97b9b247+b38f9f60 优化1/4/5 回灌"
     },
     "templates/_agents/scripts/check-loop.mjs": {
-      "sha256": "6e9be02438cc31e67e4f5b8cf455a5c773516b7d09829e660ca59ad1312185ba",
+      "sha256": "f2bb63de1da292ba64b6c8f16819bc4afbb122cd40b6c64f725f867912471cbe",
       "hard": 32,
-      "note": "source-port-batch：语法门递归+fail-closed / 委派在场门 / deploy-observations 第四台账 / verify 第八门挂载自检——源仓 97b9b247+b38f9f60 优化1/4/5 回灌"
+      "note": "source-port-batch-2：补偿行生成器 append-compensation + planConfirmedFor 关单完成度门（源仓 d134be8f/97b9b247 收窄回灌）"
     },
     "templates/_agents/scripts/check-metric-claims.mjs": {
       "sha256": "2c2d8615e9418117d43202dc67cd4131e43fb6c095686363dfcd2fd2cb542f2a",
@@ -133,9 +138,9 @@
       "hard": 1
     },
     "templates/_agents/scripts/confirm-doc.mjs": {
-      "sha256": "e93c0ff99189cd66dc79c2744303f2838d280e4c57da5bf54cf7d128738b048c",
+      "sha256": "19e1c6dea83fd695cab4685351f136a1c47ed219d393ab642916316ae7051d17",
       "hard": 13,
-      "note": "source-port-batch：语法门递归+fail-closed / 委派在场门 / deploy-observations 第四台账 / verify 第八门挂载自检——源仓 97b9b247+b38f9f60 优化1/4/5 回灌"
+      "note": "source-port-batch-2：补偿行生成器 append-compensation + planConfirmedFor 关单完成度门（源仓 d134be8f/97b9b247 收窄回灌）"
     },
     "templates/_agents/scripts/delegation-presence.mjs": {
       "sha256": "2e3fb89b01520ea97830f1fccc74d70558d63ad1d77517d8fe6bf8304e44dab1",
@@ -281,8 +286,9 @@
       "hard": 3
     },
     "templates/_agents/scripts/stage-gates.mjs": {
-      "sha256": "e2a942b70f6ae5d8f6ebe39f25f07b53f7388d912b92d06e89c298d49154ea9f",
-      "hard": 0
+      "sha256": "1a89b34383142b897439af0a0a468223bfaa4802e8128c9b1c27c3f6c11b5856",
+      "hard": 0,
+      "note": "source-port-batch-2：补偿行生成器 append-compensation + planConfirmedFor 关单完成度门（源仓 d134be8f/97b9b247 收窄回灌）"
     },
     "templates/_agents/scripts/trust-mode.mjs": {
       "sha256": "22ff792202af214245dc67d3d5f8efb407cb61cd27cb306e833db79a8b3d8b60",

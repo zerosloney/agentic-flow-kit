@@ -75,4 +75,5 @@ description: Maintain 阶段:立 incident + 复盘三件套(修复 / 防复发 /
 ## 4. 确认后
 
 - incident 状态 → fixed(三件套全落地)；防复发用例通过后 → closed——两跳均走确认门 `node .agents/scripts/confirm-doc.mjs <path>`（open→fixed / fixed→closed，无单跳；2026-09-28 起 check-loop 15 对账，AI 不得直改状态；口径见根 `AGENTS.md` §1.3 确认门）
+- **关单后裁定回填**（2026-10-25 source-port-batch-2）：done/closed 等终态文档确需回填裁定时，改正文**同批**在台账追加**重确认补偿行**——同 doc+stage、fingerprint=改后内容指纹（bindingSha256 单源口径）、prev 沿用原行、quote=用户裁定原话（source: chat-delegated）；append-only 不改历史行，检查 15 按末次行生效（重确认场景）。注意 confirm-doc 对终态文档无前向跳转，补偿行**直接追加台账**。生成器：`node .agents/scripts/append-compensation.mjs <doc...> --quote "<用户原话>"`——指纹按单源计算、写入走 appendLedger（分片口径同确认门），手搓哈希会被检查 15 内容漂移门拦（源仓 2026-10-24 实证）；非终态 / 无台账基底 / 内容未变 / 缺 quote 均拒绝
 - 若需新 intent → 进 `next: .agents/commands/plan.md`

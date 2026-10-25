@@ -35,7 +35,7 @@
     },
     {
       "rel": ".agents/commands/maintain.md",
-      "sha256": "c8808ee5be289951b6cb4d67bf4d14cc4e140b2bbde434efdf84342b6140f86f"
+      "sha256": "8541903c725f4c914346e7f6256c960cfd120fcbed5ab0bddb090e0dc484254f"
     },
     {
       "rel": ".agents/commands/new-task.md",
@@ -130,6 +130,14 @@
       "sha256": "1b3c0582cd34a47bdc7277412b7dd1b00903ed455623fc83f69cb01215cbdb6e"
     },
     {
+      "rel": ".agents/scripts/append-compensation.mjs",
+      "sha256": "3556216d3a5ddab170d87fd374bf8611334b245e4cb56c57380141960c25557e"
+    },
+    {
+      "rel": ".agents/scripts/append-compensation.test.mjs",
+      "sha256": "da1d3a1739d8e4f2098f885f288315b7cff35135d8f3dc500184ef4ae4a62861"
+    },
+    {
       "rel": ".agents/scripts/archive-sweep.mjs",
       "sha256": "19d9c87918ff0b70bf6192ed169fedb708db22f4aadb93130e54fc2a954cc777"
     },
@@ -203,7 +211,7 @@
     },
     {
       "rel": ".agents/scripts/check-loop.mjs",
-      "sha256": "6e9be02438cc31e67e4f5b8cf455a5c773516b7d09829e660ca59ad1312185ba"
+      "sha256": "f2bb63de1da292ba64b6c8f16819bc4afbb122cd40b6c64f725f867912471cbe"
     },
     {
       "rel": ".agents/scripts/check-loop.sh",
@@ -275,11 +283,11 @@
     },
     {
       "rel": ".agents/scripts/confirm-doc.mjs",
-      "sha256": "e93c0ff99189cd66dc79c2744303f2838d280e4c57da5bf54cf7d128738b048c"
+      "sha256": "19e1c6dea83fd695cab4685351f136a1c47ed219d393ab642916316ae7051d17"
     },
     {
       "rel": ".agents/scripts/confirm-doc.test.mjs",
-      "sha256": "dbc31bccfe6cfe814d6f295be07823f0b7e3852665e10019918d4380f0ba18df"
+      "sha256": "ad4148e35df5f51bcfb0b3cc576750666ae112d54b06b6e45c0af0f9b9174756"
     },
     {
       "rel": ".agents/scripts/delegation-presence.mjs",
@@ -563,7 +571,7 @@
     },
     {
       "rel": ".agents/scripts/stage-gates.mjs",
-      "sha256": "e2a942b70f6ae5d8f6ebe39f25f07b53f7388d912b92d06e89c298d49154ea9f"
+      "sha256": "1a89b34383142b897439af0a0a468223bfaa4802e8128c9b1c27c3f6c11b5856"
     },
     {
       "rel": ".agents/scripts/stage-gates.test.mjs",

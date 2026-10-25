@@ -149,6 +149,38 @@ export function specConfirmed(root, base) {
   return judgeDoc(root, abs, rel, ENTRY_STATUSES);
 }
 
+// archiveCandidates：归档探查（关单即归档是既有语义 archive-on-close）——workflow/archive/<月>/plans/<base>.md
+function archiveCandidates(root, kind, base) {
+  const out = [];
+  const ar = path.join(root, 'workflow', 'archive');
+  if (!fs.existsSync(ar)) return out;
+  for (const month of fs.readdirSync(ar)) {
+    const p = path.join(ar, month, kind, `${base}.md`);
+    if (fs.existsSync(p)) out.push(p);
+  }
+  return out;
+}
+
+// planConfirmedFor：L2/L3 intent 关单完成度门（2026-10-25 source-port-batch-2，源仓 97b9b247 回灌收窄版）
+// ——同名 plan 须存在且已确认（approved/done）。此前检查 1 只要求 plan **存在**、不要求**已确认**：
+// agent 跳过 closeout 自核即可在 plan 仍 draft 时合规关掉 L2/L3 intent（源仓复核 P1 同形洞）。
+// 归档感知（关单即归档语义）：活跃路径未命中再探 archive/<月>/plans/；台账匹配仍用原路径
+// （归档不改台账 doc 字段——judgeDoc 的 rel 参数）。
+// 边界（源仓 2026-10-24 复核 m2 同款）：plan 被合法置 superseded/cancelled 时本门恒拒——该 intent
+// 的 →done 通道随之关闭（superseded 不可逆）。正确处置是 **intent 同步 superseded**，不是放宽本门；
+// 勿在此处加放弃态放行（否则「plan 已废弃但 intent 照样关单」成为逃逸路径）。
+export function planConfirmedFor(root, base) {
+  const rel = `workflow/plans/${base}.md`;
+  const abs = path.join(root, rel);
+  const target = fs.existsSync(abs) ? abs : archiveCandidates(root, 'plans', base)[0];
+  if (!target) return { ok: false, reason: `缺同名 plan（${rel}，活跃与归档均未命中）` };
+  const r = judgeDoc(root, target, rel, ENTRY_STATUSES);
+  if (!r.ok && ['superseded', 'cancelled'].includes(r.status)) {
+    return { ok: false, reason: `同名 plan 已置 ${r.status}——其 intent 的 →done 通道随之关闭，正确处置是 intent 同步 ${r.status}（本门不放行放弃态 plan）` };
+  }
+  return r;
+}
+
 // laneOfEntry / laneOfDoc：泳道单源取法（2026-10-02 caliber-convergence 方案 C「分歧双严」）
 // risk_level 为 intent 专属协议字段（fill-intent 双写），生效锚 policy.riskLevelSince：
 //   级别非法/缺失 → suspect（fail-closed 就严）；

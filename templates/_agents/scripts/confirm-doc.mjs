@@ -46,7 +46,7 @@ import { execFileSync, spawnSync } from 'node:child_process';
 import { readLedgerEntries, readLedgerRows } from './ledger-loader.mjs';
 // 委派台账在场判据单源（2026-10-25 source-port-batch）：与检查 18 共用，事后 WARN 与写入拦截不漂移。
 import { delegationRowsOf, rowCovers } from './delegation-presence.mjs';
-import { confirmGateFor, clarifyGateFor, doneGateFor, laneOfEntry, laneOfDoc } from './stage-gates.mjs';
+import { confirmGateFor, clarifyGateFor, doneGateFor, planConfirmedFor, laneOfEntry, laneOfDoc } from './stage-gates.mjs';
 import { loadKitPolicy, hasFreshVerifyLine, ledgerChainHash, ledgerDocChainActive, ledgerDocChainPrev, scopeDigest } from './policy.mjs';
 
 // hasFreshVerify(root, doc)：读 <root>/.agents/verifications.jsonl 判 24h 窗口绿行（判定单源
@@ -457,6 +457,19 @@ if (isMain) {
       if (!gate.ok) {
         console.error(`❌ ${doc} 未过 done 前置门（approved 历史）：${gate.reason}`);
         console.error(`   ${gate.hint}（本份未落账、未写盘）`);
+        refused++;
+        continue;
+      }
+    }
+    // 关单完成度门·收窄版（2026-10-25 source-port-batch-2，源仓 97b9b247 回灌）：L2/L3 intent →done
+    // 须同名 plan 已确认（approved/done，归档感知）——检查 1 只要求 plan 存在，agent 跳过 closeout
+    // 自核即可在 plan 仍 draft 时合规关单（源仓复核 P1 同形洞）。plan 置 superseded/cancelled 时
+    // 恒拒——正确处置是 intent 同步放弃态（判据单源 stage-gates.planConfirmedFor，勿在此放宽）。
+    if (target === 'done' && doc.startsWith('workflow/intents/') && (lvl === 'L2' || lvl === 'L3')) {
+      const pl = planConfirmedFor(root, path.basename(doc, '.md'));
+      if (!pl.ok) {
+        console.error(`❌ ${doc} 未过 L2/L3 intent 关单完成度门（同名 plan 必已确认）：${pl.reason}`);
+        console.error('   先走 build.md 完成同名 plan 并确认（approved），再关本 intent；plan 已废弃则本 intent 同步 superseded（本份未落账、未写盘）');
         refused++;
         continue;
       }

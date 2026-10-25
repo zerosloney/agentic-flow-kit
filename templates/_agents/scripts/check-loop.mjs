@@ -1397,7 +1397,7 @@ export function runCheckLoop(opts = {}) {
           } else if (!(typeof entry.ts === 'string' && entry.ts >= kitPolicy.bindingTs)) {
             // 该 done 确认发生在生效锚前（旧关单顺序时代）——豁免内容绑定，配对判定照常
           } else if (bindingSha256(linesOf(doc) || [], entry.prev) !== entry.fingerprint) {
-            blockers.push(`- [确认内容漂移] ${base} ${st} 后内容与确认台账不符——已关单文档不得直接改（关单编辑先于关单确认）；确需修订走 superseded 或新 intent 引用`);
+            blockers.push(`- [确认内容漂移] ${base} ${st} 后内容与确认台账不符——已关单文档不得直接改（关单编辑先于关单确认）；确需修订走 superseded 或新 intent 引用，或经用户裁定按 maintain.md §4 走补偿行通道（node .agents/scripts/append-compensation.mjs <doc> --quote "<裁定原话>"）`);
           }
         }
       }

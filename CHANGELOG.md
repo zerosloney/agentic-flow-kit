@@ -4,6 +4,27 @@
 
 ## Unreleased
 
+- feat(gate)：**源仓策略分歧批回灌二（两件）**（2026-10-25 source-port-batch-2，L2 三件套；前单遗留
+  策略分歧按用户授权「按建议处置」收口——源仓 d134be8f + 97b9b247 收窄回灌）：
+  ① **补偿行生成器 append-compensation.mjs 常驻**——终态文档（done/closed 等）确需回填裁定时，
+  补偿行指纹按 bindingSha256 单源口径（状态行回填 prev 后再哈希——源仓 10-24 实证「手搓指纹被
+  检查 15 HARD-BLOCK」的踩坑收口）、prev 沿用末次行、quote=用户裁定原话必填（source=chat-delegated）、
+  写入走 appendLedger（分片/doc 链与确认门同一出口）；四类拒绝面 fail-loud（非终态/无台账基底/
+  末次行缺 prev/内容未变）+ 缺 --quote 拒跑。maintain.md §4 增「关单后裁定回填」政策条；
+  检查 15 漂移 blocker 文案补补偿行通道指引（判据零变化——末次生效口径本就支持重确认，本件是
+  收口既有暗路非放宽判据）；
+  ② **关单完成度门·收窄版 planConfirmedFor**——L2/L3 intent →done 须同名 plan 已确认
+  （approved/done，归档感知 archive/<月>/plans/）；缺口核验：检查 1 只要求 plan **存在**、
+  不要求**已确认**，agent 跳过 closeout 自核即可在 plan 仍 draft 时合规关单（源仓复核 P1 同形洞）。
+  plan 置 superseded/cancelled 时恒拒并指引「intent 同步放弃态」（不放行——否则「plan 已废弃但
+  intent 照样关单」成为逃逸路径，源仓复核 m2 同款边界）；L1 intent 不在门面（协作道语义）。
+  明确不收编（决策留痕）：台账指针存在性门（check-ledger-doc-presence——verify 八门关单时已兜底
+  悬空行，提交时刻增量面小）；reviewLineFor hard 化（本仓 L2 spec 模板无复核行，升 hard 属
+  policyVersion 演进另批）。
+  配套：engine-lock --note 凭据四件随批入账；自举 sync 收养 append-compensation 两件（managed 177）；
+  confirm-doc.test 既有在场门用例夹具补同名 plan seed（新执法点前置所致，用例断言零变化，S51-S55
+  五新用例钉关单完成度门）。
+
 - feat(gate)：**源仓闭环优化批回灌（四件）**（2026-10-25 source-port-batch，L2 三件套；源仓
   97b9b247 + b38f9f60 优化1/4/5 通用面收编）：
   ① **语法门递归扫描 + 每目录非空 fail-closed**——原实现只 readdirSync 顶层，脚本子目录化/
