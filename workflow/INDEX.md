@@ -5,10 +5,13 @@
 > 模块词表见 `.agents/workflow-modules.txt`。
 <!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->
 
-## 活跃（0）
+## 活跃（3）
 
 | 类型 | 级别 | 状态 | 日期 | 模块 | 标题 | 验收 |
 |---|---|---|---|---|---|---|
+| INTENT | L2 | approved | 2026-10-25 | infra | 源仓闭环优化批回灌（语法门加固 / 委派在场门 / 发布观察台账 / 挂载自检门） | ☑0/7 |
+| PLAN | L2 | approved | 2026-10-25 | infra | 源仓闭环优化批回灌 | — |
+| SPEC | L2 | approved | 2026-10-25 | infra | 源仓闭环优化批回灌 | — |
 
 ## 档案计数（9，不进表）
 
