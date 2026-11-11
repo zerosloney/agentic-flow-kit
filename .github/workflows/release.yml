@@ -1,0 +1,27 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v[0-9]*.[0-9]*.[0-9]*'
+      - '[0-9]*.[0-9]*.[0-9]*'
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+      - run: |
+          node -e "const pkg=require('./package.json');const tag=process.env.GITHUB_REF_NAME.replace(/^v/,'');if(pkg.version!==tag){console.error('version mismatch: package.json='+pkg.version+', tag='+process.env.GITHUB_REF_NAME);process.exit(1)}"
+      - run: npm install
+      - run: npm test
+      - run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
