@@ -13,7 +13,7 @@
 
 - 级别是判断而非机器可判信号：同一改动可能是「纯新增只读字段」（L1）或「既有语义收紧」（L2），hook 无法从 diff 推断级别。
 - 确认指纹只校验文档状态与承诺面，不校验发生顺序。`confirm-doc` 在实现之后调用，文档门仍会通过。
-- 顺序的机器信号在提交时刻：`.agents/hooks/check-confirm-order.mjs`（2026-11-08 档 2-D 起由 `.githooks/commit-msg` 调用——pre-commit 读不到提交消息；合并跳过改由脚本探测 `MERGE_HEAD` 状态文件）。暂存的 `backend/` 源码、`frontend/src` 的 vue/ts、`tests/**/*.cs`、数据维护 SQL，必须逐条出现在**状态为 approved** 的 `workflow/plans/` 正文里，或命中豁免：①L0 车道（消息体含非空 `L0:` 行且产品文件 ≤3）②覆盖性 plan 与本批同暂存（L1 单笔提交，`done` 亦可）。`done` 的**历史** plan 不算覆盖；`draft` 也不算。squash、rebase、cherry-pick 跳过。
+- 顺序的机器信号在提交时刻：`.agents/hooks/check-confirm-order.mjs`（2026-11-08 档 2-D 起由 `.githooks/commit-msg` 调用——pre-commit 读不到提交消息；合并跳过改由脚本探测 `MERGE_HEAD` 状态文件）。暂存的 `backend/` 源码、`frontend/src` 的 vue/ts、`tests/**/*.cs`、数据维护 SQL，必须逐条出现在**状态为 approved** 的 `workflow/plans/` 正文里，或命中豁免：①L0 车道（消息体含非空 `L0:` 行且产品文件 ≤5）②覆盖性 plan 与本批同暂存（L1 单笔提交，`done` 亦可）。`done` 的**历史** plan 不算覆盖；`draft` 也不算。squash、rebase、cherry-pick 跳过。
 - 定级本身仍靠执行者。先改后补档若绕过本门（路径没写进 plan、或提交不经 git 钩子），仍双落 incident + papercuts。
 
 ## 复现痕迹（2026-11-03）

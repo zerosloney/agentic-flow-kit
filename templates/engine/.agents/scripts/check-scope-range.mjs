@@ -10,6 +10,12 @@
 //     PRODUCT_FACES/classifyFace，再扣 AGENTS.md 引擎面：.agents/.zcode/.githooks/宿主适配/workflow/wiki/
 //     根 package.json/azure-pipelines.yml）且无 intent/spec 立档变更 → 打警告，exit 码不变、--strict 不升硬。
 //     事故线豁免（降级口径）：范围内有 incident 立档（非 INDEX 计数）变更 → 警告降级为提示——事故线合法无 plan。
+//     L0 豁免（降级口径，2026-11-11）：产品件全部来自 L0 极简道提交 → 警告降级为提示——L0 合法无 plan。
+//   - L0 极简道豁免（2026-11-11）：越过界对账同样认 L0。逐提交读消息，含非空 `L0: <判据>` 行且该提交
+//     产品路径 ≤5（判据单源复用 check-confirm-order.mjs：l0JudgementFromText / isProductPath / L0_MAX）
+//     → 该提交的产品路径不进越界集。缺失此通道时「plan 提交 + L0 提交」合推会把 L0 产品件判越界，
+//     --strict 直接拦推（L0 本就合法无 plan）。合并提交不给豁免（提交时刻 isMergeLike 同样跳过 L0 判定）。
+//     豁免按文件计且须独占：文件另被非 L0 提交（含合并提交）碰过即失豁免，防越界件搭 L0 便车。
 //   - plan 在工作区不可读 → exit 2（fail-loud，不静默放行；推送范围内改过的 plan 应已在工作区）。
 //   - old 全零（新分支首推）→ skip（exit 0）：范围判不出时不把整段历史误判越界。
 //   - --strict 时越界件非空 exit 1；默认 advisory（exit 0 出报告）。
@@ -20,6 +26,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { extractDeclared, WHITELIST_RE, matches } from './check-scope.mjs';
 import { classifyFace } from './verify-scope.mjs';
+import { L0_MAX, isProductPath, l0JudgementFromText } from '../hooks/check-confirm-order.mjs';
 
 const args = process.argv.slice(2);
 let oldSha = '', newSha = '', strict = false, rootArg = '';
@@ -48,15 +55,38 @@ if (/^0+$/.test(oldSha)) {
 const gitOut = (args) => spawnSync('git', ['-c', 'core.quotepath=off', ...args], { cwd: ROOT, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024 });
 const revs = gitOut(['rev-list', '--first-parent', '--reverse', `${oldSha}..${newSha}`]);
 if (revs.status !== 0) { console.error(`check-scope-range: git rev-list 失败: ${revs.stderr}`); process.exit(2); }
+// L0 豁免（2026-11-11）：一次性取范围内提交消息，逐提交判 `L0:` trailer 与该提交产品路径数。
+// 取不到消息 → 空表 → 不给豁免（fail-closed，与提交时刻「无消息文件豁免不生效」同口径）。
+const msgs = gitOut(['log', '--first-parent', '--reverse', '--format=%x1e%H%x00%B', `${oldSha}..${newSha}`]);
+const msgBySha = new Map();
+for (const rec of (msgs.status === 0 ? msgs.stdout : '').split('\x1e').filter((r) => r.trim())) {
+  const cut = rec.indexOf('\x00');
+  if (cut > 0) msgBySha.set(rec.slice(0, cut).trim(), rec.slice(cut + 1));
+}
 const changedSet = new Set();
+const l0ExemptSet = new Set();
+const nonL0Touched = new Set();
 for (const sha of revs.stdout.split(/\r?\n/).filter(Boolean)) {
   const parents = gitOut(['rev-list', '--parents', '-n', '1', sha]).stdout.trim().split(/\s+/).slice(1);
   const dt = parents.length > 1
     ? gitOut(['diff-tree', '-c', '--no-commit-id', '--name-only', '--no-renames', '-r', sha])
     : gitOut(['diff-tree', '--no-commit-id', '--name-only', '--no-renames', '-r', sha]);
   if (dt.status !== 0) { console.error(`check-scope-range: git diff-tree 失败（${sha}）: ${dt.stderr}`); process.exit(2); }
-  for (const l of dt.stdout.split(/\r?\n/)) if (l.trim()) changedSet.add(norm(l.trim()));
+  const files = dt.stdout.split(/\r?\n/).map((l) => l.trim()).filter(Boolean).map(norm);
+  for (const f of files) changedSet.add(f);
+  // 合并提交不适用 L0：提交时刻 isMergeLike 会让 check-confirm-order 整条跳过，L0 豁免未被授予。
+  let granted = false;
+  if (parents.length === 1) {
+    const l0 = l0JudgementFromText(msgBySha.get(sha));
+    const products = files.filter(isProductPath);
+    granted = Boolean(l0) && products.length > 0 && products.length <= L0_MAX;
+    if (granted) for (const p of products) l0ExemptSet.add(p);
+  }
+  // 同一文件只要被任一非 L0 提交（含合并提交）碰过，就不享受豁免——否则非 L0 提交的越界件
+  // 可借同范围另一笔 L0 提交搭车洗白（豁免按文件计，不能只按提交计）。
+  if (!granted) for (const f of files) nonL0Touched.add(f);
 }
+for (const f of nonL0Touched) l0ExemptSet.delete(f);
 const changed = [...changedSet];
 
 // 盲面封堵（2026-11-10）辅助判定（只服务下方 skip 路径的 advisory，不改越界对账）：
@@ -79,14 +109,20 @@ if (!plansInRange.length) {
   // PRODUCT_FACES（backend/frontend 面 match，含 tests/、scripts/verify/backend/ 与后缀兜底）。
   const productFace = classifyFace(changed).matched.filter((f) => !ENGINE_FACE_RE.test(f) && !ENGINE_FILE_RE.test(f));
   if (productFace.length && !changed.some(isIntentSpecDoc)) {
+    const l0Face = productFace.filter((f) => l0ExemptSet.has(f));
+    const restFace = productFace.filter((f) => !l0ExemptSet.has(f));
     if (changed.some(isIncidentDoc)) {
       // 事故线豁免（降级口径）：有 incident 立档 → 产品改动按事故线处理（合法无 plan），不要求回填
       // plan；降级为提示而非完全静默——立档与产品改动无关的搭车推送仍留观察面。
       console.log('⚠（降级）推送含产品面改动且范围内无 plan 变更——范围内有 incident 立档，按事故线豁免；advisory 不拦截');
+    } else if (restFace.length === 0) {
+      // L0 豁免（降级口径）：产品件全部来自满足 trailer + ≤5 的 L0 提交——L0 合法无 plan，
+      // 与事故线同级降级为提示；混入非 L0 产品件时仍走下方回填警告。
+      console.log('⚠（降级）推送含产品面改动且范围内无 plan 变更——产品件全部来自 L0 极简道提交，按 L0 豁免；advisory 不拦截');
     } else {
-      console.log('⚠ 推送含产品面改动但范围内无 plan 变更——若属计划外改动请先回填 plan（事故线 incident 除外）；本警告 advisory，不拦截');
+      console.log('⚠ 推送含产品面改动但范围内无 plan 变更——若属计划外改动请先回填 plan（事故线 incident / L0 极简道除外）；本警告 advisory，不拦截');
     }
-    console.log(`  产品面件 ${productFace.length}：${productFace.join('、')}`);
+    console.log(`  产品面件 ${productFace.length}${l0Face.length ? `（其中 L0 豁免 ${l0Face.length}）` : ''}：${productFace.join('、')}`);
   }
   process.exit(0);
 }
@@ -98,11 +134,12 @@ for (const rel of plansInRange) {
   declared.push(...extractDeclared(abs));
 }
 
-const outOfScope = changed.filter((f) => !WHITELIST_RE.test(f) && !declared.some((df) => matches(f, df)));
+// L0 极简道提交的产品路径不进越界集（提交时刻已由 check-confirm-order 豁免 A 放行，推送侧同口径）。
+const outOfScope = changed.filter((f) => !l0ExemptSet.has(f) && !WHITELIST_RE.test(f) && !declared.some((df) => matches(f, df)));
 const notLanded = declared.filter((df) => !changed.some((f) => matches(f, df)));
 
 console.log(`▶ check-scope-range（推送范围 plan 改动面对账）: ${oldSha.slice(0, 8)}..${newSha.slice(0, 8)}`);
-console.log(`  范围 plan ${plansInRange.length} 份（${plansInRange.join('、')}）｜ 声明 ${declared.length} ｜ 变更 ${changed.length}`);
+console.log(`  范围 plan ${plansInRange.length} 份（${plansInRange.join('、')}）｜ 声明 ${declared.length} ｜ 变更 ${changed.length}${l0ExemptSet.size ? ` ｜ L0 豁免 ${l0ExemptSet.size}` : ''}`);
 if (outOfScope.length) {
   console.log('  越界件（推送改了但范围内 plan 未声明）:');
   outOfScope.forEach((f) => console.log(`    - ${f}`));

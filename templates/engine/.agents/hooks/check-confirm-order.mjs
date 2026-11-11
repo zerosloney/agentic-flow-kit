@@ -27,7 +27,8 @@ const PRODUCT_RES = [
 ];
 
 // L0 极简道产品文件上限（2026-11-10 档二放宽：3→5；口径单源 new-task.md §L0）
-const L0_MAX = 5;
+// 2026-11-11 export：check-scope-range 复用同一上限做推送范围豁免（判据不复制）。
+export const L0_MAX = 5;
 
 export function isProductPath(rel) {
   return PRODUCT_RES.some((re) => re.test(rel));
@@ -168,12 +169,16 @@ function hints(uncovered, docs, onDisk) {
 // 豁免 A（L0 极简道）判据：消息体含非空 `L0: <判据>` 行（行首 L0:，机器可 grep）。
 // 读不到消息文件 / 无该行 → 返回 null，豁免不生效（fail-closed）。
 // 2026-11-09 export：check-commit-plan-ref 复用同判据做 L0 豁免 skip。
+// 2026-11-11 抽 l0JudgementFromText：check-scope-range 从提交消息文本（git log --format=%B）
+// 复用同一正则，不在推送侧复制判据。
+export function l0JudgementFromText(text) {
+  if (!text) return null;
+  const m = String(text).match(/^L0:[ \t]*(\S.*)$/m);
+  return m ? m[1].trim() : null;
+}
 export function l0Judgement(msgFile) {
   if (!msgFile) return null;
-  try {
-    const m = fs.readFileSync(msgFile, 'utf8').match(/^L0:[ \t]*(\S.*)$/m);
-    return m ? m[1].trim() : null;
-  } catch { return null; }
+  try { return l0JudgementFromText(fs.readFileSync(msgFile, 'utf8')); } catch { return null; }
 }
 
 // L0 放行落账：与 judgment-ledger recordRun 同行形（mode=commit-msg）；level=L0 为观测计数，
