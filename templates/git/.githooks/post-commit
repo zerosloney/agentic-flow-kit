@@ -1,0 +1,62 @@
+#!/usr/bin/env node
+// Git 原生 post-commit hook（经 core.hooksPath 挂载，git commit 后触发；全 node 化。
+// CommonJS——无扩展名文件 node 缺省按 CJS 解析，不依赖 ESM 语法探测）
+// 非阻断缓存维护：把本次提交触及的 workflow/、wiki/ 文件从 kb-search 结构缓存
+//   （.agents/cache/kb-index.json）摘除，收敛 [mtimeMs,size] 两元组的
+//   「同刻同尺寸」失效盲区至提交时点。
+// 判据与设计：workflow/intents/2026-09-23-kb-cache-post-commit-evict.md
+// 另有推送积压提醒（eli5 卡片 5）：ahead ≥ 10 且每满 5 一提——本地 @{upstream}
+//   引用口径（不 fetch，滞后只致少报），advisory 一行，永不阻断。
+// 失败绝不影响提交结果：post-commit 本身非阻断 + evict 脚本坏输入静默 exit 0 + 此处 try 双重兜底。
+const { spawnSync } = require('node:child_process');
+
+try {
+  // 2026-11-06 修（P1-4）：原参数 `diff-tree --no-commit-id --name-only -r HEAD` 有三重缺陷，
+  // 使缓存摘除在若干形态下静默不发生：
+  //   ① 缺 `-c core.quotepath=off`——git 默认 quotepath=true 会把非 ASCII 路径转义为
+  //      `"wiki/\345\217\246..."`，而 kb-cache-evict.mjs 以 startsWith('wiki/') 过滤，
+  //      转义行首是 `"` 一条都不匹配 → 本仓 783 个中文路径 wiki/workflow 文件永不摘除
+  //      （本机全局 .gitconfig 恰为 quotepath=false 才未暴露，换机/CI 复现）。
+  //   ② 缺 `-m`——合并提交默认输出为空（实测），合并带入的文档变更不摘缓存。
+  //   ③ 缺 `--root`——首个提交默认输出为空（实测）。
+  // 非合并提交下 `-m`/`--root` 无副作用（单父即默认行为，实测零差异）。
+  // 同源口径：pre-commit/pre-push/check-ledger-* 的 git diff 均显式带 core.quotepath=off。
+  const files = spawnSync('git', ['-c', 'core.quotepath=off', 'diff-tree', '--no-commit-id', '--name-only', '-r', '-m', '--root', 'HEAD'], { encoding: 'utf8' });
+  if (files.status === 0) {
+    spawnSync(process.execPath, ['.agents/scripts/kb-cache-evict.mjs'], { input: files.stdout, stdio: ['pipe', 'ignore', 'ignore'] });
+  }
+} catch { /* 非阻断三重兜底之一 */ }
+
+// 推送积压提醒（eli5 卡片 5「勤推小步」）：合并冲突成本 ∝ 双方分歧规模，本地积压即分歧的一半。
+// intentional-simple: 阈值 10 / 步长 5 硬编码——调整即改此两处，无需配置面。
+try {
+  const aheadRun = spawnSync('git', ['rev-list', '--count', '@{upstream}..HEAD'], { encoding: 'utf8' });
+  const ahead = aheadRun.status === 0 ? Number(String(aheadRun.stdout || '').trim()) : NaN;
+  if (Number.isInteger(ahead) && ahead >= 10 && ahead % 5 === 0) {
+    console.error(`post-commit: 已领先 upstream ${ahead} 个提交（本地引用口径）——勤推小步别攒大包袱，确认后 git push`);
+  }
+} catch { /* 提醒失败不影响提交 */ }
+
+// 离线梦境提醒（2026-11-11，Dreaming 持续运行链路）：距上次离线梦境审计报告 ≥7 天或无报告，
+// 则 stderr 打一行 advisory 提醒跑 dream-run --execute。advisory 非阻断，失败不影响提交。
+try {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const tmpDir = path.join(__dirname, '..', 'tmp'); // post-commit 位于 .githooks/，仓库根为上一级
+  let latest = '';
+  if (fs.existsSync(tmpDir)) {
+    for (const f of fs.readdirSync(tmpDir)) {
+      const m = f.match(/^dream-report-(\d{4}-\d{2}-\d{2})\.md$/);
+      if (m && m[1] > latest) latest = m[1];
+    }
+  }
+  if (!latest) {
+    console.error('[dream] 尚无离线梦境审计报告——可跑 node .agents/scripts/dream-run.mjs --execute（advisory，非阻断）');
+  } else {
+    const days = Math.floor((Date.now() - Date.parse(`${latest}T00:00:00Z`)) / 86400000);
+    if (days >= 7) {
+      console.error(`[dream] 距上次离线梦境审计（${latest}）已 ${days} 天——可跑 node .agents/scripts/dream-run.mjs --execute（advisory，非阻断）`);
+    }
+  }
+} catch { /* 提醒失败不影响提交 */ }
+process.exit(0);

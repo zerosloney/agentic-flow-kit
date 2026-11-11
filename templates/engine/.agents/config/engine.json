@@ -1,0 +1,11 @@
+{
+  "policyVersion": 16,
+  "createdAt": "{{installedAt}}",
+  "options": {
+    "hosts": {{hostsJson}},
+    "stack": "{{stack}}",
+    "boardPort": "{{boardPort}}",
+    "language": "{{language}}"
+  },
+  "modelBaseline": "GLM-4.x"
+}

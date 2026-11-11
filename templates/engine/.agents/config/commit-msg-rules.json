@@ -1,0 +1,7 @@
+{
+  "_comment": "commit-msg 校验规则单源：.githooks/commit-msg（CJS）与 .agents/scripts/ci-commit-hygiene.mjs（ESM）共同 fs.readFileSync 消费——JSON 兼容两种模块体系，取最简（2026-11-05 自钩子内联正则抽出，复盘 P0 机器执法配套）。types = AGENTS.md「git提交」Conventional Commits 中文枚举；typeSuffix = 类型后须紧跟 ( 或 : 或 （；exemptPrefix = 真实 merge/revert 豁免（git 默认消息 Merge /Revert 与自定义小写 merge:/revert: 前缀；2026-11-06 补 git 自带 squash 模板首行 `Squashed commit of the following:`——`git merge --squash` 后直接提交时该行由 git 生成，非作者笔误）；收紧后不匹配任意 merge/revert 开头。改本文件 = 同时改两处执法面。planSlugRe（2026-11-09 增）= 任务短名在提交消息中的边界匹配模板（<slug> 占位符替换为 plan 文件名去 .md），消费方 .agents/hooks/check-commit-plan-ref.mjs。",
+  "types": ["feat", "fix", "docs", "style", "refactor", "perf", "chore"],
+  "typeSuffix": "(\\(|:|（)",
+  "exemptPrefix": "^(Merge |merge:|Revert |revert:|Squashed commit of the following:)",
+  "planSlugRe": "(^|[^A-Za-z0-9-])<slug>($|[^A-Za-z0-9-])"
+}

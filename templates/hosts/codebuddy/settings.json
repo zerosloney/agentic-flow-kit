@@ -1,0 +1,31 @@
+{
+  "worktree": {
+    "symlinkDirectories": [
+      "frontend/node_modules"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CODEBUDDY_PROJECT_DIR\"/.agents/hooks/pre-write-check.cjs",
+            "timeout": 120
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|PowerShell|RunCommand|Shell|Terminal",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CODEBUDDY_PROJECT_DIR\"/.agents/hooks/pre-shell-check.cjs",
+            "timeout": 800
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentic-flow-kit/project-profile.schema.json",
+  "title": "agentic-flow-kit project profile",
+  "type": "object",
+  "required": ["stack"],
+  "properties": {
+    "stack": { "enum": ["dotnet", "node", "empty"] },
+    "ports": {
+      "type": "object",
+      "properties": {
+        "api": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "web": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "board": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      },
+      "additionalProperties": false
+    },
+    "paths": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    },
+    "commands": {
+      "type": "object",
+      "additionalProperties": { "type": "string" }
+    }
+  },
+  "additionalProperties": true
+}

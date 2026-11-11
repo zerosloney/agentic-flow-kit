@@ -1,0 +1,590 @@
+{
+  "version": 1,
+  "namespace": "Shipyard.Material.IntegrationTests",
+  "note": "影响面选测映射：areas=测试类归属；always=每次集成子集必跑；paths=按序首命中，未命中/星号=全量。新增测试类须登记，check-test-impact-map.mjs 机检。",
+  "areas": {
+    "api": [
+      "AuthChallengeBodyApiTests",
+      "BusinessExceptionResponseTests",
+      "ExceptionResponseTests",
+      "MiniProfilerWiringTests",
+      "NotEmptyGuidValidationTests",
+      "PaginationClampTests",
+      "PerfGuardLatencyTests",
+      "PerfGuardSqlCountTests",
+      "RequestDtoNullabilityTests",
+      "SearchEmptyKeywordTests"
+    ],
+    "core": [
+      "ConnectionSmokeTests",
+      "TestDbLockTests",
+      "TestDbWriteGuardTests"
+    ],
+    "inventory": [
+      "DocumentAttachmentTests",
+      "OutboundInventoryLockTests",
+      "PipePieceCountInventoryTests",
+      "TransferOrderInventoryOccupationTests"
+    ],
+    "masterdata": [
+      "BuyerGroupsApiTests",
+      "BuyersApiTests",
+      "CodeTemplateSqlTests",
+      "ExchangeRateApiTests",
+      "ExchangeRateImportApiTests",
+      "ManagementSegmentsApiTests",
+      "MasterDataApiGuardMoreTests",
+      "MasterDataApiTests",
+      "MaterialCodeAttributeGuardTests",
+      "MaterialCodesApiTests",
+      "SpecCodeCounterSqlTests",
+      "SuppliersApiTests",
+      "WarehouseKeeperCascadeSqlTests",
+      "WarehousesApiTests"
+    ],
+    "mto": [
+      "MtoChangeApiOwnerGuardTests",
+      "MtoChangeCreateInProgressGuardSqlTests",
+      "MtoChangeListFilterSqlTests",
+      "MtoChangeLongNoSqlTests",
+      "MtoChangeRowVersionSqlTests",
+      "MtoChangesApproveMissingDetailTests",
+      "MtoDetailDemandDeptFallbackTests",
+      "MtoFieldDropRegressionTests",
+      "MtoImportPreviewDeptValidationTests",
+      "MtoOrdersApiOwnerGuardTests",
+      "MtoTransferOrderFlowSqlTests"
+    ],
+    "outbound": [
+      "MtoTransferOrderFlowSqlTests",
+      "OutboundAvailabilityTests",
+      "OutboundBorrowSupplementApiPathTests",
+      "OutboundBorrowSupplementTests",
+      "OutboundCheckOccupyTests",
+      "OutboundEditDeleteLineOccupyTests",
+      "OutboundHalfUpRoundingTests",
+      "OutboundInventoryLockTests",
+      "OutboundOrderImportPreviewTests",
+      "OutboundOrderPickConfirmEndpointApiTests",
+      "OutboundOrderPickFlowTests",
+      "OutboundOrderPickingAndAuditTests",
+      "OutboundOrderPickingHeaderTests",
+      "OutboundOrderPickingTypeGateTests",
+      "OutboundOrderPickReleaseTests",
+      "OutboundOrderSourceRequestGuardApiTests",
+      "OutboundOrderSummaryRedesignEndpointsTests",
+      "OutboundOrderSummaryRedesignTests",
+      "OutboundOrderUsageCaliberTests",
+      "OutboundPalletQuotaTests",
+      "OutboundPmlDetailLinkTests",
+      "OutboundQueryValidationApiTests",
+      "OutboundQuotaMainQtyTests",
+      "OutboundR01QuotaGuardTests",
+      "OutboundReleaseChainTests",
+      "OutboundRequestCategoryUsageInfoTests",
+      "OutboundRequestCheckSatisfactionTests",
+      "OutboundRequestDraftInventoryCheckTests",
+      "OutboundRequestImportTests",
+      "OutboundRequestLinkageTests",
+      "OutboundRequestLineCheckStampTests",
+      "OutboundRequestMaterialCheckTraceTests",
+      "OutboundRequestPickingDisciplineTests",
+      "OutboundRequestPickingInfoTests",
+      "OutboundRequestQueryKeywordTests",
+      "OutboundRequestSubmitChainApiTests",
+      "OutboundRequestSubmitChainTests",
+      "OutboundRequestSummaryApiTests",
+      "OutboundRequestSummaryApplyQtyApiTests",
+      "OutboundRequestSummaryApplyQtyCacheTests",
+      "OutboundRequestSummaryFifoRedistributionTests",
+      "OutboundRequestUnoccupiedFlagApiTests",
+      "OutboundRequestWarehouseRemovalTests",
+      "OutboundSummaryRebuildTests",
+      "OutboundTransferPieceCountTests",
+      "PipePieceCountInventoryTests",
+      "PmlApiOwnerGuardTests",
+      "PMLOnlyMineFilterTests",
+      "PMLProjectFilterTests",
+      "PmlQuotaDualUnitTests",
+      "TransferExecuteEndToEndSqlTests",
+      "TransferOrderDetailActualConversionRateTests",
+      "TransferOrderDetailLocationSqlTests",
+      "TransferOrderInventoryOccupationTests",
+      "TransferOrderWarehouseNullableTests"
+    ],
+    "purchase": [
+      "DocumentAttachmentTests",
+      "AutoAssignTests",
+      "AvailableBuyersTests",
+      "BuyerAndLineGuardTests",
+      "BuyerCreateSqlTests",
+      "BuyerGroupsApiTests",
+      "BuyerJobNoMatchTests",
+      "BuyersApiTests",
+      "DraftPurchaseOrderOrderedQtyTests",
+      "ExchangeRateApiTests",
+      "ExchangeRateImportApiTests",
+      "OutboundOrderSourceRequestGuardApiTests",
+      "OutboundRequestLinkageTests",
+      "PaymentTermAndBusinessTypeGuardTests",
+      "PurchaseContractApiTests",
+      "PurchaseDisabledDetailChainGuardTests",
+      "PurchaseOrderApiGuardTests",
+      "PurchaseOrderCancelGuardTests",
+      "PurchaseOrderConcurrencyTests",
+      "PurchaseOrderContractTaxTests",
+      "PurchaseOrderLineCloseTests",
+      "PurchaseOrderLinkageServiceTests",
+      "PurchaseOrderNumericGuardTests",
+      "PurchaseOrderOrgMatchTests",
+      "PurchaseOrderOverQtyGuardTests",
+      "PurchaseOrderPrCaliberTests",
+      "PurchaseOrderPrLinkageTests",
+      "PurchaseOrderPriceAnchorTests",
+      "PurchaseOrderSupplierGuardTests",
+      "PurchaseOrderTaxRateModeTests",
+      "PurchaseRequestActiveUniqueIndexGuardTests",
+      "PurchaseRequestServiceGuardTests",
+      "RejectRemarkGuardTests",
+      "SuppliersApiTests"
+    ],
+    "schema": [
+      "BuyerCreateSqlTests",
+      "CodeTemplateSqlTests",
+      "SchemaLedgerDriftTests",
+      "SpecCodeCounterSqlTests",
+      "TransferExecuteEndToEndSqlTests",
+      "WarehouseKeeperCascadeSqlTests"
+    ]
+  },
+  "always": [
+    "ConnectionSmokeTests",
+    "TestDbWriteGuardTests",
+    "TestDbLockTests"
+  ],
+  "paths": [
+    {
+      "glob": "backend/shared/**",
+      "areas": [
+        "*"
+      ],
+      "note": "跨服务共享层"
+    },
+    {
+      "glob": "backend/integration/**",
+      "areas": [
+        "*"
+      ],
+      "note": "集成支撑库"
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/Common/**",
+      "areas": [
+        "*"
+      ],
+      "note": "横切数值/守卫/汇率解析"
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/Orders/Interfaces/**",
+      "areas": [
+        "purchase",
+        "outbound",
+        "mto"
+      ],
+      "note": "订单域接口"
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/Orders/Implementations/MTO*",
+      "areas": [
+        "mto"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/Orders/Implementations/Mto*",
+      "areas": [
+        "mto"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/Orders/Implementations/Purchase*",
+      "areas": [
+        "purchase"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/Orders/Implementations/Buyer*",
+      "areas": [
+        "purchase"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/Orders/Implementations/Outbound*",
+      "areas": [
+        "outbound"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/Orders/Implementations/*Transfer*",
+      "areas": [
+        "outbound"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/Orders/Implementations/Supplement*",
+      "areas": [
+        "outbound"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/Orders/Implementations/Arrival*",
+      "areas": [
+        "*"
+      ],
+      "note": "无独立集成覆盖，保守全量"
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/Orders/Implementations/Inbound*",
+      "areas": [
+        "*"
+      ],
+      "note": "无独立集成覆盖，保守全量"
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/Orders/Implementations/Comparison*",
+      "areas": [
+        "purchase"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/Orders/Outbound*",
+      "areas": [
+        "outbound"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/Orders/*Transfer*",
+      "areas": [
+        "outbound"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/Orders/Mto*",
+      "areas": [
+        "mto"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/Orders/MTO*",
+      "areas": [
+        "mto"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/Orders/Buyer*",
+      "areas": [
+        "purchase"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/Orders/**",
+      "areas": [
+        "purchase",
+        "outbound",
+        "mto"
+      ],
+      "note": "订单域其余文件：多域保守"
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/Inventory/**",
+      "areas": [
+        "outbound",
+        "inventory"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/MasterData/Implementations/Buyer*",
+      "areas": [
+        "purchase",
+        "masterdata"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/MasterData/Implementations/Supplier*",
+      "areas": [
+        "purchase",
+        "masterdata"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/MasterData/Implementations/ExchangeRate*",
+      "areas": [
+        "masterdata",
+        "purchase"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/MasterData/**",
+      "areas": [
+        "masterdata"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/PML/**",
+      "areas": [
+        "outbound"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Services/Statistics/**",
+      "areas": [
+        "api"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Dtos/Orders/MTO*",
+      "areas": [
+        "mto"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Dtos/Orders/Mto*",
+      "areas": [
+        "mto"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Dtos/Orders/Outbound*",
+      "areas": [
+        "outbound"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Dtos/Orders/*Transfer*",
+      "areas": [
+        "outbound"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Dtos/Orders/Supplement*",
+      "areas": [
+        "outbound"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Dtos/Orders/Borrow*",
+      "areas": [
+        "outbound"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Dtos/Orders/Purchase*",
+      "areas": [
+        "purchase"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Dtos/Orders/Buyer*",
+      "areas": [
+        "purchase"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Dtos/Orders/Comparison*",
+      "areas": [
+        "purchase"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Dtos/Orders/Arrival*",
+      "areas": [
+        "*"
+      ],
+      "note": "无独立集成覆盖，保守全量"
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Dtos/Orders/Inbound*",
+      "areas": [
+        "*"
+      ],
+      "note": "无独立集成覆盖，保守全量"
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Dtos/Orders/**",
+      "areas": [
+        "purchase",
+        "outbound",
+        "mto"
+      ],
+      "note": "订单 DTO 跨域兜底"
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Dtos/Inventory/**",
+      "areas": [
+        "outbound",
+        "inventory"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Dtos/PML/**",
+      "areas": [
+        "outbound"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Dtos/MasterData/**",
+      "areas": [
+        "masterdata"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/Dtos/Statistics/**",
+      "areas": [
+        "api"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Application/**",
+      "areas": [
+        "*"
+      ],
+      "note": "应用层其余文件"
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.API/Controllers/Orders/MTO*",
+      "areas": [
+        "mto"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.API/Controllers/Orders/Outbound*",
+      "areas": [
+        "outbound"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.API/Controllers/Orders/*Transfer*",
+      "areas": [
+        "outbound"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.API/Controllers/Orders/Supplement*",
+      "areas": [
+        "outbound"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.API/Controllers/Orders/Purchase*",
+      "areas": [
+        "purchase"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.API/Controllers/Orders/Arrival*",
+      "areas": [
+        "*"
+      ],
+      "note": "无独立集成覆盖，保守全量"
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.API/Controllers/Orders/Inbound*",
+      "areas": [
+        "*"
+      ],
+      "note": "无独立集成覆盖，保守全量"
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.API/Controllers/Orders/Comparison*",
+      "areas": [
+        "purchase"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.API/Controllers/Orders/**",
+      "areas": [
+        "purchase",
+        "outbound",
+        "mto"
+      ],
+      "note": "订单控制器其余文件：多域保守"
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.API/Controllers/MasterData/Buyer*",
+      "areas": [
+        "purchase",
+        "masterdata"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.API/Controllers/MasterData/Supplier*",
+      "areas": [
+        "purchase",
+        "masterdata"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.API/Controllers/MasterData/ExchangeRate*",
+      "areas": [
+        "masterdata",
+        "purchase"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.API/Controllers/MasterData/**",
+      "areas": [
+        "masterdata"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.API/Controllers/Inventory/**",
+      "areas": [
+        "outbound",
+        "inventory"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.API/Controllers/PML/**",
+      "areas": [
+        "outbound"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.API/Controllers/Statistics/**",
+      "areas": [
+        "api"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.API/Controllers/AuthController.cs",
+      "areas": [
+        "api"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.API/**",
+      "areas": [
+        "*"
+      ],
+      "note": "启动/中间件/错误处理/JSON 转换等横切"
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Domain/**",
+      "areas": [
+        "*"
+      ]
+    },
+    {
+      "glob": "backend/material/Shipyard.Material.Infrastructure/**",
+      "areas": [
+        "*"
+      ]
+    },
+    {
+      "glob": "backend/**",
+      "areas": [
+        "*"
+      ],
+      "note": "后端兜底：未登记路径一律全量"
+    }
+  ]
+}

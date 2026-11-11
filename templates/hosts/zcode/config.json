@@ -1,0 +1,31 @@
+{
+  "hooks": {
+    "enabled": true,
+    "events": {
+      "PreToolUse": [
+        {
+          "matcher": "Edit|Write|MultiEdit",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "node .agents/hooks/pre-write-check.cjs",
+              "enabled": true,
+              "timeout": 60
+            }
+          ]
+        },
+        {
+          "matcher": "Bash|RunCommand|Shell|Terminal|PowerShell",
+          "hooks": [
+            {
+              "type": "command",
+              "command": "node .agents/hooks/pre-shell-check.cjs",
+              "enabled": true,
+              "timeout": 600
+            }
+          ]
+        }
+      ]
+    }
+  }
+}

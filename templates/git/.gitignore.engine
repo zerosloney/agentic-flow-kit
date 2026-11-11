@@ -1,0 +1,11 @@
+# 引擎运行态（各机各自产生，不共享）
+.agents/cache/
+.agents/tmp/
+.agents/tools/
+.agents/verifications.jsonl
+.agents/judgments.jsonl
+.agents/notes/runtime-env.local.md
+.agents/config/model-roles.local.json
+
+# 本机宿主目录（默认不入库；--track-hosts 可关闭）
+{{hostIgnores}}

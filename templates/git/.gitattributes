@@ -1,0 +1,22 @@
+# 合并保护：appsettings.json 数据库连接不参与分支合并，始终保留当前分支版本。
+# 需本地配置 merge.ours.driver true 才生效。
+**/appsettings.json merge=ours
+
+# 台账追加合并驱动——多人并发或单人多 worktree 并行时，.agents/*.jsonl
+# 尾部并发追加自动并集去重合并，避免文本冲突。需本地配置 merge.jsonl-union.driver 生效。
+.agents/*.jsonl merge=jsonl-union
+.agents/confirmations.d/*.jsonl merge=jsonl-union
+workflow/gate-metrics.d/*.jsonl merge=jsonl-union
+
+# 工作流台账合并策略：三个生成物保留本侧，合并后跑 regen-ledgers 重生成；
+# delegations.md 手工行纯追加 → 行级并集。
+workflow/INDEX.md merge=ours
+workflow/metrics.md merge=ours
+workflow/verify-evidence.md merge=ours
+workflow/delegations.md merge=jsonl-union
+
+# check-delete-guard.mjs 用 diff 逐字节比对本文件与 LF 扫描输出，强制 LF。
+.agents/hooks/delete-guard-allowlist.txt text eol=lf
+
+# ZCode dwf 工作流文件：加载器按 \n 切分元数据块且不剥 \r，强制 LF。
+*.dwf.ts text eol=lf

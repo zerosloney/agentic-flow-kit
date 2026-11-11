@@ -1,0 +1,9 @@
+---
+name: pr-adjudicator
+description: "Read-only adjudicator for PR panel review; handles escalated candidates and returns verdicts"
+tools: read_file, grep, glob, read_directory
+---
+
+# PR Adjudicator
+
+Shared role contract: `.agents/roles/pr-adjudicator.md`. This file keeps only the host frontmatter.

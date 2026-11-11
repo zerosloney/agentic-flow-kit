@@ -1,0 +1,18 @@
+{
+  "_note": "checks 段曾空置（2026-10-29 本地减重）：前端 typecheck/lint 在本机实测 13.4s/7.4s，执法面下沉 CI 中档 verify --mid 与 pre-push 的 npm run build（内含 vue-tsc）。2026-11-10 起恢复在用：挂 dev-tour 模型测试门（node --test .agents/tests/*.test.mjs，实测 <3s），触发面限定 .agents/scripts/dev-tour* 与 .agents/tests/；commit-check.cjs 同日起 checks 面含 .agents/（引擎脚本变更照跑秒级检查）。2026-11-11 增 auto-tour 门（自动拉起看板脚本的单测，实测 0.85s），触发面 .agents/scripts/auto-tour。",
+  "builds": [
+    {
+      "name": "backend",
+      "command": "dotnet build Shipyard.Material.sln",
+      "ext": [".cs", ".sln", ".csproj"],
+      "lockPattern": "MSB3026|MSB3027",
+      "lockHint": "后端编译被文件锁拦下——8932 上的本地 API 正占用 bin 下 DLL（与代码无关）。处理：Stop-Process -Name Shipyard.Material.API -Force 后原路重试"
+    },
+    { "name": "frontend", "command": "npm run build", "cwd": "frontend", "prefix": "frontend/" }
+  ],
+  "checks": [
+    { "name": "dev-tour-model-tests", "command": "node --test .agents/tests/*.test.mjs", "prefix": ".agents/scripts/dev-tour" },
+    { "name": "auto-tour-tests", "command": "node --test .agents/tests/auto-tour.test.mjs", "prefix": ".agents/scripts/auto-tour" },
+    { "name": "dev-tour-tests-self", "command": "node --test .agents/tests/*.test.mjs", "prefix": ".agents/tests/" }
+  ]
+}

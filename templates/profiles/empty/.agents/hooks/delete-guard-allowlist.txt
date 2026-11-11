@@ -1,0 +1,2 @@
+# check-delete-guard.mjs 的删除豁免清单（单源；LF 行尾）。
+# 每行一个路径前缀或 glob；空清单 = 所有删除均受保护。

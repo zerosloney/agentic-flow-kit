@@ -1,0 +1,197 @@
+#!/usr/bin/env node
+// Git 原生 pre-commit hook（经 core.hooksPath 挂载）— 本仓自有编排（decouple-flow-kit 起；
+// 全 node 化：钩子体不再含 sh 逻辑——git 仍以自带 sh 启动本文件（钩子机制要求），但她bang
+// 即 node，PATH 无 sh 不再影响任何逻辑；语言单化后 CI 代理/本地行为一致。
+// 写法为 CommonJS——无扩展名文件 node 缺省按 CJS 解析，不依赖 ≥22.7 的 ESM 语法探测）
+// 通用门禁序（2026-10-21 撤出提交时刻 advisory 五门：配对增量 / 泳道 / wiki 台账 / 叙事承重 / 索引漂移——
+// 四支孤儿增量脚本（配对/叙事/索引/wiki 台账）同日止血批删除，仅 lane-surface 留存（verify 在用）。
+// 撤后去向：配对在 pre-push/关单的 check-loop 已降 WARN（同日门禁极小化第 1 批——红线判低/L3 状态
+// 仍 hard，配对自查走 closeout skill §0）；泳道产品面硬拦 verify lane-surface-ci；wiki 在 verify
+// wiki-consistency；索引/叙事等 hygiene 段已于 2026-10-28 全部退役（引擎减重第一刀））：
+// 【硬拦】确认台账不变量(触及才跑) → 项目门禁(local-pre-commit：架构红线/审计回填/删除守卫/通知守卫，四门并行) → 提交验证(commit-check.cjs；常规提交 --no-build——条件构建后移 pre-push，合并提交仍 --full)
+// 项目专属门禁放 .agents/hooks/local-pre-commit.mjs——存在即在本钩子内执行，返回非零即阻断提交
+// 合并提交场景由 .githooks/pre-merge-commit 原样转发到本脚本（合并时 git 调的是 pre-merge-commit，
+// 不是 pre-commit）——门禁清单只此一份，避免两处分叉
+// fail-closed（口径；随 node 化天然成立——本进程即 node）：门脚本缺失 = 拒提交；
+// 仅 local-pre-commit.mjs 保留「存在即执行」挂载点语义（缺失打 advisory）。
+const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
+
+const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' });
+if (top.status !== 0 || !top.stdout.trim()) {
+  console.error('pre-commit: 无法定位仓库根（git rev-parse --show-toplevel 失败）——提交已阻止');
+  process.exit(1);
+}
+process.chdir(top.stdout.trim());
+
+// `--merge` 由 .githooks/pre-merge-commit 显式透传：2026-11-06 P1-1 起曾转发给「先确认后改代码」门；
+// 2026-11-08 档 2-D 该门位移 commit-msg 后本钩子不再消费它——仅在下传 commit-check 前滤除（见文末）。
+// 合并自动提交的顺序门跳过信号由 commit-msg 时点的 MERGE_HEAD 等状态文件探测承担（彼时已落盘）。
+
+// gate(label, script, args)：node 直跑门脚本，非零即阻断（含 fail-closed 缺失检查）
+const requireScript = (rel) => {
+  if (!fs.existsSync(rel)) {
+    console.error(`pre-commit: 门脚本缺失 ${rel}——提交已阻止（脚本随仓走；git checkout -- ${rel} 恢复后重试）`);
+    process.exit(1);
+  }
+};
+const gate = (label, script, args = []) => {
+ requireScript(script);
+ const r = spawnSync(process.execPath, [script, ...args], { stdio: 'inherit' });
+ if (r.status !== 0) {
+ console.error(`pre-commit: ${label} 未通过，提交已阻止`);
+ process.exit(r.status === null ? 1 : r.status);
+ }
+};
+
+// （decouple-flow-kit：原「双源一致性 source-sync-check --gate」与「managed 台账快检」两段
+//   已随 kit 解耦删除——两段挂载条件均为包源环境（templates/_agents/），本仓恒假，纯死段。）
+
+// 确认台账不变量前置（--staged，ledger-ci-invariant）：暂存的台账文件必须是各自 HEAD 版本的
+// 逐字节前缀扩展（append-only）——本地提交时刻即拦「顺手重写台账」，CI 历史全扫兜底。
+// ledger-shard-default：确认行默认写 .agents/confirmations.d/<doc>.jsonl 分片，故触发条件
+// 自「仅主台账」扩到「主台账 ∪ 任一分片」——否则默认写入形态下这道门根本不触发，等于关门。
+// 暂存未触任何台账静默；触台账而脚本缺失 fail-closed 阻断。
+const staged = spawnSync('git', ['-c', 'core.quotepath=off', 'diff', '--cached', '--name-only'], { encoding: 'utf8' });
+const stagedFiles = String(staged.stdout || '').split(/\r?\n/).filter(Boolean).map((f) => f.replace(/\\/g, '/'));
+
+// 常驻面体积预算：2026-10-28 退出提交钩子（owner 决策：pre-commit 只留业务门与台账不变量）；
+// 2026-10-29 条件回接（触及预算面才跑）：引擎面直提不经 verify，越限到关单/CI 才红——当日实证
+// runtime-env 越限 972B 无人拦（引擎直提面实为无人执法）。判据单源 rule-budget --staged（只查触及条目），
+// 常规提交零成本；触发面单源 = .agents/config/rule-budgets.txt 首列（改预算表本条件随动）。
+const touchesBudgetFace = (() => {
+  try {
+    const txt = fs.readFileSync('.agents/config/rule-budgets.txt', 'utf8').replace(/\r/g, '');
+    // 触发面 = 首列为「路径形态」的条目（含 / 或含 .）。2026-11-06 修：原判据 `p.includes('/')`
+    // 把根级条目 `AGENTS.md`（预算表首行 8704B，引擎直提最常改的一份）当非路径行滤掉——该条目
+    // 的预算门在提交时刻恒不触发，正是「引擎直提面无人执法」的原始缺口。改用「含 / 或含 .」后
+    // 根级 .md 条目纳入；伪路径行 `check-loop-hard`（既无 / 也无 .）不再靠本判据排除，改显式映射。
+    // 伪路径 `check-loop-hard 5#count` 的执法面在 rule-budget.mjs:118（数 check-loop.mjs 的 hard 段），
+    // 其 --staged 分支只在 check-loop.mjs 或预算表被暂存时才查——故触发面须含这两个实体，
+    // 否则「改段表却绕过段数棘轮」（2026-11-06 实测 D 例）。
+    const PSEUDO_FACE = { 'check-loop-hard': '.agents/scripts/check-loop.mjs' }; // 段数棘轮：伪路径 → 实体
+    const pats = [...new Set(txt.split('\n').filter((l) => l && !l.startsWith('#'))
+      .map((l) => l.split(/\s+/)[0])
+      .filter((p) => p && p !== 'check-loop-hard' && (p.includes('/') || p.includes('.')))
+      .concat(Object.values(PSEUDO_FACE), ['.agents/config/rule-budgets.txt']))];
+    return stagedFiles.some((f) => pats.some((p) => {
+      if (p.endsWith('/')) return f.startsWith(p);
+      if (p.includes('*')) return new RegExp('^' + p.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*') + '$').test(f);
+      return f === p;
+    }));
+  } catch { return false; } // 缺预算表 = 沙箱语义（rule-budget 自身同态 exit 0）
+})();
+if (touchesBudgetFace) {
+  console.log('pre-commit: 触及预算面——跑 rule-budget --staged（常驻面体积，触及条目）');
+  gate('常驻面预算（触及预算面）', '.agents/scripts/rule-budget.mjs', ['--staged']);
+} else {
+  console.log('SKIP: 未触及预算面（rule-budgets.txt 条目）——预算门由 verify/CI 兜底');
+}
+
+const touchesLedger = stagedFiles.includes('.agents/confirmations.jsonl')
+  || stagedFiles.some((f) => f.startsWith('.agents/confirmations.d/'));
+if (touchesLedger) {
+  gate('确认台账不变量', '.agents/scripts/check-ledger-invariant.mjs', ['--staged']);
+}
+
+// 台账分片归位（2026-10-27 ledger-shards-check）：主台账残留数据行 = 分片体系漏网，
+// 会被 agg-delegations 的 splitTables 静默丢弃（实测 delegations 38 行残留在「月度聚合快照」
+// 节之后 → 聚合 exit 1「550 行日期数据，解析入账 512」，其中 10 行只存主台账，直接影响扩容门指标）。
+// 触发面 = 四本分片台账任一被暂存（追加/迁片/改主表都可能造成残留）；未触及静默，不给常规提交加税。
+// 判据单源 ledger-shards --check（<50ms，纯本地读文件）。
+const shardLedgers = ['workflow/delegations.md', 'workflow/papercuts.md', 'workflow/regression-checklist.md', 'workflow/deploy-observations.md'];
+const shardDirs = ['workflow/delegations.d/', 'workflow/papercuts.d/', 'workflow/regression-checklist.d/', 'workflow/deploy-observations.d/'];
+const touchesShardLedger = stagedFiles.some((f) => shardLedgers.includes(f) || shardDirs.some((d) => f.startsWith(d)));
+if (touchesShardLedger) {
+  gate('台账分片归位', '.agents/scripts/ledger-shards.mjs', ['--check']);
+}
+
+// 台账指针存在性（2026-10-24 复核 m5 补挂）：删除 intents/specs/plans/incidents 文档而不走
+// `confirm-doc --to cancelled|superseded` 会让台账行悬空。全量检查约 500 次 existsSync（<100ms），
+// 但只在本次提交**删除/移走**这四目录文件时触发——不给常规提交加税。
+// 判据单源 check-ledger-doc-presence.mjs（与 check-ledger-invariant 行级④同口径，含 archive 回退）。
+// 2026-11-06（P2-B1）：原 `--diff-filter=D` 漏 `git mv`——改名记 `R`（旧路径在第 2 列、新路径在第 3 列），
+// 门恒不触发，指针悬空照常落库。改为 `DR` + 显式 `-M`（不依赖用户 diff.renames 配置），并**按第 2 列
+// （旧路径）**判目录：取第 3 列会把「移入四目录」误判成「移出」，方向相反。
+const DOC_DIRS = ['workflow/intents/', 'workflow/specs/', 'workflow/plans/', 'workflow/incidents/'];
+const deletedDocs = spawnSync('git', [
+  '-c', 'core.quotepath=off', 'diff', '--cached', '--name-status', '--diff-filter=DR', '-M',
+], { encoding: 'utf8' });
+const deletedDocLines = String(deletedDocs.stdout || '').split(/\r?\n/).filter(Boolean)
+  .map((l) => l.split('\t'))
+  .filter((f) => f.length >= 2 && DOC_DIRS.some((d) => f[1].startsWith(d)));
+if (deletedDocLines.length) {
+  gate('台账指针存在性', '.agents/scripts/check-ledger-doc-presence.mjs', ['--staged']);
+}
+
+// 提交期可见性 advisory（2026-11-10，incident 2026-10-26-workflow-confirmation-drift-hard-block 三件套 #1）：
+// 改已关单（done/superseded/closed/cancelled/fixed）workflow 文档正文而同笔无确认台账变更，此前要到
+// 下次关单 check-loop §15 才炸 [确认内容漂移]——前移到提交时刻打 advisory（exit 0 恒不拦、输出不进
+// COMMIT_CHECK_OK 判定；执法面仍是 check-loop §15 关单对账，本门不合门）。触发面 = 暂存含
+// workflow/{intents,specs,plans,incidents}/*.md，未触及静默不给常规提交加税；脚本缺失打 advisory
+// 不阻断（advisory 语义，与 local-pre-commit 挂载点同款）。
+const touchesWorkflowDocFace = stagedFiles.some((f) => /^workflow\/(intents|specs|plans|incidents)\/[^/]+\.md$/.test(f));
+if (touchesWorkflowDocFace) {
+  if (!fs.existsSync('.agents/scripts/check-doc-body-drift.mjs')) {
+    console.error('pre-commit: （advisory）.agents/scripts/check-doc-body-drift.mjs 不在场——提交期正文漂移可见性失效，若为误删请 git checkout -- .agents/scripts/check-doc-body-drift.mjs');
+  } else {
+    console.log('pre-commit: 触及 workflow 四目录文档面——跑 check-doc-body-drift（已关单正文漂移 advisory，不合门）');
+    spawnSync(process.execPath, ['.agents/scripts/check-doc-body-drift.mjs', '--staged'], { stdio: 'inherit' });
+  }
+}
+
+// 密钥扫描本地腿退役（2026-10-21，owner 指令「密钥本地不扫」）：pre-commit 不再扫密钥——原
+// gitleaks protect 暂存增量门与 commit-check.cjs 敏感信息正则段同批撤除（后者误报 papercut ×4 消债）。
+// 执法面收敛 verify 安全段 secrets-scan（关单 + CI main 全量 detect+基线；develop 引擎段不含 security 门）。
+// 登记：mechanism-registry「密钥扫描门」行 + runtime-env §6.5 退役行 + papercuts 2026-10-14 行闭环。
+
+// 先确认后改代码（2026-11-03 建）已于 2026-11-08 档 2-D 位移 .githooks/commit-msg：
+// pre-commit 时点读不到提交消息，豁免 A（L0 trailer）与豁免 B（同批 done plan）都要在消息可见
+// 的时点执法。判据单源 .agents/hooks/check-confirm-order.mjs，本钩子不再启动该门。
+
+// 项目门禁挂载点：.agents/hooks/local-pre-commit.mjs（项目自建门禁/门禁模块接线处，存在即执行；
+// 自 sh 移植 node。挂载点语义保留「可选」：缺失打 advisory 不阻断（-kit 契约），
+// 但缺失不再无声——本仓该文件随仓走，advisory 即误删信号。
+// 2026-10-29 条件化（AI 写路径拦截已前移宿主写前门 .agents/hooks/pre-write-check.cjs——
+// 快照复用同一批 check-*.mjs，判据单源不变）：四门改**触及代码面才跑**（backend/**/*.cs|csproj|sln
+// 或 frontend/src/**），纯文档/台账提交零成本。四门仍保留于此——2026-11-11 起已接入 verify product
+// cohort（CI --mid/--full 执法；本地增量档单边化 CI，口径单源 verify-scope.CI_UNILATERAL_GATE_IDS），
+// 本地 pre-commit 仍是最早拦截点：手工编辑（不经宿主）提交时刻即拦，不得再撤（mechanism-registry 口径）。
+const touchesCodeFace = stagedFiles.some((f) =>
+  (/^backend\/.+\.(cs|csproj|sln)$/i.test(f)) || f.startsWith('frontend/src/'));
+if (!fs.existsSync('.agents/hooks/local-pre-commit.mjs')) {
+  console.error('pre-commit: （advisory）项目门禁挂载点 .agents/hooks/local-pre-commit.mjs 不在场——本仓该文件随仓走，若为误删请 git checkout -- .agents/hooks/local-pre-commit.mjs');
+} else if (touchesCodeFace) {
+  gate('项目门禁（local-pre-commit）', '.agents/hooks/local-pre-commit.mjs');
+} else {
+  console.log('SKIP: 未触及代码面（backend 源码 / frontend/src），四门跳过——AI 写路径已由宿主写前门拦截');
+}
+
+// 合并提交 → 构建验证覆盖【完整合并树】，不做按扩展名的条件裁剪。
+// 常规提交 --no-build（构建门后移 pre-push）：提交内环只跑敏感扫描，条件构建在推送时按
+// old..new 范围执法（.githooks/pre-push）；合并结果是没人验证过的新状态，仍全量构建。
+// 三条路径：
+//  ① `git merge` 自动提交由 .githooks/pre-merge-commit 显式传 `--full` 转发到本脚本；
+//  ② 冲突解决后手动 `git commit` 由 git 直接调本脚本——按 MERGE_HEAD 探测（此时合并仍在进行）；
+//  ③ `git merge --squash` + `git commit`（2026-10-29 补）：MERGE_HEAD 不存在，但 git 留下
+//     SQUASH_MSG（首行 "Squashed commit of the following:"）——语义同合并提交（树 = 两方结果的
+//     新状态，且被压成一个提交，无人验证过），故同样走 --full。
+//     探测用 `git rev-parse --git-path` 而非字面 `.git/SQUASH_MSG`：linked worktree 下 `.git` 是
+//     文件（内容 `gitdir: ...`），字面路径恒不存在 → 门静默失效（2026-10-29 实测）。
+//     不误判：普通提交与 `git commit --amend` 时点该文件均不存在（实测）。
+const gitPath = (rel) => {
+  const r = spawnSync('git', ['rev-parse', '--git-path', rel], { encoding: 'utf8' });
+  const p = r.status === 0 ? String(r.stdout || '').trim() : '';
+  return p && fs.existsSync(p) ? p : null;
+};
+let fullArgs = process.argv.slice(2).filter((a) => a !== '--merge');
+if (fullArgs.length === 0) {
+  const isMergeOrSquash = gitPath('MERGE_HEAD') !== null || gitPath('SQUASH_MSG') !== null;
+  fullArgs = isMergeOrSquash ? ['--full'] : ['--no-build'];
+}
+
+const cc = spawnSync(process.execPath, ['.agents/hooks/commit-check.cjs', ...fullArgs], { stdio: 'inherit' });
+if (cc.status !== 0) {
+ console.error('pre-commit: 验证未通过，提交已阻止');
+ process.exit(cc.status === null ? 1 : cc.status);
+}

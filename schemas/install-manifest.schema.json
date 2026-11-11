@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentic-flow-kit/install-manifest.schema.json",
+  "title": "agentic-flow-kit install manifest",
+  "type": "object",
+  "required": ["kit", "version", "language", "hosts", "stack", "files"],
+  "properties": {
+    "kit": { "const": "agentic-flow-kit" },
+    "version": { "type": "string" },
+    "installedAt": { "type": "string", "format": "date-time" },
+    "language": { "enum": ["zh-CN", "en"] },
+    "hosts": {
+      "type": "array",
+      "items": { "enum": ["trae", "codebuddy", "claude", "opencode", "qwen", "pi", "cline", "commandcode", "qoder", "zcode"] },
+      "uniqueItems": true
+    },
+    "stack": { "enum": ["dotnet", "node", "empty"] },
+    "files": {
+      "type": "object",
+      "additionalProperties": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+    }
+  },
+  "additionalProperties": true
+}

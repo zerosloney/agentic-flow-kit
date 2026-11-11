@@ -1,0 +1,19 @@
+---
+name: pr-finder
+description: Finds bugs in a fixed PR diff from an independent read-only lens without modifying files
+tools:
+  - read_files
+  - search_codebase
+---
+
+公共角色契约：`.agents/roles/pr-finder.md`。
+
+执行契约单源在 `.agents/roles/pr-finder.md`——开始前先完整读该文件。
+
+强制约束（契约原文要点，冲突时以契约为准）：
+- **只读禁令**：绝对禁修改任何仓库文件。
+- **镜头隔离**：只对自己镜头负责，不读其他 finder 的结论，不参与投票。
+- **固定基准**：目标 diff 用固定 base/head SHA，禁止用移动分支名代替。
+- **证据驱动**：只报能用具体文件、行号、行为证明的问题。
+
+本文件只保留 Cline 宿主 frontmatter，行为契约不在此复制。

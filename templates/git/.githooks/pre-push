@@ -1,0 +1,201 @@
+#!/usr/bin/env node
+// Git 原生 pre-push hook（经 core.hooksPath 挂载，git push 时触发；全 node 化——
+// git 仍以自带 sh 启动本文件（钩子机制要求），但她bang 即 node，PATH 无 sh 不影响任何逻辑。
+// 写法为 CommonJS——无扩展名文件 node 缺省按 CJS 解析，不依赖 ≥22.7 的 ESM 语法探测）
+// 跑 node .agents/scripts/check-loop.mjs：默认只扫 hard 5 段（配对 / 回归证据 / 证据真相 / 确认指纹 / 收敛对账）
+// 构建门（自 pre-commit 后移）：另跑 commit-check.cjs --range <old> <new> 按推送范围条件构建
+// （常规提交时刻只做敏感扫描——提交内环提速；构建执法集中到推送与关单）。
+// （去 sh 化收尾：兼容 shim check-loop.sh 已删，钩子直调 .mjs）
+//   - 硬阻断（exit 1）= check-loop hard 5 段判非绿 → push 立即阻断（原清单中的「发版未收口」§17 已于 2026-10-21 退役删码，不在扫描面）
+//   - hygiene 段已于 2026-10-28 全部退役（引擎减重第一刀）——本钩子只扫 hard 5 段。
+// stdin 有行时，hard 扫描按推送范围 old..new（C3，2026-10-28；新分支远端全零回退 --rev 扫尖端树）。没有行时（手跑钩子）仍无参数扫工作区。
+//
+// experiment/* 泳道（hybrid-governance-explore-hardening）：**目标分支**为 experiment/* 时，
+//   闭环扫描降级 advisory（报告不阻断）——快速 PoC 推送不因闭环断档被拦。
+// （原转正加固门——push 目标 main 时 --hardening 扫 exploring 收口——已退役，
+//   见 .agents/config/mechanism-registry.md；main 推送回归普通全量扫描。）
+//
+// 机器门：本地钩子（本地机器门）+ 远端 CI 业务面兜底（azure-pipelines.yml；
+//   trigger main + develop：main 直推跑 verify --full（全量 20 门，含密钥门），develop 直推跑 verify --mid（业务面 + 后端单测）——三档化 2026-10-29；治理门全在本地——口径单源 runtime-env §6.5）。
+//   （PR 面板评审台账门已于 2026-11-09 退役为手动工具——自动门拆除，编排见 .agents/commands/pr-review.md。）
+// 不要用 `git push --no-verify` 绕开——发现 hard-block 应先修 workflow 文档再推。
+const { spawnSync } = require('node:child_process');
+const fs = require('node:fs');
+
+const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' });
+if (top.status !== 0 || !top.stdout.trim()) {
+  console.error('pre-push: 无法定位仓库根（git rev-parse --show-toplevel 失败）——推送已阻止');
+  process.exit(1);
+}
+process.chdir(top.stdout.trim());
+
+const SCRIPT = '.agents/scripts/check-loop.mjs';
+// 闭环脚本随仓走——缺失 = checkout 残缺/误删，fail-closed 阻断（prepush-script-missing-failclosed）
+if (!fs.existsSync(SCRIPT)) {
+  console.error(`pre-push: 未找到 ${SCRIPT}——闭环扫描无法执行，推送已阻止（脚本随仓走；git checkout -- ${SCRIPT} 恢复后重试）`);
+  process.exit(1);
+}
+
+// 构建门（自 pre-commit 后移）：非 experiment 目标推送按 old..new 范围跑条件构建
+// （commit-check.cjs --range——匹配逻辑单源：触及 .cs/.sln/.csproj → dotnet build、触及 frontend/
+// → npm run build；远端全零 sha 的新分支首推 = 全量构建语义）。experiment/* 目标降级 advisory。
+// 手动运行（无 stdin 推送行）无范围事实，构建门跳过。脚本缺失 fail-closed。
+const BUILD_CHECK = '.agents/hooks/commit-check.cjs';
+if (!fs.existsSync(BUILD_CHECK)) {
+  console.error(`pre-push: 未找到 ${BUILD_CHECK}——构建门无法执行，推送已阻止（脚本随仓走；git checkout -- ${BUILD_CHECK} 恢复后重试）`);
+  process.exit(1);
+}
+
+// 推送级改动面门（2026-11-09 建）：非 experiment 目标推送按 old..new 范围跑 check-scope-range——
+// 范围内新增/修改的 plan 声明文件并集 vs 范围 diff，只判越界方向（改了未声明）；无 plan 变更 skip。
+// 补提交时刻 check-confirm-order 的盲面：确认门只看单条提交，多提交合推夹带 plan 外文件由此拦截。
+// 脚本缺失 fail-closed（与 BUILD_CHECK 同口径）。
+const SCOPE_RANGE = '.agents/scripts/check-scope-range.mjs';
+if (!fs.existsSync(SCOPE_RANGE)) {
+  console.error(`pre-push: 未找到 ${SCOPE_RANGE}——推送级改动面门无法执行，推送已阻止（脚本随仓走；git checkout -- ${SCOPE_RANGE} 恢复后重试）`);
+  process.exit(1);
+}
+const rangeArgsOf = (remoteSha, localSha) => ['--range', remoteSha && !/^0+$/.test(remoteSha) ? remoteSha : '0'.repeat(40), localSha];
+
+const runLoop = (args = []) => spawnSync(process.execPath, [SCRIPT, ...args], { stdio: 'inherit' });
+
+// hard 5 段最小回归条件段已于 2026-10-31 摘除（c16eec41）、2026-11-06 重新摘除：其套件
+// `.agents/scripts/check-loop-hard-sections.test.mjs` 从未入库（被 .gitignore 的 `.agents/**/*.test.mjs`
+// 排除），引用与「文件随仓走」自相矛盾——钩子对任何推送都落在「文件缺失」分支。c16eec41 已删净本段，
+// 但 60da7324 合并时本文件取了含死段的那一侧（loud-skip 版），摘除被回滚。本次按 commit 原意重新摘除，
+// 并同步修 runtime-env.md §5 与 papercuts 台账失实行。hard 段回归改由入库探针
+// `node .agents/scripts/check-loop-rev-semantics.mjs` 手动承担（engine-tests 全量已于 2026-10-28 退役）。
+
+
+// 后端集成测试档（2026-10-29 backend-unit-tier，owner 拍板「关单只跑单测」）：本地关单 backend-test
+// 降单测档（--unit-only ~5.6s），集成测试（单库串行，Deve_CSS_SuHao；2026-10-30 分区机制退役）移到本钩子——
+// 推送范围触及后端面时按影响面选测（2026-11），仅共享层/工程文件/未登记映射回退全量。
+// 面判据单源 = verify-scope.mjs PRODUCT_FACES.backend.match；2026-11 起本钩子收紧为路径面：
+// backend/|tests/|scripts/verify/backend/ + 后端侧工程文件 + 后端/测试/脚本面 SQL。
+// wiki schema 变更/数据修复 SQL 触发；其它数据维护 SQL、frontend/ 与仓库外脚本不触发集成档。
+// 新分支首推/范围判不出 → 保守跑。experiment/* 泳道不跑。
+// 所有范围 git diff 统一带 -c core.quotepath=off --no-renames：中文路径不转义，重命名不丢旧路径。
+const BACKEND_TEST = 'scripts/verify/backend/run-backend-tests.mjs';
+const BACKEND_FACE_RE = /^(backend|tests|scripts\/verify\/backend)\//i;
+const BACKEND_BUILD_FILE_RE = /\.(sln|csproj|props|targets)$/i;
+const BACKEND_SQL_RE = /\.sql$/i;
+const SCHEMA_CHANGE_SQL_RE = /^wiki\/数据维护\/schema变更\//i;
+const DATA_REPAIR_SQL_RE = /^wiki\/数据维护\/数据修复\//i;
+const isBackendFaceFile = (file) => {
+  const p = (file || '').trim();
+  if (!p) return false;
+  if (BACKEND_FACE_RE.test(p)) return true;
+  if (BACKEND_BUILD_FILE_RE.test(p) && !p.startsWith('frontend/') && !p.startsWith('node_modules/')) return true;
+  if (BACKEND_SQL_RE.test(p) && (/^(backend|tests|scripts)\//i.test(p) || SCHEMA_CHANGE_SQL_RE.test(p) || DATA_REPAIR_SQL_RE.test(p))) return true;
+  return false;
+};
+const touchedBackend = (oldSha, newSha) => {
+  if (/^0+$/.test(oldSha)) return true;
+  const d = spawnSync('git', ['-c', 'core.quotepath=off', 'diff', '--name-only', '--no-renames', `${oldSha}..${newSha}`], { encoding: 'utf8' });
+  if (d.status !== 0) return true; // 范围判不出 → 保守跑
+  return (d.stdout || '').split(/\r?\n/).some(isBackendFaceFile);
+};
+
+// 接线一致性（2026-10-29 P0）：宿主接线宣称 ↔ 实态对账——引擎测试面退役后接线漂移的唯一机检
+// （实证案例见 check-hook-wiring.mjs 头注：registry 记坐实/实态 disabled、判据脚本无挂载点）。
+// 触发面：推送范围触及宿主壳 / .agents/hooks/ / registry；新分支/范围判不出 → 保守跑。
+const WIRING_CHECK = '.agents/scripts/check-hook-wiring.mjs';
+const WIRING_FACE_RE = /^(?:\.zcode|\.trae|\.codebuddy|\.opencode|\.claude|\.qwen|\.pi|\.cline|\.commandcode|\.qoder)\//;
+const touchedWiring = (oldSha, newSha) => {
+  if (!fs.existsSync(WIRING_CHECK)) {
+    console.error(`pre-push: 未找到 ${WIRING_CHECK}——接线对账脚本随仓走，推送已阻止`);
+    return true;
+  }
+  if (/^0+$/.test(oldSha)) return true;
+  const d = spawnSync('git', ['-c', 'core.quotepath=off', 'diff', '--name-only', '--no-renames', `${oldSha}..${newSha}`], { encoding: 'utf8' });
+  if (d.status !== 0) return true; // 范围判不出 → 保守跑
+  return (d.stdout || '').split(/\r?\n/).some((f) => {
+    const t = f.trim();
+    return WIRING_FACE_RE.test(t) || t.startsWith('.agents/hooks/') || t === '.agents/config/mechanism-registry.md';
+  });
+};
+
+// stdin（git 以管道喂入待推引用行；手跑钩子无管道 → 空输入走工作区扫描路径）
+let stdinText = '';
+try { stdinText = fs.readFileSync(0, 'utf8'); } catch { /* 无管道输入 */ }
+
+let saw = 0;
+let rc = 0;
+for (const line of stdinText.split(/\r?\n/)) {
+  if (!line.trim()) continue;
+  const parts = line.trim().split(/\s+/);
+  if (parts.length < 4) continue;
+  const [localRef, localSha, remoteRef, remoteSha] = parts;
+  saw = 1;
+  if (/^0+$/.test(localSha)) continue; // 删除推送不扫
+  // 按目标分支分派（判定键 = remote_ref，v09-review-defects）：
+  //   experiment/* → advisory（报告不阻断）；其余（含 main）→ 硬门扫描（卫生段不在本钩子）
+  // P1 修复（2026-11-06）：原 remoteRef.includes('experiment/') 是任意位置子串——
+  // refs/heads/foo/experiment/x 或同名 tag 也会被降级 advisory，等于绕开硬门。
+  // 收紧为精确匹配 refs/heads/experiment/ 分支命名空间前缀。
+  if (/^refs\/heads\/experiment\//.test(remoteRef)) {
+    console.error(`pre-push: experiment/* 目标分支（${remoteRef}）——闭环扫描降级 advisory，不阻断`);
+    const adv = spawnSync(process.execPath, [SCRIPT, '--rev', localSha]);
+    const advOut = `${adv.stdout || ''}${adv.stderr || ''}`;
+    if (adv.status !== 0) console.error(`pre-push: （advisory）闭环断档已在上方列出——experiment 泳道可推送\n${advOut}`);
+    const advB = spawnSync(process.execPath, [BUILD_CHECK, ...rangeArgsOf(remoteSha, localSha)], { stdio: 'inherit' });
+    if (advB.status !== 0) console.error('pre-push: （advisory）构建门未过已在上方列出——experiment 泳道不阻断推送');
+  } else {
+    // C3（2026-10-28）：hard 扫描改扫推送范围 old..new——中间提交不再只看尖端；新分支（远端全零）回退 --rev
+    const r = /^0+$/.test(remoteSha) ? runLoop(['--rev', localSha]) : runLoop(['--range', remoteSha, localSha]);
+    if (r.status !== 0 && rc === 0) rc = r.status === null ? 1 : r.status;
+    const rb = spawnSync(process.execPath, [BUILD_CHECK, ...rangeArgsOf(remoteSha, localSha)], { stdio: 'inherit' });
+    if (rb.status !== 0 && rc === 0) rc = rb.status === null ? 1 : rb.status;
+    // 推送级改动面门：范围含 plan 变更才对账（脚本内自判 skip）；old 全零新分支首推脚本内 skip
+    const rs = spawnSync(process.execPath, [SCOPE_RANGE, remoteSha, localSha, '--strict'], { stdio: 'inherit' });
+    if (rs.status !== 0 && rc === 0) rc = rs.status === null ? 1 : rs.status;
+    // 后端集成测试档：关单单测化后集成的执法点（范围触后端面才跑；CI 重档另有全量兜底）
+    //   2026-11 影响面选测：单测先跑 → 按推送净 diff 选集成子集 → 共享层/工程文件/未登记
+    //   测试类/映射缺失自动回退全量（fail-safe）。选测口径单源 .agents/config/test-impact-map.json。
+    //
+    // 登记式跳过（PREPUSH_SKIP_INTEGRATION，2026-10-29 建）已于 2026-11-08 档 3 清退：
+    //   本地集成档默认交 CI 后该开关无可跳之物（近 30 日零触发）；已知红走 incident/papercut 台账。
+    if (touchedBackend(remoteSha, localSha)) {
+        // 2026-11-08 减重（owner 指示「本地别每次都跑集成」）：集成档默认不在本地跑——
+        // 单次推送实测 ~80s（905 条，且 test-impact-map 缺登记时恒回退全量），而同一套件在
+        // CI（develop/main 档 verify --mid/--full）恒跑。本地只跑单测档：--unit-range 按推送
+        // range 裁单测集（2026-11-08 接线 3-U4；映射缺失/后端生产面/受影响集为空 → 回落全量
+        // 单测 fail-open，一行提示；只有直接触及单测测试文件时才只跑被触及的类）。
+        // 恢复本地集成执法：PREPUSH_RUN_INTEGRATION=1 git push。
+        const runIntegration = (process.env.PREPUSH_RUN_INTEGRATION || '').trim() === '1';
+        if (runIntegration) {
+          console.error('pre-push: 推送范围触及后端面——单测 + 影响面选测（PREPUSH_RUN_INTEGRATION=1）');
+          const oldSha = /^0+$/.test(remoteSha) ? '0'.repeat(40) : remoteSha;
+          const rt2 = spawnSync(process.execPath, [BACKEND_TEST, '--select-range', oldSha, localSha], { stdio: 'inherit' });
+          if (rt2.status !== 0 && rc === 0) rc = rt2.status === null ? 1 : rt2.status;
+        } else {
+          console.error('pre-push: 推送范围触及后端面——单测档按影响面选测（集成档交 CI：develop/main 档 verify --mid/--full）');
+          console.error('pre-push: ⚠️ 本地未跑集成测试，这不是集成绿凭证；需要本地复现时加 PREPUSH_RUN_INTEGRATION=1。');
+          const oldSha = /^0+$/.test(remoteSha) ? '0'.repeat(40) : remoteSha;
+          const rt2 = spawnSync(process.execPath, [BACKEND_TEST, '--unit-range', oldSha, localSha], { stdio: 'inherit' });
+          if (rt2.status !== 0 && rc === 0) rc = rt2.status === null ? 1 : rt2.status;
+        }
+    }
+    // 接线一致性：触接线面才跑（实测 <1s）
+    if (touchedWiring(remoteSha, localSha)) {
+      const rw = spawnSync(process.execPath, [WIRING_CHECK], { stdio: 'inherit' });
+      if (rw.status !== 0 && rc === 0) rc = rw.status === null ? 1 : rw.status;
+    }
+  }
+}
+
+if (saw === 0) {
+  const r = runLoop();
+  if (r.status !== 0) rc = r.status === null ? 1 : r.status;
+  console.error('pre-push: 手动运行无推送范围——构建门跳过（真实推送时按 old..new 范围执法）');
+}
+
+if (rc !== 0) {
+  console.error('pre-push: 闭环骨架断档（hard-block）未通过，push 已阻断。修 workflow 文档后重推——不要用 --no-verify 绕过。本地钩子已阻断本次推送；远端另有 CI（main verify --full 全量 20 门）兜底。');
+  process.exit(rc);
+}
+
+// 治理面 advisory 已于 2026-10-28 全部退出 pre-push（owner 决策）：PR 体积预算、papercut 欠账提醒、
+// 回路日检（agg-judgments 月度分片 / retire-watch / papercut-report）不再随推送运行。
+// 上述脚本保留为手动工具（需要时直接 node 跑），本钩子只做 hard 扫描 + 条件构建。
+process.exit(0);

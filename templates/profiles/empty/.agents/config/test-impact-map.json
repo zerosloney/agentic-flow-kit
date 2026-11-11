@@ -1,0 +1,8 @@
+{
+  "version": 1,
+  "namespace": "",
+  "note": "影响面选测映射：areas=测试类归属；always=每次集成子集必跑；paths=按序首命中，未命中/星号=全量。新增测试类须登记，check-test-impact-map.mjs 机检。",
+  "areas": {},
+  "always": [],
+  "paths": []
+}

@@ -1,0 +1,8 @@
+---
+name: wf-review
+description: "Code review standard: risk-graded machine gates + AI self-review checklist; user decides severity and merge"
+---
+
+Authoritative command: `.agents/commands/review.md`
+
+This file is a pointer shell. Read the authoritative source at execution time; do not copy the body here.

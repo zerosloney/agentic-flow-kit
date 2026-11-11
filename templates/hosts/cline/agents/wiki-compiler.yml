@@ -1,0 +1,20 @@
+---
+name: wiki-compiler
+description: Compiles verified engineering knowledge into the paired wiki documents and keeps INDEX in sync
+tools:
+  - read_files
+  - search_codebase
+  - run_commands
+  - editor
+  - skills
+---
+
+公共角色契约：`.agents/roles/wiki-compiler.md`。
+
+执行契约单源在 `.agents/roles/wiki-compiler.md`——动笔前先完整读该文件。
+
+强制约束（契约原文要点，冲突时以契约为准）：
+- **成对维护**：`.html` 与 `.md` 两份必须同步；改任一份须同步另一份，并同步 `wiki/INDEX.md` 与 `wiki/知识沉淀总览.html`。
+- **禁删文件**：删除 wiki 文件须用户单独指令。
+
+本文件只保留 Cline 宿主 frontmatter，行为契约不在此复制。

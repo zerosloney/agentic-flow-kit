@@ -1,0 +1,224 @@
+{
+  "schema": 2,
+  "generatedAt": "2020-01-01T00:00:00.000Z",
+  "rootLabel": "Shipyard.Material",
+  "doc": {
+    "path": ".agents/tests/fixtures/dev-tour/plan-union-label.md",
+    "type": "DOC",
+    "title": "并集标签样例：代用行重排",
+    "status": "起草中",
+    "level": "L2",
+    "module": "物资",
+    "date": "2099-12-31",
+    "purpose": "",
+    "links": [],
+    "upstream": []
+  },
+  "evidence": {
+    "windowStart": "2099-12-31",
+    "rows": [],
+    "totalInWindow": 0
+  },
+  "base": {
+    "ref": "HEAD",
+    "sha": "a1b2c3d4e5f6",
+    "available": true,
+    "note": ""
+  },
+  "stats": {
+    "files": 2,
+    "new": 0,
+    "modified": 0,
+    "deleted": 0,
+    "renamed": 0,
+    "planned": 2,
+    "tests": 0,
+    "additions": 0,
+    "deletions": 0,
+    "docs": 2,
+    "steps": 3
+  },
+  "parseHealth": {
+    "total": 3,
+    "direct": 3,
+    "bySource": {
+      "tasks": 3
+    },
+    "zeroFileSteps": 0,
+    "layersFallback": false,
+    "hitRate": 1,
+    "pathGuesses": {
+      "total": 0,
+      "items": []
+    },
+    "issues": []
+  },
+  "steps": [
+    {
+      "id": "S1",
+      "index": 1,
+      "title": "删除冗余分支",
+      "summary": "编译通过",
+      "detail": [
+        "`backend/Widgets/UnionService.cs`",
+        "`backend/Widgets/UnionService.cs`"
+      ],
+      "files": [
+        "backend/Widgets/UnionService.cs"
+      ],
+      "status": "todo",
+      "source": "tasks"
+    },
+    {
+      "id": "S3",
+      "index": 2,
+      "title": "调整列序",
+      "summary": "构建通过",
+      "detail": [
+        "`backend/Widgets/UnionColumn.cs`（**S3**）：列序"
+      ],
+      "files": [
+        "backend/Widgets/UnionColumn.cs"
+      ],
+      "status": "todo",
+      "source": "tasks"
+    },
+    {
+      "id": "S4",
+      "index": 3,
+      "title": "收口：回归清单与文档",
+      "summary": "收口完成",
+      "detail": [
+        "`workflow/specs/2026-10-13-pml-quota-substitute-row-split.md`（**S4**）：注解",
+        "`workflow/regression-checklist.d/2026-10.md`（**S5**）：清单"
+      ],
+      "files": [
+        "workflow/specs/2026-10-13-pml-quota-substitute-row-split.md",
+        "workflow/regression-checklist.d/2026-10.md"
+      ],
+      "status": "todo",
+      "source": "tasks"
+    }
+  ],
+  "files": [
+    {
+      "path": "backend/Widgets/UnionColumn.cs",
+      "status": "planned",
+      "badge": "计划",
+      "additions": 0,
+      "deletions": 0,
+      "binary": false,
+      "test": false,
+      "layer": "app",
+      "planned": true,
+      "actual": false,
+      "steps": [
+        "S3"
+      ],
+      "diff": "",
+      "oldPath": "",
+      "pathGuess": false
+    },
+    {
+      "path": "backend/Widgets/UnionService.cs",
+      "status": "planned",
+      "badge": "计划",
+      "additions": 0,
+      "deletions": 0,
+      "binary": false,
+      "test": false,
+      "layer": "app",
+      "planned": true,
+      "actual": false,
+      "steps": [
+        "S1"
+      ],
+      "diff": "",
+      "oldPath": "",
+      "pathGuess": false
+    },
+    {
+      "path": "workflow/regression-checklist.d/2026-10.md",
+      "status": "planned",
+      "badge": "计划",
+      "additions": 0,
+      "deletions": 0,
+      "binary": false,
+      "test": false,
+      "layer": "doc",
+      "planned": true,
+      "actual": false,
+      "steps": [
+        "S4"
+      ],
+      "diff": "",
+      "oldPath": "",
+      "pathGuess": false
+    },
+    {
+      "path": "workflow/specs/2026-10-13-pml-quota-substitute-row-split.md",
+      "status": "planned",
+      "badge": "计划",
+      "additions": 0,
+      "deletions": 0,
+      "binary": false,
+      "test": false,
+      "layer": "doc",
+      "planned": true,
+      "actual": false,
+      "steps": [
+        "S4"
+      ],
+      "diff": "",
+      "oldPath": "",
+      "pathGuess": false
+    }
+  ],
+  "sequence": {
+    "participants": [
+      {
+        "id": "app",
+        "label": "应用层"
+      },
+      {
+        "id": "doc",
+        "label": "文档"
+      }
+    ],
+    "messages": [
+      {
+        "stepId": "S1",
+        "from": "app",
+        "to": "app",
+        "label": "删除冗余分支",
+        "self": true
+      },
+      {
+        "stepId": "S3",
+        "from": "app",
+        "to": "app",
+        "label": "调整列序",
+        "self": true
+      },
+      {
+        "stepId": "S4",
+        "from": "app",
+        "to": "app",
+        "label": "收口：回归清单与文档",
+        "self": true
+      }
+    ]
+  },
+  "dataflow": {
+    "objects": [],
+    "flows": []
+  },
+  "deps": {
+    "edges": [],
+    "source": "",
+    "unresolved": 0,
+    "unresolvedItems": []
+  },
+  "gates": [],
+  "note": ""
+}

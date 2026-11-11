@@ -1,0 +1,72 @@
+#!/usr/bin/env node
+// Git commit-msg hook：提交类型枚举校验（自 pre-commit 迁入，papercut 升级修复；
+// 全 node 化。CommonJS——无扩展名文件 node 缺省按 CJS 解析，不依赖 ESM 语法探测）
+// AGENTS.md「git提交」：Conventional Commits 中文，feat/fix/docs/style/refactor/perf/chore
+// 豁免仅限真实 merge/revert/squash 形态：git 默认消息（Merge …/Revert …/Squashed commit of the following:）
+// 与自定义小写 merge:/revert: 前缀（2026-11-06 P2-B2 补 squash 模板——该行由 git 生成，非作者笔误）。
+// 收紧：不再匹配任意 merge/revert 开头（如 "merged xxx"），空首行不再豁免（fail-closed）。
+// process.argv[2] 为 git 传入的本次消息文件（真实待提交内容）
+// 枚举/正则单源：.agents/config/commit-msg-rules.json（2026-11-05 抽出，CI 检出 ci-commit-hygiene.mjs
+// 同源消费；JSON 兼容本文件 CJS 与 CI 脚本 ESM 两读法）。规则读不到 = fail-closed 拒提交。
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+
+const RULES = path.join(__dirname, '..', '.agents', 'config', 'commit-msg-rules.json');
+let types = [];
+let exemptRe = null;
+let typeRe = null;
+try {
+  const rules = JSON.parse(fs.readFileSync(RULES, 'utf8'));
+  types = rules.types;
+  exemptRe = new RegExp(rules.exemptPrefix);
+  typeRe = new RegExp('^(' + rules.types.join('|') + ')' + rules.typeSuffix);
+} catch (e) {
+  console.error(`commit-msg: 规则单源 ${RULES} 读取失败（${e.message}），fail-closed 拒绝提交`);
+  process.exit(1);
+}
+
+const msgFile = process.argv[2];
+let first = '';
+try { first = fs.readFileSync(msgFile, 'utf8').split(/\r?\n/)[0] || ''; } catch { /* 读不到 = 空首行 fail-closed */ }
+const exempt = exemptRe.test(first);
+if (!exempt && !typeRe.test(first)) {
+  console.error(`commit-msg: 提交类型须为 ${types.join('/')}（AGENTS.md「git提交」），当前首行：${first}`);
+  process.exit(1);
+}
+
+// 先确认后改代码（2026-11-08 档 2-D 自 pre-commit 位移）：pre-commit 时点读不到提交消息，
+// 豁免 A（L0 trailer）与豁免 B（同批 done plan，L1 单笔提交）都要在消息可见的时点执法。
+// 暂存产品路径才启动（廉价前缀过滤与原 pre-commit 同口径）；精确判据单源
+// check-confirm-order.mjs。合并自动提交在 commit-msg 时点 MERGE_HEAD / SQUASH_MSG 已落盘，
+// 由脚本内状态文件探测跳过；缺失 fail-closed（与其余门同口径）。
+const GATE = path.join(__dirname, '..', '.agents', 'hooks', 'check-confirm-order.mjs');
+if (!fs.existsSync(GATE)) {
+  console.error('commit-msg: 门脚本缺失 .agents/hooks/check-confirm-order.mjs——提交已阻止（脚本随仓走；git checkout -- .agents/hooks/check-confirm-order.mjs 恢复后重试）');
+  process.exit(1);
+}
+const staged = spawnSync('git', ['-c', 'core.quotepath=off', 'diff', '--cached', '--name-only'], { encoding: 'utf8' });
+const touchesProduct = String(staged.stdout || '').split(/\r?\n/).some((f) => {
+  const rel = f.trim().replace(/\\/g, '/');
+  return rel.startsWith('backend/') || rel.startsWith('frontend/src/') || rel.startsWith('tests/')
+    || rel.startsWith('wiki/数据维护/');
+});
+if (touchesProduct) {
+  const gate = spawnSync(process.execPath, [GATE, msgFile], { stdio: 'inherit' });
+  if (gate.status !== 0) {
+    console.error('commit-msg: 先确认后改代码未通过，提交已阻止');
+    process.exit(gate.status === null ? 1 : gate.status);
+  }
+}
+
+// 任务短名校验（2026-11-09 建，advisory 先行）：覆盖 plan 恰好一份时提交消息须含其短名，
+// git log 可按任务检索。脚本内部 exit 恒 0（观察期不阻断），缺失 fail-closed（与其余门同口径）。
+const PLAN_REF = path.join(__dirname, '..', '.agents', 'hooks', 'check-commit-plan-ref.mjs');
+if (!fs.existsSync(PLAN_REF)) {
+  console.error('commit-msg: 门脚本缺失 .agents/hooks/check-commit-plan-ref.mjs——提交已阻止（脚本随仓走；git checkout -- .agents/hooks/check-commit-plan-ref.mjs 恢复后重试）');
+  process.exit(1);
+}
+if (touchesProduct) {
+  spawnSync(process.execPath, [PLAN_REF, msgFile], { stdio: 'inherit' });
+}
+process.exit(0);

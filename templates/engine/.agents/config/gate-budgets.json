@@ -1,0 +1,5 @@
+{
+  "fullMs": 240000,
+  "scopeMs": 120000,
+  "note": "墙钟预算（ms），advisory：超限只告警不阻断；连续两月超限由 owner 裁决降档/退役一门（一进一出）。fullMs 依据 workflow/metrics.md 2026-10 均值 217s + 余量；scopeMs 为增量关单目标。（flaky 隔离重跑已退役 2026-11-08 减重档 3-U1：近 30 天零触发；flaky 仍按人工立项处置，见 commands/stages.md。）"
+}

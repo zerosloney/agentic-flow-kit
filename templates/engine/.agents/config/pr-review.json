@@ -1,0 +1,67 @@
+{
+  "$schema": "pr-review/config@1",
+  "version": 1,
+  "mode": "enforce",
+  "promptVersion": "pr-review/v1",
+  "tmpDir": ".agents/tmp/pr-review",
+  "artifactDir": "workflow/reviews.d/artifacts",
+  "ledgerDir": "workflow/reviews.d",
+  "verifiersPerFinding": 1,
+  "modelRoles": {
+    "finder": "code",
+    "verifier": "review",
+    "adjudicator": "judgment"
+  },
+  "consensus": {
+    "importantConfirm": 2,
+    "nitConfirm": 1,
+    "escalateOnSingleImportantRepro": true
+  },
+  "limits": {
+    "maxFinders": 3,
+    "maxCandidates": 40,
+    "maxFilesPerLens": 40,
+    "maxDiffBytes": 2000000
+  },
+  "brief": {
+    "maxSliceBytes": 80000,
+    "maxBaseBytes": 50000,
+    "contextLines": 12,
+    "maxSliceFiles": 16,
+    "maxBaseFiles": 10
+  },
+  "lenses": {
+    "base": [
+      "correctness",
+      "spec"
+    ],
+    "extra": [
+      {
+        "id": "data-integrity",
+        "focus": "数据丢失、事务边界、幂等、并发写、迁移可逆、审计字段、删除引用检查",
+        "filePattern": "(^backend/|^tests/|\\.sql$|repository|service|migration|entity|dto)",
+        "note": "本仓业务面重点：后端/数据维护 SQL"
+      }
+    ]
+  },
+  "styleDrop": {
+    "categories": [
+      "style"
+    ],
+    "patterns": [
+      "^\\s*(格式|排版|空白|重命名|改个名字|注释措辞|import 顺序|style|format|whitespace)",
+      "^\\s*(建议|最好|可以)(把|将).*(改名|格式化|调整顺序)"
+    ],
+    "keepIfBehaviorImpact": true
+  },
+  "verifierEscalation": 0,
+  "fast": {
+    "lenses": ["correctness"],
+    "finderToolBudget": 8,
+    "finderWallBudgetSec": 150,
+    "verifierWallBudgetSec": 60,
+    "importantConfirm": 1,
+    "note": "fast 档契约见 .agents/scripts/pr-review.mjs 头注 fast 档节"
+  },
+  "_note": "2026-11-08 减重两档（owner 指示「评审耗时太长」）：U1 verifier 3 票 → 每候选默认 1 票。U2（档 3-U2）finder 面 6→3——保留 correctness/spec/data-integrity（条件），tests/performance 与 correctness 及 CI 门重叠、security 等其余 lens 一并裁撤；verifierEscalation 1→0，Important/P2 不再追加复核票——Nit 1 票 confirm 即确认，Important（P0/P1）1 票不足 importantConfirm=2 一律 escalated 进裁决复核，即复核仅由 P0 级发现物触发。恢复口径：lenses.base 调回全量、maxFinders 调回 6、verifierEscalation 调回 1。"
+}

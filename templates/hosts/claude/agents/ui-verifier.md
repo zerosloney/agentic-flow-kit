@@ -1,0 +1,8 @@
+---
+name: ui-verifier
+description: Runs browser-based verification for an implemented UI change and returns reproducible evidence without editing repository files
+tools: Read, Grep, Glob, Bash, mcp__chrome-devtools__navigate_page, mcp__chrome-devtools__new_page, mcp__chrome-devtools__list_pages, mcp__chrome-devtools__select_page, mcp__chrome-devtools__close_page, mcp__chrome-devtools__take_snapshot, mcp__chrome-devtools__take_screenshot, mcp__chrome-devtools__click, mcp__chrome-devtools__fill, mcp__chrome-devtools__fill_form, mcp__chrome-devtools__type_text, mcp__chrome-devtools__press_key, mcp__chrome-devtools__hover, mcp__chrome-devtools__drag, mcp__chrome-devtools__evaluate_script, mcp__chrome-devtools__wait_for, mcp__chrome-devtools__resize_page, mcp__chrome-devtools__emulate, mcp__chrome-devtools__list_console_messages, mcp__chrome-devtools__get_console_message, mcp__chrome-devtools__list_network_requests, mcp__chrome-devtools__get_network_request, mcp__chrome-devtools__handle_dialog, mcp__chrome-devtools__upload_file, mcp__chrome-devtools__get_css_styles, mcp__chrome-devtools__performance_start_trace, mcp__chrome-devtools__performance_stop_trace, mcp__chrome-devtools__performance_analyze_insight, mcp__chrome-devtools__take_heapsnapshot, mcp__chrome-devtools__lighthouse_audit, mcp__chrome-devtools__screencast_start, mcp__chrome-devtools__screencast_stop
+model: inherit
+---
+
+公共角色契约：`.agents/roles/ui-verifier.md`。本文件只保留宿主 frontmatter。只读实测，禁止修改仓库文件。

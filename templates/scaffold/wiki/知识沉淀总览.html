@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>知识沉淀总览 · {{projectName}}</title>
+<style>
+  :root {
+    --bg: #f7f8fb;
+    --card: #ffffff;
+    --border: #e6e8ee;
+    --text: #1f2937;
+    --muted: #6b7280;
+    --accent: #2563eb;
+    --accent-soft: #eff4ff;
+    --warn: #d97706;
+    --shadow: 0 1px 2px rgba(0,0,0,.04), 0 4px 16px rgba(0,0,0,.04);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    font-family: -apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  header {
+    padding: 32px 40px 16px;
+    background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+    color: #fff;
+  }
+  header h1 { margin: 0 0 4px; font-size: 24px; font-weight: 600; }
+  header .meta { opacity: .85; font-size: 13px; }
+  main { max-width: 1400px; margin: 0 auto; padding: 24px 40px 64px; }
+  .summary {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+  .stat {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    box-shadow: var(--shadow);
+  }
+  .stat .num { font-size: 22px; font-weight: 600; color: var(--accent); }
+  .stat .lbl { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .toolbar {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  .toolbar input {
+    flex: 1 1 280px;
+    max-width: 480px;
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    background: var(--card);
+  }
+  .toolbar select {
+    padding: 8px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 13px;
+    background: var(--card);
+  }
+  .topic-section {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 16px;
+    overflow: hidden;
+    box-shadow: var(--shadow);
+  }
+  .topic-header {
+    padding: 12px 16px;
+    background: var(--accent-soft);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    cursor: pointer;
+    user-select: none;
+  }
+  .topic-header:hover { background: #e0ebff; }
+  .topic-header .name { font-weight: 600; color: var(--accent); font-size: 15px; }
+  .topic-header .count {
+    background: var(--accent);
+    color: #fff;
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+  }
+  thead th {
+    text-align: left;
+    padding: 10px 16px;
+    background: #fafbfd;
+    border-bottom: 1px solid var(--border);
+    color: var(--muted);
+    font-weight: 500;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+  }
+  tbody td {
+    padding: 8px 16px;
+    border-bottom: 1px solid #f0f2f5;
+    vertical-align: top;
+  }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: #fafbff; }
+  td.file { font-family: "SF Mono", Consolas, monospace; font-size: 12.5px; color: #111827; }
+  td.file a { color: var(--accent); text-decoration: none; }
+  td.file a:hover { text-decoration: underline; }
+  td.topic-cell { color: var(--muted); }
+  td.dir a {
+    color: var(--accent);
+    text-decoration: none;
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 12px;
+  }
+  td.dir a:hover { text-decoration: underline; }
+  footer { padding: 24px 40px; color: var(--muted); font-size: 12px; text-align: center; }
+</style>
+</head>
+<body>
+<header>
+  <h1>知识沉淀总览</h1>
+  <div class="meta">{{projectName}} · 项目知识沉淀</div>
+</header>
+
+<main>
+  <div class="summary" id="summary"></div>
+
+  <div class="toolbar">
+    <input type="text" id="search" placeholder="🔍 搜索文件名 / 主题 / 归属目录…" />
+    <select id="topicFilter">
+      <option value="">全部主题</option>
+    </select>
+  </div>
+
+  <div id="topics"></div>
+</main>
+
+<footer>看板由 wiki 技能生成 · 原始数据见 wiki/INDEX.md</footer>
+
+<script>
+const DATA = {
+  "summary": { "total": 0, "topics": 0, "files": 0, "archive": 0 },
+  "topics": []
+};
+
+// 顶部统计卡片
+document.getElementById('summary').innerHTML = `
+  <div class="stat"><div class="num">${DATA.summary.topics}</div><div class="lbl">主题数</div></div>
+  <div class="stat"><div class="num">${DATA.summary.files}</div><div class="lbl">知识文档</div></div>
+  <div class="stat"><div class="num">${DATA.summary.archive}</div><div class="lbl">草稿归档</div></div>
+  <div class="stat"><div class="num">${DATA.topics.reduce((s,t)=>s+t.files.length,0)}</div><div class="lbl">合计记录</div></div>
+`;
+
+// 主题过滤器
+const sel = document.getElementById('topicFilter');
+DATA.topics.forEach(t => {
+  const o = document.createElement('option');
+  o.value = t.name; o.textContent = `${t.name} (${t.files.length})`;
+  sel.appendChild(o);
+});
+
+function escapeHtml(s){ return String(s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+function render(filterText='', topicFilter='') {
+  const container = document.getElementById('topics');
+  container.innerHTML = '';
+  DATA.topics
+    .filter(t => !topicFilter || t.name === topicFilter)
+    .forEach(t => {
+      const rows = t.files.filter(f =>
+        !filterText ||
+        f.file.toLowerCase().includes(filterText.toLowerCase()) ||
+        f.topic.toLowerCase().includes(filterText.toLowerCase()) ||
+        f.dir.toLowerCase().includes(filterText.toLowerCase())
+      );
+      if (rows.length === 0) return;
+      const section = document.createElement('div');
+      section.className = 'topic-section';
+      section.innerHTML = `
+        <div class="topic-header">
+          <span class="name">📁 ${escapeHtml(t.name)}</span>
+          <span class="count">${rows.length}</span>
+        </div>
+        <table>
+          <thead><tr><th style="width:40%">文件名</th><th style="width:20%">主题</th><th>归属目录</th></tr></thead>
+          <tbody>
+            ${rows.map(f => {
+              const base = f.file.split('/').pop();
+              const fileCell = /\.(html)$/i.test(f.file)
+                ? `<td class="file"><a href="${escapeHtml(f.dir + base)}" target="_blank" title="打开文档">${escapeHtml(f.file)}</a></td>`
+                : `<td class="file">${escapeHtml(f.file)}</td>`;
+              return `
+              <tr>
+                ${fileCell}
+                <td class="topic-cell">${escapeHtml(f.topic)}</td>
+                <td class="dir"><a href="${escapeHtml(f.dir)}" title="打开目录">${escapeHtml(f.dir)}</a></td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>`;
+      container.appendChild(section);
+    });
+  if (!container.innerHTML) {
+    container.innerHTML = '<div class="topic-section" style="padding:24px;text-align:center;color:var(--muted)">无匹配记录</div>';
+  }
+}
+
+document.getElementById('search').addEventListener('input', e => render(e.target.value, sel.value));
+sel.addEventListener('change', e => render(document.getElementById('search').value, e.target.value));
+render();
+</script>
+</body>
+</html>

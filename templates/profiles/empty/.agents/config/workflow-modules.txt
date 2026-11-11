@@ -1,0 +1,2 @@
+# workflow frontmatter 模块枚举（单源：workflow-enums.mjs 共读）
+# 每行一个模块名；空清单 = 不校验模块枚举（新装户按项目模块补登）。

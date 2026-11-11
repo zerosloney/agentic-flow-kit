@@ -1,0 +1,15 @@
+---
+name: implementer
+description: Implements an approved, tightly scoped code change or test when the task includes owned files and executable acceptance criteria
+tools:
+  - read_files
+  - search_codebase
+  - run_commands
+  - editor
+---
+
+公共角色契约：`.agents/roles/implementer.md`。
+
+执行契约单源在 `.agents/roles/implementer.md`——动手前先完整读该文件，其 Scope / Required Inputs / Deliverables / Constraints 为本角色的强制约束（最小 diff、禁顺手重构、只改授权清单内文件）。
+
+本文件只保留 Cline 宿主 frontmatter，行为契约不在此复制。

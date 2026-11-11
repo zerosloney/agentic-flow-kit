@@ -1,0 +1,59 @@
+{
+  "permissions": {
+    "allow": [
+      "Shell(dotnet build *)",
+      "Shell(dotnet run *)",
+      "Shell(npm run *)",
+      "Shell(npm install *)",
+      "Shell(npm ci *)",
+      "Shell(node *)",
+      "Shell(git status *)",
+      "Shell(git diff *)",
+      "Shell(git add *)",
+      "Shell(git commit *)",
+      "Shell(git log *)",
+      "Shell(git push *)",
+      "Shell(chrome *)",
+      "Shell(dir *)"
+    ],
+    "deny": [
+      "Shell(dotnet ef *)",
+      "Shell(git reset --hard *)",
+      "Shell(git push --force*)",
+      "Shell(git push -f*)",
+      "Shell(drop database *)",
+      "Shell(* --no-verify*)"
+    ],
+    "ask": [
+      "Shell(git checkout *)",
+      "Shell(git clean *)",
+      "Shell(git branch -D *)",
+      "Shell(rm -rf *)"
+    ],
+    "defaultMode": "default"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "WRITE|EDIT",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"%COMMANDCODE_PROJECT_DIR%/.agents/hooks/pre-write-check.cjs\"",
+            "timeout": 120
+          }
+        ]
+      },
+      {
+        "matcher": "SHELL",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"%COMMANDCODE_PROJECT_DIR%/.agents/hooks/pre-shell-check.cjs\"",
+            "timeout": 600
+          }
+        ]
+      }
+    ]
+  }
+}

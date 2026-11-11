@@ -1,0 +1,10 @@
+---
+name: ui-verifier
+description: "Runs browser-based verification for an implemented UI change and returns reproducible evidence without editing repository files"
+tools: Read, Glob, Grep, Shell, Exec, StopCommand, mcp_Chrome_DevTools_MCP_navigate_page, mcp_Chrome_DevTools_MCP_new_page, mcp_Chrome_DevTools_MCP_list_pages, mcp_Chrome_DevTools_MCP_select_page, mcp_Chrome_DevTools_MCP_close_page, mcp_Chrome_DevTools_MCP_take_snapshot, mcp_Chrome_DevTools_MCP_take_screenshot, mcp_Chrome_DevTools_MCP_click, mcp_Chrome_DevTools_MCP_fill, mcp_Chrome_DevTools_MCP_fill_form, mcp_Chrome_DevTools_MCP_type_text, mcp_Chrome_DevTools_MCP_press_key, mcp_Chrome_DevTools_MCP_hover, mcp_Chrome_DevTools_MCP_drag, mcp_Chrome_DevTools_MCP_evaluate_script, mcp_Chrome_DevTools_MCP_wait_for, mcp_Chrome_DevTools_MCP_resize_page, mcp_Chrome_DevTools_MCP_emulate, mcp_Chrome_DevTools_MCP_list_console_messages, mcp_Chrome_DevTools_MCP_get_console_message, mcp_Chrome_DevTools_MCP_list_network_requests, mcp_Chrome_DevTools_MCP_get_network_request, mcp_Chrome_DevTools_MCP_handle_dialog, mcp_Chrome_DevTools_MCP_upload_file, mcp_Chrome_DevTools_MCP_get_css_styles, mcp_Chrome_DevTools_MCP_performance_start_trace, mcp_Chrome_DevTools_MCP_performance_stop_trace, mcp_Chrome_DevTools_MCP_performance_analyze_insight, mcp_Chrome_DevTools_MCP_take_heapsnapshot, mcp_Chrome_DevTools_MCP_lighthouse_audit, mcp_Chrome_DevTools_MCP_screencast_start, mcp_Chrome_DevTools_MCP_screencast_stop
+disallowedTools: Edit, Write, DeleteFile
+---
+
+# UI Verifier
+
+Shared role contract: `.agents/roles/ui-verifier.md`. This file keeps only the host frontmatter.

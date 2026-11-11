@@ -1,0 +1,63 @@
+{
+  "_comment": "Qoder 宿主本机接线（不入库，见 .git/info/exclude）。钩子实现单源 .agents/hooks/，本文件只留接线；permissions 镜像 .agents/settings.json 的 allow/deny/ask 基线。timeout 单位为秒。钩子走 exec 形式（command=node + args），省掉 bash 包装进程——shell 形式每次调用要 bash+node 两次 spawn，本会话实测有 2/20 次被宿主分发层报 Retry deadline exceeded 并整次拦下。",
+  "permissions": {
+    "allow": [
+      "Bash(dotnet build:*)",
+      "Bash(dotnet run:*)",
+      "Bash(npm run:*)",
+      "Bash(npm install:*)",
+      "Bash(npm ci:*)",
+      "Bash(node:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git log:*)",
+      "Bash(git push:*)",
+      "Bash(chrome:*)"
+    ],
+    "deny": [
+      "Bash(dotnet ef:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(drop database:*)"
+    ],
+    "ask": [
+      "Bash(git checkout:*)",
+      "Bash(git clean:*)",
+      "Bash(git branch -D:*)",
+      "Bash(rm -rf:*)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${QODER_PROJECT_DIR}/.agents/hooks/pre-shell-check.cjs"],
+            "name": "shell-gates",
+            "statusMessage": "命令门禁（deny/ask 清单 + .githooks pre-commit/pre-push 前置）",
+            "timeout": 600
+          }
+        ]
+      },
+      {
+        "matcher": "Edit|Write|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node",
+            "args": ["${QODER_PROJECT_DIR}/.agents/hooks/pre-write-check.cjs"],
+            "name": "write-gates",
+            "statusMessage": "写前门（执法面自保护 / 台账 append-only / 红线快照-恢复）",
+            "timeout": 120
+          }
+        ]
+      }
+    ]
+  }
+}
