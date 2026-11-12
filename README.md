@@ -183,3 +183,7 @@ agentic-flow-kit/
 ├── tests/
 └── tools/
 ```
+
+## 许可证
+
+[MIT](LICENSE) © dc

@@ -2,7 +2,7 @@
   "name": "agentic-flow-kit",
   "version": "2.0.0",
   "description": "AI-Native workflow engine installer: generate .agents, git hooks, host adapters, wiki/workflow scaffolds from zero.",
-  "license": "UNLICENSED",
+  "license": "MIT",
   "type": "module",
   "bin": {
     "flow-kit": "bin/flow-kit.mjs"
