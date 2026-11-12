@@ -1,0 +1,94 @@
+{
+  "permissions": {
+    "allow": [
+{{stackAllowBashColon}}      "Bash(npm run:*)",
+      "Bash(npm install:*)",
+      "Bash(npm ci:*)",
+      "Bash(node:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git log:*)",
+      "Bash(git push:*)",
+      "Bash(chrome:*)"
+    ],
+    "deny": [
+      "Bash(dotnet ef:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(drop database:*)",
+      "Bash(* --no-verify*)",
+      "Read(.env*)",
+      "Read(./secrets/**)",
+      "Read(~/.ssh/**)",
+      "Read(~/.aws/credentials)",
+      "Read(~/.config/gcloud/**)",
+      "WebFetch",
+      "Bash(curl *)",
+      "Bash(wget *)"
+    ],
+    "ask": [
+      "Bash(git checkout:*)",
+      "Bash(git clean:*)",
+      "Bash(git branch -D:*)",
+      "Bash(rm -rf:*)"
+    ],
+    "disableBypassPermissionsMode": "disable"
+  },
+  "allowManagedPermissionRulesOnly": true,
+  "sandbox": {
+    "enabled": true,
+    "failIfUnavailable": true,
+    "allowUnsandboxedCommands": false,
+    "network": {
+      "allowedDomains": [
+        "registry.npmjs.org",
+        "github.com",
+        "api.github.com"
+      ]
+    },
+    "credentials": {
+      "files": [
+        { "path": "~/.ssh", "mode": "deny" },
+        { "path": "~/.aws/credentials", "mode": "deny" },
+        { "path": "~/.config/gcloud", "mode": "deny" }
+      ],
+      "envVars": [
+        { "name": "ANTHROPIC_API_KEY", "mode": "deny" },
+        { "name": "AWS_SECRET_ACCESS_KEY", "mode": "deny" },
+        { "name": "GITHUB_TOKEN", "mode": "deny" }
+      ]
+    }
+  },
+  "allowManagedHooksOnly": true,
+  "disableSideloadFlags": true,
+  "strictKnownMarketplaces": true,
+  "allowManagedMcpServersOnly": true,
+  "requiredMinimumVersion": "2.1.193",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.agents/hooks/pre-write-check.cjs",
+            "timeout": 120
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR\"/.agents/hooks/pre-shell-check.cjs",
+            "timeout": 800
+          }
+        ]
+      }
+    ]
+  }
+}

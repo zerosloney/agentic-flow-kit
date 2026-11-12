@@ -7,6 +7,9 @@ const KIT = path.resolve(HERE, '..');
 const LOCALES = path.join(KIT, 'locales');
 const FALLBACK = 'zh-CN';
 
+// 支持语言单一来源：cli/main.mjs 的 SUPPORTED_LANGS 与 TUI 向导语言菜单都由它派生
+export const LANGUAGES = ['zh-CN', 'en'];
+
 const cache = new Map();
 export function loadCatalog(lang) {
   if (cache.has(lang)) return cache.get(lang);

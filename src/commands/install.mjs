@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { flag } from '../cli/args.mjs';
 import { buildPlan } from '../install/plan.mjs';
 import { applyPlan, summaryLine } from '../install/apply.mjs';
@@ -8,6 +9,9 @@ import { emptyManifest, readManifest, writeManifest } from '../install/manifest.
 import { buildVars } from '../render/tokens.mjs';
 import { HOST_NAMES, resolveHost } from '../hosts/registry.mjs';
 import { configureGit, isGitRepo } from '../git/config.mjs';
+import {
+  parseModelFlags, readInjectedModels, resolveModels, summarizeModels, writeLocalModelRoles,
+} from '../models/resolve.mjs';
 
 export function readKitVersion() {
   try {
@@ -52,17 +56,54 @@ export function resolveHosts(args, t, fallback = []) {
   return out;
 }
 
-export function detectStack(target) {
+// 根目录标记，先匹配者胜出。package.json 放在最后，避免吞掉 Cargo.toml / go.mod / pom.xml / tsconfig.json。
+// label 是菜单上的典型标记；match 返回实际命中的文件名。
+const STACK_MARKERS = [
+  {
+    stack: 'dotnet',
+    label: '.sln / .csproj',
+    match: (names) => names.find((n) => n.endsWith('.sln')) || names.find((n) => n.endsWith('.csproj')) || null,
+  },
+  { stack: 'rust', label: 'Cargo.toml', match: (names) => (names.includes('Cargo.toml') ? 'Cargo.toml' : null) },
+  { stack: 'go', label: 'go.mod', match: (names) => (names.includes('go.mod') ? 'go.mod' : null) },
+  {
+    stack: 'java',
+    label: 'pom.xml / build.gradle',
+    match: (names) => ['pom.xml', 'build.gradle', 'build.gradle.kts'].find((n) => names.includes(n)) || null,
+  },
+  { stack: 'typescript', label: 'tsconfig.json', match: (names) => (names.includes('tsconfig.json') ? 'tsconfig.json' : null) },
+  { stack: 'node', label: 'package.json', match: (names) => (names.includes('package.json') ? 'package.json' : null) },
+];
+
+export function stackMarkerLabel(stack) {
+  return STACK_MARKERS.find((marker) => marker.stack === stack)?.label || '';
+}
+
+export function matchStack(names) {
+  const list = Array.isArray(names) ? names : [];
+  for (const marker of STACK_MARKERS) {
+    const file = marker.match(list);
+    if (file) return { stack: marker.stack, file };
+  }
+  return { stack: 'empty', file: null };
+}
+
+export function detectStackDetail(target) {
   let top = [];
   try {
     top = fs.readdirSync(target);
   } catch {
-    return 'empty';
+    return { stack: 'empty', file: null };
   }
-  if (top.some((n) => n.endsWith('.sln') || n.endsWith('.csproj'))) return 'dotnet';
-  if (top.includes('package.json')) return 'node';
-  return 'empty';
+  return matchStack(top);
 }
+
+export function detectStack(target) {
+  return detectStackDetail(target).stack;
+}
+
+// 可选技术栈单一来源：TUI 向导栈菜单由它生成
+export const STACKS = ['dotnet', 'node', 'typescript', 'rust', 'go', 'java', 'empty'];
 
 export function resolveStack(args, target) {
   const stack = String(args.stack || args.profile || detectStack(target));
@@ -70,12 +111,62 @@ export function resolveStack(args, target) {
   return fs.existsSync(abs) ? stack : 'empty';
 }
 
-export function installCommand({ args, t, lang }) {
+export function installCommand({ args, t, lang, onLog }) {
   const hosts = resolveHosts(args, t);
-  return runInstall({ args, t, lang, hosts, commandLabel: 'install' });
+  return runInstall({ args, t, lang, hosts, commandLabel: 'install', onLog });
 }
 
-export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories, commandLabel, stackOverride }) {
+const ACTION_MARK = { create: '+', update: '~', skip: '-', conflict: '!', merge: '~' };
+
+export function formatInstallLog(action, msg) {
+  return `${ACTION_MARK[action] || ' '} ${msg}`;
+}
+
+// 「已是最新」在升级时会占绝大多数，进度条已能表达。冲突和其余跳过必须留下原文。
+export function installLogNotable(action, msg) {
+  if (action === 'conflict') return true;
+  if (action === 'skip') return !String(msg).includes('已是最新');
+  return false;
+}
+
+// CLI 缺省进度行：action 前缀 + 消息（TUI 经 onLog 接管渲染）
+function logLine(action, msg) {
+  console.log(formatInstallLog(action, msg));
+}
+
+function normalizeModelMode(value) {
+  const v = String(value || 'recommend').toLowerCase();
+  return ['recommend', 'detect', 'inherit'].includes(v) ? v : 'recommend';
+}
+
+// 派生工件（索引/引擎地图）从单源现场取数生成，不能静态随模板漂移。
+// 它们不进 manifest：属于生成区，升级时重新生成即可。
+function generateDerivedArtifacts(target) {
+  for (const script of ['gen-workflow-index.mjs', 'gen-engine-map.mjs']) {
+    const abs = path.join(target, '.agents', 'scripts', script);
+    if (!fs.existsSync(abs)) continue;
+    try {
+      spawnSync(process.execPath, [abs], {
+        cwd: target, stdio: 'ignore', windowsHide: true, timeout: 30000,
+      });
+    } catch { /* 派生工件失败不阻断安装；verify/dream 会报漂移 */ }
+  }
+}
+
+const TIERS = ['lean', 'standard', 'enterprise'];
+function normalizeTier(value, t) {
+  const v = String(value || 'standard').toLowerCase();
+  if (!TIERS.includes(v)) {
+    const err = new Error(t('error.badTier', { value: value || '' }));
+    err.code = 'BAD_TIER';
+    throw err;
+  }
+  return v;
+}
+
+// onLog 回调契约：(action, msg, done, total) —— action ∈ create/update/skip/conflict/merge，
+// done/total 为已完成/总文件数，供 TUI 渲染 spinner 进度；缺省走 CLI 前缀行。
+export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories, commandLabel, stackOverride, onLog = logLine }) {
   const target = resolveTarget(args);
   const dryRun = flag(args, 'dry-run');
   const force = flag(args, 'force');
@@ -84,8 +175,49 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
   const previous = readManifest(target);
   const hostSet = [...new Set([...(previous?.hosts || []), ...hosts])];
   const trackHosts = flag(args, 'track-hosts');
+  // 档位：CLI > --hardened（=enterprise）> 既有 manifest > standard。
+  // 档位只影响交付面（CI / 加固），不削弱引擎门禁。
+  const tier = normalizeTier(
+    args.tier || (flag(args, 'hardened') ? 'enterprise' : null) || previous?.tier || 'standard',
+    t,
+  );
+  const hardened = flag(args, 'hardened') || tier === 'enterprise' || Boolean(previous?.hardened && !args.tier);
 
-  const plan = buildPlan({ target, hosts: planHosts, lang, stack, projectName, categories });
+  let modelFlags;
+  try {
+    modelFlags = parseModelFlags(args.models || []);
+  } catch (err) {
+    if (err.code !== 'BAD_MODEL') throw err;
+    const e = new Error(t('error.badModel', { value: err.value || '' }));
+    e.code = 'BAD_MODEL';
+    throw e;
+  }
+  const tuiModels = args.tuiModels || null;
+  const explicitModels = Object.keys(modelFlags.global).length > 0
+    || Object.keys(modelFlags.hosts).length > 0
+    || Boolean(tuiModels && Object.keys(tuiModels).length);
+  const modelMode = normalizeModelMode(args['model-mode']);
+  // 升级默认不重新探测：以本地 model-roles.local.json 为准，保证 agent 文件哈希稳定。
+  const shouldProbe = !previous || commandLabel === 'add-host' || explicitModels || modelMode === 'detect' || flag(args, 'probe-models');
+  const previousModels = commandLabel === 'upgrade'
+    ? readInjectedModels({ target, hosts: planHosts })
+    : {};
+  const models = flag(args, 'no-model-config') ? null : resolveModels({
+    hosts: planHosts,
+    target,
+    cli: modelFlags,
+    tui: tuiModels,
+    previous: previousModels,
+    mode: modelMode,
+    probe: shouldProbe,
+    allowCli: flag(args, 'probe-models'),
+  });
+
+  const plan = buildPlan({
+    target, hosts: planHosts, lang, stack, projectName, categories, models: models?.hosts, tier, hardened,
+  });
+  let done = 0;
+  const total = plan.entries.length;
   const vars = buildVars({
     target,
     projectName,
@@ -99,6 +231,13 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
 
   console.log(t('install.start', { command: commandLabel, target }));
   console.log(t('install.plan', { hosts: hostSet.join(', '), stack, lang, count: plan.entries.length }));
+  console.log(t('install.tier', { tier, hardened: t(hardened ? 'tui.yes' : 'tui.no') }));
+  if (models) {
+    console.log(t('install.models', { models: summarizeModels(models) }));
+    for (const warning of models.warnings || []) {
+      console.log(t('install.modelWarning', { host: warning.host, role: warning.role }));
+    }
+  }
   if (dryRun) console.log(t('install.dryRun'));
 
   const manifest = previous || emptyManifest({
@@ -114,15 +253,21 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
     manifest,
     dryRun,
     force,
-    log: (action, msg) => {
-      const prefix = { create: '+', update: '~', skip: '-', conflict: '!', merge: '~' }[action] || ' ';
-      console.log(`${prefix} ${msg}`);
-    },
+    log: (action, msg) => onLog(action, msg, (done += 1), total),
   });
 
   console.log(summaryLine(result.stats, t));
 
   if (!dryRun) {
+    generateDerivedArtifacts(target);
+    // 模型 ID 是机器本地状态：只写 gitignore 的 local 覆盖，不进 manifest。
+    if (models && (commandLabel !== 'upgrade' || explicitModels)) {
+      const saved = writeLocalModelRoles(target, models, {
+        overwrite: explicitModels || commandLabel === 'add-host',
+      });
+      if (saved.written) console.log(t('install.localModels', { path: path.join(target, '.agents/config/model-roles.local.json') }));
+    }
+
     const next = {
       ...manifest,
       version: KIT_VERSION,
@@ -130,6 +275,8 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
       language: lang,
       hosts: hostSet,
       stack,
+      tier,
+      hardened,
       files: result.files,
     };
     writeManifest(target, next);

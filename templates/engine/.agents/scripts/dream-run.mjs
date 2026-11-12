@@ -2,7 +2,9 @@
 // dream-run — 离线梦境最小审计（2026-11-11，对照 Anthropic《The components of agent memory》）
 // 定位：可手动/定时触发的只读审计编排器。不发明新判定，只编排现有脚本完成「离线梦境」
 //   职能：修剪陈旧(A) / 拓扑修复(B) / Judge 对账(C) / 错类候选(D) / 记忆负债(E) /
-//   冷数据候选(E2)，末尾追加 AI Judge 阶段(F)：抽取活跃 workflow 文档 + git 历史 + 确认/验证台账证据，
+//   冷数据候选(E2) / 主张依据(G，只报告 quote 还在不在) / 经验回放(H，会话摘要) /
+//   记忆表示(I，memory-wiki) / 注入层预算与上浮候选(J) / 交付结果指标(K)，
+//   末尾追加 AI Judge 阶段(F)：抽取活跃 workflow 文档 + git 历史 + 确认/验证台账证据，
 //   生成抽样审计简报（tmp/dream-judge-brief-<date>.md），交由主智能体在下个会话委托
 //   independent-reviewer 角色核验——脚本只做采样与证据收集，判断由 AI 执行。
 //
@@ -24,6 +26,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { recheckClaims } from './claims.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
@@ -67,6 +70,7 @@ function git(args, opts = {}) {
 
 const lines = [];
 const add = (s = '') => lines.push(s);
+const indent = (s, pad = '  ') => String(s).split('\n').map((l) => `${pad}${l}`).join('\n');
 const section = (t) => { lines.push(`\n## ${t}\n`); };
 
 // 非终态即活跃：intents/specs/plans 终态 = done/superseded/cancelled；incidents 终态 = closed
@@ -128,6 +132,65 @@ section('E2. 冷数据候选（agg-kb-usage --stale-days 90）');
 const cold = run('.agents/scripts/agg-kb-usage.mjs', ['--stale-days', '90']);
 add(cold.ok ? cold.out.trim() : `⚠ 冷数据统计失败: ${cold.err || cold.out}`);
 
+// ---------- 阶段 G：主张依据（只报告，不写账） ----------
+section('G. 主张依据（claims recheck，只报告）');
+let claimRecheck = { held: 0, broken: 0, results: [] };
+try {
+  claimRecheck = recheckClaims(ROOT);
+  add(`- held ${claimRecheck.held} / broken ${claimRecheck.broken}`);
+  const broken = claimRecheck.results.filter((r) => r.status === 'broken');
+  for (const row of broken) add(`- broken ${row.id} ${row.path}: ${row.reason}`);
+  if (broken.length === 0) add('- 无断依据');
+} catch (err) {
+  add(`⚠ 主张核对失败: ${err.message}`);
+}
+
+// ---------- 阶段 H：经验回放（会话日志 → 摘要） ----------
+section('H. 经验回放（session-log digest --days 7）');
+const digestPath = path.join(TMP_DIR, `session-digest-${today()}.md`);
+const sess = run('.agents/scripts/session-log.mjs', ['digest', '--days', '7', '--out', path.relative(ROOT, digestPath)]);
+if (sess.ok) {
+  add(`- 摘要: ${path.relative(ROOT, digestPath)}`);
+  try {
+    const excerpt = fs.readFileSync(digestPath, 'utf8').split(/\r?\n/).slice(0, 12).filter(Boolean);
+    if (excerpt.length) add(indent(excerpt.join('\n'), '    '));
+  } catch { /* 摘要读不到不影响其余阶段 */ }
+  add('  （无日志时摘要会明确写“无输入”——dreaming 不能把“没有经验”当成“没有错误”）');
+} else {
+  add(`⚠ 会话摘要失败: ${sess.err || sess.out}`);
+}
+
+// ---------- 阶段 I：记忆表示（memory-wiki） ----------
+section('I. 记忆表示（memory-wiki --check）');
+const mw = run('.agents/scripts/memory-wiki.mjs', ['--check']);
+if (mw.ok) {
+  add('- memory-wiki: 一致');
+} else {
+  add(`- memory-wiki: 漂移\n  ${mw.out.split('\n').filter(Boolean).slice(0, 8).join('\n  ')}`);
+  if (EXECUTE) {
+    const regen = run('.agents/scripts/memory-wiki.mjs', []);
+    add(regen.ok ? '  → 已重生成' : `  → 重生成失败: ${regen.err || regen.out}`);
+  } else {
+    add('  → 待生成（--execute）');
+  }
+}
+
+// ---------- 阶段 J：注入层预算与上浮候选 ----------
+section('J. 注入层预算与上浮候选（memory-tier）');
+const tierAudit = run('.agents/scripts/memory-tier.mjs', ['audit']);
+add(tierAudit.ok ? '- 注入层: 在预算内' : `- 注入层超限:\n  ${tierAudit.out.split('\n').filter(Boolean).slice(0, 6).join('\n  ')}`);
+const tierSuggest = run('.agents/scripts/memory-tier.mjs', ['suggest', '--days', '90']);
+add(tierSuggest.ok ? tierSuggest.out.trim() : `⚠ 上浮候选失败: ${tierSuggest.err || tierSuggest.out}`);
+
+// ---------- 阶段 K：交付结果指标 ----------
+section('K. 交付结果指标（outcome-metrics --days 30）');
+const om = run('.agents/scripts/outcome-metrics.mjs', ['--days', '30']);
+if (om.ok) {
+  add(om.out.split('\n').slice(0, 18).join('\n'));
+} else {
+  add(`⚠ 指标聚合失败: ${om.err || om.out}`);
+}
+
 // ---------- 阶段 F：AI Judge 抽样简报 ----------
 let judgeBriefPath = '';
 if (!NO_JUDGE && JUDGE_COUNT > 0) {
@@ -137,7 +200,7 @@ if (!NO_JUDGE && JUDGE_COUNT > 0) {
   if (sample.docs.length === 0) {
     add('- 无活跃 workflow 文档，跳过抽样');
   } else {
-    writeJudgeBrief(judgeBriefPath, sample);
+    writeJudgeBrief(judgeBriefPath, sample, claimRecheck);
     add(`- 已抽取 ${sample.docs.length} 份活跃文档，证据简报: ${path.relative(ROOT, judgeBriefPath)}`);
     add('- 下一步: 主智能体读取简报，按末尾模板委托 independent-reviewer 核验');
   }
@@ -243,7 +306,7 @@ function gatherEvidence(doc) {
   return ev;
 }
 
-function writeJudgeBrief(briefPath, sample) {
+function writeJudgeBrief(briefPath, sample, claimRecheck = { results: [] }) {
   const parts = [];
   parts.push(`# AI Judge 抽样审计简报 ${today()}`);
   parts.push('');
@@ -262,6 +325,18 @@ function writeJudgeBrief(briefPath, sample) {
     const ev = gatherEvidence(doc);
     if (ev.length) parts.push('', ev.join('\n\n'));
   });
+  const brokenClaims = (claimRecheck.results || []).filter((r) => r.status === 'broken');
+  if (brokenClaims.length) {
+    parts.push('');
+    parts.push('## 主张依据已断');
+    parts.push('');
+    parts.push('> 脚本只核对原文还在不在。断了不等于主张为假，还在也不等于主张为真。');
+    parts.push('');
+    for (const row of brokenClaims) {
+      parts.push(`- ${row.id} \`${row.path}\`: ${row.reason}`);
+      parts.push(`  主张: ${row.claim}`);
+    }
+  }
   parts.push('');
   parts.push('---');
   parts.push('');

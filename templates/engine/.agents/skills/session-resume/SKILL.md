@@ -24,6 +24,13 @@ description: 会话重入与中断落盘——接手、切换 worktree、压缩/
 
 > L2/L3 的 plan 勾选态对齐口径单源 = `.agents/commands/stages.md` Build 章「会话重入」；本技能不复制，只补 L1 与跨 worktree 场景。
 
+### 1.4 经验摘要装载（若存在）
+
+若 `tmp/session-digest-*.md` 存在，先读它（失败/纠正/拒绝的最近摘要），再按 `workflow/claims.d/`
+核对其中“未来会话会当真”的句子是否仍有原文依据。摘要缺失不阻塞重入；
+但**不要把“没有摘要”当成“没有未决教训”**——按需跑
+`node .agents/scripts/session-log.mjs digest --days 7`。
+
 ### 1.5 梦境报告装载（若存在）
 
 若 `tmp/dream-report-*.md` 或 `tmp/dream-judge-brief-*.md` 存在（gitignore 运行态，删除可从 git + 台账重建），按 `.agents/skills/dream/SKILL.md` 装载：

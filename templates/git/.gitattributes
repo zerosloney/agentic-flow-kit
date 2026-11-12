@@ -7,6 +7,7 @@
 .agents/*.jsonl merge=jsonl-union
 .agents/confirmations.d/*.jsonl merge=jsonl-union
 workflow/gate-metrics.d/*.jsonl merge=jsonl-union
+workflow/claims.d/*.jsonl merge=jsonl-union
 
 # 工作流台账合并策略：三个生成物保留本侧，合并后跑 regen-ledgers 重生成；
 # delegations.md 手工行纯追加 → 行级并集。

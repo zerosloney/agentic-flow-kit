@@ -24,6 +24,22 @@ description: 盲评技能/提示词改动——A/B 两臂、同模型同上下�
 5. **判**：Δ 明显且翻转可解释 → 保留；Δ 接近 0 或负 → 回退/调整；翻转多 → 任务歧义，先修任务集。
 6. **落账**：结论写任务文档或 `workflow/reviews.d/<当月>.md`；机制改动更新 `mechanism-registry.md`。
 
+## 落凭证（行为评测门禁）
+
+盲评结论要落成机器可核验的凭证，否则下次改技能时没人知道“上次到底测没测”：
+
+```bash
+node .agents/scripts/agent-eval.mjs check          # 无当前内容签名的凭证 → 非零
+node .agents/scripts/agent-eval.mjs record \
+  --pass-rate 0.9 --tasks 10 --model <评测模型>
+node .agents/scripts/agent-eval.mjs status
+```
+
+- 凭证按**敏感文件内容签名**（SHA-256）绑定，不认提交号；任何 `.agents/skills/**`、`commands/**`、`roles/**`、`model-roles.json`、`steering.json`、`pipeline.json` 变化都会让旧凭证失效。
+- 通过率阈值、有效期、敏感面在 `.agents/config/agent-eval.json`；CI 在稳定前用 `check --advisory`，不要未评测就把 `advisory` 设为 `false`。
+- 任务集可直接用 `.agents/evals/tasks.tsv`，跑完回填 `a`/`b` 两列。
+- 新装没有凭证时严格 `check` 必然失败——这是要求先跑基线，不是安装缺陷；`record` 要求显式 `--pass-rate`、`--tasks >= minTasks`、非空 `--model`。
+
 ## 任务集模板
 
 ```

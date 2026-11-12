@@ -14,9 +14,12 @@ next: 按 run 停机点循环推进至 done
 
 阶段机已对齐 commands 手册。与手动阶段路由二选一，禁混用。
 
-> **保留待用**：暂零 run（`cache/pipeline-runs/` 空）但不退役；启用前先跑一次小任务验证状态机。
+> **保留待用**：暂零 run（`cache/pipeline-runs/` 空）但不退役。启用前先跑
+> `node .agents/scripts/check-pipeline-state.mjs`（静态闭包检查：stage/stopType 是否都在
+> `.agents/config/pipeline.json` 内），再用一个小任务跑一次端到端 run——静态检查不能替代真实状态机验证。
 
 > **分工**：确定性部分由 `pipeline-run.mjs` 状态机驱动（fill-* $\rightarrow$ confirm-doc $\rightarrow$ verify.mjs $\rightarrow$ git，退出码全记录）；AI 槽位按工单协议执行；人件门到点即停、原话代录；宿主禁自行改状态。
+> **fix 工单**：动手前 `node .agents/scripts/fix-task.mjs start`，签收后 `stop`——窗口内既有测试只读。
 
 ## 1. 驱动协议 (Protocol)
 
@@ -44,6 +47,7 @@ next: 按 run 停机点循环推进至 done
 
 3. **放弃**: 用户明确不做 $\rightarrow$ `abort --run <id> --to superseded|cancelled --delegated "<原话>"` (approved 文档逐份走 confirm-doc --to)
 4. **观测** (可选): `status [--run <id>] [--json]` 全量事件流水 / `watch` 终端轮询视图
+5. **并行写同一页**: 多个 arm 要改同一 `workflow/` 或 `wiki/` 页面时，先 `node .agents/scripts/path-lease.mjs acquire --path <page> --owner <arm>`，写完 `release`；一页一 writer。
 
 ## 🚫 硬纪律 (违反即协议破坏)
 

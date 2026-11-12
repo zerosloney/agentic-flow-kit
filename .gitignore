@@ -29,10 +29,19 @@ Thumbs.db
 .vscode/
 *.swp
 
+# Local AI tool state (root only; host templates under templates/ are unaffected)
+/.qwen/
+/.claude/
+
 # Caches and temp workspaces
 .cache/
 .tmp/
 tmp/
+
+# Installed-engine runtime state (never ship eval credentials or caches)
+templates/engine/.agents/cache/
+templates/engine/.agents/tmp/
+templates/engine/.agents/evals/results.jsonl
 
 # Packaging
 *.tgz

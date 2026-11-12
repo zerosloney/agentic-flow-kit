@@ -45,6 +45,20 @@ ts	phase	decision	why	evidence	result
 
 交回前，用本 run 的 transcript 对账：每行是否对应真实决策/动作；evidence 是否能解析并证明该行；影响过工作但没记的分叉/pivot 是缺口，补上。审计不改故事——错行用新行 supersede。
 
+## 经验日志（给 dreaming 的输入）
+
+`decisions.tsv` 是审计轨迹；`.agents/cache/session-logs/` 是**经验**——dreaming 用它
+对照原始记录纠错。收尾时只把真正值得下次复用的点写进去，不要复制整份 TSV：
+
+```bash
+node .agents/scripts/session-log.mjs append --type failure --text "第一次假设错了：缓存不是瓶颈" --ref <file:line> --tag perf
+node .agents/scripts/session-log.mjs append --type correction --text "测试必须先在 HEAD 上复现失败，再改实现" --tag verify
+```
+
+- `type` 闭集：`decision / failure / correction / refusal / note`。
+- `--tag` 用来让 `memory-tier suggest` 发现重复模式（同类 ≥3 次才考虑上浮为规则）。
+- 日志是运行态（gitignore），删除后可从审计轨迹与 git 重建；不要当权威。
+
 ## 跨模型复核
 
 交回前，用**不同模型档**的子代理读轨迹 + transcript，标出用户该注意的点：证据弱/缺失、验证跳过或只在口头上、事后看有风险的决策、用户随手扫会漏的缺口。回复末尾给 `Attention` 段，首行 `reviewed by <model>`；`No flags` 是合法值。

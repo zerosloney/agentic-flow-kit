@@ -212,7 +212,8 @@ L1 不在本章起草 plan，回 `.agents/commands/new-task.md` §L1 快速道�
 1. **执行门禁**: `node .agents/scripts/verify.mjs`（档位口径以 verify.mjs 头注为准，本文不复述）。项目构建、测试、类型检查的命令清单单源是 `.agents/hooks/commit-check.config.json`。
 2. **故障处置**: 任一失败 $\rightarrow$ **HALT**。L1 回 `.agents/commands/new-task.md` 快速道第 5 步改代码。L2/L3 回 Build 章修复。偶发/跨层问题用 `diagnosing-bugs` 诊断。全量首跑红、隔离重跑转绿不算绿：按 flaky 立项（papercut/incident）后修复，禁以重跑绿直接关单。
 3. **档位按任务小类**: 纯文档/业务面 → 默认档（产品门按 diff 面裁）；跨面或发版前 → `--full`。引擎面无测试门，`*.test.mjs` 不入库不自动跑（2026-10-29 清库）；手动工具——合并语义探针 `node .agents/scripts/check-loop-rev-semantics.mjs`（FULL 模式末尾自动跑）。
-**Output**: 静态门全绿证据
+4. **行为评测（引擎面/模型面）**: 本批改动触及 `.agents/skills/**`、`.agents/commands/**`、`.agents/roles/**` 或模型配置时，跑 `node .agents/scripts/agent-eval.mjs check`。无当前内容签名的凭证 → 按 `.agents/skills/eval/SKILL.md` 跑任务集，再 `agent-eval.mjs record`。**修复类**在动手前 `node .agents/scripts/fix-task.mjs start`，关单后 `stop`——窗口内修改既有测试会被写前门拒绝（新建复现测试放行）。
+**Output**: 静态门全绿证据 +（引擎面/模型面）行为评测凭证
 **Note**: 运行环境细节见 `.agents/notes/runtime-env.md` §1, §2；长门禁命令（verify 全量/`dotnet test`）**分段等 + 每段回报进度**，不阻塞到 timeout 上限——口径 §6.4「后台长任务取结果」
 
 ## 2. 切库冒烟 (DB Smoke Test)

@@ -1,0 +1,6 @@
+task	expected
+skill-trigger-positive	相关任务能加载该技能并按其约束执行
+skill-trigger-negative	无关任务不加载该技能、不引入额外步骤
+command-step-order	按命令文件的确认门顺序执行，不跳过确认
+role-contract	角色只做契约内动作，越界即停
+model-quality	强模型档不因过度分步提示而降低判断质量
