@@ -37,17 +37,31 @@ export function pruneCommand({ args, t }) {
   }
   const dryRun = flag(args, 'dry-run');
   const force = flag(args, 'force');
+  const asJson = flag(args, 'json');
+  const print = asJson ? () => {} : (...line) => console.log(...line);
   // 未显式 --lang 时跟随已安装语言，避免英文项目输出中文。
   const tt = args.lang ? t : makeT(manifest.language || 'zh-CN');
   const result = buildDiff({ target, manifest });
   const orphans = result.items.filter((item) => item.kind === 'orphan');
+  const items = [];
 
-  console.log(tt('prune.title', { target }));
-  if (dryRun) console.log(tt('prune.dryRun'));
+  // --strict：保留用户修改的孤儿视为失败（未清理干净）。
+  const finish = (deleted, cleaned, skipped) => {
+    if (asJson) {
+      console.log(JSON.stringify({
+        target, dryRun, deleted, cleaned, skipped, items,
+      }, null, 2));
+    } else {
+      print(tt('prune.summary', { deleted, cleaned, skipped }));
+    }
+    return flag(args, 'strict') && skipped > 0 ? 1 : 0;
+  };
+
+  print(tt('prune.title', { target }));
+  if (dryRun) print(tt('prune.dryRun'));
   if (!orphans.length) {
-    console.log(tt('prune.none'));
-    console.log(tt('prune.summary', { deleted: 0, cleaned: 0, skipped: 0 }));
-    return 0;
+    print(tt('prune.none'));
+    return finish(0, 0, 0);
   }
 
   const nextFiles = { ...(manifest.files || {}) };
@@ -63,13 +77,15 @@ export function pruneCommand({ args, t }) {
       delete nextFiles[item.targetRel];
       cleaned += 1;
       changed = true;
-      console.log(tt('prune.clean', { path: item.targetRel }));
+      items.push({ path: item.targetRel, action: 'clean' });
+      print(tt('prune.clean', { path: item.targetRel }));
       continue;
     }
     // 用户改过的孤儿默认保留，避免误删；--force 才覆盖。
     if (item.actualHash !== item.managedHash && !force) {
       skipped += 1;
-      console.log(tt('prune.skip', { path: item.targetRel }));
+      items.push({ path: item.targetRel, action: 'skip' });
+      print(tt('prune.skip', { path: item.targetRel }));
       continue;
     }
     if (!dryRun) {
@@ -79,13 +95,13 @@ export function pruneCommand({ args, t }) {
     delete nextFiles[item.targetRel];
     deleted += 1;
     changed = true;
-    console.log(tt('prune.delete', { path: item.targetRel }));
+    items.push({ path: item.targetRel, action: 'delete' });
+    print(tt('prune.delete', { path: item.targetRel }));
   }
 
   if (!dryRun && changed) {
     const derived = (manifest.derived || []).filter((rel) => nextFiles[rel]);
     writeManifest(target, { ...manifest, files: nextFiles, derived });
   }
-  console.log(tt('prune.summary', { deleted, cleaned, skipped }));
-  return 0;
+  return finish(deleted, cleaned, skipped);
 }

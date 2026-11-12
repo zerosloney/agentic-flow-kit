@@ -19,6 +19,15 @@ export const KIND_META = {
 };
 const MERGE_KINDS = new Set(['merge-gitattributes', 'merge-gitignore']);
 
+// --strict：任何漂移（用户修改 / 模板更新 / 孤儿 / 缺失）都视为失败。
+export function hasDrift(summary) {
+  return summary.userModified + summary.kitUpdated + summary.orphan + summary.missing > 0;
+}
+
+function strictExit(args, result) {
+  return flag(args, 'strict') && hasDrift(result.summary) ? 1 : 0;
+}
+
 function normalizeEol(text) {
   return String(text).replace(/\r\n/g, '\n');
 }
@@ -190,7 +199,7 @@ export function diffCommand({ args, t }) {
   const result = buildDiff({ target, manifest });
   if (flag(args, 'json')) {
     console.log(JSON.stringify(result, null, 2));
-    return 0;
+    return strictExit(args, result);
   }
   console.log(tt('diff.title', { target }));
   const shown = flag(args, 'all')
@@ -205,7 +214,7 @@ export function diffCommand({ args, t }) {
       : line);
   }
   console.log(tt('diff.summary', result.summary));
-  return 0;
+  return strictExit(args, result);
 }
 
 export function statusCommand({ args, t }) {
@@ -220,7 +229,7 @@ export function statusCommand({ args, t }) {
       manifest: result.manifest,
       summary: result.summary,
     }, null, 2));
-    return 0;
+    return strictExit(args, result);
   }
   const m = result.manifest;
   console.log(tt('status.title', { target }));
@@ -234,5 +243,5 @@ export function statusCommand({ args, t }) {
   }));
   console.log(tt('status.hosts', { hosts: (m.hosts || []).join(', ') || '-' }));
   console.log(tt('status.counts', result.summary));
-  return 0;
+  return strictExit(args, result);
 }

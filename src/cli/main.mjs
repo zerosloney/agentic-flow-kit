@@ -63,12 +63,31 @@ async function main(argv) {
       return statusCommand({ args, t });
     case 'explain':
       return explainCommand({ args, t });
-    case 'list-hosts':
-      for (const name of HOST_NAMES) {
+    case 'list-hosts': {
+      // 宿主能力来自注册表；--json 只输出数组，人类表格保持原样。
+      const hosts = HOST_NAMES.map((name) => {
         const h = resolveHost(name);
-        console.log(`${name}\t${h.label}\t${h.dir}${h.tracked ? '\ttracked' : ''}`);
+        return {
+          name,
+          label: h.label,
+          dir: h.dir,
+          tracked: Boolean(h.tracked),
+          commands: Boolean(h.commands),
+          agents: Boolean(h.agents),
+          skills: h.skills ? h.skills.mode : null,
+          hooks: Boolean(h.hooks),
+          modelField: h.agents?.modelField || null,
+        };
+      });
+      if (flag(args, 'json')) {
+        console.log(JSON.stringify(hosts, null, 2));
+        return 0;
+      }
+      for (const h of hosts) {
+        console.log(`${h.name}\t${h.label}\t${h.dir}${h.tracked ? '\ttracked' : ''}`);
       }
       return 0;
+    }
     case 'help':
     case '--help':
     case '-h':

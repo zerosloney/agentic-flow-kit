@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { flag } from '../cli/args.mjs';
 import { readManifest } from '../install/manifest.mjs';
 import { doctorGit } from '../git/config.mjs';
 import { HOSTS, hostTargetRel } from '../hosts/registry.mjs';
@@ -12,6 +13,7 @@ const HOOK_FILES = ['pre-commit', 'commit-msg', 'post-commit', 'pre-merge-commit
 
 export function doctorCommand({ args, t }) {
   const target = resolveTarget(args);
+  const asJson = flag(args, 'json');
   const checks = [];
   const add = (ok, name, detail, fix, extra = {}) => checks.push({ ok, name, detail, fix, ...extra });
   const roleVal = (entry) => (typeof entry === 'string' ? entry : entry?.model || null);
@@ -101,26 +103,59 @@ export function doctorCommand({ args, t }) {
   add(nodeMajor >= 22, 'node >= 22', process.version);
 
   let failed = 0;
+  let deep = null;
   for (const c of checks) {
     if (c.ok) {
-      const mark = c.warn ? '!' : '✓';
-      console.log(`${mark} ${c.name}${c.detail ? ` — ${c.detail}` : ''}`);
+      if (!asJson) {
+        const mark = c.warn ? '!' : '✓';
+        console.log(`${mark} ${c.name}${c.detail ? ` — ${c.detail}` : ''}`);
+      }
     } else {
       failed += 1;
-      console.log(`✗ ${c.name}${c.detail ? ` — ${c.detail}` : ''}`);
-      if (c.fix) console.log(`  → ${c.fix}`);
+      if (!asJson) {
+        console.log(`✗ ${c.name}${c.detail ? ` — ${c.detail}` : ''}`);
+        if (c.fix) console.log(`  → ${c.fix}`);
+      }
     }
   }
-  console.log(failed ? t('doctor.fail', { failed, total: checks.length }) : t('doctor.ok', { total: checks.length }));
+  if (!asJson) {
+    console.log(failed ? t('doctor.fail', { failed, total: checks.length }) : t('doctor.ok', { total: checks.length }));
+  }
 
   if (args.deep) {
     const gates = path.join(target, '.agents/scripts/check-local-gates.mjs');
     if (fs.existsSync(gates)) {
-      console.log(`\n$ node ${gates}`);
-      const r = spawnSync(process.execPath, [gates, ...(args.fix ? ['--fix'] : [])], { cwd: target, stdio: 'inherit' });
-      if (r.status !== 0) failed += 1;
+      const deepArgs = args.fix ? ['--fix'] : [];
+      if (asJson) {
+        const r = spawnSync(process.execPath, [gates, ...deepArgs], { cwd: target, encoding: 'utf8' });
+        deep = { status: r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
+        if (r.status !== 0) failed += 1;
+      } else {
+        console.log(`\n$ node ${gates}`);
+        const r = spawnSync(process.execPath, [gates, ...deepArgs], { cwd: target, stdio: 'inherit' });
+        if (r.status !== 0) failed += 1;
+      }
     }
   }
 
+  if (asJson) {
+    console.log(JSON.stringify({
+      target,
+      ok: failed === 0,
+      summary: {
+        total: checks.length,
+        failed,
+        warnings: checks.filter((c) => c.warn).length,
+      },
+      checks: checks.map((c) => ({
+        ok: c.ok,
+        name: c.name,
+        detail: c.detail || '',
+        fix: c.fix || '',
+        warn: Boolean(c.warn),
+      })),
+      deep,
+    }, null, 2));
+  }
   return failed ? 1 : 0;
 }

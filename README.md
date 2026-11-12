@@ -69,8 +69,21 @@ npx agentic-flow-kit doctor --target .
 | `--model-mode recommend\|detect\|inherit` | `recommend`（默认，探测 + 推荐）、`detect`（强制重新探测）、`inherit`（全部继承宿主默认） |
 | `--probe-models` | 允许执行宿主注册表中声明的只读模型列表命令（1.5s 超时，失败静默） |
 | `--no-model-config` | 跳过模型探测 / 注入，也不写 `.agents/config/model-roles.local.json` |
+| `--json` | 最终只向 stdout 输出单个 JSON 对象；人类进度改写 stderr。`diff` / `status` / `prune` / `explain` / `doctor` / `list-hosts` 均支持 |
+| `--strict` | 冲突或漂移视为失败：`install` / `add-host` / `upgrade` 遇冲突返回 1；`diff` / `status` 有任何漂移返回 1；`prune` 有未清理项返回 1 |
 
-`diff` / `status` 未传 `--lang` 时跟随 manifest 记录的语言。退出码：`0` 成功、`2` 用法错误、`3` 目标或 manifest 缺失、`4` 未知宿主。
+`diff` / `status` / `prune` / `explain` 未传 `--lang` 时跟随 manifest 记录的语言。
+
+退出码契约（所有命令一致）：
+
+| 码 | 含义 |
+|---|---|
+| `0` | 成功（`--strict` 下无冲突、无漂移） |
+| `1` | 冲突，或 `--strict` 下的漂移 / 未清理项 |
+| `2` | 用法错误（未知命令、参数、语言、档位、模型） |
+| `3` | target 或 manifest 缺失 |
+| `4` | 未知宿主 |
+| `5` | IO 失败（权限、只读、磁盘已满等） |
 
 ## 宿主
 

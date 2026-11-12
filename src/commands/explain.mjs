@@ -3,6 +3,7 @@ import path from 'node:path';
 import { getField } from '../install/frontmatter.mjs';
 import { readManifest, sha256Text } from '../install/manifest.mjs';
 import { KIT_ROOT } from '../install/plan.mjs';
+import { flag } from '../cli/args.mjs';
 import { makeT } from '../i18n.mjs';
 import { resolveTarget } from './install.mjs';
 import { buildState, classifyEntry, KIND_META } from './diff.mjs';
@@ -78,15 +79,9 @@ export function explainCommand({ args, t }) {
   }
 
   const source = sourceOf(entry);
-  console.log(tt('explain.title', { path: targetRel }));
-  console.log(tt('explain.category', { category: entry?.category || tt('explain.none') }));
-  console.log(tt('explain.kind', { kind: tt((KIND_META[classified.kind] || KIND_META.unchanged).key) }));
-  console.log(tt('explain.template', {
-    path: source.template
-      ? kitRel(source.template)
-      : (source.generated ? tt('explain.generated') : tt('explain.none')),
-  }));
-  console.log(tt('explain.override', { path: source.override ? kitRel(source.override) : tt('explain.none') }));
+  const template = source.template ? kitRel(source.template) : null;
+  const override = source.override ? kitRel(source.override) : null;
+  let model = null;
   if (entry?.modelField) {
     let installed = null;
     if (exists) {
@@ -96,11 +91,46 @@ export function explainCommand({ args, t }) {
         /* 文件不可读时按无值展示 */
       }
     }
-    console.log(tt('explain.model', {
+    model = {
       field: entry.modelField,
-      role: entry.modelRole || tt('explain.none'),
-      planned: entry.modelValue == null ? tt('explain.none') : entry.modelValue,
-      installed: installed || tt('explain.none'),
+      role: entry.modelRole || null,
+      planned: entry.modelValue == null ? null : entry.modelValue,
+      installed: installed || null,
+    };
+  }
+
+  if (flag(args, 'json')) {
+    console.log(JSON.stringify({
+      target,
+      path: targetRel,
+      category: entry?.category || null,
+      kind: classified.kind,
+      template,
+      generated: source.generated,
+      override,
+      model,
+      managedHash: managedHash || null,
+      actualHash: classified.actualHash || null,
+      expectedHash: classified.expectedHash || null,
+      derived: Boolean(classified.derived),
+      kitChanged: Boolean(classified.kitChanged),
+    }, null, 2));
+    return 0;
+  }
+
+  console.log(tt('explain.title', { path: targetRel }));
+  console.log(tt('explain.category', { category: entry?.category || tt('explain.none') }));
+  console.log(tt('explain.kind', { kind: tt((KIND_META[classified.kind] || KIND_META.unchanged).key) }));
+  console.log(tt('explain.template', {
+    path: template || (source.generated ? tt('explain.generated') : tt('explain.none')),
+  }));
+  console.log(tt('explain.override', { path: override || tt('explain.none') }));
+  if (model) {
+    console.log(tt('explain.model', {
+      field: model.field,
+      role: model.role || tt('explain.none'),
+      planned: model.planned == null ? tt('explain.none') : model.planned,
+      installed: model.installed || tt('explain.none'),
     }));
   } else {
     console.log(tt('explain.modelNone'));

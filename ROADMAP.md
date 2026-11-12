@@ -21,7 +21,7 @@
 | R1-1 | `diff` / `status` 漂移视图 | 1 | M | `src/commands/diff.mjs` | DONE · [#3](https://github.com/zerosloney/agentic-flow-kit/issues/3) |
 | R1-2 | `prune` 清理僵尸文件 | 1 | S | `src/install/apply.mjs` / 新命令 | DONE · [#2](https://github.com/zerosloney/agentic-flow-kit/issues/2) |
 | R1-3 | `remove-host` / `uninstall` | 1 | M | `src/commands/remove-host.mjs` | TODO · [#4](https://github.com/zerosloney/agentic-flow-kit/issues/4) |
-| R1-4 | `--json` 与退出码契约 | 1 | M | `src/cli/main.mjs`、各命令 | TODO · [#5](https://github.com/zerosloney/agentic-flow-kit/issues/5) |
+| R1-4 | `--json` 与退出码契约 | 1 | M | `src/cli/main.mjs`、各命令 | DONE · [#5](https://github.com/zerosloney/agentic-flow-kit/issues/5) |
 | R1-5 | `explain <targetRel>` 来源解释 | 1 | S | `src/commands/explain.mjs` | DONE · [#6](https://github.com/zerosloney/agentic-flow-kit/issues/6) |
 | R2-1 | 基线留存 + 三方合并 | 2 | L | `src/install/baseline.mjs`、`apply.mjs` | TODO |
 | R2-2 | `adopt` 接管已有安装 | 2 | M | `src/commands/adopt.mjs`、`tools/parity-report.mjs` | TODO |
@@ -85,7 +85,7 @@
 
 ### R1-4 `--json` 与退出码契约（[#5](https://github.com/zerosloney/agentic-flow-kit/issues/5)）
 
-- **现状**：`runInstall` 恒返回 0（`src/commands/install.mjs:295`），冲突不失败；输出为人类文本。
+- **现状**：已实现。`src/cli/exit.mjs` 统一映射 `err.code`；`install` / `add-host` / `upgrade` 支持 `--json` 与 `--strict`；`diff` / `status` / `prune` / `explain` / `doctor` / `list-hosts` 支持 `--json`，`diff` / `status` / `prune` 支持 `--strict`；`tests/cli-contract.test.mjs` 覆盖全部退出码与 JSON 纯度。
 - **目标**：
   - 所有命令支持 `--json`（建议最终单对象，或 `--json-stream` 输出 NDJSON 事件）；
   - 退出码：`0` 成功、`1` 冲突/严格模式漂移、`2` 用法错误、`3` 目标或 manifest 缺失、`4` 未知宿主、`5` IO 失败；

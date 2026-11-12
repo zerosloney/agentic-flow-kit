@@ -166,10 +166,16 @@ function normalizeTier(value, t) {
 
 // onLog 回调契约：(action, msg, done, total) —— action ∈ create/update/skip/conflict/merge，
 // done/total 为已完成/总文件数，供 TUI 渲染 spinner 进度；缺省走 CLI 前缀行。
-export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories, commandLabel, stackOverride, onLog = logLine }) {
+export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories, commandLabel, stackOverride, onLog = null }) {
   const target = resolveTarget(args);
   const dryRun = flag(args, 'dry-run');
   const force = flag(args, 'force');
+  const asJson = flag(args, 'json');
+  // --json 时 stdout 只允许出现最终 JSON；人类进度走 stderr，逐文件日志默认静默。
+  const emit = asJson
+    ? (...line) => console.error(...line)
+    : (...line) => console.log(...line);
+  const logger = onLog || (asJson ? () => {} : logLine);
   const stack = stackOverride || resolveStack(args, target);
   const projectName = args.name || path.basename(target);
   // 渲染与 manifest 使用同一时间戳，避免 diff 把 {{installedAt}} 误判为模板更新。
@@ -231,17 +237,16 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
     trackHosts,
   });
 
-  console.log(t('install.start', { command: commandLabel, target }));
-  console.log(t('install.plan', { hosts: hostSet.join(', '), stack, lang, count: plan.entries.length }));
-  console.log(t('install.tier', { tier, hardened: t(hardened ? 'tui.yes' : 'tui.no') }));
+  emit(t('install.start', { command: commandLabel, target }));
+  emit(t('install.plan', { hosts: hostSet.join(', '), stack, lang, count: plan.entries.length }));
+  emit(t('install.tier', { tier, hardened: t(hardened ? 'tui.yes' : 'tui.no') }));
   if (models) {
-    console.log(t('install.models', { models: summarizeModels(models) }));
+    emit(t('install.models', { models: summarizeModels(models) }));
     for (const warning of models.warnings || []) {
-      console.log(t('install.modelWarning', { host: warning.host, role: warning.role }));
+      emit(t('install.modelWarning', { host: warning.host, role: warning.role }));
     }
   }
-  if (dryRun) console.log(t('install.dryRun'));
-
+  if (dryRun) emit(t('install.dryRun'));
   const manifest = previous || emptyManifest({
     kitVersion: KIT_VERSION,
     language: lang,
@@ -255,11 +260,12 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
     manifest,
     dryRun,
     force,
-    log: (action, msg) => onLog(action, msg, (done += 1), total),
+    log: (action, msg) => logger(action, msg, (done += 1), total),
   });
 
-  console.log(summaryLine(result.stats, t));
+  emit(summaryLine(result.stats, t));
 
+  let gitConfigured = false;
   if (!dryRun) {
     const beforeDerived = { ...result.files };
     const derived = new Set(previous?.derived || []);
@@ -284,7 +290,7 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
       const saved = writeLocalModelRoles(target, models, {
         overwrite: explicitModels || commandLabel === 'add-host',
       });
-      if (saved.written) console.log(t('install.localModels', { path: path.join(target, '.agents/config/model-roles.local.json') }));
+      if (saved.written) emit(t('install.localModels', { path: path.join(target, '.agents/config/model-roles.local.json') }));
     }
 
     const next = {
@@ -302,17 +308,37 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
       files: result.files,
     };
     writeManifest(target, next);
-    console.log(t('install.manifest', { path: path.join(target, '.agents/install-manifest.json') }));
+    emit(t('install.manifest', { path: path.join(target, '.agents/install-manifest.json') }));
 
     const gitConfig = flag(args, 'git-config') || (!flag(args, 'no-git-config') && isGitRepo(target));
     if (gitConfig && isGitRepo(target)) {
       configureGit(target);
-      console.log(t('install.gitConfig'));
+      gitConfigured = true;
+      emit(t('install.gitConfig'));
     } else if (!gitConfig) {
-      console.log(t('install.gitSkip'));
+      emit(t('install.gitSkip'));
     }
-    console.log(t('install.next'));
+    emit(t('install.next'));
   }
 
-  return result.stats.conflict > 0 ? 0 : 0;
+  if (asJson) {
+    console.log(JSON.stringify({
+      command: commandLabel,
+      target,
+      dryRun,
+      language: lang,
+      stack,
+      tier,
+      hardened,
+      hosts: hostSet,
+      models: models ? summarizeModels(models) : null,
+      plan: { count: plan.entries.length },
+      stats: result.stats,
+      conflicts: result.conflicts || [],
+      written: result.written || [],
+      manifest: dryRun ? null : path.join(target, '.agents/install-manifest.json'),
+      gitConfigured,
+    }, null, 2));
+  }
+  return flag(args, 'strict') && result.stats.conflict > 0 ? 1 : 0;
 }

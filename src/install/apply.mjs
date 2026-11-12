@@ -75,6 +75,7 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log }) {
   const stats = { create: 0, update: 0, skip: 0, conflict: 0, merge: 0 };
   const nextFiles = { ...(manifest.files || {}) };
   const writes = [];
+  const conflicts = [];
 
   for (const entry of plan.entries) {
     const abs = path.join(plan.target, entry.targetRel);
@@ -120,6 +121,7 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log }) {
 
     if (managedHash && managedHash !== currentHash) {
       stats.conflict += 1;
+      conflicts.push(entry.targetRel);
       log('conflict', `${entry.targetRel}（已安装后被修改，跳过；--force 可覆盖）`);
       continue;
     }
@@ -136,7 +138,7 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log }) {
     }
   }
 
-  return { stats, files: nextFiles, written: writes.map((w) => w.targetRel) };
+  return { stats, files: nextFiles, written: writes.map((w) => w.targetRel), conflicts };
 }
 
 export function summaryLine(stats, t) {
