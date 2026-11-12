@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs, flag } from './args.mjs';
-import { makeT } from '../i18n.mjs';
+import { makeT, LANGUAGES } from '../i18n.mjs';
 import { HOST_NAMES, resolveHost } from '../hosts/registry.mjs';
 import { installCommand } from '../commands/install.mjs';
 import { doctorCommand } from '../commands/doctor.mjs';
@@ -9,7 +9,7 @@ import { addHostCommand } from '../commands/add-host.mjs';
 import { upgradeCommand } from '../commands/upgrade.mjs';
 import { KIT_ROOT } from '../install/plan.mjs';
 
-const SUPPORTED_LANGS = new Set(['zh-CN', 'en']);
+const SUPPORTED_LANGS = new Set(LANGUAGES);
 
 function normalizeLang(input) {
   const lang = String(input || 'zh-CN');
@@ -26,6 +26,13 @@ async function main(argv) {
   const command = args._[0] || (args.help || args.h ? 'help' : 'help');
   const lang = normalizeLang(args.lang);
   const t = makeT(lang);
+
+  // 无位置参数且无任何选项（含 --agent/--target 等值形参数，它们不进 flags.size）、交互终端 → 进入 TUI 向导（懒加载，避免影响脚本路径）
+  if (!args._.length && args.flags.size === 0 && args.lang == null && args.agents.length === 0 && args.target == null
+    && process.stdin.isTTY && process.stdout.isTTY) {
+    const { wizardCommand } = await import('../tui/wizard.mjs');
+    return wizardCommand({ t, lang });
+  }
 
   if (flag(args, 'version') || flag(args, 'v')) {
     console.log(readVersion());
