@@ -68,3 +68,15 @@
   2. `new-task.md` / `pipeline-run.md` / `stages.md` 仍引用不存在的 `grilling`、
      `codebase-design`、`domain-modeling` 技能（存量问题）。修正会改敏感面并使上述凭证失效，
      需连同重跑评测一起做，暂未改动。
+
+## 能力扩展
+
+新增能力的规划与验收见 `ROADMAP.md`；执行项以 GitHub issue 跟踪。
+
+- Wave 1（生命周期闭环）：跟踪 [#7](https://github.com/zerosloney/agentic-flow-kit/issues/7)，
+  子项 R1-1 [#3](https://github.com/zerosloney/agentic-flow-kit/issues/3)、
+  R1-2 [#2](https://github.com/zerosloney/agentic-flow-kit/issues/2)、
+  R1-3 [#4](https://github.com/zerosloney/agentic-flow-kit/issues/4)、
+  R1-4 [#5](https://github.com/zerosloney/agentic-flow-kit/issues/5)、
+  R1-5 [#6](https://github.com/zerosloney/agentic-flow-kit/issues/6)。
+- 本文件只保留缺口修复条目；能力扩展完成后若形成新的“必须补”缺口，再回填到这里。
