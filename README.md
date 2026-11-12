@@ -6,30 +6,33 @@ AI-Native 工作流驱动开发引擎的独立安装器。把现行仓的 `.agen
 - 指定 agent：一次可装一个或多个宿主壳（命令 / 角色 / 规则 / hooks 接线）。
 - 可选语言：`--lang zh-CN`（默认）或 `--lang en`；语言包覆盖文档、提示词、记忆文件、脚手架与安装器输出。
 - 幂等升级：`.agents/install-manifest.json` 记录版本、宿主、语言与文件哈希；冲突默认跳过，`--force` 才覆盖。
+- 交互式 TUI 向导：交互终端不带参数直接运行进入菜单（安装 / 升级 / 追加宿主 / 体检 / 宿主列表），零依赖；非交互终端自动降级为编号问答或打印帮助。
 
 ## 快速开始
 
-kit 源码独立于业务仓，位于 `E:/Demo/cli-tools/agentic-flow-kit`。在目标项目根运行：
+在目标项目根运行：
 
 ```bash
-node E:/Demo/cli-tools/agentic-flow-kit/bin/flow-kit.mjs install \
+npx agentic-flow-kit install \
   --agent trae --agent codebuddy \
   --lang zh-CN \
   --stack dotnet \
   --target .
 ```
 
-发布到包源后也可以：
+从本仓库源码运行时，把 `npx agentic-flow-kit` 换成 `node <仓库路径>/bin/flow-kit.mjs`。
+
+也可以用交互式向导：在交互终端不带任何参数直接运行，进入 TUI 菜单，按提示选宿主 / 语言 / 栈与开关：
 
 ```bash
-npx agentic-flow-kit install --agent claude --lang en --target .
+npx agentic-flow-kit
 ```
 
 安装后：
 
 ```bash
 node .agents/scripts/check-local-gates.mjs --fix
-node E:/Demo/cli-tools/agentic-flow-kit/bin/flow-kit.mjs doctor --target .
+npx agentic-flow-kit doctor --target .
 ```
 
 ## 子命令
@@ -120,9 +123,9 @@ v1 支持 10 个现行宿主：
 ## 开发
 
 ```bash
-node tools/extract-from-project.mjs --project E:/Git/Shipyard.Material   # 重新提取模板（一次性迁移工具）
+node tools/extract-from-project.mjs --project 项目目录   # 重新提取模板（一次性迁移工具）
 node tools/make-en-host-overrides.mjs                                     # 重新生成英文宿主指针壳
-node tools/parity-report.mjs --project E:/Git/Shipyard.Material          # 对比现行引擎
+node tools/parity-report.mjs --project 项目目录          # 对比现行引擎
 node --test tests/*.test.mjs                                              # 安装器测试
 ```
 
