@@ -10,7 +10,7 @@ import { makeT } from '../i18n.mjs';
 import { readKitVersion, resolveTarget } from './install.mjs';
 
 const KIND_ORDER = { missing: 0, 'user-modified': 1, 'kit-updated': 2, orphan: 3, unchanged: 4 };
-const KIND_META = {
+export const KIND_META = {
   missing: { mark: '+', key: 'diff.kind.missing' },
   'user-modified': { mark: '!', key: 'diff.kind.userModified' },
   'kit-updated': { mark: '~', key: 'diff.kind.kitUpdated' },
@@ -44,7 +44,7 @@ function expectedEntry(entry, vars) {
   return { expectedHash: sha256Text(text) };
 }
 
-function buildState({ target, manifest }) {
+export function buildState({ target, manifest }) {
   const hosts = manifest.hosts || [];
   const language = manifest.language || 'zh-CN';
   const stack = manifest.stack || 'empty';
@@ -68,6 +68,40 @@ function buildState({ target, manifest }) {
   return { plan, vars, kitVersion };
 }
 
+// 单条目分类：diff 与 explain 共用，保证两处判定口径一致。
+export function classifyEntry({ target, entry, vars, managedHash, derived = false }) {
+  const abs = path.join(target, entry.targetRel);
+  const exists = fs.existsSync(abs);
+  const actualHash = exists ? sha256Text(fs.readFileSync(abs)) : null;
+  if (derived) {
+    // 派生工件由脚本按磁盘现状生成，静态模板渲染结果不可作为预期值。
+    let kind;
+    if (!exists) kind = 'missing';
+    else if (managedHash && managedHash !== actualHash) kind = 'user-modified';
+    else kind = 'unchanged';
+    return { kind, actualHash, expectedHash: null, kitChanged: false, derived: true };
+  }
+  const expected = expectedEntry(entry, vars);
+  if (!expected) return null;
+  let kitChanged;
+  if (expected.block != null) {
+    const actualBlock = exists
+      ? extractMergeBlock(fs.readFileSync(abs, 'utf8'), expected.begin, expected.end)
+      : null;
+    kitChanged = !actualBlock
+      || normalizeEol(actualBlock) !== normalizeEol(expected.block.trimEnd());
+  } else {
+    const baseline = managedHash ?? actualHash;
+    kitChanged = !exists || expected.expectedHash !== baseline;
+  }
+  let kind;
+  if (!exists) kind = 'missing';
+  else if (managedHash && managedHash !== actualHash) kind = 'user-modified';
+  else if (kitChanged) kind = 'kit-updated';
+  else kind = 'unchanged';
+  return { kind, actualHash, expectedHash: expected.expectedHash, kitChanged, derived: false };
+}
+
 // 只读：对比 manifest 账本、磁盘现状与当前模板渲染结果。
 // kind 优先级：missing > user-modified > kit-updated > orphan > unchanged。
 export function buildDiff({ target, manifest }) {
@@ -80,10 +114,9 @@ export function buildDiff({ target, manifest }) {
   for (const targetRel of paths) {
     const entry = planByRel.get(targetRel);
     const managedHash = managed[targetRel] ?? null;
-    const abs = path.join(target, targetRel);
-    const exists = fs.existsSync(abs);
-    const actualHash = exists ? sha256Text(fs.readFileSync(abs)) : null;
     if (!entry) {
+      const abs = path.join(target, targetRel);
+      const actualHash = fs.existsSync(abs) ? sha256Text(fs.readFileSync(abs)) : null;
       items.push({
         targetRel,
         category: null,
@@ -97,53 +130,20 @@ export function buildDiff({ target, manifest }) {
       });
       continue;
     }
-    if (derived.has(targetRel)) {
-      // 派生工件由脚本按磁盘现状生成，静态模板渲染结果不可作为预期值。
-      let kind;
-      if (!exists) kind = 'missing';
-      else if (managedHash && managedHash !== actualHash) kind = 'user-modified';
-      else kind = 'unchanged';
-      items.push({
-        targetRel,
-        category: entry.category || null,
-        kind,
-        managedHash,
-        actualHash,
-        expectedHash: null,
-        managed: managedHash != null,
-        kitChanged: false,
-        derived: true,
-      });
-      continue;
-    }
-    const expected = expectedEntry(entry, vars);
-    if (!expected) continue; // 二进制模板不落 manifest，也不参与 diff
-    let kitChanged;
-    if (expected.block != null) {
-      const actualBlock = exists
-        ? extractMergeBlock(fs.readFileSync(abs, 'utf8'), expected.begin, expected.end)
-        : null;
-      kitChanged = !actualBlock
-        || normalizeEol(actualBlock) !== normalizeEol(expected.block.trimEnd());
-    } else {
-      const baseline = managedHash ?? actualHash;
-      kitChanged = !exists || expected.expectedHash !== baseline;
-    }
-    let kind;
-    if (!exists) kind = 'missing';
-    else if (managedHash && managedHash !== actualHash) kind = 'user-modified';
-    else if (kitChanged) kind = 'kit-updated';
-    else kind = 'unchanged';
+    const classified = classifyEntry({
+      target,
+      entry,
+      vars,
+      managedHash,
+      derived: derived.has(targetRel),
+    });
+    if (!classified) continue; // 二进制模板不落 manifest，也不参与 diff
     items.push({
       targetRel,
       category: entry.category || null,
-      kind,
       managedHash,
-      actualHash,
-      expectedHash: expected.expectedHash,
       managed: managedHash != null,
-      kitChanged,
-      derived: false,
+      ...classified,
     });
   }
   items.sort((a, b) => (KIND_ORDER[a.kind] - KIND_ORDER[b.kind]) || a.targetRel.localeCompare(b.targetRel));

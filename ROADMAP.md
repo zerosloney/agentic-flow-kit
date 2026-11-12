@@ -22,7 +22,7 @@
 | R1-2 | `prune` 清理僵尸文件 | 1 | S | `src/install/apply.mjs` / 新命令 | DONE · [#2](https://github.com/zerosloney/agentic-flow-kit/issues/2) |
 | R1-3 | `remove-host` / `uninstall` | 1 | M | `src/commands/remove-host.mjs` | TODO · [#4](https://github.com/zerosloney/agentic-flow-kit/issues/4) |
 | R1-4 | `--json` 与退出码契约 | 1 | M | `src/cli/main.mjs`、各命令 | TODO · [#5](https://github.com/zerosloney/agentic-flow-kit/issues/5) |
-| R1-5 | `explain <targetRel>` 来源解释 | 1 | S | `src/commands/explain.mjs` | TODO · [#6](https://github.com/zerosloney/agentic-flow-kit/issues/6) |
+| R1-5 | `explain <targetRel>` 来源解释 | 1 | S | `src/commands/explain.mjs` | DONE · [#6](https://github.com/zerosloney/agentic-flow-kit/issues/6) |
 | R2-1 | 基线留存 + 三方合并 | 2 | L | `src/install/baseline.mjs`、`apply.mjs` | TODO |
 | R2-2 | `adopt` 接管已有安装 | 2 | M | `src/commands/adopt.mjs`、`tools/parity-report.mjs` | TODO |
 | R2-3 | 外部宿主插件 | 2 | M | `schemas/host.schema.json`、`registry.mjs` | TODO |

@@ -1,5 +1,5 @@
 {
-  "help": "agentic-flow-kit v{{version}}\n\n用法：\n  flow-kit install --agent <host> [--agent <host>...] [--lang zh-CN|en] [--stack dotnet|node|typescript|rust|go|java|empty] [--tier lean|standard|enterprise] [--hardened] [--target <dir>] [--model [host:]role=<id>] [--model-mode recommend|detect|inherit] [--probe-models] [--no-model-config] [--dry-run] [--force] [--no-git-config] [--track-hosts]\n  flow-kit add-host <host> [--target <dir>] [--model [host:]role=<id>] [--model-mode recommend|detect|inherit] [--probe-models] [--no-model-config] [--dry-run] [--force]\n  flow-kit upgrade [--target <dir>] [--model [host:]role=<id>] [--model-mode recommend|detect|inherit] [--probe-models] [--dry-run] [--force]\n  flow-kit prune [--target <dir>] [--dry-run] [--force]\n  flow-kit diff [--target <dir>] [--json] [--all]\n  flow-kit status [--target <dir>] [--json]\n  flow-kit doctor [--target <dir>] [--deep] [--fix]\n  flow-kit list-hosts\n\n宿主：trae, codebuddy, claude, opencode, qwen, pi, cline, commandcode, qoder, zcode\n\n模型角色：code（实现）/ judgment（判断）/ review（独立复核，建议与 code 不同）\n\n示例：\n  node cli-tools/agentic-flow-kit/bin/flow-kit.mjs install --agent claude --lang zh-CN --model claude:code=haiku --model claude:review=opus --target .\n",
+  "help": "agentic-flow-kit v{{version}}\n\n用法：\n  flow-kit install --agent <host> [--agent <host>...] [--lang zh-CN|en] [--stack dotnet|node|typescript|rust|go|java|empty] [--tier lean|standard|enterprise] [--hardened] [--target <dir>] [--model [host:]role=<id>] [--model-mode recommend|detect|inherit] [--probe-models] [--no-model-config] [--dry-run] [--force] [--no-git-config] [--track-hosts]\n  flow-kit add-host <host> [--target <dir>] [--model [host:]role=<id>] [--model-mode recommend|detect|inherit] [--probe-models] [--no-model-config] [--dry-run] [--force]\n  flow-kit upgrade [--target <dir>] [--model [host:]role=<id>] [--model-mode recommend|detect|inherit] [--probe-models] [--dry-run] [--force]\n  flow-kit prune [--target <dir>] [--dry-run] [--force]\n  flow-kit diff [--target <dir>] [--json] [--all]\n  flow-kit status [--target <dir>] [--json]\n  flow-kit explain <targetRel> [--target <dir>]\n  flow-kit doctor [--target <dir>] [--deep] [--fix]\n  flow-kit list-hosts\n\n宿主：trae, codebuddy, claude, opencode, qwen, pi, cline, commandcode, qoder, zcode\n\n模型角色：code（实现）/ judgment（判断）/ review（独立复核，建议与 code 不同）\n\n示例：\n  node cli-tools/agentic-flow-kit/bin/flow-kit.mjs install --agent claude --lang zh-CN --model claude:code=haiku --model claude:review=opus --target .\n",
   "install.start": "▶ {{command}} → {{target}}",
   "install.plan": "  宿主={{hosts}} 栈={{stack}} 语言={{lang}} 计划={{count}} 个文件",
   "install.dryRun": "  （dry-run：只打印计划，不写盘）",
@@ -128,5 +128,22 @@
   "prune.delete": "删除 {{path}}",
   "prune.clean": "移除 manifest 记录 {{path}}（文件已不存在）",
   "prune.skip": "跳过 {{path}}（用户已修改；使用 --force 覆盖）",
-  "prune.summary": "完成：删除 {{deleted}} / 清理记录 {{cleaned}} / 跳过 {{skipped}}"
+  "prune.summary": "完成：删除 {{deleted}} / 清理记录 {{cleaned}} / 跳过 {{skipped}}",
+  "explain.title": "文件：{{path}}",
+  "explain.category": "类别：{{category}}",
+  "explain.kind": "状态：{{kind}}",
+  "explain.template": "模板：{{path}}",
+  "explain.override": "语言覆盖：{{path}}",
+  "explain.model": "模型注入：{{field}} ← {{role}}；计划值={{planned}}；当前值={{installed}}",
+  "explain.modelNone": "模型注入：无",
+  "explain.managedHash": "manifest 哈希：{{hash}}",
+  "explain.actualHash": "当前哈希：{{hash}}",
+  "explain.expectedHash": "当前模板渲染哈希：{{hash}}",
+  "explain.none": "无",
+  "explain.missing": "文件不存在",
+  "explain.generated": "宿主技能面生成",
+  "explain.derived": "说明：派生工件，由脚本按磁盘现状生成，不做静态模板比对。",
+  "explain.alsoKitChanged": "说明：模板也有更新，升级时需要合并。",
+  "error.explainUsage": "用法：flow-kit explain <targetRel> [--target <dir>]",
+  "error.notManaged": "文件未托管：{{path}}（不在当前计划，也不在 manifest 中）"
 }

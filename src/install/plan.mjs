@@ -52,6 +52,9 @@ function applyLocaleOverrides(lang, entries) {
   for (const entry of entries) {
     const override = localeOverride(lang, entry.targetRel);
     if (!override) continue;
+    // 保留模板来源：explain 需要同时报告静态模板与语言覆盖。
+    if (entry.srcAbs && !entry.templateAbs) entry.templateAbs = entry.srcAbs;
+    entry.localeOverride = override;
     entry.srcAbs = override;
     delete entry.getText;
   }

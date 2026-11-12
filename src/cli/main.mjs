@@ -9,6 +9,7 @@ import { addHostCommand } from '../commands/add-host.mjs';
 import { upgradeCommand } from '../commands/upgrade.mjs';
 import { diffCommand, statusCommand } from '../commands/diff.mjs';
 import { pruneCommand } from '../commands/prune.mjs';
+import { explainCommand } from '../commands/explain.mjs';
 import { KIT_ROOT } from '../install/plan.mjs';
 
 const SUPPORTED_LANGS = new Set(LANGUAGES);
@@ -60,6 +61,8 @@ async function main(argv) {
       return diffCommand({ args, t });
     case 'status':
       return statusCommand({ args, t });
+    case 'explain':
+      return explainCommand({ args, t });
     case 'list-hosts':
       for (const name of HOST_NAMES) {
         const h = resolveHost(name);

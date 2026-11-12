@@ -1,5 +1,5 @@
 {
-  "help": "agentic-flow-kit v{{version}}\n\nUsage:\n  flow-kit install --agent <host> [--agent <host>...] [--lang zh-CN|en] [--stack dotnet|node|typescript|rust|go|java|empty] [--tier lean|standard|enterprise] [--hardened] [--target <dir>] [--model [host:]role=<id>] [--model-mode recommend|detect|inherit] [--probe-models] [--no-model-config] [--dry-run] [--force] [--no-git-config] [--track-hosts]\n  flow-kit add-host <host> [--target <dir>] [--model [host:]role=<id>] [--model-mode recommend|detect|inherit] [--probe-models] [--no-model-config] [--dry-run] [--force]\n  flow-kit upgrade [--target <dir>] [--model [host:]role=<id>] [--model-mode recommend|detect|inherit] [--probe-models] [--dry-run] [--force]\n  flow-kit prune [--target <dir>] [--dry-run] [--force]\n  flow-kit diff [--target <dir>] [--json] [--all]\n  flow-kit status [--target <dir>] [--json]\n  flow-kit doctor [--target <dir>] [--deep] [--fix]\n  flow-kit list-hosts\n\nHosts: trae, codebuddy, claude, opencode, qwen, pi, cline, commandcode, qoder, zcode\n\nModel roles: code (implementation) / judgment (reasoning) / review (independent verification; prefer different from code)\n\nExample:\n  node cli-tools/agentic-flow-kit/bin/flow-kit.mjs install --agent claude --lang en --model claude:code=haiku --model claude:review=opus --target .\n",
+  "help": "agentic-flow-kit v{{version}}\n\nUsage:\n  flow-kit install --agent <host> [--agent <host>...] [--lang zh-CN|en] [--stack dotnet|node|typescript|rust|go|java|empty] [--tier lean|standard|enterprise] [--hardened] [--target <dir>] [--model [host:]role=<id>] [--model-mode recommend|detect|inherit] [--probe-models] [--no-model-config] [--dry-run] [--force] [--no-git-config] [--track-hosts]\n  flow-kit add-host <host> [--target <dir>] [--model [host:]role=<id>] [--model-mode recommend|detect|inherit] [--probe-models] [--no-model-config] [--dry-run] [--force]\n  flow-kit upgrade [--target <dir>] [--model [host:]role=<id>] [--model-mode recommend|detect|inherit] [--probe-models] [--dry-run] [--force]\n  flow-kit prune [--target <dir>] [--dry-run] [--force]\n  flow-kit diff [--target <dir>] [--json] [--all]\n  flow-kit status [--target <dir>] [--json]\n  flow-kit explain <targetRel> [--target <dir>]\n  flow-kit doctor [--target <dir>] [--deep] [--fix]\n  flow-kit list-hosts\n\nHosts: trae, codebuddy, claude, opencode, qwen, pi, cline, commandcode, qoder, zcode\n\nModel roles: code (implementation) / judgment (reasoning) / review (independent verification; prefer different from code)\n\nExample:\n  node cli-tools/agentic-flow-kit/bin/flow-kit.mjs install --agent claude --lang en --model claude:code=haiku --model claude:review=opus --target .\n",
   "install.start": "▶ {{command}} → {{target}}",
   "install.plan": "  hosts={{hosts}} stack={{stack}} lang={{lang}} planned={{count}} files",
   "install.dryRun": "  (dry-run: print the plan only, write nothing)",
@@ -128,5 +128,22 @@
   "prune.delete": "delete {{path}}",
   "prune.clean": "remove manifest record {{path}} (file already gone)",
   "prune.skip": "skip {{path}} (user-modified; use --force to override)",
-  "prune.summary": "Done: deleted {{deleted}} / cleaned records {{cleaned}} / skipped {{skipped}}"
+  "prune.summary": "Done: deleted {{deleted}} / cleaned records {{cleaned}} / skipped {{skipped}}",
+  "explain.title": "File: {{path}}",
+  "explain.category": "Category: {{category}}",
+  "explain.kind": "Status: {{kind}}",
+  "explain.template": "Template: {{path}}",
+  "explain.override": "Locale override: {{path}}",
+  "explain.model": "Model injection: {{field}} <- {{role}}; planned={{planned}}; installed={{installed}}",
+  "explain.modelNone": "Model injection: none",
+  "explain.managedHash": "Manifest hash: {{hash}}",
+  "explain.actualHash": "Current hash: {{hash}}",
+  "explain.expectedHash": "Current template hash: {{hash}}",
+  "explain.none": "none",
+  "explain.missing": "file missing",
+  "explain.generated": "generated host skill surface",
+  "explain.derived": "Note: derived artifact; generated from disk state and not compared against a static template.",
+  "explain.alsoKitChanged": "Note: the kit template also changed; upgrade needs a merge.",
+  "error.explainUsage": "Usage: flow-kit explain <targetRel> [--target <dir>]",
+  "error.notManaged": "File is not managed: {{path}} (not in the current plan or the manifest)"
 }
