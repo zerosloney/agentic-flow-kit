@@ -22,6 +22,7 @@ node bin/flow-kit.mjs --help
 node bin/flow-kit.mjs install --agent claude --stack node --target <tmp>
 node bin/flow-kit.mjs add-host trae --target <tmp>
 node bin/flow-kit.mjs upgrade --target <tmp>
+node bin/flow-kit.mjs prune --target <tmp>
 node bin/flow-kit.mjs doctor --target <tmp>
 npm run doctor:self                       # 对当前仓库执行 doctor（需当前仓库已安装引擎）
 ```
@@ -61,7 +62,7 @@ node tools/make-en-host-overrides.mjs
 - manifest 的哈希记录的是**最终文本**：模板渲染、语言覆盖、模型注入都完成之后才计算。
 - 派生工件（如 `workflow/INDEX.md`）生成后会重算哈希，并把被生成器改写的路径登记到 `manifest.derived`；`diff` 不对这些路径做静态模板比对。
 
-`diff` / `status` 复用 `buildPlan`、manifest 哈希与 `readInjectedModels`，只读输出 `unchanged` / `user-modified` / `kit-updated` / `orphan` / `missing`；不传 `--lang` 时跟随 manifest 语言。
+`diff` / `status` 复用 `buildPlan`、manifest 哈希与 `readInjectedModels`，只读输出 `unchanged` / `user-modified` / `kit-updated` / `orphan` / `missing`；不传 `--lang` 时跟随 manifest 语言。`prune` 复用同一套 orphan 分类：哈希与 manifest 一致才删，用户改过的保留并提示，`--force` 覆盖，删除后清理空目录。
 
 `add-host` 只写 `category: 'host'`，并保留已安装的 stack / language；`upgrade` 按 manifest 记录的宿主和语言重放。
 

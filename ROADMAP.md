@@ -19,7 +19,7 @@
 | 编号 | 能力 | 波次 | 规模 | 主要落点 | 状态 |
 |---|---|---|---|---|---|
 | R1-1 | `diff` / `status` 漂移视图 | 1 | M | `src/commands/diff.mjs` | DONE · [#3](https://github.com/zerosloney/agentic-flow-kit/issues/3) |
-| R1-2 | `prune` 清理僵尸文件 | 1 | S | `src/install/apply.mjs` / 新命令 | TODO · [#2](https://github.com/zerosloney/agentic-flow-kit/issues/2) |
+| R1-2 | `prune` 清理僵尸文件 | 1 | S | `src/install/apply.mjs` / 新命令 | DONE · [#2](https://github.com/zerosloney/agentic-flow-kit/issues/2) |
 | R1-3 | `remove-host` / `uninstall` | 1 | M | `src/commands/remove-host.mjs` | TODO · [#4](https://github.com/zerosloney/agentic-flow-kit/issues/4) |
 | R1-4 | `--json` 与退出码契约 | 1 | M | `src/cli/main.mjs`、各命令 | TODO · [#5](https://github.com/zerosloney/agentic-flow-kit/issues/5) |
 | R1-5 | `explain <targetRel>` 来源解释 | 1 | S | `src/commands/explain.mjs` | TODO · [#6](https://github.com/zerosloney/agentic-flow-kit/issues/6) |

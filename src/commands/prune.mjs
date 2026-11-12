@@ -1,0 +1,91 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { flag } from '../cli/args.mjs';
+import { readManifest, writeManifest } from '../install/manifest.mjs';
+import { makeT } from '../i18n.mjs';
+import { resolveTarget } from './install.mjs';
+import { buildDiff } from './diff.mjs';
+
+// 删除空目录，向上冒泡到 target 根为止；遇到非空目录或根目录即停止。
+function cleanEmptyDirs(target, absFile) {
+  const root = path.resolve(target);
+  let dir = path.dirname(absFile);
+  while (dir.startsWith(`${root}${path.sep}`)) {
+    let entries;
+    try {
+      entries = fs.readdirSync(dir);
+    } catch {
+      return;
+    }
+    if (entries.length) return;
+    try {
+      fs.rmdirSync(dir);
+    } catch {
+      return;
+    }
+    dir = path.dirname(dir);
+  }
+}
+
+export function pruneCommand({ args, t }) {
+  const target = resolveTarget(args);
+  const manifest = readManifest(target);
+  if (!manifest) {
+    const err = new Error(t('error.noManifest'));
+    err.code = 'NO_MANIFEST';
+    throw err;
+  }
+  const dryRun = flag(args, 'dry-run');
+  const force = flag(args, 'force');
+  // 未显式 --lang 时跟随已安装语言，避免英文项目输出中文。
+  const tt = args.lang ? t : makeT(manifest.language || 'zh-CN');
+  const result = buildDiff({ target, manifest });
+  const orphans = result.items.filter((item) => item.kind === 'orphan');
+
+  console.log(tt('prune.title', { target }));
+  if (dryRun) console.log(tt('prune.dryRun'));
+  if (!orphans.length) {
+    console.log(tt('prune.none'));
+    console.log(tt('prune.summary', { deleted: 0, cleaned: 0, skipped: 0 }));
+    return 0;
+  }
+
+  const nextFiles = { ...(manifest.files || {}) };
+  let deleted = 0;
+  let cleaned = 0;
+  let skipped = 0;
+  let changed = false;
+
+  for (const item of orphans) {
+    const abs = path.join(target, item.targetRel);
+    // 文件已不存在：只清理 manifest 记录，无需删除。
+    if (item.actualHash == null) {
+      delete nextFiles[item.targetRel];
+      cleaned += 1;
+      changed = true;
+      console.log(tt('prune.clean', { path: item.targetRel }));
+      continue;
+    }
+    // 用户改过的孤儿默认保留，避免误删；--force 才覆盖。
+    if (item.actualHash !== item.managedHash && !force) {
+      skipped += 1;
+      console.log(tt('prune.skip', { path: item.targetRel }));
+      continue;
+    }
+    if (!dryRun) {
+      fs.rmSync(abs, { force: true });
+      cleanEmptyDirs(target, abs);
+    }
+    delete nextFiles[item.targetRel];
+    deleted += 1;
+    changed = true;
+    console.log(tt('prune.delete', { path: item.targetRel }));
+  }
+
+  if (!dryRun && changed) {
+    const derived = (manifest.derived || []).filter((rel) => nextFiles[rel]);
+    writeManifest(target, { ...manifest, files: nextFiles, derived });
+  }
+  console.log(tt('prune.summary', { deleted, cleaned, skipped }));
+  return 0;
+}

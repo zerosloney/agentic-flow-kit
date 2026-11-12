@@ -8,6 +8,7 @@ import { doctorCommand } from '../commands/doctor.mjs';
 import { addHostCommand } from '../commands/add-host.mjs';
 import { upgradeCommand } from '../commands/upgrade.mjs';
 import { diffCommand, statusCommand } from '../commands/diff.mjs';
+import { pruneCommand } from '../commands/prune.mjs';
 import { KIT_ROOT } from '../install/plan.mjs';
 
 const SUPPORTED_LANGS = new Set(LANGUAGES);
@@ -51,6 +52,8 @@ async function main(argv) {
       return addHostCommand({ args, t, lang });
     case 'upgrade':
       return upgradeCommand({ args, t, lang });
+    case 'prune':
+      return pruneCommand({ args, t });
     case 'doctor':
       return doctorCommand({ args, t, lang });
     case 'diff':

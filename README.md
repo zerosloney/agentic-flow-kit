@@ -44,6 +44,7 @@ npx agentic-flow-kit doctor --target .
 | `install` | 从零安装；可重复 `--agent`，也可 `--agents a,b,c` |
 | `add-host <host>` | 已安装仓追加宿主壳（同时接受 `--agent <host>`） |
 | `upgrade` | 按 manifest 记录的宿主/语言/栈重放模板；冲突默认跳过 |
+| `prune` | 删除 manifest 登记、当前模板已不存在的孤儿文件；用户改过的默认跳过，`--force` 覆盖；清理空目录 |
 | `diff` | 只读对比 manifest、磁盘与当前模板，分类 `unchanged` / `user-modified` / `kit-updated` / `orphan` / `missing`；支持 `--json`、`--all` |
 | `status` | 摘要输出安装档位、宿主、语言、栈与差异计数；支持 `--json` |
 | `doctor` | 校验 manifest、文件在位、git 配置、`.gitattributes`、五钩子、宿主接线、Node 版本；`--deep` 再跑 `check-local-gates.mjs` |
