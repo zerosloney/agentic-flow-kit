@@ -29,9 +29,10 @@ export const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', 
 // 第 n 帧 spinner（按帧表长度自动回绕）
 export const spinner = (n) => SPINNER_FRAMES[n % SPINNER_FRAMES.length];
 
-// 单行进度：回车 + 清行 + spinner + 进度条（TUI 逐文件进度渲染用）
-export function progressLine(done, total) {
-  return `\r\x1b[2K${spinner(done)} ${progress(done, total)}`;
+// 单行进度：回车 + 清行 + spinner + 进度条（TUI 逐文件进度渲染用）。detail 是当前文件，随下一帧被清掉。
+export function progressLine(done, total, detail = '') {
+  const tail = detail ? ` ${detail}` : '';
+  return `\r\x1b[2K${spinner(done)} ${progress(done, total)}${tail}`;
 }
 
 export function progress(current, total, width = 24) {

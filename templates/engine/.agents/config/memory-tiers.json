@@ -1,0 +1,13 @@
+{
+  "version": 1,
+  "injected": {
+    "file": ".agents/notes/injected-memory.md",
+    "maxLines": 200,
+    "maxBytes": 25600
+  },
+  "promotion": {
+    "candidates": ".agents/cache/memory-promotions.jsonl",
+    "minOccurrences": 3,
+    "outputDir": "tmp"
+  }
+}

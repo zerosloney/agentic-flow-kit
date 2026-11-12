@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "defaultTier": "standard",
+  "tiers": {
+    "frontier": {
+      "scaffolding": "goal",
+      "judgmentLatitude": "high",
+      "guidance": "给目标、约束、验收与红线；少给逐步指令。固定‘只记失败’这类规则可能削弱强模型，保留判断空间。"
+    },
+    "standard": {
+      "scaffolding": "mixed",
+      "judgmentLatitude": "medium",
+      "guidance": "保留确认门与检查清单；实现步骤可精简，关键判据必须显式。"
+    },
+    "lean": {
+      "scaffolding": "step",
+      "judgmentLatitude": "low",
+      "guidance": "给明确步骤、模板与反例；用门禁兜住判断缺口。"
+    }
+  },
+  "invariants": [
+    "确认门与不可逆操作红线",
+    "独立复核与职责分离",
+    "单源纪律（同一事实只写一处）",
+    "测试不可弱化",
+    "提交与推送门禁"
+  ]
+}

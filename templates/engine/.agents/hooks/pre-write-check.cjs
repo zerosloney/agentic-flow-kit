@@ -159,6 +159,33 @@ if (proposed !== null && LEDGER_RE.test(rel)) {
   }
 }
 
+// ── 2.5) 测试不可弱化（fix 任务窗口）──────────────────
+// Anthropic AI-native SDLC：修复时，写代码的 agent 不得削弱证明修复有效的检查。
+// 协议：修复开始前 `node .agents/scripts/fix-task.mjs start` 落 .agents/cache/fix-task.json；
+// 结束后 stop。窗口内改既有测试 → deny；新建测试（复现用例）放行。
+// 逃生口：① --test 预登记允许路径；② 提议内容含 `TEST-GUARD-ALLOW: <理由>`（保留给合法重构，
+// 复核时可见）；③ 用户明示的 write-gate 解锁。
+const TEST_PATH_RE = /(^|\/)(tests?|__tests__)\/|\.(test|spec)\.[cm]?[jt]sx?$|Tests?\.(cs|java|kt)$|_test\.(go|py)$|^test_.*\.py$|\.feature$/;
+try {
+  const marker = path.join(root, '.agents', 'cache', 'fix-task.json');
+  if (!unlocked && TEST_PATH_RE.test(rel) && fs.existsSync(marker)) {
+    let task = null;
+    try { task = JSON.parse(fs.readFileSync(marker, 'utf8')); } catch { task = null; }
+    if (task && task.active !== false) {
+      const existed = fs.existsSync(abs);
+      const allowed = Array.isArray(task.allowedTests) && task.allowedTests.some((p) => String(p).replace(/\\/g, '/') === rel);
+      const escape = typeof proposed === 'string' && /TEST-GUARD-ALLOW:\s*\S+/.test(proposed);
+      // 新建测试 = 失败的复现用例，允许；修改/删除既有测试一律拦。
+      if (existed && !allowed && !escape) {
+        deny(`测试不可弱化：当前处于修复任务窗口（${task.id || 'fix'}），不得修改既有测试 ${rel}。\n`
+          + '允许：新建复现测试；或让修复只改实现。\n'
+          + '如属合法重构：在提议内容里加 `TEST-GUARD-ALLOW: <理由>`，并在复核中说明；'
+          + '或先结束窗口 node .agents/scripts/fix-task.mjs stop。');
+      }
+    }
+  }
+} catch { /* 标记读取失败 → 放行，git 钩子与独立复核兜底 */ }
+
 // ── 3) 红线内容判据（快照-换入-跑真实门-恢复）─────────
 const gates = [];
 if (/^backend\/.+\.(cs|csproj|sln)$/i.test(rel)) {

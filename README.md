@@ -53,7 +53,9 @@ npx agentic-flow-kit doctor --target .
 |---|---|
 | `--target <dir>` | 目标项目根，默认当前目录 |
 | `--lang zh-CN\|en` | 语言包，默认 `zh-CN` |
-| `--stack dotnet\|node\|empty` | 项目栈 profile；缺省按 `.sln`/`.csproj`/`package.json` 探测 |
+| `--stack dotnet\|node\|typescript\|rust\|go\|java\|empty` | 项目栈 profile；缺省按根目录标记探测：`.sln`/`.csproj` → dotnet，`Cargo.toml` → rust，`go.mod` → go，`pom.xml`/`build.gradle` → java，`tsconfig.json` → typescript，`package.json` → node |
+| `--tier lean\|standard\|enterprise` | 安装档位。`lean` 不生成 CI，适合小项目；`standard`（默认）生成 CI；`enterprise` 另启用加固配置（sandbox / 凭据读拒绝 / MCP 白名单 / 版本基线） |
+| `--hardened` | 等价于 `--tier enterprise`；加固配置写入 `.claude/settings.json`，其中 managed-only 键需由平台/IT 以 managed settings 部署才不可覆盖 |
 | `--name <name>` | 渲染 `{{projectName}}`，默认目标目录名 |
 | `--dry-run` | 只打印计划，不写盘 |
 | `--force` | 覆盖冲突/非本工具安装的既有文件 |
@@ -116,14 +118,32 @@ v1 支持 10 个现行宿主：
 
 解析结果写入 `.agents/config/model-roles.local.json`（用户所有，不进 manifest、升级不覆盖）；宿主子代理的 `model` 字段在渲染与语言覆盖之后注入，manifest 哈希记录最终文本。升级时若本地配置缺失（例如被 gitignore 后换机），会从已安装子代理的 `model` 字段回收，避免把用户已配置的模型静默改回 `inherit`。仅注册表声明了 `agents.modelField` 的宿主会注入；其余宿主只在输出与本地配置中记录角色模型，并提示该宿主不支持按角色指定子代理模型。
 
-`review` 与 `code` 解析为同一模型时给出 `REVIEW_SAME_AS_CODE` 警告（不阻断安装）；`doctor` 也会对现有配置做同样提示。
+`review` 与 `code` 解析为同一模型时给出 `REVIEW_SAME_AS_CODE` 警告（不阻断安装）；`doctor` 也会对现有配置做同样提示；本地配置与已安装子代理的 `model` 字段不一致时，doctor 报 `model drift`，要求先按 `.agents/skills/model-upgrade/SKILL.md` 评测再升级。
+
+## 治理、评测与记忆
+
+安装后的引擎在静态门之外还带一层 AI-Native 治理面（全部零依赖）：
+
+| 面 | 入口 | 作用 |
+|---|---|---|
+| 行为评测 | `.agents/scripts/agent-eval.mjs` + `.agents/skills/eval/` | 技能/命令/角色/模型变更后，用固定任务集跑 A/B，凭证绑定“评测敏感面”的内容签名；CI 先 `--advisory`，稳定后转硬门 |
+| 测试不可弱化 | `.agents/hooks/pre-write-check.cjs` §2.5 + `fix-task.mjs` | 修复窗口内禁改既有测试；新建复现测试放行；`TEST-GUARD-ALLOW:` 留逃生口 |
+| 离线梦境 | `.agents/scripts/dream-run.mjs` | 归档、索引、主张依据、**经验回放**、**记忆表示**、**注入层预算**、结果指标 |
+| 经验日志 | `.agents/scripts/session-log.mjs` | 记录 failure/correction/refusal，供 dreaming 对照纠错 |
+| 记忆表示 | `.agents/scripts/memory-wiki.mjs` | 从 claims/incidents/session-logs 生成 `wiki/_memory/` 链接地图 |
+| 注入层预算 | `.agents/scripts/memory-tier.mjs` | 200 行 / 25KB 上限；只出上浮候选，不自动改 |
+| 单写者租约 | `.agents/scripts/path-lease.mjs` | 并行 agent 写同一页面前加租约，防共享页丢事实 |
+| 结果指标 | `.agents/scripts/outcome-metrics.mjs` | 首次过门率、复核采纳率、逃逸缺陷、评测通过率、返工占比 |
+| 闭环状态机 | `.agents/scripts/check-pipeline-state.mjs` | stage/stopType 闭包检查；真实端到端 run 仍需小任务验证 |
+
+`--tier standard`（默认）会生成 `azure-pipelines.yml` 与 `.github/workflows/ci.yml`，在 `verify --full` 之后跑上述 advisory 检查；`lean` 不生成 CI，`enterprise` 另装加固配置。未完成项与验收口径见 [BACKLOG.md](BACKLOG.md)。
 
 ## 模板 / Profile / State 三层
 
 | 层 | 位置 | 内容 |
 |---|---|---|
 | engine | `templates/engine/` | `.agents/` 通用引擎（commands / skills / roles / hooks / scripts / config / pipelines / tests / board / notes） |
-| profile | `templates/profiles/<stack>/` | 栈相关配置与 `AGENTS.md`：`test-impact-map.json`、`lane-surfaces.txt`、`rule-budgets.txt`、`workflow-modules.txt`、`commit-check.config.json`、`delete-guard-allowlist.txt` |
+| profile | `templates/profiles/<stack>/` | 栈相关 `AGENTS.md`。栈：`dotnet` / `node` / `typescript` / `rust` / `go` / `java` / `empty` |
 | scaffold | `templates/scaffold/` | `wiki/` 目录骨架 + INDEX + 看板；`workflow/` 状态机骨架 + 空台账 + `_TEMPLATE.md` |
 | git | `templates/git/` | `.githooks/` 五钩子、`.gitattributes` 合并块、`.gitignore` 运行态块 |
 | host-meta | `templates/host-meta/` | 宿主原生技能指针 / 技能索引模板；按能力动态生成，不参与 `templates/hosts/` 静态枚举 |
@@ -154,7 +174,7 @@ v1 支持 10 个现行宿主：
   1. `engine.json` 用 `{{installedAt}}` / `{{hostsJson}}` / `{{stack}}` / `{{language}}` 占位；
   2. `check-local-gates.mjs`：dotnet 与 `TEST_DB_CONN` 检查只在 `stack=dotnet` 时执行；
   3. `check-scripts-syntax.mjs`：缺失 `scripts/verify` 时跳过（存在但为空仍 fail-closed）；
-  4. `verify.mjs`：按 `engine.json options.stack` 过滤 dotnet/Vue 专用 product 门，node 栈追加 `npm test`；
+  4. `verify.mjs`：按 `engine.json options.stack` 过滤 dotnet/Vue 专用 product 门；`node`/`typescript` 在 `package.json` 有 `test` 脚本时追加 `npm test`，`rust` 追加 `cargo test`，`go` 追加 `go test ./...`，`java` 按 `pom.xml` 或 Gradle 追加测试门；
   5. `.githooks/pre-push`：宿主接线面扩到 10 宿主；
   6. `.agents/board/dev-tour.html`：项目名改为 `{{projectName}}` 占位；
   7. `check-ledger-invariant.mjs`：本仓历史基线哈希在新仓解析不出时按无基线处理，避免装户报警。

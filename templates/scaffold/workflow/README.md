@@ -25,6 +25,8 @@
 
 **门禁判定月度分片**（2026-10-22 gate-metrics-shard）：`workflow/gate-metrics.d/<YYYY-MM>.jsonl` 每月一行（规则 × WARN/BLOCK），由 `node .agents/scripts/agg-judgments.mjs --emit-month` 生成、随提交入库；pre-push 月检自动补生成上月分片。退役判据（连续 N 月 = 0）读「本地 `.agents/judgments.jsonl` ∪ 分片」取 max——换机/换 worktree 不再归零，多机并集（`.gitattributes` 复用 `jsonl-union`）。
 
+**主张账**（按月追加）：`workflow/claims.d/<YYYY-MM>.jsonl` 记「未来会话可能当真的一句话」及其在仓库里的原文。追加用 `node .agents/scripts/claims.mjs add`；`recheck` 只报告原文还在不在，退出码恒 0，不是门，也不改账里的历史行。合并走 `jsonl-union`。
+
 ## 使用方式
 
 - **发起新任务**：执行 `.agents/commands/new-task.md`（定级 + L0 极简道 / L1 快速道总入口）；L2/L3 进 `.agents/commands/stages.md` 四章（Plan → Design → Build → Test，2026-11-08 档 2-F 四并一）

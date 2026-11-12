@@ -99,7 +99,7 @@ node tools/make-en-host-overrides.mjs
 ## 模板与语言分层
 
 - `templates/engine/`：通用 `.agents/` 引擎。
-- `templates/profiles/<stack>/`：dotnet / node / empty 三种栈配置与 `AGENTS.md`。
+- `templates/profiles/<stack>/`：dotnet / node / typescript / rust / go / java / empty 的栈配置与 `AGENTS.md`。
 - `templates/scaffold/`：`wiki/`、`workflow/` 数据资产骨架。
 - `templates/git/`：五钩子、`.gitattributes`、`.gitignore` 合并块。
 - `templates/hosts/<host>/`：静态宿主适配文件（command / agent / hooks）。
@@ -107,6 +107,25 @@ node tools/make-en-host-overrides.mjs
 - `locales/<lang>/overrides/<targetRel>`：按目标路径镜像的覆盖，优先级高于模板；覆盖文件替换源文件（而不是合并）。
 
 安装器自身的提示文案在 `locales/<lang>/installer.json`，通过 `makeT(lang)` 读取；`zh-CN` 是回退语言。
+
+## 安装档位与加固
+
+`install` / `add-host` / `upgrade` 接受 `--tier lean|standard|enterprise` 与 `--hardened`：
+
+- `lean`：不生成 CI（`azure-pipelines.yml` / `.github/workflows/ci.yml`），其余引擎面不变。
+- `standard`（默认）：生成 CI，CI 在 `verify --full` 后跑 advisory 的 agent-eval / memory-tier / pipeline-state。
+- `enterprise` / `--hardened`：宿主 `claude` 的 `settings.json` 换成 `templates/hosts/claude/settings.hardened.json`（sandbox、凭据读拒绝、MCP/权限 managed-only 键）。该文件**不**作为独立文件安装。
+- 档位与 `hardened` 写入 manifest；`doctor` 显示档位、CI 缺失（advisory）、宿主能力缺口（无 hooks / 无 modelField）和模型漂移。
+
+## AI-Native 治理面（引擎模板）
+
+- 行为评测：`.agents/scripts/agent-eval.mjs`；敏感面在 `.agents/config/agent-eval.json`，凭证是 `.agents/evals/results.jsonl`（内容签名，不是提交号）。
+- 经验与记忆：`session-log.mjs`（运行态日志）、`memory-wiki.mjs`（生成 `wiki/_memory/`）、`memory-tier.mjs`（200 行 / 25KB 注入层）、`path-lease.mjs`（单写者租约）。
+- 修复保护：`fix-task.mjs` 落 `.agents/cache/fix-task.json`，`pre-write-check.cjs` §2.5 在窗口内拦既有测试写入。
+- 结果指标：`outcome-metrics.mjs`；闭环状态机静态检查：`check-pipeline-state.mjs` + `.agents/config/pipeline.json`。
+- 模型升级治理：`.agents/skills/model-upgrade/SKILL.md`；严格度分层：`.agents/config/steering.json` + `steering.mjs`。
+- **新增硬门禁必须登记** `.agents/config/mechanism-registry.md`；该文件受 `rule-budgets.txt` 字节/单行预算约束，新增行前先量预算。
+- 未完成/已完成的缺口与验收口径见根目录 `BACKLOG.md`。
 
 ## TUI
 

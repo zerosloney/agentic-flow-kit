@@ -10,6 +10,7 @@ import {
   isAgentTemplate,
   modelRoleForAgent,
 } from '../src/hosts/registry.mjs';
+import { buildVars, render } from '../src/render/tokens.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -78,4 +79,50 @@ test('every static host agent template exists and maps to a known role', () => {
       assert.ok(['code', 'judgment', 'review'].includes(modelRoleForAgent(file)), `${name}/${file} role`);
     }
   }
+});
+
+function renderHostSettings(rel, stack) {
+  const raw = fs.readFileSync(path.join(KIT, 'templates', 'hosts', rel), 'utf8');
+  const vars = buildVars({
+    target: 'demo',
+    projectName: 'demo',
+    stack,
+    language: 'zh-CN',
+    hosts: ['claude'],
+    kitVersion: '0.0.0',
+    installedAt: '2026-01-01T00:00:00.000Z',
+  });
+  return JSON.parse(render(raw, vars));
+}
+
+test('host allow lists follow the selected stack', () => {
+  const claudeRust = renderHostSettings('claude/settings.json', 'rust').permissions.allow;
+  assert.ok(claudeRust.includes('Bash(cargo build:*)'));
+  assert.ok(claudeRust.includes('Bash(cargo test:*)'));
+  assert.ok(claudeRust.includes('Bash(npm run:*)'));
+  assert.ok(!claudeRust.some((rule) => rule.includes('dotnet')));
+
+  const qwenGo = renderHostSettings('qwen/settings.json', 'go').permissions.allow;
+  assert.ok(qwenGo.includes('Bash(go test *)'));
+  assert.ok(qwenGo.includes('Bash(go build *)'));
+  assert.ok(!qwenGo.some((rule) => rule.includes('dotnet')));
+
+  const commandJava = renderHostSettings('commandcode/settings.json', 'java').permissions.allow;
+  assert.ok(commandJava.includes('Shell(mvn -q test *)'));
+  assert.ok(commandJava.includes('Shell(./gradlew test *)'));
+  assert.ok(commandJava.includes('Shell(npm run *)'));
+  assert.ok(!commandJava.some((rule) => rule.includes('dotnet')));
+
+  const qoderNode = renderHostSettings('qoder/settings.json', 'node').permissions.allow;
+  assert.ok(qoderNode.includes('Bash(npm run:*)'));
+  assert.ok(!qoderNode.some((rule) => rule.includes('dotnet') || rule.includes('cargo') || rule.includes('mvn')));
+
+  const dotnet = renderHostSettings('claude/settings.json', 'dotnet').permissions.allow;
+  assert.ok(dotnet.includes('Bash(dotnet build:*)'));
+  assert.ok(dotnet.includes('Bash(dotnet run:*)'));
+  assert.ok(!dotnet.some((rule) => rule.includes('cargo')));
+
+  const typescript = renderHostSettings('qoder/settings.json', 'typescript').permissions.allow;
+  assert.ok(typescript.includes('Bash(npm run:*)'));
+  assert.ok(!typescript.some((rule) => rule.includes('dotnet') || rule.includes('cargo')));
 });

@@ -12,6 +12,18 @@ export const LOCALES = path.join(KIT_ROOT, 'locales');
 // host-meta 存放生成技能指针/索引用的模板，不参与 templates/hosts/<host> 的静态枚举
 export const HOST_META = path.join(TEMPLATES, 'host-meta');
 
+// 模板目录可能被本机运行过脚本（评测凭证、缓存、本地模型角色）。这些是运行态，
+// 既不该进包，也不该被安装到目标项目——尤其 evals/results.jsonl 是行为评测凭证，
+// 若随模板出厂，会让每个新装项目“凭空”获得一张当前内容的合格凭证。
+const RUNTIME_DIRS = new Set(['.agents/cache', '.agents/tmp', '.agents/tools']);
+const RUNTIME_FILES = new Set([
+  '.agents/verifications.jsonl',
+  '.agents/judgments.jsonl',
+  '.agents/evals/results.jsonl',
+  '.agents/config/model-roles.local.json',
+  '.agents/notes/runtime-env.local.md',
+]);
+
 export function listFiles(dir) {
   if (!fs.existsSync(dir)) return [];
   const out = [];
@@ -19,8 +31,12 @@ export function listFiles(dir) {
     for (const ent of fs.readdirSync(abs, { withFileTypes: true })) {
       const childAbs = path.join(abs, ent.name);
       const childRel = rel ? `${rel}/${ent.name}` : ent.name;
-      if (ent.isDirectory()) walk(childAbs, childRel);
-      else if (ent.isFile()) out.push(childRel);
+      if (ent.isDirectory()) {
+        if (RUNTIME_DIRS.has(childRel)) continue;
+        walk(childAbs, childRel);
+      } else if (ent.isFile() && !RUNTIME_FILES.has(childRel)) {
+        out.push(childRel);
+      }
     }
   };
   walk(dir, '');
@@ -154,7 +170,7 @@ function addGeneratedSkillSurfaces({ plan, hosts, skillEntries, t }) {
 
 // 构建安装计划。targetRel 使用 / 分隔；profile 覆盖 engine，宿主只写自己的点目录。
 // models: { [host]: { code?, judgment?, review? } }，用于注入宿主子代理 model 字段。
-export function buildPlan({ target, hosts, lang, stack, projectName, categories, models = null }) {
+export function buildPlan({ target, hosts, lang, stack, projectName, categories, models = null, tier = 'standard', hardened = false }) {
   const t = makeT(lang);
   const plan = [];
   const push = (srcAbs, targetRel, category, priority = 10, kind = 'file', extra = {}) => {
@@ -178,7 +194,12 @@ export function buildPlan({ target, hosts, lang, stack, projectName, categories,
     const h = HOSTS[host];
     if (!h) continue;
     for (const rel of listFiles(path.join(TEMPLATES, 'hosts', host))) {
-      const entry = push(path.join(TEMPLATES, 'hosts', host, rel), hostTargetRel(host, rel), 'host', 30);
+      // 加固配置是 settings.json 的替换源，不作为独立文件安装。
+      if (rel === 'settings.hardened.json') continue;
+      const srcAbs = (hardened && host === 'claude' && rel === 'settings.json')
+        ? path.join(TEMPLATES, 'hosts', host, 'settings.hardened.json')
+        : path.join(TEMPLATES, 'hosts', host, rel);
+      const entry = push(srcAbs, hostTargetRel(host, rel), 'host', 30);
       if (h.agents?.modelField && isAgentTemplate(host, rel)) {
         entry.modelRole = modelRoleForAgent(rel);
         entry.modelField = h.agents.modelField;
@@ -195,6 +216,8 @@ export function buildPlan({ target, hosts, lang, stack, projectName, categories,
 
   // 5) git 门禁与合并策略
   for (const rel of listFiles(path.join(TEMPLATES, 'git'))) {
+    // lean 档不生成 CI：小项目先跑本地钩子；standard/enterprise 才落 CI。
+    if (tier === 'lean' && (rel === 'azure-pipelines.yml' || rel.startsWith('.github/'))) continue;
     if (rel === '.gitattributes') push(path.join(TEMPLATES, 'git', rel), '.gitattributes', 'git', 40, 'merge-gitattributes');
     else if (rel === '.gitignore.engine') push(path.join(TEMPLATES, 'git', rel), '.gitignore', 'git', 40, 'merge-gitignore');
     else push(path.join(TEMPLATES, 'git', rel), rel, 'git', 40);

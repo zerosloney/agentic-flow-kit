@@ -1,0 +1,32 @@
+name: ai-native-gates
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install (if package.json)
+        run: |
+          if [ -f package.json ]; then npm install; fi
+      - name: Static gates
+        run: node .agents/scripts/verify.mjs --full
+      - name: Local gate wiring audit
+        run: node .agents/scripts/check-local-gates.mjs
+        continue-on-error: true
+      - name: Behavior eval (advisory)
+        run: node .agents/scripts/agent-eval.mjs check --advisory
+        continue-on-error: true
+      - name: Pipeline state closure
+        run: node .agents/scripts/check-pipeline-state.mjs
+        continue-on-error: true
+      - name: Injected memory budget
+        run: node .agents/scripts/memory-tier.mjs audit
+        continue-on-error: true

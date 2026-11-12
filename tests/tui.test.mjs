@@ -12,8 +12,59 @@ import {
   box,
 } from '../src/tui/ansi.mjs';
 import { createSelect, createMultiSelect, createConfirm, createTextInput } from '../src/tui/widgets.mjs';
+import { stackItems, installProgressWrites } from '../src/tui/flows.mjs';
+import { makeT } from '../src/i18n.mjs';
+import { STACKS } from '../src/commands/install.mjs';
 
 const ESC = '\x1b'; // 与 ansi.mjs 内部实现一致的转义起始符
+
+test('stack menu names the matched file and keeps the losing marker', () => {
+  const items = stackItems({
+    detected: { stack: 'typescript', file: 'tsconfig.json' },
+    lang: 'zh-CN',
+    t: makeT('zh-CN'),
+  });
+  assert.deepEqual(items.map((it) => it.value), [...STACKS]);
+  const ts = items.find((it) => it.value === 'typescript');
+  const node = items.find((it) => it.value === 'node');
+  const dotnet = items.find((it) => it.value === 'dotnet');
+  assert.equal(ts.label, 'TypeScript');
+  assert.equal(ts.hint, '检测到 tsconfig.json · TypeScript 项目。');
+  assert.equal(node.label, 'Node.js');
+  assert.equal(node.hint, 'package.json · Node.js 项目。');
+  assert.equal(dotnet.hint, '.sln / .csproj · ASP.NET Core 后端 + Vue 3 前端 + SQL Server。');
+
+  const empty = stackItems({
+    detected: { stack: 'empty', file: null },
+    lang: 'zh-CN',
+    t: makeT('zh-CN'),
+  }).find((it) => it.value === 'empty');
+  assert.equal(empty.label, '未指定');
+  assert.equal(empty.hint, '检测到 · 项目技术栈按实际填写。');
+
+  const csproj = stackItems({
+    detected: { stack: 'dotnet', file: 'App.csproj' },
+    lang: 'zh-CN',
+    t: makeT('zh-CN'),
+  }).find((it) => it.value === 'dotnet');
+  assert.equal(csproj.hint, '检测到 App.csproj · ASP.NET Core 后端 + Vue 3 前端 + SQL Server。');
+
+  const recorded = stackItems({
+    detected: { stack: 'typescript', file: 'tsconfig.json' },
+    current: 'node',
+    lang: 'zh-CN',
+    t: makeT('zh-CN'),
+  });
+  assert.equal(recorded.find((it) => it.value === 'node').hint, '当前 · package.json · Node.js 项目。');
+  assert.equal(recorded.find((it) => it.value === 'typescript').hint, '检测到 tsconfig.json · TypeScript 项目。');
+  const same = stackItems({
+    detected: { stack: 'rust', file: 'Cargo.toml' },
+    current: 'rust',
+    lang: 'zh-CN',
+    t: makeT('zh-CN'),
+  }).find((it) => it.value === 'rust');
+  assert.equal(same.hint, '当前 · 检测到 Cargo.toml · Rust 项目（Cargo）。');
+});
 
 test('select: cursor movement, wrap-around and submit', () => {
   const items = [
@@ -147,6 +198,31 @@ test('progress: bar width and zero-division guard', () => {
   assert.doesNotThrow(() => progress(0, 0));
   assert.ok(progress(0, 0).includes('0/0'));
   assert.equal((progress(0, 0).match(/░/g) || []).length, 24);
+});
+
+test('install progress keeps conflict lines and shows the current file', () => {
+  const conflict = 'AGENTS.md（已安装后被修改，跳过；--force 可覆盖）';
+  const kept = installProgressWrites({ action: 'conflict', msg: conflict, done: 2, total: 4 });
+  assert.equal(kept.length, 2);
+  assert.ok(kept[0].endsWith('\n'), 'a conflict line must be committed before the bar redraws');
+  assert.match(stripAnsi(kept[0]), /! AGENTS\.md（已安装后被修改/);
+  assert.ok(kept[1].startsWith('\r\x1b[2K'));
+  assert.match(kept[1], /! AGENTS\.md$/);
+  assert.ok(!kept[1].endsWith('\n'));
+
+  const current = installProgressWrites({ action: 'skip', msg: '.gitignore（已是最新）', done: 3, total: 4 });
+  assert.equal(current.length, 1, 'an up-to-date skip stays on the bar');
+  assert.match(current[0], /- \.gitignore$/);
+
+  const foreign = installProgressWrites({
+    action: 'skip',
+    msg: 'README.md（已存在且非本工具安装，跳过；--force 可覆盖）',
+    done: 4,
+    total: 4,
+  });
+  assert.equal(foreign.length, 2);
+  assert.match(foreign[0], /- README\.md（已存在且非本工具安装/);
+  assert.ok(foreign[1].endsWith('\n'), 'the last frame ends the bar line');
 });
 
 test('spinner and progressLine: frame wrap-around and escape prefix', () => {

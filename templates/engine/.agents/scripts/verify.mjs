@@ -171,7 +171,7 @@ if (process.env.RUN_E2E === '1') {
 }
 
 // Stack profile（agentic-flow-kit 通用化）：基础门表里的 product 门是 dotnet/Vue 专用。
-// node/empty 装户只保留 engine + security + wiki 门；node 栈在 package.json 有 test 脚本时追加 npm test。
+// 其余栈只保留 engine + security + wiki 门，再按栈追加一条产品测试门。
 const STACK = (() => {
   try { return JSON.parse(fs.readFileSync('.agents/config/engine.json', 'utf8')).options?.stack || 'dotnet'; }
   catch { return 'dotnet'; }
@@ -181,13 +181,24 @@ if (STACK !== 'dotnet') {
     if (/^(backend-|frontend-|code-)/.test(GATES[i].id)) GATES.splice(i, 1);
   }
 }
-if (STACK === 'node') {
+const pushProduct = (id, name, cmd) => {
+  GATES.push({ id, cohort: 'product', name, cmd, folder: '.', type: 'shell' });
+};
+if (STACK === 'node' || STACK === 'typescript') {
   try {
     const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-    if (pkg.scripts && pkg.scripts.test) {
-      GATES.push({ id: 'node-test', cohort: 'product', name: 'Node tests', cmd: 'npm test', folder: '.', type: 'shell' });
-    }
+    if (pkg.scripts && pkg.scripts.test) pushProduct('node-test', 'Node tests', 'npm test');
   } catch { /* not a node project root */ }
+}
+if (STACK === 'rust' && fs.existsSync('Cargo.toml')) pushProduct('cargo-test', 'Cargo tests', 'cargo test');
+if (STACK === 'go' && fs.existsSync('go.mod')) pushProduct('go-test', 'Go tests', 'go test ./...');
+if (STACK === 'java') {
+  if (fs.existsSync('pom.xml')) pushProduct('maven-test', 'Maven tests', 'mvn -q test');
+  else if (fs.existsSync('gradlew') || fs.existsSync('gradlew.bat')) {
+    pushProduct('gradle-test', 'Gradle tests', process.platform === 'win32' ? 'gradlew.bat test' : './gradlew test');
+  } else if (fs.existsSync('build.gradle') || fs.existsSync('build.gradle.kts')) {
+    pushProduct('gradle-test', 'Gradle tests', 'gradle test');
+  }
 }
 
 // 计数捕获：优先 run-tests 的「断言合计」汇总行，退路取末条「合计: PASS x / FAIL y」

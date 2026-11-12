@@ -6,7 +6,8 @@ import { HOSTS, HOST_NAMES } from '../hosts/registry.mjs';
 import { probeModels } from '../models/probe.mjs';
 import { ROLE_NAMES, loadRoleConfig, recommendRoles, summarizeModels } from '../models/resolve.mjs';
 import { readManifest } from '../install/manifest.mjs';
-import { detectStack, STACKS, installCommand } from '../commands/install.mjs';
+import { detectStackDetail, STACKS, stackMarkerLabel, formatInstallLog, installLogNotable, installCommand } from '../commands/install.mjs';
+import { stackDescription } from '../render/tokens.mjs';
 import { LANGUAGES } from '../i18n.mjs';
 import { doctorCommand } from '../commands/doctor.mjs';
 import { addHostCommand } from '../commands/add-host.mjs';
@@ -14,6 +15,55 @@ import { upgradeCommand } from '../commands/upgrade.mjs';
 
 // flows 内部 argv 统一经 baseArgs 构造（形状与 cli/args.mjs parseArgs 一致：flag() 依赖 args.flags）
 export const baseArgs = () => ({ _: [], agents: [], flags: new Set() });
+
+function fileOf(msg) {
+  const text = String(msg ?? '');
+  const i = text.indexOf('（');
+  return (i >= 0 ? text.slice(0, i) : text).trim();
+}
+
+function clip(text, max) {
+  if (visualWidth(text) <= max) return text;
+  let out = '';
+  let width = 0;
+  for (const ch of text) {
+    const w = visualWidth(ch);
+    if (width + w > max - 1) return `${out}…`;
+    out += ch;
+    width += w;
+  }
+  return out;
+}
+
+// 常规创建/更新只留在进度条上。冲突和非常规跳过先换行落盘，避免被下一帧 \\r 清掉。
+export function installProgressWrites({ action, msg, done, total }) {
+  const writes = [];
+  if (installLogNotable(action, msg)) {
+    const text = formatInstallLog(action, msg);
+    writes.push(`\r\x1b[2K${action === 'conflict' ? red(text) : text}\n`);
+  }
+  const detail = clip(formatInstallLog(action, fileOf(msg)), 48);
+  const line = progressLine(done, total, detail);
+  writes.push(done === total ? `${line}\n` : line);
+  return writes;
+}
+
+// 栈菜单：名称在 label，hint 带典型标记与描述。命中项改写为实际文件名。
+export function stackItems({ detected, current, lang, t }) {
+  return STACKS.map((stack) => {
+    const matched = detected?.stack === stack;
+    const tags = [];
+    if (current && stack === current) tags.push(t('tui.currentStack'));
+    if (matched && detected.file) tags.push(t('tui.detectedFile', { file: detected.file }));
+    else if (matched) tags.push(t('tui.detected'));
+    else {
+      const marker = stackMarkerLabel(stack);
+      if (marker) tags.push(marker);
+    }
+    const hint = [...tags, stackDescription(stack, lang)].filter(Boolean).join(' · ');
+    return { value: stack, label: t(`tui.stack.${stack}`), hint };
+  });
+}
 
 // 宿主候选项单一映射：已安装的提示「已安装」，否则提示 label → dir
 function hostItems({ installed = [], t }) {
@@ -99,7 +149,7 @@ async function modelFlow(ctx, hosts) {
 
 // 安装流：宿主 → 语言 → 栈 → 模型 → 开关 → 计划确认 → 执行（进度行）→ 可选体检
 async function installFlow(ctx) {
-  const { screen, t } = ctx;
+  const { screen, t, lang } = ctx;
   const cwd = process.cwd();
   const prev = readManifest(cwd);
   const prevHosts = Array.isArray(prev && prev.hosts) ? prev.hosts : [];
@@ -119,16 +169,12 @@ async function installFlow(ctx) {
   });
   if (selLang === null) return;
 
-  const detected = detectStack(cwd);
+  const detected = detectStackDetail(cwd);
   const stack = await pickOne(ctx, {
     question: t('tui.stackQuestion'),
     hint: t('tui.hint.moveEnter'),
-    cursor: Math.max(0, STACKS.indexOf(detected)),
-    items: STACKS.map((s) => ({
-      value: s,
-      label: s,
-      hint: s === detected ? t('tui.detected') : undefined,
-    })),
+    cursor: Math.max(0, STACKS.indexOf(detected.stack)),
+    items: stackItems({ detected, lang, t }),
   });
   if (stack === null) return;
 
@@ -168,14 +214,13 @@ async function installFlow(ctx) {
   if (!(await confirmYes(ctx, t('tui.confirmInstall')))) return;
 
   screen.print(t('tui.running') + '\n');
-  // 进度回调契约 (action, msg, done, total)：只渲染 spinner + 进度条，末帧换行收尾
+  // 进度回调契约 (action, msg, done, total)：进度条带当前文件；冲突与非常规跳过单独留行。
   await installCommand({
     args,
     t,
     lang: selLang,
-    onLog: (_action, _msg, done, total) => {
-      const line = progressLine(done, total);
-      screen.output.write(done === total ? line + '\n' : line);
+    onLog: (action, msg, done, total) => {
+      for (const chunk of installProgressWrites({ action, msg, done, total })) screen.output.write(chunk);
     },
   });
   // dry-run 未写盘，完成文案须区分，避免误导
@@ -189,15 +234,25 @@ async function installFlow(ctx) {
 
 async function upgradeFlow(ctx) {
   const { t, lang } = ctx;
-  const manifest = readManifest(process.cwd());
+  const cwd = process.cwd();
+  const manifest = readManifest(cwd);
   if (!manifest) throw new Error(t('error.noManifest'));
+  const recorded = STACKS.includes(manifest.stack) ? manifest.stack : 'empty';
+  const detected = detectStackDetail(cwd);
+  const stack = await pickOne(ctx, {
+    question: t('tui.upgradeStackQuestion'),
+    hint: t('tui.hint.moveEnter'),
+    cursor: Math.max(0, STACKS.indexOf(recorded)),
+    items: stackItems({ detected, current: recorded, lang, t }),
+  });
+  if (stack === null) return;
   showLines(ctx, box(t('tui.planTitle'), [
     t('tui.plan.hosts', { hosts: (manifest.hosts || []).join(', ') }),
     t('tui.plan.lang', { lang: manifest.language || lang }),
-    t('tui.plan.stack', { stack: manifest.stack || '-' }),
+    t('tui.plan.stack', { stack }),
   ]));
   if (!(await confirmYes(ctx, t('tui.confirmUpgrade')))) return;
-  return upgradeCommand({ args: baseArgs(), t, lang });
+  return upgradeCommand({ args: { ...baseArgs(), stack }, t, lang });
 }
 
 async function addHostFlow(ctx) {

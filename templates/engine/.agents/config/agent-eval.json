@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "sensitive": [
+    ".agents/skills/**",
+    ".agents/commands/**",
+    ".agents/roles/**",
+    ".agents/config/model-roles.json",
+    ".agents/config/steering.json",
+    ".agents/config/pipeline.json",
+    ".agents/config/agent-eval.json"
+  ],
+  "results": ".agents/evals/results.jsonl",
+  "threshold": 0.8,
+  "maxAgeDays": 30,
+  "minTasks": 5,
+  "advisory": false
+}

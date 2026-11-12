@@ -1,9 +1,7 @@
 {
   "permissions": {
     "allow": [
-      "Shell(dotnet build *)",
-      "Shell(dotnet run *)",
-      "Shell(npm run *)",
+{{stackAllowShellSpace}}      "Shell(npm run *)",
       "Shell(npm install *)",
       "Shell(npm ci *)",
       "Shell(node *)",

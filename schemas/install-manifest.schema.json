@@ -14,7 +14,9 @@
       "items": { "enum": ["trae", "codebuddy", "claude", "opencode", "qwen", "pi", "cline", "commandcode", "qoder", "zcode"] },
       "uniqueItems": true
     },
-    "stack": { "enum": ["dotnet", "node", "empty"] },
+    "stack": { "enum": ["dotnet", "node", "typescript", "rust", "go", "java", "empty"] },
+    "tier": { "enum": ["lean", "standard", "enterprise"] },
+    "hardened": { "type": "boolean" },
     "files": {
       "type": "object",
       "additionalProperties": { "type": "string", "pattern": "^[a-f0-9]{64}$" }

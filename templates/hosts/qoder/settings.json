@@ -2,9 +2,7 @@
   "_comment": "Qoder 宿主本机接线（不入库，见 .git/info/exclude）。钩子实现单源 .agents/hooks/，本文件只留接线；permissions 镜像 .agents/settings.json 的 allow/deny/ask 基线。timeout 单位为秒。钩子走 exec 形式（command=node + args），省掉 bash 包装进程——shell 形式每次调用要 bash+node 两次 spawn，本会话实测有 2/20 次被宿主分发层报 Retry deadline exceeded 并整次拦下。",
   "permissions": {
     "allow": [
-      "Bash(dotnet build:*)",
-      "Bash(dotnet run:*)",
-      "Bash(npm run:*)",
+{{stackAllowBashColon}}      "Bash(npm run:*)",
       "Bash(npm install:*)",
       "Bash(npm ci:*)",
       "Bash(node:*)",

@@ -32,7 +32,12 @@ node .agents/scripts/dream-run.mjs --execute    # 执行安全修复（仅终态
 - D 错类候选（agg-judgments --retire-candidates）；
 - E 常驻面预算（rule-budget --all）；
 - E2 冷数据候选（agg-kb-usage --stale-days 90）——访问/命中遥测 + 置信度衰减，见 §5；
-- F AI Judge 抽样审计简报。
+- G 主张依据（`claims.mjs recheck`）——只报告原文还在不在，退出码恒 0，见 §6；
+- H 经验回放（`session-log.mjs digest`）——把会话失败/纠正/拒绝聚成摘要；**无日志时明确写“无输入”**；
+- I 记忆表示（`memory-wiki.mjs --check`）——`wiki/_memory/` 是否与 claims/incidents/session-logs 同步；
+- J 注入层预算与上浮候选（`memory-tier.mjs audit/suggest`）——200 行 / 25KB 预算，候选只读；
+- K 交付结果指标（`outcome-metrics.mjs`）——首次过门率、复核采纳率、逃逸缺陷、评测通过率；
+- F AI Judge 抽样审计简报。断依据会附在简报里。
 
 ## 3. 核验 AI Judge 抽样
 
@@ -56,8 +61,22 @@ node .agents/scripts/dream-run.mjs --execute    # 执行安全修复（仅终态
   2. 更新：走 wiki 技能更新知识；
   3. 删除：**须用户单独指令**（根 AGENTS.md 不可逆操作红线）。
 
+## 6. 记一条主张
+
+未来会话会当真的规则或 wiki 事实，先落主张，再写进笔记：
+
+```bash
+node .agents/scripts/claims.mjs add --claim "一句话" --path <相对路径> --quote "文件里已有的原文"
+```
+
+- 依据必须是仓库里的原文（8 到 200 字），不是命令输出，也不是聊天复述。
+- 屏幕上下次还能读到的状态不记。
+- 账在 `workflow/claims.d/<YYYY-MM>.jsonl`，只追加。核对不改这些行。
+- 报告里的 broken 只说明原文没了。读到之后登记，不当场改正文。
+
 ## 红线
 
 - `--execute` 只做归档 + 索引重生成，不改写文档正文。
 - 不自动 commit / push；删除 wiki 文件须用户单独指令。
 - 本技能是执行链路：判断由 AI 执行，确定性脚本只做采样与证据收集（「确定性脚本管事实，模型管判断」）。
+- `recheck` 不写账、不改正文。原文还在不等于主张为真。
