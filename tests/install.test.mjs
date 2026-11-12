@@ -129,10 +129,103 @@ test('unknown host fails with a helpful message', () => {
   assert.match(r.stderr, /unknown host|未知宿主/i);
 });
 
+test('invalid --model fails with a localized message and no stack trace', () => {
+  const dir = tmpRepo();
+  const r = run(['install', '--agent', 'claude', '--target', '.', '--model', 'bogus=x'], dir);
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /无效的 --model|Invalid --model/);
+  assert.ok(!r.stderr.includes('\n    at '), 'expected user error should not print a stack trace');
+});
+
 test('--track-hosts suppresses local host ignores', () => {
   const dir = tmpRepo();
   const r = run(['install', '--agent', 'qwen', '--track-hosts', '--stack', 'node', '--target', '.'], dir);
   assert.equal(r.status, 0, r.stderr);
   assert.ok(exists(dir, '.qwen/settings.json'));
   assert.ok(!read(dir, '.gitignore').includes('.qwen/'));
+});
+
+test('claude install writes native skills and role models', () => {
+  const dir = tmpRepo();
+  const r = run([
+    'install', '--agent', 'claude', '--stack', 'node', '--target', '.',
+    '--model', 'claude:code=haiku', '--model', 'claude:review=opus',
+  ], dir);
+  assert.equal(r.status, 0, r.stderr);
+
+  const skill = read(dir, '.claude/skills/verify-ui/SKILL.md');
+  assert.match(skill, /\.agents\/skills\/verify-ui\/SKILL\.md/);
+  assert.match(skill, /指针壳/);
+  assert.match(read(dir, '.claude/agents/implementer.md'), /^model: haiku$/m);
+  assert.match(read(dir, '.claude/agents/independent-reviewer.md'), /^model: opus$/m);
+
+  const local = JSON.parse(read(dir, '.agents/config/model-roles.local.json'));
+  assert.equal(local.hosts.claude.code, 'haiku');
+  assert.equal(local.hosts.claude.review, 'opus');
+
+  const manifest = JSON.parse(read(dir, '.agents/install-manifest.json'));
+  assert.ok(manifest.files['.claude/skills/verify-ui/SKILL.md'], 'generated skill must be manifest-managed');
+  assert.ok(!manifest.files['.agents/config/model-roles.local.json'], 'local model config must stay user-owned');
+});
+
+test('qwen uses shared .agents skills; trae gets a skill index command', () => {
+  const dir = tmpRepo();
+  const r = run(['install', '--agent', 'qwen', '--agent', 'trae', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+
+  assert.ok(!exists(dir, '.qwen/skills'), 'qwen natively reads .agents/skills; do not duplicate');
+  assert.ok(read(dir, '.qwen/commands/wf-skills.md').includes('.agents/skills/verify-ui/SKILL.md'));
+  assert.ok(read(dir, '.trae/commands/wf-skills.md').includes('.agents/skills/verify-ui/SKILL.md'));
+});
+
+test('host order does not drop explicit models from local config', () => {
+  const dir = tmpRepo();
+  const r = run([
+    'install', '--agent', 'trae', '--agent', 'claude', '--stack', 'node', '--target', '.',
+    '--model', 'claude:code=haiku', '--model', 'claude:review=opus',
+  ], dir);
+  assert.equal(r.status, 0, r.stderr);
+  const local = JSON.parse(read(dir, '.agents/config/model-roles.local.json'));
+  assert.equal(local.roles.code.model, 'haiku');
+  assert.equal(local.roles.review.model, 'opus');
+  assert.equal(local.hosts.claude.code, 'haiku');
+});
+
+test('upgrade recovers models when local config is missing', () => {
+  const dir = tmpRepo();
+  const r1 = run([
+    'install', '--agent', 'claude', '--stack', 'node', '--target', '.',
+    '--model', 'claude:code=haiku', '--model', 'claude:review=opus',
+  ], dir);
+  assert.equal(r1.status, 0, r1.stderr);
+  fs.rmSync(path.join(dir, '.agents/config/model-roles.local.json'));
+
+  const r2 = run(['upgrade', '--target', '.'], dir);
+  assert.equal(r2.status, 0, r2.stderr);
+  assert.match(read(dir, '.claude/agents/implementer.md'), /^model: haiku$/m);
+  assert.match(read(dir, '.claude/agents/independent-reviewer.md'), /^model: opus$/m);
+});
+
+test('--no-model-config keeps inherit and writes no local model file', () => {
+  const dir = tmpRepo();
+  const r = run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.', '--no-model-config'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(!exists(dir, '.agents/config/model-roles.local.json'));
+  assert.match(read(dir, '.claude/agents/implementer.md'), /^model: inherit$/m);
+});
+
+test('--model-mode inherit resolves supported hosts to inherit', () => {
+  const dir = tmpRepo();
+  const r = run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.', '--model-mode', 'inherit'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(read(dir, '.claude/agents/implementer.md'), /^model: inherit$/m);
+  assert.match(read(dir, '.claude/agents/independent-reviewer.md'), /^model: inherit$/m);
+});
+
+test('dry-run with --model writes no local model config', () => {
+  const dir = tmpRepo();
+  const r = run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.', '--dry-run', '--model', 'code=haiku'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(!exists(dir, '.agents'));
+  assert.ok(!exists(dir, '.claude'));
 });

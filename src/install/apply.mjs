@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { render } from '../render/tokens.mjs';
+import { setField } from './frontmatter.mjs';
 import { sha256Text } from './manifest.mjs';
 
 const GITATTR_BEGIN = '# >>> agentic-flow-kit gitattributes';
@@ -37,9 +38,22 @@ function mergeBlock(existing, block, begin, end) {
 }
 
 export function readPlanEntry(entry, vars) {
-  if (isBinary(entry.srcAbs)) return null;
-  const raw = readText(entry.srcAbs);
-  return render(raw, vars);
+  let text;
+  if (typeof entry.getText === 'function') {
+    text = entry.getText(vars);
+  } else {
+    if (!entry.srcAbs || isBinary(entry.srcAbs)) return null;
+    text = render(readText(entry.srcAbs), vars);
+  }
+
+  // 模型注入必须在语言覆盖/渲染之后：manifest 记录的是最终文本哈希。
+  if (entry.modelField && entry.modelRole && typeof entry.modelValue === 'string') {
+    const value = entry.modelValue.trim();
+    if (value && (value !== 'inherit' || entry.modelInherit)) {
+      text = setField(text, entry.modelField, value);
+    }
+  }
+  return text;
 }
 
 export function applyPlan({ plan, vars, manifest, dryRun, force, log }) {

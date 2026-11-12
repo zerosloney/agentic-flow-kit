@@ -1,8 +1,10 @@
 // TUI 业务流：安装 / 升级 / 追加宿主 / 体检 / 宿主列表，以及 FLOWS 派发表。
 // 只经 prompts 层问答、screen.print 输出与各 command 入口执行，不直接触碰终端状态。
-import { visualWidth, box, green, progressLine } from './ansi.mjs';
-import { pickOne, pickMany, confirmYes, showLines } from './prompts.mjs';
+import { visualWidth, box, green, red, progressLine } from './ansi.mjs';
+import { pickOne, pickMany, confirmYes, showLines, askText } from './prompts.mjs';
 import { HOSTS, HOST_NAMES } from '../hosts/registry.mjs';
+import { probeModels } from '../models/probe.mjs';
+import { ROLE_NAMES, loadRoleConfig, recommendRoles, summarizeModels } from '../models/resolve.mjs';
 import { readManifest } from '../install/manifest.mjs';
 import { detectStack, STACKS, installCommand } from '../commands/install.mjs';
 import { LANGUAGES } from '../i18n.mjs';
@@ -23,7 +25,79 @@ function hostItems({ installed = [], t }) {
   }));
 }
 
-// 安装流：宿主 → 语言 → 栈 → 开关 → 计划确认 → 执行（进度行）→ 可选体检
+// 模型配置流：静态探测 → 可选只读 CLI 探测 → 推荐确认 / 逐角色选择（含手填、inherit、跳过）。
+async function modelFlow(ctx, hosts) {
+  const { t } = ctx;
+  const cwd = process.cwd();
+  const roleConfig = loadRoleConfig(cwd);
+  const models = {};
+  let explicit = false;
+
+  for (const host of hosts) {
+    const h = HOSTS[host];
+    if (!h?.agents?.modelField) continue;
+
+    let candidates = probeModels({ host, target: cwd, allowCli: false });
+    if (!candidates.length && (h.modelProbe?.cli || []).length) {
+      const allow = await confirmYes(ctx, t('tui.model.allowProbe', { host }));
+      if (allow === null) return null;
+      if (allow) candidates = probeModels({ host, target: cwd, allowCli: true });
+    }
+
+    const recommended = recommendRoles({ host, candidates, roleConfig });
+    const hasRecommended = ROLE_NAMES.some((role) => recommended[role]);
+    let useRecommended = false;
+    if (hasRecommended) {
+      useRecommended = await confirmYes(ctx, t('tui.model.useRecommended', { host }));
+      if (useRecommended === null) return null;
+    }
+    if (useRecommended) {
+      models[host] = recommended;
+      continue;
+    }
+
+    explicit = true;
+    const values = {};
+    for (const role of ROLE_NAMES) {
+      const items = candidates.map((c) => ({ value: c.id, label: c.id, hint: c.source }));
+      if (recommended[role] && !items.some((it) => it.value === recommended[role])) {
+        items.push({ value: recommended[role], label: recommended[role], hint: t('tui.model.recommended') });
+      }
+      if (h.agents.inheritValue) items.push({ value: h.agents.inheritValue, label: t('tui.model.inherit') });
+      items.push({ value: '__manual__', label: t('tui.model.manual') });
+      items.push({ value: '__skip__', label: t('tui.model.skip') });
+
+      const choice = await pickOne(ctx, {
+        question: t('tui.model.role', { role: t(`tui.model.role.${role}`) }),
+        hint: t('tui.hint.moveEnter'),
+        items,
+      });
+      if (choice === null) return null;
+      if (choice === '__skip__') {
+        values[role] = '__none__';
+      } else if (choice === '__manual__') {
+        const value = await askText(ctx, {
+          question: t('tui.model.manualPrompt'),
+          validate: (v) => (String(v).trim() ? null : t('tui.model.invalid')),
+        });
+        if (value === null) return null;
+        values[role] = value.trim();
+      } else {
+        values[role] = choice;
+      }
+    }
+    // 跳过 / inherit 不是具体模型，不触发同模型告警。
+    const concrete = (v) => Boolean(v) && v !== '__none__' && v !== h.agents.inheritValue;
+    if (concrete(values.review) && concrete(values.code) && values.review === values.code) {
+      showLines(ctx, [red(t('tui.model.sameAsCode'))]);
+    }
+    models[host] = values;
+  }
+
+  return { models, explicit };
+}
+
+// 安装流：宿主 → 语言 → 栈 → 模型 → 开关 → 计划确认 → 执行（进度行）→ 可选体检
 async function installFlow(ctx) {
   const { screen, t } = ctx;
   const cwd = process.cwd();
@@ -58,6 +132,9 @@ async function installFlow(ctx) {
   });
   if (stack === null) return;
 
+  const modelResult = await modelFlow(ctx, hosts);
+  if (modelResult === null) return;
+
   const opts = await pickMany(ctx, {
     question: t('tui.optsQuestion'),
     hint: t('tui.hint.toggle'),
@@ -73,16 +150,21 @@ async function installFlow(ctx) {
   const dryRun = opts.includes('dry-run');
   // argv 形状与 wizard.mjs buildInstallArgs 一致：git 配置默认开，开关转 flags
   const args = { ...baseArgs(), _: ['install'], agents: hosts, lang: selLang, stack };
+  if (modelResult.models && Object.keys(modelResult.models).length) args.tuiModels = modelResult.models;
   if (!opts.includes('git-config')) args.flags.add('no-git-config');
   if (dryRun) args.flags.add('dry-run');
   if (opts.includes('force')) args.flags.add('force');
 
-  showLines(ctx, box(t('tui.planTitle'), [
+  const planLines = [
     t('tui.plan.target', { target: cwd }),
     t('tui.plan.hosts', { hosts: hosts.join(', ') }),
     t('tui.plan.lang', { lang: selLang }),
     t('tui.plan.stack', { stack }),
-  ]));
+  ];
+  if (modelResult.models && Object.keys(modelResult.models).length) {
+    planLines.push(t('tui.plan.models', { models: summarizeModels({ hosts: modelResult.models }) }));
+  }
+  showLines(ctx, box(t('tui.planTitle'), planLines));
   if (!(await confirmYes(ctx, t('tui.confirmInstall')))) return;
 
   screen.print(t('tui.running') + '\n');
@@ -130,7 +212,11 @@ async function addHostFlow(ctx) {
     items: hostItems({ installed, t }),
   });
   if (agents === null) return;
-  return addHostCommand({ args: { ...baseArgs(), _: ['add-host'], agents }, t, lang });
+  const modelResult = await modelFlow(ctx, agents);
+  if (modelResult === null) return;
+  const args = { ...baseArgs(), _: ['add-host'], agents };
+  if (modelResult.models && Object.keys(modelResult.models).length) args.tuiModels = modelResult.models;
+  return addHostCommand({ args, t, lang });
 }
 
 async function doctorFlow(ctx) {

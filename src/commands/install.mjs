@@ -8,6 +8,9 @@ import { emptyManifest, readManifest, writeManifest } from '../install/manifest.
 import { buildVars } from '../render/tokens.mjs';
 import { HOST_NAMES, resolveHost } from '../hosts/registry.mjs';
 import { configureGit, isGitRepo } from '../git/config.mjs';
+import {
+  parseModelFlags, readInjectedModels, resolveModels, summarizeModels, writeLocalModelRoles,
+} from '../models/resolve.mjs';
 
 export function readKitVersion() {
   try {
@@ -83,6 +86,11 @@ function logLine(action, msg) {
   console.log(`${{ create: '+', update: '~', skip: '-', conflict: '!', merge: '~' }[action] || ' '} ${msg}`);
 }
 
+function normalizeModelMode(value) {
+  const v = String(value || 'recommend').toLowerCase();
+  return ['recommend', 'detect', 'inherit'].includes(v) ? v : 'recommend';
+}
+
 // onLog 回调契约：(action, msg, done, total) —— action ∈ create/update/skip/conflict/merge，
 // done/total 为已完成/总文件数，供 TUI 渲染 spinner 进度；缺省走 CLI 前缀行。
 export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories, commandLabel, stackOverride, onLog = logLine }) {
@@ -95,7 +103,37 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
   const hostSet = [...new Set([...(previous?.hosts || []), ...hosts])];
   const trackHosts = flag(args, 'track-hosts');
 
-  const plan = buildPlan({ target, hosts: planHosts, lang, stack, projectName, categories });
+  let modelFlags;
+  try {
+    modelFlags = parseModelFlags(args.models || []);
+  } catch (err) {
+    if (err.code !== 'BAD_MODEL') throw err;
+    const e = new Error(t('error.badModel', { value: err.value || '' }));
+    e.code = 'BAD_MODEL';
+    throw e;
+  }
+  const tuiModels = args.tuiModels || null;
+  const explicitModels = Object.keys(modelFlags.global).length > 0
+    || Object.keys(modelFlags.hosts).length > 0
+    || Boolean(tuiModels && Object.keys(tuiModels).length);
+  const modelMode = normalizeModelMode(args['model-mode']);
+  // 升级默认不重新探测：以本地 model-roles.local.json 为准，保证 agent 文件哈希稳定。
+  const shouldProbe = !previous || commandLabel === 'add-host' || explicitModels || modelMode === 'detect' || flag(args, 'probe-models');
+  const previousModels = commandLabel === 'upgrade'
+    ? readInjectedModels({ target, hosts: planHosts })
+    : {};
+  const models = flag(args, 'no-model-config') ? null : resolveModels({
+    hosts: planHosts,
+    target,
+    cli: modelFlags,
+    tui: tuiModels,
+    previous: previousModels,
+    mode: modelMode,
+    probe: shouldProbe,
+    allowCli: flag(args, 'probe-models'),
+  });
+
+  const plan = buildPlan({ target, hosts: planHosts, lang, stack, projectName, categories, models: models?.hosts });
   let done = 0;
   const total = plan.entries.length;
   const vars = buildVars({
@@ -111,6 +149,12 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
 
   console.log(t('install.start', { command: commandLabel, target }));
   console.log(t('install.plan', { hosts: hostSet.join(', '), stack, lang, count: plan.entries.length }));
+  if (models) {
+    console.log(t('install.models', { models: summarizeModels(models) }));
+    for (const warning of models.warnings || []) {
+      console.log(t('install.modelWarning', { host: warning.host, role: warning.role }));
+    }
+  }
   if (dryRun) console.log(t('install.dryRun'));
 
   const manifest = previous || emptyManifest({
@@ -132,6 +176,14 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
   console.log(summaryLine(result.stats, t));
 
   if (!dryRun) {
+    // 模型 ID 是机器本地状态：只写 gitignore 的 local 覆盖，不进 manifest。
+    if (models && (commandLabel !== 'upgrade' || explicitModels)) {
+      const saved = writeLocalModelRoles(target, models, {
+        overwrite: explicitModels || commandLabel === 'add-host',
+      });
+      if (saved.written) console.log(t('install.localModels', { path: path.join(target, '.agents/config/model-roles.local.json') }));
+    }
+
     const next = {
       ...manifest,
       version: KIT_VERSION,

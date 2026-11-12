@@ -57,6 +57,41 @@ export function createMultiSelect({ items, cursor = 0, min = 1, minMessage = `�
   };
 }
 
+// textinput：单行文本（模型 ID 手填）。view 返回一行；Esc 返回 null。
+export function createTextInput({ initial = '', placeholder = '', validate = () => null } = {}) {
+  let value = String(initial);
+  let error = null;
+  return {
+    view() {
+      const line = value ? `❯ ${value}█` : dim(`❯ ${placeholder}`);
+      return error ? [line, red(error)] : [line];
+    },
+    onKey(key) {
+      if (!key) return undefined;
+      if (key.name === 'return') {
+        const err = validate(value);
+        if (err) {
+          error = err;
+          return undefined;
+        }
+        return { value };
+      }
+      if (key.name === 'escape') return { value: null };
+      if (key.ctrl) return undefined;
+      if (key.name === 'backspace') {
+        value = value.slice(0, -1);
+        error = null;
+        return undefined;
+      }
+      if (key.sequence && !/[\x00-\x1f]/.test(key.sequence)) {
+        value += key.sequence;
+        error = null;
+      }
+      return undefined;
+    },
+  };
+}
+
 // confirm：是/否二选一（题干归 runPrompt 渲染，view 只返回两行选项）
 export function createConfirm({ yesLabel = '是', noLabel = '否', defaultYes = true }) {
   let yes = defaultYes === true;

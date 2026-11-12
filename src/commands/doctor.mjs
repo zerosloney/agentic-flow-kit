@@ -3,8 +3,9 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { readManifest } from '../install/manifest.mjs';
 import { doctorGit } from '../git/config.mjs';
-import { HOSTS } from '../hosts/registry.mjs';
+import { HOSTS, hostTargetRel } from '../hosts/registry.mjs';
 import { listFiles, TEMPLATES } from '../install/plan.mjs';
+import { ROLE_NAMES, readLocalModelRoles } from '../models/resolve.mjs';
 import { resolveTarget } from './install.mjs';
 
 const HOOK_FILES = ['pre-commit', 'commit-msg', 'post-commit', 'pre-merge-commit', 'pre-push'];
@@ -47,8 +48,26 @@ export function doctorCommand({ args, t }) {
       continue;
     }
     for (const rel of listFiles(path.join(TEMPLATES, 'hosts', host))) {
-      const targetRel = host === 'claude' && rel === 'CLAUDE.md' ? 'CLAUDE.md' : `${h.dir}/${rel}`;
+      const targetRel = hostTargetRel(host, rel);
       if (!fs.existsSync(path.join(target, targetRel))) add(false, `host ${host}: ${targetRel}`, t('doctor.fileMissing'));
+    }
+  }
+
+  // 模型配置是用户本地状态：存在则校验，缺失不失败（旧安装保持 doctor 全过）。
+  const localModels = readLocalModelRoles(target);
+  if (localModels.error) {
+    add(false, 'model-roles.local', t('doctor.modelConfigInvalid'));
+  } else if (localModels.exists) {
+    add(true, 'model-roles.local', path.relative(target, localModels.file) || localModels.file);
+    const value = (entry) => (typeof entry === 'string' ? entry : entry?.model);
+    const code = value(localModels.roles.code);
+    const review = value(localModels.roles.review);
+    if (code && review && code === review) {
+      add(true, 'models heterogeneous', t('doctor.reviewSameAsCode'));
+    }
+    for (const role of ROLE_NAMES) {
+      if (value(localModels.roles[role]) == null) continue;
+      add(true, `model ${role}`, String(value(localModels.roles[role])));
     }
   }
 

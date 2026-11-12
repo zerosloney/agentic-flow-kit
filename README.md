@@ -3,7 +3,9 @@
 AI-Native 工作流驱动开发引擎的独立安装器。把现行仓的 `.agents/` 引擎、git 门禁、宿主适配层与 `wiki`/`workflow` 数据资产脚手架，从零生成到任意项目；功能与现行引擎保持 parity。
 
 - 零运行时依赖：只用 Node.js ≥ 22 内置模块。
-- 指定 agent：一次可装一个或多个宿主壳（命令 / 角色 / 规则 / hooks 接线）。
+- 指定 agent：一次可装一个或多个宿主壳（命令 / 角色 / 规则 / hooks / 技能接线），按各宿主原生规范落盘。
+- 技能单源：技能正文只保留在 `.agents/skills/`；原生支持技能的宿主生成指针壳，其余宿主生成 `wf-skills` 索引。
+- 模型按角色配置：安装时探测宿主配置 / 环境变量（可选只读 CLI），按 `code` / `judgment` / `review` 推荐，也可 `--model` 或 TUI 手填。
 - 可选语言：`--lang zh-CN`（默认）或 `--lang en`；语言包覆盖文档、提示词、记忆文件、脚手架与安装器输出。
 - 幂等升级：`.agents/install-manifest.json` 记录版本、宿主、语言与文件哈希；冲突默认跳过，`--force` 才覆盖。
 - 交互式 TUI 向导：交互终端不带参数直接运行进入菜单（安装 / 升级 / 追加宿主 / 体检 / 宿主列表），零依赖；非交互终端自动降级为编号问答或打印帮助。
@@ -57,25 +59,64 @@ npx agentic-flow-kit doctor --target .
 | `--force` | 覆盖冲突/非本工具安装的既有文件 |
 | `--no-git-config` | 不自动写三条例行 git 配置 |
 | `--track-hosts` | 不把本机宿主目录写进 `.gitignore` |
+| `--model [host:]role=<id>` | 可重复。指定模型角色；`role` 为 `code` / `judgment` / `review`，省略宿主则全局生效 |
+| `--model-mode recommend\|detect\|inherit` | `recommend`（默认，探测 + 推荐）、`detect`（强制重新探测）、`inherit`（全部继承宿主默认） |
+| `--probe-models` | 允许执行宿主注册表中声明的只读模型列表命令（1.5s 超时，失败静默） |
+| `--no-model-config` | 跳过模型探测 / 注入，也不写 `.agents/config/model-roles.local.json` |
 
 ## 宿主
 
 v1 支持 10 个现行宿主：
 
-| 宿主 | 目录 | 说明 |
-|---|---|---|
-| `trae` | `.trae/` | 命令 / 角色 / 规则 / hooks.json |
-| `codebuddy` | `.codebuddy/` | 命令 / 角色 / 规则 / 技能 / settings / 记忆 |
-| `claude` | `.claude/` + 根 `CLAUDE.md` | 命令 / 角色 / settings / 根记忆 |
-| `opencode` | `.opencode/` | 命令 / 角色 |
-| `qwen` | `.qwen/` | 命令 / 角色 / settings |
-| `pi` | `.pi/` | 角色 / 扩展 / settings |
-| `cline` | `.cline/` | workflows / 角色 YAML / hook |
-| `commandcode` | `.commandcode/` | 命令 / 角色 / settings |
-| `qoder` | `.qoder/` | 命令 / 角色 / settings |
-| `zcode` | `.zcode/` | 角色 / config / workflows |
+| 宿主 | 命令 | 子代理 | 技能 | hooks | 模型注入 |
+|---|---|---|---|---|---|
+| `trae` | `.trae/commands/` | `.trae/agents/*.md` | index → `wf-skills` | `hooks.json` | 否 |
+| `codebuddy` | `.codebuddy/commands/` | `.codebuddy/agents/*.md` | native `.codebuddy/skills/<name>/SKILL.md` | `settings.json` | 否 |
+| `claude` | `.claude/commands/` | `.claude/agents/*.md`（`model`） | native `.claude/skills/<name>/SKILL.md` | `settings.json` | 是（`inherit` / 别名） |
+| `opencode` | `.opencode/commands/` | `.opencode/agents/*.md`（`model`） | native `.opencode/skills/<name>/SKILL.md` | 插件式（保持现状） | 是（省略 = 继承） |
+| `qwen` | `.qwen/commands/` | `.qwen/agents/*.md`（`model`） | shared `.agents/skills`（不复制） | `settings.json` | 是（`inherit`） |
+| `pi` | 无 | `.pi/agents/*.md`（`model`） | index → `.pi/SKILLS.md` | `extensions/` | 是（网关 ID，无 `inherit`） |
+| `cline` | `.cline/workflows/` | `.cline/agents/*.yml` | index → `wf-skills` | `hooks/` 适配器 | 否 |
+| `commandcode` | `.commandcode/commands/` | `.commandcode/agents/*.md`（`model`） | shared `.agents/skills`（不复制） | `settings.json` | 是（`inherit`） |
+| `qoder` | `.qoder/commands/` | `.qoder/agents/*.md` | index → `wf-skills` | `settings.json` | 否 |
+| `zcode` | `.zcode/workflows/*.dwf.ts` | `.zcode/agents/*.md` | index → `wf-skills` | `config.json` | 否 |
 
 宿主壳全部是指针壳：正文权威仍在 `.agents/commands/`、`.agents/roles/`、`.agents/skills/`，安装器不复制正文，避免双源漂移。
+
+技能安装分三种模式（由注册表 `skills.mode` 驱动）：
+
+- **native**：宿主会自行发现 `<宿主目录>/skills/<name>/SKILL.md`。安装器按 `.agents/skills/*/SKILL.md` 的语言覆盖后内容动态生成指针壳（原生 frontmatter + 指向权威正文），不手写 22 × N 份静态副本。
+- **shared**：宿主原生读取 `.agents/skills`（Qwen、Command Code）。不生成宿主技能副本，只生成 `wf-skills` 索引入口。
+- **index**：无法确认原生技能目录的宿主生成一个索引（有命令目录时是 `wf-skills.md`，否则是 `SKILLS.md`），逐行列出技能名、描述与 `.agents/skills/<name>/SKILL.md` 路径。
+
+## 模型配置
+
+安装器按三个角色为子代理选模型：
+
+| 角色 | 用途 | 典型分工 |
+|---|---|---|
+| `code` | 实现 / 改代码 | 低成本、高吞吐（如 `haiku` / `sonnet`） |
+| `judgment` | 判断 / 规划 / 仲裁 | 强推理（如 `opus`） |
+| `review` | 独立复核 | 强推理，且建议与 `code` 不同 |
+
+解析优先级（高 → 低）：
+
+1. CLI `--model [host:]role=<id>`
+2. TUI 交互选择
+3. 已存在的 `.agents/config/model-roles.local.json`（宿主级 > 角色级）
+4. 探测 + 内置推荐
+5. 宿主 `inherit`
+
+探测来源：
+
+- 宿主配置：如 `~/.claude/settings.json`、`~/.qwen/settings.json`（JSONC 容错）。
+- 环境变量：如 `ANTHROPIC_MODEL`、`CLAUDE_CODE_SUBAGENT_MODEL`、`QWEN_MODEL`。
+- 只读 CLI：仅注册表中声明且已核实的命令（当前为 Command Code 的 `--list-models`）；默认不执行，交互安装或 `--probe-models` 才启用，1.5s 超时，失败静默。
+- 内置推荐：只写已核实的别名（当前仅 Claude 的 `sonnet` / `haiku` / `opus`），不合成未知模型 ID。
+
+解析结果写入 `.agents/config/model-roles.local.json`（用户所有，不进 manifest、升级不覆盖）；宿主子代理的 `model` 字段在渲染与语言覆盖之后注入，manifest 哈希记录最终文本。升级时若本地配置缺失（例如被 gitignore 后换机），会从已安装子代理的 `model` 字段回收，避免把用户已配置的模型静默改回 `inherit`。仅注册表声明了 `agents.modelField` 的宿主会注入；其余宿主只在输出与本地配置中记录角色模型，并提示该宿主不支持按角色指定子代理模型。
+
+`review` 与 `code` 解析为同一模型时给出 `REVIEW_SAME_AS_CODE` 警告（不阻断安装）；`doctor` 也会对现有配置做同样提示。
 
 ## 模板 / Profile / State 三层
 
@@ -85,6 +126,7 @@ v1 支持 10 个现行宿主：
 | profile | `templates/profiles/<stack>/` | 栈相关配置与 `AGENTS.md`：`test-impact-map.json`、`lane-surfaces.txt`、`rule-budgets.txt`、`workflow-modules.txt`、`commit-check.config.json`、`delete-guard-allowlist.txt` |
 | scaffold | `templates/scaffold/` | `wiki/` 目录骨架 + INDEX + 看板；`workflow/` 状态机骨架 + 空台账 + `_TEMPLATE.md` |
 | git | `templates/git/` | `.githooks/` 五钩子、`.gitattributes` 合并块、`.gitignore` 运行态块 |
+| host-meta | `templates/host-meta/` | 宿主原生技能指针 / 技能索引模板；按能力动态生成，不参与 `templates/hosts/` 静态枚举 |
 | locale | `locales/<lang>/overrides/` | 按目标路径镜像的语言覆盖；缺省回退模板 |
 
 运行态（`cache/`、`tmp/`、`*.jsonl` 台账、`confirmations.d/`、`workflow/archive`、`.agents/tools/`）不打包，由引擎在装户内产生。

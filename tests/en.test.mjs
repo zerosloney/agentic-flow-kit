@@ -47,3 +47,30 @@ test('en install uses English command, memory, host and scaffold overrides', () 
   assert.ok(wiki.includes('## 文件 → 主题 → 归属目录 映射表'), 'machine anchor must remain');
   assert.ok(wiki.includes('合计：**0 份**知识文档'), 'generator anchor must remain');
 });
+
+test('en claude install writes English skill pointer and English descriptions', () => {
+  const dir = tmpRepo();
+  const r = run(['install', '--agent', 'claude', '--agent', 'trae', '--stack', 'node', '--lang', 'en', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+
+  const skill = read(dir, '.claude/skills/verify-ui/SKILL.md');
+  assert.match(skill, /Authoritative skill/i);
+  assert.match(skill, /pointer shell/i);
+  assert.match(skill, /UI change verification/i);
+  assert.ok(!skill.includes('权威技能'), 'English pointer must not fall back to Chinese');
+
+  const index = read(dir, '.trae/commands/wf-skills.md');
+  assert.match(index, /Skills index/i);
+  assert.match(index, /authoritative/i);
+});
+
+test('en codebuddy native skill pointer overrides the static fallback', () => {
+  const dir = tmpRepo();
+  const r = run(['install', '--agent', 'codebuddy', '--stack', 'node', '--lang', 'en', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+
+  const skill = read(dir, '.codebuddy/skills/tfs-pr/SKILL.md');
+  assert.match(skill, /Internal self-hosted TFS/);
+  assert.match(skill, /Authoritative skill/i);
+  assert.ok(!skill.includes('内网自托管'), 'generated pointer must use the English override description');
+});

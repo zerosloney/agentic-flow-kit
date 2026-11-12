@@ -11,7 +11,7 @@ import {
   progressLine,
   box,
 } from '../src/tui/ansi.mjs';
-import { createSelect, createMultiSelect, createConfirm } from '../src/tui/widgets.mjs';
+import { createSelect, createMultiSelect, createConfirm, createTextInput } from '../src/tui/widgets.mjs';
 
 const ESC = '\x1b'; // 与 ansi.mjs 内部实现一致的转义起始符
 
@@ -100,6 +100,33 @@ test('confirm: default, arrow keys and y/n (view is the two option rows only)', 
   const w4 = createConfirm({});
   w4.onKey({ name: 'right' });
   assert.deepEqual(w4.onKey({ name: 'return' }), { value: false });
+});
+
+test('textinput: typing, backspace, validation, enter and escape', () => {
+  const w = createTextInput({ placeholder: 'model-id', validate: (v) => (v ? null : 'required') });
+  assert.ok(stripAnsi(w.view()[0]).includes('model-id'));
+
+  w.onKey({ name: 'p', sequence: 'p' });
+  w.onKey({ name: 'x', sequence: 'x' });
+  w.onKey({ name: 'backspace' });
+  w.onKey({ name: 'o', sequence: 'o' });
+  w.onKey({ name: 'p', sequence: 'p' });
+  w.onKey({ name: 'u', sequence: 'u' });
+  w.onKey({ name: 's', sequence: 's' });
+  assert.ok(stripAnsi(w.view()[0]).includes('popus'));
+
+  assert.deepEqual(w.onKey({ name: 'return' }), { value: 'popus' });
+
+  const empty = createTextInput({ validate: (v) => (v ? null : 'required') });
+  assert.equal(empty.onKey({ name: 'return' }), undefined);
+  assert.ok(stripAnsi(empty.view().join('\n')).includes('required'));
+
+  const esc = createTextInput({ initial: 'x' });
+  assert.deepEqual(esc.onKey({ name: 'escape' }), { value: null });
+
+  const ctrl = createTextInput({});
+  ctrl.onKey({ name: 'c', ctrl: true });
+  assert.ok(!stripAnsi(ctrl.view()[0]).includes('c'));
 });
 
 test('stripAnsi and visualWidth', () => {

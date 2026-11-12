@@ -1,7 +1,7 @@
 // 问答原语层：交互路径走 keypress widget（经 screen.mjs 的 runPrompt），
 // 非交互终端降级为「编号 + 回车」读行问答。本层只经 screen 输出，不直接触碰终端状态。
 import { box, dim, red } from './ansi.mjs';
-import { createSelect, createMultiSelect, createConfirm } from './widgets.mjs';
+import { createSelect, createMultiSelect, createConfirm, createTextInput } from './widgets.mjs';
 import { runPrompt } from './screen.mjs';
 
 // 降级问答原语：每轮打印「题干 + 选项行 + 行内提示」→ 读一行 → parse 裁决。
@@ -103,6 +103,27 @@ export function confirmYes(ctx, label, defaultYes = true) {
     });
   }
   return askConfirmDegraded(ctx, label, defaultYes);
+}
+
+export function askText(ctx, { question, hint, initial = '', placeholder = '', validate = () => null }) {
+  const { screen, t } = ctx;
+  if (screen.interactive) {
+    return runPrompt(screen, {
+      title: t('tui.title'),
+      question,
+      hint: hint || t('tui.hint.typeEnter'),
+      widget: createTextInput({ initial, placeholder, validate }),
+    });
+  }
+  return askLine(ctx, {
+    question,
+    rows: () => (placeholder ? [dim(placeholder)] : []),
+    prompt: `${t('tui.hint.typeEnter')} `,
+    parse: (s) => {
+      const err = validate(s);
+      return err ? { error: err } : { value: s };
+    },
+  });
 }
 
 export function showLines(ctx, lines) {

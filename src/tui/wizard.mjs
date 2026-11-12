@@ -49,8 +49,8 @@ export async function wizardCommand({ t, lang }) {
 
 // 纯函数：向导选择 → runInstall 入参（argv 形状与 cli/args.mjs parseArgs 经 baseArgs 一致）。
 // git 配置 CLI 侧默认开，--no-git-config 关闭
-export function buildInstallArgs({ hosts, lang, stack, gitConfig = true, dryRun = false, force = false }) {
-  return {
+export function buildInstallArgs({ hosts, lang, stack, gitConfig = true, dryRun = false, force = false, models = null }) {
+  const args = {
     ...baseArgs(),
     _: ['install'],
     agents: hosts,
@@ -62,4 +62,7 @@ export function buildInstallArgs({ hosts, lang, stack, gitConfig = true, dryRun 
       ...(force ? ['force'] : []),
     ]),
   };
+  // 模型参数保持 opt-in：默认路径不新增 flag，避免破坏既有 argv 断言。
+  if (models && Object.keys(models).length) args.tuiModels = models;
+  return args;
 }
