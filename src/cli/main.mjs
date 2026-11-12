@@ -7,6 +7,7 @@ import { installCommand } from '../commands/install.mjs';
 import { doctorCommand } from '../commands/doctor.mjs';
 import { addHostCommand } from '../commands/add-host.mjs';
 import { upgradeCommand } from '../commands/upgrade.mjs';
+import { diffCommand, statusCommand } from '../commands/diff.mjs';
 import { KIT_ROOT } from '../install/plan.mjs';
 
 const SUPPORTED_LANGS = new Set(LANGUAGES);
@@ -52,6 +53,10 @@ async function main(argv) {
       return upgradeCommand({ args, t, lang });
     case 'doctor':
       return doctorCommand({ args, t, lang });
+    case 'diff':
+      return diffCommand({ args, t });
+    case 'status':
+      return statusCommand({ args, t });
     case 'list-hosts':
       for (const name of HOST_NAMES) {
         const h = resolveHost(name);
@@ -64,7 +69,11 @@ async function main(argv) {
       console.log(t('help', { version: readVersion() }));
       return 0;
     default:
-      throw new Error(`unknown command: ${command}`);
+      {
+        const err = new Error(`unknown command: ${command}`);
+        err.code = 'BAD_COMMAND';
+        throw err;
+      }
   }
 }
 

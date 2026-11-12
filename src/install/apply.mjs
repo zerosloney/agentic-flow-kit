@@ -4,10 +4,10 @@ import { render } from '../render/tokens.mjs';
 import { setField } from './frontmatter.mjs';
 import { sha256Text } from './manifest.mjs';
 
-const GITATTR_BEGIN = '# >>> agentic-flow-kit gitattributes';
-const GITATTR_END = '# <<< agentic-flow-kit gitattributes';
-const GITIGNORE_BEGIN = '# >>> agentic-flow-kit ignores';
-const GITIGNORE_END = '# <<< agentic-flow-kit ignores';
+export const GITATTR_BEGIN = '# >>> agentic-flow-kit gitattributes';
+export const GITATTR_END = '# <<< agentic-flow-kit gitattributes';
+export const GITIGNORE_BEGIN = '# >>> agentic-flow-kit ignores';
+export const GITIGNORE_END = '# <<< agentic-flow-kit ignores';
 
 const BINARY_EXT = new Set(['.exe', '.png', '.jpg', '.jpeg', '.gif', '.ico', '.ttf', '.woff', '.woff2', '.zip', '.gz', '.pdf']);
 
@@ -56,6 +56,21 @@ export function readPlanEntry(entry, vars) {
   return text;
 }
 
+export function renderMergeBlock(entry, vars) {
+  const text = readPlanEntry(entry, vars) || '';
+  const begin = entry.kind === 'merge-gitattributes' ? GITATTR_BEGIN : GITIGNORE_BEGIN;
+  const end = entry.kind === 'merge-gitattributes' ? GITATTR_END : GITIGNORE_END;
+  return { begin, end, block: `${begin}\n${text.trimEnd()}\n${end}\n` };
+}
+
+// 从已安装文件中取出托管块（含标记行，不含块尾换行），用于 diff 的模板更新判定。
+export function extractMergeBlock(text, begin, end) {
+  const beginIdx = text.indexOf(begin);
+  const endIdx = text.indexOf(end);
+  if (beginIdx < 0 || endIdx <= beginIdx) return null;
+  return text.slice(beginIdx, endIdx + end.length);
+}
+
 export function applyPlan({ plan, vars, manifest, dryRun, force, log }) {
   const stats = { create: 0, update: 0, skip: 0, conflict: 0, merge: 0 };
   const nextFiles = { ...(manifest.files || {}) };
@@ -68,10 +83,7 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log }) {
     const managedHash = manifest.files ? manifest.files[entry.targetRel] : null;
 
     if (entry.kind === 'merge-gitattributes' || entry.kind === 'merge-gitignore') {
-      const text = readPlanEntry(entry, vars) || '';
-      const begin = entry.kind === 'merge-gitattributes' ? GITATTR_BEGIN : GITIGNORE_BEGIN;
-      const end = entry.kind === 'merge-gitattributes' ? GITATTR_END : GITIGNORE_END;
-      const block = `${begin}\n${text.trimEnd()}\n${end}\n`;
+      const { block, begin, end } = renderMergeBlock(entry, vars);
       const existing = exists ? readText(abs) : '';
       const merged = exists ? mergeBlock(existing, block, begin, end) : block;
       if (existing === merged) {
@@ -124,7 +136,7 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log }) {
     }
   }
 
-  return { stats, files: nextFiles };
+  return { stats, files: nextFiles, written: writes.map((w) => w.targetRel) };
 }
 
 export function summaryLine(stats, t) {

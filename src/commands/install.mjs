@@ -5,7 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { flag } from '../cli/args.mjs';
 import { buildPlan } from '../install/plan.mjs';
 import { applyPlan, summaryLine } from '../install/apply.mjs';
-import { emptyManifest, readManifest, writeManifest } from '../install/manifest.mjs';
+import { emptyManifest, readManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
 import { buildVars } from '../render/tokens.mjs';
 import { HOST_NAMES, resolveHost } from '../hosts/registry.mjs';
 import { configureGit, isGitRepo } from '../git/config.mjs';
@@ -172,6 +172,8 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
   const force = flag(args, 'force');
   const stack = stackOverride || resolveStack(args, target);
   const projectName = args.name || path.basename(target);
+  // 渲染与 manifest 使用同一时间戳，避免 diff 把 {{installedAt}} 误判为模板更新。
+  const installedAt = new Date().toISOString();
   const previous = readManifest(target);
   const hostSet = [...new Set([...(previous?.hosts || []), ...hosts])];
   const trackHosts = flag(args, 'track-hosts');
@@ -225,7 +227,7 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
     language: lang,
     hosts: hostSet,
     kitVersion: KIT_VERSION,
-    installedAt: new Date().toISOString(),
+    installedAt,
     trackHosts,
   });
 
@@ -259,7 +261,24 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
   console.log(summaryLine(result.stats, t));
 
   if (!dryRun) {
+    const beforeDerived = { ...result.files };
+    const derived = new Set(previous?.derived || []);
     generateDerivedArtifacts(target);
+    // 派生工件会改写已写入的托管文件（如 workflow/INDEX.md）；重算这些文件的哈希，
+    // 否则 manifest 记录的是生成前的文本，fresh install 会立刻显示为漂移。
+    // 被生成器改写的文件登记到 derived，diff 不对其做静态模板比对。
+    for (const rel of result.written || []) {
+      try {
+        const nextHash = sha256Text(fs.readFileSync(path.join(target, rel), 'utf8'));
+        result.files[rel] = nextHash;
+        if (beforeDerived[rel] !== nextHash) derived.add(rel);
+        else derived.delete(rel);
+      } catch {
+        /* 生成器删除的文件不保留 manifest 记录 */
+        delete result.files[rel];
+        derived.delete(rel);
+      }
+    }
     // 模型 ID 是机器本地状态：只写 gitignore 的 local 覆盖，不进 manifest。
     if (models && (commandLabel !== 'upgrade' || explicitModels)) {
       const saved = writeLocalModelRoles(target, models, {
@@ -271,10 +290,13 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
     const next = {
       ...manifest,
       version: KIT_VERSION,
-      installedAt: new Date().toISOString(),
+      installedAt,
       language: lang,
       hosts: hostSet,
       stack,
+      projectName,
+      trackHosts,
+      derived: [...derived].filter((rel) => result.files[rel]).sort(),
       tier,
       hardened,
       files: result.files,

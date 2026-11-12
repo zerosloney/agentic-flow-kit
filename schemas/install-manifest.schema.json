@@ -17,6 +17,13 @@
     "stack": { "enum": ["dotnet", "node", "typescript", "rust", "go", "java", "empty"] },
     "tier": { "enum": ["lean", "standard", "enterprise"] },
     "hardened": { "type": "boolean" },
+    "projectName": { "type": "string" },
+    "trackHosts": { "type": "boolean" },
+    "derived": {
+      "type": "array",
+      "items": { "type": "string" },
+      "uniqueItems": true
+    },
     "files": {
       "type": "object",
       "additionalProperties": { "type": "string", "pattern": "^[a-f0-9]{64}$" }

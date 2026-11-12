@@ -1,5 +1,5 @@
 {
-  "help": "agentic-flow-kit v{{version}}\n\nUsage:\n  flow-kit install --agent <host> [--agent <host>...] [--lang zh-CN|en] [--stack dotnet|node|typescript|rust|go|java|empty] [--tier lean|standard|enterprise] [--hardened] [--target <dir>] [--model [host:]role=<id>] [--model-mode recommend|detect|inherit] [--probe-models] [--no-model-config] [--dry-run] [--force] [--no-git-config] [--track-hosts]\n  flow-kit add-host <host> [--target <dir>] [--model [host:]role=<id>] [--model-mode recommend|detect|inherit] [--probe-models] [--no-model-config] [--dry-run] [--force]\n  flow-kit upgrade [--target <dir>] [--model [host:]role=<id>] [--model-mode recommend|detect|inherit] [--probe-models] [--dry-run] [--force]\n  flow-kit doctor [--target <dir>] [--deep] [--fix]\n  flow-kit list-hosts\n\nHosts: trae, codebuddy, claude, opencode, qwen, pi, cline, commandcode, qoder, zcode\n\nModel roles: code (implementation) / judgment (reasoning) / review (independent verification; prefer different from code)\n\nExample:\n  node cli-tools/agentic-flow-kit/bin/flow-kit.mjs install --agent claude --lang en --model claude:code=haiku --model claude:review=opus --target .\n",
+  "help": "agentic-flow-kit v{{version}}\n\nUsage:\n  flow-kit install --agent <host> [--agent <host>...] [--lang zh-CN|en] [--stack dotnet|node|typescript|rust|go|java|empty] [--tier lean|standard|enterprise] [--hardened] [--target <dir>] [--model [host:]role=<id>] [--model-mode recommend|detect|inherit] [--probe-models] [--no-model-config] [--dry-run] [--force] [--no-git-config] [--track-hosts]\n  flow-kit add-host <host> [--target <dir>] [--model [host:]role=<id>] [--model-mode recommend|detect|inherit] [--probe-models] [--no-model-config] [--dry-run] [--force]\n  flow-kit upgrade [--target <dir>] [--model [host:]role=<id>] [--model-mode recommend|detect|inherit] [--probe-models] [--dry-run] [--force]\n  flow-kit diff [--target <dir>] [--json] [--all]\n  flow-kit status [--target <dir>] [--json]\n  flow-kit doctor [--target <dir>] [--deep] [--fix]\n  flow-kit list-hosts\n\nHosts: trae, codebuddy, claude, opencode, qwen, pi, cline, commandcode, qoder, zcode\n\nModel roles: code (implementation) / judgment (reasoning) / review (independent verification; prefer different from code)\n\nExample:\n  node cli-tools/agentic-flow-kit/bin/flow-kit.mjs install --agent claude --lang en --model claude:code=haiku --model claude:review=opus --target .\n",
   "install.start": "▶ {{command}} → {{target}}",
   "install.plan": "  hosts={{hosts}} stack={{stack}} lang={{lang}} planned={{count}} files",
   "install.dryRun": "  (dry-run: print the plan only, write nothing)",
@@ -106,5 +106,20 @@
   "host.skillsIndexTitle": "# Skills index",
   "host.skillsIndexDescription": "Skills index; authoritative bodies live under .agents/skills/",
   "host.skillsIndexLine": "- `{{name}}` — {{description}} (authoritative: `{{path}}`)",
-  "host.skillsIndexEmpty": "(no skills)"
+  "host.skillsIndexEmpty": "(no skills)",
+  "diff.title": "Managed file diff: {{target}}",
+  "diff.clean": "No differences.",
+  "diff.summary": "Total {{total}}: unchanged {{unchanged}} / user-modified {{userModified}} / kit-updated {{kitUpdated}} / orphan {{orphan}} / missing {{missing}}",
+  "diff.kind.unchanged": "unchanged",
+  "diff.kind.userModified": "user-modified",
+  "diff.kind.kitUpdated": "kit-updated",
+  "diff.kind.orphan": "orphan",
+  "diff.kind.missing": "missing",
+  "diff.alsoKitChanged": "(kit template also changed; upgrade needs a merge)",
+  "status.title": "Install status: {{target}}",
+  "status.kit": "Current kit: v{{version}}",
+  "status.manifest": "Manifest: v{{version}} (installed {{installedAt}})",
+  "status.project": "language={{language}} stack={{stack}} tier={{tier}} hardened={{hardened}}",
+  "status.hosts": "Hosts: {{hosts}}",
+  "status.counts": "Files {{total}}: unchanged {{unchanged}} / user-modified {{userModified}} / kit-updated {{kitUpdated}} / orphan {{orphan}} / missing {{missing}}"
 }

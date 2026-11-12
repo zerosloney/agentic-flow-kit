@@ -44,6 +44,8 @@ npx agentic-flow-kit doctor --target .
 | `install` | 从零安装；可重复 `--agent`，也可 `--agents a,b,c` |
 | `add-host <host>` | 已安装仓追加宿主壳（同时接受 `--agent <host>`） |
 | `upgrade` | 按 manifest 记录的宿主/语言/栈重放模板；冲突默认跳过 |
+| `diff` | 只读对比 manifest、磁盘与当前模板，分类 `unchanged` / `user-modified` / `kit-updated` / `orphan` / `missing`；支持 `--json`、`--all` |
+| `status` | 摘要输出安装档位、宿主、语言、栈与差异计数；支持 `--json` |
 | `doctor` | 校验 manifest、文件在位、git 配置、`.gitattributes`、五钩子、宿主接线、Node 版本；`--deep` 再跑 `check-local-gates.mjs` |
 | `list-hosts` | 列出支持的宿主 |
 
@@ -65,6 +67,8 @@ npx agentic-flow-kit doctor --target .
 | `--model-mode recommend\|detect\|inherit` | `recommend`（默认，探测 + 推荐）、`detect`（强制重新探测）、`inherit`（全部继承宿主默认） |
 | `--probe-models` | 允许执行宿主注册表中声明的只读模型列表命令（1.5s 超时，失败静默） |
 | `--no-model-config` | 跳过模型探测 / 注入，也不写 `.agents/config/model-roles.local.json` |
+
+`diff` / `status` 未传 `--lang` 时跟随 manifest 记录的语言。退出码：`0` 成功、`2` 用法错误、`3` 目标或 manifest 缺失、`4` 未知宿主。
 
 ## 宿主
 

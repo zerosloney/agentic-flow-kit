@@ -59,6 +59,9 @@ node tools/make-en-host-overrides.mjs
 - 目标不存在 → 创建；目标哈希等于 manifest → 更新；被用户改过 → 冲突跳过；非本工具安装 → 跳过；`--force` 覆盖。
 - `.gitattributes` / `.gitignore` 使用带标记的合并块，重复执行不重复追加。
 - manifest 的哈希记录的是**最终文本**：模板渲染、语言覆盖、模型注入都完成之后才计算。
+- 派生工件（如 `workflow/INDEX.md`）生成后会重算哈希，并把被生成器改写的路径登记到 `manifest.derived`；`diff` 不对这些路径做静态模板比对。
+
+`diff` / `status` 复用 `buildPlan`、manifest 哈希与 `readInjectedModels`，只读输出 `unchanged` / `user-modified` / `kit-updated` / `orphan` / `missing`；不传 `--lang` 时跟随 manifest 语言。
 
 `add-host` 只写 `category: 'host'`，并保留已安装的 stack / language；`upgrade` 按 manifest 记录的宿主和语言重放。
 
