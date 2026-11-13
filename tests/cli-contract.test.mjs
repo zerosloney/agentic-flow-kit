@@ -74,7 +74,7 @@ test('exit code mapping covers every documented class', () => {
   assert.equal(EXIT.HOST, 4);
   assert.equal(EXIT.IO, 5);
 
-  for (const code of ['BAD_COMMAND', 'BAD_LANG', 'BAD_MODEL', 'BAD_TIER', 'NO_HOSTS', 'MISSING_ARG']) {
+  for (const code of ['BAD_COMMAND', 'BAD_LANG', 'BAD_MODEL', 'BAD_TIER', 'NO_HOSTS', 'MISSING_ARG', 'HOST_NOT_INSTALLED']) {
     assert.equal(exitCodeForError({ code }), EXIT.USAGE, code);
   }
   for (const code of ['TARGET_MISSING', 'NO_MANIFEST', 'NO_HOSTS_IN_MANIFEST']) {

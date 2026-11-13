@@ -20,7 +20,7 @@
 |---|---|---|---|---|---|
 | R1-1 | `diff` / `status` 漂移视图 | 1 | M | `src/commands/diff.mjs` | DONE · [#3](https://github.com/zerosloney/agentic-flow-kit/issues/3) |
 | R1-2 | `prune` 清理僵尸文件 | 1 | S | `src/install/apply.mjs` / 新命令 | DONE · [#2](https://github.com/zerosloney/agentic-flow-kit/issues/2) |
-| R1-3 | `remove-host` / `uninstall` | 1 | M | `src/commands/remove-host.mjs` | TODO · [#4](https://github.com/zerosloney/agentic-flow-kit/issues/4) |
+| R1-3 | `remove-host` / `uninstall` | 1 | M | `src/commands/remove-host.mjs` | DONE · [#4](https://github.com/zerosloney/agentic-flow-kit/issues/4) |
 | R1-4 | `--json` 与退出码契约 | 1 | M | `src/cli/main.mjs`、各命令 | DONE · [#5](https://github.com/zerosloney/agentic-flow-kit/issues/5) |
 | R1-5 | `explain <targetRel>` 来源解释 | 1 | S | `src/commands/explain.mjs` | DONE · [#6](https://github.com/zerosloney/agentic-flow-kit/issues/6) |
 | R2-1 | 基线留存 + 三方合并 | 2 | L | `src/install/baseline.mjs`、`apply.mjs` | TODO |
@@ -73,7 +73,7 @@
 
 ### R1-3 `remove-host` / `uninstall`（[#4](https://github.com/zerosloney/agentic-flow-kit/issues/4)）
 
-- **现状**：只有 `add-host`，没有反向操作；卸载只能手删目录。
+- **现状**：已实现。`remove-host` 按 manifest 哈希删除宿主面并保留根记忆文件；`uninstall` 清理全部托管文件与合并块；宿主集合变化后会收敛宿主相关渲染；`tests/remove-host.test.mjs` 覆盖隔离、恢复、用户修改与合并块。
 - **目标**：
   - `remove-host --agent <name>`：删除该宿主 `category: host` 的文件，保留引擎/栈/其他宿主；
   - `uninstall`：删除全部托管文件；

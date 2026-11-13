@@ -12,6 +12,7 @@ import { LANGUAGES } from '../i18n.mjs';
 import { doctorCommand } from '../commands/doctor.mjs';
 import { addHostCommand } from '../commands/add-host.mjs';
 import { upgradeCommand } from '../commands/upgrade.mjs';
+import { removeHostCommand, uninstallCommand } from '../commands/remove-host.mjs';
 
 // flows 内部 argv 统一经 baseArgs 构造（形状与 cli/args.mjs parseArgs 一致：flag() 依赖 args.flags）
 export const baseArgs = () => ({ _: [], agents: [], flags: new Set() });
@@ -297,10 +298,52 @@ function listHostsFlow(ctx) {
   showLines(ctx, box(t('listHosts.title'), rows.map((r) => `${pad(r.name, wName)}${pad(r.label, wLabel)}${r.dir}`)));
 }
 
+async function removeHostFlow(ctx) {
+  const { t, lang } = ctx;
+  const manifest = readManifest(process.cwd());
+  if (!manifest) throw new Error(t('error.noManifest'));
+  const installed = HOST_NAMES.filter((name) => (manifest.hosts || []).includes(name));
+  if (!installed.length) {
+    showLines(ctx, [t('tui.removeHost.none')]);
+    return;
+  }
+  const agents = await pickMany(ctx, {
+    question: t('tui.removeHostQuestion'),
+    hint: t('tui.hint.toggle'),
+    min: 1,
+    items: installed.map((name) => ({
+      value: name,
+      label: name,
+      hint: `${HOSTS[name].label} → ${HOSTS[name].dir}`,
+    })),
+  });
+  if (agents === null) return;
+  showLines(ctx, box(t('tui.planTitle'), [
+    t('tui.plan.hosts', { hosts: agents.join(', ') }),
+    t('tui.plan.target', { target: process.cwd() }),
+  ]));
+  if (!(await confirmYes(ctx, t('tui.confirmRemoveHost', { hosts: agents.join(', ') })))) return;
+  return removeHostCommand({ args: { ...baseArgs(), _: ['remove-host'], agents }, t, lang });
+}
+
+async function uninstallFlow(ctx) {
+  const { t, lang } = ctx;
+  const manifest = readManifest(process.cwd());
+  if (!manifest) throw new Error(t('error.noManifest'));
+  showLines(ctx, box(t('tui.planTitle'), [
+    t('tui.plan.target', { target: process.cwd() }),
+    t('tui.plan.hosts', { hosts: (manifest.hosts || []).join(', ') || '-' }),
+  ]));
+  if (!(await confirmYes(ctx, t('tui.confirmUninstall')))) return;
+  return uninstallCommand({ args: { ...baseArgs(), _: ['uninstall'] }, t, lang });
+}
+
 export const FLOWS = {
   install: installFlow,
   upgrade: upgradeFlow,
   'add-host': addHostFlow,
+  'remove-host': removeHostFlow,
+  uninstall: uninstallFlow,
   doctor: doctorFlow,
   'list-hosts': listHostsFlow,
 };

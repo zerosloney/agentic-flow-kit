@@ -23,6 +23,8 @@ export async function wizardCommand({ t, lang }) {
           { value: 'add-host', label: t('tui.menu.addHost') },
           { value: 'doctor', label: t('tui.menu.doctor') },
           { value: 'list-hosts', label: t('tui.menu.listHosts') },
+          { value: 'remove-host', label: t('tui.menu.removeHost') },
+          { value: 'uninstall', label: t('tui.menu.uninstall') },
           { value: 'quit', label: t('tui.menu.quit') },
         ],
       });

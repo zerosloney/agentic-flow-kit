@@ -71,6 +71,30 @@ export function extractMergeBlock(text, begin, end) {
   return text.slice(beginIdx, endIdx + end.length);
 }
 
+// 就地替换托管块，保留块外用户内容与文件 EOL；块不存在时原样返回。
+export function replaceMergeBlock(existing, block, begin, end) {
+  const beginIdx = existing.indexOf(begin);
+  const endIdx = existing.indexOf(end);
+  if (beginIdx < 0 || endIdx <= beginIdx) return existing;
+  const eol = eolOf(existing);
+  const normalized = block.replace(/\r?\n/g, eol);
+  return existing.slice(0, beginIdx) + normalized + existing.slice(endIdx + end.length);
+}
+
+// 移除托管块及其后的换行；块前由插入逻辑补的空行一并回收。
+export function stripMergeBlock(text, begin, end) {
+  const beginIdx = text.indexOf(begin);
+  const endIdx = text.indexOf(end);
+  if (beginIdx < 0 || endIdx <= beginIdx) return text;
+  let start = beginIdx;
+  if (text.startsWith('\r\n\r\n', start - 4)) start -= 2;
+  else if (text.startsWith('\n\n', start - 2)) start -= 1;
+  let stop = endIdx + end.length;
+  if (text.startsWith('\r\n', stop)) stop += 2;
+  else if (text[stop] === '\n') stop += 1;
+  return text.slice(0, start) + text.slice(stop);
+}
+
 export function applyPlan({ plan, vars, manifest, dryRun, force, log }) {
   const stats = { create: 0, update: 0, skip: 0, conflict: 0, merge: 0 };
   const nextFiles = { ...(manifest.files || {}) };

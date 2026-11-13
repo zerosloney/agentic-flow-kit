@@ -7,7 +7,7 @@ import { resolveTarget } from './install.mjs';
 import { buildDiff } from './diff.mjs';
 
 // 删除空目录，向上冒泡到 target 根为止；遇到非空目录或根目录即停止。
-function cleanEmptyDirs(target, absFile) {
+export function cleanEmptyDirs(target, absFile) {
   const root = path.resolve(target);
   let dir = path.dirname(absFile);
   while (dir.startsWith(`${root}${path.sep}`)) {
