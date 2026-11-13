@@ -4,6 +4,9 @@
 // audit 不在本表：缺省视为全量检查（已装仓库与无配置的测试夹具）；init 新装显式写 false。
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { parseEnums, validateEnums } from './workflow-enums.mjs';
 
 // 基线与增量（2026-10-10 收敛系列 6）：版本表改「基线 + 显式差异」声明式构造——每版本只写
 // 相对基线变化的锚，消除「全量手抄日期键、漏抄即静默改语义」的脆弱点（原 v2 注释自警）。
@@ -247,4 +250,474 @@ export function latestFreshVerifyLine(lines, now = Date.now()) {
 
 export function hasFreshVerifyLine(lines, now = Date.now()) {
   return latestFreshVerifyLine(lines, now) !== null;
+}
+
+// ---- policy-as-code（R3-1）：machine-readable 策略面 ----
+// policy.json 只做「引用 + 闭集 + 上限」声明，不复制各配置的业务内容：
+//   - mechanism-registry.md 仍是机制登记的人类台账；required 必须与台账双向一致；
+//   - gate-budgets.json / rule-budgets.txt / workflow-enums.txt / pipeline.json /
+//     steering.json / agent-eval.json / model-roles.json / pr-review.json 仍是各自单源。
+// `policy check` 是只读闸门；`policy explain` 与 gen-effective-policy 复用同一渲染。
+export const POLICY_REL = '.agents/config/policy.json';
+export const MECHANISM_STATUSES = ['现役', '待退役', '已退役'];
+export const MECHANISM_TYPES = ['检出型', '健康静默', '不退役主干', '数据面'];
+
+const mechanismStatusOf = (raw) => String(raw).replace(/\s*\[[^\]]*\]\s*$/, '').trim();
+const mechanismTagOf = (raw) => {
+  const m = String(raw).match(/\[([^\]]*)\]\s*$/);
+  return m ? m[1].trim() : '';
+};
+
+// parseMechanismRegistry：7 列管道表 → 行对象数组；列序固定（与 gen-engine-map 共用单源）。
+export function parseMechanismRegistry(text) {
+  const rows = [];
+  for (const line of String(text).split(/\r?\n/)) {
+    if (!/^\|/.test(line)) continue;
+    if (/^\|[\s:|-]+\|?\s*$/.test(line)) continue;
+    const cells = line.split('|').slice(1, -1).map((cell) => cell.trim());
+    if (cells.length !== 7 || cells[0] === '机制') continue;
+    const [name, gate, criterion, threshold, lastTrigger, statusRaw, deadline] = cells;
+    rows.push({
+      name, gate, criterion, threshold, lastTrigger, statusRaw, deadline,
+      status: mechanismStatusOf(statusRaw), tag: mechanismTagOf(statusRaw),
+    });
+  }
+  return rows;
+}
+
+const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
+const isPositiveInt = (value) => Number.isInteger(value) && value > 0;
+const isString = (value) => typeof value === 'string' && value.trim() !== '';
+
+function readText(root, rel) {
+  try {
+    return fs.readFileSync(path.join(root, rel), 'utf8').replace(/^﻿/, '');
+  } catch {
+    return null;
+  }
+}
+
+function readJson(root, rel, problems, code = 'POLICY_SURFACE') {
+  const text = readText(root, rel);
+  if (text === null) {
+    problems.push({ code, message: `缺少或不可读: ${rel}` });
+    return null;
+  }
+  try {
+    return JSON.parse(text);
+  } catch (error) {
+    problems.push({ code, message: `${rel} JSON 解析失败: ${error.message}` });
+    return null;
+  }
+}
+
+function readPolicyConfig(root, problems) {
+  const cfg = readJson(root, POLICY_REL, problems, 'POLICY_CONFIG');
+  if (!cfg) return null;
+  if (cfg.version !== 1) problems.push({ code: 'POLICY_CONFIG', message: `policy.json version 必须为 1（实际 ${cfg.version}）` });
+  if (!isString(cfg.registry)) problems.push({ code: 'POLICY_CONFIG', message: 'policy.json 缺少 registry' });
+  if (!isObject(cfg.surfaces)) {
+    problems.push({ code: 'POLICY_CONFIG', message: 'policy.json 缺少 surfaces' });
+  } else {
+    for (const key of ['gateBudgets', 'workflowEnums', 'pipeline', 'steering', 'agentEval', 'modelRoles', 'prReview']) {
+      if (!isString(cfg.surfaces[key])) problems.push({ code: 'POLICY_CONFIG', message: `policy.json 缺少 surfaces.${key}` });
+    }
+  }
+  return cfg;
+}
+
+function sameSet(actual, expected) {
+  if (actual.length !== expected.length) return false;
+  const a = [...new Set(actual)].sort();
+  const b = [...new Set(expected)].sort();
+  return a.length === b.length && a.every((value, i) => value === b[i]);
+}
+
+function checkMechanisms(root, cfg, problems, summary) {
+  const rel = cfg.registry;
+  const text = readText(root, rel);
+  if (text === null) {
+    problems.push({ code: 'POLICY_MECHANISM', message: `缺少机制台账: ${rel}` });
+    return [];
+  }
+  const rows = parseMechanismRegistry(text);
+  if (!rows.length) {
+    problems.push({ code: 'POLICY_MECHANISM', message: `机制台账没有可解析的数据行: ${rel}` });
+    return [];
+  }
+  const statuses = Array.isArray(cfg.mechanisms?.statuses) ? cfg.mechanisms.statuses : MECHANISM_STATUSES;
+  const types = Array.isArray(cfg.mechanisms?.types) ? cfg.mechanisms.types : MECHANISM_TYPES;
+  const required = Array.isArray(cfg.mechanisms?.required) ? cfg.mechanisms.required : null;
+  if (!required) {
+    problems.push({ code: 'POLICY_MECHANISM', message: 'policy.json 缺少 mechanisms.required' });
+    return rows;
+  }
+  const names = new Set();
+  for (const row of rows) {
+    if (names.has(row.name)) problems.push({ code: 'POLICY_MECHANISM', message: `机制台账重复登记: ${row.name}` });
+    names.add(row.name);
+    if (!statuses.includes(row.status)) {
+      problems.push({ code: 'POLICY_MECHANISM', message: `机制状态不在闭集（${row.name}）: ${row.statusRaw}` });
+    }
+    if (!types.includes(row.tag)) {
+      problems.push({ code: 'POLICY_MECHANISM', message: `机制类型不在闭集（${row.name}）: ${row.statusRaw}` });
+    }
+    if (row.status === '现役' && (!isString(row.gate) || row.gate === '—')) {
+      problems.push({ code: 'POLICY_MECHANISM', message: `现役机制缺少门禁位置: ${row.name}` });
+    }
+    if (isString(row.deadline) && row.deadline !== '—' && !/^复评\s*\d{4}-\d{2}-\d{2}$/.test(row.deadline)) {
+      problems.push({ code: 'POLICY_MECHANISM', message: `机制处置期限格式非法（${row.name}）: ${row.deadline}` });
+    }
+  }
+  const requiredSet = new Set(required);
+  for (const name of requiredSet) {
+    if (!names.has(name)) problems.push({ code: 'POLICY_MECHANISM', message: `policy.json 引用了未登记机制: ${name}` });
+  }
+  for (const name of names) {
+    if (!requiredSet.has(name)) problems.push({ code: 'POLICY_MECHANISM', message: `机制未登记到 policy.json: ${name}` });
+  }
+  const count = (status) => rows.filter((row) => row.status === status).length;
+  if (summary) {
+    summary.mechanisms = {
+      total: rows.length,
+      active: count('现役'),
+      pending: count('待退役'),
+      retired: count('已退役'),
+    };
+  }
+  return rows;
+}
+
+function checkBudgets(root, cfg, problems, summary, runBudgets) {
+  const surfaces = cfg.surfaces || {};
+  const maxGateMs = isPositiveInt(cfg.budgets?.gateMaxMs) ? cfg.budgets.gateMaxMs : null;
+  const gateRel = surfaces.gateBudgets;
+  let gate = null;
+  if (!isString(gateRel)) {
+    problems.push({ code: 'POLICY_BUDGET', message: 'policy.json 缺少 surfaces.gateBudgets' });
+  } else {
+    gate = readJson(root, gateRel, problems, 'POLICY_BUDGET');
+  }
+  if (gate) {
+    for (const key of ['fullMs', 'scopeMs']) {
+      if (!isPositiveInt(gate[key])) {
+        problems.push({ code: 'POLICY_BUDGET', message: `${gateRel}.${key} 必须为正整数` });
+      } else if (maxGateMs !== null && gate[key] > maxGateMs) {
+        problems.push({ code: 'POLICY_BUDGET', message: `${gateRel}.${key}=${gate[key]} 超过策略上限 ${maxGateMs}ms` });
+      }
+    }
+    if (isPositiveInt(gate.fullMs) && isPositiveInt(gate.scopeMs) && gate.scopeMs > gate.fullMs) {
+      problems.push({ code: 'POLICY_BUDGET', message: `${gateRel}.scopeMs 不得大于 fullMs` });
+    }
+  }
+
+  const ruleRel = surfaces.ruleBudgets;
+  const ruleText = isString(ruleRel) ? readText(root, ruleRel) : null;
+  const optional = Array.isArray(cfg.optionalSurfaces) ? cfg.optionalSurfaces : [];
+  if (ruleText === null) {
+    if (isString(ruleRel) && !optional.includes('ruleBudgets')) {
+      problems.push({ code: 'POLICY_BUDGET', message: `缺少规则预算表: ${ruleRel}` });
+    }
+  } else {
+    const maxBytes = isPositiveInt(cfg.budgets?.ruleMaxBytes) ? cfg.budgets.ruleMaxBytes : null;
+    const bytes = Buffer.byteLength(ruleText, 'utf8');
+    if (maxBytes !== null && bytes > maxBytes) {
+      problems.push({ code: 'POLICY_BUDGET', message: `${ruleRel} ${bytes}B 超过策略上限 ${maxBytes}B` });
+    }
+    let entries = 0;
+    for (const [index, line] of ruleText.split(/\r?\n/).entries()) {
+      if (!line.trim() || line.trimStart().startsWith('#')) continue;
+      const cut = line.lastIndexOf(' ');
+      const pattern = cut < 0 ? '' : line.slice(0, cut).trim();
+      const limit = cut < 0 ? '' : line.slice(cut + 1).trim();
+      if (!pattern || !/^\d+(?:#(?:count|line))?$/.test(limit) || Number.parseInt(limit, 10) <= 0) {
+        problems.push({ code: 'POLICY_BUDGET', message: `${ruleRel}:${index + 1} 预算行非法: ${line}` });
+        continue;
+      }
+      entries += 1;
+    }
+    if (summary) summary.budgets = { ...(summary.budgets || {}), ruleEntries: entries, ruleBytes: bytes };
+  }
+
+  // 预算执法复用 rule-budget.mjs（单源口径）；只在目标本身是 git 根时运行，
+  // 避免 git rev-parse 把子目录目标抬到父仓后读错预算表。
+  if (ruleText !== null && runBudgets) {
+    const script = path.join(root, '.agents', 'scripts', 'rule-budget.mjs');
+    const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: root, encoding: 'utf8', windowsHide: true });
+    const atGitRoot = top.status === 0 && path.resolve(top.stdout.trim()) === path.resolve(root);
+    if (fs.existsSync(script) && atGitRoot) {
+      const run = spawnSync(process.execPath, [script, '--all'], {
+        cwd: root, encoding: 'utf8', timeout: 120000, windowsHide: true,
+      });
+      if (run.error) {
+        problems.push({ code: 'POLICY_BUDGET', message: `rule-budget 执行失败: ${run.error.message}` });
+      } else if (run.status !== 0) {
+        const detail = String(run.stdout || run.stderr || '').trim().split(/\r?\n/).slice(-8).join(' | ');
+        problems.push({ code: 'POLICY_BUDGET', message: `规则预算超限或检查失败: ${detail || `exit ${run.status}`}` });
+      }
+    }
+  }
+
+  if (summary && gate) summary.budgets = { ...(summary.budgets || {}), fullMs: gate.fullMs, scopeMs: gate.scopeMs };
+}
+
+function checkEnums(root, cfg, problems, summary) {
+  const surfaces = cfg.surfaces || {};
+  const enumsRel = surfaces.workflowEnums;
+  if (!isString(enumsRel)) {
+    problems.push({ code: 'POLICY_ENUM', message: 'policy.json 缺少 surfaces.workflowEnums' });
+  } else {
+    const text = readText(root, enumsRel);
+    if (text === null) {
+      problems.push({ code: 'POLICY_ENUM', message: `缺少枚举单源: ${enumsRel}` });
+    } else {
+      try {
+        const enums = parseEnums(text);
+        validateEnums(enums);
+        for (const key of cfg.enums?.workflowKeys || []) {
+          if (!Array.isArray(enums[key])) problems.push({ code: 'POLICY_ENUM', message: `workflow-enums 缺少策略要求的键: ${key}` });
+        }
+        if (summary) summary.enums = { ...(summary.enums || {}), workflowKeys: Object.keys(enums).length };
+      } catch (error) {
+        problems.push({ code: 'POLICY_ENUM', message: `workflow-enums 校验失败: ${error.message}` });
+      }
+    }
+  }
+
+  const pipelineRel = surfaces.pipeline;
+  const pipeline = isString(pipelineRel) ? readJson(root, pipelineRel, problems, 'POLICY_ENUM') : null;
+  if (pipeline) {
+    const stages = pipeline.stages;
+    if (!Array.isArray(stages) || !stages.every(isString)) {
+      problems.push({ code: 'POLICY_ENUM', message: `${pipelineRel}.stages 必须为非空字符串数组` });
+    } else {
+      if (new Set(stages).size !== stages.length) problems.push({ code: 'POLICY_ENUM', message: `${pipelineRel}.stages 存在重复项` });
+      for (const stage of cfg.enums?.pipelineRequiredStages || []) {
+        if (!stages.includes(stage)) problems.push({ code: 'POLICY_ENUM', message: `${pipelineRel}.stages 缺少必需阶段: ${stage}` });
+      }
+      if (summary) summary.enums = { ...(summary.enums || {}), pipelineStages: stages.length };
+    }
+    const stops = pipeline.stopTypes;
+    const expectedStops = Array.isArray(cfg.enums?.pipelineStopTypes) ? cfg.enums.pipelineStopTypes : null;
+    if (!Array.isArray(stops) || !stops.every(isString)) {
+      problems.push({ code: 'POLICY_ENUM', message: `${pipelineRel}.stopTypes 必须为非空字符串数组` });
+    } else if (new Set(stops).size !== stops.length) {
+      problems.push({ code: 'POLICY_ENUM', message: `${pipelineRel}.stopTypes 存在重复项` });
+    } else if (expectedStops && !sameSet(stops, expectedStops)) {
+      problems.push({ code: 'POLICY_ENUM', message: `${pipelineRel}.stopTypes 与策略闭集不一致: ${stops.join(',')}` });
+    } else if (!expectedStops) {
+      problems.push({ code: 'POLICY_ENUM', message: 'policy.json 缺少 enums.pipelineStopTypes' });
+    }
+    if (summary && Array.isArray(stops)) summary.enums = { ...(summary.enums || {}), stopTypes: stops.length };
+  }
+}
+
+function checkRoles(root, cfg, problems, summary) {
+  const surfaces = cfg.surfaces || {};
+  const modelRel = surfaces.modelRoles;
+  const modelCfg = isString(modelRel) ? readJson(root, modelRel, problems, 'POLICY_ROLE') : null;
+  const expected = Array.isArray(cfg.roles?.modelRoles) ? cfg.roles.modelRoles : [];
+  const fallbacks = Array.isArray(cfg.roles?.modelFallbacks) ? cfg.roles.modelFallbacks : [];
+  if (modelCfg) {
+    if (!isObject(modelCfg.roles)) {
+      problems.push({ code: 'POLICY_ROLE', message: `${modelRel}.roles 必须为对象` });
+    } else {
+      const keys = Object.keys(modelCfg.roles);
+      for (const role of expected) {
+        if (!keys.includes(role)) problems.push({ code: 'POLICY_ROLE', message: `${modelRel}.roles 缺少角色: ${role}` });
+      }
+      for (const role of keys) {
+        if (!expected.includes(role)) problems.push({ code: 'POLICY_ROLE', message: `${modelRel}.roles 含未登记角色: ${role}` });
+        const entry = modelCfg.roles[role];
+        if (!isObject(entry)) {
+          problems.push({ code: 'POLICY_ROLE', message: `${modelRel}.roles.${role} 必须为对象` });
+          continue;
+        }
+        if (entry.model !== null && !isString(entry.model)) {
+          problems.push({ code: 'POLICY_ROLE', message: `${modelRel}.roles.${role}.model 必须为字符串或 null` });
+        }
+        if ('heterogeneous' in entry && typeof entry.heterogeneous !== 'boolean') {
+          problems.push({ code: 'POLICY_ROLE', message: `${modelRel}.roles.${role}.heterogeneous 必须为布尔` });
+        }
+      }
+      if (isString(modelCfg.fallback) && !fallbacks.includes(modelCfg.fallback)) {
+        problems.push({ code: 'POLICY_ROLE', message: `${modelRel}.fallback 不在策略闭集: ${modelCfg.fallback}` });
+      }
+      if (summary) summary.roles = { ...(summary.roles || {}), modelRoles: keys.length };
+    }
+  }
+
+  const prRel = surfaces.prReview;
+  const prCfg = isString(prRel) ? readJson(root, prRel, problems, 'POLICY_ROLE') : null;
+  const prExpected = Array.isArray(cfg.roles?.prReviewRoles) ? cfg.roles.prReviewRoles : [];
+  if (prCfg) {
+    if (!isObject(prCfg.modelRoles)) {
+      problems.push({ code: 'POLICY_ROLE', message: `${prRel}.modelRoles 必须为对象` });
+    } else {
+      const keys = Object.keys(prCfg.modelRoles);
+      for (const role of prExpected) {
+        if (!keys.includes(role)) problems.push({ code: 'POLICY_ROLE', message: `${prRel}.modelRoles 缺少角色: ${role}` });
+      }
+      for (const role of keys) {
+        if (!prExpected.includes(role)) problems.push({ code: 'POLICY_ROLE', message: `${prRel}.modelRoles 含未登记角色: ${role}` });
+        if (!expected.includes(prCfg.modelRoles[role])) {
+          problems.push({ code: 'POLICY_ROLE', message: `${prRel}.modelRoles.${role} 引用了未登记模型角色: ${prCfg.modelRoles[role]}` });
+        }
+      }
+      if (prCfg.verifiersPerFinding !== undefined && !isPositiveInt(prCfg.verifiersPerFinding)) {
+        problems.push({ code: 'POLICY_ROLE', message: `${prRel}.verifiersPerFinding 必须为正整数` });
+      }
+      if (summary) summary.roles = { ...(summary.roles || {}), prReviewRoles: keys.length };
+    }
+  }
+
+  // 本地覆盖是用户资产：只校验它引用的角色/模型形状，不改写、不要求存在。
+  const localRel = modelCfg?.localOverride;
+  if (isString(localRel) && fs.existsSync(path.join(root, localRel))) {
+    const local = readJson(root, localRel, problems, 'POLICY_ROLE');
+    if (local && isObject(local.roles)) {
+      for (const [role, entry] of Object.entries(local.roles)) {
+        if (!expected.includes(role)) problems.push({ code: 'POLICY_ROLE', message: `${localRel} 含未登记角色: ${role}` });
+        if (isObject(entry) && entry.model !== undefined && !isString(entry.model)) {
+          problems.push({ code: 'POLICY_ROLE', message: `${localRel}.roles.${role}.model 必须为非空字符串` });
+        }
+      }
+    }
+  }
+}
+
+function checkSteeringAndEval(root, cfg, problems) {
+  const surfaces = cfg.surfaces || {};
+  const steeringRel = surfaces.steering;
+  const steering = isString(steeringRel) ? readJson(root, steeringRel, problems, 'POLICY_CONFIG') : null;
+  if (steering) {
+    if (!isObject(steering.tiers) || !Object.keys(steering.tiers).length) {
+      problems.push({ code: 'POLICY_CONFIG', message: `${steeringRel}.tiers 必须为非空对象` });
+    } else if (!Object.prototype.hasOwnProperty.call(steering.tiers, steering.defaultTier)) {
+      problems.push({ code: 'POLICY_CONFIG', message: `${steeringRel}.defaultTier 不在 tiers 内: ${steering.defaultTier}` });
+    }
+    if (!Array.isArray(steering.invariants) || !steering.invariants.every(isString)) {
+      problems.push({ code: 'POLICY_CONFIG', message: `${steeringRel}.invariants 必须为非空字符串数组` });
+    }
+  }
+
+  const evalRel = surfaces.agentEval;
+  const evalCfg = isString(evalRel) ? readJson(root, evalRel, problems, 'POLICY_CONFIG') : null;
+  if (evalCfg) {
+    if (typeof evalCfg.threshold !== 'number' || evalCfg.threshold < 0 || evalCfg.threshold > 1) {
+      problems.push({ code: 'POLICY_CONFIG', message: `${evalRel}.threshold 必须在 [0,1]` });
+    }
+    if (!isPositiveInt(evalCfg.maxAgeDays)) problems.push({ code: 'POLICY_CONFIG', message: `${evalRel}.maxAgeDays 必须为正整数` });
+    if (!isPositiveInt(evalCfg.minTasks)) problems.push({ code: 'POLICY_CONFIG', message: `${evalRel}.minTasks 必须为正整数` });
+    if (!Array.isArray(evalCfg.sensitive) || !evalCfg.sensitive.every(isString)) {
+      problems.push({ code: 'POLICY_CONFIG', message: `${evalRel}.sensitive 必须为字符串数组` });
+    }
+    if (!isString(evalCfg.results)) problems.push({ code: 'POLICY_CONFIG', message: `${evalRel}.results 必须为路径字符串` });
+  }
+}
+
+export function checkPolicy(root, { runBudgets = true } = {}) {
+  const problems = [];
+  const summary = {};
+  const cfg = readPolicyConfig(root, problems);
+  if (!cfg) return { ok: false, problems, summary };
+  if (cfg.registry) checkMechanisms(root, cfg, problems, summary);
+  checkBudgets(root, cfg, problems, summary, runBudgets);
+  checkEnums(root, cfg, problems, summary);
+  checkRoles(root, cfg, problems, summary);
+  checkSteeringAndEval(root, cfg, problems);
+  return { ok: problems.length === 0, problems, summary };
+}
+
+// explain / gen-effective-policy 共用的策略面视图；只读、不写盘。
+export function renderPolicySection(root, result = checkPolicy(root, { runBudgets: false })) {
+  const jsonOf = (rel) => {
+    const text = isString(rel) ? readText(root, rel) : null;
+    if (text === null) return null;
+    try { return JSON.parse(text); } catch { return null; }
+  };
+  const cfg = jsonOf(POLICY_REL);
+  const lines = [];
+  lines.push('## 策略面（policy.json）');
+  lines.push('');
+  if (!cfg) {
+    lines.push('> policy.json 缺失或不可解析；运行 `node .agents/scripts/policy.mjs check` 查看问题。');
+    return lines;
+  }
+  const rows = isString(cfg.registry) ? parseMechanismRegistry(readText(root, cfg.registry) || '') : [];
+  const count = (status) => rows.filter((row) => row.status === status).length;
+  lines.push(`> 版本 ${cfg.version}；机制台账 ${rows.length} 行（现役 ${count('现役')} / 待退役 ${count('待退役')} / 已退役 ${count('已退役')}）。`);
+  lines.push('');
+  lines.push('| 机制 | 状态 | 类型 |');
+  lines.push('|---|---|---|');
+  for (const row of rows) lines.push(`| ${row.name} | ${row.status} | ${row.tag || '—'} |`);
+
+  const gate = jsonOf(cfg.surfaces?.gateBudgets);
+  if (gate) {
+    lines.push('');
+    lines.push(`- 门禁墙钟预算：fullMs ${gate.fullMs}ms / scopeMs ${gate.scopeMs}ms（策略上限 ${cfg.budgets?.gateMaxMs || '—'}ms）。`);
+  }
+  const ruleText = isString(cfg.surfaces?.ruleBudgets) ? readText(root, cfg.surfaces.ruleBudgets) : null;
+  if (ruleText !== null) {
+    const entries = ruleText.split(/\r?\n/).filter((line) => line.trim() && !line.trimStart().startsWith('#')).length;
+    lines.push(`- 常驻面预算：${entries} 条 / ${Buffer.byteLength(ruleText, 'utf8')}B（策略上限 ${cfg.budgets?.ruleMaxBytes || '—'}B）。`);
+  }
+  const pipeline = jsonOf(cfg.surfaces?.pipeline);
+  if (pipeline) {
+    lines.push(`- 流水线枚举：${Array.isArray(pipeline.stages) ? pipeline.stages.length : 0} 个阶段 / ${Array.isArray(pipeline.stopTypes) ? pipeline.stopTypes.length : 0} 类停止原因。`);
+  }
+  const models = jsonOf(cfg.surfaces?.modelRoles);
+  if (models?.roles) {
+    lines.push(`- 模型角色：${Object.keys(models.roles).join(' / ')}（fallback ${models.fallback || '—'}）。`);
+  }
+  const pr = jsonOf(cfg.surfaces?.prReview);
+  if (pr?.modelRoles) {
+    lines.push(`- 评审角色映射：${Object.entries(pr.modelRoles).map(([role, model]) => `${role}→${model}`).join(' / ')}。`);
+  }
+  if (!result.ok) {
+    lines.push('');
+    lines.push(`> ⚠️ policy check 未通过：${result.problems.length} 项问题（详见 \`node .agents/scripts/policy.mjs check\`）。`);
+  }
+  return lines;
+}
+
+const POLICY_USAGE = `用法：
+  node .agents/scripts/policy.mjs check [--root <dir>] [--json]
+  node .agents/scripts/policy.mjs explain [--root <dir>] [--json]
+
+check 校验机制登记、预算、枚举闭集、角色/模型引用与策略面完整性；
+explain 输出当前生效策略视图（gen-effective-policy 亦复用同一视图）。`;
+
+export function runPolicyCli(argv, { stdout = console.log, stderr = console.error } = {}) {
+  const first = argv[0] && !argv[0].startsWith('-') ? argv[0] : 'check';
+  const json = argv.includes('--json');
+  const rootIndex = argv.indexOf('--root');
+  const root = path.resolve(rootIndex >= 0 && argv[rootIndex + 1]
+    ? argv[rootIndex + 1]
+    : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..'));
+  if (first !== 'check' && first !== 'explain') {
+    stderr(POLICY_USAGE);
+    return 2;
+  }
+  const result = checkPolicy(root, { runBudgets: first === 'check' });
+  if (first === 'explain') {
+    const markdown = `${renderPolicySection(root, result).join('\n')}\n`;
+    if (json) stdout(JSON.stringify({ ...result, markdown }, null, 2));
+    else stdout(markdown.trimEnd());
+    return result.ok ? 0 : 1;
+  }
+  if (json) {
+    stdout(JSON.stringify(result, null, 2));
+  } else if (result.ok) {
+    stdout(`[policy] ✅ 策略面一致（机制 ${result.summary.mechanisms?.total || 0} 行）`);
+  } else {
+    stderr(`[policy] ❌ ${result.problems.length} 项策略问题`);
+    for (const problem of result.problems) stderr(`  [${problem.code}] ${problem.message}`);
+  }
+  return result.ok ? 0 : 1;
+}
+
+const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : '';
+if (invokedPath === fileURLToPath(import.meta.url)) {
+  process.exitCode = runPolicyCli(process.argv.slice(2));
 }

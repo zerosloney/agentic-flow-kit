@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zerosloney/agentic-flow-kit/schemas/policy.schema.json",
+  "title": "agentic-flow-kit policy",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "registry", "surfaces", "mechanisms", "budgets", "enums", "roles"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "registry": { "type": "string", "minLength": 1 },
+    "surfaces": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "gateBudgets",
+        "ruleBudgets",
+        "workflowEnums",
+        "pipeline",
+        "steering",
+        "agentEval",
+        "modelRoles",
+        "prReview"
+      ],
+      "properties": {
+        "gateBudgets": { "type": "string" },
+        "ruleBudgets": { "type": "string" },
+        "workflowEnums": { "type": "string" },
+        "pipeline": { "type": "string" },
+        "steering": { "type": "string" },
+        "agentEval": { "type": "string" },
+        "modelRoles": { "type": "string" },
+        "prReview": { "type": "string" }
+      }
+    },
+    "optionalSurfaces": {
+      "type": "array",
+      "items": { "enum": ["gateBudgets", "ruleBudgets", "workflowEnums", "pipeline", "steering", "agentEval", "modelRoles", "prReview"] },
+      "uniqueItems": true
+    },
+    "mechanisms": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["statuses", "types", "required"],
+      "properties": {
+        "statuses": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "types": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "required": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        }
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["gateMaxMs", "ruleMaxBytes"],
+      "properties": {
+        "gateMaxMs": { "type": "integer", "minimum": 1 },
+        "ruleMaxBytes": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "enums": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["workflowKeys", "pipelineRequiredStages", "pipelineStopTypes"],
+      "properties": {
+        "workflowKeys": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "pipelineRequiredStages": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        },
+        "pipelineStopTypes": {
+          "type": "array",
+          "items": { "type": "string" },
+          "uniqueItems": true
+        }
+      }
+    },
+    "roles": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["modelRoles", "prReviewRoles", "modelFallbacks"],
+      "properties": {
+        "modelRoles": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "prReviewRoles": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "uniqueItems": true
+        },
+        "modelFallbacks": {
+          "type": "array",
+          "items": { "type": "string" },
+          "minItems": 1,
+          "uniqueItems": true
+        }
+      }
+    }
+  }
+}

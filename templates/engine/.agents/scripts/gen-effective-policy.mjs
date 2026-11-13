@@ -16,7 +16,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { POLICIES, loadKitPolicy } from './policy.mjs';
+import { POLICIES, loadKitPolicy, renderPolicySection } from './policy.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
@@ -82,6 +82,11 @@ function render(viewDateStr) {
     lines.push(`| \`${key}\` | ${raw} | ${c[0]} | ${c[1]} | ${c[2]} | ${status} |`);
   }
   lines.push('');
+  // R3-1：把 policy.json 的机器策略面并入同一份人类视图；无 policy.json 的存量目标静默跳过。
+  if (fs.existsSync(path.join(ROOT, '.agents', 'config', 'policy.json'))) {
+    lines.push(...renderPolicySection(ROOT));
+    lines.push('');
+  }
   lines.push('<!-- GENERATED:BEGIN — gen-effective-policy.mjs 整段重写，手工说明写在本行之前 -->');
   return lines.join('\n') + '\n';
 }

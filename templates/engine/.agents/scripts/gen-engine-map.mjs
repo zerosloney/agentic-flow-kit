@@ -12,29 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-
-// ---- 机制台账解析（2026-11-08 内联：原复用 mechanism-retire-watch.mjs，该脚本随减重档 3-U1 退役）----
-// STATUSES：状态列闭集；statusOf 剥离「现役 [检出型]」类类型标记（标记不参与状态判定）；
-// parseRegistry：7 列管道表 → 行对象数组，列序固定。
-const STATUSES = ['现役', '待退役', '已退役'];
-const statusOf = (raw) => String(raw).replace(/\s*\[[^\]]*\]\s*$/, '').trim();
-const tagOf = (raw) => {
-  const m = String(raw).match(/\[([^\]]*)\]\s*$/);
-  return m ? m[1].trim() : '';
-};
-function parseRegistry(text) {
-  const rows = [];
-  for (const l of String(text).split(/\r?\n/)) {
-    if (!/^\|/.test(l)) continue;
-    if (/^\|[\s:|-]+\|?\s*$/.test(l)) continue; // 分隔行
-    const cells = l.split('|').slice(1, -1).map((c) => c.trim());
-    if (cells.length !== 7) continue;
-    if (cells[0] === '机制') continue; // 表头
-    const [name, gate, criterion, threshold, lastTrigger, statusRaw, deadline] = cells;
-    rows.push({ name, gate, criterion, threshold, lastTrigger, status: statusOf(statusRaw), statusRaw, tag: tagOf(statusRaw), deadline });
-  }
-  return rows;
-}
+import { MECHANISM_STATUSES as STATUSES, parseMechanismRegistry as parseRegistry } from './policy.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);

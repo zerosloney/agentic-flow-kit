@@ -158,7 +158,8 @@ Hook 接线在 `src/install/hooks.mjs`：中性规格来自引擎模板 `.agents
 - 修复保护：`fix-task.mjs` 落 `.agents/cache/fix-task.json`，`pre-write-check.cjs` §2.5 在窗口内拦既有测试写入。
 - 结果指标：`outcome-metrics.mjs`；闭环状态机静态检查：`check-pipeline-state.mjs` + `.agents/config/pipeline.json`。
 - 模型升级治理：`.agents/skills/model-upgrade/SKILL.md`；严格度分层：`.agents/config/steering.json` + `steering.mjs`。
-- **新增硬门禁必须登记** `.agents/config/mechanism-registry.md`；该文件受 `rule-budgets.txt` 字节/单行预算约束，新增行前先量预算。
+- 策略即代码：`.agents/config/policy.json`（`schemas/policy.schema.json`）声明策略面路径、机制闭集、预算上限、枚举键与角色映射；`.agents/scripts/policy.mjs check|explain` 双向核对 `mechanisms.required` 与 `mechanism-registry.md`、复用 `rule-budget.mjs --all` 执法预算、校验 `workflow-enums.txt` / `pipeline.json` / `model-roles.json` / `pr-review.json` 引用；`gen-effective-policy.mjs` 复用同一视图生成 `workflow/effective-policy.md`。CI 跑 `npm run policy:check`。
+- **新增硬门禁必须登记** `.agents/config/mechanism-registry.md`，并同步 `policy.json` 的 `mechanisms.required`（双向核对会拒绝漏登）；该文件受 `rule-budgets.txt` 字节/单行预算约束，新增行前先量预算。
 - 未完成/已完成的缺口与验收口径见根目录 `BACKLOG.md`。
 
 ## TUI
