@@ -37,6 +37,10 @@
       "type": "string",
       "description": "静态宿主模板目录（相对 JSON 文件或绝对路径）。省略时使用与 JSON 同名的兄弟目录（如 hosts/myhost/）。"
     },
+    "skillMeta": {
+      "type": "string",
+      "description": "技能入口模板目录（相对 JSON 或绝对路径），可含 skill-pointer.md / skill-index.md；省略时使用安装器内置的中性模板。"
+    },
     "commands": {
       "type": ["object", "null"],
       "additionalProperties": false,
@@ -121,7 +125,7 @@
               "required": ["form", "template"],
               "properties": {
                 "form": { "enum": ["env", "relative", "args", "cli", "cli-args"] },
-                "template": { "type": "string", "description": "必须包含 {script} 占位符。" }
+                "template": { "type": "string", "description": "cli / cli-args 必须包含 {hook}；env / relative / args 必须包含 {script}。" }
               }
             }
           }
@@ -163,6 +167,16 @@
       "properties": {
         "level": { "enum": ["managed", "permissions", "hooks", "none"] },
         "settings": { "type": "string", "description": "加固配置文件名（相对宿主模板目录），不作为独立文件安装。" }
+      }
+    },
+    "mcp": {
+      "type": ["object", "null"],
+      "description": "MCP 接线能力；声明后安装器把中性 server 列表合并进该文件。",
+      "additionalProperties": false,
+      "required": ["file"],
+      "properties": {
+        "file": { "type": "string", "description": "MCP 配置文件（相对项目根，如 .mcp.json 或 opencode.json）。" },
+        "format": { "enum": ["claude", "opencode"], "default": "claude" }
       }
     },
     "modelProbe": {

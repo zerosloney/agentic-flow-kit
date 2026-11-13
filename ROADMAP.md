@@ -42,7 +42,7 @@
 | R3-7 | 可观测与成本 | 3 | M | `outcome-metrics.mjs`、`metrics-core.mjs` | TODO |
 | R3-8 | 沙箱与供应链 | 3 | L | devcontainer / MCP 权限 / SBOM | TODO |
 | R3-9 | manifest 迁移框架 | 3 | M | `migrations/`、`manifest.schemaVersion` | DONE |
-| R3-10 | `new-host` 生成器与模板 lint | 3 | M | `tools/new-host.mjs`、`npm run lint:templates` | TODO |
+| R3-10 | `new-host` 生成器与模板 lint | 3 | M | `tools/new-host.mjs`、`npm run lint:templates` | DONE |
 | R4-1 | 多仓 Workspace 协调 | 4 | M | `src/commands/workspace.mjs`、`.flow-kit/workspace.json` | DONE |
 | R4-2 | Spec / Tasks / Verify 工件规范 | 4 | M | `templates/scaffold/workflow/specs/` + 校验脚本 | DONE |
 | R4-3 | eval-log 证据格式 | 4 | S | `agent-eval.mjs`、`schemas/eval-log.schema.json` | DONE |
@@ -252,7 +252,7 @@
 - **现状**：`upgrade` 只能重放，结构变更（文件拆分/合并/改名）需要手工处理。
 - **目标**：manifest 增加 `schemaVersion`；`migrations/<from>-<to>.mjs` 在 upgrade 前执行，支持 `--dry-run` 与失败回滚说明。
 - **验收**：旧 manifest 夹具可迁移；重复执行幂等；迁移不影响用户文件。规模 `M`。
-- **落地（2026-11-13）**：`src/install/migrations.mjs` 按 `schemaVersion` 顺序加载 `migrations/<from>-<to>.mjs`，当前版本 1（`0-1.mjs` 初始化）；升级前在内存中逐步迁移，全部成功才写 manifest，失败零写盘；`--dry-run` 只报告；manifest 版本高于工具当前支持时拒绝升级；`upgrade --json` 增加 `migration` 报告。
+- **落地（2026-11-13）**：`src/install/migrations.mjs` 按 `schemaVersion` 顺序加载 `migrations/<from>-<to>.mjs`，当前版本 2（`0-1.mjs` 初始化、`1-2.mjs` 收缩运行时安装面）；升级前在内存中逐步迁移，全部成功才写 manifest，失败零写盘；`--dry-run` 只报告；manifest 版本高于工具当前支持时拒绝升级；`upgrade --json` 增加 `migration` 报告。
 
 ### R3-10 `new-host` 生成器与模板 lint
 
@@ -261,6 +261,11 @@
   - `npm run lint:templates` 校验 frontmatter、i18n 覆盖、运行态污染、`hosts × tiers × langs` 渲染矩阵；
   - 纳入 CI。
 - **验收**：生成的新宿主开箱通过测试；故意破坏模板可失败。规模 `M`。
+- **落地（2026-11-13）**：
+  - `flow-kit new-host <name>`（`src/commands/new-host.mjs`，`tools/new-host.mjs` 薄封装）生成外部宿主插件到 `<out>/.flow-kit/hosts/`：定义 JSON、命令/子代理指针壳（从引擎 `commands` / `roles` 派生）、技能入口模板（`skillMeta`），可选 `--hooks`（`cli` 形式）、`--permissions`、`--mcp claude|opencode`；写盘后复用 `validateHostDefinition` 自校验，不修改内置注册表。生成物可被安装器自动发现，安装后 `doctor` 的 hooks / permissions / MCP 对账全过。
+  - 外部宿主定义补齐 `mcp`、`skillMeta` 与 `cli` / `cli-args` hook 形式；`schemas/host.schema.json` 与 `src/hosts/external.mjs` 的键/枚举由 lint 双向核对。
+  - `npm run lint:templates`（`tools/lint-templates.mjs`）检查：skill/host 指针 frontmatter、installer 中英文键对齐、en 覆盖、`hosts × tiers × langs` 渲染矩阵（残留占位符、JSON 可解析、运行态路径不进安装面、`flow-kit run|hook` 与 skill/command/role 引用可解析）。CI 增加 `npm run lint:templates`。
+  - 测试：`tests/new-host.test.mjs`（生成→安装→doctor）、`tests/lint-templates.test.mjs`（全量通过 + 破坏 frontmatter / 指针 / locale 必须失败）。
 
 ## 6. Wave 4 — 方法论对齐
 

@@ -124,9 +124,11 @@ function addGeneratedSkillSurfaces({ plan, hosts, skillEntries, t }) {
   for (const host of hosts) {
     const h = HOSTS[host];
     if (!h?.skills) continue;
+    // 外部宿主可自带技能入口模板（skillMeta）；内置宿主用包内 host-meta。
+    const metaDir = h.skillMeta || path.join(HOST_META, host);
 
     if (h.skills.mode === 'native') {
-      const template = readTemplate(path.join(HOST_META, host, 'skill-pointer.md'), [
+      const template = readTemplate(path.join(metaDir, 'skill-pointer.md'), [
         '---',
         'name: {{skillName}}',
         'description: {{skillDescription}}',
@@ -142,7 +144,7 @@ function addGeneratedSkillSurfaces({ plan, hosts, skillEntries, t }) {
           pointer: t('host.skillPointer', { path: skill.targetRel }),
         };
         plan.push({
-          srcAbs: path.join(HOST_META, host, 'skill-pointer.md'),
+          srcAbs: path.join(metaDir, 'skill-pointer.md'),
           targetRel: `${h.dir}/${h.skills.dir}/${skill.name}/${h.skills.file}`,
           category: 'host',
           // 生成器读取语言覆盖后的技能 frontmatter，优先于静态宿主技能回退件。
@@ -160,7 +162,7 @@ function addGeneratedSkillSurfaces({ plan, hosts, skillEntries, t }) {
       ? `${h.dir}/${h.commands.dir}/wf-skills.md`
       : `${h.dir}/SKILLS.md`;
     const templateAbs = hasCommands
-      ? path.join(HOST_META, host, 'skill-index.md')
+      ? path.join(metaDir, 'skill-index.md')
       : path.join(HOST_META, 'SKILLS.md');
     const template = readTemplate(templateAbs, [
       '---',
