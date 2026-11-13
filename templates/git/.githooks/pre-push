@@ -2,7 +2,7 @@
 // Git 原生 pre-push hook（经 core.hooksPath 挂载，git push 时触发；全 node 化——
 // git 仍以自带 sh 启动本文件（钩子机制要求），但她bang 即 node，PATH 无 sh 不影响任何逻辑。
 // 写法为 CommonJS——无扩展名文件 node 缺省按 CJS 解析，不依赖 ≥22.7 的 ESM 语法探测）
-// 跑 node .agents/scripts/check-loop.mjs：默认只扫 hard 5 段（配对 / 回归证据 / 证据真相 / 确认指纹 / 收敛对账）
+// 跑 flow-kit run check-loop：默认只扫 hard 5 段（配对 / 回归证据 / 证据真相 / 确认指纹 / 收敛对账）
 // 构建门（自 pre-commit 后移）：另跑 commit-check.cjs --range <old> <new> 按推送范围条件构建
 // （常规提交时刻只做敏感扫描——提交内环提速；构建执法集中到推送与关单）。
 // （去 sh 化收尾：兼容 shim check-loop.sh 已删，钩子直调 .mjs）
@@ -29,42 +29,26 @@ if (top.status !== 0 || !top.stdout.trim()) {
 }
 process.chdir(top.stdout.trim());
 
-const SCRIPT = '.agents/scripts/check-loop.mjs';
-// 闭环脚本随仓走——缺失 = checkout 残缺/误删，fail-closed 阻断（prepush-script-missing-failclosed）
-if (!fs.existsSync(SCRIPT)) {
-  console.error(`pre-push: 未找到 ${SCRIPT}——闭环扫描无法执行，推送已阻止（脚本随仓走；git checkout -- ${SCRIPT} 恢复后重试）`);
-  process.exit(1);
-}
+const flowKit = (args, opts = {}) => spawnSync('flow-kit', args, {
+  shell: process.platform === 'win32',
+  ...opts,
+});
+const runScript = (name, args = [], opts = {}) => flowKit(['run', name, ...args], opts);
+const runHook = (name, args = [], opts = {}) => flowKit(['hook', name, ...args], opts);
 
-// 构建门（自 pre-commit 后移）：非 experiment 目标推送按 old..new 范围跑条件构建
-// （commit-check.cjs --range——匹配逻辑单源：触及 .cs/.sln/.csproj → dotnet build、触及 frontend/
-// → npm run build；远端全零 sha 的新分支首推 = 全量构建语义）。experiment/* 目标降级 advisory。
-// 手动运行（无 stdin 推送行）无范围事实，构建门跳过。脚本缺失 fail-closed。
-const BUILD_CHECK = '.agents/hooks/commit-check.cjs';
-if (!fs.existsSync(BUILD_CHECK)) {
-  console.error(`pre-push: 未找到 ${BUILD_CHECK}——构建门无法执行，推送已阻止（脚本随仓走；git checkout -- ${BUILD_CHECK} 恢复后重试）`);
-  process.exit(1);
-}
+// 闭环扫描走包内 runtime；入口缺失由 flow-kit 以非零退出，等同 fail-closed。
+const runLoop = (args = []) => runScript('check-loop', args, { stdio: 'inherit' });
 
-// 推送级改动面门（2026-11-09 建）：非 experiment 目标推送按 old..new 范围跑 check-scope-range——
-// 范围内新增/修改的 plan 声明文件并集 vs 范围 diff，只判越界方向（改了未声明）；无 plan 变更 skip。
-// 补提交时刻 check-confirm-order 的盲面：确认门只看单条提交，多提交合推夹带 plan 外文件由此拦截。
-// 脚本缺失 fail-closed（与 BUILD_CHECK 同口径）。
-const SCOPE_RANGE = '.agents/scripts/check-scope-range.mjs';
-if (!fs.existsSync(SCOPE_RANGE)) {
-  console.error(`pre-push: 未找到 ${SCOPE_RANGE}——推送级改动面门无法执行，推送已阻止（脚本随仓走；git checkout -- ${SCOPE_RANGE} 恢复后重试）`);
-  process.exit(1);
-}
+// 构建门走包内 commit-check hook；入口缺失由 flow-kit 返回非零（fail-closed）。
+// 推送级改动面门同理走包内 check-scope-range。
 const rangeArgsOf = (remoteSha, localSha) => ['--range', remoteSha && !/^0+$/.test(remoteSha) ? remoteSha : '0'.repeat(40), localSha];
-
-const runLoop = (args = []) => spawnSync(process.execPath, [SCRIPT, ...args], { stdio: 'inherit' });
 
 // hard 5 段最小回归条件段已于 2026-10-31 摘除（c16eec41）、2026-11-06 重新摘除：其套件
 // `.agents/scripts/check-loop-hard-sections.test.mjs` 从未入库（被 .gitignore 的 `.agents/**/*.test.mjs`
 // 排除），引用与「文件随仓走」自相矛盾——钩子对任何推送都落在「文件缺失」分支。c16eec41 已删净本段，
 // 但 60da7324 合并时本文件取了含死段的那一侧（loud-skip 版），摘除被回滚。本次按 commit 原意重新摘除，
 // 并同步修 runtime-env.md §5 与 papercuts 台账失实行。hard 段回归改由入库探针
-// `node .agents/scripts/check-loop-rev-semantics.mjs` 手动承担（engine-tests 全量已于 2026-10-28 退役）。
+// `flow-kit run check-loop-rev-semantics` 手动承担（engine-tests 全量已于 2026-10-28 退役）。
 
 
 // 后端集成测试档（2026-10-29 backend-unit-tier，owner 拍板「关单只跑单测」）：本地关单 backend-test
@@ -98,14 +82,9 @@ const touchedBackend = (oldSha, newSha) => {
 
 // 接线一致性（2026-10-29 P0）：宿主接线宣称 ↔ 实态对账——引擎测试面退役后接线漂移的唯一机检
 // （实证案例见 check-hook-wiring.mjs 头注：registry 记坐实/实态 disabled、判据脚本无挂载点）。
-// 触发面：推送范围触及宿主壳 / .agents/hooks/ / registry；新分支/范围判不出 → 保守跑。
-const WIRING_CHECK = '.agents/scripts/check-hook-wiring.mjs';
+// 触发面：推送范围触及宿主壳 / registry；新分支/范围判不出 → 保守跑。
 const WIRING_FACE_RE = /^(?:\.zcode|\.trae|\.codebuddy|\.opencode|\.claude|\.qwen|\.pi|\.cline|\.commandcode|\.qoder)\//;
 const touchedWiring = (oldSha, newSha) => {
-  if (!fs.existsSync(WIRING_CHECK)) {
-    console.error(`pre-push: 未找到 ${WIRING_CHECK}——接线对账脚本随仓走，推送已阻止`);
-    return true;
-  }
   if (/^0+$/.test(oldSha)) return true;
   const d = spawnSync('git', ['-c', 'core.quotepath=off', 'diff', '--name-only', '--no-renames', `${oldSha}..${newSha}`], { encoding: 'utf8' });
   if (d.status !== 0) return true; // 范围判不出 → 保守跑
@@ -135,19 +114,19 @@ for (const line of stdinText.split(/\r?\n/)) {
   // 收紧为精确匹配 refs/heads/experiment/ 分支命名空间前缀。
   if (/^refs\/heads\/experiment\//.test(remoteRef)) {
     console.error(`pre-push: experiment/* 目标分支（${remoteRef}）——闭环扫描降级 advisory，不阻断`);
-    const adv = spawnSync(process.execPath, [SCRIPT, '--rev', localSha]);
+    const adv = runScript('check-loop', ['--rev', localSha], { encoding: 'utf8' });
     const advOut = `${adv.stdout || ''}${adv.stderr || ''}`;
     if (adv.status !== 0) console.error(`pre-push: （advisory）闭环断档已在上方列出——experiment 泳道可推送\n${advOut}`);
-    const advB = spawnSync(process.execPath, [BUILD_CHECK, ...rangeArgsOf(remoteSha, localSha)], { stdio: 'inherit' });
+    const advB = runHook('commit-check', rangeArgsOf(remoteSha, localSha), { stdio: 'inherit' });
     if (advB.status !== 0) console.error('pre-push: （advisory）构建门未过已在上方列出——experiment 泳道不阻断推送');
   } else {
     // C3（2026-10-28）：hard 扫描改扫推送范围 old..new——中间提交不再只看尖端；新分支（远端全零）回退 --rev
     const r = /^0+$/.test(remoteSha) ? runLoop(['--rev', localSha]) : runLoop(['--range', remoteSha, localSha]);
     if (r.status !== 0 && rc === 0) rc = r.status === null ? 1 : r.status;
-    const rb = spawnSync(process.execPath, [BUILD_CHECK, ...rangeArgsOf(remoteSha, localSha)], { stdio: 'inherit' });
+    const rb = runHook('commit-check', rangeArgsOf(remoteSha, localSha), { stdio: 'inherit' });
     if (rb.status !== 0 && rc === 0) rc = rb.status === null ? 1 : rb.status;
     // 推送级改动面门：范围含 plan 变更才对账（脚本内自判 skip）；old 全零新分支首推脚本内 skip
-    const rs = spawnSync(process.execPath, [SCOPE_RANGE, remoteSha, localSha, '--strict'], { stdio: 'inherit' });
+    const rs = runScript('check-scope-range', [remoteSha, localSha, '--strict'], { stdio: 'inherit' });
     if (rs.status !== 0 && rc === 0) rc = rs.status === null ? 1 : rs.status;
     // 后端集成测试档：关单单测化后集成的执法点（范围触后端面才跑；CI 重档另有全量兜底）
     //   2026-11 影响面选测：单测先跑 → 按推送净 diff 选集成子集 → 共享层/工程文件/未登记
@@ -178,7 +157,7 @@ for (const line of stdinText.split(/\r?\n/)) {
     }
     // 接线一致性：触接线面才跑（实测 <1s）
     if (touchedWiring(remoteSha, localSha)) {
-      const rw = spawnSync(process.execPath, [WIRING_CHECK], { stdio: 'inherit' });
+      const rw = runScript('check-hook-wiring', [], { stdio: 'inherit' });
       if (rw.status !== 0 && rc === 0) rc = rw.status === null ? 1 : rw.status;
     }
   }

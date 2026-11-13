@@ -20,7 +20,7 @@ concurrency: 2
 |----|-------|------|------|---------------|--------------|-------------------|------|-------|---------|
 | backend | — | implementer | — | 实现后端 X | src/api/** | 项目测试过 | | | 1 |
 | frontend | — | implementer | — | 改前端 Y | web/** | 构建过 | | | 0 |
-| gate-all | backend,frontend | — | — | — | — | — | node .agents/scripts/verify.mjs | | |
+| gate-all | backend,frontend | — | — | — | — | — | flow-kit run verify.mjs | | |
 | confirm-deploy | gate-all | — | — | 用户对话内确认可上 staging | — | 一句「可以」 | | 用户确认 | |
 | deploy-check | confirm-deploy | — | 部署验证 | env=staging | | 部署命令 exit 0 | | | 0 |
 | review | deploy-check | independent-reviewer | — | 评审两域改动 | | 符合 plan 与判据 | | | 0 |
@@ -40,8 +40,8 @@ concurrency: 2
 **run journal**（断点续跑与重试计量）：每个 stage 每次尝试出结果（pass / fail / blocked）即记一行；中止后重跑先看 status——已 pass 的 stage 不重跑，从就绪层续：
 
 ```bash
-node .agents/scripts/wf-journal.mjs add --wf <编排名> --stage <id> --status pass --form human   # fail/blocked 同式；--form ∈ role|step|gate|human
-node .agents/scripts/wf-journal.mjs status --wf <编排名>                                        # 已完成 / 就绪（含重试就绪×N）/ 待定
+flow-kit run wf-journal.mjs add --wf <编排名> --stage <id> --status pass --form human   # fail/blocked 同式；--form ∈ role|step|gate|human
+flow-kit run wf-journal.mjs status --wf <编排名>                                        # 已完成 / 就绪（含重试就绪×N）/ 待定
 ```
 
 journal 落 `.agents/cache/orchestration-runs.jsonl`（本地运行态，可丢弃；同 run 同 stage 多行按末次生效，attempt 自动计次；`--new-run` 新起一轮）。
@@ -72,4 +72,4 @@ params: env（目标环境）；timeout-min（可选，默认 10）
 - **run journal 三条**：① 每个 stage 每次尝试出结果即 `wf-journal.mjs add` 记一行（含重试与 human 门结论）；② 中止后重跑先 `status`——已 pass 不重跑，从就绪层续；③ 收尾可把本 run 的 status 汇总粘 `workflow/delegations.md` 留痕（聚合脚本不读 journal）。
 - **journal 是自报态，非验证态**：run journal 由执行者（宿主 AI）自己记——concurrency / retry / 断点续跑语义的保证取决于记账纪律，编排层无运行时派发器强制（wf-run 已废，执行按本机制文档语义）；中止续跑时对「已 pass」结论保留人工核对权（audit-gate-hardening 边界声明）。
 - 留痕：每个派单 / step stage 完成后向 `workflow/delegations.md` 委派结果表追加一行（`一次通过` / `返工×N` / `返工待修`，口径与 agg-delegations.mjs 对齐）。
-- 解析校验先行（机器门）：`node .agents/scripts/workflows-check.mjs`——role ∈ `.agents/roles/`、step ∈ `steps/`、after 引用存在且无环、四形态恰填一项、retries/concurrency 数值合法；任一不过即拒，不执行。
+- 解析校验先行（机器门）：`flow-kit run workflows-check.mjs`——role ∈ `.agents/roles/`、step ∈ `steps/`、after 引用存在且无环、四形态恰填一项、retries/concurrency 数值合法；任一不过即拒，不执行。

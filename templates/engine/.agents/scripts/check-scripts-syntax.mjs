@@ -10,7 +10,7 @@
 // `scripts/verify` 顶层 0 个 .mjs 时静默空转、总数不变无痕迹）；不 import 任何引擎件，零依赖可独立调度。
 // 性能（scripts-syntax-parallel）：node --check 无原地解析 ESM 的 API，只能逐文件起子进程
 //       （单次 ~70ms × 117 文件）；改工作池并发（min(8, cpus-2)）后本机 8.1s → 4.2s，判红集合不变。
-// 用法：node .agents/scripts/check-scripts-syntax.mjs [目录...]（相对仓库根；缺省 .agents/scripts .agents/hooks
+// 用法：flow-kit run check-scripts-syntax.mjs [目录...]（相对仓库根；缺省 .agents/scripts .agents/hooks
 //       scripts/verify——第三项为 backend 门执行器所在，2026-10-24 复核 P1 修复纳入守护；
 //       CHECK_LOOP_ROOT 可覆写仓库根，与 check-loop/verify 同口径）
 // 沿革：guardian-selfcheck（审计 P0-1 立项，verify.mjs GATES 首门消费）。
@@ -23,7 +23,9 @@ import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = process.env.FLOW_KIT_PROJECT_ROOT || process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
-const DEFAULT_DIRS = ['.agents/scripts', '.agents/hooks', 'scripts/verify'];
+const DEFAULT_DIRS = process.env.FLOW_KIT_RUNTIME_SCRIPTS
+  ? [process.env.FLOW_KIT_RUNTIME_SCRIPTS, process.env.FLOW_KIT_RUNTIME_HOOKS, 'scripts/verify'].filter(Boolean)
+  : ['.agents/scripts', '.agents/hooks', 'scripts/verify'];
 // 项目侧目录：不存在时跳过（新装户可能没有 scripts/verify）；存在但为空仍 fail-closed。
 const OPTIONAL_DIRS = new Set(['scripts/verify']);
 

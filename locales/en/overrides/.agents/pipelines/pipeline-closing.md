@@ -10,12 +10,12 @@ concurrency: 2
 | id | after | role | step | task / params | files (authorization) | accept (acceptance criteria) | gate | human | retries |
 |----|-------|------|------|---------------|--------------|-------------------|------|-------|---------|
 | author | — | implementer | — | Draft one L1 plan (fill-plan.mjs --level L1 + AI fills it in), status draft. Do not create a separate intent | workflow/plans/<date>-<topic>.md | plan contains entry point / change approach / constraints and risks / verification plan / acceptance criteria, status draft | | | 1 |
-| gate-doc | author | — | — | — | — | — | node .agents/scripts/workflows-check.mjs | | |
+| gate-doc | author | — | — | — | — | — | flow-kit run workflows-check.mjs | | |
 | confirm | gate-doc | — | — | Review the full plan draft, one "OK" within the user conversation → plan status draft → approved + backfill the `「确认与复核」` section | — | plan status approved + "Confirmation result: approved (YYYY-MM-DD confirmed within user conversation)" | | User confirmation (plan confirmation gate) | |
 | plan-commit | confirm | implementer | — | Commit the plan initiation commit (docs(workflow)) | workflow/plans/, workflow/INDEX.md | pre-commit hooks all pass; commit message contains a summary of the plan's change surface | | | 0 |
 | build | plan-commit | implementer | — | Execute per plan `§改动面` | see plan | all plan change surface completed | | | 1 |
 | gate-test | build | — | — | — | — | — | project test command (must be all green) | | |
-| gate-loop | build | — | — | — | — | — | node .agents/scripts/check-loop.mjs (EXIT=0 and no HARD-BLOCK) | | |
+| gate-loop | build | — | — | — | — | — | flow-kit run check-loop.mjs (EXIT=0 and no HARD-BLOCK) | | |
 | feat-commit | gate-test,gate-loop | implementer | — | Commit feat commit (feat(module-name)) | all changed files in the workspace | pre-commit hooks all pass; commit message contains a summary of the build change surface | | | 0 |
 | closeout | feat-commit | implementer | — | Tick plan acceptance + plan → done + closeout docs commit for the record; sync INDEX.md (if applicable) | workflow/plans/<date>-<topic>.md, workflow/INDEX.md | plan status done; acceptance checklist contains commit SHA evidence | | | 0 |
 
@@ -25,4 +25,4 @@ concurrency: 2
 - The declaration may be executed only after the plan is confirmed — this workflow is the executor for plan task breakdown; the plan draft is confirmed within the user conversation first.
 - Subagents do not cross confirmation gates and do not commit / push (dispatch red-line row: modify only authorized files; missing input or need to deviate → `BLOCKER:` stop). Confirmation gates are always expressed as human-form rows (the confirm row is one), and a subagent must never act on the user's behalf.
 - Record keeping: after each dispatch stage completes, append one line to the delegation results table in `workflow/delegations.md` (`一次通过` / `返工×N` / `返工待修`).
-- Parsing validation comes first (machine gate `node .agents/scripts/workflows-check.mjs`): role ∈ `.agents/roles/`, after references exist and are acyclic, exactly one of the four forms is filled — any failure → reject, do not execute.
+- Parsing validation comes first (machine gate `flow-kit run workflows-check.mjs`): role ∈ `.agents/roles/`, after references exist and are acyclic, exactly one of the four forms is filled — any failure → reject, do not execute.

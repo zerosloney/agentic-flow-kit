@@ -789,9 +789,9 @@ if (staged) {
   }
   if (problems.length) {
     console.error('台账不可变（--staged）— BLOCK:\n' + problems.join('\n'));
-    console.error('  修法：台账历史行禁删改——误写走追加补偿行（node .agents/scripts/confirm-doc.mjs ...）；所有者明令清理须携带逐行 sha256 的 ledger-prune-manifest.json 同笔暂存');
+    console.error('  修法：台账历史行禁删改——误写走追加补偿行（flow-kit run confirm-doc.mjs ...）；所有者明令清理须携带逐行 sha256 的 ledger-prune-manifest.json 同笔暂存');
     if (problems.some((p) => p.startsWith('- [台账重写] .agents/confirmations.d/'))) {
-      console.error('  分片重写另因：分片按 doc 命名、单端追加；跨端并发确认同一 doc 时须有 merge=jsonl-union 驱动（node .agents/scripts/check-local-gates.mjs --fix 配置）——驱动生效则合并自动取并集、不破坏前缀');
+      console.error('  分片重写另因：分片按 doc 命名、单端追加；跨端并发确认同一 doc 时须有 merge=jsonl-union 驱动（flow-kit run check-local-gates.mjs --fix 配置）——驱动生效则合并自动取并集、不破坏前缀');
     }
     process.exit(1);
   }

@@ -18,7 +18,7 @@ description: 无人值守长跑合同——长任务/过夜时逐单元签收、
 ## 逐单元签收（每个 implement / fix 工单）
 
 1. 按授权文件实现，偏离即停（计划外文件 / 公共接口 / 新依赖）。
-2. 跑 `node .agents/scripts/verify.mjs --scope`，必须退出码 0。
+2. 跑 `flow-kit run verify.mjs --scope`，必须退出码 0。
 3. 记录绿凭证的 `headShort`（s15 指纹）；**HEAD 变了或凭证超 24h 窗 → 重跑**，不沿用旧绿。
 4. 签收后才 `next`；不绿不推进，不攒批。
 

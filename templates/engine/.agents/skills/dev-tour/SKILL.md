@@ -38,16 +38,16 @@ description: 把 spec/plan 的步骤与改动文件生成可交互开发全景�
 ## 生成 / 刷新
 ```bash
 # 静态快照（默认 .agents/cache/tours/<type>-<name>.html）
-node .agents/scripts/gen-dev-tour.mjs workflow/plans/<name>.md
+flow-kit run gen-dev-tour.mjs workflow/plans/<name>.md
 
 # 对比已提交的整段任务（默认 HEAD = 当前未提交工作树）
-node .agents/scripts/gen-dev-tour.mjs workflow/plans/<name>.md --base origin/main
+flow-kit run gen-dev-tour.mjs workflow/plans/<name>.md --base origin/main
 
 # 只看模型（调试解析）
-node .agents/scripts/gen-dev-tour.mjs workflow/plans/<name>.md --json
+flow-kit run gen-dev-tour.mjs workflow/plans/<name>.md --json
 
 # 门禁化：层兜底/无步骤/实现步骤无文件时拒产（exit 1；纯验证步骤按标题豁免）
-node .agents/scripts/gen-dev-tour.mjs workflow/plans/<name>.md --strict
+flow-kit run gen-dev-tour.mjs workflow/plans/<name>.md --strict
 ```
 
 每次生成会打印「解析命中：直认 X/Y 步 … · 路径猜测 Z 处」行——直认率 <100% 先看是不是标题失约，再决定是否接受兜底归集；命中行之后逐条打印「⚠ 第 N 行：<标题>：<原因>」，把失约定位到行（步骤无对齐文件块 / 文件块锚点未对齐任何步骤 / 依赖引用未解析 / 层兜底触发，对应模型 `parseHealth.issues` 的 `{line,title,kind}`；`pathGuess` 与 issues 一律 advisory，不参与 `--strict` 拒产）。页面顶部警告条消费同一份 issues：按 `kind` 归并成「文件块未对齐 / 步骤缺文件 / 依赖未解析」几类，组内再展开逐行；`step-no-files` 中标题含「验证步骤/单测/UI 实测/静态门」的条目单列为“验证步骤”，不计入待修。
@@ -55,11 +55,11 @@ node .agents/scripts/gen-dev-tour.mjs workflow/plans/<name>.md --strict
 实时版（推荐 Build 阶段一直开着）：
 ```bash
 # 自动拉起看板 + 打印本 plan 的实时链接（幂等复用，不弹浏览器；拉不起来只告警不阻断）
-node .agents/scripts/auto-tour.mjs workflow/plans/<name>.md
+flow-kit run auto-tour.mjs workflow/plans/<name>.md
 # → http://127.0.0.1:8933/tour?file=workflow/plans/<name>.md
 
 # 只拉看板不指定文档
-node .agents/scripts/ensure-board.mjs
+flow-kit run ensure-board.mjs
 ```
 实时页每 5s 拉 `/api/tour`，文档保存 / 工作树变化会自动重绘，保留当前选中步骤与视图。
 
@@ -73,7 +73,7 @@ node .agents/scripts/ensure-board.mjs
 - **联动**：点站点/文件/步骤卡/时序消息都会同步左侧树与右侧说明；`←/→` 切步骤，`Esc` 清除；「跟着流程走」自动播放。
 
 ## 适用规模（2026-11-11 实测）
-复现：`node .agents/tests/tools/gen-synthetic-plan.mjs --bench`（合成 plan 落 `.agents/cache/tour-perf/`；build 计时走 `buildTour({git})` 注入 300 个修改文件，3 轮取最大；HTML 由 `gen-dev-tour.mjs --no-diff` 生成，git 面为当刻真实工作树，体积以文档面为主）。
+复现（仅 kit 源码仓；测试工具不随包安装）：`node .agents/tests/tools/gen-synthetic-plan.mjs --bench`（合成 plan 落 `.agents/cache/tour-perf/`；build 计时走 `buildTour({git})` 注入 300 个修改文件，3 轮取最大；HTML 由 `flow-kit run gen-dev-tour --no-diff` 生成，git 面为当刻真实工作树，体积以文档面为主）。
 
 | 档位 | buildTour（300 diff 文件注入） | 静态 HTML 体积 |
 | --- | --- | --- |

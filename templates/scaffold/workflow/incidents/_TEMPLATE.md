@@ -44,6 +44,6 @@
    - 或回归清单条目：workflow/regression-checklist.md（防复发验证节追加一行）
 
 3. 规范条目（必须有可追溯的落点）
-   - 落点（多选）：AGENTS.md <章节> / .agents/hooks/<脚本> / .agents/skills/<skill> / .agents/commands/<cmd> / 回归清单 §<章节>
+   - 落点（多选）：AGENTS.md <章节> / 包内运行时脚本（`flow-kit run`，上游工程包）/ .agents/skills/<skill> / .agents/commands/<cmd> / 回归清单 §<章节>
    - 引用：commit <SHA> / 文件:<路径>#L<行>
    - 若无新增条目，理由：<已有条目覆盖，说明条目位置>

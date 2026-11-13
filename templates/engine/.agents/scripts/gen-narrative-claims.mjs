@@ -12,7 +12,7 @@
 //   钩子数 = .githooks 文件数；verify 门数 = spawn verify.mjs --list（即时不执行门）；
 //   命令/角色数 = .agents/commands|roles 目录 md 计数（2026-11-11 P0：总览图原手抄 9/3，实为 7/7）；
 //   workflow 活跃/档案 = workflow/INDEX.md 头部两行（同受生成物漂移门钉死）。
-// 用法：node .agents/scripts/gen-narrative-claims.mjs [--root <dir>] [--check]
+// 用法：flow-kit run gen-narrative-claims.mjs [--root <dir>] [--check]
 //   默认 = 改写所有命中声明为单源真值（打印逐处变更）；--check = 漂移 exit 1（供门禁/CI）。
 // 测试面已随引擎减重退役（2026-10-28，owner 决策），本脚本现无测试兜底
 import fs from 'node:fs';
@@ -29,9 +29,9 @@ const argOf = (k) => {
 };
 
 // ---- 单源取数：collectSources(root) → { ... } | 抛错（缺单源文件 = fail-loud，门与生成器同口径）----
-export function collectSources(root) {
+export function collectSources(root, scriptsDir = process.env.FLOW_KIT_RUNTIME_SCRIPTS || path.join(root, '.agents', 'scripts')) {
   const rd = (p) => fs.readFileSync(path.join(root, p), 'utf8');
-  const cl = rd(path.join('.agents', 'scripts', 'check-loop.mjs'));
+  const cl = fs.readFileSync(path.join(scriptsDir, 'check-loop.mjs'), 'utf8');
   const lanes = [...cl.matchAll(/lane:\s*'(hard|hygiene)'/g)];
   const ep = rd(path.join('workflow', 'effective-policy.md'));
   const vm = ep.match(/policyVersion (\d+)/);
@@ -245,7 +245,7 @@ if (isMain) {
     if (mismatches.length) {
       console.error(`❌ 叙事承重计数漂移 ${mismatches.length}/${claims} 项：`);
       for (const mm of mismatches) console.error(`  - ${mm.file}「${mm.label}」`);
-      console.error('  修法：node .agents/scripts/gen-narrative-claims.mjs（改写为单源真值）或改写为非现态措辞');
+      console.error('  修法：flow-kit run gen-narrative-claims.mjs（改写为单源真值）或改写为非现态措辞');
       process.exit(1);
     }
     console.log(`[narrative-claims] ✅ ${claims} 项现态声明对单源一致`);

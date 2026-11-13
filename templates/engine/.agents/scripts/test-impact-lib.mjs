@@ -16,7 +16,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
-export const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+export const ROOT = process.env.FLOW_KIT_PROJECT_ROOT
+  || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const MAP_PATH = path.join(ROOT, '.agents', 'config', 'test-impact-map.json');
 
 const TEST_DIR = 'tests/Shipyard.Material.IntegrationTests/';

@@ -5,9 +5,9 @@
 // 新建复现测试仍然允许（先写失败用例，再修实现）。
 //
 // 用法：
-//   node .agents/scripts/fix-task.mjs start [--id <id>] [--allow path1,path2]
-//   node .agents/scripts/fix-task.mjs status
-//   node .agents/scripts/fix-task.mjs stop
+//   flow-kit run fix-task.mjs start [--id <id>] [--allow path1,path2]
+//   flow-kit run fix-task.mjs status
+//   flow-kit run fix-task.mjs stop
 import fs from 'node:fs';
 import path from 'node:path';
 

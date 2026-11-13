@@ -41,7 +41,7 @@ description: Design-selection bakeoff — give N independent arms the same brief
 - Dispatch: the `tasks[]` batch of `task`; the `judgment` role in `model-roles.json`.
 - Review: after choosing the design, take it apart with multiple lenses per `.agents/skills/interrogate/SKILL.md`.
 - Proof: `.agents/skills/blast-radius/SKILL.md` (the reason it is safe is X, so run code to prove it).
-- Record: `workflow/delegations.md`; aggregate with `node .agents/scripts/agg-delegations.mjs`.
+- Record: `workflow/delegations.md`; aggregate with `flow-kit run agg-delegations.mjs`.
 
 ## Boundaries
 

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // workflow 活跃层索引生成器（2026-09-21，intent 2026-09-21-workflow-doc-retrieval）
-// 用法：node .agents/scripts/gen-workflow-index.mjs [--dry-run] [--check] [--help]
+// 用法：flow-kit run gen-workflow-index.mjs [--dry-run] [--check] [--help]
 //   --dry-run  只打印差异预览，不写盘
 //   --check    不写盘；与磁盘不一致时 exit 1 并打印差异（供 check-loop 漂移告警）
 // 测试面已随引擎减重退役（2026-10-28，owner 决策），本脚本现无测试兜底
@@ -12,7 +12,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { ENUMS } from './workflow-enums.mjs';
 
-const USAGE = `用法：node .agents/scripts/gen-workflow-index.mjs [--dry-run] [--check] [--help]
+const USAGE = `用法：flow-kit run gen-workflow-index.mjs [--dry-run] [--check] [--help]
 
 事实源：workflow/{intents,specs,plans,incidents}/*.md 的 frontmatter（状态/级别/日期/发现/模块）
         + H1 标题 + 「## 验收标准」勾验统计；排除 _TEMPLATE.md。
@@ -40,8 +40,8 @@ const BEGIN = '<!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，�
 const END = '<!-- GENERATED:END -->';
 const HEADER = `# workflow 索引 — 活跃层与档案（生成物，勿手改）
 
-> 生成器 \`node .agents/scripts/gen-workflow-index.mjs\`（状态变更 / 新建文档后重跑；\`--check\` 校验漂移，check-loop 会告警）。
-> 活跃 = ${ACTIVE_STATUS.join(' / ')}（在跑）；其余状态折叠进档案计数，检索用 \`node .agents/scripts/kb-search.mjs "<词>"\`（默认含全部状态、活跃优先排序）。
+> 生成器 \`flow-kit run gen-workflow-index.mjs\`（状态变更 / 新建文档后重跑；\`--check\` 校验漂移，check-loop 会告警）。
+> 活跃 = ${ACTIVE_STATUS.join(' / ')}（在跑）；其余状态折叠进档案计数，检索用 \`flow-kit run kb-search.mjs "<词>"\`（默认含全部状态、活跃优先排序）。
 > 模块词表见 \`.agents/config/workflow-modules.txt\`。
 `;
 
@@ -136,7 +136,7 @@ function render(docs) {
     '|---|---|---|',
     ...archRows,
     '',
-    `终态构成：${statusLine}；查档案用 \`node .agents/scripts/kb-search.mjs "<词>" --status all\`。`,
+    `终态构成：${statusLine}；查档案用 \`flow-kit run kb-search.mjs "<词>" --status all\`。`,
   ].join('\n');
 }
 
@@ -186,7 +186,7 @@ if (CHECK) {
     console.log(`✅ workflow/INDEX.md 与磁盘一致（${summary}）`);
     process.exit(0);
   }
-  console.error(`❌ workflow/INDEX.md 与磁盘不一致（${summary}）——跑 node .agents/scripts/gen-workflow-index.mjs 重新生成`);
+  console.error(`❌ workflow/INDEX.md 与磁盘不一致（${summary}）——跑 flow-kit run gen-workflow-index.mjs 重新生成`);
   previewDiff(existing, out);
   process.exit(1);
 }

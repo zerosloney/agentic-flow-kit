@@ -4,9 +4,9 @@
 //   对 workflow/wiki 文档做「访问/命中 + 内容更新」双维度置信度衰减筛查。只做机械筛查与候选输出，
 //   裁决由主智能体/用户执行（归档 archive-sweep / 更新 wiki 技能 / 删除须用户单独指令）。
 // 用法：
-//   node .agents/scripts/agg-kb-usage.mjs                      # 默认：3 个数据月起步、90 天未命中且未更新
-//   node .agents/scripts/agg-kb-usage.mjs --months 6           # 数据月下限（有遥测行的自然月数）
-//   node .agents/scripts/agg-kb-usage.mjs --stale-days 180     # 冷数据阈值（天）
+//   flow-kit run agg-kb-usage.mjs                      # 默认：3 个数据月起步、90 天未命中且未更新
+//   flow-kit run agg-kb-usage.mjs --months 6           # 数据月下限（有遥测行的自然月数）
+//   flow-kit run agg-kb-usage.mjs --stale-days 180     # 冷数据阈值（天）
 // 口径：
 //   - 「有数据月」= 遥测文件出现过的自然月；有数据月 < --months → 数据不充分，不产候选
 //     （年轻遥测不得制造假候选，与 agg-judgments --retire-candidates 同口径）
@@ -41,7 +41,7 @@ for (let i = 0; i < args.length; i++) {
   if (a === '--months') minMonths = Number.parseInt(args[++i] ?? '', 10);
   else if (a === '--stale-days') staleDays = Number.parseInt(args[++i] ?? '', 10);
   else if (a === '--help') {
-    console.log(`用法: node .agents/scripts/agg-kb-usage.mjs [--months N] [--stale-days N]
+    console.log(`用法: flow-kit run agg-kb-usage.mjs [--months N] [--stale-days N]
   --months N        有数据月下限（默认 3）——遥测月数不足不产候选
   --stale-days N    冷数据阈值（默认 90）：最近 N 天既未被命中、内容也未更新 → 候选`);
     process.exit(0);

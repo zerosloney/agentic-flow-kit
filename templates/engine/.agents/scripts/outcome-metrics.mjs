@@ -15,7 +15,7 @@
 // 诚实边界：只聚合已有台账；缺源在报告末尾单列，不造数、不把 0 当“很好”。
 //
 // 用法：
-//   node .agents/scripts/outcome-metrics.mjs [--days 30] [--json] [--out <path>]
+//   flow-kit run outcome-metrics.mjs [--days 30] [--json] [--out <path>]
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';

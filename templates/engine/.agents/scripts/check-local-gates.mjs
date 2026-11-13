@@ -4,7 +4,7 @@
 // ⑥ 起工具链按「环境变量（仅浏览器 CHROME_PATH）→ 本机登记 runtime-env.local.md → 标准安装位置探测」解析并回显路径（机理 runtime-env.md §6.3，
 // 2026-10-10 本机事实出库——绝对路径不再入库登记，新机按回显补登记即可）。
 // 鸡生蛋约束：钩子没挂时任何钩子面检测不可达，故自检必须是独立脚本 + 显著入口（README 入门节 / AGENTS.md 头部）。
-// 用法：node .agents/scripts/check-local-gates.mjs [--fix]
+// 用法：flow-kit run check-local-gates.mjs [--fix]
 // 退出码：0 全过 / 1 有缺。零工作区副作用（只读 git config + 文件存在性检测）。
 // 另有 PI 宿主接线 advisory（只读、允许缺省、不进八项判定与退出码；.pi/ 不随 clone 传播，硬查会让他机假红）。
 
@@ -38,7 +38,7 @@ check(ours === 'true', 'merge.ours.driver = true',
 
 // ②b merge.jsonl-union.driver（.agents/*.jsonl 台账并发去重合并驱动）
 const jsonlDriver = git(['config', 'merge.jsonl-union.driver']);
-const expectedJsonlDriver = 'node .agents/scripts/git-merge-jsonl.mjs %O %A %B';
+const expectedJsonlDriver = 'flow-kit run git-merge-jsonl %O %A %B';
 check(jsonlDriver === expectedJsonlDriver, 'merge.jsonl-union.driver（台账并发并集合并驱动）',
   jsonlDriver ? `当前值: ${jsonlDriver}` : '未配置', `git config merge.jsonl-union.driver "${expectedJsonlDriver}"`);
 
@@ -62,6 +62,21 @@ const nodeMajor = Number((/^v(\d+)/.exec(nodeVer) || [])[1]);
 check(nodeMajor >= 22, 'Node.js 在位且主版本 ≥ 22（CI 锚 22.17 / 本机 24.21）',
   nodeVer ? `当前: ${nodeVer}（低于 22，请升级）` : '未找到 node（六门中除 commit-msg 外全依赖 node）',
   null);
+// ⑤b 包内 runtime 入口：脚本/hook 实现随包分发，flow-kit 不在 PATH 时全部门禁不可执行。
+// 本脚本自身从包内 runtime 执行时 FLOW_KIT_RUNTIME_SCRIPTS 已注入，等价于能力在位（不要求全局安装）。
+const runtimeEnv = process.env.FLOW_KIT_RUNTIME_SCRIPTS || '';
+const winShell = process.platform === 'win32';
+const flowKitCli = runtimeEnv ? 'package runtime' : (() => {
+  try {
+    return execFileSync(winShell ? 'flow-kit --version' : 'flow-kit', winShell ? [] : ['--version'], {
+      encoding: 'utf8',
+      shell: winShell,
+    }).trim();
+  } catch { return ''; }
+})();
+check(Boolean(flowKitCli), 'flow-kit CLI 在 PATH（包内 runtime 入口）',
+  flowKitCli === 'package runtime' ? '当前：包内运行时（flow-kit run）' : flowKitCli ? `当前: v${flowKitCli}` : '未找到 flow-kit；先安装/升级 agentic-flow-kit',
+  'npm install -g agentic-flow-kit');
 
 // ⑥ 工具链解析回显（跨机自适应，runtime-env.md §6.3）：解析顺序 = 环境变量（仅浏览器 CHROME_PATH）→ 本机登记 runtime-env.local.md → 标准安装位置。
 // dotnet 缺失计入缺失（静态门 build/test 依赖）；浏览器缺失仅提示（仅 UI 实测需要，不拦上岗）。
@@ -134,8 +149,6 @@ console.log(browserPath
 const piWiringFiles = [
   '.pi/extensions/shipyard-gates.ts',
   '.pi/extensions/lib/gates-core.cjs',
-  '.agents/hooks/pre-shell-check.cjs',
-  '.agents/hooks/pre-write-check.cjs',
 ];
 const piMissing = piWiringFiles.filter((f) => !fs.existsSync(f));
 const piHostAbsent = piWiringFiles.slice(0, 2).every((f) => !fs.existsSync(f));
@@ -186,8 +199,8 @@ if (clineAbsent) {
 const CC_SETTINGS = '.commandcode/settings.json';
 if (!fs.existsSync('.commandcode')) {
   console.log('  [info] Command Code 宿主接线：本机未启用（.commandcode/ 为 gitignore 的本机私有目录，clone 不传播；启用见 runtime-env.md §6.4 / runtime-env.local.md）');
-} else if (![CC_SETTINGS, '.agents/hooks/pre-shell-check.cjs', '.agents/hooks/pre-write-check.cjs'].every((f) => fs.existsSync(f))) {
-  console.log(`  [WARN] Command Code 宿主接线不完整：缺 ${CC_SETTINGS} 或 .agents/hooks 两门文件（宿主钩子会静默失效）`);
+} else if (!fs.existsSync(CC_SETTINGS)) {
+  console.log(`  [WARN] Command Code 宿主接线不完整：缺 ${CC_SETTINGS}（宿主钩子会静默失效）`);
 } else {
   let cc = null;
   try { cc = JSON.parse(fs.readFileSync(CC_SETTINGS, 'utf8')); } catch { /* 解析失败按失配处理 */ }
@@ -195,8 +208,8 @@ if (!fs.existsSync('.commandcode')) {
   const wired = (matcherRe, gateFile) => groups.some((g) => g && typeof g.matcher === 'string' && matcherRe.test(g.matcher)
     && Array.isArray(g.hooks) && g.hooks.some((h) => h && typeof h.command === 'string' && h.command.includes(gateFile)));
   const ccMiss = [];
-  if (!wired(/write|edit/i, 'pre-write-check.cjs')) ccMiss.push('写前门（matcher 需含 WRITE/EDIT）');
-  if (!wired(/shell/i, 'pre-shell-check.cjs')) ccMiss.push('命令门（matcher 需含 SHELL）');
+  if (!wired(/write|edit/i, 'pre-write-check')) ccMiss.push('写前门（matcher 需含 WRITE/EDIT）');
+  if (!wired(/shell/i, 'pre-shell-check')) ccMiss.push('命令门（matcher 需含 SHELL）');
   console.log(ccMiss.length
     ? `  [WARN] Command Code 宿主接线缺：${ccMiss.join('、')}（该宿主下对应门禁静默失效；机理 runtime-env.md §6.4）`
     : '  [OK] Command Code 宿主接线齐备（PreToolUse 写前门 + 命令门）');
@@ -215,8 +228,6 @@ const claudeAgents = [
 ];
 const claudeFiles = [
   CLAUDE_SETTINGS,
-  '.agents/hooks/pre-shell-check.cjs',
-  '.agents/hooks/pre-write-check.cjs',
   ...claudeCommands.map((n) => `.claude/commands/${n}.md`),
   ...claudeAgents.map((n) => `.claude/agents/${n}.md`),
 ];
@@ -232,8 +243,8 @@ if (!fs.existsSync('.claude')) {
   const wired = (matcherRe, gateFile) => groups.some((g) => g && typeof g.matcher === 'string' && matcherRe.test(g.matcher)
     && Array.isArray(g.hooks) && g.hooks.some((h) => h && typeof h.command === 'string' && h.command.includes(gateFile)));
   const claudeMiss = [];
-  if (!wired(/write|edit/i, 'pre-write-check.cjs')) claudeMiss.push('写前门（matcher 需含 WRITE/EDIT）');
-  if (!wired(/bash|shell/i, 'pre-shell-check.cjs')) claudeMiss.push('命令门（matcher 需含 BASH/SHELL）');
+  if (!wired(/write|edit/i, 'pre-write-check')) claudeMiss.push('写前门（matcher 需含 WRITE/EDIT）');
+  if (!wired(/bash|shell/i, 'pre-shell-check')) claudeMiss.push('命令门（matcher 需含 BASH/SHELL）');
   console.log(claudeMiss.length
     ? `  [WARN] Claude Code 宿主接线缺：${claudeMiss.join('、')}（该宿主下对应门禁静默失效；机理 runtime-env.md §6.4）`
     : '  [OK] Claude Code 宿主接线齐备（PreToolUse 写前门 + 命令门；7 命令 + 7 角色指针壳）');
@@ -242,7 +253,7 @@ if (!fs.existsSync('.claude')) {
 if (fail > 0) {
   console.log(fix
     ? '\n门卫未全上岗：配置类已尝试自动修复（文件类缺失须按指引手动恢复）；修复后重跑本脚本确认全绿。'
-    : '\n门卫未全上岗——逐条执行上方修复命令，或一键: node .agents/scripts/check-local-gates.mjs --fix');
+    : '\n门卫未全上岗——逐条执行上方修复命令，或一键: flow-kit run check-local-gates --fix');
   process.exit(1);
 }
 console.log('\n[PASS] 八项全过——门卫已上岗（pre-commit 硬拦 / 整树强制编译 pre-merge-commit / 闭环扫描 pre-push / evict+积压提醒 post-commit / 台账并集合并；机理详见 .agents/notes/runtime-env.md §7）。');

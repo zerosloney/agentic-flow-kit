@@ -11,9 +11,9 @@
 //   - 不自动 commit / push，不读宿主私有 transcript。
 //
 // 用法：
-//   node .agents/scripts/session-log.mjs append --type failure --text "..." [--ref path] [--tag x]
-//   node .agents/scripts/session-log.mjs digest [--days 7] [--out tmp/session-digest-<date>.md]
-//   node .agents/scripts/session-log.mjs list [--days 7] [--json]
+//   flow-kit run session-log.mjs append --type failure --text "..." [--ref path] [--tag x]
+//   flow-kit run session-log.mjs digest [--days 7] [--out tmp/session-digest-<date>.md]
+//   flow-kit run session-log.mjs list [--days 7] [--json]
 //
 // 事件类型闭集：decision / failure / correction / refusal / note
 import fs from 'node:fs';
@@ -86,7 +86,7 @@ export function digestEvents(events, { days = 7, maxPerType = 8 } = {}) {
   if (!events.length) {
     lines.push('_无会话日志输入。dreaming 只能审计工件，无法用经验纠错。_');
     lines.push('');
-    lines.push('在关键节点执行：`node .agents/scripts/session-log.mjs append --type failure --text "…"`');
+    lines.push('在关键节点执行：`flow-kit run session-log.mjs append --type failure --text "…"`');
     return `${lines.join('\n')}\n`;
   }
   const counts = {};

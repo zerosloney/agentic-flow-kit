@@ -7,7 +7,7 @@
 //   他人进程（其他项目看板 / 非看板服务）不动手不 kill，直接失败退出并提示（旧上探窗口 10 会漂进相邻槽位服务口）。
 //   端口解析单源 board-port.mjs（本文件 import；槽位派生仍单源 scripts/verify/e2e/ports.mjs，端口字面量不落脚本）。
 // 身份与陈旧判定全部来自 /api/board 自报（pid/startedAt）——不碰 OS 专属的端口属主 / 进程启动时间 API。
-// 用法：node .agents/scripts/ensure-board.mjs [--port 8933] [--no-open]（多 worktree 并行设 SHIPYARD_SLOT=<n>）
+// 用法：flow-kit run ensure-board.mjs [--port 8933] [--no-open]（多 worktree 并行设 SHIPYARD_SLOT=<n>）
 import net from 'node:net';
 import http from 'node:http';
 import fs from 'node:fs';

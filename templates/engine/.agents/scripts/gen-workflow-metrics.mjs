@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // workflow 规模与规则面月度快照（2026-09-21，intent 2026-09-21-workflow-metrics-snapshot）
-// 用法：node .agents/scripts/gen-workflow-metrics.mjs [--month YYYY-MM] [--dry-run] [--help]
+// 用法：flow-kit run gen-workflow-metrics.mjs [--month YYYY-MM] [--dry-run] [--help]
 // 目的：把「语料膨胀 + 常驻面体积」变成可观测趋势——每月（或按需）跑一次，往 workflow/metrics.md 追加/更新一行。
 // 口径：文档 = 磁盘（对照 gen-workflow-index / 看板，排除 _TEMPLATE.md）；常驻面 = `.agents/config/rule-budgets.txt`
 //   各条实测（单源，含预算上限），括号内给「预算占用峰值项」。
@@ -22,7 +22,7 @@ import { readLedger } from './ledger-shards.mjs';
 import { loadFirstAdded, funnelFromLedger, fmtMedianDays, scanReviews, FUNNEL_LEGACY_RATIO_LIMIT } from './metrics-core.mjs';
 import { analyze, buildDocList, loadLastTouch, loadLedgerTs, parseStatus, ACTIVE } from './archive-sweep.mjs';
 
-const USAGE = `用法：node .agents/scripts/gen-workflow-metrics.mjs [--month YYYY-MM] [--dry-run] [--check] [--restamp] [--help]
+const USAGE = `用法：flow-kit run gen-workflow-metrics.mjs [--month YYYY-MM] [--dry-run] [--check] [--restamp] [--help]
 
 事实源：workflow/{intents,specs,plans,incidents}/*.md（排除 _TEMPLATE.md）+ workflow/INDEX.md + .agents/config/rule-budgets.txt + workflow/reviews.d/*.md（独立复核效果台账，2026-10-16 建账）+ workflow/specs/*.md 与 workflow/archive/*/specs/*.md（spec 体积观察，2026-10-16 起采集）
 产物：workflow/metrics.md —— 每月一行（同月重跑即更新该行，不重复追加）；明细打印在 stdout，不落表。
@@ -398,7 +398,7 @@ function writeGateCostSnapshot(byMonth) {
   const END_GC = '<!-- GENERATED:END -->';
   const head = `# 门禁成本近窗快照（生成物，勿手改）
 
-> 生成器 \`node .agents/scripts/gen-workflow-metrics.mjs --gate-cost-only\`（随月度快照一并重写；同月重跑覆盖）。
+> 生成器 \`flow-kit run gen-workflow-metrics.mjs --gate-cost-only\`（随月度快照一并重写；同月重跑覆盖）。
 > 源：\`.agents/verifications.jsonl\`（**本地、gitignore**）中 suite=all-gates 的全绿行——跨机/换树后须在本机重跑生成器。
 > 用途：\`workflow/metrics.md\` 的门禁成本表是**月度均值**，会掩盖「门已退出本地路径」与「最近变慢/变快」（两次误读实证见 gate-diet §4 #5、2026-10-27 体检 P2）——**判断当前态看本表，不要引用月均值**。
 > 读法：**「末次」列与中位差异大 = 当前态已变**（如门被改造或退出本地路径），此时中位是历史噪声，以末次为准。
@@ -538,7 +538,7 @@ try {
     windowDays: 21,
   });
   const fams = new Set(arch.candidates.map((x) => x.file));
-  console.log(`  归档积压：候选 ${arch.candidates.length} 篇 / ${fams.size} 族（21 天窗）${arch.candidates.length ? '——node .agents/scripts/archive-sweep.mjs 查看，--execute 执行' : ''}`);
+  console.log(`  归档积压：候选 ${arch.candidates.length} 篇 / ${fams.size} 族（21 天窗）${arch.candidates.length ? '——flow-kit run archive-sweep.mjs 查看，--execute 执行' : ''}`);
 } catch { /* fail-open */ }
 console.log(`  ${DRY ? '（--dry-run，未写盘）' : ''}`);
 
@@ -552,7 +552,7 @@ if (DRY) {
 // ---- 组装：GENERATED 区内的月表按月份键 upsert（同月重跑覆盖，行序按月升序）----
 const HEADER = `# workflow 规模与规则面月度快照
 
-> 生成器 \`node .agents/scripts/gen-workflow-metrics.mjs\`（每月或有需要时跑；同月重跑即更新该行）。明细（类型分布 / 逐条预算占用）看脚本 stdout，不落表。
+> 生成器 \`flow-kit run gen-workflow-metrics.mjs\`（每月或有需要时跑；同月重跑即更新该行）。明细（类型分布 / 逐条预算占用）看脚本 stdout，不落表。
 > 口径：文档 = 磁盘（排除 \`_TEMPLATE.md\`）；常驻面 = \`.agents/config/rule-budgets.txt\` 逐条实测，括号内为「预算占用峰值项」。
 > 归因表 = incident frontmatter 枚举；空键用 archive/attribution-legacy.md 对质表补齐（不回写文件；不明与仍缺的来源计入未判读）+ 引擎面提交占比（git）。
 `;
@@ -595,14 +595,14 @@ if (CHECK) {
   const snapM = existing.match(/<!-- 快照生成：([0-9T:.+-]+Z?)/);
   if (!snapM) {
     console.error('❌ workflow/metrics.md 无「快照生成」时刻标记——本门判的是自述时效（快照按设计是历史记录，逐字比会常红）');
-    console.error('   修：node .agents/scripts/gen-workflow-metrics.mjs（重生成快照并写入生成时刻），须随同提交');
+    console.error('   修：flow-kit run gen-workflow-metrics.mjs（重生成快照并写入生成时刻），须随同提交');
     process.exit(1);
   }
   const ts = Date.parse(snapM[1]);
   const ageDays = (Date.now() - ts) / 86400000;
   if (!Number.isFinite(ts) || ageDays > maxAgeDays) {
     console.error(`❌ workflow/metrics.md 快照陈旧 ${Number.isFinite(ts) ? ageDays.toFixed(1) : '?'} 天（上限 ${maxAgeDays} 天，METRICS_MAX_AGE_DAYS 可调）——引擎量化自述停在 ${snapM[1]}`);
-    console.error('   修：node .agents/scripts/gen-workflow-metrics.mjs（重生成快照；须随同提交）');
+    console.error('   修：flow-kit run gen-workflow-metrics.mjs（重生成快照；须随同提交）');
     process.exit(1);
   }
   console.log(`✅ workflow/metrics.md 快照新鲜（生成于 ${snapM[1]}，${ageDays.toFixed(1)} 天前；上限 ${maxAgeDays} 天）`);

@@ -7,7 +7,7 @@
 //   （豁免 A 同判据复用）、覆盖 plan 为零（顺序门已执法，这里不重判）。
 //   判据全部复用 check-confirm-order.mjs 导出（collectStagedCoverage / coveringDocs / l0Judgement /
 //   isMergeLike），短名边界匹配模板单源 .agents/config/commit-msg-rules.json planSlugRe。
-// 用法：node .agents/hooks/check-commit-plan-ref.mjs <msgFile>（由 .githooks/commit-msg 调用）
+// 用法：flow-kit hook check-commit-plan-ref.mjs <msgFile>（由 .githooks/commit-msg 调用）
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';

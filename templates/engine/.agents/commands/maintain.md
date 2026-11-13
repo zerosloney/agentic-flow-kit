@@ -25,13 +25,13 @@ L1 且不是线上事故、复发、数据或契约：只做 §1 立档，然后
 **Process**:
 1. **诊断**: 读日志 + 代码 $\rightarrow$ 给出 [止血选项 (回退/回滚/热修/降级)] + [影响面/耗时]
 2. **执行**: 方案由用户拍板 $\rightarrow$ AI 仅执行选定方案 (禁自行推送修复)
-3. **验证**: 热修后跑 `node .agents/scripts/verify.mjs --scope`（口径见头注）
+3. **验证**: 热修后跑 `flow-kit run verify.mjs --scope`（口径见头注）
 **Output**: 服务恢复 $\rightarrow$ 进复盘流程
 
 ## 1. 起草 incident
 **Input**: 止血完成后的故障上下文
 **Process**:
-1. **同类检索**: `node .agents/scripts/kb-search.mjs "<关键词>" --scope workflow --type incidents` $\rightarrow$ 引用既有防复发条目
+1. **同类检索**: `flow-kit run kb-search.mjs "<关键词>" --scope workflow --type incidents` $\rightarrow$ 引用既有防复发条目
 2. **创建文档**: 复制 `_TEMPLATE.md` $\rightarrow$ `workflow/incidents/{name}.md`
 3. **填写内容**: [时间线 (发现$\rightarrow$恢复)] / [影响面] / [根因 (深层原因)] / [门禁失效分析]
 **Output**: `workflow/incidents/{name}.md` (Status: Draft)
@@ -61,7 +61,7 @@ L1 且不是线上事故、复发、数据或契约：只做 §1 立档，然后
 1. **状态迁移**: `open` $\rightarrow$ `fixed` (三件套落地) $\rightarrow$ `closed` (防复发验证通过)
 2. **落态入口**: `confirm-doc.mjs` 逐跳迁移（口径见 `new-task.md` 快速道第 4 步）
 3. **对账**: `check-loop 15` 校验 [关单编辑 $\rightarrow$ closed 确认] 的顺序
-4. **关单后裁定回填**: done/closed 文档确需回填裁定 $\rightarrow$ 改正文**同批**在 `.agents/confirmations.jsonl` 追加**重确认补偿行**——同 doc+stage、fingerprint=改后内容指纹 (bindingSha256)、prev 沿用原行、quote=用户裁定原话 (source: chat-delegated)；append-only 不改历史行，check-loop 15 按末次 done 行生效 (重确认场景)。注意 `confirm-doc` 对终态文档无前向跳转，补偿行直接追加台账。**生成器**：`node .agents/scripts/append-compensation.mjs <doc...> --quote "<用户原话>"`，手搓哈希会被 s15 内容漂移门拦 
+4. **关单后裁定回填**: done/closed 文档确需回填裁定 $\rightarrow$ 改正文**同批**在 `.agents/confirmations.jsonl` 追加**重确认补偿行**——同 doc+stage、fingerprint=改后内容指纹 (bindingSha256)、prev 沿用原行、quote=用户裁定原话 (source: chat-delegated)；append-only 不改历史行，check-loop 15 按末次 done 行生效 (重确认场景)。注意 `confirm-doc` 对终态文档无前向跳转，补偿行直接追加台账。**生成器**：`flow-kit run append-compensation.mjs <doc...> --quote "<用户原话>"`，手搓哈希会被 s15 内容漂移门拦
 
 ## 🚫 禁止项
 | 操作 | 后果 / 机器行为 | 例外 |

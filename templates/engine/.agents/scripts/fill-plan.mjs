@@ -1,5 +1,5 @@
 // fill-plan：起草 plan 草稿（L1 五节或 --lite 三节且 plan 即入口 / L2-L3 完整 4 节）
-// 用法：node .agents/scripts/fill-plan.mjs --level L1 --topic "test" --output /tmp/x.md [--lite] [--root <仓库根>]
+// 用法：flow-kit run fill-plan.mjs --level L1 --topic "test" --output /tmp/x.md [--lite] [--root <仓库根>]
 // L1：入口 + 改动方案 + 约束与风险 + 验证计划 + 验收标准（不另立 intent）
 // L1 --lite：入口 + 改动方案 + 验证与验收（三节；适用条件：检索无 incident 命中且红线全不勾）
 // L2/L3：改动方案 + 任务拆解 + 执行顺序 + 验证计划
@@ -51,7 +51,7 @@ const L1_LITE_SECTIONS = [
   L1_SECTIONS[1],
   {
     title: '验证与验收（lite）',
-    hint: '- 静态门：`node .agents/scripts/verify.mjs --scope` 绿（涉前端改动另附实测证据）\n- 检索：粘贴第 2 步 kb-search 输出（无命中贴命令与空结果即可，免另写说明）\n- 验收：\n- [ ] <逐条可测试；写不出判据 = 还没想清楚>\n\n> 关单前逐条勾验并补证据：`- [x] <判据>（证据：<commit SHA / 测试用例名 / 冒烟输出>）`。约束与风险以一句话并入改动方案条目。',
+    hint: '- 静态门：`flow-kit run verify.mjs --scope` 绿（涉前端改动另附实测证据）\n- 检索：粘贴第 2 步 kb-search 输出（无命中贴命令与空结果即可，免另写说明）\n- 验收：\n- [ ] <逐条可测试；写不出判据 = 还没想清楚>\n\n> 关单前逐条勾验并补证据：`- [x] <判据>（证据：<commit SHA / 测试用例名 / 冒烟输出>）`。约束与风险以一句话并入改动方案条目。',
   },
 ];
 
@@ -76,7 +76,7 @@ export function renderPlan({ topic, level = 'L1', date = TODAY, lite = false }) 
   for (const { title, hint } of sections) {
     body += '## ' + title + '\n\n' + hint + '\n\n';
   }
-  body += '## 确认与复核\n\n> 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节（确认环节的机器可见态），done 只在关单出现——禁从 draft 直跳 done（papercut）。\n- 确认结果：approved（YYYY-MM-DD 用户对话内确认）；done（YYYY-MM-DD 关单，随入口文档置终态）\n- 确认门记录：plan 草稿全文过目 + 改动清单确认（stages.md Build 两道门，逐次，不合并）\n- 复核：L1 不要求独立复核\n\n> 开发全景：`node .agents/scripts/gen-dev-tour.mjs <本文件>`；看板实时版 `/tour?file=<本文件>`。步骤取「任务拆解/步骤」，文件取任务每步「- 文件：…」或「改动方案」，git 工作树补实际改动（口径 `.agents/skills/dev-tour/SKILL.md`）。\n';
+  body += '## 确认与复核\n\n> 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节（确认环节的机器可见态），done 只在关单出现——禁从 draft 直跳 done（papercut）。\n- 确认结果：approved（YYYY-MM-DD 用户对话内确认）；done（YYYY-MM-DD 关单，随入口文档置终态）\n- 确认门记录：plan 草稿全文过目 + 改动清单确认（stages.md Build 两道门，逐次，不合并）\n- 复核：L1 不要求独立复核\n\n> 开发全景：`flow-kit run gen-dev-tour.mjs <本文件>`；看板实时版 `/tour?file=<本文件>`。步骤取「任务拆解/步骤」，文件取任务每步「- 文件：…」或「改动方案」，git 工作树补实际改动（口径 `.agents/skills/dev-tour/SKILL.md`）。\n';
   return { frontmatter: fm, body: fm + body, sections: sections.map((s) => s.title) };
 }
 

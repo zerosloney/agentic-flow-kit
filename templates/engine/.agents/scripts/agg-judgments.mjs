@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // agg-judgments.mjs — check-loop 判定流水月度聚合（judgment-ledger）
-// 用法：node .agents/scripts/agg-judgments.mjs [--month=YYYY-MM]
-//       node .agents/scripts/agg-judgments.mjs --retire-candidates [--months=6]
-//       node .agents/scripts/agg-judgments.mjs --emit-month[=YYYY-MM]
+// 用法：flow-kit run agg-judgments.mjs [--month=YYYY-MM]
+//       flow-kit run agg-judgments.mjs --retire-candidates [--months=6]
+//       flow-kit run agg-judgments.mjs --emit-month[=YYYY-MM]
 // 源：.agents/judgments.jsonl（check-loop.mjs 每次真实运行追加一行，本地 gitignore；
 //     缺文件 = 尚无运行记录，提示后 exit 0——与 delegations 台账「必在」不同，这是渐积数据）。
 // 仓库级数据面（gate-metrics-shard 2026-10-22）：--emit-month 把某月聚合落成

@@ -65,7 +65,7 @@ export function run() {
       const ok = !!fp && docEntries.some((e) => e.stage === st
         && typeof e.fingerprint === 'string' && e.fingerprint.startsWith(fp));
       if (!ok) {
-        blockers.push(`- [确认未对账] ${base} 状态 ${st} 无用户确认记录——AI 不得代确认，用户在终端跑 node .agents/scripts/confirm-doc.mjs ${rel} 后重试`);
+        blockers.push(`- [确认未对账] ${base} 状态 ${st} 无用户确认记录——AI 不得代确认，用户在终端跑 flow-kit run confirm-doc.mjs ${rel} 后重试`);
       }
       // 内容绑定（audit-gate-hardening；生效锚 gate-hardening-p2-batch 自文档自报日期
       // 改为台账 done 行 ts）：done 文档当前内容须与台账 done 行确认时的内容一致——按 prev 复原跳转前文本
@@ -101,7 +101,7 @@ export function run() {
         if (lastAppr) {
           const nowCommit = commitmentFingerprint(linesOf(doc) || []);
           if (nowCommit !== lastAppr.commit) {
-            blockers.push(`- [承诺面漂移] ${base} approved 后承诺面被改写（${lastAppr.commit} → ${nowCommit}）——用户点头的不是现在这一份；请用户重新点头后跑 node .agents/scripts/confirm-doc.mjs ${rel} --reconfirm --delegated "<原话>" 重录承诺面指纹（仅勾验收/补证据/复核行改动不应触发本门——若触发请登记 papercut）`);
+            blockers.push(`- [承诺面漂移] ${base} approved 后承诺面被改写（${lastAppr.commit} → ${nowCommit}）——用户点头的不是现在这一份；请用户重新点头后跑 flow-kit run confirm-doc.mjs ${rel} --reconfirm --delegated "<原话>" 重录承诺面指纹（仅勾验收/补证据/复核行改动不应触发本门——若触发请登记 papercut）`);
           }
         }
       }

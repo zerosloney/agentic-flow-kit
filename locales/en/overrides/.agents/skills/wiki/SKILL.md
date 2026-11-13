@@ -28,7 +28,7 @@ Build and maintain a structured project knowledge base, ensuring three-way consi
 3. **File migration**:
     - Copy the file to `wiki/<主题>/` and rename it per the convention.
     - Copy the original file into `drafts-archive/` for provenance.
-4. **Index update**: run `node .agents/scripts/gen-wiki-board.mjs`.
+4. **Index update**: run `flow-kit run gen-wiki-board.mjs`.
 5. **Description completion**: fill in a description for the new topic in the "Purpose" column of the quick-view table in `wiki/INDEX.md`, then run the generator again.
 
 ### 2. Add a single document
@@ -40,7 +40,7 @@ Build and maintain a structured project knowledge base, ensuring three-way consi
 ## Verification mechanism
 Run after every change:
 ```bash
-node .agents/scripts/verify-wiki-consistency.mjs
+flow-kit run verify-wiki-consistency.mjs
 ```
 **Acceptance criteria**:
 - `exit 0` and output `✅ wiki 三方一致`.

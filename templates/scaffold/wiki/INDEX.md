@@ -2,7 +2,7 @@
 
 > 本目录为项目知识沉淀，按主题归位。看板：`知识沉淀总览.html`（同级目录，三列映射表格）。
 >
-> 新装户从零开始：把文档放进对应主题目录后跑 `node .agents/scripts/gen-wiki-board.mjs`，本索引与看板自动重生成。
+> 新装户从零开始：把文档放进对应主题目录后跑 `flow-kit run gen-wiki-board.mjs`，本索引与看板自动重生成。
 
 ## 主题目录速览
 
@@ -22,7 +22,7 @@
 
 ## 文件 → 主题 → 归属目录 映射表
 
-（由 `node .agents/scripts/gen-wiki-board.mjs` 生成，勿手改。）
+（由 `flow-kit run gen-wiki-board.mjs` 生成，勿手改。）
 
 ---
 

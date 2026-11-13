@@ -9,7 +9,7 @@
 //   已知粗度：任务中途未触文档的纯代码提交会被漏计（审计低招，不是执法——宁可漏报不误报）。
 // 判据：目录签名（dirname 前 3 段）被 ≥ --min（默认 3）个**不同** L2/L3 文档触及，且该签名下
 //   观测到的文件无一命中 ERE → 候选。被命中的文件所在目录不进候选（已覆盖）。
-// 用法：node .agents/scripts/lane-surface-audit.mjs [--since <YYYY-MM-DD>] [--min <N>] [--root <dir>]
+// 用法：flow-kit run lane-surface-audit.mjs [--since <YYYY-MM-DD>] [--min <N>] [--root <dir>]
 //   --since 缺省 = 今天−30 天。输出候选清单；无候选打印一行「无漂移信号」。
 // 时机：月度随 gen-workflow-metrics 跑（runtime-env §6.5 登记位）；改共享契约频繁期可随时手跑。
 // 测试面已随引擎减重退役（2026-10-28，owner 决策），本脚本现无测试兜底

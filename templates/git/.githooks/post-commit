@@ -23,7 +23,11 @@ try {
   // 同源口径：pre-commit/pre-push/check-ledger-* 的 git diff 均显式带 core.quotepath=off。
   const files = spawnSync('git', ['-c', 'core.quotepath=off', 'diff-tree', '--no-commit-id', '--name-only', '-r', '-m', '--root', 'HEAD'], { encoding: 'utf8' });
   if (files.status === 0) {
-    spawnSync(process.execPath, ['.agents/scripts/kb-cache-evict.mjs'], { input: files.stdout, stdio: ['pipe', 'ignore', 'ignore'] });
+    spawnSync('flow-kit', ['run', 'kb-cache-evict'], {
+      input: files.stdout,
+      stdio: ['pipe', 'ignore', 'ignore'],
+      shell: process.platform === 'win32',
+    });
   }
 } catch { /* 非阻断三重兜底之一 */ }
 
@@ -51,11 +55,11 @@ try {
     }
   }
   if (!latest) {
-    console.error('[dream] 尚无离线梦境审计报告——可跑 node .agents/scripts/dream-run.mjs --execute（advisory，非阻断）');
+    console.error('[dream] 尚无离线梦境审计报告——可跑 flow-kit run dream-run --execute（advisory，非阻断）');
   } else {
     const days = Math.floor((Date.now() - Date.parse(`${latest}T00:00:00Z`)) / 86400000);
     if (days >= 7) {
-      console.error(`[dream] 距上次离线梦境审计（${latest}）已 ${days} 天——可跑 node .agents/scripts/dream-run.mjs --execute（advisory，非阻断）`);
+      console.error(`[dream] 距上次离线梦境审计（${latest}）已 ${days} 天——可跑 flow-kit run dream-run --execute（advisory，非阻断）`);
     }
   }
 } catch { /* 提醒失败不影响提交 */ }

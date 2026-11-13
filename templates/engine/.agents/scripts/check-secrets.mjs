@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // check-secrets：密钥扫描门（2026-10-14 决定 4 / G5 安全插队；机制台账已登记）
-// 用法：node .agents/scripts/check-secrets.mjs [--staged] [--lite]
+// 用法：flow-kit run check-secrets.mjs [--staged] [--lite]
 //   默认     = 全量历史：gitleaks detect --baseline-path .gitleaks-baseline.json（基线外新泄漏 exit 1）
 //   --staged = 提交增量：gitleaks protect --staged（只看暂存内容，历史存量不触；原 pre-commit 消费——
 //              2026-10-21 owner 指令「密钥本地不扫」退役该腿，旗标保留供手动/测试）

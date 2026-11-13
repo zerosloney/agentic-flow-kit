@@ -18,7 +18,7 @@ If any one is met, run the panel review; if none are met, use the graded review 
 
 ## Flow
 
-Script: `.agents/scripts/pr-review.mjs` (subcommand details via `--help`). Execute in order; do not skip steps:
+Script: `flow-kit run pr-review` (subcommand details via `--help`). Execute in order; do not skip steps:
 
 1. `plan --base <ref> --head <ref>`; for high-risk quick checks add `--fast` (single-lens tier). Artifacts land in `.agents/tmp/pr-review/<runId>/` (run.json / briefs / tasks.json)
 2. Dispatch finder / verifier subagents in parallel per `tasks.json`; role contracts in `.agents/roles/pr-finder.md`, `pr-verifier.md`, `pr-adjudicator.md`

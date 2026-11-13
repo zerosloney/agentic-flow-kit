@@ -7,7 +7,7 @@
 //   A) 等价性：first-parent 结果 ⊆ `git show -m` 双侧并集（防现行实现本身算错面）；
 //   B) 退化钉子：样本合并提交中至少 1 个满足「旧语义 git show 为空集且 first-parent 非空」——
 //      实现被改回 git show 时两条语义重合、pinned 归零，B 即红。
-// 用法：node .agents/scripts/check-loop-rev-semantics.mjs [样本数，默认 12]；
+// 用法：flow-kit run check-loop-rev-semantics.mjs [样本数，默认 12]；
 //   check-loop FULL 模式（本地手动审计）末尾自动调用。手动工具：不占 verify 门表（16 门不变）、不进 CI。
 import { spawnSync } from 'node:child_process';
 

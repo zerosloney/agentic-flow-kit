@@ -46,7 +46,7 @@
 | R4-1 | 多仓 Workspace 协调 | 4 | M | `src/commands/workspace.mjs`、`.flow-kit/workspace.json` | DONE |
 | R4-2 | Spec / Tasks / Verify 工件规范 | 4 | M | `templates/scaffold/workflow/specs/` + 校验脚本 | DONE |
 | R4-3 | eval-log 证据格式 | 4 | S | `agent-eval.mjs`、`schemas/eval-log.schema.json` | DONE |
-| R5-1 | 运行时能力包内化 | 5 | L | `src/commands/runtime.mjs`、`flow-kit run/hook`、安装面收缩 | WIP |
+| R5-1 | 运行时能力包内化 | 5 | L | `src/commands/runtime.mjs`、`flow-kit run/hook`、安装面收缩 | DONE |
 
 ## 3. Wave 1 — 生命周期闭环
 
@@ -295,8 +295,8 @@
 ### R5-1 运行时能力包内化
 
 - **R5-1a（DONE）包内 runtime 入口**：`flow-kit run <script>` / `flow-kit hook <hook>` 从包内执行引擎脚本与 hook 适配器；目标根按 `--root` > `FLOW_KIT_PROJECT_ROOT` > 向上查找 `.agents` 解析；子进程注入 `FLOW_KIT_PROJECT_ROOT` / `FLOW_KIT_RUNTIME_*`，脚本的 ROOT 解析改为优先读取该环境变量（直接执行安装副本时保持原回退）。
-- **R5-1b（TODO）安装面收缩与迁移**：默认计划不再生成 `.agents/scripts/**`、`.agents/hooks/**`、`.agents/tests/**`；`.githooks`、宿主 hooks、commands/skills 中的 `node .agents/scripts/x.mjs` 改为 `flow-kit run x`；manifest `schemaVersion` 1→2 迁移按哈希安全移除旧脚本，保留用户改动；`doctor` 检查遗留脚本与 `flow-kit` PATH 可达性。
-- **验收**：`run/hook --list`、root 解析、未知入口退出码 2、从包执行不污染包目录；R5-1b 完成后再验收“新装项目无 `.agents/scripts` 且门禁可用”。规模 `L`（a：M，b：L）。
+- **R5-1b（DONE）安装面收缩与迁移**：`buildPlan` 跳过 `.agents/scripts/**`、`.agents/hooks/*.cjs|mjs`、`.agents/tests/**`（`isRuntimeEnginePath` 单一判定源）；git 钩子、宿主 hooks、MCP、commands/skills 中的运行时调用统一改为 `flow-kit run x` / `flow-kit hook x`；manifest `schemaVersion` 1→2 迁移摘除旧运行时条目，并按旧哈希只删除未改动的磁盘副本（用户改动保留为 legacy）；`doctor` 报告遗留运行时文件与 `flow-kit` PATH advisory；CI 使用 `npx --yes agentic-flow-kit`，项目自建 `local-pre-commit` 优先于包内默认实现。
+- **验收**：`run/hook --list`、root 解析、未知入口退出码 2、从包执行不污染包目录；新装项目无 `.agents/scripts` / `.agents/hooks` 实现文件，`policy check`、`check-local-gates`、hooks 接线与安装测试全绿。规模 `L`（a：M，b：L）。
 
 ## 8. 依赖关系
 

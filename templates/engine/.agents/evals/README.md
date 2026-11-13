@@ -14,14 +14,14 @@
 3. 用 `eval-score.mjs` 算通过率，然后落凭证：
 
 ```bash
-node .agents/scripts/agent-eval.mjs record --pass-rate 0.9 --tasks 8 --model opus --note "skill x v2"
+flow-kit run agent-eval.mjs record --pass-rate 0.9 --tasks 8 --model opus --note "skill x v2"
 ```
 
 4. 门禁检查：
 
 ```bash
-node .agents/scripts/agent-eval.mjs check            # 严格：无凭证/过期/不达标 → 非零
-node .agents/scripts/agent-eval.mjs check --advisory # 试点：只告警
+flow-kit run agent-eval.mjs check            # 严格：无凭证/过期/不达标 → 非零
+flow-kit run agent-eval.mjs check --advisory # 试点：只告警
 ```
 
 ## 新装为什么严格 check 会失败

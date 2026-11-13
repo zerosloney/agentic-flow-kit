@@ -5,8 +5,8 @@
  * scripts/verify/backend/run-backend-tests.mjs 执行；本 CLI 保留作手动探查。
  *
  * 用法：
- *   node .agents/scripts/test-impact.mjs --range <old> <new> [--json]
- *   node .agents/scripts/test-impact.mjs --files <file1,file2,...> [--json]
+ *   flow-kit run test-impact.mjs --range <old> <new> [--json]
+ *   flow-kit run test-impact.mjs --files <file1,file2,...> [--json]
  *
  * 输出：
  *   mode=filter → 给出 dotnet test --filter 表达式
@@ -54,8 +54,8 @@ for (let i = 0; i < argv.length; i += 1) {
 
 function usage(message) {
   if (message) console.error(`test-impact: ${message}`);
-  console.error('用法：node .agents/scripts/test-impact.mjs --range <old> <new> [--json]');
-  console.error('      node .agents/scripts/test-impact.mjs --files <a,b,c> [--json]');
+  console.error('用法：flow-kit run test-impact.mjs --range <old> <new> [--json]');
+  console.error('      flow-kit run test-impact.mjs --files <a,b,c> [--json]');
   process.exit(2);
 }
 

@@ -9,7 +9,7 @@
 //   白名单豁免：workflow/ 台账（intents/specs/plans/incidents/INDEX）、.agents/confirmations.jsonl、
 //   .agents/confirmations.d/ 分片、package-lock.json——闭环随行件不算越界。
 // 测试面已随引擎减重退役（2026-10-28，owner 决策），本脚本现无测试兜底
-// 用法：node .agents/scripts/check-scope.mjs workflow/plans/<name>.md [--base <sha>|--staged] [--strict] [--root <dir>]
+// 用法：flow-kit run check-scope.mjs workflow/plans/<name>.md [--base <sha>|--staged] [--strict] [--root <dir>]
 //   默认比对工作区（含未跟踪，git status --porcelain 口径）；--base <sha> 比对 sha..HEAD 已提交变更；
 //   --staged 仅比对暂存区。
 // 沿革：2026-10-09 立档（缺口实证=检查 8 单向交集不拦夹带）。
@@ -67,8 +67,8 @@ for (let i = 0; i < args.length; i++) {
   else if (a === '--root') rootArg = args[++i] || '';
   else if (!planRel && !a.startsWith('--')) planRel = a;
 }
-const ROOT = path.resolve(rootArg || process.cwd());
-if (!planRel) { console.error('用法: node .agents/scripts/check-scope.mjs workflow/plans/<name>.md [--base <sha>|--staged] [--strict] [--root <dir>]'); process.exit(2); }
+const ROOT = path.resolve(rootArg || process.env.FLOW_KIT_PROJECT_ROOT || process.cwd());
+if (!planRel) { console.error('用法: flow-kit run check-scope.mjs workflow/plans/<name>.md [--base <sha>|--staged] [--strict] [--root <dir>]'); process.exit(2); }
 const planAbs = path.isAbsolute(planRel) ? planRel : path.join(ROOT, planRel);
 if (!fs.existsSync(planAbs)) { console.error(`plan 不可读: ${planRel}`); process.exit(2); }
 

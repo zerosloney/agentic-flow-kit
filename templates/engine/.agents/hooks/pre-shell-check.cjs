@@ -358,7 +358,7 @@ function probeFailure() {
 
 const probeFail = probeFailure();
 if (probeFail) {
-  deny(`钩子未挂载，先跑 node .agents/scripts/check-local-gates.mjs --fix（${probeFail}）——本门只做在岗探针，门禁链由 git 原生执行`);
+  deny(`钩子未挂载，先跑 flow-kit run check-local-gates.mjs --fix（${probeFail}）——本门只做在岗探针，门禁链由 git 原生执行`);
 }
 
 // 探针通过：放行，钩子由 git 自己跑（commit → pre-commit + commit-msg，push → pre-push）

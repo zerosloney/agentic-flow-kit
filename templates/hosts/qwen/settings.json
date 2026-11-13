@@ -36,7 +36,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$QWEN_PROJECT_DIR\"/.agents/hooks/pre-write-check.cjs",
+            "command": "flow-kit hook pre-write-check",
             "timeout": 120
           }
         ]
@@ -46,7 +46,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node \"$QWEN_PROJECT_DIR\"/.agents/hooks/pre-shell-check.cjs",
+            "command": "flow-kit hook pre-shell-check",
             "timeout": 800
           }
         ]

@@ -23,17 +23,17 @@ const ROOT = path.resolve(process.env.FLOW_KIT_PROJECT_ROOT || path.join(HERE, '
 const CLAIMS = [
   {
     host: '.trae/hooks.json', event: 'PreToolUse', matcher: 'RunCommand|Bash|Shell|Terminal',
-    cmdIncludes: 'pre-shell-check.cjs', enabled: null, // null = 该宿主配置无 enabled 字段（缺省即启用），只验存在
+    cmdIncludes: 'pre-shell-check', enabled: null, // null = 该宿主配置无 enabled 字段（缺省即启用），只验存在
     claim: 'runtime-env §6.4 宿主事实（Trae RunCommand）',
   },
   {
     host: '.codebuddy/settings.json', event: 'PreToolUse', matcher: 'Bash|PowerShell|RunCommand|Shell|Terminal',
-    cmdIncludes: 'pre-shell-check.cjs', enabled: null,
+    cmdIncludes: 'pre-shell-check', enabled: null,
     claim: 'runtime-env §6.4 宿主事实（CodeBuddy Bash 主通道 + PowerShell 次通道）',
   },
   {
     host: '.codebuddy/settings.json', event: 'PreToolUse', matcher: 'Write|Edit|MultiEdit',
-    cmdIncludes: 'pre-write-check.cjs', enabled: null,
+    cmdIncludes: 'pre-write-check', enabled: null,
     claim: 'registry 宿主写前门行（2026-11-11 codebuddy 接线，trae 仍无写前壳）',
   },
   // post-edit-check（PostToolUse 反馈腿）已于 2026-11-08 档 1 减重退役（与写前门/pre-commit 重复执法），

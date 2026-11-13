@@ -1,7 +1,7 @@
 import { execFileSync } from 'node:child_process';
 
 export const HOOKS_PATH = '.githooks';
-export const JSONL_UNION_DRIVER = 'node .agents/scripts/git-merge-jsonl.mjs %O %A %B';
+export const JSONL_UNION_DRIVER = 'flow-kit run git-merge-jsonl %O %A %B';
 
 export function isGitRepo(target) {
   try {

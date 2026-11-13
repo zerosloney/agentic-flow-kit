@@ -1,4 +1,4 @@
-// 用法:node .agents/scripts/check-loop.mjs [--rev <sha>] [--all | --hygiene]
+// 用法:flow-kit run check-loop.mjs [--rev <sha>] [--all | --hygiene]
 // 默认（现状，2026-11-11 起）：只跑 hard 6 段 = §1 §3x §8 §15 §23 §29（全部有阻断力）；
 // §14 §17 §25 等历史段已退役或下沉（编号留疤不重排），演化史见下方日期注记。
 // 2026-10-21 门禁极小化第 1 批：§17 退役删除；§1 配对/L3 三件、§3 配对/回路、§14 留痕降 WARN——
@@ -94,7 +94,9 @@ recordRun({ root: ROOT, mode: kit.LOOP_MODE, blockers, warnings });
 // 实现落位：.agents/scripts/warn-format.mjs——本文件无 isMain 守卫（被 import 即全量执行并 exit），
 // 聚合逻辑不可在此直接单测；抽成无副作用模块 warn-format.mjs（原锁折叠规则的 warn-format.test.mjs 已随引擎测试面退役 2026-10-28）。
 const WARN_LOG = path.join(ROOT, 'tmp', 'check-loop-warn.log');
-const selfRun = fs.existsSync(path.join(ROOT, '.agents', 'scripts', 'check-loop.mjs'));
+// R5-1b：脚本实体随包分发；优先包内 runtime 目录，夹具/旧布局回退项目内路径。
+const SCRIPTS_DIR = process.env.FLOW_KIT_RUNTIME_SCRIPTS || path.join(ROOT, '.agents', 'scripts');
+const selfRun = fs.existsSync(path.join(SCRIPTS_DIR, 'check-loop.mjs'));
 const compactOn = selfRun && process.env.CHECK_LOOP_VERBOSE !== '1';
 // 三类高频纯 WARN 默认静默（2026-11-08 档 2-G，与头注同源）：仅折叠门（compactOn）开启时静默——
 //   夹具/VERBOSE=1 口径逐条输出不变。只滤 stderr 呈现：judgments 落账（recordRun 用全量 warnings）
@@ -122,7 +124,7 @@ if (warnings.length) {
 // C1（2026-10-28）：FULL 手动审计末尾跑合并语义对拍探针——P0-A 修复（first-parent diff）被退化回
 // git show 时立红。仅本地 FULL（无 --rev/worktree、无夹具根）自动跑；探针可独立手动直跑。
 if (kit.FULL_SCAN && !kit.REV && !process.env.CHECK_LOOP_ROOT) {
-  const probe = kit.spawnSync(process.execPath, [path.join('.agents', 'scripts', 'check-loop-rev-semantics.mjs')], { stdio: 'inherit' });
+  const probe = kit.spawnSync(process.execPath, [path.join(SCRIPTS_DIR, 'check-loop-rev-semantics.mjs')], { stdio: 'inherit' });
   if (probe.status !== 0) {
     process.stderr.write('闭环骨架断档（check-loop.mjs）— 合并语义对拍探针未过（check-loop-rev-semantics.mjs）——REV 面实现疑似退化。HARD-BLOCK\n');
     process.exit(1);

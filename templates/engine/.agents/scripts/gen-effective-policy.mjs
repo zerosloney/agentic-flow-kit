@@ -8,7 +8,7 @@
 //   执法段已退役的锚标注「执法已退役」，不宣称不存在的执法——2026-10-28 引擎减重 hygiene 16 段全退）。
 // 判定单源：锚定义 = policy.mjs POLICIES（本脚本不写日期，只读只渲染）；键→检查项映射取自
 //   check-loop.mjs 头部检查清单（编号是文档引用锚，此处仅作说明文本）。
-// 用法：node .agents/scripts/gen-effective-policy.mjs [--root <dir>] [--check]
+// 用法：flow-kit run gen-effective-policy.mjs [--root <dir>] [--check]
 //   --check：与磁盘 workflow/effective-policy.md 比对，漂移 exit 1（CI/verify 用）。
 //   比对前双侧行尾归一（CRLF→LF）。生成器仍只写 LF，--check 不改文件。
 //   干净的 autocrlf 检出是 CRLF，字节相等会假红，且重生成只留下不可提交的行尾差。
@@ -65,7 +65,7 @@ function render(viewDateStr) {
   const lines = [];
   lines.push('# 当前生效规则视图（生成物，勿手改）');
   lines.push('');
-  lines.push('> 生成器 `node .agents/scripts/gen-effective-policy.mjs`（policy.mjs 单源渲染；漂移由 verify.mjs `effective-policy` 门 --check 把关——改 policy 后须重生成并随同提交）。');
+  lines.push('> 生成器 `flow-kit run gen-effective-policy.mjs`（policy.mjs 单源渲染；漂移由 verify.mjs `effective-policy` 门 --check 把关——改 policy 后须重生成并随同提交）。');
   lines.push(`> 当前生效：**policyVersion ${policy.policyVersion}**（engine.json 声明 ${policy.requestedVersion}${policy.requestedVersion === policy.policyVersion ? '' : '，不在 POLICIES 表内已回落 v1'}）；视图日期 ${todayStr}。`);
   lines.push('');
   lines.push('| 锚键 | 生效日/锚 | 消费检查项 | 语义 | 分级 | 现状 |');
@@ -110,7 +110,7 @@ if (argv.includes('--check')) {
     process.exit(0);
   }
   console.error('[effective-policy] ❌ 漂移：policy/engine 变更后未重生成 workflow/effective-policy.md');
-  console.error('  修法：node .agents/scripts/gen-effective-policy.mjs && git add workflow/effective-policy.md（随 policy 变更同笔提交）');
+  console.error('  修法：flow-kit run gen-effective-policy.mjs && git add workflow/effective-policy.md（随 policy 变更同笔提交）');
   process.exit(1);
 }
 fs.mkdirSync(path.dirname(OUT), { recursive: true });

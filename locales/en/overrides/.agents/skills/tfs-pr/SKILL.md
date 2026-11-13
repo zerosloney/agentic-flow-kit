@@ -9,7 +9,7 @@ Zero project assumptions: if the remote is in TFS / Azure DevOps form (path cont
 
 ## Trigger / do not trigger
 - Trigger: internal TFS transactions such as "check PR / any conflicts", "add / update PR description", "resolve PR conflicts"; `az devops login` reporting "Refusing to attach credentials to an invalid Azure DevOps organization URL" → switch to this skill, do not retry az.
-- Trigger (PR creation class): when the host has a unique PR entry convention (e.g., Shipyard.Material's `pr-create.mjs`), "create PR / push and create PR" **does not directly trigger this skill** — PR creation only goes through the host's unique entry `node .agents/scripts/pr-create.mjs` (which internally calls `tfs-pr create`); agents are forbidden to bypass the host entry and call `tfs-pr create` directly. Hosts without this convention may keep direct triggering. (This repo's former review pre-step was retired to a manual tool on 2026-11-09: panel review runs manually on demand, see `.agents/commands/pr-review.md`.)
+- Trigger (PR creation class): when the host has a unique PR entry convention (e.g., Shipyard.Material's `pr-create.mjs`), "create PR / push and create PR" **does not directly trigger this skill** — PR creation only goes through the host's unique entry `flow-kit run pr-create.mjs` (which internally calls `tfs-pr create`); agents are forbidden to bypass the host entry and call `tfs-pr create` directly. Hosts without this convention may keep direct triggering. (This repo's former review pre-step was retired to a manual tool on 2026-11-09: panel review runs manually on demand, see `.agents/commands/pr-review.md`.)
 - Do not trigger: GitHub / GitLab and other public hosted PRs; ordinary code review, commit messages.
 
 ## 0. Prerequisite probing

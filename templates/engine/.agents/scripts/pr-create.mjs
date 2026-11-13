@@ -6,9 +6,9 @@
 //   评审改为手动按需，编排见 .agents/commands/pr-review.md。）
 //
 // 用法：
-//   node .agents/scripts/pr-create.mjs create --source <branch> --target <branch> \
+//   flow-kit run pr-create.mjs create --source <branch> --target <branch> \
 //     --title "<Conventional Commits 中文>" --body-file <file>
-//   node .agents/scripts/pr-create.mjs --source <branch> --target <branch> --title ... --body-file ...
+//   flow-kit run pr-create.mjs --source <branch> --target <branch> --title ... --body-file ...
 //
 // 选项：全部原样传给 tfs-pr create（--dry-run / --json / --title / --body-file / ...）。
 //
@@ -33,7 +33,7 @@ if (!rawArgs.length || rawArgs.includes('--help') || rawArgs.includes('-h')) {
   console.log(`pr-create.mjs — 转调 tfs-pr create
 
 用法：
-  node .agents/scripts/pr-create.mjs create --source <branch> --target <branch> \\
+  flow-kit run pr-create.mjs create --source <branch> --target <branch> \\
     --title "<Conventional Commits 中文>" --body-file <file>
 
 选项：

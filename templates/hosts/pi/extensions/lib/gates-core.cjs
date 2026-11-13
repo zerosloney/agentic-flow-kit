@@ -76,13 +76,14 @@ function parseGateOutput(stdout) {
 }
 
 function runGate(scriptName, payload, cwd) {
-  const script = path.join(cwd, '.agents', 'hooks', scriptName);
-  const r = spawnSync(process.execPath, [script], {
+  const hook = scriptName.replace(/\.(cjs|mjs)$/, '');
+  const r = spawnSync('flow-kit', ['hook', hook], {
     cwd,
     input: JSON.stringify(payload),
     encoding: 'utf8',
     timeout: TIMEOUT_MS,
     windowsHide: true,
+    shell: process.platform === 'win32',
   });
   return {
     failed: Boolean(r.error) || r.status !== 0,
@@ -93,13 +94,11 @@ function runGate(scriptName, payload, cwd) {
 }
 
 // ── L1 自保护：.pi/ 接线区（本机私有、git 不可见）────────
-// 接线完整性基线：两个接线文件 + 两个门脚本，缺一即告警。
-// （PostToolUse 反馈腿 post-edit-check.cjs 已于 2026-11-08 档 1 减重退役，不再计入。）
+// 接线完整性基线：两个接线文件 + 包内 CLI；缺一即告警。
+// （门实现随包分发，不再要求项目内存在 .agents/hooks 脚本。）
 const REQUIRED_FILES = [
   '.pi/extensions/shipyard-gates.ts',
   '.pi/extensions/lib/gates-core.cjs',
-  '.agents/hooks/pre-shell-check.cjs',
-  '.agents/hooks/pre-write-check.cjs',
 ];
 
 function normalizeRel(target, cwd) {
@@ -127,6 +126,12 @@ function isPiWriteCommand(command) {
 
 function checkWiring(cwd) {
   const missing = REQUIRED_FILES.filter((f) => !fs.existsSync(path.join(cwd, f)));
+  const cli = spawnSync('flow-kit', ['--version'], {
+    encoding: 'utf8',
+    windowsHide: true,
+    shell: process.platform === 'win32',
+  });
+  if (cli.error || cli.status !== 0) missing.push('flow-kit CLI');
   return { ok: missing.length === 0, missing };
 }
 

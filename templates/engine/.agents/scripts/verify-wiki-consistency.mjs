@@ -1,5 +1,5 @@
 // wiki 三方一致性验证：磁盘 ↔ INDEX.md ↔ 知识沉淀总览.html(DATA) ＋ 数据维护台账登记 ＋ 看板链接可达性
-// 用法: node .agents/scripts/verify-wiki-consistency.mjs   （不一致 exit 1）
+// 用法: flow-kit run verify-wiki-consistency.mjs   （不一致 exit 1）
 // 约定见 .agents/skills/wiki/SKILL.md；归档 drafts-archive 仅计数，不参与文件比对。
 // 口径（2026-09-17 起，与 gen-wiki-board.mjs 保持一致）：主题目录顶层全量文件登记 +
 //      直属子目录中的 md/html 知识文档（排除 *.visual-check.* 工具产物；数据维护主题例外——
@@ -248,7 +248,7 @@ if (untrackedRegistered.length) {
 {
   const { claims, mismatches } = checkNarrativeClaims(process.cwd());
   if (mismatches.length) {
-    for (const mm of mismatches) problems.push(`叙事计数声明漂移：${mm.file}「${mm.label}」——跑 node .agents/scripts/gen-narrative-claims.mjs 改写或改为非现态措辞`);
+    for (const mm of mismatches) problems.push(`叙事计数声明漂移：${mm.file}「${mm.label}」——跑 flow-kit run gen-narrative-claims.mjs 改写或改为非现态措辞`);
   } else {
     notes.push(`叙事计数声明对账：${claims} 项现态声明对单源一致`);
   }

@@ -8,11 +8,11 @@
 // 租约是 advisory（协作纪律），不是安全边界；文件放 `.agents/cache/leases/`（gitignore）。
 //
 // 用法：
-//   node .agents/scripts/path-lease.mjs acquire --path wiki/foo.md [--owner <id>] [--ttl 30]
-//   node .agents/scripts/path-lease.mjs release --path wiki/foo.md [--owner <id>] [--force]
-//   node .agents/scripts/path-lease.mjs check   --path wiki/foo.md [--owner <id>]
-//   node .agents/scripts/path-lease.mjs list [--json]
-//   node .agents/scripts/path-lease.mjs sweep
+//   flow-kit run path-lease.mjs acquire --path wiki/foo.md [--owner <id>] [--ttl 30]
+//   flow-kit run path-lease.mjs release --path wiki/foo.md [--owner <id>] [--force]
+//   flow-kit run path-lease.mjs check   --path wiki/foo.md [--owner <id>]
+//   flow-kit run path-lease.mjs list [--json]
+//   flow-kit run path-lease.mjs sweep
 //
 // 退出码：acquire/check 成功 0；被他人持有 1；参数错误 2。
 import fs from 'node:fs';

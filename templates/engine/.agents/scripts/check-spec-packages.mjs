@@ -2,7 +2,7 @@
 // check-spec-packages.mjs — 校验 workflow/specs/<name>/ 的 Spec / Tasks / Verify 工件。
 // 约定：目录包（不含 _TEMPLATE）内三件套齐全；spec 有验收标准；
 // tasks 至少一条勾选项；verify-report 有结果/证据节与可识别的结论。
-// 用法：node .agents/scripts/check-spec-packages.mjs [--root <dir>] [--json]
+// 用法：flow-kit run check-spec-packages.mjs [--root <dir>] [--json]
 // 退出码：0 通过；1 存在缺件/缺节；2 用法错误。
 import fs from 'node:fs';
 import path from 'node:path';

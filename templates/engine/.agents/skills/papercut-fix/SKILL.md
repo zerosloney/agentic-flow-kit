@@ -18,7 +18,7 @@ description: 修 workflow/papercuts.md 里指定的未升级 papercut 条目（�
 
 | 源 | 读法 |
 |---|---|
-| `.agents/judgments.jsonl` | `node .agents/scripts/agg-judgments.mjs --retire-candidates`（per-rule 计数与候选） |
+| `.agents/judgments.jsonl` | `flow-kit run agg-judgments.mjs --retire-candidates`（per-rule 计数与候选） |
 | `workflow/delegations.md` | 返工原因枚举分布 + 月度聚合快照 |
 | `workflow/reviews.d/<YYYY-MM>.md` | 意见级采纳/拒绝/误报，按根因方向归并 |
 | `workflow/incidents/` | 根因枚举（仅引擎面条目） |
@@ -45,10 +45,10 @@ description: 修 workflow/papercuts.md 里指定的未升级 papercut 条目（�
 
 ## 约束与红线
 - **单一目标**：每轮执行仅处理一条目标，禁止顺手修复相邻条目或夹带其他改动。
-- **范围限制**：改动仅限文档面（`.agents/commands/`, `.agents/roles/`, `.agents/skills/`, `.githooks/`, `.agents/scripts/`, `workflow/`）。
+- **范围限制**：改动仅限文档面（`.agents/commands/`, `.agents/roles/`, `.agents/skills/`, `.githooks/`, `workflow/`）。
 - **绝对禁区**：禁止修改 `backend/`, `frontend/`, `tests/`, `wiki/`，禁止连接数据库。超出范围时必须停止并报告用户。
 - **验证优先**：禁止凭台账描述臆测现状。必须先读权威文件验证症状是否成立。
-- **编辑规范**：改 `workflow/` 文档用 `node .agents/scripts/rewrite-file.mjs <文件> --find <字面串> --replace <字面串>`（与 `stages.md` Build §4 相同）。
+- **编辑规范**：改 `workflow/` 文档用 `flow-kit run rewrite-file.mjs <文件> --find <字面串> --replace <字面串>`（与 `stages.md` Build §4 相同）。
 - **消债判定**：分支 A（修复）与分支 B（暂缓/失效）**均**满足 `debt -1` 不变量（debt = 台账待修
   行数，人工清点：触碰行带终态标记且不新增待修行；原定时报债传感器已退役 2026-11-08）。
 
@@ -84,7 +84,7 @@ description: 修 workflow/papercuts.md 里指定的未升级 papercut 条目（�
 - **运行检查**：
     - 触碰行已带终态标记（`✅ 已升级修复` / `⏸ 暂缓`），且本轮未新增待修行（`debt -1`，人工清点）。
     - 检查 `workflow/papercuts.md` 的总行数、列数分布及是否存在超长行（压行信号）。
-- **体积检查**：若修改了 `.agents/commands/` 或根 `AGENTS.md`，跑 `node .agents/scripts/rule-budget.mjs --all`，以其退出码为准。
+- **体积检查**：若修改了 `.agents/commands/` 或根 `AGENTS.md`，跑 `flow-kit run rule-budget.mjs --all`，以其退出码为准。
 
 ## 回报要求
 - 参照 `references/response-template.md` 输出。

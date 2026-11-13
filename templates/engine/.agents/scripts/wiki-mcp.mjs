@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import readline from 'node:readline';
 
-const ROOT = process.cwd();
+const ROOT = process.env.FLOW_KIT_PROJECT_ROOT || process.cwd();
 const SEARCH_ROOTS = ['wiki', '.agents'];
 const SKIP_DIRS = new Set(['.git', 'node_modules', '.agents/cache', '.agents/tmp', '.agents/tools', '.agents/.kit']);
 const TEXT_EXT = new Set(['.md', '.txt', '.json', '.jsonl', '.mjs', '.cjs', '.js', '.ts', '.yml', '.yaml']);

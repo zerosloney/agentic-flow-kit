@@ -9,9 +9,9 @@ The frontend dev server on port {{webPort}} connects to the API at `http://local
 > Missing these silently disables the gates. See `.agents/notes/runtime-env.md` §7.
 - `git config core.hooksPath .githooks` — mount the repository hooks.
 - `git config merge.ours.driver true` — enable `merge=ours` merge protection.
-- `git config merge.jsonl-union.driver "node .agents/scripts/git-merge-jsonl.mjs %O %A %B"` — enable union merge for `.agents/*.jsonl` ledgers.
+- `git config merge.jsonl-union.driver "flow-kit run git-merge-jsonl.mjs %O %A %B"` — enable union merge for `.agents/*.jsonl` ledgers.
 - **Never** use `--no-verify` for commit / merge / push.
-- **Self-check**: `node .agents/scripts/check-local-gates.mjs --fix`
+- **Self-check**: `flow-kit run check-local-gates.mjs --fix`
 
 ## 3. Universal Laws
 - **Security/privacy**: never commit secrets, tokens, `.env` files, or real user data; if sensitive material is found, stop spreading it immediately.

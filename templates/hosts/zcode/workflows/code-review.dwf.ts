@@ -91,12 +91,21 @@ const GIT_CANDIDATES: Candidate[] = [
   { run: (a, o) => world.run("C:/Program Files (x86)/Git/cmd/git.exe", a, o ?? {}) },
   { run: (a, o) => world.run("git", a, o ?? {}) },
 ];
+// R5-1b：门禁实现随包分发，经 `flow-kit hook` / `flow-kit run` 调用。
+const FLOW_KIT_CANDIDATES: Candidate[] = [
+  { run: (a, o) => world.run("flow-kit", a, o ?? {}) },
+];
 const nodeHit = await firstRunning(NODE_CANDIDATES);
 const gitHit = await firstRunning(GIT_CANDIDATES);
+const kitHit = await firstRunning(FLOW_KIT_CANDIDATES);
 const runNode: Runner = (nodeHit ?? NODE_CANDIDATES[NODE_CANDIDATES.length - 1]).run;
 const runGit: Runner = (gitHit ?? GIT_CANDIDATES[GIT_CANDIDATES.length - 1]).run;
+const runKit: Runner = (kitHit ?? FLOW_KIT_CANDIDATES[0]).run;
 if (nodeHit === null || gitHit === null) {
   log(`⚠ 可执行文件未解析到：${[...(nodeHit === null ? ["node"] : []), ...(gitHit === null ? ["git"] : [])].join("、")}——标准安装位置与 PATH 均未命中，受影响门禁将记「未能运行」；安装后重跑，或核对 .agents/notes/runtime-env.local.md（模板 runtime-env.local.example.md）`);
+}
+if (kitHit === null) {
+  log("⚠ flow-kit 未在 PATH：写前门/命令门/lane-surface 判定将记「未能运行」；请 npm install -g agentic-flow-kit");
 }
 function parseChanged(out: string): string[] {
   const paths: string[] = [];
@@ -180,14 +189,14 @@ if (paths.length === 0) {
 }
 
 const gateScripts = [
-  ".agents/hooks/check-architecture.mjs",
-  ".agents/hooks/check-delete-guard.mjs",
-  ".agents/hooks/check-notify-guard.mjs",
+  "check-architecture",
+  "check-delete-guard",
+  "check-notify-guard",
 ];
 const gateRuns = await Promise.all(
   gateScripts.map(async (script) => {
     try {
-      return { script, result: await runNode([script]) };
+      return { script, result: await runKit(["hook", script]) };
     } catch {
       return { script, result: null };
     }
@@ -227,28 +236,29 @@ const listWrite = await runNode([
 ]);
 if (listWrite.exitCode === 0 && paths.length > 0) {
   try {
-    const lane = await runNode([
-      ".agents/scripts/check-lane-surface.mjs",
+    const lane = await runKit([
+      "run",
+      "check-lane-surface",
       "--staged-file",
       laneListPath,
     ]);
     if (lane.exitCode === 0) {
-      gateNotes.push(".agents/scripts/check-lane-surface.mjs（触达面判低，注入评审清单）通过");
+      gateNotes.push("flow-kit run check-lane-surface（触达面判低，注入评审清单）通过");
     } else {
       const out = `${lane.stdout}\n${lane.stderr}`.trim().slice(0, 2000);
       gateFindings.push({
-        where: ".agents/scripts/check-lane-surface.mjs",
+        where: "flow-kit run check-lane-surface",
         what: "触达面判低：改动命中 L2 契约面（lane-surfaces.txt）——核对入口文档级别是否应就高",
         evidence: out === "" ? `退出码 ${lane.exitCode}，无输出` : out,
         severity: "P0",
       });
-      gateNotes.push(".agents/scripts/check-lane-surface.mjs（触达面判低，注入评审清单）未通过");
+      gateNotes.push("flow-kit run check-lane-surface（触达面判低，注入评审清单）未通过");
     }
   } catch {
-    gateNotes.push(".agents/scripts/check-lane-surface.mjs 未能运行");
+    gateNotes.push("flow-kit run check-lane-surface 未能运行");
   }
 } else if (listWrite.exitCode !== 0) {
-  gateNotes.push(".agents/scripts/check-lane-surface.mjs 未能运行（评审清单写入失败）");
+  gateNotes.push("flow-kit run check-lane-surface 未能运行（评审清单写入失败）");
 }
 log(`机器门禁：${gateNotes.join("；")}`);
 

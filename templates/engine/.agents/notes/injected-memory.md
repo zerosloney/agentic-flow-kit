@@ -10,5 +10,5 @@
 - 会话重入：`.agents/skills/session-resume/SKILL.md`
 - 主张账（未来会当真的话）：`workflow/claims.d/`
 - 记忆地图：`wiki/_memory/INDEX.md`
-- 行为评测门：`.agents/scripts/agent-eval.mjs`
+- 行为评测门：`flow-kit run agent-eval`
 - 离线梦境：`.agents/skills/dream/SKILL.md`

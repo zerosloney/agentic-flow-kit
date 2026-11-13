@@ -9,7 +9,7 @@
 //   ③ 写后回读校验（新锚已在、旧锚已零、行数不变、EOL 未变）——全过才打印成功；任一不过即非零退出
 // 另防两类自伤：find === replace（无操作却报成功）与目标文件不存在（fail-loud，不静默建文件）。
 // 原子写：同目录临时文件 + rename——中途崩溃不留半写文件（沿 git-merge-jsonl.mjs / compact-ledgers.mjs 惯例）。
-// 用法：node .agents/scripts/rewrite-file.mjs <文件> --find <字面串> --replace <字面串>
+// 用法：flow-kit run rewrite-file.mjs <文件> --find <字面串> --replace <字面串>
 //         [--expect N] [--allow-multi] [--dry-run] [--root <仓库根>]
 //   ⚠ 仅支持行内等行数替换（2026-11-06 配方回收：增/删行的多行改写本工具行数校验必拦，
 //     直接改用宿主 Edit 工具，勿反复重试）
@@ -42,7 +42,7 @@ for (let i = 0; i < argv.length; i++) {
 }
 const expectRaw = argOf('--expect');
 
-const USAGE = `用法：node .agents/scripts/rewrite-file.mjs <文件> --find <字面串> --replace <字面串> [--expect N] [--allow-multi] [--dry-run]`;
+const USAGE = `用法：flow-kit run rewrite-file.mjs <文件> --find <字面串> --replace <字面串> [--expect N] [--allow-multi] [--dry-run]`;
 const die = (msg) => { console.error(`❌ rewrite-file: ${msg}\n${USAGE}`); process.exit(1); };
 if (argv.includes('--help') || argv.includes('-h')) { console.log(USAGE); process.exit(0); }
 if (!file) die('缺目标文件');

@@ -191,7 +191,9 @@ const overCount = (pat, n, lim) => { console.log(`常驻面超限（条目数）
 // 里 `lane: 'hard'` 的段数——新增 hard 段须先退役一个 hard（总段数棘轮只锁 21，不锁 hard 数）。
 const countHardSections = () => {
   try {
-    const src = fs.readFileSync('.agents/scripts/check-loop.mjs', 'utf8');
+    const src = fs.readFileSync(process.env.FLOW_KIT_RUNTIME_SCRIPTS
+      ? path.join(process.env.FLOW_KIT_RUNTIME_SCRIPTS, 'check-loop.mjs')
+      : '.agents/scripts/check-loop.mjs', 'utf8');
     return (src.match(/\{\s*lane:\s*'hard'/g) || []).length;
   } catch { return 0; }
 };

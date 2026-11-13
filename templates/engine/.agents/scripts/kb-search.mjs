@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // 跨语料检索入口（2026-09-21，intent 2026-09-21-workflow-doc-retrieval）
-// 用法：node .agents/scripts/kb-search.mjs [选项] <词1> [词2 ...]（多词 AND，全部命中才算）
+// 用法：flow-kit run kb-search.mjs [选项] <词1> [词2 ...]（多词 AND，全部命中才算）
 //
 // 语料与口径
 //   workflow（流程留痕）：只搜 frontmatter + H1 + 指定节（背景 / 目标 / 根因 / 复盘三件套 / 验收标准 / 影响面），
@@ -25,7 +25,7 @@ const AGENTS_DIR = process.env.FLOW_KIT_PROJECT_ROOT
   : path.join(SCRIPT_DIR, '..');
 const MODULES_FILE = path.join(AGENTS_DIR, 'config', 'workflow-modules.txt');
 
-const USAGE = `用法: node .agents/scripts/kb-search.mjs [选项] <词1> [词2 ...]（多词 AND）
+const USAGE = `用法: flow-kit run kb-search.mjs [选项] <词1> [词2 ...]（多词 AND）
 
   --scope <workflow|wiki|all>   检索语料，默认 all（指定 -t 时默认转 wiki）
   --files <路径,...>            文件关联检索：逗号分隔路径，各取「文件名去扩展名」
@@ -104,7 +104,7 @@ if (!qWords.length && !anyWords.length) { console.error(`检索词不能为空�
 // 空格短语检索本就不受支持（拆词 AND 命中面是短语的超集），无损失面。
 const spaced = qWords.filter((w) => /\s/.test(w));
 if (spaced.length) {
-  console.error(`词内含空白：${spaced.map((w) => `「${w}」`).join(' ')}——多词请拆独立参数（AND 语义）：node .agents/scripts/kb-search.mjs 托盘 导入\n\n${USAGE}`);
+  console.error(`词内含空白：${spaced.map((w) => `「${w}」`).join(' ')}——多词请拆独立参数（AND 语义）：flow-kit run kb-search.mjs 托盘 导入\n\n${USAGE}`);
   process.exit(1);
 }
 words.length = 0; words.push(...qWords); // 原位替换，下游 searchWorkflow/searchWiki 传参不变

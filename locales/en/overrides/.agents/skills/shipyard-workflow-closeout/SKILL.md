@@ -26,16 +26,16 @@ Check four items against the document family to close; if any is missing → fil
 1. **Pairing self-check**: sibling documents of the same family present — L2/L3 intent must have same-named spec and plan (confirm-doc's `specConfirmed` / `planConfirmedFor` hard gates); intent (including legacy L1) must have a same-named plan; incident must have a same-named plan (L2/L3 additionally must have a same-named spec). L1 pairing remains a self-check: 2026-10-21 gate minimization downgraded the pairing hard gate to WARN, not re-hardened here.
 2. **incident trio** (when closing an incident): `## 复盘三件套` section contains `1. 结构性修复 / 2. 防复发验证 / 3. 规范条目` all three + "whether a new intent is needed" line; if "yes" → the referenced intent path exists. Criterion single source `stage-gates.mjs / incidentTrioGate`, hard-blocked by confirm-doc for →fixed/→closed; legacy documents before the 2026-11-09 first-anchor addition and documents declaring `流程: legacy` / `存量确认态豁免（` remain manual self-check (same criteria).
 3. **L2/L3 review context required**: persisted line format `- 独立复核：…（复核上下文：<session/subagent id>）`, starting with `- 独立复核：` and containing "复核上下文："; L2/L3 intent→done hard-blocked by confirm-doc's `reviewLineFor`, spec/plan and L1 remain self-check. If missing → **HALT**: go back to `.agents/commands/stages.md` Test §4 to add the independent review, persist that line, then close.
-4. **Commitment surface not rewritten (new 2026-10-27)**: if the **commitment surface** (criteria text / red lines / goal / change plan) was changed after approval, the user must **nod again** before close-out — run `node .agents/scripts/confirm-doc.mjs <doc> --reconfirm --delegated "<user's original utterance>"` to re-record the commitment-surface fingerprint (does not advance status). **Checking acceptance + evidence backfill / `确认结果` / review-line anchor changes do not count as commitment changes** (normalized; normal close-out unaffected).
+4. **Commitment surface not rewritten (new 2026-10-27)**: if the **commitment surface** (criteria text / red lines / goal / change plan) was changed after approval, the user must **nod again** before close-out — run `flow-kit run confirm-doc.mjs <doc> --reconfirm --delegated "<user's original utterance>"` to re-record the commitment-surface fingerprint (does not advance status). **Checking acceptance + evidence backfill / `确认结果` / review-line anchor changes do not count as commitment changes** (normalized; normal close-out unaffected).
 
 Completion criteria: four items pass; machine gates per confirm-doc rejection messages, human self-check items verified one by one.
 
 ### 1. Verification
-Run `node .agents/scripts/verify.mjs --scope`. If just run in fast lane step 5 it can be reused; criteria no longer rely on memory: when the all-green line is persisted record `dirty` (snapshot of dirty paths under `backend/` `frontend/` at that time); at close-out confirm-doc compares current business dirty paths — business changes appearing after verify are judged stale evidence (24h window as before). Legacy green lines (without a dirty field) keep the original criteria.
+Run `flow-kit run verify.mjs --scope`. If just run in fast lane step 5 it can be reused; criteria no longer rely on memory: when the all-green line is persisted record `dirty` (snapshot of dirty paths under `backend/` `frontend/` at that time); at close-out confirm-doc compares current business dirty paths — business changes appearing after verify are judged stale evidence (24h window as before). Legacy green lines (without a dirty field) keep the original criteria.
 
 Completion criteria: one exit code 0, and not judged "evidence stale" at close-out (if judged, rerun verify to refresh the snapshot). When scope judgment needs full coverage the script falls back itself; do not hand-edit `workflow/verify-evidence.md`. Ordering: the verify green line must be produced **before** the done transition (the dirty snapshot records current business dirty paths; code from the same-batch L1 single commit is already in the working tree at verify time, a path the green line has seen, so it is not judged stale).
 
-Scope reconciliation (advisory, 2026-11-11 dev-tour wiring): run `node .agents/scripts/gen-dev-tour.mjs workflow/plans/<name>.md --scope-report` — when "actual changes outside the document" is non-empty, explain or backfill the plan before closing (same criteria as dev-tour trigger conditions; complements the `check-scope.mjs` out-of-scope hard gate, here only prompts and never blocks, always exit 0).
+Scope reconciliation (advisory, 2026-11-11 dev-tour wiring): run `flow-kit run gen-dev-tour.mjs workflow/plans/<name>.md --scope-report` — when "actual changes outside the document" is non-empty, explain or backfill the plan before closing (same criteria as dev-tour trigger conditions; complements the `check-scope.mjs` out-of-scope hard gate, here only prompts and never blocks, always exit 0).
 
 ### 2. Check acceptance
 In the document check each acceptance item and write evidence, fixed format: `- [x] acceptance item` with "证据：<command output / path / verification record>" on the same line or immediately following continuation line. Criterion single source `stage-gates.mjs / acceptanceEvidenceGate` (close-out format gate): unchecked items, checked items missing the "证据：" annotation, and L2/L3 specs without a "验收判据" data row are all rejected at confirm-doc. L1 checks the plan. L2/L3 new requirements check the intent. Fixes check the incident, path is `open` → `fixed` → `closed`.
@@ -45,16 +45,16 @@ Completion criteria: every acceptance item points to evidence (command output, p
 **Check semantics (criteria declaration, 2026-11-10)**: document checks fall into three classes; done is unrelated to total check count — ① task-breakdown checks = process trace / session re-entry anchor (e.g., `stages.md` §1 shortcut check reads check state to align progress); not all checked ≠ not complete, not a reason to withhold close-out; ② entry red-line questionnaires are negative declarations; L1 all unchecked is the correct "not touched" state; ③ the only check criterion for done = acceptance criteria section each `[x]` cleared + evidence line (this section's acceptanceEvidenceGate). Fabricating backfilled checks for "tidiness" is forbidden.
 
 ### 3. Proxy-record terminal state
-First choice is one call `node .agents/scripts/closeout.mjs <doc> --delegated "<user's original utterance>"` (chains §3–§5; usage and failure recovery see §5.1); the three steps below are the manual equivalent path.
+First choice is one call `flow-kit run closeout.mjs <doc> --delegated "<user's original utterance>"` (chains §3–§5; usage and failure recovery see §5.1); the three steps below are the manual equivalent path.
 
-Manual proxy record: `node .agents/scripts/confirm-doc.mjs <doc> --delegated "<user's original utterance>"`.
+Manual proxy record: `flow-kit run confirm-doc.mjs <doc> --delegated "<user's original utterance>"`.
 
 Incident from `fixed` to `closed` run once more. When spec is marked `done`, step 1's all-green evidence already exists.
 
 Completion criteria: target document status is `done` or `closed`, body remains unchanged after this proxy record.
 
 ### 4. Index
-Run `node .agents/scripts/gen-workflow-index.mjs`.
+Run `flow-kit run gen-workflow-index.mjs`.
 
 Completion criteria: `workflow/INDEX.md` regenerated from disk.
 
@@ -69,7 +69,7 @@ Completion criteria: above paths committed, hooks pass.
 
 ### 5.1 Single call and failure recovery (re-entry)
 
-`node .agents/scripts/closeout.mjs <doc> --delegated "<user's original utterance>" [--msg "<commit subject>"] [--dry-run]`
+`flow-kit run closeout.mjs <doc> --delegated "<user's original utterance>" [--msg "<commit subject>"] [--dry-run]`
 
 Chain order: confirm-doc writes terminal state → gen-workflow-index regenerates → git add fixed path list → git commit. Incident's two hops run once each (`fixed` and `closed`). `--dry-run` reports only current status / next hop / candidate path changes; no state, no write, no commit.
 

@@ -60,12 +60,12 @@ L1 的立档、实现、验证与关单都在 `.agents/commands/new-task.md` §L
 **Input**: 用户需求原文 + 已定级别
 **Process**:
 1. **捷径检查（兼会话重入，session-context）**: L1 看 `workflow/plans/` 是否已有同名 plan；L2/L3 看 `workflow/intents/` 是否已有 approved intent。已有且**终态** → 按 `next` 跳；已有且**在途**（draft/approved，勾选≠完成）→ 这是重入不是新建：读 plan 勾选态和 `git status` 对齐后续作，禁另立新档。L1 回到快速道，不进 Build 章。
-2. **同类检索**: `node .agents/scripts/kb-search.mjs "<关键词>" --scope workflow --type intents,plans,specs` $\rightarrow$ 命中同类先读结论与验收
+2. **同类检索**: `flow-kit run kb-search.mjs "<关键词>" --scope workflow --type intents,plans,specs` $\rightarrow$ 命中同类先读结论与验收
 **Output**: 确认无同类入口 / 已有 approved 入口
 
 ## 3. L2/L3：起草 intent
 **Process**:
-1. **生成草稿**: `node .agents/scripts/fill-intent.mjs --module <模块> --level <L2|L3> --topic <主题> --output workflow/intents/<date>-<主题>.md --notes "<备注>"`
+1. **生成草稿**: `flow-kit run fill-intent.mjs --module <模块> --level <L2|L3> --topic <主题> --output workflow/intents/<date>-<主题>.md --notes "<备注>"`
 2. **填实**: 背景与问题 / 历史教训防复发 / 目标 / 非目标 / 约束 / 影响面 / 触达红线 / 验收标准
 3. **红线核对**: 对照根 `AGENTS.md` 及目录级 `AGENTS.md`。没碰到不勾。
 **Output**: `workflow/intents/{name}.md` (Status: Draft)
@@ -108,7 +108,7 @@ L1 的立档、实现、验证与关单都在 `.agents/commands/new-task.md` §L
 3. `frontend/AGENTS.md` 全文（门禁 G-2~G-3 / 契约规则 / 列表页状态规则）
 **Process**:
 0. **先查后建**: 同功能已有 spec（含归档）/ `verify-ui/features` $\rightarrow$ 原件修订不新建（单源 `workflow/README.md`「同功能续作」）
-1. **生成草稿**: 运行 `node .agents/scripts/fill-spec.mjs --level <L2|L3> --topic <主题> --output workflow/specs/<date>-<主题>.md`
+1. **生成草稿**: 运行 `flow-kit run fill-spec.mjs --level <L2|L3> --topic <主题> --output workflow/specs/<date>-<主题>.md`
 2. **填实内容**: 复制 `_TEMPLATE.md` $\rightarrow$ 填写 [功能行为 / 数据流 / 系统改动 / 约束遵守映射 / 风险评估]
 3. **约束核对**: 对照根 `AGENTS.md` 及目录级 `AGENTS.md` 红线逐条说明满足方式
 4. **交互确认**: 明确标注入口形态 (表单/选择器/弹窗)，禁自行推定
@@ -131,7 +131,7 @@ L2/L3 强制：委派 `independent-reviewer`；触发、形态、必填输入与
 **Process**:
 1. **HALT**: 输出 spec 全文 $\rightarrow$ 等待用户确认。确认前自查歧义清单与前提质询：待澄清归零、6 维齐、每行有依据、前提有反问有选定依据（不满足则落态被拒）
 2. **状态迁移**: $\text{draft} \rightarrow \text{approved}$
-3. **落态入口**: 运行 `node .agents/scripts/confirm-doc.mjs <path>`（口径见 `new-task.md` 快速道第 4 步，本文不复述）
+3. **落态入口**: 运行 `flow-kit run confirm-doc.mjs <path>`（口径见 `new-task.md` 快速道第 4 步，本文不复述）
 4. **留痕提交**: 立即 `docs(workflow)` 单独提交
 **Next**: Build 章
 
@@ -164,13 +164,13 @@ L1 不在本章起草 plan，回 `.agents/commands/new-task.md` §L1 快速道�
 ## 2. 进计划模式列改动
 **Input**: `workflow/plans/{name}.md` (Approved)
 **Process**:
-1. **坑点检索**: `node .agents/scripts/kb-search.mjs --scope workflow --module <token> "<关键词>"` $\rightarrow$ 提取 incident 根因入自查项
+1. **坑点检索**: `flow-kit run kb-search.mjs --scope workflow --module <token> "<关键词>"` $\rightarrow$ 提取 incident 根因入自查项
 2. **列清单**: 明确 [读后改/新建] 文件清单 + [动作 $\rightarrow$ 对象] 执行步骤
 3. **同步审计**: 改动命中 `.agents/commands/` 或 `.agents/roles/` 时，正文只改权威源，宿主壳保持指针（见 §🛠️ 辅助与同步）
 4. **红线核对**: 对照根 `AGENTS.md` 及目录级 `AGENTS.md` 标注触达红线
-5. **生成全景 + 拉起看板**: 先 `node .agents/scripts/gen-dev-tour.mjs workflow/plans/{name}.md --strict` 过每步文件门（实现步骤缺 `- 文件：` 拒产；纯验证步骤标「验证步骤」），再 `node .agents/scripts/auto-tour.mjs workflow/plans/{name}.md` 拉起看板（幂等，失败只告警）。需要快照另跑 gen-dev-tour；核对「文档外实际改动」，越界先回填/回滚；口径见 dev-tour/SKILL.md。层兜底（直认 0）= 标题失约，规范后重生成
+5. **生成全景 + 拉起看板**: 先 `flow-kit run gen-dev-tour.mjs workflow/plans/{name}.md --strict` 过每步文件门（实现步骤缺 `- 文件：` 拒产；纯验证步骤标「验证步骤」），再 `flow-kit run auto-tour.mjs workflow/plans/{name}.md` 拉起看板（幂等，失败只告警）。需要快照另跑 gen-dev-tour；核对「文档外实际改动」，越界先回填/回滚；口径见 dev-tour/SKILL.md。层兜底（直认 0）= 标题失约，规范后重生成
 6. **HALT**: 输出改动清单 $\rightarrow$ 等待用户确认
-**Output**: 确认的改动清单 $\rightarrow$ **回填 plan「改动面/任务拆解」落盘**（session-context：对话留痕仅供当次，重入以 plan 为准——改动面 + 任务勾选态 + git status = 会话重入三锚）。**落盘后重跑 `node .agents/scripts/auto-tour.mjs workflow/plans/{name}.md`**——真实目的是确保看板进程在跑（幂等，已在跑即复用）；在跑则实时页自动重绘（SSE 推送 + 5s 兜底轮询），落盘后的改动面自会进图
+**Output**: 确认的改动清单 $\rightarrow$ **回填 plan「改动面/任务拆解」落盘**（session-context：对话留痕仅供当次，重入以 plan 为准——改动面 + 任务勾选态 + git status = 会话重入三锚）。**落盘后重跑 `flow-kit run auto-tour.mjs workflow/plans/{name}.md`**——真实目的是确保看板进程在跑（幂等，已在跑即复用）；在跑则实时页自动重绘（SSE 推送 + 5s 兜底轮询），落盘后的改动面自会进图
 
 ## 3. 实现与自验
 **Input**: `workflow/plans/{name}.md` (Approved，含落盘的改动面与任务清单)
@@ -180,14 +180,14 @@ L1 不在本章起草 plan，回 `.agents/commands/new-task.md` §L1 快速道�
 3. **架构约束**: 严禁自创旁路数据访问，必须遵循根/目录级 `AGENTS.md` 红线
 4. **L3 专项**: Schema 变更必须走项目约定维护方式，禁擅自引入迁移机制
 5. **变更管控**: 若需偏离 plan (改公共接口 / 动未列文件 / 引新依赖) $\rightarrow$ **HALT** $\rightarrow$ 确认后继续
-6. **自验闭环**: 运行 [项目构建 / 类型检查 / 自动化测试] (详见 Test 章 §1)；范围对账 `node .agents/scripts/check-scope.mjs workflow/plans/{name}.md`——越界件即收口（回填 plan 或回滚）；**L2/L3 关单前必须 `--strict` 通过**，L1 保持 advisory（推送时刻另有 check-scope-range 按 old..new 范围硬门兜底）
+6. **自验闭环**: 运行 [项目构建 / 类型检查 / 自动化测试] (详见 Test 章 §1)；范围对账 `flow-kit run check-scope.mjs workflow/plans/{name}.md`——越界件即收口（回填 plan 或回滚）；**L2/L3 关单前必须 `--strict` 通过**，L1 保持 advisory（推送时刻另有 check-scope-range 按 old..new 范围硬门兜底）
 **Output**: 实现的代码变更 + 自验通过证据
 
 ## 4. 确认后收尾
 **Process**:
 1. **状态迁移**: plan 保持 `approved`，不在此置 `done`。关单在 Test 章 §5，经 confirm-doc 置 `done`。
 2. **提交留痕**: intent/spec 在 design 确认后单独 `docs(workflow)`。plan 确认后同样单独 `docs(workflow)`，不与代码同一提交。Conventional Commits 中文。
-3. **脚本化改写**：改 workflow 文档或台账用 `node .agents/scripts/rewrite-file.mjs <文件> --find <字面串> --replace <字面串>`。禁止 `node -e` 配 `writeFileSync`（CRLF 检出上会静默没改到还打印成功）。
+3. **脚本化改写**：改 workflow 文档或台账用 `flow-kit run rewrite-file.mjs <文件> --find <字面串> --replace <字面串>`。禁止 `node -e` 配 `writeFileSync`（CRLF 检出上会静默没改到还打印成功）。
 **Next**: Test 章
 
 ## 🚫 禁止项
@@ -200,7 +200,7 @@ L1 不在本章起草 plan，回 `.agents/commands/new-task.md` §L1 快速道�
 ## 🛠️ 辅助与同步
 - **宿主是指针壳**：改 `.agents/commands/` 或 `.agents/roles/` 不要把正文抄进 opencode / trae / codebuddy。壳只保留宿主 frontmatter，并写明权威路径。机器检查仅 check-loop hard 五段，不覆盖宿主壳；人工核对壳是否断线/过厚。
 - **改动面纪律**: plan 改动面列权威源路径。宿主壳未改就不要把 `wf-*.md` 写进改动面。
-- **自检**: 改 check-loop 后跑 `node .agents/scripts/check-loop.mjs`
+- **自检**: 改 check-loop 后跑 `flow-kit run check-loop.mjs`
 
 # Test · 静态门 + UI 实测
 
@@ -209,10 +209,10 @@ L1 不在本章起草 plan，回 `.agents/commands/new-task.md` §L1 快速道�
 ## 1. 静态门 (Static Gates)
 **Input**: 待验证代码变更
 **Process**:
-1. **执行门禁**: `node .agents/scripts/verify.mjs`（档位口径以 verify.mjs 头注为准，本文不复述）。项目构建、测试、类型检查的命令清单单源是 `.agents/hooks/commit-check.config.json`。
+1. **执行门禁**: `flow-kit run verify.mjs`（档位口径以 verify.mjs 头注为准，本文不复述）。项目构建、测试、类型检查的命令清单单源是 `.agents/hooks/commit-check.config.json`。
 2. **故障处置**: 任一失败 $\rightarrow$ **HALT**。L1 回 `.agents/commands/new-task.md` 快速道第 5 步改代码。L2/L3 回 Build 章修复。偶发/跨层问题用 `diagnosing-bugs` 诊断。全量首跑红、隔离重跑转绿不算绿：按 flaky 立项（papercut/incident）后修复，禁以重跑绿直接关单。
-3. **档位按任务小类**: 纯文档/业务面 → 默认档（产品门按 diff 面裁）；跨面或发版前 → `--full`。引擎面无测试门，`*.test.mjs` 不入库不自动跑（2026-10-29 清库）；手动工具——合并语义探针 `node .agents/scripts/check-loop-rev-semantics.mjs`（FULL 模式末尾自动跑）。
-4. **行为评测（引擎面/模型面）**: 本批改动触及 `.agents/skills/**`、`.agents/commands/**`、`.agents/roles/**` 或模型配置时，跑 `node .agents/scripts/agent-eval.mjs check`。无当前内容签名的凭证 → 按 `.agents/skills/eval/SKILL.md` 跑任务集，再 `agent-eval.mjs record`。**修复类**在动手前 `node .agents/scripts/fix-task.mjs start`，关单后 `stop`——窗口内修改既有测试会被写前门拒绝（新建复现测试放行）。
+3. **档位按任务小类**: 纯文档/业务面 → 默认档（产品门按 diff 面裁）；跨面或发版前 → `--full`。引擎面无测试门，`*.test.mjs` 不入库不自动跑（2026-10-29 清库）；手动工具——合并语义探针 `flow-kit run check-loop-rev-semantics.mjs`（FULL 模式末尾自动跑）。
+4. **行为评测（引擎面/模型面）**: 本批改动触及 `.agents/skills/**`、`.agents/commands/**`、`.agents/roles/**` 或模型配置时，跑 `flow-kit run agent-eval.mjs check`。无当前内容签名的凭证 → 按 `.agents/skills/eval/SKILL.md` 跑任务集，再 `agent-eval.mjs record`。**修复类**在动手前 `flow-kit run fix-task.mjs start`，关单后 `stop`——窗口内修改既有测试会被写前门拒绝（新建复现测试放行）。
 **Output**: 静态门全绿证据 +（引擎面/模型面）行为评测凭证
 **Note**: 运行环境细节见 `.agents/notes/runtime-env.md` §1, §2；长门禁命令（verify 全量/`dotnet test`）**分段等 + 每段回报进度**，不阻塞到 timeout 上限——口径 §6.4「后台长任务取结果」
 
@@ -245,7 +245,7 @@ L1 关单即 `.agents/commands/new-task.md` 快速道第 6 步的单笔提交（
    - **L2/L3 新需求**: 逐条勾验 intent「验收标准」 $\rightarrow$ 补证据 $\rightarrow$ intent $\text{approved} \rightarrow \text{done}$
    - **修复类**: 验证防复发落地 $\rightarrow$ incident $\text{open} \rightarrow \text{fixed} \rightarrow \text{closed}$
 3. **同族清理**: L2/L3 与修复类的同名 plan 一并置 `done`。不留 `approved` 孤儿。
-4. **留痕记录**: 委派任务记入 `workflow/delegations.md` 委派结果表；L2/L3 自做记入自做任务结果表。自做 L1 不写。写了行才跑 `node .agents/scripts/agg-delegations.mjs --write`。
+4. **留痕记录**: 委派任务记入 `workflow/delegations.md` 委派结果表；L2/L3 自做记入自做任务结果表。自做 L1 不写。写了行才跑 `flow-kit run agg-delegations.mjs --write`。
 5. **顺事回灌（advisory）**: 有摩擦记 `workflow/papercuts.md`，没有就在关单回复写「无候选」。
 **Next**: L2/L3 $\rightarrow$ `.agents/commands/deploy.md`
 

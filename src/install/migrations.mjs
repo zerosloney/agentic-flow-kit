@@ -4,6 +4,7 @@
 // 框架在全部步骤成功后才写 manifest；任一步失败不落盘，避免半迁移状态。
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { CURRENT_SCHEMA_VERSION as SCHEMA_VERSION, writeManifest } from './manifest.mjs';
 
@@ -54,6 +55,9 @@ export async function migrateManifest({ target, manifest, dryRun = false, migrat
   let version = from;
   const applied = [];
   const notes = [];
+  const removals = [];
+  const keptLegacy = [];
+  const previousFiles = { ...(manifest.files || {}) };
   while (version < CURRENT_SCHEMA_VERSION) {
     const migration = list.find((item) => item.from === version && item.to === version + 1);
     if (!migration) {
@@ -82,6 +86,8 @@ export async function migrateManifest({ target, manifest, dryRun = false, migrat
     version = next.schemaVersion;
     applied.push(`${migration.from}-${migration.to}`);
     for (const note of result?.notes || []) notes.push(String(note));
+    for (const rel of result?.removals || []) removals.push(String(rel));
+    for (const rel of result?.keptLegacy || []) keptLegacy.push(String(rel));
     log(`migrate ${migration.file}`);
   }
   const changed = applied.length > 0;
@@ -93,6 +99,50 @@ export async function migrateManifest({ target, manifest, dryRun = false, migrat
     dryRun,
     applied,
     notes,
+    removals,
+    keptLegacy,
+    previousFiles,
     manifest: current,
   };
+}
+
+// 迁移成功后清理旧运行时文件：仅删除仍在盘且哈希与旧 manifest 一致的文件。
+// 用户改过的文件保留在项目里（不再托管），由 doctor 以 legacy 提示。
+export function cleanupMigratedFiles({ target, files = {}, removals, dryRun = false }) {
+  const removed = [];
+  const kept = [];
+  for (const rel of removals || []) {
+    const abs = path.join(target, rel);
+    let actual = null;
+    try {
+      actual = crypto.createHash('sha256').update(fs.readFileSync(abs)).digest('hex');
+    } catch {
+      continue;
+    }
+    const expected = files[rel];
+    if (!expected) {
+      kept.push(rel); // 旧 manifest 没有基线哈希：宁可不删，交给用户处置
+      continue;
+    }
+    if (actual !== expected) {
+      kept.push(rel);
+      continue;
+    }
+    if (dryRun) {
+      removed.push(rel);
+      continue;
+    }
+    try {
+      fs.unlinkSync(abs);
+      removed.push(rel);
+      let dir = path.dirname(abs);
+      while (dir !== target && fs.existsSync(dir) && fs.readdirSync(dir).length === 0) {
+        fs.rmdirSync(dir);
+        dir = path.dirname(dir);
+      }
+    } catch {
+      kept.push(rel);
+    }
+  }
+  return { removed, kept };
 }

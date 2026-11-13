@@ -22,8 +22,8 @@
 //   import { readLedger, shardPathFor, appendRows } from './ledger-shards.mjs';
 //   const { main, shards, all } = readLedger(root, 'delegations');
 // 用法（CLI，迁移/巡检）：
-//   node .agents/scripts/ledger-shards.mjs --check          # 巡检：主台账残留数据行 / 分片可读性
-//   node .agents/scripts/ledger-shards.mjs --split <ledger> # 把主台账数据行按月迁入分片（幂等）
+//   flow-kit run ledger-shards.mjs --check          # 巡检：主台账残留数据行 / 分片可读性
+//   flow-kit run ledger-shards.mjs --split <ledger> # 把主台账数据行按月迁入分片（幂等）
 // 测试面已随引擎减重退役（2026-10-28，owner 决策），本脚本现无测试兜底
 import fs from 'node:fs';
 import path from 'node:path';
@@ -339,7 +339,7 @@ function main() {
     console.log(`✓ 追加 1 行 → ${written.map((p) => path.relative(root, p).split(path.sep).join('/')).join(', ')}`);
     return;
   }
-  console.error('用法：node .agents/scripts/ledger-shards.mjs --check | --split <ledger> [--dry-run] | --append <ledger> --row "<行>" [--month YYYY-MM] [--section <节标题>]');
+  console.error('用法：flow-kit run ledger-shards.mjs --check | --split <ledger> [--dry-run] | --append <ledger> --row "<行>" [--month YYYY-MM] [--section <节标题>]');
   process.exit(2);
 }
 

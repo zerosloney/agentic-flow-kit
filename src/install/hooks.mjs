@@ -8,7 +8,14 @@ import path from 'node:path';
 export const HOOKS_SPEC_REL = '.agents/hooks/gates.json';
 
 const TOOLS = new Set(['write', 'shell']);
-const FORMS = new Set(['env', 'relative', 'args']);
+const FORMS = new Set(['env', 'relative', 'args', 'cli', 'cli-args']);
+
+function hookIdOf(script) {
+  const base = String(script || '').replace(/\\/g, '/').split('/').pop() || '';
+  if (!/^\.agents\/hooks\//.test(String(script || '').replace(/\\/g, '/'))) return null;
+  if (!/\.(cjs|mjs)$/i.test(base)) return null;
+  return base.replace(/\.(cjs|mjs)$/i, '');
+}
 
 function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -62,7 +69,7 @@ function applicable(spec, cfg) {
 }
 
 // 中性条目 -> 宿主 hook 对象。form 决定命令形态：
-// env（"$X"/… 或 "%X%/…" 字符串）、relative（项目相对路径）、args（command + args）。
+// cli / cli-args 走包内入口（flow-kit hook <id>）；env/relative/args 保留旧模板兼容外部宿主。
 function renderHook(item, cfg) {
   const form = cfg?.command?.form;
   if (!FORMS.has(form)) {
@@ -70,19 +77,40 @@ function renderHook(item, cfg) {
     err.code = 'HOOK_CONFIG';
     throw err;
   }
-  const template = String(cfg.command.template || '');
-  if (!template.includes('{script}')) {
-    const err = new Error('hook command template must contain {script}');
-    err.code = 'HOOK_CONFIG';
-    throw err;
-  }
-  const rendered = template.split('{script}').join(item.script);
+  const hookId = hookIdOf(item.script);
   const hook = { type: 'command' };
-  if (form === 'args') {
-    hook.command = 'node';
-    hook.args = [rendered];
+  if (form === 'cli' || form === 'cli-args') {
+    if (!hookId) {
+      const err = new Error(`hook script must be under .agents/hooks: ${item.script}`);
+      err.code = 'HOOK_CONFIG';
+      throw err;
+    }
+    if (form === 'cli-args') {
+      hook.command = 'flow-kit';
+      hook.args = ['hook', hookId];
+    } else {
+      const template = String(cfg.command.template || 'flow-kit hook {hook}');
+      if (!template.includes('{hook}')) {
+        const err = new Error('hook command template must contain {hook}');
+        err.code = 'HOOK_CONFIG';
+        throw err;
+      }
+      hook.command = template.split('{hook}').join(hookId);
+    }
   } else {
-    hook.command = rendered;
+    const template = String(cfg.command.template || '');
+    if (!template.includes('{script}')) {
+      const err = new Error('hook command template must contain {script}');
+      err.code = 'HOOK_CONFIG';
+      throw err;
+    }
+    const rendered = template.split('{script}').join(item.script);
+    if (form === 'args') {
+      hook.command = 'node';
+      hook.args = [rendered];
+    } else {
+      hook.command = rendered;
+    }
   }
   if (cfg.includeMeta) {
     hook.name = item.name || item.id;
@@ -119,8 +147,12 @@ function scriptPattern(script) {
 }
 
 function managedScript(hook, scripts) {
-  const text = hookRefs(hook);
-  for (const script of scripts) if (scriptPattern(script).test(text)) return script;
+  const text = hookRefs(hook).replace(/\s+/g, ' ');
+  for (const script of scripts) {
+    if (scriptPattern(script).test(text)) return script;
+    const id = hookIdOf(script);
+    if (id && scriptPattern(`flow-kit hook ${id}`).test(text)) return script;
+  }
   return null;
 }
 

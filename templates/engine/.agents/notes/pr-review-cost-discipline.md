@@ -38,11 +38,11 @@
 | 单轮面板 verifier | 12–21 min | 改后：默认 1 票，Important/security 追加 1 票 |
 | `pre-push` 本地门 | 改前 110–130 s / 改后 15–20 s | 集成档默认交 CI（`PREPUSH_RUN_INTEGRATION=1` 可本地复现） |
 | 一次「改完就重评」的返工 | +15–30 min | 本次因顺序倒置浪费两轮（~33 min） |
-| fast 档单轮面板（--fast；单镜头单票，目标 ≤5 min） | **实测 377s**（零仓库读 finder 2 次工具调用 343s + 脚本 34s；首跑含队列 640s） | 模型延迟是地板，超硬顶按 fast-timeout 收口；判据与编排契约：`.agents/scripts/pr-review.mjs` 头注 fast 档节 + config `fast` 节 |
+| fast 档单轮面板（--fast；单镜头单票，目标 ≤5 min） | **实测 377s**（零仓库读 finder 2 次工具调用 343s + 脚本 34s；首跑含队列 640s） | 模型延迟是地板，超硬顶按 fast-timeout 收口；判据与编排契约：`flow-kit run pr-review` 头注 fast 档节 + config `fast` 节 |
 
 ## 相关单源
 
-- 评审面板机制与命令：`.agents/scripts/pr-review.mjs`（--help）+ `.agents/commands/pr-review.md`
+- 评审面板机制与命令：`flow-kit run pr-review`（--help）+ `.agents/commands/pr-review.md`
 - 确认门与三件套顺序：`.agents/notes/process-order-rule.md`
 - 端口槽与并发：`.agents/notes/runtime-env.md` §6.1b（**本页不复述端口数值**）
 - 门禁卡口一览：`.agents/notes/engine-map.md`

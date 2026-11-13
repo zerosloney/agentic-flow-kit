@@ -34,7 +34,7 @@ try {
   if (install.status !== 0) {
     fail('临时目标安装失败', install);
   } else {
-    const check = run([path.join(target, '.agents', 'scripts', 'policy.mjs'), 'check', '--root', target, '--json']);
+    const check = run([BIN, 'run', 'policy', '--root', target, 'check', '--json']);
     const parsed = (() => {
       try { return JSON.parse(check.stdout.trim()); } catch { return null; }
     })();
@@ -44,11 +44,11 @@ try {
       fail(`policy check 发现 ${parsed.problems.length} 项问题`, check);
       for (const problem of parsed.problems) console.error(`  [${problem.code}] ${problem.message}`);
     } else {
-      const generate = run([path.join(target, '.agents', 'scripts', 'gen-effective-policy.mjs'), '--root', target]);
+      const generate = run([BIN, 'run', 'gen-effective-policy', '--root', target]);
       if (generate.status !== 0) {
         fail('effective-policy 生成失败', generate);
       } else {
-        const drift = run([path.join(target, '.agents', 'scripts', 'gen-effective-policy.mjs'), '--root', target, '--check']);
+        const drift = run([BIN, 'run', 'gen-effective-policy', '--root', target, '--check']);
         if (drift.status !== 0) fail('effective-policy 与生成器不一致', drift);
         else console.log(`[policy-ci] ✅ 策略面一致（机制 ${parsed.summary.mechanisms?.total || 0} 行）`);
       }

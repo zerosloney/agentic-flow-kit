@@ -51,8 +51,8 @@ ts	phase	decision	why	evidence	result
 对照原始记录纠错。收尾时只把真正值得下次复用的点写进去，不要复制整份 TSV：
 
 ```bash
-node .agents/scripts/session-log.mjs append --type failure --text "第一次假设错了：缓存不是瓶颈" --ref <file:line> --tag perf
-node .agents/scripts/session-log.mjs append --type correction --text "测试必须先在 HEAD 上复现失败，再改实现" --tag verify
+flow-kit run session-log.mjs append --type failure --text "第一次假设错了：缓存不是瓶颈" --ref <file:line> --tag perf
+flow-kit run session-log.mjs append --type correction --text "测试必须先在 HEAD 上复现失败，再改实现" --tag verify
 ```
 
 - `type` 闭集：`decision / failure / correction / refusal / note`。

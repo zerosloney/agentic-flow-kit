@@ -10,7 +10,7 @@
 // 无对应确认台账变更（.agents/confirmations.d/<基名>.jsonl 分片或主台账 .agents/confirmations.jsonl
 // 任一在场即算；append-compensation.mjs 的补偿行正落在分片，补偿路径天然不警）→ 打印 advisory：
 // 疑似改已关单正文未重录指纹，确认后重录或说明。exit 0 恒不拦。
-// 用法：node .agents/scripts/check-doc-body-drift.mjs [--staged]（--staged 仅为可读性别名，本脚本恒查暂存面）
+// 用法：flow-kit run check-doc-body-drift.mjs [--staged]（--staged 仅为可读性别名，本脚本恒查暂存面）
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
