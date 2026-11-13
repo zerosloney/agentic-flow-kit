@@ -35,7 +35,7 @@
 | R2-10 | i18n 覆盖一致性检查 | 2 | S | `tools/make-en-host-overrides.mjs --check` | DONE · [#17](https://github.com/zerosloney/agentic-flow-kit/issues/17) |
 | R3-1 | policy-as-code | 3 | L | `templates/engine/.agents/config/policy.json` + `policy.mjs` | DONE |
 | R3-2 | 升级策略影响面 | 3 | S | `doctor` / `upgrade --explain-policy` | DONE |
-| R3-3 | 安装证明链 | 3 | M | manifest + eval 凭证 + 签名 | TODO |
+| R3-3 | 安装证明链 | 3 | M | manifest + eval 凭证 + 签名 | DONE |
 | R3-4 | 技能包分发与准入 | 3 | L | `add-skill`、lockfile、`skills lint` | TODO |
 | R3-5 | pipeline 真实执行器 | 3 | L | `templates/engine/.agents/scripts/pipeline-run.mjs` | TODO |
 | R3-6 | 记忆生命周期 | 3 | L | `memory-tier.mjs` / `memory-wiki.mjs` | TODO |
@@ -212,6 +212,7 @@
 - **目标**：manifest 哈希 + eval 凭证 + 策略版本组成哈希链；`doctor --attest --out <file>` 输出可归档证明；可选本地签名/绑定 git 提交。
 - **验收**：篡改任一文件可检出；输出确定性；不依赖网络。
 - **风险**：先定义信任模型（谁签、验什么），再实现。规模 `M`。
+- **落地（2026-11-13）**：`src/install/attest.mjs` 生成 `flow-kit-attest/v1`（sha256-chain/v1）：manifest/files/policy/eval/git 五段摘要组成 root；`doctor --attest [--out <file>]` 输出证明并写入 `--json`，托管文件缺失/哈希不符即 `ok:false` 且 doctor 退出 1；证明不含时间戳、绝对路径与网络访问，可选绑定 `git HEAD` 与 dirty 状态；信任模型为“归档后重生成比对 root”，第三方签名可在归档侧完成。
 
 ### R3-4 技能包分发与准入
 

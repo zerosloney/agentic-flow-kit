@@ -1,0 +1,90 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zerosloney/agentic-flow-kit/schemas/attestation.schema.json",
+  "title": "agentic-flow-kit installation attestation",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "algorithm", "ok", "problems", "policy", "manifest", "evals", "git", "chain"],
+  "properties": {
+    "schema": { "const": "flow-kit-attest/v1" },
+    "algorithm": { "const": "sha256-chain/v1" },
+    "ok": { "type": "boolean" },
+    "problems": { "type": "array", "items": { "type": "string" } },
+    "kitVersion": { "type": ["string", "null"] },
+    "language": { "type": ["string", "null"] },
+    "hosts": { "type": "array", "items": { "type": "string" } },
+    "stack": { "type": ["string", "null"] },
+    "surfaces": { "type": "array", "items": { "type": "string" } },
+    "tier": { "type": ["string", "null"] },
+    "hardened": { "type": "boolean" },
+    "policy": {
+      "type": ["object", "null"],
+      "required": ["present", "version", "digest"],
+      "properties": {
+        "present": { "type": "boolean" },
+        "version": { "type": ["integer", "null"] },
+        "digest": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" }
+      },
+      "additionalProperties": false
+    },
+    "manifest": {
+      "type": ["object", "null"],
+      "required": ["digest", "files", "baselineVersion"],
+      "properties": {
+        "digest": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+        "files": { "type": "integer", "minimum": 0 },
+        "baselineVersion": { "type": ["string", "null"] }
+      },
+      "additionalProperties": false
+    },
+    "evals": {
+      "type": ["object", "null"],
+      "required": ["results", "evalLog"],
+      "properties": {
+        "results": {
+          "type": "object",
+          "required": ["present", "digest", "lines"],
+          "properties": {
+            "present": { "type": "boolean" },
+            "digest": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+            "lines": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        },
+        "evalLog": {
+          "type": "object",
+          "required": ["present", "digest", "entries"],
+          "properties": {
+            "present": { "type": "boolean" },
+            "digest": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+            "entries": { "type": "integer", "minimum": 0 }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "git": {
+      "type": ["object", "null"],
+      "required": ["commit", "dirty"],
+      "properties": {
+        "commit": { "type": "string", "minLength": 1 },
+        "dirty": { "type": "boolean" }
+      },
+      "additionalProperties": false
+    },
+    "chain": {
+      "type": ["object", "null"],
+      "required": ["manifest", "files", "policy", "evals", "git", "root"],
+      "properties": {
+        "manifest": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+        "files": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+        "policy": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+        "evals": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+        "git": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
+        "root": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" }
+      },
+      "additionalProperties": false
+    }
+  }
+}
