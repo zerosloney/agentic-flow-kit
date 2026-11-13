@@ -156,6 +156,18 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 
 合并只替换指向 `.agents/hooks/*.cjs` 的托管条目：用户自建 hook、其它事件、`permissions` 等其余键原样保留；重复安装不会重复追加，过期接线（错误 matcher）会被清理。Qwen 的 `settings.json` 同时承载 hooks 与 MCP，两个合并器对同一份 JSON 组合执行。`opencode` / `pi` / `cline` 没有 `hooks.events`，继续使用静态模板，行为不变；外部宿主也可在宿主定义的 `hooks.events` 中接入同一编译器。`doctor` 以 `gates.json` 为期望值检查缺失 / 多余接线。
 
+## 权限编译
+
+权限与 Hook 同源：`.agents/hooks/gates.json` 的 `allow` / `deny` / `ask`（`tool` 为 `shell` / `read` / `web`）编译进宿主 `permissions` 数组；`hardened` 段是 enterprise 档的追加项（凭据读拒绝、禁 `WebFetch` / `curl` / `wget`）。`--hardened` 走同一个编译器，Claude 的 `settings.hardened.json` 只保留 `sandbox`、`allowManagedPermissionRulesOnly` 等 managed-only 键，权限数组由 gates 生成。
+
+| 宿主 | 语法 | tool 类别 |
+|---|---|---|
+| `claude` / `qoder` | `Bash(cmd:*)` | shell / read / web |
+| `qwen` | `Bash(cmd *)` | shell |
+| `commandcode` | `Shell(cmd *)` | shell |
+
+权限数组是托管策略：安装/升级按 gates.json 精确对齐（用户自建条目会被覆盖，白名单请改 gates.json），重复安装幂等。栈相关白名单（`dotnet build`、`cargo test` 等）由栈配置自动追加。宿主不支持声明的 `tool` 类别时降级跳过，`doctor` 给出 `permissions <host> unsupported` 告警；没有权限能力的宿主（codebuddy / trae / zcode 等）得到 `guarantee <host>` advisory，不静默丢弃。`doctor` 还会对账权限数组与 gates.json 的缺失 / 多余项。
+
 ## MCP 接线
 
 安装器把中性 server 声明编译进各宿主的原生 MCP 配置，安装期不联网，只写配置：

@@ -13,7 +13,7 @@ const SKILL_MODES = new Set(['native', 'shared', 'index']);
 const HOOK_FORMATS = new Set(['json']);
 const ALLOWED_KEYS = new Set([
   'name', 'dir', 'label', 'tracked', 'rootMemory', 'detect', 'templates',
-  'commands', 'agents', 'skills', 'hooks', 'modelProbe',
+  'commands', 'agents', 'skills', 'hooks', 'permissions', 'modelProbe',
 ]);
 
 function isObject(value) {
@@ -135,6 +135,40 @@ function normalizeHooks(raw, field, bad) {
   return { file: raw.file, format: raw.format || 'json', ...(events ? { events } : {}) };
 }
 
+const PERMISSION_TOOLS = new Set(['shell', 'read', 'web']);
+const PERMISSION_SYNTAX = new Set(['colon', 'space']);
+
+function normalizePermissions(raw, field, bad) {
+  if (raw == null) return null;
+  if (!isObject(raw)) bad(`\`${field}\` must be an object or null`);
+  if (raw.file != null) {
+    if (!isRelPath(raw.file) || raw.file.includes('/')) bad(`\`${field}.file\` must be a file name`);
+  }
+  if (raw.container != null && !isString(raw.container)) bad(`\`${field}.container\` must be a string`);
+  if (raw.syntax != null && !PERMISSION_SYNTAX.has(raw.syntax)) bad(`\`${field}.syntax\` must be one of: colon, space`);
+  if (raw.tool != null && !isString(raw.tool)) bad(`\`${field}.tool\` must be a string`);
+  const tools = raw.tools == null ? ['shell'] : stringList(raw.tools, `${field}.tools`, bad);
+  for (const tool of tools) {
+    if (!PERMISSION_TOOLS.has(tool)) bad(`\`${field}.tools\` must contain only shell/read/web`);
+  }
+  const extraAllow = raw.extraAllow == null ? [] : raw.extraAllow;
+  if (!Array.isArray(extraAllow)) bad(`\`${field}.extraAllow\` must be an array`);
+  const normalizedExtra = extraAllow.map((item, i) => {
+    if (!isObject(item) || !isString(item.pat)) bad(`\`${field}.extraAllow[${i}].pat\` is required`);
+    const tool = item.tool == null ? 'shell' : String(item.tool);
+    if (!PERMISSION_TOOLS.has(tool)) bad(`\`${field}.extraAllow[${i}].tool\` must be shell/read/web`);
+    return { tool, pat: item.pat };
+  });
+  return {
+    ...(raw.file ? { file: raw.file } : {}),
+    ...(raw.container ? { container: raw.container } : {}),
+    syntax: raw.syntax || 'colon',
+    tool: raw.tool || 'Bash',
+    tools,
+    ...(normalizedExtra.length ? { extraAllow: normalizedExtra } : {}),
+  };
+}
+
 function normalizeProbe(raw, field, bad) {
   if (raw == null) return { configs: [], env: [], cli: [] };
   if (!isObject(raw)) bad(`\`${field}\` must be an object`);
@@ -200,6 +234,7 @@ export function validateHostDefinition(raw, file, t) {
     agents: normalizeAgents(raw.agents, 'agents', bad),
     skills: normalizeSkills(raw.skills, 'skills', bad),
     hooks: normalizeHooks(raw.hooks, 'hooks', bad),
+    permissions: normalizePermissions(raw.permissions, 'permissions', bad),
     modelProbe: normalizeProbe(raw.modelProbe, 'modelProbe', bad),
     ...(templates ? { templates } : {}),
   };

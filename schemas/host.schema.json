@@ -128,6 +128,33 @@
         }
       }
     },
+    "permissions": {
+      "type": ["object", "null"],
+      "description": "权限编译器能力；省略时该宿主不接收权限编译，doctor 给 advisory。",
+      "additionalProperties": false,
+      "properties": {
+        "file": { "type": "string", "description": "权限所在文件（默认沿用 hooks.file）。" },
+        "container": { "type": "string", "description": "permissions 容器键，默认 permissions。" },
+        "syntax": { "enum": ["colon", "space"], "description": "shell 规则通配形式：Tool(cmd:*) / Tool(cmd *)。" },
+        "tool": { "type": "string", "description": "shell 工具名，如 Bash / Shell。" },
+        "tools": {
+          "type": "array",
+          "items": { "enum": ["shell", "read", "web"] }
+        },
+        "extraAllow": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["pat"],
+            "properties": {
+              "tool": { "enum": ["shell", "read", "web"] },
+              "pat": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
     "modelProbe": {
       "type": "object",
       "additionalProperties": false,

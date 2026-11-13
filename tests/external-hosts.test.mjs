@@ -147,6 +147,24 @@ test('external hosts can opt into the hook compiler via hooks.events', () => {
   assert.equal(check.ok, true, check.detail);
 });
 
+test('external hosts can opt into the permission compiler', () => {
+  const dir = tmpRepo();
+  writeHost(dir, 'demo', {
+    ...DEMO,
+    permissions: { file: 'settings.json', syntax: 'colon', tool: 'Bash', tools: ['shell'] },
+  });
+  writeTemplates(dir, 'demo', { 'settings.json': '{"permissions":{}}\n' });
+
+  const r = installDemo(dir);
+  assert.equal(r.status, 0, r.stderr);
+  const config = JSON.parse(fs.readFileSync(path.join(dir, '.demo/settings.json'), 'utf8'));
+  assert.ok(config.permissions.allow.includes('Bash(npm run:*)'));
+  assert.ok(config.permissions.deny.includes('Bash(git reset --hard:*)'));
+  assert.deepEqual(config.permissions.ask, [
+    'Bash(git checkout:*)', 'Bash(git clean:*)', 'Bash(git branch -D:*)', 'Bash(rm -rf:*)',
+  ]);
+});
+
 test('priority is builtin < user < project < --host-manifest', () => {
   const project = tmpRepo();
   const home = tmpDir('flow-kit-home-');

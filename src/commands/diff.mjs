@@ -95,7 +95,7 @@ export function classifyEntry({ target, entry, vars, managedHash, derived = fals
     return { kind, actualHash, expectedHash: null, kitChanged: false, derived: true };
   }
   const expected = expectedEntry(entry, vars);
-  const isConfigMerge = entry.kind === 'merge-mcp' || entry.kind === 'merge-hooks';
+  const isConfigMerge = entry.kind === 'merge-mcp' || entry.kind === 'merge-host';
   if (!expected) {
     // Hook / MCP 配置损坏无法合并：明确归类为用户修改，doctor / diff 都能看到。
     if (isConfigMerge && exists) {

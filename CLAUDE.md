@@ -82,7 +82,7 @@ node tools/make-en-host-overrides.mjs --check   # CI：英文覆盖缺失/过期
 `src/hosts/registry.mjs` 是宿主能力的单一来源，不要在 `plan.mjs` / `doctor.mjs` 里为某个宿主写硬编码分支。字段包括：
 
 - `dir`、`rootMemory`：`hostTargetRel()` 负责把宿主模板相对路径映射到 `<dir>/...`，根记忆文件映射到项目根。
-- `commands` / `agents` / `skills` / `hooks`：声明目录、扩展名、技能模式和接线文件；`hooks.events` 描述 Hook 编译器需要的宿主 schema（事件、`matchers`、`command.form/template`、超时、容器路径、root/group/hook 扩展键）。
+- `commands` / `agents` / `skills` / `hooks` / `permissions`：声明目录、扩展名、技能模式和接线文件；`hooks.events` 描述 Hook 编译器需要的宿主 schema（事件、`matchers`、`command.form/template`、超时、容器路径、root/group/hook 扩展键）；`permissions` 描述权限编译能力（`syntax`、shell 工具名、支持的 `tools`、`extraAllow`）。
 - `agents.modelField` / `agents.inheritValue`：该宿主子代理是否支持按角色指定模型，以及 `inherit` 的写法。
 - `modelProbe.configs/env/cli`：模型探测来源。
 - `templates`：外部宿主的静态模板目录（绝对路径）；内置宿主不设置，回退到 `templates/hosts/<host>`。
@@ -91,7 +91,9 @@ node tools/make-en-host-overrides.mjs --check   # CI：英文覆盖缺失/过期
 
 MCP 接线在 `src/install/mcp.mjs`：`templates/mcp/servers.json`（项目可用 `.flow-kit/mcp/servers.json` 替换）声明中性 server，`buildPlan` 为注册表中声明了 `mcp` 的宿主生成 `kind: 'merge-mcp'` 条目，`getText` 渲染时读取磁盘并按 `format`（`claude` → `mcpServers`，`opencode` → `mcp`）合并，只补缺失同名 server，不覆盖用户内容。MCP 条目不走 user-modified 冲突分支（合并语义本身安全），apply 记录 `manifest.mcpServers[targetRel] = [names]`；`manifest.mcp` 是布尔开关（`--no-mcp` / upgrade 重放）。Qwen 的 `.qwen/settings.json` 与静态宿主模板同路径，文件不存在时以静态模板渲染结果打底，避免丢掉 hooks/permissions。卸载 / remove-host / prune 以哈希为闸：未被改动则整文件删除，用户改过则只摘 manifest 记录的 server 名。`doctor` 校验缺失 / JSON 损坏 / 容器或 server 缺失。
 
-Hook 接线在 `src/install/hooks.mjs`：中性规格来自引擎模板 `.agents/hooks/gates.json` 的 `hooks` 数组（`event`、`tool: write|shell`、`script`、`timeout`），`buildPlan` 为注册表中声明了 `hooks.events` 的宿主生成 `kind: 'merge-hooks'` 条目（优先级 31，高于静态宿主条目 30），以宿主静态模板或有文件的磁盘内容为底稿，只替换指向 `.agents/hooks/*.cjs` 的托管条目，保留用户 hook、其它事件与 `permissions` 等键。同一文件同时有 MCP 时（Qwen `settings.json`）`addMcpEntries` 把 MCP 挂到 hook 条目上组合执行，不再单独生成条目。没有 `hooks.events` 的宿主（opencode / pi / cline）继续安装静态模板，行为不变；规格 JSON 非法时回退静态模板。`doctor` 以 `gates.json` 为期望值按 `event|matcher|script` 比对，报告缺失 / 多余接线；golden 夹具在 `tests/fixtures/hooks/`。
+Hook 接线在 `src/install/hooks.mjs`：中性规格来自引擎模板 `.agents/hooks/gates.json` 的 `hooks` 数组（`event`、`tool: write|shell`、`script`、`timeout`），`buildPlan` 为注册表中声明了 `hooks.events` 的宿主生成 `kind: 'merge-host'` 条目（优先级 31，高于静态宿主条目 30），以宿主静态模板或有文件的磁盘内容为底稿，只替换指向 `.agents/hooks/*.cjs` 的托管条目，保留用户 hook、其它事件与 `permissions` 等键。同一文件同时有 MCP 时（Qwen `settings.json`）`addMcpEntries` 把 MCP 挂到该条目上组合执行，不再单独生成条目。没有 `hooks.events` 的宿主（opencode / pi / cline）继续安装静态模板，行为不变；规格 JSON 非法时回退静态模板。`doctor` 以 `gates.json` 为期望值按 `event|matcher|script` 比对，报告缺失 / 多余接线；golden 夹具在 `tests/fixtures/hooks/`。
+
+权限编译在 `src/install/permissions.mjs`（与 Hook 编译共用合并骨架）：`gates.json` 的 `allow` / `deny` / `ask`（`tool: shell|read|web`）按注册表 `permissions` 能力编译，`hardened` 段在 `--hardened` 时追加；宿主 `syntax` 决定 `Bash(cmd:*)` 或 `Bash(cmd *)`，栈白名单来自 `STACK_SHELL` 自动追加。`mergePermissionsIntoRoot` 精确替换三个数组（托管策略），保留 `defaultMode` / `disableBypassPermissionsMode` 等其它键；与 hooks / MCP 在同一个 `merge-host` 条目里组合执行。宿主不支持的 `tool` 类别不静默丢弃，编译结果带 `unsupported`；`doctor` 对账 `permissions <host>` 的缺失 / 多余项，并对无权限能力的宿主给 `guarantee` advisory。
 
 技能安装由 `skills.mode` 驱动：
 
@@ -137,7 +139,7 @@ Hook 接线在 `src/install/hooks.mjs`：中性规格来自引擎模板 `.agents
 
 - `lean`：不生成 CI（`azure-pipelines.yml` / `.github/workflows/ci.yml`），其余引擎面不变。
 - `standard`（默认）：生成 CI，CI 在 `verify --full` 后跑 advisory 的 agent-eval / memory-tier / pipeline-state。
-- `enterprise` / `--hardened`：宿主 `claude` 的 `settings.json` 换成 `templates/hosts/claude/settings.hardened.json`（sandbox、凭据读拒绝、MCP/权限 managed-only 键）。该文件**不**作为独立文件安装。
+- `enterprise` / `--hardened`：宿主 `claude` 的 `settings.json` 换成 `templates/hosts/claude/settings.hardened.json`（sandbox、MCP/权限 managed-only 键）；权限数组由 `gates.json` 基线 + `hardened` 追加项编译覆盖，该文件**不**作为独立文件安装。
 - 档位与 `hardened` 写入 manifest；`doctor` 显示档位、CI 缺失（advisory）、宿主能力缺口（无 hooks / 无 modelField）、模型漂移和 manifest 漂移（advisory，明细引导到 `diff`）。
 
 ## AI-Native 治理面（引擎模板）

@@ -126,11 +126,11 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
     }
 
     const text = readPlanEntry(entry, vars);
-    const isConfigMerge = entry.kind === 'merge-mcp' || entry.kind === 'merge-hooks';
+    const isConfigMerge = entry.kind === 'merge-mcp' || entry.kind === 'merge-host';
     if (text == null) {
       stats.skip += 1;
       log('skip', isConfigMerge
-        ? `${entry.targetRel}（${entry.kind === 'merge-hooks' ? 'Hook' : 'MCP'} 配置不是合法 JSON，已保留原文件）`
+        ? `${entry.targetRel}（${entry.kind === 'merge-host' ? '宿主配置' : 'MCP'} 不是合法 JSON，已保留原文件）`
         : `${entry.targetRel}（二进制模板跳过）`);
       continue;
     }
@@ -141,7 +141,7 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
     if (isConfigMerge) {
       if (exists && text === readText(abs)) {
         stats.skip += 1;
-        log('skip', `${entry.targetRel}（${entry.kind === 'merge-hooks' ? 'Hook' : 'MCP'} 已是最新）`);
+        log('skip', `${entry.targetRel}（${entry.kind === 'merge-host' ? '宿主配置' : 'MCP'} 已是最新）`);
         continue;
       }
       writes.push({ abs, text, targetRel: entry.targetRel, kind: entry.kind });

@@ -9,6 +9,7 @@ import { listFiles, TEMPLATES } from '../install/plan.mjs';
 import { readMcpServers } from '../install/mcp.mjs';
 import { findHookDrift, readHookSpec } from '../install/hooks.mjs';
 import { listBaselines } from '../install/baseline.mjs';
+import { compilePermissions, permissionDrift, readPermissionSpec } from '../install/permissions.mjs';
 import { ROLE_NAMES, readInjectedModels, readLocalModelRoles } from '../models/resolve.mjs';
 import { resolveTarget } from './install.mjs';
 import { buildDiff } from './diff.mjs';
@@ -23,6 +24,9 @@ export function doctorCommand({ args, t }) {
   const roleVal = (entry) => (typeof entry === 'string' ? entry : entry?.model || null);
 
   const manifest = readManifest(target);
+  const permissionSpec = manifest ? readPermissionSpec(target) : null;
+  const permissionDeclared = Boolean(permissionSpec
+    && (permissionSpec.allow.length || permissionSpec.deny.length || permissionSpec.ask.length));
   if (!manifest) {
     add(false, 'install-manifest', t('doctor.manifestMissing'));
   } else {
@@ -139,6 +143,40 @@ export function doctorCommand({ args, t }) {
           }
         } catch {
           add(false, `hooks ${host}`, t('doctor.hooksInvalid', { path: rel }));
+        }
+      }
+    }
+
+    // 权限编译：声明了但宿主没有 permissions 能力时给 advisory，不静默丢弃。
+    if (permissionDeclared && !h.permissions) {
+      add(true, `guarantee ${host}`, t('doctor.guaranteeGap', { host, capability: 'permissions' }), '', { warn: true });
+    }
+    if (h.permissions && permissionSpec) {
+      const permRel = hostTargetRel(host, h.permissions.file || h.hooks?.file || 'settings.json');
+      const compiled = compilePermissions(permissionSpec, h.permissions, {
+        stack: manifest?.stack || 'empty',
+        hardened: Boolean(manifest?.hardened),
+      });
+      if (compiled.unsupported.length) {
+        const list = compiled.unsupported.map((item) => `${item.tool}:${item.pat}`).join(', ');
+        add(true, `permissions ${host} unsupported`, t('doctor.permissionsUnsupported', { host, list }), '', { warn: true });
+      }
+      if (!fs.existsSync(path.join(target, permRel))) {
+        add(false, `permissions ${host}`, t('doctor.hooksFileMissing', { path: permRel }));
+      } else {
+        try {
+          const root = JSON.parse(fs.readFileSync(path.join(target, permRel), 'utf8'));
+          const drift = permissionDrift(root, compiled, h.permissions);
+          if (drift.missing.length || drift.extra.length) {
+            const parts = [];
+            if (drift.missing.length) parts.push(`missing ${drift.missing.join(', ')}`);
+            if (drift.extra.length) parts.push(`extra ${drift.extra.join(', ')}`);
+            add(false, `permissions ${host}`, t('doctor.permissionsDrift', { path: permRel, detail: parts.join('; ') }));
+          } else {
+            add(true, `permissions ${host}`, `${permRel}: ${compiled.allow.length}/${compiled.deny.length}/${compiled.ask.length}`);
+          }
+        } catch {
+          add(false, `permissions ${host}`, t('doctor.hooksInvalid', { path: permRel }));
         }
       }
     }

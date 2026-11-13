@@ -105,7 +105,7 @@ test('user hooks and unrelated settings survive; managed wiring is repaired', ()
   assert.equal(install(dir, 'claude').status, 0);
   const file = hookFile('claude', dir);
   const config = readJson(file);
-  config.permissions.allow.push('Bash(custom:*)');
+  config.customTopLevel = 'keep-me';
   config.hooks.PreToolUse[1].hooks[0].timeout = 999;
   config.hooks.PreToolUse.unshift({
     matcher: 'Read',
@@ -115,7 +115,7 @@ test('user hooks and unrelated settings survive; managed wiring is repaired', ()
 
   assert.equal(run(['upgrade', '--target', '.', '--json'], dir).status, 0);
   const after = readJson(file);
-  assert.ok(after.permissions.allow.includes('Bash(custom:*)'));
+  assert.equal(after.customTopLevel, 'keep-me');
   assert.ok(after.hooks.PreToolUse.some((group) => group.matcher === 'Read'
     && group.hooks.some((hook) => hook.command === 'node scripts/my-hook.mjs')));
   const shell = after.hooks.PreToolUse.find((group) => group.matcher === 'Bash');
@@ -169,7 +169,7 @@ test('hosts without hooks.events keep the static template fallback', () => {
       projectName: 'fallback',
       mcp: false,
     });
-    assert.equal(plan.entries.some((entry) => entry.kind === 'merge-hooks'), false, host);
+    assert.equal(plan.entries.some((entry) => entry.kind === 'merge-host'), false, host);
   }
   const covered = buildPlan({
     target: os.tmpdir(),
@@ -179,7 +179,7 @@ test('hosts without hooks.events keep the static template fallback', () => {
     projectName: 'covered',
     mcp: false,
   });
-  assert.equal(covered.entries.filter((entry) => entry.kind === 'merge-hooks').length, 1);
+  assert.equal(covered.entries.filter((entry) => entry.kind === 'merge-host').length, 1);
 });
 
 test('Qwen settings.json carries hooks and MCP in one idempotent file', () => {

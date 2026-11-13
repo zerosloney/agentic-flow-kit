@@ -105,6 +105,8 @@
   "doctor.hooksMissing": "Hook wiring missing: {{path}} → {{list}} (run upgrade to repair)",
   "doctor.hooksExtra": "Hook wiring is extra or stale: {{path}} → {{list}} (run upgrade to clean up)",
   "doctor.hooksInvalid": "Host hook config is not valid JSON: {{path}}",
+  "doctor.permissionsUnsupported": "{{host}} does not support declared permissions: {{list}} (skipped)",
+  "doctor.permissionsDrift": "Permissions disagree with gates.json: {{path}} → {{detail}} (run upgrade to align)",
   "doctor.baseline": "Baseline: {{count}} file(s) (v{{version}})",
   "doctor.baselineMissing": "Baseline directory is missing (upgrade falls back to hash skip; rerun install to rebuild)",
   "doctor.baselineOrphans": "{{count}} orphan baseline(s) (run prune --baseline to clean up)",

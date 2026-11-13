@@ -105,6 +105,8 @@
   "doctor.hooksMissing": "Hook 接线缺失：{{path}} → {{list}}（重跑 upgrade 可补齐）",
   "doctor.hooksExtra": "Hook 接线多余或已过期：{{path}} → {{list}}（重跑 upgrade 可清理）",
   "doctor.hooksInvalid": "宿主 Hook 配置不是合法 JSON：{{path}}",
+  "doctor.permissionsUnsupported": "{{host}} 不支持声明的权限项：{{list}}（已降级跳过）",
+  "doctor.permissionsDrift": "权限与 gates.json 不一致：{{path}} → {{detail}}（重跑 upgrade 对齐）",
   "doctor.baseline": "基线：{{count}} 个文件（v{{version}}）",
   "doctor.baselineMissing": "未找到基线目录（升级将回退为哈希跳过；重跑 install 可重建）",
   "doctor.baselineOrphans": "存在无主基线 {{count}} 个（prune --baseline 可清理）",

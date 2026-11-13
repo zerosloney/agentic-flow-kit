@@ -28,7 +28,7 @@
 | R2-3 | 外部宿主插件 | 2 | M | `schemas/host.schema.json`、`registry.mjs` | DONE · [#10](https://github.com/zerosloney/agentic-flow-kit/issues/10) |
 | R2-4 | Hook 编译器 | 2 | L | 中性 hook 规格 + 宿主序列化器 | DONE · [#11](https://github.com/zerosloney/agentic-flow-kit/issues/11) |
 | R2-5 | MCP 接线 | 2 | M | registry `mcp` 字段、`templates/mcp/` | DONE · [#12](https://github.com/zerosloney/agentic-flow-kit/issues/12) |
-| R2-6 | 权限 / 工具白名单编译 | 2 | M | 复用 `gates.json` 与 hardened 路径 | TODO · [#13](https://github.com/zerosloney/agentic-flow-kit/issues/13) |
+| R2-6 | 权限 / 工具白名单编译 | 2 | M | 复用 `gates.json` 与 hardened 路径 | DONE · [#13](https://github.com/zerosloney/agentic-flow-kit/issues/13) |
 | R2-7 | 宿主探测 `--auto-hosts` | 2 | S | `src/commands/install.mjs`、TUI | DONE · [#14](https://github.com/zerosloney/agentic-flow-kit/issues/14) |
 | R2-8 | 组合式 profile | 2 | M | `src/install/plan.mjs`、`schemas/project-profile.schema.json` | DONE · [#15](https://github.com/zerosloney/agentic-flow-kit/issues/15) |
 | R2-9 | 企业档宿主矩阵 | 2 | M | `templates/hosts/*`、`doctor` | TODO · [#16](https://github.com/zerosloney/agentic-flow-kit/issues/16) |
@@ -152,9 +152,9 @@
 
 ### R2-6 权限 / 工具白名单编译
 
-- **现状**：权限面只有 Claude hardened settings 的 managed-only 键。
+- **现状**：`src/install/permissions.mjs` 把 `gates.json` 的 `allow` / `deny` / `ask`（`shell` / `read` / `web`）按注册表 `permissions` 能力编译到 claude / qwen / qoder / commandcode 的 `permissions` 数组；`--hardened` 走同一编译器并追加 `hardened` 段（凭据读、`WebFetch`、`curl` / `wget`），Claude managed-only 键保持不变。权限数组按托管策略精确对齐，栈白名单自动追加；不支持的 `tool` 降级并进入 `unsupported`，`doctor` 对账缺失 / 多余项并对无权限能力的宿主给 advisory。
 - **目标**：声明式权限（复用 `gates.json` 的 deny/ask 语义）编译到各宿主 settings；hardened 走同一编译器；`doctor` 报“声明了但宿主不支持”。
-- **落点**：权限编译模块、`templates/hosts/claude/settings.hardened.json` 改为生成物或保持等价。
+- **落点**：`src/install/permissions.mjs`；`gates.json` 增加 allow / hardened；`templates/hosts/claude/settings.hardened.json` 保持等价（权限数组由编译器覆盖）。
 - **验收**：与 `gates.json` 对账一致；hardened 语义不变；不支持的能力降级告警。
 - **依赖**：R2-4（共享编译器骨架）。规模 `M`。
 

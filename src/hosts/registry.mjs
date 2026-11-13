@@ -68,6 +68,7 @@ export const HOSTS = {
       },
     },
     // Claude Code 项目级 MCP 配置（根目录 .mcp.json，mcpServers 容器）
+    permissions: { container: 'permissions', syntax: 'colon', tool: 'Bash', tools: ['shell', 'read', 'web'] },
     mcp: { file: '.mcp.json', format: 'claude', scope: 'project' },
     modelProbe: {
       configs: ['~/.claude/settings.json'],
@@ -110,6 +111,7 @@ export const HOSTS = {
       },
     },
     // Qwen Code 在 .qwen/settings.json 使用 mcpServers 容器
+    permissions: { container: 'permissions', syntax: 'space', tool: 'Bash', tools: ['shell'], extraAllow: [{ tool: 'shell', pat: 'dir' }] },
     mcp: { file: '.qwen/settings.json', format: 'claude', scope: 'project' },
     modelProbe: { configs: ['~/.qwen/settings.json'], env: ['QWEN_MODEL'], cli: [] },
   },
@@ -154,6 +156,7 @@ export const HOSTS = {
         command: { form: 'env', template: 'node "%COMMANDCODE_PROJECT_DIR%/{script}"' },
       },
     },
+    permissions: { container: 'permissions', syntax: 'space', tool: 'Shell', tools: ['shell'], extraAllow: [{ tool: 'shell', pat: 'dir' }] },
     modelProbe: {
       configs: ['~/.commandcode/settings.json'],
       env: ['COMMANDCODE_MODEL'],
@@ -180,6 +183,7 @@ export const HOSTS = {
         command: { form: 'args', template: '${QODER_PROJECT_DIR}/{script}' },
       },
     },
+    permissions: { container: 'permissions', syntax: 'colon', tool: 'Bash', tools: ['shell'] },
     modelProbe: { configs: ['~/.qoder/settings.json'], env: [], cli: [] },
   },
   zcode: {
