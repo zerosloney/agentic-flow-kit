@@ -276,7 +276,8 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 | 单写者租约 | `flow-kit run path-lease` | 并行 agent 写同一页面前加租约，防共享页丢事实 |
 | 结果指标 | `flow-kit run outcome-metrics` | 首次过门率、复核采纳率、逃逸缺陷、评测通过率、返工占比 |
 | 成本与延迟 | `flow-kit run usage-log` + `observability` | 按 run / 角色 / 模型的 token、成本、延迟；模型质量时间线；导出 Prometheus / OTLP JSON |
-| 闭环状态机 | `flow-kit run check-pipeline-state` | stage/stopType 闭包检查；真实端到端 run 仍需小任务验证 |
+| 闭环执行器 | `flow-kit run pipeline-run.mjs` | 六阶段状态机；断点续跑（inFlight + resume）、verify 门重试预算、并行门分支、阶段产物契约 |
+| 闭环状态机 | `flow-kit run check-pipeline-state` | stage/stopType 闭包检查；静态检查不能替代真实端到端 run |
 | 策略即代码 | `.agents/config/policy.json` + `flow-kit run policy` | 双向核对机制台账、预算、枚举闭集与角色/模型引用；`check` 失败非零，`explain` 输出人类视图 |
 | 安装证明链 | `flow-kit doctor --attest --out <file>` | manifest / files / policy / eval / git 五段 sha256 链；篡改可检出，输出确定、可归档 |
 

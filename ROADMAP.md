@@ -37,7 +37,7 @@
 | R3-2 | 升级策略影响面 | 3 | S | `doctor` / `upgrade --explain-policy` | DONE |
 | R3-3 | 安装证明链 | 3 | M | manifest + eval 凭证 + 签名 | DONE |
 | R3-4 | 技能包分发与准入 | 3 | L | `add-skill`、lockfile、`skills lint` | TODO |
-| R3-5 | pipeline 真实执行器 | 3 | L | `templates/engine/.agents/scripts/pipeline-run.mjs` | TODO |
+| R3-5 | pipeline 真实执行器 | 3 | L | `templates/engine/.agents/scripts/pipeline-run.mjs` | DONE |
 | R3-6 | 记忆生命周期 | 3 | L | `memory-tier.mjs` / `memory-wiki.mjs` | TODO |
 | R3-7 | 可观测与成本 | 3 | M | `outcome-metrics.mjs`、`metrics-core.mjs` | DONE |
 | R3-8 | 沙箱与供应链 | 3 | L | devcontainer / MCP 权限 / SBOM | TODO |
@@ -231,6 +231,13 @@
 - **目标**：在现有 `pipeline-run` 与静态闭包检查上补断点续跑、重试、并行分支、阶段产物契约校验。
 - **验收**：小任务端到端跑通；kill 后可恢复；状态机静态检查仍通过。
 - **边界**：只进 `templates/engine`，不进安装器。规模 `L`。
+- **落地（2026-11-13）**：
+  - **断点续跑**：门执行前写 `run.inFlight` 并落盘；`next` 自动从该门重入并记 `resume` 事件，新增 `resume` 子命令显式续跑（无断点时空操作退出 0）；`docsCommit` 以 HEAD 同主题提交判幂等，避免续跑重复提交。
+  - **重试**：`next --retry <0-5>` 只作用于 verify 门，每次失败记 `retry` 事件；预算耗尽仍红才进修复环 / `gate-fail`，不跳过 `--files` 授权核对。
+  - **并行分支**：`next --parallel "a.mjs,b.mjs"` 用 `spawn` 并发执行 verify 与附加门，任一非零即整体非零，事件带 `parallel` 组号；只接受门脚本名（拒绝路径）。
+  - **阶段产物契约**：`.agents/config/pipeline.json` 新增 `stageArtifacts`（`{entry}/{spec}/{plan}` 占位），在阶段逻辑与门之前校验产物存在且非空；模板默认覆盖 `spec-confirm` / `plan-confirm` / `verify` / `closeout`。
+  - **兼容**：`advance` 改异步以支持并发门；`check-pipeline-state` 闭包不变（无新增 stage / stopType）。
+  - **测试**：`tests/pipeline-executor.test.mjs` 8 例——产物契约先于门、重试计数与事件、并行屏障证明真并发、并行失败传播、真实 kill 后 `inFlight` 与 `resume`、无断点空操作、静态闭包。
 
 ### R3-6 记忆生命周期（引擎面）
 

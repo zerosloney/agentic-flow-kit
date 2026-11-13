@@ -49,6 +49,14 @@ next: 按 run 停机点循环推进至 done
 4. **观测** (可选): `status [--run <id>] [--json]` 全量事件流水 / `watch` 终端轮询视图
 5. **并行写同一页**: 多个 arm 要改同一 `workflow/` 或 `wiki/` 页面时，先 `flow-kit run path-lease.mjs acquire --path <page> --owner <arm>`，写完 `release`；一页一 writer。
 
+### 断点续跑 / 重试 / 并行分支（R3-5）
+
+- **断点续跑**：门执行前脚本把 run 标 `inFlight` 并落盘；进程被杀（CI 超时/中断）后 `next` 自动从该门重入，`resume --run <id>` 可显式续跑。恢复记 `resume` 事件，`status` 显示「↻ 中断于 …」。
+- **重试**：`next --retry <0-5>` 只作用于 verify 门；失败后重跑至多 N 次，每次记 `retry` 事件。耗尽仍红才进修复环 / `gate-fail`；重试不跳过 `--files` 核对。
+- **并行分支**：`next --parallel "check-a.mjs,check-b.mjs"` 让附加门与 `verify.mjs` 并发执行，任一非零即整体非零；事件带 `parallel` 组号。只接受门脚本名，拒绝路径分隔符。
+- **阶段产物契约**：`.agents/config/pipeline.json` 的 `stageArtifacts` 用 `{entry}/{spec}/{plan}` 声明产物；缺失或为空时在门执行前停 `gate-fail`（模板默认覆盖 `spec-confirm` / `plan-confirm` / `verify` / `closeout`）。
+- **续跑幂等**：`docsCommit` 若发现 HEAD 已是同主题提交，不再重复提交（记 `resumed: true` 的 commit 事件）。
+
 ## 🚫 硬纪律 (违反即协议破坏)
 
 | 操作 | 后果 / 机器行为 | 例外 |
