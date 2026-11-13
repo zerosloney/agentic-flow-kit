@@ -16,13 +16,20 @@
 // 用法：
 //   flow-kit run pipeline-run.mjs start "<需求原文>" [--hint "kind=require level=L1 module=wiki"]
 //   flow-kit run pipeline-run.mjs next [--run <id>] [--triage "kind=|level=|module=|topic="] [--delegated "<原话>"] [--files "a,b"]
+//                                   [--retry <0-5>] [--parallel "check-a.mjs,check-b.mjs"]
+//   flow-kit run pipeline-run.mjs resume [--run <id>] [--retry <0-5>] [--parallel "…"]
 //   flow-kit run pipeline-run.mjs status [--run <id>] [--adopt] [--json]
 //   flow-kit run pipeline-run.mjs watch [--run <id>] [--interval 2]
 //   flow-kit run pipeline-run.mjs abort --run <id> [--to superseded|cancelled] [--delegated "<原话>"]
-// 测试面已随引擎减重退役（2026-10-28，owner 决策），本脚本现无测试兜底
+// 断点续跑（R3-5）：门执行前把 run 标 inFlight 并落盘，进程被杀后 next/resume 自动从该门重入；
+//       docsCommit 以 HEAD 同主题提交判幂等，避免续跑重复提交。
+// 重试（R3-5）：--retry N 仅作用于 verify 门，N 次重试后仍红才停 gate-fail；每次尝试记 retry 事件。
+// 并行分支（R3-5）：--parallel 列出的附加门与 verify.mjs 并发执行，任一非零即整体非零。
+// 阶段产物契约（R3-5）：`.agents/config/pipeline.json` 的 stageArtifacts 逐阶段校验产物存在且非空。
+// 测试面：tests/pipeline-executor.test.mjs（引擎外包测试，本脚本仍不内嵌测试）
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
@@ -42,7 +49,36 @@ function ctxEnv(overrideRoot) {
   const root = path.resolve(overrideRoot || process.env.PIPELINE_RUN_ROOT || process.cwd());
   const bin = path.resolve(process.env.PIPELINE_RUN_BIN || process.env.FLOW_KIT_RUNTIME_SCRIPTS || path.join(root, '.agents', 'scripts'));
   const gitPrefix = (process.env.PIPELINE_RUN_GIT_BIN || 'git').split(/\s+/).filter(Boolean);
-  return { root, bin, gitPrefix, runsDir: path.join(root, '.agents', 'cache', 'pipeline-runs') };
+  return { root, bin, gitPrefix, runsDir: path.join(root, '.agents', 'cache', 'pipeline-runs'), pipeline: loadPipelineConfig(root) };
+}
+
+// 阶段产物契约（R3-5）：可选配置，缺失/非法时退回空对象（不改变旧行为）。
+function loadPipelineConfig(root) {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'config', 'pipeline.json'), 'utf8'));
+    return cfg && typeof cfg === 'object' ? cfg : {};
+  } catch { return {}; }
+}
+
+// {entry}|{spec}|{plan} 从 run.docs 解析；未指定的产物跳过校验（如 fix 流程无 plan）。
+export function resolveArtifact(template, docs) {
+  return String(template)
+    .replace(/\{(entry|spec|plan)\}/g, (_, k) => (docs && docs[k]) || '')
+    .trim();
+}
+
+export function stageArtifactProblems(read, stage, docs, cfg) {
+  const list = cfg?.stageArtifacts?.[stage];
+  if (!Array.isArray(list)) return [];
+  const problems = [];
+  for (const tpl of list) {
+    const rel = resolveArtifact(tpl, docs);
+    if (!rel) continue;
+    const text = read(rel);
+    if (text == null) problems.push(`阶段产物缺失：${rel}（${stage} 契约，见 .agents/config/pipeline.json stageArtifacts）`);
+    else if (!String(text).trim()) problems.push(`阶段产物为空：${rel}（${stage} 契约）`);
+  }
+  return problems;
 }
 
 function moduleList(ctx) {
@@ -90,27 +126,99 @@ function newRunId(requirement) {
 }
 
 // ── 门执行（唯一子进程出口；记录真实退出码） ──────────────────────────
+function gateCmd(script, args) { return `flow-kit run ${script}${args.length ? ' ' + args.join(' ') : ''}`; }
+
+// CLI 参数校验错误统一走 fail(msg, 2)（用法错误），不让栈回溯泄到用户输出。
+function usage(fn) {
+  try { return fn(); } catch (e) { return fail(e.message, 2); }
+}
+
+// 门执行前先落 inFlight（R3-5 断点续跑）：进程被杀后 run 文件仍标记中断阶段。
+function beginGate(ctx, run) {
+  run.inFlight = { stage: run.stage, since: nowIso() };
+  saveRun(ctx, run);
+}
+
+function endGate(ctx, run, ev) {
+  run.inFlight = null;
+  emit(run, ev);
+  saveRun(ctx, run);
+}
+
 function runNode(ctx, run, script, args) {
   const scriptPath = path.join(ctx.bin, script);
-  const cmd = `flow-kit run ${script} ${args.join(' ')}`;
+  const cmd = gateCmd(script, args);
   const t0 = Date.now();
+  beginGate(ctx, run);
   // PIPELINE_RUN_ID 注入（verify-evidence 复核 P2-1）：verify.mjs 绿行据此绑定 runId
   //（对质链与 run 事件流同源，docsCommit 格式已含同一 runId）
   const p = spawnSync(process.execPath, [scriptPath, ...args], { cwd: ctx.root, encoding: 'utf8', windowsHide: true, env: { ...process.env, PIPELINE_RUN_ID: run.runId } });
   const ms = Date.now() - t0;
   const exit = p.status ?? 1;
-  emit(run, { type: 'gate', cmd, exit, ms });
+  endGate(ctx, run, { type: 'gate', cmd, exit, ms });
   return { exit, stdout: p.stdout || '', stderr: p.stderr || '' };
 }
 
-function runGit(ctx, run, args) {
+// 并行门分支（R3-5）：spawn 并发，全部结束后聚合；事件带 parallel 组号。
+function runNodeAsync(ctx, run, script, args, group) {
+  const scriptPath = path.join(ctx.bin, script);
+  const cmd = gateCmd(script, args);
+  const t0 = Date.now();
+  return new Promise((resolve) => {
+    const child = spawn(process.execPath, [scriptPath, ...args], {
+      cwd: ctx.root, windowsHide: true, env: { ...process.env, PIPELINE_RUN_ID: run.runId },
+    });
+    let stdout = '';
+    let stderr = '';
+    child.stdout.on('data', (d) => { stdout += d; });
+    child.stderr.on('data', (d) => { stderr += d; });
+    child.on('close', (code) => {
+      const exit = code ?? 1;
+      emit(run, { type: 'gate', cmd, exit, ms: Date.now() - t0, ...(group ? { parallel: group } : {}) });
+      saveRun(ctx, run); // inFlight 由 runGateGroup 在所有分支结束后清除
+      resolve({ exit, stdout, stderr, script });
+    });
+  });
+}
+
+function mergeGateResults(results) {
+  const exit = results.some((r) => r.exit !== 0) ? 1 : 0;
+  const stdout = results.map((r) => r.stdout).join('');
+  const stderr = results.map((r) => (results.length > 1 ? `[${r.script}]\n${r.stderr}` : r.stderr)).join('');
+  return { exit, stdout, stderr };
+}
+
+// 重试预算（R3-5）：cap 为额外尝试次数；每次失败记 retry 事件并落盘，耗尽后返回最后一次结果。
+async function runGateGroup(ctx, run, stage, jobs, cap = 0) {
+  const group = jobs.length > 1 ? `p-${run.events.filter((e) => e.type === 'gate' && e.parallel).length + 1}` : null;
+  let attempt = 0;
+  for (;;) {
+    attempt += 1;
+    beginGate(ctx, run);
+    const results = jobs.length > 1
+      ? await Promise.all(jobs.map((j) => runNodeAsync(ctx, run, j.script, j.args || [], group)))
+      : [await runNodeAsync(ctx, run, jobs[0].script, jobs[0].args || [])];
+    run.inFlight = null;
+    saveRun(ctx, run);
+    const merged = mergeGateResults(results);
+    if (merged.exit === 0 || attempt > cap) return merged;
+    emit(run, { type: 'retry', stage, attempt, cap, exit: merged.exit });
+    saveRun(ctx, run);
+  }
+}
+
+function runGit(ctx, run, args, { optional = false } = {}) {
   if (args.some((a) => GIT_NEVER_FLAGS.includes(a))) fail('不变量破坏：git 调用携带禁用旗标', 1);
   const cmd = `git ${args.join(' ')}`;
   const t0 = Date.now();
   const p = spawnSync(ctx.gitPrefix[0], [...ctx.gitPrefix.slice(1), ...args], { cwd: ctx.root, encoding: 'utf8', windowsHide: true });
   const ms = Date.now() - t0;
   const exit = p.status ?? 1;
-  emit(run, { type: 'gate', cmd, exit, ms });
+  // optional：探测类调用（如空仓库的 git log）失败不记 gate 事件，避免污染门失败计数。
+  if (!optional || exit === 0) {
+    emit(run, { type: 'gate', cmd, exit, ms });
+    saveRun(ctx, run); // 事件落盘：断点续跑时 git 侧已发生的事实不丢
+  }
   return { exit, stdout: p.stdout || '', stderr: p.stderr || '' };
 }
 
@@ -258,6 +366,7 @@ export function stageBar(run) {
 function printRun(ctx, run, problems) {
   const lv = run.triage ? ` ${run.triage.level}·${run.triage.kind}` : '';
   console.log(`\n▶ pipeline-run ${run.runId}${lv}  ${stageBar(run)}`);
+  if (run.inFlight) console.log(`↻ 中断于 ${run.inFlight.stage}（自 ${run.inFlight.since}）——next 或 resume 会从该门重入`);
   if (run.stopType === 'work-order' && run.workOrder) {
     const w = run.workOrder;
     console.log(`\n== 工单 #${w.id}（${w.kind}）${w.title} ==`);
@@ -306,6 +415,27 @@ export function parseKV(s) {
   return out;
 }
 
+// --parallel（R3-5）：只接受包内门脚本名，拒绝路径分隔符/上级目录。
+export function parseParallelList(s) {
+  const names = String(s || '').split(/[,，]/).map((x) => x.trim()).filter(Boolean);
+  const out = [];
+  for (const name of names) {
+    if (!/^[A-Za-z0-9._-]+\.mjs$/.test(name) || name === 'pipeline-run.mjs') {
+      throw new Error(`--parallel 只接受门脚本名（如 check-loop.mjs）：${name}`);
+    }
+    if (!out.some((j) => j.script === name)) out.push({ script: name, args: [] });
+  }
+  return out;
+}
+
+export function parseRetryCap(v) {
+  if (v === undefined) return 0;
+  if (v === true) throw new Error('--retry 须带次数：--retry 2');
+  const n = Number(v);
+  if (!Number.isInteger(n) || n < 0 || n > 5) throw new Error('--retry 须为 0-5 的整数');
+  return n;
+}
+
 function validateTriage(ctx, kv) {
   const problems = [];
   if (!KINDS.includes(kv.kind)) problems.push(`kind 须为 ${KINDS.join('|')}`);
@@ -339,6 +469,14 @@ function nextConfirmTarget(curState, docRel) { return curState || 'approved'; }
 
 function docsCommit(ctx, run, files, subject) {
   const commitFiles = [...new Set(files)];
+  // 断点续跑幂等（R3-5）：上次提交成功、落盘前被杀 → HEAD 已是同主题提交，不重复提交。
+  const head = runGit(ctx, run, ['log', '-1', '--format=%s'], { optional: true });
+  if (head.exit === 0 && head.stdout.trim() === subject) {
+    const sha = runGit(ctx, run, ['rev-parse', '--short', 'HEAD']);
+    emit(run, { type: 'commit', sha: sha.stdout.trim(), subject, resumed: true });
+    saveRun(ctx, run);
+    return { ok: true };
+  }
   const add = runGit(ctx, run, ['add', ...commitFiles]);
   if (add.exit !== 0) return { ok: false, msg: `git add 失败：${add.stderr.slice(0, 200)}` };
   const c = runGit(ctx, run, ['commit', '-m', subject]);
@@ -420,15 +558,26 @@ function kbGate(ctx, run, types) {
   return { exit: r.exit, hits };
 }
 
-function advance(ctx, run, opt) {
+async function advance(ctx, run, opt) {
   const L = () => run.triage.level;
   const K = () => run.triage.kind;
   const entry = () => run.docs.entry;
   const topic = () => run.triage.topic;
 
+  // 断点续跑（R3-5）：上次进程在门执行中被杀 → 记 resume 事件后从同一阶段重入。
+  if (run.inFlight) {
+    emit(run, { type: 'resume', stage: run.inFlight.stage, since: run.inFlight.since });
+    run.inFlight = null;
+    saveRun(ctx, run);
+  }
+
   // 工单型停机点的复验（进入对应阶段时先校验上一工单产出）
   while (true) {
     const s = run.stage;
+
+    // 阶段产物契约（R3-5）：先校验本阶段声明的产物，再走阶段逻辑。
+    const artifactProblems = stageArtifactProblems((rel) => readDoc(ctx, rel), s, run.docs, ctx.pipeline);
+    if (artifactProblems.length) stopGateFail(ctx, run, s, artifactProblems);
 
     if (s === 'triage') {
       if (!run.triage) {
@@ -652,7 +801,9 @@ function advance(ctx, run, opt) {
     }
 
     if (s === 'verify') {
-      const r = runNode(ctx, run, 'verify.mjs', []);
+      // 并行分支 + 重试（R3-5）：附加门与 verify 并发；--retry 只增加门重跑次数，不掩盖失败。
+      const jobs = [{ script: 'verify.mjs', args: [] }, ...(opt.parallel || [])];
+      const r = await runGateGroup(ctx, run, s, jobs, opt.retry || 0);
       if (K() === 'verify') { // verify-only 短路径：不带修复环，绿即收、败即停
         if (r.exit === 0) stopDone(ctx, run);
         stopGateFail(ctx, run, s, ['verify 未过（verify-only 不带修复环——人工处理后重跑，或立正式任务走闭环）']);
@@ -865,11 +1016,22 @@ if (isMain) {
     };
     emit(run, { type: 'run-created', requirement: req });
     saveRun(ctx, run);
-    advance(ctx, run, {}); // 首停机点 = triage 工单
-  } else if (cmd === 'next') {
+    await advance(ctx, run, {}); // 首停机点 = triage 工单
+  } else if (cmd === 'next' || cmd === 'resume') {
     const run = resolveRun(ctx, a);
+    if (cmd === 'resume' && !run.inFlight) {
+      console.log(`无断点可续：run ${run.runId} 未处于中断态（stage=${run.stage} stopType=${run.stopType}）`);
+      process.exit(0);
+    }
     if (run.stopType === 'done' || run.stopType === 'aborted') { printRun(ctx, run); process.exit(0); }
-    advance(ctx, run, { triage: typeof a.triage === 'string' ? a.triage : undefined, delegated: typeof a.delegated === 'string' ? a.delegated : undefined, files: typeof a.files === 'string' ? a.files : undefined, done: a.done === true });
+    await advance(ctx, run, {
+      triage: typeof a.triage === 'string' ? a.triage : undefined,
+      delegated: typeof a.delegated === 'string' ? a.delegated : undefined,
+      files: typeof a.files === 'string' ? a.files : undefined,
+      parallel: typeof a.parallel === 'string' ? usage(() => parseParallelList(a.parallel)) : [],
+      retry: usage(() => parseRetryCap(a.retry)),
+      done: a.done === true,
+    });
   } else if (cmd === 'status') {
     if (a.adopt) { adoptRun(ctx, a); process.exit(0); }
     const run = resolveRun(ctx, a);
@@ -882,6 +1044,9 @@ if (isMain) {
       if (e.doc) bits.push(e.doc);
       if (e.quote) bits.push(`原话「${e.quote.slice(0, 30)}」`);
       if (e.subject) bits.push(e.subject.slice(0, 50));
+      if (e.type === 'retry') bits.push(`attempt ${e.attempt}/${e.cap} exit ${e.exit}`);
+      if (e.type === 'resume') bits.push(`from ${e.stage}`);
+      if (e.parallel) bits.push(e.parallel);
       if (e.id) bits.push(`#${e.id}`);
       console.log('  ' + bits.join(' | '));
     }

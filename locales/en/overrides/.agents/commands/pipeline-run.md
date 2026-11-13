@@ -45,6 +45,14 @@ The stage machine is aligned with the commands manual. Mutually exclusive with m
 3. **Abort**: the user explicitly declines $\rightarrow$ `abort --run <id> --to superseded|cancelled --delegated "<verbatim words>"` (approved documents go through confirm-doc --to one by one)
 4. **Observe** (optional): `status [--run <id>] [--json]` full event stream / `watch` terminal polling view
 
+### Resume / Retry / Parallel Branches (R3-5)
+
+- **Resume**: before running a gate the script marks the run `inFlight` and persists it. If the process is killed (CI timeout / interruption), `next` re-enters that gate automatically and `resume --run <id>` does it explicitly. Recovery records a `resume` event; `status` shows "↻ interrupted at …".
+- **Retry**: `next --retry <0-5>` applies only to the verify gate; failures are re-run up to N times and each attempt records a `retry` event. Only after the budget is exhausted does it enter the fix loop / `gate-fail`; retries never skip the `--files` authorization check.
+- **Parallel branches**: `next --parallel "check-a.mjs,check-b.mjs"` runs extra gates concurrently with `verify.mjs`; any non-zero makes the whole gate non-zero and events carry a `parallel` group id. Only gate script names are accepted (paths are rejected).
+- **Stage artifact contracts**: `stageArtifacts` in `.agents/config/pipeline.json` declares products with `{entry}/{spec}/{plan}`; a missing or empty product stops with `gate-fail` before the gate runs (the template covers `spec-confirm` / `plan-confirm` / `verify` / `closeout`).
+- **Resume idempotency**: if HEAD already carries the same subject, `docsCommit` does not commit again (a commit event with `resumed: true` is recorded).
+
 ## 🚫 Hard Discipline (violation breaks the protocol)
 
 | Operation | Consequence / machine behavior | Exception |
