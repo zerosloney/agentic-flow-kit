@@ -70,6 +70,8 @@ node tools/make-en-host-overrides.mjs --check   # CI：英文覆盖缺失/过期
 
 `add-host` 只写 `category: 'host'`，并保留已安装的 stack / language；`upgrade` 按 manifest 记录的宿主和语言重放。
 
+`install --auto-hosts` 通过 `src/hosts/detect.mjs` 只读探测宿主点目录与注册表声明的根级配置/记忆文件（如 `.mcp.json`、`opencode.json`、`QWEN.md`）；仅在未显式 `--agent` 时采用，探测为空报错。探测结果只进入 `--json` 的 `detectedHosts`，不写 manifest；TUI 用同一结果预选宿主。
+
 `remove-host` / `uninstall` 同样以 manifest 哈希为安全闸：哈希一致的托管文件才删，用户改过的跳过并保留记录，`--force` 覆盖；删除后清理空目录。`remove-host` 只处理该宿主 `category: 'host'` 的文件和孤儿残留，根记忆文件（`rootMemory`，如 `CLAUDE.md`）视为用户文件、默认保留并停止托管；宿主集合变化后会用剩余宿主重渲染 engine.json / AGENTS.md / `.gitignore` 等宿主相关文件（仅当当前哈希仍等于 manifest）。`uninstall` 只移除带标记的合并块（保留块外用户内容，文件变空才删除），默认保留根记忆文件与用户改过的文件，全部清理完成才删除 manifest。
 
 ## 宿主能力注册表

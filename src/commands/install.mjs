@@ -8,6 +8,7 @@ import { applyPlan, summaryLine } from '../install/apply.mjs';
 import { emptyManifest, readManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
 import { buildVars } from '../render/tokens.mjs';
 import { HOST_NAMES, resolveHost } from '../hosts/registry.mjs';
+import { detectHosts } from '../hosts/detect.mjs';
 import { configureGit, isGitRepo } from '../git/config.mjs';
 import {
   parseModelFlags, readInjectedModels, resolveModels, summarizeModels, writeLocalModelRoles,
@@ -112,8 +113,17 @@ export function resolveStack(args, target) {
 }
 
 export function installCommand({ args, t, lang, onLog }) {
-  const hosts = resolveHosts(args, t);
-  return runInstall({ args, t, lang, hosts, commandLabel: 'install', onLog });
+  const target = resolveTarget(args);
+  const detectedHosts = detectHosts(target);
+  const explicit = args.agents && args.agents.length;
+  // --auto-hosts 仅在显式开启且未指定 --agent 时采用探测结果；探测为空给出明确错误。
+  if (flag(args, 'auto-hosts') && !explicit && !detectedHosts.length) {
+    const err = new Error(t('error.noHostsDetected', { hosts: HOST_NAMES.join(', ') }));
+    err.code = 'NO_HOSTS';
+    throw err;
+  }
+  const hosts = resolveHosts(args, t, flag(args, 'auto-hosts') ? detectedHosts : []);
+  return runInstall({ args, t, lang, hosts, commandLabel: 'install', onLog, detectedHosts });
 }
 
 const ACTION_MARK = { create: '+', update: '~', skip: '-', conflict: '!', merge: '~' };
@@ -166,7 +176,7 @@ function normalizeTier(value, t) {
 
 // onLog 回调契约：(action, msg, done, total) —— action ∈ create/update/skip/conflict/merge，
 // done/total 为已完成/总文件数，供 TUI 渲染 spinner 进度；缺省走 CLI 前缀行。
-export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories, commandLabel, stackOverride, onLog = null }) {
+export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories, commandLabel, stackOverride, onLog = null, detectedHosts = [] }) {
   const target = resolveTarget(args);
   const dryRun = flag(args, 'dry-run');
   const force = flag(args, 'force');
@@ -331,6 +341,7 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
       tier,
       hardened,
       hosts: hostSet,
+      detectedHosts,
       models: models ? summarizeModels(models) : null,
       plan: { count: plan.entries.length },
       stats: result.stats,

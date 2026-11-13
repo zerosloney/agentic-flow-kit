@@ -29,7 +29,7 @@
 | R2-4 | Hook 编译器 | 2 | L | 中性 hook 规格 + 宿主序列化器 | TODO · [#11](https://github.com/zerosloney/agentic-flow-kit/issues/11) |
 | R2-5 | MCP 接线 | 2 | M | registry `mcp` 字段、`templates/mcp/` | TODO · [#12](https://github.com/zerosloney/agentic-flow-kit/issues/12) |
 | R2-6 | 权限 / 工具白名单编译 | 2 | M | 复用 `gates.json` 与 hardened 路径 | TODO · [#13](https://github.com/zerosloney/agentic-flow-kit/issues/13) |
-| R2-7 | 宿主探测 `--auto-hosts` | 2 | S | `src/commands/install.mjs`、TUI | TODO · [#14](https://github.com/zerosloney/agentic-flow-kit/issues/14) |
+| R2-7 | 宿主探测 `--auto-hosts` | 2 | S | `src/commands/install.mjs`、TUI | DONE · [#14](https://github.com/zerosloney/agentic-flow-kit/issues/14) |
 | R2-8 | 组合式 profile | 2 | M | `src/install/plan.mjs`、`schemas/project-profile.schema.json` | TODO · [#15](https://github.com/zerosloney/agentic-flow-kit/issues/15) |
 | R2-9 | 企业档宿主矩阵 | 2 | M | `templates/hosts/*`、`doctor` | TODO · [#16](https://github.com/zerosloney/agentic-flow-kit/issues/16) |
 | R2-10 | i18n 覆盖一致性检查 | 2 | S | `tools/make-en-host-overrides.mjs --check` | DONE · [#17](https://github.com/zerosloney/agentic-flow-kit/issues/17) |
@@ -160,7 +160,7 @@
 
 ### R2-7 宿主探测 `--auto-hosts`
 
-- **现状**：宿主必须显式 `--agent`，TUI 也靠用户选。
+- **现状**：已实现。`src/hosts/detect.mjs` 只读探测宿主目录与根级配置/记忆文件；`install --auto-hosts` 仅在未显式 `--agent` 时采用，探测为空报错；TUI 预选探测结果；`--json` 输出 `detectedHosts`。
 - **目标**：扫描 `.claude/`、`.qwen/`、`.opencode/`、配置与锁文件，给出建议宿主；`--auto-hosts` 仅在显式开启时采用；TUI 预选。
 - **验收**：10 宿主夹具；探测不到时给明确空结果；绝不静默安装。规模 `S`。
 

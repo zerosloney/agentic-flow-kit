@@ -41,7 +41,7 @@ npx agentic-flow-kit doctor --target .
 
 | 命令 | 作用 |
 |---|---|
-| `install` | 从零安装；可重复 `--agent`，也可 `--agents a,b,c` |
+| `install` | 从零安装；可重复 `--agent`，也可 `--agents a,b,c`；`--auto-hosts` 探测现有宿主目录 |
 | `add-host <host>` | 已安装仓追加宿主壳（同时接受 `--agent <host>`） |
 | `upgrade` | 按 manifest 记录的宿主/语言/栈重放模板；冲突默认跳过 |
 | `prune` | 删除 manifest 登记、当前模板已不存在的孤儿文件；用户改过的默认跳过，`--force` 覆盖；清理空目录 |
@@ -67,6 +67,7 @@ npx agentic-flow-kit doctor --target .
 | `--force` | 覆盖冲突/非本工具安装的既有文件 |
 | `--no-git-config` | 不自动写三条例行 git 配置 |
 | `--track-hosts` | 不把本机宿主目录写进 `.gitignore` |
+| `--auto-hosts` | 扫描宿主点目录与根级配置/记忆文件，采用探测结果作为安装宿主；仅在未显式 `--agent` 时生效，探测为空报错 |
 | `--model [host:]role=<id>` | 可重复。指定模型角色；`role` 为 `code` / `judgment` / `review`，省略宿主则全局生效 |
 | `--model-mode recommend\|detect\|inherit` | `recommend`（默认，探测 + 推荐）、`detect`（强制重新探测）、`inherit`（全部继承宿主默认） |
 | `--probe-models` | 允许执行宿主注册表中声明的只读模型列表命令（1.5s 超时，失败静默） |

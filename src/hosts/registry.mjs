@@ -29,6 +29,8 @@ export const HOSTS = {
     label: 'Claude Code',
     tracked: false,
     rootMemory: 'CLAUDE.md',
+    // 根目录信号：Claude Code 的项目配置与记忆文件
+    detect: ['.mcp.json', 'CLAUDE.md'],
     commands: { dir: 'commands', ext: '.md' },
     agents: { dir: 'agents', ext: '.md', modelField: 'model', inheritValue: 'inherit' },
     skills: { mode: 'native', dir: 'skills', file: 'SKILL.md' },
@@ -43,6 +45,7 @@ export const HOSTS = {
     dir: '.opencode',
     label: 'OpenCode',
     tracked: false,
+    detect: ['opencode.json', 'opencode.jsonc'],
     commands: { dir: 'commands', ext: '.md' },
     // 省略 model = 继承父级；不写 inherit 值
     agents: { dir: 'agents', ext: '.md', modelField: 'model', inheritValue: null },
@@ -54,6 +57,7 @@ export const HOSTS = {
     dir: '.qwen',
     label: 'Qwen Code',
     tracked: false,
+    detect: ['QWEN.md'],
     commands: { dir: 'commands', ext: '.md' },
     agents: { dir: 'agents', ext: '.md', modelField: 'model', inheritValue: 'inherit' },
     // Qwen 原生发现 .agents/skills；不复制宿主技能副本

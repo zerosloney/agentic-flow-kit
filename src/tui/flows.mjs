@@ -3,6 +3,7 @@
 import { visualWidth, box, green, red, progressLine } from './ansi.mjs';
 import { pickOne, pickMany, confirmYes, showLines, askText } from './prompts.mjs';
 import { HOSTS, HOST_NAMES } from '../hosts/registry.mjs';
+import { detectHosts } from '../hosts/detect.mjs';
 import { probeModels } from '../models/probe.mjs';
 import { ROLE_NAMES, loadRoleConfig, recommendRoles, summarizeModels } from '../models/resolve.mjs';
 import { readManifest } from '../install/manifest.mjs';
@@ -66,14 +67,23 @@ export function stackItems({ detected, current, lang, t }) {
   });
 }
 
-// 宿主候选项单一映射：已安装的提示「已安装」，否则提示 label → dir
-function hostItems({ installed = [], t }) {
-  return HOST_NAMES.map((n) => ({
-    value: n,
-    label: n,
-    hint: installed.includes(n) ? t('tui.installed') : `${HOSTS[n].label} → ${HOSTS[n].dir}`,
-    checked: installed.includes(n),
-  }));
+// 宿主候选项单一映射：已安装或探测到的提示，用户仍可改选。
+function hostItems({ installed = [], suggested = [], t }) {
+  return HOST_NAMES.map((n) => {
+    const isInstalled = installed.includes(n);
+    const isSuggested = !isInstalled && suggested.includes(n);
+    const tags = [
+      isInstalled ? t('tui.installed') : null,
+      isSuggested ? t('tui.detectedHost') : null,
+      `${HOSTS[n].label} → ${HOSTS[n].dir}`,
+    ].filter(Boolean);
+    return {
+      value: n,
+      label: n,
+      hint: tags.join(' · '),
+      checked: isInstalled || isSuggested,
+    };
+  });
 }
 
 // 模型配置流：静态探测 → 可选只读 CLI 探测 → 推荐确认 / 逐角色选择（含手填、inherit、跳过）。
@@ -159,7 +169,7 @@ async function installFlow(ctx) {
     question: t('tui.hostsQuestion'),
     hint: t('tui.hint.toggle'),
     min: 1,
-    items: hostItems({ installed: prevHosts, t }),
+    items: hostItems({ installed: prevHosts, suggested: detectHosts(cwd), t }),
   });
   if (hosts === null) return;
 
