@@ -64,6 +64,24 @@
         "uniqueItems": true
       }
     },
+    "managedPermissions": {
+      "type": "object",
+      "description": "宿主配置 -> 上次由本工具写入的 allow/deny/ask 条目；卸载/升级只替换这些条目，保留用户自建权限。",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "allow": { "type": "array", "items": { "type": "string" } },
+          "deny": { "type": "array", "items": { "type": "string" } },
+          "ask": { "type": "array", "items": { "type": "string" } }
+        }
+      }
+    },
+    "mergeOrigins": {
+      "type": "object",
+      "description": "合并型配置首次安装时是否已存在；created 且未被改动时卸载可整文件删除。",
+      "additionalProperties": { "enum": ["created", "existing"] }
+    },
     "projectName": { "type": "string" },
     "trackHosts": { "type": "boolean" },
     "derived": {

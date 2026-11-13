@@ -104,19 +104,47 @@ export function compilePermissions(spec, cfg, { stack = 'empty', hardened = fals
   return result;
 }
 
+// 卸载：只移除 manifest 记录为托管的条目，保留用户自建权限。
+export function stripManagedPermissions(root, recorded, cfg) {
+  if (!isObject(root) || !recorded) return false;
+  const key = cfg.container || 'permissions';
+  const target = root[key];
+  if (!isObject(target)) return false;
+  let changed = false;
+  for (const bucket of BUCKETS) {
+    if (!Array.isArray(target[bucket])) continue;
+    const managed = new Set(recorded[bucket] || []);
+    const next = target[bucket].filter((item) => !managed.has(item));
+    if (next.length !== target[bucket].length) changed = true;
+    if (next.length) target[bucket] = next;
+    else delete target[bucket];
+  }
+  if (!Object.keys(target).length) {
+    delete root[key];
+    changed = true;
+  }
+  return changed;
+}
+
 function container(root, cfg) {
   const key = cfg.container || 'permissions';
   if (!isObject(root[key])) root[key] = {};
   return root[key];
 }
 
-// 精确替换 allow / deny / ask（权限面是托管策略），保留 defaultMode 等其它键。
-export function mergePermissionsIntoRoot(root, compiled, cfg) {
+// 合并策略：保留用户自建条目，只替换“上次由本工具写入”的条目，再补上本次编译项。
+// reset=true 用于文件尚不存在、以静态宿主模板打底的场景：模板条目属于工具自身，直接替换。
+export function mergePermissionsIntoRoot(root, compiled, cfg, previousManaged = null, { reset = false } = {}) {
   if (!isObject(root) || !compiled) return false;
   const target = container(root, cfg);
   let changed = false;
   for (const bucket of BUCKETS) {
-    const desired = compiled[bucket] || [];
+    const current = Array.isArray(target[bucket]) ? [...target[bucket]] : [];
+    const managedPrev = new Set(previousManaged?.[bucket] || []);
+    const desired = reset ? [] : current.filter((item) => !managedPrev.has(item));
+    for (const item of compiled[bucket] || []) {
+      if (!desired.includes(item)) desired.push(item);
+    }
     if (JSON.stringify(target[bucket] || []) !== JSON.stringify(desired)) {
       target[bucket] = desired;
       changed = true;
@@ -125,16 +153,19 @@ export function mergePermissionsIntoRoot(root, compiled, cfg) {
   return changed;
 }
 
-// doctor：对账编译结果与文件实际数组。
-export function permissionDrift(root, compiled, cfg) {
+// doctor：编译项必须全部在位；上次托管但本次已移除的条目属于残留。
+// 用户自建条目不在校验范围内。
+export function permissionDrift(root, compiled, cfg, previousManaged = null) {
   const target = isObject(root) ? root[cfg.container || 'permissions'] : null;
   const missing = [];
-  const extra = [];
+  const stale = [];
   for (const bucket of BUCKETS) {
     const actual = Array.isArray(target?.[bucket]) ? target[bucket] : [];
     const desired = compiled[bucket] || [];
     missing.push(...desired.filter((item) => !actual.includes(item)).map((item) => `${bucket}:${item}`));
-    extra.push(...actual.filter((item) => !desired.includes(item)).map((item) => `${bucket}:${item}`));
+    const managedPrev = new Set(previousManaged?.[bucket] || []);
+    stale.push(...[...managedPrev].filter((item) => actual.includes(item) && !desired.includes(item))
+      .map((item) => `${bucket}:${item}`));
   }
-  return { missing, extra };
+  return { missing, stale };
 }

@@ -101,6 +101,8 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
   const target = plan.target;
   const nextFiles = { ...(manifest.files || {}) };
   const nextMcp = { ...(manifest.mcp || {}) };
+  const nextManagedPermissions = { ...(manifest.managedPermissions || {}) };
+  const nextMergeOrigins = { ...(manifest.mergeOrigins || {}) };
   const writes = [];
   const conflicts = [];
 
@@ -134,7 +136,20 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
         : `${entry.targetRel}（二进制模板跳过）`);
       continue;
     }
+    if (entry.kind === 'merge-mcp' || entry.kind === 'merge-host') {
+      // 记录首次安装时文件是否已存在：卸载时只有“本工具创建且未被改动”的文件可整体删除。
+      if (!nextMergeOrigins[entry.targetRel]) {
+        nextMergeOrigins[entry.targetRel] = exists ? 'existing' : 'created';
+      }
+    }
     if (entry.mcpNames) nextMcp[entry.targetRel] = entry.mcpNames;
+    if (entry.permissionSpec) {
+      nextManagedPermissions[entry.targetRel] = {
+        allow: [...entry.permissionSpec.allow],
+        deny: [...entry.permissionSpec.deny],
+        ask: [...entry.permissionSpec.ask],
+      };
+    }
 
     // Hook / MCP 配置以“合并”为语义：用户对文件的其它修改不影响托管条目，
     // 因此不走 user-modified 冲突分支；内容已一致时跳过。
@@ -233,6 +248,8 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
     stats,
     files: nextFiles,
     mcp: nextMcp,
+    managedPermissions: nextManagedPermissions,
+    mergeOrigins: nextMergeOrigins,
     written: writes.map((w) => w.targetRel),
     conflictPaths: writes.filter((w) => w.conflict).map((w) => w.targetRel),
     // 合并/冲突文件的磁盘文本不等于 manifest 记录的模板哈希，安装器派生扫描不得重算。

@@ -106,7 +106,8 @@ export function mergeThreeWay({ base, ours, theirs }) {
       ['merge-file', '-p', '-q', '-L', 'current', '-L', 'baseline', '-L', 'kit', oursFile, baseFile, theirsFile],
       { encoding: 'utf8', windowsHide: true },
     );
-    if (result.error || (result.status !== 0 && result.status !== 1)) return { status: 'unavailable' };
+    // git merge-file 的退出码是冲突块数量（最多 127）；>=128 才是 git 自身错误。
+    if (result.error || result.status < 0 || result.status > 127) return { status: 'unavailable' };
     return {
       status: result.status === 0 ? 'clean' : 'conflict',
       text: result.stdout,

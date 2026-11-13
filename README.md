@@ -166,7 +166,7 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 | `qwen` | `Bash(cmd *)` | shell |
 | `commandcode` | `Shell(cmd *)` | shell |
 
-权限数组是托管策略：安装/升级按 gates.json 精确对齐（用户自建条目会被覆盖，白名单请改 gates.json），重复安装幂等。栈相关白名单（`dotnet build`、`cargo test` 等）由栈配置自动追加。宿主不支持声明的 `tool` 类别时降级跳过，`doctor` 给出 `permissions <host> unsupported` 告警；没有权限能力的宿主（codebuddy / trae / zcode 等）得到 `guarantee <host>` advisory，不静默丢弃。`doctor` 还会对账权限数组与 gates.json 的缺失 / 多余项。
+权限数组按“托管条目”合并：安装/升级只替换 manifest 记录的上次编译项，用户自建 allow/deny/ask 条目保留；重复安装幂等。栈相关白名单（`dotnet build`、`cargo test` 等）由栈配置自动追加。宿主不支持声明的 `tool` 类别时降级跳过，`doctor` 给出 `permissions <host> unsupported` 告警；没有权限能力的宿主（codebuddy / trae / zcode 等）得到 `guarantee <host>` advisory，不静默丢弃。`doctor` 还会对账权限数组：缺失编译项或残留已废弃托管项都会报出，用户自建条目不误报。
 
 ## 企业档加固矩阵
 
@@ -193,7 +193,7 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 
 默认声明在 `templates/mcp/servers.json`，项目可用 `.flow-kit/mcp/servers.json` 整体替换（同为 `{"servers": {...}}`）。每个 server 支持 `command` + `args` + `env`，或远程 `url` + `headers`。
 
-合并是幂等的：只补缺失的同名 server，保留用户自建 server 与文件中的其它键（如 `permissions`）；重复安装/升级不会重排或覆盖既有内容。卸载时按 manifest 记录的 server 名摘除托管条目，用户内容保留；文件整体未被改动时直接删除。`doctor` 校验配置文件存在、JSON 合法、容器与 server 齐全。`--no-mcp` 完全跳过接线，并把选择写入 manifest 供 `upgrade` 重放。
+合并是幂等的：只补缺失的同名 server，保留用户自建 server 与文件中的其它键（如 `permissions`）；重复安装/升级不会重排或覆盖既有内容。远程 server 按宿主 schema 生成：Claude / Qwen 写 `type: http`（可用 `type: sse` 覆盖），OpenCode 写 `type: remote`。卸载时按 manifest 记录的 server 名摘除托管条目，用户内容保留；只有本工具创建且未被改动的文件才整文件删除（`manifest.mergeOrigins`）。`doctor` 校验配置文件存在、JSON 合法、容器与 server 齐全。`--no-mcp` 完全跳过接线，并把选择写入 manifest 供 `upgrade` 重放。
 
 默认声明带一个只读本地 server `flow-kit-wiki`（`.agents/scripts/wiki-mcp.mjs`），提供 `wiki_search` 工具检索 `wiki/` 与 `.agents/`；不联网、不写盘。
 

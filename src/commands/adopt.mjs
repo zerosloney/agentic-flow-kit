@@ -69,6 +69,7 @@ function scan({ target, plan, vars, hosts, existing }) {
   const missing = [];
   const derived = new Set();
   const mcpServers = {};
+  const managedPermissions = {};
   const planned = new Set();
   const adoptedSet = new Set();
   const adopt = (rel, entry) => {
@@ -76,7 +77,14 @@ function scan({ target, plan, vars, hosts, existing }) {
     adoptedSet.add(rel);
     adopted.push({ path: rel, hash: sha256Text(fs.readFileSync(path.join(target, rel), 'utf8')) });
     if (DERIVED_RELS.has(rel)) derived.add(rel);
-    if (entry?.kind === 'merge-mcp' && entry.mcpNames) mcpServers[rel] = entry.mcpNames;
+    if (entry?.mcpNames) mcpServers[rel] = entry.mcpNames;
+    if (entry?.permissionSpec) {
+      managedPermissions[rel] = {
+        allow: [...entry.permissionSpec.allow],
+        deny: [...entry.permissionSpec.deny],
+        ask: [...entry.permissionSpec.ask],
+      };
+    }
   };
   for (const entry of plan.entries) {
     const rel = entry.targetRel;
@@ -125,6 +133,7 @@ function scan({ target, plan, vars, hosts, existing }) {
       if (targetRel === MANIFEST_REL || planned.has(targetRel) || rel.endsWith('.gitkeep')) continue;
       if (GENERATED_ONLY.has(targetRel)) continue;
       if (RUNTIME_FILES.has(targetRel)) continue;
+      if (targetRel.startsWith('.agents/.kit/')) continue; // 升级基线不属于安装面
       if ([...RUNTIME_DIRS].some((dir) => targetRel.startsWith(`${dir}/`))) continue;
       unrecognized.push(targetRel);
     }
@@ -134,7 +143,7 @@ function scan({ target, plan, vars, hosts, existing }) {
     if (!planned.has(rel) && !unrecognized.includes(rel)) unrecognized.push(rel);
   }
   unrecognized.sort();
-  return { adopted, modified, missing, unrecognized, derived, mcpServers };
+  return { adopted, modified, missing, unrecognized, derived, mcpServers, managedPermissions };
 }
 
 export function adoptCommand({ args, t }) {
@@ -185,6 +194,7 @@ export function adoptCommand({ args, t }) {
     next.files = files;
     next.derived = derived;
     next.mcpServers = { ...(existing?.mcpServers || {}), ...result.mcpServers };
+    next.managedPermissions = { ...(existing?.managedPermissions || {}), ...result.managedPermissions };
     writeManifest(target, next);
   }
 

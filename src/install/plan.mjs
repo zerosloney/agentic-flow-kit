@@ -188,7 +188,14 @@ function readGatesText(lang) {
   }
 }
 
-function addHostConfigEntries({ plan, target, hosts, lang, stack, hardened }) {
+// doctor 与安装共用同一个规格源（kit 模板 + 语言覆盖），避免“安装成功、doctor 立刻报漂移”。
+export function readGatesSpecs(lang) {
+  const text = readGatesText(lang);
+  if (!text) return { hooks: null, permissions: null };
+  return { hooks: parseHookSpec(text), permissions: parsePermissionSpec(text) };
+}
+
+function addHostConfigEntries({ plan, target, hosts, lang, stack, hardened, managedPermissions = {} }) {
   const gatesText = readGatesText(lang);
   if (!gatesText) return;
   const hookSpec = parseHookSpec(gatesText);
@@ -216,6 +223,7 @@ function addHostConfigEntries({ plan, target, hosts, lang, stack, hardened }) {
       hookConfig,
       permissionSpec: compiledPermissions,
       permissionConfig,
+      previousPermissions: managedPermissions[rel] || null,
       getText: (vars) => {
         const abs = path.join(target, rel);
         const exists = fs.existsSync(abs);
@@ -235,7 +243,13 @@ function addHostConfigEntries({ plan, target, hosts, lang, stack, hardened }) {
           changed = mergeHooksIntoRoot(root, entry.hookSpec, hookConfig) || changed;
         }
         if (entry.permissionSpec) {
-          changed = mergePermissionsIntoRoot(root, entry.permissionSpec, permissionConfig) || changed;
+          changed = mergePermissionsIntoRoot(
+            root,
+            entry.permissionSpec,
+            permissionConfig,
+            entry.previousPermissions,
+            { reset: !exists },
+          ) || changed;
         }
         // Qwen 的 settings.json 同时承载 MCP：多个合并器对同一个 root 组合执行，
         // 避免同一文件在去重时丢掉其中一个托管面。
@@ -293,7 +307,7 @@ function addMcpEntries({ plan, target, hosts }) {
 // surfaces: 组合式切面闭集（frontend/api/data），按声明顺序叠加在 stack 之上。
 export function buildPlan({
   target, hosts, lang, stack, projectName, categories, models = null, tier = 'standard', hardened = false, mcp = true,
-  surfaces = [],
+  surfaces = [], managedPermissions = {},
 }) {
   const t = makeT(lang);
   const plan = [];
@@ -354,7 +368,7 @@ export function buildPlan({
   }
 
   // 3.4) Hook / 权限接线编译（中性 gates.json -> 宿主 schema）
-  addHostConfigEntries({ plan, target, hosts, lang, stack, hardened });
+  addHostConfigEntries({ plan, target, hosts, lang, stack, hardened, managedPermissions });
 
   // 3.5) MCP 配置合并（--no-mcp 时整段跳过）
   if (mcp) addMcpEntries({ plan, target, hosts });
