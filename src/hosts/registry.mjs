@@ -23,6 +23,7 @@ export const HOSTS = {
         command: { form: 'relative', template: 'node {script}' },
       },
     },
+    hardening: { level: 'hooks' },
     modelProbe: { configs: [], env: [], cli: [] },
   },
   codebuddy: {
@@ -44,6 +45,7 @@ export const HOSTS = {
         command: { form: 'env', template: 'node "$CODEBUDDY_PROJECT_DIR"/{script}' },
       },
     },
+    hardening: { level: 'hooks' },
     modelProbe: { configs: ['~/.codebuddy/settings.json'], env: ['CODEBUDDY_MODEL'], cli: [] },
   },
   claude: {
@@ -69,6 +71,8 @@ export const HOSTS = {
     },
     // Claude Code 项目级 MCP 配置（根目录 .mcp.json，mcpServers 容器）
     permissions: { container: 'permissions', syntax: 'colon', tool: 'Bash', tools: ['shell', 'read', 'web'] },
+    // enterprise 档：managed-only 设置模板替换 settings.json，权限数组仍由 gates.json 编译
+    hardening: { level: 'managed', settings: 'settings.hardened.json' },
     mcp: { file: '.mcp.json', format: 'claude', scope: 'project' },
     modelProbe: {
       configs: ['~/.claude/settings.json'],
@@ -88,6 +92,7 @@ export const HOSTS = {
     hooks: null,
     // OpenCode 根配置使用 mcp 容器，local 命令是数组、env 字段名为 environment
     mcp: { file: 'opencode.json', format: 'opencode', scope: 'project' },
+    hardening: { level: 'none' },
     modelProbe: { configs: ['~/.config/opencode/opencode.json'], env: ['OPENCODE_MODEL'], cli: [] },
   },
   qwen: {
@@ -112,6 +117,7 @@ export const HOSTS = {
     },
     // Qwen Code 在 .qwen/settings.json 使用 mcpServers 容器
     permissions: { container: 'permissions', syntax: 'space', tool: 'Bash', tools: ['shell'], extraAllow: [{ tool: 'shell', pat: 'dir' }] },
+    hardening: { level: 'permissions' },
     mcp: { file: '.qwen/settings.json', format: 'claude', scope: 'project' },
     modelProbe: { configs: ['~/.qwen/settings.json'], env: ['QWEN_MODEL'], cli: [] },
   },
@@ -124,6 +130,7 @@ export const HOSTS = {
     agents: { dir: 'agents', ext: '.md', modelField: 'model', inheritValue: null },
     skills: { mode: 'index' },
     hooks: null,
+    hardening: { level: 'none' },
     modelProbe: { configs: ['~/.pi/settings.json'], env: ['PI_MODEL'], cli: [] },
   },
   cline: {
@@ -135,6 +142,7 @@ export const HOSTS = {
     agents: { dir: 'agents', ext: '.yml', modelField: null, inheritValue: null },
     skills: { mode: 'index' },
     hooks: null,
+    hardening: { level: 'none' },
     modelProbe: { configs: [], env: [], cli: [] },
   },
   commandcode: {
@@ -157,6 +165,7 @@ export const HOSTS = {
       },
     },
     permissions: { container: 'permissions', syntax: 'space', tool: 'Shell', tools: ['shell'], extraAllow: [{ tool: 'shell', pat: 'dir' }] },
+    hardening: { level: 'permissions' },
     modelProbe: {
       configs: ['~/.commandcode/settings.json'],
       env: ['COMMANDCODE_MODEL'],
@@ -184,6 +193,7 @@ export const HOSTS = {
       },
     },
     permissions: { container: 'permissions', syntax: 'colon', tool: 'Bash', tools: ['shell'] },
+    hardening: { level: 'permissions' },
     modelProbe: { configs: ['~/.qoder/settings.json'], env: [], cli: [] },
   },
   zcode: {
@@ -206,6 +216,7 @@ export const HOSTS = {
         command: { form: 'relative', template: 'node {script}' },
       },
     },
+    hardening: { level: 'hooks' },
     modelProbe: { configs: ['~/.zcode/config.json'], env: [], cli: [] },
   },
 };

@@ -336,11 +336,12 @@ export function buildPlan({
     const h = HOSTS[host];
     if (!h) continue;
     const templatesDir = h.templates || path.join(TEMPLATES, 'hosts', host);
+    const hardeningSource = h.hardening?.settings || null;
     for (const rel of listFiles(templatesDir)) {
-      // 加固配置是 settings.json 的替换源，不作为独立文件安装。
-      if (rel === 'settings.hardened.json') continue;
-      const srcAbs = (hardened && host === 'claude' && rel === 'settings.json')
-        ? path.join(TEMPLATES, 'hosts', host, 'settings.hardened.json')
+      // 加固配置是宿主主配置的替换源，不作为独立文件安装。
+      if (hardeningSource && rel === hardeningSource) continue;
+      const srcAbs = (hardened && hardeningSource && rel === h.hooks?.file)
+        ? path.join(templatesDir, hardeningSource)
         : path.join(templatesDir, rel);
       const entry = push(srcAbs, hostTargetRel(host, rel), 'host', 30);
       if (h.agents?.modelField && isAgentTemplate(host, rel)) {

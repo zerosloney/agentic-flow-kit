@@ -36,6 +36,25 @@
       "type": ["string", "null"],
       "description": "写入基线时的安装器版本；基线内容不参与 manifest 哈希。"
     },
+    "enterprise": {
+      "type": "object",
+      "description": "enterprise / --hardened 实际启用的加固矩阵与证明链状态。",
+      "additionalProperties": false,
+      "required": ["posture", "hosts", "gaps", "proofChain", "policyChecks"],
+      "properties": {
+        "posture": { "enum": ["hardened"] },
+        "hosts": {
+          "type": "object",
+          "additionalProperties": { "enum": ["managed", "permissions", "hooks", "none"] }
+        },
+        "gaps": { "type": "array", "items": { "type": "string" } },
+        "proofChain": { "type": "boolean" },
+        "policyChecks": {
+          "type": "array",
+          "items": { "enum": ["githooks", "ci", "permissions"] }
+        }
+      }
+    },
     "mcpServers": {
       "type": "object",
       "description": "目标 MCP 配置文件 -> 本工具写入的 server 名列表（卸载时只摘除这些条目）。",

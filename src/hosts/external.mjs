@@ -13,7 +13,7 @@ const SKILL_MODES = new Set(['native', 'shared', 'index']);
 const HOOK_FORMATS = new Set(['json']);
 const ALLOWED_KEYS = new Set([
   'name', 'dir', 'label', 'tracked', 'rootMemory', 'detect', 'templates',
-  'commands', 'agents', 'skills', 'hooks', 'permissions', 'modelProbe',
+  'commands', 'agents', 'skills', 'hooks', 'permissions', 'hardening', 'modelProbe',
 ]);
 
 function isObject(value) {
@@ -169,6 +169,18 @@ function normalizePermissions(raw, field, bad) {
   };
 }
 
+const HARDENING_LEVELS = new Set(['managed', 'permissions', 'hooks', 'none']);
+
+function normalizeHardening(raw, field, bad) {
+  if (raw == null) return null;
+  if (!isObject(raw)) bad(`\`${field}\` must be an object or null`);
+  if (!HARDENING_LEVELS.has(raw.level)) bad(`\`${field}.level\` must be one of: managed, permissions, hooks, none`);
+  if (raw.settings != null && (!isRelPath(raw.settings) || raw.settings.includes('/'))) {
+    bad(`\`${field}.settings\` must be a file name`);
+  }
+  return { level: raw.level, ...(raw.settings ? { settings: raw.settings } : {}) };
+}
+
 function normalizeProbe(raw, field, bad) {
   if (raw == null) return { configs: [], env: [], cli: [] };
   if (!isObject(raw)) bad(`\`${field}\` must be an object`);
@@ -235,6 +247,7 @@ export function validateHostDefinition(raw, file, t) {
     skills: normalizeSkills(raw.skills, 'skills', bad),
     hooks: normalizeHooks(raw.hooks, 'hooks', bad),
     permissions: normalizePermissions(raw.permissions, 'permissions', bad),
+    hardening: normalizeHardening(raw.hardening, 'hardening', bad),
     modelProbe: normalizeProbe(raw.modelProbe, 'modelProbe', bad),
     ...(templates ? { templates } : {}),
   };

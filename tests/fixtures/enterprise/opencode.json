@@ -1,0 +1,7 @@
+{
+  "level": "none",
+  "hooks": false,
+  "permissions": false,
+  "sandbox": false,
+  "hardenedRules": false
+}

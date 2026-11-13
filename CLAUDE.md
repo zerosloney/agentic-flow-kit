@@ -82,7 +82,7 @@ node tools/make-en-host-overrides.mjs --check   # CI：英文覆盖缺失/过期
 `src/hosts/registry.mjs` 是宿主能力的单一来源，不要在 `plan.mjs` / `doctor.mjs` 里为某个宿主写硬编码分支。字段包括：
 
 - `dir`、`rootMemory`：`hostTargetRel()` 负责把宿主模板相对路径映射到 `<dir>/...`，根记忆文件映射到项目根。
-- `commands` / `agents` / `skills` / `hooks` / `permissions`：声明目录、扩展名、技能模式和接线文件；`hooks.events` 描述 Hook 编译器需要的宿主 schema（事件、`matchers`、`command.form/template`、超时、容器路径、root/group/hook 扩展键）；`permissions` 描述权限编译能力（`syntax`、shell 工具名、支持的 `tools`、`extraAllow`）。
+- `commands` / `agents` / `skills` / `hooks` / `permissions` / `hardening`：声明目录、扩展名、技能模式和接线文件；`hooks.events` 描述 Hook 编译器需要的宿主 schema（事件、`matchers`、`command.form/template`、超时、容器路径、root/group/hook 扩展键）；`permissions` 描述权限编译能力（`syntax`、shell 工具名、支持的 `tools`、`extraAllow`）；`hardening.level`（managed / permissions / hooks / none）与可选 `settings` 驱动企业档矩阵。
 - `agents.modelField` / `agents.inheritValue`：该宿主子代理是否支持按角色指定模型，以及 `inherit` 的写法。
 - `modelProbe.configs/env/cli`：模型探测来源。
 - `templates`：外部宿主的静态模板目录（绝对路径）；内置宿主不设置，回退到 `templates/hosts/<host>`。
@@ -139,8 +139,8 @@ Hook 接线在 `src/install/hooks.mjs`：中性规格来自引擎模板 `.agents
 
 - `lean`：不生成 CI（`azure-pipelines.yml` / `.github/workflows/ci.yml`），其余引擎面不变。
 - `standard`（默认）：生成 CI，CI 在 `verify --full` 后跑 advisory 的 agent-eval / memory-tier / pipeline-state。
-- `enterprise` / `--hardened`：宿主 `claude` 的 `settings.json` 换成 `templates/hosts/claude/settings.hardened.json`（sandbox、MCP/权限 managed-only 键）；权限数组由 `gates.json` 基线 + `hardened` 追加项编译覆盖，该文件**不**作为独立文件安装。
-- 档位与 `hardened` 写入 manifest；`doctor` 显示档位、CI 缺失（advisory）、宿主能力缺口（无 hooks / 无 modelField）、模型漂移和 manifest 漂移（advisory，明细引导到 `diff`）。
+- `enterprise` / `--hardened`：按 registry `hardening.level` 分级加固——`managed`（claude）替换 `settings.hardened.json`（sandbox、MCP/权限 managed-only 键，权限数组由 `gates.json` 基线 + `hardened` 追加项编译覆盖，该文件**不**作为独立文件安装）；`permissions`（qwen / qoder / commandcode）编译 hardened 权限项；`hooks`（codebuddy / trae / zcode）只有命令门禁；`none`（opencode / pi / cline）无可配置面。`hardening.settings` 声明的文件作为宿主主配置替换源，不独立安装。
+- 档位与 `hardened` 写入 manifest；hardened 时额外写 `manifest.enterprise`（`posture`、每宿主级别、`gaps`、`proofChain`、`policyChecks`，默认档不写该字段）。`doctor` 显示档位、实际姿态、宿主矩阵与缺口（advisory），核对证明链（agent-eval / outcome-metrics / pipeline-state）与策略面（`.githooks` / CI / permissions），并继续报告 CI 缺失、宿主能力缺口（无 hooks / 无 modelField）、模型漂移和 manifest 漂移。
 
 ## AI-Native 治理面（引擎模板）
 

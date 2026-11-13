@@ -8,7 +8,7 @@ import { parseProfileArgs } from '../install/profiles.mjs';
 import { applyPlan, summaryLine } from '../install/apply.mjs';
 import { emptyManifest, readManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
 import { buildVars } from '../render/tokens.mjs';
-import { HOST_NAMES, resolveHost } from '../hosts/registry.mjs';
+import { HOST_NAMES, HOSTS, resolveHost } from '../hosts/registry.mjs';
 import { detectHosts } from '../hosts/detect.mjs';
 import { configureGit, isGitRepo } from '../git/config.mjs';
 import { writeBaseline } from '../install/baseline.mjs';
@@ -166,6 +166,36 @@ function generateDerivedArtifacts(target) {
 }
 
 const TIERS = ['lean', 'standard', 'enterprise'];
+
+// enterprise 证明链所需工件；policyChecks 记录实际落盘的策略面。
+export const PROOF_CHAIN_FILES = [
+  '.agents/scripts/agent-eval.mjs',
+  '.agents/config/agent-eval.json',
+  '.agents/scripts/check-pipeline-state.mjs',
+  '.agents/config/pipeline.json',
+  '.agents/scripts/outcome-metrics.mjs',
+];
+export const GIT_HOOKS = ['pre-commit', 'commit-msg', 'post-commit', 'pre-merge-commit', 'pre-push'];
+
+// 实际启用的加固姿态：managed（宿主 managed-only 配置）/ permissions（权限编译）/
+// hooks（仅命令门禁）/ none。hooks 与 none 都算缺口（无权限面）。
+export function computeEnterprise({ target, hosts, hardened }) {
+  if (!hardened) return null;
+  const matrix = {};
+  const gaps = [];
+  for (const host of hosts) {
+    const level = HOSTS[host]?.hardening?.level || 'none';
+    matrix[host] = level;
+    if (level !== 'managed' && level !== 'permissions') gaps.push(host);
+  }
+  const proofChain = PROOF_CHAIN_FILES.every((rel) => fs.existsSync(path.join(target, rel)));
+  const policyChecks = [];
+  if (GIT_HOOKS.every((name) => fs.existsSync(path.join(target, '.githooks', name)))) policyChecks.push('githooks');
+  if (['azure-pipelines.yml', '.github/workflows/ci.yml'].some((rel) => fs.existsSync(path.join(target, rel)))) policyChecks.push('ci');
+  if (Object.values(matrix).some((level) => level === 'managed' || level === 'permissions')) policyChecks.push('permissions');
+  return { posture: 'hardened', hosts: matrix, gaps, proofChain, policyChecks };
+}
+
 function normalizeTier(value, t) {
   const v = String(value || 'standard').toLowerCase();
   if (!TIERS.includes(v)) {
@@ -285,6 +315,7 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
     hosts: hostSet,
     stack,
   });
+  let enterprise = null;
 
   const result = applyPlan({
     plan,
@@ -353,6 +384,16 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
       baselineVersion: baselineEnabled ? KIT_VERSION : null,
       files: result.files,
     };
+    enterprise = computeEnterprise({ target, hosts: hostSet, hardened });
+    if (enterprise) {
+      next.enterprise = enterprise;
+      emit(t('install.enterprise', {
+        posture: enterprise.posture,
+        gaps: enterprise.gaps.length ? enterprise.gaps.join(', ') : '-',
+      }));
+    } else {
+      delete next.enterprise;
+    }
     writeManifest(target, next);
     emit(t('install.manifest', { path: path.join(target, '.agents/install-manifest.json') }));
 
@@ -377,6 +418,7 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
       surfaces,
       tier,
       hardened,
+      ...(enterprise ? { enterprise } : {}),
       hosts: hostSet,
       detectedHosts,
       mcp: mcpEnabled,

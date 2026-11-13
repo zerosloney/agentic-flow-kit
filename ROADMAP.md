@@ -31,7 +31,7 @@
 | R2-6 | 权限 / 工具白名单编译 | 2 | M | 复用 `gates.json` 与 hardened 路径 | DONE · [#13](https://github.com/zerosloney/agentic-flow-kit/issues/13) |
 | R2-7 | 宿主探测 `--auto-hosts` | 2 | S | `src/commands/install.mjs`、TUI | DONE · [#14](https://github.com/zerosloney/agentic-flow-kit/issues/14) |
 | R2-8 | 组合式 profile | 2 | M | `src/install/plan.mjs`、`schemas/project-profile.schema.json` | DONE · [#15](https://github.com/zerosloney/agentic-flow-kit/issues/15) |
-| R2-9 | 企业档宿主矩阵 | 2 | M | `templates/hosts/*`、`doctor` | TODO · [#16](https://github.com/zerosloney/agentic-flow-kit/issues/16) |
+| R2-9 | 企业档宿主矩阵 | 2 | M | `templates/hosts/*`、`doctor` | DONE · [#16](https://github.com/zerosloney/agentic-flow-kit/issues/16) |
 | R2-10 | i18n 覆盖一致性检查 | 2 | S | `tools/make-en-host-overrides.mjs --check` | DONE · [#17](https://github.com/zerosloney/agentic-flow-kit/issues/17) |
 | R3-1 | policy-as-code | 3 | L | `templates/engine/.agents/config/policy.json` + `policy.mjs` | TODO |
 | R3-2 | 升级策略影响面 | 3 | S | `doctor` / `upgrade --explain-policy` | TODO |
@@ -173,9 +173,10 @@
 
 ### R2-9 企业档宿主矩阵
 
-- **现状**：`enterprise` / `--hardened` 只替换 Claude 的 settings。
+- **现状**：`enterprise` / `--hardened` 按注册表 `hardening.level` 分级：claude = managed（settings.hardened.json + hardened 权限），qwen / qoder / commandcode = permissions（hardened 权限项），codebuddy / trae / zcode = hooks，opencode / pi / cline = none。`manifest.enterprise` 记录 posture、每宿主级别、缺口、证明链与策略面；`doctor` 展示档位 / 姿态 / 矩阵 / 缺口，并核对证明链（agent-eval / outcome-metrics / pipeline-state）与策略（githooks / CI / permissions）。默认 standard 档不写 enterprise 字段，行为不变。
 - **目标**：为每个有配置能力的宿主提供加固等价物；enterprise 同时启用证明链与策略检查；manifest 记录实际启用的能力。
-- **验收**：每宿主快照；`doctor` 显示“档位 + 实际姿态 + 缺口”。
+- **落点**：registry `hardening`、宿主快照夹具、`doctor` 档位 / 姿态 / 缺口输出。
+- **验收**：每宿主快照；`doctor` 显示“档位 + 实际姿态 + 缺口”；不支持加固的宿主 advisory。
 - **依赖**：R2-6。规模 `M`。
 
 ### R2-10 i18n 覆盖一致性检查

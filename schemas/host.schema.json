@@ -155,6 +155,16 @@
         }
       }
     },
+    "hardening": {
+      "type": ["object", "null"],
+      "description": "企业档加固能力矩阵；settings 为该宿主 managed-only 配置的替换源。",
+      "additionalProperties": false,
+      "required": ["level"],
+      "properties": {
+        "level": { "enum": ["managed", "permissions", "hooks", "none"] },
+        "settings": { "type": "string", "description": "加固配置文件名（相对宿主模板目录），不作为独立文件安装。" }
+      }
+    },
     "modelProbe": {
       "type": "object",
       "additionalProperties": false,

@@ -62,8 +62,8 @@ npx agentic-flow-kit doctor --target .
 | `--lang zh-CN\|en` | 语言包，默认 `zh-CN` |
 | `--stack dotnet\|node\|typescript\|rust\|go\|java\|empty` | 项目栈 profile；缺省按根目录标记探测：`.sln`/`.csproj` → dotnet，`Cargo.toml` → rust，`go.mod` → go，`pom.xml`/`build.gradle` → java，`tsconfig.json` → typescript，`package.json` → node |
 | `--surface frontend\|api\|data` | 叠加切面，可重复/逗号分隔，也可写成 `--stack dotnet+frontend`；与 stack 同层合并，同名文件后声明者覆盖 |
-| `--tier lean\|standard\|enterprise` | 安装档位。`lean` 不生成 CI，适合小项目；`standard`（默认）生成 CI；`enterprise` 另启用加固配置（sandbox / 凭据读拒绝 / MCP 白名单 / 版本基线） |
-| `--hardened` | 等价于 `--tier enterprise`；加固配置写入 `.claude/settings.json`，其中 managed-only 键需由平台/IT 以 managed settings 部署才不可覆盖 |
+| `--tier lean\|standard\|enterprise` | 安装档位。`lean` 不生成 CI，适合小项目；`standard`（默认）生成 CI；`enterprise` 另启用按宿主能力分级的加固矩阵（见下） |
+| `--hardened` | 等价于 `--tier enterprise`；有 managed-only 键的宿主（目前为 Claude）需由平台/IT 以 managed settings 部署才不可覆盖 |
 | `--name <name>` | 渲染 `{{projectName}}`，默认目标目录名 |
 | `--dry-run` | 只打印计划，不写盘 |
 | `--force` | 覆盖冲突/非本工具安装的既有文件 |
@@ -167,6 +167,19 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 | `commandcode` | `Shell(cmd *)` | shell |
 
 权限数组是托管策略：安装/升级按 gates.json 精确对齐（用户自建条目会被覆盖，白名单请改 gates.json），重复安装幂等。栈相关白名单（`dotnet build`、`cargo test` 等）由栈配置自动追加。宿主不支持声明的 `tool` 类别时降级跳过，`doctor` 给出 `permissions <host> unsupported` 告警；没有权限能力的宿主（codebuddy / trae / zcode 等）得到 `guarantee <host>` advisory，不静默丢弃。`doctor` 还会对账权限数组与 gates.json 的缺失 / 多余项。
+
+## 企业档加固矩阵
+
+`--tier enterprise` / `--hardened` 按宿主实际能力分级加固，不再是 Claude 专属：
+
+| 能力级别 | 宿主 | 企业档行为 |
+|---|---|---|
+| `managed` | `claude` | 替换 `settings.hardened.json`（sandbox、managed-only 权限 / hooks / MCP 键）+ gates.json 硬化权限 |
+| `permissions` | `qwen` / `qoder` / `commandcode` | gates.json `hardened` 权限项（凭据读、网络命令）编译进 `permissions` |
+| `hooks` | `codebuddy` / `trae` / `zcode` | 仅命令门禁 hook，无权限面 → 计入缺口 |
+| `none` | `opencode` / `pi` / `cline` | 无可配置加固面 → 计入缺口 |
+
+配置能力由注册表 `hardening.level` / `hardening.settings` 声明，外部宿主同样可声明；加固配置作为宿主主配置的替换源，不独立安装。`manifest.enterprise` 记录 `posture`、每个宿主的实际级别、`gaps`、`proofChain` 与 `policyChecks`。`doctor` 展示档位 / 姿态 / 宿主矩阵 / 缺口，并核对证明链（agent-eval、outcome-metrics、pipeline-state）与策略面（`.githooks`、CI、权限编译）；缺口以 advisory 呈现，默认 `standard` 档不产生该字段，行为不变。
 
 ## MCP 接线
 

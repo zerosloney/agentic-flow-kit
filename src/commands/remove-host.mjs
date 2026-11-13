@@ -13,7 +13,7 @@ import { BASELINE_DIR } from '../install/baseline.mjs';
 import { HOSTS, HOST_NAMES } from '../hosts/registry.mjs';
 import { readInjectedModels } from '../models/resolve.mjs';
 import { makeT } from '../i18n.mjs';
-import { readKitVersion, resolveTarget } from './install.mjs';
+import { computeEnterprise, readKitVersion, resolveTarget } from './install.mjs';
 import { cleanEmptyDirs } from './prune.mjs';
 
 const MERGE_KINDS = new Set(['merge-gitattributes', 'merge-gitignore']);
@@ -274,6 +274,9 @@ export function removeHostCommand({ args, t }) {
       files: nextFiles,
       mcpServers: nextMcpServers,
       derived: (manifest.derived || []).filter((rel) => nextFiles[rel]),
+      ...(manifest.hardened
+        ? { enterprise: computeEnterprise({ target, hosts: remaining, hardened: true }) }
+        : {}),
     });
   }
 
@@ -422,7 +425,9 @@ export function uninstallCommand({ args, t }) {
       manifestRemoved = true;
     } else {
       // 保留用户改过的文件与其记录，供再次 uninstall --force 继续清理。
-      writeManifest(target, { ...manifest, hosts: [], files: nextFiles, mcpServers: nextMcpServers, derived: [] });
+      const kept = { ...manifest, hosts: [], files: nextFiles, mcpServers: nextMcpServers, derived: [] };
+      delete kept.enterprise;
+      writeManifest(target, kept);
     }
   }
   print(tt(manifestRemoved ? 'uninstall.manifestRemoved' : 'uninstall.manifestKept'));

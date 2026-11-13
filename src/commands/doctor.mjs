@@ -11,7 +11,7 @@ import { findHookDrift, readHookSpec } from '../install/hooks.mjs';
 import { listBaselines } from '../install/baseline.mjs';
 import { compilePermissions, permissionDrift, readPermissionSpec } from '../install/permissions.mjs';
 import { ROLE_NAMES, readInjectedModels, readLocalModelRoles } from '../models/resolve.mjs';
-import { resolveTarget } from './install.mjs';
+import { computeEnterprise, GIT_HOOKS, PROOF_CHAIN_FILES, resolveTarget } from './install.mjs';
 import { buildDiff } from './diff.mjs';
 
 const HOOK_FILES = ['pre-commit', 'commit-msg', 'post-commit', 'pre-merge-commit', 'pre-push'];
@@ -82,7 +82,7 @@ export function doctorCommand({ args, t }) {
     const source = hostSource(host);
     add(true, `host ${host} source`, t('doctor.hostSource', { host, source }));
     for (const rel of listFiles(h.templates || path.join(TEMPLATES, 'hosts', host))) {
-      if (rel === 'settings.hardened.json') continue; // 替换源，不独立安装
+      if (h.hardening?.settings && rel === h.hardening.settings) continue; // 替换源，不独立安装
       const targetRel = hostTargetRel(host, rel);
       if (!fs.existsSync(path.join(target, targetRel))) add(false, `host ${host}: ${targetRel}`, t('doctor.fileMissing'));
     }
@@ -210,7 +210,36 @@ export function doctorCommand({ args, t }) {
     if (ci.length) add(true, 'ci', ci.join(', '));
     else add(true, 'ci', t('doctor.ciMissing', { paths: 'azure-pipelines.yml / .github/workflows/ci.yml' }), '', { warn: true });
   }
-  if (manifest?.hardened) add(true, 'hardened', t('doctor.hardenedHint'), '', { warn: true });
+  // enterprise：展示档位、实际加固姿态与缺口，并核对证明链 / 策略检查。
+  const enterprise = manifest?.hardened
+    ? computeEnterprise({ target, hosts: manifest.hosts || [], hardened: true })
+    : null;
+  if (enterprise) {
+    const matrix = Object.entries(enterprise.hosts).map(([name, level]) => `${name}:${level}`).join(', ');
+    add(true, 'enterprise', t('doctor.enterprise', {
+      tier,
+      posture: enterprise.posture,
+      hosts: matrix,
+      gaps: enterprise.gaps.length ? enterprise.gaps.join(', ') : '-',
+    }));
+    if (enterprise.gaps.length) {
+      add(true, 'enterprise gaps', t('doctor.enterpriseGaps', { gaps: enterprise.gaps.join(', ') }), '', { warn: true });
+    }
+    const missingProof = PROOF_CHAIN_FILES.filter((rel) => !fs.existsSync(path.join(target, rel)));
+    if (missingProof.length) add(false, 'enterprise proof-chain', t('doctor.enterpriseProof', { list: missingProof.join(', ') }));
+    else add(true, 'enterprise proof-chain', t('doctor.enterpriseProofOk'));
+    const missingPolicy = [];
+    if (!GIT_HOOKS.every((name) => fs.existsSync(path.join(target, '.githooks', name)))) missingPolicy.push('.githooks/*');
+    if (!['azure-pipelines.yml', '.github/workflows/ci.yml'].some((rel) => fs.existsSync(path.join(target, rel)))) missingPolicy.push('CI');
+    if (!enterprise.policyChecks.includes('permissions')) missingPolicy.push('permissions');
+    if (missingPolicy.length) add(false, 'enterprise policy', t('doctor.enterprisePolicy', { list: missingPolicy.join(', ') }));
+    else add(true, 'enterprise policy', t('doctor.enterprisePolicyOk', { list: enterprise.policyChecks.join(', ') }));
+    if (manifest.enterprise && JSON.stringify(manifest.enterprise) !== JSON.stringify(enterprise)) {
+      add(true, 'enterprise record', t('doctor.enterpriseStale'), '', { warn: true });
+    }
+  } else if (manifest?.hardened) {
+    add(true, 'hardened', t('doctor.hardenedHint'), '', { warn: true });
+  }
 
   // 模型配置是用户本地状态：存在则校验，缺失不失败（旧安装保持 doctor 全过）。
   const localModels = readLocalModelRoles(target);
