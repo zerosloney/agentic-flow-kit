@@ -174,5 +174,7 @@
   "uninstall.summary": "完成：删除 {{deleted}} / 清理记录 {{cleaned}} / 跳过 {{skipped}} / 保留 {{kept}} / 合并块 {{blocks}}",
   "uninstall.manifestRemoved": "已删除安装清单 .agents/install-manifest.json",
   "uninstall.manifestKept": "保留安装清单（仍有用户修改的文件，未清理完）",
-  "removeHost.refreshed": "更新宿主相关文件 {{count}} 个"
+  "removeHost.refreshed": "更新宿主相关文件 {{count}} 个",
+  "doctor.drift": "用户修改 {{userModified}} / 模板更新 {{kitUpdated}} / 孤儿 {{orphan}}",
+  "doctor.driftHint": "运行 flow-kit diff 查看明细；flow-kit prune 可清理孤儿"
 }

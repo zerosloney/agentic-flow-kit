@@ -124,7 +124,7 @@ node tools/make-en-host-overrides.mjs
 - `lean`：不生成 CI（`azure-pipelines.yml` / `.github/workflows/ci.yml`），其余引擎面不变。
 - `standard`（默认）：生成 CI，CI 在 `verify --full` 后跑 advisory 的 agent-eval / memory-tier / pipeline-state。
 - `enterprise` / `--hardened`：宿主 `claude` 的 `settings.json` 换成 `templates/hosts/claude/settings.hardened.json`（sandbox、凭据读拒绝、MCP/权限 managed-only 键）。该文件**不**作为独立文件安装。
-- 档位与 `hardened` 写入 manifest；`doctor` 显示档位、CI 缺失（advisory）、宿主能力缺口（无 hooks / 无 modelField）和模型漂移。
+- 档位与 `hardened` 写入 manifest；`doctor` 显示档位、CI 缺失（advisory）、宿主能力缺口（无 hooks / 无 modelField）、模型漂移和 manifest 漂移（advisory，明细引导到 `diff`）。
 
 ## AI-Native 治理面（引擎模板）
 

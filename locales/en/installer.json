@@ -174,5 +174,7 @@
   "uninstall.summary": "Done: deleted {{deleted}} / cleaned records {{cleaned}} / skipped {{skipped}} / kept {{kept}} / blocks {{blocks}}",
   "uninstall.manifestRemoved": "removed .agents/install-manifest.json",
   "uninstall.manifestKept": "kept the manifest (user-modified files remain)",
-  "removeHost.refreshed": "refreshed {{count}} host-dependent file(s)"
+  "removeHost.refreshed": "refreshed {{count}} host-dependent file(s)",
+  "doctor.drift": "user-modified {{userModified}} / kit-updated {{kitUpdated}} / orphan {{orphan}}",
+  "doctor.driftHint": "run flow-kit diff for details; flow-kit prune cleans orphans"
 }

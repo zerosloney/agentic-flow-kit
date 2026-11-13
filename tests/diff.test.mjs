@@ -179,6 +179,28 @@ test('diff without a manifest exits 3', () => {
   assert.match(r.stderr, /install/);
 });
 
+test('doctor surfaces manifest drift as advisory', () => {
+  const dir = tmpRepo();
+  install(dir);
+
+  const clean = JSON.parse(run(['doctor', '--target', '.', '--json'], dir).stdout);
+  assert.equal(clean.checks.some((c) => c.name === 'manifest drift'), false);
+
+  fs.appendFileSync(path.join(dir, '.agents/commands/new-task.md'), '\nuser edit\n', 'utf8');
+  const drifted = run(['doctor', '--target', '.', '--json'], dir);
+  assert.equal(drifted.status, 0, drifted.stderr);
+  const out = JSON.parse(drifted.stdout);
+  const check = out.checks.find((c) => c.name === 'manifest drift');
+  assert.ok(check, 'drift check should be present');
+  assert.equal(check.ok, true);
+  assert.equal(check.warn, true);
+  assert.match(check.detail, /用户修改 1/);
+  assert.equal(out.ok, true, 'drift is advisory, not a failure');
+
+  const human = run(['doctor', '--target', '.'], dir);
+  assert.match(human.stdout, /! manifest drift/);
+});
+
 test('diff output is localized in English', () => {
   const dir = tmpRepo();
   const r = run(['install', '--agent', 'trae', '--lang', 'en', '--stack', 'node', '--target', '.'], dir);
@@ -189,3 +211,4 @@ test('diff output is localized in English', () => {
   assert.match(diff.stdout, /No differences\./);
   assert.match(diff.stdout, /Total \d+: unchanged/);
 });
+

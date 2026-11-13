@@ -52,7 +52,7 @@
 
 ### R1-1 `diff` / `status`（[#3](https://github.com/zerosloney/agentic-flow-kit/issues/3)）
 
-- **现状**：`doctor` 只检查 manifest 记录的文件是否存在；`upgrade` 直接重放；用户改动只能靠冲突行发现。
+- **现状**：`doctor` 检查 manifest 记录的文件是否存在，并以 advisory 报告 manifest 漂移；`upgrade` 直接重放；用户改动只能靠冲突行发现。
 - **目标**：`flow-kit diff [--target] [--json]` 对每个路径输出五类之一：
   `unchanged` / `user-modified` / `kit-updated` / `orphan` / `missing`。`status` 给出宿主、档位、语言、栈、计数摘要。
 - **落点**：新增 `src/commands/diff.mjs`；`src/cli/main.mjs` 注册；复用 `buildPlan` 与 manifest 哈希；文案进 `locales/*/installer.json`。

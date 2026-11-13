@@ -8,6 +8,7 @@ import { HOSTS, hostTargetRel } from '../hosts/registry.mjs';
 import { listFiles, TEMPLATES } from '../install/plan.mjs';
 import { ROLE_NAMES, readInjectedModels, readLocalModelRoles } from '../models/resolve.mjs';
 import { resolveTarget } from './install.mjs';
+import { buildDiff } from './diff.mjs';
 
 const HOOK_FILES = ['pre-commit', 'commit-msg', 'post-commit', 'pre-merge-commit', 'pre-push'];
 
@@ -25,6 +26,12 @@ export function doctorCommand({ args, t }) {
     add(true, 'install-manifest', `.agents/install-manifest.json (v${manifest.version || '?'})`);
     for (const rel of Object.keys(manifest.files || {})) {
       if (!fs.existsSync(path.join(target, rel))) add(false, `file ${rel}`, t('doctor.fileMissing'));
+    }
+    // 漂移是 advisory：用户改文件属正常，缺失已在上面按文件报错；明细交给 diff。
+    const drift = buildDiff({ target, manifest }).summary;
+    const drifting = drift.userModified + drift.kitUpdated + drift.orphan;
+    if (drifting > 0) {
+      add(true, 'manifest drift', t('doctor.drift', drift), t('doctor.driftHint'), { warn: true });
     }
   }
 

@@ -50,7 +50,7 @@ npx agentic-flow-kit doctor --target .
 | `diff` | 只读对比 manifest、磁盘与当前模板，分类 `unchanged` / `user-modified` / `kit-updated` / `orphan` / `missing`；支持 `--json`、`--all` |
 | `status` | 摘要输出安装档位、宿主、语言、栈与差异计数；支持 `--json` |
 | `explain <targetRel>` | 解释单个托管文件：类别、模板来源、语言覆盖、模型注入与 manifest/当前哈希 |
-| `doctor` | 校验 manifest、文件在位、git 配置、`.gitattributes`、五钩子、宿主接线、Node 版本；`--deep` 再跑 `check-local-gates.mjs` |
+| `doctor` | 校验 manifest、文件在位、git 配置、`.gitattributes`、五钩子、宿主接线、Node 版本；`--deep` 再跑 `check-local-gates.mjs`；manifest 漂移以 advisory 报告 |
 | `list-hosts` | 列出支持的宿主 |
 
 通用选项：
