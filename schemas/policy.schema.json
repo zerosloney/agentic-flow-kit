@@ -13,6 +13,7 @@
       "type": "object",
       "additionalProperties": false,
       "required": [
+        "gates",
         "gateBudgets",
         "ruleBudgets",
         "workflowEnums",
@@ -23,6 +24,7 @@
         "prReview"
       ],
       "properties": {
+        "gates": { "type": "string" },
         "gateBudgets": { "type": "string" },
         "ruleBudgets": { "type": "string" },
         "workflowEnums": { "type": "string" },
@@ -35,7 +37,7 @@
     },
     "optionalSurfaces": {
       "type": "array",
-      "items": { "enum": ["gateBudgets", "ruleBudgets", "workflowEnums", "pipeline", "steering", "agentEval", "modelRoles", "prReview"] },
+      "items": { "enum": ["gates", "gateBudgets", "ruleBudgets", "workflowEnums", "pipeline", "steering", "agentEval", "modelRoles", "prReview"] },
       "uniqueItems": true
     },
     "mechanisms": {

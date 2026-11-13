@@ -3,6 +3,7 @@
   "version": 1,
   "registry": ".agents/config/mechanism-registry.md",
   "surfaces": {
+    "gates": ".agents/hooks/gates.json",
     "gateBudgets": ".agents/config/gate-budgets.json",
     "ruleBudgets": ".agents/config/rule-budgets.txt",
     "workflowEnums": ".agents/config/workflow-enums.txt",
