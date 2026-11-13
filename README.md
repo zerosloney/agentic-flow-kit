@@ -53,6 +53,8 @@ npx agentic-flow-kit doctor --target .
 | `explain <targetRel>` | 解释单个托管文件：类别、模板来源、语言覆盖、模型注入与 manifest/当前哈希 |
 | `doctor` | 校验 manifest、文件在位、git 配置、`.gitattributes`、五钩子、宿主接线、Node 版本；`--deep` 再跑 `check-local-gates.mjs`；`--attest [--out <file>]` 生成安装证明链；manifest 漂移以 advisory 报告 |
 | `list-hosts` | 列出支持的宿主 |
+| `run <script>` | 从包内运行时执行引擎脚本；`--root <dir>` 指定项目根，`--` 后的参数原样透传；`--list` 列出可用脚本 |
+| `hook <hook>` | 从包内运行时执行宿主 hook 适配器；stdin 与剩余参数透传；`--list` 列出可用 hook |
 | `workspace init --repos <dir>...` | 在多仓根目录生成 `.flow-kit/workspace.json`，记录仓库清单与各仓安装摘要；可重复执行刷新 |
 | `workspace status` | 只读聚合 workspace 内各仓的安装状态、宿主、栈、版本与路径缺失 |
 

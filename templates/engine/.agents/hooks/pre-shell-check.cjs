@@ -120,7 +120,11 @@ const FALLBACK_GATES = {
 };
 let gates = FALLBACK_GATES;
 try {
-  gates = JSON.parse(fs.readFileSync(path.join(__dirname, 'gates.json'), 'utf8'));
+  // 包内运行时执行时，清单仍以项目声明为准；直接执行安装副本时回退同级文件。
+  const gatesFile = process.env.FLOW_KIT_PROJECT_ROOT
+    ? path.join(process.env.FLOW_KIT_PROJECT_ROOT, '.agents', 'hooks', 'gates.json')
+    : path.join(__dirname, 'gates.json');
+  gates = JSON.parse(fs.readFileSync(gatesFile, 'utf8'));
 } catch (e) {
   console.error(`[pre-shell-check] gates.json 不可读，已回退内置清单：${e.message}`);
 }

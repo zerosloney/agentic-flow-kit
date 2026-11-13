@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { ENUMS } from './workflow-enums.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
+const ROOT = process.env.FLOW_KIT_PROJECT_ROOT || process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
 const CACHE_DIR = path.join(ROOT, '.agents', 'cache');
 const TELEMETRY_FILE = path.join(CACHE_DIR, 'kb-usage.jsonl');
 

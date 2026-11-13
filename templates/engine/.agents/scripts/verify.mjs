@@ -72,7 +72,7 @@ import { computeDiffScope, parseEvidenceGreens, EVIDENCE_REL, CI_UNILATERAL_GATE
 import { classifyFailure } from './failure-attribution.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
+const ROOT = process.env.FLOW_KIT_PROJECT_ROOT || process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
 
 // --- 门禁定义 ---
 // 引擎段在前（2026-10-10）：语法与引擎测试仍最先；编排/预算/生效规则/闭环硬门/泳道接在其后。

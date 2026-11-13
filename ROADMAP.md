@@ -10,7 +10,7 @@
 
 1. **manifest 是唯一账本**：任何“新增/升级/删除/接管”都以 `.agents/install-manifest.json` 为准，不做目录猜测。
 2. **registry 是宿主能力唯一来源**：不在 `plan.mjs` / `doctor.mjs` 里为单个宿主写分支。
-3. **安装器与运行态分层**：安装器只负责生成、收敛、解释；pipeline 执行器、记忆闭环、可观测性属于引擎模板。
+3. **安装器与运行态分层**：安装器只负责生成、收敛、解释；运行态脚本随包分发（`flow-kit run` / `flow-kit hook`），项目只落 agent 可识别的声明式面（技能、子代理、命令、MCP 与 hooks 配置）。
 4. **新能力必须可检查**：能被 `doctor` 或 `verify` 发现缺失、漂移或降级，否则不算完成。
 5. **门禁面先登记**：进入硬门禁的能力须写 `.agents/config/mechanism-registry.md`，并遵守 `rule-budgets` 的一进一出。
 
@@ -46,6 +46,7 @@
 | R4-1 | 多仓 Workspace 协调 | 4 | M | `src/commands/workspace.mjs`、`.flow-kit/workspace.json` | DONE |
 | R4-2 | Spec / Tasks / Verify 工件规范 | 4 | M | `templates/scaffold/workflow/specs/` + 校验脚本 | DONE |
 | R4-3 | eval-log 证据格式 | 4 | S | `agent-eval.mjs`、`schemas/eval-log.schema.json` | DONE |
+| R5-1 | 运行时能力包内化 | 5 | L | `src/commands/runtime.mjs`、`flow-kit run/hook`、安装面收缩 | WIP |
 
 ## 3. Wave 1 — 生命周期闭环
 
@@ -287,7 +288,17 @@
 - **目标**：`agent-eval.mjs` 在既有 JSONL 凭证外输出版本化 `eval-log.json`（阶段、结果、证据签名、资源计数），并提供 JSON schema；字段与外部平台可对齐。
 - **验收**：schema 校验；既有评测行为不变；可关闭/指定输出路径。规模 `S`。
 
-## 7. 依赖关系
+## 7. Wave 5 — 运行时能力归位
+
+目标：脚本能力随 npm 包提供，项目只保留 agent 能识别的声明式适配面；不把运行时实现复制进每个目标项目。
+
+### R5-1 运行时能力包内化
+
+- **R5-1a（DONE）包内 runtime 入口**：`flow-kit run <script>` / `flow-kit hook <hook>` 从包内执行引擎脚本与 hook 适配器；目标根按 `--root` > `FLOW_KIT_PROJECT_ROOT` > 向上查找 `.agents` 解析；子进程注入 `FLOW_KIT_PROJECT_ROOT` / `FLOW_KIT_RUNTIME_*`，脚本的 ROOT 解析改为优先读取该环境变量（直接执行安装副本时保持原回退）。
+- **R5-1b（TODO）安装面收缩与迁移**：默认计划不再生成 `.agents/scripts/**`、`.agents/hooks/**`、`.agents/tests/**`；`.githooks`、宿主 hooks、commands/skills 中的 `node .agents/scripts/x.mjs` 改为 `flow-kit run x`；manifest `schemaVersion` 1→2 迁移按哈希安全移除旧脚本，保留用户改动；`doctor` 检查遗留脚本与 `flow-kit` PATH 可达性。
+- **验收**：`run/hook --list`、root 解析、未知入口退出码 2、从包执行不污染包目录；R5-1b 完成后再验收“新装项目无 `.agents/scripts` 且门禁可用”。规模 `L`（a：M，b：L）。
+
+## 8. 依赖关系
 
 ```text
 R1-1 diff ──┬─> R1-2 prune ──> R1-3 remove-host
@@ -301,7 +312,7 @@ R3-1 policy-as-code ──> R3-2 策略 diff ──> R3-3 证明链
 R3-4 技能包 ──> R3-10 模板/技能 lint（共享校验骨架）
 ```
 
-## 8. 完成定义（DoD）
+## 9. 完成定义（DoD）
 
 任何路线图条目完成，须同时满足：
 
@@ -312,7 +323,7 @@ R3-4 技能包 ──> R3-10 模板/技能 lint（共享校验骨架）
 - 文档更新：`README.md`、`CLAUDE.md`、本文件状态；涉及缺口时同步 `BACKLOG.md`；
 - 若进入门禁面：登记 `mechanism-registry.md` 并守住 `rule-budgets` 预算。
 
-## 9. 风险与不做清单
+## 10. 风险与不做清单
 
 **风险**
 

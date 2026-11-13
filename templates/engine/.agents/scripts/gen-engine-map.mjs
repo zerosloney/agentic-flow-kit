@@ -17,7 +17,7 @@ import { MECHANISM_STATUSES as STATUSES, parseMechanismRegistry as parseRegistry
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
 const argOf = (k) => { const i = argv.indexOf(k); return i >= 0 && i + 1 < argv.length ? argv[i + 1] : ''; };
-const ROOT = path.resolve(argOf('--root') || path.join(SCRIPT_DIR, '..', '..'));
+const ROOT = path.resolve(argOf('--root') || process.env.FLOW_KIT_PROJECT_ROOT || path.join(SCRIPT_DIR, '..', '..'));
 const MAP_REL = path.join('.agents', 'notes', 'engine-map.md');
 
 // ---- 单源取数 ----

@@ -22,7 +22,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
+const ROOT = process.env.FLOW_KIT_PROJECT_ROOT || process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
 const DEFAULT_DIRS = ['.agents/scripts', '.agents/hooks', 'scripts/verify'];
 // 项目侧目录：不存在时跳过（新装户可能没有 scripts/verify）；存在但为空仍 fail-closed。
 const OPTIONAL_DIRS = new Set(['scripts/verify']);

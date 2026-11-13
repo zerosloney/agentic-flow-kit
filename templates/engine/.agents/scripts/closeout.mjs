@@ -29,7 +29,7 @@ for (let i = 0; i < argv.length; i++) {
   positional.push(argv[i]);
 }
 const DRY = argv.includes('--dry-run');
-const ROOT = path.resolve(argOf('--root') || path.join(SCRIPT_DIR, '..', '..'));
+const ROOT = path.resolve(argOf('--root') || process.env.FLOW_KIT_PROJECT_ROOT || path.join(SCRIPT_DIR, '..', '..'));
 
 const USAGE = '用法：node .agents/scripts/closeout.mjs <workflow/{intents,specs,plans,incidents}/x.md> --delegated "<用户原话>" [--msg "<主题>"] [--root <仓库根>] [--dry-run]';
 const RECOVER = (doc) => `恢复：修掉报错原因后重跑同一命令（已完成的步骤幂等跳过）：node .agents/scripts/closeout.mjs ${doc} --delegated "<用户原话>" [--msg "<主题>"]`;

@@ -17,7 +17,7 @@ import { spawn } from 'node:child_process';
 import { resolveBoardPort } from './board-port.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(SCRIPT_DIR, '../..'); // 与 server 的 ROOT 同口径
+const ROOT = path.resolve(process.env.FLOW_KIT_PROJECT_ROOT || path.join(SCRIPT_DIR, '../..')); // 与 server 的 ROOT 同口径
 const SERVER = path.join(SCRIPT_DIR, 'workflow-board-server.mjs');
 const CODE_FILES = [
   path.join(ROOT, '.agents', 'board', 'index.html'),

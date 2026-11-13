@@ -22,7 +22,7 @@ import { fileURLToPath } from 'node:url';
 import { resolveBoardPort } from './board-port.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(SCRIPT_DIR, '../..');
+const ROOT = path.resolve(process.env.FLOW_KIT_PROJECT_ROOT || path.join(SCRIPT_DIR, '../..'));
 const ENSURE_BOARD = path.join(SCRIPT_DIR, 'ensure-board.mjs');
 
 const USAGE = `用法：node .agents/scripts/auto-tour.mjs <workflow/plans/<name>.md> [--port <port>]

@@ -14,7 +14,7 @@ import { createRequire } from 'node:module';
 import { fileURLToPath } from 'node:url';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(HERE, '../..');
+const ROOT = path.resolve(process.env.FLOW_KIT_PROJECT_ROOT || path.join(HERE, '../..'));
 
 // 宣称表（单源：期望态在此声明并指回 registry 行；改期望态 = 改本表 + registry 行同提交）
 // 只列**入库宿主**（engine.json options.hosts = trae / codebuddy）。本机宿主壳（.zcode/.qoder/.grok/

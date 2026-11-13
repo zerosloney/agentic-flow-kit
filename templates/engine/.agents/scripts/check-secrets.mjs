@@ -36,7 +36,7 @@ import { fileURLToPath } from 'node:url';
 import { main as liteMain } from './check-secrets-lite.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = process.env.CHECK_SECRETS_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
+const ROOT = process.env.FLOW_KIT_PROJECT_ROOT || process.env.CHECK_SECRETS_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
 const STAGED = process.argv.includes('--staged');
 const FORCE_LITE = process.argv.includes('--lite') || process.env.SECRETS_SCAN_LITE === '1';
 const BASELINE = path.join(ROOT, '.gitleaks-baseline.json');

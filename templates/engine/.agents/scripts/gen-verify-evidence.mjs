@@ -26,7 +26,7 @@ const argOf = (k) => {
   const i = argv.indexOf(k);
   return i >= 0 && i + 1 < argv.length ? argv[i + 1] : '';
 };
-const ROOT = argOf('--root') || path.resolve(SCRIPT_DIR, '..', '..');
+const ROOT = path.resolve(argOf('--root') || process.env.FLOW_KIT_PROJECT_ROOT || path.join(SCRIPT_DIR, '..', '..'));
 const LEDGER = path.join(ROOT, '.agents', 'verifications.jsonl');
 const OUT = path.join(ROOT, 'workflow', 'verify-evidence.md');
 

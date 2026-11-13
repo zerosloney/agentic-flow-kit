@@ -25,6 +25,9 @@ node bin/flow-kit.mjs upgrade --target <tmp>
 node bin/flow-kit.mjs upgrade --target <tmp> --explain-policy --dry-run
 node bin/flow-kit.mjs prune --target <tmp>
 node bin/flow-kit.mjs explain .claude/agents/implementer.md --target <tmp>
+node bin/flow-kit.mjs run --list
+node bin/flow-kit.mjs run --root <tmp> check-scripts-syntax
+node bin/flow-kit.mjs hook --list
 node bin/flow-kit.mjs doctor --target <tmp>
 node bin/flow-kit.mjs doctor --target <tmp> --attest --out proof.json
 npm run doctor:self                       # 对当前仓库执行 doctor（需当前仓库已安装引擎）
@@ -79,6 +82,12 @@ node tools/make-en-host-overrides.mjs --check   # CI：英文覆盖缺失/过期
 `install --auto-hosts` 通过 `src/hosts/detect.mjs` 只读探测宿主点目录与注册表声明的根级配置/记忆文件（如 `.mcp.json`、`opencode.json`、`QWEN.md`）；仅在未显式 `--agent` 时采用，探测为空报错。探测结果只进入 `--json` 的 `detectedHosts`，不写 manifest；TUI 用同一结果预选宿主。
 
 `remove-host` / `uninstall` 同样以 manifest 哈希为安全闸：普通托管文件哈希一致才删，用户改过则跳过 / `--force` 覆盖。合并型配置（`merge-host` / `merge-mcp`）不能整文件删除：只有 `manifest.mergeOrigins[rel] === 'created'` 且哈希一致时才整体删除，否则只摘除托管 hook / 权限（按 `managedPermissions` 记录）/ MCP server，保留安装前已有的用户内容，文件变空才删。`remove-host` 只处理该宿主 `category: 'host'` 的文件和孤儿残留，根记忆文件（`rootMemory`，如 `CLAUDE.md`）视为用户文件、默认保留并停止托管；宿主集合变化后会用剩余宿主重渲染 engine.json / AGENTS.md / `.gitignore` 等宿主相关文件（仅当当前哈希仍等于 manifest）。`uninstall` 只移除带标记的合并块（保留块外用户内容，文件变空才删除），默认保留根记忆文件与用户改过的文件，全部清理完成才删除 manifest。
+
+## 包内运行时入口
+
+`run` / `hook` 在通用 `parseArgs` 之前分派（`src/commands/runtime.mjs`），因为脚本参数可能自带 `--json` / `--root` 等旗标。入口从包内 `templates/engine/.agents/{scripts,hooks}` 解析目标，只消费 `--root` / `--lang` / `--list` 等入口选项，其余参数与 stdin 原样透传。目标根解析顺序：`--root` > `FLOW_KIT_PROJECT_ROOT` > 从 cwd 向上查找 `.agents` > cwd；子进程 cwd 固定为目标根，并注入 `FLOW_KIT_PROJECT_ROOT` / `FLOW_KIT_RUNTIME_ROOT` / `FLOW_KIT_RUNTIME_SCRIPTS` / `FLOW_KIT_RUNTIME_HOOKS`。
+
+脚本的 `ROOT` 解析优先读取 `FLOW_KIT_PROJECT_ROOT`，回退到自身 `SCRIPT_DIR/../..`，因此既可由包内入口执行，也可直接执行安装副本。未知脚本 / hook 为 `UNKNOWN_SCRIPT` / `UNKNOWN_HOOK`（退出码 2），目标缺失为 `TARGET_MISSING`（3）。R5-1b 会在此入口上收缩安装面：默认不再把 `.agents/scripts/**`、`.agents/hooks/**` 写入目标项目。
 
 ## 工件与证据
 

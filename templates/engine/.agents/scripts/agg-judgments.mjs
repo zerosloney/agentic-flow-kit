@@ -21,7 +21,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(SCRIPT_DIR, '..', '..');
+const ROOT = path.resolve(process.env.FLOW_KIT_PROJECT_ROOT || path.join(SCRIPT_DIR, '..', '..'));
 const LEDGER = path.join(ROOT, '.agents', 'judgments.jsonl');
 
 const argMonth = (process.argv.find((a) => a.startsWith('--month=')) || '').split('=')[1] || null;

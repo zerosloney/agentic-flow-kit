@@ -188,11 +188,13 @@ try {
 
 // ── 3) 红线内容判据（快照-换入-跑真实门-恢复）─────────
 const gates = [];
+// 包内运行时执行时用包内门脚本；直接执行安装副本时回退项目 hooks 目录。
+const hookRoot = process.env.FLOW_KIT_RUNTIME_HOOKS || path.join(root, '.agents', 'hooks');
 if (/^backend\/.+\.(cs|csproj|sln)$/i.test(rel)) {
-  gates.push(['check-architecture', path.join('.agents', 'hooks', 'check-architecture.mjs')]);
-  gates.push(['check-delete-guard', path.join('.agents', 'hooks', 'check-delete-guard.mjs')]);
+  gates.push(['check-architecture', path.join(hookRoot, 'check-architecture.mjs')]);
+  gates.push(['check-delete-guard', path.join(hookRoot, 'check-delete-guard.mjs')]);
 } else if (/^frontend\/src\/.+\.(ts|vue)$/i.test(rel)) {
-  gates.push(['check-notify-guard', path.join('.agents', 'hooks', 'check-notify-guard.mjs')]);
+  gates.push(['check-notify-guard', path.join(hookRoot, 'check-notify-guard.mjs')]);
 }
 // runGateAsync：异步 spawn 单个门脚本（30 秒超时约束保持），聚合 stdout/stderr 后 resolve。
 // 并行化（2026-11-08 减重档 1-A）：多门经 Promise.all 同时起跑，任一门非零退出即整体 deny

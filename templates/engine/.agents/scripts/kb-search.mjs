@@ -19,7 +19,11 @@ import { fileURLToPath } from 'node:url';
 import { ENUMS } from './workflow-enums.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const MODULES_FILE = path.join(SCRIPT_DIR, '..', 'config', 'workflow-modules.txt');
+// 运行时从包内执行时，配置与缓存仍必须落在目标项目（FLOW_KIT_PROJECT_ROOT/.agents）。
+const AGENTS_DIR = process.env.FLOW_KIT_PROJECT_ROOT
+  ? path.join(process.env.FLOW_KIT_PROJECT_ROOT, '.agents')
+  : path.join(SCRIPT_DIR, '..');
+const MODULES_FILE = path.join(AGENTS_DIR, 'config', 'workflow-modules.txt');
 
 const USAGE = `用法: node .agents/scripts/kb-search.mjs [选项] <词1> [词2 ...]（多词 AND）
 
@@ -191,7 +195,7 @@ function matchWords(lines, words, anyWords = []) {
 
 // ---- 结构缓存：可检索子集预提取，[mtimeMs,size] 两元组逐文件失效，指纹变即整份作废 ----
 // 键 = <检索根 cwd>::<相对路径>（多语料根共存一文件，fixture 临时目录天然隔离）；读写任何异常静默回退全扫。
-const CACHE_DIR = path.join(SCRIPT_DIR, '..', 'cache');
+const CACHE_DIR = path.join(AGENTS_DIR, 'cache');
 const CACHE_FILE = cacheFileOverride || path.join(CACHE_DIR, 'kb-index.json');
 const ROOT_NS = `${path.resolve('.')}::`;
 // WIKI_EXTS：wiki 语料扩展面（含 --include-generated 分支）——上移至 CFG_FP 之前（board-kb-p1 起纳入指纹派生）

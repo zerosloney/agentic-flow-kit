@@ -22,7 +22,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { readLedger as readLedgerShards } from './ledger-shards.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(SCRIPT_DIR, '..', '..');
+const ROOT = path.resolve(process.env.FLOW_KIT_PROJECT_ROOT || path.join(SCRIPT_DIR, '..', '..'));
 
 const argMonth = (process.argv.find((a) => a.startsWith('--month=')) || '').split('=')[1] || null;
 const WRITE = process.argv.includes('--write');

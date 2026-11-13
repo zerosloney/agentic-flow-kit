@@ -24,7 +24,7 @@ const argOf = (k) => {
   const i = argv.indexOf(k);
   return i >= 0 && i + 1 < argv.length ? argv[i + 1] : '';
 };
-const ROOT = argOf('--root') || path.resolve(SCRIPT_DIR, '..', '..');
+const ROOT = path.resolve(argOf('--root') || process.env.FLOW_KIT_PROJECT_ROOT || path.join(SCRIPT_DIR, '..', '..'));
 const OUT = path.join(ROOT, 'workflow', 'effective-policy.md');
 
 // 键 → 消费检查项与分级说明（单源 check-loop 检查清单编号；说明文本与本脚本共同演进）。

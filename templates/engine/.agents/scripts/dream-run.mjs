@@ -29,7 +29,7 @@ import { fileURLToPath } from 'node:url';
 import { recheckClaims } from './claims.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
+const ROOT = process.env.FLOW_KIT_PROJECT_ROOT || process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
 const TMP_DIR = path.join(ROOT, 'tmp');
 
 // ---------- 参数解析 ----------

@@ -239,7 +239,7 @@ export function checkNarrativeClaims(root) {
 // ---- CLI ----
 const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href;
 if (isMain) {
-  const ROOT = argOf('--root') || path.resolve(SCRIPT_DIR, '..', '..');
+  const ROOT = path.resolve(argOf('--root') || process.env.FLOW_KIT_PROJECT_ROOT || path.join(SCRIPT_DIR, '..', '..'));
   if (argv.includes('--check')) {
     const { claims, mismatches } = checkNarrativeClaims(ROOT);
     if (mismatches.length) {
