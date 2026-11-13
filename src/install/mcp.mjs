@@ -61,6 +61,22 @@ export function compileServer(name, def, format) {
   return { command: String(def.command), ...(args.length ? { args } : {}), ...(env ? { env } : {}) };
 }
 
+// 向已解析的 JSON root 合并缺失的 server（供与 hooks 编译器组合写同一配置文件的场景）。
+// 返回 {changed, names}；不覆盖用户已有的同名 server。
+export function mergeMcpInto(root, servers, format) {
+  const key = containerKey(format);
+  const current = isObject(root[key]) ? root[key] : {};
+  let changed = false;
+  for (const [name, def] of Object.entries(servers || {})) {
+    if (!(name in current)) {
+      current[name] = compileServer(name, def, format);
+      changed = true;
+    }
+  }
+  if (changed) root[key] = current;
+  return { changed, names: Object.keys(servers || {}) };
+}
+
 // 幂等合并：只补缺失的同名 server，保留文件里其它键与用户自建 server。
 // 文件已是期望状态时原样返回（不重排格式）。JSON 损坏时返回 null，由调用方跳过。
 // baseText：宿主静态模板渲染结果（如 Qwen 的 settings.json）；文件不存在时以它为底稿。

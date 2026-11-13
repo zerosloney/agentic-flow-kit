@@ -26,7 +26,7 @@
 | R2-1 | 基线留存 + 三方合并 | 2 | L | `src/install/baseline.mjs`、`apply.mjs` | TODO · [#8](https://github.com/zerosloney/agentic-flow-kit/issues/8) |
 | R2-2 | `adopt` 接管已有安装 | 2 | M | `src/commands/adopt.mjs`、`tools/parity-report.mjs` | DONE · [#9](https://github.com/zerosloney/agentic-flow-kit/issues/9) |
 | R2-3 | 外部宿主插件 | 2 | M | `schemas/host.schema.json`、`registry.mjs` | DONE · [#10](https://github.com/zerosloney/agentic-flow-kit/issues/10) |
-| R2-4 | Hook 编译器 | 2 | L | 中性 hook 规格 + 宿主序列化器 | TODO · [#11](https://github.com/zerosloney/agentic-flow-kit/issues/11) |
+| R2-4 | Hook 编译器 | 2 | L | 中性 hook 规格 + 宿主序列化器 | DONE · [#11](https://github.com/zerosloney/agentic-flow-kit/issues/11) |
 | R2-5 | MCP 接线 | 2 | M | registry `mcp` 字段、`templates/mcp/` | DONE · [#12](https://github.com/zerosloney/agentic-flow-kit/issues/12) |
 | R2-6 | 权限 / 工具白名单编译 | 2 | M | 复用 `gates.json` 与 hardened 路径 | TODO · [#13](https://github.com/zerosloney/agentic-flow-kit/issues/13) |
 | R2-7 | 宿主探测 `--auto-hosts` | 2 | S | `src/commands/install.mjs`、TUI | DONE · [#14](https://github.com/zerosloney/agentic-flow-kit/issues/14) |
@@ -136,11 +136,11 @@
 
 ### R2-4 Hook 编译器
 
-- **现状**：各宿主 hook 靠静态模板分别维护，10 套壳容易漂移。
+- **现状**：`src/install/hooks.mjs` 读取 `.agents/hooks/gates.json` 的 `hooks` 中性规格（事件、`write`/`shell`、脚本、超时），按注册表 `hooks.events` 编译成 7 个已验证宿主的 schema，并幂等合并进其配置；只替换指向托管脚本的条目，用户自建 hook 与其它键保留。Qwen 的 hooks 与 MCP 对同一份 `settings.json` 组合执行。`opencode` / `pi` / `cline` 无 `hooks.events`，继续使用静态模板；外部宿主也可声明 `hooks.events` 接入。`doctor` 按规格检查缺失 / 多余接线；golden 夹具在 `tests/fixtures/hooks/`。
 - **目标**：以 `.agents/hooks/gates.json` 为事件源，声明中性规格；按宿主 schema 编译并幂等合并进 settings/hooks 文件；保留静态模板作为逃生口。
-- **落点**：`src/hosts/registry.mjs` 增加 `hooks.events` 映射；新增编译模块与 golden 测试。
-- **验收**：10 宿主 golden 输出；重复安装不重复追加；`doctor` 校验接线；现有模板迁移后语义不变。
-- **风险**：宿主 schema 不稳定，先覆盖已验证的 4–5 个宿主，其余回退静态模板。规模 `L`。
+- **落点**：`src/hosts/registry.mjs` 增加 `hooks.events` 映射；`src/install/hooks.mjs` 编译模块与 golden 测试。
+- **验收**：首批 7 宿主 golden 输出；重复安装不重复追加；`doctor` 校验接线；现有模板迁移后语义不变。
+- **风险**：宿主 schema 不稳定，先覆盖已验证宿主，其余回退静态模板。规模 `L`。
 
 ### R2-5 MCP 接线
 

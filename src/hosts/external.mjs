@@ -70,12 +70,69 @@ function normalizeSkills(raw, field, bad) {
   return { mode: raw.mode, dir: raw.dir, file: raw.file };
 }
 
+const HOOK_TOOLS = new Set(['write', 'shell']);
+const HOOK_FORMS = new Set(['env', 'relative', 'args']);
+
+// hooks.events 让外部宿主也能接入 Hook 编译器；字段与内置注册表一致。
+function normalizeHookEvents(raw, field, bad) {
+  if (raw == null) return null;
+  if (!isObject(raw)) bad(`\`${field}\` must be an object or null`);
+  if (!isString(raw.event)) bad(`\`${field}.event\` is required`);
+  for (const key of ['container', 'matcherKey', 'hooksKey']) {
+    if (raw[key] != null && !isString(raw[key])) bad(`\`${field}.${key}\` must be a string`);
+  }
+  if (!isObject(raw.matchers) || !Object.keys(raw.matchers).length) {
+    bad(`\`${field}.matchers\` must map write/shell to host matchers`);
+  }
+  for (const [tool, matcher] of Object.entries(raw.matchers)) {
+    if (!HOOK_TOOLS.has(tool)) bad(`\`${field}.matchers.${tool}\` must be write or shell`);
+    if (!isString(matcher)) bad(`\`${field}.matchers.${tool}\` must be a string`);
+  }
+  const tools = raw.tools == null ? null : stringList(raw.tools, `${field}.tools`, bad);
+  for (const tool of tools || []) {
+    if (!HOOK_TOOLS.has(tool)) bad(`\`${field}.tools\` must contain only write/shell`);
+  }
+  const timeouts = raw.timeouts == null ? null : raw.timeouts;
+  if (timeouts != null) {
+    if (!isObject(timeouts)) bad(`\`${field}.timeouts\` must be an object`);
+    for (const [tool, value] of Object.entries(timeouts)) {
+      if (!HOOK_TOOLS.has(tool) || !Number.isFinite(value)) bad(`\`${field}.timeouts.${tool}\` must be a number`);
+    }
+  }
+  if (!isObject(raw.command)) bad(`\`${field}.command\` must be an object`);
+  if (!HOOK_FORMS.has(raw.command.form)) bad(`\`${field}.command.form\` must be one of: env, relative, args`);
+  if (!isString(raw.command.template) || !raw.command.template.includes('{script}')) {
+    bad(`\`${field}.command.template\` must be a string containing {script}`);
+  }
+  if (raw.includeMeta != null && typeof raw.includeMeta !== 'boolean') {
+    bad(`\`${field}.includeMeta\` must be a boolean`);
+  }
+  for (const key of ['rootDefaults', 'groupExtras', 'hookExtras']) {
+    if (raw[key] != null && !isObject(raw[key])) bad(`\`${field}.${key}\` must be an object`);
+  }
+  return {
+    event: raw.event,
+    ...(raw.container ? { container: raw.container } : {}),
+    ...(raw.matcherKey ? { matcherKey: raw.matcherKey } : {}),
+    ...(raw.hooksKey ? { hooksKey: raw.hooksKey } : {}),
+    matchers: { ...raw.matchers },
+    ...(tools ? { tools } : {}),
+    ...(timeouts ? { timeouts: { ...timeouts } } : {}),
+    command: { form: raw.command.form, template: raw.command.template },
+    ...(raw.includeMeta ? { includeMeta: true } : {}),
+    ...(raw.rootDefaults ? { rootDefaults: { ...raw.rootDefaults } } : {}),
+    ...(raw.groupExtras ? { groupExtras: { ...raw.groupExtras } } : {}),
+    ...(raw.hookExtras ? { hookExtras: { ...raw.hookExtras } } : {}),
+  };
+}
+
 function normalizeHooks(raw, field, bad) {
   if (raw == null) return null;
   if (!isObject(raw)) bad(`\`${field}\` must be an object or null`);
   if (!isRelPath(raw.file) || raw.file.includes('/')) bad(`\`${field}.file\` must be a file name`);
   if (raw.format != null && !HOOK_FORMATS.has(raw.format)) bad(`\`${field}.format\` must be one of: json`);
-  return { file: raw.file, format: raw.format || 'json' };
+  const events = normalizeHookEvents(raw.events, `${field}.events`, bad);
+  return { file: raw.file, format: raw.format || 'json', ...(events ? { events } : {}) };
 }
 
 function normalizeProbe(raw, field, bad) {

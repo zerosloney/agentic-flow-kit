@@ -1,6 +1,26 @@
 {
   "_comment": "PreToolUse 命令门禁清单（单源）。mirrorOf 指向项目安全下限；exempt 为刻意缺省项，须写明原因，防静默漂移。宿主壳（.trae/hooks.json / .zcode/config.json / .codebuddy/settings.json）只接线指向 .agents/hooks/pre-shell-check.cjs，不复制脚本（2026-10-29 owner 单源指示）。",
   "mirrorOf": ".agents/settings.json#/permissions",
+  "hooks": [
+    {
+      "id": "write-gates",
+      "event": "PreToolUse",
+      "tool": "write",
+      "script": ".agents/hooks/pre-write-check.cjs",
+      "timeout": 120,
+      "name": "write-gates",
+      "statusMessage": "写前门（执法面自保护 / 台账 append-only / 红线快照-恢复）"
+    },
+    {
+      "id": "shell-gates",
+      "event": "PreToolUse",
+      "tool": "shell",
+      "script": ".agents/hooks/pre-shell-check.cjs",
+      "timeout": 600,
+      "name": "shell-gates",
+      "statusMessage": "命令门禁（deny/ask 清单 + .githooks pre-commit/pre-push 前置）"
+    }
+  ],
   "exempt": [
     {
       "item": "dotnet ef",

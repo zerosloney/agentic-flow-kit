@@ -3,7 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HOSTS, hostTargetRel, isAgentTemplate, modelRoleForAgent } from '../hosts/registry.mjs';
 import { makeT } from '../i18n.mjs';
-import { mergeMcpFile, readMcpServers } from './mcp.mjs';
+import { mergeMcpFile, mergeMcpInto, readMcpServers } from './mcp.mjs';
+import { HOOKS_SPEC_REL, mergeHooksIntoRoot, parseHookSpec } from './hooks.mjs';
 import { readPlanEntry } from './apply.mjs';
 import { parseFrontmatter, yamlScalar } from './frontmatter.mjs';
 
@@ -173,6 +174,65 @@ function addGeneratedSkillSurfaces({ plan, hosts, skillEntries, t }) {
   }
 }
 
+// 宿主 hook 接线的中性规格来自引擎模板的 gates.json（语言覆盖优先）。
+// 编译器按 registry 的 hooks.events 生成宿主 schema，并以静态宿主模板为底稿；
+// 没有 events 的宿主继续使用静态模板，行为不变。
+function readHookSpecForPlan(lang) {
+  const override = localeOverride(lang, HOOKS_SPEC_REL);
+  const abs = override || path.join(TEMPLATES, 'engine', HOOKS_SPEC_REL);
+  try {
+    return parseHookSpec(fs.readFileSync(abs, 'utf8'));
+  } catch {
+    return null;
+  }
+}
+
+function addHookEntries({ plan, target, hosts, lang }) {
+  const spec = readHookSpecForPlan(lang);
+  if (!spec?.length) return;
+  for (const host of hosts) {
+    const h = HOSTS[host];
+    const config = h?.hooks?.events;
+    if (!config) continue;
+    const rel = hostTargetRel(host, h.hooks.file);
+    const baseEntry = plan.find((entry) => entry.targetRel === rel && entry.kind === 'file');
+    const entry = {
+      srcAbs: null,
+      targetRel: rel.replace(/\\/g, '/'),
+      category: 'host',
+      priority: 31,
+      kind: 'merge-hooks',
+      hookSpec: spec,
+      hookConfig: config,
+      getText: (vars) => {
+        const abs = path.join(target, rel);
+        const exists = fs.existsSync(abs);
+        const baseText = !exists && baseEntry ? readPlanEntry(baseEntry, vars) : null;
+        const sourceText = exists ? fs.readFileSync(abs, 'utf8') : (baseText || '');
+        let root = {};
+        if (sourceText.trim()) {
+          try {
+            root = JSON.parse(sourceText);
+          } catch {
+            return null;
+          }
+          if (!root || typeof root !== 'object' || Array.isArray(root)) return null;
+        }
+        let changed = mergeHooksIntoRoot(root, spec, config);
+        // Qwen 的 settings.json 同时承载 MCP：两个合并器对同一个 root 组合执行，
+        // 避免同一文件在去重时丢掉其中一个托管面。
+        if (entry.mcpServers) {
+          changed = mergeMcpInto(root, entry.mcpServers, entry.mcpFormat).changed || changed;
+        }
+        if (exists && !changed) return sourceText;
+        if (!exists && !sourceText.trim() && !changed) return null;
+        return `${JSON.stringify(root, null, 2)}\n`;
+      },
+    };
+    plan.push(entry);
+  }
+}
+
 // 宿主 MCP 配置：同一份中性 server 列表编译到各宿主容器；getText 在渲染时读取磁盘，
 // 实现“只补缺失项、保留用户 server”的幂等合并。JSON 损坏时返回 null，由 apply 跳过。
 function addMcpEntries({ plan, target, hosts }) {
@@ -182,6 +242,15 @@ function addMcpEntries({ plan, target, hosts }) {
     const h = HOSTS[host];
     if (!h?.mcp) continue;
     const rel = h.mcp.file;
+    const targetRel = rel.replace(/\\/g, '/');
+    // 同一文件已经有 hook 合并条目时（Qwen settings.json），把 MCP 挂到该条目上组合执行。
+    const hookEntry = plan.find((entry) => entry.kind === 'merge-hooks' && entry.targetRel === targetRel);
+    if (hookEntry) {
+      hookEntry.mcpServers = servers;
+      hookEntry.mcpFormat = h.mcp.format;
+      hookEntry.mcpNames = Object.keys(servers);
+      continue;
+    }
     // Qwen 的 settings.json 同时是静态宿主模板：文件不存在时以渲染结果打底，避免丢掉 hooks/permissions。
     const baseEntry = plan.find((entry) => entry.targetRel === rel && entry.kind !== 'merge-mcp');
     plan.push({
@@ -264,6 +333,9 @@ export function buildPlan({
       }
     }
   }
+
+  // 3.4) Hook 接线编译（中性 gates.json -> 宿主 schema）
+  addHookEntries({ plan, target, hosts, lang });
 
   // 3.5) MCP 配置合并（--no-mcp 时整段跳过）
   if (mcp) addMcpEntries({ plan, target, hosts });

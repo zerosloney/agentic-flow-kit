@@ -95,16 +95,17 @@ export function classifyEntry({ target, entry, vars, managedHash, derived = fals
     return { kind, actualHash, expectedHash: null, kitChanged: false, derived: true };
   }
   const expected = expectedEntry(entry, vars);
+  const isConfigMerge = entry.kind === 'merge-mcp' || entry.kind === 'merge-hooks';
   if (!expected) {
-    // MCP 配置损坏无法合并：明确归类为用户修改，doctor / diff 都能看到。
-    if (entry.kind === 'merge-mcp' && exists) {
+    // Hook / MCP 配置损坏无法合并：明确归类为用户修改，doctor / diff 都能看到。
+    if (isConfigMerge && exists) {
       return { kind: 'user-modified', actualHash, expectedHash: null, kitChanged: false, derived: false };
     }
     return null;
   }
-  // MCP 合并语义：期望值 = 当前内容 + 缺失的托管 server。
-  // 期望与现状一致即视为 unchanged（用户自建 server 不应被报成漂移）。
-  if (entry.kind === 'merge-mcp' && expected.expectedHash === actualHash) {
+  // 合并语义：期望值 = 当前内容 + 缺失的托管条目。
+  // 期望与现状一致即视为 unchanged（用户自建 server/hook 不应被报成漂移）。
+  if (isConfigMerge && expected.expectedHash === actualHash) {
     return { kind: 'unchanged', actualHash, expectedHash: expected.expectedHash, kitChanged: false, derived: false };
   }
   let kitChanged;

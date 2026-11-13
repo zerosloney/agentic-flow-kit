@@ -142,6 +142,20 @@ v1 支持 10 个现行宿主：
 
 字段缺失、目录非法、枚举越界、未知键都会在加载时以退出码 2 报出具体字段；`doctor` 会标注每个已安装宿主的定义来源（`builtin` / `user` / `project` / `cli`）。
 
+## Hook 接线
+
+Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/gates.json` 的 `hooks` 数组（事件、`write`/`shell` 工具类别、脚本、超时），安装器按注册表 `hooks.events` 编译成宿主 schema，并幂等合并进宿主配置：
+
+| 宿主 | 文件 | 形态 |
+|---|---|---|
+| `claude` / `codebuddy` / `qwen` | `settings.json` / `.qwen/settings.json` | `$<HOST>_PROJECT_DIR` 命令字符串 |
+| `trae` | `hooks.json` | 项目相对路径 |
+| `qoder` | `settings.json` | `command` + `args` + `name` / `statusMessage` |
+| `zcode` | `config.json` | `hooks.events`，条目带 `enabled` |
+| `commandcode` | `settings.json` | `%COMMANDCODE_PROJECT_DIR%` 命令字符串 |
+
+合并只替换指向 `.agents/hooks/*.cjs` 的托管条目：用户自建 hook、其它事件、`permissions` 等其余键原样保留；重复安装不会重复追加，过期接线（错误 matcher）会被清理。Qwen 的 `settings.json` 同时承载 hooks 与 MCP，两个合并器对同一份 JSON 组合执行。`opencode` / `pi` / `cline` 没有 `hooks.events`，继续使用静态模板，行为不变；外部宿主也可在宿主定义的 `hooks.events` 中接入同一编译器。`doctor` 以 `gates.json` 为期望值检查缺失 / 多余接线。
+
 ## MCP 接线
 
 安装器把中性 server 声明编译进各宿主的原生 MCP 配置，安装期不联网，只写配置：

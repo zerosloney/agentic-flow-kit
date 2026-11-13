@@ -10,7 +10,19 @@ export const HOSTS = {
     commands: { dir: 'commands', ext: '.md' },
     agents: { dir: 'agents', ext: '.md', modelField: null, inheritValue: null },
     skills: { mode: 'index' },
-    hooks: { file: 'hooks.json', format: 'json' },
+    // Trae 目前只接线命令门禁（无写前门），迁移时保持既有语义。
+    hooks: {
+      file: 'hooks.json',
+      format: 'json',
+      events: {
+        event: 'PreToolUse',
+        container: 'hooks',
+        matchers: { shell: 'RunCommand|Bash|Shell|Terminal' },
+        tools: ['shell'],
+        timeouts: { shell: 600 },
+        command: { form: 'relative', template: 'node {script}' },
+      },
+    },
     modelProbe: { configs: [], env: [], cli: [] },
   },
   codebuddy: {
@@ -21,7 +33,17 @@ export const HOSTS = {
     agents: { dir: 'agents', ext: '.md', modelField: null, inheritValue: null },
     // CodeBuddy 官方文档不可得；本地既有 .codebuddy/skills/<name>/SKILL.md 约定
     skills: { mode: 'native', dir: 'skills', file: 'SKILL.md' },
-    hooks: { file: 'settings.json', format: 'json' },
+    hooks: {
+      file: 'settings.json',
+      format: 'json',
+      events: {
+        event: 'PreToolUse',
+        container: 'hooks',
+        matchers: { write: 'Write|Edit|MultiEdit', shell: 'Bash|PowerShell|RunCommand|Shell|Terminal' },
+        timeouts: { write: 120, shell: 800 },
+        command: { form: 'env', template: 'node "$CODEBUDDY_PROJECT_DIR"/{script}' },
+      },
+    },
     modelProbe: { configs: ['~/.codebuddy/settings.json'], env: ['CODEBUDDY_MODEL'], cli: [] },
   },
   claude: {
@@ -34,7 +56,17 @@ export const HOSTS = {
     commands: { dir: 'commands', ext: '.md' },
     agents: { dir: 'agents', ext: '.md', modelField: 'model', inheritValue: 'inherit' },
     skills: { mode: 'native', dir: 'skills', file: 'SKILL.md' },
-    hooks: { file: 'settings.json', format: 'json' },
+    hooks: {
+      file: 'settings.json',
+      format: 'json',
+      events: {
+        event: 'PreToolUse',
+        container: 'hooks',
+        matchers: { write: 'Write|Edit|MultiEdit', shell: 'Bash' },
+        timeouts: { write: 120, shell: 800 },
+        command: { form: 'env', template: 'node "$CLAUDE_PROJECT_DIR"/{script}' },
+      },
+    },
     // Claude Code 项目级 MCP 配置（根目录 .mcp.json，mcpServers 容器）
     mcp: { file: '.mcp.json', format: 'claude', scope: 'project' },
     modelProbe: {
@@ -66,7 +98,17 @@ export const HOSTS = {
     agents: { dir: 'agents', ext: '.md', modelField: 'model', inheritValue: 'inherit' },
     // Qwen 原生发现 .agents/skills；不复制宿主技能副本
     skills: { mode: 'shared' },
-    hooks: { file: 'settings.json', format: 'json' },
+    hooks: {
+      file: 'settings.json',
+      format: 'json',
+      events: {
+        event: 'PreToolUse',
+        container: 'hooks',
+        matchers: { write: 'write_file|edit|replace|multiedit', shell: 'run_shell_command|shell' },
+        timeouts: { write: 120, shell: 800 },
+        command: { form: 'env', template: 'node "$QWEN_PROJECT_DIR"/{script}' },
+      },
+    },
     // Qwen Code 在 .qwen/settings.json 使用 mcpServers 容器
     mcp: { file: '.qwen/settings.json', format: 'claude', scope: 'project' },
     modelProbe: { configs: ['~/.qwen/settings.json'], env: ['QWEN_MODEL'], cli: [] },
@@ -101,7 +143,17 @@ export const HOSTS = {
     agents: { dir: 'agents', ext: '.md', modelField: 'model', inheritValue: 'inherit' },
     // Command Code 原生发现 .agents/skills；不复制宿主技能副本
     skills: { mode: 'shared' },
-    hooks: { file: 'settings.json', format: 'json' },
+    hooks: {
+      file: 'settings.json',
+      format: 'json',
+      events: {
+        event: 'PreToolUse',
+        container: 'hooks',
+        matchers: { write: 'WRITE|EDIT', shell: 'SHELL' },
+        timeouts: { write: 120, shell: 600 },
+        command: { form: 'env', template: 'node "%COMMANDCODE_PROJECT_DIR%/{script}"' },
+      },
+    },
     modelProbe: {
       configs: ['~/.commandcode/settings.json'],
       env: ['COMMANDCODE_MODEL'],
@@ -116,7 +168,18 @@ export const HOSTS = {
     commands: { dir: 'commands', ext: '.md' },
     agents: { dir: 'agents', ext: '.md', modelField: null, inheritValue: null },
     skills: { mode: 'index' },
-    hooks: { file: 'settings.json', format: 'json' },
+    hooks: {
+      file: 'settings.json',
+      format: 'json',
+      events: {
+        event: 'PreToolUse',
+        container: 'hooks',
+        matchers: { write: 'Edit|Write|NotebookEdit', shell: 'Bash' },
+        timeouts: { write: 120, shell: 600 },
+        includeMeta: true,
+        command: { form: 'args', template: '${QODER_PROJECT_DIR}/{script}' },
+      },
+    },
     modelProbe: { configs: ['~/.qoder/settings.json'], env: [], cli: [] },
   },
   zcode: {
@@ -126,7 +189,19 @@ export const HOSTS = {
     commands: null,
     agents: { dir: 'agents', ext: '.md', modelField: null, inheritValue: null },
     skills: { mode: 'index' },
-    hooks: { file: 'config.json', format: 'json' },
+    hooks: {
+      file: 'config.json',
+      format: 'json',
+      events: {
+        event: 'PreToolUse',
+        container: 'hooks.events',
+        matchers: { write: 'Edit|Write|MultiEdit', shell: 'Bash|RunCommand|Shell|Terminal|PowerShell' },
+        timeouts: { write: 60, shell: 600 },
+        rootDefaults: { enabled: true },
+        hookExtras: { enabled: true },
+        command: { form: 'relative', template: 'node {script}' },
+      },
+    },
     modelProbe: { configs: ['~/.zcode/config.json'], env: [], cli: [] },
   },
 };

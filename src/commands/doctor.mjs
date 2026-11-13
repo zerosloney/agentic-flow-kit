@@ -7,6 +7,7 @@ import { doctorGit } from '../git/config.mjs';
 import { HOSTS, hostTargetRel, hostSource } from '../hosts/registry.mjs';
 import { listFiles, TEMPLATES } from '../install/plan.mjs';
 import { readMcpServers } from '../install/mcp.mjs';
+import { findHookDrift, readHookSpec } from '../install/hooks.mjs';
 import { ROLE_NAMES, readInjectedModels, readLocalModelRoles } from '../models/resolve.mjs';
 import { resolveTarget } from './install.mjs';
 import { buildDiff } from './diff.mjs';
@@ -99,6 +100,31 @@ export function doctorCommand({ args, t }) {
       const missing = names.filter((name) => !(name in container));
       if (missing.length) add(false, `mcp ${host}`, t('doctor.mcpServersMissing', { servers: missing.join(', ') }));
       else add(true, `mcp ${host}`, `${h.mcp.file}: ${names.join(', ')}`);
+    }
+
+    // Hook 接线：以 .agents/hooks/gates.json 为期望值，比对宿主配置里的托管条目。
+    if (h.hooks?.events) {
+      const spec = readHookSpec(target);
+      const rel = hostTargetRel(host, h.hooks.file);
+      if (!spec) {
+        add(false, `hooks ${host}`, t('doctor.hooksSpecInvalid', { path: '.agents/hooks/gates.json' }));
+      } else if (!fs.existsSync(path.join(target, rel))) {
+        add(false, `hooks ${host}`, t('doctor.hooksFileMissing', { path: rel }));
+      } else {
+        try {
+          const root = JSON.parse(fs.readFileSync(path.join(target, rel), 'utf8'));
+          const drift = findHookDrift(root, spec, h.hooks.events);
+          if (drift.missing.length) {
+            add(false, `hooks ${host}`, t('doctor.hooksMissing', { path: rel, list: drift.missing.join(', ') }));
+          } else if (drift.extra.length) {
+            add(false, `hooks ${host}`, t('doctor.hooksExtra', { path: rel, list: drift.extra.join(', ') }));
+          } else {
+            add(true, `hooks ${host}`, `${rel}: ${drift.expected}`);
+          }
+        } catch {
+          add(false, `hooks ${host}`, t('doctor.hooksInvalid', { path: rel }));
+        }
+      }
     }
   }
 

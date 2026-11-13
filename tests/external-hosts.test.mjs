@@ -115,6 +115,38 @@ test('external host installs commands, agents and skill index; diff/upgrade/adop
   assert.equal(after.summary.unchanged, after.summary.total);
 });
 
+test('external hosts can opt into the hook compiler via hooks.events', () => {
+  const dir = tmpRepo();
+  writeHost(dir, 'demo', {
+    ...DEMO,
+    hooks: {
+      file: 'hooks.json',
+      events: {
+        event: 'PreToolUse',
+        container: 'hooks',
+        matchers: { shell: 'Bash' },
+        tools: ['shell'],
+        timeouts: { shell: 600 },
+        command: { form: 'relative', template: 'node {script}' },
+      },
+    },
+  });
+  writeTemplates(dir, 'demo', { 'hooks.json': '{"hooks":{}}\n' });
+
+  const r = installDemo(dir);
+  assert.equal(r.status, 0, r.stderr);
+  const hooks = JSON.parse(fs.readFileSync(path.join(dir, '.demo/hooks.json'), 'utf8'));
+  assert.deepEqual(hooks.hooks.PreToolUse, [{
+    matcher: 'Bash',
+    hooks: [{ type: 'command', command: 'node .agents/hooks/pre-shell-check.cjs', timeout: 600 }],
+  }]);
+
+  const doctor = json(run(['doctor', '--target', '.', '--json'], dir));
+  const check = doctor.checks.find((item) => item.name === 'hooks demo');
+  assert.ok(check);
+  assert.equal(check.ok, true, check.detail);
+});
+
 test('priority is builtin < user < project < --host-manifest', () => {
   const project = tmpRepo();
   const home = tmpDir('flow-kit-home-');

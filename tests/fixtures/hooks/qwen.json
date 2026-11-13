@@ -1,0 +1,24 @@
+[
+  {
+    "event": "PreToolUse",
+    "matcher": "write_file|edit|replace|multiedit",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "node \"$QWEN_PROJECT_DIR\"/.agents/hooks/pre-write-check.cjs",
+        "timeout": 120
+      }
+    ]
+  },
+  {
+    "event": "PreToolUse",
+    "matcher": "run_shell_command|shell",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "node \"$QWEN_PROJECT_DIR\"/.agents/hooks/pre-shell-check.cjs",
+        "timeout": 800
+      }
+    ]
+  }
+]

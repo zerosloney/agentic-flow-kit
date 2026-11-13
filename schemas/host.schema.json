@@ -80,7 +80,52 @@
       "required": ["file"],
       "properties": {
         "file": { "type": "string", "description": "宿主钩子配置文件（位于宿主点目录）。" },
-        "format": { "enum": ["json"], "default": "json" }
+        "format": { "enum": ["json"], "default": "json" },
+        "events": {
+          "type": ["object", "null"],
+          "description": "Hook 编译器映射；省略时该宿主回退静态模板。",
+          "additionalProperties": false,
+          "required": ["event", "matchers", "command"],
+          "properties": {
+            "event": { "type": "string" },
+            "container": { "type": "string", "description": "事件表的键路径，如 hooks 或 hooks.events。" },
+            "matcherKey": { "type": "string" },
+            "hooksKey": { "type": "string" },
+            "matchers": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "write": { "type": "string" },
+                "shell": { "type": "string" }
+              }
+            },
+            "tools": {
+              "type": "array",
+              "items": { "enum": ["write", "shell"] }
+            },
+            "timeouts": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "write": { "type": "number" },
+                "shell": { "type": "number" }
+              }
+            },
+            "includeMeta": { "type": "boolean" },
+            "rootDefaults": { "type": "object" },
+            "groupExtras": { "type": "object" },
+            "hookExtras": { "type": "object" },
+            "command": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["form", "template"],
+              "properties": {
+                "form": { "enum": ["env", "relative", "args"] },
+                "template": { "type": "string", "description": "必须包含 {script} 占位符。" }
+              }
+            }
+          }
+        }
       }
     },
     "modelProbe": {
