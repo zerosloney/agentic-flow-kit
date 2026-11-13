@@ -1,0 +1,107 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentic-flow-kit/host.schema.json",
+  "title": "agentic-flow-kit external host definition",
+  "description": "外部宿主定义。放置于 <target>/.flow-kit/hosts/<name>.json、~/.flow-kit/hosts/<name>.json，或通过 --host-manifest <file> 指定。同名优先级：项目 > 用户 > 内置；--host-manifest 最高。",
+  "type": "object",
+  "required": ["name", "dir"],
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "宿主标识，小写；同名会覆盖低优先级定义。"
+    },
+    "dir": {
+      "type": "string",
+      "pattern": "^\\.[A-Za-z0-9._-]+$",
+      "description": "宿主点目录，如 \".myhost\"。"
+    },
+    "label": { "type": "string", "description": "展示名，默认与 name 相同。" },
+    "tracked": {
+      "type": "boolean",
+      "default": false,
+      "description": "true 时不把宿主目录写入 .gitignore。"
+    },
+    "rootMemory": {
+      "type": "string",
+      "pattern": "^[^/\\\\]+$",
+      "description": "项目根记忆文件名（如 \"CLAUDE.md\"）；仅当宿主使用根级记忆文件时设置。"
+    },
+    "detect": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "根级探测信号（相对项目根的路径），供 --auto-hosts 使用。"
+    },
+    "templates": {
+      "type": "string",
+      "description": "静态宿主模板目录（相对 JSON 文件或绝对路径）。省略时使用与 JSON 同名的兄弟目录（如 hosts/myhost/）。"
+    },
+    "commands": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["dir"],
+      "properties": {
+        "dir": { "type": "string", "description": "命令目录（相对宿主点目录）。" },
+        "ext": { "type": "string", "default": ".md" }
+      }
+    },
+    "agents": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["dir"],
+      "properties": {
+        "dir": { "type": "string" },
+        "ext": { "type": "string", "default": ".md" },
+        "modelField": {
+          "type": ["string", "null"],
+          "default": null,
+          "description": "子代理 frontmatter 中的模型字段名；null 表示不支持按角色注入模型。"
+        },
+        "inheritValue": {
+          "type": ["string", "null"],
+          "description": "继承父级模型的字面值；设置 modelField 时必须提供。"
+        }
+      }
+    },
+    "skills": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": { "enum": ["native", "shared", "index"] },
+        "dir": { "type": "string", "description": "native 模式的技能目录。" },
+        "file": { "type": "string", "description": "native 模式的技能文件名，如 SKILL.md。" }
+      }
+    },
+    "hooks": {
+      "type": ["object", "null"],
+      "additionalProperties": false,
+      "required": ["file"],
+      "properties": {
+        "file": { "type": "string", "description": "宿主钩子配置文件（位于宿主点目录）。" },
+        "format": { "enum": ["json"], "default": "json" }
+      }
+    },
+    "modelProbe": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "configs": { "type": "array", "items": { "type": "string" } },
+        "env": { "type": "array", "items": { "type": "string" } },
+        "cli": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["command"],
+            "properties": {
+              "command": { "type": "string" },
+              "args": { "type": "array", "items": { "type": "string" } }
+            }
+          }
+        }
+      }
+    }
+  }
+}

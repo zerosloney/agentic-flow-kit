@@ -2,7 +2,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseArgs, flag } from './args.mjs';
 import { makeT, LANGUAGES } from '../i18n.mjs';
-import { HOST_NAMES, resolveHost } from '../hosts/registry.mjs';
+import { HOST_NAMES, resolveHost, hostSource } from '../hosts/registry.mjs';
+import { loadExternalHosts } from '../hosts/external.mjs';
 import { installCommand } from '../commands/install.mjs';
 import { doctorCommand } from '../commands/doctor.mjs';
 import { addHostCommand } from '../commands/add-host.mjs';
@@ -31,6 +32,13 @@ async function main(argv) {
   const command = args._[0] || (args.help || args.h ? 'help' : 'help');
   const lang = normalizeLang(args.lang);
   const t = makeT(lang);
+
+  // 外部宿主定义必须先于命令分派加载：install / doctor / list-hosts 等都从注册表读取能力面。
+  loadExternalHosts({
+    target: path.resolve(args.target || process.cwd()),
+    files: args.hostManifests || [],
+    t,
+  });
 
   // 无位置参数且无任何选项（含 --agent/--target 等值形参数，它们不进 flags.size）、交互终端 → 进入 TUI 向导（懒加载，避免影响脚本路径）
   if (!args._.length && args.flags.size === 0 && args.lang == null && args.agents.length === 0 && args.target == null
@@ -79,6 +87,7 @@ async function main(argv) {
           name,
           label: h.label,
           dir: h.dir,
+          source: hostSource(name),
           tracked: Boolean(h.tracked),
           commands: Boolean(h.commands),
           agents: Boolean(h.agents),

@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import { flag } from '../cli/args.mjs';
 import { readManifest } from '../install/manifest.mjs';
 import { doctorGit } from '../git/config.mjs';
-import { HOSTS, hostTargetRel } from '../hosts/registry.mjs';
+import { HOSTS, hostTargetRel, hostSource } from '../hosts/registry.mjs';
 import { listFiles, TEMPLATES } from '../install/plan.mjs';
 import { ROLE_NAMES, readInjectedModels, readLocalModelRoles } from '../models/resolve.mjs';
 import { resolveTarget } from './install.mjs';
@@ -57,7 +57,9 @@ export function doctorCommand({ args, t }) {
       add(false, `host ${host}`, t('doctor.unknownHost'));
       continue;
     }
-    for (const rel of listFiles(path.join(TEMPLATES, 'hosts', host))) {
+    const source = hostSource(host);
+    add(true, `host ${host} source`, t('doctor.hostSource', { host, source }));
+    for (const rel of listFiles(h.templates || path.join(TEMPLATES, 'hosts', host))) {
       if (rel === 'settings.hardened.json') continue; // 替换源，不独立安装
       const targetRel = hostTargetRel(host, rel);
       if (!fs.existsSync(path.join(target, targetRel))) add(false, `host ${host}: ${targetRel}`, t('doctor.fileMissing'));

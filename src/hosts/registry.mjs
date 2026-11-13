@@ -127,6 +127,22 @@ export const HOSTS = {
 
 export const HOST_NAMES = Object.keys(HOSTS);
 
+// 来源：builtin / user / project / cli。外部定义由 src/hosts/external.mjs 注册。
+export const HOST_SOURCES = new Map(HOST_NAMES.map((name) => [name, 'builtin']));
+
+export function registerHost(name, def, source = 'external') {
+  const key = String(name || '').trim().toLowerCase();
+  HOSTS[key] = def;
+  HOST_SOURCES.set(key, source);
+  if (!HOST_NAMES.includes(key)) HOST_NAMES.push(key);
+  return key;
+}
+
+export function hostSource(name) {
+  return HOST_SOURCES.get(String(name || '').trim().toLowerCase()) || 'builtin';
+}
+
+
 export function resolveHost(name) {
   const key = String(name || '').trim().toLowerCase();
   if (!HOSTS[key]) {

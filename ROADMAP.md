@@ -25,7 +25,7 @@
 | R1-5 | `explain <targetRel>` 来源解释 | 1 | S | `src/commands/explain.mjs` | DONE · [#6](https://github.com/zerosloney/agentic-flow-kit/issues/6) |
 | R2-1 | 基线留存 + 三方合并 | 2 | L | `src/install/baseline.mjs`、`apply.mjs` | TODO · [#8](https://github.com/zerosloney/agentic-flow-kit/issues/8) |
 | R2-2 | `adopt` 接管已有安装 | 2 | M | `src/commands/adopt.mjs`、`tools/parity-report.mjs` | DONE · [#9](https://github.com/zerosloney/agentic-flow-kit/issues/9) |
-| R2-3 | 外部宿主插件 | 2 | M | `schemas/host.schema.json`、`registry.mjs` | TODO · [#10](https://github.com/zerosloney/agentic-flow-kit/issues/10) |
+| R2-3 | 外部宿主插件 | 2 | M | `schemas/host.schema.json`、`registry.mjs` | DONE · [#10](https://github.com/zerosloney/agentic-flow-kit/issues/10) |
 | R2-4 | Hook 编译器 | 2 | L | 中性 hook 规格 + 宿主序列化器 | TODO · [#11](https://github.com/zerosloney/agentic-flow-kit/issues/11) |
 | R2-5 | MCP 接线 | 2 | M | registry `mcp` 字段、`templates/mcp/` | TODO · [#12](https://github.com/zerosloney/agentic-flow-kit/issues/12) |
 | R2-6 | 权限 / 工具白名单编译 | 2 | M | 复用 `gates.json` 与 hardened 路径 | TODO · [#13](https://github.com/zerosloney/agentic-flow-kit/issues/13) |
@@ -128,7 +128,7 @@
 
 ### R2-3 外部宿主插件
 
-- **现状**：`HOSTS` 写死在 `src/hosts/registry.mjs`，新增宿主必须发版。
+- **现状**：`src/hosts/external.mjs` 在命令分派前加载用户级、项目级与 `--host-manifest` 定义，注册进同一 `HOSTS` 注册表并记录来源；`schemas/host.schema.json` 描述完整字段。静态模板默认取 JSON 同名兄弟目录（或 `templates` 字段），`plan` / `doctor` 统一解析；`doctor` / `list-hosts` 输出 `builtin` / `user` / `project` / `cli` 来源。非法定义以退出码 2 报字段级错误，内置 10 宿主行为不变。
 - **目标**：支持 `.flow-kit/hosts/<name>.json` 与 `--host-manifest <file>`；新增 `schemas/host.schema.json`；优先级：项目 > 用户 > 内置；非法定义给出可操作错误。
 - **落点**：`src/hosts/registry.mjs` 改为“内置 + 外部合并”；`doctor` 标注宿主来源。
 - **验收**：自定义宿主可安装 command/agent/skill/index；schema 错误被拒绝；内置行为不变。

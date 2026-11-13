@@ -192,16 +192,17 @@ export function buildPlan({ target, hosts, lang, stack, projectName, categories,
     push(path.join(TEMPLATES, 'profiles', stack, rel), rel, 'profile', 20);
   }
 
-  // 3) 宿主适配层
+  // 3) 宿主适配层（外部宿主用定义里的 templates 目录，内置宿主用 templates/hosts/<host>）
   for (const host of hosts) {
     const h = HOSTS[host];
     if (!h) continue;
-    for (const rel of listFiles(path.join(TEMPLATES, 'hosts', host))) {
+    const templatesDir = h.templates || path.join(TEMPLATES, 'hosts', host);
+    for (const rel of listFiles(templatesDir)) {
       // 加固配置是 settings.json 的替换源，不作为独立文件安装。
       if (rel === 'settings.hardened.json') continue;
       const srcAbs = (hardened && host === 'claude' && rel === 'settings.json')
         ? path.join(TEMPLATES, 'hosts', host, 'settings.hardened.json')
-        : path.join(TEMPLATES, 'hosts', host, rel);
+        : path.join(templatesDir, rel);
       const entry = push(srcAbs, hostTargetRel(host, rel), 'host', 30);
       if (h.agents?.modelField && isAgentTemplate(host, rel)) {
         entry.modelRole = modelRoleForAgent(rel);

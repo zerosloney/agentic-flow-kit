@@ -1,6 +1,6 @@
 // 极简参数解析：--key value / --flag / --key=value；--agent 可重复。
 export function parseArgs(argv) {
-  const args = { _: [], agents: [], models: [], flags: new Set() };
+  const args = { _: [], agents: [], models: [], hostManifests: [], flags: new Set() };
   const takeValue = (i) => {
     const next = argv[i + 1];
     if (next == null || (next.startsWith('--') && next !== '-')) return null;
@@ -18,6 +18,7 @@ export function parseArgs(argv) {
       const value = raw.slice(eq + 1);
       if (key === 'agent') args.agents.push(value);
       else if (key === 'model') args.models.push(value);
+      else if (key === 'host-manifest') args.hostManifests.push(value);
       else args[key] = value;
       continue;
     }
@@ -26,6 +27,7 @@ export function parseArgs(argv) {
     if (value != null) {
       if (key === 'agent') args.agents.push(value);
       else if (key === 'model') args.models.push(value);
+      else if (key === 'host-manifest') args.hostManifests.push(value);
       else args[key] = value;
       i += 1;
     } else {

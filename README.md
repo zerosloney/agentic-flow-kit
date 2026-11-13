@@ -69,6 +69,7 @@ npx agentic-flow-kit doctor --target .
 | `--no-git-config` | 不自动写三条例行 git 配置 |
 | `--track-hosts` | 不把本机宿主目录写进 `.gitignore` |
 | `--auto-hosts` | 扫描宿主点目录与根级配置/记忆文件，采用探测结果作为安装宿主；仅在未显式 `--agent` 时生效，探测为空报错 |
+| `--host-manifest <file>` | 加载外部宿主定义，可重复；同名时优先级 `--host-manifest` > 项目 `.flow-kit/hosts` > 用户 `~/.flow-kit/hosts` > 内置 |
 | `--model [host:]role=<id>` | 可重复。指定模型角色；`role` 为 `code` / `judgment` / `review`，省略宿主则全局生效 |
 | `--model-mode recommend\|detect\|inherit` | `recommend`（默认，探测 + 推荐）、`detect`（强制重新探测）、`inherit`（全部继承宿主默认） |
 | `--probe-models` | 允许执行宿主注册表中声明的只读模型列表命令（1.5s 超时，失败静默） |
@@ -113,6 +114,31 @@ v1 支持 10 个现行宿主：
 - **native**：宿主会自行发现 `<宿主目录>/skills/<name>/SKILL.md`。安装器按 `.agents/skills/*/SKILL.md` 的语言覆盖后内容动态生成指针壳（原生 frontmatter + 指向权威正文），不手写 22 × N 份静态副本。
 - **shared**：宿主原生读取 `.agents/skills`（Qwen、Command Code）。不生成宿主技能副本，只生成 `wf-skills` 索引入口。
 - **index**：无法确认原生技能目录的宿主生成一个索引（有命令目录时是 `wf-skills.md`，否则是 `SKILLS.md`），逐行列出技能名、描述与 `.agents/skills/<name>/SKILL.md` 路径。
+
+### 外部宿主插件
+
+不重发版也能接入新宿主。定义是 JSON（schema：`schemas/host.schema.json`），放置位置按优先级从低到高：
+
+1. 内置注册表（`src/hosts/registry.mjs`）
+2. 用户级 `~/.flow-kit/hosts/*.json`
+3. 项目级 `<target>/.flow-kit/hosts/*.json`
+4. `--host-manifest <file>`（可重复）
+
+同名定义后者覆盖前者。静态 command / agent 文件放在与 JSON 同名的兄弟目录（如 `.flow-kit/hosts/myhost/commands/*.md`），或用 `templates` 指向别处；技能索引/指针仍由 `.agents/skills` 动态生成。
+
+```json
+{
+  "name": "myhost",
+  "dir": ".myhost",
+  "label": "My Host",
+  "commands": { "dir": "commands", "ext": ".md" },
+  "agents": { "dir": "agents", "ext": ".md", "modelField": null, "inheritValue": null },
+  "skills": { "mode": "index" },
+  "hooks": null
+}
+```
+
+字段缺失、目录非法、枚举越界、未知键都会在加载时以退出码 2 报出具体字段；`doctor` 会标注每个已安装宿主的定义来源（`builtin` / `user` / `project` / `cli`）。
 
 ## 模型配置
 

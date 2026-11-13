@@ -84,6 +84,9 @@ node tools/make-en-host-overrides.mjs --check   # CI：英文覆盖缺失/过期
 - `commands` / `agents` / `skills` / `hooks`：声明目录、扩展名、技能模式和接线文件。
 - `agents.modelField` / `agents.inheritValue`：该宿主子代理是否支持按角色指定模型，以及 `inherit` 的写法。
 - `modelProbe.configs/env/cli`：模型探测来源。
+- `templates`：外部宿主的静态模板目录（绝对路径）；内置宿主不设置，回退到 `templates/hosts/<host>`。
+
+外部宿主插件由 `src/hosts/external.mjs` 在命令分派前加载（`main.mjs` 调用 `loadExternalHosts`）：`~/.flow-kit/hosts/*.json` → `<target>/.flow-kit/hosts/*.json` → `--host-manifest <file>`，后加载者覆盖同名定义，注册进 `HOSTS` / `HOST_NAMES` 并记录 `HOST_SOURCES`（`hostSource()` 供 doctor / list-hosts 使用）。JSON 走手写校验（`schemas/host.schema.json` 是对外文档），非法定义抛 `HOST_MANIFEST` → 退出码 2，错误带字段名。模板默认取与 JSON 同名的兄弟目录，`templates` 可显式覆盖；`plan.mjs` / `doctor.mjs` 统一用 `h.templates || templates/hosts/<host>`，不要新增按宿主名分支。
 
 技能安装由 `skills.mode` 驱动：
 

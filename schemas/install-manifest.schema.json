@@ -11,7 +11,8 @@
     "language": { "enum": ["zh-CN", "en"] },
     "hosts": {
       "type": "array",
-      "items": { "enum": ["trae", "codebuddy", "claude", "opencode", "qwen", "pi", "cline", "commandcode", "qoder", "zcode"] },
+      "items": { "type": "string", "pattern": "^[a-z][a-z0-9-]*$" },
+      "description": "内置宿主或通过 --host-manifest / .flow-kit/hosts 加载的外部宿主。",
       "uniqueItems": true
     },
     "stack": { "enum": ["dotnet", "node", "typescript", "rust", "go", "java", "empty"] },
