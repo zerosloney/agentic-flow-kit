@@ -29,8 +29,9 @@
     },
     "manifest": {
       "type": ["object", "null"],
-      "required": ["digest", "files", "baselineVersion"],
+      "required": ["schemaVersion", "digest", "files", "baselineVersion"],
       "properties": {
+        "schemaVersion": { "type": "integer", "minimum": 0 },
         "digest": { "type": ["string", "null"], "pattern": "^[0-9a-f]{64}$" },
         "files": { "type": "integer", "minimum": 0 },
         "baselineVersion": { "type": ["string", "null"] }

@@ -344,6 +344,8 @@ flow-kit doctor --target <dir> --attest --json    # 证明对象随 JSON 返回
 
 基线保存在 `.agents/.kit/baseline/`，内容为上次安装的文本，默认被 `.gitignore` 忽略；`--no-baseline` 关闭，`--baseline` 可在旧安装上重新开启，`upgrade` 重放 manifest 中的选择。基线不参与 manifest 哈希；`prune --baseline` 清理无主基线，`doctor` 报告基线与无主项。
 
+manifest 带 `schemaVersion`（当前为 1）。`upgrade` 在生成计划前按 `migrations/<from>-<to>.mjs` 顺序迁移旧 manifest：全部步骤成功才写盘，失败零写入；`--dry-run` 只报告将执行的迁移，`--json` 输出 `migration` 字段。迁移只转换 manifest 元数据，不触碰目标文件；版本高于当前工具支持时拒绝升级。
+
 ## 语言
 
 - `zh-CN`：模板原文即中文。

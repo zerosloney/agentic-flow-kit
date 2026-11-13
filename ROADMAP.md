@@ -41,7 +41,7 @@
 | R3-6 | 记忆生命周期 | 3 | L | `memory-tier.mjs` / `memory-wiki.mjs` | TODO |
 | R3-7 | 可观测与成本 | 3 | M | `outcome-metrics.mjs`、`metrics-core.mjs` | TODO |
 | R3-8 | 沙箱与供应链 | 3 | L | devcontainer / MCP 权限 / SBOM | TODO |
-| R3-9 | manifest 迁移框架 | 3 | M | `migrations/`、`manifest.schemaVersion` | TODO |
+| R3-9 | manifest 迁移框架 | 3 | M | `migrations/`、`manifest.schemaVersion` | DONE |
 | R3-10 | `new-host` 生成器与模板 lint | 3 | M | `tools/new-host.mjs`、`npm run lint:templates` | TODO |
 | R4-1 | 多仓 Workspace 协调 | 4 | M | `src/commands/workspace.mjs`、`.flow-kit/workspace.json` | DONE |
 | R4-2 | Spec / Tasks / Verify 工件规范 | 4 | M | `templates/scaffold/workflow/specs/` + 校验脚本 | DONE |
@@ -251,6 +251,7 @@
 - **现状**：`upgrade` 只能重放，结构变更（文件拆分/合并/改名）需要手工处理。
 - **目标**：manifest 增加 `schemaVersion`；`migrations/<from>-<to>.mjs` 在 upgrade 前执行，支持 `--dry-run` 与失败回滚说明。
 - **验收**：旧 manifest 夹具可迁移；重复执行幂等；迁移不影响用户文件。规模 `M`。
+- **落地（2026-11-13）**：`src/install/migrations.mjs` 按 `schemaVersion` 顺序加载 `migrations/<from>-<to>.mjs`，当前版本 1（`0-1.mjs` 初始化）；升级前在内存中逐步迁移，全部成功才写 manifest，失败零写盘；`--dry-run` 只报告；manifest 版本高于工具当前支持时拒绝升级；`upgrade --json` 增加 `migration` 报告。
 
 ### R3-10 `new-host` 生成器与模板 lint
 

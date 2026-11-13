@@ -73,6 +73,7 @@ function gitInfo(target) {
 
 function manifestCore(manifest) {
   return {
+    schemaVersion: manifest.schemaVersion ?? 0,
     version: manifest.version ?? null,
     kitVersion: manifest.kitVersion ?? null,
     language: manifest.language ?? null,
@@ -167,6 +168,7 @@ export function buildAttestation(target) {
     hardened: core.hardened,
     policy: policyInfo,
     manifest: {
+      schemaVersion: core.schemaVersion,
       digest: manifestDigest,
       files: Object.keys(core.files).length,
       baselineVersion: core.baselineVersion,

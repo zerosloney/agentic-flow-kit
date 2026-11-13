@@ -64,7 +64,8 @@ node tools/make-en-host-overrides.mjs --check   # CI：英文覆盖缺失/过期
 - 目标不存在 → 创建；目标哈希等于 manifest → 更新；被用户改过 → 三方合并或冲突跳过；非本工具安装 → 跳过；`--force` 覆盖。
 - 文本直写文件的基线保存在 `.agents/.kit/baseline/<targetRel>`（默认 gitignore；`--no-baseline` 关闭，`--baseline` 重新开启）。升级时若用户改过且模板相对基线确有变化，以 baseline 为 base、磁盘为 ours、新模板为 theirs 调用 `git merge-file`：clean 自动写回并把基线更新为模板侧内容，conflict 写冲突标记、保留 manifest 旧哈希并计入 `conflict`。无基线、二进制或 git 不可用时回退为哈希冲突跳过。合并块 / MCP / hooks 配置不存基线（自身已有合并语义）。
 - `.gitattributes` / `.gitignore` 使用带标记的合并块，重复执行不重复追加。
-- manifest 的哈希记录的是**最终文本**：模板渲染、语言覆盖、模型注入都完成之后才计算；`manifest.baseline` / `baselineVersion` 记录基线状态，基线内容不参与哈希；`manifest.managedPermissions` 记录上次编译进各宿主配置的权限条目，`manifest.mergeOrigins` 记录合并型配置首次安装时是否已存在。
+- manifest 的哈希记录的是**最终文本**：模板渲染、语言覆盖、模型注入都完成之后才计算；`manifest.schemaVersion` 记录 manifest 结构版本（当前 1）；`manifest.baseline` / `baselineVersion` 记录基线状态，基线内容不参与哈希；`manifest.managedPermissions` 记录上次编译进各宿主配置的权限条目，`manifest.mergeOrigins` 记录合并型配置首次安装时是否已存在。
+- `src/install/migrations.mjs` 在 `upgrade` 前按 `manifest.schemaVersion` 顺序加载 `migrations/<from>-<to>.mjs`，全部成功后才写 manifest，失败零写盘；`--dry-run` 只报告，`--json` 增加 `migration`。迁移只转换 manifest，不改目标文件；缺失 schemaVersion 视为 0，高于当前支持版本时拒绝升级。
 - 派生工件（如 `workflow/INDEX.md`）生成后会重算哈希，并把被生成器改写的路径登记到 `manifest.derived`；`diff` 不对这些路径做静态模板比对。
 
 `adopt` 用于接管已有安装（含缺失 manifest 的半安装树）：元数据优先取 `engine.json` 的 `options.{hosts,stack,language}` 与 `createdAt`，其次既有 manifest、宿主探测与参数；语言在候选集中按“与磁盘逐文件匹配数”择优。`src/commands/adopt.mjs` 复用 `buildState` 与 `readPlanEntry`，只把渲染结果完全一致的文件写入 manifest；合并块只比较托管块（块外用户内容不影响接管）；`workflow/INDEX.md` 按现状收录并登记 `derived`；`.agents/notes/engine-map.md` 等纯生成物与运行态文件不进 manifest。已改动 / 缺失 / 未识别文件分别报告且不覆盖，`--dry-run` 零写入；无可接管文件且无既有 manifest 时退出 1。
