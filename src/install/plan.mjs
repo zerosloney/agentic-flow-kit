@@ -63,7 +63,7 @@ function applyLocaleOverrides(lang, entries) {
   return entries;
 }
 
-function dedupe(entries) {
+export function dedupeEntries(entries) {
   const byTarget = new Map();
   for (const entry of entries.sort((a, b) => a.priority - b.priority)) byTarget.set(entry.targetRel, entry);
   return [...byTarget.values()];
@@ -203,8 +203,10 @@ function addMcpEntries({ plan, target, hosts }) {
 
 // 构建安装计划。targetRel 使用 / 分隔；profile 覆盖 engine，宿主只写自己的点目录。
 // models: { [host]: { code?, judgment?, review? } }，用于注入宿主子代理 model 字段。
+// surfaces: 组合式切面闭集（frontend/api/data），按声明顺序叠加在 stack 之上。
 export function buildPlan({
   target, hosts, lang, stack, projectName, categories, models = null, tier = 'standard', hardened = false, mcp = true,
+  surfaces = [],
 }) {
   const t = makeT(lang);
   const plan = [];
@@ -222,6 +224,24 @@ export function buildPlan({
   // 2) 项目 profile（栈相关配置与 AGENTS.md）
   for (const rel of listFiles(path.join(TEMPLATES, 'profiles', stack))) {
     push(path.join(TEMPLATES, 'profiles', stack, rel), rel, 'profile', 20);
+  }
+
+  // 2.5) surface 叠加：同一 targetRel 由后声明的 surface 覆盖（21 + index > 20）。
+  // 单 stack 安装不产生任何额外文件，保持行为不变。
+  surfaces.forEach((surface, index) => {
+    const dir = path.join(TEMPLATES, 'surfaces', surface);
+    for (const rel of listFiles(dir)) push(path.join(dir, rel), rel, 'profile', 21 + index);
+  });
+  if (surfaces.length) {
+    push(null, '.agents/config/profile.json', 'profile', 25, 'generated', {
+      getText: (vars) => `${JSON.stringify({
+        kit: 'agentic-flow-kit',
+        version: vars.kitVersion || null,
+        stack,
+        surfaces,
+        profiles: [stack, ...surfaces],
+      }, null, 2)}\n`,
+    });
   }
 
   // 3) 宿主适配层（外部宿主用定义里的 templates 目录，内置宿主用 templates/hosts/<host>）
@@ -264,7 +284,7 @@ export function buildPlan({
 
   // 6) 语言包覆盖（按目标路径镜像）
   applyLocaleOverrides(lang, plan);
-  let deduped = dedupe(plan);
+  let deduped = dedupeEntries(plan);
 
   // 7) 从覆盖后的 .agents/skills/<name>/SKILL.md 生成宿主技能面
   const skillEntries = deduped.filter((e) => /^\.agents\/skills\/[^/]+\/SKILL\.md$/.test(e.targetRel));
@@ -272,7 +292,7 @@ export function buildPlan({
 
   // 生成项同样允许按目标路径覆盖，然后二次去重（静态宿主文件优先级更高）
   applyLocaleOverrides(lang, plan);
-  deduped = dedupe(plan);
+  deduped = dedupeEntries(plan);
 
   if (categories && categories.length) deduped = deduped.filter((e) => categories.includes(e.category));
 

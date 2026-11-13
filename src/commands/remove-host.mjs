@@ -48,6 +48,7 @@ function planFor({ target, manifest, hosts, categories, lang }) {
     tier: manifest.tier || 'standard',
     hardened: Boolean(manifest.hardened),
     mcp: manifest.mcp !== false,
+    surfaces: manifest.surfaces || [],
   });
 }
 

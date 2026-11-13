@@ -61,6 +61,7 @@ npx agentic-flow-kit doctor --target .
 | `--target <dir>` | 目标项目根，默认当前目录 |
 | `--lang zh-CN\|en` | 语言包，默认 `zh-CN` |
 | `--stack dotnet\|node\|typescript\|rust\|go\|java\|empty` | 项目栈 profile；缺省按根目录标记探测：`.sln`/`.csproj` → dotnet，`Cargo.toml` → rust，`go.mod` → go，`pom.xml`/`build.gradle` → java，`tsconfig.json` → typescript，`package.json` → node |
+| `--surface frontend\|api\|data` | 叠加切面，可重复/逗号分隔，也可写成 `--stack dotnet+frontend`；与 stack 同层合并，同名文件后声明者覆盖 |
 | `--tier lean\|standard\|enterprise` | 安装档位。`lean` 不生成 CI，适合小项目；`standard`（默认）生成 CI；`enterprise` 另启用加固配置（sandbox / 凭据读拒绝 / MCP 白名单 / 版本基线） |
 | `--hardened` | 等价于 `--tier enterprise`；加固配置写入 `.claude/settings.json`，其中 managed-only 键需由平台/IT 以 managed settings 部署才不可覆盖 |
 | `--name <name>` | 渲染 `{{projectName}}`，默认目标目录名 |
@@ -210,12 +211,23 @@ v1 支持 10 个现行宿主：
 |---|---|---|
 | engine | `templates/engine/` | `.agents/` 通用引擎（commands / skills / roles / hooks / scripts / config / pipelines / tests / board / notes） |
 | profile | `templates/profiles/<stack>/` | 栈相关 `AGENTS.md`。栈：`dotnet` / `node` / `typescript` / `rust` / `go` / `java` / `empty` |
+| surface | `templates/surfaces/<surface>/` | 可叠加切面：`frontend` / `api` / `data`；与 stack 同层（优先级 21+），不改单 stack 的产物 |
 | scaffold | `templates/scaffold/` | `wiki/` 目录骨架 + INDEX + 看板；`workflow/` 状态机骨架 + 空台账 + `_TEMPLATE.md` |
 | git | `templates/git/` | `.githooks/` 五钩子、`.gitattributes` 合并块、`.gitignore` 运行态块 |
 | host-meta | `templates/host-meta/` | 宿主原生技能指针 / 技能索引模板；按能力动态生成，不参与 `templates/hosts/` 静态枚举 |
 | locale | `locales/<lang>/overrides/` | 按目标路径镜像的语言覆盖；缺省回退模板 |
 
 运行态（`cache/`、`tmp/`、`*.jsonl` 台账、`confirmations.d/`、`workflow/archive`、`.agents/tools/`）不打包，由引擎在装户内产生。
+
+### 组合式 profile
+
+`--stack` 保持单选基底，`--surface` 叠加闭集切面，两者也可合并写：`--stack dotnet+frontend --surface api`。
+
+- 闭集：`frontend` / `api` / `data`（未知 surface 退出码 2）。
+- 合并顺序：engine → stack profile → surfaces（按声明顺序）；同一目标路径**后声明者覆盖**（surface 优先级 21+，stack 为 20）。
+- 只有存在 surface 时才生成 `.agents/config/profile.json`（记录 `stack` / `surfaces` / `profiles`），单 stack 安装的产物与行为完全不变。
+- `manifest.surfaces` 记录组合；`upgrade` / `add-host` 重放，`adopt` 从 `profile.json` 恢复，`doctor` 校验凭证与 manifest 一致。
+- 注意：`typescript` 是栈而不是 surface；dotnet 后端 + TS 前端用 `--stack dotnet+frontend`。
 
 ## 冲突与升级
 

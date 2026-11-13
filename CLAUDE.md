@@ -52,7 +52,7 @@ node tools/make-en-host-overrides.mjs --check   # CI：英文覆盖缺失/过期
 
 `buildPlan` 的顺序是理解安装结果的关键：
 
-1. 静态层按优先级入队：engine 10、profile 20、host 30、scaffold/git 40。
+1. 静态层按优先级入队：engine 10、profile 20、surface 21+（按声明顺序）、host 30、scaffold/git 40；存在 surface 时追加 `profile.json`（25）。
 2. 按 `targetRel` 应用语言覆盖（覆盖文件替换 `srcAbs`）→ 第一次去重。
 3. 从覆盖后的 `.agents/skills/<name>/SKILL.md` 读取 frontmatter，动态生成宿主技能面。
 4. 对生成项再应用一次语言覆盖 → 第二次去重（同一 `targetRel` 高优先级胜出）→ 类别过滤。
@@ -119,6 +119,7 @@ MCP 接线在 `src/install/mcp.mjs`：`templates/mcp/servers.json`（项目可�
 
 - `templates/engine/`：通用 `.agents/` 引擎。
 - `templates/profiles/<stack>/`：dotnet / node / typescript / rust / go / java / empty 的栈配置与 `AGENTS.md`。
+- `templates/surfaces/<surface>/`：组合式切面 `frontend` / `api` / `data`，按声明顺序以优先级 21+ 叠加在 stack（20）之上；同名路径后声明者覆盖。仅当存在 surface 时生成 `.agents/config/profile.json`；`src/install/profiles.mjs` 是闭集与解析的单一来源，`manifest.surfaces` 记录组合。
 - `templates/scaffold/`：`wiki/`、`workflow/` 数据资产骨架。
 - `templates/git/`：五钩子、`.gitattributes`、`.gitignore` 合并块。
 - `templates/hosts/<host>/`：静态宿主适配文件（command / agent / hooks）。

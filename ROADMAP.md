@@ -30,7 +30,7 @@
 | R2-5 | MCP 接线 | 2 | M | registry `mcp` 字段、`templates/mcp/` | DONE · [#12](https://github.com/zerosloney/agentic-flow-kit/issues/12) |
 | R2-6 | 权限 / 工具白名单编译 | 2 | M | 复用 `gates.json` 与 hardened 路径 | TODO · [#13](https://github.com/zerosloney/agentic-flow-kit/issues/13) |
 | R2-7 | 宿主探测 `--auto-hosts` | 2 | S | `src/commands/install.mjs`、TUI | DONE · [#14](https://github.com/zerosloney/agentic-flow-kit/issues/14) |
-| R2-8 | 组合式 profile | 2 | M | `src/install/plan.mjs`、`schemas/project-profile.schema.json` | TODO · [#15](https://github.com/zerosloney/agentic-flow-kit/issues/15) |
+| R2-8 | 组合式 profile | 2 | M | `src/install/plan.mjs`、`schemas/project-profile.schema.json` | DONE · [#15](https://github.com/zerosloney/agentic-flow-kit/issues/15) |
 | R2-9 | 企业档宿主矩阵 | 2 | M | `templates/hosts/*`、`doctor` | TODO · [#16](https://github.com/zerosloney/agentic-flow-kit/issues/16) |
 | R2-10 | i18n 覆盖一致性检查 | 2 | S | `tools/make-en-host-overrides.mjs --check` | DONE · [#17](https://github.com/zerosloney/agentic-flow-kit/issues/17) |
 | R3-1 | policy-as-code | 3 | L | `templates/engine/.agents/config/policy.json` + `policy.mjs` | TODO |
@@ -166,7 +166,7 @@
 
 ### R2-8 组合式 profile
 
-- **现状**：`--stack` 单选，但真实项目常是 dotnet 后端 + TS 前端；`schemas/project-profile.schema.json` 已有 `ports` 字段。
+- **现状**：`src/install/profiles.mjs` 定义闭集 `frontend` / `api` / `data`，支持 `--stack dotnet+frontend` 与可重复 `--surface`；plan 在 20 层后按声明顺序叠加（21+），同名文件后者覆盖；存在 surface 时生成 `.agents/config/profile.json` 并写入 `manifest.surfaces`。`upgrade` / `add-host` 重放、`adopt` 从凭证恢复、`doctor` 校验一致性；单 stack 产物不变。TUI 安装流提供可跳过多选。
 - **目标**：支持 `stack + surface` 叠加（如 `dotnet+frontend`）；plan 优先级 20 内确定合并顺序；project-profile schema 扩展。
 - **验收**：`dotnet + typescript` 夹具；同名文件冲突有确定规则；文档写明支持的 surface 闭集。
 - **风险**：组合爆炸，先只支持 `frontend` / `api` / `data` 三个面。规模 `M`。

@@ -6,6 +6,12 @@
   "required": ["stack"],
   "properties": {
     "stack": { "enum": ["dotnet", "node", "typescript", "rust", "go", "java", "empty"] },
+    "surfaces": {
+      "type": "array",
+      "description": "组合式 profile 切面闭集：叠加在 stack 之上，按声明顺序合并；同名文件后声明者覆盖。",
+      "items": { "enum": ["frontend", "api", "data"] },
+      "uniqueItems": true
+    },
     "ports": {
       "type": "object",
       "properties": {

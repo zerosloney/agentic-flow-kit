@@ -1,6 +1,6 @@
 // 极简参数解析：--key value / --flag / --key=value；--agent 可重复。
 export function parseArgs(argv) {
-  const args = { _: [], agents: [], models: [], hostManifests: [], flags: new Set() };
+  const args = { _: [], agents: [], models: [], hostManifests: [], surfaces: [], flags: new Set() };
   const takeValue = (i) => {
     const next = argv[i + 1];
     if (next == null || (next.startsWith('--') && next !== '-')) return null;
@@ -19,6 +19,7 @@ export function parseArgs(argv) {
       if (key === 'agent') args.agents.push(value);
       else if (key === 'model') args.models.push(value);
       else if (key === 'host-manifest') args.hostManifests.push(value);
+      else if (key === 'surface') args.surfaces.push(value);
       else args[key] = value;
       continue;
     }
@@ -28,6 +29,7 @@ export function parseArgs(argv) {
       if (key === 'agent') args.agents.push(value);
       else if (key === 'model') args.models.push(value);
       else if (key === 'host-manifest') args.hostManifests.push(value);
+      else if (key === 'surface') args.surfaces.push(value);
       else args[key] = value;
       i += 1;
     } else {
@@ -37,6 +39,8 @@ export function parseArgs(argv) {
   // --agents a,b,c
   if (typeof args.agents === 'string') args.agents = args.agents.split(',');
   args.agents = args.agents.flatMap((a) => String(a).split(',')).map((a) => a.trim()).filter(Boolean);
+  args.surfaces = (Array.isArray(args.surfaces) ? args.surfaces : [])
+    .flatMap((s) => String(s).split(',')).map((s) => s.trim()).filter(Boolean);
   return args;
 }
 

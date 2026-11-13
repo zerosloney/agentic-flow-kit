@@ -31,7 +31,16 @@ function readEngineInfo(target) {
   }
 }
 
-function baseManifest({ target, existing, hosts, lang, stack, tier, hardened, projectName, trackHosts, installedAt }) {
+function readProfileInfo(target) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(path.join(target, '.agents/config/profile.json'), 'utf8'));
+    return { surfaces: Array.isArray(parsed.surfaces) ? parsed.surfaces.filter((s) => typeof s === 'string') : [] };
+  } catch {
+    return { surfaces: [] };
+  }
+}
+
+function baseManifest({ target, existing, hosts, lang, stack, tier, hardened, projectName, trackHosts, installedAt, surfaces }) {
   return {
     ...(existing || {}),
     kit: 'agentic-flow-kit',
@@ -40,6 +49,7 @@ function baseManifest({ target, existing, hosts, lang, stack, tier, hardened, pr
     language: lang,
     hosts,
     stack,
+    surfaces,
     projectName,
     trackHosts,
     tier,
@@ -133,6 +143,8 @@ export function adoptCommand({ args, t }) {
   const detectedHosts = detectHosts(target);
   // engine.json 是上一次安装的机器可读凭证：优先用它还原宿主顺序与栈，避免误判。
   const engineInfo = readEngineInfo(target);
+  const profileInfo = readProfileInfo(target);
+  const surfaces = existing?.surfaces?.length ? existing.surfaces : profileInfo.surfaces;
   const fallbackHosts = existing?.hosts?.length
     ? existing.hosts
     : (engineInfo?.hosts?.length ? engineInfo.hosts : detectedHosts);
@@ -153,7 +165,7 @@ export function adoptCommand({ args, t }) {
   let best = null;
   for (const language of candidates) {
     const manifest = baseManifest({
-      target, existing, hosts, lang: language, stack, tier, hardened, projectName, trackHosts, installedAt,
+      target, existing, hosts, lang: language, stack, surfaces, tier, hardened, projectName, trackHosts, installedAt,
     });
     const { plan, vars } = buildState({ target, manifest });
     const result = scan({ target, plan, vars, hosts, existing });
@@ -168,7 +180,7 @@ export function adoptCommand({ args, t }) {
   const willWrite = result.adopted.length > 0 || Boolean(existing);
   if (!dryRun && willWrite) {
     const next = baseManifest({
-      target, existing, hosts, lang: language, stack, tier, hardened, projectName, trackHosts, installedAt,
+      target, existing, hosts, lang: language, stack, surfaces, tier, hardened, projectName, trackHosts, installedAt,
     });
     next.files = files;
     next.derived = derived;
@@ -182,6 +194,7 @@ export function adoptCommand({ args, t }) {
     dryRun,
     language,
     stack,
+    surfaces,
     tier,
     hardened,
     hosts,

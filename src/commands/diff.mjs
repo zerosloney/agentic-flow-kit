@@ -66,6 +66,7 @@ export function buildState({ target, manifest }) {
   const plan = buildPlan({
     target, hosts, lang: language, stack, projectName, models, tier, hardened,
     mcp: manifest.mcp === true,
+    surfaces: manifest.surfaces || [],
   });
   const vars = buildVars({
     target,

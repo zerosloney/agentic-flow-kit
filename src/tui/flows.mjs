@@ -9,6 +9,7 @@ import { ROLE_NAMES, loadRoleConfig, recommendRoles, summarizeModels } from '../
 import { readManifest } from '../install/manifest.mjs';
 import { detectStackDetail, STACKS, stackMarkerLabel, formatInstallLog, installLogNotable, installCommand } from '../commands/install.mjs';
 import { stackDescription } from '../render/tokens.mjs';
+import { SURFACES, surfaceDescription } from '../install/profiles.mjs';
 import { LANGUAGES } from '../i18n.mjs';
 import { doctorCommand } from '../commands/doctor.mjs';
 import { addHostCommand } from '../commands/add-host.mjs';
@@ -189,6 +190,19 @@ async function installFlow(ctx) {
   });
   if (stack === null) return;
 
+  // 组合式 profile：surface 可多选、可不选；闭集由 profiles.mjs 约束。
+  const surfaces = await pickMany(ctx, {
+    question: t('tui.surfaceQuestion'),
+    hint: t('tui.hint.toggle'),
+    min: 0,
+    items: SURFACES.map((surface) => ({
+      value: surface,
+      label: t(`tui.surface.${surface}`),
+      hint: surfaceDescription(surface, lang),
+    })),
+  });
+  if (surfaces === null) return;
+
   const modelResult = await modelFlow(ctx, hosts);
   if (modelResult === null) return;
 
@@ -207,6 +221,7 @@ async function installFlow(ctx) {
   const dryRun = opts.includes('dry-run');
   // argv 形状与 wizard.mjs buildInstallArgs 一致：git 配置默认开，开关转 flags
   const args = { ...baseArgs(), _: ['install'], agents: hosts, lang: selLang, stack };
+  if (surfaces.length) args.surfaces = surfaces;
   if (modelResult.models && Object.keys(modelResult.models).length) args.tuiModels = modelResult.models;
   if (!opts.includes('git-config')) args.flags.add('no-git-config');
   if (dryRun) args.flags.add('dry-run');
@@ -218,6 +233,7 @@ async function installFlow(ctx) {
     t('tui.plan.lang', { lang: selLang }),
     t('tui.plan.stack', { stack }),
   ];
+  if (surfaces.length) planLines.push(t('tui.plan.surfaces', { surfaces: surfaces.join(', ') }));
   if (modelResult.models && Object.keys(modelResult.models).length) {
     planLines.push(t('tui.plan.models', { models: summarizeModels({ hosts: modelResult.models }) }));
   }

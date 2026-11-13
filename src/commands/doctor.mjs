@@ -102,6 +102,26 @@ export function doctorCommand({ args, t }) {
     }
   }
 
+  // 组合式 profile：profile.json 是机器可读的组合凭证，必须与 manifest 一致。
+  const surfaces = manifest?.surfaces || [];
+  if (surfaces.length) {
+    const rel = '.agents/config/profile.json';
+    const abs = path.join(target, rel);
+    if (!fs.existsSync(abs)) {
+      add(false, 'profile composition', t('doctor.profileMissing', { path: rel }));
+    } else {
+      try {
+        const profile = JSON.parse(fs.readFileSync(abs, 'utf8'));
+        const same = profile.stack === (manifest.stack || 'empty')
+          && JSON.stringify(profile.surfaces || []) === JSON.stringify(surfaces);
+        if (same) add(true, 'profile composition', `${manifest.stack}+${surfaces.join('+')}`);
+        else add(false, 'profile composition', t('doctor.profileMismatch', { path: rel }));
+      } catch {
+        add(false, 'profile composition', t('doctor.profileInvalid', { path: rel }));
+      }
+    }
+  }
+
   // 安装档位与交付面：lean 允许没有 CI；standard/enterprise 应有可运行 CI。
   const tier = manifest?.tier || 'standard';
   add(true, 'tier', t('doctor.tier', { tier }));

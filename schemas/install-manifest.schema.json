@@ -16,6 +16,12 @@
       "uniqueItems": true
     },
     "stack": { "enum": ["dotnet", "node", "typescript", "rust", "go", "java", "empty"] },
+    "surfaces": {
+      "type": "array",
+      "description": "组合式 profile 切面（frontend / api / data），按声明顺序。",
+      "items": { "enum": ["frontend", "api", "data"] },
+      "uniqueItems": true
+    },
     "tier": { "enum": ["lean", "standard", "enterprise"] },
     "hardened": { "type": "boolean" },
     "mcp": {

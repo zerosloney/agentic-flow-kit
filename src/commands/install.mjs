@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { flag } from '../cli/args.mjs';
 import { buildPlan } from '../install/plan.mjs';
+import { parseProfileArgs } from '../install/profiles.mjs';
 import { applyPlan, summaryLine } from '../install/apply.mjs';
 import { emptyManifest, readManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
 import { buildVars } from '../render/tokens.mjs';
@@ -186,11 +187,19 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
     ? (...line) => console.error(...line)
     : (...line) => console.log(...line);
   const logger = onLog || (asJson ? () => {} : logLine);
-  const stack = stackOverride || resolveStack(args, target);
+  const previous = readManifest(target);
+  const profile = parseProfileArgs({
+    stackArg: args.stack,
+    surfaceArgs: args.surfaces || [],
+    fallbackSurfaces: previous?.surfaces || [],
+    t,
+  });
+  const stack = stackOverride
+    || (profile.stack ? resolveStack({ ...args, stack: profile.stack }, target) : resolveStack(args, target));
+  const surfaces = profile.surfaces;
   const projectName = args.name || path.basename(target);
   // 渲染与 manifest 使用同一时间戳，避免 diff 把 {{installedAt}} 误判为模板更新。
   const installedAt = new Date().toISOString();
-  const previous = readManifest(target);
   const hostSet = [...new Set([...(previous?.hosts || []), ...hosts])];
   const trackHosts = flag(args, 'track-hosts');
   // 档位：CLI > --hardened（=enterprise）> 既有 manifest > standard。
@@ -239,7 +248,7 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
 
   const plan = buildPlan({
     target, hosts: planHosts, lang, stack, projectName, categories, models: models?.hosts, tier, hardened,
-    mcp: mcpEnabled,
+    mcp: mcpEnabled, surfaces,
   });
   let done = 0;
   const total = plan.entries.length;
@@ -317,6 +326,7 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
       language: lang,
       hosts: hostSet,
       stack,
+      surfaces,
       projectName,
       trackHosts,
       derived: [...derived].filter((rel) => result.files[rel]).sort(),
@@ -347,6 +357,7 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
       dryRun,
       language: lang,
       stack,
+      surfaces,
       tier,
       hardened,
       hosts: hostSet,
