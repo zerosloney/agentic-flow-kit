@@ -1,6 +1,6 @@
 // wiki 索引生成器：磁盘 + INDEX 速览表「用途」列 → 自动重生成 INDEX 速览计数/映射表 + 看板 DATA
 // 2026-09-13 引入：消除三层手工双写（短板①）。人工只维护两样：磁盘文件本身 + 速览表用途列。
-// 用法：node .agents/scripts/gen-wiki-board.mjs [--dry-run] [--help]
+// 用法：flow-kit run gen-wiki-board.mjs [--dry-run] [--help]
 //   （收录/删除/移动 wiki 文件后必跑，随后跑 verify-wiki-consistency.mjs）
 // 测试面已随引擎减重退役（2026-10-28，owner 决策），本脚本现无测试兜底
 // 生成范围（锚点内整段重写，锚点外字节原样保留）：
@@ -11,7 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 
-const USAGE = `用法：node .agents/scripts/gen-wiki-board.mjs [--dry-run] [--help]
+const USAGE = `用法：flow-kit run gen-wiki-board.mjs [--dry-run] [--help]
 
 事实源：磁盘 wiki/<主题>/ 一层文件 + INDEX.md 速览表「用途」列（人工列）。重生成：
   - wiki/INDEX.md：速览表数据行与文件计数、「合计」行数字、映射表节

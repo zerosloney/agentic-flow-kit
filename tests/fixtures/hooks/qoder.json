@@ -5,9 +5,10 @@
     "hooks": [
       {
         "type": "command",
-        "command": "node",
+        "command": "flow-kit",
         "args": [
-          "${QODER_PROJECT_DIR}/.agents/hooks/pre-write-check.cjs"
+          "hook",
+          "pre-write-check"
         ],
         "name": "write-gates",
         "statusMessage": "写前门（执法面自保护 / 台账 append-only / 红线快照-恢复）",
@@ -21,9 +22,10 @@
     "hooks": [
       {
         "type": "command",
-        "command": "node",
+        "command": "flow-kit",
         "args": [
-          "${QODER_PROJECT_DIR}/.agents/hooks/pre-shell-check.cjs"
+          "hook",
+          "pre-shell-check"
         ],
         "name": "shell-gates",
         "statusMessage": "命令门禁（deny/ask 清单 + .githooks pre-commit/pre-push 前置）",

@@ -57,6 +57,7 @@ test('golden: gates.json compiles to the verified host permission syntax', () =>
     'Bash(npm install:*)',
     'Bash(npm ci:*)',
     'Bash(node:*)',
+    'Bash(flow-kit:*)',
     'Bash(git status:*)',
     'Bash(git diff:*)',
     'Bash(git add:*)',

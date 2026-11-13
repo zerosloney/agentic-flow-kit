@@ -14,10 +14,10 @@
 // 本脚本负责把「跑过没有、跑的是不是当前配置」变成机器可判的门。
 //
 // 用法：
-//   node .agents/scripts/agent-eval.mjs check [--advisory] [--json]
-//   node .agents/scripts/agent-eval.mjs record --pass-rate 0.9 --tasks 10 --model opus [--note "..."]
-//   node .agents/scripts/agent-eval.mjs status [--json]
-//   node .agents/scripts/agent-eval.mjs signature
+//   flow-kit run agent-eval.mjs check [--advisory] [--json]
+//   flow-kit run agent-eval.mjs record --pass-rate 0.9 --tasks 10 --model opus [--note "..."]
+//   flow-kit run agent-eval.mjs status [--json]
+//   flow-kit run agent-eval.mjs signature
 //
 // 选项：
 //   --root <dir>        目标根（默认 cwd）

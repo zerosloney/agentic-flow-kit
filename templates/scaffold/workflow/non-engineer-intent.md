@@ -47,5 +47,5 @@ Date: <YYYY-MM-DD>
 
 ## 技术侧配合
 
-- 仓库里跑 `node .agents/scripts/fill-intent.mjs` 可生成骨架（有引擎时）。
+- 仓库里跑 `flow-kit run fill-intent.mjs` 可生成骨架（有引擎时）。
 - 进入 Design 前，产品 owner 必须回答 open questions 或明确“带问进入”。

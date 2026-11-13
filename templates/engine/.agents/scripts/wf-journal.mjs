@@ -7,10 +7,10 @@
 //   run = <wf>@<YYYYMMDD-HHMM>；同 run 同 stage 多行按末次状态生效（重试后过 = pass），attempt 取最大。
 // 语义口径（与 _TEMPLATE.md 四形态一致；stages 表解析复用 workflows-check.mjs 的 parseStages 单源）。
 // 用法：
-//   node .agents/scripts/wf-journal.mjs add --wf <编排名> --stage <id> --status <pass|fail|blocked>
+//   flow-kit run wf-journal.mjs add --wf <编排名> --stage <id> --status <pass|fail|blocked>
 //        [--form role|step|gate|human] [--attempt N] [--note <文本>] [--run <runId>] [--new-run]
 //        [--journal <文件>]（默认 .agents/cache/orchestration-runs.jsonl，按 cwd）
-//   node .agents/scripts/wf-journal.mjs status --wf <编排名> [--run <runId>] [--journal <文件>] [--wf-root <目录>] [--delegations <文件>]
+//   flow-kit run wf-journal.mjs status --wf <编排名> [--run <runId>] [--journal <文件>] [--wf-root <目录>] [--delegations <文件>]
 // 测试面已随引擎减重退役（2026-10-28，owner 决策），本脚本现无测试兜底
 import fs from 'node:fs';
 import path from 'node:path';

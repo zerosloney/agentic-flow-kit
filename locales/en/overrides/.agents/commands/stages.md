@@ -60,12 +60,12 @@ The level is already set by `new-task.md`; this chapter branches by level and mu
 **Input**: user's raw requirement text + already-assigned level
 **Process**:
 1. **Shortcut check (also session re-entry, session-context)**: L1 checks whether `workflow/plans/` already has a same-named plan; L2/L3 checks whether `workflow/intents/` already has an approved intent. Existing and **terminal** → jump per `next`; existing and **in flight** (draft/approved, checked ≠ complete) → this is re-entry, not a new creation: read the plan's check states and `git status` to align subsequent work, do not file a new document. L1 returns to the fast track and does not enter the Build chapter.
-2. **Similar-case search**: `node .agents/scripts/kb-search.mjs "<keyword>" --scope workflow --type intents,plans,specs` $\rightarrow$ on a same-kind hit, read the conclusion and acceptance criteria first
+2. **Similar-case search**: `flow-kit run kb-search.mjs "<keyword>" --scope workflow --type intents,plans,specs` $\rightarrow$ on a same-kind hit, read the conclusion and acceptance criteria first
 **Output**: confirmed no same-kind entry / existing approved entry
 
 ## 3. L2/L3: Draft Intent
 **Process**:
-1. **Generate draft**: `node .agents/scripts/fill-intent.mjs --module <module> --level <L2|L3> --topic <topic> --output workflow/intents/<date>-<topic>.md --notes "<note>"`
+1. **Generate draft**: `flow-kit run fill-intent.mjs --module <module> --level <L2|L3> --topic <topic> --output workflow/intents/<date>-<topic>.md --notes "<note>"`
 2. **Fill in**: background and problem / historical lessons and recurrence prevention / goals / non-goals / constraints / impact surface / touched red lines / acceptance criteria
 3. **Red-line check**: against root `AGENTS.md` and directory-level `AGENTS.md`. If not touched, do not check.
 **Output**: `workflow/intents/{name}.md` (Status: Draft)
@@ -108,7 +108,7 @@ The level is already set by `new-task.md`; this chapter branches by level and mu
 3. The full text of `frontend/AGENTS.md` (gates G-2~G-3 / contract rules / list-page state rules)
 **Process**:
 0. **Check before creating**: if a same-feature spec already exists (including archived) / `verify-ui/features` $\rightarrow$ revise the original, do not create new (single source `workflow/README.md` "same-feature continuation")
-1. **Generate draft**: run `node .agents/scripts/fill-spec.mjs --level <L2|L3> --topic <topic> --output workflow/specs/<date>-<topic>.md`
+1. **Generate draft**: run `flow-kit run fill-spec.mjs --level <L2|L3> --topic <topic> --output workflow/specs/<date>-<topic>.md`
 2. **Fill in content**: copy `_TEMPLATE.md` $\rightarrow$ fill in [feature behavior / data flow / system changes / constraint compliance mapping / risk assessment]
 3. **Constraint check**: against red lines in root `AGENTS.md` and directory-level `AGENTS.md`, explain how each is satisfied
 4. **Interaction confirmation**: explicitly mark the entry form (form/selector/dialog); do not presume
@@ -131,7 +131,7 @@ L2/L3 mandatory: delegate `independent-reviewer`; trigger, form, required inputs
 **Process**:
 1. **HALT**: output the full spec $\rightarrow$ wait for user confirmation. Before confirmation, self-check the ambiguity checklist and premise interrogation: 待澄清 zeroed, 6 dimensions complete, every line has a basis, premises have counter-questions and chosen bases (otherwise the transition is rejected)
 2. **Status transition**: $\text{draft} \rightarrow \text{approved}$
-3. **State entry point**: run `node .agents/scripts/confirm-doc.mjs <path>` (policy per `new-task.md` Fast Track step 4, not restated here)
+3. **State entry point**: run `flow-kit run confirm-doc.mjs <path>` (policy per `new-task.md` Fast Track step 4, not restated here)
 4. **Trace commit**: immediately commit separately as `docs(workflow)`
 **Next**: Build chapter
 
@@ -164,13 +164,13 @@ L1 does not draft a plan in this chapter; return to `.agents/commands/new-task.m
 ## 2. Enter Plan Mode and List Changes
 **Input**: `workflow/plans/{name}.md` (Approved)
 **Process**:
-1. **Pitfall search**: `node .agents/scripts/kb-search.mjs --scope workflow --module <module> "<keyword>"` $\rightarrow$ extract incident root causes into self-check items
+1. **Pitfall search**: `flow-kit run kb-search.mjs --scope workflow --module <module> "<keyword>"` $\rightarrow$ extract incident root causes into self-check items
 2. **List**: specify the [read-then-modify/new] file list + [action $\rightarrow$ object] execution steps
 3. **Sync audit**: when changes hit `.agents/commands/` or `.agents/roles/`, change only the authoritative source body; host shells stay pointers (see §🛠️ Auxiliary and Sync)
 4. **Red-line check**: against root `AGENTS.md` and directory-level `AGENTS.md`, mark touched red lines
-5. **Generate overview + start dashboard**: first `node .agents/scripts/gen-dev-tour.mjs workflow/plans/{name}.md --strict` to pass the per-step file gate (implementation steps missing `- 文件：` are rejected; pure verification steps are marked "验证步骤"), then `node .agents/scripts/auto-tour.mjs workflow/plans/{name}.md` to start the dashboard (idempotent, failures only warn). For snapshots, run gen-dev-tour separately; verify "actual changes outside the document", backfill/rollback out-of-bounds first; policy see dev-tour/SKILL.md. Layer fallback (defaults to 0) = heading contract violation, regenerate after normalizing
+5. **Generate overview + start dashboard**: first `flow-kit run gen-dev-tour.mjs workflow/plans/{name}.md --strict` to pass the per-step file gate (implementation steps missing `- 文件：` are rejected; pure verification steps are marked "验证步骤"), then `flow-kit run auto-tour.mjs workflow/plans/{name}.md` to start the dashboard (idempotent, failures only warn). For snapshots, run gen-dev-tour separately; verify "actual changes outside the document", backfill/rollback out-of-bounds first; policy see dev-tour/SKILL.md. Layer fallback (defaults to 0) = heading contract violation, regenerate after normalizing
 6. **HALT**: output the change list $\rightarrow$ wait for user confirmation
-**Output**: confirmed change list $\rightarrow$ **backfill into the plan's "change surface/task breakdown"** (session-context: conversation traces are for the current session only; on re-entry the plan is authoritative — change surface + task check state + git status = the three session re-entry anchors). **After persisting, rerun `node .agents/scripts/auto-tour.mjs workflow/plans/{name}.md`** — the real purpose is to ensure the dashboard process is running (idempotent, reuse if already running); if running, the live page redraws automatically (SSE push + 5s fallback polling), and the persisted change surface enters the graph
+**Output**: confirmed change list $\rightarrow$ **backfill into the plan's "change surface/task breakdown"** (session-context: conversation traces are for the current session only; on re-entry the plan is authoritative — change surface + task check state + git status = the three session re-entry anchors). **After persisting, rerun `flow-kit run auto-tour.mjs workflow/plans/{name}.md`** — the real purpose is to ensure the dashboard process is running (idempotent, reuse if already running); if running, the live page redraws automatically (SSE push + 5s fallback polling), and the persisted change surface enters the graph
 
 ## 3. Implementation and Self-Verification
 **Input**: `workflow/plans/{name}.md` (Approved, including the persisted change surface and task list)
@@ -180,14 +180,14 @@ L1 does not draft a plan in this chapter; return to `.agents/commands/new-task.m
 3. **Architecture constraints**: strictly forbid inventing bypass data access; must follow root/directory-level `AGENTS.md` red lines
 4. **L3 special case**: schema changes must follow the project's agreed maintenance method; do not introduce a migration mechanism arbitrarily
 5. **Change control**: if a plan deviation is needed (change public interface / touch unlisted files / add new dependency) $\rightarrow$ **HALT** $\rightarrow$ continue after confirmation
-6. **Self-verification loop**: run [project build / type check / automated tests] (details in Test chapter §1); scope reconciliation `node .agents/scripts/check-scope.mjs workflow/plans/{name}.md` — out-of-bounds items must be closed out (backfill the plan or roll back); **L2/L3 must pass with `--strict` before closeout**, L1 stays advisory (at push time, check-scope-range hard-blocks by old..new range)
+6. **Self-verification loop**: run [project build / type check / automated tests] (details in Test chapter §1); scope reconciliation `flow-kit run check-scope.mjs workflow/plans/{name}.md` — out-of-bounds items must be closed out (backfill the plan or roll back); **L2/L3 must pass with `--strict` before closeout**, L1 stays advisory (at push time, check-scope-range hard-blocks by old..new range)
 **Output**: implemented code changes + self-verification pass evidence
 
 ## 4. Wind Down After Confirmation
 **Process**:
 1. **Status transition**: the plan stays `approved`, not set to `done` here. Closeout happens in Test chapter §5, set to `done` via confirm-doc.
 2. **Commit trace**: intent/spec are committed separately as `docs(workflow)` after design confirmation. The plan is likewise committed separately after confirmation, not in the same commit as code. Conventional Commits in Chinese.
-3. **Scripted rewrite**: to modify workflow documents or ledgers, use `node .agents/scripts/rewrite-file.mjs <file> --find <literal string> --replace <literal string>`. Prohibit `node -e` with `writeFileSync` (on CRLF checkouts it silently does nothing yet prints success).
+3. **Scripted rewrite**: to modify workflow documents or ledgers, use `flow-kit run rewrite-file.mjs <file> --find <literal string> --replace <literal string>`. Prohibit `node -e` with `writeFileSync` (on CRLF checkouts it silently does nothing yet prints success).
 **Next**: Test chapter
 
 ## 🚫 Prohibitions
@@ -200,7 +200,7 @@ L1 does not draft a plan in this chapter; return to `.agents/commands/new-task.m
 ## 🛠️ Auxiliary and Sync
 - **Hosts are pointer shells**: when changing `.agents/commands/` or `.agents/roles/`, do not copy the body into opencode / trae / codebuddy. Shells keep only host frontmatter and state the authoritative path. The machine check only covers the five check-loop hard sections, not host shells; manually verify whether shells are disconnected/too thick.
 - **Change-surface discipline**: the plan change surface lists authoritative source paths. If host shells are unchanged, do not write `wf-*.md` into the change surface.
-- **Self-check**: after changing check-loop, run `node .agents/scripts/check-loop.mjs`
+- **Self-check**: after changing check-loop, run `flow-kit run check-loop.mjs`
 
 # Test · Static Gates + UI Verification
 
@@ -209,9 +209,9 @@ This chapter is for L2/L3, DB-switch smoke tests, flaky, and independent review.
 ## 1. Static Gates
 **Input**: code changes to verify
 **Process**:
-1. **Run gates**: `node .agents/scripts/verify.mjs` (tier policy per the verify.mjs header note, not restated here). The single source for project build, test, and type-check command lists is `.agents/hooks/commit-check.config.json`.
+1. **Run gates**: `flow-kit run verify.mjs` (tier policy per the verify.mjs header note, not restated here). The single source for project build, test, and type-check command lists is `.agents/hooks/commit-check.config.json`.
 2. **Failure handling**: any failure $\rightarrow$ **HALT**. L1 returns to `.agents/commands/new-task.md` Fast Track step 5 to change code. L2/L3 return to the Build chapter to fix. For intermittent/cross-layer issues use `diagnosing-bugs` diagnosis. A full-suite first run red with an isolated rerun green does not count as green: file it as flaky (papercut/incident) and fix it; do not close out just because a rerun is green.
-3. **Tier by task subtype**: pure docs/business surface → default tier (product gates cut by diff surface); cross-surface or before release → `--full`. The engine surface has no test gate; `*.test.mjs` is not checked in and does not run automatically (cleared 2026-10-29); manual tool — merge-semantics probe `node .agents/scripts/check-loop-rev-semantics.mjs` (runs automatically at the end of FULL mode).
+3. **Tier by task subtype**: pure docs/business surface → default tier (product gates cut by diff surface); cross-surface or before release → `--full`. The engine surface has no test gate; `*.test.mjs` is not checked in and does not run automatically (cleared 2026-10-29); manual tool — merge-semantics probe `flow-kit run check-loop-rev-semantics.mjs` (runs automatically at the end of FULL mode).
 **Output**: static-gate all-green evidence
 **Note**: runtime environment details in `.agents/notes/runtime-env.md` §1, §2; for long gate commands (verify full / `dotnet test`) **wait in segments + report progress per segment**, do not block to the timeout limit — policy in §6.4 "retrieving results of long background tasks"
 
@@ -244,7 +244,7 @@ L1 closeout is the single commit in `.agents/commands/new-task.md` Fast Track st
    - **L2/L3 new requirement**: check off the intent's "acceptance criteria" one by one $\rightarrow$ backfill evidence $\rightarrow$ intent $\text{approved} \rightarrow \text{done}$
    - **Fix-type**: verify recurrence-prevention landing $\rightarrow$ incident $\text{open} \rightarrow \text{fixed} \rightarrow \text{closed}$
 3. **Same-family cleanup**: plans with the same name as L2/L3 and fix-type work are also set to `done`. Do not leave `approved` orphans.
-4. **Trace record**: delegated tasks go into the `workflow/delegations.md` delegation results table; L2/L3 self-performed work goes into the self-performed task results table. Self-performed L1 is not written. Run `node .agents/scripts/agg-delegations.mjs --write` only after a row is written.
+4. **Trace record**: delegated tasks go into the `workflow/delegations.md` delegation results table; L2/L3 self-performed work goes into the self-performed task results table. Self-performed L1 is not written. Run `flow-kit run agg-delegations.mjs --write` only after a row is written.
 5. **Opportunistic backfeed (advisory)**: if there is friction, record it in `workflow/papercuts.md`; if not, write "no candidates" in the closeout reply.
 **Next**: L2/L3 $\rightarrow$ `.agents/commands/deploy.md`
 

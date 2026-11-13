@@ -442,7 +442,9 @@ function checkBudgets(root, cfg, problems, summary, runBudgets) {
   // 预算执法复用 rule-budget.mjs（单源口径）；只在目标本身是 git 根时运行，
   // 避免 git rev-parse 把子目录目标抬到父仓后读错预算表。
   if (ruleText !== null && runBudgets) {
-    const script = path.join(root, '.agents', 'scripts', 'rule-budget.mjs');
+    const script = process.env.FLOW_KIT_RUNTIME_SCRIPTS
+      ? path.join(process.env.FLOW_KIT_RUNTIME_SCRIPTS, 'rule-budget.mjs')
+      : path.join(root, '.agents', 'scripts', 'rule-budget.mjs');
     const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: root, encoding: 'utf8', windowsHide: true });
     const atGitRoot = top.status === 0 && path.resolve(top.stdout.trim()) === path.resolve(root);
     if (fs.existsSync(script) && atGitRoot) {
@@ -641,7 +643,7 @@ export function renderPolicySection(root, result = checkPolicy(root, { runBudget
   lines.push('## 策略面（policy.json）');
   lines.push('');
   if (!cfg) {
-    lines.push('> policy.json 缺失或不可解析；运行 `node .agents/scripts/policy.mjs check` 查看问题。');
+    lines.push('> policy.json 缺失或不可解析；运行 `flow-kit run policy.mjs check` 查看问题。');
     return lines;
   }
   const rows = isString(cfg.registry) ? parseMechanismRegistry(readText(root, cfg.registry) || '') : [];
@@ -676,14 +678,14 @@ export function renderPolicySection(root, result = checkPolicy(root, { runBudget
   }
   if (!result.ok) {
     lines.push('');
-    lines.push(`> ⚠️ policy check 未通过：${result.problems.length} 项问题（详见 \`node .agents/scripts/policy.mjs check\`）。`);
+    lines.push(`> ⚠️ policy check 未通过：${result.problems.length} 项问题（详见 \`flow-kit run policy.mjs check\`）。`);
   }
   return lines;
 }
 
 const POLICY_USAGE = `用法：
-  node .agents/scripts/policy.mjs check [--root <dir>] [--json]
-  node .agents/scripts/policy.mjs explain [--root <dir>] [--json]
+  flow-kit run policy.mjs check [--root <dir>] [--json]
+  flow-kit run policy.mjs explain [--root <dir>] [--json]
 
 check 校验机制登记、预算、枚举闭集、角色/模型引用与策略面完整性；
 explain 输出当前生效策略视图（gen-effective-policy 亦复用同一视图）。`;
@@ -694,7 +696,7 @@ export function runPolicyCli(argv, { stdout = console.log, stderr = console.erro
   const rootIndex = argv.indexOf('--root');
   const root = path.resolve(rootIndex >= 0 && argv[rootIndex + 1]
     ? argv[rootIndex + 1]
-    : path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..'));
+    : process.env.FLOW_KIT_PROJECT_ROOT || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..'));
   if (first !== 'check' && first !== 'explain') {
     stderr(POLICY_USAGE);
     return 2;

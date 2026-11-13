@@ -13,7 +13,7 @@
 //   代价（明示）：上述文件内**新增**的弱特征密钥会漏，由可装机环境的 gitleaks 全量补。
 // 基线缺失 = exit 2（无豁免清单则全树必爆红，与 gitleaks detect 同口径 fail-closed）。
 // 行内豁免：同行含 `gitleaks:allow` 或 `secrets-lite:allow` 即跳过（与 gitleaks 同形）。
-// 用法：node .agents/scripts/check-secrets-lite.mjs [--staged | --range <a>..<b>] [--json]
+// 用法：flow-kit run check-secrets-lite.mjs [--staged | --range <a>..<b>] [--json]
 //   --staged 只扫暂存区新增行；--range 只扫给定范围新增行；缺省 = 全部 git 跟踪文件
 // 退出码：0 无泄漏；1 发现泄漏；2 配置/参数失守
 import fs from 'node:fs';
@@ -22,7 +22,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const DEFAULT_ROOT = path.resolve(SCRIPT_DIR, '..', '..');
+const DEFAULT_ROOT = path.resolve(process.env.FLOW_KIT_PROJECT_ROOT || path.join(SCRIPT_DIR, '..', '..'));
 
 const STRONG_RULES = [
   { id: 'private-key', re: /-----BEGIN (?:RSA |EC |DSA |OPENSSH |PGP )?PRIVATE KEY-----/ },

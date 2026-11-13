@@ -1,6 +1,6 @@
 # workflow 索引（生成物，勿手改）
 
-> 由 `node .agents/scripts/gen-workflow-index.mjs` 从 `workflow/{intents,specs,plans,incidents}/` 重生成。
+> 由 `flow-kit run gen-workflow-index.mjs` 从 `workflow/{intents,specs,plans,incidents}/` 重生成。
 > 本文件为新装户占位；首次生成后自动填充活跃层与档案表。
 
 ## 活跃（0）
@@ -24,6 +24,6 @@
 | 类型 | 模块 | 数量 |
 |---|---|---|
 
-终态构成：；查档案用 `node .agents/scripts/kb-search.mjs "<词>" --status all`。
+终态构成：；查档案用 `flow-kit run kb-search.mjs "<词>" --status all`。
 
 <!-- GENERATED:END -->

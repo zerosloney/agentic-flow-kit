@@ -14,8 +14,8 @@ description: "Offline Dreaming — periodic memory maintenance modeled on Anthro
 ## 1. Run the audit
 
 ```bash
-node .agents/scripts/dream-run.mjs              # dry-run: read-only audit + AI sampling brief (default)
-node .agents/scripts/dream-run.mjs --execute    # execute safe fixes (terminal-state artifact archiving + index regeneration only)
+flow-kit run dream-run.mjs              # dry-run: read-only audit + AI sampling brief (default)
+flow-kit run dream-run.mjs --execute    # execute safe fixes (terminal-state artifact archiving + index regeneration only)
 ```
 
 - The report lands in `tmp/dream-report-<date>.md` (gitignored); the AI Judge brief lands in `tmp/dream-judge-brief-<date>.md`.
@@ -52,7 +52,7 @@ Read the latest `tmp/dream-report-*.md`, focusing on:
 
 - Cold-data candidates come from `agg-kb-usage.mjs` (telemetry basis: neither hit by kb-search nor content-updated in the last 90 days).
 - Disposal ladder (adjudicated by the main agent/user):
-  1. Archive: `node .agents/scripts/archive-sweep.mjs --execute` (terminal-state artifacts, 21-day window);
+  1. Archive: `flow-kit run archive-sweep.mjs --execute` (terminal-state artifacts, 21-day window);
   2. Update: update the knowledge via the wiki skill;
   3. Delete: **requires an explicit user instruction** (root AGENTS.md irreversible-operation red line).
 

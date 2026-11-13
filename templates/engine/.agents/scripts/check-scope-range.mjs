@@ -20,7 +20,7 @@
 //   - old 全零（新分支首推）→ skip（exit 0）：范围判不出时不把整段历史误判越界。
 //   - --strict 时越界件非空 exit 1；默认 advisory（exit 0 出报告）。
 // 白名单与宽松匹配规则与 check-scope.mjs 单源（import 复用，不复制正则）。
-// 用法：node .agents/scripts/check-scope-range.mjs <oldSha> <newSha> [--strict] [--root <dir>]
+// 用法：flow-kit run check-scope-range.mjs <oldSha> <newSha> [--strict] [--root <dir>]
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -37,8 +37,8 @@ for (let i = 0; i < args.length; i++) {
   else if (!oldSha && !a.startsWith('--')) oldSha = a;
   else if (!newSha && !a.startsWith('--')) newSha = a;
 }
-const ROOT = path.resolve(rootArg || process.cwd());
-if (!oldSha || !newSha) { console.error('用法: node .agents/scripts/check-scope-range.mjs <oldSha> <newSha> [--strict] [--root <dir>]'); process.exit(2); }
+const ROOT = path.resolve(rootArg || process.env.FLOW_KIT_PROJECT_ROOT || process.cwd());
+if (!oldSha || !newSha) { console.error('用法: flow-kit run check-scope-range.mjs <oldSha> <newSha> [--strict] [--root <dir>]'); process.exit(2); }
 
 const norm = (p) => p.replace(/\\/g, '/');
 

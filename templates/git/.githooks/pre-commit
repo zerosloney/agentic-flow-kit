@@ -9,11 +9,11 @@
 // 仍 hard，配对自查走 closeout skill §0）；泳道产品面硬拦 verify lane-surface-ci；wiki 在 verify
 // wiki-consistency；索引/叙事等 hygiene 段已于 2026-10-28 全部退役（引擎减重第一刀））：
 // 【硬拦】确认台账不变量(触及才跑) → 项目门禁(local-pre-commit：架构红线/审计回填/删除守卫/通知守卫，四门并行) → 提交验证(commit-check.cjs；常规提交 --no-build——条件构建后移 pre-push，合并提交仍 --full)
-// 项目专属门禁放 .agents/hooks/local-pre-commit.mjs——存在即在本钩子内执行，返回非零即阻断提交
+// 项目专属门禁放 .agents/hooks/local-pre-commit.mjs（存在即优先于包内默认实现；返回非零即阻断提交）
 // 合并提交场景由 .githooks/pre-merge-commit 原样转发到本脚本（合并时 git 调的是 pre-merge-commit，
 // 不是 pre-commit）——门禁清单只此一份，避免两处分叉
 // fail-closed（口径；随 node 化天然成立——本进程即 node）：门脚本缺失 = 拒提交；
-// 仅 local-pre-commit.mjs 保留「存在即执行」挂载点语义（缺失打 advisory）。
+// 项目内 local-pre-commit 不存在时回退包内 `flow-kit hook local-pre-commit`，两者皆缺失才 advisory。
 const { spawnSync } = require('node:child_process');
 const fs = require('node:fs');
 
@@ -28,20 +28,26 @@ process.chdir(top.stdout.trim());
 // 2026-11-08 档 2-D 该门位移 commit-msg 后本钩子不再消费它——仅在下传 commit-check 前滤除（见文末）。
 // 合并自动提交的顺序门跳过信号由 commit-msg 时点的 MERGE_HEAD 等状态文件探测承担（彼时已落盘）。
 
-// gate(label, script, args)：node 直跑门脚本，非零即阻断（含 fail-closed 缺失检查）
-const requireScript = (rel) => {
-  if (!fs.existsSync(rel)) {
-    console.error(`pre-commit: 门脚本缺失 ${rel}——提交已阻止（脚本随仓走；git checkout -- ${rel} 恢复后重试）`);
-    process.exit(1);
-  }
+// gate(label, script, args)：经包内 runtime 执行门脚本，非零即阻断
+const flowKit = (args, opts = {}) => spawnSync('flow-kit', args, {
+  shell: process.platform === 'win32',
+  ...opts,
+});
+const runScript = (name, args = [], opts = {}) => flowKit(['run', name, ...args], opts);
+const runHook = (name, args = [], opts = {}) => flowKit(['hook', name, ...args], opts);
+const scriptName = (rel) => String(rel).replace(/^.*[\\/]/, '').replace(/\.(mjs|cjs)$/i, '');
+const hasHook = (name) => {
+  const r = flowKit(['hook', '--list'], { encoding: 'utf8' });
+  return r.status === 0 && String(r.stdout || '').split(/\r?\n/).includes(name);
 };
+
 const gate = (label, script, args = []) => {
- requireScript(script);
- const r = spawnSync(process.execPath, [script, ...args], { stdio: 'inherit' });
- if (r.status !== 0) {
- console.error(`pre-commit: ${label} 未通过，提交已阻止`);
- process.exit(r.status === null ? 1 : r.status);
- }
+  const r = runScript(scriptName(script), args, { stdio: 'inherit' });
+  if (r.error || r.status !== 0) {
+    if (r.error) console.error(`pre-commit: ${label} 无法执行（${r.error.message}）`);
+    console.error(`pre-commit: ${label} 未通过，提交已阻止`);
+    process.exit(r.status === null || r.status === undefined ? 1 : r.status);
+  }
 };
 
 // （decouple-flow-kit：原「双源一致性 source-sync-check --gate」与「managed 台账快检」两段
@@ -69,7 +75,7 @@ const touchesBudgetFace = (() => {
     // 伪路径 `check-loop-hard 5#count` 的执法面在 rule-budget.mjs:118（数 check-loop.mjs 的 hard 段），
     // 其 --staged 分支只在 check-loop.mjs 或预算表被暂存时才查——故触发面须含这两个实体，
     // 否则「改段表却绕过段数棘轮」（2026-11-06 实测 D 例）。
-    const PSEUDO_FACE = { 'check-loop-hard': '.agents/scripts/check-loop.mjs' }; // 段数棘轮：伪路径 → 实体
+    const PSEUDO_FACE = { 'check-loop-hard': 'check-loop.mjs' }; // 段数棘轮：伪路径 → 运行时脚本
     const pats = [...new Set(txt.split('\n').filter((l) => l && !l.startsWith('#'))
       .map((l) => l.split(/\s+/)[0])
       .filter((p) => p && p !== 'check-loop-hard' && (p.includes('/') || p.includes('.')))
@@ -132,11 +138,10 @@ if (deletedDocLines.length) {
 // 不阻断（advisory 语义，与 local-pre-commit 挂载点同款）。
 const touchesWorkflowDocFace = stagedFiles.some((f) => /^workflow\/(intents|specs|plans|incidents)\/[^/]+\.md$/.test(f));
 if (touchesWorkflowDocFace) {
-  if (!fs.existsSync('.agents/scripts/check-doc-body-drift.mjs')) {
-    console.error('pre-commit: （advisory）.agents/scripts/check-doc-body-drift.mjs 不在场——提交期正文漂移可见性失效，若为误删请 git checkout -- .agents/scripts/check-doc-body-drift.mjs');
-  } else {
-    console.log('pre-commit: 触及 workflow 四目录文档面——跑 check-doc-body-drift（已关单正文漂移 advisory，不合门）');
-    spawnSync(process.execPath, ['.agents/scripts/check-doc-body-drift.mjs', '--staged'], { stdio: 'inherit' });
+  console.log('pre-commit: 触及 workflow 四目录文档面——跑 check-doc-body-drift（已关单正文漂移 advisory，不合门）');
+  const drift = runScript('check-doc-body-drift', ['--staged'], { stdio: 'inherit' });
+  if (drift.error) {
+    console.error(`pre-commit: （advisory）check-doc-body-drift 无法执行：${drift.error.message}`);
   }
 }
 
@@ -147,24 +152,38 @@ if (touchesWorkflowDocFace) {
 
 // 先确认后改代码（2026-11-03 建）已于 2026-11-08 档 2-D 位移 .githooks/commit-msg：
 // pre-commit 时点读不到提交消息，豁免 A（L0 trailer）与豁免 B（同批 done plan）都要在消息可见
-// 的时点执法。判据单源 .agents/hooks/check-confirm-order.mjs，本钩子不再启动该门。
+// 的时点执法。判据单源 `flow-kit hook check-confirm-order`，本钩子不再启动该门。
 
-// 项目门禁挂载点：.agents/hooks/local-pre-commit.mjs（项目自建门禁/门禁模块接线处，存在即执行；
-// 自 sh 移植 node。挂载点语义保留「可选」：缺失打 advisory 不阻断（-kit 契约），
-// 但缺失不再无声——本仓该文件随仓走，advisory 即误删信号。
-// 2026-10-29 条件化（AI 写路径拦截已前移宿主写前门 .agents/hooks/pre-write-check.cjs——
+// 项目门禁挂载点：.agents/hooks/local-pre-commit.mjs（项目自建门禁/门禁模块接线处，存在即优先执行；
+// 缺失时回退包内默认实现 flow-kit hook local-pre-commit，两者皆缺失才 advisory）。
+// 2026-10-29 条件化（AI 写路径拦截已前移宿主写前门 flow-kit hook pre-write-check——
 // 快照复用同一批 check-*.mjs，判据单源不变）：四门改**触及代码面才跑**（backend/**/*.cs|csproj|sln
 // 或 frontend/src/**），纯文档/台账提交零成本。四门仍保留于此——2026-11-11 起已接入 verify product
 // cohort（CI --mid/--full 执法；本地增量档单边化 CI，口径单源 verify-scope.CI_UNILATERAL_GATE_IDS），
 // 本地 pre-commit 仍是最早拦截点：手工编辑（不经宿主）提交时刻即拦，不得再撤（mechanism-registry 口径）。
 const touchesCodeFace = stagedFiles.some((f) =>
   (/^backend\/.+\.(cs|csproj|sln)$/i.test(f)) || f.startsWith('frontend/src/'));
-if (!fs.existsSync('.agents/hooks/local-pre-commit.mjs')) {
-  console.error('pre-commit: （advisory）项目门禁挂载点 .agents/hooks/local-pre-commit.mjs 不在场——本仓该文件随仓走，若为误删请 git checkout -- .agents/hooks/local-pre-commit.mjs');
-} else if (touchesCodeFace) {
-  gate('项目门禁（local-pre-commit）', '.agents/hooks/local-pre-commit.mjs');
-} else {
+// 项目自建门禁优先：.agents/hooks/local-pre-commit.{mjs,cjs} 存在即直接执行（项目所有，不随包分发）；
+// 否则回退包内默认实现 `flow-kit hook local-pre-commit`。
+const projectGate = ['.agents/hooks/local-pre-commit.mjs', '.agents/hooks/local-pre-commit.cjs']
+  .find((f) => fs.existsSync(f));
+if (!touchesCodeFace) {
   console.log('SKIP: 未触及代码面（backend 源码 / frontend/src），四门跳过——AI 写路径已由宿主写前门拦截');
+} else if (projectGate) {
+  const r = spawnSync(process.execPath, [projectGate, ...(process.argv.slice(2))], { stdio: 'inherit' });
+  if (r.error || r.status !== 0) {
+    if (r.error) console.error(`pre-commit: 项目门禁无法执行（${r.error.message}）`);
+    console.error('pre-commit: 项目门禁（local-pre-commit）未通过，提交已阻止');
+    process.exit(r.status === null || r.status === undefined ? 1 : r.status);
+  }
+} else if (!hasHook('local-pre-commit')) {
+  console.error('pre-commit: （advisory）门禁实现 local-pre-commit 不在包内 runtime——四门未执行；请升级 flow-kit 或检查安装');
+} else {
+  const r = runHook('local-pre-commit', [], { stdio: 'inherit' });
+  if (r.error || r.status !== 0) {
+    console.error('pre-commit: 项目门禁（local-pre-commit）未通过，提交已阻止');
+    process.exit(r.status === null || r.status === undefined ? 1 : r.status);
+  }
 }
 
 // 合并提交 → 构建验证覆盖【完整合并树】，不做按扩展名的条件裁剪。
@@ -190,8 +209,8 @@ if (fullArgs.length === 0) {
   fullArgs = isMergeOrSquash ? ['--full'] : ['--no-build'];
 }
 
-const cc = spawnSync(process.execPath, ['.agents/hooks/commit-check.cjs', ...fullArgs], { stdio: 'inherit' });
-if (cc.status !== 0) {
+const cc = runHook('commit-check', fullArgs, { stdio: 'inherit' });
+if (cc.error || cc.status !== 0) {
  console.error('pre-commit: 验证未通过，提交已阻止');
- process.exit(cc.status === null ? 1 : cc.status);
+ process.exit(cc.status === null || cc.status === undefined ? 1 : cc.status);
 }

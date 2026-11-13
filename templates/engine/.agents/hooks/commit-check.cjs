@@ -50,7 +50,7 @@ const fs = require('fs');
 // 取 10 分钟兼顾慢机与「本该 90 秒内结束」的挂起场景——远小于原来的永不返回。
 const BUILD_TIMEOUT_MS = 10 * 60 * 1000;
 
-process.chdir(path.resolve(__dirname, '../..'));
+process.chdir(process.env.FLOW_KIT_PROJECT_ROOT || path.resolve(__dirname, '../..'));
 
 function sh(cmd, cwd) {
   try {

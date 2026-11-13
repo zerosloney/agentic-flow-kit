@@ -38,11 +38,11 @@ If any item is "no", starting the panel is a waste.
 | Single-round panel verifier | 12–21 min | after change: 1 vote by default, +1 vote for Important/security |
 | `pre-push` local gate | before change 110–130 s / after change 15–20 s | integration tier defaults to CI (`PREPUSH_RUN_INTEGRATION=1` reproduces locally) |
 | One "re-review right after changing" rework | +15–30 min | this run wasted two rounds due to inverted ordering (~33 min) |
-| Fast-tier single-round panel (--fast; single lens, single vote, target ≤5 min) | **measured 377s** (zero repo reads: finder 2 tool calls 343s + script 34s; first run including queue 640s) | model latency is the floor; overruns above the hard cap are cut off by fast-timeout; criteria and orchestration contract: header-note fast-tier section of `.agents/scripts/pr-review.mjs` + config `fast` section |
+| Fast-tier single-round panel (--fast; single lens, single vote, target ≤5 min) | **measured 377s** (zero repo reads: finder 2 tool calls 343s + script 34s; first run including queue 640s) | model latency is the floor; overruns above the hard cap are cut off by fast-timeout; criteria and orchestration contract: header-note fast-tier section of `flow-kit run pr-review` + config `fast` section |
 
 ## Related Single Sources
 
-- Review panel mechanics and commands: `.agents/scripts/pr-review.mjs` (--help) + `.agents/commands/pr-review.md`
+- Review panel mechanics and commands: `flow-kit run pr-review` (--help) + `.agents/commands/pr-review.md`
 - Confirmation gate and three-piece-set ordering: `.agents/notes/process-order-rule.md`
 - Port slots and concurrency: `.agents/notes/runtime-env.md` §6.1b (**this page does not restate the port values**)
 - Gate checkpoint overview: `.agents/notes/engine-map.md`

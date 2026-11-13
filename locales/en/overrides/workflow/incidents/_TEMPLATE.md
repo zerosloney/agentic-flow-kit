@@ -44,6 +44,6 @@
    - Or regression-checklist entry: workflow/regression-checklist.md (append one line under the recurrence-prevention verification section)
 
 3. 规范条目（必须有可追溯的落点）
-   - Landing point (multiple allowed): AGENTS.md <section> / .agents/hooks/<script> / .agents/skills/<skill> / .agents/commands/<cmd> / regression checklist §<section>
+   - Landing point (multiple allowed): AGENTS.md <section> / package runtime script (`flow-kit run`, upstream kit) / .agents/skills/<skill> / .agents/commands/<cmd> / regression checklist §<section>
    - Reference: commit <SHA> / 文件:<path>#L<line>
    - If no new entry, reason: <covered by an existing entry; state its location>

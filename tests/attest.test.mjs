@@ -45,7 +45,7 @@ test('doctor --attest writes a deterministic proof file and reports the chain', 
   assert.equal(out.attestation.schema, 'flow-kit-attest/v1');
   assert.equal(out.attestation.policy.version, 1);
   assert.match(out.attestation.chain.root, /^[0-9a-f]{64}$/);
-  assert.ok(out.attestation.manifest.files > 300);
+  assert.ok(out.attestation.manifest.files > 100);
 
   const written = JSON.parse(fs.readFileSync(proof, 'utf8'));
   assert.deepEqual(written, out.attestation);

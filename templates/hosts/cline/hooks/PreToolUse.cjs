@@ -97,13 +97,14 @@ function toRepoPayload(gateTool, input, cwd) {
     tool_input: i,
   };
 }
-// 调用仓库 hook，返回 { decision, reason, context }（无输出 = allow）
-function callRepoHook(script, payload) {
-  const r = spawnSync(process.execPath, [script], {
+// 调用包内 hook，返回 { decision, reason, context }（无输出 = allow）
+function callRepoHook(hook, payload) {
+  const r = spawnSync('flow-kit', ['hook', hook], {
     input: JSON.stringify(payload),
     encoding: 'utf8',
     timeout: TIMEOUT_MS,
     cwd: ROOT,
+    shell: process.platform === 'win32',
   });
   if (r.error) {
     return { decision: 'allow', reason: `仓库 hook 调用失败（${r.error.message}），放行` };
@@ -151,10 +152,7 @@ function main() {
     const command = extractCommand(input);
     if (!command) return; // 无命令文本，放行
     const shellPayload = toRepoPayload('bash', { command }, cwd);
-    const { decision, reason } = callRepoHook(
-      path.join(ROOT, '.agents', 'hooks', 'pre-shell-check.cjs'),
-      shellPayload
-    );
+    const { decision, reason } = callRepoHook('pre-shell-check', shellPayload);
     if (decision === 'deny') {
       emitControl({ cancel: true, cancelReason: reason || '命令被仓库门禁拒绝' });
     } else if (decision === 'ask') {
@@ -177,10 +175,7 @@ function main() {
       writeInput.edits = [{ insert_line: input.insert_line, new_string: input.new_text || '' }];
     }
     const writePayload = toRepoPayload('write', writeInput, cwd);
-    const { decision, reason, context } = callRepoHook(
-      path.join(ROOT, '.agents', 'hooks', 'pre-write-check.cjs'),
-      writePayload
-    );
+    const { decision, reason, context } = callRepoHook('pre-write-check', writePayload);
     if (decision === 'deny') {
       emitControl({ cancel: true, cancelReason: reason || '写入被仓库门禁拒绝' });
     } else if (decision === 'ask') {

@@ -10,7 +10,7 @@ import path from 'node:path';
 import process from 'node:process';
 
 const SCRIPT_DIR = path.dirname(process.argv[1]);
-const ROOT = path.resolve(SCRIPT_DIR, '..', '..');
+const ROOT = path.resolve(process.env.FLOW_KIT_PROJECT_ROOT || path.join(SCRIPT_DIR, '..', '..'));
 const ALLOWLIST = path.join(ROOT, '.agents', 'hooks', 'delete-guard-allowlist.txt');
 const SCAN_DIRS = [
   path.join(ROOT, 'backend', 'material', 'Shipyard.Material.Application'),

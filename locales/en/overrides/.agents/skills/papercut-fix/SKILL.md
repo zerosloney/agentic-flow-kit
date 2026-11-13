@@ -18,7 +18,7 @@ Only treats mistakes that the **engine face** repeatedly makes (business-code de
 
 | Source | How to read |
 |---|---|
-| `.agents/judgments.jsonl` | `node .agents/scripts/agg-judgments.mjs --retire-candidates` (per-rule counts and candidates) |
+| `.agents/judgments.jsonl` | `flow-kit run agg-judgments.mjs --retire-candidates` (per-rule counts and candidates) |
 | `workflow/delegations.md` | rework-reason enum distribution + monthly aggregate snapshot |
 | `workflow/reviews.d/<YYYY-MM>.md` | per-comment accepted/rejected/false-positive, merged by root-cause direction |
 | `workflow/incidents/` | root-cause enum (engine-face entries only) |
@@ -45,10 +45,10 @@ Only treats mistakes that the **engine face** repeatedly makes (business-code de
 
 ## Constraints and red lines
 - **Single target**: each execution handles only one target; do not opportunistically fix adjacent entries or bundle other changes.
-- **Scope limit**: changes are limited to the documentation surface (`.agents/commands/`, `.agents/roles/`, `.agents/skills/`, `.githooks/`, `.agents/scripts/`, `workflow/`).
+- **Scope limit**: changes are limited to the documentation surface (`.agents/commands/`, `.agents/roles/`, `.agents/skills/`, `.githooks/`, `workflow/`).
 - **Absolute no-go**: do not modify `backend/`, `frontend/`, `tests/`, `wiki/`, and do not connect to a database. Stop and report to the user when out of scope.
 - **Verify before acting**: do not guess the current state from the ledger description. Read the authoritative file first to verify that the symptom holds.
-- **Edit convention**: modify `workflow/` documents with `node .agents/scripts/rewrite-file.mjs <file> --find <literal string> --replace <literal string>` (same as `stages.md` Build §4).
+- **Edit convention**: modify `workflow/` documents with `flow-kit run rewrite-file.mjs <file> --find <literal string> --replace <literal string>` (same as `stages.md` Build §4).
 - **Debt-clearing criterion**: branch A (fix) and branch B (deferred/obsolete) **both** satisfy the `debt -1` invariant (debt = number of pending-fix
   rows in the ledger, manually counted: the touched row carries a terminal marker and no new pending row is added; the scheduled-debt sensor was retired 2026-11-08).
 
@@ -84,7 +84,7 @@ Only treats mistakes that the **engine face** repeatedly makes (business-code de
 - **Run checks**:
     - The touched row already carries a terminal marker (`✅ 已升级修复` / `⏸ 暂缓`), and this round added no new pending row (`debt -1`, manually counted).
     - Check `workflow/papercuts.md` for total line count, column-count distribution, and any overly long rows (a line-compression signal).
-- **Size check**: if `.agents/commands/` or the root `AGENTS.md` was modified, run `node .agents/scripts/rule-budget.mjs --all` and use its exit code as authoritative.
+- **Size check**: if `.agents/commands/` or the root `AGENTS.md` was modified, run `flow-kit run rule-budget.mjs --all` and use its exit code as authoritative.
 
 ## Reporting requirements
 - Output per `references/response-template.md`.

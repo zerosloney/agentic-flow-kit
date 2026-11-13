@@ -80,7 +80,9 @@ test('covered hosts install the compiled wiring without duplicating it', () => {
   for (const host of GOLDEN_HOSTS) {
     assert.deepEqual(readInstalledGroups(host, dir), golden(host), host);
     const text = fs.readFileSync(hookFile(host, dir), 'utf8');
-    const count = text.split('pre-write-check.cjs').length - 1;
+    const count = host === 'qoder'
+      ? text.split('"pre-write-check"').length - 1
+      : text.split('flow-kit hook pre-write-check').length - 1;
     // Trae 只接命令门禁；其余宿主各一条写前门。
     assert.equal(count, host === 'trae' ? 0 : 1, `${host}: duplicated wiring in ${text}`);
   }
@@ -97,7 +99,7 @@ test('reinstalling does not rewrite or duplicate host hook files', () => {
   files.forEach((file, index) => {
     assert.equal(fs.readFileSync(file, 'utf8'), before[index], path.basename(file));
   });
-  assert.equal(before[0].split('pre-shell-check.cjs').length - 1, 1);
+  assert.equal(before[0].split('flow-kit hook pre-shell-check').length - 1, 1);
 });
 
 test('user hooks and unrelated settings survive; managed wiring is repaired', () => {
@@ -120,7 +122,7 @@ test('user hooks and unrelated settings survive; managed wiring is repaired', ()
     && group.hooks.some((hook) => hook.command === 'node scripts/my-hook.mjs')));
   const shell = after.hooks.PreToolUse.find((group) => group.matcher === 'Bash');
   assert.equal(shell.hooks[0].timeout, 800);
-  assert.equal(fs.readFileSync(file, 'utf8').split('pre-shell-check.cjs').length - 1, 1);
+  assert.equal(fs.readFileSync(file, 'utf8').split('flow-kit hook pre-shell-check').length - 1, 1);
 });
 
 test('doctor detects missing and stale hook wiring', () => {
@@ -135,7 +137,7 @@ test('doctor detects missing and stale hook wiring', () => {
   let check = doctor.checks.find((item) => item.name === 'hooks claude');
   assert.equal(check.ok, false);
   assert.match(check.detail, /缺失/);
-  assert.match(check.detail, /pre-shell-check\.cjs/);
+  assert.match(check.detail, /pre-shell-check/);
 
   // 先补齐缺失，再单独验证“多余接线”：托管脚本被挂到了错误的 matcher 上。
   assert.equal(run(['upgrade', '--target', '.', '--json'], dir).status, 0);
@@ -149,7 +151,7 @@ test('doctor detects missing and stale hook wiring', () => {
   check = doctor.checks.find((item) => item.name === 'hooks claude');
   assert.equal(check.ok, false);
   assert.match(check.detail, /多余|过期/);
-  assert.match(check.detail, /pre-write-check\.cjs/);
+  assert.match(check.detail, /pre-write-check/);
 
   // upgrade 会同时补齐缺失和清理过期接线。
   assert.equal(run(['upgrade', '--target', '.', '--json'], dir).status, 0);

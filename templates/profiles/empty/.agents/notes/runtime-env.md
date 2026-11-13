@@ -8,15 +8,15 @@
 |---|---|---|---|---|
 | API | {{apiPort}} | `+slot×10` | HTTP | `<API 启动命令>` |
 | 前端 dev | {{webPort}} | `+slot×10` | HTTP | `<前端启动命令>` |
-| 流程看板 | {{boardPort}} | `+slot×10` | HTTP | `node .agents/scripts/ensure-board.mjs` |
+| 流程看板 | {{boardPort}} | `+slot×10` | HTTP | `flow-kit run ensure-board.mjs` |
 
 ## 2. 本地 Clone 必做
 
 ```bash
 git config core.hooksPath .githooks
 git config merge.ours.driver true
-git config merge.jsonl-union.driver "node .agents/scripts/git-merge-jsonl.mjs %O %A %B"
-node .agents/scripts/check-local-gates.mjs --fix
+git config merge.jsonl-union.driver "flow-kit run git-merge-jsonl.mjs %O %A %B"
+flow-kit run check-local-gates.mjs --fix
 ```
 
 ## 3. 可执行文件解析

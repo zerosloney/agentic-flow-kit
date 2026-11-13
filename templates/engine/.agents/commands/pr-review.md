@@ -18,7 +18,7 @@ triggers:
 
 ## 流程
 
-脚本：`.agents/scripts/pr-review.mjs`（子命令细节 `--help`）。按序执行，禁跳步：
+脚本：`flow-kit run pr-review`（子命令细节 `--help`）。按序执行，禁跳步：
 
 1. `plan --base <ref> --head <ref>`；高风险快检加 `--fast`（单镜头档）。现场落 `.agents/tmp/pr-review/<runId>/`（run.json / briefs / tasks.json）
 2. 按 `tasks.json` 并行派 finder / verifier 子代理；角色契约见 `.agents/roles/pr-finder.md`、`pr-verifier.md`、`pr-adjudicator.md`

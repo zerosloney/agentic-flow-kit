@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // workflow 实时看板服务：本地只读 http + SSE 文件监听，可视化 AI 执行流程（intents/incidents/plans/specs）。
-// 用法：node .agents/scripts/workflow-board-server.mjs [--port 8933]；多 worktree 并行请用 ensure-board.mjs 拉起（按 SHIPYARD_SLOT 槽位派生端口，strict 不漂移——2026-10-22 board-slot-strict）
+// 用法：flow-kit run workflow-board-server.mjs [--port 8933]；多 worktree 并行请用 ensure-board.mjs 拉起（按 SHIPYARD_SLOT 槽位派生端口，strict 不漂移——2026-10-22 board-slot-strict）
 // 零依赖（node:http/node:fs/node:path/node:url/node:child_process）；只读 workflow/ 与 git，仅绑 127.0.0.1。
 // API：GET /（看板页） /marked.min.js（vendor） /api/board /api/doc?file=<相对路径> /api/history?file=<相对路径> /api/events（SSE）
 //       /api/runs（pipeline-run 执行器 run 卡片列表） /api/run?file=<runId>.json（单 run 事件流）
@@ -19,7 +19,9 @@ import { loadAllConfirmations } from './ledger-loader.mjs';
 import { funnelFromLedger, loadFirstAdded, scanReviews, fmtMedianDays, calendarMonthsBetween } from './metrics-core.mjs';
 import { buildTour } from './dev-tour-model.mjs';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const ROOT = process.env.FLOW_KIT_PROJECT_ROOT
+  || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
+const SCRIPTS_DIR = process.env.FLOW_KIT_RUNTIME_SCRIPTS || path.join(ROOT, '.agents', 'scripts');
 const WORKFLOW = path.join(ROOT, 'workflow');
 const BOARD_DIR = path.join(ROOT, '.agents', 'board');
 const DOC_TYPES = ['intents', 'incidents', 'plans', 'specs'];
@@ -506,7 +508,7 @@ const loopCache = { at: 0, v: null, running: false };
 function refreshLoopBlocks() {
   if (loopCache.running) return;
   loopCache.running = true;
-  execFile(process.execPath, [path.join(ROOT, '.agents', 'scripts', 'check-loop.mjs')], { cwd: ROOT, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, windowsHide: true }, (err, stdout, stderr) => {
+  execFile(process.execPath, [path.join(SCRIPTS_DIR, 'check-loop.mjs')], { cwd: ROOT, encoding: 'utf8', maxBuffer: 8 * 1024 * 1024, windowsHide: true }, (err, stdout, stderr) => {
     const prev = loopCache.v;
     loopCache.running = false;
     loopCache.at = Date.now();

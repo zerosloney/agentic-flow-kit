@@ -6,7 +6,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { readManifest, writeManifest } from '../src/install/manifest.mjs';
-import { loadMigrations, migrateManifest } from '../src/install/migrations.mjs';
+import { loadMigrations, migrateManifest, cleanupMigratedFiles } from '../src/install/migrations.mjs';
+import crypto from 'node:crypto';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
@@ -42,8 +43,8 @@ test('migrateManifest upgrades an old manifest, is idempotent, and supports dry-
   writeManifest(dir, oldManifest());
   const first = await migrateManifest({ target: dir, manifest: readManifest(dir) });
   assert.equal(first.changed, true);
-  assert.deepEqual(first.applied, ['0-1']);
-  assert.equal(readManifest(dir).schemaVersion, 1);
+  assert.deepEqual(first.applied, ['0-1', '1-2']);
+  assert.equal(readManifest(dir).schemaVersion, 2);
 
   const second = await migrateManifest({ target: dir, manifest: readManifest(dir) });
   assert.equal(second.changed, false);
@@ -105,7 +106,7 @@ test('upgrade migrates an old manifest without touching user files', () => {
   });
   assert.equal(dry.status, 0, dry.stderr);
   const dryOut = JSON.parse(dry.stdout);
-  assert.deepEqual(dryOut.migration.applied, ['0-1']);
+  assert.deepEqual(dryOut.migration.applied, ['0-1', '1-2']);
   assert.equal(JSON.parse(fs.readFileSync(manifestFile, 'utf8')).schemaVersion, undefined);
 
   const real = spawnSync(process.execPath, [BIN, 'upgrade', '--target', '.', '--json'], {
@@ -114,7 +115,7 @@ test('upgrade migrates an old manifest without touching user files', () => {
     env: { ...process.env, FLOW_KIT_TEST: '1' },
   });
   assert.equal(real.status, 0, real.stderr);
-  assert.equal(JSON.parse(fs.readFileSync(manifestFile, 'utf8')).schemaVersion, 1);
+  assert.equal(JSON.parse(fs.readFileSync(manifestFile, 'utf8')).schemaVersion, 2);
   assert.equal(fs.readFileSync(path.join(dir, 'notes/user.txt'), 'utf8'), 'keep me\n');
 
   const again = spawnSync(process.execPath, [BIN, 'upgrade', '--target', '.', '--json'], {
@@ -124,4 +125,47 @@ test('upgrade migrates an old manifest without touching user files', () => {
   });
   assert.equal(again.status, 0, again.stderr);
   assert.equal(JSON.parse(again.stdout).migration, undefined);
+});
+
+test('1→2 drops runtime files and deletes only unmodified copies', async () => {
+  const dir = tmpRepo();
+  const sha = (text) => crypto.createHash('sha256').update(text).digest('hex');
+  const write = (rel, text) => {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), text, 'utf8');
+  };
+  write('.agents/scripts/drop.mjs', 'drop');
+  write('.agents/scripts/modified.mjs', 'user changed');
+  write('.agents/hooks/drop.cjs', 'hook');
+  write('.agents/tests/x.test.mjs', 'test');
+  write('.agents/hooks/gates.json', '{}');
+  const files = {
+    '.agents/scripts/drop.mjs': sha('drop'),
+    '.agents/scripts/modified.mjs': sha('original'),
+    '.agents/hooks/drop.cjs': sha('hook'),
+    '.agents/tests/x.test.mjs': sha('test'),
+    '.agents/hooks/gates.json': sha('{}'),
+  };
+  writeManifest(dir, { ...oldManifest(), schemaVersion: 1, files });
+
+  const first = await migrateManifest({ target: dir, manifest: readManifest(dir) });
+  assert.equal(first.manifest.schemaVersion, 2);
+  assert.deepEqual(Object.keys(first.manifest.files).sort(), ['.agents/hooks/gates.json']);
+  assert.deepEqual(first.removals.sort(), [
+    '.agents/hooks/drop.cjs',
+    '.agents/scripts/drop.mjs',
+    '.agents/tests/x.test.mjs',
+  ]);
+  assert.deepEqual(first.keptLegacy, ['.agents/scripts/modified.mjs']);
+
+  const cleanup = cleanupMigratedFiles({
+    target: dir,
+    files: first.previousFiles,
+    removals: first.removals,
+  });
+  assert.deepEqual(cleanup.removed.sort(), first.removals);
+  assert.deepEqual(cleanup.kept, []);
+  for (const rel of first.removals) assert.equal(fs.existsSync(path.join(dir, rel)), false, rel);
+  assert.equal(fs.existsSync(path.join(dir, '.agents/scripts/modified.mjs')), true);
+  assert.equal(fs.existsSync(path.join(dir, '.agents/hooks/gates.json')), true);
 });

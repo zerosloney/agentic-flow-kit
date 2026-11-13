@@ -25,13 +25,13 @@ For L1 that is not a production incident, a recurrence, data, or a contract chan
 **Process**:
 1. **Diagnose**: read logs + code $\rightarrow$ provide [stop-the-bleeding options (revert/rollback/hotfix/degrade)] + [impact surface / time cost]
 2. **Execute**: the user decides the plan $\rightarrow$ AI only executes the chosen plan (no self-initiated pushing of fixes)
-3. **Verify**: after the hotfix, run `node .agents/scripts/verify.mjs --scope` (policy in the header note)
+3. **Verify**: after the hotfix, run `flow-kit run verify.mjs --scope` (policy in the header note)
 **Output**: service restored $\rightarrow$ enter the retrospective flow
 
 ## 1. Draft the Incident
 **Input**: failure context after stop-the-bleeding completes
 **Process**:
-1. **Similar-case search**: `node .agents/scripts/kb-search.mjs "<keyword>" --scope workflow --type incidents` $\rightarrow$ cite existing recurrence-prevention entries
+1. **Similar-case search**: `flow-kit run kb-search.mjs "<keyword>" --scope workflow --type incidents` $\rightarrow$ cite existing recurrence-prevention entries
 2. **Create document**: copy `_TEMPLATE.md` $\rightarrow$ `workflow/incidents/{name}.md`
 3. **Fill in content**: [timeline (discovery$\rightarrow$recovery)] / [impact surface] / [root cause (underlying reason)] / [gate-failure analysis]
 **Output**: `workflow/incidents/{name}.md` (Status: Draft)
@@ -61,7 +61,7 @@ This section starts from production incidents and L2/L3.
 1. **Status transitions**: `open` $\rightarrow$ `fixed` (trio landed) $\rightarrow$ `closed` (recurrence-prevention verification passed)
 2. **State entry point**: `confirm-doc.mjs` migrates step by step (policy in `new-task.md` Fast Track step 4)
 3. **Reconciliation**: `check-loop 15` verifies the order of [closeout edit $\rightarrow$ closed confirmation]
-4. **Ruling backfill after closeout**: if a done/closed document genuinely needs a ruling backfilled $\rightarrow$ change the body and in the **same batch** append a **re-confirmation compensation line** to `.agents/confirmations.jsonl` — same doc+stage, fingerprint = post-edit content fingerprint (bindingSha256), prev uses the original line, quote = the user's ruling verbatim (source: chat-delegated); append-only, do not alter historical lines; check-loop 15 takes effect based on the last done line (re-confirmation scenario). Note that `confirm-doc` has no forward transition for terminal-state documents, so append the compensation line directly to the ledger. **Generator**: `node .agents/scripts/append-compensation.mjs <doc...> --quote "<user's verbatim words>"`; hand-crafted hashes are blocked by the s15 content-drift gate
+4. **Ruling backfill after closeout**: if a done/closed document genuinely needs a ruling backfilled $\rightarrow$ change the body and in the **same batch** append a **re-confirmation compensation line** to `.agents/confirmations.jsonl` — same doc+stage, fingerprint = post-edit content fingerprint (bindingSha256), prev uses the original line, quote = the user's ruling verbatim (source: chat-delegated); append-only, do not alter historical lines; check-loop 15 takes effect based on the last done line (re-confirmation scenario). Note that `confirm-doc` has no forward transition for terminal-state documents, so append the compensation line directly to the ledger. **Generator**: `flow-kit run append-compensation.mjs <doc...> --quote "<user's verbatim words>"`; hand-crafted hashes are blocked by the s15 content-drift gate
 
 ## 🚫 Prohibitions
 | Operation | Consequence / machine behavior | Exception |

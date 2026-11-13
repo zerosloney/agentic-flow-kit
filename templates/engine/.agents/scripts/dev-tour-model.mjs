@@ -16,7 +16,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-export const DEFAULT_ROOT = path.resolve(SCRIPT_DIR, '../..');
+export const DEFAULT_ROOT = path.resolve(process.env.FLOW_KIT_PROJECT_ROOT || path.join(SCRIPT_DIR, '../..'));
 
 const CODE_ROOTS = ['backend/', 'frontend/', 'tests/', 'db/', 'database/', 'sql/', 'scripts/', 'tools/', 'integration/'];
 const DOC_ROOTS = ['workflow/', 'wiki/', '.agents/'];

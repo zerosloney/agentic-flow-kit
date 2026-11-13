@@ -9,7 +9,7 @@ description: 内网自托管 TFS / Azure DevOps Server PR 技能，项目无关�
 
 ## 触发 / 不触发
 - 触发：「查 PR / 有没有冲突」「补 / 改 PR 描述」「解决 PR 冲突」等内网 TFS 事务；`az devops login` 报 "Refusing to attach credentials to an invalid Azure DevOps organization URL" → 转本技能，禁再试 az。
-- 触发（建 PR 类）：宿主有 PR 唯一入口约定时（如 Shipyard.Material 的 `pr-create.mjs`），「建 PR / 推送并建 PR」**不直接触发本技能**——建 PR 只走宿主唯一入口 `node .agents/scripts/pr-create.mjs`（内部调 `tfs-pr create`）；agent 禁止绕过宿主入口直接调 `tfs-pr create`。无此约定的宿主可保留直接触发。（本仓原评审前置已于 2026-11-09 退役为手动工具：面板评审按需手动跑，见 `.agents/commands/pr-review.md`。）
+- 触发（建 PR 类）：宿主有 PR 唯一入口约定时（如 Shipyard.Material 的 `pr-create.mjs`），「建 PR / 推送并建 PR」**不直接触发本技能**——建 PR 只走宿主唯一入口 `flow-kit run pr-create.mjs`（内部调 `tfs-pr create`）；agent 禁止绕过宿主入口直接调 `tfs-pr create`。无此约定的宿主可保留直接触发。（本仓原评审前置已于 2026-11-09 退役为手动工具：面板评审按需手动跑，见 `.agents/commands/pr-review.md`。）
 - 不触发：GitHub / GitLab 等公网托管 PR；普通代码评审、commit 消息。
 
 ## 0. 前置探测

@@ -9,9 +9,9 @@
 > 漏配则门禁静默失效，详见 `.agents/notes/runtime-env.md` §7。
 - `git config core.hooksPath .githooks` 挂仓库自带钩子。
 - `git config merge.ours.driver true` 启用 `appsettings.json` 的 `merge=ours` 策略。
-- `git config merge.jsonl-union.driver "node .agents/scripts/git-merge-jsonl.mjs %O %A %B"` 启用 `.agents/*.jsonl` 并集合并策略。
+- `git config merge.jsonl-union.driver "flow-kit run git-merge-jsonl.mjs %O %A %B"` 启用 `.agents/*.jsonl` 并集合并策略。
 - **禁令**：commit / merge / push 三处一律禁 `--no-verify`。
-- **自检**：`node .agents/scripts/check-local-gates.mjs --fix`
+- **自检**：`flow-kit run check-local-gates.mjs --fix`
 
 ## 3. 全局红线 (Universal Laws)
 - **安全/隐私**：不提交密钥、令牌、`.env` 或真实用户数据；发现敏感信息立即停止扩散。

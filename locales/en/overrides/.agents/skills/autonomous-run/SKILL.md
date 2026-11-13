@@ -18,7 +18,7 @@ Used for long runs (overnight / user away). **Advancement mode**: per-unit sign-
 ## Per-unit sign-off (each implement / fix ticket)
 
 1. Implement per authorized files; deviation stops (out-of-plan files / public interfaces / new dependencies).
-2. Run `node .agents/scripts/verify.mjs --scope`, must exit code 0.
+2. Run `flow-kit run verify.mjs --scope`, must exit code 0.
 3. Record the green evidence's `headShort` (s15 fingerprint); **HEAD changed or evidence older than 24h window → rerun**, do not reuse old green.
 4. Only after sign-off `next`; no advancement without green, no batching.
 

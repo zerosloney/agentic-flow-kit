@@ -15,7 +15,7 @@
 //   ③ workflow/*.md 文档 —— 引用的 intent/spec/plan/incident 文件名确实存在
 // 落点：
 //   - confirm-doc.mjs 关单（docs→done / incidents→closed）前置 —— 关单时拦，防残留进归档
-// 用法：node .agents/scripts/check-regression-consistency.mjs [--root <仓库根>]
+// 用法：flow-kit run check-regression-consistency.mjs [--root <仓库根>]
 //   exit 0 = 无悬空引用；exit 1 = 存在悬空测试类/文档引用；tmp 缺失只警告不拦。
 // 测试面已随引擎减重退役（2026-10-28，owner 决策），本脚本现无测试兜底
 // 非独立门：由 confirm-doc.mjs 关单时动态调用（confirm-doc.mjs:551 附近）；按 check-* 命名易误判为钩子门，勿在钩子/verify 挂载。
@@ -215,7 +215,7 @@ if (isMain) {
   for (let i = 0; i < argv.length; i++) {
     if (argv[i] === '--root') root = path.resolve(argv[++i]);
     else if (argv[i] === '--help' || argv[i] === '-h') {
-      console.log('用法：node .agents/scripts/check-regression-consistency.mjs [--root <仓库根>]');
+      console.log('用法：flow-kit run check-regression-consistency.mjs [--root <仓库根>]');
       process.exit(0);
     }
   }

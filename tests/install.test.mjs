@@ -40,7 +40,6 @@ test('fresh install creates engine, host, scaffold and manifest', () => {
   for (const rel of [
     '.agents/install-manifest.json',
     '.agents/commands/new-task.md',
-    '.agents/scripts/verify.mjs',
     '.agents/config/engine.json',
     '.githooks/pre-commit',
     '.githooks/pre-push',
@@ -60,6 +59,9 @@ test('fresh install creates engine, host, scaffold and manifest', () => {
   ]) {
     assert.ok(exists(dir, rel), `missing ${rel}`);
   }
+  assert.equal(exists(dir, '.agents/scripts'), false);
+  assert.equal(exists(dir, '.agents/hooks/pre-write-check.cjs'), false);
+  assert.equal(exists(dir, '.agents/hooks/gates.json'), true);
 
   const manifest = JSON.parse(read(dir, '.agents/install-manifest.json'));
   assert.equal(manifest.kit, 'agentic-flow-kit');
@@ -286,7 +288,9 @@ test('Cargo.toml installs the rust profile without --stack', () => {
   assert.equal(JSON.parse(read(dir, '.agents/install-manifest.json')).stack, 'rust');
   assert.equal(JSON.parse(read(dir, '.agents/config/engine.json')).options.stack, 'rust');
   assert.match(read(dir, 'AGENTS.md'), /Rust 项目（Cargo）/);
-  assert.match(read(dir, '.agents/scripts/verify.mjs'), /cargo test/);
+  // verify 脚本随包分发；栈差异由 runtime 读取 engine.json 决定，不再安装渲染后的副本。
+  assert.equal(exists(dir, '.agents/scripts/verify.mjs'), false);
+  assert.match(fs.readFileSync(path.join(KIT, 'templates/engine/.agents/scripts/verify.mjs'), 'utf8'), /cargo test/);
 });
 
 test('dry-run with --model writes no local model config', () => {
@@ -308,4 +312,19 @@ test('git hooks parse as CommonJS inside a type: module project', () => {
     cwd: dir, encoding: 'utf8',
   });
   assert.equal(check.status, 0, check.stderr);
+});
+
+test('doctor reports leftover runtime files as advisory only', () => {
+  const dir = tmpRepo();
+  assert.equal(run(['install', '--agent', 'trae', '--stack', 'node', '--target', '.'], dir).status, 0);
+  fs.mkdirSync(path.join(dir, '.agents/scripts'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.agents/scripts/verify.mjs'), '// legacy\n');
+  const doctor = run(['doctor', '--target', '.', '--json'], dir);
+  assert.equal(doctor.status, 0, doctor.stderr);
+  const out = JSON.parse(doctor.stdout);
+  assert.equal(out.summary.failed, 0);
+  const legacy = out.checks.find((c) => c.name === 'runtime legacy');
+  assert.ok(legacy);
+  assert.equal(legacy.ok, true);
+  assert.equal(legacy.warn, true);
 });

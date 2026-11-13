@@ -35,16 +35,10 @@ if (!exempt && !typeRe.test(first)) {
   process.exit(1);
 }
 
-// 先确认后改代码（2026-11-08 档 2-D 自 pre-commit 位移）：pre-commit 时点读不到提交消息，
-// 豁免 A（L0 trailer）与豁免 B（同批 done plan，L1 单笔提交）都要在消息可见的时点执法。
-// 暂存产品路径才启动（廉价前缀过滤与原 pre-commit 同口径）；精确判据单源
-// check-confirm-order.mjs。合并自动提交在 commit-msg 时点 MERGE_HEAD / SQUASH_MSG 已落盘，
-// 由脚本内状态文件探测跳过；缺失 fail-closed（与其余门同口径）。
-const GATE = path.join(__dirname, '..', '.agents', 'hooks', 'check-confirm-order.mjs');
-if (!fs.existsSync(GATE)) {
-  console.error('commit-msg: 门脚本缺失 .agents/hooks/check-confirm-order.mjs——提交已阻止（脚本随仓走；git checkout -- .agents/hooks/check-confirm-order.mjs 恢复后重试）');
-  process.exit(1);
-}
+const flowKitRun = (name, args) => spawnSync('flow-kit', ['run', name, ...args], {
+  stdio: 'inherit',
+  shell: process.platform === 'win32',
+});
 const staged = spawnSync('git', ['-c', 'core.quotepath=off', 'diff', '--cached', '--name-only'], { encoding: 'utf8' });
 const touchesProduct = String(staged.stdout || '').split(/\r?\n/).some((f) => {
   const rel = f.trim().replace(/\\/g, '/');
@@ -52,21 +46,21 @@ const touchesProduct = String(staged.stdout || '').split(/\r?\n/).some((f) => {
     || rel.startsWith('wiki/数据维护/');
 });
 if (touchesProduct) {
-  const gate = spawnSync(process.execPath, [GATE, msgFile], { stdio: 'inherit' });
-  if (gate.status !== 0) {
+  const gate = flowKitRun('check-confirm-order', [msgFile]);
+  if (gate.error || gate.status !== 0) {
+    if (gate.error) console.error(`commit-msg: check-confirm-order 无法执行（${gate.error.message}）`);
     console.error('commit-msg: 先确认后改代码未通过，提交已阻止');
-    process.exit(gate.status === null ? 1 : gate.status);
+    process.exit(gate.status === null || gate.status === undefined ? 1 : gate.status);
   }
 }
 
 // 任务短名校验（2026-11-09 建，advisory 先行）：覆盖 plan 恰好一份时提交消息须含其短名，
-// git log 可按任务检索。脚本内部 exit 恒 0（观察期不阻断），缺失 fail-closed（与其余门同口径）。
-const PLAN_REF = path.join(__dirname, '..', '.agents', 'hooks', 'check-commit-plan-ref.mjs');
-if (!fs.existsSync(PLAN_REF)) {
-  console.error('commit-msg: 门脚本缺失 .agents/hooks/check-commit-plan-ref.mjs——提交已阻止（脚本随仓走；git checkout -- .agents/hooks/check-commit-plan-ref.mjs 恢复后重试）');
-  process.exit(1);
-}
+// git log 可按任务检索。脚本内部 exit 恒 0（观察期不阻断），入口缺失 fail-closed。
 if (touchesProduct) {
-  spawnSync(process.execPath, [PLAN_REF, msgFile], { stdio: 'inherit' });
+  const planRef = flowKitRun('check-commit-plan-ref', [msgFile]);
+  if (planRef.error) {
+    console.error(`commit-msg: check-commit-plan-ref 无法执行（${planRef.error.message}）——提交已阻止`);
+    process.exit(1);
+  }
 }
 process.exit(0);

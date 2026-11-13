@@ -35,8 +35,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node",
-            "args": ["${QODER_PROJECT_DIR}/.agents/hooks/pre-shell-check.cjs"],
+            "command": "flow-kit",
+            "args": ["hook", "pre-shell-check"],
             "name": "shell-gates",
             "statusMessage": "命令门禁（deny/ask 清单 + .githooks pre-commit/pre-push 前置）",
             "timeout": 600
@@ -48,8 +48,8 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node",
-            "args": ["${QODER_PROJECT_DIR}/.agents/hooks/pre-write-check.cjs"],
+            "command": "flow-kit",
+            "args": ["hook", "pre-write-check"],
             "name": "write-gates",
             "statusMessage": "写前门（执法面自保护 / 台账 append-only / 红线快照-恢复）",
             "timeout": 120

@@ -18,7 +18,7 @@
 #   逻辑内嵌于服务）不可路径表达，仍靠级别判定纪律）：backend/shared 全模块（跨模块共享内核：
 #   契约/分页/错误出口/认证服务，49 文件）+ API 横切根（DI 管线/错误出口/JSON 序列化权威）+
 #   schema 变更与数据修复 SQL（L3 判据直配；此前 2026-09-28 曾实证「4 个 L3 schema 批次无 spec/plan」）。
-# 闭集防漂移（2026-10-09 P3-2）：月度跑 node .agents/scripts/lane-surface-audit.mjs——反查「L2/L3 任务
+# 闭集防漂移（2026-10-09 P3-2）：月度跑 flow-kit run lane-surface-audit.mjs——反查「L2/L3 任务
 #   反复触及却无 ERE 命中的目录」出候选清单，人工评估补登（高频触及 ≠ 契约面，机器不猜语义）。
 ## engine
 ^templates/

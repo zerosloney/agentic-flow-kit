@@ -25,6 +25,9 @@ node bin/flow-kit.mjs upgrade --target <tmp>
 node bin/flow-kit.mjs upgrade --target <tmp> --explain-policy --dry-run
 node bin/flow-kit.mjs prune --target <tmp>
 node bin/flow-kit.mjs explain .claude/agents/implementer.md --target <tmp>
+node bin/flow-kit.mjs run --list
+node bin/flow-kit.mjs run --root <tmp> check-scripts-syntax
+node bin/flow-kit.mjs hook --list
 node bin/flow-kit.mjs doctor --target <tmp>
 node bin/flow-kit.mjs doctor --target <tmp> --attest --out proof.json
 npm run doctor:self                       # 对当前仓库执行 doctor（需当前仓库已安装引擎）
@@ -80,6 +83,12 @@ node tools/make-en-host-overrides.mjs --check   # CI：英文覆盖缺失/过期
 
 `remove-host` / `uninstall` 同样以 manifest 哈希为安全闸：普通托管文件哈希一致才删，用户改过则跳过 / `--force` 覆盖。合并型配置（`merge-host` / `merge-mcp`）不能整文件删除：只有 `manifest.mergeOrigins[rel] === 'created'` 且哈希一致时才整体删除，否则只摘除托管 hook / 权限（按 `managedPermissions` 记录）/ MCP server，保留安装前已有的用户内容，文件变空才删。`remove-host` 只处理该宿主 `category: 'host'` 的文件和孤儿残留，根记忆文件（`rootMemory`，如 `CLAUDE.md`）视为用户文件、默认保留并停止托管；宿主集合变化后会用剩余宿主重渲染 engine.json / AGENTS.md / `.gitignore` 等宿主相关文件（仅当当前哈希仍等于 manifest）。`uninstall` 只移除带标记的合并块（保留块外用户内容，文件变空才删除），默认保留根记忆文件与用户改过的文件，全部清理完成才删除 manifest。
 
+## 包内运行时入口
+
+`run` / `hook` 在通用 `parseArgs` 之前分派（`src/commands/runtime.mjs`），因为脚本参数可能自带 `--json` / `--root` 等旗标。入口从包内 `templates/engine/.agents/{scripts,hooks}` 解析目标，只消费 `--root` / `--lang` / `--list` 等入口选项，其余参数与 stdin 原样透传。目标根解析顺序：`--root` > `FLOW_KIT_PROJECT_ROOT` > 从 cwd 向上查找 `.agents` > cwd；子进程 cwd 固定为目标根，并注入 `FLOW_KIT_PROJECT_ROOT` / `FLOW_KIT_RUNTIME_ROOT` / `FLOW_KIT_RUNTIME_SCRIPTS` / `FLOW_KIT_RUNTIME_HOOKS`。
+
+脚本的 `ROOT` 解析优先读取 `FLOW_KIT_PROJECT_ROOT`，回退到自身 `SCRIPT_DIR/../..`，因此既可由包内入口执行，也可直接执行安装副本。未知脚本 / hook 为 `UNKNOWN_SCRIPT` / `UNKNOWN_HOOK`（退出码 2），目标缺失为 `TARGET_MISSING`（3）。R5-1b 起安装面收缩：`.agents/scripts/**`、`.agents/hooks/**`（实现文件）与 `.agents/tests/**` 不再写入目标项目，项目内只保留 agent 声明面与配置；`isRuntimeEnginePath()`（`plan.mjs`）是唯一判定源，`migrations/1-2.mjs` 把旧 manifest 中的运行时条目摘除，并按旧哈希只清理未改动的磁盘副本。
+
 ## 工件与证据
 
 - `templates/scaffold/workflow/specs/_TEMPLATE/` 提供目录化 `spec.md` / `tasks.md` / `verify-report.md`；`templates/engine/.agents/scripts/check-spec-packages.mjs` 校验包内三件套、`## 验收标准`、任务勾选项、`## 结果` / `## 证据` 与 `结论: pass|fail|partial`。以 `_` 开头的目录跳过，脚本可独立运行（`--root` / `--json`，失败退出 1）。
@@ -103,7 +112,7 @@ node tools/make-en-host-overrides.mjs --check   # CI：英文覆盖缺失/过期
 
 MCP 接线在 `src/install/mcp.mjs`：`templates/mcp/servers.json`（项目可用 `.flow-kit/mcp/servers.json` 替换）声明中性 server，`buildPlan` 为注册表中声明了 `mcp` 的宿主生成 `kind: 'merge-mcp'` 条目，`getText` 渲染时读取磁盘并按 `format`（`claude` → `mcpServers`，`opencode` → `mcp`）合并，只补缺失同名 server，不覆盖用户内容；远程 server 在 claude 格式写 `type: http`（可声明 `sse`），opencode 写 `type: remote`。MCP 条目不走 user-modified 冲突分支（合并语义本身安全），apply 记录 `manifest.mcpServers[targetRel] = [names]` 与 `manifest.mergeOrigins`；`manifest.mcp` 是布尔开关（`--no-mcp` / upgrade 重放）。Qwen 的 `.qwen/settings.json` 与静态宿主模板同路径，文件不存在时以静态模板渲染结果打底，避免丢掉 hooks/permissions。卸载 / remove-host 对合并型文件只摘 manifest 记录的 server 名，`created` 且未改动才整文件删除；`prune` 以哈希为闸。`doctor` 校验缺失 / JSON 损坏 / 容器或 server 缺失。
 
-Hook 接线在 `src/install/hooks.mjs`：中性规格来自引擎模板 `.agents/hooks/gates.json` 的 `hooks` 数组（`event`、`tool: write|shell`、`script`、`timeout`），`buildPlan` 为注册表中声明了 `hooks.events` 的宿主生成 `kind: 'merge-host'` 条目（优先级 31，高于静态宿主条目 30），以宿主静态模板或有文件的磁盘内容为底稿，只替换指向 `.agents/hooks/*.cjs` 的托管条目，保留用户 hook、其它事件与 `permissions` 等键。同一文件同时有 MCP 时（Qwen `settings.json`）`addMcpEntries` 把 MCP 挂到该条目上组合执行，不再单独生成条目。没有 `hooks.events` 的宿主（opencode / pi / cline）继续安装静态模板，行为不变；规格 JSON 非法时回退静态模板。`doctor` 与安装共用同一规格源（kit 模板 `gates.json` + 语言覆盖，`readGatesSpecs`），按 `event|matcher|script` 比对，报告缺失 / 多余接线；golden 夹具在 `tests/fixtures/hooks/`。
+Hook 接线在 `src/install/hooks.mjs`：中性规格来自引擎模板 `.agents/hooks/gates.json` 的 `hooks` 数组（`event`、`tool: write|shell`、`script`、`timeout`），`buildPlan` 为注册表中声明了 `hooks.events` 的宿主生成 `kind: 'merge-host'` 条目（优先级 31，高于静态宿主条目 30），以宿主静态模板或有文件的磁盘内容为底稿，只替换托管条目，保留用户 hook、其它事件与 `permissions` 等键。注册表 `command.form` 为 `cli`（字符串 `flow-kit hook <id>`）或 `cli-args`（`command: flow-kit` + `args: ["hook", "<id>"]`）；`env` / `relative` / `args` 保留给外部宿主。`managedScript()` 同时识别 `flow-kit hook <id>` 与旧版 `.agents/hooks/*.cjs|mjs` 路径，因此升级可接管旧接线。同一文件同时有 MCP 时（Qwen `settings.json`）`addMcpEntries` 把 MCP 挂到该条目上组合执行，不再单独生成条目。没有 `hooks.events` 的宿主（opencode / pi / cline）继续安装静态模板，行为不变；规格 JSON 非法时回退静态模板。`doctor` 与安装共用同一规格源（kit 模板 `gates.json` + 语言覆盖，`readGatesSpecs`），按 `event|matcher|script` 比对，报告缺失 / 多余接线；golden 夹具在 `tests/fixtures/hooks/`。
 
 权限编译在 `src/install/permissions.mjs`（与 Hook 编译共用合并骨架）：`gates.json` 的 `allow` / `deny` / `ask`（`tool: shell|read|web`）按注册表 `permissions` 能力编译，`hardened` 段在 `--hardened` 时追加；宿主 `syntax` 决定 `Bash(cmd:*)` 或 `Bash(cmd *)`，栈白名单来自 `STACK_SHELL` 自动追加。`mergePermissionsIntoRoot` 按 `manifest.managedPermissions` 替换上次托管项、保留用户自建条目（静态模板打底时整体替换），保留 `defaultMode` / `disableBypassPermissionsMode` 等其它键；与 hooks / MCP 在同一个 `merge-host` 条目里组合执行。宿主不支持的 `tool` 类别不静默丢弃，编译结果带 `unsupported`；`doctor` 对账 `permissions <host>` 的缺失编译项 / 残留托管项（用户条目不算漂移），并对无权限能力的宿主给 `guarantee` advisory。
 
@@ -156,12 +165,12 @@ Hook 接线在 `src/install/hooks.mjs`：中性规格来自引擎模板 `.agents
 
 ## AI-Native 治理面（引擎模板）
 
-- 行为评测：`.agents/scripts/agent-eval.mjs`；敏感面在 `.agents/config/agent-eval.json`，凭证是 `.agents/evals/results.jsonl`（内容签名，不是提交号）。
+- 行为评测：`flow-kit run agent-eval`（实现随包）；敏感面在 `.agents/config/agent-eval.json`，凭证是 `.agents/evals/results.jsonl`（内容签名，不是提交号）。
 - 经验与记忆：`session-log.mjs`（运行态日志）、`memory-wiki.mjs`（生成 `wiki/_memory/`）、`memory-tier.mjs`（200 行 / 25KB 注入层）、`path-lease.mjs`（单写者租约）。
 - 修复保护：`fix-task.mjs` 落 `.agents/cache/fix-task.json`，`pre-write-check.cjs` §2.5 在窗口内拦既有测试写入。
 - 结果指标：`outcome-metrics.mjs`；闭环状态机静态检查：`check-pipeline-state.mjs` + `.agents/config/pipeline.json`。
 - 模型升级治理：`.agents/skills/model-upgrade/SKILL.md`；严格度分层：`.agents/config/steering.json` + `steering.mjs`。
-- 策略即代码：`.agents/config/policy.json`（`schemas/policy.schema.json`）声明策略面路径、机制闭集、预算上限、枚举键与角色映射；`.agents/scripts/policy.mjs check|explain` 双向核对 `mechanisms.required` 与 `mechanism-registry.md`、复用 `rule-budget.mjs --all` 执法预算、校验 `workflow-enums.txt` / `pipeline.json` / `model-roles.json` / `pr-review.json` 引用；`gen-effective-policy.mjs` 复用同一视图生成 `workflow/effective-policy.md`。CI 跑 `npm run policy:check`。
+- 策略即代码：`.agents/config/policy.json`（`schemas/policy.schema.json`）声明策略面路径、机制闭集、预算上限、枚举键与角色映射；`flow-kit run policy check|explain` 双向核对 `mechanisms.required` 与 `mechanism-registry.md`、复用 `rule-budget.mjs --all` 执法预算、校验 `workflow-enums.txt` / `pipeline.json` / `model-roles.json` / `pr-review.json` 引用；`flow-kit run gen-effective-policy` 复用同一视图生成 `workflow/effective-policy.md`。CI 跑 `npm run policy:check`。
 - 安装证明链：`src/install/attest.mjs` 生成 `flow-kit-attest/v1`（manifest / files / policy / evals / git 五段 sha256 链）；`doctor --attest [--out <file>]` 输出可归档证明，托管文件缺失/哈希不符时 `ok:false` 且退出 1；证明不含时间戳/绝对路径/网络访问，schema 为 `schemas/attestation.schema.json`。
 - **新增硬门禁必须登记** `.agents/config/mechanism-registry.md`，并同步 `policy.json` 的 `mechanisms.required`（双向核对会拒绝漏登）；该文件受 `rule-budgets.txt` 字节/单行预算约束，新增行前先量预算。
 - 未完成/已完成的缺口与验收口径见根目录 `BACKLOG.md`。

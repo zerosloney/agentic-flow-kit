@@ -4,7 +4,7 @@ Single source of truth: root `AGENTS.md` (read it fully before starting). This f
 
 ## Runtime / Setup
 - Frontend dev server `{{webPort}}` → API `http://localhost:{{apiPort}}`.
-- After clone: `node .agents/scripts/check-local-gates.mjs --fix`.
+- After clone: `flow-kit run check-local-gates.mjs --fix`.
 - Never use `--no-verify` for commit / merge / push.
 
 ## Routing

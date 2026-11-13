@@ -15,7 +15,7 @@ L1 is already closed out in `.agents/commands/new-task.md` §L1 Fast Track; this
 **Policy (owner 2026-10-29)**: no tag/24h observation ritual — merge = PR creation $\rightarrow$ review $\rightarrow$ regression $\rightarrow$ merge $\rightarrow$ archive (release tags and the release-observation ledger are retired; see git for history).
 
 ## 1. Static Gates
-1. `node .agents/scripts/verify.mjs --full` (policy in the header note) all green $\rightarrow$ record evidence; any failure $\rightarrow$ **HALT** $\rightarrow$ return to the Build chapter in `stages.md`. Environment details in `.agents/notes/runtime-env.md` §1, §2
+1. `flow-kit run verify.mjs --full` (policy in the header note) all green $\rightarrow$ record evidence; any failure $\rightarrow$ **HALT** $\rightarrow$ return to the Build chapter in `stages.md`. Environment details in `.agents/notes/runtime-env.md` §1, §2
 
 ## 2. Documentation Audit
 1. **Pairing check (L2/L3)**: `intents/` (or `incidents/`) $\leftrightarrow$ `specs/` $\leftrightarrow$ `plans/` all three present under the same name, all with status `done`
@@ -31,7 +31,7 @@ L1 is already closed out in `.agents/commands/new-task.md` §L1 Fast Track; this
 
 ## 4. Authorization & PR
 1. **User authorization**: only accept the user themself saying "上" (go) or an equivalent confirmation in the conversation
-2. **PR creation**: the panel-review trigger policy follows `.agents/commands/pr-review.md` (run it only when its trigger rules are met), then `node .agents/scripts/pr-create.mjs create --source <branch> --target <target> --title "<Conventional Commits in Chinese>" --body-file <file>` — the description carries the three Test evidence items (Summary / Evidence / Merge Danger, format in `review.md`); the automated review gate is retired (2026-11-09), and pr-create only delegates to tfs-pr; if a manual panel review was run, append one line to Evidence: `面板评审：<runId>（Important n / Nit n / Pre-existing n）`
+2. **PR creation**: the panel-review trigger policy follows `.agents/commands/pr-review.md` (run it only when its trigger rules are met), then `flow-kit run pr-create.mjs create --source <branch> --target <target> --title "<Conventional Commits in Chinese>" --body-file <file>` — the description carries the three Test evidence items (Summary / Evidence / Merge Danger, format in `review.md`); the automated review gate is retired (2026-11-09), and pr-create only delegates to tfs-pr; if a manual panel review was run, append one line to Evidence: `面板评审：<runId>（Important n / Nit n / Pre-existing n）`
 3. **Review**: graded review per `.agents/commands/review.md` (logic $\rightarrow$ security $\rightarrow$ against spec/plan) — do not merge if the review fails
 4. **Merge record**: record the PR number + merge commit SHA; release pipeline execution (if any) is manually approved by the user on the platform
 **Output**: PR review record + merge SHA

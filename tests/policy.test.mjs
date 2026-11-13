@@ -22,7 +22,8 @@ function installTarget() {
 }
 
 function policy(dir, args) {
-  return spawnSync(process.execPath, [path.join(dir, '.agents', 'scripts', 'policy.mjs'), ...args], {
+  // R5-1b：policy 脚本随包分发，经包内运行时入口执行。
+  return spawnSync(process.execPath, [BIN, 'run', 'policy', '--root', dir, ...args], {
     cwd: dir,
     encoding: 'utf8',
     env: { ...process.env, FLOW_KIT_TEST: '1' },

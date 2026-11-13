@@ -123,7 +123,7 @@ function main() {
     return;
   }
 
-  console.log('用法: node .agents/scripts/trust-mode.mjs [--enable --level <Strict|Standard|Trusted|1|2> | --disable | --status | --verify]');
+  console.log('用法: flow-kit run trust-mode.mjs [--enable --level <Strict|Standard|Trusted|1|2> | --disable | --status | --verify]');
   process.exit(config.enabled ? 0 : 1);
 }
 

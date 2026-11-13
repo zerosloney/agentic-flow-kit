@@ -19,7 +19,7 @@
 //         clone 传播的静默失效面从「靠人记得跑 check-local-gates」升格为每次关单自动对质）。
 //         2026-11-11 增 4 门至 20（审计 P2「--no-verify 远端兜底缺口」：.agents/hooks 代码四门接入
 //         product cohort，本地增量档单边化 CI——执法点 = --mid/--full）。
-// 用法：node .agents/scripts/verify.mjs [--full | --scope | --face <面> | --product | --mid] [--list] [--jobs N | --serial] [--help]
+// 用法：flow-kit run verify.mjs [--full | --scope | --face <面> | --product | --mid] [--list] [--jobs N | --serial] [--help]
 //   **档位口径（命令侧单源，2026-11-08 补记）**：--scope = diff 面增量档（判据同缺省档，单源
 //     verify-scope.mjs）；--full = 显式全量；--scope 与 --full 互斥。命令侧档位口径以此头注为准。
 //   --product = 业务面分档（cohort product + security），不落 all-gates 凭证。
@@ -35,7 +35,7 @@
 //   --face <面> = 显式面覆盖（合法值 = verify-scope 面枚举 backend|frontend|docs，逗号多值）：不做工作区
 //     脏路径自动面检测，直接按给定面裁门；与 --full 互斥（亦拒 --scope / 分档 / 夹具旗标）；跳过 24h 兜底
 //     （显式面 = 操作者已判读）；绿行记 entry.face，face 绿行因 loud-skip ledger-invariant 不作增量锚。
-//       node .agents/scripts/verify.mjs --stub-gate <cmd>   （仅 CHECK_LOOP_ROOT 夹具；走生产尾段，不打 testCmd）
+//       flow-kit run verify.mjs --stub-gate <cmd>   （仅 CHECK_LOOP_ROOT 夹具；走生产尾段，不打 testCmd）
 //   **默认档 = diff 面增量**（verify-scope-default 2026-10-22）：不带参数即按变更面裁门；`--full` 显式全量。
 //     兜底：最近 24h 无全量绿行（或 diff 面解析失败）→ 自动退回全量并打印 ⏭️ 兜底行，不静默降档。
 //     基线候选 = 本地台账 ∪ 仓库凭证（workflow/verify-evidence.md，verify-evidence-fallback 2026-10-22）：
@@ -72,7 +72,19 @@ import { computeDiffScope, parseEvidenceGreens, EVIDENCE_REL, CI_UNILATERAL_GATE
 import { classifyFailure } from './failure-attribution.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
+const ROOT = process.env.FLOW_KIT_PROJECT_ROOT || process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
+const AGENTS_RUNTIME = path.resolve(SCRIPT_DIR, '..');
+// verify 从包内运行时执行时，门命令里的 flow-kit run|hook 改为包内绝对路径：
+// 不依赖 flow-kit 是否在当前进程 PATH（本地 node bin/flow-kit.mjs、直接 node 执行均可用）。
+const localizeRuntimeCmd = (cmd) => String(cmd)
+  .replace(/flow-kit\s+run\s+([A-Za-z0-9][A-Za-z0-9._-]*)/g, (m, name) => {
+    const file = name.endsWith('.mjs') ? name : `${name}.mjs`;
+    return `node "${path.join(AGENTS_RUNTIME, 'scripts', file)}"`;
+  })
+  .replace(/flow-kit\s+hook\s+([A-Za-z0-9][A-Za-z0-9._-]*)/g, (m, name) => {
+    const file = name.endsWith('.cjs') || name.endsWith('.mjs') ? name : `${name}.cjs`;
+    return `node "${path.join(AGENTS_RUNTIME, 'hooks', file)}"`;
+  });
 
 // --- 门禁定义 ---
 // 引擎段在前（2026-10-10）：语法与引擎测试仍最先；编排/预算/生效规则/闭环硬门/泳道接在其后。
@@ -81,36 +93,36 @@ const ROOT = process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..')
 const GATES = [
   // guardian（2026-10-16 并行编排）：本门未过则后序门一并不启动——引擎脚本不可解析时其余门无意义，
   // 且夹具根（CHECK_LOOP_ROOT 指向无脚本目录）下若并行铺开，16 门会在假根里乱跑（原 verify.test 场景 7 口径）。
-  { id: 'scripts-syntax', cohort: 'engine', guardian: true, name: '引擎脚本语法自检', cmd: 'node .agents/scripts/check-scripts-syntax.mjs', folder: '.', type: 'shell' },
-  { id: 'workflows-check', cohort: 'engine', name: '编排脚本检查', cmd: 'node .agents/scripts/workflows-check.mjs', folder: '.', type: 'shell' },
-  { id: 'rule-budget', cohort: 'engine', name: '常驻面预算检查', cmd: 'node .agents/scripts/rule-budget.mjs --all', folder: '.', type: 'shell' },
+  { id: 'scripts-syntax', cohort: 'engine', guardian: true, name: '引擎脚本语法自检', cmd: 'flow-kit run check-scripts-syntax.mjs', folder: '.', type: 'shell' },
+  { id: 'workflows-check', cohort: 'engine', name: '编排脚本检查', cmd: 'flow-kit run workflows-check.mjs', folder: '.', type: 'shell' },
+  { id: 'rule-budget', cohort: 'engine', name: '常驻面预算检查', cmd: 'flow-kit run rule-budget.mjs --all', folder: '.', type: 'shell' },
   // 本地门禁挂载自检（2026-10-25 优化1，WARN 档）：判据与 check-local-gates.mjs ①-④ 对齐（单源，一边改
   // 另一边须跟）。默认 WARN 缺配只告警；CI（TF_BUILD）/非 git 根 loud-skip；升格 = cmd 加 --strict（owner 拍板）。
-  { id: 'local-gate-config', cohort: 'engine', name: '本地门禁挂载自检（WARN 档）', cmd: 'node .agents/scripts/check-local-gate-config.mjs', folder: '.', type: 'shell' },
+  { id: 'local-gate-config', cohort: 'engine', name: '本地门禁挂载自检（WARN 档）', cmd: 'flow-kit run check-local-gate-config.mjs', folder: '.', type: 'shell' },
   // 生成物漂移单门（2026-10-28 引擎减重第三刀；2026-11-08 档 2-E 改自愈）：effective-policy / engine-map /
   // workflow-index 三门机制相同（跑生成器 --check 比对磁盘），合并为一次调用；漂移 → 原地重生成自愈后按
   // 通过计，重生成/复检失败才红（判据与自愈单源在 check-engine-artifacts.mjs，各档含 --full 同语义）。
-  { id: 'engine-artifacts', cohort: 'engine', name: '生成物漂移检查（3 份）', cmd: 'node .agents/scripts/check-engine-artifacts.mjs', folder: '.', type: 'shell' },
+  { id: 'engine-artifacts', cohort: 'engine', name: '生成物漂移检查（3 份）', cmd: 'flow-kit run check-engine-artifacts.mjs', folder: '.', type: 'shell' },
   // 默认硬门。hygiene 段已于 2026-10-28 全部退役（只跑 hard 5 段）。
-  { id: 'check-loop', cohort: 'engine', name: '闭环门禁校验', cmd: 'node .agents/scripts/check-loop.mjs', folder: '.', type: 'shell' },
-  { id: 'ledger-doc-presence', cohort: 'engine', name: '台账指针存在性', cmd: 'node .agents/scripts/check-ledger-doc-presence.mjs', folder: '.', type: 'shell' },
+  { id: 'check-loop', cohort: 'engine', name: '闭环门禁校验', cmd: 'flow-kit run check-loop.mjs', folder: '.', type: 'shell' },
+  { id: 'ledger-doc-presence', cohort: 'engine', name: '台账指针存在性', cmd: 'flow-kit run check-ledger-doc-presence.mjs', folder: '.', type: 'shell' },
   // 确认台账不变量（ledger-invariant-ci）：历史全扫挂进引擎段——此前该门自称 CI 机器门
   // 却从未进任何门表，71 处存量断档积累数月无人见（当日 DAG 感知重写 + HISTORY_BASELINE 声明后
   // 首次全绿，方具挂门条件）。pre-commit 仅 --staged 前缀面，全史审计由此门独担。
   // verify-diet 二批（2026-10-21 P0-2，owner 拍板）：本地关单不再重复付全史扫描（~37s）——TF_BUILD 外
   // 执行期 loud-skip（diff 面触台账即回列；门表/--list 恒 20，同 lane-surface-ci「本地跳过」先例）；全史审计由 CI 独担
   // （main 全量 verify 含本门；develop 最小 CI 面 secrets+check-loop 不含本门——2026-10-25 起），新违规仍被提交时刻 --staged 增量门当场拦。
-  { id: 'ledger-invariant', cohort: 'engine', name: '确认台账不变量（历史全扫）', cmd: 'node .agents/scripts/check-ledger-invariant.mjs', folder: '.', type: 'shell' },
+  { id: 'ledger-invariant', cohort: 'engine', name: '确认台账不变量（历史全扫）', cmd: 'flow-kit run check-ledger-invariant.mjs', folder: '.', type: 'shell' },
   // 泳道 diff 面（ai-native-review-p1）：CI（TF_BUILD/合并提交检出）按基准执法——产品契约面
   // 改动须 diff 内协伴 L2+ 入口；本地手跑无基准事实 → 脚本内 advisory 跳过（显式 --base origin/main 可预检）。
-  { id: 'lane-surface-ci', cohort: 'engine', name: '泳道完整性（CI diff 面；本地无基准则跳过）', cmd: 'node .agents/scripts/check-lane-surface.mjs --ci', folder: '.', type: 'shell' },
+  { id: 'lane-surface-ci', cohort: 'engine', name: '泳道完整性（CI diff 面；本地无基准则跳过）', cmd: 'flow-kit run check-lane-surface.mjs --ci', folder: '.', type: 'shell' },
   // 安全段（2026-10-14 决定 4 / G5 插队）：密钥扫描。
   // secrets-scan：gitleaks detect + 基线（.gitleaks-baseline.json，存量豁免清单，用户拍板——
   //   2026-10-15 扩 6 处权限Key 标识符，见 check-secrets.mjs 头注）；
   //   **2026-10-29 起恒执法**：gitleaks 三处解析皆缺（典型 = CI agent 装不上）→ 自动降级为纯 Node
   //   兜底扫描 check-secrets-lite.mjs（同一基线做文件级豁免），不再 loud-skip；输出首行标明执法者。
   //   需要缺二进制即红：SECRETS_SCAN_REQUIRE_GITLEAKS=1（check-secrets exit 2）。
-  { id: 'secrets-scan', cohort: 'security', name: '密钥扫描（gitleaks 优先 / lite 兜底，+基线）', cmd: 'node .agents/scripts/check-secrets.mjs', folder: '.', type: 'shell' },
+  { id: 'secrets-scan', cohort: 'security', name: '密钥扫描（gitleaks 优先 / lite 兜底，+基线）', cmd: 'flow-kit run check-secrets.mjs', folder: '.', type: 'shell' },
   // 依赖漏洞审计三门（nuget-audit / frontend-audit-prod / frontend-audit-devtool）2026-10-16 退役
   //   （owner 指令）：三者皆依赖公网漏洞服务（npm `/-/npm/v1/security/*`、NuGet 源索引的
   //   `VulnerabilityInfo`），内网镜像均不代理该面（实测见 runtime-env §6.4「漏洞数据源实测」），
@@ -120,21 +132,21 @@ const GATES = [
   //    修复）：原 .agents/hooks pre-commit 专用四门（local-pre-commit.mjs 同批脚本，判据单源不变），
   //    随本表进 CI --mid/--full 执法；本地 pre-commit 保留为最早拦截点（.githooks/pre-commit 口径已同步）。
   //    四门 id 已入 verify-scope 的 CI_UNILATERAL_GATE_IDS——本地增量档单边化 CI。
-  { id: 'code-architecture', cohort: 'product', name: '架构红线（Application 禁引 Infrastructure 等）', cmd: 'node .agents/hooks/check-architecture.mjs', folder: '.', type: 'shell' },
+  { id: 'code-architecture', cohort: 'product', name: '架构红线（Application 禁引 Infrastructure 等）', cmd: 'flow-kit hook check-architecture.mjs', folder: '.', type: 'shell' },
   // CI_PUSH_BEFORE 在场（azure-pipelines ci-push-before 步注入的 pipeline 变量）扫该区间新增行；
   // 缺省扫暂存区新增行——存量不拦（渐进收口语义与 pre-commit 一字不变）。
   { id: 'code-audit-fields', cohort: 'product',
     name: '审计字段守卫（禁手工写 Operator 等）',
-    cmd: process.env.CI_PUSH_BEFORE ? `node .agents/hooks/check-audit-fields.mjs --range ${process.env.CI_PUSH_BEFORE}..HEAD` : 'node .agents/hooks/check-audit-fields.mjs',
+    cmd: process.env.CI_PUSH_BEFORE ? `flow-kit hook check-audit-fields.mjs --range ${process.env.CI_PUSH_BEFORE}..HEAD` : 'flow-kit hook check-audit-fields.mjs',
     folder: '.', type: 'shell' },
   // 删除守卫默认即全仓面（Application/API 全目录计数比对 allowlist，非暂存面）——静态 cmd 零改接入。
-  { id: 'code-delete-guard', cohort: 'product', name: '删除守卫（Remove/RemoveRange 须登记 allowlist）', cmd: 'node .agents/hooks/check-delete-guard.mjs', folder: '.', type: 'shell' },
-  { id: 'code-notify-guard', cohort: 'product', name: '通知守卫（frontend 禁直调 antd message）', cmd: 'node .agents/hooks/check-notify-guard.mjs', folder: '.', type: 'shell' },
+  { id: 'code-delete-guard', cohort: 'product', name: '删除守卫（Remove/RemoveRange 须登记 allowlist）', cmd: 'flow-kit hook check-delete-guard.mjs', folder: '.', type: 'shell' },
+  { id: 'code-notify-guard', cohort: 'product', name: '通知守卫（frontend 禁直调 antd message）', cmd: 'flow-kit hook check-notify-guard.mjs', folder: '.', type: 'shell' },
   { id: 'frontend-lint', cohort: 'product', name: '前端代码规范检查', cmd: 'npm run lint:check', folder: 'frontend', type: 'shell' },
   // 前端单测硬门（2026-10-09）：Vitest 纯 node 面零外部依赖，CI 可执法——
   // 补齐「后端 1426 用例 vs 前端 0」的验证面不对称（AI-Native 架构审查 P1-1）。
   { id: 'frontend-unit-test', cohort: 'product', name: '前端单测 (Vitest)', cmd: 'npm run test:unit', folder: 'frontend', type: 'shell' },
-  { id: 'wiki-consistency', cohort: 'product', name: 'wiki 三方一致性', cmd: 'node .agents/scripts/verify-wiki-consistency.mjs', folder: '.', type: 'shell' },
+  { id: 'wiki-consistency', cohort: 'product', name: 'wiki 三方一致性', cmd: 'flow-kit run verify-wiki-consistency.mjs', folder: '.', type: 'shell' },
   { id: 'backend-build', cohort: 'product', name: '后端编译', cmd: 'dotnet build Shipyard.Material.sln', folder: '.', type: 'shell' },
   // --no-build（verify-diet 2026-10-21 ③）：测试直接消费 backend-build 产物，消「build → test 内部再
   // 构建同一 sln」的双构建。deps 仍必需：--no-build 无产物即红，且保持依赖门序（依赖门红 → 本门不启动）。
@@ -261,7 +273,7 @@ const persistGateLog = (gate, r) => {
 // --help 出口（2026-11-06）：只出用法——不读 git、不裁变更面、不落凭证、不跑门
 function usageText() {
   return [
-    '用法：node .agents/scripts/verify.mjs [档位] [选项]',
+    '用法：flow-kit run verify.mjs [档位] [选项]',
     '',
     '档位（缺省 = diff 面增量；最近 24h 无全量绿行时自动回落 --full 并打印 ⏭️ 兜底行）：',
     '  --full      全量门（关单凭证；引擎段 + 业务面 + 安全段）',
@@ -308,7 +320,7 @@ async function run() {
       continue;
     }
     if (argv[i].startsWith('-') && argv[i].length > 1 && !KNOWN_FLAGS.has(argv[i])) {
-      console.error(`[verify] ⚠️ 未知参数 ${argv[i]}（node .agents/scripts/verify.mjs --help 看用法）`);
+      console.error(`[verify] ⚠️ 未知参数 ${argv[i]}（flow-kit run verify.mjs --help 看用法）`);
     }
   }
   const ti = argv.indexOf('--test-cmd');
@@ -601,7 +613,7 @@ async function run() {
   if (scopeMode) console.log(`[verify] ⏭️ ${UNILATERAL_NOTE}\n`);
   console.log(`[verify] 🚀 开始全量静态门验证 (共 ${gates.length} 项，并发 ${JOBS}${serial ? '·串行' : ''})${testCmd ? '【fixture 模式】' : ''}${stubCmd ? '【stub 尾段】' : ''}${engineOnly ? '【引擎段增量门】' : ''}${productOnly ? '【业务面分档】' : ''}${midOnly ? '【中档：业务面+单测】' : ''}\n`);
   if (!testCmd && !stubCmd && process.env.RUN_E2E !== '1') {
-    console.log('[verify] ⏭️  E2E 冒烟门未启用（RUN_E2E≠1）——前置为全栈在线（前端 5203 + API 8932 + SMOKE_ADMIN/SMOKE_ADMIN_PASSWORD）；启用方式：RUN_E2E=1 node .agents/scripts/verify.mjs\n');
+    console.log('[verify] ⏭️  E2E 冒烟门未启用（RUN_E2E≠1）——前置为全栈在线（前端 5203 + API 8932 + SMOKE_ADMIN/SMOKE_ADMIN_PASSWORD）；启用方式：RUN_E2E=1 flow-kit run verify.mjs\n');
   }
 
   let passedCount = 0;
@@ -630,7 +642,7 @@ async function run() {
     }
     console.log(`[verify] ▶ ${i + 1}/${gates.length} ${gate.name}...`);
     const t0 = performance.now();
-    const child = spawn(gate.cmd, { shell: true, cwd: path.join(ROOT, gate.folder), env: gate.env ? { ...process.env, ...gate.env } : process.env });
+    const child = spawn(localizeRuntimeCmd(gate.cmd), { shell: true, cwd: path.join(ROOT, gate.folder), env: gate.env ? { ...process.env, ...gate.env } : process.env });
     running.set(i, child);
     const buf = { stdout: '', stderr: '', overflow: false };
     const pump = (src, key) => {
@@ -831,13 +843,13 @@ async function run() {
       const budgetNote = budget === null ? '' : `（预算 ${(budget / 1000).toFixed(0)}s${over ? `，超 ${((wallMs / budget - 1) * 100).toFixed(1)}%` : ''}）`;
       console.log(`[verify] ⏱️ 门禁成本：墙钟 ${(wallMs / 1000).toFixed(1)}s${budgetNote}｜各门合计 ${(totalMs / 1000).toFixed(1)}s｜最慢三门 ${top3}`);
       if (over) {
-        console.log('[verify] ⚠️ 门禁成本超预算——下一批须退役一门（一进一出；候选 node .agents/scripts/agg-judgments.mjs --retire-candidates）');
+        console.log('[verify] ⚠️ 门禁成本超预算——下一批须退役一门（一进一出；候选 flow-kit run agg-judgments.mjs --retire-candidates）');
       }
       const gen = spawnSync(process.execPath, [path.join(SCRIPT_DIR, 'gen-verify-evidence.mjs'), '--root', ROOT], { encoding: 'utf8' });
       if (gen.status === 0) {
         if (gen.stdout) process.stdout.write(String(gen.stdout).trimEnd() + '\n');
       } else {
-        console.error(`[verify] ⚠️ 绿凭证摘要生成失败（${String(gen.stderr || gen.stdout || '').trim().slice(0, 200)}）——绿裁决不变，手动补跑 node .agents/scripts/gen-verify-evidence.mjs`);
+        console.error(`[verify] ⚠️ 绿凭证摘要生成失败（${String(gen.stderr || gen.stdout || '').trim().slice(0, 200)}）——绿裁决不变，手动补跑 flow-kit run gen-verify-evidence.mjs`);
       }
     }
   }

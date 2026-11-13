@@ -9,11 +9,13 @@
 // 这是静态合同检查，不替代一次端到端 run；它拦住“新增/改名 stage 忘了登记”的低级漂移。
 //
 // 用法：
-//   node .agents/scripts/check-pipeline-state.mjs [--json] [--file <path>]
+//   flow-kit run check-pipeline-state.mjs [--json] [--file <path>]
 import fs from 'node:fs';
 import path from 'node:path';
 
-const DEFAULT_FILE = '.agents/scripts/pipeline-run.mjs';
+const DEFAULT_FILE = process.env.FLOW_KIT_RUNTIME_SCRIPTS
+  ? path.join(process.env.FLOW_KIT_RUNTIME_SCRIPTS, 'pipeline-run.mjs')
+  : '.agents/scripts/pipeline-run.mjs';
 const DEFAULT_CFG = '.agents/config/pipeline.json';
 
 export function analyze(source, config) {
@@ -56,7 +58,7 @@ function argOf(argv, name, fallback = null) {
 
 function main() {
   const argv = process.argv.slice(2);
-  const root = path.resolve(argOf(argv, 'root', process.cwd()));
+  const root = path.resolve(argOf(argv, 'root', process.env.FLOW_KIT_PROJECT_ROOT || process.cwd()));
   const file = path.resolve(root, argOf(argv, 'file', DEFAULT_FILE));
   const cfgFile = path.resolve(root, argOf(argv, 'config', DEFAULT_CFG));
   if (!fs.existsSync(file)) {

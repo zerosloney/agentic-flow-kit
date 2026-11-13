@@ -24,10 +24,10 @@
 // verify 对 fast run 后处理：无票 Nit 自动 recorded（fast-auto-recorded）、escalated 按多数票定性（fast-majority）。
 //
 // 用法示例：
-//   node .agents/scripts/pr-review.mjs plan --base origin/develop --head HEAD
-//   node .agents/scripts/pr-review.mjs collect --run .agents/tmp/pr-review/<runId>
-//   node .agents/scripts/pr-review.mjs verify --run <run>
-//   node .agents/scripts/pr-review.mjs gate --run <run> --mode enforce
+//   flow-kit run pr-review.mjs plan --base origin/develop --head HEAD
+//   flow-kit run pr-review.mjs collect --run .agents/tmp/pr-review/<runId>
+//   flow-kit run pr-review.mjs verify --run <run>
+//   flow-kit run pr-review.mjs gate --run <run> --mode enforce
 //
 // 退出码：0 通过/成功；1 门禁失败；2 用法/IO/数据错误。
 
@@ -1493,7 +1493,7 @@ function usage() {
   console.log(`pr-review.mjs — PR 面板评审骨架
 
 用法：
-  node .agents/scripts/pr-review.mjs <plan|collect|verify|adjudicate|dispose|gate|summary|status> [options]
+  flow-kit run pr-review.mjs <plan|collect|verify|adjudicate|dispose|gate|summary|status> [options]
 
 plan        --base <ref> --head <ref> [--spec <path>] [--fast] [--force]
 collect     --run <dir> [--findings <dir>] [--check]

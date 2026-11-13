@@ -8,7 +8,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "node .agents/hooks/pre-write-check.cjs",
+              "command": "flow-kit hook pre-write-check",
               "enabled": true,
               "timeout": 60
             }
@@ -19,7 +19,7 @@
           "hooks": [
             {
               "type": "command",
-              "command": "node .agents/hooks/pre-shell-check.cjs",
+              "command": "flow-kit hook pre-shell-check",
               "enabled": true,
               "timeout": 600
             }

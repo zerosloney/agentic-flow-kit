@@ -10,12 +10,12 @@ concurrency: 2
 | id | after | role | step | task / params | files（授权） | accept（验收判据） | gate | human | retries |
 |----|-------|------|------|---------------|--------------|-------------------|------|-------|---------|
 | author | — | implementer | — | 起草一份 L1 plan（fill-plan.mjs --level L1 + AI 填实），状态 draft。不另立 intent | workflow/plans/<date>-<topic>.md | plan 含入口/改动方案/约束与风险/验证计划/验收标准，状态 draft | | | 1 |
-| gate-doc | author | — | — | — | — | — | node .agents/scripts/workflows-check.mjs | | |
+| gate-doc | author | — | — | — | — | — | flow-kit run workflows-check.mjs | | |
 | confirm | gate-doc | — | — | plan 草稿全文过目，用户对话内一句"可以" → plan 状态 draft → approved + 回填「确认与复核」节 | — | plan 状态 approved + 「确认结果：approved（YYYY-MM-DD 用户对话内确认）」 | | 用户确认（plan 确认门） | |
 | plan-commit | confirm | implementer | — | 提交 plan 立项 commit（docs(workflow)） | workflow/plans/, workflow/INDEX.md | pre-commit 钩子全过；commit message 含 plan 改动面摘要 | | | 0 |
 | build | plan-commit | implementer | — | 按 plan §改动面 执行 | 见 plan | plan 改动面全部完成 | | | 1 |
 | gate-test | build | — | — | — | — | — | 项目测试命令（必须全绿） | | |
-| gate-loop | build | — | — | — | — | — | node .agents/scripts/check-loop.mjs（EXIT=0 且无 HARD-BLOCK） | | |
+| gate-loop | build | — | — | — | — | — | flow-kit run check-loop.mjs（EXIT=0 且无 HARD-BLOCK） | | |
 | feat-commit | gate-test,gate-loop | implementer | — | 提交 feat commit（feat(模块名)） | 工作区所有变更文件 | pre-commit 钩子全过；commit message 含 build 改动面摘要 | | | 0 |
 | closeout | feat-commit | implementer | — | 勾 plan 验收 + plan → done + 关单 docs commit 留痕；同步 INDEX.md（如适用） | workflow/plans/<date>-<topic>.md, workflow/INDEX.md | plan 状态 done；验收勾验含 commit SHA 证据 | | | 0 |
 
@@ -25,4 +25,4 @@ concurrency: 2
 - 声明随 plan 确认后方可执行——本 workflow 是 plan 任务拆解的执行器；plan 草稿先经用户对话内确认。
 - 子智能体不跨确认门、不 commit / push（派单红线行：只改授权文件；缺输入或需偏离 → `BLOCKER:` 停下）。确认门一律 human 形态行表达（confirm 行即此），不得派子智能体代行。
 - 留痕：每个派单 stage 完成后向 `workflow/delegations.md` 委派结果表追加一行（`一次通过` / `返工×N` / `返工待修`）。
-- 解析校验先行（机器门 `node .agents/scripts/workflows-check.mjs`）：role ∈ `.agents/roles/`、after 引用存在且无环、四形态恰填一项——任一不过即拒，不执行。
+- 解析校验先行（机器门 `flow-kit run workflows-check.mjs`）：role ∈ `.agents/roles/`、after 引用存在且无环、四形态恰填一项——任一不过即拒，不执行。

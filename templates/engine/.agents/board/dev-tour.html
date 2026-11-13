@@ -1902,7 +1902,7 @@ const MODE = __TOUR_MODE__;
     } catch (e) {
       $('#title').textContent = '开发全景图加载失败';
       $('#subtitle').textContent = e.message;
-      $('#canvas').innerHTML = `<div class="none">${esc(e.message)}<br><br>实时视图需先启动 <code>node .agents/scripts/ensure-board.mjs</code></div>`;
+      $('#canvas').innerHTML = `<div class="none">${esc(e.message)}<br><br>实时视图需先启动 <code>flow-kit run ensure-board.mjs</code></div>`;
       return;
     }
     readHash();

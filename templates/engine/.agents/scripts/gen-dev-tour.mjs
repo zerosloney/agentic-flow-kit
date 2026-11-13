@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 // gen-dev-tour.mjs — 把 plan/spec 的「步骤 × 改动文件」渲染成可交互开发全景图
 // 用法：
-//   node .agents/scripts/gen-dev-tour.mjs workflow/plans/<name>.md
-//   node .agents/scripts/gen-dev-tour.mjs <doc> --out .agents/cache/tours/x.html
-//   node .agents/scripts/gen-dev-tour.mjs <doc> --base origin/main      # 对比已提交的整段改动
-//   node .agents/scripts/gen-dev-tour.mjs <doc> --json                  # 只打印模型，不写 HTML
+//   flow-kit run gen-dev-tour.mjs workflow/plans/<name>.md
+//   flow-kit run gen-dev-tour.mjs <doc> --out .agents/cache/tours/x.html
+//   flow-kit run gen-dev-tour.mjs <doc> --base origin/main      # 对比已提交的整段改动
+//   flow-kit run gen-dev-tour.mjs <doc> --json                  # 只打印模型，不写 HTML
 // 默认输出 .agents/cache/tours/<type>-<name>.html（gitignored 的本地快照），并打印看板实时地址。
-// 实时版：node .agents/scripts/ensure-board.mjs → http://127.0.0.1:8933/tour?file=<doc>
+// 实时版：flow-kit run ensure-board.mjs → http://127.0.0.1:8933/tour?file=<doc>
 // 口径：文档 = 计划面（步骤/文件），git = 实际面（--base 之后的工作树），两者按路径合并；
 //       实际改了但文档没登记的文件进「文档外实际改动」步骤，不静默丢弃。
 // 零依赖；HTML 模板单源 .agents/board/dev-tour.html，静态快照只在 __TOUR_DATA__ 处注入模型。
@@ -19,7 +19,7 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = DEFAULT_ROOT;
 const TEMPLATE = path.join(ROOT, '.agents', 'board', 'dev-tour.html');
 
-const USAGE = `用法：node .agents/scripts/gen-dev-tour.mjs <workflow 文档.md> [选项]
+const USAGE = `用法：flow-kit run gen-dev-tour.mjs <workflow 文档.md> [选项]
 
 把 plan/spec 的步骤与改动文件渲染为单文件 HTML：左侧文件树 / 中间全景图·时序图·数据流图·流程图 / 右侧步骤变更说明。
 
@@ -36,9 +36,9 @@ const USAGE = `用法：node .agents/scripts/gen-dev-tour.mjs <workflow 文档.m
   --help             打印本说明
 
 示例：
-  node .agents/scripts/gen-dev-tour.mjs workflow/plans/2026-11-09-outbound-edit-preserve-line-no.md
-  node .agents/scripts/gen-dev-tour.mjs workflow/plans/2026-11-05-material-guoyu-push.md --base HEAD~20
-  node .agents/scripts/gen-dev-tour.mjs workflow/specs/2026-08-29-code-template-l3-readd-duplicate.md --json`;
+  flow-kit run gen-dev-tour.mjs workflow/plans/2026-11-09-outbound-edit-preserve-line-no.md
+  flow-kit run gen-dev-tour.mjs workflow/plans/2026-11-05-material-guoyu-push.md --base HEAD~20
+  flow-kit run gen-dev-tour.mjs workflow/specs/2026-08-29-code-template-l3-readd-duplicate.md --json`;
 
 function parseArgs(argv) {
   const out = {
@@ -185,7 +185,7 @@ function main() {
   if (model.note) console.log(`   ⚠ ${model.note}`);
   if (model.base.note) console.log(`   ⚠ git 基线 ${model.base.ref}：${model.base.note}`);
   console.log(`   打开快照：file://${outPath.replace(/\\/g, '/')}`);
-  console.log(`   实时版：node .agents/scripts/ensure-board.mjs 后访问 /tour?file=${encodeURI(model.doc.path)}`);
+  console.log(`   实时版：flow-kit run ensure-board.mjs 后访问 /tour?file=${encodeURI(model.doc.path)}`);
 }
 
 main();

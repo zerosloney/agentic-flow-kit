@@ -11,8 +11,8 @@
 //   budget  打印当前用量
 //
 // 用法：
-//   node .agents/scripts/memory-tier.mjs audit
-//   node .agents/scripts/memory-tier.mjs suggest [--days 90] [--min 3]
+//   flow-kit run memory-tier.mjs audit
+//   flow-kit run memory-tier.mjs suggest [--days 90] [--min 3]
 import fs from 'node:fs';
 import path from 'node:path';
 

@@ -24,7 +24,7 @@
  *   - `direction: 'residue'`：批次已删但实库仍在，且已人工核实为「实体确实声明该列」（台账注释过时）。
  *
  * 依赖：sqlcmd（PATH 可达）与 backend/material/Shipyard.Material.API/appsettings.json 的 DBConnParameter。
- * 用法：node .agents/scripts/check-schema-residue.mjs [--verbose]
+ * 用法：flow-kit run check-schema-residue.mjs [--verbose]
  * 退出码：0 = 无未解释残留/缺失；1 = 有；2 = 前置缺失（appsettings/sqlcmd）。
  */
 import { execFileSync } from 'node:child_process';

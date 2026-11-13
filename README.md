@@ -33,9 +33,11 @@ npx agentic-flow-kit
 安装后：
 
 ```bash
-node .agents/scripts/check-local-gates.mjs --fix
+npx agentic-flow-kit run check-local-gates --fix
 npx agentic-flow-kit doctor --target .
 ```
+
+脚本与 hook 实现随包分发：装好 `agentic-flow-kit` 即具备能力，项目内只落 `.agents` 的声明面（技能、子代理、命令、MCP / hooks 配置）与数据资产，不再复制 `.agents/scripts`、`.agents/hooks/*.cjs|*.mjs`、`.agents/tests`。git 钩子、宿主适配层与 MCP 统一通过 `flow-kit run <script>` / `flow-kit hook <hook>` 调用，因此 `flow-kit` 需在 PATH（CI 用 `npx --yes agentic-flow-kit`）。
 
 ## 子命令
 
@@ -51,8 +53,10 @@ npx agentic-flow-kit doctor --target .
 | `diff` | 只读对比 manifest、磁盘与当前模板，分类 `unchanged` / `user-modified` / `kit-updated` / `orphan` / `missing`；支持 `--json`、`--all` |
 | `status` | 摘要输出安装档位、宿主、语言、栈与差异计数；支持 `--json` |
 | `explain <targetRel>` | 解释单个托管文件：类别、模板来源、语言覆盖、模型注入与 manifest/当前哈希 |
-| `doctor` | 校验 manifest、文件在位、git 配置、`.gitattributes`、五钩子、宿主接线、Node 版本；`--deep` 再跑 `check-local-gates.mjs`；`--attest [--out <file>]` 生成安装证明链；manifest 漂移以 advisory 报告 |
+| `doctor` | 校验 manifest、文件在位、git 配置、`.gitattributes`、五钩子、宿主接线、Node 版本；`--deep` 再跑 `flow-kit run check-local-gates`；`--attest [--out <file>]` 生成安装证明链；manifest 漂移以 advisory 报告 |
 | `list-hosts` | 列出支持的宿主 |
+| `run <script>` | 从包内运行时执行引擎脚本；`--root <dir>` 指定项目根，`--` 后的参数原样透传；`--list` 列出可用脚本 |
+| `hook <hook>` | 从包内运行时执行宿主 hook 适配器；stdin 与剩余参数透传；`--list` 列出可用 hook |
 | `workspace init --repos <dir>...` | 在多仓根目录生成 `.flow-kit/workspace.json`，记录仓库清单与各仓安装摘要；可重复执行刷新 |
 | `workspace status` | 只读聚合 workspace 内各仓的安装状态、宿主、栈、版本与路径缺失 |
 
@@ -118,7 +122,7 @@ flow-kit workspace status --json
 | `tasks.md` | 与验收标准对应的勾选任务，至少一条 `- [ ]` |
 | `verify-report.md` | `## 结果`、`## 证据`，以及 `结论: pass\|fail\|partial` |
 
-每个需求建 `workflow/specs/<name>/` 并复制模板；`node .agents/scripts/check-spec-packages.mjs [--root <dir>] [--json]` 校验缺件、缺节与无法识别的结论。脚本默认只检查以 `_` 开头的模板目录之外的包，可独立接入 CI / verify。
+每个需求建 `workflow/specs/<name>/` 并复制模板；`flow-kit run check-spec-packages [--root <dir>] [--json]` 校验缺件、缺节与无法识别的结论。脚本默认只检查以 `_` 开头的模板目录之外的包，可独立接入 CI / verify。
 
 评测证据另有版本化输出：`agent-eval record` 在写 `.agents/evals/results.jsonl` 的同时生成 `.agents/evals/eval-log.json`（`version: 1`、阈值、结果、证据签名，schema：`schemas/eval-log.schema.json`），便于外部评估平台消费。`--no-eval-log` 关闭，`--eval-log <path>` 指定路径。
 
@@ -178,13 +182,11 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 
 | 宿主 | 文件 | 形态 |
 |---|---|---|
-| `claude` / `codebuddy` / `qwen` | `settings.json` / `.qwen/settings.json` | `$<HOST>_PROJECT_DIR` 命令字符串 |
-| `trae` | `hooks.json` | 项目相对路径 |
-| `qoder` | `settings.json` | `command` + `args` + `name` / `statusMessage` |
+| `claude` / `codebuddy` / `qwen` / `trae` / `commandcode` | 各自配置 | `flow-kit hook <id>` 命令字符串 |
+| `qoder` | `settings.json` | `command: flow-kit` + `args: ["hook", "<id>"]` + `name` / `statusMessage` |
 | `zcode` | `config.json` | `hooks.events`，条目带 `enabled` |
-| `commandcode` | `settings.json` | `%COMMANDCODE_PROJECT_DIR%` 命令字符串 |
 
-合并只替换指向 `.agents/hooks/*.cjs` 的托管条目：用户自建 hook、其它事件、`permissions` 等其余键原样保留；重复安装不会重复追加，过期接线（错误 matcher）会被清理。Qwen 的 `settings.json` 同时承载 hooks 与 MCP，两个合并器对同一份 JSON 组合执行。`opencode` / `pi` / `cline` 没有 `hooks.events`，继续使用静态模板，行为不变；外部宿主也可在宿主定义的 `hooks.events` 中接入同一编译器。`doctor` 以 `gates.json` 为期望值检查缺失 / 多余接线。
+合并只替换托管 hook 条目（`flow-kit hook <id>` 或旧版 `.agents/hooks/*.cjs` 路径，用于接管旧安装）：用户自建 hook、其它事件、`permissions` 等其余键原样保留；重复安装不会重复追加，过期接线（错误 matcher）会被清理。Gate 实现随包分发，项目内只保留声明与配置。Qwen 的 `settings.json` 同时承载 hooks 与 MCP，两个合并器对同一份 JSON 组合执行。`opencode` / `pi` / `cline` 没有 `hooks.events`，继续使用静态模板，行为不变；外部宿主也可在宿主定义的 `hooks.events` 中接入同一编译器。`doctor` 以 `gates.json` 为期望值检查缺失 / 多余接线。
 
 ## 权限编译
 
@@ -225,7 +227,7 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 
 合并是幂等的：只补缺失的同名 server，保留用户自建 server 与文件中的其它键（如 `permissions`）；重复安装/升级不会重排或覆盖既有内容。远程 server 按宿主 schema 生成：Claude / Qwen 写 `type: http`（可用 `type: sse` 覆盖），OpenCode 写 `type: remote`。卸载时按 manifest 记录的 server 名摘除托管条目，用户内容保留；只有本工具创建且未被改动的文件才整文件删除（`manifest.mergeOrigins`）。`doctor` 校验配置文件存在、JSON 合法、容器与 server 齐全。`--no-mcp` 完全跳过接线，并把选择写入 manifest 供 `upgrade` 重放。
 
-默认声明带一个只读本地 server `flow-kit-wiki`（`.agents/scripts/wiki-mcp.mjs`），提供 `wiki_search` 工具检索 `wiki/` 与 `.agents/`；不联网、不写盘。
+默认声明带一个只读本地 server `flow-kit-wiki`（`flow-kit run wiki-mcp`），提供 `wiki_search` 工具检索 `wiki/` 与 `.agents/`；不联网、不写盘。
 
 ## 模型配置
 
@@ -262,16 +264,16 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 
 | 面 | 入口 | 作用 |
 |---|---|---|
-| 行为评测 | `.agents/scripts/agent-eval.mjs` + `.agents/skills/eval/` | 技能/命令/角色/模型变更后，用固定任务集跑 A/B，凭证绑定“评测敏感面”的内容签名；CI 先 `--advisory`，稳定后转硬门 |
-| 测试不可弱化 | `.agents/hooks/pre-write-check.cjs` §2.5 + `fix-task.mjs` | 修复窗口内禁改既有测试；新建复现测试放行；`TEST-GUARD-ALLOW:` 留逃生口 |
-| 离线梦境 | `.agents/scripts/dream-run.mjs` | 归档、索引、主张依据、**经验回放**、**记忆表示**、**注入层预算**、结果指标 |
-| 经验日志 | `.agents/scripts/session-log.mjs` | 记录 failure/correction/refusal，供 dreaming 对照纠错 |
-| 记忆表示 | `.agents/scripts/memory-wiki.mjs` | 从 claims/incidents/session-logs 生成 `wiki/_memory/` 链接地图 |
-| 注入层预算 | `.agents/scripts/memory-tier.mjs` | 200 行 / 25KB 上限；只出上浮候选，不自动改 |
-| 单写者租约 | `.agents/scripts/path-lease.mjs` | 并行 agent 写同一页面前加租约，防共享页丢事实 |
-| 结果指标 | `.agents/scripts/outcome-metrics.mjs` | 首次过门率、复核采纳率、逃逸缺陷、评测通过率、返工占比 |
-| 闭环状态机 | `.agents/scripts/check-pipeline-state.mjs` | stage/stopType 闭包检查；真实端到端 run 仍需小任务验证 |
-| 策略即代码 | `.agents/config/policy.json` + `.agents/scripts/policy.mjs` | 双向核对机制台账、预算、枚举闭集与角色/模型引用；`check` 失败非零，`explain` 输出人类视图 |
+| 行为评测 | `flow-kit run agent-eval` + `.agents/skills/eval/` | 技能/命令/角色/模型变更后，用固定任务集跑 A/B，凭证绑定“评测敏感面”的内容签名；CI 先 `--advisory`，稳定后转硬门 |
+| 测试不可弱化 | `flow-kit hook pre-write-check` §2.5 + `flow-kit run fix-task` | 修复窗口内禁改既有测试；新建复现测试放行；`TEST-GUARD-ALLOW:` 留逃生口 |
+| 离线梦境 | `flow-kit run dream-run` | 归档、索引、主张依据、**经验回放**、**记忆表示**、**注入层预算**、结果指标 |
+| 经验日志 | `flow-kit run session-log` | 记录 failure/correction/refusal，供 dreaming 对照纠错 |
+| 记忆表示 | `flow-kit run memory-wiki` | 从 claims/incidents/session-logs 生成 `wiki/_memory/` 链接地图 |
+| 注入层预算 | `flow-kit run memory-tier` | 200 行 / 25KB 上限；只出上浮候选，不自动改 |
+| 单写者租约 | `flow-kit run path-lease` | 并行 agent 写同一页面前加租约，防共享页丢事实 |
+| 结果指标 | `flow-kit run outcome-metrics` | 首次过门率、复核采纳率、逃逸缺陷、评测通过率、返工占比 |
+| 闭环状态机 | `flow-kit run check-pipeline-state` | stage/stopType 闭包检查；真实端到端 run 仍需小任务验证 |
+| 策略即代码 | `.agents/config/policy.json` + `flow-kit run policy` | 双向核对机制台账、预算、枚举闭集与角色/模型引用；`check` 失败非零，`explain` 输出人类视图 |
 | 安装证明链 | `flow-kit doctor --attest --out <file>` | manifest / files / policy / eval / git 五段 sha256 链；篡改可检出，输出确定、可归档 |
 
 `--tier standard`（默认）会生成 `azure-pipelines.yml` 与 `.github/workflows/ci.yml`，在 `verify --full` 之后跑上述 advisory 检查；`lean` 不生成 CI，`enterprise` 另装加固配置。未完成项与验收口径见 [BACKLOG.md](BACKLOG.md)。
@@ -281,10 +283,10 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 `policy.json` 是策略面的机器可读索引，不复制各配置的业务内容：
 
 ```bash
-node .agents/scripts/policy.mjs check            # 校验；问题退出 1
-node .agents/scripts/policy.mjs check --json     # 机器可读输出
-node .agents/scripts/policy.mjs explain          # 当前生效策略视图
-node .agents/scripts/gen-effective-policy.mjs    # 重生成 workflow/effective-policy.md
+flow-kit run policy check            # 校验；问题退出 1
+flow-kit run policy check --json     # 机器可读输出
+flow-kit run policy explain          # 当前生效策略视图
+flow-kit run gen-effective-policy    # 重生成 workflow/effective-policy.md
 flow-kit upgrade --explain-policy --dry-run      # 只读输出升级将带来的策略差异
 ```
 

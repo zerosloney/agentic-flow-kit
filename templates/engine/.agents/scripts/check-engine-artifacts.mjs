@@ -9,7 +9,7 @@
 //   判据仍以各生成器 --check 为唯一单源（不复制比对逻辑）；workflow/verify-evidence.md 由 verify
 //   全绿尾段（gen-verify-evidence）在全部门结束后的串行尾段写入——三个生成物均不以其为源，
 //   与本门自愈写盘无读写交集，不存在顺序/幂等冲突。
-// 用法：node .agents/scripts/check-engine-artifacts.mjs
+// 用法：flow-kit run check-engine-artifacts.mjs
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -44,7 +44,7 @@ for (const [id, script, artifact] of ITEMS) {
   const f = recheck || regen;
   const why = regen.status === 0 ? '重生成后复检仍漂移' : `重生成器异常 exit ${regen.status}`;
   console.error(`[artifacts] ❌ ${id} 自愈失败（${why}）：${(`${f.stdout || ''}${f.stderr || ''}`.trim()) || `exit ${f.status}`}`);
-  console.error(`[artifacts]    ${artifact} 手动重生成：node .agents/scripts/${script}`);
+  console.error(`[artifacts]    ${artifact} 手动重生成：flow-kit run ${script}`);
 }
 if (red) {
   console.error(`[artifacts] ${red}/${ITEMS.length} 份生成物自愈失败——单源与磁盘不可自动收敛，人工介入`);

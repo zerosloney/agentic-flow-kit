@@ -9,7 +9,7 @@
 
 - 终端默认 PowerShell（各机 shell 配置差异登记 runtime-env.local.md）：`bash` / `sh` 是否在 PATH 因机而异；门禁脚本已 `.mjs`/`.cjs` 化（node 直跑，`.sh` 门禁归零），唯一仍以 POSIX sh 书写的是 `.githooks/` 五个 git 钩子（git 机制要求），其内部一律转发 node，不依赖系统 PATH 上的 `sh`。若某脚本确需 shell 跑：用 Git Bash 绝对路径包装（本机路径登记 runtime-env.local.md 的 bash 行）
 - 取真实退出码必须包 `bash -c`（pwsh 的 `$?` 是布尔值；`<bash>` = 本机登记的 bash 路径）——`$LASTEXITCODE` 假绿陷阱见 §6.4「假绿陷阱」行：
-  `& "<bash>" -c 'node .agents/scripts/check-loop.mjs; echo EXIT=$?'`
+  `& "<bash>" -c 'flow-kit run check-loop.mjs; echo EXIT=$?'`
 - 长命服务一律独立进程起（如 `Start-Process`）；shell `&` 作业生命周期不可依赖——**但 Bash `run_in_background` 的完成通知是可靠的**，别退化成轮询：有限命令前台直跑（`timeout` 上限 600000ms），已起后台的用 `TaskOutput(block=true)` 或等通知。
 
 ## 2. 编译输出锁与多会话并行
@@ -40,7 +40,7 @@
 
 ## 5. 门禁与 fixture 回归速查
 
-- 引擎面测试不入库、仓内无 fixture 套件（`*.test.mjs` 已 gitignore）：按改动对象跑生成器 `--check` / `--dry-run`（如 `gen-workflow-index.mjs --check`、`gen-workflow-metrics.mjs --dry-run`）；需绿凭证直跑 `node .agents/scripts/verify.mjs`（无根 `package.json` 的仓给 `--test-cmd`）。hard 段回归手动跑 `node .agents/scripts/check-loop-rev-semantics.mjs`。
+- 引擎面测试不入库、仓内无 fixture 套件（`*.test.mjs` 已 gitignore）：按改动对象跑生成器 `--check` / `--dry-run`（如 `gen-workflow-index.mjs --check`、`gen-workflow-metrics.mjs --dry-run`）；需绿凭证直跑 `flow-kit run verify.mjs`（无根 `package.json` 的仓给 `--test-cmd`）。hard 段回归手动跑 `flow-kit run check-loop-rev-semantics.mjs`。
 
 ## 6. 环境事实登记处 (Environment Fact Registry)
 
@@ -53,7 +53,7 @@
 |---|---|---|---|---|---|
 | API (Kestrel) | 8932 | `+slot×10` | HTTP | `scripts/verify/business/dev-local.ps1` | 权威联通口径，前端实际连接地址；`-Port` 可换端口（发布目录随端口派生，支持多实例）；`-Mode debug` = `dotnet watch`（占 dev bin；`--no-hot-reload`，仅重编+重启） |
 | 前端 (Vite) | 5203 | `+slot×10` | HTTP | 同 API 脚本（`dev-local.ps1` 一并起停） | 直起 Vite 并带 `--port --strictPort`（禁静默漂移）；注入 `VITE_API_BASE_URL`，无需改 `.env.local` |
-| 流程看板 | 8933 | `+slot×10` | HTTP | `.agents/scripts/ensure-board.mjs` | 仅绑 127.0.0.1；strict（槽位口被他人进程占即失败不漂移，2026-10-22 board-slot-strict）；看板槽位口与同槽 API 口恒差 1（8933↔8932），族内无碰撞 |
+| 流程看板 | 8933 | `+slot×10` | HTTP | `flow-kit run ensure-board` | 仅绑 127.0.0.1；strict（槽位口被他人进程占即失败不漂移，2026-10-22 board-slot-strict）；看板槽位口与同槽 API 口恒差 1（8933↔8932），族内无碰撞 |
 | 冒烟探活 | — | 随所测端口 | — | `scripts/verify/business/regression-smoke.mjs` | 6 个端点任一非 200 即 fail |
 
 ### 6.1a UI 实测登录账号 (UI Test Accounts)
@@ -96,7 +96,7 @@
 
 - **解析顺序**（dwf / `browser-resolve.mjs` / `check-local-gates.mjs`）：① 环境变量（仅浏览器 `CHROME_PATH`）→ ② `runtime-env.local.md`「工具」表登记行（git-ignore 自登记，模板 `runtime-env.local.example.md`；dwf 仅消费 npm-cli 行）→ ③ 标准安装位置探测（node/dotnet/git 逐候选 `--version` 至 exit 0，浏览器 fs 探测 Edge/Chrome）→ ④ 按名回退（仅 dwf）。`browser-resolve.mjs` 全空返回 null，`harness.mjs` launch 抛指导性报错。
 - **登记格式**：`| 工具 | 本机路径 | 备注 |` 表行，工具名限 `node` / `npm-cli` / `dotnet` / `git` / `bash` / `browser`（行首整词匹配，`npm-cli` 不会误中 `node`）。dwf 的 npm-cli 未登记时随 node 安装目录自动派生（官方发行版固定相对布局 `node_modules/npm/bin/npm-cli.js`）。
-- **新机上手**：clone 后跑 `node .agents/scripts/check-local-gates.mjs`——⑥ 回显各工具解析结果，缺什么登什么；全部标准安装则零登记。
+- **新机上手**：clone 后跑 `flow-kit run check-local-gates.mjs`——⑥ 回显各工具解析结果，缺什么登什么；全部标准安装则零登记。
 - **gitleaks 解析序**：`GITLEAKS_BIN` 环境变量（`.mjs`/`.js` 经 node 直跑）→ PATH 上 `gitleaks` → `.agents/tools/gitleaks(.exe)`（**git-ignore，机器本地**；装机 = GitHub releases 官方 zip 解压，版本锚 8.30.1——与 CI 装机版本、基线生成口径一致）。消费方 = `check-secrets.mjs`（verify 安全段 `secrets-scan`——关单/CI）。
 - **gitleaks 三处皆缺 = 降级纯 Node 兜底 `check-secrets-lite.mjs`**：零二进制零网络，同一基线做**文件级**豁免；强特征规则（私钥块/AWS/GitHub/JWT/Square/云前缀）无豁免，宽泛 key=value 仅对基线外文件执法；首行标 `执法者=lite`，绿行记 `secretsEnforcer=lite`。`--lite` / `SECRETS_SCAN_LITE=1` 强制；`SECRETS_SCAN_REQUIRE_GITLEAKS=1` 缺二进制 fail-closed（exit 2）。基线 `.gitleaks-baseline.json`（豁免 owner 拍板）随仓走，缺基线 exit 2。实测：gitleaks 全史 14–18s，lite 全树 0.9s / 增量 0.3s。
 
@@ -120,7 +120,7 @@
 | worktree junction 穿透删包（2026-11-04 实证） | worktree 内 `mklink /j …/node_modules` 复用依赖后，`git worktree remove --force` / `rm -rf` 会**穿透 junction 递归删目标本体**（主仓 node_modules 被清到只剩 42 项） | git 不识别 NTFS junction（reparse point 按普通目录递归） | **禁 junction**：worktree 内独立 `npm install`（外网不可达时不可行），或删前先 `rmdir` 摘链接（MSYS `rmdir` 不递归）再 remove；`xlsx@0.20.3` 走 cdn.sheetjs.com 不入 registry/镜像、缓存无它，损伤只能外部补 tarball |
 | git add 批量原子失败+吞错（2026-11-08 实证） | 一条 git add 里 glob 混入不可见字符、且 api.http 误写根路径（实际 `backend/material/Shipyard.Material.API/api.http`）→ 任一 pathspec 无匹配即**整条 fatal 中止**；叠加 `2>/dev/null` 吞错 → F 批次一度只提交 3 个模板（残缺提交，两次 amend 修齐） | git add 对无效 pathspec 整体退出、不执行部分匹配；吞错重定向掩盖 fatal；编辑器可注入零宽字符 | 批量暂存一律**显式路径清单**（禁 glob、禁 `2>/dev/null`）；add 后必看 `git diff --cached --stat` 条数再 commit；未 push 的残缺提交用 `git commit --amend` 收齐 |
 | DDL 事后溯源 | 需查「谁/何时/何表」 | 本库默认追踪**已启用**（`sys.traces` is_default=1） | `fn_trace_gettable((SELECT value FROM fn_trace_getinfo(NULL) WHERE property=2), default)` 过滤 `EventClass IN (164,47,46)` + `DatabaseName`；记录主机/应用/时刻/对象（**不含语句文本**；曾据此定位带外 ADD 源主机） |
-| schema 批次残留审计 | 「已删列仍存在 / 已加列不存在」全批次对账 | — | `node .agents/scripts/check-schema-residue.mjs [--verbose]`（只读；连接串取 `appsettings.json` 的 `DBConnParameter`；退出码 1 = 有未解释残留/缺失；`EXEMPT` 为带因豁免清单） |
+| schema 批次残留审计 | 「已删列仍存在 / 已加列不存在」全批次对账 | — | `flow-kit run check-schema-residue.mjs [--verbose]`（只读；连接串取 `appsettings.json` 的 `DBConnParameter`；退出码 1 = 有未解释残留/缺失；`EXEMPT` 为带因豁免清单） |
 | git cat-file --batch 回显完整 sha | 输入缩写 sha 时 Map 恒 miss、静默走保守回退 | `--batch` header 用**完整** sha，与输入形态无关 | 按**输入顺序**回填（键用请求时的缩写）；新增文件 oldSha 为 `0000000` 须判 `/^0+$/` |
 | MSYS 斜杠开关被当路径 | `robocopy … /E` 被转成 `E:/`，**退出码 0 且悄无声息** | git-bash 把单斜杠开关按 POSIX 路径转 | `MSYS_NO_PATHCONV=1` 直调 exe（`MSYS2_ARG_CONV_EXCL='*'` 与 `cmd //c` 组合无效）；事后核对目标目录真实存在 |
 | 看板服务闪 CMD 窗（2026-11-09 实证） | 看板服务（`ensure-board.mjs` 以 detached+windowsHide 拉起，**无控制台**）内 spawn 的 git/node 子进程未带 `windowsHide` → 用户每次点击看板即闪 CMD 窗 | Windows 为无控制台父进程派生的控制台子进程**新开控制台窗口** | 服务进程可达的所有 spawn/execFile/execFileSync 一律加 `windowsHide: true`（非 Windows 平台自动忽略，无副作用；已补 `workflow-board-server.mjs` ×3、`dev-tour-model.mjs` ×1） |
@@ -173,6 +173,6 @@
 - **`git config core.hooksPath .githooks`**：仓库自带钩子不随 clone 传播，须本机挂载，否则全部门禁静默失效（2026-09-16 缺档事故实证）。
 - **五钩子职责单源 = `.githooks/*` 头部注释**：pre-commit（台账不变量 + local-pre-commit + commit-check）；commit-msg（Conventional Commits 类型枚举 feat/fix/docs/style/refactor/perf/chore，真实 Merge/Revert 豁免）；pre-merge-commit（转发 pre-commit 按完整合并树编译，squash 由 pre-commit 探 SQUASH_MSG 走 `--full`）；pre-push（闭环断档 hard-block = hard 6 段）；post-commit（非阻断：kb-cache evict + 推送积压提醒）。
 - **`git config merge.ours.driver true`**：让 `.gitattributes` 对 `appsettings.json` 的 `merge=ours` 生效；仅护 `git merge`——**`rebase` 时 ours=上游，本侧改动被静默丢弃**（实测 exit 0、无提示）；`cherry-pick` 冲突可见。
-- **`git config merge.jsonl-union.driver "node .agents/scripts/git-merge-jsonl.mjs %O %A %B"`**（2026-10-10 并发台账防冲突）：让 `.gitattributes` 对 `.agents/*.jsonl`（`confirmations.jsonl` 等）的 `merge=jsonl-union` 生效；多人并发提 develop 或单人多 worktree 并行时，自动对尾部追加行取并集去重合并，彻底消除追加式日志文件的 Git 文本合并冲突。
+- **`git config merge.jsonl-union.driver "flow-kit run git-merge-jsonl.mjs %O %A %B"`**（2026-10-10 并发台账防冲突）：让 `.gitattributes` 对 `.agents/*.jsonl`（`confirmations.jsonl` 等）的 `merge=jsonl-union` 生效；多人并发提 develop 或单人多 worktree 并行时，自动对尾部追加行取并集去重合并，彻底消除追加式日志文件的 Git 文本合并冲突。
 - **钩子维护口径**：五钩子为本仓自有维护（agentic-flow-kit 依赖已移除），无 sync / 回哺 / doctor 概念；pre-push（hard 扫描）与 post-commit（积压提醒段）等本地增强直接改直接提交。引擎配置单源为 `.agents/config/engine.json`（policyVersion / 看板端口等）。
 - **CI agent 环境事实（单源登记 2026-10-08；以 `azure-pipelines.yml` 为准）**：池 `JAMTC`（自托管 Windows）；Node 锚见 §6.2；前端依赖 `npm install --legacy-peer-deps --include=dev`（须 `NODE_ENV=development` + 清 `npm_config_omit`，否则少装 devDependencies → vitest/eslint 报「不是内部或外部命令」）；agent 与 dev 库同内网（`dotnet test` 可达 `DEVE_CSS_YZGY`）；观察项：Node 22 `spawnSync` EBUSY 若现，弃 NodeTool 改系统 Node 并回改锚。

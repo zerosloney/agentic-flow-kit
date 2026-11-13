@@ -5,8 +5,8 @@
 // 原文还在不等于主张为真。核对只报告，退出码恒 0，不改正文、不改历史行。
 //
 // 用法：
-//   node .agents/scripts/claims.mjs add --claim "..." --path <相对路径> --quote "..."
-//   node .agents/scripts/claims.mjs recheck
+//   flow-kit run claims.mjs add --claim "..." --path <相对路径> --quote "..."
+//   flow-kit run claims.mjs recheck
 // 库：addClaim({ root, claim, path, quote, now }) / recheckClaims(root)
 import crypto from 'node:crypto';
 import fs from 'node:fs';

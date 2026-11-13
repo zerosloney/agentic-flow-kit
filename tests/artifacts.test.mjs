@@ -105,8 +105,12 @@ test('scaffold installs the spec package templates and validator', () => {
     'workflow/specs/_TEMPLATE/spec.md',
     'workflow/specs/_TEMPLATE/tasks.md',
     'workflow/specs/_TEMPLATE/verify-report.md',
-    '.agents/scripts/check-spec-packages.mjs',
   ]) {
     assert.equal(fs.existsSync(path.join(dir, rel)), true, rel);
   }
+  // R5-1b：校验脚本随包分发，不再安装到项目。
+  assert.equal(fs.existsSync(path.join(dir, '.agents/scripts')), false);
+  assert.equal(fs.existsSync(CHECK_SPEC), true);
+  const check = spawnSync(process.execPath, [CHECK_SPEC, '--root', '.', '--json'], { cwd: dir, encoding: 'utf8' });
+  assert.equal(check.status, 0, check.stderr);
 });

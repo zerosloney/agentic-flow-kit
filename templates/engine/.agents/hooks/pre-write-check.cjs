@@ -29,7 +29,7 @@
  *
  * stdin: { tool_name, llm_tool_name, tool_input: { file_path, content|old_string/new_string|edits }, cwd, workspace_roots }
  * stdout: hookSpecificOutput.permissionDecision = deny（trae/codebuddy 同形约定）；无输出 = 放行。
- * 测试：node .agents/scripts/pre-write-check.test.mjs
+ * 测试：flow-kit run pre-write-check.test.mjs
  */
 'use strict';
 
@@ -111,7 +111,7 @@ try {
 // ── 1) 执法面自保护 ───────────────────────────────────
 const WIRING_RE = /^(\.zcode\/config\.json|\.trae\/hooks\.json|\.codebuddy\/settings\.json|\.qoder\/settings\.json|\.qwen\/settings\.json|\.commandcode\/settings\.json|\.claude\/settings(\.local)?\.json|\.grok\/hooks\/.+\.json|\.agents\/hooks\/gates\.json|\.agents\/settings\.json)$/;
 if (!unlocked && WIRING_RE.test(rel)) {
-  deny(`执法面自保护：${rel} 是门禁接线/权限基线，AI 不得自行改写。如系用户明示的引擎变更：请用户执行 node .agents/hooks/pre-write-check.cjs --unlock <分钟> 临时放行（或用户手动改本文件），完成后删除解锁标记。`);
+  deny(`执法面自保护：${rel} 是门禁接线/权限基线，AI 不得自行改写。如系用户明示的引擎变更：请用户执行 flow-kit hook pre-write-check.cjs --unlock <分钟> 临时放行（或用户手动改本文件），完成后删除解锁标记。`);
 }
 
 // ── 合成提议内容（供 2/3 层；合成不了则对应层跳过）────
@@ -161,7 +161,7 @@ if (proposed !== null && LEDGER_RE.test(rel)) {
 
 // ── 2.5) 测试不可弱化（fix 任务窗口）──────────────────
 // Anthropic AI-native SDLC：修复时，写代码的 agent 不得削弱证明修复有效的检查。
-// 协议：修复开始前 `node .agents/scripts/fix-task.mjs start` 落 .agents/cache/fix-task.json；
+// 协议：修复开始前 `flow-kit run fix-task.mjs start` 落 .agents/cache/fix-task.json；
 // 结束后 stop。窗口内改既有测试 → deny；新建测试（复现用例）放行。
 // 逃生口：① --test 预登记允许路径；② 提议内容含 `TEST-GUARD-ALLOW: <理由>`（保留给合法重构，
 // 复核时可见）；③ 用户明示的 write-gate 解锁。
@@ -180,7 +180,7 @@ try {
         deny(`测试不可弱化：当前处于修复任务窗口（${task.id || 'fix'}），不得修改既有测试 ${rel}。\n`
           + '允许：新建复现测试；或让修复只改实现。\n'
           + '如属合法重构：在提议内容里加 `TEST-GUARD-ALLOW: <理由>`，并在复核中说明；'
-          + '或先结束窗口 node .agents/scripts/fix-task.mjs stop。');
+          + '或先结束窗口 flow-kit run fix-task.mjs stop。');
       }
     }
   }
@@ -188,11 +188,13 @@ try {
 
 // ── 3) 红线内容判据（快照-换入-跑真实门-恢复）─────────
 const gates = [];
+// 包内运行时执行时用包内门脚本；直接执行安装副本时回退项目 hooks 目录。
+const hookRoot = process.env.FLOW_KIT_RUNTIME_HOOKS || path.join(root, '.agents', 'hooks');
 if (/^backend\/.+\.(cs|csproj|sln)$/i.test(rel)) {
-  gates.push(['check-architecture', path.join('.agents', 'hooks', 'check-architecture.mjs')]);
-  gates.push(['check-delete-guard', path.join('.agents', 'hooks', 'check-delete-guard.mjs')]);
+  gates.push(['check-architecture', path.join(hookRoot, 'check-architecture.mjs')]);
+  gates.push(['check-delete-guard', path.join(hookRoot, 'check-delete-guard.mjs')]);
 } else if (/^frontend\/src\/.+\.(ts|vue)$/i.test(rel)) {
-  gates.push(['check-notify-guard', path.join('.agents', 'hooks', 'check-notify-guard.mjs')]);
+  gates.push(['check-notify-guard', path.join(hookRoot, 'check-notify-guard.mjs')]);
 }
 // runGateAsync：异步 spawn 单个门脚本（30 秒超时约束保持），聚合 stdout/stderr 后 resolve。
 // 并行化（2026-11-08 减重档 1-A）：多门经 Promise.all 同时起跑，任一门非零退出即整体 deny

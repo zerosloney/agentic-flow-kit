@@ -143,7 +143,7 @@ test('wiki MCP does not index the baseline tree', () => {
     { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {}, clientInfo: { name: 'test', version: '1' } } },
     { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'wiki_search', arguments: { query: 'BASELINEONLYTOKEN' } } },
   ].map((request) => JSON.stringify(request)).join('\n');
-  const r = spawnSync(process.execPath, [path.join(dir, '.agents/scripts/wiki-mcp.mjs')], {
+  const r = spawnSync(process.execPath, [BIN, 'run', 'wiki-mcp', '--root', '.'], {
     cwd: dir,
     input: `${requests}\n`,
     encoding: 'utf8',
@@ -164,5 +164,5 @@ test('managed hook detection uses path boundaries, so wrapper hooks are preserve
   mergeHooksIntoRoot(root, spec, cfg);
   assert.ok(root.hooks.PreToolUse.some((group) => group.hooks
     .some((hook) => hook.command === 'node .agents/hooks/pre-shell-check.cjs.bak')));
-  assert.equal(JSON.stringify(root).split('pre-shell-check.cjs"').length - 1, 1);
+  assert.equal(JSON.stringify(root).split('flow-kit hook pre-shell-check').length - 1, 1);
 });

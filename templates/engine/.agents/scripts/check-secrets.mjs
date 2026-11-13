@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // check-secrets：密钥扫描门（2026-10-14 决定 4 / G5 安全插队；机制台账已登记）
-// 用法：node .agents/scripts/check-secrets.mjs [--staged] [--lite]
+// 用法：flow-kit run check-secrets.mjs [--staged] [--lite]
 //   默认     = 全量历史：gitleaks detect --baseline-path .gitleaks-baseline.json（基线外新泄漏 exit 1）
 //   --staged = 提交增量：gitleaks protect --staged（只看暂存内容，历史存量不触；原 pre-commit 消费——
 //              2026-10-21 owner 指令「密钥本地不扫」退役该腿，旗标保留供手动/测试）
@@ -36,7 +36,7 @@ import { fileURLToPath } from 'node:url';
 import { main as liteMain } from './check-secrets-lite.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = process.env.CHECK_SECRETS_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
+const ROOT = process.env.FLOW_KIT_PROJECT_ROOT || process.env.CHECK_SECRETS_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
 const STAGED = process.argv.includes('--staged');
 const FORCE_LITE = process.argv.includes('--lite') || process.env.SECRETS_SCAN_LITE === '1';
 const BASELINE = path.join(ROOT, '.gitleaks-baseline.json');

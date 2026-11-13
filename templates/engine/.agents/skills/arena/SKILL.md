@@ -16,7 +16,7 @@ description: 设计选型 bakeoff——同一 brief 给 N 个独立臂（不同�
 **同一 brief，独立臂，裁判选底座 + 嫁接。** 不是并行实现同一个文件；是并行**提案**，再选一个底座。臂之间不共享上下文（防锚定）。
 
 **单写者**：每个臂只写自己的提案文件/目录；需要写共享页面前先
-`node .agents/scripts/path-lease.mjs acquire --path <page> --owner <arm>`，写完释放。
+`flow-kit run path-lease.mjs acquire --path <page> --owner <arm>`，写完释放。
 并发写同一页会丢事实（Anthropic 实证：共享表 57 条只剩 41 条）。
 
 ## 步骤
@@ -45,7 +45,7 @@ description: 设计选型 bakeoff——同一 brief 给 N 个独立臂（不同�
 - 派发：`task` 的 `tasks[]` 批次；`model-roles.json` 的 `judgment` 角色。
 - 复核：选定设计后按 `.agents/skills/interrogate/SKILL.md` 多镜拆。
 - 证明：`.agents/skills/blast-radius/SKILL.md`（安全因为 X 要跑代码）。
-- 落账：`workflow/delegations.md`；聚合 `node .agents/scripts/agg-delegations.mjs`。
+- 落账：`workflow/delegations.md`；聚合 `flow-kit run agg-delegations.mjs`。
 
 ## 边界
 

@@ -21,25 +21,25 @@
 
 根目录 `regression-checklist.md` 为**活文档回归清单**：deploy 回归必过条目与 incident 防复发验证的统一落点，随模块上线补充、随 incident 追加。
 
-**三份 append-only 台账已分片**（2026-10-13 ledger-shard-ledgers）：`regression-checklist` / `delegations` / `papercuts` 的数据行按月存 `workflow/<台账>.d/<YYYY-MM>.md`，主台账只留说明、表头与 GENERATED 区——消除「每次追加全量重写整文件」的体积与合并冲突面。读写单源 = `.agents/scripts/ledger-shards.mjs`（读侧自动合并主台账 ∪ 全部分片，既有消费者无需改动）；追加一行用 `node .agents/scripts/ledger-shards.mjs --append <台账> --row "<行>"`。（第四份 `deploy-observations` 已随 deploy 仪式退役删除——2026-10-29 owner 拍板：实际发布不走 tag/24h 观察仪式，合入 = PR 创建→审查→回归→合并→归档，见 `deploy.md` 头注。）confirmations.d 分片始于 2026-10，2026-09 无分片（该月确认仅 git 口径可溯，历史缺口不回补）；jsonl 各台账 schema 代际以字段有无自描述（如 quoteGrounding 自 2026-10-24 起），不设版本字段（2026-11-05 决策）。
+**三份 append-only 台账已分片**（2026-10-13 ledger-shard-ledgers）：`regression-checklist` / `delegations` / `papercuts` 的数据行按月存 `workflow/<台账>.d/<YYYY-MM>.md`，主台账只留说明、表头与 GENERATED 区——消除「每次追加全量重写整文件」的体积与合并冲突面。读写单源 = `.agents/scripts/ledger-shards.mjs`（读侧自动合并主台账 ∪ 全部分片，既有消费者无需改动）；追加一行用 `flow-kit run ledger-shards.mjs --append <台账> --row "<行>"`。（第四份 `deploy-observations` 已随 deploy 仪式退役删除——2026-10-29 owner 拍板：实际发布不走 tag/24h 观察仪式，合入 = PR 创建→审查→回归→合并→归档，见 `deploy.md` 头注。）confirmations.d 分片始于 2026-10，2026-09 无分片（该月确认仅 git 口径可溯，历史缺口不回补）；jsonl 各台账 schema 代际以字段有无自描述（如 quoteGrounding 自 2026-10-24 起），不设版本字段（2026-11-05 决策）。
 
-**门禁判定月度分片**（2026-10-22 gate-metrics-shard）：`workflow/gate-metrics.d/<YYYY-MM>.jsonl` 每月一行（规则 × WARN/BLOCK），由 `node .agents/scripts/agg-judgments.mjs --emit-month` 生成、随提交入库；pre-push 月检自动补生成上月分片。退役判据（连续 N 月 = 0）读「本地 `.agents/judgments.jsonl` ∪ 分片」取 max——换机/换 worktree 不再归零，多机并集（`.gitattributes` 复用 `jsonl-union`）。
+**门禁判定月度分片**（2026-10-22 gate-metrics-shard）：`workflow/gate-metrics.d/<YYYY-MM>.jsonl` 每月一行（规则 × WARN/BLOCK），由 `flow-kit run agg-judgments.mjs --emit-month` 生成、随提交入库；pre-push 月检自动补生成上月分片。退役判据（连续 N 月 = 0）读「本地 `.agents/judgments.jsonl` ∪ 分片」取 max——换机/换 worktree 不再归零，多机并集（`.gitattributes` 复用 `jsonl-union`）。
 
-**主张账**（按月追加）：`workflow/claims.d/<YYYY-MM>.jsonl` 记「未来会话可能当真的一句话」及其在仓库里的原文。追加用 `node .agents/scripts/claims.mjs add`；`recheck` 只报告原文还在不在，退出码恒 0，不是门，也不改账里的历史行。合并走 `jsonl-union`。
+**主张账**（按月追加）：`workflow/claims.d/<YYYY-MM>.jsonl` 记「未来会话可能当真的一句话」及其在仓库里的原文。追加用 `flow-kit run claims.mjs add`；`recheck` 只报告原文还在不在，退出码恒 0，不是门，也不改账里的历史行。合并走 `jsonl-union`。
 
 ## 使用方式
 
 - **发起新任务**：执行 `.agents/commands/new-task.md`（定级 + L0 极简道 / L1 快速道总入口）；L2/L3 进 `.agents/commands/stages.md` 四章（Plan → Design → Build → Test，2026-11-08 档 2-F 四并一）
-- **看板（可选，默认不拉起）**：需要时手动跑 `node .agents/scripts/ensure-board.mjs`（幂等：探活 / 旧代码自动重启 / 全新启动弹浏览器），实时只读 http://127.0.0.1:8933；**预警层，非门禁；告警口径对齐 check-loop 硬断档**。「旧代码」＝`board/index.html` 或 `workflow-board-server.mjs` 的 LastWriteTime 晚于看板进程启动 2s（任一更新即重启）；端口被占用时先探活 `/api/board`——响应不含 `cards` 即判为他人进程，不动手不 kill、跳过试下一端口
-- **检索**：活跃流程读 `INDEX.md`（生成物，`node .agents/scripts/gen-workflow-index.mjs` 重生成、`--check` 校验漂移）；跨语料检索 `node .agents/scripts/kb-search.mjs "<词>"`（workflow 按节级定位 + wiki 全文，`--type/--module/--status/-n` 过滤；`--status all` 显式全量）
-- **归档**：关单即归档（2026-10-13 archive-on-close）——`confirm-doc.mjs` 落终态后自动把**本次确认涉及的家族**（同名 intent/spec/plan/incident 整族）`git mv` 进 `workflow/archive/<终态月>/{类型}/`，活跃目录不再累积终态件。**特性分支默认不归档**（2026-10-15 起，防 CI 泳道门拦合法合并）——合并后由 main/develop 关单或 sweep 承接，未满 21 天窗的滞留属正常态。历史积压用 `node .agents/scripts/archive-sweep.mjs [--window 21] [--execute]`（缺省 dry-run）手工批次清理；归档件仍可被 `kb-search` 检索（`archive/<批次>/<type>` 已覆盖），check-loop 配对门与内容绑定只扫四目录直下、对归档件不触发。终态件积压时人工月度跑一轮 archive-sweep（dry-run 先看候选，`--execute` 执行）。
+- **看板（可选，默认不拉起）**：需要时手动跑 `flow-kit run ensure-board.mjs`（幂等：探活 / 旧代码自动重启 / 全新启动弹浏览器），实时只读 http://127.0.0.1:8933；**预警层，非门禁；告警口径对齐 check-loop 硬断档**。「旧代码」＝`board/index.html` 或 `workflow-board-server.mjs` 的 LastWriteTime 晚于看板进程启动 2s（任一更新即重启）；端口被占用时先探活 `/api/board`——响应不含 `cards` 即判为他人进程，不动手不 kill、跳过试下一端口
+- **检索**：活跃流程读 `INDEX.md`（生成物，`flow-kit run gen-workflow-index.mjs` 重生成、`--check` 校验漂移）；跨语料检索 `flow-kit run kb-search.mjs "<词>"`（workflow 按节级定位 + wiki 全文，`--type/--module/--status/-n` 过滤；`--status all` 显式全量）
+- **归档**：关单即归档（2026-10-13 archive-on-close）——`confirm-doc.mjs` 落终态后自动把**本次确认涉及的家族**（同名 intent/spec/plan/incident 整族）`git mv` 进 `workflow/archive/<终态月>/{类型}/`，活跃目录不再累积终态件。**特性分支默认不归档**（2026-10-15 起，防 CI 泳道门拦合法合并）——合并后由 main/develop 关单或 sweep 承接，未满 21 天窗的滞留属正常态。历史积压用 `flow-kit run archive-sweep.mjs [--window 21] [--execute]`（缺省 dry-run）手工批次清理；归档件仍可被 `kb-search` 检索（`archive/<批次>/<type>` 已覆盖），check-loop 配对门与内容绑定只扫四目录直下、对归档件不触发。终态件积压时人工月度跑一轮 archive-sweep（dry-run 先看候选，`--execute` 执行）。
 - **spec 生命周期口径（2026-10-16 owner 拍板，Böckeler 三层分类取 spec-anchored + 长期维护）**：spec 是**持续对照的事实源，交付后不失效**——代码改动触及某 spec 覆盖的行为时须对照该 spec（含归档件）：行为漂移要么改代码回到 spec，要么同一提交回改 spec；有争议立 incident 裁决。**归档是容量治理不是失效**：归档只把终态件移出活跃扫描面（INDEX 活跃行 / check-loop 四目录扫描 / 月度再生），事实源地位与修订权不变——归档 spec 可原地修订，修订不改归档位置。体积治理先观察后设限：spec 行数/验收条数分布由 metrics.md 观察列采集（advisory 上限与「暂缓加门」取舍冲突，显式延后至 D6 度量补齐后再议）。
 - **同功能续作（先查后建，2026-10-22）**：动工前按「模块 + 功能关键词」检索 `workflow/specs/`、`workflow/archive/**/specs/`、`.agents/skills/verify-ui/features/`、`workflow/regression-checklist.md`。命中覆盖同一行为 → 在原件上修订（spec 按上条口径原地改，不新建）；确属新特性才新建。新建任务文档时 topic 带特性键，便于后续检索。
 - **验证**：`.agents/commands/stages.md` Test 章（静态门 + UI 实测）；切库探活与 API 防复发断言跑 `node scripts/verify/business/regression-smoke.mjs`（默认只读；`--writes` 自建自清探针，仅 dev 库）
 - **评审**：`.agents/commands/review.md`（按 P0 / P1 / P2 分级：机器兜底 + AI 自查出清单，用户决策定性与合入）
-- **PR 面板评审**：面板已退役为**手动工具**（2026-11-09 自动门退役）——pre-push / CI / pr-create 不再强制评审台账，需要时按 `.agents/commands/pr-review.md` 手动编排；建 PR 走 `node .agents/scripts/pr-create.mjs ...`（先 gate 再调 `tfs-pr create`）
+- **PR 面板评审**：面板已退役为**手动工具**（2026-11-09 自动门退役）——pre-push / CI / pr-create 不再强制评审台账，需要时按 `.agents/commands/pr-review.md` 手动编排；建 PR 走 `flow-kit run pr-create.mjs ...`（先 gate 再调 `tfs-pr create`）
 - **上线**：`.agents/commands/deploy.md`（上线前必跑清单）
-- **量化**：委派/自做结果记 `delegations.md`，聚合跑 `node .agents/scripts/agg-delegations.mjs`（**并发扩容门槛见该文件——数字达标前不扩并发**）；语料与常驻面体积的**月度快照**跑 `node .agents/scripts/gen-workflow-metrics.mjs`（每月一行落 `metrics.md`，同月重跑即更新；明细看 stdout）
+- **量化**：委派/自做结果记 `delegations.md`，聚合跑 `flow-kit run agg-delegations.mjs`（**并发扩容门槛见该文件——数字达标前不扩并发**）；语料与常驻面体积的**月度快照**跑 `flow-kit run gen-workflow-metrics.mjs`（每月一行落 `metrics.md`，同月重跑即更新；明细看 stdout）
 - **追溯**：git 即审计。两条驱动路径二选一、禁混用——手动阶段路由（确认后的 workflow 文档用 `docs(workflow)` 收成一笔，代码提交另笔；L1 普通需求只有 plan，修复为 incident+plan，L2/L3 为入口+spec+plan）或 `pipeline-run` 状态机（按阶段 `docsCommit` 落同形态提交，驱动协议单源 `.agents/commands/pipeline-run.md`）。上线不走 tag/24h 观察仪式（release tag 与发布观察台账已退役，2026-10-29）。本地开发依靠 Independent Reviewer 做认知隔离自查，主干合并通过 TFS PR 团队评审与 git 历史形成完整审计证据
 - **级别**：L1 实现级（未命中 L2/L3；新需求的入口是 plan）｜ L2 规则 / 契约（编码权威 / 共享契约 / 既有接口语义 / 全局横切口径，触达面闭集见 `.agents/commands/new-task.md`）｜ L3 数据与运行时结构（schema / 迁移 SQL / DI 链 / 认证与中间件管线）。混合改动就高不就低
 

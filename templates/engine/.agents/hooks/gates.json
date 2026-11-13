@@ -12,6 +12,7 @@
     { "tool": "shell", "pat": "npm install" },
     { "tool": "shell", "pat": "npm ci" },
     { "tool": "shell", "pat": "node" },
+    { "tool": "shell", "pat": "flow-kit", "reason": "包内运行时入口：脚本/hook/MCP 统一经 flow-kit run|hook 调用" },
     { "tool": "shell", "pat": "git status" },
     { "tool": "shell", "pat": "git diff" },
     { "tool": "shell", "pat": "git add" },

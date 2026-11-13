@@ -120,7 +120,7 @@
               "additionalProperties": false,
               "required": ["form", "template"],
               "properties": {
-                "form": { "enum": ["env", "relative", "args"] },
+                "form": { "enum": ["env", "relative", "args", "cli", "cli-args"] },
                 "template": { "type": "string", "description": "必须包含 {script} 占位符。" }
               }
             }

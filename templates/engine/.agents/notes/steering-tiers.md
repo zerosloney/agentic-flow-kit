@@ -13,7 +13,7 @@
 | lean | 小模型/低成本实现 | step（明确步骤 + 模板 + 反例） | 低 |
 
 配置单源：`.agents/config/steering.json`；解析：
-`node .agents/scripts/steering.mjs resolve --model opus`。
+`flow-kit run steering.mjs resolve --model opus`。
 
 ## 什么永远不能“按档放宽”
 

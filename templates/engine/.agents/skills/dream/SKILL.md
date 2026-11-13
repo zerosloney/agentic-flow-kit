@@ -14,8 +14,8 @@ description: 离线梦境（Dreaming）——对照 Anthropic 记忆架构的周
 ## 1. 运行审计
 
 ```bash
-node .agents/scripts/dream-run.mjs              # dry-run：只读审计 + AI 抽样简报（默认）
-node .agents/scripts/dream-run.mjs --execute    # 执行安全修复（仅终态件归档 + 索引重生成）
+flow-kit run dream-run.mjs              # dry-run：只读审计 + AI 抽样简报（默认）
+flow-kit run dream-run.mjs --execute    # 执行安全修复（仅终态件归档 + 索引重生成）
 ```
 
 - 报告落 `tmp/dream-report-<date>.md`（gitignore）；AI Judge 简报落 `tmp/dream-judge-brief-<date>.md`。
@@ -57,7 +57,7 @@ node .agents/scripts/dream-run.mjs --execute    # 执行安全修复（仅终态
 
 - 冷数据候选来自 `agg-kb-usage.mjs`（遥测口径：最近 90 天既未被 kb-search 命中、内容也未更新）。
 - 处置阶梯（由主智能体/用户裁决）：
-  1. 归档：`node .agents/scripts/archive-sweep.mjs --execute`（终态件，21 天窗口）；
+  1. 归档：`flow-kit run archive-sweep.mjs --execute`（终态件，21 天窗口）；
   2. 更新：走 wiki 技能更新知识；
   3. 删除：**须用户单独指令**（根 AGENTS.md 不可逆操作红线）。
 
@@ -66,7 +66,7 @@ node .agents/scripts/dream-run.mjs --execute    # 执行安全修复（仅终态
 未来会话会当真的规则或 wiki 事实，先落主张，再写进笔记：
 
 ```bash
-node .agents/scripts/claims.mjs add --claim "一句话" --path <相对路径> --quote "文件里已有的原文"
+flow-kit run claims.mjs add --claim "一句话" --path <相对路径> --quote "文件里已有的原文"
 ```
 
 - 依据必须是仓库里的原文（8 到 200 字），不是命令输出，也不是聊天复述。

@@ -2,8 +2,8 @@
 // steering.mjs — 按模型档解析“严格度”（不变量不变，只调表达方式）
 //
 // 用法：
-//   node .agents/scripts/steering.mjs resolve --model opus [--json]
-//   node .agents/scripts/steering.mjs show
+//   flow-kit run steering.mjs resolve --model opus [--json]
+//   flow-kit run steering.mjs show
 import fs from 'node:fs';
 import path from 'node:path';
 

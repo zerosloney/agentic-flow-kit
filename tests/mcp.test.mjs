@@ -44,18 +44,18 @@ test('compiles the neutral server list into Claude, OpenCode and Qwen configs', 
   install(dir, ['claude', 'opencode', 'qwen']);
 
   const claude = readJson(dir, '.mcp.json');
-  assert.equal(claude.mcpServers['flow-kit-wiki'].command, 'node');
-  assert.deepEqual(claude.mcpServers['flow-kit-wiki'].args, ['.agents/scripts/wiki-mcp.mjs']);
+  assert.equal(claude.mcpServers['flow-kit-wiki'].command, 'flow-kit');
+  assert.deepEqual(claude.mcpServers['flow-kit-wiki'].args, ['run', 'wiki-mcp']);
 
   const opencode = readJson(dir, 'opencode.json');
   assert.deepEqual(opencode.mcp['flow-kit-wiki'], {
     type: 'local',
-    command: ['node', '.agents/scripts/wiki-mcp.mjs'],
+    command: ['flow-kit', 'run', 'wiki-mcp'],
     enabled: true,
   });
 
   const qwen = readJson(dir, '.qwen/settings.json');
-  assert.equal(qwen.mcpServers['flow-kit-wiki'].command, 'node');
+  assert.equal(qwen.mcpServers['flow-kit-wiki'].command, 'flow-kit');
   // Qwen 的 settings.json 同时承载 hooks/permissions：MCP 合并不能丢掉静态宿主模板。
   assert.ok(qwen.hooks, 'qwen hooks preserved');
   assert.ok(qwen.permissions, 'qwen permissions preserved');
@@ -176,7 +176,7 @@ test('wiki MCP server speaks initialize / tools/list / tools/call', () => {
     { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'wiki_search', arguments: { query: 'unique-needle' } } },
   ].map((request) => JSON.stringify(request)).join('\n');
 
-  const r = spawnSync(process.execPath, [path.join(dir, '.agents/scripts/wiki-mcp.mjs')], {
+  const r = spawnSync(process.execPath, [BIN, 'run', 'wiki-mcp', '--root', '.'], {
     cwd: dir,
     input: `${requests}\n`,
     encoding: 'utf8',

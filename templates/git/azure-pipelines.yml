@@ -26,21 +26,21 @@ steps:
       fi
     displayName: 'Install (if package.json)'
 
-  - script: node .agents/scripts/verify.mjs --full
+  - script: npx --yes agentic-flow-kit run verify --full
     displayName: 'Static gates (verify --full)'
 
-  - script: node .agents/scripts/check-local-gates.mjs
+  - script: npx --yes agentic-flow-kit run check-local-gates
     displayName: 'Local gate wiring audit'
     continueOnError: true
 
-  - script: node .agents/scripts/agent-eval.mjs check --advisory
+  - script: npx --yes agentic-flow-kit run agent-eval check --advisory
     displayName: 'Behavior eval (advisory; remove --advisory after baseline)'
     continueOnError: true
 
-  - script: node .agents/scripts/check-pipeline-state.mjs
+  - script: npx --yes agentic-flow-kit run check-pipeline-state
     displayName: 'Pipeline state closure'
     continueOnError: true
 
-  - script: node .agents/scripts/memory-tier.mjs audit
+  - script: npx --yes agentic-flow-kit run memory-tier audit
     displayName: 'Injected memory budget'
     continueOnError: true

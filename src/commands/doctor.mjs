@@ -13,9 +13,34 @@ import { buildAttestation, writeAttestation } from '../install/attest.mjs';
 import { compilePermissions, permissionDrift } from '../install/permissions.mjs';
 import { ROLE_NAMES, readInjectedModels, readLocalModelRoles } from '../models/resolve.mjs';
 import { computeEnterprise, GIT_HOOKS, PROOF_CHAIN_FILES, resolveTarget } from './install.mjs';
+import { RUNTIME_SCRIPTS, RUNTIME_HOOKS, KIT_ROOT } from './runtime.mjs';
 import { buildDiff } from './diff.mjs';
 
 const HOOK_FILES = ['pre-commit', 'commit-msg', 'post-commit', 'pre-merge-commit', 'pre-push'];
+
+// R5-1b：运行时实现应随包分发；目标项目里残留的旧脚本/hook 代码只作 advisory。
+// 只对照包内确实存在的运行时文件，避免把项目自建的 hook 误报为遗留。
+function listLegacyRuntime(target) {
+  const out = [];
+  const collect = (dir, relPrefix, filter = () => true) => {
+    const walk = (abs, rel) => {
+      let entries = [];
+      try { entries = fs.readdirSync(abs, { withFileTypes: true }); } catch { return; }
+      for (const entry of entries) {
+        const nextRel = rel ? `${rel}/${entry.name}` : entry.name;
+        if (entry.isDirectory()) walk(path.join(abs, entry.name), nextRel);
+        else if (filter(entry.name) && fs.existsSync(path.join(target, relPrefix, nextRel))) {
+          out.push(`${relPrefix}/${nextRel}`);
+        }
+      }
+    };
+    walk(dir, '');
+  };
+  collect(RUNTIME_SCRIPTS, '.agents/scripts', (name) => /\.(mjs|cjs)$/i.test(name));
+  collect(RUNTIME_HOOKS, '.agents/hooks', (name) => /\.(mjs|cjs)$/i.test(name));
+  collect(path.join(KIT_ROOT, 'templates/engine/.agents/tests'), '.agents/tests', (name) => /\.(mjs|cjs)$/i.test(name));
+  return out.sort();
+}
 
 export function doctorCommand({ args, t }) {
   const target = resolveTarget(args);
@@ -42,6 +67,25 @@ export function doctorCommand({ args, t }) {
     if (drifting > 0) {
       add(true, 'manifest drift', t('doctor.drift', drift), t('doctor.driftHint'), { warn: true });
     }
+  }
+
+  // R5-1b：运行时能力随包分发，目标项目不再需要脚本/hook 实现。
+  const legacyRuntime = listLegacyRuntime(target);
+  if (legacyRuntime.length) {
+    add(true, 'runtime legacy', t('doctor.runtimeLegacy', { count: legacyRuntime.length }), t('doctor.runtimeLegacyHint'), { warn: true });
+  }
+
+  // 门禁与 MCP 以 `flow-kit` 命令为运行时入口：不在 PATH 时全部静默失效，必须显式告警。
+  const winShell = process.platform === 'win32';
+  const kitProbe = spawnSync(winShell ? 'flow-kit --version' : 'flow-kit', winShell ? [] : ['--version'], {
+    encoding: 'utf8',
+    stdio: ['ignore', 'pipe', 'ignore'],
+    shell: winShell,
+  });
+  if (kitProbe.status === 0) {
+    add(true, 'flow-kit cli', String(kitProbe.stdout || '').trim() || 'flow-kit');
+  } else {
+    add(true, 'flow-kit cli', t('doctor.flowKitMissing'), t('doctor.flowKitMissingHint'), { warn: true });
   }
 
   checks.push(...doctorGit(target));
@@ -316,16 +360,17 @@ export function doctorCommand({ args, t }) {
   }
 
   if (args.deep) {
-    const gates = path.join(target, '.agents/scripts/check-local-gates.mjs');
+    const gates = path.join(RUNTIME_SCRIPTS, 'check-local-gates.mjs');
     if (fs.existsSync(gates)) {
       const deepArgs = args.fix ? ['--fix'] : [];
+      const deepEnv = { ...process.env, FLOW_KIT_PROJECT_ROOT: target };
       if (asJson) {
-        const r = spawnSync(process.execPath, [gates, ...deepArgs], { cwd: target, encoding: 'utf8' });
+        const r = spawnSync(process.execPath, [gates, ...deepArgs], { cwd: target, encoding: 'utf8', env: deepEnv });
         deep = { status: r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
         if (r.status !== 0) failed += 1;
       } else {
-        console.log(`\n$ node ${gates}`);
-        const r = spawnSync(process.execPath, [gates, ...deepArgs], { cwd: target, stdio: 'inherit' });
+        console.log(`\n$ flow-kit run check-local-gates${args.fix ? ' --fix' : ''}`);
+        const r = spawnSync(process.execPath, [gates, ...deepArgs], { cwd: target, stdio: 'inherit', env: deepEnv });
         if (r.status !== 0) failed += 1;
       }
     }

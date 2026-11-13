@@ -7,7 +7,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "node .agents/hooks/pre-shell-check.cjs",
+            "command": "flow-kit hook pre-shell-check",
             "timeout": 600
           }
         ]

@@ -14,8 +14,8 @@
 // 归档形态：git mv → workflow/archive/<家族最晚终态月>/{类型}/（kit-engine 先例同款；check-loop docFiles
 // 与配对门只扫四目录直下；kb-search 已扩 archive/<批次>/<type> 覆盖——同日返工中补齐）
 // 用法：
-// node .agents/scripts/archive-sweep.mjs # dry-run（缺省），--window 21
-// node .agents/scripts/archive-sweep.mjs --window 21 --execute # git mv 执行
+// flow-kit run archive-sweep.mjs # dry-run（缺省），--window 21
+// flow-kit run archive-sweep.mjs --window 21 --execute # git mv 执行
 // 测试面已随引擎减重退役（2026-10-28，owner 决策），本脚本现无测试兜底
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';

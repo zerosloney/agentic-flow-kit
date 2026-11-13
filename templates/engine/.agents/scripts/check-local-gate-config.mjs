@@ -13,7 +13,7 @@
 //   CI（TF_BUILD）不挂本地钩子是常态而非违规：loud-skip（跳过可见，与 E2E 门对称）。
 //   非 git 仓库（git config 不可用）→ 同样 loud-skip（fixture 根合法形态）。
 //
-// 用法：node .agents/scripts/check-local-gate-config.mjs [--root <仓库根>] [--strict]
+// 用法：flow-kit run check-local-gate-config.mjs [--root <仓库根>] [--strict]
 // 退出码：0 = 全配或 WARN 档放行 / 1 = --strict 下有缺配。零工作区副作用。
 // 测试面已随引擎减重退役（2026-10-28，owner 决策），本脚本现无测试兜底
 
@@ -44,7 +44,7 @@ if (git(['rev-parse', '--is-inside-work-tree']) !== 'true') {
   process.exit(0);
 }
 
-const JSONL_DRIVER = 'node .agents/scripts/git-merge-jsonl.mjs %O %A %B';
+const JSONL_DRIVER = 'flow-kit run git-merge-jsonl %O %A %B';
 const hooksPath = git(['config', 'core.hooksPath']);
 const gaText = (() => {
   const p = path.join(root, '.gitattributes');
@@ -91,5 +91,5 @@ if (!bad.length) {
   console.log('[local-gate-config] 本地门禁挂载面全配（hooksPath + 两条 merge driver + .gitattributes + 五钩子在位）');
   process.exit(0);
 }
-console.log(`[local-gate-config] ${strict ? '❌' : '⚠️'} ${bad.length} 项缺配——一键修复: node .agents/scripts/check-local-gates.mjs --fix（机理见 .agents/notes/runtime-env.md §7）`);
+console.log(`[local-gate-config] ${strict ? '❌' : '⚠️'} ${bad.length} 项缺配——一键修复: flow-kit run check-local-gates.mjs --fix（机理见 .agents/notes/runtime-env.md §7）`);
 process.exit(strict ? 1 : 0);

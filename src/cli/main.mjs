@@ -29,6 +29,12 @@ function normalizeLang(input) {
 }
 
 async function main(argv) {
+  // run / hook 的脚本参数可能自带 --json / --root 等旗标，必须在通用 parseArgs 之前分派，
+  // 只解析入口选项，其余原样透传。
+  if (argv[0] === 'run' || argv[0] === 'hook') {
+    const { runtimeCommand } = await import('../commands/runtime.mjs');
+    return runtimeCommand(argv[0], argv.slice(1));
+  }
   const args = parseArgs(argv);
   const command = args._[0] || (args.help || args.h ? 'help' : 'help');
   const lang = normalizeLang(args.lang);

@@ -20,6 +20,16 @@ export const HOST_META = path.join(TEMPLATES, 'host-meta');
 // 既不该进包，也不该被安装到目标项目——尤其 evals/results.jsonl 是行为评测凭证，
 // 若随模板出厂，会让每个新装项目“凭空”获得一张当前内容的合格凭证。
 export const RUNTIME_DIRS = new Set(['.agents/cache', '.agents/tmp', '.agents/tools']);
+// R5-1b：运行时实现随包分发，不再写入目标项目；只保留声明式配置（gates.json 等）。
+export const RUNTIME_ENGINE_PREFIXES = ['.agents/scripts/', '.agents/tests/'];
+
+export function isRuntimeEnginePath(rel) {
+  const p = String(rel).replace(/\\/g, '/');
+  if (RUNTIME_ENGINE_PREFIXES.some((prefix) => p.startsWith(prefix))) return true;
+  if (p.startsWith('.agents/hooks/') && /\.(cjs|mjs)$/i.test(p)) return true;
+  return false;
+}
+
 export const RUNTIME_FILES = new Set([
   '.agents/verifications.jsonl',
   '.agents/judgments.jsonl',
@@ -317,8 +327,9 @@ export function buildPlan({
     return entry;
   };
 
-  // 1) 引擎核心
+  // 1) 引擎核心（运行时脚本/hook 实现不进项目；项目只落声明式面）
   for (const rel of listFiles(path.join(TEMPLATES, 'engine'))) {
+    if (isRuntimeEnginePath(rel)) continue;
     push(path.join(TEMPLATES, 'engine', rel), rel, 'engine', 10);
   }
 

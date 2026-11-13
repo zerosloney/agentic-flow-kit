@@ -9,11 +9,11 @@
 //   independent-reviewer 角色核验——脚本只做采样与证据收集，判断由 AI 执行。
 //
 // 用法：
-//   node .agents/scripts/dream-run.mjs                     # dry-run：只读审计 + AI 抽样简报
-//   node .agents/scripts/dream-run.mjs --execute           # 执行安全修复（仅归档 + 重生成索引）
-//   node .agents/scripts/dream-run.mjs --report <path>     # 自定义报告路径（默认 tmp/dream-report-<date>.md）
-//   node .agents/scripts/dream-run.mjs --judge-count <N>   # AI 抽样文档数（默认 3，0 = 跳过）
-//   node .agents/scripts/dream-run.mjs --no-judge          # 跳过 AI Judge 阶段
+//   flow-kit run dream-run                 # dry-run：只读审计 + AI 抽样简报
+//   flow-kit run dream-run --execute       # 执行安全修复（仅归档 + 重生成索引）
+//   flow-kit run dream-run --report <path> # 自定义报告路径（默认 tmp/dream-report-<date>.md）
+//   flow-kit run dream-run --judge-count <N> # AI 抽样文档数（默认 3，0 = 跳过）
+//   flow-kit run dream-run --no-judge      # 跳过 AI Judge 阶段
 //
 // 安全边界：
 //   - 默认 dry-run 零写操作；--execute 只做「终态件归档 + 索引重生成」，不改写任何文档内容
@@ -29,7 +29,9 @@ import { fileURLToPath } from 'node:url';
 import { recheckClaims } from './claims.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
+const ROOT = process.env.FLOW_KIT_PROJECT_ROOT || process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
+// R5-1b：同级脚本随包分发，优先走包内运行时目录；未设置时回退项目内旧布局。
+const SCRIPTS_DIR = process.env.FLOW_KIT_RUNTIME_SCRIPTS || path.join(ROOT, '.agents', 'scripts');
 const TMP_DIR = path.join(ROOT, 'tmp');
 
 // ---------- 参数解析 ----------
@@ -53,7 +55,8 @@ function today() {
 }
 
 function run(relScript, scriptArgs = [], opts = {}) {
-  const r = spawnSync('node', [relScript, ...scriptArgs], {
+  const script = path.isAbsolute(relScript) ? relScript : path.join(SCRIPTS_DIR, path.basename(relScript));
+  const r = spawnSync(process.execPath, [script, ...scriptArgs], {
     encoding: 'utf8',
     cwd: ROOT,
     windowsHide: true,
@@ -114,7 +117,7 @@ if (loop.ok) {
   add(`- check-loop: 退出码 ${loop.status}（有阻断/告警）`);
   const blk = loop.out.split('\n').filter((l) => /BLOCK|block/i.test(l)).slice(0, 15);
   if (blk.length) add(`  BLOCK 摘要:\n  ${blk.join('\n  ')}`);
-  add('  明细: node .agents/scripts/check-loop.mjs（或 tmp/check-loop-warn.log）');
+  add('  明细: flow-kit run check-loop（或 tmp/check-loop-warn.log）');
 }
 
 // ---------- 阶段 D：错类候选（只报告，沿用 papercut-fix §0 阈值 ≥3 次） ----------
@@ -208,7 +211,7 @@ if (!NO_JUDGE && JUDGE_COUNT > 0) {
 
 // ---------- 报告落盘 ----------
 fs.mkdirSync(TMP_DIR, { recursive: true });
-const header = `# 离线梦境审计报告 ${today()}\n> 生成: node .agents/scripts/dream-run.mjs${EXECUTE ? ' --execute' : ''}（默认 dry-run）\n`;
+const header = `# 离线梦境审计报告 ${today()}\n> 生成: flow-kit run dream-run.mjs${EXECUTE ? ' --execute' : ''}（默认 dry-run）\n`;
 fs.writeFileSync(REPORT_PATH, header + lines.join('\n') + '\n', 'utf8');
 console.log(`报告已写入 ${path.relative(ROOT, REPORT_PATH)}`);
 if (judgeBriefPath && fs.existsSync(judgeBriefPath)) {

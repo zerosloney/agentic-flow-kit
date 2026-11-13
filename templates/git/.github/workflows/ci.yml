@@ -17,16 +17,16 @@ jobs:
         run: |
           if [ -f package.json ]; then npm install; fi
       - name: Static gates
-        run: node .agents/scripts/verify.mjs --full
+        run: npx --yes agentic-flow-kit run verify --full
       - name: Local gate wiring audit
-        run: node .agents/scripts/check-local-gates.mjs
+        run: npx --yes agentic-flow-kit run check-local-gates
         continue-on-error: true
       - name: Behavior eval (advisory)
-        run: node .agents/scripts/agent-eval.mjs check --advisory
+        run: npx --yes agentic-flow-kit run agent-eval check --advisory
         continue-on-error: true
       - name: Pipeline state closure
-        run: node .agents/scripts/check-pipeline-state.mjs
+        run: npx --yes agentic-flow-kit run check-pipeline-state
         continue-on-error: true
       - name: Injected memory budget
-        run: node .agents/scripts/memory-tier.mjs audit
+        run: npx --yes agentic-flow-kit run memory-tier audit
         continue-on-error: true

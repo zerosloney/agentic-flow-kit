@@ -18,9 +18,9 @@
 //   - 不自动 commit；不把 claims 的“原文还在”当成“主张为真”。
 //
 // 用法：
-//   node .agents/scripts/memory-wiki.mjs            # 生成/更新
-//   node .agents/scripts/memory-wiki.mjs --check    # 只检查是否最新
-//   node .agents/scripts/memory-wiki.mjs --dry-run  # 只打印将写文件
+//   flow-kit run memory-wiki.mjs            # 生成/更新
+//   flow-kit run memory-wiki.mjs --check    # 只检查是否最新
+//   flow-kit run memory-wiki.mjs --dry-run  # 只打印将写文件
 import fs from 'node:fs';
 import path from 'node:path';
 import { recheckClaims } from './claims.mjs';

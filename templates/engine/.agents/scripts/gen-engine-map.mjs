@@ -6,7 +6,7 @@
 // 单源：.githooks/ 文件清单｜verify.mjs GATES（spawn --list，即时不执行门）｜
 //       check-loop.mjs SECTIONS（lane 计数）｜mechanism-registry.md（parseRegistry）｜
 //       commands/skills/roles 目录清单。静态文字仅「执行模型/卡口职责/台账用途」三段说明性内容。
-// 用法：node .agents/scripts/gen-engine-map.mjs [--check] [--root <仓库根>]
+// 用法：flow-kit run gen-engine-map.mjs [--check] [--root <仓库根>]
 // 测试面已随引擎减重退役（2026-10-28，owner 决策），本脚本现无测试兜底
 import fs from 'node:fs';
 import path from 'node:path';
@@ -17,7 +17,8 @@ import { MECHANISM_STATUSES as STATUSES, parseMechanismRegistry as parseRegistry
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const argv = process.argv.slice(2);
 const argOf = (k) => { const i = argv.indexOf(k); return i >= 0 && i + 1 < argv.length ? argv[i + 1] : ''; };
-const ROOT = path.resolve(argOf('--root') || path.join(SCRIPT_DIR, '..', '..'));
+const ROOT = path.resolve(argOf('--root') || process.env.FLOW_KIT_PROJECT_ROOT || path.join(SCRIPT_DIR, '..', '..'));
+const SCRIPTS_DIR = process.env.FLOW_KIT_RUNTIME_SCRIPTS || path.join(ROOT, '.agents', 'scripts');
 const MAP_REL = path.join('.agents', 'notes', 'engine-map.md');
 
 // ---- 单源取数 ----
@@ -49,7 +50,7 @@ function verifyGateIds() {
 }
 
 function loopSections() {
-  const text = readText(path.join('.agents', 'scripts', 'check-loop.mjs'));
+  const text = readText(path.join(SCRIPTS_DIR, 'check-loop.mjs'));
   if (text === null) return null;
   const out = [];
   for (const m of text.matchAll(/\{\s*lane:\s*'(hard|hygiene)'\s*,\s*run:\s*(\w+)\s*\}/g)) out.push({ lane: m[1], id: m[2] });
@@ -185,7 +186,7 @@ function buildMap() {
   const L = [];
   L.push('# 引擎地图（生成物，勿手改）');
   L.push('');
-  L.push('> 生成器 `node .agents/scripts/gen-engine-map.mjs`（单源现场取数；`--check` 防漂移——改引擎后重生成随同提交）。');
+  L.push('> 生成器 `flow-kit run gen-engine-map.mjs`（单源现场取数；`--check` 防漂移——改引擎后重生成随同提交）。');
   L.push('> 一页冷启动地图：接手会话/新协作者读本页替代全仓考古；明细按 §维护 的单源指针下钻。');
   L.push('');
   L.push('## 执行模型（一段）');
@@ -245,7 +246,7 @@ function buildMap() {
   L.push('');
   L.push('## 维护');
   L.push('');
-  L.push('- 改任何单源（钩子/GATES/SECTIONS/台账/目录）后：`node .agents/scripts/gen-engine-map.mjs` 重生成随同提交；CI/hygiene 可跑 `--check` 防漂移。');
+  L.push('- 改任何单源（钩子/GATES/SECTIONS/台账/目录）后：`flow-kit run gen-engine-map.mjs` 重生成随同提交；CI/hygiene 可跑 `--check` 防漂移。');
   L.push('- 环境事实单源 `.agents/notes/runtime-env.md` §6；机制明细与退役阈值单源 `.agents/config/mechanism-registry.md`；门禁成本 `workflow/metrics.md`。');
   L.push('');
   return L.join('\n');
@@ -261,7 +262,7 @@ if (isMain) {
       console.log('[engine-map] ✅ 与单源一致');
       process.exit(0);
     }
-    console.error('❌ engine-map.md 与单源漂移——重生成：node .agents/scripts/gen-engine-map.mjs');
+    console.error('❌ engine-map.md 与单源漂移——重生成：flow-kit run gen-engine-map.mjs');
     process.exit(1);
   }
   fs.mkdirSync(path.dirname(mapPath), { recursive: true });

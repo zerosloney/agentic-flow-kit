@@ -7,12 +7,14 @@ import { buildPlan } from '../install/plan.mjs';
 import { parseProfileArgs } from '../install/profiles.mjs';
 import { applyPlan, summaryLine } from '../install/apply.mjs';
 import { emptyManifest, readManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
+import { cleanupMigratedFiles } from '../install/migrations.mjs';
 import { buildVars } from '../render/tokens.mjs';
 import { HOST_NAMES, HOSTS, resolveHost } from '../hosts/registry.mjs';
 import { detectHosts } from '../hosts/detect.mjs';
 import { configureGit, isGitRepo } from '../git/config.mjs';
 import { writeBaseline } from '../install/baseline.mjs';
 import { explainPolicyDiff, renderPolicyDiff } from '../install/policy-diff.mjs';
+import { RUNTIME_SCRIPTS } from './runtime.mjs';
 import {
   parseModelFlags, readInjectedModels, resolveModels, summarizeModels, writeLocalModelRoles,
 } from '../models/resolve.mjs';
@@ -153,14 +155,18 @@ function normalizeModelMode(value) {
 }
 
 // 派生工件（索引/引擎地图）从单源现场取数生成，不能静态随模板漂移。
-// 它们不进 manifest：属于生成区，升级时重新生成即可。
+// 运行时实现已随包分发，因此从包内脚本执行，只把 cwd/根指向目标项目。
 function generateDerivedArtifacts(target) {
   for (const script of ['gen-workflow-index.mjs', 'gen-engine-map.mjs']) {
-    const abs = path.join(target, '.agents', 'scripts', script);
+    const abs = path.join(RUNTIME_SCRIPTS, script);
     if (!fs.existsSync(abs)) continue;
     try {
       spawnSync(process.execPath, [abs], {
-        cwd: target, stdio: 'ignore', windowsHide: true, timeout: 30000,
+        cwd: target,
+        stdio: 'ignore',
+        windowsHide: true,
+        timeout: 30000,
+        env: { ...process.env, FLOW_KIT_PROJECT_ROOT: target },
       });
     } catch { /* 派生工件失败不阻断安装；verify/dream 会报漂移 */ }
   }
@@ -168,13 +174,15 @@ function generateDerivedArtifacts(target) {
 
 const TIERS = ['lean', 'standard', 'enterprise'];
 
-// enterprise 证明链所需工件；policyChecks 记录实际落盘的策略面。
+// enterprise 证明链所需工件；脚本随包分发，目标侧只核对声明式配置。
 export const PROOF_CHAIN_FILES = [
-  '.agents/scripts/agent-eval.mjs',
   '.agents/config/agent-eval.json',
-  '.agents/scripts/check-pipeline-state.mjs',
   '.agents/config/pipeline.json',
-  '.agents/scripts/outcome-metrics.mjs',
+];
+export const PROOF_CHAIN_RUNTIME = [
+  'agent-eval.mjs',
+  'check-pipeline-state.mjs',
+  'outcome-metrics.mjs',
 ];
 export const GIT_HOOKS = ['pre-commit', 'commit-msg', 'post-commit', 'pre-merge-commit', 'pre-push'];
 
@@ -189,7 +197,8 @@ export function computeEnterprise({ target, hosts, hardened }) {
     matrix[host] = level;
     if (level !== 'managed' && level !== 'permissions') gaps.push(host);
   }
-  const proofChain = PROOF_CHAIN_FILES.every((rel) => fs.existsSync(path.join(target, rel)));
+  const proofChain = PROOF_CHAIN_FILES.every((rel) => fs.existsSync(path.join(target, rel)))
+    && PROOF_CHAIN_RUNTIME.every((name) => fs.existsSync(path.join(RUNTIME_SCRIPTS, name)));
   const policyChecks = [];
   if (GIT_HOOKS.every((name) => fs.existsSync(path.join(target, '.githooks', name)))) policyChecks.push('githooks');
   if (['azure-pipelines.yml', '.github/workflows/ci.yml'].some((rel) => fs.existsSync(path.join(target, rel)))) policyChecks.push('ci');
@@ -411,6 +420,21 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
     writeManifest(target, next);
     emit(t('install.manifest', { path: path.join(target, '.agents/install-manifest.json') }));
 
+    // R5-1b：迁移只摘 manifest；磁盘旧运行时文件在此按旧哈希安全删除。
+    let migrationCleanup = null;
+    if (migration?.removals?.length) {
+      migrationCleanup = cleanupMigratedFiles({
+        target,
+        files: migration.previousFiles || {},
+        removals: migration.removals,
+        dryRun: false,
+      });
+      if (migrationCleanup.removed.length) {
+        emit(t('install.runtimeCleanup', { count: migrationCleanup.removed.length }));
+      }
+    }
+    if (migration) migration.cleanup = migrationCleanup;
+
     const gitConfig = flag(args, 'git-config') || (!flag(args, 'no-git-config') && isGitRepo(target));
     if (gitConfig && isGitRepo(target)) {
       configureGit(target);
@@ -442,6 +466,8 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
           dryRun: migration.dryRun,
           applied: migration.applied,
           notes: migration.notes,
+          removed: migration.cleanup?.removed || [],
+          keptLegacy: migration.keptLegacy || [],
         },
       } : {}),
       hosts: hostSet,

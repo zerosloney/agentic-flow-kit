@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // auto-tour.mjs — plan 落盘后自动拉起开发全景看板并输出 /tour 链接（Build 段回填后调用）
-// 用法：node .agents/scripts/auto-tour.mjs workflow/plans/<name>.md
+// 用法：flow-kit run auto-tour.mjs workflow/plans/<name>.md
 //
 // 存在理由（2026-11-11）：stages.md Build §2 第 5 步要求「生成全景并核对文档外实际改动」，
 // 但那步只产出静态快照；看板实时版要人手动跑 ensure-board 再自己拼 /tour?file= 链接。
@@ -22,10 +22,10 @@ import { fileURLToPath } from 'node:url';
 import { resolveBoardPort } from './board-port.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.resolve(SCRIPT_DIR, '../..');
+const ROOT = path.resolve(process.env.FLOW_KIT_PROJECT_ROOT || path.join(SCRIPT_DIR, '../..'));
 const ENSURE_BOARD = path.join(SCRIPT_DIR, 'ensure-board.mjs');
 
-const USAGE = `用法：node .agents/scripts/auto-tour.mjs <workflow/plans/<name>.md> [--port <port>]
+const USAGE = `用法：flow-kit run auto-tour.mjs <workflow/plans/<name>.md> [--port <port>]
 
 plan 落盘后拉起开发全景看板并打印实时链接（不弹浏览器）。
 看板已在跑则复用；拉起失败只告警不阻断（exit 0）。`;
@@ -66,7 +66,7 @@ function main() {
   if (r.status !== 0) {
     const tail = out.split('\n').filter(Boolean).slice(-3).map((l) => `   ${l}`).join('\n');
     console.error(`⚠ 开发全景看板未就绪（不影响 Build 流程）：\n${tail || `   exit ${r.status}`}`);
-    console.error(`   手动拉起：node .agents/scripts/ensure-board.mjs --no-open`);
+    console.error(`   手动拉起：flow-kit run ensure-board.mjs --no-open`);
     process.exit(0);
   }
 

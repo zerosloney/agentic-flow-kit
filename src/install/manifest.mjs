@@ -3,7 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 export const MANIFEST_REL = '.agents/install-manifest.json';
-export const CURRENT_SCHEMA_VERSION = 1;
+export const CURRENT_SCHEMA_VERSION = 2;
 
 export function readManifest(target) {
   const file = path.join(target, MANIFEST_REL);

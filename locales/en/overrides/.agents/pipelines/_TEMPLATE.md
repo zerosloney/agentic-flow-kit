@@ -20,7 +20,7 @@ concurrency: 2
 |----|-------|------|------|---------------|--------------|-------------------|------|-------|---------|
 | backend | — | implementer | — | Implement backend X | src/api/** | Project tests pass | | | 1 |
 | frontend | — | implementer | — | Change frontend Y | web/** | Build passes | | | 0 |
-| gate-all | backend,frontend | — | — | — | — | — | node .agents/scripts/verify.mjs | | |
+| gate-all | backend,frontend | — | — | — | — | — | flow-kit run verify.mjs | | |
 | confirm-deploy | gate-all | — | — | Confirm within the user conversation that staging deployment is allowed | — | One-line "OK" | | User confirmation | |
 | deploy-check | confirm-deploy | — | Deploy verification | env=staging | | Deploy command exit 0 | | | 0 |
 | review | deploy-check | independent-reviewer | — | Review changes in both domains | | Conforms to plan and criteria | | | 0 |
@@ -40,8 +40,8 @@ concurrency: 2
 **run journal** (resume from checkpoint and retry accounting): each stage records one line as soon as each attempt produces a result (pass / fail / blocked); after an abort, inspect status first on rerun — stages already marked pass are not rerun, and execution resumes from the ready layer:
 
 ```bash
-node .agents/scripts/wf-journal.mjs add --wf <orchestration-name> --stage <id> --status pass --form human   # fail/blocked use the same form; --form ∈ role|step|gate|human
-node .agents/scripts/wf-journal.mjs status --wf <orchestration-name>                                        # done / ready (including retry-ready×N) / pending
+flow-kit run wf-journal.mjs add --wf <orchestration-name> --stage <id> --status pass --form human   # fail/blocked use the same form; --form ∈ role|step|gate|human
+flow-kit run wf-journal.mjs status --wf <orchestration-name>                                        # done / ready (including retry-ready×N) / pending
 ```
 
 The journal is written to `.agents/cache/orchestration-runs.jsonl` (local runtime state, discardable; multiple lines for the same run and stage take effect by the last one, attempts are counted automatically; `--new-run` starts a new round).
@@ -72,4 +72,4 @@ params: env (target environment); timeout-min (optional, default 10)
 - **Three run journal rules**: ① record one line via `wf-journal.mjs add` whenever each stage attempt produces a result (including retries and human gate conclusions); ② after an abort, run `status` first on rerun — stages already pass are not rerun, resume from the ready layer; ③ at wrap-up, the run's status summary may be pasted into `workflow/delegations.md` for the record (the aggregation script does not read the journal).
 - **The journal is self-reported state, not verified state**: the run journal is recorded by the executor (host AI) itself — guarantees for concurrency / retry / resume semantics depend on bookkeeping discipline; the orchestration layer has no runtime dispatcher to enforce it (wf-run is deprecated; execution follows this mechanism document's semantics); when resuming after an abort, humans retain the right to manually verify "already pass" conclusions (audit-gate-hardening boundary statement).
 - Record keeping: after each dispatch / step stage completes, append one line to the delegation results table in `workflow/delegations.md` (`一次通过` / `返工×N` / `返工待修`, aligned with the agg-delegations.mjs standard).
-- Parsing validation comes first (machine gate): `node .agents/scripts/workflows-check.mjs` — role ∈ `.agents/roles/`, step ∈ `steps/`, after references exist and are acyclic, exactly one of the four forms is filled, retries/concurrency values are valid; any failure → reject, do not execute.
+- Parsing validation comes first (machine gate): `flow-kit run workflows-check.mjs` — role ∈ `.agents/roles/`, step ∈ `steps/`, after references exist and are acyclic, exactly one of the four forms is filled, retries/concurrency values are valid; any failure → reject, do not execute.

@@ -7,7 +7,7 @@
 // 幂等 / 恢复：任一步失败即停并报「从哪一步重入」；重跑时已到终态（done/closed/cancelled/superseded）
 // 的文档跳过 confirm，index 生成器幂等，无暂存改动则跳过 commit。
 // 安全边界：commit 前核对暂存区只有候选路径——存在外来暂存路径即拒绝提交，不夹带用户其它在途改动。
-// 用法：node .agents/scripts/closeout.mjs <workflow/.../x.md> --delegated "<用户对话原话>"
+// 用法：flow-kit run closeout.mjs <workflow/.../x.md> --delegated "<用户对话原话>"
 //         [--msg "<提交主题>"] [--root <仓库根>] [--dry-run]
 //   --dry-run 只报告当前状态 / 下一跳 / 候选路径变更，不落态、不写盘、不提交。
 import fs from 'node:fs';
@@ -29,10 +29,10 @@ for (let i = 0; i < argv.length; i++) {
   positional.push(argv[i]);
 }
 const DRY = argv.includes('--dry-run');
-const ROOT = path.resolve(argOf('--root') || path.join(SCRIPT_DIR, '..', '..'));
+const ROOT = path.resolve(argOf('--root') || process.env.FLOW_KIT_PROJECT_ROOT || path.join(SCRIPT_DIR, '..', '..'));
 
-const USAGE = '用法：node .agents/scripts/closeout.mjs <workflow/{intents,specs,plans,incidents}/x.md> --delegated "<用户原话>" [--msg "<主题>"] [--root <仓库根>] [--dry-run]';
-const RECOVER = (doc) => `恢复：修掉报错原因后重跑同一命令（已完成的步骤幂等跳过）：node .agents/scripts/closeout.mjs ${doc} --delegated "<用户原话>" [--msg "<主题>"]`;
+const USAGE = '用法：flow-kit run closeout.mjs <workflow/{intents,specs,plans,incidents}/x.md> --delegated "<用户原话>" [--msg "<主题>"] [--root <仓库根>] [--dry-run]';
+const RECOVER = (doc) => `恢复：修掉报错原因后重跑同一命令（已完成的步骤幂等跳过）：flow-kit run closeout.mjs ${doc} --delegated "<用户原话>" [--msg "<主题>"]`;
 if (positional.length !== 1) { console.error(`❌ 需且仅需一份文档\n${USAGE}`); process.exit(1); }
 const doc = positional[0].replace(/\\/g, '/');
 if (!/^workflow\/(intents|specs|plans|incidents)\/[^/\\]+\.md$/.test(doc)) {

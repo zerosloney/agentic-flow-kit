@@ -2,9 +2,9 @@
 
 > **This file is the checked-in template; the real file `runtime-env.local.md` is git-ignored — each machine registers its own, and it is not committed or shared.**
 > For the mechanics and resolution order see `runtime-env.md` §6.3. Consumers (they automatically read the "Tool" table rows at runtime):
-> 5 dwf workflows (`.zcode/workflows/*.dwf.ts`), `scripts/verify/e2e/browser-resolve.mjs`, `.agents/scripts/check-local-gates.mjs`.
+> 5 dwf workflows (`.zcode/workflows/*.dwf.ts`), `scripts/verify/e2e/browser-resolve.mjs`, `flow-kit run check-local-gates`.
 > Unregistered tools get built-in standard-install-location probing (node/dotnet/git tried candidate by candidate via `--version`, browser probed by filesystem existence);
-> **registration is only for overriding non-standard install locations** — after cloning, first run `node .agents/scripts/check-local-gates.mjs`,
+> **registration is only for overriding non-standard install locations** — after cloning, first run `flow-kit run check-local-gates.mjs`,
 > and use its output to decide which tools need registration.
 
 | Tool | Local path | Notes |

@@ -22,7 +22,7 @@ The stage machine is aligned with the commands manual. Mutually exclusive with m
 
 **Input**: raw requirement text
 **Process**:
-1. **Start**: `node .agents/scripts/pipeline-run.mjs start "<raw requirement text>"` (may pre-judge and add `--hint "kind=… level=… module=…"`)
+1. **Start**: `flow-kit run pipeline-run.mjs start "<raw requirement text>"` (may pre-judge and add `--hint "kind=… level=… module=…"`)
 2. **Loop reading stop points**: the last stdout line is the machine marker `PIPELINE-STOP <type> …` $\rightarrow$ branch by type:
 
 | Stop type | Action | Re-run command |

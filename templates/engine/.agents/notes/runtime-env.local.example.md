@@ -2,9 +2,9 @@
 
 > **本文件是入库模板；真身 `runtime-env.local.md` 已 git-ignore，各机自登记、不提交、不共享。**
 > 机理与解析顺序见 `runtime-env.md` §6.3。消费方（运行时自动读取「工具」表行）：
-> 5 个 dwf 工作流（`.zcode/workflows/*.dwf.ts`）、`scripts/verify/e2e/browser-resolve.mjs`、`.agents/scripts/check-local-gates.mjs`。
+> 5 个 dwf 工作流（`.zcode/workflows/*.dwf.ts`）、`scripts/verify/e2e/browser-resolve.mjs`、`flow-kit run check-local-gates`。
 > 未登记的工具有内置标准安装位置探测（node/dotnet/git 逐候选 `--version` 试跑、浏览器 fs 存在性探测）；
-> **登记仅用于覆盖非标准安装位置**——clone 后先跑 `node .agents/scripts/check-local-gates.mjs`，
+> **登记仅用于覆盖非标准安装位置**——clone 后先跑 `flow-kit run check-local-gates.mjs`，
 > 按其回显判断哪些工具需要登记。
 
 | 工具 | 本机路径 | 备注 |

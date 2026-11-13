@@ -21,7 +21,7 @@ description: 追溯「为什么长这样」——并行查源码历史、流程�
 |---|---|
 | 源码与历史 | `git log -S<term>`（pickaxe）、`git log --follow -- <path>`、`git blame`、`xd://lsp` references |
 | 流程留痕 | `workflow/{intents,specs,plans,incidents}`、`workflow/archive/`、`workflow/delegations.md`、`workflow/papercuts.md`、`workflow/regression-checklist.md` |
-| 领域知识 | `wiki/`、`node .agents/scripts/kb-search.mjs <term>` |
+| 领域知识 | `wiki/`、`flow-kit run kb-search.mjs <term>` |
 | 会话记录 | `history://`、`archive`（eval 全局）、`.agents/skills/session-resume/SKILL.md` |
 | Issue / PR | `issue://<N>`、`pr://<N>`（有 GitHub 远端时） |
 | 外部文档 | `microsoft_docs_search`、`web_search`、`read <url>` |

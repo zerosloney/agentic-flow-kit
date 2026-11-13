@@ -26,7 +26,10 @@ function readList() {
   try { return fs.readFileSync(0, 'utf8'); } catch { return ''; }
 }
 
-const cacheFile = opt('--cache') || path.join(SCRIPT_DIR, '..', 'cache', 'kb-index.json');
+const AGENTS_DIR = process.env.FLOW_KIT_PROJECT_ROOT
+  ? path.join(process.env.FLOW_KIT_PROJECT_ROOT, '.agents')
+  : path.join(SCRIPT_DIR, '..');
+const cacheFile = opt('--cache') || path.join(AGENTS_DIR, 'cache', 'kb-index.json');
 const files = [...new Set(
   readList()
     .split(/\r?\n/)

@@ -26,8 +26,8 @@ description: 模型升级治理——别名/宿主模型变化时，先对当前
    - 一个已知答案的复核样本（`review-method/golden-set.md`）。
 3. **落凭证**：
    ```bash
-   node .agents/scripts/agent-eval.mjs record --pass-rate <0-1> --tasks <N> --model <id> --note "upgrade <old> -> <new>"
-   node .agents/scripts/agent-eval.mjs check
+   flow-kit run agent-eval.mjs record --pass-rate <0-1> --tasks <N> --model <id> --note "upgrade <old> -> <new>"
+   flow-kit run agent-eval.mjs check
    ```
 4. **写迁移说明**：`workflow/model-upgrades.d/<YYYY-MM>.md` 一行一模型：
    `日期 | 角色 | 旧 | 新 | 通过率 | Δ | 翻转任务 | 回退方式`。

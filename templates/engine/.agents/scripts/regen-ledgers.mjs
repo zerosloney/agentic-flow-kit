@@ -7,8 +7,8 @@
 // 行级并集（手工行纯追加）——合并后跑本脚本即可把四件重生成出含两侧事实的正确版本。
 //
 // 用法：
-//   node .agents/scripts/regen-ledgers.mjs            # 四件全量重生成（合并 develop / 解台账冲突后跑）
-//   node .agents/scripts/regen-ledgers.mjs --check    # 仅校验各生成器 --check/--dry-run 口径（支持者跑，不支持者跳过）
+//   flow-kit run regen-ledgers            # 四件全量重生成（合并 develop / 解台账冲突后跑）
+//   flow-kit run regen-ledgers --check    # 仅校验各生成器 --check/--dry-run 口径（支持者跑，不支持者跳过）
 //
 // 真值源不在本脚本：INDEX ← workflow 文档树；metrics ← 各 done 文档与台账；
 // verify-evidence ← .agents/verifications.jsonl（合并侧经 jsonl-union 已含两侧绿凭证）；
@@ -19,15 +19,17 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = process.env.FLOW_KIT_PROJECT_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
+const SCRIPTS_DIR = process.env.FLOW_KIT_RUNTIME_SCRIPTS || path.join(ROOT, '.agents', 'scripts');
 
 // 重生成步骤（单源：本函数被 CLI 与测试共用）
-export function buildSteps() {
+export function buildSteps(scriptsDir = SCRIPTS_DIR) {
   return [
-    { name: 'workflow/INDEX.md', args: ['.agents/scripts/gen-workflow-index.mjs'] },
-    { name: 'workflow/metrics.md', args: ['.agents/scripts/gen-workflow-metrics.mjs'] },
-    { name: 'workflow/verify-evidence.md', args: ['.agents/scripts/gen-verify-evidence.mjs'] },
-    { name: 'workflow/delegations.md 月度快照', args: ['.agents/scripts/agg-delegations.mjs', '--write'] },
+    { name: 'workflow/INDEX.md', args: [path.join(scriptsDir, 'gen-workflow-index.mjs')] },
+    { name: 'workflow/metrics.md', args: [path.join(scriptsDir, 'gen-workflow-metrics.mjs')] },
+    { name: 'workflow/verify-evidence.md', args: [path.join(scriptsDir, 'gen-verify-evidence.mjs')] },
+    { name: 'workflow/delegations.md 月度快照', args: [path.join(scriptsDir, 'agg-delegations.mjs'), '--write'] },
   ];
 }
 
@@ -51,7 +53,7 @@ function main() {
     console.error(`\n[regen-ledgers] ${failed.length}/${results.length} 步失败——先修上游再重跑`);
     process.exit(1);
   }
-  console.log('\n[regen-ledgers] 四台账已重生成（含两侧事实）。建议随后跑 node .agents/scripts/verify.mjs 复核。');
+  console.log('\n[regen-ledgers] 四台账已重生成（含两侧事实）。建议随后跑 flow-kit run verify 复核。');
 }
 
 if (process.argv[1] && process.argv[1].endsWith('regen-ledgers.mjs')) {

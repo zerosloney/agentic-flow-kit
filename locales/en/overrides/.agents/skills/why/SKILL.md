@@ -21,7 +21,7 @@ description: Trace "why it looks like this" — search source history, process t
 |---|---|
 | Source and history | `git log -S<term>` (pickaxe), `git log --follow -- <path>`, `git blame`, `xd://lsp` references |
 | Process trail | `workflow/{intents,specs,plans,incidents}`, `workflow/archive/`, `workflow/delegations.md`, `workflow/papercuts.md`, `workflow/regression-checklist.md` |
-| Domain knowledge | `wiki/`, `node .agents/scripts/kb-search.mjs <term>` |
+| Domain knowledge | `wiki/`, `flow-kit run kb-search.mjs <term>` |
 | Session records | `history://`, `archive` (eval global), `.agents/skills/session-resume/SKILL.md` |
 | Issue / PR | `issue://<N>`, `pr://<N>` (when a GitHub remote exists) |
 | External docs | `microsoft_docs_search`, `web_search`, `read <url>` |

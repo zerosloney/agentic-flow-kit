@@ -14,11 +14,11 @@
 //       PIPELINE_RUN_TODAY（文档日期锚定，默认当天——测试固定日期消除时钟依赖，2026-10-03 实证：测试硬编码日期跨日即红）。
 //       npm 不直接调用——测试门统一走 verify.mjs。
 // 用法：
-//   node .agents/scripts/pipeline-run.mjs start "<需求原文>" [--hint "kind=require level=L1 module=wiki"]
-//   node .agents/scripts/pipeline-run.mjs next [--run <id>] [--triage "kind=|level=|module=|topic="] [--delegated "<原话>"] [--files "a,b"]
-//   node .agents/scripts/pipeline-run.mjs status [--run <id>] [--adopt] [--json]
-//   node .agents/scripts/pipeline-run.mjs watch [--run <id>] [--interval 2]
-//   node .agents/scripts/pipeline-run.mjs abort --run <id> [--to superseded|cancelled] [--delegated "<原话>"]
+//   flow-kit run pipeline-run.mjs start "<需求原文>" [--hint "kind=require level=L1 module=wiki"]
+//   flow-kit run pipeline-run.mjs next [--run <id>] [--triage "kind=|level=|module=|topic="] [--delegated "<原话>"] [--files "a,b"]
+//   flow-kit run pipeline-run.mjs status [--run <id>] [--adopt] [--json]
+//   flow-kit run pipeline-run.mjs watch [--run <id>] [--interval 2]
+//   flow-kit run pipeline-run.mjs abort --run <id> [--to superseded|cancelled] [--delegated "<原话>"]
 // 测试面已随引擎减重退役（2026-10-28，owner 决策），本脚本现无测试兜底
 import fs from 'node:fs';
 import path from 'node:path';
@@ -40,7 +40,7 @@ const pad = (n) => String(n).padStart(2, '0');
 // ── 环境解析（测试注入点） ─────────────────────────────────────────────
 function ctxEnv(overrideRoot) {
   const root = path.resolve(overrideRoot || process.env.PIPELINE_RUN_ROOT || process.cwd());
-  const bin = path.resolve(process.env.PIPELINE_RUN_BIN || path.join(root, '.agents', 'scripts'));
+  const bin = path.resolve(process.env.PIPELINE_RUN_BIN || process.env.FLOW_KIT_RUNTIME_SCRIPTS || path.join(root, '.agents', 'scripts'));
   const gitPrefix = (process.env.PIPELINE_RUN_GIT_BIN || 'git').split(/\s+/).filter(Boolean);
   return { root, bin, gitPrefix, runsDir: path.join(root, '.agents', 'cache', 'pipeline-runs') };
 }
@@ -92,7 +92,7 @@ function newRunId(requirement) {
 // ── 门执行（唯一子进程出口；记录真实退出码） ──────────────────────────
 function runNode(ctx, run, script, args) {
   const scriptPath = path.join(ctx.bin, script);
-  const cmd = `node .agents/scripts/${script} ${args.join(' ')}`;
+  const cmd = `flow-kit run ${script} ${args.join(' ')}`;
   const t0 = Date.now();
   // PIPELINE_RUN_ID 注入（verify-evidence 复核 P2-1）：verify.mjs 绿行据此绑定 runId
   //（对质链与 run 事件流同源，docsCommit 格式已含同一 runId）
@@ -269,7 +269,7 @@ function printRun(ctx, run, problems) {
     for (const c of w.constraints) console.log(`  - ${c}`);
     console.log('验收（脚本机器校验）：');
     for (const a of w.acceptance) console.log(`  - ${a}`);
-    console.log(`\n完成工单后回跑：node .agents/scripts/pipeline-run.mjs next${run.docs?.entry ? '' : ''}`);
+    console.log(`\n完成工单后回跑：flow-kit run pipeline-run.mjs next${run.docs?.entry ? '' : ''}`);
   } else if (run.stopType === 'await-confirm' && run.awaitConfirm) {
     const c = run.awaitConfirm;
     console.log(`\n== 等待确认 ==${c.ledger ? `（文档：${c.doc}，将经 confirm-doc 代录入台账）` : '（对话级确认，记 run 事件不进台账）'}`);
