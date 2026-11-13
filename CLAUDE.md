@@ -173,6 +173,7 @@ Hook 接线在 `src/install/hooks.mjs`：中性规格来自引擎模板 `.agents
 - 经验与记忆：`session-log.mjs`（运行态日志）、`memory-wiki.mjs`（生成 `wiki/_memory/`）、`memory-tier.mjs`（200 行 / 25KB 注入层）、`path-lease.mjs`（单写者租约）。
 - 修复保护：`fix-task.mjs` 落 `.agents/cache/fix-task.json`，`pre-write-check.cjs` §2.5 在窗口内拦既有测试写入。
 - 结果指标：`outcome-metrics.mjs`；闭环状态机静态检查：`check-pipeline-state.mjs` + `.agents/config/pipeline.json`。
+- 成本与延迟：`usage-log.mjs` 追加角色/模型调用凭据（`.agents/usage.jsonl`，gitignore 运行态）；`observability.mjs` 聚合 pipeline run 事件、verify 凭证、eval-log 时间线、usage 与复核产物，支持 `--format prom|otel` 与 `--baseline` 快照对比。聚合纯函数在 `metrics-core.mjs`；口径配置 `.agents/config/observability.json`（schema `schemas/observability.schema.json`）。缺 token/价格的调用记 `unpricedCalls`，不按 0 计费。
 - 模型升级治理：`.agents/skills/model-upgrade/SKILL.md`；严格度分层：`.agents/config/steering.json` + `steering.mjs`。
 - 策略即代码：`.agents/config/policy.json`（`schemas/policy.schema.json`）声明策略面路径、机制闭集、预算上限、枚举键与角色映射；`flow-kit run policy check|explain` 双向核对 `mechanisms.required` 与 `mechanism-registry.md`、复用 `rule-budget.mjs --all` 执法预算、校验 `workflow-enums.txt` / `pipeline.json` / `model-roles.json` / `pr-review.json` 引用；`flow-kit run gen-effective-policy` 复用同一视图生成 `workflow/effective-policy.md`。CI 跑 `npm run policy:check`。
 - 安装证明链：`src/install/attest.mjs` 生成 `flow-kit-attest/v1`（manifest / files / policy / evals / git 五段 sha256 链）；`doctor --attest [--out <file>]` 输出可归档证明，托管文件缺失/哈希不符时 `ok:false` 且退出 1；证明不含时间戳/绝对路径/网络访问，schema 为 `schemas/attestation.schema.json`。

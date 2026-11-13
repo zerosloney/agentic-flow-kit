@@ -1,0 +1,13 @@
+{
+  "$schema": "observability/config@1",
+  "version": 1,
+  "windowDays": 30,
+  "regression": {
+    "passRateDrop": 0.05
+  },
+  "export": {
+    "serviceName": "agentic-flow-kit",
+    "prefix": "agentic_flow_kit"
+  },
+  "pricing": {}
+}

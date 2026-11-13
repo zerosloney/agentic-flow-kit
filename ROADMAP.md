@@ -39,7 +39,7 @@
 | R3-4 | 技能包分发与准入 | 3 | L | `add-skill`、lockfile、`skills lint` | TODO |
 | R3-5 | pipeline 真实执行器 | 3 | L | `templates/engine/.agents/scripts/pipeline-run.mjs` | TODO |
 | R3-6 | 记忆生命周期 | 3 | L | `memory-tier.mjs` / `memory-wiki.mjs` | TODO |
-| R3-7 | 可观测与成本 | 3 | M | `outcome-metrics.mjs`、`metrics-core.mjs` | TODO |
+| R3-7 | 可观测与成本 | 3 | M | `outcome-metrics.mjs`、`metrics-core.mjs` | DONE |
 | R3-8 | 沙箱与供应链 | 3 | L | devcontainer / MCP 权限 / SBOM | TODO |
 | R3-9 | manifest 迁移框架 | 3 | M | `migrations/`、`manifest.schemaVersion` | DONE |
 | R3-10 | `new-host` 生成器与模板 lint | 3 | M | `tools/new-host.mjs`、`npm run lint:templates` | DONE |
@@ -241,6 +241,12 @@
 
 - **目标**：从现有 ledger 派生按 run/角色/模型的成本与延迟；模型质量回归时间线；可选 OTel/Prometheus 导出（无外部依赖时落本地文件）。
 - **验收**：指标可由现有证据重算；时间线可对比两个版本。规模 `M`。
+- **落地（2026-11-13）**：
+  - `metrics-core.mjs` 增加纯聚合内核：`percentile` / `stageLabel` / `summarizeRuns` / `summarizeUsage` / `evalTimeline` / `diffReports`（无读盘、无写盘，供 observability 与看板复用）。
+  - `usage-log.mjs`：`append` 校验后写入 `.agents/usage.jsonl`（gitignore），`list` 只读；拿不到的字段不写，`costUsd` 可由行内值或价格表换算。
+  - `observability.mjs`：聚合 pipeline run 事件（run/阶段延迟、停止类型）、verify 凭证（通过率、逐门耗时）、`eval-log.json`（模型质量时间线，回归按 `regression.passRateDrop` 或 pass→fail）、usage（角色/模型 token、成本、延迟、失败）与复核产物（verifier 投票模型分布、复核墙钟）；缺源单列。输出 `md|json|prom|otel`；`--baseline <report.json>` 对比两个版本（数值差分 + 模型通过率回归）。
+  - 口径配置 `.agents/config/observability.json` + `schemas/observability.schema.json`；缺 token/价格的调用记 `unpricedCalls`，不按 0 计费。
+  - 测试：`tests/observability.test.mjs`（可重算、成本换算、回归检测、Prom/OTel 导出、基线差分、usage-log 校验）。
 
 ### R3-8 沙箱与供应链（引擎面）
 

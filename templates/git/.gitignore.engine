@@ -4,6 +4,7 @@
 .agents/tools/
 .agents/verifications.jsonl
 .agents/judgments.jsonl
+.agents/usage.jsonl
 .agents/notes/runtime-env.local.md
 .agents/config/model-roles.local.json
 # 升级用基线（含上次安装内容，默认不入库；--no-baseline 可关闭）

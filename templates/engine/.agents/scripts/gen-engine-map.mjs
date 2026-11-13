@@ -237,6 +237,8 @@ function buildMap() {
   L.push('|---|---|');
   L.push('| `.agents/verifications.jsonl` | verify 绿凭证（钉 headShort + 24h 窗；--scope 行带面与基线） |');
   L.push('| `.agents/judgments.jsonl` | check-loop 每次运行 per-rule WARN/BLOCK 落账（agg-judgments 供数） |');
+  L.push('| `.agents/usage.jsonl` | 角色 / 模型调用凭据（usage-log 写入，observability 供数；本机） |');
+  L.push('| `.agents/cache/pipeline-runs/*.json` | pipeline-run 事件流（按 run 的耗时与停止类型；本机） |');
   L.push('| `.agents/confirmations.jsonl` + `confirmations.d/` | 确认链（append-only，指纹 sha256，提交时刻增量执法） |');
   L.push('| `.agents/trust-mode-audit.jsonl` | 自治授权升降级（prev-sha256 链；trust-mode 升降级时按需生成，新克隆暂缺） |');
   L.push('| `workflow/reviews.d/` | 复核事件级台账（采纳/拒绝/误报） |');
