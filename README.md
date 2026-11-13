@@ -275,11 +275,30 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 | 注入层预算 | `flow-kit run memory-tier` | 200 行 / 25KB 上限；只出上浮候选，不自动改 |
 | 单写者租约 | `flow-kit run path-lease` | 并行 agent 写同一页面前加租约，防共享页丢事实 |
 | 结果指标 | `flow-kit run outcome-metrics` | 首次过门率、复核采纳率、逃逸缺陷、评测通过率、返工占比 |
+| 成本与延迟 | `flow-kit run usage-log` + `observability` | 按 run / 角色 / 模型的 token、成本、延迟；模型质量时间线；导出 Prometheus / OTLP JSON |
 | 闭环状态机 | `flow-kit run check-pipeline-state` | stage/stopType 闭包检查；真实端到端 run 仍需小任务验证 |
 | 策略即代码 | `.agents/config/policy.json` + `flow-kit run policy` | 双向核对机制台账、预算、枚举闭集与角色/模型引用；`check` 失败非零，`explain` 输出人类视图 |
 | 安装证明链 | `flow-kit doctor --attest --out <file>` | manifest / files / policy / eval / git 五段 sha256 链；篡改可检出，输出确定、可归档 |
 
 `--tier standard`（默认）会生成 `azure-pipelines.yml` 与 `.github/workflows/ci.yml`，在 `verify --full` 之后跑上述 advisory 检查；`lean` 不生成 CI，`enterprise` 另装加固配置。未完成项与验收口径见 [BACKLOG.md](BACKLOG.md)。
+
+### 可观测与成本
+
+`observability` 只聚合已有台账，不造数：pipeline run 事件流给 run/阶段延迟，verify 凭证给通过率与逐门耗时，`eval-log.json` 给模型质量时间线，`usage-log` 给角色/模型 token 与成本，复核产物给 verifier 投票分布。
+
+```bash
+# 记录一次子代理调用的凭据（拿不到的字段就不写）
+flow-kit run usage-log append --role verifier --model <id> \
+  --input-tokens 1200 --output-tokens 300 --latency-ms 4200 --outcome pass --run <runId>
+
+flow-kit run observability                          # Markdown（stdout）
+flow-kit run observability --json --out workflow/metrics/observability.json
+flow-kit run observability --baseline workflow/metrics/observability-old.json   # 对比两个版本
+flow-kit run observability --format prom --out metrics.prom                     # Prometheus 文本
+flow-kit run observability --format otel --out metrics.json                     # OTLP JSON（无 SDK）
+```
+
+口径由 `.agents/config/observability.json` 控制（schema：`schemas/observability.schema.json`）：`windowDays`、回归阈值 `regression.passRateDrop`、导出前缀 / service name、可选 `pricing`（每百万 token）。成本只在行内 `costUsd` 或价格表可换算时计入，缺 token/价格的调用记 `unpricedCalls`，不按 0 计费；缺源在报告末尾单列。报告 JSON 去掉 `generatedAt` 后与输入一一对应，可直接重算，`--baseline` 即依赖这一点。
 
 ### 策略即代码
 

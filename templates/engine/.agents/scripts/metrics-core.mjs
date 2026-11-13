@@ -10,6 +10,245 @@ import { spawnSync } from 'node:child_process';
 // legacy 占比告警共用；此前两处各写 0.30 字面量，靠测试钉同值。
 export const FUNNEL_LEGACY_RATIO_LIMIT = 0.30;
 
+// ── R3-7 可观测与成本：纯聚合内核（observability.mjs 消费；不读盘、不写盘） ──
+
+export function percentile(values, p = 0.5) {
+  const nums = (values || []).filter((v) => Number.isFinite(v)).slice().sort((a, b) => a - b);
+  if (!nums.length) return null;
+  if (nums.length === 1) return nums[0];
+  const idx = (nums.length - 1) * Math.min(1, Math.max(0, p));
+  const lo = Math.floor(idx);
+  const hi = Math.ceil(idx);
+  return lo === hi ? nums[lo] : nums[lo] + (nums[hi] - nums[lo]) * (idx - lo);
+}
+
+export const round1 = (v) => (v == null || !Number.isFinite(v) ? null : Math.round(v * 10) / 10);
+
+const STAGE_RE = /^flow-kit run ([A-Za-z0-9._-]+)/;
+
+/** 门事件 → 稳定阶段名：脚本名或 git 子命令；避免参数/路径把同一门拆成多桶。 */
+export function stageLabel(cmd) {
+  const s = String(cmd || '').trim();
+  const m = STAGE_RE.exec(s);
+  if (m) return m[1].replace(/\.mjs$/, '');
+  const git = /^git\s+([A-Za-z-]+)/.exec(s);
+  if (git) return `git ${git[1]}`;
+  return s.split(/\s+/)[0] || 'unknown';
+}
+
+export function runDurationMs(run) {
+  const events = Array.isArray(run?.events) ? run.events : [];
+  const start = Date.parse(run?.createdAt || events[0]?.t || '');
+  const end = Date.parse(run?.updatedAt || events[events.length - 1]?.t || '');
+  if (Number.isFinite(start) && Number.isFinite(end) && end >= start) return end - start;
+  if (events.length >= 2) {
+    const a = Date.parse(events[0].t);
+    const b = Date.parse(events[events.length - 1].t);
+    if (Number.isFinite(a) && Number.isFinite(b) && b >= a) return b - a;
+  }
+  return null;
+}
+
+/** 按 run 汇总：完成/中止、总时长分位、门次数与失败、阶段耗时。 */
+export function summarizeRuns(runs, { since = 0 } = {}) {
+  const items = (runs || []).filter((run) => {
+    const t = Date.parse(run?.createdAt || run?.events?.[0]?.t || '');
+    return Number.isFinite(t) && t >= since;
+  });
+  const byStopType = {};
+  const durations = [];
+  const stages = new Map();
+  let gates = 0;
+  let failed = 0;
+  for (const run of items) {
+    const stop = String(run.stopType || (run.events || []).find((e) => e.type === 'stop')?.stopType || 'unknown');
+    byStopType[stop] = (byStopType[stop] || 0) + 1;
+    const d = runDurationMs(run);
+    if (d != null) durations.push(d);
+    for (const ev of run.events || []) {
+      if (ev.type !== 'gate') continue;
+      gates += 1;
+      if (ev.exit !== 0) failed += 1;
+      const label = stageLabel(ev.cmd);
+      if (!stages.has(label)) stages.set(label, { stage: label, count: 0, failed: 0, ms: [] });
+      const row = stages.get(label);
+      row.count += 1;
+      if (ev.exit !== 0) row.failed += 1;
+      if (Number.isFinite(ev.ms)) row.ms.push(ev.ms);
+    }
+  }
+  const byStage = [...stages.values()]
+    .map((row) => ({
+      stage: row.stage,
+      count: row.count,
+      failed: row.failed,
+      medianMs: round1(percentile(row.ms, 0.5)),
+      p90Ms: round1(percentile(row.ms, 0.9)),
+      maxMs: round1(percentile(row.ms, 1)),
+    }))
+    .sort((a, b) => (b.p90Ms || 0) - (a.p90Ms || 0));
+  return {
+    total: items.length,
+    completed: byStopType.done || 0,
+    aborted: byStopType.aborted || 0,
+    byStopType,
+    durationMs: {
+      p50: round1(percentile(durations, 0.5)),
+      p90: round1(percentile(durations, 0.9)),
+      avg: round1(durations.length ? durations.reduce((s, x) => s + x, 0) / durations.length : null),
+      max: round1(percentile(durations, 1)),
+    },
+    gates: { total: gates, failed },
+    byStage,
+  };
+}
+
+function usageCost(row, pricing) {
+  if (Number.isFinite(row.costUsd)) return row.costUsd;
+  const price = pricing?.[row.model];
+  if (!price) return null;
+  const input = Number(row.inputTokens) || 0;
+  const output = Number(row.outputTokens) || 0;
+  const cost = (input / 1e6) * (Number(price.inputPerMTok) || 0) + (output / 1e6) * (Number(price.outputPerMTok) || 0);
+  return Number.isFinite(cost) && cost > 0 ? cost : null;
+}
+
+function emptyUsageBucket(key) {
+  return { key, calls: 0, inputTokens: 0, outputTokens: 0, costUsd: 0, pricedCalls: 0, latencyMs: [], failures: 0 };
+}
+
+function finalizeUsageBucket(b) {
+  return {
+    key: b.key,
+    calls: b.calls,
+    inputTokens: b.inputTokens,
+    outputTokens: b.outputTokens,
+    tokens: b.inputTokens + b.outputTokens,
+    costUsd: Math.round(b.costUsd * 1e6) / 1e6,
+    pricedCalls: b.pricedCalls,
+    unpricedCalls: b.calls - b.pricedCalls,
+    latencyMs: {
+      p50: round1(percentile(b.latencyMs, 0.5)),
+      p90: round1(percentile(b.latencyMs, 0.9)),
+    },
+    failures: b.failures,
+  };
+}
+
+/** 角色 / 模型成本与延迟。rows 为 .agents/usage.jsonl；pricing 缺省时只统计 token 与墙钟。 */
+export function summarizeUsage(rows, { since = 0, pricing = {} } = {}) {
+  const items = (rows || []).filter((row) => {
+    const t = Date.parse(row?.ts || '');
+    return Number.isFinite(t) && t >= since;
+  });
+  const byRole = new Map();
+  const byModel = new Map();
+  const totals = emptyUsageBucket('total');
+  for (const row of items) {
+    const role = String(row.role || 'unknown');
+    const model = String(row.model || 'unknown');
+    const input = Number(row.inputTokens) || 0;
+    const output = Number(row.outputTokens) || 0;
+    const cost = usageCost(row, pricing);
+    const latency = Number(row.latencyMs);
+    const failed = row.outcome === 'fail';
+    for (const [map, key] of [[byRole, role], [byModel, model]]) {
+      if (!map.has(key)) map.set(key, emptyUsageBucket(key));
+      const b = map.get(key);
+      b.calls += 1;
+      b.inputTokens += input;
+      b.outputTokens += output;
+      if (cost != null) { b.costUsd += cost; b.pricedCalls += 1; }
+      if (Number.isFinite(latency)) b.latencyMs.push(latency);
+      if (failed) b.failures += 1;
+    }
+    totals.calls += 1;
+    totals.inputTokens += input;
+    totals.outputTokens += output;
+    if (cost != null) { totals.costUsd += cost; totals.pricedCalls += 1; }
+    if (Number.isFinite(latency)) totals.latencyMs.push(latency);
+    if (failed) totals.failures += 1;
+  }
+  const finalize = (map) => [...map.values()].map(finalizeUsageBucket).sort((a, b) => b.calls - a.calls);
+  return { total: finalizeUsageBucket(totals), byRole: finalize(byRole), byModel: finalize(byModel) };
+}
+
+/** 模型质量时间线：按模型逐条评测；drop ≥ regressionDrop 或 pass→fail 记为回归。 */
+export function evalTimeline(entries, { since = 0, regressionDrop = 0.05 } = {}) {
+  const items = (entries || [])
+    .filter((e) => {
+      const t = Date.parse(e?.ts || '');
+      return Number.isFinite(t) && t >= since;
+    })
+    .sort((a, b) => String(a.ts).localeCompare(String(b.ts)));
+  const byModel = new Map();
+  for (const e of items) {
+    const model = String(e.model || 'unknown');
+    if (!byModel.has(model)) byModel.set(model, []);
+    byModel.get(model).push({
+      ts: e.ts,
+      signature: e.signature || '',
+      passRate: Number(e.passRate),
+      tasks: Number(e.tasks) || 0,
+      outcome: e.outcome || null,
+    });
+  }
+  const models = [];
+  const regressions = [];
+  for (const [model, points] of byModel) {
+    let regressed = false;
+    for (let i = 1; i < points.length; i += 1) {
+      const prev = points[i - 1];
+      const cur = points[i];
+      const drop = prev.passRate - cur.passRate;
+      const flipped = prev.outcome === 'pass' && cur.outcome === 'fail';
+      if (!Number.isFinite(drop)) continue;
+      if (drop >= regressionDrop || flipped) {
+        regressed = true;
+        regressions.push({
+          model,
+          ts: cur.ts,
+          from: prev.passRate,
+          to: cur.passRate,
+          delta: Math.round((cur.passRate - prev.passRate) * 1000) / 1000,
+          fromSignature: prev.signature,
+          toSignature: cur.signature,
+        });
+      }
+    }
+    const first = points[0];
+    const latest = points[points.length - 1];
+    models.push({
+      model,
+      points,
+      latest,
+      delta: first && latest ? Math.round((latest.passRate - first.passRate) * 1000) / 1000 : null,
+      regressed,
+    });
+  }
+  return { models: models.sort((a, b) => String(b.latest.ts).localeCompare(String(a.latest.ts))), regressions };
+}
+
+/** 两次报告快照的数值差分：只比较两侧都存在的路径，缺一侧不计入。 */
+export function diffReports(current, baseline, paths = []) {
+  const get = (obj, path) => path.split('.').reduce((v, k) => (v == null ? undefined : v[k]), obj);
+  const out = [];
+  for (const path of paths) {
+    const before = get(baseline, path);
+    const after = get(current, path);
+    if (!Number.isFinite(before) || !Number.isFinite(after)) continue;
+    const delta = after - before;
+    out.push({
+      path,
+      before,
+      after,
+      delta: Math.round(delta * 1000) / 1000,
+      pct: before === 0 ? null : Math.round((delta / before) * 1000) / 10,
+    });
+  }
+  return out;
+}
+
 export function cycleDays(addedIso, terminalTs) {
   if (!addedIso || !terminalTs) return null;
   const days = (Date.parse(terminalTs) - Date.parse(addedIso)) / 86400000;

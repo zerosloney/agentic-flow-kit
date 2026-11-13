@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zerosloney/agentic-flow-kit/schemas/observability.schema.json",
+  "title": "agentic-flow-kit observability config",
+  "description": ".agents/config/observability.json：成本 / 延迟报告口径与导出配置。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "windowDays": { "type": "integer", "minimum": 1, "description": "默认统计窗口（天）。" },
+    "regression": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "passRateDrop": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 1,
+          "description": "同一模型相邻两次评测通过率下降达到该值即记为回归（0.05 = 5 个百分点）。"
+        }
+      }
+    },
+    "export": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "serviceName": { "type": "string", "description": "OTel resource service.name。" },
+        "prefix": { "type": "string", "pattern": "^[a-zA-Z_:][a-zA-Z0-9_:]*$", "description": "Prometheus 指标名前缀。" }
+      }
+    },
+    "pricing": {
+      "type": "object",
+      "description": "模型价格表（每百万 token，美元）；usage 行自带 costUsd 时优先用行内值。",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "inputPerMTok": { "type": "number", "minimum": 0 },
+          "outputPerMTok": { "type": "number", "minimum": 0 }
+        }
+      }
+    }
+  }
+}
