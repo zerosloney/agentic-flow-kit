@@ -23,16 +23,16 @@
 | R1-3 | `remove-host` / `uninstall` | 1 | M | `src/commands/remove-host.mjs` | DONE · [#4](https://github.com/zerosloney/agentic-flow-kit/issues/4) |
 | R1-4 | `--json` 与退出码契约 | 1 | M | `src/cli/main.mjs`、各命令 | DONE · [#5](https://github.com/zerosloney/agentic-flow-kit/issues/5) |
 | R1-5 | `explain <targetRel>` 来源解释 | 1 | S | `src/commands/explain.mjs` | DONE · [#6](https://github.com/zerosloney/agentic-flow-kit/issues/6) |
-| R2-1 | 基线留存 + 三方合并 | 2 | L | `src/install/baseline.mjs`、`apply.mjs` | TODO |
-| R2-2 | `adopt` 接管已有安装 | 2 | M | `src/commands/adopt.mjs`、`tools/parity-report.mjs` | TODO |
-| R2-3 | 外部宿主插件 | 2 | M | `schemas/host.schema.json`、`registry.mjs` | TODO |
-| R2-4 | Hook 编译器 | 2 | L | 中性 hook 规格 + 宿主序列化器 | TODO |
-| R2-5 | MCP 接线 | 2 | M | registry `mcp` 字段、`templates/mcp/` | TODO |
-| R2-6 | 权限 / 工具白名单编译 | 2 | M | 复用 `gates.json` 与 hardened 路径 | TODO |
-| R2-7 | 宿主探测 `--auto-hosts` | 2 | S | `src/commands/install.mjs`、TUI | TODO |
-| R2-8 | 组合式 profile | 2 | M | `src/install/plan.mjs`、`schemas/project-profile.schema.json` | TODO |
-| R2-9 | 企业档宿主矩阵 | 2 | M | `templates/hosts/*`、`doctor` | TODO |
-| R2-10 | i18n 覆盖一致性检查 | 2 | S | `tools/make-en-host-overrides.mjs --check` | TODO |
+| R2-1 | 基线留存 + 三方合并 | 2 | L | `src/install/baseline.mjs`、`apply.mjs` | TODO · [#8](https://github.com/zerosloney/agentic-flow-kit/issues/8) |
+| R2-2 | `adopt` 接管已有安装 | 2 | M | `src/commands/adopt.mjs`、`tools/parity-report.mjs` | TODO · [#9](https://github.com/zerosloney/agentic-flow-kit/issues/9) |
+| R2-3 | 外部宿主插件 | 2 | M | `schemas/host.schema.json`、`registry.mjs` | TODO · [#10](https://github.com/zerosloney/agentic-flow-kit/issues/10) |
+| R2-4 | Hook 编译器 | 2 | L | 中性 hook 规格 + 宿主序列化器 | TODO · [#11](https://github.com/zerosloney/agentic-flow-kit/issues/11) |
+| R2-5 | MCP 接线 | 2 | M | registry `mcp` 字段、`templates/mcp/` | TODO · [#12](https://github.com/zerosloney/agentic-flow-kit/issues/12) |
+| R2-6 | 权限 / 工具白名单编译 | 2 | M | 复用 `gates.json` 与 hardened 路径 | TODO · [#13](https://github.com/zerosloney/agentic-flow-kit/issues/13) |
+| R2-7 | 宿主探测 `--auto-hosts` | 2 | S | `src/commands/install.mjs`、TUI | TODO · [#14](https://github.com/zerosloney/agentic-flow-kit/issues/14) |
+| R2-8 | 组合式 profile | 2 | M | `src/install/plan.mjs`、`schemas/project-profile.schema.json` | TODO · [#15](https://github.com/zerosloney/agentic-flow-kit/issues/15) |
+| R2-9 | 企业档宿主矩阵 | 2 | M | `templates/hosts/*`、`doctor` | TODO · [#16](https://github.com/zerosloney/agentic-flow-kit/issues/16) |
+| R2-10 | i18n 覆盖一致性检查 | 2 | S | `tools/make-en-host-overrides.mjs --check` | DONE · [#17](https://github.com/zerosloney/agentic-flow-kit/issues/17) |
 | R3-1 | policy-as-code | 3 | L | `templates/engine/.agents/config/policy.json` + `policy.mjs` | TODO |
 | R3-2 | 升级策略影响面 | 3 | S | `doctor` / `upgrade --explain-policy` | TODO |
 | R3-3 | 安装证明链 | 3 | M | manifest + eval 凭证 + 签名 | TODO |
@@ -180,7 +180,7 @@
 
 ### R2-10 i18n 覆盖一致性检查
 
-- **现状**：`locales/en/overrides` 由 `tools/make-en-host-overrides.mjs` 生成，但 CI 不检查漂移。
+- **现状**：已实现。`--check [--json]` 报告缺失 / 过期 / 孤儿覆盖，`npm run check:i18n` 已接入 CI；生成与检查均按 LF 归一，Windows 检出不会误报。
 - **目标**：增加 `--check`，报告缺失、过期、孤立覆盖；CI 失败。
 - **验收**：故意制造漂移可失败；修复后通过。规模 `S`。
 

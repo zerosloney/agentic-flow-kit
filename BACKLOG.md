@@ -79,4 +79,15 @@
   R1-3 [#4](https://github.com/zerosloney/agentic-flow-kit/issues/4)、
   R1-4 [#5](https://github.com/zerosloney/agentic-flow-kit/issues/5)、
   R1-5 [#6](https://github.com/zerosloney/agentic-flow-kit/issues/6)。
+- Wave 2（收敛与适配）：跟踪 [#18](https://github.com/zerosloney/agentic-flow-kit/issues/18)，
+  子项 R2-1 [#8](https://github.com/zerosloney/agentic-flow-kit/issues/8)、
+  R2-2 [#9](https://github.com/zerosloney/agentic-flow-kit/issues/9)、
+  R2-3 [#10](https://github.com/zerosloney/agentic-flow-kit/issues/10)、
+  R2-4 [#11](https://github.com/zerosloney/agentic-flow-kit/issues/11)、
+  R2-5 [#12](https://github.com/zerosloney/agentic-flow-kit/issues/12)、
+  R2-6 [#13](https://github.com/zerosloney/agentic-flow-kit/issues/13)、
+  R2-7 [#14](https://github.com/zerosloney/agentic-flow-kit/issues/14)、
+  R2-8 [#15](https://github.com/zerosloney/agentic-flow-kit/issues/15)、
+  R2-9 [#16](https://github.com/zerosloney/agentic-flow-kit/issues/16)、
+  R2-10 [#17](https://github.com/zerosloney/agentic-flow-kit/issues/17)。
 - 本文件只保留缺口修复条目；能力扩展完成后若形成新的“必须补”缺口，再回填到这里。

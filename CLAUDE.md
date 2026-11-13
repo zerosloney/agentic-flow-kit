@@ -38,6 +38,7 @@ npm run doctor:self                       # 对当前仓库执行 doctor（需�
 node tools/parity-report.mjs --project <project>
 node tools/extract-from-project.mjs --project <project> [--dry-run]
 node tools/make-en-host-overrides.mjs
+node tools/make-en-host-overrides.mjs --check   # CI：英文覆盖缺失/过期/孤儿
 ```
 
 ## 安装管线（核心）

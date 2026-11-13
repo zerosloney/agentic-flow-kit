@@ -208,6 +208,7 @@ v1 支持 10 个现行宿主：
 ```bash
 node tools/extract-from-project.mjs --project 项目目录   # 重新提取模板（一次性迁移工具）
 node tools/make-en-host-overrides.mjs                                     # 重新生成英文宿主指针壳
+node tools/make-en-host-overrides.mjs --check                             # 检查英文覆盖缺失/过期/孤儿（CI 失败）
 node tools/parity-report.mjs --project 项目目录          # 对比现行引擎
 node --test tests/*.test.mjs                                              # 安装器测试
 ```

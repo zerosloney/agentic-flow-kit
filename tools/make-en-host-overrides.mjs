@@ -31,6 +31,10 @@ const COMMAND_DESC = {
   'wf-pr-review': 'PR panel review: multi-agent finders + independent votes + ledger',
 };
 
+const SKILL_DESC = {
+  'tfs-pr': 'Internal self-hosted TFS / Azure DevOps Server PR skill, project-agnostic — auto-detects the git repository and remote to derive collection/project/repo, guides creation and saves an env var when PAT is missing; query PR / create PR (context pulls diff to distill title and description) / update PR description / conflict pre-check and worktree-isolated resolution, via REST API + PAT (the az devops extension rejects http organization URLs, so az is unavailable). Command entry .agents/skills/tfs-pr/scripts/tfs-pr.mjs.',
+};
+
 const AGENT_DESC = {
   implementer: 'Implements an approved, tightly scoped code change or test when the task includes owned files and executable acceptance criteria',
   'independent-reviewer': 'Independently reviews a fixed spec, plan, or code diff for correctness and project-rule violations without modifying files',
@@ -82,25 +86,22 @@ function targetRel(host, rel) {
   return `${HOST_DIRS[host]}/${rel}`;
 }
 
-function writeOverride(rel, content) {
-  const abs = path.join(OUT, rel);
-  fs.mkdirSync(path.dirname(abs), { recursive: true });
-  fs.writeFileSync(abs, content, 'utf8');
-}
-
-let count = 0;
+const overrides = new Map();
+// 生成与检查都按 LF 归一：Windows 检出可能带 CRLF，不能因此判为漂移。
+const normalize = (text) => text.replace(/\r\n/g, '\n');
 for (const host of Object.keys(HOST_DIRS)) {
   const dir = path.join(T, host);
   for (const rel of walk(dir)) {
     const base = path.basename(rel).replace(/\.(md|yml|yaml)$/i, '');
-    const desc = COMMAND_DESC[base] || AGENT_DESC[base];
+    const skill = rel.match(/^skills\/([^/]+)\/SKILL\.md$/);
+    const desc = COMMAND_DESC[base] || AGENT_DESC[base] || (skill ? SKILL_DESC[skill[1]] : undefined);
     const abs = path.join(dir, rel);
-    const text = fs.readFileSync(abs, 'utf8');
+    const text = normalize(fs.readFileSync(abs, 'utf8'));
     const parts = splitFrontmatter(text);
     const outRel = targetRel(host, rel);
 
     if (base === 'CODEBUDDY' && rel === 'CODEBUDDY.md') {
-      writeOverride(outRel, `# Project Memory
+      overrides.set(outRel, `# Project Memory
 
 Single source of truth: root \`AGENTS.md\` (read it fully before starting). Host surface: this directory's \`commands/\`, \`agents/\`, \`rules/\`; hooks are wired via this directory's \`settings.json\` to \`.agents/hooks/\` — the host layer does not own scripts.
 
@@ -108,7 +109,6 @@ Single source of truth: root \`AGENTS.md\` (read it fully before starting). Host
 - **Do not** place \`CODEBUDDY.md\` at the repository root (it takes precedence over \`AGENTS.md\` without merging and would override the authority).
 - English is the language for this generated pack; commits follow Conventional Commits.
 `);
-      count += 1;
       continue;
     }
 
@@ -120,13 +120,12 @@ Single source of truth: root \`AGENTS.md\` (read it fully before starting). Host
       const detail = isBackend
         ? 'including §6 data integrity / API contract / database operation hard constraints'
         : 'including the BC/G gates and Never rules';
-      writeOverride(outRel, `---
+      overrides.set(outRel, `---
 description: Read ${name} before changing ${scope} files
 alwaysApply: true
 ---
 Before modifying or reviewing any file under \`${scope}/\`, read and follow \`${name}\` (${detail}).
 `);
-      count += 1;
       continue;
     }
 
@@ -152,10 +151,77 @@ Before modifying or reviewing any file under \`${scope}/\`, read and follow \`${
     }
 
     if (newBody) {
-      writeOverride(outRel, `${fm}\n${newBody}`);
-      count += 1;
+      overrides.set(outRel, `${fm}\n${newBody}`);
     }
   }
 }
 
-console.log(`[en] generated ${count} host override files`);
+// 检查只覆盖本工具负责的宿主面；.agents/wiki/workflow 的英文覆盖不归它管。
+// 孤儿 = 覆盖存在但对应模板已删除；手写覆盖（如 CLAUDE.md）只要模板还在就不算孤儿。
+function sourceOf(rel) {
+  if (rel === 'CLAUDE.md') return path.join(T, 'claude', 'CLAUDE.md');
+  for (const [host, dir] of Object.entries(HOST_DIRS)) {
+    if (rel === `${dir}` || rel.startsWith(`${dir}/`)) {
+      return path.join(T, host, rel.slice(dir.length + 1));
+    }
+  }
+  return null;
+}
+
+function scopeFiles() {
+  const out = [];
+  for (const dir of new Set(Object.values(HOST_DIRS))) {
+    for (const file of walk(path.join(OUT, dir))) out.push(`${dir}/${file}`);
+  }
+  if (fs.existsSync(path.join(OUT, 'CLAUDE.md'))) out.push('CLAUDE.md');
+  return out;
+}
+
+function checkOverrides() {
+  const missing = [];
+  const stale = [];
+  const orphan = [];
+  for (const [rel, content] of overrides) {
+    const abs = path.join(OUT, rel);
+    if (!fs.existsSync(abs)) missing.push(rel);
+    else if (normalize(fs.readFileSync(abs, 'utf8')) !== content) stale.push(rel);
+  }
+  for (const rel of scopeFiles()) {
+    const src = sourceOf(rel);
+    if (!src || !fs.existsSync(src)) orphan.push(rel);
+  }
+  missing.sort();
+  stale.sort();
+  orphan.sort();
+  return { ok: !missing.length && !stale.length && !orphan.length, expected: overrides.size, missing, stale, orphan };
+}
+
+function writeOverrides() {
+  for (const [rel, content] of overrides) {
+    const abs = path.join(OUT, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, content, 'utf8');
+  }
+  return overrides.size;
+}
+
+const args = process.argv.slice(2);
+const asJson = args.includes('--json');
+if (args.includes('--check')) {
+  const result = checkOverrides();
+  if (asJson) {
+    console.log(JSON.stringify(result, null, 2));
+  } else {
+    for (const rel of result.missing) console.log(`missing ${rel}`);
+    for (const rel of result.stale) console.log(`stale   ${rel}`);
+    for (const rel of result.orphan) console.log(`orphan  ${rel}`);
+    console.log(result.ok
+      ? `[en] overrides are up to date (${result.expected} files)`
+      : `[en] overrides drift: ${result.missing.length} missing / ${result.stale.length} stale / ${result.orphan.length} orphan`);
+  }
+  process.exitCode = result.ok ? 0 : 1;
+} else {
+  const count = writeOverrides();
+  if (asJson) console.log(JSON.stringify({ written: count }, null, 2));
+  else console.log(`[en] generated ${count} host override files`);
+}
