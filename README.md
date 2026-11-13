@@ -53,6 +53,8 @@ npx agentic-flow-kit doctor --target .
 | `explain <targetRel>` | 解释单个托管文件：类别、模板来源、语言覆盖、模型注入与 manifest/当前哈希 |
 | `doctor` | 校验 manifest、文件在位、git 配置、`.gitattributes`、五钩子、宿主接线、Node 版本；`--deep` 再跑 `check-local-gates.mjs`；manifest 漂移以 advisory 报告 |
 | `list-hosts` | 列出支持的宿主 |
+| `workspace init --repos <dir>...` | 在多仓根目录生成 `.flow-kit/workspace.json`，记录仓库清单与各仓安装摘要；可重复执行刷新 |
+| `workspace status` | 只读聚合 workspace 内各仓的安装状态、宿主、栈、版本与路径缺失 |
 
 通用选项：
 
@@ -91,6 +93,34 @@ npx agentic-flow-kit doctor --target .
 | `3` | target 或 manifest 缺失 |
 | `4` | 未知宿主 |
 | `5` | IO 失败（权限、只读、磁盘已满等） |
+
+## 多仓 Workspace
+
+在包含多个仓库的父目录运行：
+
+```bash
+flow-kit workspace init --repos ./api ./web
+flow-kit workspace status --json
+```
+
+- 清单固定为 `.flow-kit/workspace.json`（schema：`schemas/workspace.schema.json`），只记录显式列出的仓库，不做隐式发现。
+- 仓库必须在 workspace 根目录内且是 git 仓库；每仓独立安装本引擎，workspace 只读取各自的 `.agents/install-manifest.json`。
+- `init` 幂等并保留 `createdAt`；`status` 不写盘，按路径重新聚合，仓库被删除时标记 `missingPath`。
+- JSON 输出包含 `repos` 与 `summary`；非法仓库退出码 2，缺少 workspace 清单退出码 3。
+
+## Spec / Tasks / Verify 工件
+
+安装后 `workflow/specs/_TEMPLATE/` 提供目录化的三件套，供需要可审计证据链的团队使用：
+
+| 文件 | 作用 |
+|---|---|
+| `spec.md` | 背景、目标、非目标、`## 验收标准`、约束与风险 |
+| `tasks.md` | 与验收标准对应的勾选任务，至少一条 `- [ ]` |
+| `verify-report.md` | `## 结果`、`## 证据`，以及 `结论: pass\|fail\|partial` |
+
+每个需求建 `workflow/specs/<name>/` 并复制模板；`node .agents/scripts/check-spec-packages.mjs [--root <dir>] [--json]` 校验缺件、缺节与无法识别的结论。脚本默认只检查以 `_` 开头的模板目录之外的包，可独立接入 CI / verify。
+
+评测证据另有版本化输出：`agent-eval record` 在写 `.agents/evals/results.jsonl` 的同时生成 `.agents/evals/eval-log.json`（`version: 1`、阈值、结果、证据签名，schema：`schemas/eval-log.schema.json`），便于外部评估平台消费。`--no-eval-log` 关闭，`--eval-log <path>` 指定路径。
 
 ## 宿主
 

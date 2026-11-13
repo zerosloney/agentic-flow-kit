@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zerosloney/agentic-flow-kit/schemas/workspace.schema.json",
+  "title": "agentic-flow-kit workspace manifest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kit", "version", "createdAt", "updatedAt", "repos"],
+  "properties": {
+    "kit": { "const": "agentic-flow-kit" },
+    "version": { "type": "string" },
+    "createdAt": { "type": "string", "format": "date-time" },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "repos": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "name", "installed", "hosts"],
+        "properties": {
+          "path": { "type": "string", "description": "相对 workspace 根目录的 POSIX 路径。" },
+          "name": { "type": "string" },
+          "installed": { "type": "boolean", "description": "仓库内是否存在本工具的 install-manifest。" },
+          "kitVersion": { "type": ["string", "null"] },
+          "hosts": { "type": "array", "items": { "type": "string" } },
+          "stack": { "type": ["string", "null"] },
+          "language": { "type": ["string", "null"] },
+          "tier": { "type": ["string", "null"] },
+          "missingPath": { "type": "boolean", "description": "status 聚合时仓库路径已不存在。" }
+        }
+      }
+    }
+  }
+}

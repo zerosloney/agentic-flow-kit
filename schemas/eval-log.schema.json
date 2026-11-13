@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zerosloney/agentic-flow-kit/schemas/eval-log.schema.json",
+  "title": "agentic-flow-kit eval-log",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "updatedAt", "entries"],
+  "properties": {
+    "version": { "const": 1 },
+    "updatedAt": { "type": "string", "format": "date-time" },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["ts", "signature", "passRate", "tasks", "model", "note", "threshold", "outcome"],
+        "properties": {
+          "ts": { "type": "string", "format": "date-time" },
+          "signature": { "type": "string" },
+          "passRate": { "type": "number", "minimum": 0, "maximum": 1 },
+          "tasks": { "type": "integer", "minimum": 0 },
+          "model": { "type": "string" },
+          "note": { "type": "string" },
+          "threshold": { "type": "number", "minimum": 0, "maximum": 1 },
+          "outcome": { "enum": ["pass", "fail"] }
+        }
+      }
+    }
+  }
+}

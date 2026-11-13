@@ -77,6 +77,15 @@ node tools/make-en-host-overrides.mjs --check   # CI：英文覆盖缺失/过期
 
 `remove-host` / `uninstall` 同样以 manifest 哈希为安全闸：普通托管文件哈希一致才删，用户改过则跳过 / `--force` 覆盖。合并型配置（`merge-host` / `merge-mcp`）不能整文件删除：只有 `manifest.mergeOrigins[rel] === 'created'` 且哈希一致时才整体删除，否则只摘除托管 hook / 权限（按 `managedPermissions` 记录）/ MCP server，保留安装前已有的用户内容，文件变空才删。`remove-host` 只处理该宿主 `category: 'host'` 的文件和孤儿残留，根记忆文件（`rootMemory`，如 `CLAUDE.md`）视为用户文件、默认保留并停止托管；宿主集合变化后会用剩余宿主重渲染 engine.json / AGENTS.md / `.gitignore` 等宿主相关文件（仅当当前哈希仍等于 manifest）。`uninstall` 只移除带标记的合并块（保留块外用户内容，文件变空才删除），默认保留根记忆文件与用户改过的文件，全部清理完成才删除 manifest。
 
+## 工件与证据
+
+- `templates/scaffold/workflow/specs/_TEMPLATE/` 提供目录化 `spec.md` / `tasks.md` / `verify-report.md`；`templates/engine/.agents/scripts/check-spec-packages.mjs` 校验包内三件套、`## 验收标准`、任务勾选项、`## 结果` / `## 证据` 与 `结论: pass|fail|partial`。以 `_` 开头的目录跳过，脚本可独立运行（`--root` / `--json`，失败退出 1）。
+- `agent-eval.mjs` 的 `recordEval` 在 JSONL 凭证外写版本化 `.agents/evals/eval-log.json`（`version: 1`、threshold、outcome），可用 `--no-eval-log` / `--eval-log` 控制；schema 为 `schemas/eval-log.schema.json`。既有 `results.jsonl` 行为不变。
+
+## 多仓 Workspace
+
+`src/commands/workspace.mjs` 提供 `workspace init` / `workspace status`：清单固定为 `.flow-kit/workspace.json`（schema `schemas/workspace.schema.json`），只记录显式 `--repos` 列出的仓库，不做隐式发现。仓库必须在根目录内且含 `.git`；每仓独立安装，workspace 只读取各仓 `.agents/install-manifest.json` 的宿主 / 栈 / 语言 / 版本摘要。`init` 幂等并保留 `createdAt`；`status` 只读、路径消失标 `missingPath`。非法仓库 `BAD_REPO` → 退出码 2，缺清单 `NO_WORKSPACE` → 3；`--repos` 支持空格分隔（收集到下一个 `--flag`）与逗号分隔。`workspaceCommand` 由 `main.mjs` 在 `workspace` 子命令分派，不加载安装计划。
+
 ## 宿主能力注册表
 
 `src/hosts/registry.mjs` 是宿主能力的单一来源，不要在 `plan.mjs` / `doctor.mjs` 里为某个宿主写硬编码分支。字段包括：
