@@ -44,6 +44,7 @@ npx agentic-flow-kit doctor --target .
 | `install` | 从零安装；可重复 `--agent`，也可 `--agents a,b,c`；`--auto-hosts` 探测现有宿主目录 |
 | `add-host <host>` | 已安装仓追加宿主壳（同时接受 `--agent <host>`） |
 | `upgrade` | 按 manifest 记录的宿主/语言/栈重放模板；冲突默认跳过 |
+| `adopt` | 接管已有安装或半安装目录：按当前渲染结果识别文件并播种 manifest，未识别/已改动文件分类报告；`--dry-run` 零写入；之后 `upgrade` / `diff` 可用 |
 | `prune` | 删除 manifest 登记、当前模板已不存在的孤儿文件；用户改过的默认跳过，`--force` 覆盖；清理空目录 |
 | `remove-host <host>` | 移除单个宿主的适配层与技能面，保留引擎 / 栈 / 其他宿主；根记忆文件（如 `CLAUDE.md`）默认保留；刷新 `.gitignore` 合并块 |
 | `uninstall` | 删除全部托管文件与合并块；用户改过的文件、根记忆文件默认保留，`--force` 覆盖；清理空目录与安装清单 |
@@ -72,10 +73,10 @@ npx agentic-flow-kit doctor --target .
 | `--model-mode recommend\|detect\|inherit` | `recommend`（默认，探测 + 推荐）、`detect`（强制重新探测）、`inherit`（全部继承宿主默认） |
 | `--probe-models` | 允许执行宿主注册表中声明的只读模型列表命令（1.5s 超时，失败静默） |
 | `--no-model-config` | 跳过模型探测 / 注入，也不写 `.agents/config/model-roles.local.json` |
-| `--json` | 最终只向 stdout 输出单个 JSON 对象；人类进度改写 stderr。`diff` / `status` / `prune` / `remove-host` / `uninstall` / `explain` / `doctor` / `list-hosts` 均支持 |
+| `--json` | 最终只向 stdout 输出单个 JSON 对象；人类进度改写 stderr。`diff` / `status` / `prune` / `remove-host` / `uninstall` / `explain` / `adopt` / `doctor` / `list-hosts` 均支持 |
 | `--strict` | 冲突或漂移视为失败：`install` / `add-host` / `upgrade` 遇冲突返回 1；`diff` / `status` 有任何漂移返回 1；`prune` / `remove-host` / `uninstall` 有未清理项返回 1 |
 
-`diff` / `status` / `prune` / `remove-host` / `uninstall` / `explain` 未传 `--lang` 时跟随 manifest 记录的语言。
+`diff` / `status` / `prune` / `remove-host` / `uninstall` / `explain` 未传 `--lang` 时跟随 manifest 记录的语言。`adopt` 没有 manifest 可跟随时，依次用 `engine.json`、既有 manifest、候选语言渲染匹配数推断语言与栈。
 
 退出码契约（所有命令一致）：
 

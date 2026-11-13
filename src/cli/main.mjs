@@ -7,6 +7,7 @@ import { installCommand } from '../commands/install.mjs';
 import { doctorCommand } from '../commands/doctor.mjs';
 import { addHostCommand } from '../commands/add-host.mjs';
 import { upgradeCommand } from '../commands/upgrade.mjs';
+import { adoptCommand } from '../commands/adopt.mjs';
 import { diffCommand, statusCommand } from '../commands/diff.mjs';
 import { pruneCommand } from '../commands/prune.mjs';
 import { removeHostCommand, uninstallCommand } from '../commands/remove-host.mjs';
@@ -54,6 +55,8 @@ async function main(argv) {
       return addHostCommand({ args, t, lang });
     case 'upgrade':
       return upgradeCommand({ args, t, lang });
+    case 'adopt':
+      return adoptCommand({ args, t });
     case 'prune':
       return pruneCommand({ args, t });
     case 'remove-host':

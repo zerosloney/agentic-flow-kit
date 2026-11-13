@@ -15,8 +15,8 @@ export const HOST_META = path.join(TEMPLATES, 'host-meta');
 // 模板目录可能被本机运行过脚本（评测凭证、缓存、本地模型角色）。这些是运行态，
 // 既不该进包，也不该被安装到目标项目——尤其 evals/results.jsonl 是行为评测凭证，
 // 若随模板出厂，会让每个新装项目“凭空”获得一张当前内容的合格凭证。
-const RUNTIME_DIRS = new Set(['.agents/cache', '.agents/tmp', '.agents/tools']);
-const RUNTIME_FILES = new Set([
+export const RUNTIME_DIRS = new Set(['.agents/cache', '.agents/tmp', '.agents/tools']);
+export const RUNTIME_FILES = new Set([
   '.agents/verifications.jsonl',
   '.agents/judgments.jsonl',
   '.agents/evals/results.jsonl',

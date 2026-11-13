@@ -24,7 +24,7 @@
 | R1-4 | `--json` 与退出码契约 | 1 | M | `src/cli/main.mjs`、各命令 | DONE · [#5](https://github.com/zerosloney/agentic-flow-kit/issues/5) |
 | R1-5 | `explain <targetRel>` 来源解释 | 1 | S | `src/commands/explain.mjs` | DONE · [#6](https://github.com/zerosloney/agentic-flow-kit/issues/6) |
 | R2-1 | 基线留存 + 三方合并 | 2 | L | `src/install/baseline.mjs`、`apply.mjs` | TODO · [#8](https://github.com/zerosloney/agentic-flow-kit/issues/8) |
-| R2-2 | `adopt` 接管已有安装 | 2 | M | `src/commands/adopt.mjs`、`tools/parity-report.mjs` | TODO · [#9](https://github.com/zerosloney/agentic-flow-kit/issues/9) |
+| R2-2 | `adopt` 接管已有安装 | 2 | M | `src/commands/adopt.mjs`、`tools/parity-report.mjs` | DONE · [#9](https://github.com/zerosloney/agentic-flow-kit/issues/9) |
 | R2-3 | 外部宿主插件 | 2 | M | `schemas/host.schema.json`、`registry.mjs` | TODO · [#10](https://github.com/zerosloney/agentic-flow-kit/issues/10) |
 | R2-4 | Hook 编译器 | 2 | L | 中性 hook 规格 + 宿主序列化器 | TODO · [#11](https://github.com/zerosloney/agentic-flow-kit/issues/11) |
 | R2-5 | MCP 接线 | 2 | M | registry `mcp` 字段、`templates/mcp/` | TODO · [#12](https://github.com/zerosloney/agentic-flow-kit/issues/12) |
@@ -120,7 +120,7 @@
 
 ### R2-2 `adopt` 接管已有安装
 
-- **现状**：`tools/parity-report.mjs` 与 `extract-from-project.mjs` 是一次性只读工具，半安装项目无法直接 `upgrade`。
+- **现状**：`src/commands/adopt.mjs` 已接管现有安装：优先从 `engine.json` / 既有 manifest 还原宿主、栈、语言、档位与安装时间；按当前语言渲染逐文件比对，仅“完全一致”的文件写入 manifest；合并块只比对托管块；`workflow/INDEX.md` 按现状收录并登记 `derived`。已改动 / 缺失 / 未识别文件只报告不接管，`--dry-run` 零写入，重复执行幂等；无任何可接管文件且无既有 manifest 时退出 1。`tools/parity-report.mjs` 保留为一次性只读工具。
 - **目标**：`flow-kit adopt [--dry-run]` 扫描现有树，对可识别文件按渲染结果打指纹并播种 manifest；未识别/已改动文件分类报告；之后 `upgrade` 可用。
 - **落点**：产品化 `tools/parity-report.mjs` 为 `src/commands/adopt.mjs`；复用 `buildPlan`。
 - **验收**：parity 夹具；`--dry-run` 零写入；连续 adopt 幂等；不覆盖用户文件。
