@@ -17,4 +17,5 @@ jobs:
       - run: npm install
       - run: npm test
       - run: npm run check:i18n
+      - run: npm run policy:check
       - run: npm pack --dry-run

@@ -79,6 +79,7 @@ check-loop-hard 6#count
 .agents/notes/runtime-env.md 37888
 # 2026-11-06：新增「PR 面板评审批次门」登记行（约 400B）；上限 22528→23200B。
 # 2026-11-11 上调：宿主适配批量登记（Claude Code + Cline 门接线），实测 24,174B → 24576B（见 runtime-env 行上方说明）。
-.agents/config/mechanism-registry.md 24576
+# 2026-11-13 R3-1：新增「策略即代码校验」机制登记行（约 200B）；上限 24576→25600B（余量 ~3%）。
+.agents/config/mechanism-registry.md 25600
 .agents/notes/runtime-env.md 832#line
 .agents/config/mechanism-registry.md 832#line

@@ -271,8 +271,25 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 | 单写者租约 | `.agents/scripts/path-lease.mjs` | 并行 agent 写同一页面前加租约，防共享页丢事实 |
 | 结果指标 | `.agents/scripts/outcome-metrics.mjs` | 首次过门率、复核采纳率、逃逸缺陷、评测通过率、返工占比 |
 | 闭环状态机 | `.agents/scripts/check-pipeline-state.mjs` | stage/stopType 闭包检查；真实端到端 run 仍需小任务验证 |
+| 策略即代码 | `.agents/config/policy.json` + `.agents/scripts/policy.mjs` | 双向核对机制台账、预算、枚举闭集与角色/模型引用；`check` 失败非零，`explain` 输出人类视图 |
 
 `--tier standard`（默认）会生成 `azure-pipelines.yml` 与 `.github/workflows/ci.yml`，在 `verify --full` 之后跑上述 advisory 检查；`lean` 不生成 CI，`enterprise` 另装加固配置。未完成项与验收口径见 [BACKLOG.md](BACKLOG.md)。
+
+### 策略即代码
+
+`policy.json` 是策略面的机器可读索引，不复制各配置的业务内容：
+
+```bash
+node .agents/scripts/policy.mjs check            # 校验；问题退出 1
+node .agents/scripts/policy.mjs check --json     # 机器可读输出
+node .agents/scripts/policy.mjs explain          # 当前生效策略视图
+node .agents/scripts/gen-effective-policy.mjs    # 重生成 workflow/effective-policy.md
+```
+
+- `mechanisms.required` 与 `mechanism-registry.md` **双向一致**：policy 引用未登记机制、或台账新增行未登记到 policy 都会失败。
+- 预算由 `rule-budget.mjs --all` 复用执法，墙钟预算核对 `gate-budgets.json` 与策略上限。
+- 枚举闭集覆盖 `workflow-enums.txt` 与 `pipeline.json` 的 stage/stopType；角色/模型引用覆盖 `model-roles.json`、`pr-review.json` 与本地覆盖。
+- 根仓库 CI 用 `npm run policy:check` 在临时目标安装后跑 `check` 与 `effective-policy --check`。
 
 ## 模板 / Profile / State 三层
 

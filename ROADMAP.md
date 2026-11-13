@@ -33,7 +33,7 @@
 | R2-8 | 组合式 profile | 2 | M | `src/install/plan.mjs`、`schemas/project-profile.schema.json` | DONE · [#15](https://github.com/zerosloney/agentic-flow-kit/issues/15) |
 | R2-9 | 企业档宿主矩阵 | 2 | M | `templates/hosts/*`、`doctor` | DONE · [#16](https://github.com/zerosloney/agentic-flow-kit/issues/16) |
 | R2-10 | i18n 覆盖一致性检查 | 2 | S | `tools/make-en-host-overrides.mjs --check` | DONE · [#17](https://github.com/zerosloney/agentic-flow-kit/issues/17) |
-| R3-1 | policy-as-code | 3 | L | `templates/engine/.agents/config/policy.json` + `policy.mjs` | TODO |
+| R3-1 | policy-as-code | 3 | L | `templates/engine/.agents/config/policy.json` + `policy.mjs` | DONE |
 | R3-2 | 升级策略影响面 | 3 | S | `doctor` / `upgrade --explain-policy` | TODO |
 | R3-3 | 安装证明链 | 3 | M | manifest + eval 凭证 + 签名 | TODO |
 | R3-4 | 技能包分发与准入 | 3 | L | `add-skill`、lockfile、`skills lint` | TODO |
@@ -199,6 +199,7 @@
 - **落点**：`templates/engine/.agents/config/policy.json`、`policy.mjs`、`mechanism-registry` 可解析化。
 - **验收**：未登记机制被拒绝；预算超限非零；CI 作业；现有配置迁移后行为不变。
 - **风险**：Markdown 台账是人工资产，先做“检查”而非“替换”。规模 `L`。
+- **落地（2026-11-13）**：`policy.json` 只声明策略面路径、机制闭集、预算上限、枚举键与角色映射；`policy.mjs check` 双向核对 `mechanisms.required` 与 Markdown 台账、复用 `rule-budget.mjs --all` 执法预算、校验枚举/角色/模型引用；`explain` 与 `gen-effective-policy.mjs` 共用同一策略面视图；CI 新增 `npm run policy:check`（临时安装后跑 check + 生成器防漂移）。
 
 ### R3-2 升级策略影响面
 

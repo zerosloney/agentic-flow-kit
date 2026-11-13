@@ -1,0 +1,113 @@
+{
+  "$schema": "policy/config@1",
+  "version": 1,
+  "registry": ".agents/config/mechanism-registry.md",
+  "surfaces": {
+    "gateBudgets": ".agents/config/gate-budgets.json",
+    "ruleBudgets": ".agents/config/rule-budgets.txt",
+    "workflowEnums": ".agents/config/workflow-enums.txt",
+    "pipeline": ".agents/config/pipeline.json",
+    "steering": ".agents/config/steering.json",
+    "agentEval": ".agents/config/agent-eval.json",
+    "modelRoles": ".agents/config/model-roles.json",
+    "prReview": ".agents/config/pr-review.json"
+  },
+  "optionalSurfaces": [
+    "ruleBudgets"
+  ],
+  "mechanisms": {
+    "statuses": [
+      "现役",
+      "待退役",
+      "已退役"
+    ],
+    "types": [
+      "检出型",
+      "健康静默",
+      "不退役主干",
+      "数据面"
+    ],
+    "required": [
+      "三件套同名配对",
+      "证据真相核验",
+      "确认指纹配对",
+      "独立复核上下文标识",
+      "判据级收敛对账",
+      "触达面判低门",
+      "密钥扫描门（gitleaks）",
+      "门禁耗时埋点",
+      "常驻面体积预算",
+      "incident 防复发证据门",
+      "回归清单执法者配对",
+      "后端测试分档执法",
+      "代码四门 CI 兜底",
+      "状态严格枚举",
+      "产品契约面归因",
+      "复核效果台账",
+      "评审黄金集校准",
+      "verify 增量关单（scope）",
+      "委托引文接地",
+      "告警聚合（输出降噪）",
+      "门禁判定月度分片",
+      "本地门禁挂载自检（WARN 档）",
+      "订单域文案与创建审计静态门（红线 6 + 审计 hook 扩展）",
+      "spec 前提质询门",
+      "接线宣称一致性（check-hook-wiring）",
+      "先确认后改代码",
+      "提交信息卫生检出（ci-commit-hygiene）",
+      "Dreaming 持续运行链路（dream-run 接线）",
+      "PI 宿主门禁接线（本机私有）",
+      "Cline 宿主适配（本机私有）",
+      "测试守卫",
+      "策略即代码校验"
+    ]
+  },
+  "budgets": {
+    "gateMaxMs": 600000,
+    "ruleMaxBytes": 262144
+  },
+  "enums": {
+    "workflowKeys": [
+      "doc.status.all",
+      "doc.status.confirmed",
+      "doc.status.active",
+      "doc.status.terminal",
+      "doc.status.abandoned",
+      "incident.status.all",
+      "incident.status.active",
+      "level.all"
+    ],
+    "pipelineRequiredStages": [
+      "triage",
+      "intent-draft",
+      "spec-draft",
+      "plan-draft",
+      "implement",
+      "verify",
+      "done"
+    ],
+    "pipelineStopTypes": [
+      "work-order",
+      "await-confirm",
+      "gate-fail",
+      "done",
+      "aborted"
+    ]
+  },
+  "roles": {
+    "modelRoles": [
+      "code",
+      "judgment",
+      "review"
+    ],
+    "prReviewRoles": [
+      "finder",
+      "verifier",
+      "adjudicator"
+    ],
+    "modelFallbacks": [
+      "host-default",
+      "inherit"
+    ]
+  }
+}
