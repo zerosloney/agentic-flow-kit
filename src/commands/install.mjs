@@ -209,7 +209,7 @@ function normalizeTier(value, t) {
 
 // onLog 回调契约：(action, msg, done, total) —— action ∈ create/update/skip/conflict/merge，
 // done/total 为已完成/总文件数，供 TUI 渲染 spinner 进度；缺省走 CLI 前缀行。
-export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories, commandLabel, stackOverride, onLog = null, detectedHosts = [] }) {
+export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories, commandLabel, stackOverride, onLog = null, detectedHosts = [], migration = null }) {
   const target = resolveTarget(args);
   const dryRun = flag(args, 'dry-run');
   const force = flag(args, 'force');
@@ -307,6 +307,10 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
   emit(t('install.start', { command: commandLabel, target }));
   emit(t('install.plan', { hosts: hostSet.join(', '), stack, lang, count: plan.entries.length }));
   emit(t('install.tier', { tier, hardened: t(hardened ? 'tui.yes' : 'tui.no') }));
+  if (migration?.changed) {
+    const steps = `${migration.applied.join(', ')}${migration.dryRun ? ' (dry-run)' : ''}`;
+    emit(t('install.migration', { steps }));
+  }
   if (policyDiff?.changed) {
     for (const line of renderPolicyDiff(policyDiff.changes, t)) emit(line);
   }
@@ -430,6 +434,16 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
       hardened,
       ...(enterprise ? { enterprise } : {}),
       ...(policyDiff ? { policyDiff } : {}),
+      ...(migration?.changed ? {
+        migration: {
+          from: migration.from,
+          to: migration.to,
+          changed: migration.changed,
+          dryRun: migration.dryRun,
+          applied: migration.applied,
+          notes: migration.notes,
+        },
+      } : {}),
       hosts: hostSet,
       detectedHosts,
       mcp: mcpEnabled,

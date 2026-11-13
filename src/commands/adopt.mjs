@@ -2,7 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { flag } from '../cli/args.mjs';
 import { listFiles, RUNTIME_DIRS, RUNTIME_FILES } from '../install/plan.mjs';
-import { MANIFEST_REL, readManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
+import { CURRENT_SCHEMA_VERSION, MANIFEST_REL, readManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
 import { extractMergeBlock, readPlanEntry, renderMergeBlock } from '../install/apply.mjs';
 import { HOSTS } from '../hosts/registry.mjs';
 import { detectHosts } from '../hosts/detect.mjs';
@@ -44,6 +44,7 @@ function baseManifest({ target, existing, hosts, lang, stack, tier, hardened, pr
   return {
     ...(existing || {}),
     kit: 'agentic-flow-kit',
+    schemaVersion: CURRENT_SCHEMA_VERSION,
     version: readKitVersion(),
     installedAt,
     language: lang,

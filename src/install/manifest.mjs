@@ -3,6 +3,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 
 export const MANIFEST_REL = '.agents/install-manifest.json';
+export const CURRENT_SCHEMA_VERSION = 1;
 
 export function readManifest(target) {
   const file = path.join(target, MANIFEST_REL);
@@ -30,6 +31,7 @@ export function sha256File(abs) {
 export function emptyManifest({ kitVersion, language, hosts, stack }) {
   return {
     kit: 'agentic-flow-kit',
+    schemaVersion: CURRENT_SCHEMA_VERSION,
     version: kitVersion,
     installedAt: new Date().toISOString(),
     language,

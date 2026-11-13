@@ -1,10 +1,12 @@
+import { flag } from '../cli/args.mjs';
 import { readManifest } from '../install/manifest.mjs';
+import { migrateManifest } from '../install/migrations.mjs';
 import { makeT } from '../i18n.mjs';
 import { resolveTarget, runInstall } from './install.mjs';
 
-export function upgradeCommand({ args, t, lang }) {
+export async function upgradeCommand({ args, t, lang }) {
   const target = resolveTarget(args);
-  const manifest = readManifest(target);
+  let manifest = readManifest(target);
   if (!manifest) {
     const err = new Error(t('error.noManifest'));
     err.code = 'NO_MANIFEST';
@@ -12,6 +14,19 @@ export function upgradeCommand({ args, t, lang }) {
   }
   const currentLang = args.lang || manifest.language || lang;
   const tt = makeT(currentLang);
+  let migration = null;
+  try {
+    migration = await migrateManifest({ target, manifest, dryRun: flag(args, 'dry-run') });
+  } catch (error) {
+    const wrapped = new Error(
+      error.code === 'MANIFEST_SCHEMA'
+        ? t('error.manifestFuture', { version: error.version, current: error.current })
+        : t('error.migrationFailed', { file: error.file || '?', message: error.message }),
+    );
+    wrapped.code = error.code || 'MIGRATION_FAILED';
+    throw wrapped;
+  }
+  manifest = migration.manifest;
   const hosts = manifest.hosts || [];
   if (!hosts.length) {
     const err = new Error(t('error.noHostsInManifest'));
@@ -26,5 +41,6 @@ export function upgradeCommand({ args, t, lang }) {
     planHosts: hosts,
     commandLabel: 'upgrade',
     stackOverride: args.stack || args.profile || manifest.stack,
+    migration,
   });
 }
