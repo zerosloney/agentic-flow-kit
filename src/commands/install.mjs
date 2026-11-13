@@ -12,6 +12,7 @@ import { HOST_NAMES, HOSTS, resolveHost } from '../hosts/registry.mjs';
 import { detectHosts } from '../hosts/detect.mjs';
 import { configureGit, isGitRepo } from '../git/config.mjs';
 import { writeBaseline } from '../install/baseline.mjs';
+import { explainPolicyDiff, renderPolicyDiff } from '../install/policy-diff.mjs';
 import {
   parseModelFlags, readInjectedModels, resolveModels, summarizeModels, writeLocalModelRoles,
 } from '../models/resolve.mjs';
@@ -300,9 +301,15 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
     trackHosts,
   });
 
+  const explainPolicy = flag(args, 'explain-policy');
+  const policyDiff = explainPolicy ? explainPolicyDiff({ target, plan, vars }) : null;
+
   emit(t('install.start', { command: commandLabel, target }));
   emit(t('install.plan', { hosts: hostSet.join(', '), stack, lang, count: plan.entries.length }));
   emit(t('install.tier', { tier, hardened: t(hardened ? 'tui.yes' : 'tui.no') }));
+  if (policyDiff?.changed) {
+    for (const line of renderPolicyDiff(policyDiff.changes, t)) emit(line);
+  }
   if (models) {
     emit(t('install.models', { models: summarizeModels(models) }));
     for (const warning of models.warnings || []) {
@@ -422,6 +429,7 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
       tier,
       hardened,
       ...(enterprise ? { enterprise } : {}),
+      ...(policyDiff ? { policyDiff } : {}),
       hosts: hostSet,
       detectedHosts,
       mcp: mcpEnabled,

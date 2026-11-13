@@ -22,6 +22,7 @@ node bin/flow-kit.mjs --help
 node bin/flow-kit.mjs install --agent claude --stack node --target <tmp>
 node bin/flow-kit.mjs add-host trae --target <tmp>
 node bin/flow-kit.mjs upgrade --target <tmp>
+node bin/flow-kit.mjs upgrade --target <tmp> --explain-policy --dry-run
 node bin/flow-kit.mjs prune --target <tmp>
 node bin/flow-kit.mjs explain .claude/agents/implementer.md --target <tmp>
 node bin/flow-kit.mjs doctor --target <tmp>
@@ -71,7 +72,7 @@ node tools/make-en-host-overrides.mjs --check   # CI：英文覆盖缺失/过期
 
 所有命令共享 `--json` 与退出码契约（`src/cli/exit.mjs`）：`--json` 时 stdout 只允许最终单对象，人类进度走 stderr；`--strict` 把冲突/漂移变成退出码 1。码值：0 成功、1 冲突或严格模式漂移、2 用法、3 target/manifest 缺失、4 未知宿主、5 IO。新增错误类型时在 `exit.mjs` 登记 `err.code`，不要在命令里直接 `process.exit`。
 
-`add-host` 只写 `category: 'host'`，并保留已安装的 stack / language；`upgrade` 按 manifest 记录的宿主和语言重放。
+`add-host` 只写 `category: 'host'`，并保留已安装的 stack / language；`upgrade` 按 manifest 记录的宿主和语言重放。`upgrade --explain-policy` 在应用前用 `src/install/policy-diff.mjs` 对比磁盘与本次渲染文本，只做策略面语义差分（gates / budgets / enums / roles / policy）；有变化才打印，`--json` 增加 `policyDiff`。
 
 `install --auto-hosts` 通过 `src/hosts/detect.mjs` 只读探测宿主点目录与注册表声明的根级配置/记忆文件（如 `.mcp.json`、`opencode.json`、`QWEN.md`）；仅在未显式 `--agent` 时采用，探测为空报错。探测结果只进入 `--json` 的 `detectedHosts`，不写 manifest；TUI 用同一结果预选宿主。
 

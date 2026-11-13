@@ -34,7 +34,7 @@
 | R2-9 | 企业档宿主矩阵 | 2 | M | `templates/hosts/*`、`doctor` | DONE · [#16](https://github.com/zerosloney/agentic-flow-kit/issues/16) |
 | R2-10 | i18n 覆盖一致性检查 | 2 | S | `tools/make-en-host-overrides.mjs --check` | DONE · [#17](https://github.com/zerosloney/agentic-flow-kit/issues/17) |
 | R3-1 | policy-as-code | 3 | L | `templates/engine/.agents/config/policy.json` + `policy.mjs` | DONE |
-| R3-2 | 升级策略影响面 | 3 | S | `doctor` / `upgrade --explain-policy` | TODO |
+| R3-2 | 升级策略影响面 | 3 | S | `doctor` / `upgrade --explain-policy` | DONE |
 | R3-3 | 安装证明链 | 3 | M | manifest + eval 凭证 + 签名 | TODO |
 | R3-4 | 技能包分发与准入 | 3 | L | `add-skill`、lockfile、`skills lint` | TODO |
 | R3-5 | pipeline 真实执行器 | 3 | L | `templates/engine/.agents/scripts/pipeline-run.mjs` | TODO |
@@ -205,6 +205,7 @@
 
 - **目标**：`upgrade --explain-policy` 输出门禁、预算、角色、模型引用的 diff；无变化时输出为空。
 - **依赖**：R3-1。规模 `S`。
+- **落地（2026-11-13）**：`src/install/policy-diff.mjs` 按 `policy.json` 的策略面（gates / budgets / enums / roles / policy）对比磁盘与本次升级渲染文本，做语义差分；人类输出只在有变化时打印，`--json` 增加 `policyDiff`；`tests/policy-diff.test.mjs` 覆盖空 diff、角色/模型、门禁、预算与枚举。
 
 ### R3-3 安装证明链
 

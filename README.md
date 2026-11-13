@@ -43,7 +43,7 @@ npx agentic-flow-kit doctor --target .
 |---|---|
 | `install` | 从零安装；可重复 `--agent`，也可 `--agents a,b,c`；`--auto-hosts` 探测现有宿主目录 |
 | `add-host <host>` | 已安装仓追加宿主壳（同时接受 `--agent <host>`） |
-| `upgrade` | 按 manifest 记录的宿主/语言/栈重放模板；冲突默认跳过 |
+| `upgrade` | 按 manifest 记录的宿主/语言/栈重放模板；冲突默认跳过；`--explain-policy` 输出本次门禁/预算/枚举/角色模型差异 |
 | `adopt` | 接管已有安装或半安装目录：按当前渲染结果识别文件并播种 manifest，未识别/已改动文件分类报告；`--dry-run` 零写入；之后 `upgrade` / `diff` 可用 |
 | `prune` | 删除 manifest 登记、当前模板已不存在的孤儿文件；用户改过的默认跳过，`--force` 覆盖；清理空目录 |
 | `remove-host <host>` | 移除单个宿主的适配层与技能面，保留引擎 / 栈 / 其他宿主；根记忆文件（如 `CLAUDE.md`）默认保留；刷新 `.gitignore` 合并块 |
@@ -284,12 +284,14 @@ node .agents/scripts/policy.mjs check            # 校验；问题退出 1
 node .agents/scripts/policy.mjs check --json     # 机器可读输出
 node .agents/scripts/policy.mjs explain          # 当前生效策略视图
 node .agents/scripts/gen-effective-policy.mjs    # 重生成 workflow/effective-policy.md
+flow-kit upgrade --explain-policy --dry-run      # 只读输出升级将带来的策略差异
 ```
 
 - `mechanisms.required` 与 `mechanism-registry.md` **双向一致**：policy 引用未登记机制、或台账新增行未登记到 policy 都会失败。
 - 预算由 `rule-budget.mjs --all` 复用执法，墙钟预算核对 `gate-budgets.json` 与策略上限。
 - 枚举闭集覆盖 `workflow-enums.txt` 与 `pipeline.json` 的 stage/stopType；角色/模型引用覆盖 `model-roles.json`、`pr-review.json` 与本地覆盖。
 - 根仓库 CI 用 `npm run policy:check` 在临时目标安装后跑 `check` 与 `effective-policy --check`。
+- `upgrade --explain-policy` 按同一策略面做语义 diff：门禁接线、预算、枚举、角色/模型引用；无变化时人类输出为空，`--json` 的 `policyDiff.changed` 为 `false`。
 
 ## 模板 / Profile / State 三层
 

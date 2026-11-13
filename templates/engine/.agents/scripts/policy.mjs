@@ -319,7 +319,7 @@ function readPolicyConfig(root, problems) {
   if (!isObject(cfg.surfaces)) {
     problems.push({ code: 'POLICY_CONFIG', message: 'policy.json 缺少 surfaces' });
   } else {
-    for (const key of ['gateBudgets', 'workflowEnums', 'pipeline', 'steering', 'agentEval', 'modelRoles', 'prReview']) {
+    for (const key of ['gates', 'gateBudgets', 'workflowEnums', 'pipeline', 'steering', 'agentEval', 'modelRoles', 'prReview']) {
       if (!isString(cfg.surfaces[key])) problems.push({ code: 'POLICY_CONFIG', message: `policy.json 缺少 surfaces.${key}` });
     }
   }
