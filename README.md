@@ -55,6 +55,7 @@ npx agentic-flow-kit doctor --target .
 | `explain <targetRel>` | 解释单个托管文件：类别、模板来源、语言覆盖、模型注入与 manifest/当前哈希 |
 | `doctor` | 校验 manifest、文件在位、git 配置、`.gitattributes`、五钩子、宿主接线、Node 版本；`--deep` 再跑 `flow-kit run check-local-gates`；`--attest [--out <file>]` 生成安装证明链；manifest 漂移以 advisory 报告 |
 | `list-hosts` | 列出支持的宿主 |
+| `new-host <name>` | 生成可直接安装的宿主插件（定义 JSON + 命令/子代理指针壳 + 技能入口模板）；写入 `<out>/.flow-kit/hosts/`，后续命令自动发现。可选 `--skills native\|shared\|index`、`--hooks`、`--permissions`、`--mcp claude\|opencode`、`--model-field` / `--inherit`、`--root-memory` |
 | `run <script>` | 从包内运行时执行引擎脚本；`--root <dir>` 指定项目根，`--` 后的参数原样透传；`--list` 列出可用脚本 |
 | `hook <hook>` | 从包内运行时执行宿主 hook 适配器；stdin 与剩余参数透传；`--list` 列出可用 hook |
 | `workspace init --repos <dir>...` | 在多仓根目录生成 `.flow-kit/workspace.json`，记录仓库清单与各仓安装摘要；可重复执行刷新 |
@@ -160,7 +161,9 @@ v1 支持 10 个现行宿主：
 3. 项目级 `<target>/.flow-kit/hosts/*.json`
 4. `--host-manifest <file>`（可重复）
 
-同名定义后者覆盖前者。静态 command / agent 文件放在与 JSON 同名的兄弟目录（如 `.flow-kit/hosts/myhost/commands/*.md`），或用 `templates` 指向别处；技能索引/指针仍由 `.agents/skills` 动态生成。
+同名定义后者覆盖前者。静态 command / agent 文件放在与 JSON 同名的兄弟目录（如 `.flow-kit/hosts/myhost/commands/*.md`），或用 `templates` 指向别处；技能索引/指针仍由 `.agents/skills` 动态生成，可用 `skillMeta` 指向自带模板目录。`mcp` 字段声明后，中性 server 列表会按 `claude` / `opencode` 格式合并进该宿主的配置文件。接线命令统一用 `command.form: "cli"`（模板 `flow-kit hook {hook}`）。
+
+`flow-kit new-host <name>` 直接生成上述完整插件（命令指针壳、子代理壳、技能入口模板，可选 `--hooks` / `--permissions` / `--mcp`）；生成即通过 `validateHostDefinition` 自校验，安装后 `doctor` 可对账 hooks / permissions / MCP。
 
 ```json
 {
@@ -377,6 +380,8 @@ manifest 带 `schemaVersion`（当前为 1）。`upgrade` 在生成计划前按 
 node tools/extract-from-project.mjs --project 项目目录   # 重新提取模板（一次性迁移工具）
 node tools/make-en-host-overrides.mjs                                     # 重新生成英文宿主指针壳
 node tools/make-en-host-overrides.mjs --check                             # 检查英文覆盖缺失/过期/孤儿（CI 失败）
+node tools/lint-templates.mjs                                             # 模板 lint：frontmatter / i18n / 运行态污染 / 渲染矩阵 / 引用可解析
+node tools/new-host.mjs myhost --hooks --permissions                      # 生成宿主插件（等价于 flow-kit new-host）
 node tools/parity-report.mjs --project 项目目录          # 对比现行引擎
 node --test tests/*.test.mjs                                              # 安装器测试
 ```

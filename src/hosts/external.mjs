@@ -11,10 +11,11 @@ const REL_PATH_RE = /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
 const EXT_RE = /^\.[A-Za-z0-9]+$/;
 const SKILL_MODES = new Set(['native', 'shared', 'index']);
 const HOOK_FORMATS = new Set(['json']);
-const ALLOWED_KEYS = new Set([
-  'name', 'dir', 'label', 'tracked', 'rootMemory', 'detect', 'templates',
-  'commands', 'agents', 'skills', 'hooks', 'permissions', 'hardening', 'modelProbe',
-]);
+export const HOST_DEFINITION_KEYS = [
+  'name', 'dir', 'label', 'tracked', 'rootMemory', 'detect', 'templates', 'skillMeta',
+  'commands', 'agents', 'skills', 'hooks', 'permissions', 'hardening', 'mcp', 'modelProbe',
+];
+const ALLOWED_KEYS = new Set(HOST_DEFINITION_KEYS);
 
 function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
@@ -71,7 +72,10 @@ function normalizeSkills(raw, field, bad) {
 }
 
 const HOOK_TOOLS = new Set(['write', 'shell']);
-const HOOK_FORMS = new Set(['env', 'relative', 'args']);
+export const HOOK_FORMS = ['env', 'relative', 'args', 'cli', 'cli-args'];
+const HOOK_FORM_SET = new Set(HOOK_FORMS);
+// cli / cli-args 指向包内入口，模板占位符是 {hook}；旧式 env/relative/args 直接指向脚本，用 {script}。
+const CLI_FORMS = new Set(['cli', 'cli-args']);
 
 // hooks.events 让外部宿主也能接入 Hook 编译器；字段与内置注册表一致。
 function normalizeHookEvents(raw, field, bad) {
@@ -100,9 +104,12 @@ function normalizeHookEvents(raw, field, bad) {
     }
   }
   if (!isObject(raw.command)) bad(`\`${field}.command\` must be an object`);
-  if (!HOOK_FORMS.has(raw.command.form)) bad(`\`${field}.command.form\` must be one of: env, relative, args`);
-  if (!isString(raw.command.template) || !raw.command.template.includes('{script}')) {
-    bad(`\`${field}.command.template\` must be a string containing {script}`);
+  if (!HOOK_FORM_SET.has(raw.command.form)) {
+    bad(`\`${field}.command.form\` must be one of: ${HOOK_FORMS.join(', ')}`);
+  }
+  const token = CLI_FORMS.has(raw.command.form) ? '{hook}' : '{script}';
+  if (!isString(raw.command.template) || !raw.command.template.includes(token)) {
+    bad(`\`${field}.command.template\` must be a string containing ${token}`);
   }
   if (raw.includeMeta != null && typeof raw.includeMeta !== 'boolean') {
     bad(`\`${field}.includeMeta\` must be a boolean`);
@@ -167,6 +174,17 @@ function normalizePermissions(raw, field, bad) {
     tools,
     ...(normalizedExtra.length ? { extraAllow: normalizedExtra } : {}),
   };
+}
+
+const MCP_FORMATS = new Set(['claude', 'opencode']);
+
+function normalizeMcp(raw, field, bad) {
+  if (raw == null) return null;
+  if (!isObject(raw)) bad(`\`${field}\` must be an object or null`);
+  if (!isRelPath(raw.file)) bad(`\`${field}.file\` must be a relative path`);
+  const format = raw.format == null ? 'claude' : raw.format;
+  if (!MCP_FORMATS.has(format)) bad(`\`${field}.format\` must be one of: claude, opencode`);
+  return { file: raw.file, format };
 }
 
 const HARDENING_LEVELS = new Set(['managed', 'permissions', 'hooks', 'none']);
@@ -236,6 +254,17 @@ export function validateHostDefinition(raw, file, t) {
     if (fs.existsSync(sibling) && fs.statSync(sibling).isDirectory()) templates = sibling;
   }
 
+  // 技能入口模板目录：外部宿主无包内 templates/host-meta/<name>，可显式指定；
+  // 缺省时安装器回退到内置的中性指针/索引模板。
+  let skillMeta = null;
+  if (raw.skillMeta != null) {
+    if (!isString(raw.skillMeta)) bad('`skillMeta` must be a path to a directory');
+    skillMeta = path.resolve(path.dirname(file), raw.skillMeta);
+    if (!fs.existsSync(skillMeta) || !fs.statSync(skillMeta).isDirectory()) {
+      bad(`\`skillMeta\` directory not found: ${skillMeta}`);
+    }
+  }
+
   return {
     dir: raw.dir,
     label: raw.label || raw.name,
@@ -248,8 +277,10 @@ export function validateHostDefinition(raw, file, t) {
     hooks: normalizeHooks(raw.hooks, 'hooks', bad),
     permissions: normalizePermissions(raw.permissions, 'permissions', bad),
     hardening: normalizeHardening(raw.hardening, 'hardening', bad),
+    mcp: normalizeMcp(raw.mcp, 'mcp', bad),
     modelProbe: normalizeProbe(raw.modelProbe, 'modelProbe', bad),
     ...(templates ? { templates } : {}),
+    ...(skillMeta ? { skillMeta } : {}),
   };
 }
 

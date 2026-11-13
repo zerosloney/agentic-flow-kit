@@ -32,6 +32,8 @@
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "check:i18n": "node tools/make-en-host-overrides.mjs --check",
+    "lint:templates": "node tools/lint-templates.mjs",
+    "new-host": "node tools/new-host.mjs",
     "policy:check": "node tools/policy-check.mjs",
     "extract": "node tools/extract-from-project.mjs",
     "doctor:self": "node bin/flow-kit.mjs doctor --target .",

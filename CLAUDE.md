@@ -44,6 +44,8 @@ node tools/parity-report.mjs --project <project>
 node tools/extract-from-project.mjs --project <project> [--dry-run]
 node tools/make-en-host-overrides.mjs
 node tools/make-en-host-overrides.mjs --check   # CI：英文覆盖缺失/过期/孤儿
+node tools/lint-templates.mjs                   # CI：frontmatter / i18n / 运行态污染 / hosts×tiers×langs 渲染矩阵
+node tools/new-host.mjs myhost [--hooks] [--permissions] [--mcp claude|opencode]
 ```
 
 ## 安装管线（核心）
@@ -108,7 +110,9 @@ node tools/make-en-host-overrides.mjs --check   # CI：英文覆盖缺失/过期
 - `modelProbe.configs/env/cli`：模型探测来源。
 - `templates`：外部宿主的静态模板目录（绝对路径）；内置宿主不设置，回退到 `templates/hosts/<host>`。
 
-外部宿主插件由 `src/hosts/external.mjs` 在命令分派前加载（`main.mjs` 调用 `loadExternalHosts`）：`~/.flow-kit/hosts/*.json` → `<target>/.flow-kit/hosts/*.json` → `--host-manifest <file>`，后加载者覆盖同名定义，注册进 `HOSTS` / `HOST_NAMES` 并记录 `HOST_SOURCES`（`hostSource()` 供 doctor / list-hosts 使用）。JSON 走手写校验（`schemas/host.schema.json` 是对外文档），非法定义抛 `HOST_MANIFEST` → 退出码 2，错误带字段名。模板默认取与 JSON 同名的兄弟目录，`templates` 可显式覆盖；`plan.mjs` / `doctor.mjs` 统一用 `h.templates || templates/hosts/<host>`，不要新增按宿主名分支。
+外部宿主插件由 `src/hosts/external.mjs` 在命令分派前加载（`main.mjs` 调用 `loadExternalHosts`）：`~/.flow-kit/hosts/*.json` → `<target>/.flow-kit/hosts/*.json` → `--host-manifest <file>`，后加载者覆盖同名定义，注册进 `HOSTS` / `HOST_NAMES` 并记录 `HOST_SOURCES`（`hostSource()` 供 doctor / list-hosts 使用）。JSON 走手写校验（`schemas/host.schema.json` 是对外文档，`HOST_DEFINITION_KEYS` / `HOOK_FORMS` 是代码侧单源，lint 双向核对），非法定义抛 `HOST_MANIFEST` → 退出码 2，错误带字段名。模板默认取与 JSON 同名的兄弟目录，`templates` 可显式覆盖；`skillMeta` 指向自带技能入口模板（否则用包内 `templates/host-meta/<host>` 或中性回退）；`mcp` 让外部宿主接入 MCP 合并。`plan.mjs` / `doctor.mjs` 统一用 `h.templates || templates/hosts/<host>`，不要新增按宿主名分支。`flow-kit new-host <name>`（`src/commands/new-host.mjs`，`tools/new-host.mjs` 为薄封装）生成完整插件：命令/子代理指针壳、技能入口模板、可选 hooks（`cli` 形式）/ permissions / MCP，写盘后立即用同一套校验器自校验，不修改内置注册表。
+
+`npm run lint:templates`（`tools/lint-templates.mjs`）是模板面的维护门：frontmatter 必填与 name 一致、宿主指针壳引用存在、installer 中英文键对齐、en 覆盖检查、`hosts × tiers × langs` 全量渲染（残留占位符 / JSON 可解析 / 运行态路径不进安装面 / `flow-kit run|hook` 引用可解析 / skill·command·role 引用存在）。新增模板或宿主能力时先跑它；故意破坏模板必须能失败。
 
 MCP 接线在 `src/install/mcp.mjs`：`templates/mcp/servers.json`（项目可用 `.flow-kit/mcp/servers.json` 替换）声明中性 server，`buildPlan` 为注册表中声明了 `mcp` 的宿主生成 `kind: 'merge-mcp'` 条目，`getText` 渲染时读取磁盘并按 `format`（`claude` → `mcpServers`，`opencode` → `mcp`）合并，只补缺失同名 server，不覆盖用户内容；远程 server 在 claude 格式写 `type: http`（可声明 `sse`），opencode 写 `type: remote`。MCP 条目不走 user-modified 冲突分支（合并语义本身安全），apply 记录 `manifest.mcpServers[targetRel] = [names]` 与 `manifest.mergeOrigins`；`manifest.mcp` 是布尔开关（`--no-mcp` / upgrade 重放）。Qwen 的 `.qwen/settings.json` 与静态宿主模板同路径，文件不存在时以静态模板渲染结果打底，避免丢掉 hooks/permissions。卸载 / remove-host 对合并型文件只摘 manifest 记录的 server 名，`created` 且未改动才整文件删除；`prune` 以哈希为闸。`doctor` 校验缺失 / JSON 损坏 / 容器或 server 缺失。
 

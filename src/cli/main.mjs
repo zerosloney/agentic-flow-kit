@@ -14,6 +14,7 @@ import { pruneCommand } from '../commands/prune.mjs';
 import { removeHostCommand, uninstallCommand } from '../commands/remove-host.mjs';
 import { explainCommand } from '../commands/explain.mjs';
 import { workspaceCommand } from '../commands/workspace.mjs';
+import { newHostCommand } from '../commands/new-host.mjs';
 import { KIT_ROOT } from '../install/plan.mjs';
 
 const SUPPORTED_LANGS = new Set(LANGUAGES);
@@ -86,6 +87,15 @@ async function main(argv) {
       return statusCommand({ args, t });
     case 'workspace':
       return workspaceCommand({ args, t });
+    case 'new-host': {
+      const result = newHostCommand({ args, t });
+      if (flag(args, 'json')) console.log(JSON.stringify(result, null, 2));
+      else {
+        console.log(result.summary);
+        console.log(result.next);
+      }
+      return 0;
+    }
     case 'explain':
       return explainCommand({ args, t });
     case 'list-hosts': {
@@ -102,6 +112,8 @@ async function main(argv) {
           agents: Boolean(h.agents),
           skills: h.skills ? h.skills.mode : null,
           hooks: Boolean(h.hooks),
+          permissions: Boolean(h.permissions),
+          mcp: Boolean(h.mcp),
           modelField: h.agents?.modelField || null,
         };
       });

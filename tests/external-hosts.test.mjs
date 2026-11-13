@@ -229,6 +229,8 @@ test('invalid host definitions fail with usage exit and a field-level detail', (
     ['bad skill mode', { name: 'demo', dir: '.demo', skills: { mode: 'auto' } }, /`skills.mode`/],
     ['modelField without inheritValue', { name: 'demo', dir: '.demo', agents: { dir: 'agents', modelField: 'model' } }, /inheritValue/],
     ['missing templates dir', { name: 'demo', dir: '.demo', templates: './nowhere' }, /templates/],
+    ['missing skillMeta dir', { name: 'demo', dir: '.demo', skillMeta: './nowhere' }, /skillMeta/],
+    ['bad mcp format', { name: 'demo', dir: '.demo', mcp: { file: '.mcp.json', format: 'vscode' } }, /`mcp\.format`/],
   ];
   for (const [label, def, pattern] of cases) {
     const dir = tmpRepo();
