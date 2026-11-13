@@ -35,6 +35,8 @@ export const HOSTS = {
     agents: { dir: 'agents', ext: '.md', modelField: 'model', inheritValue: 'inherit' },
     skills: { mode: 'native', dir: 'skills', file: 'SKILL.md' },
     hooks: { file: 'settings.json', format: 'json' },
+    // Claude Code 项目级 MCP 配置（根目录 .mcp.json，mcpServers 容器）
+    mcp: { file: '.mcp.json', format: 'claude', scope: 'project' },
     modelProbe: {
       configs: ['~/.claude/settings.json'],
       env: ['ANTHROPIC_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL'],
@@ -51,6 +53,8 @@ export const HOSTS = {
     agents: { dir: 'agents', ext: '.md', modelField: 'model', inheritValue: null },
     skills: { mode: 'native', dir: 'skills', file: 'SKILL.md' },
     hooks: null,
+    // OpenCode 根配置使用 mcp 容器，local 命令是数组、env 字段名为 environment
+    mcp: { file: 'opencode.json', format: 'opencode', scope: 'project' },
     modelProbe: { configs: ['~/.config/opencode/opencode.json'], env: ['OPENCODE_MODEL'], cli: [] },
   },
   qwen: {
@@ -63,6 +67,8 @@ export const HOSTS = {
     // Qwen 原生发现 .agents/skills；不复制宿主技能副本
     skills: { mode: 'shared' },
     hooks: { file: 'settings.json', format: 'json' },
+    // Qwen Code 在 .qwen/settings.json 使用 mcpServers 容器
+    mcp: { file: '.qwen/settings.json', format: 'claude', scope: 'project' },
     modelProbe: { configs: ['~/.qwen/settings.json'], env: ['QWEN_MODEL'], cli: [] },
   },
   pi: {

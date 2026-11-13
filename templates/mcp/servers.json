@@ -1,0 +1,9 @@
+{
+  "servers": {
+    "flow-kit-wiki": {
+      "description": "Read-only search over wiki/ and .agents/ (memory, decisions, skills).",
+      "command": "node",
+      "args": [".agents/scripts/wiki-mcp.mjs"]
+    }
+  }
+}

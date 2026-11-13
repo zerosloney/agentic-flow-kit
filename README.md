@@ -70,6 +70,7 @@ npx agentic-flow-kit doctor --target .
 | `--track-hosts` | 不把本机宿主目录写进 `.gitignore` |
 | `--auto-hosts` | 扫描宿主点目录与根级配置/记忆文件，采用探测结果作为安装宿主；仅在未显式 `--agent` 时生效，探测为空报错 |
 | `--host-manifest <file>` | 加载外部宿主定义，可重复；同名时优先级 `--host-manifest` > 项目 `.flow-kit/hosts` > 用户 `~/.flow-kit/hosts` > 内置 |
+| `--no-mcp` | 跳过 MCP 配置编译（默认按 `templates/mcp/servers.json` 接线）；选择写入 manifest，`upgrade` 重放 |
 | `--model [host:]role=<id>` | 可重复。指定模型角色；`role` 为 `code` / `judgment` / `review`，省略宿主则全局生效 |
 | `--model-mode recommend\|detect\|inherit` | `recommend`（默认，探测 + 推荐）、`detect`（强制重新探测）、`inherit`（全部继承宿主默认） |
 | `--probe-models` | 允许执行宿主注册表中声明的只读模型列表命令（1.5s 超时，失败静默） |
@@ -139,6 +140,22 @@ v1 支持 10 个现行宿主：
 ```
 
 字段缺失、目录非法、枚举越界、未知键都会在加载时以退出码 2 报出具体字段；`doctor` 会标注每个已安装宿主的定义来源（`builtin` / `user` / `project` / `cli`）。
+
+## MCP 接线
+
+安装器把中性 server 声明编译进各宿主的原生 MCP 配置，安装期不联网，只写配置：
+
+| 宿主 | 文件 | 容器 / 形态 |
+|---|---|---|
+| `claude` | `.mcp.json` | `mcpServers` |
+| `opencode` | `opencode.json` | `mcp`，`type: local/remote`、`command` 数组、`environment` |
+| `qwen` | `.qwen/settings.json` | `mcpServers`（与 hooks / permissions 同文件合并） |
+
+默认声明在 `templates/mcp/servers.json`，项目可用 `.flow-kit/mcp/servers.json` 整体替换（同为 `{"servers": {...}}`）。每个 server 支持 `command` + `args` + `env`，或远程 `url` + `headers`。
+
+合并是幂等的：只补缺失的同名 server，保留用户自建 server 与文件中的其它键（如 `permissions`）；重复安装/升级不会重排或覆盖既有内容。卸载时按 manifest 记录的 server 名摘除托管条目，用户内容保留；文件整体未被改动时直接删除。`doctor` 校验配置文件存在、JSON 合法、容器与 server 齐全。`--no-mcp` 完全跳过接线，并把选择写入 manifest 供 `upgrade` 重放。
+
+默认声明带一个只读本地 server `flow-kit-wiki`（`.agents/scripts/wiki-mcp.mjs`），提供 `wiki_search` 工具检索 `wiki/` 与 `.agents/`；不联网、不写盘。
 
 ## 模型配置
 

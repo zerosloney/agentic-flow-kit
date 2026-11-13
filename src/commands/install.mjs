@@ -231,8 +231,15 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
     allowCli: flag(args, 'probe-models'),
   });
 
+  // MCP 设置随 manifest 走：install/add-host 可用 --no-mcp 关闭；
+  // upgrade 重放既有值，避免无意识地把已关闭的项目重新打开。
+  const mcpEnabled = commandLabel === 'upgrade'
+    ? previous?.mcp !== false
+    : (flag(args, 'no-mcp') ? false : previous?.mcp !== false);
+
   const plan = buildPlan({
     target, hosts: planHosts, lang, stack, projectName, categories, models: models?.hosts, tier, hardened,
+    mcp: mcpEnabled,
   });
   let done = 0;
   const total = plan.entries.length;
@@ -315,6 +322,8 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
       derived: [...derived].filter((rel) => result.files[rel]).sort(),
       tier,
       hardened,
+      mcp: mcpEnabled,
+      mcpServers: result.mcp || {},
       files: result.files,
     };
     writeManifest(target, next);
@@ -342,6 +351,7 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
       hardened,
       hosts: hostSet,
       detectedHosts,
+      mcp: mcpEnabled,
       models: models ? summarizeModels(models) : null,
       plan: { count: plan.entries.length },
       stats: result.stats,

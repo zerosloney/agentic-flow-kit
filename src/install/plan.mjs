@@ -3,6 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HOSTS, hostTargetRel, isAgentTemplate, modelRoleForAgent } from '../hosts/registry.mjs';
 import { makeT } from '../i18n.mjs';
+import { mergeMcpFile, readMcpServers } from './mcp.mjs';
+import { readPlanEntry } from './apply.mjs';
 import { parseFrontmatter, yamlScalar } from './frontmatter.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -171,9 +173,39 @@ function addGeneratedSkillSurfaces({ plan, hosts, skillEntries, t }) {
   }
 }
 
+// 宿主 MCP 配置：同一份中性 server 列表编译到各宿主容器；getText 在渲染时读取磁盘，
+// 实现“只补缺失项、保留用户 server”的幂等合并。JSON 损坏时返回 null，由 apply 跳过。
+function addMcpEntries({ plan, target, hosts }) {
+  const servers = readMcpServers(target);
+  if (!Object.keys(servers).length) return;
+  for (const host of hosts) {
+    const h = HOSTS[host];
+    if (!h?.mcp) continue;
+    const rel = h.mcp.file;
+    // Qwen 的 settings.json 同时是静态宿主模板：文件不存在时以渲染结果打底，避免丢掉 hooks/permissions。
+    const baseEntry = plan.find((entry) => entry.targetRel === rel && entry.kind !== 'merge-mcp');
+    plan.push({
+      srcAbs: null,
+      targetRel: rel.replace(/\\/g, '/'),
+      category: 'host',
+      priority: 32,
+      kind: 'merge-mcp',
+      mcpFormat: h.mcp.format,
+      mcpNames: Object.keys(servers),
+      getText: (vars) => {
+        const baseText = baseEntry ? readPlanEntry(baseEntry, vars) : null;
+        const merged = mergeMcpFile(path.join(target, rel), servers, h.mcp.format, baseText);
+        return merged ? merged.text : null;
+      },
+    });
+  }
+}
+
 // 构建安装计划。targetRel 使用 / 分隔；profile 覆盖 engine，宿主只写自己的点目录。
 // models: { [host]: { code?, judgment?, review? } }，用于注入宿主子代理 model 字段。
-export function buildPlan({ target, hosts, lang, stack, projectName, categories, models = null, tier = 'standard', hardened = false }) {
+export function buildPlan({
+  target, hosts, lang, stack, projectName, categories, models = null, tier = 'standard', hardened = false, mcp = true,
+}) {
   const t = makeT(lang);
   const plan = [];
   const push = (srcAbs, targetRel, category, priority = 10, kind = 'file', extra = {}) => {
@@ -212,6 +244,9 @@ export function buildPlan({ target, hosts, lang, stack, projectName, categories,
       }
     }
   }
+
+  // 3.5) MCP 配置合并（--no-mcp 时整段跳过）
+  if (mcp) addMcpEntries({ plan, target, hosts });
 
   // 4) 数据资产脚手架（空目录由 scaffold 中的 .gitkeep 保证）
   for (const rel of listFiles(path.join(TEMPLATES, 'scaffold'))) {

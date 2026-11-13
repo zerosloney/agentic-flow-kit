@@ -98,6 +98,7 @@ export function stripMergeBlock(text, begin, end) {
 export function applyPlan({ plan, vars, manifest, dryRun, force, log }) {
   const stats = { create: 0, update: 0, skip: 0, conflict: 0, merge: 0 };
   const nextFiles = { ...(manifest.files || {}) };
+  const nextMcp = { ...(manifest.mcp || {}) };
   const writes = [];
   const conflicts = [];
 
@@ -125,7 +126,24 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log }) {
     const text = readPlanEntry(entry, vars);
     if (text == null) {
       stats.skip += 1;
-      log('skip', `${entry.targetRel}（二进制模板跳过）`);
+      log('skip', entry.kind === 'merge-mcp'
+        ? `${entry.targetRel}（MCP 配置不是合法 JSON，已保留原文件）`
+        : `${entry.targetRel}（二进制模板跳过）`);
+      continue;
+    }
+    if (entry.kind === 'merge-mcp' && entry.mcpNames) nextMcp[entry.targetRel] = entry.mcpNames;
+
+    // MCP 配置以“合并”为语义：用户对文件的其它修改不影响托管条目，
+    // 因此不走 user-modified 冲突分支；内容已一致时跳过。
+    if (entry.kind === 'merge-mcp') {
+      if (exists && text === readText(abs)) {
+        stats.skip += 1;
+        log('skip', `${entry.targetRel}（MCP 已是最新）`);
+        continue;
+      }
+      writes.push({ abs, text, targetRel: entry.targetRel });
+      stats.merge += 1;
+      log(exists ? 'update' : 'create', entry.targetRel);
       continue;
     }
 
@@ -162,7 +180,7 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log }) {
     }
   }
 
-  return { stats, files: nextFiles, written: writes.map((w) => w.targetRel), conflicts };
+  return { stats, files: nextFiles, mcp: nextMcp, written: writes.map((w) => w.targetRel), conflicts };
 }
 
 export function summaryLine(stats, t) {

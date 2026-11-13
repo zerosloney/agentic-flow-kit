@@ -27,7 +27,7 @@
 | R2-2 | `adopt` 接管已有安装 | 2 | M | `src/commands/adopt.mjs`、`tools/parity-report.mjs` | DONE · [#9](https://github.com/zerosloney/agentic-flow-kit/issues/9) |
 | R2-3 | 外部宿主插件 | 2 | M | `schemas/host.schema.json`、`registry.mjs` | DONE · [#10](https://github.com/zerosloney/agentic-flow-kit/issues/10) |
 | R2-4 | Hook 编译器 | 2 | L | 中性 hook 规格 + 宿主序列化器 | TODO · [#11](https://github.com/zerosloney/agentic-flow-kit/issues/11) |
-| R2-5 | MCP 接线 | 2 | M | registry `mcp` 字段、`templates/mcp/` | TODO · [#12](https://github.com/zerosloney/agentic-flow-kit/issues/12) |
+| R2-5 | MCP 接线 | 2 | M | registry `mcp` 字段、`templates/mcp/` | DONE · [#12](https://github.com/zerosloney/agentic-flow-kit/issues/12) |
 | R2-6 | 权限 / 工具白名单编译 | 2 | M | 复用 `gates.json` 与 hardened 路径 | TODO · [#13](https://github.com/zerosloney/agentic-flow-kit/issues/13) |
 | R2-7 | 宿主探测 `--auto-hosts` | 2 | S | `src/commands/install.mjs`、TUI | DONE · [#14](https://github.com/zerosloney/agentic-flow-kit/issues/14) |
 | R2-8 | 组合式 profile | 2 | M | `src/install/plan.mjs`、`schemas/project-profile.schema.json` | TODO · [#15](https://github.com/zerosloney/agentic-flow-kit/issues/15) |
@@ -144,7 +144,7 @@
 
 ### R2-5 MCP 接线
 
-- **现状**：安装器完全不写 MCP 配置，AI-Native 工作流缺少工具面。
+- **现状**：`src/install/mcp.mjs` 把 `templates/mcp/servers.json`（项目可用 `.flow-kit/mcp/servers.json` 替换）编译进 Claude `.mcp.json`、OpenCode `opencode.json`、Qwen `.qwen/settings.json`；幂等合并、保留用户 server，`--no-mcp` 跳过并写入 manifest，`upgrade` 重放。卸载按 manifest 记录只摘托管 server；`doctor` 校验缺失 / JSON 损坏 / 容器与 server 齐全。默认声明带零依赖只读 `wiki-mcp` server（`wiki_search`）。
 - **目标**：registry 增加 `mcp` 能力（文件、格式、scope、merge 策略）；`templates/mcp/servers.json` 为中性描述；编译到各宿主；`--no-mcp` 跳过；安装期不联网，只写配置。
 - **落点**：`templates/mcp/`、registry、编译器、`doctor` 校验缺失/格式错误。
 - **验收**：Claude / OpenCode / Qwen 夹具；幂等合并；用户已有 server 不被覆盖。

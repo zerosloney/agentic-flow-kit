@@ -63,7 +63,10 @@ export function buildState({ target, manifest }) {
   const kitVersion = readKitVersion();
   // 模型值从已安装子代理回读，使“模板未变”的文件不会被模型注入差异误判。
   const models = readInjectedModels({ target, hosts });
-  const plan = buildPlan({ target, hosts, lang: language, stack, projectName, models, tier, hardened });
+  const plan = buildPlan({
+    target, hosts, lang: language, stack, projectName, models, tier, hardened,
+    mcp: manifest.mcp === true,
+  });
   const vars = buildVars({
     target,
     projectName,
@@ -91,7 +94,18 @@ export function classifyEntry({ target, entry, vars, managedHash, derived = fals
     return { kind, actualHash, expectedHash: null, kitChanged: false, derived: true };
   }
   const expected = expectedEntry(entry, vars);
-  if (!expected) return null;
+  if (!expected) {
+    // MCP 配置损坏无法合并：明确归类为用户修改，doctor / diff 都能看到。
+    if (entry.kind === 'merge-mcp' && exists) {
+      return { kind: 'user-modified', actualHash, expectedHash: null, kitChanged: false, derived: false };
+    }
+    return null;
+  }
+  // MCP 合并语义：期望值 = 当前内容 + 缺失的托管 server。
+  // 期望与现状一致即视为 unchanged（用户自建 server 不应被报成漂移）。
+  if (entry.kind === 'merge-mcp' && expected.expectedHash === actualHash) {
+    return { kind: 'unchanged', actualHash, expectedHash: expected.expectedHash, kitChanged: false, derived: false };
+  }
   let kitChanged;
   if (expected.block != null) {
     const actualBlock = exists

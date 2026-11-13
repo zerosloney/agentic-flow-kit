@@ -8,6 +8,7 @@ import {
   readPlanEntry, renderMergeBlock, replaceMergeBlock, stripMergeBlock,
 } from '../install/apply.mjs';
 import { MANIFEST_REL, readManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
+import { stripMcpFile } from '../install/mcp.mjs';
 import { HOSTS, HOST_NAMES } from '../hosts/registry.mjs';
 import { readInjectedModels } from '../models/resolve.mjs';
 import { makeT } from '../i18n.mjs';
@@ -46,11 +47,26 @@ function planFor({ target, manifest, hosts, categories, lang }) {
     models: readInjectedModels({ target, hosts }),
     tier: manifest.tier || 'standard',
     hardened: Boolean(manifest.hardened),
+    mcp: manifest.mcp !== false,
   });
 }
 
-function varsFor({ target, manifest, hosts, lang }) {
-  return buildVars({
+// rel -> { names, format }：合并型 MCP 配置不能整文件删除，卸载时只摘掉本工具声明的 server。
+function mcpTargetsFor({ target, manifest, hosts, lang }) {
+  const map = new Map();
+  for (const entry of planFor({ target, manifest, hosts, categories: null, lang }).entries) {
+    if (entry.kind === 'merge-mcp') map.set(entry.targetRel, { names: entry.mcpNames || [], format: entry.mcpFormat });
+  }
+  for (const [rel, names] of Object.entries(manifest.mcpServers || {})) {
+    if (map.has(rel)) continue;
+    if (!(hosts || []).some((name) => HOSTS[name]?.mcp?.file === rel)) continue;
+    const format = Object.values(HOSTS).find((h) => h.mcp?.file === rel)?.mcp?.format;
+    if (format) map.set(rel, { names, format });
+  }
+  return map;
+}
+
+function varsFor({ target, manifest, hosts, lang }) {  return buildVars({
     target,
     projectName: manifest.projectName || path.basename(target),
     stack: manifest.stack || 'empty',
@@ -126,6 +142,8 @@ export function removeHostCommand({ args, t }) {
   }
 
   const nextFiles = { ...(manifest.files || {}) };
+  const nextMcpServers = { ...(manifest.mcpServers || {}) };
+  const mcpTargets = mcpTargetsFor({ target, manifest, hosts: names, lang });
   const rootMemory = new Set(names.map((name) => HOSTS[name].rootMemory).filter(Boolean));
   let deleted = 0;
   let cleaned = 0;
@@ -138,6 +156,48 @@ export function removeHostCommand({ args, t }) {
     if (!owned.has(rel)) continue;
     const abs = path.join(target, rel);
     const managedHash = manifest.files[rel];
+    if (mcpTargets.has(rel)) {
+      const { names: serverNames, format } = mcpTargets.get(rel);
+      // 哈希一致 = 安装后无人改动，整文件都是托管内容（含 Qwen settings 的 hooks/permissions），可整体删除。
+      if (force || (fs.existsSync(abs) && managedHash && hashOf(abs) === managedHash)) {
+        if (!dryRun) {
+          fs.rmSync(abs, { force: true });
+          cleanEmptyDirs(target, abs);
+        }
+        delete nextFiles[rel];
+        delete nextMcpServers[rel];
+        deleted += 1;
+        items.push({ path: rel, action: 'delete' });
+        print(tt('removeHost.delete', { path: rel }));
+        continue;
+      }
+      const result = stripMcpFile(abs, serverNames, format);
+      delete nextMcpServers[rel];
+      if (result.invalid) {
+        skipped += 1;
+        nextFiles[rel] = managedHash;
+        items.push({ path: rel, action: 'skip' });
+        print(tt('removeHost.skipMcp', { path: rel }));
+        continue;
+      }
+      if (result.text !== null) {
+        if (!dryRun && result.text !== fs.readFileSync(abs, 'utf8')) fs.writeFileSync(abs, result.text, 'utf8');
+        nextFiles[rel] = sha256Text(result.text);
+        cleaned += 1;
+        items.push({ path: rel, action: 'clean', removed: result.removed });
+        print(tt('removeHost.mcpClean', { path: rel, servers: result.removed.join(', ') }));
+        continue;
+      }
+      if (!dryRun) {
+        fs.rmSync(abs, { force: true });
+        cleanEmptyDirs(target, abs);
+      }
+      delete nextFiles[rel];
+      deleted += 1;
+      items.push({ path: rel, action: 'delete' });
+      print(tt('removeHost.delete', { path: rel }));
+      continue;
+    }
     // 根记忆文件视作用户所有：默认保留并停止托管，--force 才删除。
     if (rootMemory.has(rel) && !force) {
       delete nextFiles[rel];
@@ -210,6 +270,7 @@ export function removeHostCommand({ args, t }) {
       ...manifest,
       hosts: remaining,
       files: nextFiles,
+      mcpServers: nextMcpServers,
       derived: (manifest.derived || []).filter((rel) => nextFiles[rel]),
     });
   }
@@ -236,6 +297,8 @@ export function uninstallCommand({ args, t }) {
     target, manifest, hosts: manifest.hosts || [], categories: ['git'], lang,
   }).entries.filter((entry) => MERGE_KINDS.has(entry.kind));
   const mergeRels = new Set(mergeEntries.map((entry) => entry.targetRel));
+  const mcpTargets = mcpTargetsFor({ target, manifest, hosts: manifest.hosts || [], lang });
+  const nextMcpServers = { ...(manifest.mcpServers || {}) };
   const rootMemory = new Set((manifest.hosts || []).map((name) => HOSTS[name]?.rootMemory).filter(Boolean));
 
   const nextFiles = {};
@@ -248,6 +311,48 @@ export function uninstallCommand({ args, t }) {
   if (dryRun) print(tt('uninstall.dryRun'));
   for (const rel of Object.keys(manifest.files || {}).sort()) {
     if (mergeRels.has(rel)) continue; // 合并块单独处理，避免误删用户内容
+    if (mcpTargets.has(rel)) {
+      // MCP 配置可能混有用户自建 server。哈希一致时整文件归安装器所有；
+      // 被用户改过则只摘掉本工具的条目，文件空了才删。
+      const { names: serverNames, format } = mcpTargets.get(rel);
+      if (force || (fs.existsSync(path.join(target, rel)) && manifest.files[rel]
+        && hashOf(path.join(target, rel)) === manifest.files[rel])) {
+        if (!dryRun) {
+          fs.rmSync(path.join(target, rel), { force: true });
+          cleanEmptyDirs(target, path.join(target, rel));
+        }
+        delete nextMcpServers[rel];
+        deleted += 1;
+        items.push({ path: rel, action: 'delete' });
+        print(tt('uninstall.delete', { path: rel }));
+        continue;
+      }
+      const result = stripMcpFile(path.join(target, rel), serverNames, format);
+      delete nextMcpServers[rel];
+      if (result.invalid) {
+        skipped += 1;
+        nextFiles[rel] = manifest.files[rel];
+        items.push({ path: rel, action: 'skip' });
+        print(tt('uninstall.skip', { path: rel }));
+        continue;
+      }
+      if (result.text !== null) {
+        const abs = path.join(target, rel);
+        if (!dryRun && result.text !== fs.readFileSync(abs, 'utf8')) fs.writeFileSync(abs, result.text, 'utf8');
+        cleaned += 1;
+        items.push({ path: rel, action: 'clean', removed: result.removed });
+        print(tt('uninstall.cleanMcp', { path: rel, servers: result.removed.join(', ') }));
+        continue;
+      }
+      if (!dryRun) {
+        fs.rmSync(path.join(target, rel), { force: true });
+        cleanEmptyDirs(target, path.join(target, rel));
+      }
+      deleted += 1;
+      items.push({ path: rel, action: 'delete' });
+      print(tt('uninstall.delete', { path: rel }));
+      continue;
+    }
     const abs = path.join(target, rel);
     const managedHash = manifest.files[rel];
     if (rootMemory.has(rel) && !force) {
@@ -311,7 +416,7 @@ export function uninstallCommand({ args, t }) {
       manifestRemoved = true;
     } else {
       // 保留用户改过的文件与其记录，供再次 uninstall --force 继续清理。
-      writeManifest(target, { ...manifest, hosts: [], files: nextFiles, derived: [] });
+      writeManifest(target, { ...manifest, hosts: [], files: nextFiles, mcpServers: nextMcpServers, derived: [] });
     }
   }
   print(tt(manifestRemoved ? 'uninstall.manifestRemoved' : 'uninstall.manifestKept'));

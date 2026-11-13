@@ -6,6 +6,7 @@ import { readManifest } from '../install/manifest.mjs';
 import { doctorGit } from '../git/config.mjs';
 import { HOSTS, hostTargetRel, hostSource } from '../hosts/registry.mjs';
 import { listFiles, TEMPLATES } from '../install/plan.mjs';
+import { readMcpServers } from '../install/mcp.mjs';
 import { ROLE_NAMES, readInjectedModels, readLocalModelRoles } from '../models/resolve.mjs';
 import { resolveTarget } from './install.mjs';
 import { buildDiff } from './diff.mjs';
@@ -67,6 +68,38 @@ export function doctorCommand({ args, t }) {
     // 能力缺口：没有 hooks / modelField 的宿主，相关保证只能是 advisory。
     if (!h.hooks) add(true, `guarantee ${host}`, t('doctor.guaranteeGap', { host, capability: 'hooks' }), '', { warn: true });
     if (h.agents && !h.agents.modelField) add(true, `guarantee ${host}`, t('doctor.guaranteeGap', { host, capability: 'model injection' }), '', { warn: true });
+
+    if (h.mcp && manifest?.mcp === true) {
+      let servers = {};
+      try {
+        servers = readMcpServers(target);
+      } catch (err) {
+        add(false, `mcp ${host}`, t('doctor.mcpDeclarationInvalid', { detail: err.message }));
+        continue;
+      }
+      const names = Object.keys(servers);
+      if (!names.length) continue;
+      const abs = path.join(target, h.mcp.file);
+      if (!fs.existsSync(abs)) {
+        add(false, `mcp ${host}`, t('doctor.mcpMissing', { path: h.mcp.file }));
+        continue;
+      }
+      let root;
+      try {
+        root = JSON.parse(fs.readFileSync(abs, 'utf8'));
+      } catch {
+        add(false, `mcp ${host}`, t('doctor.mcpInvalid', { path: h.mcp.file }));
+        continue;
+      }
+      const container = h.mcp.format === 'opencode' ? root?.mcp : root?.mcpServers;
+      if (!container || typeof container !== 'object') {
+        add(false, `mcp ${host}`, t('doctor.mcpContainer', { path: h.mcp.file }));
+        continue;
+      }
+      const missing = names.filter((name) => !(name in container));
+      if (missing.length) add(false, `mcp ${host}`, t('doctor.mcpServersMissing', { servers: missing.join(', ') }));
+      else add(true, `mcp ${host}`, `${h.mcp.file}: ${names.join(', ')}`);
+    }
   }
 
   // 安装档位与交付面：lean 允许没有 CI；standard/enterprise 应有可运行 CI。

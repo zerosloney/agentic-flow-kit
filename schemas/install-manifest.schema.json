@@ -18,6 +18,19 @@
     "stack": { "enum": ["dotnet", "node", "typescript", "rust", "go", "java", "empty"] },
     "tier": { "enum": ["lean", "standard", "enterprise"] },
     "hardened": { "type": "boolean" },
+    "mcp": {
+      "type": "boolean",
+      "description": "是否编译 MCP 配置；false 表示安装时使用了 --no-mcp。"
+    },
+    "mcpServers": {
+      "type": "object",
+      "description": "目标 MCP 配置文件 -> 本工具写入的 server 名列表（卸载时只摘除这些条目）。",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" },
+        "uniqueItems": true
+      }
+    },
     "projectName": { "type": "string" },
     "trackHosts": { "type": "boolean" },
     "derived": {

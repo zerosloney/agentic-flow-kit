@@ -44,6 +44,8 @@ function baseManifest({ target, existing, hosts, lang, stack, tier, hardened, pr
     trackHosts,
     tier,
     hardened,
+    mcp: existing?.mcp !== false,
+    mcpServers: existing?.mcpServers || {},
     derived: existing?.derived || [],
     files: existing?.files || {},
   };
@@ -56,13 +58,15 @@ function scan({ target, plan, vars, hosts, existing }) {
   const modified = [];
   const missing = [];
   const derived = new Set();
+  const mcpServers = {};
   const planned = new Set();
   const adoptedSet = new Set();
-  const adopt = (rel) => {
+  const adopt = (rel, entry) => {
     if (adoptedSet.has(rel)) return;
     adoptedSet.add(rel);
     adopted.push({ path: rel, hash: sha256Text(fs.readFileSync(path.join(target, rel), 'utf8')) });
     if (DERIVED_RELS.has(rel)) derived.add(rel);
+    if (entry?.kind === 'merge-mcp' && entry.mcpNames) mcpServers[rel] = entry.mcpNames;
   };
   for (const entry of plan.entries) {
     const rel = entry.targetRel;
@@ -96,7 +100,7 @@ function scan({ target, plan, vars, hosts, existing }) {
     if (expected == null) continue; // 二进制模板不参与接管
     const current = fs.readFileSync(abs, 'utf8');
     if (norm(current) === norm(expected)) {
-      adopt(rel);
+      adopt(rel, entry);
     } else {
       modified.push({ path: rel, reason: 'content-differs' });
     }
@@ -120,7 +124,7 @@ function scan({ target, plan, vars, hosts, existing }) {
     if (!planned.has(rel) && !unrecognized.includes(rel)) unrecognized.push(rel);
   }
   unrecognized.sort();
-  return { adopted, modified, missing, unrecognized, derived };
+  return { adopted, modified, missing, unrecognized, derived, mcpServers };
 }
 
 export function adoptCommand({ args, t }) {
@@ -168,6 +172,7 @@ export function adoptCommand({ args, t }) {
     });
     next.files = files;
     next.derived = derived;
+    next.mcpServers = { ...(existing?.mcpServers || {}), ...result.mcpServers };
     writeManifest(target, next);
   }
 
