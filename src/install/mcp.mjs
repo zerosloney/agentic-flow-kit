@@ -55,7 +55,8 @@ export function compileServer(name, def, format) {
       ...(env ? { environment: env } : {}),
     };
   }
-  if (def.url) return { type: 'remote', url: String(def.url), ...(headers ? { headers } : {}) };
+  // Claude Code 的远程 server 使用 http / sse；允许声明覆盖 type。
+  if (def.url) return { type: def.type || 'http', url: String(def.url), ...(headers ? { headers } : {}) };
   if (!def.command) fail(`server \`${name}\` needs \`command\` or \`url\``);
   const args = Array.isArray(def.args) ? def.args.map(String) : [];
   return { command: String(def.command), ...(args.length ? { args } : {}), ...(env ? { env } : {}) };
@@ -75,6 +76,22 @@ export function mergeMcpInto(root, servers, format) {
   }
   if (changed) root[key] = current;
   return { changed, names: Object.keys(servers || {}) };
+}
+
+// 从已解析的 root 摘除托管 server（供与 hooks/permissions 组合清理同一配置文件）。
+export function stripMcpFromRoot(root, names, format) {
+  let key;
+  try {
+    key = containerKey(format);
+  } catch {
+    return { changed: false, removed: [] };
+  }
+  const current = isObject(root?.[key]) ? root[key] : null;
+  if (!current) return { changed: false, removed: [] };
+  const removed = (names || []).filter((name) => name in current);
+  for (const name of removed) delete current[name];
+  if (!Object.keys(current).length) delete root[key];
+  return { changed: removed.length > 0, removed };
 }
 
 // 幂等合并：只补缺失的同名 server，保留文件里其它键与用户自建 server。

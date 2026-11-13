@@ -164,25 +164,46 @@ test('unsupported tool classes degrade with an advisory instead of disappearing 
   assert.equal(gap.warn, true);
 });
 
-test('doctor flags permission drift and upgrade realigns it', () => {
+test('user permissions survive; doctor flags missing managed rules and stale wiring', () => {
   const dir = tmpRepo();
   assert.equal(install(dir, 'claude').status, 0);
-  const file = path.join(dir, settingsRel('claude'));
-  const config = JSON.parse(fs.readFileSync(file, 'utf8'));
-  config.permissions.deny = config.permissions.deny.filter((item) => item !== 'Bash(drop database:*)');
-  config.permissions.ask.push('Bash(custom:*)');
-  fs.writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+  const rel = settingsRel('claude');
+  const file = path.join(dir, rel);
 
+  // 用户自建条目保留，且不计为漂移。
+  let config = JSON.parse(fs.readFileSync(file, 'utf8'));
+  config.permissions.allow.push('Bash(custom:*)');
+  fs.writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+  assert.equal(run(['upgrade', '--target', '.', '--json'], dir).status, 0);
+  config = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.ok(config.permissions.allow.includes('Bash(custom:*)'));
   let doctor = json(run(['doctor', '--target', '.', '--json'], dir));
+  assert.equal(doctor.checks.find((c) => c.name === 'permissions claude').ok, true);
+
+  // 托管项缺失 → doctor 失败，upgrade 对齐。
+  config.permissions.deny = config.permissions.deny.filter((item) => item !== 'Bash(drop database:*)');
+  fs.writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+  doctor = json(run(['doctor', '--target', '.', '--json'], dir));
   let check = doctor.checks.find((c) => c.name === 'permissions claude');
   assert.equal(check.ok, false);
   assert.match(check.detail, /missing/);
   assert.match(check.detail, /drop database/);
-  assert.match(check.detail, /extra/);
-  assert.match(check.detail, /custom/);
+
+  // 上次托管但本次不再编译的条目 → stale。
+  const manifest = JSON.parse(fs.readFileSync(path.join(dir, '.agents/install-manifest.json'), 'utf8'));
+  manifest.managedPermissions[rel].deny.push('Bash(stale:*)');
+  fs.writeFileSync(path.join(dir, '.agents/install-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+  const withStale = JSON.parse(fs.readFileSync(file, 'utf8'));
+  withStale.permissions.deny.push('Bash(stale:*)');
+  fs.writeFileSync(file, `${JSON.stringify(withStale, null, 2)}\n`, 'utf8');
+  doctor = json(run(['doctor', '--target', '.', '--json'], dir));
+  check = doctor.checks.find((c) => c.name === 'permissions claude');
+  assert.equal(check.ok, false);
+  assert.match(check.detail, /stale/);
 
   assert.equal(run(['upgrade', '--target', '.', '--json'], dir).status, 0);
   doctor = json(run(['doctor', '--target', '.', '--json'], dir));
   check = doctor.checks.find((c) => c.name === 'permissions claude');
   assert.equal(check.ok, true);
+  assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).permissions.deny.includes('Bash(stale:*)'), false);
 });

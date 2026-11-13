@@ -285,6 +285,7 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
   const plan = buildPlan({
     target, hosts: planHosts, lang, stack, projectName, categories, models: models?.hosts, tier, hardened,
     mcp: mcpEnabled, surfaces,
+    managedPermissions: previous?.managedPermissions || {},
   });
   let done = 0;
   const total = plan.entries.length;
@@ -380,6 +381,8 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
       hardened,
       mcp: mcpEnabled,
       mcpServers: result.mcp || {},
+      managedPermissions: result.managedPermissions || {},
+      mergeOrigins: result.mergeOrigins || {},
       baseline: baselineEnabled,
       baselineVersion: baselineEnabled ? KIT_VERSION : null,
       files: result.files,

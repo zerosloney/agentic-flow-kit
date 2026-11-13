@@ -67,6 +67,7 @@ export function buildState({ target, manifest }) {
     target, hosts, lang: language, stack, projectName, models, tier, hardened,
     mcp: manifest.mcp === true,
     surfaces: manifest.surfaces || [],
+    managedPermissions: manifest.managedPermissions || {},
   });
   const vars = buildVars({
     target,

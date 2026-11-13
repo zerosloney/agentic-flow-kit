@@ -5,11 +5,11 @@ import { flag } from '../cli/args.mjs';
 import { readManifest } from '../install/manifest.mjs';
 import { doctorGit } from '../git/config.mjs';
 import { HOSTS, hostTargetRel, hostSource } from '../hosts/registry.mjs';
-import { listFiles, TEMPLATES } from '../install/plan.mjs';
+import { listFiles, readGatesSpecs, TEMPLATES } from '../install/plan.mjs';
 import { readMcpServers } from '../install/mcp.mjs';
-import { findHookDrift, readHookSpec } from '../install/hooks.mjs';
+import { findHookDrift } from '../install/hooks.mjs';
 import { listBaselines } from '../install/baseline.mjs';
-import { compilePermissions, permissionDrift, readPermissionSpec } from '../install/permissions.mjs';
+import { compilePermissions, permissionDrift } from '../install/permissions.mjs';
 import { ROLE_NAMES, readInjectedModels, readLocalModelRoles } from '../models/resolve.mjs';
 import { computeEnterprise, GIT_HOOKS, PROOF_CHAIN_FILES, resolveTarget } from './install.mjs';
 import { buildDiff } from './diff.mjs';
@@ -24,7 +24,8 @@ export function doctorCommand({ args, t }) {
   const roleVal = (entry) => (typeof entry === 'string' ? entry : entry?.model || null);
 
   const manifest = readManifest(target);
-  const permissionSpec = manifest ? readPermissionSpec(target) : null;
+  const gates = manifest ? readGatesSpecs(manifest.language || 'zh-CN') : { hooks: null, permissions: null };
+  const permissionSpec = gates.permissions;
   const permissionDeclared = Boolean(permissionSpec
     && (permissionSpec.allow.length || permissionSpec.deny.length || permissionSpec.ask.length));
   if (!manifest) {
@@ -124,7 +125,7 @@ export function doctorCommand({ args, t }) {
 
     // Hook 接线：以 .agents/hooks/gates.json 为期望值，比对宿主配置里的托管条目。
     if (h.hooks?.events) {
-      const spec = readHookSpec(target);
+      const spec = gates.hooks;
       const rel = hostTargetRel(host, h.hooks.file);
       if (!spec) {
         add(false, `hooks ${host}`, t('doctor.hooksSpecInvalid', { path: '.agents/hooks/gates.json' }));
@@ -166,11 +167,11 @@ export function doctorCommand({ args, t }) {
       } else {
         try {
           const root = JSON.parse(fs.readFileSync(path.join(target, permRel), 'utf8'));
-          const drift = permissionDrift(root, compiled, h.permissions);
-          if (drift.missing.length || drift.extra.length) {
+          const drift = permissionDrift(root, compiled, h.permissions, manifest?.managedPermissions?.[permRel]);
+          if (drift.missing.length || drift.stale.length) {
             const parts = [];
             if (drift.missing.length) parts.push(`missing ${drift.missing.join(', ')}`);
-            if (drift.extra.length) parts.push(`extra ${drift.extra.join(', ')}`);
+            if (drift.stale.length) parts.push(`stale ${drift.stale.join(', ')}`);
             add(false, `permissions ${host}`, t('doctor.permissionsDrift', { path: permRel, detail: parts.join('; ') }));
           } else {
             add(true, `permissions ${host}`, `${permRel}: ${compiled.allow.length}/${compiled.deny.length}/${compiled.ask.length}`);

@@ -110,7 +110,13 @@ export function pruneCommand({ args, t }) {
 
   if (!dryRun && changed) {
     const derived = (manifest.derived || []).filter((rel) => nextFiles[rel]);
-    writeManifest(target, { ...manifest, files: nextFiles, derived });
+    const managedPermissions = Object.fromEntries(
+      Object.entries(manifest.managedPermissions || {}).filter(([rel]) => nextFiles[rel]),
+    );
+    const mergeOrigins = Object.fromEntries(
+      Object.entries(manifest.mergeOrigins || {}).filter(([rel]) => nextFiles[rel]),
+    );
+    writeManifest(target, { ...manifest, files: nextFiles, derived, managedPermissions, mergeOrigins });
   }
   return finish(deleted, cleaned, skipped, baselines);
 }

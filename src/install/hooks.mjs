@@ -113,9 +113,14 @@ export function hookRefs(hook) {
   return refs.join('\n').replace(/\\/g, '/');
 }
 
+function scriptPattern(script) {
+  const escaped = script.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`(^|[^A-Za-z0-9._-])${escaped}(?=$|[^A-Za-z0-9._-])`);
+}
+
 function managedScript(hook, scripts) {
   const text = hookRefs(hook);
-  for (const script of scripts) if (text.includes(script)) return script;
+  for (const script of scripts) if (scriptPattern(script).test(text)) return script;
   return null;
 }
 
@@ -170,6 +175,53 @@ export function mergeHooksIntoRoot(root, spec, cfg) {
     const next = [...kept, ...compiled];
     if (JSON.stringify(next) !== JSON.stringify(list)) changed = true;
     events[event] = next;
+  }
+  return changed;
+}
+
+// 移除指向托管脚本的 hook 条目（卸载 / remove-host 用）；用户自建 hook 保留。
+export function stripHooksFromRoot(root, spec, cfg) {
+  if (!isObject(root) || !Array.isArray(spec) || !spec.length) return false;
+  const scripts = new Set(spec.map((item) => item.script));
+  const hooksKey = cfg.hooksKey || 'hooks';
+  const events = eventsOwner(root, cfg, false);
+  if (!events) return false;
+  let changed = false;
+  for (const [event, list] of Object.entries(events)) {
+    if (!Array.isArray(list)) continue;
+    const kept = [];
+    for (const group of list) {
+      if (!isObject(group) || !Array.isArray(group[hooksKey])) {
+        kept.push(group);
+        continue;
+      }
+      const hooks = group[hooksKey].filter((hook) => !managedScript(hook, scripts));
+      if (hooks.length !== group[hooksKey].length) changed = true;
+      if (hooks.length) kept.push(hooks.length === group[hooksKey].length ? group : { ...group, [hooksKey]: hooks });
+    }
+    if (kept.length) {
+      if (JSON.stringify(events[event]) !== JSON.stringify(kept)) changed = true;
+      events[event] = kept;
+    } else if (event in events) {
+      delete events[event];
+      changed = true;
+    }
+  }
+  const segments = String(cfg.container || 'hooks').split('.');
+  const containerNode = segments.reduce((node, key) => (isObject(node) ? node[key] : null), root);
+  if (isObject(containerNode) && !Object.keys(containerNode).length) {
+    const parent = segments.slice(0, -1).reduce((node, key) => node?.[key], root);
+    if (isObject(parent)) delete parent[segments[segments.length - 1]];
+    changed = true;
+  }
+  // ZCode 等带 rootDefaults 的容器：只剩默认键时整段移除。
+  const head = root[segments[0]];
+  if (isObject(head) && isObject(cfg.rootDefaults)) {
+    const keys = Object.keys(head);
+    if (keys.length && keys.every((key) => key in cfg.rootDefaults && head[key] === cfg.rootDefaults[key])) {
+      delete root[segments[0]];
+      changed = true;
+    }
   }
   return changed;
 }
