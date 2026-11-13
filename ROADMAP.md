@@ -43,6 +43,9 @@
 | R3-8 | 沙箱与供应链 | 3 | L | devcontainer / MCP 权限 / SBOM | TODO |
 | R3-9 | manifest 迁移框架 | 3 | M | `migrations/`、`manifest.schemaVersion` | TODO |
 | R3-10 | `new-host` 生成器与模板 lint | 3 | M | `tools/new-host.mjs`、`npm run lint:templates` | TODO |
+| R4-1 | 多仓 Workspace 协调 | 4 | M | `src/commands/workspace.mjs`、`.flow-kit/workspace.json` | DONE |
+| R4-2 | Spec / Tasks / Verify 工件规范 | 4 | M | `templates/scaffold/workflow/specs/` + 校验脚本 | DONE |
+| R4-3 | eval-log 证据格式 | 4 | S | `agent-eval.mjs`、`schemas/eval-log.schema.json` | DONE |
 
 ## 3. Wave 1 — 生命周期闭环
 
@@ -254,7 +257,33 @@
   - 纳入 CI。
 - **验收**：生成的新宿主开箱通过测试；故意破坏模板可失败。规模 `M`。
 
-## 6. 依赖关系
+## 6. Wave 4 — 方法论对齐
+
+对齐外部 Harness 方法论（HelixHarness 等）中本仓缺失的三块：多仓协调、可审计工件、可互操作的评测证据。原则仍是“安装器生成 + 运行态可检查”，不引入服务端依赖。
+
+### R4-1 多仓 Workspace 协调
+
+- **现状**：已实现 `workspace init/status`。清单 `.flow-kit/workspace.json` 只记录显式仓库；init 幂等保留 createdAt；status 只读聚合各仓 manifest 的宿主/栈/语言/版本，路径缺失标 `missingPath`；非法仓库退出码 2，缺清单 3。`--repos` 支持空格/逗号分隔。
+- **目标**：
+  - `flow-kit workspace init --repos ./api ./web` 生成 `.flow-kit/workspace.json`（仓库清单 + 各仓 manifest 摘要）；
+  - `flow-kit workspace status` 只读聚合各仓安装状态、宿主/栈/版本与缺失；
+  - 仓库必须在 workspace 根目录内且是 git 仓库；不引入 workspace 清单以外的隐式发现。
+- **落点**：`src/commands/workspace.mjs`、`schemas/workspace.schema.json`、CLI help/locale。
+- **验收**：init 幂等、status `--json` 契约、非法仓库退出码、缺失清单退出码。规模 `M`。
+
+### R4-2 Spec / Tasks / Verify 工件规范
+
+- **现状**：`workflow/specs/_TEMPLATE/` 提供 `spec.md` / `tasks.md` / `verify-report.md`；`check-spec-packages.mjs` 校验三件套、验收标准节、任务勾选项、结果/证据节与结论枚举，支持 `--root` / `--json`，缺件或伪完成退出 1。
+- **目标**：`workflow/specs/` 增加 `_TEMPLATE/{spec,tasks,verify-report}.md`；active/completed 目录约定；校验脚本检查必填节与证据字段。
+- **验收**：模板随安装落盘；校验可发现缺节/伪完成；文档说明工作流。规模 `M`。
+
+### R4-3 eval-log 证据格式
+
+- **现状**：`recordEval` 在既有 `results.jsonl` 外写版本化 `eval-log.json`（version 1、threshold、outcome、证据签名），支持 `--no-eval-log` 与 `--eval-log <path>`；schema 在 `schemas/eval-log.schema.json`，既有评测门行为不变。
+- **目标**：`agent-eval.mjs` 在既有 JSONL 凭证外输出版本化 `eval-log.json`（阶段、结果、证据签名、资源计数），并提供 JSON schema；字段与外部平台可对齐。
+- **验收**：schema 校验；既有评测行为不变；可关闭/指定输出路径。规模 `S`。
+
+## 7. 依赖关系
 
 ```text
 R1-1 diff ──┬─> R1-2 prune ──> R1-3 remove-host
@@ -268,7 +297,7 @@ R3-1 policy-as-code ──> R3-2 策略 diff ──> R3-3 证明链
 R3-4 技能包 ──> R3-10 模板/技能 lint（共享校验骨架）
 ```
 
-## 7. 完成定义（DoD）
+## 8. 完成定义（DoD）
 
 任何路线图条目完成，须同时满足：
 
@@ -279,7 +308,7 @@ R3-4 技能包 ──> R3-10 模板/技能 lint（共享校验骨架）
 - 文档更新：`README.md`、`CLAUDE.md`、本文件状态；涉及缺口时同步 `BACKLOG.md`；
 - 若进入门禁面：登记 `mechanism-registry.md` 并守住 `rule-budgets` 预算。
 
-## 8. 风险与不做清单
+## 9. 风险与不做清单
 
 **风险**
 

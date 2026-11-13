@@ -24,6 +24,8 @@
 //   --files a,b         只对指定文件算签名（测试/定向复核）
 //   --threshold <0..1>  通过率阈值（默认取配置）
 //   --max-age-days <N>  凭证有效期（默认取配置）
+//   --eval-log <path>   record 时覆盖证据日志路径（默认 .agents/evals/eval-log.json）
+//   --no-eval-log       record 时不写证据日志（仅保留 results.jsonl）
 //
 // 退出码：check 通过 0；无凭证/过期/不达标 1（--advisory 时仍为 0 并打 WARN）。
 import fs from 'node:fs';
@@ -44,6 +46,8 @@ export const DEFAULT_CONFIG = {
     '.agents/config/agent-eval.json',
   ],
   results: '.agents/evals/results.jsonl',
+  // 版本化证据日志：可与外部评估平台对齐；设为 null 关闭，或由 --eval-log 覆盖路径。
+  evalLog: '.agents/evals/eval-log.json',
   threshold: 0.8,
   maxAgeDays: 30,
   // 凭证必须可追溯：少于该任务数不接受 record（eval/SKILL.md 要求 5–10 条）
@@ -174,7 +178,23 @@ export function evaluate(root, { now = Date.now(), only = null } = {}) {
   return { ok: true, reason: 'pass', signature, files, cfg, record: latest };
 }
 
-export function recordEval(root, { passRate, tasks = 0, model = '', note = '', signature = null, now = new Date() } = {}) {
+export function writeEvalLog(root, rel, entry) {
+  if (!rel) return null;
+  const file = path.join(root, rel);
+  const existing = readJson(file);
+  const entries = Array.isArray(existing?.entries) ? existing.entries.slice(-199) : [];
+  entries.push(entry);
+  const log = { version: 1, updatedAt: entry.ts, entries };
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(log, null, 2)}\n`, 'utf8');
+  fs.renameSync(tmp, file);
+  return file;
+}
+
+export function recordEval(root, {
+  passRate, tasks = 0, model = '', note = '', signature = null, now = new Date(), evalLog = undefined,
+} = {}) {
   const rate = Number(passRate);
   if (!Number.isFinite(rate) || rate < 0 || rate > 1) throw new Error('pass-rate 必须是 0..1');
   const cfg = loadConfig(root);
@@ -190,6 +210,12 @@ export function recordEval(root, { passRate, tasks = 0, model = '', note = '', s
   const file = path.join(root, cfg.results);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.appendFileSync(file, `${JSON.stringify(row)}\n`);
+  const logRel = evalLog === false ? null : (typeof evalLog === 'string' ? evalLog : cfg.evalLog);
+  writeEvalLog(root, logRel, {
+    ...row,
+    threshold: Number(cfg.threshold),
+    outcome: rate >= Number(cfg.threshold) ? 'pass' : 'fail',
+  });
   return row;
 }
 
@@ -234,11 +260,16 @@ function main() {
       console.error('record 需要 --model <评测模型>（凭证必须可追溯）');
       return 2;
     }
+    const noteArg = argOf(argv, 'note', '');
+    const logArg = argOf(argv, 'eval-log');
     const row = recordEval(root, {
       passRate: Number(rawRate),
       tasks,
       model: String(rawModel).trim(),
-      note: argOf(argv, 'note', '') === true ? '' : String(argOf(argv, 'note', '')),
+      note: noteArg === true ? '' : String(noteArg),
+      evalLog: argv.includes('--no-eval-log')
+        ? false
+        : (typeof logArg === 'string' ? logArg : undefined),
     });
     console.log(`recorded eval ${row.signature.slice(0, 12)} passRate=${row.passRate} tasks=${row.tasks}`);
     return 0;

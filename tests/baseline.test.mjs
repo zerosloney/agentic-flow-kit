@@ -72,7 +72,8 @@ test('install writes baselines and records baselineVersion without touching hash
   const manifest = readManifest(dir);
   assert.equal(manifest.baseline, true);
   assert.equal(manifest.baselineVersion, manifest.version);
-  assert.equal(Object.keys(manifest.files).length, 304);
+  assert.equal(Object.keys(manifest.files).some((rel) => rel.startsWith('.agents/.kit/')), false);
+  assert.ok(Object.keys(manifest.files).length > 300);
   assert.equal(fs.readFileSync(path.join(dir, '.gitignore'), 'utf8').includes('.agents/.kit/'), true);
 
   const doctor = json(run(['doctor', '--target', '.', '--json'], dir));

@@ -1,6 +1,6 @@
 // 极简参数解析：--key value / --flag / --key=value；--agent 可重复。
 export function parseArgs(argv) {
-  const args = { _: [], agents: [], models: [], hostManifests: [], surfaces: [], flags: new Set() };
+  const args = { _: [], agents: [], models: [], hostManifests: [], surfaces: [], repos: [], flags: new Set() };
   const takeValue = (i) => {
     const next = argv[i + 1];
     if (next == null || (next.startsWith('--') && next !== '-')) return null;
@@ -20,6 +20,7 @@ export function parseArgs(argv) {
       else if (key === 'model') args.models.push(value);
       else if (key === 'host-manifest') args.hostManifests.push(value);
       else if (key === 'surface') args.surfaces.push(value);
+      else if (key === 'repos') args.repos.push(value);
       else args[key] = value;
       continue;
     }
@@ -30,8 +31,16 @@ export function parseArgs(argv) {
       else if (key === 'model') args.models.push(value);
       else if (key === 'host-manifest') args.hostManifests.push(value);
       else if (key === 'surface') args.surfaces.push(value);
+      else if (key === 'repos') args.repos.push(value);
       else args[key] = value;
       i += 1;
+      // --repos ./api ./web：收集到下一个 --flag 为止
+      if (key === 'repos') {
+        while (i + 1 < argv.length && !argv[i + 1].startsWith('--')) {
+          args.repos.push(argv[i + 1]);
+          i += 1;
+        }
+      }
     } else {
       args.flags.add(key);
     }

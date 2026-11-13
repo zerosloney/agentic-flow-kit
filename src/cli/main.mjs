@@ -13,6 +13,7 @@ import { diffCommand, statusCommand } from '../commands/diff.mjs';
 import { pruneCommand } from '../commands/prune.mjs';
 import { removeHostCommand, uninstallCommand } from '../commands/remove-host.mjs';
 import { explainCommand } from '../commands/explain.mjs';
+import { workspaceCommand } from '../commands/workspace.mjs';
 import { KIT_ROOT } from '../install/plan.mjs';
 
 const SUPPORTED_LANGS = new Set(LANGUAGES);
@@ -77,6 +78,8 @@ async function main(argv) {
       return diffCommand({ args, t });
     case 'status':
       return statusCommand({ args, t });
+    case 'workspace':
+      return workspaceCommand({ args, t });
     case 'explain':
       return explainCommand({ args, t });
     case 'list-hosts': {
