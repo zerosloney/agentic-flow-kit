@@ -3,15 +3,18 @@
 import { visualWidth, box, green, red, progressLine } from './ansi.mjs';
 import { pickOne, pickMany, confirmYes, showLines, askText } from './prompts.mjs';
 import { HOSTS, HOST_NAMES } from '../hosts/registry.mjs';
+import { detectHosts } from '../hosts/detect.mjs';
 import { probeModels } from '../models/probe.mjs';
 import { ROLE_NAMES, loadRoleConfig, recommendRoles, summarizeModels } from '../models/resolve.mjs';
 import { readManifest } from '../install/manifest.mjs';
 import { detectStackDetail, STACKS, stackMarkerLabel, formatInstallLog, installLogNotable, installCommand } from '../commands/install.mjs';
 import { stackDescription } from '../render/tokens.mjs';
+import { SURFACES, surfaceDescription } from '../install/profiles.mjs';
 import { LANGUAGES } from '../i18n.mjs';
 import { doctorCommand } from '../commands/doctor.mjs';
 import { addHostCommand } from '../commands/add-host.mjs';
 import { upgradeCommand } from '../commands/upgrade.mjs';
+import { removeHostCommand, uninstallCommand } from '../commands/remove-host.mjs';
 
 // flows 内部 argv 统一经 baseArgs 构造（形状与 cli/args.mjs parseArgs 一致：flag() 依赖 args.flags）
 export const baseArgs = () => ({ _: [], agents: [], flags: new Set() });
@@ -65,14 +68,23 @@ export function stackItems({ detected, current, lang, t }) {
   });
 }
 
-// 宿主候选项单一映射：已安装的提示「已安装」，否则提示 label → dir
-function hostItems({ installed = [], t }) {
-  return HOST_NAMES.map((n) => ({
-    value: n,
-    label: n,
-    hint: installed.includes(n) ? t('tui.installed') : `${HOSTS[n].label} → ${HOSTS[n].dir}`,
-    checked: installed.includes(n),
-  }));
+// 宿主候选项单一映射：已安装或探测到的提示，用户仍可改选。
+function hostItems({ installed = [], suggested = [], t }) {
+  return HOST_NAMES.map((n) => {
+    const isInstalled = installed.includes(n);
+    const isSuggested = !isInstalled && suggested.includes(n);
+    const tags = [
+      isInstalled ? t('tui.installed') : null,
+      isSuggested ? t('tui.detectedHost') : null,
+      `${HOSTS[n].label} → ${HOSTS[n].dir}`,
+    ].filter(Boolean);
+    return {
+      value: n,
+      label: n,
+      hint: tags.join(' · '),
+      checked: isInstalled || isSuggested,
+    };
+  });
 }
 
 // 模型配置流：静态探测 → 可选只读 CLI 探测 → 推荐确认 / 逐角色选择（含手填、inherit、跳过）。
@@ -158,7 +170,7 @@ async function installFlow(ctx) {
     question: t('tui.hostsQuestion'),
     hint: t('tui.hint.toggle'),
     min: 1,
-    items: hostItems({ installed: prevHosts, t }),
+    items: hostItems({ installed: prevHosts, suggested: detectHosts(cwd), t }),
   });
   if (hosts === null) return;
 
@@ -178,6 +190,19 @@ async function installFlow(ctx) {
   });
   if (stack === null) return;
 
+  // 组合式 profile：surface 可多选、可不选；闭集由 profiles.mjs 约束。
+  const surfaces = await pickMany(ctx, {
+    question: t('tui.surfaceQuestion'),
+    hint: t('tui.hint.toggle'),
+    min: 0,
+    items: SURFACES.map((surface) => ({
+      value: surface,
+      label: t(`tui.surface.${surface}`),
+      hint: surfaceDescription(surface, lang),
+    })),
+  });
+  if (surfaces === null) return;
+
   const modelResult = await modelFlow(ctx, hosts);
   if (modelResult === null) return;
 
@@ -196,6 +221,7 @@ async function installFlow(ctx) {
   const dryRun = opts.includes('dry-run');
   // argv 形状与 wizard.mjs buildInstallArgs 一致：git 配置默认开，开关转 flags
   const args = { ...baseArgs(), _: ['install'], agents: hosts, lang: selLang, stack };
+  if (surfaces.length) args.surfaces = surfaces;
   if (modelResult.models && Object.keys(modelResult.models).length) args.tuiModels = modelResult.models;
   if (!opts.includes('git-config')) args.flags.add('no-git-config');
   if (dryRun) args.flags.add('dry-run');
@@ -207,6 +233,7 @@ async function installFlow(ctx) {
     t('tui.plan.lang', { lang: selLang }),
     t('tui.plan.stack', { stack }),
   ];
+  if (surfaces.length) planLines.push(t('tui.plan.surfaces', { surfaces: surfaces.join(', ') }));
   if (modelResult.models && Object.keys(modelResult.models).length) {
     planLines.push(t('tui.plan.models', { models: summarizeModels({ hosts: modelResult.models }) }));
   }
@@ -297,10 +324,52 @@ function listHostsFlow(ctx) {
   showLines(ctx, box(t('listHosts.title'), rows.map((r) => `${pad(r.name, wName)}${pad(r.label, wLabel)}${r.dir}`)));
 }
 
+async function removeHostFlow(ctx) {
+  const { t, lang } = ctx;
+  const manifest = readManifest(process.cwd());
+  if (!manifest) throw new Error(t('error.noManifest'));
+  const installed = HOST_NAMES.filter((name) => (manifest.hosts || []).includes(name));
+  if (!installed.length) {
+    showLines(ctx, [t('tui.removeHost.none')]);
+    return;
+  }
+  const agents = await pickMany(ctx, {
+    question: t('tui.removeHostQuestion'),
+    hint: t('tui.hint.toggle'),
+    min: 1,
+    items: installed.map((name) => ({
+      value: name,
+      label: name,
+      hint: `${HOSTS[name].label} → ${HOSTS[name].dir}`,
+    })),
+  });
+  if (agents === null) return;
+  showLines(ctx, box(t('tui.planTitle'), [
+    t('tui.plan.hosts', { hosts: agents.join(', ') }),
+    t('tui.plan.target', { target: process.cwd() }),
+  ]));
+  if (!(await confirmYes(ctx, t('tui.confirmRemoveHost', { hosts: agents.join(', ') })))) return;
+  return removeHostCommand({ args: { ...baseArgs(), _: ['remove-host'], agents }, t, lang });
+}
+
+async function uninstallFlow(ctx) {
+  const { t, lang } = ctx;
+  const manifest = readManifest(process.cwd());
+  if (!manifest) throw new Error(t('error.noManifest'));
+  showLines(ctx, box(t('tui.planTitle'), [
+    t('tui.plan.target', { target: process.cwd() }),
+    t('tui.plan.hosts', { hosts: (manifest.hosts || []).join(', ') || '-' }),
+  ]));
+  if (!(await confirmYes(ctx, t('tui.confirmUninstall')))) return;
+  return uninstallCommand({ args: { ...baseArgs(), _: ['uninstall'] }, t, lang });
+}
+
 export const FLOWS = {
   install: installFlow,
   upgrade: upgradeFlow,
   'add-host': addHostFlow,
+  'remove-host': removeHostFlow,
+  uninstall: uninstallFlow,
   doctor: doctorFlow,
   'list-hosts': listHostsFlow,
 };

@@ -51,7 +51,7 @@ export function stackDescription(stack, language) {
 }
 
 // 宿主权限白名单里随栈变化的命令。npm / node / git 是引擎运行时，留在各宿主模板的固定项里。
-const STACK_SHELL = {
+export const STACK_SHELL = {
   dotnet: ['dotnet build', 'dotnet run'],
   rust: ['cargo build', 'cargo run', 'cargo test', 'cargo check'],
   go: ['go build', 'go run', 'go test'],

@@ -68,3 +68,26 @@
   2. `new-task.md` / `pipeline-run.md` / `stages.md` 仍引用不存在的 `grilling`、
      `codebase-design`、`domain-modeling` 技能（存量问题）。修正会改敏感面并使上述凭证失效，
      需连同重跑评测一起做，暂未改动。
+
+## 能力扩展
+
+新增能力的规划与验收见 `ROADMAP.md`；执行项以 GitHub issue 跟踪。
+
+- Wave 1（生命周期闭环）：跟踪 [#7](https://github.com/zerosloney/agentic-flow-kit/issues/7)，
+  子项 R1-1 [#3](https://github.com/zerosloney/agentic-flow-kit/issues/3)、
+  R1-2 [#2](https://github.com/zerosloney/agentic-flow-kit/issues/2)、
+  R1-3 [#4](https://github.com/zerosloney/agentic-flow-kit/issues/4)、
+  R1-4 [#5](https://github.com/zerosloney/agentic-flow-kit/issues/5)、
+  R1-5 [#6](https://github.com/zerosloney/agentic-flow-kit/issues/6)。
+- Wave 2（收敛与适配）：跟踪 [#18](https://github.com/zerosloney/agentic-flow-kit/issues/18)，
+  子项 R2-1 [#8](https://github.com/zerosloney/agentic-flow-kit/issues/8)、
+  R2-2 [#9](https://github.com/zerosloney/agentic-flow-kit/issues/9)、
+  R2-3 [#10](https://github.com/zerosloney/agentic-flow-kit/issues/10)、
+  R2-4 [#11](https://github.com/zerosloney/agentic-flow-kit/issues/11)、
+  R2-5 [#12](https://github.com/zerosloney/agentic-flow-kit/issues/12)、
+  R2-6 [#13](https://github.com/zerosloney/agentic-flow-kit/issues/13)、
+  R2-7 [#14](https://github.com/zerosloney/agentic-flow-kit/issues/14)、
+  R2-8 [#15](https://github.com/zerosloney/agentic-flow-kit/issues/15)、
+  R2-9 [#16](https://github.com/zerosloney/agentic-flow-kit/issues/16)、
+  R2-10 [#17](https://github.com/zerosloney/agentic-flow-kit/issues/17)。
+- 本文件只保留缺口修复条目；能力扩展完成后若形成新的“必须补”缺口，再回填到这里。

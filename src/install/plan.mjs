@@ -3,6 +3,10 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { HOSTS, hostTargetRel, isAgentTemplate, modelRoleForAgent } from '../hosts/registry.mjs';
 import { makeT } from '../i18n.mjs';
+import { mergeMcpFile, mergeMcpInto, readMcpServers } from './mcp.mjs';
+import { HOOKS_SPEC_REL, mergeHooksIntoRoot, parseHookSpec } from './hooks.mjs';
+import { compilePermissions, mergePermissionsIntoRoot, parsePermissionSpec } from './permissions.mjs';
+import { readPlanEntry } from './apply.mjs';
 import { parseFrontmatter, yamlScalar } from './frontmatter.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -15,8 +19,8 @@ export const HOST_META = path.join(TEMPLATES, 'host-meta');
 // 模板目录可能被本机运行过脚本（评测凭证、缓存、本地模型角色）。这些是运行态，
 // 既不该进包，也不该被安装到目标项目——尤其 evals/results.jsonl 是行为评测凭证，
 // 若随模板出厂，会让每个新装项目“凭空”获得一张当前内容的合格凭证。
-const RUNTIME_DIRS = new Set(['.agents/cache', '.agents/tmp', '.agents/tools']);
-const RUNTIME_FILES = new Set([
+export const RUNTIME_DIRS = new Set(['.agents/cache', '.agents/tmp', '.agents/tools']);
+export const RUNTIME_FILES = new Set([
   '.agents/verifications.jsonl',
   '.agents/judgments.jsonl',
   '.agents/evals/results.jsonl',
@@ -52,13 +56,16 @@ function applyLocaleOverrides(lang, entries) {
   for (const entry of entries) {
     const override = localeOverride(lang, entry.targetRel);
     if (!override) continue;
+    // 保留模板来源：explain 需要同时报告静态模板与语言覆盖。
+    if (entry.srcAbs && !entry.templateAbs) entry.templateAbs = entry.srcAbs;
+    entry.localeOverride = override;
     entry.srcAbs = override;
     delete entry.getText;
   }
   return entries;
 }
 
-function dedupe(entries) {
+export function dedupeEntries(entries) {
   const byTarget = new Map();
   for (const entry of entries.sort((a, b) => a.priority - b.priority)) byTarget.set(entry.targetRel, entry);
   return [...byTarget.values()];
@@ -168,9 +175,126 @@ function addGeneratedSkillSurfaces({ plan, hosts, skillEntries, t }) {
   }
 }
 
+// 宿主 Hook / 权限接线的中性规格来自引擎模板的 gates.json（语言覆盖优先）。
+// 编译器按 registry 的 hooks.events / permissions 生成宿主 schema，并以静态宿主模板为底稿；
+// 没有相应能力的宿主继续使用静态模板，行为不变。
+function readGatesText(lang) {
+  const override = localeOverride(lang, HOOKS_SPEC_REL);
+  const abs = override || path.join(TEMPLATES, 'engine', HOOKS_SPEC_REL);
+  try {
+    return fs.readFileSync(abs, 'utf8');
+  } catch {
+    return null;
+  }
+}
+
+function addHostConfigEntries({ plan, target, hosts, lang, stack, hardened }) {
+  const gatesText = readGatesText(lang);
+  if (!gatesText) return;
+  const hookSpec = parseHookSpec(gatesText);
+  const permissionSpec = parsePermissionSpec(gatesText);
+  for (const host of hosts) {
+    const h = HOSTS[host];
+    const hookConfig = h?.hooks?.events || null;
+    const permissionConfig = h?.permissions || null;
+    if (!hookConfig && !permissionConfig) continue;
+    const fileName = permissionConfig?.file || h?.hooks?.file;
+    if (!fileName) continue;
+    const compiledPermissions = permissionSpec && permissionConfig
+      ? compilePermissions(permissionSpec, permissionConfig, { stack, hardened })
+      : null;
+    if (!(hookConfig && hookSpec?.length) && !compiledPermissions) continue;
+    const rel = hostTargetRel(host, fileName);
+    const baseEntry = plan.find((entry) => entry.targetRel === rel && entry.kind === 'file');
+    const entry = {
+      srcAbs: null,
+      targetRel: rel.replace(/\\/g, '/'),
+      category: 'host',
+      priority: 31,
+      kind: 'merge-host',
+      hookSpec: hookConfig ? hookSpec : null,
+      hookConfig,
+      permissionSpec: compiledPermissions,
+      permissionConfig,
+      getText: (vars) => {
+        const abs = path.join(target, rel);
+        const exists = fs.existsSync(abs);
+        const baseText = !exists && baseEntry ? readPlanEntry(baseEntry, vars) : null;
+        const sourceText = exists ? fs.readFileSync(abs, 'utf8') : (baseText || '');
+        let root = {};
+        if (sourceText.trim()) {
+          try {
+            root = JSON.parse(sourceText);
+          } catch {
+            return null;
+          }
+          if (!root || typeof root !== 'object' || Array.isArray(root)) return null;
+        }
+        let changed = false;
+        if (hookConfig && entry.hookSpec?.length) {
+          changed = mergeHooksIntoRoot(root, entry.hookSpec, hookConfig) || changed;
+        }
+        if (entry.permissionSpec) {
+          changed = mergePermissionsIntoRoot(root, entry.permissionSpec, permissionConfig) || changed;
+        }
+        // Qwen 的 settings.json 同时承载 MCP：多个合并器对同一个 root 组合执行，
+        // 避免同一文件在去重时丢掉其中一个托管面。
+        if (entry.mcpServers) {
+          changed = mergeMcpInto(root, entry.mcpServers, entry.mcpFormat).changed || changed;
+        }
+        if (exists && !changed) return sourceText;
+        if (!exists && !sourceText.trim() && !changed) return null;
+        return `${JSON.stringify(root, null, 2)}\n`;
+      },
+    };
+    plan.push(entry);
+  }
+}
+
+// 宿主 MCP 配置：同一份中性 server 列表编译到各宿主容器；getText 在渲染时读取磁盘，
+// 实现“只补缺失项、保留用户 server”的幂等合并。JSON 损坏时返回 null，由 apply 跳过。
+function addMcpEntries({ plan, target, hosts }) {
+  const servers = readMcpServers(target);
+  if (!Object.keys(servers).length) return;
+  for (const host of hosts) {
+    const h = HOSTS[host];
+    if (!h?.mcp) continue;
+    const rel = h.mcp.file;
+    const targetRel = rel.replace(/\\/g, '/');
+    // 同一文件已经有 hook 合并条目时（Qwen settings.json），把 MCP 挂到该条目上组合执行。
+    const hookEntry = plan.find((entry) => entry.kind === 'merge-host' && entry.targetRel === targetRel);
+    if (hookEntry) {
+      hookEntry.mcpServers = servers;
+      hookEntry.mcpFormat = h.mcp.format;
+      hookEntry.mcpNames = Object.keys(servers);
+      continue;
+    }
+    // Qwen 的 settings.json 同时是静态宿主模板：文件不存在时以渲染结果打底，避免丢掉 hooks/permissions。
+    const baseEntry = plan.find((entry) => entry.targetRel === rel && entry.kind !== 'merge-mcp');
+    plan.push({
+      srcAbs: null,
+      targetRel: rel.replace(/\\/g, '/'),
+      category: 'host',
+      priority: 32,
+      kind: 'merge-mcp',
+      mcpFormat: h.mcp.format,
+      mcpNames: Object.keys(servers),
+      getText: (vars) => {
+        const baseText = baseEntry ? readPlanEntry(baseEntry, vars) : null;
+        const merged = mergeMcpFile(path.join(target, rel), servers, h.mcp.format, baseText);
+        return merged ? merged.text : null;
+      },
+    });
+  }
+}
+
 // 构建安装计划。targetRel 使用 / 分隔；profile 覆盖 engine，宿主只写自己的点目录。
 // models: { [host]: { code?, judgment?, review? } }，用于注入宿主子代理 model 字段。
-export function buildPlan({ target, hosts, lang, stack, projectName, categories, models = null, tier = 'standard', hardened = false }) {
+// surfaces: 组合式切面闭集（frontend/api/data），按声明顺序叠加在 stack 之上。
+export function buildPlan({
+  target, hosts, lang, stack, projectName, categories, models = null, tier = 'standard', hardened = false, mcp = true,
+  surfaces = [],
+}) {
   const t = makeT(lang);
   const plan = [];
   const push = (srcAbs, targetRel, category, priority = 10, kind = 'file', extra = {}) => {
@@ -189,16 +313,36 @@ export function buildPlan({ target, hosts, lang, stack, projectName, categories,
     push(path.join(TEMPLATES, 'profiles', stack, rel), rel, 'profile', 20);
   }
 
-  // 3) 宿主适配层
+  // 2.5) surface 叠加：同一 targetRel 由后声明的 surface 覆盖（21 + index > 20）。
+  // 单 stack 安装不产生任何额外文件，保持行为不变。
+  surfaces.forEach((surface, index) => {
+    const dir = path.join(TEMPLATES, 'surfaces', surface);
+    for (const rel of listFiles(dir)) push(path.join(dir, rel), rel, 'profile', 21 + index);
+  });
+  if (surfaces.length) {
+    push(null, '.agents/config/profile.json', 'profile', 25, 'generated', {
+      getText: (vars) => `${JSON.stringify({
+        kit: 'agentic-flow-kit',
+        version: vars.kitVersion || null,
+        stack,
+        surfaces,
+        profiles: [stack, ...surfaces],
+      }, null, 2)}\n`,
+    });
+  }
+
+  // 3) 宿主适配层（外部宿主用定义里的 templates 目录，内置宿主用 templates/hosts/<host>）
   for (const host of hosts) {
     const h = HOSTS[host];
     if (!h) continue;
-    for (const rel of listFiles(path.join(TEMPLATES, 'hosts', host))) {
-      // 加固配置是 settings.json 的替换源，不作为独立文件安装。
-      if (rel === 'settings.hardened.json') continue;
-      const srcAbs = (hardened && host === 'claude' && rel === 'settings.json')
-        ? path.join(TEMPLATES, 'hosts', host, 'settings.hardened.json')
-        : path.join(TEMPLATES, 'hosts', host, rel);
+    const templatesDir = h.templates || path.join(TEMPLATES, 'hosts', host);
+    const hardeningSource = h.hardening?.settings || null;
+    for (const rel of listFiles(templatesDir)) {
+      // 加固配置是宿主主配置的替换源，不作为独立文件安装。
+      if (hardeningSource && rel === hardeningSource) continue;
+      const srcAbs = (hardened && hardeningSource && rel === h.hooks?.file)
+        ? path.join(templatesDir, hardeningSource)
+        : path.join(templatesDir, rel);
       const entry = push(srcAbs, hostTargetRel(host, rel), 'host', 30);
       if (h.agents?.modelField && isAgentTemplate(host, rel)) {
         entry.modelRole = modelRoleForAgent(rel);
@@ -208,6 +352,12 @@ export function buildPlan({ target, hosts, lang, stack, projectName, categories,
       }
     }
   }
+
+  // 3.4) Hook / 权限接线编译（中性 gates.json -> 宿主 schema）
+  addHostConfigEntries({ plan, target, hosts, lang, stack, hardened });
+
+  // 3.5) MCP 配置合并（--no-mcp 时整段跳过）
+  if (mcp) addMcpEntries({ plan, target, hosts });
 
   // 4) 数据资产脚手架（空目录由 scaffold 中的 .gitkeep 保证）
   for (const rel of listFiles(path.join(TEMPLATES, 'scaffold'))) {
@@ -225,7 +375,7 @@ export function buildPlan({ target, hosts, lang, stack, projectName, categories,
 
   // 6) 语言包覆盖（按目标路径镜像）
   applyLocaleOverrides(lang, plan);
-  let deduped = dedupe(plan);
+  let deduped = dedupeEntries(plan);
 
   // 7) 从覆盖后的 .agents/skills/<name>/SKILL.md 生成宿主技能面
   const skillEntries = deduped.filter((e) => /^\.agents\/skills\/[^/]+\/SKILL\.md$/.test(e.targetRel));
@@ -233,7 +383,7 @@ export function buildPlan({ target, hosts, lang, stack, projectName, categories,
 
   // 生成项同样允许按目标路径覆盖，然后二次去重（静态宿主文件优先级更高）
   applyLocaleOverrides(lang, plan);
-  deduped = dedupe(plan);
+  deduped = dedupeEntries(plan);
 
   if (categories && categories.length) deduped = deduped.filter((e) => categories.includes(e.category));
 

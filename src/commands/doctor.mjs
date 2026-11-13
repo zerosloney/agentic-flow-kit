@@ -1,22 +1,32 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { flag } from '../cli/args.mjs';
 import { readManifest } from '../install/manifest.mjs';
 import { doctorGit } from '../git/config.mjs';
-import { HOSTS, hostTargetRel } from '../hosts/registry.mjs';
+import { HOSTS, hostTargetRel, hostSource } from '../hosts/registry.mjs';
 import { listFiles, TEMPLATES } from '../install/plan.mjs';
+import { readMcpServers } from '../install/mcp.mjs';
+import { findHookDrift, readHookSpec } from '../install/hooks.mjs';
+import { listBaselines } from '../install/baseline.mjs';
+import { compilePermissions, permissionDrift, readPermissionSpec } from '../install/permissions.mjs';
 import { ROLE_NAMES, readInjectedModels, readLocalModelRoles } from '../models/resolve.mjs';
-import { resolveTarget } from './install.mjs';
+import { computeEnterprise, GIT_HOOKS, PROOF_CHAIN_FILES, resolveTarget } from './install.mjs';
+import { buildDiff } from './diff.mjs';
 
 const HOOK_FILES = ['pre-commit', 'commit-msg', 'post-commit', 'pre-merge-commit', 'pre-push'];
 
 export function doctorCommand({ args, t }) {
   const target = resolveTarget(args);
+  const asJson = flag(args, 'json');
   const checks = [];
   const add = (ok, name, detail, fix, extra = {}) => checks.push({ ok, name, detail, fix, ...extra });
   const roleVal = (entry) => (typeof entry === 'string' ? entry : entry?.model || null);
 
   const manifest = readManifest(target);
+  const permissionSpec = manifest ? readPermissionSpec(target) : null;
+  const permissionDeclared = Boolean(permissionSpec
+    && (permissionSpec.allow.length || permissionSpec.deny.length || permissionSpec.ask.length));
   if (!manifest) {
     add(false, 'install-manifest', t('doctor.manifestMissing'));
   } else {
@@ -24,9 +34,30 @@ export function doctorCommand({ args, t }) {
     for (const rel of Object.keys(manifest.files || {})) {
       if (!fs.existsSync(path.join(target, rel))) add(false, `file ${rel}`, t('doctor.fileMissing'));
     }
+    // 漂移是 advisory：用户改文件属正常，缺失已在上面按文件报错；明细交给 diff。
+    const drift = buildDiff({ target, manifest }).summary;
+    const drifting = drift.userModified + drift.kitUpdated + drift.orphan;
+    if (drifting > 0) {
+      add(true, 'manifest drift', t('doctor.drift', drift), t('doctor.driftHint'), { warn: true });
+    }
   }
 
   checks.push(...doctorGit(target));
+
+  // 基线是升级三方合并的底稿：缺失属 advisory（旧安装仍可哈希跳过）。
+  if (manifest && (manifest.baseline === true || typeof manifest.baselineVersion === 'string')) {
+    const baselines = listBaselines(target);
+    if (!baselines.length) {
+      add(true, 'baseline', t('doctor.baselineMissing'), '', { warn: true });
+    } else {
+      add(true, 'baseline', t('doctor.baseline', { count: baselines.length, version: manifest.baselineVersion || '?' }));
+      const managed = new Set(Object.keys(manifest.files || {}));
+      const orphans = baselines.filter((rel) => !managed.has(rel));
+      if (orphans.length) {
+        add(true, 'baseline orphans', t('doctor.baselineOrphans', { count: orphans.length }), '', { warn: true });
+      }
+    }
+  }
 
   const attrPath = path.join(target, '.gitattributes');
   let attr = '';
@@ -48,14 +79,127 @@ export function doctorCommand({ args, t }) {
       add(false, `host ${host}`, t('doctor.unknownHost'));
       continue;
     }
-    for (const rel of listFiles(path.join(TEMPLATES, 'hosts', host))) {
-      if (rel === 'settings.hardened.json') continue; // 替换源，不独立安装
+    const source = hostSource(host);
+    add(true, `host ${host} source`, t('doctor.hostSource', { host, source }));
+    for (const rel of listFiles(h.templates || path.join(TEMPLATES, 'hosts', host))) {
+      if (h.hardening?.settings && rel === h.hardening.settings) continue; // 替换源，不独立安装
       const targetRel = hostTargetRel(host, rel);
       if (!fs.existsSync(path.join(target, targetRel))) add(false, `host ${host}: ${targetRel}`, t('doctor.fileMissing'));
     }
     // 能力缺口：没有 hooks / modelField 的宿主，相关保证只能是 advisory。
     if (!h.hooks) add(true, `guarantee ${host}`, t('doctor.guaranteeGap', { host, capability: 'hooks' }), '', { warn: true });
     if (h.agents && !h.agents.modelField) add(true, `guarantee ${host}`, t('doctor.guaranteeGap', { host, capability: 'model injection' }), '', { warn: true });
+
+    if (h.mcp && manifest?.mcp === true) {
+      let servers = {};
+      try {
+        servers = readMcpServers(target);
+      } catch (err) {
+        add(false, `mcp ${host}`, t('doctor.mcpDeclarationInvalid', { detail: err.message }));
+        continue;
+      }
+      const names = Object.keys(servers);
+      if (!names.length) continue;
+      const abs = path.join(target, h.mcp.file);
+      if (!fs.existsSync(abs)) {
+        add(false, `mcp ${host}`, t('doctor.mcpMissing', { path: h.mcp.file }));
+        continue;
+      }
+      let root;
+      try {
+        root = JSON.parse(fs.readFileSync(abs, 'utf8'));
+      } catch {
+        add(false, `mcp ${host}`, t('doctor.mcpInvalid', { path: h.mcp.file }));
+        continue;
+      }
+      const container = h.mcp.format === 'opencode' ? root?.mcp : root?.mcpServers;
+      if (!container || typeof container !== 'object') {
+        add(false, `mcp ${host}`, t('doctor.mcpContainer', { path: h.mcp.file }));
+        continue;
+      }
+      const missing = names.filter((name) => !(name in container));
+      if (missing.length) add(false, `mcp ${host}`, t('doctor.mcpServersMissing', { servers: missing.join(', ') }));
+      else add(true, `mcp ${host}`, `${h.mcp.file}: ${names.join(', ')}`);
+    }
+
+    // Hook 接线：以 .agents/hooks/gates.json 为期望值，比对宿主配置里的托管条目。
+    if (h.hooks?.events) {
+      const spec = readHookSpec(target);
+      const rel = hostTargetRel(host, h.hooks.file);
+      if (!spec) {
+        add(false, `hooks ${host}`, t('doctor.hooksSpecInvalid', { path: '.agents/hooks/gates.json' }));
+      } else if (!fs.existsSync(path.join(target, rel))) {
+        add(false, `hooks ${host}`, t('doctor.hooksFileMissing', { path: rel }));
+      } else {
+        try {
+          const root = JSON.parse(fs.readFileSync(path.join(target, rel), 'utf8'));
+          const drift = findHookDrift(root, spec, h.hooks.events);
+          if (drift.missing.length) {
+            add(false, `hooks ${host}`, t('doctor.hooksMissing', { path: rel, list: drift.missing.join(', ') }));
+          } else if (drift.extra.length) {
+            add(false, `hooks ${host}`, t('doctor.hooksExtra', { path: rel, list: drift.extra.join(', ') }));
+          } else {
+            add(true, `hooks ${host}`, `${rel}: ${drift.expected}`);
+          }
+        } catch {
+          add(false, `hooks ${host}`, t('doctor.hooksInvalid', { path: rel }));
+        }
+      }
+    }
+
+    // 权限编译：声明了但宿主没有 permissions 能力时给 advisory，不静默丢弃。
+    if (permissionDeclared && !h.permissions) {
+      add(true, `guarantee ${host}`, t('doctor.guaranteeGap', { host, capability: 'permissions' }), '', { warn: true });
+    }
+    if (h.permissions && permissionSpec) {
+      const permRel = hostTargetRel(host, h.permissions.file || h.hooks?.file || 'settings.json');
+      const compiled = compilePermissions(permissionSpec, h.permissions, {
+        stack: manifest?.stack || 'empty',
+        hardened: Boolean(manifest?.hardened),
+      });
+      if (compiled.unsupported.length) {
+        const list = compiled.unsupported.map((item) => `${item.tool}:${item.pat}`).join(', ');
+        add(true, `permissions ${host} unsupported`, t('doctor.permissionsUnsupported', { host, list }), '', { warn: true });
+      }
+      if (!fs.existsSync(path.join(target, permRel))) {
+        add(false, `permissions ${host}`, t('doctor.hooksFileMissing', { path: permRel }));
+      } else {
+        try {
+          const root = JSON.parse(fs.readFileSync(path.join(target, permRel), 'utf8'));
+          const drift = permissionDrift(root, compiled, h.permissions);
+          if (drift.missing.length || drift.extra.length) {
+            const parts = [];
+            if (drift.missing.length) parts.push(`missing ${drift.missing.join(', ')}`);
+            if (drift.extra.length) parts.push(`extra ${drift.extra.join(', ')}`);
+            add(false, `permissions ${host}`, t('doctor.permissionsDrift', { path: permRel, detail: parts.join('; ') }));
+          } else {
+            add(true, `permissions ${host}`, `${permRel}: ${compiled.allow.length}/${compiled.deny.length}/${compiled.ask.length}`);
+          }
+        } catch {
+          add(false, `permissions ${host}`, t('doctor.hooksInvalid', { path: permRel }));
+        }
+      }
+    }
+  }
+
+  // 组合式 profile：profile.json 是机器可读的组合凭证，必须与 manifest 一致。
+  const surfaces = manifest?.surfaces || [];
+  if (surfaces.length) {
+    const rel = '.agents/config/profile.json';
+    const abs = path.join(target, rel);
+    if (!fs.existsSync(abs)) {
+      add(false, 'profile composition', t('doctor.profileMissing', { path: rel }));
+    } else {
+      try {
+        const profile = JSON.parse(fs.readFileSync(abs, 'utf8'));
+        const same = profile.stack === (manifest.stack || 'empty')
+          && JSON.stringify(profile.surfaces || []) === JSON.stringify(surfaces);
+        if (same) add(true, 'profile composition', `${manifest.stack}+${surfaces.join('+')}`);
+        else add(false, 'profile composition', t('doctor.profileMismatch', { path: rel }));
+      } catch {
+        add(false, 'profile composition', t('doctor.profileInvalid', { path: rel }));
+      }
+    }
   }
 
   // 安装档位与交付面：lean 允许没有 CI；standard/enterprise 应有可运行 CI。
@@ -66,7 +210,36 @@ export function doctorCommand({ args, t }) {
     if (ci.length) add(true, 'ci', ci.join(', '));
     else add(true, 'ci', t('doctor.ciMissing', { paths: 'azure-pipelines.yml / .github/workflows/ci.yml' }), '', { warn: true });
   }
-  if (manifest?.hardened) add(true, 'hardened', t('doctor.hardenedHint'), '', { warn: true });
+  // enterprise：展示档位、实际加固姿态与缺口，并核对证明链 / 策略检查。
+  const enterprise = manifest?.hardened
+    ? computeEnterprise({ target, hosts: manifest.hosts || [], hardened: true })
+    : null;
+  if (enterprise) {
+    const matrix = Object.entries(enterprise.hosts).map(([name, level]) => `${name}:${level}`).join(', ');
+    add(true, 'enterprise', t('doctor.enterprise', {
+      tier,
+      posture: enterprise.posture,
+      hosts: matrix,
+      gaps: enterprise.gaps.length ? enterprise.gaps.join(', ') : '-',
+    }));
+    if (enterprise.gaps.length) {
+      add(true, 'enterprise gaps', t('doctor.enterpriseGaps', { gaps: enterprise.gaps.join(', ') }), '', { warn: true });
+    }
+    const missingProof = PROOF_CHAIN_FILES.filter((rel) => !fs.existsSync(path.join(target, rel)));
+    if (missingProof.length) add(false, 'enterprise proof-chain', t('doctor.enterpriseProof', { list: missingProof.join(', ') }));
+    else add(true, 'enterprise proof-chain', t('doctor.enterpriseProofOk'));
+    const missingPolicy = [];
+    if (!GIT_HOOKS.every((name) => fs.existsSync(path.join(target, '.githooks', name)))) missingPolicy.push('.githooks/*');
+    if (!['azure-pipelines.yml', '.github/workflows/ci.yml'].some((rel) => fs.existsSync(path.join(target, rel)))) missingPolicy.push('CI');
+    if (!enterprise.policyChecks.includes('permissions')) missingPolicy.push('permissions');
+    if (missingPolicy.length) add(false, 'enterprise policy', t('doctor.enterprisePolicy', { list: missingPolicy.join(', ') }));
+    else add(true, 'enterprise policy', t('doctor.enterprisePolicyOk', { list: enterprise.policyChecks.join(', ') }));
+    if (manifest.enterprise && JSON.stringify(manifest.enterprise) !== JSON.stringify(enterprise)) {
+      add(true, 'enterprise record', t('doctor.enterpriseStale'), '', { warn: true });
+    }
+  } else if (manifest?.hardened) {
+    add(true, 'hardened', t('doctor.hardenedHint'), '', { warn: true });
+  }
 
   // 模型配置是用户本地状态：存在则校验，缺失不失败（旧安装保持 doctor 全过）。
   const localModels = readLocalModelRoles(target);
@@ -101,26 +274,59 @@ export function doctorCommand({ args, t }) {
   add(nodeMajor >= 22, 'node >= 22', process.version);
 
   let failed = 0;
+  let deep = null;
   for (const c of checks) {
     if (c.ok) {
-      const mark = c.warn ? '!' : '✓';
-      console.log(`${mark} ${c.name}${c.detail ? ` — ${c.detail}` : ''}`);
+      if (!asJson) {
+        const mark = c.warn ? '!' : '✓';
+        console.log(`${mark} ${c.name}${c.detail ? ` — ${c.detail}` : ''}`);
+      }
     } else {
       failed += 1;
-      console.log(`✗ ${c.name}${c.detail ? ` — ${c.detail}` : ''}`);
-      if (c.fix) console.log(`  → ${c.fix}`);
+      if (!asJson) {
+        console.log(`✗ ${c.name}${c.detail ? ` — ${c.detail}` : ''}`);
+        if (c.fix) console.log(`  → ${c.fix}`);
+      }
     }
   }
-  console.log(failed ? t('doctor.fail', { failed, total: checks.length }) : t('doctor.ok', { total: checks.length }));
+  if (!asJson) {
+    console.log(failed ? t('doctor.fail', { failed, total: checks.length }) : t('doctor.ok', { total: checks.length }));
+  }
 
   if (args.deep) {
     const gates = path.join(target, '.agents/scripts/check-local-gates.mjs');
     if (fs.existsSync(gates)) {
-      console.log(`\n$ node ${gates}`);
-      const r = spawnSync(process.execPath, [gates, ...(args.fix ? ['--fix'] : [])], { cwd: target, stdio: 'inherit' });
-      if (r.status !== 0) failed += 1;
+      const deepArgs = args.fix ? ['--fix'] : [];
+      if (asJson) {
+        const r = spawnSync(process.execPath, [gates, ...deepArgs], { cwd: target, encoding: 'utf8' });
+        deep = { status: r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
+        if (r.status !== 0) failed += 1;
+      } else {
+        console.log(`\n$ node ${gates}`);
+        const r = spawnSync(process.execPath, [gates, ...deepArgs], { cwd: target, stdio: 'inherit' });
+        if (r.status !== 0) failed += 1;
+      }
     }
   }
 
+  if (asJson) {
+    console.log(JSON.stringify({
+      target,
+      ok: failed === 0,
+      summary: {
+        total: checks.length,
+        failed,
+        warnings: checks.filter((c) => c.warn).length,
+      },
+      checks: checks.map((c) => ({
+        ok: c.ok,
+        name: c.name,
+        detail: c.detail || '',
+        fix: c.fix || '',
+        warn: Boolean(c.warn),
+      })),
+      deep,
+    }, null, 2));
+  }
   return failed ? 1 : 0;
 }

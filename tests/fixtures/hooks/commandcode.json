@@ -1,0 +1,24 @@
+[
+  {
+    "event": "PreToolUse",
+    "matcher": "WRITE|EDIT",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "node \"%COMMANDCODE_PROJECT_DIR%/.agents/hooks/pre-write-check.cjs\"",
+        "timeout": 120
+      }
+    ]
+  },
+  {
+    "event": "PreToolUse",
+    "matcher": "SHELL",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "node \"%COMMANDCODE_PROJECT_DIR%/.agents/hooks/pre-shell-check.cjs\"",
+        "timeout": 600
+      }
+    ]
+  }
+]

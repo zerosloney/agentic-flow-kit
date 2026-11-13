@@ -10,7 +10,20 @@ export const HOSTS = {
     commands: { dir: 'commands', ext: '.md' },
     agents: { dir: 'agents', ext: '.md', modelField: null, inheritValue: null },
     skills: { mode: 'index' },
-    hooks: { file: 'hooks.json', format: 'json' },
+    // Trae 目前只接线命令门禁（无写前门），迁移时保持既有语义。
+    hooks: {
+      file: 'hooks.json',
+      format: 'json',
+      events: {
+        event: 'PreToolUse',
+        container: 'hooks',
+        matchers: { shell: 'RunCommand|Bash|Shell|Terminal' },
+        tools: ['shell'],
+        timeouts: { shell: 600 },
+        command: { form: 'relative', template: 'node {script}' },
+      },
+    },
+    hardening: { level: 'hooks' },
     modelProbe: { configs: [], env: [], cli: [] },
   },
   codebuddy: {
@@ -21,7 +34,18 @@ export const HOSTS = {
     agents: { dir: 'agents', ext: '.md', modelField: null, inheritValue: null },
     // CodeBuddy 官方文档不可得；本地既有 .codebuddy/skills/<name>/SKILL.md 约定
     skills: { mode: 'native', dir: 'skills', file: 'SKILL.md' },
-    hooks: { file: 'settings.json', format: 'json' },
+    hooks: {
+      file: 'settings.json',
+      format: 'json',
+      events: {
+        event: 'PreToolUse',
+        container: 'hooks',
+        matchers: { write: 'Write|Edit|MultiEdit', shell: 'Bash|PowerShell|RunCommand|Shell|Terminal' },
+        timeouts: { write: 120, shell: 800 },
+        command: { form: 'env', template: 'node "$CODEBUDDY_PROJECT_DIR"/{script}' },
+      },
+    },
+    hardening: { level: 'hooks' },
     modelProbe: { configs: ['~/.codebuddy/settings.json'], env: ['CODEBUDDY_MODEL'], cli: [] },
   },
   claude: {
@@ -29,10 +53,27 @@ export const HOSTS = {
     label: 'Claude Code',
     tracked: false,
     rootMemory: 'CLAUDE.md',
+    // 根目录信号：Claude Code 的项目配置与记忆文件
+    detect: ['.mcp.json', 'CLAUDE.md'],
     commands: { dir: 'commands', ext: '.md' },
     agents: { dir: 'agents', ext: '.md', modelField: 'model', inheritValue: 'inherit' },
     skills: { mode: 'native', dir: 'skills', file: 'SKILL.md' },
-    hooks: { file: 'settings.json', format: 'json' },
+    hooks: {
+      file: 'settings.json',
+      format: 'json',
+      events: {
+        event: 'PreToolUse',
+        container: 'hooks',
+        matchers: { write: 'Write|Edit|MultiEdit', shell: 'Bash' },
+        timeouts: { write: 120, shell: 800 },
+        command: { form: 'env', template: 'node "$CLAUDE_PROJECT_DIR"/{script}' },
+      },
+    },
+    // Claude Code 项目级 MCP 配置（根目录 .mcp.json，mcpServers 容器）
+    permissions: { container: 'permissions', syntax: 'colon', tool: 'Bash', tools: ['shell', 'read', 'web'] },
+    // enterprise 档：managed-only 设置模板替换 settings.json，权限数组仍由 gates.json 编译
+    hardening: { level: 'managed', settings: 'settings.hardened.json' },
+    mcp: { file: '.mcp.json', format: 'claude', scope: 'project' },
     modelProbe: {
       configs: ['~/.claude/settings.json'],
       env: ['ANTHROPIC_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL'],
@@ -43,22 +84,41 @@ export const HOSTS = {
     dir: '.opencode',
     label: 'OpenCode',
     tracked: false,
+    detect: ['opencode.json', 'opencode.jsonc'],
     commands: { dir: 'commands', ext: '.md' },
     // 省略 model = 继承父级；不写 inherit 值
     agents: { dir: 'agents', ext: '.md', modelField: 'model', inheritValue: null },
     skills: { mode: 'native', dir: 'skills', file: 'SKILL.md' },
     hooks: null,
+    // OpenCode 根配置使用 mcp 容器，local 命令是数组、env 字段名为 environment
+    mcp: { file: 'opencode.json', format: 'opencode', scope: 'project' },
+    hardening: { level: 'none' },
     modelProbe: { configs: ['~/.config/opencode/opencode.json'], env: ['OPENCODE_MODEL'], cli: [] },
   },
   qwen: {
     dir: '.qwen',
     label: 'Qwen Code',
     tracked: false,
+    detect: ['QWEN.md'],
     commands: { dir: 'commands', ext: '.md' },
     agents: { dir: 'agents', ext: '.md', modelField: 'model', inheritValue: 'inherit' },
     // Qwen 原生发现 .agents/skills；不复制宿主技能副本
     skills: { mode: 'shared' },
-    hooks: { file: 'settings.json', format: 'json' },
+    hooks: {
+      file: 'settings.json',
+      format: 'json',
+      events: {
+        event: 'PreToolUse',
+        container: 'hooks',
+        matchers: { write: 'write_file|edit|replace|multiedit', shell: 'run_shell_command|shell' },
+        timeouts: { write: 120, shell: 800 },
+        command: { form: 'env', template: 'node "$QWEN_PROJECT_DIR"/{script}' },
+      },
+    },
+    // Qwen Code 在 .qwen/settings.json 使用 mcpServers 容器
+    permissions: { container: 'permissions', syntax: 'space', tool: 'Bash', tools: ['shell'], extraAllow: [{ tool: 'shell', pat: 'dir' }] },
+    hardening: { level: 'permissions' },
+    mcp: { file: '.qwen/settings.json', format: 'claude', scope: 'project' },
     modelProbe: { configs: ['~/.qwen/settings.json'], env: ['QWEN_MODEL'], cli: [] },
   },
   pi: {
@@ -70,6 +130,7 @@ export const HOSTS = {
     agents: { dir: 'agents', ext: '.md', modelField: 'model', inheritValue: null },
     skills: { mode: 'index' },
     hooks: null,
+    hardening: { level: 'none' },
     modelProbe: { configs: ['~/.pi/settings.json'], env: ['PI_MODEL'], cli: [] },
   },
   cline: {
@@ -81,6 +142,7 @@ export const HOSTS = {
     agents: { dir: 'agents', ext: '.yml', modelField: null, inheritValue: null },
     skills: { mode: 'index' },
     hooks: null,
+    hardening: { level: 'none' },
     modelProbe: { configs: [], env: [], cli: [] },
   },
   commandcode: {
@@ -91,7 +153,19 @@ export const HOSTS = {
     agents: { dir: 'agents', ext: '.md', modelField: 'model', inheritValue: 'inherit' },
     // Command Code 原生发现 .agents/skills；不复制宿主技能副本
     skills: { mode: 'shared' },
-    hooks: { file: 'settings.json', format: 'json' },
+    hooks: {
+      file: 'settings.json',
+      format: 'json',
+      events: {
+        event: 'PreToolUse',
+        container: 'hooks',
+        matchers: { write: 'WRITE|EDIT', shell: 'SHELL' },
+        timeouts: { write: 120, shell: 600 },
+        command: { form: 'env', template: 'node "%COMMANDCODE_PROJECT_DIR%/{script}"' },
+      },
+    },
+    permissions: { container: 'permissions', syntax: 'space', tool: 'Shell', tools: ['shell'], extraAllow: [{ tool: 'shell', pat: 'dir' }] },
+    hardening: { level: 'permissions' },
     modelProbe: {
       configs: ['~/.commandcode/settings.json'],
       env: ['COMMANDCODE_MODEL'],
@@ -106,7 +180,20 @@ export const HOSTS = {
     commands: { dir: 'commands', ext: '.md' },
     agents: { dir: 'agents', ext: '.md', modelField: null, inheritValue: null },
     skills: { mode: 'index' },
-    hooks: { file: 'settings.json', format: 'json' },
+    hooks: {
+      file: 'settings.json',
+      format: 'json',
+      events: {
+        event: 'PreToolUse',
+        container: 'hooks',
+        matchers: { write: 'Edit|Write|NotebookEdit', shell: 'Bash' },
+        timeouts: { write: 120, shell: 600 },
+        includeMeta: true,
+        command: { form: 'args', template: '${QODER_PROJECT_DIR}/{script}' },
+      },
+    },
+    permissions: { container: 'permissions', syntax: 'colon', tool: 'Bash', tools: ['shell'] },
+    hardening: { level: 'permissions' },
     modelProbe: { configs: ['~/.qoder/settings.json'], env: [], cli: [] },
   },
   zcode: {
@@ -116,12 +203,41 @@ export const HOSTS = {
     commands: null,
     agents: { dir: 'agents', ext: '.md', modelField: null, inheritValue: null },
     skills: { mode: 'index' },
-    hooks: { file: 'config.json', format: 'json' },
+    hooks: {
+      file: 'config.json',
+      format: 'json',
+      events: {
+        event: 'PreToolUse',
+        container: 'hooks.events',
+        matchers: { write: 'Edit|Write|MultiEdit', shell: 'Bash|RunCommand|Shell|Terminal|PowerShell' },
+        timeouts: { write: 60, shell: 600 },
+        rootDefaults: { enabled: true },
+        hookExtras: { enabled: true },
+        command: { form: 'relative', template: 'node {script}' },
+      },
+    },
+    hardening: { level: 'hooks' },
     modelProbe: { configs: ['~/.zcode/config.json'], env: [], cli: [] },
   },
 };
 
 export const HOST_NAMES = Object.keys(HOSTS);
+
+// 来源：builtin / user / project / cli。外部定义由 src/hosts/external.mjs 注册。
+export const HOST_SOURCES = new Map(HOST_NAMES.map((name) => [name, 'builtin']));
+
+export function registerHost(name, def, source = 'external') {
+  const key = String(name || '').trim().toLowerCase();
+  HOSTS[key] = def;
+  HOST_SOURCES.set(key, source);
+  if (!HOST_NAMES.includes(key)) HOST_NAMES.push(key);
+  return key;
+}
+
+export function hostSource(name) {
+  return HOST_SOURCES.get(String(name || '').trim().toLowerCase()) || 'builtin';
+}
+
 
 export function resolveHost(name) {
   const key = String(name || '').trim().toLowerCase();

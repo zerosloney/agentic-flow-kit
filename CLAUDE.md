@@ -22,6 +22,8 @@ node bin/flow-kit.mjs --help
 node bin/flow-kit.mjs install --agent claude --stack node --target <tmp>
 node bin/flow-kit.mjs add-host trae --target <tmp>
 node bin/flow-kit.mjs upgrade --target <tmp>
+node bin/flow-kit.mjs prune --target <tmp>
+node bin/flow-kit.mjs explain .claude/agents/implementer.md --target <tmp>
 node bin/flow-kit.mjs doctor --target <tmp>
 npm run doctor:self                       # 对当前仓库执行 doctor（需当前仓库已安装引擎）
 ```
@@ -36,6 +38,7 @@ npm run doctor:self                       # 对当前仓库执行 doctor（需�
 node tools/parity-report.mjs --project <project>
 node tools/extract-from-project.mjs --project <project> [--dry-run]
 node tools/make-en-host-overrides.mjs
+node tools/make-en-host-overrides.mjs --check   # CI：英文覆盖缺失/过期/孤儿
 ```
 
 ## 安装管线（核心）
@@ -49,27 +52,48 @@ node tools/make-en-host-overrides.mjs
 
 `buildPlan` 的顺序是理解安装结果的关键：
 
-1. 静态层按优先级入队：engine 10、profile 20、host 30、scaffold/git 40。
+1. 静态层按优先级入队：engine 10、profile 20、surface 21+（按声明顺序）、host 30、scaffold/git 40；存在 surface 时追加 `profile.json`（25）；宿主层之后生成 Hook 合并条目（31）与 MCP 合并条目（32）。
 2. 按 `targetRel` 应用语言覆盖（覆盖文件替换 `srcAbs`）→ 第一次去重。
 3. 从覆盖后的 `.agents/skills/<name>/SKILL.md` 读取 frontmatter，动态生成宿主技能面。
 4. 对生成项再应用一次语言覆盖 → 第二次去重（同一 `targetRel` 高优先级胜出）→ 类别过滤。
 
 `applyPlan` 的写盘语义：
 
-- 目标不存在 → 创建；目标哈希等于 manifest → 更新；被用户改过 → 冲突跳过；非本工具安装 → 跳过；`--force` 覆盖。
+- 目标不存在 → 创建；目标哈希等于 manifest → 更新；被用户改过 → 三方合并或冲突跳过；非本工具安装 → 跳过；`--force` 覆盖。
+- 文本直写文件的基线保存在 `.agents/.kit/baseline/<targetRel>`（默认 gitignore；`--no-baseline` 关闭，`--baseline` 重新开启）。升级时若用户改过且模板相对基线确有变化，以 baseline 为 base、磁盘为 ours、新模板为 theirs 调用 `git merge-file`：clean 自动写回并把基线更新为模板侧内容，conflict 写冲突标记、保留 manifest 旧哈希并计入 `conflict`。无基线、二进制或 git 不可用时回退为哈希冲突跳过。合并块 / MCP / hooks 配置不存基线（自身已有合并语义）。
 - `.gitattributes` / `.gitignore` 使用带标记的合并块，重复执行不重复追加。
-- manifest 的哈希记录的是**最终文本**：模板渲染、语言覆盖、模型注入都完成之后才计算。
+- manifest 的哈希记录的是**最终文本**：模板渲染、语言覆盖、模型注入都完成之后才计算；`manifest.baseline` / `baselineVersion` 记录基线状态，基线内容不参与哈希。
+- 派生工件（如 `workflow/INDEX.md`）生成后会重算哈希，并把被生成器改写的路径登记到 `manifest.derived`；`diff` 不对这些路径做静态模板比对。
+
+`adopt` 用于接管已有安装（含缺失 manifest 的半安装树）：元数据优先取 `engine.json` 的 `options.{hosts,stack,language}` 与 `createdAt`，其次既有 manifest、宿主探测与参数；语言在候选集中按“与磁盘逐文件匹配数”择优。`src/commands/adopt.mjs` 复用 `buildState` 与 `readPlanEntry`，只把渲染结果完全一致的文件写入 manifest；合并块只比较托管块（块外用户内容不影响接管）；`workflow/INDEX.md` 按现状收录并登记 `derived`；`.agents/notes/engine-map.md` 等纯生成物与运行态文件不进 manifest。已改动 / 缺失 / 未识别文件分别报告且不覆盖，`--dry-run` 零写入；无可接管文件且无既有 manifest 时退出 1。
+
+`diff` / `status` 复用 `buildPlan`、manifest 哈希与 `readInjectedModels`，只读输出 `unchanged` / `user-modified` / `kit-updated` / `orphan` / `missing`；不传 `--lang` 时跟随 manifest 语言。`prune` 复用同一套 orphan 分类：哈希与 manifest 一致才删，用户改过的保留并提示，`--force` 覆盖，删除后清理空目录；`prune --baseline` 额外清理 manifest 中已无对应文件的基线。`explain` 复用 `buildState` 与 `classifyEntry`，输出模板来源、语言覆盖、模型注入和哈希；语言覆盖会在 plan 条目上记录 `templateAbs` / `localeOverride`。
+
+所有命令共享 `--json` 与退出码契约（`src/cli/exit.mjs`）：`--json` 时 stdout 只允许最终单对象，人类进度走 stderr；`--strict` 把冲突/漂移变成退出码 1。码值：0 成功、1 冲突或严格模式漂移、2 用法、3 target/manifest 缺失、4 未知宿主、5 IO。新增错误类型时在 `exit.mjs` 登记 `err.code`，不要在命令里直接 `process.exit`。
 
 `add-host` 只写 `category: 'host'`，并保留已安装的 stack / language；`upgrade` 按 manifest 记录的宿主和语言重放。
+
+`install --auto-hosts` 通过 `src/hosts/detect.mjs` 只读探测宿主点目录与注册表声明的根级配置/记忆文件（如 `.mcp.json`、`opencode.json`、`QWEN.md`）；仅在未显式 `--agent` 时采用，探测为空报错。探测结果只进入 `--json` 的 `detectedHosts`，不写 manifest；TUI 用同一结果预选宿主。
+
+`remove-host` / `uninstall` 同样以 manifest 哈希为安全闸：哈希一致的托管文件才删，用户改过的跳过并保留记录，`--force` 覆盖；删除后清理空目录。`remove-host` 只处理该宿主 `category: 'host'` 的文件和孤儿残留，根记忆文件（`rootMemory`，如 `CLAUDE.md`）视为用户文件、默认保留并停止托管；宿主集合变化后会用剩余宿主重渲染 engine.json / AGENTS.md / `.gitignore` 等宿主相关文件（仅当当前哈希仍等于 manifest）。`uninstall` 只移除带标记的合并块（保留块外用户内容，文件变空才删除），默认保留根记忆文件与用户改过的文件，全部清理完成才删除 manifest。
 
 ## 宿主能力注册表
 
 `src/hosts/registry.mjs` 是宿主能力的单一来源，不要在 `plan.mjs` / `doctor.mjs` 里为某个宿主写硬编码分支。字段包括：
 
 - `dir`、`rootMemory`：`hostTargetRel()` 负责把宿主模板相对路径映射到 `<dir>/...`，根记忆文件映射到项目根。
-- `commands` / `agents` / `skills` / `hooks`：声明目录、扩展名、技能模式和接线文件。
+- `commands` / `agents` / `skills` / `hooks` / `permissions` / `hardening`：声明目录、扩展名、技能模式和接线文件；`hooks.events` 描述 Hook 编译器需要的宿主 schema（事件、`matchers`、`command.form/template`、超时、容器路径、root/group/hook 扩展键）；`permissions` 描述权限编译能力（`syntax`、shell 工具名、支持的 `tools`、`extraAllow`）；`hardening.level`（managed / permissions / hooks / none）与可选 `settings` 驱动企业档矩阵。
 - `agents.modelField` / `agents.inheritValue`：该宿主子代理是否支持按角色指定模型，以及 `inherit` 的写法。
 - `modelProbe.configs/env/cli`：模型探测来源。
+- `templates`：外部宿主的静态模板目录（绝对路径）；内置宿主不设置，回退到 `templates/hosts/<host>`。
+
+外部宿主插件由 `src/hosts/external.mjs` 在命令分派前加载（`main.mjs` 调用 `loadExternalHosts`）：`~/.flow-kit/hosts/*.json` → `<target>/.flow-kit/hosts/*.json` → `--host-manifest <file>`，后加载者覆盖同名定义，注册进 `HOSTS` / `HOST_NAMES` 并记录 `HOST_SOURCES`（`hostSource()` 供 doctor / list-hosts 使用）。JSON 走手写校验（`schemas/host.schema.json` 是对外文档），非法定义抛 `HOST_MANIFEST` → 退出码 2，错误带字段名。模板默认取与 JSON 同名的兄弟目录，`templates` 可显式覆盖；`plan.mjs` / `doctor.mjs` 统一用 `h.templates || templates/hosts/<host>`，不要新增按宿主名分支。
+
+MCP 接线在 `src/install/mcp.mjs`：`templates/mcp/servers.json`（项目可用 `.flow-kit/mcp/servers.json` 替换）声明中性 server，`buildPlan` 为注册表中声明了 `mcp` 的宿主生成 `kind: 'merge-mcp'` 条目，`getText` 渲染时读取磁盘并按 `format`（`claude` → `mcpServers`，`opencode` → `mcp`）合并，只补缺失同名 server，不覆盖用户内容。MCP 条目不走 user-modified 冲突分支（合并语义本身安全），apply 记录 `manifest.mcpServers[targetRel] = [names]`；`manifest.mcp` 是布尔开关（`--no-mcp` / upgrade 重放）。Qwen 的 `.qwen/settings.json` 与静态宿主模板同路径，文件不存在时以静态模板渲染结果打底，避免丢掉 hooks/permissions。卸载 / remove-host / prune 以哈希为闸：未被改动则整文件删除，用户改过则只摘 manifest 记录的 server 名。`doctor` 校验缺失 / JSON 损坏 / 容器或 server 缺失。
+
+Hook 接线在 `src/install/hooks.mjs`：中性规格来自引擎模板 `.agents/hooks/gates.json` 的 `hooks` 数组（`event`、`tool: write|shell`、`script`、`timeout`），`buildPlan` 为注册表中声明了 `hooks.events` 的宿主生成 `kind: 'merge-host'` 条目（优先级 31，高于静态宿主条目 30），以宿主静态模板或有文件的磁盘内容为底稿，只替换指向 `.agents/hooks/*.cjs` 的托管条目，保留用户 hook、其它事件与 `permissions` 等键。同一文件同时有 MCP 时（Qwen `settings.json`）`addMcpEntries` 把 MCP 挂到该条目上组合执行，不再单独生成条目。没有 `hooks.events` 的宿主（opencode / pi / cline）继续安装静态模板，行为不变；规格 JSON 非法时回退静态模板。`doctor` 以 `gates.json` 为期望值按 `event|matcher|script` 比对，报告缺失 / 多余接线；golden 夹具在 `tests/fixtures/hooks/`。
+
+权限编译在 `src/install/permissions.mjs`（与 Hook 编译共用合并骨架）：`gates.json` 的 `allow` / `deny` / `ask`（`tool: shell|read|web`）按注册表 `permissions` 能力编译，`hardened` 段在 `--hardened` 时追加；宿主 `syntax` 决定 `Bash(cmd:*)` 或 `Bash(cmd *)`，栈白名单来自 `STACK_SHELL` 自动追加。`mergePermissionsIntoRoot` 精确替换三个数组（托管策略），保留 `defaultMode` / `disableBypassPermissionsMode` 等其它键；与 hooks / MCP 在同一个 `merge-host` 条目里组合执行。宿主不支持的 `tool` 类别不静默丢弃，编译结果带 `unsupported`；`doctor` 对账 `permissions <host>` 的缺失 / 多余项，并对无权限能力的宿主给 `guarantee` advisory。
 
 技能安装由 `skills.mode` 驱动：
 
@@ -100,6 +124,7 @@ node tools/make-en-host-overrides.mjs
 
 - `templates/engine/`：通用 `.agents/` 引擎。
 - `templates/profiles/<stack>/`：dotnet / node / typescript / rust / go / java / empty 的栈配置与 `AGENTS.md`。
+- `templates/surfaces/<surface>/`：组合式切面 `frontend` / `api` / `data`，按声明顺序以优先级 21+ 叠加在 stack（20）之上；同名路径后声明者覆盖。仅当存在 surface 时生成 `.agents/config/profile.json`；`src/install/profiles.mjs` 是闭集与解析的单一来源，`manifest.surfaces` 记录组合。
 - `templates/scaffold/`：`wiki/`、`workflow/` 数据资产骨架。
 - `templates/git/`：五钩子、`.gitattributes`、`.gitignore` 合并块。
 - `templates/hosts/<host>/`：静态宿主适配文件（command / agent / hooks）。
@@ -114,8 +139,8 @@ node tools/make-en-host-overrides.mjs
 
 - `lean`：不生成 CI（`azure-pipelines.yml` / `.github/workflows/ci.yml`），其余引擎面不变。
 - `standard`（默认）：生成 CI，CI 在 `verify --full` 后跑 advisory 的 agent-eval / memory-tier / pipeline-state。
-- `enterprise` / `--hardened`：宿主 `claude` 的 `settings.json` 换成 `templates/hosts/claude/settings.hardened.json`（sandbox、凭据读拒绝、MCP/权限 managed-only 键）。该文件**不**作为独立文件安装。
-- 档位与 `hardened` 写入 manifest；`doctor` 显示档位、CI 缺失（advisory）、宿主能力缺口（无 hooks / 无 modelField）和模型漂移。
+- `enterprise` / `--hardened`：按 registry `hardening.level` 分级加固——`managed`（claude）替换 `settings.hardened.json`（sandbox、MCP/权限 managed-only 键，权限数组由 `gates.json` 基线 + `hardened` 追加项编译覆盖，该文件**不**作为独立文件安装）；`permissions`（qwen / qoder / commandcode）编译 hardened 权限项；`hooks`（codebuddy / trae / zcode）只有命令门禁；`none`（opencode / pi / cline）无可配置面。`hardening.settings` 声明的文件作为宿主主配置替换源，不独立安装。
+- 档位与 `hardened` 写入 manifest；hardened 时额外写 `manifest.enterprise`（`posture`、每宿主级别、`gaps`、`proofChain`、`policyChecks`，默认档不写该字段）。`doctor` 显示档位、实际姿态、宿主矩阵与缺口（advisory），核对证明链（agent-eval / outcome-metrics / pipeline-state）与策略面（`.githooks` / CI / permissions），并继续报告 CI 缺失、宿主能力缺口（无 hooks / 无 modelField）、模型漂移和 manifest 漂移。
 
 ## AI-Native 治理面（引擎模板）
 

@@ -1,0 +1,13 @@
+[
+  {
+    "event": "PreToolUse",
+    "matcher": "RunCommand|Bash|Shell|Terminal",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "node .agents/hooks/pre-shell-check.cjs",
+        "timeout": 600
+      }
+    ]
+  }
+]

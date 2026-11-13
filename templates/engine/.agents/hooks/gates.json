@@ -1,33 +1,69 @@
 {
-  "_comment": "PreToolUse 命令门禁清单（单源）。mirrorOf 指向项目安全下限；exempt 为刻意缺省项，须写明原因，防静默漂移。宿主壳（.trae/hooks.json / .zcode/config.json / .codebuddy/settings.json）只接线指向 .agents/hooks/pre-shell-check.cjs，不复制脚本（2026-10-29 owner 单源指示）。",
+  "_comment": "权限与 Hook 接线单源。mirrorOf 指向项目安全下限；allow / deny / ask 编译到各宿主 permissions，hardened 为 enterprise 档追加项；exempt 为刻意缺省项，须写明原因，防静默漂移。宿主壳（.trae/hooks.json / .zcode/config.json / .codebuddy/settings.json）只接线指向 .agents/hooks/pre-shell-check.cjs，不复制脚本（2026-10-29 owner 单源指示）。权限条目按 tool 分类：shell（默认）/ read / web，由宿主能力矩阵决定是否支持。",
   "mirrorOf": ".agents/settings.json#/permissions",
   "exempt": [
-    {
-      "item": "dotnet ef",
-      "reason": "EF Migrations 禁令属 dotnet-ca 门禁域（提交时拦截）；此处重复会形成双源漂移"
-    },
-    {
-      "item": "git push --force",
-      "reason": "由 pre-shell-check.cjs 的 isForcePush() 做 token 化判定，覆盖面强于子串匹配（含 -f、+refspec、参数换序）"
-    },
-    {
-      "item": "git push -f",
-      "reason": "同上，并入 isForcePush() token 化判定"
-    },
     {
       "item": "commit 短旗标簇 / shell 展开（$、反引号）/ hooksPath 配置注入 / 一次性别名 / 大括号展开",
       "reason": "由 pre-shell-check.cjs isNoVerify 与 1b 块代码层执法（2026-11-09 评审多轮收敛：扁平域/物化/闭集枚举，子串清单不可表达；长旗标已另列 deny 行作子串面镜像）"
     }
   ],
+  "allow": [
+    { "tool": "shell", "pat": "npm run" },
+    { "tool": "shell", "pat": "npm install" },
+    { "tool": "shell", "pat": "npm ci" },
+    { "tool": "shell", "pat": "node" },
+    { "tool": "shell", "pat": "git status" },
+    { "tool": "shell", "pat": "git diff" },
+    { "tool": "shell", "pat": "git add" },
+    { "tool": "shell", "pat": "git commit" },
+    { "tool": "shell", "pat": "git log" },
+    { "tool": "shell", "pat": "git push" },
+    { "tool": "shell", "pat": "chrome" }
+  ],
   "deny": [
-    { "pat": "git reset --hard", "reason": "禁破坏性重置" },
-    { "pat": "drop database", "reason": "禁删库" },
-    { "pat": "--no-verify", "reason": "禁绕过 git 钩子（commit/merge/push 三处一律禁，AGENTS.md §2；与 isNoVerify 代码层互补：此行覆盖子串面兜底，代码层覆盖短旗标/展开/注入闭集）" }
+    { "tool": "shell", "pat": "dotnet ef", "reason": "EF Migrations 禁令的权限面镜像；dotnet-ca 在提交时另做策略拦截" },
+    { "tool": "shell", "pat": "git reset --hard", "reason": "禁破坏性重置" },
+    { "tool": "shell", "pat": "git push --force", "reason": "禁强推；pre-shell-check.cjs 的 isForcePush() 另做 token 化判定" },
+    { "tool": "shell", "pat": "git push -f", "reason": "禁强推；与 isForcePush() 代码层互补" },
+    { "tool": "shell", "pat": "drop database", "reason": "禁删库" },
+    { "tool": "shell", "pat": "* --no-verify*", "reason": "禁绕过 git 钩子（commit/merge/push 三处一律禁，AGENTS.md §2；与 isNoVerify 代码层互补：此行覆盖子串面兜底，代码层覆盖短旗标/展开/注入闭集）" }
   ],
   "ask": [
-    { "pat": "git checkout", "reason": "可能切换/丢弃工作区改动" },
-    { "pat": "git clean", "reason": "可能删除未跟踪文件" },
-    { "pat": "git branch -D", "reason": "可能删除未合并分支" },
-    { "pat": "rm -rf", "reason": "可能递归删除文件" }
+    { "tool": "shell", "pat": "git checkout", "reason": "可能切换/丢弃工作区改动" },
+    { "tool": "shell", "pat": "git clean", "reason": "可能删除未跟踪文件" },
+    { "tool": "shell", "pat": "git branch -D", "reason": "可能删除未合并分支" },
+    { "tool": "shell", "pat": "rm -rf", "reason": "可能递归删除文件" }
+  ],
+  "hardened": {
+    "deny": [
+      { "tool": "read", "pat": ".env*", "reason": "凭据文件" },
+      { "tool": "read", "pat": "./secrets/**", "reason": "本地密文目录" },
+      { "tool": "read", "pat": "~/.ssh/**", "reason": "SSH 私钥" },
+      { "tool": "read", "pat": "~/.aws/credentials", "reason": "云凭据" },
+      { "tool": "read", "pat": "~/.config/gcloud/**", "reason": "云凭据" },
+      { "tool": "web", "pat": "WebFetch", "reason": "禁任意网络读取" },
+      { "tool": "shell", "pat": "curl *", "reason": "禁任意网络读取" },
+      { "tool": "shell", "pat": "wget *", "reason": "禁任意网络读取" }
+    ]
+  },
+  "hooks": [
+    {
+      "id": "write-gates",
+      "event": "PreToolUse",
+      "tool": "write",
+      "script": ".agents/hooks/pre-write-check.cjs",
+      "timeout": 120,
+      "name": "write-gates",
+      "statusMessage": "写前门（执法面自保护 / 台账 append-only / 红线快照-恢复）"
+    },
+    {
+      "id": "shell-gates",
+      "event": "PreToolUse",
+      "tool": "shell",
+      "script": ".agents/hooks/pre-shell-check.cjs",
+      "timeout": 600,
+      "name": "shell-gates",
+      "statusMessage": "命令门禁（deny/ask 清单 + .githooks pre-commit/pre-push 前置）"
+    }
   ]
 }
