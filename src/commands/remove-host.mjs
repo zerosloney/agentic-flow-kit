@@ -9,6 +9,7 @@ import {
 } from '../install/apply.mjs';
 import { MANIFEST_REL, readManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
 import { stripMcpFile } from '../install/mcp.mjs';
+import { BASELINE_DIR } from '../install/baseline.mjs';
 import { HOSTS, HOST_NAMES } from '../hosts/registry.mjs';
 import { readInjectedModels } from '../models/resolve.mjs';
 import { makeT } from '../i18n.mjs';
@@ -414,6 +415,10 @@ export function uninstallCommand({ args, t }) {
       const manifestAbs = path.join(target, MANIFEST_REL);
       fs.rmSync(manifestAbs, { force: true });
       cleanEmptyDirs(target, manifestAbs);
+      // 完整卸载时基线只服务于本工具升级，一并清理（含用户内容，不能留在项目里）。
+      const baselineAbs = path.join(target, BASELINE_DIR);
+      fs.rmSync(baselineAbs, { recursive: true, force: true });
+      cleanEmptyDirs(target, baselineAbs);
       manifestRemoved = true;
     } else {
       // 保留用户改过的文件与其记录，供再次 uninstall --force 继续清理。

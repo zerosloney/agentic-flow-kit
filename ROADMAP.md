@@ -23,7 +23,7 @@
 | R1-3 | `remove-host` / `uninstall` | 1 | M | `src/commands/remove-host.mjs` | DONE · [#4](https://github.com/zerosloney/agentic-flow-kit/issues/4) |
 | R1-4 | `--json` 与退出码契约 | 1 | M | `src/cli/main.mjs`、各命令 | DONE · [#5](https://github.com/zerosloney/agentic-flow-kit/issues/5) |
 | R1-5 | `explain <targetRel>` 来源解释 | 1 | S | `src/commands/explain.mjs` | DONE · [#6](https://github.com/zerosloney/agentic-flow-kit/issues/6) |
-| R2-1 | 基线留存 + 三方合并 | 2 | L | `src/install/baseline.mjs`、`apply.mjs` | TODO · [#8](https://github.com/zerosloney/agentic-flow-kit/issues/8) |
+| R2-1 | 基线留存 + 三方合并 | 2 | L | `src/install/baseline.mjs`、`apply.mjs` | DONE · [#8](https://github.com/zerosloney/agentic-flow-kit/issues/8) |
 | R2-2 | `adopt` 接管已有安装 | 2 | M | `src/commands/adopt.mjs`、`tools/parity-report.mjs` | DONE · [#9](https://github.com/zerosloney/agentic-flow-kit/issues/9) |
 | R2-3 | 外部宿主插件 | 2 | M | `schemas/host.schema.json`、`registry.mjs` | DONE · [#10](https://github.com/zerosloney/agentic-flow-kit/issues/10) |
 | R2-4 | Hook 编译器 | 2 | L | 中性 hook 规格 + 宿主序列化器 | DONE · [#11](https://github.com/zerosloney/agentic-flow-kit/issues/11) |
@@ -108,13 +108,13 @@
 
 ### R2-1 基线留存 + 三方合并
 
-- **现状**：manifest 只存最终哈希，无法区分“用户改了哪里、模板改了哪里”；冲突整文件跳过。
+- **现状**：`src/install/baseline.mjs` 把文本直写文件的上次内容存到 `.agents/.kit/baseline/<targetRel>`（默认 gitignore、`--no-baseline` 关闭、`--baseline` 重启、upgrade 重放）；升级遇到用户改动且模板变化时用 `git merge-file` 三方合并：clean 写回并把基线更新为模板侧，conflict 写冲突标记、保留旧哈希、计入 `conflict`（`--strict` 退出 1）；二进制、无基线或 git 不可用回退哈希跳过。`manifest.baseline` / `baselineVersion` 记录状态且不参与哈希；`prune --baseline` 清理无主基线，`doctor` 报告基线数量与无主项。
 - **目标**：
   - 对文本文件保存上次安装的完整内容到 `.agents/.kit/baseline/`（默认 gitignore，可 `--no-baseline` 关闭）；
   - 升级时若用户有改动，调用 `git merge-file` 做三方合并（base = baseline，ours = 磁盘，theirs = 新模板）；
   - 无冲突自动合并；有冲突写冲突标记并计入 `conflict`；二进制/非文本回退为哈希跳过；
   - `prune --baseline` 清理无主基线。
-- **落点**：新增 `src/install/baseline.mjs`；改造 `apply.mjs` 的写入分支；manifest 增加 `baselineVersion`。
+- **落点**：`src/install/baseline.mjs`；`apply.mjs` 写入/冲突分支；manifest `baseline` / `baselineVersion`。
 - **验收**：用户改 A 段 + 模板改 B 段 → 自动合并；同段冲突 → 保留标记且 `--strict` 退出 1；基线不进 manifest 哈希。
 - **风险**：基线含用户内容，必须 gitignore、可关闭、可清理。规模 `L`。
 

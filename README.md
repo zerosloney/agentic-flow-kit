@@ -247,9 +247,13 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 
 - 目标文件不存在 → 创建。
 - 目标文件存在且哈希等于 manifest → 更新。
-- 目标文件存在但哈希不等于 manifest（装后被改）→ 冲突跳过；`--force` 覆盖。
+- 目标文件存在但哈希不等于 manifest（装后被改）：
+  - 有基线且模板确有变化 → 以基线为 base、磁盘为 ours、新模板为 theirs 调用 `git merge-file` 三方合并；无冲突自动写回，冲突写冲突标记并计入 `conflict`（`--strict` 退出 1）。
+  - 无基线、二进制或模板未变 → 冲突跳过；`--force` 覆盖。
 - 目标文件存在且不在 manifest（非本工具安装）→ 跳过；`--force` 覆盖。
 - `.gitattributes` / `.gitignore` 用带标记的合并块，重复执行不会重复追加。
+
+基线保存在 `.agents/.kit/baseline/`，内容为上次安装的文本，默认被 `.gitignore` 忽略；`--no-baseline` 关闭，`--baseline` 可在旧安装上重新开启，`upgrade` 重放 manifest 中的选择。基线不参与 manifest 哈希；`prune --baseline` 清理无主基线，`doctor` 报告基线与无主项。
 
 ## 语言
 

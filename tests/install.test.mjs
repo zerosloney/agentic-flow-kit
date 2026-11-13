@@ -98,7 +98,8 @@ test('upgrade conflicts on a modified managed file and --force overwrites', () =
 
   const r2 = run(['upgrade', '--target', '.'], dir);
   assert.equal(r2.status, 0, r2.stderr);
-  assert.match(r2.stdout, /conflict|冲突/);
+  // 模板侧未变：升级保留用户修改，不再整文件报冲突。
+  assert.match(r2.stdout, /保留用户修改/);
   assert.ok(fs.readFileSync(file, 'utf8').includes('<!-- user edit -->'));
   assert.equal(JSON.parse(read(dir, '.agents/install-manifest.json')).stack, 'node', 'upgrade must preserve the installed stack');
 

@@ -59,14 +59,15 @@ node tools/make-en-host-overrides.mjs --check   # CI：英文覆盖缺失/过期
 
 `applyPlan` 的写盘语义：
 
-- 目标不存在 → 创建；目标哈希等于 manifest → 更新；被用户改过 → 冲突跳过；非本工具安装 → 跳过；`--force` 覆盖。
+- 目标不存在 → 创建；目标哈希等于 manifest → 更新；被用户改过 → 三方合并或冲突跳过；非本工具安装 → 跳过；`--force` 覆盖。
+- 文本直写文件的基线保存在 `.agents/.kit/baseline/<targetRel>`（默认 gitignore；`--no-baseline` 关闭，`--baseline` 重新开启）。升级时若用户改过且模板相对基线确有变化，以 baseline 为 base、磁盘为 ours、新模板为 theirs 调用 `git merge-file`：clean 自动写回并把基线更新为模板侧内容，conflict 写冲突标记、保留 manifest 旧哈希并计入 `conflict`。无基线、二进制或 git 不可用时回退为哈希冲突跳过。合并块 / MCP / hooks 配置不存基线（自身已有合并语义）。
 - `.gitattributes` / `.gitignore` 使用带标记的合并块，重复执行不重复追加。
-- manifest 的哈希记录的是**最终文本**：模板渲染、语言覆盖、模型注入都完成之后才计算。
+- manifest 的哈希记录的是**最终文本**：模板渲染、语言覆盖、模型注入都完成之后才计算；`manifest.baseline` / `baselineVersion` 记录基线状态，基线内容不参与哈希。
 - 派生工件（如 `workflow/INDEX.md`）生成后会重算哈希，并把被生成器改写的路径登记到 `manifest.derived`；`diff` 不对这些路径做静态模板比对。
 
 `adopt` 用于接管已有安装（含缺失 manifest 的半安装树）：元数据优先取 `engine.json` 的 `options.{hosts,stack,language}` 与 `createdAt`，其次既有 manifest、宿主探测与参数；语言在候选集中按“与磁盘逐文件匹配数”择优。`src/commands/adopt.mjs` 复用 `buildState` 与 `readPlanEntry`，只把渲染结果完全一致的文件写入 manifest；合并块只比较托管块（块外用户内容不影响接管）；`workflow/INDEX.md` 按现状收录并登记 `derived`；`.agents/notes/engine-map.md` 等纯生成物与运行态文件不进 manifest。已改动 / 缺失 / 未识别文件分别报告且不覆盖，`--dry-run` 零写入；无可接管文件且无既有 manifest 时退出 1。
 
-`diff` / `status` 复用 `buildPlan`、manifest 哈希与 `readInjectedModels`，只读输出 `unchanged` / `user-modified` / `kit-updated` / `orphan` / `missing`；不传 `--lang` 时跟随 manifest 语言。`prune` 复用同一套 orphan 分类：哈希与 manifest 一致才删，用户改过的保留并提示，`--force` 覆盖，删除后清理空目录。`explain` 复用 `buildState` 与 `classifyEntry`，输出模板来源、语言覆盖、模型注入和哈希；语言覆盖会在 plan 条目上记录 `templateAbs` / `localeOverride`。
+`diff` / `status` 复用 `buildPlan`、manifest 哈希与 `readInjectedModels`，只读输出 `unchanged` / `user-modified` / `kit-updated` / `orphan` / `missing`；不传 `--lang` 时跟随 manifest 语言。`prune` 复用同一套 orphan 分类：哈希与 manifest 一致才删，用户改过的保留并提示，`--force` 覆盖，删除后清理空目录；`prune --baseline` 额外清理 manifest 中已无对应文件的基线。`explain` 复用 `buildState` 与 `classifyEntry`，输出模板来源、语言覆盖、模型注入和哈希；语言覆盖会在 plan 条目上记录 `templateAbs` / `localeOverride`。
 
 所有命令共享 `--json` 与退出码契约（`src/cli/exit.mjs`）：`--json` 时 stdout 只允许最终单对象，人类进度走 stderr；`--strict` 把冲突/漂移变成退出码 1。码值：0 成功、1 冲突或严格模式漂移、2 用法、3 target/manifest 缺失、4 未知宿主、5 IO。新增错误类型时在 `exit.mjs` 登记 `err.code`，不要在命令里直接 `process.exit`。
 

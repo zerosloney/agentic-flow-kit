@@ -5,6 +5,7 @@ import { readManifest, writeManifest } from '../install/manifest.mjs';
 import { makeT } from '../i18n.mjs';
 import { resolveTarget } from './install.mjs';
 import { buildDiff } from './diff.mjs';
+import { pruneBaselines } from '../install/baseline.mjs';
 
 // 删除空目录，向上冒泡到 target 根为止；遇到非空目录或根目录即停止。
 export function cleanEmptyDirs(target, absFile) {
@@ -46,10 +47,10 @@ export function pruneCommand({ args, t }) {
   const items = [];
 
   // --strict：保留用户修改的孤儿视为失败（未清理干净）。
-  const finish = (deleted, cleaned, skipped) => {
+  const finish = (deleted, cleaned, skipped, baselines) => {
     if (asJson) {
       console.log(JSON.stringify({
-        target, dryRun, deleted, cleaned, skipped, items,
+        target, dryRun, deleted, cleaned, skipped, baselines, items,
       }, null, 2));
     } else {
       print(tt('prune.summary', { deleted, cleaned, skipped }));
@@ -59,10 +60,7 @@ export function pruneCommand({ args, t }) {
 
   print(tt('prune.title', { target }));
   if (dryRun) print(tt('prune.dryRun'));
-  if (!orphans.length) {
-    print(tt('prune.none'));
-    return finish(0, 0, 0);
-  }
+  if (!orphans.length) print(tt('prune.none'));
 
   const nextFiles = { ...(manifest.files || {}) };
   let deleted = 0;
@@ -99,9 +97,20 @@ export function pruneCommand({ args, t }) {
     print(tt('prune.delete', { path: item.targetRel }));
   }
 
+  let baselines = 0;
+  if (flag(args, 'baseline')) {
+    const removed = pruneBaselines(target, new Set(Object.keys(nextFiles)), { dryRun });
+    baselines = removed.length;
+    for (const rel of removed) {
+      items.push({ path: rel, action: 'baseline-delete' });
+      print(tt('prune.baseline', { path: rel }));
+    }
+    print(tt('prune.baselineSummary', { count: baselines }));
+  }
+
   if (!dryRun && changed) {
     const derived = (manifest.derived || []).filter((rel) => nextFiles[rel]);
     writeManifest(target, { ...manifest, files: nextFiles, derived });
   }
-  return finish(deleted, cleaned, skipped);
+  return finish(deleted, cleaned, skipped, baselines);
 }

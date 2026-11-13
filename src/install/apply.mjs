@@ -3,6 +3,7 @@ import path from 'node:path';
 import { render } from '../render/tokens.mjs';
 import { setField } from './frontmatter.mjs';
 import { sha256Text } from './manifest.mjs';
+import { isBinaryPath, mergeThreeWay, readBaseline, writeBaseline } from './baseline.mjs';
 
 export const GITATTR_BEGIN = '# >>> agentic-flow-kit gitattributes';
 export const GITATTR_END = '# <<< agentic-flow-kit gitattributes';
@@ -95,8 +96,9 @@ export function stripMergeBlock(text, begin, end) {
   return text.slice(0, start) + text.slice(stop);
 }
 
-export function applyPlan({ plan, vars, manifest, dryRun, force, log }) {
+export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline = false, benignUnchanged = false }) {
   const stats = { create: 0, update: 0, skip: 0, conflict: 0, merge: 0 };
+  const target = plan.target;
   const nextFiles = { ...(manifest.files || {}) };
   const nextMcp = { ...(manifest.mcp || {}) };
   const writes = [];
@@ -117,7 +119,7 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log }) {
         log('skip', `${entry.targetRel}（已是最新）`);
         continue;
       }
-      writes.push({ abs, text: merged, targetRel: entry.targetRel });
+      writes.push({ abs, text: merged, targetRel: entry.targetRel, kind: entry.kind });
       stats.merge += 1;
       log(exists ? 'update' : 'create', `${entry.targetRel}（合并块）`);
       continue;
@@ -142,30 +144,67 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log }) {
         log('skip', `${entry.targetRel}（${entry.kind === 'merge-hooks' ? 'Hook' : 'MCP'} 已是最新）`);
         continue;
       }
-      writes.push({ abs, text, targetRel: entry.targetRel });
+      writes.push({ abs, text, targetRel: entry.targetRel, kind: entry.kind });
       stats.merge += 1;
       log(exists ? 'update' : 'create', entry.targetRel);
       continue;
     }
 
     if (!exists) {
-      writes.push({ abs, text, targetRel: entry.targetRel });
+      writes.push({ abs, text, targetRel: entry.targetRel, kind: entry.kind });
       stats.create += 1;
       log('create', entry.targetRel);
       continue;
     }
 
     if (force || (managedHash && managedHash === currentHash)) {
-      writes.push({ abs, text, targetRel: entry.targetRel });
+      writes.push({ abs, text, targetRel: entry.targetRel, kind: entry.kind });
       stats.update += 1;
       log('update', entry.targetRel);
       continue;
     }
 
     if (managedHash && managedHash !== currentHash) {
+      const rel = entry.targetRel;
+      // 三方合并：baseline 为 base、磁盘为 ours、新模板为 theirs。
+      // 仅文本文件、且模板相对基线确有变化时尝试；git 不可用或二进制回退旧语义。
+      if (baseline && !isBinaryPath(rel)) {
+        const base = readBaseline(target, rel);
+        if (base != null && base === text && benignUnchanged) {
+          // 升级时模板侧没变：保留用户改动，不算冲突。
+          stats.skip += 1;
+          log('skip', `${rel}（模板未变，保留用户修改）`);
+          continue;
+        }
+        if (base != null && base !== text) {
+          const merged = mergeThreeWay({ base, ours: readText(abs), theirs: text });
+          if (merged.status === 'clean') {
+            // manifest 哈希记录模板侧文本；合并结果含用户内容，不刷新哈希。
+            writes.push({
+              abs,
+              text: merged.text,
+              targetRel: rel,
+              kind: entry.kind,
+              baselineText: text,
+              templateText: text,
+            });
+            stats.merge += 1;
+            log('merge', `${rel}（三方合并）`);
+            continue;
+          }
+          if (merged.status === 'conflict') {
+            // 冲突标记写入磁盘供用户处理；manifest 保留旧哈希，下次仍视为未解决。
+            writes.push({ abs, text: merged.text, targetRel: rel, kind: entry.kind, baselineText: null, conflict: true });
+            stats.conflict += 1;
+            conflicts.push(rel);
+            log('conflict', `${rel}（三方合并冲突，已写入冲突标记；--force 可覆盖）`);
+            continue;
+          }
+        }
+      }
       stats.conflict += 1;
-      conflicts.push(entry.targetRel);
-      log('conflict', `${entry.targetRel}（已安装后被修改，跳过；--force 可覆盖）`);
+      conflicts.push(rel);
+      log('conflict', `${rel}（已安装后被修改，跳过；--force 可覆盖）`);
       continue;
     }
 
@@ -177,11 +216,29 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log }) {
     for (const w of writes) {
       fs.mkdirSync(path.dirname(w.abs), { recursive: true });
       fs.writeFileSync(w.abs, w.text, 'utf8');
-      nextFiles[w.targetRel] = sha256Text(w.text);
+      if (!w.conflict) nextFiles[w.targetRel] = sha256Text(w.templateText ?? w.text);
+    }
+    // 基线只保存文本直写结果：合并块 / MCP / hooks 配置有各自的合并语义，
+    // 冲突文件保留旧基线（下次升级继续视为未解决）。
+    if (baseline) {
+      for (const w of writes) {
+        if (w.conflict || (w.kind !== 'file' && w.kind !== 'generated')) continue;
+        const content = w.baselineText !== undefined ? w.baselineText : w.text;
+        if (content != null) writeBaseline(plan.target, w.targetRel, content);
+      }
     }
   }
 
-  return { stats, files: nextFiles, mcp: nextMcp, written: writes.map((w) => w.targetRel), conflicts };
+  return {
+    stats,
+    files: nextFiles,
+    mcp: nextMcp,
+    written: writes.map((w) => w.targetRel),
+    conflictPaths: writes.filter((w) => w.conflict).map((w) => w.targetRel),
+    // 合并/冲突文件的磁盘文本不等于 manifest 记录的模板哈希，安装器派生扫描不得重算。
+    skipRehash: writes.filter((w) => w.conflict || w.templateText != null).map((w) => w.targetRel),
+    conflicts,
+  };
 }
 
 export function summaryLine(stats, t) {

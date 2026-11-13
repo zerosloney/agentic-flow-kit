@@ -8,6 +8,7 @@ import { HOSTS, hostTargetRel, hostSource } from '../hosts/registry.mjs';
 import { listFiles, TEMPLATES } from '../install/plan.mjs';
 import { readMcpServers } from '../install/mcp.mjs';
 import { findHookDrift, readHookSpec } from '../install/hooks.mjs';
+import { listBaselines } from '../install/baseline.mjs';
 import { ROLE_NAMES, readInjectedModels, readLocalModelRoles } from '../models/resolve.mjs';
 import { resolveTarget } from './install.mjs';
 import { buildDiff } from './diff.mjs';
@@ -38,6 +39,21 @@ export function doctorCommand({ args, t }) {
   }
 
   checks.push(...doctorGit(target));
+
+  // 基线是升级三方合并的底稿：缺失属 advisory（旧安装仍可哈希跳过）。
+  if (manifest && (manifest.baseline === true || typeof manifest.baselineVersion === 'string')) {
+    const baselines = listBaselines(target);
+    if (!baselines.length) {
+      add(true, 'baseline', t('doctor.baselineMissing'), '', { warn: true });
+    } else {
+      add(true, 'baseline', t('doctor.baseline', { count: baselines.length, version: manifest.baselineVersion || '?' }));
+      const managed = new Set(Object.keys(manifest.files || {}));
+      const orphans = baselines.filter((rel) => !managed.has(rel));
+      if (orphans.length) {
+        add(true, 'baseline orphans', t('doctor.baselineOrphans', { count: orphans.length }), '', { warn: true });
+      }
+    }
+  }
 
   const attrPath = path.join(target, '.gitattributes');
   let attr = '';

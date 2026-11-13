@@ -11,6 +11,7 @@ import { buildVars } from '../render/tokens.mjs';
 import { HOST_NAMES, resolveHost } from '../hosts/registry.mjs';
 import { detectHosts } from '../hosts/detect.mjs';
 import { configureGit, isGitRepo } from '../git/config.mjs';
+import { writeBaseline } from '../install/baseline.mjs';
 import {
   parseModelFlags, readInjectedModels, resolveModels, summarizeModels, writeLocalModelRoles,
 } from '../models/resolve.mjs';
@@ -246,6 +247,11 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
     ? previous?.mcp !== false
     : (flag(args, 'no-mcp') ? false : previous?.mcp !== false);
 
+  // 基线默认开启；--no-baseline 关闭，--baseline 在旧安装上重新开启，upgrade 重放 manifest 选择。
+  const baselineEnabled = flag(args, 'no-baseline')
+    ? false
+    : (flag(args, 'baseline') || previous?.baseline !== false);
+
   const plan = buildPlan({
     target, hosts: planHosts, lang, stack, projectName, categories, models: models?.hosts, tier, hardened,
     mcp: mcpEnabled, surfaces,
@@ -286,6 +292,9 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
     manifest,
     dryRun,
     force,
+    baseline: baselineEnabled,
+    // upgrade 时模板侧未变（base === theirs）视为无冲突；install/add-host 保持旧冲突语义。
+    benignUnchanged: commandLabel === 'upgrade',
     log: (action, msg) => logger(action, msg, (done += 1), total),
   });
 
@@ -300,11 +309,17 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
     // 否则 manifest 记录的是生成前的文本，fresh install 会立刻显示为漂移。
     // 被生成器改写的文件登记到 derived，diff 不对其做静态模板比对。
     for (const rel of result.written || []) {
+      // 三方合并冲突/合并文件保留旧哈希，供 diff / doctor 继续提示未解决。
+      if ((result.skipRehash || []).includes(rel)) continue;
       try {
-        const nextHash = sha256Text(fs.readFileSync(path.join(target, rel), 'utf8'));
+        const text = fs.readFileSync(path.join(target, rel), 'utf8');
+        const nextHash = sha256Text(text);
         result.files[rel] = nextHash;
-        if (beforeDerived[rel] !== nextHash) derived.add(rel);
-        else derived.delete(rel);
+        if (beforeDerived[rel] !== nextHash) {
+          derived.add(rel);
+          // 派生工件在安装期重写，基线同步为最终文本，避免下次升级误判。
+          if (baselineEnabled) writeBaseline(target, rel, text);
+        } else derived.delete(rel);
       } catch {
         /* 生成器删除的文件不保留 manifest 记录 */
         delete result.files[rel];
@@ -334,6 +349,8 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
       hardened,
       mcp: mcpEnabled,
       mcpServers: result.mcp || {},
+      baseline: baselineEnabled,
+      baselineVersion: baselineEnabled ? KIT_VERSION : null,
       files: result.files,
     };
     writeManifest(target, next);
@@ -363,6 +380,7 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
       hosts: hostSet,
       detectedHosts,
       mcp: mcpEnabled,
+      baseline: baselineEnabled,
       models: models ? summarizeModels(models) : null,
       plan: { count: plan.entries.length },
       stats: result.stats,
