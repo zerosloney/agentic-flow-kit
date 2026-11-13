@@ -51,7 +51,7 @@ npx agentic-flow-kit doctor --target .
 | `diff` | 只读对比 manifest、磁盘与当前模板，分类 `unchanged` / `user-modified` / `kit-updated` / `orphan` / `missing`；支持 `--json`、`--all` |
 | `status` | 摘要输出安装档位、宿主、语言、栈与差异计数；支持 `--json` |
 | `explain <targetRel>` | 解释单个托管文件：类别、模板来源、语言覆盖、模型注入与 manifest/当前哈希 |
-| `doctor` | 校验 manifest、文件在位、git 配置、`.gitattributes`、五钩子、宿主接线、Node 版本；`--deep` 再跑 `check-local-gates.mjs`；manifest 漂移以 advisory 报告 |
+| `doctor` | 校验 manifest、文件在位、git 配置、`.gitattributes`、五钩子、宿主接线、Node 版本；`--deep` 再跑 `check-local-gates.mjs`；`--attest [--out <file>]` 生成安装证明链；manifest 漂移以 advisory 报告 |
 | `list-hosts` | 列出支持的宿主 |
 | `workspace init --repos <dir>...` | 在多仓根目录生成 `.flow-kit/workspace.json`，记录仓库清单与各仓安装摘要；可重复执行刷新 |
 | `workspace status` | 只读聚合 workspace 内各仓的安装状态、宿主、栈、版本与路径缺失 |
@@ -272,6 +272,7 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 | 结果指标 | `.agents/scripts/outcome-metrics.mjs` | 首次过门率、复核采纳率、逃逸缺陷、评测通过率、返工占比 |
 | 闭环状态机 | `.agents/scripts/check-pipeline-state.mjs` | stage/stopType 闭包检查；真实端到端 run 仍需小任务验证 |
 | 策略即代码 | `.agents/config/policy.json` + `.agents/scripts/policy.mjs` | 双向核对机制台账、预算、枚举闭集与角色/模型引用；`check` 失败非零，`explain` 输出人类视图 |
+| 安装证明链 | `flow-kit doctor --attest --out <file>` | manifest / files / policy / eval / git 五段 sha256 链；篡改可检出，输出确定、可归档 |
 
 `--tier standard`（默认）会生成 `azure-pipelines.yml` 与 `.github/workflows/ci.yml`，在 `verify --full` 之后跑上述 advisory 检查；`lean` 不生成 CI，`enterprise` 另装加固配置。未完成项与验收口径见 [BACKLOG.md](BACKLOG.md)。
 
@@ -292,6 +293,20 @@ flow-kit upgrade --explain-policy --dry-run      # 只读输出升级将带来�
 - 枚举闭集覆盖 `workflow-enums.txt` 与 `pipeline.json` 的 stage/stopType；角色/模型引用覆盖 `model-roles.json`、`pr-review.json` 与本地覆盖。
 - 根仓库 CI 用 `npm run policy:check` 在临时目标安装后跑 `check` 与 `effective-policy --check`。
 - `upgrade --explain-policy` 按同一策略面做语义 diff：门禁接线、预算、枚举、角色/模型引用；无变化时人类输出为空，`--json` 的 `policyDiff.changed` 为 `false`。
+
+### 安装证明链
+
+```bash
+flow-kit doctor --target <dir> --attest --out attest.json
+flow-kit doctor --target <dir> --attest --json    # 证明对象随 JSON 返回
+```
+
+证明由 `manifest` / `files` / `policy` / `evals` / `git` 五段摘要串联成 `root`：
+
+- 托管文件缺失或哈希不符时 `ok:false`，doctor 退出 1，证明仍会归档问题清单；
+- 不包含时间戳或绝对路径，同一状态重复生成字节一致；
+- 目标在 git 仓库内时绑定 `HEAD` 与 dirty 状态，便于把证明对应到提交；
+- 信任模型是“归档后重生成比对 root”；第三方签名可在归档侧对 JSON 完成。
 
 ## 模板 / Profile / State 三层
 

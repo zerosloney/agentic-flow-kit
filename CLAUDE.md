@@ -26,6 +26,7 @@ node bin/flow-kit.mjs upgrade --target <tmp> --explain-policy --dry-run
 node bin/flow-kit.mjs prune --target <tmp>
 node bin/flow-kit.mjs explain .claude/agents/implementer.md --target <tmp>
 node bin/flow-kit.mjs doctor --target <tmp>
+node bin/flow-kit.mjs doctor --target <tmp> --attest --out proof.json
 npm run doctor:self                       # 对当前仓库执行 doctor（需当前仓库已安装引擎）
 ```
 
@@ -160,6 +161,7 @@ Hook 接线在 `src/install/hooks.mjs`：中性规格来自引擎模板 `.agents
 - 结果指标：`outcome-metrics.mjs`；闭环状态机静态检查：`check-pipeline-state.mjs` + `.agents/config/pipeline.json`。
 - 模型升级治理：`.agents/skills/model-upgrade/SKILL.md`；严格度分层：`.agents/config/steering.json` + `steering.mjs`。
 - 策略即代码：`.agents/config/policy.json`（`schemas/policy.schema.json`）声明策略面路径、机制闭集、预算上限、枚举键与角色映射；`.agents/scripts/policy.mjs check|explain` 双向核对 `mechanisms.required` 与 `mechanism-registry.md`、复用 `rule-budget.mjs --all` 执法预算、校验 `workflow-enums.txt` / `pipeline.json` / `model-roles.json` / `pr-review.json` 引用；`gen-effective-policy.mjs` 复用同一视图生成 `workflow/effective-policy.md`。CI 跑 `npm run policy:check`。
+- 安装证明链：`src/install/attest.mjs` 生成 `flow-kit-attest/v1`（manifest / files / policy / evals / git 五段 sha256 链）；`doctor --attest [--out <file>]` 输出可归档证明，托管文件缺失/哈希不符时 `ok:false` 且退出 1；证明不含时间戳/绝对路径/网络访问，schema 为 `schemas/attestation.schema.json`。
 - **新增硬门禁必须登记** `.agents/config/mechanism-registry.md`，并同步 `policy.json` 的 `mechanisms.required`（双向核对会拒绝漏登）；该文件受 `rule-budgets.txt` 字节/单行预算约束，新增行前先量预算。
 - 未完成/已完成的缺口与验收口径见根目录 `BACKLOG.md`。
 

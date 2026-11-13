@@ -9,6 +9,7 @@ import { listFiles, readGatesSpecs, TEMPLATES } from '../install/plan.mjs';
 import { readMcpServers } from '../install/mcp.mjs';
 import { findHookDrift } from '../install/hooks.mjs';
 import { listBaselines } from '../install/baseline.mjs';
+import { buildAttestation, writeAttestation } from '../install/attest.mjs';
 import { compilePermissions, permissionDrift } from '../install/permissions.mjs';
 import { ROLE_NAMES, readInjectedModels, readLocalModelRoles } from '../models/resolve.mjs';
 import { computeEnterprise, GIT_HOOKS, PROOF_CHAIN_FILES, resolveTarget } from './install.mjs';
@@ -274,6 +275,26 @@ export function doctorCommand({ args, t }) {
   const nodeMajor = Number(process.versions.node.split('.')[0]);
   add(nodeMajor >= 22, 'node >= 22', process.version);
 
+  let attestation = null;
+  if (flag(args, 'attest')) {
+    attestation = buildAttestation(target);
+    add(
+      attestation.ok,
+      'attestation',
+      attestation.ok
+        ? t('doctor.attestation', { root: attestation.chain.root })
+        : t('doctor.attestationFailed', { problems: attestation.problems.join('; ') }),
+    );
+    if (args.out) {
+      try {
+        const written = writeAttestation(args.out, attestation);
+        add(true, 'attestation-output', t('doctor.attestationWritten', { path: written }));
+      } catch (error) {
+        add(false, 'attestation-output', error.message);
+      }
+    }
+  }
+
   let failed = 0;
   let deep = null;
   for (const c of checks) {
@@ -326,6 +347,7 @@ export function doctorCommand({ args, t }) {
         fix: c.fix || '',
         warn: Boolean(c.warn),
       })),
+      ...(attestation ? { attestation } : {}),
       deep,
     }, null, 2));
   }
