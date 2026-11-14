@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { HOSTS, hostTargetRel, isAgentTemplate, modelRoleForAgent } from '../hosts/registry.mjs';
 import { makeT } from '../i18n.mjs';
 import { mergeMcpFile, mergeMcpInto, readMcpServers } from './mcp.mjs';
+import { readToolPolicy } from './tool-policy.mjs';
 import { HOOKS_SPEC_REL, mergeHooksIntoRoot, parseHookSpec } from './hooks.mjs';
 import { compilePermissions, mergePermissionsIntoRoot, parsePermissionSpec } from './permissions.mjs';
 import { readPlanEntry } from './apply.mjs';
@@ -281,6 +282,9 @@ function addHostConfigEntries({ plan, target, hosts, lang, stack, hardened, mana
 // 实现“只补缺失项、保留用户 server”的幂等合并。JSON 损坏时返回 null，由 apply 跳过。
 function addMcpEntries({ plan, target, hosts }) {
   const servers = readMcpServers(target);
+  // 工具权限策略（R3-8）：声明无效时在这里抛 MCP_CONFIG，安装零写盘。
+  // 运行时通过 FLOW_KIT_MCP_TOOL_POLICY 读同一份声明，doctor 做双向对账。
+  readToolPolicy(target);
   if (!Object.keys(servers).length) return;
   for (const host of hosts) {
     const h = HOSTS[host];

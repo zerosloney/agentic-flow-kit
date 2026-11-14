@@ -85,6 +85,27 @@ function toolResult(hits) {
   return { content: [{ type: 'text', text }] };
 }
 
+const SERVER_NAME = 'flow-kit-wiki';
+// 工具权限策略（R3-8）：FLOW_KIT_MCP_TOOL_POLICY 指向 {"mode":"allow","servers":{...}} 声明文件。
+// 未设置 = 不设限；设置后 tools/call 只放行白名单内的工具，tools/list 只列出白名单内的工具。
+const SERVER = SERVER_NAME;
+let TOOL_POLICY = null;
+try {
+  const policyFile = process.env.FLOW_KIT_MCP_TOOL_POLICY;
+  if (policyFile && fs.existsSync(policyFile)) {
+    const parsed = JSON.parse(fs.readFileSync(policyFile, 'utf8'));
+    if (parsed?.toolPolicy?.mode === 'allow' && parsed?.toolPolicy?.servers?.[SERVER_NAME]) {
+      TOOL_POLICY = new Set(parsed.toolPolicy.servers[SERVER_NAME]);
+    }
+  }
+} catch {
+  TOOL_POLICY = null;
+}
+
+function toolAllowed(name) {
+  return !TOOL_POLICY || TOOL_POLICY.has(name);
+}
+
 function handle(request) {
   const { id, method, params } = request;
   if (method === 'initialize') {
@@ -94,15 +115,24 @@ function handle(request) {
       result: {
         protocolVersion: params?.protocolVersion || '2024-11-05',
         capabilities: { tools: {} },
-        serverInfo: { name: 'flow-kit-wiki', version: '1.0.0' },
+        serverInfo: { name: SERVER_NAME, version: '1.0.0' },
       },
     };
   }
   if (method === 'ping') return { jsonrpc: '2.0', id, result: {} };
-  if (method === 'tools/list') return { jsonrpc: '2.0', id, result: { tools: TOOLS } };
+  if (method === 'tools/list') {
+    return { jsonrpc: '2.0', id, result: { tools: TOOLS.filter((tool) => toolAllowed(tool.name)) } };
+  }
   if (method === 'tools/call') {
     if (params?.name !== 'wiki_search') {
       return { jsonrpc: '2.0', id, error: { code: -32602, message: `unknown tool: ${params?.name}` } };
+    }
+    if (!toolAllowed(params.name)) {
+      return {
+        jsonrpc: '2.0',
+        id,
+        error: { code: -32604, message: `tool not allowed by MCP tool policy: ${params.name} (server: ${SERVER})` },
+      };
     }
     const limit = Math.min(hitLimit(params), MAX_LIMIT);
     return { jsonrpc: '2.0', id, result: toolResult(search(params?.arguments?.query, limit)) };

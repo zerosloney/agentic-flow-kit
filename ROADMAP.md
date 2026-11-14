@@ -275,6 +275,7 @@
 
 - **目标**：devcontainer 生成、MCP 工具权限策略、SBOM/许可证检查（`check-secrets` 已有基础）。
 - **验收**：生成的容器可构建；未列入策略的 MCP 工具被拒。规模 `L`。
+- **进度**：MCP 工具权限策略已落地——`templates/mcp/servers.json` 支持 `toolPolicy`（per-server allow 白名单），`wiki-mcp` 运行时拒绝未列入策略的工具（JSON-RPC `-32604`），`doctor` 对账声明与运行时工具面（`src/install/tool-policy.mjs`）；devcontainer 生成与 SBOM/许可证检查待做。
 
 ### R3-9 manifest 迁移框架
 

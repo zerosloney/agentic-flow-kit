@@ -189,3 +189,90 @@ test('wiki MCP server speaks initialize / tools/list / tools/call', () => {
   const text = replies.find((m) => m.id === 3).result.content[0].text;
   assert.match(text, /wiki\/note\.md:3: unique-needle/);
 });
+
+test('MCP tool policy: runtime rejects unlisted tools and doctor reconciles the declared surface', () => {
+  const dir = tmpRepo();
+  install(dir, ['claude']);
+  fs.mkdirSync(path.join(dir, 'wiki'), { recursive: true });
+  fs.writeFileSync(path.join(dir, 'wiki', 'note.md'), '# note\n\nunique-needle\n', 'utf8');
+
+  // 项目覆盖声明：白名单为空 → 未列入策略的 MCP 工具必须被拒。
+  const policyRel = '.flow-kit/mcp/servers.json';
+  fs.mkdirSync(path.dirname(path.join(dir, policyRel)), { recursive: true });
+  fs.writeFileSync(path.join(dir, policyRel), `${JSON.stringify({
+    servers: { 'flow-kit-wiki': { command: 'flow-kit', args: ['run', 'wiki-mcp'] } },
+    toolPolicy: { mode: 'allow', servers: { 'flow-kit-wiki': [] } },
+  }, null, 2)}\n`, 'utf8');
+
+  const call = (name) => spawnSync(process.execPath, [BIN, 'run', 'wiki-mcp', '--root', '.'], {
+    cwd: dir,
+    input: `${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name, arguments: { query: 'unique-needle' } } })}\n`,
+    encoding: 'utf8',
+    env: { ...process.env, FLOW_KIT_TEST: '1', FLOW_KIT_MCP_TOOL_POLICY: path.join(dir, policyRel) },
+  });
+
+  const denied = JSON.parse(call('wiki_search').stdout.trim());
+  assert.equal(denied.error.code, -32604);
+  assert.match(denied.error.message, /tool not allowed by MCP tool policy/);
+
+  // 未设置策略环境时行为不变（向后兼容）。
+  const open = spawnSync(process.execPath, [BIN, 'run', 'wiki-mcp', '--root', '.'], {
+    cwd: dir,
+    input: `${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'wiki_search', arguments: { query: 'unique-needle' } } })}\n`,
+    encoding: 'utf8',
+    env: { ...process.env, FLOW_KIT_TEST: '1' },
+  });
+  const allowed = JSON.parse(open.stdout.trim());
+  assert.equal(allowed.result.content[0].text.includes('unique-needle'), true);
+
+  // tools/list 同样受策略约束：白名单为空 → 不暴露任何工具。
+  const listed = spawnSync(process.execPath, [BIN, 'run', 'wiki-mcp', '--root', '.'], {
+    cwd: dir,
+    input: `${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' })}\n`,
+    encoding: 'utf8',
+    env: { ...process.env, FLOW_KIT_TEST: '1', FLOW_KIT_MCP_TOOL_POLICY: path.join(dir, policyRel) },
+  });
+  assert.deepEqual(JSON.parse(listed.stdout.trim()).result.tools, []);
+
+  // doctor 对账：空白名单 → 缺口报告；补齐后恢复；幽灵工具 → 未知工具报告。
+  const doctor = () => run(['doctor', '--target', '.', '--json'], dir);
+  let report = json(doctor());
+  let check = report.checks.find((c) => c.name === 'mcp policy claude');
+  assert.equal(check.ok, false);
+  assert.match(check.detail, /wiki_search/);
+
+  fs.writeFileSync(path.join(dir, policyRel), `${JSON.stringify({
+    servers: { 'flow-kit-wiki': { command: 'flow-kit', args: ['run', 'wiki-mcp'] } },
+    toolPolicy: { mode: 'allow', servers: { 'flow-kit-wiki': ['wiki_search'] } },
+  }, null, 2)}\n`, 'utf8');
+  report = json(doctor());
+  check = report.checks.find((c) => c.name === 'mcp policy claude');
+  assert.equal(check.ok, true, JSON.stringify(check));
+
+  fs.writeFileSync(path.join(dir, policyRel), `${JSON.stringify({
+    servers: { 'flow-kit-wiki': { command: 'flow-kit', args: ['run', 'wiki-mcp'] } },
+    toolPolicy: { mode: 'allow', servers: { 'flow-kit-wiki': ['wiki_search', 'ghost_tool'] } },
+  }, null, 2)}\n`, 'utf8');
+  report = json(doctor());
+  check = report.checks.find((c) => c.name === 'mcp policy claude');
+  assert.equal(check.ok, false);
+  assert.match(check.detail, /ghost_tool/);
+
+  // 非法声明 → install 退出码 2（MCP_CONFIG）。
+  fs.writeFileSync(path.join(dir, policyRel), `${JSON.stringify({
+    servers: { 'flow-kit-wiki': { command: 'flow-kit', args: ['run', 'wiki-mcp'] } },
+    toolPolicy: { mode: 'deny', servers: {} },
+  }, null, 2)}\n`, 'utf8');
+  const bad = run(['install', '--agent', 'claude', '--stack', 'node', '--lang', 'zh-CN', '--target', '.', '--json'], dir);
+  assert.equal(bad.status, 2, bad.stderr);
+  assert.match(bad.stderr, /tool policy/i);
+});
+
+test('MCP tool policy is optional: template default allows wiki_search and installs stay green', () => {
+  const dir = tmpRepo();
+  install(dir, ['claude', 'opencode', 'qwen']);
+  const report = json(run(['doctor', '--target', '.', '--json'], dir));
+  const checks = report.checks.filter((c) => String(c.name).startsWith('mcp policy'));
+  assert.equal(checks.length, 3);
+  for (const check of checks) assert.equal(check.ok, true, JSON.stringify(check));
+});
