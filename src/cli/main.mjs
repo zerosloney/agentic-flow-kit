@@ -14,6 +14,7 @@ import { pruneCommand } from '../commands/prune.mjs';
 import { removeHostCommand, uninstallCommand } from '../commands/remove-host.mjs';
 import { explainCommand } from '../commands/explain.mjs';
 import { workspaceCommand } from '../commands/workspace.mjs';
+import { addSkillCommand, removeSkillCommand, skillsCommand } from '../commands/skills.mjs';
 import { newHostCommand } from '../commands/new-host.mjs';
 import { KIT_ROOT } from '../install/plan.mjs';
 
@@ -87,6 +88,12 @@ async function main(argv) {
       return statusCommand({ args, t });
     case 'workspace':
       return workspaceCommand({ args, t });
+    case 'add-skill':
+      return addSkillCommand({ args, t, lang });
+    case 'remove-skill':
+      return removeSkillCommand({ args, t });
+    case 'skills':
+      return skillsCommand({ args, t, lang });
     case 'new-host': {
       const result = newHostCommand({ args, t });
       if (flag(args, 'json')) console.log(JSON.stringify(result, null, 2));

@@ -406,6 +406,21 @@ export function buildPlan({
 
   // 7) 从覆盖后的 .agents/skills/<name>/SKILL.md 生成宿主技能面
   const skillEntries = deduped.filter((e) => /^\.agents\/skills\/[^/]+\/SKILL\.md$/.test(e.targetRel));
+  // R3-4：add-skill 装到目标磁盘的外部技能不在包模板 plan 内，但同样需要宿主指针/索引。
+  // 只读磁盘取元数据，不把技能正文纳入安装计划（正文归 lockfile + manifest.skills 管）。
+  try {
+    const skillsDir = path.join(target, '.agents', 'skills');
+    for (const ent of fs.readdirSync(skillsDir, { withFileTypes: true })) {
+      if (!ent.isDirectory()) continue;
+      const rel = `.agents/skills/${ent.name}/SKILL.md`;
+      const abs = path.join(target, rel);
+      if (!fs.existsSync(abs)) continue;
+      if (skillEntries.some((e) => e.targetRel === rel)) continue;
+      skillEntries.push({ srcAbs: abs, targetRel: rel });
+    }
+  } catch {
+    /* 目标尚无 .agents/skills：跳过外部技能面 */
+  }
   addGeneratedSkillSurfaces({ plan, hosts, skillEntries, t });
 
   // 生成项同样允许按目标路径覆盖，然后二次去重（静态宿主文件优先级更高）

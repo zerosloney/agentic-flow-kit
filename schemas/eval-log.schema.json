@@ -17,6 +17,11 @@
         "properties": {
           "ts": { "type": "string", "format": "date-time" },
           "signature": { "type": "string" },
+          "skill": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "description": "R3-4 技能粒度凭证：该条评测对应的技能名（缺省为整体评测）。"
+          },
           "passRate": { "type": "number", "minimum": 0, "maximum": 1 },
           "tasks": { "type": "integer", "minimum": 0 },
           "model": { "type": "string" },

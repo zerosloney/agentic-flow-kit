@@ -36,7 +36,7 @@
 | R3-1 | policy-as-code | 3 | L | `templates/engine/.agents/config/policy.json` + `policy.mjs` | DONE |
 | R3-2 | 升级策略影响面 | 3 | S | `doctor` / `upgrade --explain-policy` | DONE |
 | R3-3 | 安装证明链 | 3 | M | manifest + eval 凭证 + 签名 | DONE |
-| R3-4 | 技能包分发与准入 | 3 | L | `add-skill`、lockfile、`skills lint` | TODO |
+| R3-4 | 技能包分发与准入 | 3 | L | `add-skill`、lockfile、`skills lint` | DONE |
 | R3-5 | pipeline 真实执行器 | 3 | L | `templates/engine/.agents/scripts/pipeline-run.mjs` | DONE |
 | R3-6 | 记忆生命周期 | 3 | L | `memory-tier.mjs` / `memory-wiki.mjs` | TODO |
 | R3-7 | 可观测与成本 | 3 | M | `outcome-metrics.mjs`、`metrics-core.mjs` | DONE |
@@ -225,6 +225,13 @@
   - 默认离线，联网需显式 `--allow-network`。
 - **验收**：安装/升级/移除全生命周期；校验和不匹配拒绝；评测凭证可按技能查询。
 - **风险**：供应链安全，校验和与来源必须强制。规模 `L`。
+- **落地（2026-11-14）**：
+  - **来源**：`add-skill <local|git|npm>`；local 直接复制，git 走 `git clone --depth 1 [--ref|#ref]`，npm 走 `npm install --no-save`；git/npm 必须 `--allow-network`（默认离线）。`--subdir` 选择仓库内技能目录，`--name` 覆盖技能名。
+  - **lockfile**：`.agents/skills.lock.json`（`schemas/skills-lock.schema.json`）记录来源/版本/包校验和/逐文件 sha256；校验和 = 排序后 `<rel>\0<sha256>\n` 的 sha256。manifest 增 `skills` 段（`category: skill`），并与 `files` 同步。
+  - **生命周期**：`--update` 升级已登记技能；`remove-skill` 按 manifest 哈希拒绝删除用户改动（`--force` 覆盖），同时清理宿主指针与空目录、重放宿主面刷新索引。
+  - **准入**：`skills lint` 校验 frontmatter 必填、name 唯一且匹配目录、描述 ≤ 300 字符、可选 `triggers` 冲突、`evalTasks` 引用、lockfile 漂移；`add-skill` 安装前对单个技能跑同一套规则。
+  - **评测绑定**：`agent-eval record --skill <name>` 落技能粒度凭证（eval-log schema 增可选 `skill`），`agent-eval status` 输出各技能最新通过率。
+  - **全新安装可用性并入**：`gitleaks` 基线随 `templates/git/.gitleaks-baseline.json` 安装；`workflow-modules.txt` 空词表不再校验模块枚举（pipeline-run / kb-search）；wiki 看板与 INDEX 口径对齐（忽略 `.gitkeep` 等点文件，模板计入 `数据维护/README.md`）；`check-secrets-lite` 工作树扫描改为「已跟踪 + 未跟踪未被忽略」，首装未提交基线也能过；`pipeline-run` 的 `changedFiles` 剔除 manifest 记录且哈希未变的安装产物，首次工单不再被「改动超出回填清单」误拦。
 
 ### R3-5 pipeline 真实执行器（引擎面）
 

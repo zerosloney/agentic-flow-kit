@@ -145,7 +145,9 @@ const scanWorkingTree = (root, baselineFiles) => {
   if (top.status !== 0) throw new Error(`git rev-parse --show-toplevel 失败（${root} 不是 git 工作区？）：${top.stderr || top.status}`);
   const topPath = path.resolve(String(top.stdout || '').trim());
   if (topPath !== path.resolve(root)) throw new Error(`扫描根 ${root} 不是 git 顶层（顶层为 ${topPath}）——拒跑，避免扫空目录假绿`);
-  const r = spawnSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
+  // 工作树全量 = 已跟踪 + 未跟踪但未被 .gitignore 排除的文件。fresh install 尚未提交基线时
+  // `git ls-files` 为空，会把真实扫描面算成 0 并 fail-closed 拒跑（新装户第一次 verify 必红）。
+  const r = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: root, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
   if (r.status !== 0) throw new Error(`git ls-files 失败：${r.stderr || r.status}`);
   const files = String(r.stdout || '').split('\0').map((s) => s.replace(/\\/g, '/')).filter(Boolean);
   const hits = [];

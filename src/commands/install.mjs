@@ -218,16 +218,19 @@ function normalizeTier(value, t) {
 
 // onLog 回调契约：(action, msg, done, total) —— action ∈ create/update/skip/conflict/merge，
 // done/total 为已完成/总文件数，供 TUI 渲染 spinner 进度；缺省走 CLI 前缀行。
-export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories, commandLabel, stackOverride, onLog = null, detectedHosts = [], migration = null }) {
+export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories, commandLabel, stackOverride, onLog = null, detectedHosts = [], migration = null, quiet = false }) {
   const target = resolveTarget(args);
   const dryRun = flag(args, 'dry-run');
   const force = flag(args, 'force');
   const asJson = flag(args, 'json');
   // --json 时 stdout 只允许出现最终 JSON；人类进度走 stderr，逐文件日志默认静默。
-  const emit = asJson
-    ? (...line) => console.error(...line)
-    : (...line) => console.log(...line);
-  const logger = onLog || (asJson ? () => {} : logLine);
+  // quiet：命令间复用（add-skill / remove-skill 重放宿主面）时完全静默，由调用方统一输出。
+  const emit = quiet
+    ? () => {}
+    : asJson
+      ? (...line) => console.error(...line)
+      : (...line) => console.log(...line);
+  const logger = onLog || (quiet || asJson ? () => {} : logLine);
   const previous = readManifest(target);
   const profile = parseProfileArgs({
     stackArg: args.stack,

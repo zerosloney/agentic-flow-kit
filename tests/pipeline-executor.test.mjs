@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { analyze } from '../templates/engine/.agents/scripts/check-pipeline-state.mjs';
@@ -246,6 +247,51 @@ test('R3-5: archived terminal doc still counts as closed (done-confirm does not 
   const run = readRun(root);
   assert.equal(run.stage, 'done');
   assert.equal(run.stopType, 'done');
+});
+
+test('R3-4: empty module vocabulary disables triage module validation', () => {
+  const root = fixture();
+  fs.writeFileSync(path.join(root, '.agents/config/workflow-modules.txt'), '# 仅注释：新装户尚未登记模块\n');
+  writeRun(root, { stage: 'triage', stopType: 'await-confirm', docs: { entry: 'workflow/intents/t.md', spec: null, plan: null } });
+  const r = runPipeline(root, ['next', '--run', 'test-run', '--triage', 'kind=require level=L1 module=custom']);
+  assert.doesNotMatch(r.stdout + r.stderr, /module 须在词表内/);
+});
+
+test('R3-4: pristine install output is not counted as work-order changes', () => {
+  const root = fixture();
+  assert.equal(spawnSync('git', ['init', '-q'], { cwd: root }).status, 0);
+  const pristineRel = '.agents/notes/managed.md';
+  fs.mkdirSync(path.join(root, '.agents/notes'), { recursive: true });
+  fs.writeFileSync(path.join(root, pristineRel), '安装产物\n');
+  const files = {};
+  const walk = (dir) => {
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, ent.name);
+      const rel = path.relative(root, abs).replace(/\\/g, '/');
+      if (ent.isDirectory()) {
+        if (rel === '.git' || rel === '.agents/cache') continue;
+        walk(abs);
+      } else if (rel !== '.agents/install-manifest.json') {
+        files[rel] = crypto.createHash('sha256').update(fs.readFileSync(abs)).digest('hex');
+      }
+    }
+  };
+  walk(root);
+  fs.writeFileSync(path.join(root, '.agents/install-manifest.json'), JSON.stringify({
+    kit: 'agentic-flow-kit', schemaVersion: 2, version: 'test', language: 'zh-CN',
+    hosts: ['claude'], stack: 'node', files,
+  }));
+  fs.mkdirSync(path.join(root, 'workflow/wiki'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'workflow/wiki/e2e.md'), '新增文档\n');
+  writeRun(root, {
+    stage: 'implement',
+    stopType: 'work-order',
+    workOrder: { id: 3, kind: 'implement' },
+    docs: { entry: 'workflow/plans/t.md', spec: null, plan: 'workflow/plans/t.md' },
+  });
+  const r = runPipeline(root, ['next', '--run', 'test-run', '--files', 'workflow/wiki/e2e.md'], { PIPELINE_RUN_GIT_BIN: 'git' });
+  assert.doesNotMatch(r.stdout + r.stderr, /超出回填清单/, r.stdout + r.stderr);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
 });
 
 test('pipeline state machine stays statically closed after R3-5', () => {

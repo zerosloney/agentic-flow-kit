@@ -66,7 +66,7 @@ for (const dEnt of fs.readdirSync(WIKI, { withFileTypes: true })) {
   // 否则「gen 恒写 N、verify 恒数 N+1」门禁死锁且自愈指引（重跑 gen）无效
   const isIgnored = (rel) => { const k = rel.replace(/\/$/, ''); return gitIgnoredArchive.has(`${d}/${k}`) || gitIgnoredArchive.has(`${d}/${k}/`); }; // 尾斜杠归一（复核 P2-a）
   for (const fEnt of fs.readdirSync(p, { withFileTypes: true })) {
-    if (isFileEntry(fEnt, p) && !isIgnored(fEnt.name)) diskFiles.add(`${d}/${fEnt.name}`);
+    if (isFileEntry(fEnt, p) && !fEnt.name.startsWith('.') && !isIgnored(fEnt.name)) diskFiles.add(`${d}/${fEnt.name}`);
   }
   if (d !== '数据维护') {
     for (const subEnt of fs.readdirSync(p, { withFileTypes: true })) {
@@ -151,7 +151,7 @@ if (ghosts.length) problems.push(`磁盘存在看板未登记的主题目录: ${
 // ---- 3. 占位主题（看板有、磁盘 0 文件）——允许，仅提示 ----
 for (const t of DATA.topics) {
   if (t.files.length === 0 && fs.existsSync(path.join(WIKI, t.name))) {
-    const real = fs.readdirSync(path.join(WIKI, t.name), { withFileTypes: true }).filter((e) => isFileEntry(e, path.join(WIKI, t.name))).length;
+    const real = fs.readdirSync(path.join(WIKI, t.name), { withFileTypes: true }).filter((e) => isFileEntry(e, path.join(WIKI, t.name)) && !e.name.startsWith('.')).length;
     if (real > 0) problems.push(`看板主题「${t.name}」files 为空但磁盘有 ${real} 个文件`);
     else notes.push(`占位主题「${t.name}」：0 文件（允许）`);
   } else if (t.files.length === 0) {

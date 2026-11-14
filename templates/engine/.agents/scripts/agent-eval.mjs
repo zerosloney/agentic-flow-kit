@@ -155,6 +155,33 @@ export function readResults(root, cfg = loadConfig(root)) {
   return rows;
 }
 
+// R3-4：技能粒度通过率——按 eval-log / results 中的 skill 字段聚合，取每个技能最新一条。
+// 没有 skill 字段的历史凭证不参与（不能把整体评测摊到技能上）。
+export function skillPassRates(root, cfg = loadConfig(root)) {
+  let rows = [];
+  try {
+    const log = JSON.parse(fs.readFileSync(path.join(root, cfg.evalLog), 'utf8'));
+    rows = Array.isArray(log?.entries) ? log.entries : [];
+  } catch {
+    rows = readResults(root, cfg);
+  }
+  const latest = new Map();
+  for (const row of rows) {
+    if (!row || !row.skill) continue;
+    const prev = latest.get(row.skill);
+    if (!prev || String(row.ts) > String(prev.ts)) latest.set(row.skill, row);
+  }
+  return [...latest.entries()]
+    .map(([skill, row]) => ({
+      skill,
+      passRate: Number(row.passRate),
+      tasks: Number(row.tasks) || 0,
+      outcome: row.outcome || (Number(row.passRate) >= Number(cfg.threshold) ? 'pass' : 'fail'),
+      ts: row.ts,
+    }))
+    .sort((a, b) => a.skill.localeCompare(b.skill));
+}
+
 function ageDays(ts, now = Date.now()) {
   const t = Date.parse(ts);
   if (!Number.isFinite(t)) return Infinity;
@@ -193,7 +220,7 @@ export function writeEvalLog(root, rel, entry) {
 }
 
 export function recordEval(root, {
-  passRate, tasks = 0, model = '', note = '', signature = null, now = new Date(), evalLog = undefined,
+  passRate, tasks = 0, model = '', note = '', skill = '', signature = null, now = new Date(), evalLog = undefined,
 } = {}) {
   const rate = Number(passRate);
   if (!Number.isFinite(rate) || rate < 0 || rate > 1) throw new Error('pass-rate 必须是 0..1');
@@ -202,6 +229,7 @@ export function recordEval(root, {
   const row = {
     ts: now.toISOString(),
     signature: sig,
+    ...(skill ? { skill: String(skill) } : {}),
     passRate: rate,
     tasks: Number(tasks) || 0,
     model: String(model || ''),
@@ -262,11 +290,25 @@ function main() {
     }
     const noteArg = argOf(argv, 'note', '');
     const logArg = argOf(argv, 'eval-log');
+    const rawSkill = argOf(argv, 'skill');
+    let skill = '';
+    if (rawSkill != null) {
+      if (rawSkill === true || !/^[a-z0-9][a-z0-9-]*$/.test(String(rawSkill))) {
+        console.error('record 的 --skill 需要 kebab-case 技能名');
+        return 2;
+      }
+      skill = String(rawSkill);
+      if (!fs.existsSync(path.join(root, '.agents', 'skills', skill, 'SKILL.md'))) {
+        console.error(`--skill 未安装：${skill}（先 flow-kit add-skill）`);
+        return 2;
+      }
+    }
     const row = recordEval(root, {
       passRate: Number(rawRate),
       tasks,
       model: String(rawModel).trim(),
       note: noteArg === true ? '' : String(noteArg),
+      skill,
       evalLog: argv.includes('--no-eval-log')
         ? false
         : (typeof logArg === 'string' ? logArg : undefined),
@@ -276,8 +318,15 @@ function main() {
   }
 
   const result = evaluate(root, { only: only ? String(only).split(',') : null });
+  if (cmd === 'status') result.skills = skillPassRates(root, result.cfg);
   if (cmd === 'status' || json) {
-    console.log(json ? JSON.stringify(result, null, 2) : `signature=${result.signature.slice(0, 12)} ok=${result.ok} reason=${result.reason}`);
+    if (json) console.log(JSON.stringify(result, null, 2));
+    else {
+      console.log(`signature=${result.signature.slice(0, 12)} ok=${result.ok} reason=${result.reason}`);
+      for (const s of result.skills || []) {
+        console.log(`  skill ${s.skill}: passRate=${s.passRate} tasks=${s.tasks} outcome=${s.outcome}`);
+      }
+    }
     return 0;
   }
 

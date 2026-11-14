@@ -72,7 +72,7 @@ test('en install uses English command, memory, host and scaffold overrides', () 
   const wiki = read(dir, 'wiki/INDEX.md');
   assert.match(wiki, /Wiki index|Wiki Index|Knowledge/i);
   assert.ok(wiki.includes('## 文件 → 主题 → 归属目录 映射表'), 'machine anchor must remain');
-  assert.ok(wiki.includes('合计：**0 份**知识文档'), 'generator anchor must remain');
+  assert.ok(wiki.includes('合计：**1 份**知识文档'), 'generator anchor must remain');
 });
 
 test('en claude install writes English skill pointer and English descriptions', () => {

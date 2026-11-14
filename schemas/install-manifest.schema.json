@@ -89,6 +89,34 @@
       "items": { "type": "string" },
       "uniqueItems": true
     },
+    "skills": {
+      "type": "object",
+      "description": "category: skill——add-skill 安装的外部技能（来源 / 版本 / 校验和 / 逐文件哈希）；与 .agents/skills.lock.json 同步。",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "version", "checksum", "installedAt", "files"],
+        "properties": {
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "spec", "resolved"],
+            "properties": {
+              "type": { "enum": ["local", "git", "npm"] },
+              "spec": { "type": "string" },
+              "resolved": { "type": "string" }
+            }
+          },
+          "version": { "type": "string" },
+          "checksum": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "installedAt": { "type": "string", "format": "date-time" },
+          "files": {
+            "type": "object",
+            "additionalProperties": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+          }
+        }
+      }
+    },
     "files": {
       "type": "object",
       "additionalProperties": { "type": "string", "pattern": "^[a-f0-9]{64}$" }

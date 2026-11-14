@@ -29,6 +29,7 @@
 // 测试面：tests/pipeline-executor.test.mjs（引擎外包测试，本脚本仍不内嵌测试）
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -414,7 +415,7 @@ function printRun(ctx, run, problems) {
     const fails = gates.filter((e) => e.exit !== 0).length;
     console.log(`  需求：${run.requirement}`);
     console.log(`  门执行 ${gates.length} 道（非零 ${fails}）；确认 ${run.events.filter((e) => e.type === 'confirm').length} 次；提交 ${run.events.filter((e) => e.type === 'commit').length} 笔`);
-    for (const d of [run.docs?.entry, run.docs?.spec, run.docs?.plan].filter(Boolean)) console.log(`  文档：${d}（${docState(ctx, d) || '?'}）`);
+    for (const d of [...new Set([run.docs?.entry, run.docs?.spec, run.docs?.plan].filter(Boolean))]) console.log(`  文档：${d}（${docState(ctx, d) || '?'}）`);
   } else if (run.stopType === 'aborted') {
     console.log(`\n== 已放弃（${run.abort?.to || ''}）== ${run.abort?.note || ''}`);
   }
@@ -462,7 +463,8 @@ function validateTriage(ctx, kv) {
   if (!KINDS.includes(kv.kind)) problems.push(`kind 须为 ${KINDS.join('|')}`);
   if (!LEVELS.includes(kv.level)) problems.push(`level 须为 ${LEVELS.join('|')}`);
   const mods = moduleList(ctx);
-  if (kv.module && !mods.includes(kv.module)) problems.push(`module 须在词表内：${mods.join('|')}`);
+  // 空词表 = 不校验模块枚举（与 profiles 模板注释的契约一致）；非空才拒绝表外值。
+  if (mods.length && kv.module && !mods.includes(kv.module)) problems.push(`module 须在词表内：${mods.join('|')}`);
   if (kv.topic && !/^[a-z0-9][a-z0-9-]*$/.test(kv.topic)) problems.push('topic 须为英文 kebab-case');
   return problems;
 }
@@ -519,9 +521,33 @@ function docsCommit(ctx, run, files, subject) {
   return { ok: true };
 }
 
+// 安装产物（manifest 有记录且磁盘哈希未变）不是工单改动：fresh install 尚未提交基线时，
+// git status 会把全部托管文件列为 untracked，旧逻辑误判为「改动超出回填清单」。
+function manifestPristine(ctx) {
+  const pristine = new Set();
+  let manifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(path.join(ctx.root, '.agents', 'install-manifest.json'), 'utf8'));
+  } catch {
+    return pristine;
+  }
+  for (const [rel, hash] of Object.entries(manifest.files || {})) {
+    try {
+      const buf = fs.readFileSync(path.join(ctx.root, rel));
+      if (crypto.createHash('sha256').update(buf).digest('hex') === hash) pristine.add(rel);
+    } catch {
+      /* 缺失/不可读：不算 pristine，按普通改动处理 */
+    }
+  }
+  return pristine;
+}
+
 function changedFiles(ctx, run) {
   const r = runGit(ctx, run, ['status', '--porcelain', '-u']); // -u：展开 untracked 目录为逐文件（防「src/」折叠误报越权）
   if (r.exit !== 0) return null;
+  const pristine = manifestPristine(ctx);
+  // manifest 本身是安装器元数据，不是任何工单的改动面（fresh install 时同样 untracked）。
+  pristine.add('.agents/install-manifest.json');
   const out = [];
   for (const line of r.stdout.split(/\r?\n/).filter(Boolean)) {
     let p = line.slice(3).trim();
@@ -529,12 +555,12 @@ function changedFiles(ctx, run) {
       // 复核 P2-2：rename 行收录 old+new 两路径——旧路径的删除同样属改动面（防改名逃逸越权）
       for (const q of p.split(' -> ')) {
         const n = q.trim().replace(/^"|"$/g, '').replace(/\\/g, '/');
-        if (n) out.push(n);
+        if (n && !pristine.has(n)) out.push(n);
       }
       continue;
     }
     p = p.replace(/^"|"$/g, '').replace(/\\/g, '/');
-    out.push(p);
+    if (!pristine.has(p)) out.push(p);
   }
   return out;
 }
@@ -633,7 +659,7 @@ async function advance(ctx, run, opt) {
         if (/红线|契约|schema|公共接口/.test(run.requirement) && LEVELS.indexOf(kv.level) < LEVELS.indexOf('L2')) {
           console.log('⚠️ warning：需求文本命中红线关键词而 level<L2——判级应就高（继续，但责任在回填者）');
         }
-        run.triage = { kind: kv.kind, level: kv.level, module: kv.module || moduleList(ctx)[0], topic: kv.topic || 'task', decidedBy: run.hint ? 'hint+ai' : 'ai', decidedAt: nowIso() };
+        run.triage = { kind: kv.kind, level: kv.level, module: kv.module || moduleList(ctx)[0] || 'general', topic: kv.topic || 'task', decidedBy: run.hint ? 'hint+ai' : 'ai', decidedAt: nowIso() };
         emit(run, { type: 'triage', ...run.triage });
         run.docs = run.docs || { entry: null, spec: null, plan: null };
         // 路由
