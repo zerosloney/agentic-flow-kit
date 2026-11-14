@@ -1,7 +1,7 @@
 import { test } from 'node:test';
+import { makeTmp } from './helpers/tmp.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +11,7 @@ import { listFiles } from '../src/install/plan.mjs';
 const AGENT_EVAL = fileURLToPath(new URL('../templates/engine/.agents/scripts/agent-eval.mjs', import.meta.url));
 
 function tmp() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'agent-eval-'));
+  return makeTmp('agent-eval-');
 }
 
 function write(root, rel, text) {

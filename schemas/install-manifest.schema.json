@@ -28,6 +28,10 @@
       "type": "boolean",
       "description": "是否编译 MCP 配置；false 表示安装时使用了 --no-mcp。"
     },
+    "devcontainer": {
+      "type": "boolean",
+      "description": "是否生成开发容器声明（R3-8 沙箱面）；false 表示安装时使用了 --no-devcontainer。"
+    },
     "baseline": {
       "type": "boolean",
       "description": "是否留存升级用基线；false 表示安装时使用了 --no-baseline。"

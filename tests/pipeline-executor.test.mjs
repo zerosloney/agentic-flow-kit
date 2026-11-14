@@ -1,7 +1,7 @@
 import { test } from 'node:test';
+import { makeTmp } from './helpers/tmp.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
@@ -68,7 +68,7 @@ const FAKE_GIT = `process.exit(0);
 `;
 
 function fixture({ stageArtifacts = { verify: ['{plan}'] }, withPlan = true } = {}) {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'pipeline-exec-'));
+  const root = makeTmp('pipeline-exec-');
   const write = (rel, text) => {
     const abs = path.join(root, rel);
     fs.mkdirSync(path.dirname(abs), { recursive: true });

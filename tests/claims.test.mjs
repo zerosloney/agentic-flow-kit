@@ -1,7 +1,7 @@
 import { test } from 'node:test';
+import { makeTmp } from './helpers/tmp.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +11,7 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DREAM = path.join(HERE, '..', 'templates', 'engine', '.agents', 'scripts', 'dream-run.mjs');
 
 function tmp() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'claims-'));
+  return makeTmp('claims-');
 }
 
 test('add rejects a quote that is not in the file and writes nothing', () => {

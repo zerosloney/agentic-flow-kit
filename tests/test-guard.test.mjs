@@ -1,7 +1,7 @@
 import { test } from 'node:test';
+import { makeTmp } from './helpers/tmp.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { startFixTask, stopFixTask } from '../templates/engine/.agents/scripts/fix-task.mjs';
@@ -9,7 +9,7 @@ import { startFixTask, stopFixTask } from '../templates/engine/.agents/scripts/f
 const HOOK = path.resolve('templates/engine/.agents/hooks/pre-write-check.cjs');
 
 function tmp() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'test-guard-'));
+  return makeTmp('test-guard-');
 }
 
 function write(root, rel, text) {

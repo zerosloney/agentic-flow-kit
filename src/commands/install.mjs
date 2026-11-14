@@ -295,10 +295,17 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
     ? false
     : (flag(args, 'baseline') || previous?.baseline !== false);
 
+  // 开发容器（R3-8 沙箱面）随 manifest 走：--no-devcontainer 关闭、--devcontainer 重新开启；
+  // 都没给时沿用既有选择（upgrade 重放 manifest，不静默改主意）。
+  const devcontainerEnabled = flag(args, 'no-devcontainer')
+    ? false
+    : (flag(args, 'devcontainer') ? true : previous?.devcontainer !== false);
+
   const plan = buildPlan({
     target, hosts: planHosts, lang, stack, projectName, categories, models: models?.hosts, tier, hardened,
     mcp: mcpEnabled, surfaces,
     managedPermissions: previous?.managedPermissions || {},
+    devcontainer: devcontainerEnabled,
   });
   let done = 0;
   const total = plan.entries.length;
@@ -404,6 +411,7 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
       hardened,
       mcp: mcpEnabled,
       mcpServers: result.mcp || {},
+      devcontainer: devcontainerEnabled,
       managedPermissions: result.managedPermissions || {},
       mergeOrigins: result.mergeOrigins || {},
       baseline: baselineEnabled,
@@ -476,6 +484,7 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
       hosts: hostSet,
       detectedHosts,
       mcp: mcpEnabled,
+      devcontainer: devcontainerEnabled,
       baseline: baselineEnabled,
       models: models ? summarizeModels(models) : null,
       plan: { count: plan.entries.length },

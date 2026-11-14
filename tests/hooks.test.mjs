@@ -1,4 +1,5 @@
 import { test } from 'node:test';
+import { makeTmp } from './helpers/tmp.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -17,7 +18,7 @@ const FIXTURES = path.join(KIT, 'tests', 'fixtures', 'hooks');
 const GOLDEN_HOSTS = ['claude', 'codebuddy', 'trae', 'qwen', 'qoder', 'zcode', 'commandcode'];
 
 function tmpRepo() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'flow-kit-hooks-'));
+  const dir = makeTmp('flow-kit-hooks-');
   spawnSync('git', ['init', '-q'], { cwd: dir });
   return dir;
 }

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
+import { makeTmp } from './helpers/tmp.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import {
   buildReport, renderMarkdown, toOtelJson, toPrometheus,
@@ -13,7 +13,7 @@ const NOW = Date.parse('2026-11-13T12:00:00.000Z');
 const iso = (msAgo) => new Date(NOW - msAgo).toISOString();
 
 function fixture() {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'observability-'));
+  const root = makeTmp('observability-');
   const write = (rel, text) => {
     const abs = path.join(root, rel);
     fs.mkdirSync(path.dirname(abs), { recursive: true });
@@ -158,7 +158,7 @@ test('baseline comparison surfaces deltas and regressions', () => {
 });
 
 test('usage-log appends validated rows and reads them back', () => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'usage-'));
+  const root = makeTmp('usage-');
   const row = buildUsageRow({ role: 'verifier', model: 'alpha', inputTokens: 10, latencyMs: 5, outcome: 'pass', now: new Date(NOW) });
   appendUsage(root, row);
   const rows = readUsage(root, { now: NOW });

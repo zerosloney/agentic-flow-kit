@@ -1,7 +1,7 @@
 import { test } from 'node:test';
+import { makeTmp } from './helpers/tmp.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +11,7 @@ const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
 
 function tmpRepo() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'flow-kit-'));
+  const dir = makeTmp('flow-kit-');
   spawnSync('git', ['init', '-q'], { cwd: dir });
   return dir;
 }
@@ -242,7 +242,7 @@ test('--model-mode inherit resolves supported hosts to inherit', () => {
 });
 
 test('detectStack reads rust, go, java and typescript markers before package.json', () => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'flow-kit-stack-'));
+  const dir = makeTmp('flow-kit-stack-');
   assert.equal(detectStack(dir), 'empty');
   const write = (name) => fs.writeFileSync(path.join(dir, name), '');
   const reset = () => {

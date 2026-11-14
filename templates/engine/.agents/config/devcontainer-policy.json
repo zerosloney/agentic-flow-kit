@@ -1,0 +1,7 @@
+{
+  "$schema": "devcontainer-policy/config@1",
+  "version": 1,
+  "allowedImagePrefixes": ["mcr.microsoft.com/devcontainers/"],
+  "forbiddenTags": ["latest"],
+  "requirePinnedFlowKit": true
+}

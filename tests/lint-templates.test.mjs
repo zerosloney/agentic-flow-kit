@@ -1,7 +1,7 @@
 import { test } from 'node:test';
+import { makeTmp } from './helpers/tmp.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { runLint } from '../tools/lint-templates.mjs';
@@ -9,7 +9,7 @@ import { runLint } from '../tools/lint-templates.mjs';
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
 function fixture() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'flow-kit-lint-'));
+  return makeTmp('flow-kit-lint-');
 }
 
 function write(root, rel, text) {

@@ -5,6 +5,12 @@ import { HOSTS, hostTargetRel, isAgentTemplate, modelRoleForAgent } from '../hos
 import { makeT } from '../i18n.mjs';
 import { mergeMcpFile, mergeMcpInto, readMcpServers } from './mcp.mjs';
 import { readToolPolicy } from './tool-policy.mjs';
+import {
+  DEVCONTAINER_DOCKERFILE_REL,
+  DEVCONTAINER_JSON_REL,
+  renderDevcontainerDockerfile,
+  renderDevcontainerJson,
+} from './devcontainer.mjs';
 import { HOOKS_SPEC_REL, mergeHooksIntoRoot, parseHookSpec } from './hooks.mjs';
 import { compilePermissions, mergePermissionsIntoRoot, parsePermissionSpec } from './permissions.mjs';
 import { readPlanEntry } from './apply.mjs';
@@ -323,7 +329,7 @@ function addMcpEntries({ plan, target, hosts }) {
 // surfaces: 组合式切面闭集（frontend/api/data），按声明顺序叠加在 stack 之上。
 export function buildPlan({
   target, hosts, lang, stack, projectName, categories, models = null, tier = 'standard', hardened = false, mcp = true,
-  surfaces = [], managedPermissions = {},
+  surfaces = [], managedPermissions = {}, devcontainer = true,
 }) {
   const t = makeT(lang);
   const plan = [];
@@ -404,11 +410,27 @@ export function buildPlan({
     else push(path.join(TEMPLATES, 'git', rel), rel, 'git', 40);
   }
 
-  // 6) 语言包覆盖（按目标路径镜像）
+  // 6) 开发容器（R3-8 沙箱面）：devcontainer.json + Dockerfile，按栈选官方基础镜像。
+  // 与 CI 一样属于「环境交付面」：--no-devcontainer 关闭，upgrade 按 manifest 重放。
+  if (devcontainer) {
+    push(null, DEVCONTAINER_JSON_REL, 'devcontainer', 41, 'generated', {
+      getText: (vars) => renderDevcontainerJson({
+        projectName: vars.projectName,
+        stack,
+        apiPort: vars.apiPort,
+        webPort: vars.webPort,
+      }),
+    });
+    push(null, DEVCONTAINER_DOCKERFILE_REL, 'devcontainer', 41, 'generated', {
+      getText: (vars) => renderDevcontainerDockerfile({ stack, kitVersion: vars.kitVersion }),
+    });
+  }
+
+  // 7) 语言包覆盖（按目标路径镜像）
   applyLocaleOverrides(lang, plan);
   let deduped = dedupeEntries(plan);
 
-  // 7) 从覆盖后的 .agents/skills/<name>/SKILL.md 生成宿主技能面
+  // 8) 从覆盖后的 .agents/skills/<name>/SKILL.md 生成宿主技能面
   const skillEntries = deduped.filter((e) => /^\.agents\/skills\/[^/]+\/SKILL\.md$/.test(e.targetRel));
   // R3-4：add-skill 装到目标磁盘的外部技能不在包模板 plan 内，但同样需要宿主指针/索引。
   // 只读磁盘取元数据，不把技能正文纳入安装计划（正文归 lockfile + manifest.skills 管）。
