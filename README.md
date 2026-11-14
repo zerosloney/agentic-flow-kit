@@ -63,6 +63,8 @@ npx agentic-flow-kit doctor --target .
 | `hook <hook>` | 从包内运行时执行宿主 hook 适配器；stdin 与剩余参数透传；`--list` 列出可用 hook |
 | `workspace init --repos <dir>...` | 在多仓根目录生成 `.flow-kit/workspace.json`，记录仓库清单与各仓安装摘要；可重复执行刷新 |
 | `workspace status` | 只读聚合 workspace 内各仓的安装状态、宿主、栈、版本与路径缺失 |
+| `devcontainer check` | 校验开发容器声明（`.devcontainer/devcontainer.json` + `Dockerfile`）：镜像白名单、版本钉死、栈匹配 |
+| `devcontainer build` | 用 docker 真构建一次容器镜像（"容器可构建"的证据）；docker 不在 PATH 时退出 2 |
 
 通用选项：
 
@@ -268,6 +270,21 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 - `doctor` 把声明与包内运行时工具面双向对账：声明引用了不存在的工具、或未覆盖某个运行时工具，都报 `mcp policy` 失败。
 - 不写 `toolPolicy` = 不设限（向后兼容旧声明文件）。
 
+## 开发容器（R3-8 沙箱面）
+
+安装默认生成 `.devcontainer/`（两个文件），让「AI 在沙箱里干活」有可审计的落地面：
+
+```
+.devcontainer/devcontainer.json   # 镜像/构建/端口/扩展声明
+.devcontainer/Dockerfile          # 官方基础镜像 + 钉版本的 flow-kit
+```
+
+- **按栈选镜像**：`node`/`typescript` → `devcontainers/typescript-node:22`，`dotnet` → `devcontainers/dotnet:8`，`rust` → `devcontainers/rust:1`，`go` → `devcontainers/go:1.23`，`java` → `devcontainers/java:21`，其余 → `devcontainers/base:ubuntu-24.04`；端口按栈的 `apiPort`/`webPort` 自动转发。
+- **flow-kit 随镜像安装**：`Dockerfile` 里 `ARG FLOW_KIT_VERSION=<安装器版本>`，`npm i -g agentic-flow-kit@<版本>`，容器内 `flow-kit run` / hook / MCP 照常可用；需要别的版本时 `docker build --build-arg FLOW_KIT_VERSION=latest`。
+- **供应链门**：`flow-kit run check-devcontainer.mjs` 校验镜像来源必须在 `.agents/config/devcontainer-policy.json` 的 `allowedImagePrefixes` 内、不得用浮动 tag、flow-kit 版本必须钉死；违规即红（verify 安全段 `devcontainer` 门，CI 里为 advisory 步）。项目没启用容器时大声跳过，不判红。
+- **可构建性证据**：`flow-kit devcontainer build` 用 docker 真构建一次镜像；docker 不在 PATH 时退出 2（不假装构建过）。
+- **关闭**：`install --no-devcontainer` 不生成（`--devcontainer` 可重新开启）；该选择记进 manifest，`upgrade` 默认沿用，不会悄悄改主意。
+
 ## 模型配置
 
 安装器按三个角色为子代理选模型：
@@ -317,6 +334,7 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 | 闭环状态机 | `flow-kit run check-pipeline-state` | stage/stopType 闭包检查；静态检查不能替代真实端到端 run |
 | 策略即代码 | `.agents/config/policy.json` + `flow-kit run policy` | 双向核对机制台账、预算、枚举闭集与角色/模型引用；`check` 失败非零，`explain` 输出人类视图 |
 | SBOM 与许可证 | `flow-kit run sbom-license.mjs` + `.agents/config/license-policy.json` | 从 lockfile 生成 SPDX 2.3 SBOM（`.agents/sbom/spdx.json`）并按 allow/deny 闭集判定依赖许可证；未知/违规即红，豁免走 `exceptions`（写明理由）；零依赖零网络，lockfile 缺失 fail-closed |
+| 开发容器声明 | `flow-kit run check-devcontainer.mjs` + `.agents/config/devcontainer-policy.json` | 校验 `.devcontainer/` 声明：镜像来源白名单、版本钉死、flow-kit 版本钉死；项目未启用容器时大声跳过不判红 |
 | 安装证明链 | `flow-kit doctor --attest --out <file>` | manifest / files / policy / eval / git 五段 sha256 链；篡改可检出，输出确定、可归档 |
 
 `--tier standard`（默认）会生成 `azure-pipelines.yml` 与 `.github/workflows/ci.yml`，在 `verify --full` 之后跑上述 advisory 检查；`lean` 不生成 CI，`enterprise` 另装加固配置。未完成项与验收口径见 [BACKLOG.md](BACKLOG.md)。

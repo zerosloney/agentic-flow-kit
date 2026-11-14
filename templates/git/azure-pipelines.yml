@@ -45,6 +45,10 @@ steps:
     displayName: 'SBOM & license policy (advisory)'
     continueOnError: true
 
+  - script: npx --yes agentic-flow-kit run check-devcontainer.mjs
+    displayName: 'Devcontainer declaration (advisory)'
+    continueOnError: true
+
   - script: npx --yes agentic-flow-kit run memory-tier audit
     displayName: 'Injected memory budget'
     continueOnError: true

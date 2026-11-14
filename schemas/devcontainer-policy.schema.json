@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zerosloney/agentic-flow-kit/schemas/devcontainer-policy.schema.json",
+  "title": "agentic-flow-kit devcontainer policy",
+  "description": ".agents/config/devcontainer-policy.json：开发容器供应链策略（R3-8 沙箱）。allowedImagePrefixes 是允许的镜像来源前缀闭集；forbiddenTags 是禁用的浮动 tag；requirePinnedFlowKit 决定 Dockerfile 是否必须钉定 flow-kit 版本。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "allowedImagePrefixes": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "允许的镜像来源前缀（如 mcr.microsoft.com/devcontainers/）；镜像必须命中其一。"
+    },
+    "forbiddenTags": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "禁用的浮动 tag（如 latest）；镜像必须钉到具体版本。"
+    },
+    "requirePinnedFlowKit": {
+      "type": "boolean",
+      "default": true,
+      "description": "true = Dockerfile 必须把 flow-kit 钉到具体版本（不接受 latest/*）。"
+    }
+  }
+}

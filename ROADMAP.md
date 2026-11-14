@@ -40,7 +40,7 @@
 | R3-5 | pipeline 真实执行器 | 3 | L | `templates/engine/.agents/scripts/pipeline-run.mjs` | DONE |
 | R3-6 | 记忆生命周期 | 3 | L | `memory-tier.mjs` / `memory-wiki.mjs` / `memory-lifecycle.mjs` | DONE |
 | R3-7 | 可观测与成本 | 3 | M | `outcome-metrics.mjs`、`metrics-core.mjs` | DONE |
-| R3-8 | 沙箱与供应链 | 3 | L | devcontainer / MCP 权限 / SBOM | TODO |
+| R3-8 | 沙箱与供应链 | 3 | L | devcontainer / MCP 权限 / SBOM | DONE |
 | R3-9 | manifest 迁移框架 | 3 | M | `migrations/`、`manifest.schemaVersion` | DONE |
 | R3-10 | `new-host` 生成器与模板 lint | 3 | M | `tools/new-host.mjs`、`npm run lint:templates` | DONE |
 | R4-1 | 多仓 Workspace 协调 | 4 | M | `src/commands/workspace.mjs`、`.flow-kit/workspace.json` | DONE |
@@ -275,7 +275,7 @@
 
 - **目标**：devcontainer 生成、MCP 工具权限策略、SBOM/许可证检查（`check-secrets` 已有基础）。
 - **验收**：生成的容器可构建；未列入策略的 MCP 工具被拒。规模 `L`。
-- **进度**：MCP 工具权限策略已落地——`templates/mcp/servers.json` 支持 `toolPolicy`（per-server allow 白名单），`wiki-mcp` 运行时拒绝未列入策略的工具（JSON-RPC `-32604`），`doctor` 对账声明与运行时工具面（`src/install/tool-policy.mjs`）。SBOM/许可证检查已落地——`flow-kit run sbom-license.mjs` 从 lockfile 生成 SPDX 2.3 SBOM 并按 `.agents/config/license-policy.json` 闭集判定许可证（verify 安全段 `sbom-license` 门 + CI advisory），机制台账已登记。devcontainer 生成待做。
+- **进度**：MCP 工具权限策略已落地——`templates/mcp/servers.json` 支持 `toolPolicy`（per-server allow 白名单），`wiki-mcp` 运行时拒绝未列入策略的工具（JSON-RPC `-32604`），`doctor` 对账声明与运行时工具面（`src/install/tool-policy.mjs`）。SBOM/许可证检查已落地——`flow-kit run sbom-license.mjs` 从 lockfile 生成 SPDX 2.3 SBOM 并按 `.agents/config/license-policy.json` 闭集判定许可证（verify 安全段 `sbom-license` 门 + CI advisory），机制台账已登记。devcontainer 生成已落地——`src/install/devcontainer.mjs` 按栈生成 `.devcontainer/devcontainer.json` + `Dockerfile`（官方基础镜像 + 钉版本 flow-kit），`flow-kit run check-devcontainer.mjs` 按 `.agents/config/devcontainer-policy.json` 校验镜像白名单与版本钉死（verify 安全段 `devcontainer` 门），`flow-kit devcontainer build` 用 docker 验证可构建性。
 
 ### R3-9 manifest 迁移框架
 

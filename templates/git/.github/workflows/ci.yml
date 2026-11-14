@@ -30,6 +30,9 @@ jobs:
       - name: SBOM & license policy (advisory)
         run: npx --yes agentic-flow-kit run sbom-license.mjs --check
         continue-on-error: true
+      - name: Devcontainer declaration (advisory)
+        run: npx --yes agentic-flow-kit run check-devcontainer.mjs
+        continue-on-error: true
       - name: Pipeline state closure
         run: npx --yes agentic-flow-kit run check-pipeline-state
         continue-on-error: true

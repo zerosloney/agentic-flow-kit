@@ -48,6 +48,7 @@
 | 测试守卫 | pre-write §2.5 | 改测试 deny/月 | 不退役 | 2026-11-12 | 现役[不退役主干] | — |
 | 策略即代码校验 | `flow-kit run policy check`（CI policy 作业；本地 `npm run policy:check`） | hard「未登记机制 / 枚举 / 角色模型引用 / 预算」计数 | 不退役（策略面主干） | 2026-11-13 建 | 现役 [不退役主干] | — |
 | SBOM 与许可证门 | `flow-kit run sbom-license.mjs --check`（verify.mjs 安全段 `sbom-license`；CI 模板 advisory 步） | 违规依赖数（deny/未知按策略；月）+ SBOM 漂移计数 | 不退役（供应链主干） | 2026-11-14 建（R3-8 第二片：SPDX 2.3 生成 + license-policy 闭集判定，零依赖零网络；lockfile 缺失 fail-closed exit 2） | 现役 [不退役主干] | — |
+| 开发容器声明门 | `flow-kit run check-devcontainer.mjs`（verify.mjs 安全段 `devcontainer`；CI 模板 advisory 步） | 容器声明违规数（镜像越白名单 / 浮动 tag / flow-kit 未钉版本；月） | 不退役（沙箱主干） | 2026-11-14 建（R3-8 第三片：devcontainer.json + Dockerfile 按栈生成，镜像白名单零网络门；项目未启用容器时 loud-skip 不判红） | 现役 [不退役主干] | — |
 
 ## 维护纪律
 

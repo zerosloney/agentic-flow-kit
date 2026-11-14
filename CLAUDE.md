@@ -136,6 +136,8 @@ Hook 接线在 `src/install/hooks.mjs`：中性规格来自引擎模板 `.agents
 
 权限编译在 `src/install/permissions.mjs`（与 Hook 编译共用合并骨架）：`gates.json` 的 `allow` / `deny` / `ask`（`tool: shell|read|web`）按注册表 `permissions` 能力编译，`hardened` 段在 `--hardened` 时追加；宿主 `syntax` 决定 `Bash(cmd:*)` 或 `Bash(cmd *)`，栈白名单来自 `STACK_SHELL` 自动追加。`mergePermissionsIntoRoot` 按 `manifest.managedPermissions` 替换上次托管项、保留用户自建条目（静态模板打底时整体替换），保留 `defaultMode` / `disableBypassPermissionsMode` 等其它键；与 hooks / MCP 在同一个 `merge-host` 条目里组合执行。宿主不支持的 `tool` 类别不静默丢弃，编译结果带 `unsupported`；`doctor` 对账 `permissions <host>` 的缺失编译项 / 残留托管项（用户条目不算漂移），并对无权限能力的宿主给 `guarantee` advisory。
 
+开发容器（R3-8 沙箱面）在 `src/install/devcontainer.mjs`：该文件是「栈 → 官方基础镜像 / 扩展」映射与渲染规则的单源（`STACK_IMAGES` / `STACK_EXTENSIONS`）。`buildPlan` 生成 `category: 'devcontainer'`、优先级 41 的两条 `kind: 'generated'` 条目（`.devcontainer/devcontainer.json` + `.devcontainer/Dockerfile`），Dockerfile 里 `ARG FLOW_KIT_VERSION=<安装器版本>` 钉死随镜像安装的 kit 版本；`--no-devcontainer` 关闭，选择记进 `manifest.devcontainer`，`upgrade` 按 manifest 重放（不静默重开）。白名单（`allowedImagePrefixes` / `forbiddenTags` / `requirePinnedFlowKit`）落在项目内 `.agents/config/devcontainer-policy.json`（schema `schemas/devcontainer-policy.schema.json`），运行时门 `templates/engine/.agents/scripts/check-devcontainer.mjs` 与 `doctor` 共读这一份，避免两处策略各说各话；门挂在 verify 安全段 `devcontainer`（项目没有 `.devcontainer/` 时大声跳过不判红），CLI `flow-kit devcontainer check|build`（`build` 需要 docker，缺失退出 2）。
+
 技能安装由 `skills.mode` 驱动：
 
 - `native`：生成 `<宿主目录>/skills/<name>/SKILL.md` 指针壳，正文权威仍在 `.agents/skills/`。

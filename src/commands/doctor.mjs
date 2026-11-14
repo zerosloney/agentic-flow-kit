@@ -8,6 +8,7 @@ import { HOSTS, hostTargetRel, hostSource } from '../hosts/registry.mjs';
 import { listFiles, readGatesSpecs, TEMPLATES } from '../install/plan.mjs';
 import { readMcpServers } from '../install/mcp.mjs';
 import { readToolPolicy } from '../install/tool-policy.mjs';
+import { checkDevcontainer } from '../install/devcontainer.mjs';
 import { findHookDrift } from '../install/hooks.mjs';
 import { listBaselines } from '../install/baseline.mjs';
 import { buildAttestation, writeAttestation } from '../install/attest.mjs';
@@ -300,6 +301,15 @@ export function doctorCommand({ args, t }) {
     const ci = ['azure-pipelines.yml', '.github/workflows/ci.yml'].filter((rel) => fs.existsSync(path.join(target, rel)));
     if (ci.length) add(true, 'ci', ci.join(', '));
     else add(true, 'ci', t('doctor.ciMissing', { paths: 'azure-pipelines.yml / .github/workflows/ci.yml' }), '', { warn: true });
+  }
+  // 开发容器（R3-8 沙箱面）：manifest 声明启用时，容器声明必须在位且合规。
+  // manifest 未声明该字段 = 旧安装（升级后才有），此时不判红也不假装有容器。
+  if (manifest?.devcontainer === true) {
+    const dc = checkDevcontainer({ target, stack: manifest.stack || null });
+    if (dc.ok) add(true, 'devcontainer', t('doctor.devcontainerOk', { image: dc.image }));
+    else add(false, 'devcontainer', t('doctor.devcontainerProblems', { problems: dc.problems.join('; ') }));
+  } else if (manifest?.devcontainer === false) {
+    add(true, 'devcontainer', t('doctor.devcontainerDisabled'), '', { warn: true });
   }
   // enterprise：展示档位、实际加固姿态与缺口，并核对证明链 / 策略检查。
   const enterprise = manifest?.hardened

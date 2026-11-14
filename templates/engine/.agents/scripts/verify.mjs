@@ -20,6 +20,7 @@
 //         2026-11-11 增 4 门至 20（审计 P2「--no-verify 远端兜底缺口」：.agents/hooks 代码四门接入
 //         product cohort，本地增量档单边化 CI——执法点 = --mid/--full）。
 //         2026-11-14 21 门（R3-8 供应链：sbom-license 安全段 +1——SBOM/许可证策略零网络门）。
+//         2026-11-14 22 门（R3-8 沙箱：devcontainer 安全段 +1——开发容器声明零网络门）。
 // 用法：flow-kit run verify.mjs [--full | --scope | --face <面> | --product | --mid] [--list] [--jobs N | --serial] [--help]
 //   **档位口径（命令侧单源，2026-11-08 补记）**：--scope = diff 面增量档（判据同缺省档，单源
 //     verify-scope.mjs）；--full = 显式全量；--scope 与 --full 互斥。命令侧档位口径以此头注为准。
@@ -31,7 +32,7 @@
 //     frontend-build）＋代码四门（code-architecture / code-audit-fields / code-delete-guard /
 //     code-notify-guard，审计 P2「--no-verify 远端兜底缺口」接入）——执法点单边移交
 //     CI（--full / --mid / --product 三档与 azure-pipelines 一字不变）；secrets-scan、sbom-license、
-//     引擎段与 wiki-consistency 照跑。门表叙事锚恒 21（裸 --list，2026-11-14 R3-8 +1），增量档裁剪在
+//     引擎段与 wiki-consistency 照跑。门表叙事锚恒 22（裸 --list，2026-11-14 R3-8 +2），增量档裁剪在
 //     执行期与 --list --scope / --face 干跑可见（跳过说明行）。
 //   --face <面> = 显式面覆盖（合法值 = verify-scope 面枚举 backend|frontend|docs，逗号多值）：不做工作区
 //     脏路径自动面检测，直接按给定面裁门；与 --full 互斥（亦拒 --scope / 分档 / 夹具旗标）；跳过 24h 兜底
@@ -48,7 +49,7 @@
 //   **分层跑（2026-10-23，P0-1 改口径）**：engine-code 触面 → 引擎套件全量；业务/文档面 →
 //     `npm test -- --fast`（跳过最慢 9 套件，不再整门跳过）。全量 / --engine / CI / 零裁剪仍全量。
 //     绿行 `fastTests` 标记可审计。
-//   --list：按执行序打印门 id 后退出（含 RUN_E2E=1 时的条件门），不执行；裸 --list 不参与裁剪（门表恒 21），
+//   --list：按执行序打印门 id 后退出（含 RUN_E2E=1 时的条件门），不执行；裸 --list 不参与裁剪（门表恒 22），
 //     配 --scope / --face 干跑展示增量档裁剪结果（跳过说明行走 stderr，stdout 保持纯 id 可管道）。
 //   --jobs / --serial：并发档位与串行回退（见上「编排」）。
 // 沿革：verify-evidence（凭证落账）；2026-10-09 统一质量检查门禁 d009965（九门）；
@@ -59,7 +60,7 @@
 //       ④前端关单门 vue-tsc 分离（TF_BUILD 下仍全量 build）；②--scope diff 面增量关单（口径单源 verify-scope.mjs）。
 //       verify-diet 二批（2026-10-21 P0，owner 拍板）：⑤--scope 引擎自检面——engine-tests 引擎面触 = 全量、
 //       业务面 = --fast（2026-10-23 改口径，不再整门跳过）；⑥ledger-invariant
-//       全史扫描默认 CI-only（diff 面触及台账时本地回列；门表/--list 恒 21，绿行 envSkips 记录跳过事实）。
+//       全史扫描默认 CI-only（diff 面触及台账时本地回列；门表/--list 恒 22，绿行 envSkips 记录跳过事实）。
 //       引擎减重档 1-B（2026-11-08）：增量档（缺省/--scope/--face）产品 5 门单边化 CI + --face 显式面覆盖。
 //       引擎减重档 2-E（2026-11-08）：engine-artifacts 门「漂移即红」改「自动重生成后通过」——生成物是
 //       磁盘态的确定函数，漂移原地重生成自愈（复检确认），失败才红；并行会话在途立档不再误伤关单 verify。
@@ -111,7 +112,7 @@ const GATES = [
   // 却从未进任何门表，71 处存量断档积累数月无人见（当日 DAG 感知重写 + HISTORY_BASELINE 声明后
   // 首次全绿，方具挂门条件）。pre-commit 仅 --staged 前缀面，全史审计由此门独担。
   // verify-diet 二批（2026-10-21 P0-2，owner 拍板）：本地关单不再重复付全史扫描（~37s）——TF_BUILD 外
-  // 执行期 loud-skip（diff 面触台账即回列；门表/--list 恒 21，同 lane-surface-ci「本地跳过」先例）；全史审计由 CI 独担
+  // 执行期 loud-skip（diff 面触台账即回列；门表/--list 恒 22，同 lane-surface-ci「本地跳过」先例）；全史审计由 CI 独担
   // （main 全量 verify 含本门；develop 最小 CI 面 secrets+check-loop 不含本门——2026-10-25 起），新违规仍被提交时刻 --staged 增量门当场拦。
   { id: 'ledger-invariant', cohort: 'engine', name: '确认台账不变量（历史全扫）', cmd: 'flow-kit run check-ledger-invariant.mjs', folder: '.', type: 'shell' },
   // 泳道 diff 面（ai-native-review-p1）：CI（TF_BUILD/合并提交检出）按基准执法——产品契约面
@@ -127,6 +128,9 @@ const GATES = [
   // 供应链门（R3-8）：SBOM 生成 + 许可证策略检查（零依赖零网络，判据 = .agents/config/license-policy.json）。
   // lockfile 缺失 = fail-closed exit 2；--check 只读比对 SBOM 漂移。与 secrets-scan 同属安全段。
   { id: 'sbom-license', cohort: 'security', name: 'SBOM 与许可证策略（SPDX 2.3，零网络）', cmd: 'flow-kit run sbom-license.mjs --check', folder: '.', type: 'shell' },
+  // 沙箱门（R3-8）：开发容器声明校验——镜像来源白名单 + 版本钉死 + 声明结构。
+  // 判据 = .agents/config/devcontainer-policy.json；项目没有 .devcontainer/（未启用容器）→ 大声跳过不判红。
+  { id: 'devcontainer', cohort: 'security', name: '开发容器声明（镜像白名单 + 版本钉死）', cmd: 'flow-kit run check-devcontainer.mjs', folder: '.', type: 'shell' },
   // 依赖漏洞审计三门（nuget-audit / frontend-audit-prod / frontend-audit-devtool）2026-10-16 退役
   //   （owner 指令）：三者皆依赖公网漏洞服务（npm `/-/npm/v1/security/*`、NuGet 源索引的
   //   `VulnerabilityInfo`），内网镜像均不代理该面（实测见 runtime-env §6.4「漏洞数据源实测」），
@@ -159,7 +163,7 @@ const GATES = [
   { id: 'backend-test', cohort: 'product', name: '后端自动化测试', cmd: 'node scripts/verify/backend/run-backend-tests.mjs', folder: '.', type: 'shell', deps: ['backend-build'] },
   // 前端关单门（verify-diet ④ 分离）：本地关单只执法类型检查——vite bundle 产物不进任何断言，
   // 对验证语义无贡献，完整构建留在 deploy 与 CI（TF_BUILD 时仍 npm run build 全量）。
-  // 门 id/计数变更（--list 恒 21，2026-11-14 R3-8 增 sbom-license；2026-11-11 增代码四门；2026-10-25 local-gate-config 加入引擎段；2026-10-24 复核加三门）；s23 GATE_CMD 已同步收 vue-tsc。
+  // 门 id/计数变更（--list 恒 22，2026-11-14 R3-8 增 sbom-license + devcontainer；2026-11-11 增代码四门；2026-10-25 local-gate-config 加入引擎段；2026-10-24 复核加三门）；s23 GATE_CMD 已同步收 vue-tsc。
   { id: 'frontend-build', cohort: 'product',
     name: process.env.TF_BUILD ? '前端构建 (含类型检查)' : '前端类型检查 (vue-tsc)',
     cmd: process.env.TF_BUILD ? 'npm run build' : 'npm run type-check',
@@ -371,7 +375,7 @@ async function run() {
   const productOnly = argv.includes('--product');
   // --mid（2026-10-29 三档门禁）：CI 中档 = PR→develop / develop 直推。业务面（product + security）
   // 与 --product 同集合，唯 backend-test 换「只跑单测」（不碰集成测试库）——PR 阶段不依赖测试库
-  // 副本，DB 回归留给 develop→main 的重档（全量 21 门）。同 --product 不落 all-gates 凭证：
+  // 副本，DB 回归留给 develop→main 的重档（全量 22 门）。同 --product 不落 all-gates 凭证：
   // 分档绿不是关单凭证（关单仍要本地全量）。
   const midOnly = argv.includes('--mid');
   const explicitScope = argv.includes('--scope');
@@ -407,7 +411,7 @@ async function run() {
   // 默认档（verify-scope-default 2026-10-22，owner 拍板）：未显式 --full、且非夹具/非引擎段/非 --list →
   // 默认走 diff 面增量，`--full` 才全量。实测依据：一日 23 次全量、墙钟中位 234s ≈ 90 分钟纯等待，而
   // 绝大多数分支只动文档面；「默认便宜、全量显式」是把关单压到分钟级以下的唯一杠杆。
-  // --list 不参与：门表恒 21 是叙事锚与对外契约，裁剪只在执行期生效。
+  // --list 不参与：门表恒 22 是叙事锚与对外契约，裁剪只在执行期生效。
   let scopeMode = explicitScope ? 'diff'
     : faceArg ? 'face'
     : (!explicitFull && !testCmd && !stubCmd && !engineOnly && !productOnly && !midOnly && !listOnly) ? 'diff' : null;
@@ -521,7 +525,7 @@ async function run() {
   }
   // --engine（2026-10-11 C7 方案②）：只跑 cohort=engine 的引擎段门——原设计供 develop 增量 CI
   // （该 CI 步已随 2026-10-21 死步清理删除；--engine 保留本地/手动用法）。与全量的关键差异：
-  // 全绿**不落 all-gates 绿行、不生成摘要**——增量段绿不是 21 门全量关单凭证，落了会被 hasFreshVerifyLine
+  // 全绿**不落 all-gates 绿行、不生成摘要**——增量段绿不是 22 门全量关单凭证，落了会被 hasFreshVerifyLine
   // 与 gen-verify-evidence 误认成全量绿（伪凭证）；失败行照记（suite=门 id，诊断用）。
   const skipSet = scope ? new Set(scope.skippedGateIds) : new Set();
   // CI-only 门（verify-diet 二批 2026-10-21 P0-2；2026-10-24 复核 P1 收紧）：ledger-invariant 全史扫描
@@ -541,10 +545,10 @@ async function run() {
       .map((g) => (g.id === 'backend-test'
         ? { ...g, cmd: `${g.cmd} --unit-only`, name: '后端单元测试（不含集成测试）' }
         : g))
-    // 重档（--full / 默认档回落，2026-11-06 修复）：全量 21 门，backend-test 不附 --unit-only（含集成）——
+    // 重档（--full / 默认档回落，2026-11-06 修复）：全量 22 门，backend-test 不附 --unit-only（含集成）——
     // 直推 main 与 PR→main 的 CI 重档执法面（CI 已备 TEST_DB_ALLOW_DEV=1 逃生，见 azure-pipelines.yml）；
     // 本地默认档/中档仍单测档（集成在 pre-push --select-range / CI 重档）。
-    // !scopeMode 兜住裸 --list：门表叙事锚恒 21（裁剪只在增量档执行期与 --list --scope/--face 生效）。
+    // !scopeMode 兜住裸 --list：门表叙事锚恒 22（裁剪只在增量档执行期与 --list --scope/--face 生效）。
     : fullTier || !scopeMode ? GATES
     // 增量档（缺省 / --scope / --face；2026-11-08 档 1-B 产品门单边化 CI）：
     // ① 产品 cohort 5 门（backend-build / backend-test / frontend-lint / frontend-unit-test / frontend-build）
@@ -767,7 +771,7 @@ async function run() {
   }
 
   // ---- 全绿尾段（任一门红已在上方 exit 1 返回，能走到这里即全绿）----
-  // 引擎段增量门不落 all-gates 凭证（增量段绿 ≠ 21 门全量关单凭证）——台账/摘要双跳过；
+  // 引擎段增量门不落 all-gates 凭证（增量段绿 ≠ 22 门全量关单凭证）——台账/摘要双跳过；
   // fixture 绿行照落（带 testCmd:true 标记，hasFreshVerifyLine 不认——测试面沿既有契约）
   if (!engineOnly && !productOnly && !midOnly) {
     let entry = null;
@@ -858,11 +862,11 @@ async function run() {
     }
   }
   if (engineOnly) {
-    console.log(`\n[verify] ✅ 引擎段 ${passedCount} 门全绿——增量门通过（非 21 门关单凭证，不落 all-gates 台账与摘要）`);
+    console.log(`\n[verify] ✅ 引擎段 ${passedCount} 门全绿——增量门通过（非 22 门关单凭证，不落 all-gates 台账与摘要）`);
   } else if (productOnly) {
-    console.log(`\n[verify] ✅ 业务面 ${passedCount} 门全绿——分面凭证（非 21 门关单凭证，不落 all-gates 台账与摘要）`);
+    console.log(`\n[verify] ✅ 业务面 ${passedCount} 门全绿——分面凭证（非 22 门关单凭证，不落 all-gates 台账与摘要）`);
   } else if (midOnly) {
-    console.log(`\n[verify] ✅ 中档 ${passedCount} 门全绿——业务面 + 后端单测（集成测试未跑；非 21 门关单凭证，不落 all-gates 台账与摘要）`);
+    console.log(`\n[verify] ✅ 中档 ${passedCount} 门全绿——业务面 + 后端单测（集成测试未跑；非 22 门关单凭证，不落 all-gates 台账与摘要）`);
   } else {
     console.log(`\n[verify] 🎉 全绿——可以关单（共 ${passedCount} 项通过）`);
   }
