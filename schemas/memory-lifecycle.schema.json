@@ -1,0 +1,69 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zerosloney/agentic-flow-kit/schemas/memory-lifecycle.schema.json",
+  "title": "agentic-flow-kit memory lifecycle config",
+  "description": ".agents/config/memory-lifecycle.json：记忆生命周期（提升 / 衰减 / 冲突消解 / 联邦 / 查询）口径。注入层预算仍由 memory-tiers.json 单源执法。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "store": { "type": "string", "description": "记忆记录（JSONL，相对项目根）。" },
+    "audit": { "type": "string", "description": "状态迁移审计（JSONL，相对项目根）。" },
+    "hits": { "type": "string", "description": "查询命中日志（JSONL，运行态；应在 .gitignore）。" },
+    "injected": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["begin", "end"],
+      "properties": {
+        "begin": { "type": "string", "minLength": 1, "description": "托管块起始标记（精确匹配）。" },
+        "end": { "type": "string", "minLength": 1, "description": "托管块结束标记（精确匹配）。" }
+      }
+    },
+    "promotion": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "minUses": { "type": "integer", "minimum": 0, "description": "candidate 上浮为 active 所需命中次数。" }
+      }
+    },
+    "decay": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "dormantAfterDays": { "type": "integer", "minimum": 1, "description": "active 闲置超过该天数转 dormant。" },
+        "retireAfterDays": { "type": "integer", "minimum": 1, "description": "非终态闲置超过该天数转 retired。" }
+      }
+    },
+    "conflict": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sourceRank": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "冲突裁决的来源权威顺序（前者胜）；未列出的来源排在最后。"
+        }
+      }
+    },
+    "federation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "roots": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "跨仓联邦的仓库根（相对当前根或绝对路径）；只读。"
+        }
+      }
+    },
+    "query": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "limit": { "type": "integer", "minimum": 1, "description": "默认返回条数。" }
+      }
+    }
+  }
+}

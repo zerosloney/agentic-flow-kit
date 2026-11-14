@@ -3,7 +3,8 @@
 > 每次会话都会加载的文件。**上限 200 行 / 25KB**（见 `.agents/config/memory-tiers.json`）。
 > 只放“每次都必须知道”的稳定事实；细节一律用链接下沉。
 > 更长不等于更有效：指令文件越长，遵循度越低（Anthropic agent memory 研究）。
-> 由 dreaming 的 `memory-tier audit/suggest` 维护；`suggest` 只出候选，不自动改本文件。
+> 由 dreaming 的 `memory-tier audit/suggest` 出候选；`memory-lifecycle promote` 只维护下方
+> `memory:auto` 标记块，块外手写内容不受影响（生命周期见 `.agents/config/memory-lifecycle.json`）。
 
 - 入口与定级：`.agents/commands/new-task.md`
 - L2/L3 阶段流：`.agents/commands/stages.md`
@@ -12,3 +13,8 @@
 - 记忆地图：`wiki/_memory/INDEX.md`
 - 行为评测门：`flow-kit run agent-eval`
 - 离线梦境：`.agents/skills/dream/SKILL.md`
+
+<!-- memory:auto:begin -->
+<!-- 由 flow-kit run memory-lifecycle.mjs promote 维护；块外手写内容不受影响。 -->
+- _（暂无自动上浮记忆）_
+<!-- memory:auto:end -->

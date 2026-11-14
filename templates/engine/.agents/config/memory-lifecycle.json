@@ -1,0 +1,27 @@
+{
+  "$schema": "memory-lifecycle/config@1",
+  "version": 1,
+  "store": ".agents/memory/records.jsonl",
+  "audit": ".agents/memory/audit.jsonl",
+  "hits": ".agents/cache/memory-hits.jsonl",
+  "injected": {
+    "begin": "<!-- memory:auto:begin -->",
+    "end": "<!-- memory:auto:end -->"
+  },
+  "promotion": {
+    "minUses": 2
+  },
+  "decay": {
+    "dormantAfterDays": 90,
+    "retireAfterDays": 180
+  },
+  "conflict": {
+    "sourceRank": ["manual", "incident", "claim", "papercut", "session-log", "suggest"]
+  },
+  "federation": {
+    "roots": []
+  },
+  "query": {
+    "limit": 10
+  }
+}

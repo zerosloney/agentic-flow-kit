@@ -38,7 +38,7 @@
 | R3-3 | 安装证明链 | 3 | M | manifest + eval 凭证 + 签名 | DONE |
 | R3-4 | 技能包分发与准入 | 3 | L | `add-skill`、lockfile、`skills lint` | DONE |
 | R3-5 | pipeline 真实执行器 | 3 | L | `templates/engine/.agents/scripts/pipeline-run.mjs` | DONE |
-| R3-6 | 记忆生命周期 | 3 | L | `memory-tier.mjs` / `memory-wiki.mjs` | TODO |
+| R3-6 | 记忆生命周期 | 3 | L | `memory-tier.mjs` / `memory-wiki.mjs` / `memory-lifecycle.mjs` | DONE |
 | R3-7 | 可观测与成本 | 3 | M | `outcome-metrics.mjs`、`metrics-core.mjs` | DONE |
 | R3-8 | 沙箱与供应链 | 3 | L | devcontainer / MCP 权限 / SBOM | TODO |
 | R3-9 | manifest 迁移框架 | 3 | M | `migrations/`、`manifest.schemaVersion` | DONE |
@@ -250,6 +250,15 @@
 
 - **目标**：`memory-tier` / `memory-wiki` 之上补提升、衰减、冲突消解、跨仓联邦、统一 `memory query` 与命中率评测。
 - **验收**：状态迁移确定性；审计报告可追溯来源；注入层预算不破。规模 `L`。
+- **落地（2026-11-14）**：
+  - `memory-lifecycle.mjs`：记录库 `.agents/memory/records.jsonl`（candidate / active / dormant / retired / superseded）+ 迁移审计 `.agents/memory/audit.jsonl`；`add` / `decay` / `conflict` / `promote` / `cycle` / `query` / `report` 子命令。
+  - **状态机确定性**：`idle = now - max(lastHitAt, createdAt)` 是唯一时间输入；`candidate --hits>=promotion.minUses--> active`、`active --idle>dormantAfterDays--> dormant`、非终态 `--idle>retireAfterDays--> retired`、`dormant` 在窗口内再次命中回到 `active`；`retired` / `superseded` 终态。
+  - **冲突消解**：同 key、不同文本按“来源权威 rank → createdAt 新者 → id 小者”裁决；败者 `superseded` + `supersededBy`，审计保留双方来源。id 用折叠后的 key+text，大小写/引号/空白差异不产生假冲突。
+  - **注入层预算不破**：`promote` 只替换 `injected-memory.md` 的 `memory:auto:begin/end` 托管块（块外手写内容不动），写前用 `memory-tiers.json` 的 200 行 / 25KB 预检，超限拒绝写入且不落状态。
+  - **统一查询与命中率**：`query` 同时检索记录、`workflow/claims.d`、`workflow/incidents`、`workflow/papercuts.d` 与联邦仓库（只读）；命中写入 `.agents/cache/memory-hits.jsonl` 并回写记录 `hits` / `lastHitAt`；`report` 输出查询命中率、逐条命中、审计事件与可追溯来源，`--check` 在预算溢出 / 托管块陈旧 / 未消解冲突时退出 1。
+  - **跨仓联邦**：`federation.roots` / `--roots` 只读其他仓库的 `records.jsonl`，结果带仓库标签，不写对方。
+  - 口径配置 `.agents/config/memory-lifecycle.json` + `schemas/memory-lifecycle.schema.json`；CI 追加 advisory `report --check`；`dream-run` 阶段 J 纳入生命周期审计。
+  - 测试：`tests/memory-lifecycle.test.mjs` 9 例（id 幂等、衰减确定性、休眠复活、冲突裁决、上浮/预算拒绝、统一查询与命中日志、联邦只读、审计可追溯与陈旧检测、托管块组合）。
 
 ### R3-7 可观测与成本（引擎面）
 

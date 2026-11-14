@@ -292,6 +292,7 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 | 经验日志 | `flow-kit run session-log` | 记录 failure/correction/refusal，供 dreaming 对照纠错 |
 | 记忆表示 | `flow-kit run memory-wiki` | 从 claims/incidents/session-logs 生成 `wiki/_memory/` 链接地图 |
 | 注入层预算 | `flow-kit run memory-tier` | 200 行 / 25KB 上限；只出上浮候选，不自动改 |
+| 记忆生命周期 | `flow-kit run memory-lifecycle.mjs` | 提升 / 衰减 / 冲突消解 / 跨仓联邦 / 统一查询 / 命中率审计；只维护注入层 `memory:auto` 标记块 |
 | 单写者租约 | `flow-kit run path-lease` | 并行 agent 写同一页面前加租约，防共享页丢事实 |
 | 结果指标 | `flow-kit run outcome-metrics` | 首次过门率、复核采纳率、逃逸缺陷、评测通过率、返工占比 |
 | 成本与延迟 | `flow-kit run usage-log` + `observability` | 按 run / 角色 / 模型的 token、成本、延迟；模型质量时间线；导出 Prometheus / OTLP JSON |
@@ -319,6 +320,28 @@ flow-kit run observability --format otel --out metrics.json                     
 ```
 
 口径由 `.agents/config/observability.json` 控制（schema：`schemas/observability.schema.json`）：`windowDays`、回归阈值 `regression.passRateDrop`、导出前缀 / service name、可选 `pricing`（每百万 token）。成本只在行内 `costUsd` 或价格表可换算时计入，缺 token/价格的调用记 `unpricedCalls`，不按 0 计费；缺源在报告末尾单列。报告 JSON 去掉 `generatedAt` 后与输入一一对应，可直接重算，`--baseline` 即依赖这一点。
+
+### 记忆生命周期
+
+`memory-lifecycle` 把记忆从“只读建议”变成可运营的状态机（记录在 `.agents/memory/records.jsonl`，迁移审计在 `.agents/memory/audit.jsonl`）：
+
+- **状态迁移确定性**：`candidate → active → dormant → retired`；命中次数达到 `promotion.minUses` 才上浮，闲置超过 `decay.dormantAfterDays` / `retireAfterDays` 自动降级；`retired` / `superseded` 是终态。
+- **冲突消解**：同 key、不同文本按“来源权威 rank → 时间新者 → id 小者”裁决，败者置 `superseded` 并记录 `supersededBy`；审计保留双方来源。
+- **注入层只改托管块**：`promote` 只替换 `injected-memory.md` 中 `memory:auto:begin/end` 标记块，块外手写内容不受影响；写前用 `memory-tiers.json` 的 200 行 / 25KB 预算预检，超限拒绝写入。
+- **统一查询与命中率**：`query` 同时检索记忆记录、claims、incidents、papercuts 与联邦仓库（只读），结果带来源；每次查询写入 `.agents/cache/memory-hits.jsonl`，`report` 据此算查询命中率与逐条命中。
+
+```bash
+flow-kit run memory-lifecycle.mjs add --text "先复现失败测试再修" --kind session-log --ref session-logs/2026-05-01.jsonl
+flow-kit run memory-lifecycle.mjs query "缓存" --limit 10      # 统一检索（自动记命中）
+flow-kit run memory-lifecycle.mjs decay                       # 衰减迁移
+flow-kit run memory-lifecycle.mjs conflict                    # 冲突消解
+flow-kit run memory-lifecycle.mjs promote --from-suggest      # 上浮到注入层托管块
+flow-kit run memory-lifecycle.mjs cycle                       # decay → conflict → promote
+flow-kit run memory-lifecycle.mjs report --check --out tmp/memory-audit.md   # 审计；预算/块陈旧/未消解冲突时退出 1
+flow-kit run memory-lifecycle.mjs query "约定" --roots ../other-repo          # 跨仓联邦（只读）
+```
+
+口径由 `.agents/config/memory-lifecycle.json` 控制（schema：`schemas/memory-lifecycle.schema.json`）：存储/审计/命中路径、托管块标记、上浮阈值、衰减窗口、来源权威顺序、联邦仓库与默认返回条数。`report --json` 的 `records` 每行带 `source` / `refs`，可直接追溯；CI 以 advisory 方式跑 `report --check`。
 
 ### 策略即代码
 

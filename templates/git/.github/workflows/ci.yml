@@ -30,3 +30,6 @@ jobs:
       - name: Injected memory budget
         run: npx --yes agentic-flow-kit run memory-tier audit
         continue-on-error: true
+      - name: Memory lifecycle audit
+        run: npx --yes agentic-flow-kit run memory-lifecycle.mjs report --check
+        continue-on-error: true
