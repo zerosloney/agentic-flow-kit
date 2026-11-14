@@ -251,6 +251,23 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 
 默认声明带一个只读本地 server `flow-kit-wiki`（`flow-kit run wiki-mcp`），提供 `wiki_search` 工具检索 `wiki/` 与 `.agents/`；不联网、不写盘。
 
+### MCP 工具权限策略
+
+声明文件支持可选的 `toolPolicy` 段（R3-8），按 server 声明工具白名单：
+
+```json
+{
+  "servers": { "flow-kit-wiki": { "command": "flow-kit", "args": ["run", "wiki-mcp"] } },
+  "toolPolicy": { "mode": "allow", "servers": { "flow-kit-wiki": ["wiki_search"] } }
+}
+```
+
+- `mode` 目前只支持 `allow`；`servers.<name>` 是该 server 允许被调用的工具名列表。
+- 运行时由包内 server 强制执行：`flow-kit run wiki-mcp` 读取同一份声明（`FLOW_KIT_MCP_TOOL_POLICY` 环境变量注入路径），`tools/call` 对未列入白名单的工具返回 JSON-RPC `-32604`，`tools/list` 也只暴露白名单内的工具。宿主 MCP 客户端只透传环境，策略不依赖宿主能力。
+- 声明无效（`mode` 非法、白名单不是字符串数组）→ `install` 退出码 2（`MCP_CONFIG`），零写盘。
+- `doctor` 把声明与包内运行时工具面双向对账：声明引用了不存在的工具、或未覆盖某个运行时工具，都报 `mcp policy` 失败。
+- 不写 `toolPolicy` = 不设限（向后兼容旧声明文件）。
+
 ## 模型配置
 
 安装器按三个角色为子代理选模型：

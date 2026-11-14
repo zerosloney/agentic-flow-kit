@@ -5,5 +5,11 @@
       "command": "flow-kit",
       "args": ["run", "wiki-mcp"]
     }
+  },
+  "toolPolicy": {
+    "mode": "allow",
+    "servers": {
+      "flow-kit-wiki": ["wiki_search"]
+    }
   }
 }

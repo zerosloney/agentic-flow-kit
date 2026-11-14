@@ -7,6 +7,7 @@ import { doctorGit } from '../git/config.mjs';
 import { HOSTS, hostTargetRel, hostSource } from '../hosts/registry.mjs';
 import { listFiles, readGatesSpecs, TEMPLATES } from '../install/plan.mjs';
 import { readMcpServers } from '../install/mcp.mjs';
+import { readToolPolicy } from '../install/tool-policy.mjs';
 import { findHookDrift } from '../install/hooks.mjs';
 import { listBaselines } from '../install/baseline.mjs';
 import { buildAttestation, writeAttestation } from '../install/attest.mjs';
@@ -17,6 +18,12 @@ import { RUNTIME_SCRIPTS, RUNTIME_HOOKS, KIT_ROOT } from './runtime.mjs';
 import { buildDiff } from './diff.mjs';
 
 const HOOK_FILES = ['pre-commit', 'commit-msg', 'post-commit', 'pre-merge-commit', 'pre-push'];
+
+// MCP 运行时工具面：来自包内 server 实现（wiki-mcp.mjs）。新增工具时同步更新。
+// doctor 拿它和 toolPolicy.servers 声明做双向对账。
+const MCP_RUNTIME_TOOLS = [{ name: 'wiki_search' }];
+const allowedHas = (policy, server, tool) => Boolean(policy?.servers?.[server]?.has(tool));
+let mcpPolicyCache;
 
 // R5-1b：运行时实现应随包分发；目标项目里残留的旧脚本/hook 代码只作 advisory。
 // 只对照包内确实存在的运行时文件，避免把项目自建的 hook 误报为遗留。
@@ -136,7 +143,23 @@ export function doctorCommand({ args, t }) {
     if (!h.hooks) add(true, `guarantee ${host}`, t('doctor.guaranteeGap', { host, capability: 'hooks' }), '', { warn: true });
     if (h.agents && !h.agents.modelField) add(true, `guarantee ${host}`, t('doctor.guaranteeGap', { host, capability: 'model injection' }), '', { warn: true });
 
+    // MCP 工具权限策略与运行时工具面对账（R3-8）：声明了白名单的 server 必须覆盖运行时工具。
+    // 声明一次，所有宿主共享；声明无效时每个 MCP 宿主都要报告，不能只报第一个。
+    let mcpPolicy = mcpPolicyCache;
+    if (h.mcp && manifest?.mcp === true && mcpPolicy === undefined) {
+      try {
+        mcpPolicy = readToolPolicy(target);
+      } catch (err) {
+        mcpPolicy = { error: err };
+      }
+      mcpPolicyCache = mcpPolicy;
+    }
+    if (mcpPolicy?.error) {
+      add(false, `mcp policy ${host}`, t('doctor.mcpPolicyInvalid', { detail: mcpPolicy.error.message }));
+    }
+
     if (h.mcp && manifest?.mcp === true) {
+      if (mcpPolicy?.error) continue;
       let servers = {};
       try {
         servers = readMcpServers(target);
@@ -166,6 +189,28 @@ export function doctorCommand({ args, t }) {
       const missing = names.filter((name) => !(name in container));
       if (missing.length) add(false, `mcp ${host}`, t('doctor.mcpServersMissing', { servers: missing.join(', ') }));
       else add(true, `mcp ${host}`, `${h.mcp.file}: ${names.join(', ')}`);
+      if (mcpPolicy) {
+        const runtimeNames = new Set(MCP_RUNTIME_TOOLS.map((tool) => tool.name));
+        const over = names.filter((name) => {
+          const allowed = mcpPolicy.servers[name];
+          return allowed && [...allowed].some((tool) => !runtimeNames.has(tool));
+        });
+        const under = names.filter((name) => {
+          const allowed = mcpPolicy.servers[name];
+          return allowed && [...runtimeNames].some((tool) => !allowed.has(tool));
+        });
+        if (over.length) {
+          const detail = over.map((name) => `${name}: ${[...mcpPolicy.servers[name]].filter((tool) => !runtimeNames.has(tool)).join(', ')}`).join('; ');
+          add(false, `mcp policy ${host}`, t('doctor.mcpPolicyUnknownTool', { detail }));
+        }
+        if (under.length) {
+          const detail = under.map((name) => `${name}: ${[...runtimeNames].filter((tool) => !allowedHas(mcpPolicy, name, tool)).join(', ')}`).join('; ');
+          add(false, `mcp policy ${host}`, t('doctor.mcpPolicyMissingTool', { detail }));
+        }
+        if (!over.length && !under.length) {
+          add(true, `mcp policy ${host}`, t('doctor.mcpPolicyOk', { servers: names.join(', ') }));
+        }
+      }
     }
 
     // Hook 接线：以 .agents/hooks/gates.json 为期望值，比对宿主配置里的托管条目。

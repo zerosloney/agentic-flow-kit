@@ -13,7 +13,14 @@ function fail(detail) {
   throw err;
 }
 
-function isObject(value) {
+// 工具权限策略声明无效时也走同一类错误（退出码 2），便于 install / doctor 统一处理。
+export function mcpPolicyFail(detail) {
+  const err = new Error(`invalid MCP tool policy declaration: ${detail}`);
+  err.code = 'MCP_CONFIG';
+  throw err;
+}
+
+export function isObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
 
