@@ -1,0 +1,25 @@
+{
+  "$schema": "license-policy/config@1",
+  "version": 1,
+  "allow": [
+    "MIT",
+    "ISC",
+    "Apache-2.0",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "0BSD",
+    "CC0-1.0",
+    "Unlicense",
+    "Python-2.0"
+  ],
+  "deny": [
+    "AGPL-3.0",
+    "AGPL-3.0-only",
+    "AGPL-3.0-or-later",
+    "SSPL-1.0",
+    "EPL-1.0"
+  ],
+  "exceptions": {},
+  "unknownAction": "deny",
+  "failOn": "deny"
+}

@@ -316,6 +316,7 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 | 闭环执行器 | `flow-kit run pipeline-run.mjs` | 六阶段状态机；断点续跑（inFlight + resume）、verify 门重试预算、并行门分支、阶段产物契约 |
 | 闭环状态机 | `flow-kit run check-pipeline-state` | stage/stopType 闭包检查；静态检查不能替代真实端到端 run |
 | 策略即代码 | `.agents/config/policy.json` + `flow-kit run policy` | 双向核对机制台账、预算、枚举闭集与角色/模型引用；`check` 失败非零，`explain` 输出人类视图 |
+| SBOM 与许可证 | `flow-kit run sbom-license.mjs` + `.agents/config/license-policy.json` | 从 lockfile 生成 SPDX 2.3 SBOM（`.agents/sbom/spdx.json`）并按 allow/deny 闭集判定依赖许可证；未知/违规即红，豁免走 `exceptions`（写明理由）；零依赖零网络，lockfile 缺失 fail-closed |
 | 安装证明链 | `flow-kit doctor --attest --out <file>` | manifest / files / policy / eval / git 五段 sha256 链；篡改可检出，输出确定、可归档 |
 
 `--tier standard`（默认）会生成 `azure-pipelines.yml` 与 `.github/workflows/ci.yml`，在 `verify --full` 之后跑上述 advisory 检查；`lean` 不生成 CI，`enterprise` 另装加固配置。未完成项与验收口径见 [BACKLOG.md](BACKLOG.md)。

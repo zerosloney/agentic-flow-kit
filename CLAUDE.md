@@ -97,6 +97,7 @@ node tools/new-host.mjs myhost [--hooks] [--permissions] [--mcp claude|opencode]
 
 - `templates/scaffold/workflow/specs/_TEMPLATE/` 提供目录化 `spec.md` / `tasks.md` / `verify-report.md`；`templates/engine/.agents/scripts/check-spec-packages.mjs` 校验包内三件套、`## 验收标准`、任务勾选项、`## 结果` / `## 证据` 与 `结论: pass|fail|partial`。以 `_` 开头的目录跳过，脚本可独立运行（`--root` / `--json`，失败退出 1）。
 - `agent-eval.mjs` 的 `recordEval` 在 JSONL 凭证外写版本化 `.agents/evals/eval-log.json`（`version: 1`、threshold、outcome），可用 `--no-eval-log` / `--eval-log` 控制；schema 为 `schemas/eval-log.schema.json`。既有 `results.jsonl` 行为不变。
+- `sbom-license.mjs`（R3-8 供应链）从 `package-lock.json` 生成 SPDX 2.3 SBOM 到 `.agents/sbom/spdx.json`，并按 `.agents/config/license-policy.json`（schema `schemas/license-policy.schema.json`）的 allow/deny 闭集判定依赖许可证；`--check` 只读比对漂移，lockfile 缺失退出 2（fail-closed）。verify 安全段门 `sbom-license` 恒执法；判定纯函数（`judgeLicense` 等）可直接 import 测试。
 
 ## 技能包分发与准入
 

@@ -41,6 +41,10 @@ steps:
     displayName: 'Pipeline state closure'
     continueOnError: true
 
+  - script: npx --yes agentic-flow-kit run sbom-license.mjs --check
+    displayName: 'SBOM & license policy (advisory)'
+    continueOnError: true
+
   - script: npx --yes agentic-flow-kit run memory-tier audit
     displayName: 'Injected memory budget'
     continueOnError: true

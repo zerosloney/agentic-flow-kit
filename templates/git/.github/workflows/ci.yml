@@ -24,6 +24,12 @@ jobs:
       - name: Behavior eval (advisory)
         run: npx --yes agentic-flow-kit run agent-eval check --advisory
         continue-on-error: true
+      - name: Secrets scan (gitleaks / lite fallback)
+        run: npx --yes agentic-flow-kit run check-secrets.mjs
+        continue-on-error: true
+      - name: SBOM & license policy (advisory)
+        run: npx --yes agentic-flow-kit run sbom-license.mjs --check
+        continue-on-error: true
       - name: Pipeline state closure
         run: npx --yes agentic-flow-kit run check-pipeline-state
         continue-on-error: true

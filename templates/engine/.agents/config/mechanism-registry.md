@@ -47,6 +47,7 @@
 | Claude Code 宿主适配（本机私有） | `.claude/settings.json` PreToolUse 两门（`Bash` → pre-shell-check.cjs；`Write\|Edit\|MultiEdit` → pre-write-check.cjs）+ `.claude/commands/wf-*.md`（7 指针壳 → `.agents/commands/`）+ `.claude/agents/*.md`（7 角色 → `.agents/roles/`）；根 `CLAUDE.md` 为 AGENTS.md 镜像；权威源零改动 | check-local-gates.mjs ⑩ advisory 对账（settings 两门接线 + 7+7 壳） | 不适用零命中退役（[健康静默]：未用 ≠ 失效）；弃用 → 评估退役 | 2026-11-11 建（hook 协议与 Trae/CodeBuddy 同形；`.claude/` 与 CLAUDE.md gitignore 不随 clone）。增量理由：Claude 会话此前无宿主侧两门，仅 git 钩子兜底 | 现役 [健康静默] | — |
 | 测试守卫 | pre-write §2.5 | 改测试 deny/月 | 不退役 | 2026-11-12 | 现役[不退役主干] | — |
 | 策略即代码校验 | `flow-kit run policy check`（CI policy 作业；本地 `npm run policy:check`） | hard「未登记机制 / 枚举 / 角色模型引用 / 预算」计数 | 不退役（策略面主干） | 2026-11-13 建 | 现役 [不退役主干] | — |
+| SBOM 与许可证门 | `flow-kit run sbom-license.mjs --check`（verify.mjs 安全段 `sbom-license`；CI 模板 advisory 步） | 违规依赖数（deny/未知按策略；月）+ SBOM 漂移计数 | 不退役（供应链主干） | 2026-11-14 建（R3-8 第二片：SPDX 2.3 生成 + license-policy 闭集判定，零依赖零网络；lockfile 缺失 fail-closed exit 2） | 现役 [不退役主干] | — |
 
 ## 维护纪律
 
