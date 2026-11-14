@@ -1,12 +1,12 @@
 import { test } from 'node:test';
+import { makeTmp } from './helpers/tmp.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { collect, renderMarkdown } from '../templates/engine/.agents/scripts/outcome-metrics.mjs';
 
 function tmp() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'outcome-'));
+  return makeTmp('outcome-');
 }
 
 function write(root, rel, text) {

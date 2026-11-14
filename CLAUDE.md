@@ -214,5 +214,6 @@ Hook 接线在 `src/install/hooks.mjs`：中性规格来自引擎模板 `.agents
 
 - 使用 `node:test` 和 `node:assert/strict`，不引入测试框架。
 - 安装测试在临时目录 `git init` 后 spawn `bin/flow-kit.mjs`，并设置 `FLOW_KIT_TEST=1`。
+- 测试要建临时目录时用 `tests/helpers/tmp.mjs` 的 `makeTmp(prefix)`，不要直接 `fs.mkdtempSync`：helper 登记本进程创建的目录并在进程退出时删掉，避免 `%TEMP%` 越攒越多。
 - TUI 测试用 `PassThrough` / `EventEmitter` 模拟终端，并直接喂 CSI 转义序列验证按键解码。
 - 新增宿主能力或安装行为时，优先补 `tests/hosts.test.mjs`、`tests/install.test.mjs`、`tests/models.test.mjs`；中英文输出改动同时补 `tests/en.test.mjs`。

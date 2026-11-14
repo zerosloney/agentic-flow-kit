@@ -1,7 +1,7 @@
 import { test } from 'node:test';
+import { makeTmp } from './helpers/tmp.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -13,7 +13,7 @@ const CHECK_SPEC = path.join(ENGINE, 'check-spec-packages.mjs');
 const AGENT_EVAL = path.join(ENGINE, 'agent-eval.mjs');
 
 function tmp() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'flow-kit-artifacts-'));
+  return makeTmp('flow-kit-artifacts-');
 }
 
 function write(file, text) {

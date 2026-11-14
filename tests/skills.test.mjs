@@ -1,7 +1,7 @@
 import { test } from 'node:test';
+import { makeTmp } from './helpers/tmp.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -17,7 +17,7 @@ function cli(cwd, args, input) {
 }
 
 function installedTarget() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'flow-kit-skills-'));
+  const dir = makeTmp('flow-kit-skills-');
   assert.equal(spawnSync('git', ['init', '-q'], { cwd: dir }).status, 0);
   const r = cli(dir, ['install', '--agent', 'claude', '--stack', 'node', '--target', '.', '--no-model-config']);
   assert.equal(r.status, 0, r.stderr || r.stdout);
@@ -45,7 +45,7 @@ function makeSkill(parent, name, { description = '测试用技能', extra = true
 }
 
 const target = installedTarget();
-const work = fs.mkdtempSync(path.join(os.tmpdir(), 'flow-kit-skill-src-'));
+const work = makeTmp('flow-kit-skill-src-');
 
 test('add-skill installs a local skill, writes lockfile and manifest category', () => {
   const src = makeSkill(work, 'demo-skill', { evalTasks: 'skill-trigger-positive' });

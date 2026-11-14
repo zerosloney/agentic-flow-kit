@@ -1,7 +1,7 @@
 import { test } from 'node:test';
+import { makeTmp } from './helpers/tmp.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { appendEvent, readEvents, digestEvents } from '../templates/engine/.agents/scripts/session-log.mjs';
 import { buildMemoryWiki, syncMemoryWiki } from '../templates/engine/.agents/scripts/memory-wiki.mjs';
@@ -13,7 +13,7 @@ import { tierFor, resolveSteering } from '../templates/engine/.agents/scripts/st
 import { addClaim } from '../templates/engine/.agents/scripts/claims.mjs';
 
 function tmp() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'engine-mem-'));
+  return makeTmp('engine-mem-');
 }
 
 function write(root, rel, text) {

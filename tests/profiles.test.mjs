@@ -1,7 +1,7 @@
 import { test } from 'node:test';
+import { makeTmp } from './helpers/tmp.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +15,7 @@ const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
 const t = makeT('zh-CN');
 
 function tmpRepo() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'flow-kit-profile-'));
+  const dir = makeTmp('flow-kit-profile-');
   spawnSync('git', ['init', '-q'], { cwd: dir });
   return dir;
 }

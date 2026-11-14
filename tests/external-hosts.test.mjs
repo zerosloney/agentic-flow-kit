@@ -1,7 +1,7 @@
 import { test } from 'node:test';
+import { makeTmp } from './helpers/tmp.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -10,7 +10,7 @@ const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
 
 function tmpDir(prefix = 'flow-kit-ext-') {
-  return fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  return makeTmp(prefix);
 }
 
 function tmpRepo() {

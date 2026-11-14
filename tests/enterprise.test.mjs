@@ -1,7 +1,7 @@
 import { test } from 'node:test';
+import { makeTmp } from './helpers/tmp.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -14,7 +14,7 @@ const FIXTURES = path.join(KIT, 'tests', 'fixtures', 'enterprise');
 const HOSTS_ALL = ['claude', 'qwen', 'qoder', 'commandcode', 'codebuddy', 'trae', 'zcode', 'opencode', 'pi', 'cline'];
 
 function tmpRepo() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'flow-kit-enterprise-'));
+  const dir = makeTmp('flow-kit-enterprise-');
   spawnSync('git', ['init', '-q'], { cwd: dir });
   return dir;
 }

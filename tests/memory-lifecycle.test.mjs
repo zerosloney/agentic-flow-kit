@@ -1,7 +1,7 @@
 import { test } from 'node:test';
+import { makeTmp } from './helpers/tmp.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import {
   addRecord, applyDecay, composeInjected, conflictGroups, inspectInjected, loadConfig,
@@ -22,7 +22,7 @@ const INJECTED = [
 ].join('\n');
 
 function tmp() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'memory-lifecycle-'));
+  return makeTmp('memory-lifecycle-');
 }
 
 function write(root, rel, text) {

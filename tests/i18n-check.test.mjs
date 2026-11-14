@@ -1,7 +1,7 @@
 import { test } from 'node:test';
+import { makeTmp } from './helpers/tmp.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -11,7 +11,7 @@ const TOOL = path.join(KIT, 'tools', 'make-en-host-overrides.mjs');
 
 // 复制成最小 KIT 形状：工具以自身所在目录的上级为根，避免测试改动真实仓库。
 function tmpKit() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'flow-kit-i18n-'));
+  const dir = makeTmp('flow-kit-i18n-');
   fs.cpSync(path.join(KIT, 'templates', 'hosts'), path.join(dir, 'templates', 'hosts'), { recursive: true });
   fs.cpSync(path.join(KIT, 'locales', 'en', 'overrides'), path.join(dir, 'locales', 'en', 'overrides'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'tools'), { recursive: true });
