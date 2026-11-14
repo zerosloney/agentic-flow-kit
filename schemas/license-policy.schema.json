@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zerosloney/agentic-flow-kit/schemas/license-policy.schema.json",
+  "title": "agentic-flow-kit license policy",
+  "description": ".agents/config/license-policy.json：依赖许可证策略（R3-8 供应链）。allow/deny 为 SPDX 标识符闭集；exceptions 按 \"name\" 或 \"name@version\" 登记豁免并写明理由；unknownAction 决定许可证未知的处置；failOn 决定警告是否阻断。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "allow": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "允许的 SPDX 许可证标识符（支持 -only/-or-later 后缀族）。"
+    },
+    "deny": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 1 },
+      "description": "禁止的 SPDX 许可证标识符；deny 优先于 allow。"
+    },
+    "exceptions": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "键为 \"name\" 或 \"name@version\"（version 可为 *），值为豁免理由（评审/工单链接）。"
+    },
+    "unknownAction": { "enum": ["deny", "warn"], "default": "deny" },
+    "failOn": { "enum": ["deny", "any"], "default": "deny" }
+  }
+}
