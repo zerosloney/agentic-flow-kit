@@ -31,26 +31,29 @@ export function loadConfig(root) {
   }
 }
 
-export function auditBudget(root, cfg = loadConfig(root)) {
-  const rel = cfg.injected.file;
-  const abs = path.join(root, rel);
-  if (!fs.existsSync(abs)) return { ok: false, reason: 'missing', rel, lines: 0, bytes: 0, cfg };
-  const text = fs.readFileSync(abs, 'utf8');
-  const lines = text.split(/\r?\n/).length;
-  // 字节口径与 rule-budget 一致：LF 归一，避免 CRLF 虚高。
-  const bytes = Buffer.byteLength(text.replace(/\r\n/g, '\n'), 'utf8');
+// 预算测量单源（memory-tier audit 与 memory-lifecycle promote 共用）：
+// 行数/字节口径与 rule-budget 一致，LF 归一避免 CRLF 虚高。
+export function measureText(text, cfg = DEFAULT_CONFIG) {
+  const lines = String(text).split(/\r?\n/).length;
+  const bytes = Buffer.byteLength(String(text).replace(/\r\n/g, '\n'), 'utf8');
   const overLines = lines > cfg.injected.maxLines;
   const overBytes = bytes > cfg.injected.maxBytes;
   return {
     ok: !overLines && !overBytes,
     reason: overLines ? 'over-lines' : overBytes ? 'over-bytes' : 'ok',
-    rel,
     lines,
     bytes,
     maxLines: cfg.injected.maxLines,
     maxBytes: cfg.injected.maxBytes,
-    cfg,
   };
+}
+
+export function auditBudget(root, cfg = loadConfig(root)) {
+  const rel = cfg.injected.file;
+  const abs = path.join(root, rel);
+  if (!fs.existsSync(abs)) return { ok: false, reason: 'missing', rel, lines: 0, bytes: 0, maxLines: cfg.injected.maxLines, maxBytes: cfg.injected.maxBytes, cfg };
+  const measured = measureText(fs.readFileSync(abs, 'utf8'), cfg);
+  return { ...measured, rel, cfg };
 }
 
 function readJsonl(dir, re) {

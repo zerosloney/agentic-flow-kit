@@ -36,6 +36,7 @@ flow-kit run dream-run.mjs --execute    # 执行安全修复（仅终态件归�
 - H 经验回放（`session-log.mjs digest`）——把会话失败/纠正/拒绝聚成摘要；**无日志时明确写“无输入”**；
 - I 记忆表示（`memory-wiki.mjs --check`）——`wiki/_memory/` 是否与 claims/incidents/session-logs 同步；
 - J 注入层预算与上浮候选（`memory-tier.mjs audit/suggest`）——200 行 / 25KB 预算，候选只读；
+- J2 记忆生命周期（`memory-lifecycle.mjs report --check`）——状态迁移确定性、冲突消解、注入托管块最新与预算内；
 - K 交付结果指标（`outcome-metrics.mjs`）——首次过门率、复核采纳率、逃逸缺陷、评测通过率；
 - F AI Judge 抽样审计简报。断依据会附在简报里。
 

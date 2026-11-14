@@ -184,6 +184,10 @@ const tierAudit = run('.agents/scripts/memory-tier.mjs', ['audit']);
 add(tierAudit.ok ? '- 注入层: 在预算内' : `- 注入层超限:\n  ${tierAudit.out.split('\n').filter(Boolean).slice(0, 6).join('\n  ')}`);
 const tierSuggest = run('.agents/scripts/memory-tier.mjs', ['suggest', '--days', '90']);
 add(tierSuggest.ok ? tierSuggest.out.trim() : `⚠ 上浮候选失败: ${tierSuggest.err || tierSuggest.out}`);
+const lifecycle = run('.agents/scripts/memory-lifecycle.mjs', ['report', '--check', '--days', '30']);
+add(lifecycle.ok
+  ? '- memory-lifecycle: 一致（无未消解冲突 / 注入块最新 / 预算内）'
+  : `- memory-lifecycle 需处理:\n  ${lifecycle.out.split('\n').filter(Boolean).slice(0, 10).join('\n  ')}`);
 
 // ---------- 阶段 K：交付结果指标 ----------
 section('K. 交付结果指标（outcome-metrics --days 30）');
