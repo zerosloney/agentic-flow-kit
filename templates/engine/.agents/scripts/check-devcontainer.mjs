@@ -192,6 +192,10 @@ function main() {
     if (!needsNode && hasNodeProvision) {
       problems.push(`镜像 ${image} 已烘焙 node，${DOCKERFILE_REL} 不应再补装（多余 ARG NODE_VERSION）`);
     }
+    // 解到 /usr/local 是硬要求：解进子目录会让 npm 的 global bin 掉出 PATH。
+    if (hasNodeProvision && !/-C \/usr\/local\s/.test(text)) {
+      problems.push(`${DOCKERFILE_REL} 的 node tarball 必须解到 /usr/local（否则 npm 全局 bin 不在 PATH）`);
+    }
     kitVersion = parseDockerfileKitVersion(text);
     if (policy.requirePinnedFlowKit && !isConcreteVersion(kitVersion)) {
       problems.push(`${DOCKERFILE_REL}: 未钉定 flow-kit 版本`);

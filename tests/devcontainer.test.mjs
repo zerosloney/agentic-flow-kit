@@ -91,9 +91,26 @@ test('every stack image ships the baked tooling its container needs', () => {
     assert.equal(readDoc(dir).remoteUser, want.user, `${stack}: remoteUser`);
     // 镜像不烘焙 node 的栈必须补装，烘焙了的栈不该重复补装。
     assert.equal(/ARG NODE_VERSION=/.test(dockerfile), want.node, `${stack}: node provisioning`);
+    if (want.node) {
+      // node tarball 必须解到 /usr/local：解进子目录会让 npm 的 global bin 掉出 PATH。
+      assert.match(dockerfile, /tar -xzf "\$tmp" -C \/usr\/local --strip-components=1/, `${stack}: extract to /usr/local`);
+    }
     const state = checkDevcontainer({ target: dir, stack });
     assert.equal(state.ok, true, `${stack}: ${state.problems.join('; ')}`);
   }
+});
+
+test('the gate rejects a node tarball extracted outside /usr/local', () => {
+  const dir = tmpRepo();
+  const r = run(['install', '--agent', 'claude', '--stack', 'dotnet', '--target', '.', '--json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  const dockerAbs = path.join(dir, DOCKERFILE_REL);
+  const good = fs.readFileSync(dockerAbs, 'utf8');
+  const bad = good.replace('-C /usr/local --strip', '-C /usr/local/lib/nodejs/node-v22 --strip');
+  fs.writeFileSync(dockerAbs, bad, 'utf8');
+  const state = checkDevcontainer({ target: dir, stack: 'dotnet' });
+  assert.equal(state.ok, false);
+  assert.match(state.problems.join('; '), /必须解到 \/usr\/local/);
 });
 
 test('--no-devcontainer suppresses the surface and upgrade replays the choice', () => {

@@ -167,14 +167,14 @@ export function renderDevcontainerDockerfile({ stack, kitVersion }) {
       '  apt-get update && apt-get install -y --no-install-recommends ca-certificates curl xz-utils; \\',
       '  curl -fsSL -o "$tmp" "$url"; \\',
       '  echo "$sum  $tmp" | sha256sum -c -; \\',
-      `  mkdir -p /usr/local/lib/nodejs/node-v${NODE_VERSION}; \\`,
-      `  tar -xzf "$tmp" -C /usr/local/lib/nodejs/node-v${NODE_VERSION} --strip-components=1; \\`,
+      // 必须解到 /usr/local，不能解到 /usr/local/lib/nodejs/<ver>：npm 的 global prefix
+      // 由 process.execPath 推出，解进子目录会让全局 bin 落在 .../<ver>/bin（不在 PATH），
+      // 后续 `flow-kit` 直接 not found（CI 实测 exit 127）。解到 /usr/local 时 prefix 即
+      // /usr/local，全局 bin 就是 /usr/local/bin。
+      '  tar -xzf "$tmp" -C /usr/local --strip-components=1 --no-same-owner; \\',
       '  rm -f "$tmp"; \\',
-      `  ln -sf /usr/local/lib/nodejs/node-v${NODE_VERSION}/bin/node /usr/local/bin/node; \\`,
-      `  ln -sf /usr/local/lib/nodejs/node-v${NODE_VERSION}/bin/npm /usr/local/bin/npm; \\`,
-      `  ln -sf /usr/local/lib/nodejs/node-v${NODE_VERSION}/bin/npx /usr/local/bin/npx; \\`,
       '  hash -r; \\',
-      `  su "${user}" -c "umask 0002 && node --version && npm --version"`,
+      `  su "${user}" -c "umask 0002 && node --version && npm --version && npm prefix -g"`,
     );
   }
 
@@ -322,12 +322,16 @@ export function checkDevcontainer({ target, stack = null }) {
       if (doc.remoteUser && doc.remoteUser !== containerUser(stack)) {
         problems.push(`remoteUser 与镜像不符：${doc.remoteUser} ≠ ${containerUser(stack)}（stack=${stack}）`);
       }
-      const hasNodeProvision = /ARG\s+NODE_VERSION=/m.test(state.dockerfile);
+      const hasNodeProvision = /^\s*ARG\s+NODE_VERSION=/m.test(state.dockerfile);
       if (stackNeedsNode(stack) && !hasNodeProvision) {
         problems.push(`镜像 ${image} 未烘焙 node，但 Dockerfile 未补装（缺 ARG NODE_VERSION）`);
       }
       if (!stackNeedsNode(stack) && hasNodeProvision) {
         problems.push(`镜像 ${image} 已烘焙 node，Dockerfile 不应再补装（多余 ARG NODE_VERSION）`);
+      }
+      // 解到 /usr/local 是硬要求：解进子目录会让 npm 的 global bin 掉出 PATH。
+      if (hasNodeProvision && !/-C \/usr\/local\s/.test(state.dockerfile)) {
+        problems.push('Dockerfile 的 node tarball 必须解到 /usr/local（否则 npm 全局 bin 不在 PATH）');
       }
     }
     kitVersion = parseDockerfileKitVersion(state.dockerfile);
