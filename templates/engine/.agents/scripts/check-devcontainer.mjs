@@ -47,8 +47,10 @@ const STACK_USER = {
   java: 'vscode',
   empty: 'vscode',
 };
-// rust / base 镜像不烘焙 node，生成器会在 Dockerfile 里补装（ARG NODE_VERSION）。
-const STACK_NEEDS_NODE = { rust: true, empty: true };
+// 镜像里是否真有 node 可执行文件（不是「有没有 nvm 目录」）：只有 typescript-node:22
+// 带 NODE_VERSION；dotnet / go / java 上游是 node feature `version: "none"`（只有 nvm 壳），
+// rust / base 连 node feature 都没有。生成器据此在 Dockerfile 里补装。
+const STACK_NEEDS_NODE = { dotnet: true, rust: true, go: true, java: true, empty: true };
 
 // 安装 manifest 里的 stack 是这里的唯一事实来源（manifest 缺失时退到 empty）。
 function readStack() {

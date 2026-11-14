@@ -43,18 +43,23 @@ export const STACK_CONTAINER_USER = {
   empty: 'vscode',
 };
 
-// rust / base 镜像只烘焙了 rust、common-utils、git，**没有 node**（node 的 tar 包也不在
-// 镜像里），而 flow-kit 是 Node ≥ 22 的 CLI。这两个栈必须显式装 node，否则 npm 无从谈起。
-// 版本与官方镜像 typescript-node:22 烘焙的 NODE_VERSION 对齐（同源事实，不是拍脑袋）。
+// 镜像里**是否真有 node 可执行文件**（不是「有没有 nvm 目录」）。
+// 事实来源是镜像 config 的 `NODE_VERSION` 环境变量：只有 typescript-node:22 有
+// `NODE_VERSION=22.23.5`。dotnet / go / java 上游声明的是 node feature `version: "none"`，
+// 只装了 nvm 壳子（PATH 里有 /usr/local/share/nvm/current/bin，但没有任何 node 版本），
+// `npm` 因此不存在——CI 实测 `sudo: npm: command not found`。rust / base 则连 node feature
+// 都没有。
+// flow-kit 是 Node >= 22 的 CLI，所以除 node / typescript 外的栈都要在 Dockerfile 里补装。
+// 版本与官方镜像烘焙的 NODE_VERSION 对齐（同源事实，不是拍脑袋）。
 export const NODE_VERSION = '22.23.5';
 
 export const STACK_PROVISIONS_NODE = {
-  dotnet: false,
+  dotnet: true,
   node: false,
   typescript: false,
   rust: true,
-  go: false,
-  java: false,
+  go: true,
+  java: true,
   empty: true,
 };
 
@@ -127,10 +132,10 @@ export function renderDevcontainerJson({ projectName, stack, apiPort, webPort })
 }
 
 // 生成 Dockerfile。产物分两种形态：
-//   - 镜像自带 node（node / typescript / dotnet / go / java）：直接以镜像的非 root 用户
+//   - 镜像自带可执行的 node（node / typescript）：直接以镜像的非 root 用户
 //     `npm install -g`。这些镜像的 PATH 已含 node 与 npm 全局目录。
-//   - 镜像没有 node（rust / empty）：先以 root 装 node（钉死版本 + 校验 sha256），再切到
-//     镜像自带的非 root 用户装 flow-kit。
+//   - 镜像没有 node（dotnet / rust / go / java / empty，见 STACK_PROVISIONS_NODE）：
+//     先以 root 装 node（钉死版本 + 校验 sha256），再切到镜像自带的非 root 用户装 flow-kit。
 // 两处都以「镜像自带用户」为准，不新造用户：新造用户需要 UID/GID/家目录全对齐，
 // 而上游镜像已经建好了对应身份。
 export function renderDevcontainerDockerfile({ stack, kitVersion }) {
@@ -150,7 +155,7 @@ export function renderDevcontainerDockerfile({ stack, kitVersion }) {
     const arm64 = nodeTarball('arm64');
     lines.push(
       '',
-      `# 该栈的官方镜像不烘焙 node，而 flow-kit 是 Node >= 22 的 CLI：先钉版本补装 node。`,
+      '# 该栈的官方镜像不烘焙 node，而 flow-kit 是 Node >= 22 的 CLI：先钉版本补装 node。',
       `ARG NODE_VERSION=${NODE_VERSION}`,
       'RUN set -eu; \\',
       '  arch="$(dpkg --print-architecture)"; \\',

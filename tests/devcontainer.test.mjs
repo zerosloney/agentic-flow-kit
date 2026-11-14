@@ -74,12 +74,12 @@ test('each stack picks its own base image', () => {
 test('every stack image ships the baked tooling its container needs', () => {
   // 镜像 tag 必须真实存在（上游没有 dotnet:8 这种短 tag），且容器身份/ node 供给要自洽。
   const expectations = {
-    dotnet: { user: 'vscode', node: false },
+    dotnet: { user: 'vscode', node: true },
     node: { user: 'node', node: false },
     typescript: { user: 'node', node: false },
     rust: { user: 'vscode', node: true },
-    go: { user: 'vscode', node: false },
-    java: { user: 'vscode', node: false },
+    go: { user: 'vscode', node: true },
+    java: { user: 'vscode', node: true },
     empty: { user: 'vscode', node: true },
   };
   for (const [stack, want] of Object.entries(expectations)) {

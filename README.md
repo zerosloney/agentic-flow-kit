@@ -280,7 +280,7 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 ```
 
 - **按栈选镜像**：`node`/`typescript` → `devcontainers/typescript-node:22`，`dotnet` → `devcontainers/dotnet:8.0`，`rust` → `devcontainers/rust:1`，`go` → `devcontainers/go:1.23`，`java` → `devcontainers/java:21`，其余 → `devcontainers/base:ubuntu-24.04`；端口按栈的 `apiPort`/`webPort` 自动转发。
-- **容器身份随镜像**：`node`/`typescript` 镜像的非 root 用户是 `node`，其余是 `vscode`，`remoteUser` 与 Dockerfile 的 `USER` 都按此对齐（写错会让 `docker build` 直接失败）。`rust`/`empty` 镜像不烘焙 node，Dockerfile 会钉版本补装 Node 22（含 sha256 校验）；其余镜像直接用内置 node。
+- **容器身份随镜像**：`node`/`typescript` 镜像的非 root 用户是 `node`，其余是 `vscode`，`remoteUser` 与 Dockerfile 的 `USER` 都按此对齐（写错会让 `docker build` 直接失败）。只有 `typescript-node:22` 真带 node；`dotnet`/`go`/`java` 上游装的是 node feature 的 `version: "none"`（只有 nvm 壳），`rust`/`empty` 连 node 都没有——除 `node`/`typescript` 外的栈，Dockerfile 都会钉版本补装 Node 22（含 sha256 校验）。
 - **flow-kit 随镜像安装**：`Dockerfile` 里 `ARG FLOW_KIT_VERSION=<安装器版本>`，`npm i -g agentic-flow-kit@<版本>`，容器内 `flow-kit run` / hook / MCP 照常可用；需要别的版本时 `docker build --build-arg FLOW_KIT_VERSION=latest`。
 - **供应链门**：`flow-kit run check-devcontainer.mjs` 校验镜像来源必须在 `.agents/config/devcontainer-policy.json` 的 `allowedImagePrefixes` 内、不得用浮动 tag、flow-kit 版本必须钉死；违规即红（verify 安全段 `devcontainer` 门，CI 里为 advisory 步）。项目没启用容器时大声跳过，不判红。
 - **可构建性证据**：`flow-kit devcontainer build` 用 docker 真构建一次镜像；docker 不在 PATH 时退出 2（不假装构建过）。
