@@ -7,7 +7,8 @@ import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { analyze } from '../templates/engine/.agents/scripts/check-pipeline-state.mjs';
 import {
-  parseParallelList as parseParallel, parseRetryCap as parseRetry, resolveArtifact, stageArtifactProblems,
+  parseParallelList as parseParallel, parseRetryCap as parseRetry, resolveArtifact, resolveDocRel,
+  stageArtifactProblems,
 } from '../templates/engine/.agents/scripts/pipeline-run.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -116,7 +117,7 @@ function envFor(root, extra = {}) {
     ...process.env,
     PIPELINE_RUN_ROOT: root,
     PIPELINE_RUN_BIN: path.join(root, '.agents', 'scripts'),
-    PIPELINE_RUN_GIT_BIN: `${process.execPath} ${path.join(root, '.agents', 'scripts', 'fake-git.mjs')}`,
+    PIPELINE_RUN_GIT_BIN: `"${process.execPath}" "${path.join(root, '.agents', 'scripts', 'fake-git.mjs')}"`,
     PIPELINE_RUN_TODAY: '2026-11-13',
     ...extra,
   };
@@ -224,6 +225,27 @@ test('resume without an interrupted run exits 0 and changes nothing', () => {
   assert.equal(r.status, 0, r.stderr || r.stdout);
   assert.match(r.stdout, /无断点可续/);
   assert.equal(readRun(root).events.length, 0);
+});
+
+test('R3-5: archived terminal doc still counts as closed (done-confirm does not deadlock)', () => {
+  const root = fixture();
+  const planRel = 'workflow/plans/t.md';
+  const archived = 'workflow/archive/2026-11/plans/t.md';
+  fs.mkdirSync(path.dirname(path.join(root, archived)), { recursive: true });
+  fs.renameSync(path.join(root, planRel), path.join(root, archived));
+  fs.writeFileSync(path.join(root, archived), '---\n状态: done\n级别: L1\n---\n\n## 改动方案\n\nx\n');
+  writeRun(root, {
+    stage: 'done-confirm',
+    stopType: 'await-confirm',
+    awaitConfirm: { doc: planRel, points: '关单确认', ledger: true },
+    docs: { entry: planRel, spec: null, plan: planRel },
+  });
+  assert.equal(resolveDocRel({ root }, planRel), archived);
+  const r = runPipeline(root, ['next', '--run', 'test-run']);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const run = readRun(root);
+  assert.equal(run.stage, 'done');
+  assert.equal(run.stopType, 'done');
 });
 
 test('pipeline state machine stays statically closed after R3-5', () => {

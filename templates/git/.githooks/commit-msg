@@ -35,7 +35,9 @@ if (!exempt && !typeRe.test(first)) {
   process.exit(1);
 }
 
-const flowKitRun = (name, args) => spawnSync('flow-kit', ['run', name, ...args], {
+// R5-1b 运行时面收缩后，hook 实现只经 `flow-kit hook` 解析（`run` 只认
+// templates/engine/.agents/scripts/**）——用 `run` 会报 unknown runtime script 并拦死提交。
+const flowKitRun = (name, args) => spawnSync('flow-kit', ['hook', name, ...args], {
   stdio: 'inherit',
   shell: process.platform === 'win32',
 });
