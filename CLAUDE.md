@@ -138,6 +138,8 @@ Hook 接线在 `src/install/hooks.mjs`：中性规格来自引擎模板 `.agents
 
 开发容器（R3-8 沙箱面）在 `src/install/devcontainer.mjs`：该文件是「栈 → 官方基础镜像 / 扩展」映射与渲染规则的单源（`STACK_IMAGES` / `STACK_EXTENSIONS`）。`buildPlan` 生成 `category: 'devcontainer'`、优先级 41 的两条 `kind: 'generated'` 条目（`.devcontainer/devcontainer.json` + `.devcontainer/Dockerfile`），Dockerfile 里 `ARG FLOW_KIT_VERSION=<安装器版本>` 钉死随镜像安装的 kit 版本；`--no-devcontainer` 关闭，选择记进 `manifest.devcontainer`，`upgrade` 按 manifest 重放（不静默重开）。白名单（`allowedImagePrefixes` / `forbiddenTags` / `requirePinnedFlowKit`）落在项目内 `.agents/config/devcontainer-policy.json`（schema `schemas/devcontainer-policy.schema.json`），运行时门 `templates/engine/.agents/scripts/check-devcontainer.mjs` 与 `doctor` 共读这一份，避免两处策略各说各话；门挂在 verify 安全段 `devcontainer`（项目没有 `.devcontainer/` 时大声跳过不判红），CLI `flow-kit devcontainer check|build`（`build` 需要 docker，缺失退出 2）。
 
+「容器可构建」的证据由 `tools/devcontainer-build.mjs` 产出，两层分开记账：静态层（零 docker）逐栈生成 `.devcontainer/` 并用 `checkDevcontainer` 校验全部 7 栈，`npm run devcontainer:check`（`--dry-run`）在 CI 的 test 作业里跑；构建层需要 docker，对选定栈真跑 `docker build` + 冒烟 `docker run`，docker 缺失时 fail-closed 退出 2（不假装构建过），钉的版本尚未发布到 npm 时构建退回 `latest` 并记账。kit 自身 CI 的 `devcontainer-build` 矩阵作业跑 node/dotnet 两个代表栈；目标项目 CI 模板里的同名作业默认关闭（仓库变量 `FLOW_KIT_DEVCONTAINER_BUILD=true` 才开），避免默认拉镜像。
+
 技能安装由 `skills.mode` 驱动：
 
 - `native`：生成 `<宿主目录>/skills/<name>/SKILL.md` 指针壳，正文权威仍在 `.agents/skills/`。

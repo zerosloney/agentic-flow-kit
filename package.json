@@ -37,6 +37,8 @@
     "policy:check": "node tools/policy-check.mjs",
     "extract": "node tools/extract-from-project.mjs",
     "doctor:self": "node bin/flow-kit.mjs doctor --target .",
-    "prepublishOnly": "node --test tests/*.test.mjs"
+    "prepublishOnly": "node --test tests/*.test.mjs",
+    "devcontainer:check": "node tools/devcontainer-build.mjs --dry-run",
+    "devcontainer:build": "node tools/devcontainer-build.mjs"
   }
 }

@@ -188,6 +188,20 @@ test('upgrade can turn the container off and on explicitly', () => {
   assert.equal(fs.existsSync(path.join(dir, DOCKERFILE_REL)), true);
 });
 
+test('the CI evidence tool statically validates every stack', () => {
+  const r = spawnSync(process.execPath, [path.join(KIT, 'tools', 'devcontainer-build.mjs'), '--dry-run', '--json'], {
+    cwd: KIT,
+    encoding: 'utf8',
+    env: { ...process.env, FLOW_KIT_TEST: '1' },
+  });
+  assert.equal(r.status, 0, r.stderr);
+  const payload = JSON.parse(r.stdout);
+  assert.equal(payload.ok, true);
+  assert.deepEqual(payload.stacks, ['dotnet', 'node', 'typescript', 'rust', 'go', 'java', 'empty']);
+  assert.equal(payload.results.length, 7);
+  assert.equal(payload.results.every((x) => x.ok), true, JSON.stringify(payload.results));
+});
+
 test('the gate is registered in verify, policy and the mechanism registry', () => {
   const dir = tmpRepo();
   install(dir);

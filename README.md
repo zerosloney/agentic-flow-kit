@@ -283,6 +283,7 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 - **flow-kit 随镜像安装**：`Dockerfile` 里 `ARG FLOW_KIT_VERSION=<安装器版本>`，`npm i -g agentic-flow-kit@<版本>`，容器内 `flow-kit run` / hook / MCP 照常可用；需要别的版本时 `docker build --build-arg FLOW_KIT_VERSION=latest`。
 - **供应链门**：`flow-kit run check-devcontainer.mjs` 校验镜像来源必须在 `.agents/config/devcontainer-policy.json` 的 `allowedImagePrefixes` 内、不得用浮动 tag、flow-kit 版本必须钉死；违规即红（verify 安全段 `devcontainer` 门，CI 里为 advisory 步）。项目没启用容器时大声跳过，不判红。
 - **可构建性证据**：`flow-kit devcontainer build` 用 docker 真构建一次镜像；docker 不在 PATH 时退出 2（不假装构建过）。
+- **CI 里的硬证据**：kit 自身的 CI 有 `devcontainer-build` 作业，对代表性栈真跑 `docker build` + 冒烟 `docker run`（R3-8 验收「生成的容器可构建」的直接证据）；`npm run devcontainer:check` 是零 docker 的静态层，覆盖全部 7 栈（镜像白名单 / 版本钉死 / 栈匹配）。目标项目的 CI 模板里也带一个**默认关闭**的同名作业，开关是仓库变量 `FLOW_KIT_DEVCONTAINER_BUILD=true`。
 - **关闭**：`install --no-devcontainer` 不生成（`--devcontainer` 可重新开启）；该选择记进 manifest，`upgrade` 默认沿用，不会悄悄改主意。
 
 ## 模型配置

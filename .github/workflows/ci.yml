@@ -19,4 +19,22 @@ jobs:
       - run: npm run check:i18n
       - run: npm run lint:templates
       - run: npm run policy:check
+      - run: npm run devcontainer:check
       - run: npm pack --dry-run
+
+  # R3-8 验收证据：生成的容器**真能构建**（不只是声明校验）。
+  # 静态层（npm run devcontainer:check）已在 test 作业覆盖全部 7 栈；这里做真 docker build + 冒烟 run。
+  # 矩阵选代表性栈（node / dotnet 覆盖两类工具链），其余栈本地用 --stacks 扩展。
+  devcontainer-build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        stack: [node, dotnet]
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - name: Generated devcontainer must build and run
+        run: node tools/devcontainer-build.mjs --stacks ${{ matrix.stack }}

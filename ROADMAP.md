@@ -275,7 +275,7 @@
 
 - **目标**：devcontainer 生成、MCP 工具权限策略、SBOM/许可证检查（`check-secrets` 已有基础）。
 - **验收**：生成的容器可构建；未列入策略的 MCP 工具被拒。规模 `L`。
-- **进度**：MCP 工具权限策略已落地——`templates/mcp/servers.json` 支持 `toolPolicy`（per-server allow 白名单），`wiki-mcp` 运行时拒绝未列入策略的工具（JSON-RPC `-32604`），`doctor` 对账声明与运行时工具面（`src/install/tool-policy.mjs`）。SBOM/许可证检查已落地——`flow-kit run sbom-license.mjs` 从 lockfile 生成 SPDX 2.3 SBOM 并按 `.agents/config/license-policy.json` 闭集判定许可证（verify 安全段 `sbom-license` 门 + CI advisory），机制台账已登记。devcontainer 生成已落地——`src/install/devcontainer.mjs` 按栈生成 `.devcontainer/devcontainer.json` + `Dockerfile`（官方基础镜像 + 钉版本 flow-kit），`flow-kit run check-devcontainer.mjs` 按 `.agents/config/devcontainer-policy.json` 校验镜像白名单与版本钉死（verify 安全段 `devcontainer` 门），`flow-kit devcontainer build` 用 docker 验证可构建性。
+- **进度**：MCP 工具权限策略已落地——`templates/mcp/servers.json` 支持 `toolPolicy`（per-server allow 白名单），`wiki-mcp` 运行时拒绝未列入策略的工具（JSON-RPC `-32604`），`doctor` 对账声明与运行时工具面（`src/install/tool-policy.mjs`）。SBOM/许可证检查已落地——`flow-kit run sbom-license.mjs` 从 lockfile 生成 SPDX 2.3 SBOM 并按 `.agents/config/license-policy.json` 闭集判定许可证（verify 安全段 `sbom-license` 门 + CI advisory），机制台账已登记。devcontainer 生成已落地——`src/install/devcontainer.mjs` 按栈生成 `.devcontainer/devcontainer.json` + `Dockerfile`（官方基础镜像 + 钉版本 flow-kit），`flow-kit run check-devcontainer.mjs` 按 `.agents/config/devcontainer-policy.json` 校验镜像白名单与版本钉死（verify 安全段 `devcontainer` 门），`flow-kit devcontainer build` 用 docker 验证可构建性；「容器可构建」的 CI 硬证据由 `tools/devcontainer-build.mjs` 产出（静态层覆盖全部 7 栈 + 构建层真跑 `docker build` 与冒烟 `docker run`，kit 自身 CI 矩阵跑 node/dotnet）。
 
 ### R3-9 manifest 迁移框架
 

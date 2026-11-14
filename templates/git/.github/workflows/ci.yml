@@ -42,3 +42,16 @@ jobs:
       - name: Memory lifecycle audit
         run: npx --yes agentic-flow-kit run memory-lifecycle.mjs report --check
         continue-on-error: true
+
+  # 可选证据作业（R3-8 验收：生成的容器可构建）——默认关闭：拉基础镜像较重。
+  # 打开方式：仓库变量 FLOW_KIT_DEVCONTAINER_BUILD=true。
+  devcontainer-build:
+    if: ${{ vars.FLOW_KIT_DEVCONTAINER_BUILD == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Build the generated devcontainer
+        run: npx --yes agentic-flow-kit devcontainer build --target .
