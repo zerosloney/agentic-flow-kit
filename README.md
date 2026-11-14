@@ -56,6 +56,9 @@ npx agentic-flow-kit doctor --target .
 | `doctor` | 校验 manifest、文件在位、git 配置、`.gitattributes`、五钩子、宿主接线、Node 版本；`--deep` 再跑 `flow-kit run check-local-gates`；`--attest [--out <file>]` 生成安装证明链；manifest 漂移以 advisory 报告 |
 | `list-hosts` | 列出支持的宿主 |
 | `new-host <name>` | 生成可直接安装的宿主插件（定义 JSON + 命令/子代理指针壳 + 技能入口模板）；写入 `<out>/.flow-kit/hosts/`，后续命令自动发现。可选 `--skills native\|shared\|index`、`--hooks`、`--permissions`、`--mcp claude\|opencode`、`--model-field` / `--inherit`、`--root-memory` |
+| `add-skill <local\|git\|npm>` | 安装外部技能到 `.agents/skills/<name>/`，写 `.agents/skills.lock.json` 与 manifest `skills` 段并刷新宿主技能面；git/npm 需 `--allow-network`，已有技能用 `--update` 升级 |
+| `remove-skill <name>` | 按 manifest 哈希安全移除技能与宿主指针；用户改动默认拒绝，`--force` 覆盖 |
+| `skills lint` | 技能准入检查：frontmatter 必填、name 唯一且匹配目录、描述预算、触发词冲突、`evalTasks` 引用、lockfile 完整性 |
 | `run <script>` | 从包内运行时执行引擎脚本；`--root <dir>` 指定项目根，`--` 后的参数原样透传；`--list` 列出可用脚本 |
 | `hook <hook>` | 从包内运行时执行宿主 hook 适配器；stdin 与剩余参数透传；`--list` 列出可用 hook |
 | `workspace init --repos <dir>...` | 在多仓根目录生成 `.flow-kit/workspace.json`，记录仓库清单与各仓安装摘要；可重复执行刷新 |
@@ -151,6 +154,22 @@ v1 支持 10 个现行宿主：
 - **native**：宿主会自行发现 `<宿主目录>/skills/<name>/SKILL.md`。安装器按 `.agents/skills/*/SKILL.md` 的语言覆盖后内容动态生成指针壳（原生 frontmatter + 指向权威正文），不手写 22 × N 份静态副本。
 - **shared**：宿主原生读取 `.agents/skills`（Qwen、Command Code）。不生成宿主技能副本，只生成 `wf-skills` 索引入口。
 - **index**：无法确认原生技能目录的宿主生成一个索引（有命令目录时是 `wf-skills.md`，否则是 `SKILLS.md`），逐行列出技能名、描述与 `.agents/skills/<name>/SKILL.md` 路径。
+
+### 技能包来源与准入（R3-4）
+
+`flow-kit add-skill` 支持三种来源，默认离线：
+
+```bash
+flow-kit add-skill ./skills/my-skill                 # 本地目录（含 SKILL.md）
+flow-kit add-skill https://github.com/org/repo.git --ref v1.2.0 --subdir skills/x --allow-network
+flow-kit add-skill @scope/pkg@1.0.0 --allow-network    # npm（npm install --no-save 取包）
+```
+
+- 技能正文落到 `.agents/skills/<name>/`；来源、版本、校验和与逐文件哈希落 `.agents/skills.lock.json`（schema：`schemas/skills-lock.schema.json`）。
+- manifest 的 `skills` 段记录同一份来源与校验和（`category: skill`），用于升级/移除；宿主技能面（指针/索引）由安装器按磁盘技能动态重生成。
+- 准入规则：`SKILL.md` 必须有 frontmatter 与 `name` / `description`，name 为 kebab-case 且与目录一致，描述 ≤ 300 字符；可选 `triggers` 不得跨技能冲突，`evalTasks` 必须引用 `.agents/evals/tasks.tsv` 中的任务。
+- `--update` 升级已登记技能；直接覆盖用户改动的技能需要 `--force`；`remove-skill` 按 manifest 哈希拒绝删除用户改动文件（`--force` 覆盖）。
+- `flow-kit skills lint` 全量检查并报告 lockfile 漂移；`agent-eval record --skill <name>` 落技能粒度凭证，`agent-eval status` 聚合各技能最新通过率。
 
 ### 外部宿主插件
 

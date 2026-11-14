@@ -101,3 +101,24 @@ test('unknown or missing runtime entries fail with usage exit code', () => {
   const bad = cli(KIT, ['run', 'no-such-script']);
   assert.match(bad.stderr, /unknown runtime script/);
 });
+
+test('git hooks dispatch hook implementations through `flow-kit hook`', () => {
+  // R5-1b 后 `run` 只解析 scripts/；hook 实现只能走 `hook`。commit-msg 曾用 `run`
+  // 调 check-confirm-order，导致所有触碰产品面的提交被 unknown runtime script 拦死。
+  const hookNames = new Set(fs.readdirSync(path.join(KIT, 'templates', 'engine', '.agents', 'hooks'))
+    .filter((f) => /\.(mjs|cjs)$/.test(f))
+    .map((f) => f.replace(/\.(mjs|cjs)$/, '')));
+  const gitDir = path.join(KIT, 'templates', 'git', '.githooks');
+  for (const f of fs.readdirSync(gitDir)) {
+    const text = fs.readFileSync(path.join(gitDir, f), 'utf8');
+    const verbs = new Map();
+    for (const m of text.matchAll(/const (\w+) = \([^)]*\) => (?:spawnSync\('flow-kit', \[|flowKit\(\[)'(\w+)'/g)) {
+      verbs.set(m[1], m[2]);
+    }
+    for (const m of text.matchAll(/\b(\w+)\('([a-z][\w-]+)'/g)) {
+      const [call, fn, name] = m;
+      if (!verbs.has(fn) || !hookNames.has(name)) continue;
+      assert.equal(verbs.get(fn), 'hook', `${f}: ${call} 调了 hooks/ 下的实现，必须经 flow-kit hook`);
+    }
+  }
+});

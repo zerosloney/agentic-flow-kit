@@ -118,7 +118,8 @@ if (typeFilter && typeFilter.some((t) => !DOC_TYPES.includes(t))) {
   process.exit(1);
 }
 const MODULES = fs.readFileSync(MODULES_FILE, 'utf8').split(/\r?\n/).map((l) => l.trim()).filter((l) => l && !l.startsWith('#'));
-if (moduleFilter && !MODULES.includes(moduleFilter)) {
+// 空词表 = 项目尚未登记模块枚举：不校验 --module 取值（与 workflow-modules.txt 契约一致）。
+if (MODULES.length && moduleFilter && !MODULES.includes(moduleFilter)) {
   console.error(`--module 未知模块：${moduleFilter}（词表见 .agents/config/workflow-modules.txt：${MODULES.join(' / ')}）\n\n${USAGE}`);
   process.exit(1);
 }

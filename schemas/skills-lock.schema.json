@@ -1,0 +1,39 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zerosloney/agentic-flow-kit/schemas/skills-lock.schema.json",
+  "title": "agentic-flow-kit skills lockfile",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "skills"],
+  "properties": {
+    "version": { "const": 1 },
+    "skills": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "version", "checksum", "installedAt", "files"],
+        "properties": {
+          "source": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["type", "spec", "resolved"],
+            "properties": {
+              "type": { "enum": ["local", "git", "npm"] },
+              "spec": { "type": "string", "minLength": 1 },
+              "resolved": { "type": "string", "minLength": 1 }
+            }
+          },
+          "version": { "type": "string", "minLength": 1 },
+          "checksum": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+          "installedAt": { "type": "string", "format": "date-time" },
+          "files": {
+            "type": "object",
+            "additionalProperties": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+            "minProperties": 1
+          }
+        }
+      }
+    }
+  }
+}

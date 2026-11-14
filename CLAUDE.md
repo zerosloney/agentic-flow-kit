@@ -21,6 +21,8 @@ node --test --test-name-pattern="claude" tests/install.test.mjs   # 单个用例
 node bin/flow-kit.mjs --help
 node bin/flow-kit.mjs install --agent claude --stack node --target <tmp>
 node bin/flow-kit.mjs add-host trae --target <tmp>
+node bin/flow-kit.mjs add-skill ./my-skill --target <tmp>
+node bin/flow-kit.mjs skills lint --target <tmp>
 node bin/flow-kit.mjs upgrade --target <tmp>
 node bin/flow-kit.mjs upgrade --target <tmp> --explain-policy --dry-run
 node bin/flow-kit.mjs prune --target <tmp>
@@ -95,6 +97,19 @@ node tools/new-host.mjs myhost [--hooks] [--permissions] [--mcp claude|opencode]
 
 - `templates/scaffold/workflow/specs/_TEMPLATE/` 提供目录化 `spec.md` / `tasks.md` / `verify-report.md`；`templates/engine/.agents/scripts/check-spec-packages.mjs` 校验包内三件套、`## 验收标准`、任务勾选项、`## 结果` / `## 证据` 与 `结论: pass|fail|partial`。以 `_` 开头的目录跳过，脚本可独立运行（`--root` / `--json`，失败退出 1）。
 - `agent-eval.mjs` 的 `recordEval` 在 JSONL 凭证外写版本化 `.agents/evals/eval-log.json`（`version: 1`、threshold、outcome），可用 `--no-eval-log` / `--eval-log` 控制；schema 为 `schemas/eval-log.schema.json`。既有 `results.jsonl` 行为不变。
+
+## 技能包分发与准入
+
+`src/skills/` + `src/commands/skills.mjs` 实现 `add-skill` / `remove-skill` / `skills lint`：
+
+- 来源解析在 `src/skills/source.mjs`：local 直接复制；git 用 `git clone --depth 1 [--ref|#ref]`；npm 用 `npm install --no-save`。git/npm 必须显式 `--allow-network`，默认离线。
+- lockfile 固定为 `.agents/skills.lock.json`（`src/skills/lock.mjs`，schema `schemas/skills-lock.schema.json`）：来源、版本、包校验和（排序后 `<rel>\0<sha256>\n` 再 sha256）与逐文件哈希。manifest 的 `skills` 段与 `manifest.files` 同步记录，供升级/移除与哈希闸使用。
+- 准入规则在 `src/skills/lint.mjs`：frontmatter 必填、name 唯一且匹配目录、描述 ≤ 300 字符、可选 `triggers` 跨技能冲突、`evalTasks` 引用 `.agents/evals/tasks.tsv`、lockfile 漂移。`add-skill` 安装前复用同一套规则。
+- 宿主技能面从磁盘 `.agents/skills/*/SKILL.md` 动态生成（`plan.mjs` 的外部技能补充）：add/remove 后用 `runInstall({categories:['host'], quiet:true})` 重放，不复制正文。
+- `remove-skill` 只删 manifest 哈希一致的文件，用户改动需 `--force`；同时清理宿主指针目录与空目录。
+- `agent-eval record --skill <name>` 写技能粒度凭证（eval-log schema 可选 `skill`），`agent-eval status` 聚合最新通过率。
+
+全新安装可用性约定（R3-4 并入）：`templates/git/.gitleaks-baseline.json` 随安装落盘；`workflow-modules.txt` 空词表 = 不校验模块枚举（pipeline-run / kb-search）；wiki 计数忽略点文件（`.gitkeep`），模板 INDEX 与 `数据维护/README.md` 对齐；`check-secrets-lite` 扫「已跟踪 + 未跟踪未被忽略」；`pipeline-run` 的 `changedFiles` 剔除 manifest 记录且哈希未变的安装产物（首次工单不再误判越权）。
 
 ## 多仓 Workspace
 

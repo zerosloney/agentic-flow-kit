@@ -29,6 +29,7 @@
 // 测试面：tests/pipeline-executor.test.mjs（引擎外包测试，本脚本仍不内嵌测试）
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -48,7 +49,9 @@ const pad = (n) => String(n).padStart(2, '0');
 function ctxEnv(overrideRoot) {
   const root = path.resolve(overrideRoot || process.env.PIPELINE_RUN_ROOT || process.cwd());
   const bin = path.resolve(process.env.PIPELINE_RUN_BIN || process.env.FLOW_KIT_RUNTIME_SCRIPTS || path.join(root, '.agents', 'scripts'));
-  const gitPrefix = (process.env.PIPELINE_RUN_GIT_BIN || 'git').split(/\s+/).filter(Boolean);
+  // 空格分隔；支持双引号包裹（Windows 的 process.execPath 常在「Program Files」下）。
+  const gitPrefix = (process.env.PIPELINE_RUN_GIT_BIN || 'git')
+    .match(/"[^"]+"|\S+/g)?.map((x) => x.replace(/^"|"$/g, '')) || ['git'];
   return { root, bin, gitPrefix, runsDir: path.join(root, '.agents', 'cache', 'pipeline-runs'), pipeline: loadPipelineConfig(root) };
 }
 
@@ -230,7 +233,26 @@ function fmGet(text, key) {
   const m = text.split(/\r?\n/).find((l) => l.startsWith(`${key}:`));
   return m ? m.slice(key.length + 1).trim() : null;
 }
-function docState(ctx, rel) { const t = readDoc(ctx, rel); return t ? fmGet(t, '状态') : null; }
+// 关单即归档（confirm-doc archive-on-close）：文档落终态后可能已被 git mv 到
+// workflow/archive/<月>/<类型>/。活跃路径缺失时回落到归档路径——否则 pendOf 会把
+// 已归档的终态件重新算作待确认，关单永远停在 await-confirm「余 1 份」。
+const DOC_DIRS = ['intents', 'specs', 'plans', 'incidents'];
+export function resolveDocRel(ctx, rel) {
+  if (!rel || readDoc(ctx, rel) !== null) return rel;
+  const parts = String(rel).replace(/\\/g, '/').split('/');
+  const base = parts.pop();
+  const dir = parts.pop();
+  let months = [];
+  try { months = fs.readdirSync(path.join(ctx.root, 'workflow', 'archive')).sort().reverse(); } catch { return rel; }
+  for (const m of months) {
+    for (const d of DOC_DIRS.includes(dir) ? [dir] : DOC_DIRS) {
+      const cand = ['workflow', 'archive', m, d, base].join('/');
+      if (readDoc(ctx, cand) !== null) return cand;
+    }
+  }
+  return rel;
+}
+function docState(ctx, rel) { const t = readDoc(ctx, resolveDocRel(ctx, rel)); return t ? fmGet(t, '状态') : null; }
 
 // 占位符判定（复核 P1-3 收窄，2026-10-02）：先剔除 code span（`…`）与引号串（"…"）——
 // 正文合法的命令语法占位（如 `next --delegated "<原话>"`）几乎总在 code span 内，
@@ -393,7 +415,7 @@ function printRun(ctx, run, problems) {
     const fails = gates.filter((e) => e.exit !== 0).length;
     console.log(`  需求：${run.requirement}`);
     console.log(`  门执行 ${gates.length} 道（非零 ${fails}）；确认 ${run.events.filter((e) => e.type === 'confirm').length} 次；提交 ${run.events.filter((e) => e.type === 'commit').length} 笔`);
-    for (const d of [run.docs?.entry, run.docs?.spec, run.docs?.plan].filter(Boolean)) console.log(`  文档：${d}（${docState(ctx, d) || '?'}）`);
+    for (const d of [...new Set([run.docs?.entry, run.docs?.spec, run.docs?.plan].filter(Boolean))]) console.log(`  文档：${d}（${docState(ctx, d) || '?'}）`);
   } else if (run.stopType === 'aborted') {
     console.log(`\n== 已放弃（${run.abort?.to || ''}）== ${run.abort?.note || ''}`);
   }
@@ -441,7 +463,8 @@ function validateTriage(ctx, kv) {
   if (!KINDS.includes(kv.kind)) problems.push(`kind 须为 ${KINDS.join('|')}`);
   if (!LEVELS.includes(kv.level)) problems.push(`level 须为 ${LEVELS.join('|')}`);
   const mods = moduleList(ctx);
-  if (kv.module && !mods.includes(kv.module)) problems.push(`module 须在词表内：${mods.join('|')}`);
+  // 空词表 = 不校验模块枚举（与 profiles 模板注释的契约一致）；非空才拒绝表外值。
+  if (mods.length && kv.module && !mods.includes(kv.module)) problems.push(`module 须在词表内：${mods.join('|')}`);
   if (kv.topic && !/^[a-z0-9][a-z0-9-]*$/.test(kv.topic)) problems.push('topic 须为英文 kebab-case');
   return problems;
 }
@@ -461,6 +484,18 @@ function confirmGate(ctx, run, docRel, quote, to) {
 }
 // 语义上 confirm-doc 自行决定目标态（approved/done/fixed/closed）；事件里记录结果态
 function nextConfirmTarget(curState, docRel) { return curState || 'approved'; }
+
+// 断点续跑幂等（R3-5）：上一次 confirm-doc 已把文档推入 approved 但后续提交/落盘失败时，
+// 重入不得再调 confirm-doc——否则它会按 approved→done 继续前向，跳过 implement。
+// 文档 frontmatter 是唯一真相源：已是 approved 即认定确认已完成，仅补 run 事件。
+function confirmOrResume(ctx, run, docRel, quote) {
+  if (docState(ctx, docRel) === 'approved') {
+    emit(run, { type: 'confirm', doc: docRel, to: 'approved', source: 'resume', ...(quote ? { quote } : {}) });
+    saveRun(ctx, run);
+    return { ok: true, resumed: true };
+  }
+  return confirmGate(ctx, run, docRel, quote);
+}
 
 // （decouple-flow-kit）原 managedFaceCheck（提交集命中 kit.json managed 台账 / 包源
 // templates/_agents/ 时自动跑 bin/flow-kit.mjs sync 刷台账）已随 kit 双源机制退役整段删除——
@@ -486,9 +521,33 @@ function docsCommit(ctx, run, files, subject) {
   return { ok: true };
 }
 
+// 安装产物（manifest 有记录且磁盘哈希未变）不是工单改动：fresh install 尚未提交基线时，
+// git status 会把全部托管文件列为 untracked，旧逻辑误判为「改动超出回填清单」。
+function manifestPristine(ctx) {
+  const pristine = new Set();
+  let manifest;
+  try {
+    manifest = JSON.parse(fs.readFileSync(path.join(ctx.root, '.agents', 'install-manifest.json'), 'utf8'));
+  } catch {
+    return pristine;
+  }
+  for (const [rel, hash] of Object.entries(manifest.files || {})) {
+    try {
+      const buf = fs.readFileSync(path.join(ctx.root, rel));
+      if (crypto.createHash('sha256').update(buf).digest('hex') === hash) pristine.add(rel);
+    } catch {
+      /* 缺失/不可读：不算 pristine，按普通改动处理 */
+    }
+  }
+  return pristine;
+}
+
 function changedFiles(ctx, run) {
   const r = runGit(ctx, run, ['status', '--porcelain', '-u']); // -u：展开 untracked 目录为逐文件（防「src/」折叠误报越权）
   if (r.exit !== 0) return null;
+  const pristine = manifestPristine(ctx);
+  // manifest 本身是安装器元数据，不是任何工单的改动面（fresh install 时同样 untracked）。
+  pristine.add('.agents/install-manifest.json');
   const out = [];
   for (const line of r.stdout.split(/\r?\n/).filter(Boolean)) {
     let p = line.slice(3).trim();
@@ -496,12 +555,12 @@ function changedFiles(ctx, run) {
       // 复核 P2-2：rename 行收录 old+new 两路径——旧路径的删除同样属改动面（防改名逃逸越权）
       for (const q of p.split(' -> ')) {
         const n = q.trim().replace(/^"|"$/g, '').replace(/\\/g, '/');
-        if (n) out.push(n);
+        if (n && !pristine.has(n)) out.push(n);
       }
       continue;
     }
     p = p.replace(/^"|"$/g, '').replace(/\\/g, '/');
-    out.push(p);
+    if (!pristine.has(p)) out.push(p);
   }
   return out;
 }
@@ -600,7 +659,7 @@ async function advance(ctx, run, opt) {
         if (/红线|契约|schema|公共接口/.test(run.requirement) && LEVELS.indexOf(kv.level) < LEVELS.indexOf('L2')) {
           console.log('⚠️ warning：需求文本命中红线关键词而 level<L2——判级应就高（继续，但责任在回填者）');
         }
-        run.triage = { kind: kv.kind, level: kv.level, module: kv.module || moduleList(ctx)[0], topic: kv.topic || 'task', decidedBy: run.hint ? 'hint+ai' : 'ai', decidedAt: nowIso() };
+        run.triage = { kind: kv.kind, level: kv.level, module: kv.module || moduleList(ctx)[0] || 'general', topic: kv.topic || 'task', decidedBy: run.hint ? 'hint+ai' : 'ai', decidedAt: nowIso() };
         emit(run, { type: 'triage', ...run.triage });
         run.docs = run.docs || { entry: null, spec: null, plan: null };
         // 路由
@@ -724,7 +783,7 @@ async function advance(ctx, run, opt) {
 
     if (s === 'spec-confirm') {
       if (!opt.delegated) stopConfirm(ctx, run, run.docs.spec, run.awaitConfirm?.points || '', true);
-      const r = confirmGate(ctx, run, run.docs.spec, opt.delegated);
+      const r = confirmOrResume(ctx, run, run.docs.spec, opt.delegated);
       if (!r.ok) stopGateFail(ctx, run, s, [r.msg]);
       run.stage = 'plan-fill'; continue;
     }
@@ -761,7 +820,7 @@ async function advance(ctx, run, opt) {
 
     if (s === 'plan-confirm') {
       if (!opt.delegated) stopConfirm(ctx, run, run.docs.plan, run.awaitConfirm?.points || '', true);
-      const r = confirmGate(ctx, run, run.docs.plan, opt.delegated);
+      const r = confirmOrResume(ctx, run, run.docs.plan, opt.delegated);
       if (!r.ok) stopGateFail(ctx, run, s, [r.msg]);
       // 批次一：入口(+spec)+plan 全 approved → 一笔 docs 提交（配对门要求树内成对）
       // L1 的 entry 就是 plan，去重后只提交一份。
@@ -886,7 +945,8 @@ async function advance(ctx, run, opt) {
     if (s === 'done-confirm' || s === 'incident-fixed-confirm' || s === 'incident-closed-confirm') {
       const finalize = () => {
         runNode(ctx, run, 'gen-workflow-index.mjs', []);
-        const files = [...new Set([entry(), run.docs.spec, run.docs.plan].filter(Boolean))];
+        const files = [...new Set([entry(), run.docs.spec, run.docs.plan].filter(Boolean))]
+          .map((f) => resolveDocRel(ctx, f));
         const c = docsCommit(ctx, run, [...files, 'workflow/INDEX.md'], `docs(workflow): ${topic()} 关单——终态落定（pipeline-run ${run.runId}）`);
         if (!c.ok) stopGateFail(ctx, run, s, [c.msg]);
         stopDone(ctx, run);
