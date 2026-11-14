@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { checkDevcontainer } from '../src/install/devcontainer.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
@@ -52,6 +53,9 @@ test('fresh install generates the devcontainer surface for the stack', () => {
   assert.match(dockerfile, /^FROM mcr\.microsoft\.com\/devcontainers\/typescript-node:22$/m);
   assert.match(dockerfile, /^ARG FLOW_KIT_VERSION=\d+\.\d+\.\d+$/m);
   assert.match(dockerfile, /agentic-flow-kit@\$\{FLOW_KIT_VERSION\}/);
+  // 身份必须与镜像自带的非 root 用户一致：javascript-node 系镜像里是 node。
+  assert.match(dockerfile, /^USER node$/m);
+  assert.equal(readDoc(dir).remoteUser, 'node');
 
   const manifest = JSON.parse(fs.readFileSync(path.join(dir, '.agents', 'install-manifest.json'), 'utf8'));
   assert.equal(manifest.devcontainer, true);
@@ -65,6 +69,31 @@ test('each stack picks its own base image', () => {
   const dockerfile = fs.readFileSync(path.join(dir, DOCKERFILE_REL), 'utf8');
   assert.match(dockerfile, /^FROM mcr\.microsoft\.com\/devcontainers\/go:1\.23$/m);
   assert.deepEqual(readDoc(dir).forwardPorts, [8080, 5173]);
+});
+
+test('every stack image ships the baked tooling its container needs', () => {
+  // 镜像 tag 必须真实存在（上游没有 dotnet:8 这种短 tag），且容器身份/ node 供给要自洽。
+  const expectations = {
+    dotnet: { user: 'vscode', node: false },
+    node: { user: 'node', node: false },
+    typescript: { user: 'node', node: false },
+    rust: { user: 'vscode', node: true },
+    go: { user: 'vscode', node: false },
+    java: { user: 'vscode', node: false },
+    empty: { user: 'vscode', node: true },
+  };
+  for (const [stack, want] of Object.entries(expectations)) {
+    const dir = tmpRepo();
+    const r = run(['install', '--agent', 'claude', '--stack', stack, '--target', '.', '--json'], dir);
+    assert.equal(r.status, 0, `${stack}: ${r.stderr}`);
+    const dockerfile = fs.readFileSync(path.join(dir, DOCKERFILE_REL), 'utf8');
+    assert.match(dockerfile, new RegExp(`^USER ${want.user}$`, 'm'), `${stack}: USER`);
+    assert.equal(readDoc(dir).remoteUser, want.user, `${stack}: remoteUser`);
+    // 镜像不烘焙 node 的栈必须补装，烘焙了的栈不该重复补装。
+    assert.equal(/ARG NODE_VERSION=/.test(dockerfile), want.node, `${stack}: node provisioning`);
+    const state = checkDevcontainer({ target: dir, stack });
+    assert.equal(state.ok, true, `${stack}: ${state.problems.join('; ')}`);
+  }
 });
 
 test('--no-devcontainer suppresses the surface and upgrade replays the choice', () => {
@@ -116,6 +145,20 @@ test('the gate enforces image allowlist, tag pinning and kit pinning', () => {
   assert.equal(unpinned.status, 1, unpinned.stderr);
   assert.match(unpinned.stderr, /未钉定 flow-kit 版本/);
   fs.writeFileSync(dockerAbs, original, 'utf8');
+
+  // 容器身份写错 → 红（镜像里没这个用户，docker build 会直接失败）
+  fs.writeFileSync(dockerAbs, original.replace(/^USER node$/m, 'USER vscode'), 'utf8');
+  const wrongUser = gate();
+  assert.equal(wrongUser.status, 1, wrongUser.stderr);
+  assert.match(wrongUser.stderr, /USER 与镜像不符/);
+  fs.writeFileSync(dockerAbs, original, 'utf8');
+
+  const jsonAbs = path.join(dir, JSON_REL);
+  fs.writeFileSync(jsonAbs, JSON.stringify({ ...readDoc(dir), remoteUser: 'vscode' }, null, 2));
+  const wrongRemote = gate();
+  assert.equal(wrongRemote.status, 1, wrongRemote.stderr);
+  assert.match(wrongRemote.stderr, /remoteUser 与镜像不符/);
+  fs.writeFileSync(jsonAbs, JSON.stringify(readDoc(dir), null, 2));
 
   // 项目未启用容器 → 大声跳过，不判红
   fs.rmSync(path.join(dir, '.devcontainer'), { recursive: true, force: true });

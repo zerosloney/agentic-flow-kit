@@ -27,6 +27,35 @@ const DEFAULT_POLICY = {
   requirePinnedFlowKit: true,
 };
 
+// 栈 → 镜像自带的非 root 用户，以及镜像是否烘焙 node。与 src/install/devcontainer.mjs
+// （生成器）同源，改动必须两侧同步——身份/供给写错会让 docker build 直接失败。
+const STACK_IMAGES = {
+  dotnet: 'mcr.microsoft.com/devcontainers/dotnet:8.0',
+  node: 'mcr.microsoft.com/devcontainers/typescript-node:22',
+  typescript: 'mcr.microsoft.com/devcontainers/typescript-node:22',
+  rust: 'mcr.microsoft.com/devcontainers/rust:1',
+  go: 'mcr.microsoft.com/devcontainers/go:1.23',
+  java: 'mcr.microsoft.com/devcontainers/java:21',
+  empty: 'mcr.microsoft.com/devcontainers/base:ubuntu-24.04',
+};
+const STACK_USER = {
+  dotnet: 'vscode',
+  node: 'node',
+  typescript: 'node',
+  rust: 'vscode',
+  go: 'vscode',
+  java: 'vscode',
+  empty: 'vscode',
+};
+// rust / base 镜像不烘焙 node，生成器会在 Dockerfile 里补装（ARG NODE_VERSION）。
+const STACK_NEEDS_NODE = { rust: true, empty: true };
+
+// 安装 manifest 里的 stack 是这里的唯一事实来源（manifest 缺失时退到 empty）。
+function readStack() {
+  const m = readJson(path.join(ROOT, '.agents', 'install-manifest.json'));
+  return m && typeof m.stack === 'string' ? m.stack : 'empty';
+}
+
 const args = process.argv.slice(2);
 const jsonOut = args.includes('--json');
 const unknownArgs = args.filter((a) => a !== '--json');
@@ -106,6 +135,7 @@ function main() {
   }
 
   const problems = [];
+  const stack = readStack();
   let doc = null;
   try {
     doc = JSON.parse(fs.readFileSync(jsonAbs, 'utf8'));
@@ -120,6 +150,10 @@ function main() {
       if (doc.forwardPorts != null) {
         const ports = Array.isArray(doc.forwardPorts) ? doc.forwardPorts : [];
         if (!ports.every((p) => Number.isInteger(p) && p > 0)) problems.push(`${JSON_REL}: forwardPorts 非法`);
+      }
+      // 身份必须是镜像自带的那个非 root 用户，否则 docker build / 容器启动直接失败。
+      if (doc.remoteUser && STACK_USER[stack] && doc.remoteUser !== STACK_USER[stack]) {
+        problems.push(`remoteUser 与镜像不符：${doc.remoteUser} ≠ ${STACK_USER[stack]}（stack=${stack}）`);
       }
     }
   }
@@ -139,6 +173,22 @@ function main() {
       const tag = imageTag(image);
       if (!tag) problems.push(`镜像未钉版本：${image}`);
       else if (policy.forbiddenTags.includes(tag)) problems.push(`镜像使用了浮动 tag「${tag}」：${image}`);
+      if (STACK_IMAGES[stack] && image !== STACK_IMAGES[stack]) {
+        problems.push(`镜像与栈不符：${image} ≠ ${STACK_IMAGES[stack]}（stack=${stack}）`);
+      }
+    }
+    const userLine = /^\s*USER\s+(\S+)/m.exec(text);
+    if (!userLine) problems.push(`${DOCKERFILE_REL} 缺少 USER 指令（容器以 root 运行不安全）`);
+    else if (STACK_USER[stack] && userLine[1] !== STACK_USER[stack]) {
+      problems.push(`USER 与镜像不符：${userLine[1]} ≠ ${STACK_USER[stack]}（stack=${stack}）`);
+    }
+    const needsNode = Boolean(STACK_NEEDS_NODE[stack]);
+    const hasNodeProvision = /^\s*ARG\s+NODE_VERSION=/m.test(text);
+    if (needsNode && !hasNodeProvision) {
+      problems.push(`镜像 ${image} 未烘焙 node，但 ${DOCKERFILE_REL} 未补装（缺 ARG NODE_VERSION）`);
+    }
+    if (!needsNode && hasNodeProvision) {
+      problems.push(`镜像 ${image} 已烘焙 node，${DOCKERFILE_REL} 不应再补装（多余 ARG NODE_VERSION）`);
     }
     kitVersion = parseDockerfileKitVersion(text);
     if (policy.requirePinnedFlowKit && !isConcreteVersion(kitVersion)) {
