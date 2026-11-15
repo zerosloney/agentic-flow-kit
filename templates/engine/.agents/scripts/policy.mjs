@@ -285,6 +285,27 @@ export function parseMechanismRegistry(text) {
   return rows;
 }
 
+// kit 模板台账行源（issue #42）：policy 脚本随包分发、经 `flow-kit run` 从包内 templates 目录执行，
+// scripts/../config/mechanism-registry.md 即 kit 模板面。升级/install 后 policy.json required 新增机制
+// 而项目台账 userModified 不覆盖 → check 报「引用了未登记机制」，报错附可粘贴行、--fix 从这里取原行迁移。
+const KIT_TEMPLATE_REGISTRY = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'config', 'mechanism-registry.md');
+
+function kitTemplateRow(name) {
+  let text;
+  try {
+    text = fs.readFileSync(KIT_TEMPLATE_REGISTRY, 'utf8');
+  } catch {
+    return null;
+  }
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.startsWith('|')) continue;
+    const cells = line.split('|').slice(1, -1).map((cell) => cell.trim());
+    if (cells.length !== 7 || cells[0] === '机制') continue;
+    if (cells[0] === name) return line.trimEnd();
+  }
+  return null;
+}
+
 const isObject = (value) => value !== null && typeof value === 'object' && !Array.isArray(value);
 const isPositiveInt = (value) => Number.isInteger(value) && value > 0;
 const isString = (value) => typeof value === 'string' && value.trim() !== '';
@@ -360,7 +381,10 @@ function checkMechanisms(root, cfg, problems, summary) {
       problems.push({ code: 'POLICY_MECHANISM', message: `机制状态不在闭集（${row.name}）: ${row.statusRaw}` });
     }
     if (!types.includes(row.tag)) {
-      problems.push({ code: 'POLICY_MECHANISM', message: `机制类型不在闭集（${row.name}）: ${row.statusRaw}` });
+      problems.push({
+        code: 'POLICY_MECHANISM',
+        message: `机制类型不在闭集（${row.name}）: ${row.statusRaw}——状态列补 [类型] 标记（检出型/健康静默/不退役主干/数据面）`,
+      });
     }
     if (row.status === '现役' && (!isString(row.gate) || row.gate === '—')) {
       problems.push({ code: 'POLICY_MECHANISM', message: `现役机制缺少门禁位置: ${row.name}` });
@@ -371,10 +395,24 @@ function checkMechanisms(root, cfg, problems, summary) {
   }
   const requiredSet = new Set(required);
   for (const name of requiredSet) {
-    if (!names.has(name)) problems.push({ code: 'POLICY_MECHANISM', message: `policy.json 引用了未登记机制: ${name}` });
+    if (names.has(name)) continue;
+    const templateRow = kitTemplateRow(name);
+    const hint = templateRow !== null
+      ? `\n    可粘贴行（取自 kit 模板，门禁位置/CI 描述按本仓改写）: ${templateRow}`
+      : '\n    kit 模板中无此机制行——需手工登记（7 列管道表：机制|门禁位置|判据|阈值|最近触发|状态[类型]|处置期限）';
+    problems.push({
+      code: 'POLICY_MECHANISM',
+      message: `policy.json 引用了未登记机制: ${name}${hint}`,
+      fix: { kind: 'registry-row', name },
+    });
   }
   for (const name of names) {
-    if (!requiredSet.has(name)) problems.push({ code: 'POLICY_MECHANISM', message: `机制未登记到 policy.json: ${name}` });
+    if (requiredSet.has(name)) continue;
+    problems.push({
+      code: 'POLICY_MECHANISM',
+      message: `机制未登记到 policy.json: ${name}\n    修法：把 "${name}" 追加到 policy.json mechanisms.required，或 policy check --fix 自动登记`,
+      fix: { kind: 'required-entry', name },
+    });
   }
   const count = (status) => rows.filter((row) => row.status === status).length;
   if (summary) {
@@ -683,16 +721,99 @@ export function renderPolicySection(root, result = checkPolicy(root, { runBudget
   return lines;
 }
 
+// --fix 一次性迁移（issue #42）：升级/install 给了新 policy.json，而项目台账 userModified 不覆盖，
+// 双向登记漂移必红。可自动修的只有两类——台账缺行（kit 模板原行补）与 required 缺名（追加数组尾）；
+// 类型/状态闭集、门禁位置、期限格式、重复登记无法推断，不替用户猜。
+// 台账写入走「读全文 → 最后一条 7 列数据行后插入 → 写回」，换行符按原文首个换行符判断，保持 CRLF/LF 原样。
+function insertRegistryRows(text, newRows) {
+  const eol = (/\r\n|\r|\n/.exec(text) || ['\n'])[0];
+  const lines = text.split(/\r\n|\r|\n/);
+  let lastIdx = -1;
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i];
+    if (!line.startsWith('|')) continue;
+    if (/^\|[\s:|-]+\|?\s*$/.test(line)) continue;
+    const cells = line.split('|').slice(1, -1).map((cell) => cell.trim());
+    if (cells.length !== 7 || cells[0] === '机制') continue;
+    lastIdx = i;
+  }
+  if (lastIdx < 0) return null;
+  return [...lines.slice(0, lastIdx + 1), ...newRows, ...lines.slice(lastIdx + 1)].join(eol);
+}
+
+function applyPolicyFixes(root, problems, { json, stdout, stderr }) {
+  const note = json ? stderr : stdout; // --json 下 stdout 只留最终 JSON，修复进度走 stderr
+  const rowNames = [...new Set(problems.filter((p) => p.fix?.kind === 'registry-row').map((p) => p.fix.name))];
+  const entryNames = [...new Set(problems.filter((p) => p.fix?.kind === 'required-entry').map((p) => p.fix.name))];
+  if (!rowNames.length && !entryNames.length) return false;
+  const cfgText = readText(root, POLICY_REL);
+  if (cfgText === null) throw new Error('--fix 读回 policy.json 失败（文件在 check 之后被改动？）');
+  const cfg = JSON.parse(cfgText);
+  let changed = false;
+
+  if (rowNames.length) {
+    const missing = [];
+    const rows = [];
+    for (const name of rowNames) {
+      const row = kitTemplateRow(name);
+      if (row === null) missing.push(name);
+      else rows.push(row);
+    }
+    if (rows.length) {
+      const registryText = readText(root, cfg.registry);
+      const next = registryText === null ? null : insertRegistryRows(registryText, rows);
+      if (next === null) {
+        // 首次 check 刚确认过台账有数据行；走到这里只能是文件在 check 后被改动的竞态——loud 失败不静默。
+        throw new Error(`--fix 追加机制台账失败：${cfg.registry} 无插入点（文件在 check 之后被改动？）`);
+      }
+      fs.writeFileSync(path.join(root, cfg.registry), next, 'utf8');
+      const appended = rowNames.filter((name) => !missing.includes(name));
+      note(`[policy] --fix 已追加机制台账 ${rows.length} 行（取自 kit 模板）：${appended.join('、')}`);
+      changed = true;
+    }
+    if (missing.length) stderr(`[policy] --fix 未能自动迁移：${missing.join('、')}（kit 模板无对应行）`);
+  }
+
+  if (entryNames.length) {
+    const required = Array.isArray(cfg.mechanisms?.required) ? cfg.mechanisms.required : [];
+    const added = entryNames.filter((name) => !required.includes(name));
+    if (added.length) {
+      required.push(...added);
+      fs.writeFileSync(path.join(root, POLICY_REL), `${JSON.stringify(cfg, null, 2)}\n`, 'utf8');
+      note(`[policy] --fix 已把 ${added.length} 个机制登入 policy.json required：${added.join('、')}`);
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 const POLICY_USAGE = `用法：
-  flow-kit run policy.mjs check [--root <dir>] [--json]
+  flow-kit run policy.mjs check [--root <dir>] [--json] [--fix]
   flow-kit run policy.mjs explain [--root <dir>] [--json]
 
 check 校验机制登记、预算、枚举闭集、角色/模型引用与策略面完整性；
+check --fix 一次性迁移升级后的双向登记漂移（台账缺行取自 kit 模板原行、required 缺名追加数组尾；
+类型/状态闭集、门禁位置、期限格式、重复登记不自动修），写入后重跑 check 按最终结果退出。
 explain 输出当前生效策略视图（gen-effective-policy 亦复用同一视图）。`;
+
+function emitCheckResult(result, { json, stdout, stderr }) {
+  if (json) {
+    stdout(JSON.stringify(result, null, 2));
+    return result.ok ? 0 : 1;
+  }
+  if (result.ok) {
+    stdout(`[policy] ✅ 策略面一致（机制 ${result.summary.mechanisms?.total || 0} 行）`);
+  } else {
+    stderr(`[policy] ❌ ${result.problems.length} 项策略问题`);
+    for (const problem of result.problems) stderr(`  [${problem.code}] ${problem.message}`);
+  }
+  return result.ok ? 0 : 1;
+}
 
 export function runPolicyCli(argv, { stdout = console.log, stderr = console.error } = {}) {
   const first = argv[0] && !argv[0].startsWith('-') ? argv[0] : 'check';
   const json = argv.includes('--json');
+  const fix = argv.includes('--fix');
   const rootIndex = argv.indexOf('--root');
   const root = path.resolve(rootIndex >= 0 && argv[rootIndex + 1]
     ? argv[rootIndex + 1]
@@ -701,6 +822,17 @@ export function runPolicyCli(argv, { stdout = console.log, stderr = console.erro
     stderr(POLICY_USAGE);
     return 2;
   }
+  if (fix && first !== 'check') {
+    stderr(`policy ${first} 不支持 --fix（一次性迁移只属于 check）`);
+    stderr(POLICY_USAGE);
+    return 2;
+  }
+  if (fix) {
+    const firstResult = checkPolicy(root, { runBudgets: true });
+    const changed = applyPolicyFixes(root, firstResult.problems, { json, stdout, stderr });
+    const result = changed ? checkPolicy(root, { runBudgets: true }) : firstResult;
+    return emitCheckResult(result, { json, stdout, stderr });
+  }
   const result = checkPolicy(root, { runBudgets: first === 'check' });
   if (first === 'explain') {
     const markdown = `${renderPolicySection(root, result).join('\n')}\n`;
@@ -708,15 +840,7 @@ export function runPolicyCli(argv, { stdout = console.log, stderr = console.erro
     else stdout(markdown.trimEnd());
     return result.ok ? 0 : 1;
   }
-  if (json) {
-    stdout(JSON.stringify(result, null, 2));
-  } else if (result.ok) {
-    stdout(`[policy] ✅ 策略面一致（机制 ${result.summary.mechanisms?.total || 0} 行）`);
-  } else {
-    stderr(`[policy] ❌ ${result.problems.length} 项策略问题`);
-    for (const problem of result.problems) stderr(`  [${problem.code}] ${problem.message}`);
-  }
-  return result.ok ? 0 : 1;
+  return emitCheckResult(result, { json, stdout, stderr });
 }
 
 const invokedPath = process.argv[1] ? path.resolve(process.argv[1]) : '';

@@ -2,15 +2,18 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import {
   HOSTS,
   HOST_NAMES,
+  UNMANAGED_HOST_PROBES,
   hostTargetRel,
   isAgentTemplate,
   modelRoleForAgent,
 } from '../src/hosts/registry.mjs';
 import { buildVars, render } from '../src/render/tokens.mjs';
+import { makeTmp } from './helpers/tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
@@ -125,4 +128,65 @@ test('host allow lists follow the selected stack', () => {
   const typescript = renderHostSettings('qoder/settings.json', 'typescript').permissions.allow;
   assert.ok(typescript.includes('Bash(npm run:*)'));
   assert.ok(!typescript.some((rule) => rule.includes('dotnet') || rule.includes('cargo')));
+});
+
+// issue #41 C 档：list-hosts 人类输出对假 HOME 下的未接管宿主（UNMANAGED_HOST_PROBES）出探测行。
+const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
+
+function runWithHome(args, fakeHome) {
+  return spawnSync(process.execPath, [BIN, ...args], {
+    cwd: KIT,
+    encoding: 'utf8',
+    // 同时盖 HOME 与 USERPROFILE：os.homedir() 在 Windows 走 USERPROFILE。
+    env: { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome, FLOW_KIT_TEST: '1' },
+  });
+}
+
+function seedFakeHome(rel) {
+  const home = makeTmp('flow-kit-home-');
+  fs.mkdirSync(path.join(home, path.dirname(rel)), { recursive: true });
+  fs.writeFileSync(path.join(home, rel), '{}');
+  return home;
+}
+
+test('UNMANAGED_HOST_PROBES mirrors the check-local-gates probe table', () => {
+  assert.deepEqual(UNMANAGED_HOST_PROBES, [
+    { name: 'Codex', dir: '.codex', signals: ['hooks.json', 'config.toml'] },
+    { name: 'Gemini CLI', dir: '.gemini', signals: ['settings.json'] },
+  ]);
+});
+
+test('list-hosts prints a probe line for a detected unmanaged host', () => {
+  const home = seedFakeHome('.codex/hooks.json');
+  const r = runWithHome(['list-hosts'], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /\[探测\] Codex/);
+  assert.match(r.stdout, /暂不受支持/);
+  assert.doesNotMatch(r.stdout, /\[探测\] Gemini CLI/);
+});
+
+test('list-hosts prints one probe line per detected unmanaged host', () => {
+  const home = seedFakeHome('.codex/hooks.json');
+  fs.mkdirSync(path.join(home, '.gemini'), { recursive: true });
+  fs.writeFileSync(path.join(home, '.gemini', 'settings.json'), '{}');
+  const r = runWithHome(['list-hosts'], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /\[探测\] Codex/);
+  assert.match(r.stdout, /\[探测\] Gemini CLI/);
+});
+
+test('list-hosts prints no probe line on an empty fake HOME', () => {
+  const home = makeTmp('flow-kit-home-');
+  const r = runWithHome(['list-hosts'], home);
+  assert.equal(r.status, 0, r.stderr);
+  assert.doesNotMatch(r.stdout, /\[探测\]/);
+});
+
+test('list-hosts --json stays a plain host array without probe output', () => {
+  const home = seedFakeHome('.codex/hooks.json');
+  const r = runWithHome(['list-hosts', '--json'], home);
+  assert.equal(r.status, 0, r.stderr);
+  const parsed = JSON.parse(r.stdout);
+  assert.ok(Array.isArray(parsed));
+  assert.doesNotMatch(r.stdout, /探测|Codex|Gemini/);
 });

@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { stackItems } from '../src/tui/flows.mjs';
 import { makeT } from '../src/i18n.mjs';
+import { BASELINE_DIR } from '../src/install/baseline.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
@@ -122,4 +123,13 @@ test('en install rejects an unknown stack in English', () => {
   const r = run(['install', '--agent', 'trae', '--stack', 'bogus', '--lang', 'en', '--target', '.'], dir);
   assert.equal(r.status, 2);
   assert.match(`${r.stdout}${r.stderr}`, /Invalid --stack/);
+});
+
+test('en doctor suggests install --baseline-only when the baseline is missing', () => {
+  const dir = tmpRepo();
+  assert.equal(run(['install', '--agent', 'claude', '--stack', 'node', '--lang', 'en', '--target', '.'], dir).status, 0);
+  fs.rmSync(path.join(dir, BASELINE_DIR), { recursive: true, force: true });
+
+  const r = run(['doctor', '--target', '.', '--lang', 'en'], dir);
+  assert.match(`${r.stdout}${r.stderr}`, /install --baseline-only/);
 });

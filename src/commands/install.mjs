@@ -5,14 +5,14 @@ import { spawnSync } from 'node:child_process';
 import { flag } from '../cli/args.mjs';
 import { buildPlan, CI_MODES, ciModeFor, ciTemplateRels } from '../install/plan.mjs';
 import { parseProfileArgs, STACKS } from '../install/profiles.mjs';
-import { applyPlan, summaryLine } from '../install/apply.mjs';
+import { applyPlan, readPlanEntry, summaryLine } from '../install/apply.mjs';
 import { emptyManifest, readManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
 import { cleanupMigratedFiles } from '../install/migrations.mjs';
 import { buildVars } from '../render/tokens.mjs';
 import { HOST_NAMES, HOSTS, resolveHost } from '../hosts/registry.mjs';
 import { detectHosts } from '../hosts/detect.mjs';
 import { configureGit, isGitRepo } from '../git/config.mjs';
-import { writeBaseline } from '../install/baseline.mjs';
+import { isBinaryPath, writeBaseline } from '../install/baseline.mjs';
 import { explainPolicyDiff, renderPolicyDiff } from '../install/policy-diff.mjs';
 import { RUNTIME_SCRIPTS } from './runtime.mjs';
 import {
@@ -357,6 +357,81 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
     installedAt,
     trackHosts,
   });
+
+  // --baseline-only：只重建基线目录，不重装。基线（.agents/.kit/baseline）被 .gitignore 忽略，
+  // fresh clone / git clean -fdx 后必然缺失而 manifest 仍声明 baseline=true；
+  // 这里按 manifest 登记把基线补回来，不执行安装流程的任何其他动作。
+  if (flag(args, 'baseline-only')) {
+    if (!previous) {
+      const err = new Error(t('error.noManifest'));
+      err.code = 'NO_MANIFEST';
+      throw err;
+    }
+    // 语言重放（与 upgrade 同口径）：en 装户不带 --lang 重跑时按 manifest 语言渲染，
+    // 否则模板语言与磁盘不符会整盘 skipped。只影响本分支；主流程 lang 语义不变。
+    const rebuildLang = args.lang || previous.language || lang;
+    const rebuildPlan = buildPlan({
+      target, hosts: planHosts, lang: rebuildLang, stack, stacks, projectName, categories, models: models?.hosts, tier, hardened,
+      mcp: mcpEnabled, surfaces,
+      managedPermissions: previous?.managedPermissions || {},
+      devcontainer: devcontainerEnabled,
+      ci: ciChoice,
+    });
+    const rebuildVars = buildVars({
+      target,
+      projectName,
+      stack,
+      stacks,
+      language: rebuildLang,
+      hosts: hostSet,
+      kitVersion: KIT_VERSION,
+      installedAt,
+      trackHosts,
+    });
+    const managed = previous.files || {};
+    const rebuilt = [];
+    const skipped = [];
+    for (const entry of rebuildPlan.entries) {
+      // 基线只收文本直写结果（与 applyPlan 同口径）；合并块 / 配置合并不走基线。
+      if (entry.kind !== 'file' && entry.kind !== 'generated') continue;
+      const rel = entry.targetRel;
+      if (managed[rel] === undefined || isBinaryPath(rel)) continue;
+      const text = readPlanEntry(entry, rebuildVars);
+      if (text == null) continue;
+      let onDisk = null;
+      try {
+        onDisk = fs.readFileSync(path.join(target, rel), 'utf8');
+      } catch { /* 磁盘缺失按跳过处理 */ }
+      if (onDisk == null) {
+        skipped.push(rel);
+        continue;
+      }
+      const diskHash = sha256Text(onDisk);
+      // 磁盘与上次工具写入（manifest 哈希）或当前模板渲染一致才重建；
+      // 否则用户改过或模板已升级，跳过并提示先 upgrade。
+      if (diskHash === managed[rel] || diskHash === sha256Text(text)) {
+        if (!dryRun) writeBaseline(target, rel, onDisk);
+        rebuilt.push(rel);
+      } else {
+        skipped.push(rel);
+      }
+    }
+    const skippedNote = skipped.length ? t('install.baselineOnlySkipped', { count: skipped.length }) : '';
+    emit(t('install.baselineOnly', { count: rebuilt.length, skippedNote }));
+    if (!dryRun) {
+      writeManifest(target, { ...previous, baseline: true, baselineVersion: KIT_VERSION });
+    }
+    if (asJson) {
+      console.log(JSON.stringify({
+        command: commandLabel,
+        baselineOnly: true,
+        rebuilt,
+        skipped,
+        manifest: dryRun ? null : path.join(target, '.agents/install-manifest.json'),
+      }, null, 2));
+    }
+    return 0;
+  }
 
   const explainPolicy = flag(args, 'explain-policy');
   const policyDiff = explainPolicy ? explainPolicyDiff({ target, plan, vars }) : null;

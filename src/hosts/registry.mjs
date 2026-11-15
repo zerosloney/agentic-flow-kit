@@ -223,6 +223,13 @@ export const HOSTS = {
 
 export const HOST_NAMES = Object.keys(HOSTS);
 
+// 已知但暂不受支持的宿主探测面（issue #41 C 档）：list-hosts 与 check-local-gates 的机器级探测共用。
+// 宿主被正式支持（内置或 external host plugin）后，把对应项从此表移除并在 HOSTS/插件登记。
+export const UNMANAGED_HOST_PROBES = [
+  { name: 'Codex', dir: '.codex', signals: ['hooks.json', 'config.toml'] },
+  { name: 'Gemini CLI', dir: '.gemini', signals: ['settings.json'] },
+];
+
 // 来源：builtin / user / project / cli。外部定义由 src/hosts/external.mjs 注册。
 export const HOST_SOURCES = new Map(HOST_NAMES.map((name) => [name, 'builtin']));
 
