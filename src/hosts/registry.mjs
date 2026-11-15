@@ -48,6 +48,28 @@ export const HOSTS = {
     hardening: { level: 'hooks' },
     modelProbe: { configs: ['~/.codebuddy/settings.json'], env: ['CODEBUDDY_MODEL'], cli: [] },
   },
+  codex: {
+    dir: '.codex',
+    label: 'Codex / ChatGPT',
+    tracked: true,
+    // 零项目文件宿主：Codex 原生读根 AGENTS.md，不写宿主点目录（不建 templates/hosts/codex/）。
+    commands: null,
+    agents: null,
+    skills: null,
+    hooks: null,
+    // 用户级 hook 接线（issue #45 实测）：Codex 的 hooks 在 ~/.codex/hooks.json（不在仓内），
+    // 适配脚本随包分发经 `flow-kit hook codex-gate` 调起；编辑 hooks.json 会使条目信任哈希失效，
+    // 接线变更后需交互式会话重新信任一次，非交互模式会静默跳过未信任条目。
+    userHooks: {
+      config: '~/.codex/hooks.json',
+      event: 'PreToolUse',
+      matcher: '^(exec_command|apply_patch)$',
+      command: 'flow-kit hook codex-gate',
+      timeout: 60,
+    },
+    hardening: { level: 'hooks' },
+    modelProbe: { configs: [], env: [], cli: [] },
+  },
   claude: {
     dir: '.claude',
     label: 'Claude Code',
@@ -225,8 +247,8 @@ export const HOST_NAMES = Object.keys(HOSTS);
 
 // 已知但暂不受支持的宿主探测面（issue #41 C 档）：list-hosts 与 check-local-gates 的机器级探测共用。
 // 宿主被正式支持（内置或 external host plugin）后，把对应项从此表移除并在 HOSTS/插件登记。
+// Codex 已内置（issue #45），自此表移除。
 export const UNMANAGED_HOST_PROBES = [
-  { name: 'Codex', dir: '.codex', signals: ['hooks.json', 'config.toml'] },
   { name: 'Gemini CLI', dir: '.gemini', signals: ['settings.json'] },
 ];
 

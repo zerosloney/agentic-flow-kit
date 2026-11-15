@@ -219,10 +219,10 @@ test('list-hosts --json lists the registry surface', () => {
   const r = run(['list-hosts', '--json'], KIT);
   assert.equal(r.status, EXIT.OK, r.stderr);
   const hosts = parseSingleJson(r);
-  assert.equal(hosts.length, 10);
+  assert.equal(hosts.length, 11);
   const claude = hosts.find((h) => h.name === 'claude');
   assert.ok(claude);
   assert.equal(claude.dir, '.claude');
   assert.equal(claude.modelField, 'model');
-  assert.ok(hosts.every((h) => typeof h.skills === 'string'));
+  assert.ok(hosts.every((h) => h.skills === null || typeof h.skills === 'string'));
 });

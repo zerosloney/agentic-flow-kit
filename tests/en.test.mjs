@@ -133,3 +133,18 @@ test('en doctor suggests install --baseline-only when the baseline is missing', 
   const r = run(['doctor', '--target', '.', '--lang', 'en'], dir);
   assert.match(`${r.stdout}${r.stderr}`, /install --baseline-only/);
 });
+
+test('en codex install reports user-level wiring with the re-trust reminder', () => {
+  const dir = tmpRepo();
+  const home = makeTmp('flow-kit-en-home-');
+  // Codex 接线落在用户级 ~/.codex/hooks.json：必须盖假 HOME，不能碰真实用户目录。
+  const r = spawnSync(process.execPath, [BIN, 'install', '--agent', 'codex', '--stack', 'node', '--lang', 'en', '--target', '.'], {
+    cwd: dir,
+    encoding: 'utf8',
+    env: { ...process.env, HOME: home, USERPROFILE: home },
+  });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /User-level hooks wired/);
+  assert.match(r.stdout, /re-trust once in an interactive/);
+  assert.ok(fs.existsSync(path.join(home, '.codex', 'hooks.json')));
+});
