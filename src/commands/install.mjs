@@ -13,6 +13,7 @@ import { HOST_NAMES, HOSTS, resolveHost } from '../hosts/registry.mjs';
 import { detectHosts } from '../hosts/detect.mjs';
 import { configureGit, isGitRepo } from '../git/config.mjs';
 import { isBinaryPath, writeBaseline } from '../install/baseline.mjs';
+import { wireUserHooks } from '../install/user-hooks.mjs';
 import { explainPolicyDiff, renderPolicyDiff } from '../install/policy-diff.mjs';
 import { RUNTIME_SCRIPTS } from './runtime.mjs';
 import {
@@ -477,6 +478,7 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
   emit(summaryLine(result.stats, t));
 
   let gitConfigured = false;
+  const userHooks = [];
   if (!dryRun) {
     const beforeDerived = { ...result.files };
     const derived = new Set(previous?.derived || []);
@@ -551,6 +553,17 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
     writeManifest(target, next);
     emit(t('install.manifest', { path: path.join(target, '.agents/install-manifest.json') }));
 
+    // 用户级 hook 接线（issue #45）：hooks 配置在用户目录（如 ~/.codex/hooks.json），不在项目仓内。
+    // 数据驱动遍历 hostSet 里带 userHooks 能力的宿主；编辑即失效条目信任哈希，输出必须带重信任提醒。
+    for (const host of hostSet) {
+      if (!HOSTS[host]?.userHooks) continue;
+      const wired = wireUserHooks({ host, t });
+      userHooks.push({ host, changed: wired.changed });
+      emit(wired.changed
+        ? t('install.userHooksChanged', { host: HOSTS[host].label || host, path: wired.file })
+        : t('install.userHooksOk', { host: HOSTS[host].label || host, path: wired.file }));
+    }
+
     // R5-1b：迁移只摘 manifest；磁盘旧运行时文件在此按旧哈希安全删除。
     let migrationCleanup = null;
     if (migration?.removals?.length) {
@@ -608,6 +621,7 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
       mcp: mcpEnabled,
       devcontainer: devcontainerEnabled,
       baseline: baselineEnabled,
+      ...(userHooks.length ? { userHooks } : {}),
       models: models ? summarizeModels(models) : null,
       plan: { count: plan.entries.length },
       stats: result.stats,

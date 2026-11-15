@@ -10,6 +10,7 @@ import { readMcpServers } from '../install/mcp.mjs';
 import { readToolPolicy } from '../install/tool-policy.mjs';
 import { checkDevcontainer } from '../install/devcontainer.mjs';
 import { findHookDrift } from '../install/hooks.mjs';
+import { inspectUserHookEntry } from '../install/user-hooks.mjs';
 import { listBaselines } from '../install/baseline.mjs';
 import { buildAttestation, writeAttestation } from '../install/attest.mjs';
 import { compilePermissions, permissionDrift } from '../install/permissions.mjs';
@@ -140,8 +141,8 @@ export function doctorCommand({ args, t }) {
       const targetRel = hostTargetRel(host, rel);
       if (!fs.existsSync(path.join(target, targetRel))) add(false, `host ${host}: ${targetRel}`, t('doctor.fileMissing'));
     }
-    // 能力缺口：没有 hooks / modelField 的宿主，相关保证只能是 advisory。
-    if (!h.hooks) add(true, `guarantee ${host}`, t('doctor.guaranteeGap', { host, capability: 'hooks' }), '', { warn: true });
+    // 能力缺口：没有 hooks（项目级或用户级） / modelField 的宿主，相关保证只能是 advisory。
+    if (!h.hooks && !h.userHooks) add(true, `guarantee ${host}`, t('doctor.guaranteeGap', { host, capability: 'hooks' }), '', { warn: true });
     if (h.agents && !h.agents.modelField) add(true, `guarantee ${host}`, t('doctor.guaranteeGap', { host, capability: 'model injection' }), '', { warn: true });
 
     // MCP 工具权限策略与运行时工具面对账（R3-8）：声明了白名单的 server 必须覆盖运行时工具。
@@ -236,6 +237,22 @@ export function doctorCommand({ args, t }) {
         } catch {
           add(false, `hooks ${host}`, t('doctor.hooksInvalid', { path: rel }));
         }
+      }
+    }
+
+    // 用户级 hook 接线（issue #45）：hooks 配置在用户目录而非项目仓，按 registry userHooks 字段校验。
+    // matcher 过期（如旧版 ^(Bash)$）会形成静默绕过，与条目缺失一样按 fail 报；
+    // 条目信任哈希编辑即失效，重新接线 / 修改后须在交互式宿主会话重新信任一次。
+    if (h.userHooks) {
+      const status = inspectUserHookEntry({ host });
+      if (status.state === 'ok') {
+        add(true, `hooks ${host} (user)`, t('doctor.userHooksOk', { path: status.file, matcher: status.matcher, host }));
+      } else if (status.state === 'stale') {
+        add(false, `hooks ${host} (user)`, t('doctor.userHooksStale', { path: status.file, matcher: status.matcher, expected: status.expected, host }));
+      } else if (status.state === 'invalid') {
+        add(false, `hooks ${host} (user)`, t('doctor.hooksInvalid', { path: status.file }));
+      } else {
+        add(false, `hooks ${host} (user)`, t('doctor.userHooksMissing', { path: status.file, host }));
       }
     }
 

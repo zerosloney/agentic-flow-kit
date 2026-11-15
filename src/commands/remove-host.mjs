@@ -12,6 +12,7 @@ import { stripMcpFromRoot } from '../install/mcp.mjs';
 import { stripHooksFromRoot } from '../install/hooks.mjs';
 import { stripManagedPermissions } from '../install/permissions.mjs';
 import { BASELINE_DIR } from '../install/baseline.mjs';
+import { unwireUserHooks } from '../install/user-hooks.mjs';
 import { HOSTS, HOST_NAMES } from '../hosts/registry.mjs';
 import { readInjectedModels } from '../models/resolve.mjs';
 import { makeT } from '../i18n.mjs';
@@ -337,6 +338,20 @@ export function removeHostCommand({ args, t }) {
   if (blocks) print(tt('removeHost.blocks', { count: blocks }));
   if (refreshed) print(tt('removeHost.refreshed', { count: refreshed }));
 
+  // 用户级 hook 接线（issue #45）：hooks 配置在用户目录，不在 manifest 文件面内；
+  // 按 registry userHooks 字段摘除本工具条目，其余条目与未变更文件不动。
+  let userHooksRemoved = 0;
+  if (!dryRun) {
+    for (const name of names) {
+      if (!HOSTS[name]?.userHooks) continue;
+      const unwired = unwireUserHooks({ host: name, t: tt });
+      if (unwired.removed) {
+        userHooksRemoved += 1;
+        print(tt('install.userHooksRemoved', { host: HOSTS[name].label || name, path: unwired.file }));
+      }
+    }
+  }
+
   if (!dryRun) {
     writeManifest(target, {
       ...manifest,
@@ -353,7 +368,7 @@ export function removeHostCommand({ args, t }) {
   }
 
   print(tt('removeHost.remaining', { hosts: remaining.join(', ') || tt('removeHost.none') }));
-  const summary = { deleted, cleaned, skipped, kept, blocks, refreshed };
+  const summary = { deleted, cleaned, skipped, kept, blocks, refreshed, userHooksRemoved };
   return finish(
     { args, asJson, tt, items },
     { ...summary, hosts: names, remaining, dryRun, summaryKey: 'removeHost.summary' },
@@ -497,6 +512,20 @@ export function uninstallCommand({ args, t }) {
   }
   if (blocks) print(tt('uninstall.blocks', { count: blocks }));
 
+  // 用户级 hook 接线（issue #45）：hooks 配置在用户目录，不在 manifest 文件面内；
+  // 卸载时按 registry userHooks 字段摘除条目，其余条目不动。
+  let userHooksRemoved = 0;
+  if (!dryRun) {
+    for (const name of manifest.hosts || []) {
+      if (!HOSTS[name]?.userHooks) continue;
+      const unwired = unwireUserHooks({ host: name, t: tt });
+      if (unwired.removed) {
+        userHooksRemoved += 1;
+        print(tt('install.userHooksRemoved', { host: HOSTS[name].label || name, path: unwired.file }));
+      }
+    }
+  }
+
   let manifestRemoved = false;
   if (!dryRun) {
     if (skipped === 0) {
@@ -517,7 +546,7 @@ export function uninstallCommand({ args, t }) {
   }
   print(tt(manifestRemoved ? 'uninstall.manifestRemoved' : 'uninstall.manifestKept'));
 
-  const summary = { deleted, cleaned, skipped, kept, blocks };
+  const summary = { deleted, cleaned, skipped, kept, blocks, userHooksRemoved };
   return finish(
     { args, asJson, tt, items },
     { ...summary, dryRun, manifestRemoved, summaryKey: 'uninstall.summary' },

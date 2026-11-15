@@ -17,10 +17,10 @@ import { makeTmp } from './helpers/tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-test('registry covers all 10 hosts with complete, valid capabilities', () => {
-  assert.equal(HOST_NAMES.length, 10);
+test('registry covers all 11 hosts with complete, valid capabilities', () => {
+  assert.equal(HOST_NAMES.length, 11);
   assert.deepEqual([...HOST_NAMES].sort(), [
-    'claude', 'cline', 'codebuddy', 'commandcode', 'opencode',
+    'claude', 'cline', 'codebuddy', 'codex', 'commandcode', 'opencode',
     'pi', 'qoder', 'qwen', 'trae', 'zcode',
   ]);
 
@@ -28,11 +28,13 @@ test('registry covers all 10 hosts with complete, valid capabilities', () => {
     const h = HOSTS[name];
     assert.ok(h.dir.startsWith('.'), `${name} dir`);
     assert.ok(h.label, `${name} label`);
-    assert.ok(['native', 'shared', 'index'].includes(h.skills.mode), `${name} skills.mode`);
-    if (h.skills.mode === 'native') {
-      assert.ok(h.skills.dir && h.skills.file, `${name} native skill layout`);
+    if (h.skills) {
+      assert.ok(['native', 'shared', 'index'].includes(h.skills.mode), `${name} skills.mode`);
+      if (h.skills.mode === 'native') {
+        assert.ok(h.skills.dir && h.skills.file, `${name} native skill layout`);
+      }
     }
-    if (h.agents.modelField) {
+    if (h.agents?.modelField) {
       assert.equal(typeof h.agents.modelField, 'string');
       assert.ok('inheritValue' in h.agents);
     }
@@ -151,28 +153,24 @@ function seedFakeHome(rel) {
 
 test('UNMANAGED_HOST_PROBES mirrors the check-local-gates probe table', () => {
   assert.deepEqual(UNMANAGED_HOST_PROBES, [
-    { name: 'Codex', dir: '.codex', signals: ['hooks.json', 'config.toml'] },
     { name: 'Gemini CLI', dir: '.gemini', signals: ['settings.json'] },
   ]);
 });
 
 test('list-hosts prints a probe line for a detected unmanaged host', () => {
-  const home = seedFakeHome('.codex/hooks.json');
+  const home = seedFakeHome('.gemini/settings.json');
   const r = runWithHome(['list-hosts'], home);
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /\[探测\] Codex/);
+  assert.match(r.stdout, /\[探测\] Gemini CLI/);
   assert.match(r.stdout, /暂不受支持/);
-  assert.doesNotMatch(r.stdout, /\[探测\] Gemini CLI/);
 });
 
-test('list-hosts prints one probe line per detected unmanaged host', () => {
+test('codex is builtin: no probe line even when its user hooks file exists', () => {
   const home = seedFakeHome('.codex/hooks.json');
-  fs.mkdirSync(path.join(home, '.gemini'), { recursive: true });
-  fs.writeFileSync(path.join(home, '.gemini', 'settings.json'), '{}');
   const r = runWithHome(['list-hosts'], home);
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /\[探测\] Codex/);
-  assert.match(r.stdout, /\[探测\] Gemini CLI/);
+  assert.match(r.stdout, /codex\tCodex \/ ChatGPT/);
+  assert.doesNotMatch(r.stdout, /\[探测\]/);
 });
 
 test('list-hosts prints no probe line on an empty fake HOME', () => {
@@ -183,10 +181,10 @@ test('list-hosts prints no probe line on an empty fake HOME', () => {
 });
 
 test('list-hosts --json stays a plain host array without probe output', () => {
-  const home = seedFakeHome('.codex/hooks.json');
+  const home = seedFakeHome('.gemini/settings.json');
   const r = runWithHome(['list-hosts', '--json'], home);
   assert.equal(r.status, 0, r.stderr);
   const parsed = JSON.parse(r.stdout);
   assert.ok(Array.isArray(parsed));
-  assert.doesNotMatch(r.stdout, /探测|Codex|Gemini/);
+  assert.doesNotMatch(r.stdout, /探测|Gemini/);
 });
