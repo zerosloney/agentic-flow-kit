@@ -439,17 +439,17 @@ export function doctorCommand({ args, t }) {
     console.log(failed ? t('doctor.fail', { failed, total: checks.length }) : t('doctor.ok', { total: checks.length }));
   }
 
-  if (args.deep) {
+  if (flag(args, 'deep')) {
     const gates = path.join(RUNTIME_SCRIPTS, 'check-local-gates.mjs');
     if (fs.existsSync(gates)) {
-      const deepArgs = args.fix ? ['--fix'] : [];
+      const deepArgs = flag(args, 'fix') ? ['--fix'] : [];
       const deepEnv = { ...process.env, FLOW_KIT_PROJECT_ROOT: target };
       if (asJson) {
         const r = spawnSync(process.execPath, [gates, ...deepArgs], { cwd: target, encoding: 'utf8', env: deepEnv });
         deep = { status: r.status, stdout: r.stdout || '', stderr: r.stderr || '' };
         if (r.status !== 0) failed += 1;
       } else {
-        console.log(`\n$ flow-kit run check-local-gates${args.fix ? ' --fix' : ''}`);
+        console.log(`\n$ flow-kit run check-local-gates${flag(args, 'fix') ? ' --fix' : ''}`);
         const r = spawnSync(process.execPath, [gates, ...deepArgs], { cwd: target, stdio: 'inherit', env: deepEnv });
         if (r.status !== 0) failed += 1;
       }
