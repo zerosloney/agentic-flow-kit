@@ -196,6 +196,9 @@ test('uninstall removes the baseline tree with the rest of the managed state', (
 });
 
 function commitAll(dir) {
+  // CI runner 无全局 git 身份：仓库级配置，避免 "Author identity unknown" 环境差异。
+  spawnSync('git', ['config', 'user.email', 'test@local'], { cwd: dir });
+  spawnSync('git', ['config', 'user.name', 'flow-kit test'], { cwd: dir });
   spawnSync('git', ['add', '-A'], { cwd: dir });
   const c = spawnSync('git', ['commit', '--no-verify', '-q', '-m', 'init'], { cwd: dir, encoding: 'utf8' });
   assert.equal(c.status, 0, c.stderr);
