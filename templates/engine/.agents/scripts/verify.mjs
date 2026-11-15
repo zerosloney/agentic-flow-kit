@@ -192,11 +192,14 @@ if (process.env.RUN_E2E === '1') {
 
 // Stack profile（agentic-flow-kit 通用化）：基础门表里的 product 门是 dotnet/Vue 专用。
 // 其余栈只保留 engine + security + wiki 门，再按栈追加一条产品测试门。
-const STACK = (() => {
-  try { return JSON.parse(fs.readFileSync('.agents/config/engine.json', 'utf8')).options?.stack || 'dotnet'; }
-  catch { return 'dotnet'; }
+// 多栈（options.stacks）按并集执法：任一栈命中即保留/追加；旧安装无 stacks 字段走单栈回退。
+const STACKS = (() => {
+  try {
+    const options = JSON.parse(fs.readFileSync('.agents/config/engine.json', 'utf8')).options || {};
+    return options.stacks?.length ? options.stacks : [options.stack || 'dotnet'];
+  } catch { return ['dotnet']; }
 })();
-if (STACK !== 'dotnet') {
+if (!STACKS.includes('dotnet')) {
   for (let i = GATES.length - 1; i >= 0; i -= 1) {
     if (/^(backend-|frontend-|code-)/.test(GATES[i].id)) GATES.splice(i, 1);
   }
@@ -204,15 +207,17 @@ if (STACK !== 'dotnet') {
 const pushProduct = (id, name, cmd) => {
   GATES.push({ id, cohort: 'product', name, cmd, folder: '.', type: 'shell' });
 };
-if (STACK === 'node' || STACK === 'typescript') {
+if (STACKS.includes('node') || STACKS.includes('typescript')) {
   try {
     const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-    if (pkg.scripts && pkg.scripts.test) pushProduct('node-test', 'Node tests', 'npm test');
+    if (pkg.scripts && pkg.scripts.test && !GATES.some((g) => g.id === 'node-test')) {
+      pushProduct('node-test', 'Node tests', 'npm test');
+    }
   } catch { /* not a node project root */ }
 }
-if (STACK === 'rust' && fs.existsSync('Cargo.toml')) pushProduct('cargo-test', 'Cargo tests', 'cargo test');
-if (STACK === 'go' && fs.existsSync('go.mod')) pushProduct('go-test', 'Go tests', 'go test ./...');
-if (STACK === 'java') {
+if (STACKS.includes('rust') && fs.existsSync('Cargo.toml')) pushProduct('cargo-test', 'Cargo tests', 'cargo test');
+if (STACKS.includes('go') && fs.existsSync('go.mod')) pushProduct('go-test', 'Go tests', 'go test ./...');
+if (STACKS.includes('java')) {
   if (fs.existsSync('pom.xml')) pushProduct('maven-test', 'Maven tests', 'mvn -q test');
   else if (fs.existsSync('gradlew') || fs.existsSync('gradlew.bat')) {
     pushProduct('gradle-test', 'Gradle tests', process.platform === 'win32' ? 'gradlew.bat test' : './gradlew test');

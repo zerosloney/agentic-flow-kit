@@ -14,10 +14,12 @@ import path from 'node:path';
 import os from 'node:os';
 
 const fix = process.argv.includes('--fix');
-// Stack profile（agentic-flow-kit）：dotnet / TEST_DB_CONN 检查仅 dotnet 栈适用。
-const STACK = (() => {
-  try { return JSON.parse(fs.readFileSync('.agents/config/engine.json', 'utf8')).options?.stack || 'dotnet'; }
-  catch { return 'dotnet'; }
+// Stack profile（agentic-flow-kit）：dotnet / TEST_DB_CONN 检查仅 dotnet 栈适用；多栈任一命中即检查。
+const STACKS = (() => {
+  try {
+    const options = JSON.parse(fs.readFileSync('.agents/config/engine.json', 'utf8')).options || {};
+    return options.stacks?.length ? options.stacks : [options.stack || 'dotnet'];
+  } catch { return ['dotnet']; }
 })();
 const git = (args) => {
   try { return execFileSync('git', args, { encoding: 'utf8' }).trim(); } catch { return ''; }
@@ -94,9 +96,9 @@ const resolveOnDisk = (name, probes, envVar) => {
   const reg = localTool(name);
   return [envVal, reg, ...probes].filter(Boolean).find((p) => fs.existsSync(p)) ?? null;
 };
-const dotnetPath = STACK === 'dotnet' ? resolveOnDisk('dotnet', ['C:/Program Files/dotnet/dotnet.exe']) : '';
+const dotnetPath = STACKS.includes('dotnet') ? resolveOnDisk('dotnet', ['C:/Program Files/dotnet/dotnet.exe']) : '';
 const dotnetVer = dotnetPath ? (() => { try { return execFileSync(dotnetPath, ['--version'], { encoding: 'utf8' }).trim(); } catch { return ''; } })() : '';
-if (STACK === 'dotnet') {
+if (STACKS.includes('dotnet')) {
   check(dotnetVer !== '', 'dotnet 在位且可执行（静态门 build/test 依赖；标准位置无则登记 runtime-env.local.md）',
     dotnetPath ? `路径 ${dotnetPath} 无法执行 --version` : '未找到：标准位置与 runtime-env.local.md 登记均无（模板 runtime-env.local.example.md）',
     null);
@@ -112,7 +114,7 @@ const browserPath = resolveOnDisk('browser', [
 // 未设或指向共享 dev 库（DEVE_CSS_YZGY）时，串行直跑的写用例会被守卫拦截——本项把暴露提前到上岗自检。
 // 分区机制已退役（2026-10-30）：本项为集成测试唯一库供给（必设）。含口令不代修——按 runtime-env §6.5
 // 口径以 appsettings 同源凭据拼装后 setx（连接串不入库）。
-if (STACK === 'dotnet') {
+if (STACKS.includes('dotnet')) {
   const tdc = process.env.TEST_DB_CONN || '';
   const tdcDb = (/(?:Database|Initial Catalog)\s*=\s*([^;]+)/i.exec(tdc) || [])[1]?.trim() || '';
   check(!!tdcDb && tdcDb.toUpperCase() !== 'DEVE_CSS_YZGY', 'TEST_DB_CONN 专用测试库已设且不指向共享 dev 库',

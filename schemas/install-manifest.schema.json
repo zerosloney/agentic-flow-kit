@@ -16,6 +16,12 @@
       "uniqueItems": true
     },
     "stack": { "enum": ["dotnet", "node", "typescript", "rust", "go", "java", "empty"] },
+    "stacks": {
+      "type": "array",
+      "minItems": 2,
+      "items": { "enum": ["dotnet", "node", "typescript", "rust", "go", "java", "empty"] },
+      "description": "多栈安装（--stack 可重复/逗号分隔）时声明的全部技术栈，按声明顺序、首个为主栈（即 stack）；单栈安装不写该字段。"
+    },
     "surfaces": {
       "type": "array",
       "description": "组合式 profile 切面（frontend / api / data），按声明顺序。",

@@ -57,6 +57,7 @@ export function buildState({ target, manifest }) {
   const hosts = manifest.hosts || [];
   const language = manifest.language || 'zh-CN';
   const stack = manifest.stack || 'empty';
+  const stacks = manifest.stacks || null;
   const projectName = manifest.projectName || path.basename(target);
   const tier = manifest.tier || 'standard';
   const hardened = Boolean(manifest.hardened);
@@ -64,15 +65,17 @@ export function buildState({ target, manifest }) {
   // 模型值从已安装子代理回读，使“模板未变”的文件不会被模型注入差异误判。
   const models = readInjectedModels({ target, hosts });
   const plan = buildPlan({
-    target, hosts, lang: language, stack, projectName, models, tier, hardened,
+    target, hosts, lang: language, stack, stacks, projectName, models, tier, hardened,
     mcp: manifest.mcp === true,
     surfaces: manifest.surfaces || [],
     managedPermissions: manifest.managedPermissions || {},
+    ci: manifest.ci || null,
   });
   const vars = buildVars({
     target,
     projectName,
     stack,
+    stacks,
     language,
     hosts,
     kitVersion,
@@ -190,8 +193,10 @@ export function buildDiff({ target, manifest }) {
       language: manifest.language || null,
       hosts: manifest.hosts || [],
       stack: manifest.stack || null,
+      stacks: manifest.stacks || null,
       tier: manifest.tier || 'standard',
       hardened: Boolean(manifest.hardened),
+      ci: manifest.ci || null,
     },
     summary,
     items,

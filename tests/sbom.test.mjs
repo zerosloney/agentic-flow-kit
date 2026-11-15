@@ -38,12 +38,25 @@ function run(args, cwd, extraEnv = {}) {
   });
 }
 
-function writeLock(dir, packages) {
+function writeLockAt(dir, rel, packages) {
   const lock = { name: 'demo-app', version: '1.0.0', lockfileVersion: 3, packages: { '': { name: 'demo-app', version: '1.0.0' } } };
   for (const [name, info] of Object.entries(packages)) {
     lock.packages[`node_modules/${name}`] = { ...info };
   }
-  fs.writeFileSync(path.join(dir, 'package-lock.json'), `${JSON.stringify(lock, null, 2)}\n`, 'utf8');
+  const abs = path.join(dir, rel);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, `${JSON.stringify(lock, null, 2)}\n`, 'utf8');
+}
+
+function writeLock(dir, packages) {
+  writeLockAt(dir, 'package-lock.json', packages);
+}
+
+// 在 seededRepo 的模板策略上打补丁（保持其余字段不动）。
+function patchPolicy(dir, patch) {
+  const policyPath = path.join(dir, '.agents/config/license-policy.json');
+  const policy = JSON.parse(fs.readFileSync(policyPath, 'utf8'));
+  fs.writeFileSync(policyPath, `${JSON.stringify({ ...policy, ...patch }, null, 2)}\n`, 'utf8');
 }
 
 test('packagesFromLockfile parses v3 flat entries and v1 nested trees', () => {
@@ -233,4 +246,76 @@ test('fresh install ships the policy and the gate is wired into verify security 
 
   const policySrc = JSON.parse(fs.readFileSync(path.join(KIT, 'templates', 'engine', '.agents', 'config', 'policy.json'), 'utf8'));
   assert.equal(policySrc.mechanisms.required.includes('SBOM 与许可证门'), true);
+});
+
+test('lockfiles: monorepo audits the declared subdirectory lockfile', () => {
+  const dir = seededRepo();
+  // monorepo：根 package.json 无依赖、根无 lockfile，真实依赖树在子目录 lockfile
+  fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"demo-app","version":"1.0.0"}\n', 'utf8');
+  writeLockAt(dir, 'frontend/package-lock.json', {
+    react: { version: '18.2.0', license: 'MIT', integrity: 'sha512-AAAA' },
+    lodash: { version: '4.17.21', license: 'ISC' },
+  });
+  patchPolicy(dir, { lockfiles: ['frontend/package-lock.json'] });
+
+  const r = run([], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(r.stdout.includes('数据源=frontend/package-lock.json'), r.stdout);
+  const sbomRel = path.join(dir, '.agents', 'sbom', 'spdx.json');
+  const spdx = JSON.parse(fs.readFileSync(sbomRel, 'utf8'));
+  const names = spdx.packages.map((p) => p.name);
+  assert.equal(names.includes('react'), true);
+  assert.equal(names.includes('lodash'), true);
+
+  // 确定性：同一组 lockfile 两次生成逐字节一致，--check 绿
+  const first = fs.readFileSync(sbomRel, 'utf8');
+  assert.equal(run([], dir).status, 0);
+  assert.equal(fs.readFileSync(sbomRel, 'utf8'), first, 'regeneration must be byte-identical');
+  assert.equal(run(['--check'], dir).status, 0);
+});
+
+test('lockfiles: multiple lockfiles merge with the first-declared entry winning', () => {
+  const dir = seededRepo();
+  fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"demo-app","version":"1.0.0"}\n', 'utf8');
+  writeLockAt(dir, 'a/package-lock.json', {
+    shared: { version: '1.0.0', license: 'MIT' },
+    onlya: { version: '0.1.0', license: 'Apache-2.0' },
+  });
+  writeLockAt(dir, 'b/package-lock.json', {
+    shared: { version: '1.0.0', license: 'ISC' },
+    onlyb: { version: '0.2.0', license: 'MIT' },
+  });
+  patchPolicy(dir, { lockfiles: ['a/package-lock.json', 'b/package-lock.json'] });
+
+  const r = run([], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(r.stdout.includes('数据源=a/package-lock.json + b/package-lock.json'), r.stdout);
+  const spdx = JSON.parse(fs.readFileSync(path.join(dir, '.agents', 'sbom', 'spdx.json'), 'utf8'));
+  const deps = spdx.packages.filter((p) => p.SPDXID !== 'SPDXRef-Root');
+  assert.equal(deps.length, 3, `expect merged dedup: ${deps.map((p) => p.name).join(',')}`);
+  assert.equal(deps.find((p) => p.name === 'shared').licenseConcluded, 'MIT', 'first-declared file wins');
+});
+
+test('lockfiles: declared but missing lockfile fails closed with exit 2', () => {
+  const dir = seededRepo();
+  fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"demo-app","version":"1.0.0"}\n', 'utf8');
+  // 根 lockfile 存在也不回落：声明了 frontend 就必须存在
+  writeLock(dir, { a: { version: '1.0.0', license: 'MIT' } });
+  patchPolicy(dir, { lockfiles: ['frontend/package-lock.json'] });
+
+  const r = run([], dir);
+  assert.equal(r.status, 2, r.stderr);
+  assert.match(r.stderr, /frontend\/package-lock\.json/);
+  assert.match(r.stderr, /fail-closed/);
+});
+
+test('lockfiles: traversal and absolute paths are rejected with exit 2', () => {
+  for (const bad of ['../outside/package-lock.json', '/abs/package-lock.json']) {
+    const dir = seededRepo();
+    fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"demo-app","version":"1.0.0"}\n', 'utf8');
+    patchPolicy(dir, { lockfiles: [bad] });
+    const r = run([], dir);
+    assert.equal(r.status, 2, `${bad}: ${r.stderr}`);
+    assert.match(r.stderr, /非法路径/);
+  }
 });

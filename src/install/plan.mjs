@@ -214,7 +214,7 @@ export function readGatesSpecs(lang) {
   return { hooks: parseHookSpec(text), permissions: parsePermissionSpec(text) };
 }
 
-function addHostConfigEntries({ plan, target, hosts, lang, stack, hardened, managedPermissions = {} }) {
+function addHostConfigEntries({ plan, target, hosts, lang, stacks, hardened, managedPermissions = {} }) {
   const gatesText = readGatesText(lang);
   if (!gatesText) return;
   const hookSpec = parseHookSpec(gatesText);
@@ -227,7 +227,7 @@ function addHostConfigEntries({ plan, target, hosts, lang, stack, hardened, mana
     const fileName = permissionConfig?.file || h?.hooks?.file;
     if (!fileName) continue;
     const compiledPermissions = permissionSpec && permissionConfig
-      ? compilePermissions(permissionSpec, permissionConfig, { stack, hardened })
+      ? compilePermissions(permissionSpec, permissionConfig, { stacks, hardened })
       : null;
     if (!(hookConfig && hookSpec?.length) && !compiledPermissions) continue;
     const rel = hostTargetRel(host, fileName);
@@ -324,12 +324,28 @@ function addMcpEntries({ plan, target, hosts }) {
   }
 }
 
+// CI 交付面二选一：azure-pipelines.yml 与 .github/workflows/ci.yml 各自独立可发。
+// ciModeFor：显式 ci 优先；缺省按 tier 派生（lean 不发，standard/enterprise 双发）。
+export const CI_MODES = ['azure', 'github', 'none', 'both'];
+export function ciModeFor({ tier, ci }) {
+  if (ci && CI_MODES.includes(ci)) return ci;
+  return tier === 'lean' ? 'none' : 'both';
+}
+export function ciTemplateRels(mode) {
+  const rels = [];
+  if (mode === 'azure' || mode === 'both') rels.push('azure-pipelines.yml');
+  if (mode === 'github' || mode === 'both') rels.push('.github/workflows/ci.yml');
+  return rels;
+}
+
 // 构建安装计划。targetRel 使用 / 分隔；profile 覆盖 engine，宿主只写自己的点目录。
 // models: { [host]: { code?, judgment?, review? } }，用于注入宿主子代理 model 字段。
 // surfaces: 组合式切面闭集（frontend/api/data），按声明顺序叠加在 stack 之上。
+// stacks: 多栈声明序列（首个为主栈）；按声明顺序叠加 profile，同名文件后者覆盖（优先级 20 + index）。
+// ci: 显式 CI 交付面选择（CI_MODES 之一），缺省按 tier 派生；写入 manifest 由 upgrade 重放。
 export function buildPlan({
-  target, hosts, lang, stack, projectName, categories, models = null, tier = 'standard', hardened = false, mcp = true,
-  surfaces = [], managedPermissions = {}, devcontainer = true,
+  target, hosts, lang, stack, stacks = null, projectName, categories, models = null, tier = 'standard', hardened = false, mcp = true,
+  surfaces = [], managedPermissions = {}, devcontainer = true, ci = null,
 }) {
   const t = makeT(lang);
   const plan = [];
@@ -345,10 +361,13 @@ export function buildPlan({
     push(path.join(TEMPLATES, 'engine', rel), rel, 'engine', 10);
   }
 
-  // 2) 项目 profile（栈相关配置与 AGENTS.md）
-  for (const rel of listFiles(path.join(TEMPLATES, 'profiles', stack))) {
-    push(path.join(TEMPLATES, 'profiles', stack, rel), rel, 'profile', 20);
-  }
+  // 2) 项目 profile（栈相关配置与 AGENTS.md）；多栈按声明顺序叠加，同名文件后者覆盖（20 + index）。
+  const stackList = stacks?.length ? stacks : [stack];
+  stackList.forEach((s, index) => {
+    for (const rel of listFiles(path.join(TEMPLATES, 'profiles', s))) {
+      push(path.join(TEMPLATES, 'profiles', s, rel), rel, 'profile', 20 + index);
+    }
+  });
 
   // 2.5) surface 叠加：同一 targetRel 由后声明的 surface 覆盖（21 + index > 20）。
   // 单 stack 安装不产生任何额外文件，保持行为不变。
@@ -356,14 +375,15 @@ export function buildPlan({
     const dir = path.join(TEMPLATES, 'surfaces', surface);
     for (const rel of listFiles(dir)) push(path.join(dir, rel), rel, 'profile', 21 + index);
   });
-  if (surfaces.length) {
+  if (surfaces.length || stackList.length > 1) {
     push(null, '.agents/config/profile.json', 'profile', 25, 'generated', {
       getText: (vars) => `${JSON.stringify({
         kit: 'agentic-flow-kit',
         version: vars.kitVersion || null,
         stack,
+        ...(stackList.length > 1 ? { stacks: stackList } : {}),
         surfaces,
-        profiles: [stack, ...surfaces],
+        profiles: [...stackList, ...surfaces],
       }, null, 2)}\n`,
     });
   }
@@ -390,8 +410,8 @@ export function buildPlan({
     }
   }
 
-  // 3.4) Hook / 权限接线编译（中性 gates.json -> 宿主 schema）
-  addHostConfigEntries({ plan, target, hosts, lang, stack, hardened, managedPermissions });
+  // 3.4) Hook / 权限接线编译（中性 gates.json -> 宿主 schema）；多栈白名单按声明顺序取并集。
+  addHostConfigEntries({ plan, target, hosts, lang, stacks: stackList, hardened, managedPermissions });
 
   // 3.5) MCP 配置合并（--no-mcp 时整段跳过）
   if (mcp) addMcpEntries({ plan, target, hosts });
@@ -402,9 +422,11 @@ export function buildPlan({
   }
 
   // 5) git 门禁与合并策略
+  const ciMode = ciModeFor({ tier, ci });
   for (const rel of listFiles(path.join(TEMPLATES, 'git'))) {
-    // lean 档不生成 CI：小项目先跑本地钩子；standard/enterprise 才落 CI。
-    if (tier === 'lean' && (rel === 'azure-pipelines.yml' || rel.startsWith('.github/'))) continue;
+    // CI 交付面按选择裁剪：lean 档缺省不生成（小项目先跑本地钩子）；显式 --ci 优先于 tier 派生。
+    if (rel === 'azure-pipelines.yml' && (ciMode === 'github' || ciMode === 'none')) continue;
+    if (rel.startsWith('.github/') && (ciMode === 'azure' || ciMode === 'none')) continue;
     if (rel === '.gitattributes') push(path.join(TEMPLATES, 'git', rel), '.gitattributes', 'git', 40, 'merge-gitattributes');
     else if (rel === '.gitignore.engine') push(path.join(TEMPLATES, 'git', rel), '.gitignore', 'git', 40, 'merge-gitignore');
     else push(path.join(TEMPLATES, 'git', rel), rel, 'git', 40);

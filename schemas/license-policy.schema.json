@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://github.com/zerosloney/agentic-flow-kit/schemas/license-policy.schema.json",
   "title": "agentic-flow-kit license policy",
-  "description": ".agents/config/license-policy.json：依赖许可证策略（R3-8 供应链）。allow/deny 为 SPDX 标识符闭集；exceptions 按 \"name\" 或 \"name@version\" 登记豁免并写明理由；unknownAction 决定许可证未知的处置；failOn 决定警告是否阻断。",
+  "description": ".agents/config/license-policy.json：依赖许可证策略（R3-8 供应链）。allow/deny 为 SPDX 标识符闭集；exceptions 按 \"name\" 或 \"name@version\" 登记豁免并写明理由；unknownAction 决定许可证未知的处置；failOn 决定警告是否阻断；lockfiles 声明审计的 lockfile 数据源（monorepo 多份合并去重，缺省 = 根 package-lock.json）。",
   "type": "object",
   "additionalProperties": false,
   "required": ["version"],
@@ -25,6 +25,11 @@
       "description": "键为 \"name\" 或 \"name@version\"（version 可为 *），值为豁免理由（评审/工单链接）。"
     },
     "unknownAction": { "enum": ["deny", "warn"], "default": "deny" },
-    "failOn": { "enum": ["deny", "any"], "default": "deny" }
+    "failOn": { "enum": ["deny", "any"], "default": "deny" },
+    "lockfiles": {
+      "type": "array",
+      "items": { "type": "string", "minLength": 2 },
+      "description": "可选：相对项目根的 lockfile 路径（正斜杠，不允许 .. 段或绝对路径）；缺省 = 审计根 package-lock.json；多份按声明顺序合并去重，name@version 同键取先声明者；任一声明的文件缺失即 fail-closed。"
+    }
   }
 }
