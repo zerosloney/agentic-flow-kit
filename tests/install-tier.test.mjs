@@ -100,3 +100,15 @@ test('invalid tier fails the install', () => {
   assert.notEqual(r.status, 0);
   assert.match(`${r.stdout}${r.stderr}`, /tier|档位/i);
 });
+
+// issue #49：--deep 曾直读 args.deep（parseArgs 收进 flags Set），旗标从未生效——测试面与缺陷同源，此前无法区分。
+test('doctor --deep actually runs check-local-gates and --fix is passed through', () => {
+  const dir = tmpRepo();
+  assert.equal(run(['install', '--agent', 'trae', '--stack', 'node', '--target', '.'], dir).status, 0);
+  const plain = run(['doctor', '--target', '.'], dir);
+  assert.doesNotMatch(plain.stdout, /check-local-gates/);
+  const deep = run(['doctor', '--deep', '--target', '.'], dir);
+  assert.match(deep.stdout, /\$ flow-kit run check-local-gates$/m);
+  const fix = run(['doctor', '--deep', '--fix', '--target', '.'], dir);
+  assert.match(fix.stdout, /\$ flow-kit run check-local-gates --fix$/m);
+});
