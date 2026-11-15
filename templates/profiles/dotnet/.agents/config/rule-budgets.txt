@@ -17,21 +17,31 @@
 AGENTS.md 8704
 backend/AGENTS.md 7424
 frontend/AGENTS.md 9216
-.trae/rules/backend-scope.md 256
+# 2026-11-15 kit 模板对齐（issue #44）：kit 发行模板渲染实测超限（en 渲染系统性偏大，源仓预算表此前只对 zh 校准）；
+# 按 max(zh-CN, en) 两语言渲染实测 + ~7% 余量重定本轮各行，防装户新仓首提即被 pre-commit 阻断。
+# 增长属 R3-8 等合法特性内容，不瘦身模板；本轮改 7 行 / 增 1 行（review.md 专用行），各行数据见各自行上方注记。
+# 同轮（issue #44）：backend-scope en 渲染实测 270B，256→384B。
+.trae/rules/backend-scope.md 384
 .trae/rules/frontend-scope.md 256
 # 2026-10-09 CodeBuddy 适配收口：rules 常驻面（project-workflow + 中文 + 提交）+ 主记忆 CODEBUDDY.md 首入预算（实测 rules 合计 2162B / CODEBUDDY.md 475B）
 # 2026-11-05 CodeBuddy 收敛（对齐 .trae/rules 先例）：三份通用规则退役，收敛为 backend/frontend 作用域两份（实测合计 449B：237B/212B，与 .trae 同字节），上限 2336→512B。
 .codebuddy/rules/ 512
-.codebuddy/CODEBUDDY.md 512
+# 2026-11-15 同轮（issue #44）：CODEBUDDY.md en 渲染实测 599B，512→768B（口径见 backend-scope 行上方注记）。
+.codebuddy/CODEBUDDY.md 768
 .agents/commands/*.md 8704
 # 2026-11-08 档 2-F（stages.md 四并一）：plan/design/build/test 四份阶段命令合并为 stages.md，四并一去重后
 # commands 合计下降（四文件 LF 19658B → 单文件 19159B），但单文件超通配行 8704B——为 stages.md 开专用行
 # 重定单文件上限（实测 19159B + 余量 ~7%，与他条同量级）；专用行优先于通配行，语义见 rule-budget.mjs。
-.agents/commands/stages.md 20480
+# 2026-11-15 kit 模板对齐（issue #44）：stages.md en 渲染实测 24675B，20480→26624B（口径见 backend-scope 行上方注记）。
+.agents/commands/stages.md 26624
 # 2026-11-10 档二：L0/L1 快速道放宽（L0 上限 3→5、fill-plan --lite 三节、L2 负例增补）后实测 9113B
 #   超通配行 8704B——定级判据单源在入口命令、无法下沉 skills/，按 stages.md 先例开专用行重定
 #   上限（余量 615B ≈ 6.7%，与他条同量级）。
-.agents/commands/new-task.md 9728
+# 2026-11-15 kit 模板对齐（issue #44）：new-task.md en 渲染实测 11397B，9728→12288B（口径同上）。
+.agents/commands/new-task.md 12288
+# 2026-11-15 kit 模板对齐（issue #44）：review.md en 渲染实测 8755B 超通配行 8704——按 stages.md 先例开专用行
+# 重定上限 9728B（zh 渲染实测 ≤8704 未超）。
+.agents/commands/review.md 9728
 # 2026-10-21 第五轮：路由表去重与快速道检索前移后重定目录上限。实测 commands 合计 41256B（索引 LF），
 # 上限 67584→44144B（余量 2888B ≈ 7.0%）。单篇上限 8704B 不变（峰值 new-task.md 6121B）。
 # 2026-10-22 第六轮：develop 合并（MTO 批 commands 增改）与本地引擎批并集后实测合计 44189B，
@@ -45,7 +55,8 @@ frontend/AGENTS.md 9216
 # 2026-11-06 第九轮（owner 裁定）：第八轮估 48478B、实测 51354B（pr-review.md 2737B + review.md 扩写），
 # 超第八轮上限 2454B——属长期能力增长，重定上限 48900→52500B（余量 1146B ≈ 2.2%）。
 # 纪律不变：后续再增命令先按一进一出下沉/删除（正文继续下沉 skills/），不要继续抬上限。
-.agents/commands/ 52500
+# 2026-11-15 kit 模板对齐（issue #44）：commands/ en 渲染实测合计 63535B，52500→68096B（口径见 backend-scope 行上方注记）。
+.agents/commands/ 68096
 # 2026-10-15 规则面一进一出（减重手段②）：check-loop 段数上限——锚日升格只增不减的对冲面；
 # 超上限进门先退役一段（候选见 agg-judgments --retire-candidates；段编号承重不重排，退役 = 段体
 # 删除 + SECTIONS 行摘除，编号留疤）。
@@ -80,6 +91,8 @@ check-loop-hard 6#count
 # 2026-11-06：新增「PR 面板评审批次门」登记行（约 400B）；上限 22528→23200B。
 # 2026-11-11 上调：宿主适配批量登记（Claude Code + Cline 门接线），实测 24,174B → 24576B（见 runtime-env 行上方说明）。
 # 2026-11-13 R3-1：新增「策略即代码校验」机制登记行（约 200B）；上限 24576→25600B（余量 ~3%）。
-.agents/config/mechanism-registry.md 25600
+# 2026-11-15 kit 模板对齐（issue #44）：mechanism-registry en 渲染实测 25612B，25600→27648B（口径见 backend-scope 行上方注记）。
+.agents/config/mechanism-registry.md 27648
 .agents/notes/runtime-env.md 832#line
-.agents/config/mechanism-registry.md 832#line
+# 2026-11-15 同轮（issue #44）：mechanism-registry 单行 en 渲染实测 841B，832→896#line。
+.agents/config/mechanism-registry.md 896#line
