@@ -89,6 +89,7 @@ npx agentic-flow-kit doctor --target .
 | `--model-mode recommend\|detect\|inherit` | `recommend`（默认，探测 + 推荐）、`detect`（强制重新探测）、`inherit`（全部继承宿主默认） |
 | `--probe-models` | 允许执行宿主注册表中声明的只读模型列表命令（1.5s 超时，失败静默） |
 | `--no-model-config` | 跳过模型探测 / 注入，也不写 `.agents/config/model-roles.local.json` |
+| `--baseline-only` | 只重建基线不重装（新 clone / `git clean -fdx` 后基线目录缺失时用）：按 manifest 登记重建 `.agents/.kit/baseline/`，磁盘与模板不一致的文件跳过并提示先 `upgrade` |
 | `--json` | 最终只向 stdout 输出单个 JSON 对象；人类进度改写 stderr。`diff` / `status` / `prune` / `remove-host` / `uninstall` / `explain` / `adopt` / `doctor` / `list-hosts` 均支持 |
 | `--strict` | 冲突或漂移视为失败：`install` / `add-host` / `upgrade` 遇冲突返回 1；`diff` / `status` 有任何漂移返回 1；`prune` / `remove-host` / `uninstall` 有未清理项返回 1 |
 

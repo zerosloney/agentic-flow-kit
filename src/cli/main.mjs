@@ -1,8 +1,9 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { parseArgs, flag } from './args.mjs';
 import { makeT, LANGUAGES } from '../i18n.mjs';
-import { HOST_NAMES, resolveHost, hostSource } from '../hosts/registry.mjs';
+import { HOST_NAMES, resolveHost, hostSource, UNMANAGED_HOST_PROBES } from '../hosts/registry.mjs';
 import { loadExternalHosts } from '../hosts/external.mjs';
 import { installCommand } from '../commands/install.mjs';
 import { doctorCommand } from '../commands/doctor.mjs';
@@ -133,6 +134,13 @@ async function main(argv) {
       }
       for (const h of hosts) {
         console.log(`${h.name}\t${h.label}\t${h.dir}${h.tracked ? '\ttracked' : ''}`);
+      }
+      // issue #41 C 档：已探测到但暂不受支持的宿主，逐项只读存在性检查；检出几行输出几行，无检出不加尾行。
+      for (const probe of UNMANAGED_HOST_PROBES) {
+        const detected = probe.signals.some((sig) => fs.existsSync(path.join(os.homedir(), probe.dir, sig)));
+        if (detected) {
+          console.log(`[探测] ${probe.name}（~/${probe.dir}）——本机已检出但暂不受支持：install/upgrade 未接管其门禁；check-local-gates 的宿主探测段会给出接线告警。完整支持跟踪见 GitHub issue #41`);
+        }
       }
       return 0;
     }

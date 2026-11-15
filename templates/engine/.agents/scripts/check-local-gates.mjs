@@ -252,6 +252,55 @@ if (!fs.existsSync('.claude')) {
     : '  [OK] Claude Code 宿主接线齐备（PreToolUse 写前门 + 命令门；7 命令 + 7 角色指针壳）');
 }
 
+// ⑪-advisory 通用宿主探测（issue #40）：机器级宿主配置存在但其中无 flow-kit 接线 → WARN（该宿主下门禁静默失效）。
+// 数据表驱动：宿主被 kit 正式支持（issue #41）后此表对应项退役、由 registry 安装面接管。
+// 权威表在 src/hosts/registry.mjs 的 UNMANAGED_HOST_PROBES（runtime 脚本自包含，此为静态镜像，两处同步）。
+// advisory：只读对账，不进八项判定、不改退出码（同 ⑧⑨⑩ 口径）。
+const HOST_PROBES = [
+  { name: 'Codex', dir: '.codex', signals: ['hooks.json', 'config.toml'] },
+  { name: 'Gemini CLI', dir: '.gemini', signals: ['settings.json'] },
+];
+for (const probe of HOST_PROBES) {
+  const probeDir = path.join(os.homedir(), probe.dir);
+  const present = probe.signals.filter((sig) => fs.existsSync(path.join(probeDir, sig)));
+  if (!present.length) {
+    console.log(`  [info] ${probe.name} 宿主：本机未检出（${probe.dir} 无配置）`);
+    continue;
+  }
+  const wired = present.some((sig) => {
+    try { return fs.readFileSync(path.join(probeDir, sig), 'utf8').includes('flow-kit'); } catch { return false; }
+  });
+  console.log(wired
+    ? `  [OK] ${probe.name} 宿主已接线 flow-kit（${present.join('、')}）`
+    : `  [WARN] ${probe.name} 宿主已启用但未接入 flow-kit 门禁（门禁静默失效；接线样板见 .trae/hooks.json / .codebuddy/settings.json 的 pre-shell-check / pre-write-check 挂法）`);
+}
+
+// ⑪-advisory 项目内未纳入 manifest 的宿主目录：目录在项目根、宿主不在 manifest.hosts → info（门禁/升级面缺失）。
+// KNOWN_HOST_DIRS 与 src/hosts/registry.mjs 的 dir 保持同步：runtime 脚本自包含、不 import kit 源，此表是静态镜像，registry 变更时同步。
+const KNOWN_HOST_DIRS = {
+  trae: '.trae',
+  codebuddy: '.codebuddy',
+  claude: '.claude',
+  opencode: '.opencode',
+  qwen: '.qwen',
+  pi: '.pi',
+  cline: '.cline',
+  commandcode: '.commandcode',
+  qoder: '.qoder',
+  zcode: '.zcode',
+};
+let manifestHosts = null;
+try { manifestHosts = JSON.parse(fs.readFileSync('.agents/install-manifest.json', 'utf8')).hosts; } catch { /* 无 manifest = 整段跳过 */ }
+if (Array.isArray(manifestHosts)) {
+  const unmanaged = Object.entries(KNOWN_HOST_DIRS)
+    .filter(([, dir]) => fs.existsSync(dir))
+    .filter(([host]) => !manifestHosts.includes(host))
+    .map(([, dir]) => dir);
+  if (unmanaged.length) {
+    console.log(`  [info] 已探测到未纳入 manifest 的宿主目录：${unmanaged.join('、')}（对应宿主未接管：门禁/升级面缺失，install --agent <宿主> 可接管）`);
+  }
+}
+
 if (fail > 0) {
   console.log(fix
     ? '\n门卫未全上岗：配置类已尝试自动修复（文件类缺失须按指引手动恢复）；修复后重跑本脚本确认全绿。'

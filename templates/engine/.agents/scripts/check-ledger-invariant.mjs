@@ -83,6 +83,10 @@
 //     （2026-10-15 staged-merge-union，与历史全扫 mergeUnionProblem 同口径——ours==base 时三方合并
 //     整体取 theirs，行序重排必破坏前缀属假阳性），再认「父母并集 − manifest 所列行」的集合对账
 //     （2026-10-14 staged-merge-prune，与历史全扫 mergePruneProblem 同口径）。
+//     暂存删除（2026-11-15 issue #39）：diff --cached 名单含删除路径，对已从索引删除的路径读 `:rel`
+//     必抛 git fatal 且 execFileSync 把 stderr 直通父进程——619 片删片即 619 条噪声。先 `ls-files
+//     --cached` 探测删除；删片改走归并凭据对账的 staged 版本（片内全部非空行 ⊆ 暂存主台账，与历史
+//     全扫 shardDeleteReason 同判据），主台账被暂存删除直接判 [主台账删除]（旧版静默 continue 是漏检）。
 //     并集只判**行集合**（多父提交不判前缀），故合并提交可自行排序——两侧并行修复同一台账时（一侧
 //     修剪、一侧重建，被删行在并集中复活），合并提交须把并集按 ts 归位，否则终树行级校验①当场红
 //     （2026-10-15 拉取 origin/develop 实证：337 行并集尾部带回旧 ts 行）。
@@ -745,6 +749,40 @@ if (staged) {
   const touched = ledgerPaths().filter((rel) => stagedHit.includes(rel));
   if (!touched.length) process.exit(0);
   for (const rel of touched) {
+    // 暂存删除探测必须先于任何 blob 读取（2026-11-15 issue #39）：对已从索引删除的路径读 `:rel`
+    // 必抛 fatal 且 execFileSync 把 stderr 直通父进程——先探 `ls-files --cached`，删除路径不再触碰 `:rel`。
+    const inIndex = gitText(['ls-files', '--cached', '--', rel]).trim() !== '';
+    if (!inIndex) {
+      if (rel === REL) {
+        // 主台账被暂存删除——append-only 世界禁删主台账（与历史全扫 [台账删除] 同红线），不再静默放行
+        problems.push(`- [主台账删除] ${rel} 暂存删除主台账——主台账永不因归并被删`);
+        continue;
+      }
+      if (isShard(rel)) {
+        // 分片暂存删除：归并凭据对账的 staged 版本（与历史全扫 shardDeleteReason 同判据——片内全部
+        // 非空行须已在暂存主台账；compact-ledgers 归并后 git add -A 的删片正属此形态）。
+        // 读法全走 tryBlob（静默），不向父进程外泄 git fatal 噪声。
+        const head = tryBlob(`HEAD:${rel}`);
+        let mainBuf = tryBlob(`:${REL}`); // 暂存主台账
+        if (mainBuf === null) {
+          try { mainBuf = fs.readFileSync(path.join(ROOT, REL)); } catch { /* 暂存区与工作区均无主台账 */ }
+        }
+        if (head === null || mainBuf === null) {
+          problems.push(`- [删片未归并] ${rel}：暂存删除分片但无可对账的主台账（暂存区与工作区均无）——compact-ledgers 归并或随附 ledger-prune-manifest`);
+          continue;
+        }
+        const shardLines = [...new Set(linesOf(head).filter((l) => l.trim()))];
+        const mainSet = new Set(linesOf(mainBuf).filter((l) => l.trim()));
+        const missing = shardLines.filter((l) => !mainSet.has(l));
+        if (!missing.length) {
+          console.log(`台账不变量（--staged）— ${rel} 分片归并删除认可：片内全部行已在暂存主台账`);
+        } else {
+          problems.push(`- [删片未归并] ${rel}：${missing.length} 行不在暂存主台账（例：${missing[0].slice(0, 60)}…）——compact-ledgers 归并或随附 ledger-prune-manifest`);
+        }
+        continue;
+      }
+      continue; // 非台账路径不会进 touched（touched ⊆ ledgerPaths()），防御性兜底
+    }
     const headExists = (() => { try { gitText(['rev-parse', '--verify', '--quiet', `HEAD:${rel}`]); return true; } catch { return false; } })();
     if (!headExists) continue; // 首次入库：无 HEAD 基线，历史全扫与终树行级校验覆盖
     let head, cur;
@@ -792,6 +830,9 @@ if (staged) {
     console.error('  修法：台账历史行禁删改——误写走追加补偿行（flow-kit run confirm-doc.mjs ...）；所有者明令清理须携带逐行 sha256 的 ledger-prune-manifest.json 同笔暂存');
     if (problems.some((p) => p.startsWith('- [台账重写] .agents/confirmations.d/'))) {
       console.error('  分片重写另因：分片按 doc 命名、单端追加；跨端并发确认同一 doc 时须有 merge=jsonl-union 驱动（flow-kit run check-local-gates.mjs --fix 配置）——驱动生效则合并自动取并集、不破坏前缀');
+    }
+    if (problems.some((p) => p.startsWith('- [删片未归并]') || p.startsWith('- [主台账删除]'))) {
+      console.error('  删片/删主台账另因：删片的唯一合法形态 = compact-ledgers 归并后同笔暂存（片内全部非空行已进暂存主台账）——回溯分片待主台账末行时间推进后重跑 compact-ledgers，或携带 ledger-prune-manifest 特许修剪；主台账永不因归并被删，请恢复 .agents/confirmations.jsonl 原内容');
     }
     process.exit(1);
   }

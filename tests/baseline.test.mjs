@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { applyPlan } from '../src/install/apply.mjs';
-import { BASELINE_DIR, readBaseline } from '../src/install/baseline.mjs';
+import { BASELINE_DIR, listBaselines, readBaseline } from '../src/install/baseline.mjs';
 import { readManifest, sha256Text } from '../src/install/manifest.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -193,4 +193,93 @@ test('uninstall removes the baseline tree with the rest of the managed state', (
   const r = run(['uninstall', '--target', '.', '--json'], dir);
   assert.equal(r.status, 0, r.stderr);
   assert.equal(fs.existsSync(path.join(dir, BASELINE_DIR)), false);
+});
+
+function commitAll(dir) {
+  spawnSync('git', ['add', '-A'], { cwd: dir });
+  const c = spawnSync('git', ['commit', '--no-verify', '-q', '-m', 'init'], { cwd: dir, encoding: 'utf8' });
+  assert.equal(c.status, 0, c.stderr);
+}
+
+test('--baseline-only rebuilds the baseline after a fresh clone wipes .agents/.kit', () => {
+  const dir = tmpRepo();
+  const installArgs = ['install', '--agent', 'claude', '--stack', 'node', '--target', '.', '--json'];
+  assert.equal(run(installArgs, dir).status, 0);
+  // 基线被 .gitignore 忽略：提交后删掉 .agents/.kit 模拟 fresh clone / git clean -fdx。
+  commitAll(dir);
+  fs.rmSync(path.join(dir, BASELINE_DIR), { recursive: true, force: true });
+  assert.equal(fs.existsSync(path.join(dir, BASELINE_DIR)), false);
+
+  const warned = run(['doctor', '--target', '.'], dir);
+  assert.match(`${warned.stdout}${warned.stderr}`, /--baseline-only/);
+
+  const r = run([...installArgs, '--baseline-only'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  const out = json(r);
+  assert.equal(out.baselineOnly, true);
+  assert.ok(out.rebuilt.length > 0);
+
+  const doctor = run(['doctor', '--target', '.'], dir);
+  const text = `${doctor.stdout}${doctor.stderr}`;
+  assert.doesNotMatch(text, /未找到基线目录/);
+  assert.match(text, /基线：\d+ 个文件/);
+
+  assert.ok(listBaselines(dir).length > 0);
+  const status = spawnSync('git', ['status', '--porcelain'], { cwd: dir, encoding: 'utf8' });
+  assert.equal(status.stdout.trim(), '');
+});
+
+test('--baseline-only skips files whose on-disk content the user modified', () => {
+  const dir = tmpRepo();
+  assert.equal(run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.'], dir).status, 0);
+  fs.appendFileSync(path.join(dir, 'AGENTS.md'), 'user edit\n', 'utf8');
+  fs.rmSync(path.join(dir, BASELINE_DIR), { recursive: true, force: true });
+
+  const r = run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.', '--json', '--baseline-only'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  const out = json(r);
+  assert.ok(out.skipped.includes('AGENTS.md'), `expected AGENTS.md in skipped: ${out.skipped}`);
+  assert.ok(!out.rebuilt.includes('AGENTS.md'));
+  assert.ok(out.rebuilt.length > 0);
+  assert.equal(fs.existsSync(path.join(dir, BASELINE_DIR, 'AGENTS.md')), false);
+  assert.ok(listBaselines(dir).length > 0);
+});
+
+test('--baseline-only replays manifest.language so en installs rebuild without --lang', () => {
+  const dir = tmpRepo();
+  assert.equal(run(['install', '--agent', 'claude', '--stack', 'node', '--lang', 'en', '--target', '.', '--json'], dir).status, 0);
+  fs.rmSync(path.join(dir, BASELINE_DIR), { recursive: true, force: true });
+
+  // 不带 --lang 重跑（CLI 默认 zh-CN）：必须按 manifest 语言（en）渲染，否则整盘语言不符 skipped。
+  const r = run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.', '--json', '--baseline-only'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  const out = json(r);
+  assert.ok(out.rebuilt.length > 100, `expected mass rebuild, got ${out.rebuilt.length}`);
+  assert.deepEqual(out.skipped, []);
+
+  const doctor = run(['doctor', '--target', '.'], dir);
+  const text = `${doctor.stdout}${doctor.stderr}`;
+  assert.doesNotMatch(text, /未找到基线目录/);
+  assert.match(text, /基线：\d+ 个文件/);
+});
+
+test('--baseline-only --dry-run reports the lists and writes nothing', () => {
+  const dir = tmpRepo();
+  assert.equal(run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.', '--json'], dir).status, 0);
+  fs.rmSync(path.join(dir, BASELINE_DIR), { recursive: true, force: true });
+
+  const r = run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.', '--json', '--dry-run', '--baseline-only'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  const out = json(r);
+  assert.equal(out.baselineOnly, true);
+  assert.ok(out.rebuilt.length > 0);
+  assert.equal(out.manifest, null);
+  assert.equal(fs.existsSync(path.join(dir, BASELINE_DIR)), false);
+});
+
+test('--baseline-only without a manifest exits 3', () => {
+  const dir = tmpRepo();
+  const r = run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.', '--baseline-only'], dir);
+  assert.equal(r.status, 3);
+  assert.match(`${r.stdout}${r.stderr}`, /install/);
 });
