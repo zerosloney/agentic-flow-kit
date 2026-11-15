@@ -136,13 +136,14 @@ flow-kit workspace status --json
 
 ## 宿主
 
-v1 支持 11 个现行宿主：
+v1 支持 12 个现行宿主：
 
 | 宿主 | 命令 | 子代理 | 技能 | hooks | 模型注入 |
 |---|---|---|---|---|---|
 | `trae` | `.trae/commands/` | `.trae/agents/*.md` | index → `wf-skills` | `hooks.json` | 否 |
 | `codebuddy` | `.codebuddy/commands/` | `.codebuddy/agents/*.md` | native `.codebuddy/skills/<name>/SKILL.md` | `settings.json` | 否 |
 | `codex` | 无（零项目文件，原生读根 AGENTS.md） | 无 | 无 | 用户级 `~/.codex/hooks.json`（见下） | 否 |
+| `codeartsdoer` | 无（宿主无项目级等价面，原生读根 AGENTS.md） | 无 | native `.codeartsdoer/skills/<name>/SKILL.md` | `.github/hooks/flow-kit-gates.json`（见下） | 否 |
 | `claude` | `.claude/commands/` | `.claude/agents/*.md`（`model`） | native `.claude/skills/<name>/SKILL.md` | `settings.json` | 是（`inherit` / 别名） |
 | `opencode` | `.opencode/commands/` | `.opencode/agents/*.md`（`model`） | native `.opencode/skills/<name>/SKILL.md` | 插件式（保持现状） | 是（省略 = 继承） |
 | `qwen` | `.qwen/commands/` | `.qwen/agents/*.md`（`model`） | shared `.agents/skills`（不复制） | `settings.json` | 是（`inherit`） |
@@ -159,6 +160,19 @@ v1 支持 11 个现行宿主：
 - **native**：宿主会自行发现 `<宿主目录>/skills/<name>/SKILL.md`。安装器按 `.agents/skills/*/SKILL.md` 的语言覆盖后内容动态生成指针壳（原生 frontmatter + 指向权威正文），不手写 22 × N 份静态副本。
 - **shared**：宿主原生读取 `.agents/skills`（Qwen、Command Code）。不生成宿主技能副本，只生成 `wf-skills` 索引入口。
 - **index**：无法确认原生技能目录的宿主生成一个索引（有命令目录时是 `wf-skills.md`，否则是 `SKILLS.md`），逐行列出技能名、描述与 `.agents/skills/<name>/SKILL.md` 路径。
+
+### CodeArtsDoer 能力覆盖（四态）
+
+issue #48 协议实测（CodeArts Agent 26.11.100，2026-11-15）落地的四态口径：
+
+| 能力 | 状态 | 说明 |
+|---|---|---|
+| hooks | 完整支持 | 内置 Claude 兼容 Hook 系统，协议实测认 `hookSpecificOutput.permissionDecision: deny\|ask`；接线面为项目级 `.github/hooks/flow-kit-gates.json`（见 Hook 接线）。宿主本构建忽略 matcher（全量工具触发），随包适配层 `flow-kit hook codeartsdoer-gate` 按 stdin `tool_name` 自行分派 |
+| skills | 完整支持 | `.codeartsdoer/skills/<name>/SKILL.md` 指针壳 |
+| commands / agents | 不支持-兜底声明 | 宿主无项目级等价面；治理与命令走根 `AGENTS.md`（原生加载），越权面由 git 钩子兜底 |
+| MCP | 未探测 | 注册表不声明 `mcp`，安装器不写宿主 MCP 配置 |
+
+**启用前提**：在 CodeArtsDoer 设置中开启 `chat.useHooks`（`.github/hooks` 发现面的开关），新会话生效。
 
 ### 技能包来源与准入（R3-4）
 
@@ -213,10 +227,13 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 | `qoder` | `settings.json` | `command: flow-kit` + `args: ["hook", "<id>"]` + `name` / `statusMessage` |
 | `zcode` | `config.json` | `hooks.events`，条目带 `enabled` |
 | `codex` | `~/.codex/hooks.json`（用户级，不在项目仓内） | `flow-kit hook codex-gate` 命令字符串 + 重信任（见下） |
+| `codeartsdoer` | `.github/hooks/flow-kit-gates.json`（项目级，仓根锚定） | `flow-kit hook codeartsdoer-gate` 命令字符串 + 适配层按 `tool_name` 分派（见下） |
 
 合并只替换托管 hook 条目（`flow-kit hook <id>` 或旧版 `.agents/hooks/*.cjs` 路径，用于接管旧安装）：用户自建 hook、其它事件、`permissions` 等其余键原样保留；重复安装不会重复追加，过期接线（错误 matcher）会被清理。Gate 实现随包分发，项目内只保留声明与配置。Qwen 的 `settings.json` 同时承载 hooks 与 MCP，两个合并器对同一份 JSON 组合执行。`opencode` / `pi` / `cline` 没有 `hooks.events`，继续使用静态模板，行为不变；外部宿主也可在宿主定义的 `hooks.events` 中接入同一编译器。`doctor` 以 `gates.json` 为期望值检查缺失 / 多余接线。
 
 **Codex 用户级接线（issue #45 实测）**：Codex 0.169.0 的 hooks 配置在用户级 `~/.codex/hooks.json`（Claude 风格 schema），不在项目仓内。`install --agent codex` 不写任何 `.codex/` 项目文件，而是把 `PreToolUse` 条目（matcher `^(exec_command|apply_patch)$`）幂等合并进用户级 hooks.json，command 指向随包分发的适配层 `flow-kit hook codex-gate`（`exec_command` 归一为 Bash 形态转命令门，`apply_patch` 转写前门；补丁形态无法合成提议内容，内容判据 fail-open，路径类判据依赖 tool_input 携带可识别路径字段；MCP 工具（`mcp__*`）当前不设门）。条目按条目信任哈希（config.toml `hooks.state` 的 `trusted_hash`）信任，**编辑 hooks.json 即失效**：接线变更后需在交互式 Codex 会话中重新信任一次，非交互模式会静默跳过未信任条目；`doctor` 校验条目在位与 matcher 一致（过期 matcher 会静默绕过，按 fail 报）；`remove-host codex` / `uninstall` 只摘除本条目，其余条目（如 context-mode）保留。
+
+**CodeArtsDoer 项目级接线（issue #48 实测）**：CodeArts Agent 26.11.100 的 hook 发现面为项目级 `.github/hooks/*.json`（VS Code 标准）。`install --agent codeartsdoer` 把 `PreToolUse` 条目幂等合并进 `.github/hooks/flow-kit-gates.json`（registry `rootRels` 根锚定，与 `.github/workflows/` 同存互不干扰），command 指向随包适配层 `flow-kit hook codeartsdoer-gate`；宿主本构建忽略 matcher（全量工具触发），适配层按 stdin `tool_name` 自行分派（`execute` 归一为 Bash 形态转命令门，`edit` 转写前门，`search` / `agent` / `read` / `web` / `todo` / `mcp__*` 不设门）。kernel 载荷精确字段未静态取证，command 按 `command|cmd|cmdline`（字符串或数组）多形态兼容。**启用前提**：设置 `chat.useHooks` 开启，新会话生效；`remove-host codeartsdoer` / `uninstall` 按托管条目摘除，用户自建 hook 保留。
 
 ## 权限编译
 
@@ -238,7 +255,7 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 |---|---|---|
 | `managed` | `claude` | 替换 `settings.hardened.json`（sandbox、managed-only 权限 / hooks / MCP 键）+ gates.json 硬化权限 |
 | `permissions` | `qwen` / `qoder` / `commandcode` | gates.json `hardened` 权限项（凭据读、网络命令）编译进 `permissions` |
-| `hooks` | `codebuddy` / `trae` / `zcode` / `codex` | 仅命令门禁 hook，无权限面 → 计入缺口 |
+| `hooks` | `codebuddy` / `trae` / `zcode` / `codex` / `codeartsdoer` | 仅命令门禁 hook，无权限面 → 计入缺口 |
 | `none` | `opencode` / `pi` / `cline` | 无可配置加固面 → 计入缺口 |
 
 配置能力由注册表 `hardening.level` / `hardening.settings` 声明，外部宿主同样可声明；加固配置作为宿主主配置的替换源，不独立安装。`manifest.enterprise` 记录 `posture`、每个宿主的实际级别、`gaps`、`proofChain` 与 `policyChecks`。`doctor` 展示档位 / 姿态 / 宿主矩阵 / 缺口，并核对证明链（agent-eval、outcome-metrics、pipeline-state）与策略面（`.githooks`、CI、权限编译）；缺口以 advisory 呈现，默认 `standard` 档不产生该字段，行为不变。

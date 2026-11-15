@@ -70,6 +70,34 @@ export const HOSTS = {
     hardening: { level: 'hooks' },
     modelProbe: { configs: [], env: [], cli: [] },
   },
+  codeartsdoer: {
+    dir: '.codeartsdoer',
+    label: 'CodeArtsDoer（华为云码道）',
+    tracked: true,
+    // 无 commands/agents 项目等价面（issue #48 实测）：治理与命令兜底走根 AGENTS.md 与 git 钩子。
+    commands: null,
+    agents: null,
+    // .codeartsdoer/skills/<name>/SKILL.md 指针壳（宿主标准文件名 SKILL.md，实测）
+    skills: { mode: 'native', dir: 'skills', file: 'SKILL.md' },
+    hooks: {
+      // 宿主真实发现面（VS Code 标准，issue §5.2 的 .codeartsdoer/ 假设按「探测先行」修正，见 issue 评论）
+      file: '.github/hooks/flow-kit-gates.json',
+      format: 'json',
+      events: {
+        event: 'PreToolUse',
+        container: 'hooks',
+        // 宿主本构建忽略 matcher（全量工具触发，适配层按 tool_name 自分派）；仍按既有宿主同构声明
+        matchers: { shell: 'execute|edit|search|agent|read|web|todo' },
+        tools: ['shell'],
+        timeouts: { shell: 60 },
+        command: { form: 'cli', template: 'flow-kit hook codeartsdoer-gate' },
+      },
+    },
+    hardening: { level: 'hooks' },
+    modelProbe: { configs: [], env: [], cli: [] },
+    // hooks 面根锚定：.github/hooks/ 落仓根（与 .github/workflows/ 同存），不进宿主点目录
+    rootRels: ['.github/hooks/flow-kit-gates.json'],
+  },
   claude: {
     dir: '.claude',
     label: 'Claude Code',
@@ -278,7 +306,7 @@ export function resolveHost(name) {
   return { name: key, ...HOSTS[key] };
 }
 
-// 宿主模板相对路径 -> 目标相对路径。rootMemory 文件放项目根，其余放宿主点目录。
+// 宿主模板相对路径 -> 目标相对路径。rootMemory / rootRels 文件放项目根，其余放宿主点目录。
 export function hostTargetRel(name, rel) {
   const h = HOSTS[name];
   if (!h) {
@@ -288,6 +316,7 @@ export function hostTargetRel(name, rel) {
   }
   const normalized = String(rel).replace(/\\/g, '/');
   if (h.rootMemory && normalized === h.rootMemory) return h.rootMemory;
+  if (Array.isArray(h.rootRels) && h.rootRels.includes(normalized)) return normalized;
   return `${h.dir}/${normalized}`;
 }
 

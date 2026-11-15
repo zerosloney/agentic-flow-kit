@@ -11,6 +11,7 @@ const OUT = path.join(KIT, 'locales', 'en', 'overrides');
 const HOST_DIRS = {
   trae: '.trae',
   codebuddy: '.codebuddy',
+  codeartsdoer: '.codeartsdoer',
   claude: '.claude',
   opencode: '.opencode',
   qwen: '.qwen',
@@ -56,6 +57,11 @@ const AGENT_TITLE = {
   'pr-verifier': 'PR Verifier',
 };
 
+// 宿主规则入口指针（rule/）：frontmatter 描述英文化，正文走指针壳通用分支。
+const RULE_DESC = {
+  'flow-kit': 'Rule entry pointer: governance routing and red lines live in the root AGENTS.md; engine authority lives in .agents/',
+};
+
 function walk(dir, rel = '') {
   const out = [];
   if (!fs.existsSync(dir)) return out;
@@ -94,7 +100,7 @@ for (const host of Object.keys(HOST_DIRS)) {
   for (const rel of walk(dir)) {
     const base = path.basename(rel).replace(/\.(md|yml|yaml)$/i, '');
     const skill = rel.match(/^skills\/([^/]+)\/SKILL\.md$/);
-    const desc = COMMAND_DESC[base] || AGENT_DESC[base] || (skill ? SKILL_DESC[skill[1]] : undefined);
+    const desc = COMMAND_DESC[base] || AGENT_DESC[base] || RULE_DESC[base] || (skill ? SKILL_DESC[skill[1]] : undefined);
     const abs = path.join(dir, rel);
     const text = normalize(fs.readFileSync(abs, 'utf8'));
     const parts = splitFrontmatter(text);

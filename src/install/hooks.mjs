@@ -70,6 +70,7 @@ function applicable(spec, cfg) {
 
 // 中性条目 -> 宿主 hook 对象。form 决定命令形态：
 // cli / cli-args 走包内入口（flow-kit hook <id>）；env/relative/args 保留旧模板兼容外部宿主。
+// cli 模板不含 {hook} 时为字面命令：适配层宿主固定调起随包适配器（命令不指向规格脚本本身）。
 function renderHook(item, cfg) {
   const form = cfg?.command?.form;
   if (!FORMS.has(form)) {
@@ -77,25 +78,30 @@ function renderHook(item, cfg) {
     err.code = 'HOOK_CONFIG';
     throw err;
   }
-  const hookId = hookIdOf(item.script);
   const hook = { type: 'command' };
   if (form === 'cli' || form === 'cli-args') {
-    if (!hookId) {
-      const err = new Error(`hook script must be under .agents/hooks: ${item.script}`);
-      err.code = 'HOOK_CONFIG';
-      throw err;
-    }
     if (form === 'cli-args') {
+      const hookId = hookIdOf(item.script);
+      if (!hookId) {
+        const err = new Error(`hook script must be under .agents/hooks: ${item.script}`);
+        err.code = 'HOOK_CONFIG';
+        throw err;
+      }
       hook.command = 'flow-kit';
       hook.args = ['hook', hookId];
     } else {
       const template = String(cfg.command.template || 'flow-kit hook {hook}');
-      if (!template.includes('{hook}')) {
-        const err = new Error('hook command template must contain {hook}');
-        err.code = 'HOOK_CONFIG';
-        throw err;
+      if (template.includes('{hook}')) {
+        const hookId = hookIdOf(item.script);
+        if (!hookId) {
+          const err = new Error(`hook script must be under .agents/hooks: ${item.script}`);
+          err.code = 'HOOK_CONFIG';
+          throw err;
+        }
+        hook.command = template.split('{hook}').join(hookId);
+      } else {
+        hook.command = template;
       }
-      hook.command = template.split('{hook}').join(hookId);
     }
   } else {
     const template = String(cfg.command.template || '');
@@ -146,12 +152,30 @@ function scriptPattern(script) {
   return new RegExp(`(^|[^A-Za-z0-9._-])${escaped}(?=$|[^A-Za-z0-9._-])`);
 }
 
-function managedScript(hook, scripts) {
+// cli 形态的托管引用：模板含 {hook} 时按规格脚本派生 flow-kit hook <id>；字面模板即调起命令本身。
+function cliRef(item, cfg) {
+  const template = String(cfg?.command?.template || 'flow-kit hook {hook}');
+  if (!template.includes('{hook}')) return template;
+  return `flow-kit hook ${hookIdOf(item.script)}`;
+}
+
+// 托管识别引用表：spec script -> 该宿主 schema 下的调起引用。适用条目按 cliRef 渲染，
+// 未适用条目保持 flow-kit hook <id> 旧式引用（旧安装清理与 doctor 对账共用同一张表）。
+function managedRefs(spec, cfg) {
+  const refs = new Map();
+  const wired = new Set(applicable(spec, cfg).map((item) => item.script));
+  for (const item of spec || []) {
+    refs.set(item.script, wired.has(item.script) ? cliRef(item, cfg) : `flow-kit hook ${hookIdOf(item.script)}`);
+  }
+  return refs;
+}
+
+function managedScript(hook, scripts, refs = null) {
   const text = hookRefs(hook).replace(/\s+/g, ' ');
   for (const script of scripts) {
     if (scriptPattern(script).test(text)) return script;
-    const id = hookIdOf(script);
-    if (id && scriptPattern(`flow-kit hook ${id}`).test(text)) return script;
+    const ref = refs?.get(script);
+    if (ref && scriptPattern(ref).test(text)) return script;
   }
   return null;
 }
@@ -182,6 +206,7 @@ export function mergeHooksIntoRoot(root, spec, cfg) {
   const groups = compileHookGroups(spec, cfg);
   if (!groups.length) return false;
   const scripts = new Set(spec.map((item) => item.script));
+  const refs = managedRefs(spec, cfg);
   const matcherKey = cfg.matcherKey || 'matcher';
   const hooksKey = cfg.hooksKey || 'hooks';
   const events = eventsOwner(root, cfg, true);
@@ -195,7 +220,7 @@ export function mergeHooksIntoRoot(root, spec, cfg) {
         kept.push(group);
         continue;
       }
-      const hooks = group[hooksKey].filter((hook) => !managedScript(hook, scripts));
+      const hooks = group[hooksKey].filter((hook) => !managedScript(hook, scripts, refs));
       if (hooks.length !== group[hooksKey].length) changed = true;
       if (hooks.length) kept.push(hooks.length === group[hooksKey].length ? group : { ...group, [hooksKey]: hooks });
     }
@@ -215,6 +240,7 @@ export function mergeHooksIntoRoot(root, spec, cfg) {
 export function stripHooksFromRoot(root, spec, cfg) {
   if (!isObject(root) || !Array.isArray(spec) || !spec.length) return false;
   const scripts = new Set(spec.map((item) => item.script));
+  const refs = managedRefs(spec, cfg);
   const hooksKey = cfg.hooksKey || 'hooks';
   const events = eventsOwner(root, cfg, false);
   if (!events) return false;
@@ -227,7 +253,7 @@ export function stripHooksFromRoot(root, spec, cfg) {
         kept.push(group);
         continue;
       }
-      const hooks = group[hooksKey].filter((hook) => !managedScript(hook, scripts));
+      const hooks = group[hooksKey].filter((hook) => !managedScript(hook, scripts, refs));
       if (hooks.length !== group[hooksKey].length) changed = true;
       if (hooks.length) kept.push(hooks.length === group[hooksKey].length ? group : { ...group, [hooksKey]: hooks });
     }
@@ -261,6 +287,7 @@ export function stripHooksFromRoot(root, spec, cfg) {
 // doctor 用：期望接线与文件实际接线按 event|matcher|script 对比。
 export function findHookDrift(root, spec, cfg) {
   const scripts = new Set((spec || []).map((item) => item.script));
+  const refs = managedRefs(spec || [], cfg);
   const expected = new Set(applicable(spec || [], cfg)
     .map((item) => `${item.event}|${cfg.matchers[item.tool]}|${item.script}`));
   const actual = new Set();
@@ -272,7 +299,7 @@ export function findHookDrift(root, spec, cfg) {
         if (!isObject(group) || !Array.isArray(group[cfg.hooksKey || 'hooks'])) continue;
         const matcher = String(group[cfg.matcherKey || 'matcher'] || '');
         for (const hook of group[cfg.hooksKey || 'hooks']) {
-          const script = managedScript(hook, scripts);
+          const script = managedScript(hook, scripts, refs);
           if (script) actual.add(`${event}|${matcher}|${script}`);
         }
       }

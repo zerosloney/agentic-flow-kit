@@ -109,7 +109,7 @@ try {
 } catch { /* 标记读取失败按未解锁处理 */ }
 
 // ── 1) 执法面自保护 ───────────────────────────────────
-const WIRING_RE = /^(\.zcode\/config\.json|\.trae\/hooks\.json|\.codebuddy\/settings\.json|\.qoder\/settings\.json|\.qwen\/settings\.json|\.commandcode\/settings\.json|\.claude\/settings(\.local)?\.json|\.grok\/hooks\/.+\.json|\.agents\/hooks\/gates\.json|\.agents\/settings\.json)$/;
+const WIRING_RE = /^(\.zcode\/config\.json|\.trae\/hooks\.json|\.codebuddy\/settings\.json|\.qoder\/settings\.json|\.qwen\/settings\.json|\.commandcode\/settings\.json|\.claude\/settings(\.local)?\.json|\.grok\/hooks\/.+\.json|\.github\/hooks\/.+\.json|\.agents\/hooks\/gates\.json|\.agents\/settings\.json)$/;
 if (!unlocked && WIRING_RE.test(rel)) {
   deny(`执法面自保护：${rel} 是门禁接线/权限基线，AI 不得自行改写。如系用户明示的引擎变更：请用户执行 flow-kit hook pre-write-check.cjs --unlock <分钟> 临时放行（或用户手动改本文件），完成后删除解锁标记。`);
 }
