@@ -12,6 +12,7 @@
 //     "allow": ["MIT", "ISC", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "0BSD", "CC0-1.0", "Unlicense", "Python-2.0"],
 //     "deny": ["AGPL-3.0", "AGPL-3.0-only", "AGPL-3.0-or-later", "SSPL-1.0", "GPL-3.0", "GPL-2.0", "EPL-1.0"],
 //     "exceptions": { "<pkg>@<version>": "理由：评审记录/工单链接" },
+//     "lockfiles": ["frontend/package-lock.json"],  // 可选；缺省审计根 package-lock.json；多份合并去重取先声明者
 //     "unknownAction": "deny"   // deny = 未知/缺声明按违规；warn = 只告警（仍非零退出由 failOn 控制）
 //     "failOn": "deny"          // deny = 只有 deny/未知(unknownAction=deny) 非零；any = warn 也非零
 //   }
@@ -41,6 +42,7 @@ const DEFAULT_POLICY = {
   exceptions: {},
   unknownAction: 'deny',
   failOn: 'deny',
+  lockfiles: [],
 };
 
 const args = process.argv.slice(2);
@@ -74,6 +76,18 @@ function loadPolicy() {
     console.error(`sbom-license: ${POLICY_REL} version 必须为 1`);
     process.exit(2);
   }
+  // lockfiles（可选）：声明审计数据源的 lockfile 路径（monorepo 多份），相对项目根、统一按 / 归一；
+  // 含 .. 段、绝对路径或以 / \\ 开头的项 fail-closed；过滤空项后为空 = 未配置（等同现状根 lockfile 行为）。
+  const lockfiles = Array.isArray(raw.lockfiles)
+    ? raw.lockfiles.map(String).map((s) => s.trim()).filter(Boolean)
+    : [];
+  for (const rel of lockfiles) {
+    const norm = rel.replaceAll('\\', '/');
+    if (path.isAbsolute(norm) || norm.startsWith('/') || norm.split('/').includes('..')) {
+      console.error(`sbom-license: ${POLICY_REL} lockfiles 含非法路径「${rel}」——必须是相对项目根的路径，不允许 .. 段或绝对路径（fail-closed）。`);
+      process.exit(2);
+    }
+  }
   const policy = {
     ...DEFAULT_POLICY,
     ...raw,
@@ -84,6 +98,7 @@ function loadPolicy() {
       : {},
     unknownAction: raw.unknownAction === 'warn' ? 'warn' : 'deny',
     failOn: raw.failOn === 'any' ? 'any' : 'deny',
+    lockfiles: lockfiles.map((s) => s.replaceAll('\\', '/')),
   };
   return policy;
 }
@@ -241,33 +256,55 @@ export function buildSpdx({ rootName, rootVersion, packages, generatedAt }) {
   };
 }
 
-function collectPackages() {
+function collectPackages(policy) {
+  // 显式声明 lockfiles：按声明顺序读取并跨文件合并去重（name@version 同键取先声明文件中的条目）；
+  // 声明了就必须存在——任一缺失直接 fail-closed，不回落根 lockfile 也不猜。
+  if (policy.lockfiles && policy.lockfiles.length) {
+    const merged = new Map();
+    for (const rel of policy.lockfiles) {
+      const lock = readJson(path.join(ROOT, rel));
+      if (!lock) {
+        console.error(`sbom-license: 声明的 lockfile 缺失：${rel}（fail-closed，不猜测未锁定的依赖）`);
+        process.exit(2);
+      }
+      for (const entry of packagesFromLockfile(lock)) {
+        const key = `${entry.name}@${entry.version}`;
+        if (!merged.has(key)) merged.set(key, entry);
+      }
+    }
+    return {
+      source: policy.lockfiles.join(' + '),
+      packages: [...merged.values()].sort((a, b) => `${a.name}@${a.version}`.localeCompare(`${b.name}@${b.version}`)),
+      lockPaths: policy.lockfiles.map((rel) => path.join(ROOT, rel)),
+    };
+  }
+  // 未配置 lockfiles：现状路径——根 package-lock.json → npm ls 兜底 → fail-closed。
   const lock = readJson(path.join(ROOT, 'package-lock.json'));
-  if (lock) return { source: 'package-lock.json', packages: packagesFromLockfile(lock) };
+  if (lock) return { source: 'package-lock.json', packages: packagesFromLockfile(lock), lockPaths: [path.join(ROOT, 'package-lock.json')] };
   // lockfile 缺失时才尝试 npm ls（只读子进程、失败不致命）
   const r = spawnSync('npm', ['ls', '--json', '--all'], { cwd: ROOT, encoding: 'utf8', timeout: 60000, windowsHide: true });
   if (r.status === 0 && r.stdout) {
     try {
       const tree = JSON.parse(r.stdout);
       const packages = packagesFromNpmLs(tree);
-      if (packages.length) return { source: 'npm ls', packages };
+      if (packages.length) return { source: 'npm ls', packages, lockPaths: [] };
     } catch { /* fallthrough */ }
   }
-  return { source: null, packages: [] };
+  return { source: null, packages: [], lockPaths: [] };
 }
 
 function main() {
   const pkg = readJson(path.join(ROOT, 'package.json')) || {};
   const rootName = String(pkg.name || 'unnamed-project');
   const rootVersion = String(pkg.version || '0.0.0');
-  const { source, packages } = collectPackages();
+  const policy = loadPolicy();
+  const { source, packages, lockPaths } = collectPackages(policy);
   if (!source || !packages.length) {
     console.error('sbom-license: 找不到 package-lock.json 且 npm ls 无结果——无依赖清单可审计（fail-closed）。');
     console.error('  修法：在项目根执行 npm install 生成 lockfile 后重跑；本门不猜测未锁定的依赖。');
     process.exit(2);
   }
 
-  const policy = loadPolicy();
   const violations = [];
   const warnings = [];
   for (const dep of packages) {
@@ -280,10 +317,12 @@ function main() {
   }
   const failHard = policy.failOn === 'any' ? violations.length + warnings.length > 0 : violations.length > 0;
 
-  // SBOM 的 created 取 lockfile 的 mtime（ISO）而不是 now：同一 lockfile 重复生成必须逐字节一致，
-  // 否则 --check 永远漂移。mtime 不可得时回落 Unix 纪元（同样确定）。
-  const lockStat = source === 'package-lock.json' ? fs.statSync(path.join(ROOT, 'package-lock.json')) : null;
-  const generatedAt = (lockStat ? lockStat.mtime : new Date(0)).toISOString();
+  // SBOM 的 created 取全部实际使用 lockfile 的 mtime 最大值（ISO）而不是 now：同一组 lockfile 重复
+  // 生成必须逐字节一致，否则 --check 永远漂移；任一 lockfile 变更 → mtime 变化 → SBOM 刷新促重跑。
+  // 无 lockfile 源（npm ls 兜底）时回落 Unix 纪元（同样确定）。
+  const generatedAt = (lockPaths.length
+    ? new Date(Math.max(...lockPaths.map((p) => fs.statSync(p).mtime.getTime())))
+    : new Date(0)).toISOString();
   const spdx = buildSpdx({ rootName, rootVersion, packages, generatedAt });
   const sbomAbs = path.join(ROOT, SBOM_REL);
   const sbomText = `${JSON.stringify(spdx, null, 2)}\n`;

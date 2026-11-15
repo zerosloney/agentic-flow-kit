@@ -4,6 +4,7 @@
   "options": {
     "hosts": {{hostsJson}},
     "stack": "{{stack}}",
+    "stacks": {{stacksJson}},
     "boardPort": "{{boardPort}}",
     "language": "{{language}}"
   },

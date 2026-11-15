@@ -65,9 +65,11 @@ function stackAllowFragment(stack, tool, sep) {
 }
 
 // 模板变量：只替换已知 token，未知 {{...}} 原样保留（避免误伤代码模板字符串）。
-export function buildVars({ target, projectName, stack, language, hosts, kitVersion, installedAt, trackHosts = false }) {
+// stacks 为多栈声明序列（首个为主栈）；{{stack}}、端口与描述恒按主栈，权限片段按各栈声明顺序拼接。
+export function buildVars({ target, projectName, stack, language, hosts, kitVersion, installedAt, trackHosts = false, stacks = null }) {
   const d = STACK_DEFAULTS[stack] || STACK_DEFAULTS.empty;
   const description = stackDescription(stack, language);
+  const stackList = stacks?.length ? stacks : [stack];
   const hostIgnores = trackHosts
     ? ''
     : hosts
@@ -77,6 +79,7 @@ export function buildVars({ target, projectName, stack, language, hosts, kitVers
   return {
     projectName: projectName || pathBase(target),
     stack,
+    stacksJson: JSON.stringify(stackList),
     stackDescription: description,
     language,
     apiPort: String(d.apiPort),
@@ -84,9 +87,9 @@ export function buildVars({ target, projectName, stack, language, hosts, kitVers
     boardPort: '8933',
     hosts: hosts.join(', '),
     hostsJson: JSON.stringify(hosts),
-    stackAllowBashColon: stackAllowFragment(stack, 'Bash', ':'),
-    stackAllowBashSpace: stackAllowFragment(stack, 'Bash', ' '),
-    stackAllowShellSpace: stackAllowFragment(stack, 'Shell', ' '),
+    stackAllowBashColon: stackList.map((s) => stackAllowFragment(s, 'Bash', ':')).join(''),
+    stackAllowBashSpace: stackList.map((s) => stackAllowFragment(s, 'Bash', ' ')).join(''),
+    stackAllowShellSpace: stackList.map((s) => stackAllowFragment(s, 'Shell', ' ')).join(''),
     kitVersion,
     installedAt,
     nodeMinimum: '22',

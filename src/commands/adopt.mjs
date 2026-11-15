@@ -7,7 +7,7 @@ import { extractMergeBlock, readPlanEntry, renderMergeBlock } from '../install/a
 import { HOSTS } from '../hosts/registry.mjs';
 import { detectHosts } from '../hosts/detect.mjs';
 import { buildState } from './diff.mjs';
-import { readKitVersion, resolveHosts, resolveStack, resolveTarget } from './install.mjs';
+import { readKitVersion, resolveHosts, resolveStack, resolveTarget, validateStacks } from './install.mjs';
 
 const MERGE_KINDS = new Set(['merge-gitattributes', 'merge-gitignore']);
 // 生成脚本会按磁盘现状重写 workflow/INDEX.md，静态模板不可作为预期值；
@@ -40,8 +40,8 @@ function readProfileInfo(target) {
   }
 }
 
-function baseManifest({ target, existing, hosts, lang, stack, tier, hardened, projectName, trackHosts, installedAt, surfaces }) {
-  return {
+function baseManifest({ target, existing, hosts, lang, stack, stacks = null, tier, hardened, projectName, trackHosts, installedAt, surfaces }) {
+  const next = {
     ...(existing || {}),
     kit: 'agentic-flow-kit',
     schemaVersion: CURRENT_SCHEMA_VERSION,
@@ -60,6 +60,10 @@ function baseManifest({ target, existing, hosts, lang, stack, tier, hardened, pr
     derived: existing?.derived || [],
     files: existing?.files || {},
   };
+  // 多栈序列与 install 同规则：>1 才记 stacks，单栈接管不留旧字段。
+  if (stacks?.length > 1) next.stacks = stacks;
+  else delete next.stacks;
+  return next;
 }
 
 // 只读比对：plan 条目逐一与磁盘比对，adopt 只认“与当前渲染完全一致”的文件。
@@ -159,9 +163,18 @@ export function adoptCommand({ args, t }) {
     ? existing.hosts
     : (engineInfo?.hosts?.length ? engineInfo.hosts : detectedHosts);
   const hosts = resolveHosts(args, t, fallbackHosts);
-  const stack = args.stack || args.profile
-    ? resolveStack(args, target)
-    : (existing?.stack || engineInfo?.stack || resolveStack(args, target));
+  // 栈回退链：显式 --stack（闭集校验，可多栈）→ manifest 多栈 → 主栈回退链（manifest / engine.json / 探测）。
+  let declaredStacks = null;
+  if (args.stacks?.length) {
+    validateStacks(args.stacks, t);
+    declaredStacks = [...new Set(args.stacks)];
+  } else if (existing?.stacks?.length) {
+    declaredStacks = existing.stacks;
+  }
+  const stack = declaredStacks?.[0]
+    || (args.stack || args.profile
+      ? resolveStack(args, target, t)
+      : (existing?.stack || engineInfo?.stack || resolveStack(args, target, t)));
   const tier = ['lean', 'standard', 'enterprise'].includes(args.tier) ? args.tier : (existing?.tier || 'standard');
   const hardened = flag(args, 'hardened') || tier === 'enterprise' || Boolean(existing?.hardened && !args.tier);
   const projectName = args.name || existing?.projectName || path.basename(target);
@@ -175,7 +188,7 @@ export function adoptCommand({ args, t }) {
   let best = null;
   for (const language of candidates) {
     const manifest = baseManifest({
-      target, existing, hosts, lang: language, stack, surfaces, tier, hardened, projectName, trackHosts, installedAt,
+      target, existing, hosts, lang: language, stack, stacks: declaredStacks, surfaces, tier, hardened, projectName, trackHosts, installedAt,
     });
     const { plan, vars } = buildState({ target, manifest });
     const result = scan({ target, plan, vars, hosts, existing });
@@ -190,7 +203,7 @@ export function adoptCommand({ args, t }) {
   const willWrite = result.adopted.length > 0 || Boolean(existing);
   if (!dryRun && willWrite) {
     const next = baseManifest({
-      target, existing, hosts, lang: language, stack, surfaces, tier, hardened, projectName, trackHosts, installedAt,
+      target, existing, hosts, lang: language, stack, stacks: declaredStacks, surfaces, tier, hardened, projectName, trackHosts, installedAt,
     });
     next.files = files;
     next.derived = derived;

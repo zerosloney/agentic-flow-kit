@@ -72,9 +72,10 @@ npx agentic-flow-kit doctor --target .
 |---|---|
 | `--target <dir>` | 目标项目根，默认当前目录 |
 | `--lang zh-CN\|en` | 语言包，默认 `zh-CN` |
-| `--stack dotnet\|node\|typescript\|rust\|go\|java\|empty` | 项目栈 profile；缺省按根目录标记探测：`.sln`/`.csproj` → dotnet，`Cargo.toml` → rust，`go.mod` → go，`pom.xml`/`build.gradle` → java，`tsconfig.json` → typescript，`package.json` → node |
+| `--stack <name>` | 项目栈 profile，可重复/逗号分隔声明多栈（`--stack dotnet --stack typescript` 或 `--stack dotnet,typescript`，闭集 `dotnet\|node\|typescript\|rust\|go\|java\|empty`）；缺省按根目录标记探测：`.sln`/`.csproj` → dotnet，`Cargo.toml` → rust，`go.mod` → go，`pom.xml`/`build.gradle` → java，`tsconfig.json` → typescript，`package.json` → node。多栈按声明顺序叠加，同名文件后声明者覆盖；manifest 记 `stacks` 数组（主栈仍记 `stack`），门禁 / 权限 / verify 自检按各栈并集，devcontainer 仍按主栈；单栈安装不写 `stacks` 字段 |
 | `--surface frontend\|api\|data` | 叠加切面，可重复/逗号分隔，也可写成 `--stack dotnet+frontend`；与 stack 同层合并，同名文件后声明者覆盖 |
 | `--tier lean\|standard\|enterprise` | 安装档位。`lean` 不生成 CI，适合小项目；`standard`（默认）生成 CI；`enterprise` 另启用按宿主能力分级的加固矩阵（见下） |
+| `--ci azure\|github\|none\|both` | CI 交付面二选一（或不发/全发）。默认 `standard`/`enterprise` 双发，`lean` 等价 `none`；选择写入 manifest，`upgrade` 重放，`diff`/`status`/`doctor` 只比对选中的那份 |
 | `--hardened` | 等价于 `--tier enterprise`；有 managed-only 键的宿主（目前为 Claude）需由平台/IT 以 managed settings 部署才不可覆盖 |
 | `--name <name>` | 渲染 `{{projectName}}`，默认目标目录名 |
 | `--dry-run` | 只打印计划，不写盘 |
@@ -335,11 +336,11 @@ Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/ga
 | 闭环执行器 | `flow-kit run pipeline-run.mjs` | 六阶段状态机；断点续跑（inFlight + resume）、verify 门重试预算、并行门分支、阶段产物契约 |
 | 闭环状态机 | `flow-kit run check-pipeline-state` | stage/stopType 闭包检查；静态检查不能替代真实端到端 run |
 | 策略即代码 | `.agents/config/policy.json` + `flow-kit run policy` | 双向核对机制台账、预算、枚举闭集与角色/模型引用；`check` 失败非零，`explain` 输出人类视图 |
-| SBOM 与许可证 | `flow-kit run sbom-license.mjs` + `.agents/config/license-policy.json` | 从 lockfile 生成 SPDX 2.3 SBOM（`.agents/sbom/spdx.json`）并按 allow/deny 闭集判定依赖许可证；未知/违规即红，豁免走 `exceptions`（写明理由）；零依赖零网络，lockfile 缺失 fail-closed |
+| SBOM 与许可证 | `flow-kit run sbom-license.mjs` + `.agents/config/license-policy.json` | 从 lockfile 生成 SPDX 2.3 SBOM（`.agents/sbom/spdx.json`）并按 allow/deny 闭集判定依赖许可证；未知/违规即红，豁免走 `exceptions`（写明理由）；零依赖零网络，lockfile 缺失 fail-closed；可用 `"lockfiles": ["frontend/package-lock.json"]` 指定审计数据源（monorepo 多份合并去重取先声明者，缺省 = 根 package-lock.json；声明缺失即 fail-closed） |
 | 开发容器声明 | `flow-kit run check-devcontainer.mjs` + `.agents/config/devcontainer-policy.json` | 校验 `.devcontainer/` 声明：镜像来源白名单、版本钉死、flow-kit 版本钉死；项目未启用容器时大声跳过不判红 |
 | 安装证明链 | `flow-kit doctor --attest --out <file>` | manifest / files / policy / eval / git 五段 sha256 链；篡改可检出，输出确定、可归档 |
 
-`--tier standard`（默认）会生成 `azure-pipelines.yml` 与 `.github/workflows/ci.yml`，在 `verify --full` 之后跑上述 advisory 检查；`lean` 不生成 CI，`enterprise` 另装加固配置。未完成项与验收口径见 [BACKLOG.md](BACKLOG.md)。
+`--tier standard`（默认）会生成 `azure-pipelines.yml` 与 `.github/workflows/ci.yml`，在 `verify --full` 之后跑上述 advisory 检查；`lean` 不生成 CI，`enterprise` 另装加固配置。两份 CI 可用 `--ci azure|github|none|both` 二选一（或不发/全发），选择写入 manifest 由 `upgrade` 重放。未完成项与验收口径见 [BACKLOG.md](BACKLOG.md)。
 
 ### 可观测与成本
 
@@ -429,13 +430,14 @@ flow-kit doctor --target <dir> --attest --json    # 证明对象随 JSON 返回
 
 ### 组合式 profile
 
-`--stack` 保持单选基底，`--surface` 叠加闭集切面，两者也可合并写：`--stack dotnet+frontend --surface api`。
+`--stack` 可单选基底，也可重复/逗号分隔声明多栈（`--stack dotnet --stack typescript` 或 `--stack dotnet,typescript`）；`--surface` 叠加闭集切面，两者也可合并写：`--stack dotnet+frontend --surface api`。
 
-- 闭集：`frontend` / `api` / `data`（未知 surface 退出码 2）。
-- 合并顺序：engine → stack profile → surfaces（按声明顺序）；同一目标路径**后声明者覆盖**（surface 优先级 21+，stack 为 20）。
-- 只有存在 surface 时才生成 `.agents/config/profile.json`（记录 `stack` / `surfaces` / `profiles`），单 stack 安装的产物与行为完全不变。
-- `manifest.surfaces` 记录组合；`upgrade` / `add-host` 重放，`adopt` 从 `profile.json` 恢复，`doctor` 校验凭证与 manifest 一致。
-- 注意：`typescript` 是栈而不是 surface；dotnet 后端 + TS 前端用 `--stack dotnet+frontend`。
+- 闭集：栈 `dotnet` / `node` / `typescript` / `rust` / `go` / `java` / `empty`（未知栈与未知 surface 都退出码 2）。
+- 合并顺序：engine → 多个 stack profile（按声明顺序）→ surfaces（按声明顺序）；同一目标路径**后声明者覆盖**（stack 优先级 20+index，surface 为 21+）。
+- 多栈时生成 `.agents/config/profile.json`（记录 `stack` / `stacks` / `surfaces` / `profiles`）；单 stack + surface 只记 `stack`，单 stack 安装的产物与行为完全不变。
+- `manifest.surfaces` 记录切面组合，多栈另记 `manifest.stacks`（首个为主栈，`stack` 保持主栈）；`upgrade` / `add-host` 重放（`upgrade --stack rust` 单栈覆盖），`adopt` 从 `profile.json` / manifest 恢复，`doctor` 校验凭证与 manifest 一致。
+- 门禁、宿主权限白名单与 verify 自检按各栈并集执法；devcontainer 仍按主栈选镜像。
+- 注意：`typescript` 是栈而不是 surface；dotnet 后端 + TS 前端直接 `--stack dotnet,typescript`（或 `--stack dotnet+frontend` 叠切面）。
 
 ## 冲突与升级
 

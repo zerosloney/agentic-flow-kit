@@ -3,8 +3,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { flag } from '../cli/args.mjs';
-import { buildPlan } from '../install/plan.mjs';
-import { parseProfileArgs } from '../install/profiles.mjs';
+import { buildPlan, CI_MODES, ciModeFor, ciTemplateRels } from '../install/plan.mjs';
+import { parseProfileArgs, STACKS } from '../install/profiles.mjs';
 import { applyPlan, summaryLine } from '../install/apply.mjs';
 import { emptyManifest, readManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
 import { cleanupMigratedFiles } from '../install/migrations.mjs';
@@ -108,13 +108,32 @@ export function detectStack(target) {
   return detectStackDetail(target).stack;
 }
 
-// 可选技术栈单一来源：TUI 向导栈菜单由它生成
-export const STACKS = ['dotnet', 'node', 'typescript', 'rust', 'go', 'java', 'empty'];
+// 可选技术栈闭集单一来源在 profiles.mjs；TUI 向导栈菜单由它生成
+export { STACKS };
 
-export function resolveStack(args, target) {
+// 闭集校验：任何显式声明的栈不在 STACKS 内 → BAD_STACK（废除旧的 existsSync 静默回落 empty）。
+export function validateStacks(values, t) {
+  for (const value of values) {
+    if (!STACKS.includes(value)) {
+      const err = new Error(t('error.badStack', { value, stacks: STACKS.join(', ') }));
+      err.code = 'BAD_STACK';
+      throw err;
+    }
+  }
+}
+
+export function resolveStack(args, target, t) {
   const stack = String(args.stack || args.profile || detectStack(target));
-  const abs = fileURLToPath(new URL(`../../templates/profiles/${stack}/`, import.meta.url));
-  return fs.existsSync(abs) ? stack : 'empty';
+  validateStacks([stack], t);
+  return stack;
+}
+
+// 显式声明（--stack 重复/逗号收集，或 --profile）→ 闭集校验后去重；无显式声明 → 探测。
+export function resolveStacks(args, target, t) {
+  const declared = args.stacks?.length ? args.stacks : [args.stack || args.profile].filter(Boolean);
+  if (!declared.length) return [detectStack(target)];
+  validateStacks(declared, t);
+  return [...new Set(declared)];
 }
 
 export function installCommand({ args, t, lang, onLog }) {
@@ -188,7 +207,7 @@ export const GIT_HOOKS = ['pre-commit', 'commit-msg', 'post-commit', 'pre-merge-
 
 // 实际启用的加固姿态：managed（宿主 managed-only 配置）/ permissions（权限编译）/
 // hooks（仅命令门禁）/ none。hooks 与 none 都算缺口（无权限面）。
-export function computeEnterprise({ target, hosts, hardened }) {
+export function computeEnterprise({ target, hosts, hardened, ci = null }) {
   if (!hardened) return null;
   const matrix = {};
   const gaps = [];
@@ -200,8 +219,9 @@ export function computeEnterprise({ target, hosts, hardened }) {
   const proofChain = PROOF_CHAIN_FILES.every((rel) => fs.existsSync(path.join(target, rel)))
     && PROOF_CHAIN_RUNTIME.every((name) => fs.existsSync(path.join(RUNTIME_SCRIPTS, name)));
   const policyChecks = [];
+  const ciRels = ciTemplateRels(ciModeFor({ tier: 'enterprise', ci }));
   if (GIT_HOOKS.every((name) => fs.existsSync(path.join(target, '.githooks', name)))) policyChecks.push('githooks');
-  if (['azure-pipelines.yml', '.github/workflows/ci.yml'].some((rel) => fs.existsSync(path.join(target, rel)))) policyChecks.push('ci');
+  if (ciRels.length && ciRels.some((rel) => fs.existsSync(path.join(target, rel)))) policyChecks.push('ci');
   if (Object.values(matrix).some((level) => level === 'managed' || level === 'permissions')) policyChecks.push('permissions');
   return { posture: 'hardened', hosts: matrix, gaps, proofChain, policyChecks };
 }
@@ -216,9 +236,19 @@ function normalizeTier(value, t) {
   return v;
 }
 
+function normalizeCi(value, t) {
+  const v = String(value || '').toLowerCase();
+  if (!CI_MODES.includes(v)) {
+    const err = new Error(t('error.badCi', { value: value || '' }));
+    err.code = 'BAD_CI';
+    throw err;
+  }
+  return v;
+}
+
 // onLog 回调契约：(action, msg, done, total) —— action ∈ create/update/skip/conflict/merge，
 // done/total 为已完成/总文件数，供 TUI 渲染 spinner 进度；缺省走 CLI 前缀行。
-export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories, commandLabel, stackOverride, onLog = null, detectedHosts = [], migration = null, quiet = false }) {
+export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories, commandLabel, stackOverride, stacksOverride = null, onLog = null, detectedHosts = [], migration = null, quiet = false }) {
   const target = resolveTarget(args);
   const dryRun = flag(args, 'dry-run');
   const force = flag(args, 'force');
@@ -233,13 +263,17 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
   const logger = onLog || (quiet || asJson ? () => {} : logLine);
   const previous = readManifest(target);
   const profile = parseProfileArgs({
-    stackArg: args.stack,
+    stackArg: args.stacks,
     surfaceArgs: args.surfaces || [],
     fallbackSurfaces: previous?.surfaces || [],
+    fallbackStacks: previous?.stacks || [],
     t,
   });
-  const stack = stackOverride
-    || (profile.stack ? resolveStack({ ...args, stack: profile.stack }, target) : resolveStack(args, target));
+  // 栈序列：显式 override > 显式声明（--stack/--profile）> 单栈 override（add-host 等重放）> 探测。
+  const stacks = stacksOverride
+    || (profile.stacks.length ? profile.stacks : (stackOverride ? [stackOverride] : resolveStacks(args, target, t)));
+  validateStacks(stacks, t);
+  const stack = stackOverride || stacks[0];
   const surfaces = profile.surfaces;
   const projectName = args.name || path.basename(target);
   // 渲染与 manifest 使用同一时间戳，避免 diff 把 {{installedAt}} 误判为模板更新。
@@ -253,6 +287,8 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
     t,
   );
   const hardened = flag(args, 'hardened') || tier === 'enterprise' || Boolean(previous?.hardened && !args.tier);
+  // CI 交付面：显式 --ci 优先；否则沿用 manifest 选择；都没有时按 tier 派生（buildPlan 内）。
+  const ciChoice = args.ci !== undefined ? normalizeCi(args.ci, t) : (previous?.ci || null);
 
   let modelFlags;
   try {
@@ -302,10 +338,11 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
     : (flag(args, 'devcontainer') ? true : previous?.devcontainer !== false);
 
   const plan = buildPlan({
-    target, hosts: planHosts, lang, stack, projectName, categories, models: models?.hosts, tier, hardened,
+    target, hosts: planHosts, lang, stack, stacks, projectName, categories, models: models?.hosts, tier, hardened,
     mcp: mcpEnabled, surfaces,
     managedPermissions: previous?.managedPermissions || {},
     devcontainer: devcontainerEnabled,
+    ci: ciChoice,
   });
   let done = 0;
   const total = plan.entries.length;
@@ -313,6 +350,7 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
     target,
     projectName,
     stack,
+    stacks,
     language: lang,
     hosts: hostSet,
     kitVersion: KIT_VERSION,
@@ -324,8 +362,9 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
   const policyDiff = explainPolicy ? explainPolicyDiff({ target, plan, vars }) : null;
 
   emit(t('install.start', { command: commandLabel, target }));
-  emit(t('install.plan', { hosts: hostSet.join(', '), stack, lang, count: plan.entries.length }));
+  emit(t('install.plan', { hosts: hostSet.join(', '), stack: stacks.join(', '), lang, count: plan.entries.length }));
   emit(t('install.tier', { tier, hardened: t(hardened ? 'tui.yes' : 'tui.no') }));
+  emit(t('install.ci', { mode: ciModeFor({ tier, ci: ciChoice }) }));
   if (migration?.changed) {
     const steps = `${migration.applied.join(', ')}${migration.dryRun ? ' (dry-run)' : ''}`;
     emit(t('install.migration', { steps }));
@@ -418,7 +457,13 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
       baselineVersion: baselineEnabled ? KIT_VERSION : null,
       files: result.files,
     };
-    enterprise = computeEnterprise({ target, hosts: hostSet, hardened });
+    // CI 交付面只记显式选择：无 --ci 且 manifest 未记录时保持字段缺席（等价历史双发行为）。
+    if (ciChoice) next.ci = ciChoice;
+    else delete next.ci;
+    // 多栈序列只记显式/重放出的多栈；单栈安装不写 stacks 字段（manifest 字节与历史一致）。
+    if (stacks.length > 1) next.stacks = stacks;
+    else delete next.stacks;
+    enterprise = computeEnterprise({ target, hosts: hostSet, hardened, ci: ciChoice });
     if (enterprise) {
       next.enterprise = enterprise;
       emit(t('install.enterprise', {
@@ -464,9 +509,11 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
       dryRun,
       language: lang,
       stack,
+      stacks,
       surfaces,
       tier,
       hardened,
+      ci: ciModeFor({ tier, ci: ciChoice }),
       ...(enterprise ? { enterprise } : {}),
       ...(policyDiff ? { policyDiff } : {}),
       ...(migration?.changed ? {

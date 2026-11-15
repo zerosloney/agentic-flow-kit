@@ -40,7 +40,10 @@ export async function upgradeCommand({ args, t, lang }) {
     hosts,
     planHosts: hosts,
     commandLabel: 'upgrade',
-    stackOverride: args.stack || args.profile || manifest.stack,
+    // 栈重放：显式 --stack 优先（可多栈）；否则沿用 manifest 多栈；再退单栈主栈。主栈覆盖语义不变。
+    stacksOverride: args.stacks?.length
+      ? args.stacks
+      : (manifest.stacks?.length ? manifest.stacks : [args.stack || args.profile || manifest.stack]),
     migration,
   });
 }

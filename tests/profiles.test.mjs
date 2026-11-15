@@ -39,10 +39,12 @@ function install(dir, stackArgs, extra = []) {
 
 test('parseProfileArgs accepts stack+surface and --surface, dedupes and rejects unknown surfaces', () => {
   assert.deepEqual(parseProfileArgs({ stackArg: 'dotnet+frontend', surfaceArgs: ['api'], t }), {
+    stacks: ['dotnet'],
     stack: 'dotnet',
     surfaces: ['frontend', 'api'],
   });
   assert.deepEqual(parseProfileArgs({ surfaceArgs: ['api,frontend', 'api'], fallbackSurfaces: ['data'], t }), {
+    stacks: [],
     stack: null,
     surfaces: ['api', 'frontend'],
   });
@@ -52,6 +54,35 @@ test('parseProfileArgs accepts stack+surface and --surface, dedupes and rejects 
     (err) => err.code === 'BAD_SURFACE' && /frontend, api, data/.test(err.message),
   );
   assert.deepEqual(SURFACES, ['frontend', 'api', 'data']);
+});
+
+test('parseProfileArgs accepts a stack array (repeatable --stack) and dedupes in order', () => {
+  assert.deepEqual(parseProfileArgs({ stackArg: ['dotnet', 'typescript'], t }), {
+    stacks: ['dotnet', 'typescript'],
+    stack: 'dotnet',
+    surfaces: [],
+  });
+  assert.deepEqual(parseProfileArgs({ stackArg: ['dotnet+frontend', 'typescript'], surfaceArgs: ['api'], t }), {
+    stacks: ['dotnet', 'typescript'],
+    stack: 'dotnet',
+    surfaces: ['frontend', 'api'],
+  });
+  assert.deepEqual(parseProfileArgs({ stackArg: ['typescript', 'typescript', 'typescript'], t }).stacks, ['typescript']);
+  assert.deepEqual(
+    parseProfileArgs({ stackArg: [], fallbackStacks: ['dotnet', 'typescript'], t }).stacks,
+    ['dotnet', 'typescript'],
+  );
+});
+
+test('parseProfileArgs rejects unknown stacks (single and multi) with the closed-set message', () => {
+  assert.throws(
+    () => parseProfileArgs({ stackArg: 'bogus', t }),
+    (err) => err.code === 'BAD_STACK' && /dotnet, node, typescript/.test(err.message),
+  );
+  assert.throws(
+    () => parseProfileArgs({ stackArg: ['dotnet', 'bogus'], t }),
+    (err) => err.code === 'BAD_STACK' && /bogus/.test(err.message),
+  );
 });
 
 test('same-name profile files resolve deterministically: later layer wins', () => {

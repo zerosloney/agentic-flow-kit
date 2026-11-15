@@ -73,11 +73,14 @@ function stackAllow(stack) {
 }
 
 // 编译成宿主 permissions 数组。extraAllow 是宿主特有的白名单项（如 Shell(dir *)）。
-export function compilePermissions(spec, cfg, { stack = 'empty', hardened = false } = {}) {
+// stacks 为多栈声明序列（首个为主栈）；栈白名单取各栈并集，按声明顺序拼接。
+export function compilePermissions(spec, cfg, { stack = 'empty', stacks = null, hardened = false } = {}) {
   const extras = hardened ? spec.hardened : { allow: [], deny: [], ask: [] };
+  const list = stacks?.length ? stacks : [stack];
+  const stackExtras = list.flatMap(stackAllow);
   const source = {
     // 栈相关白名单放在前面，与静态模板的 {{stackAllow*}} 位置一致。
-    allow: [...stackAllow(stack), ...spec.allow, ...(cfg.extraAllow || []), ...extras.allow],
+    allow: [...stackExtras, ...spec.allow, ...(cfg.extraAllow || []), ...extras.allow],
     deny: [...spec.deny, ...extras.deny],
     ask: [...spec.ask, ...extras.ask],
   };

@@ -109,3 +109,17 @@ test('en codebuddy native skill pointer overrides the static fallback', () => {
   assert.match(skill, /Authoritative skill/i);
   assert.ok(!skill.includes('内网自托管'), 'generated pointer must use the English override description');
 });
+
+test('en install rejects an invalid --ci value in English', () => {
+  const dir = tmpRepo();
+  const r = run(['install', '--agent', 'trae', '--stack', 'node', '--lang', 'en', '--ci', 'bogus', '--target', '.'], dir);
+  assert.notEqual(r.status, 0);
+  assert.match(`${r.stdout}${r.stderr}`, /Invalid --ci/);
+});
+
+test('en install rejects an unknown stack in English', () => {
+  const dir = tmpRepo();
+  const r = run(['install', '--agent', 'trae', '--stack', 'bogus', '--lang', 'en', '--target', '.'], dir);
+  assert.equal(r.status, 2);
+  assert.match(`${r.stdout}${r.stderr}`, /Invalid --stack/);
+});

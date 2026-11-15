@@ -5,7 +5,7 @@ import { flag } from '../cli/args.mjs';
 import { readManifest } from '../install/manifest.mjs';
 import { doctorGit } from '../git/config.mjs';
 import { HOSTS, hostTargetRel, hostSource } from '../hosts/registry.mjs';
-import { listFiles, readGatesSpecs, TEMPLATES } from '../install/plan.mjs';
+import { ciModeFor, ciTemplateRels, listFiles, readGatesSpecs, TEMPLATES } from '../install/plan.mjs';
 import { readMcpServers } from '../install/mcp.mjs';
 import { readToolPolicy } from '../install/tool-policy.mjs';
 import { checkDevcontainer } from '../install/devcontainer.mjs';
@@ -247,6 +247,7 @@ export function doctorCommand({ args, t }) {
       const permRel = hostTargetRel(host, h.permissions.file || h.hooks?.file || 'settings.json');
       const compiled = compilePermissions(permissionSpec, h.permissions, {
         stack: manifest?.stack || 'empty',
+        stacks: manifest?.stacks || null,
         hardened: Boolean(manifest?.hardened),
       });
       if (compiled.unsupported.length) {
@@ -275,8 +276,10 @@ export function doctorCommand({ args, t }) {
   }
 
   // 组合式 profile：profile.json 是机器可读的组合凭证，必须与 manifest 一致。
+  // 旧 profile.json 无 stacks 字段时按 [profile.stack] 归一，单栈安装照常对上。
   const surfaces = manifest?.surfaces || [];
-  if (surfaces.length) {
+  const stacksList = manifest.stacks?.length ? manifest.stacks : [manifest.stack || 'empty'];
+  if (surfaces.length || stacksList.length > 1) {
     const rel = '.agents/config/profile.json';
     const abs = path.join(target, rel);
     if (!fs.existsSync(abs)) {
@@ -284,9 +287,9 @@ export function doctorCommand({ args, t }) {
     } else {
       try {
         const profile = JSON.parse(fs.readFileSync(abs, 'utf8'));
-        const same = profile.stack === (manifest.stack || 'empty')
+        const same = JSON.stringify(profile.stacks || [profile.stack]) === JSON.stringify(stacksList)
           && JSON.stringify(profile.surfaces || []) === JSON.stringify(surfaces);
-        if (same) add(true, 'profile composition', `${manifest.stack}+${surfaces.join('+')}`);
+        if (same) add(true, 'profile composition', `${stacksList.join('+')}${surfaces.length ? `+${surfaces.join('+')}` : ''}`);
         else add(false, 'profile composition', t('doctor.profileMismatch', { path: rel }));
       } catch {
         add(false, 'profile composition', t('doctor.profileInvalid', { path: rel }));
@@ -294,13 +297,17 @@ export function doctorCommand({ args, t }) {
     }
   }
 
-  // 安装档位与交付面：lean 允许没有 CI；standard/enterprise 应有可运行 CI。
+  // 安装档位与交付面：CI 按 manifest 选择比对；--ci none（含 lean 缺省）只是没有这个交付面，advisory 呈现。
   const tier = manifest?.tier || 'standard';
   add(true, 'tier', t('doctor.tier', { tier }));
-  if (tier !== 'lean') {
-    const ci = ['azure-pipelines.yml', '.github/workflows/ci.yml'].filter((rel) => fs.existsSync(path.join(target, rel)));
-    if (ci.length) add(true, 'ci', ci.join(', '));
-    else add(true, 'ci', t('doctor.ciMissing', { paths: 'azure-pipelines.yml / .github/workflows/ci.yml' }), '', { warn: true });
+  const ciMode = ciModeFor({ tier, ci: manifest?.ci || null });
+  const ciRels = ciTemplateRels(ciMode);
+  if (ciRels.length) {
+    const found = ciRels.filter((rel) => fs.existsSync(path.join(target, rel)));
+    if (found.length) add(true, 'ci', found.join(', '));
+    else add(true, 'ci', t('doctor.ciMissing', { paths: ciRels.join(' / ') }), '', { warn: true });
+  } else {
+    add(true, 'ci', t('doctor.ciDisabled'), '', { warn: true });
   }
   // 开发容器（R3-8 沙箱面）：manifest 声明启用时，容器声明必须在位且合规。
   // manifest 未声明该字段 = 旧安装（升级后才有），此时不判红也不假装有容器。
@@ -313,7 +320,7 @@ export function doctorCommand({ args, t }) {
   }
   // enterprise：展示档位、实际加固姿态与缺口，并核对证明链 / 策略检查。
   const enterprise = manifest?.hardened
-    ? computeEnterprise({ target, hosts: manifest.hosts || [], hardened: true })
+    ? computeEnterprise({ target, hosts: manifest.hosts || [], hardened: true, ci: manifest?.ci || null })
     : null;
   if (enterprise) {
     const matrix = Object.entries(enterprise.hosts).map(([name, level]) => `${name}:${level}`).join(', ');
@@ -330,8 +337,9 @@ export function doctorCommand({ args, t }) {
     if (missingProof.length) add(false, 'enterprise proof-chain', t('doctor.enterpriseProof', { list: missingProof.join(', ') }));
     else add(true, 'enterprise proof-chain', t('doctor.enterpriseProofOk'));
     const missingPolicy = [];
+    const enterpriseCiRels = ciTemplateRels(ciModeFor({ tier: 'enterprise', ci: manifest?.ci || null }));
     if (!GIT_HOOKS.every((name) => fs.existsSync(path.join(target, '.githooks', name)))) missingPolicy.push('.githooks/*');
-    if (!['azure-pipelines.yml', '.github/workflows/ci.yml'].some((rel) => fs.existsSync(path.join(target, rel)))) missingPolicy.push('CI');
+    if (enterpriseCiRels.length && !enterpriseCiRels.some((rel) => fs.existsSync(path.join(target, rel)))) missingPolicy.push('CI');
     if (!enterprise.policyChecks.includes('permissions')) missingPolicy.push('permissions');
     if (missingPolicy.length) add(false, 'enterprise policy', t('doctor.enterprisePolicy', { list: missingPolicy.join(', ') }));
     else add(true, 'enterprise policy', t('doctor.enterprisePolicyOk', { list: enterprise.policyChecks.join(', ') }));
