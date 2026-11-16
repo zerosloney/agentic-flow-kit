@@ -18,12 +18,15 @@
  *       advisory 只计量不阻断）。台账无「派发报告全文」机器可读数据源（结果表单元格是一句话摘要），
  *       故按 delegations.d/<YYYY-MM>.md 分片文档正文字数计量（去空白字符、月合计）并在输出列名标明口径，
  *       不伪造逐报告数据；计量单源 = reportBudgetStats(root)，outcome-metrics.mjs 同源引用。
+ *       超限判定按月·报告数加权：over = 月合计 > 报告数×单报告预算（reports=分片数据行数，判定单源
+ *       ledger-shards.isDataRow('delegations')；reports=0 纯表头分片不计费不判超限）——月合计直比
+ *       单报告预算会对多报告月结构性误报（PR #53 评审遗留）。
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { readLedger as readLedgerShards } from './ledger-shards.mjs';
+import { readLedger as readLedgerShards, isDataRow } from './ledger-shards.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(process.env.FLOW_KIT_PROJECT_ROOT || path.join(SCRIPT_DIR, '..', '..'));
@@ -374,7 +377,11 @@ function loadDispatchConfig(root = ROOT) {
 // reportBudgetStats(root)：预算计量单源（供本脚本输出与 outcome-metrics.mjs 聚合共用——禁各自复制口径）。
 // 诚实口径：台账/分片没有「派发报告全文」的机器可读数据源（结果表单元格是一句话摘要），故统计
 // delegations.d/<YYYY-MM>.md 分片文档正文字数（去空白字符、按文件名月份合计）并在输出列名标明口径，
-// 不伪造逐报告数据。over=null = 预算单源缺失/非法，只计量不判超限。
+// 不伪造逐报告数据。超限判定（2026-11-16 修正）按月·报告数加权：over = 月合计 > reports × 单报告预算；
+// reports = 分片内数据行数，判定单源 = ledger-shards.isDataRow（复用迁入判据，禁复制第三份实现）。
+// 旧口径月合计直比单报告预算，多报告月结构性误报。reports=0（纯表头/规则分片）一律 over=false：
+// 表头/分隔行不属任何一份报告、本就不该计费，避免表头字数被判超限。
+// over=null = 预算单源缺失/非法，只计量不判超限。
 function reportBudgetStats(root = ROOT) {
   const { budget, configMissing } = loadDispatchConfig(root);
   const dir = path.join(root, 'workflow', 'delegations.d');
@@ -383,8 +390,11 @@ function reportBudgetStats(root = ROOT) {
     for (const f of fs.readdirSync(dir).sort()) {
       const m = f.match(/^(\d{4}-\d{2})\.md$/);
       if (!m) continue;
-      const chars = fs.readFileSync(path.join(dir, f), 'utf8').replace(/\s+/g, '').length;
-      byMonth.push({ ym: m[1], chars, over: budget == null ? null : chars > budget });
+      const text = fs.readFileSync(path.join(dir, f), 'utf8');
+      const chars = text.replace(/\s+/g, '').length;
+      const reports = text.split(/\r?\n/).filter((l) => isDataRow('delegations', l)).length;
+      const over = budget == null ? null : reports > 0 && chars > reports * budget;
+      byMonth.push({ ym: m[1], chars, reports, over });
     }
   }
   return {
@@ -442,7 +452,7 @@ function main() {
     console.log(`  有效任务 ${m.total}（待修 ${m.pending}${m.unknown ? `、未知结果 ${m.unknown}` : ''}）｜一次通过 ${fmtRate(m.passRate)}｜平均返工 ${fmtNum(m.avgRework)}｜主兜底 ${fmtRate(m.fallbackRate)}｜incident 合计 ${Object.values(incidents).reduce((a, b) => a + b, 0)} 起\n`);
   }
 
-  // 派发报告预算（dispatch-budget）：advisory 只计量不阻断；口径在列名标明（分片正文合计，非逐报告全文）
+  // 派发报告预算（dispatch-budget）：advisory 只计量不阻断；口径在列名标明（月合计 vs 报告数×单报告预算）
   let rb;
   try {
     rb = reportBudgetStats();
@@ -456,9 +466,10 @@ function main() {
     console.log('  （预算单源缺失/非法：只列字数，不判超限）');
   }
   for (const x of rb.byMonth.filter((x) => !argMonth || x.ym === argMonth)) {
+    const limit = x.reports * rb.budget;
     const cell = rb.budget == null
       ? `${x.ym}｜delegations.d/${x.ym}.md 正文字符 ${x.chars}`
-      : `${x.ym}｜delegations.d/${x.ym}.md 正文字符 ${x.chars}/${rb.budget}（口径：分片去空白字符合计，非逐报告全文）${x.over ? ` ❌ 超限 +${x.chars - rb.budget}` : ' ✅ 预算内'}`;
+      : `${x.ym}｜delegations.d/${x.ym}.md 正文字符 ${x.chars}/${limit}（口径：${x.reports} 报告×${rb.budget}，分片去空白字符合计）${x.over ? ` ❌ 超限 +${x.chars - limit}` : ' ✅ 预算内'}`;
     console.log(`  ${cell}`);
   }
   console.log('');

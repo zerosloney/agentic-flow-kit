@@ -21,17 +21,20 @@ function write(root, rel, text) {
   fs.writeFileSync(abs, text);
 }
 
-// 月度分片样例：委派表表头 + 一行带备注的委派记录（备注长度可控）
-function shard(remarkChars) {
-  const remark = remarkChars > 0 ? '派发报告预算样例备注'.repeat(Math.ceil(remarkChars / 10)).slice(0, remarkChars) : '';
-  const row = remark ? `| 2026-11-10 | GLM | 实现样例功能 | 一次通过 | ${remark} | |\n` : '';
+// 月度分片样例：委派表表头 + N 行带备注的委派记录（备注长度可控；N 行 = N 份报告）
+function shardRows(remarkCharsList) {
+  const rows = remarkCharsList.map((c, i) => `| 2026-11-${10 + i} | GLM | 实现样例功能 | 一次通过 | ${'派发报告预算样例备注'.repeat(Math.ceil(c / 10)).slice(0, c)} | |`);
   return [
     '## 委派结果',
     '',
     '| 日期 | 被委派方(模型) | 任务一句话 | 结果 | 备注 | 返工原因 |',
     '|------|----------------|------------|------|------|----------|',
-    row,
+    ...rows,
   ].join('\n');
+}
+
+function shard(remarkChars) {
+  return shardRows(remarkChars > 0 ? [remarkChars] : []); // 0 → 纯表头分片（无数据行）
 }
 
 function seedBudgetRoot(root, { withConfig = true } = {}) {
@@ -73,9 +76,41 @@ test('reportBudgetStats meters delegations.d shard body chars against the budget
   assert.equal(rb.byMonth.length, 2);
   const nov = rb.byMonth.find((x) => x.ym === '2026-11');
   const oct = rb.byMonth.find((x) => x.ym === '2026-10');
-  assert.equal(nov.over, true); // 600 字符样例 → 超限可辨识
+  assert.equal(nov.reports, 1); // 单报告月：数据行数 = 1
+  assert.equal(oct.reports, 1);
+  assert.equal(nov.chars, shard(600).replace(/\s+/g, '').length); // 计量口径不变：整月分片去空白字符
+  assert.equal(nov.over, true); // 单报告 ~600 字 > 1×500 预算 → 超限可辨识
   assert.equal(oct.over, false);
   assert.equal(rb.overCount, 1);
+});
+
+test('multi-report month weights budget by report count (old per-month cap would false-flag)', () => {
+  const root = makeTmp('dispatch-budget-multi-');
+  write(root, 'workflow/delegations.md', '# 委派台账\n');
+  write(root, 'workflow/delegations.d/2026-11.md', shardRows([400, 400])); // 2 份报告、月合计远超单报告预算
+  write(root, '.agents/config/dispatch.json', read('templates/engine/.agents/config/dispatch.json'));
+  const rb = reportBudgetStats(root);
+  const nov = rb.byMonth.find((x) => x.ym === '2026-11');
+  const chars = shardRows([400, 400]).replace(/\s+/g, '').length; // 期望值独立推导，不依赖被测实现
+  assert.equal(nov.reports, 2);
+  assert.equal(nov.chars, chars);
+  assert.ok(chars > 500, 'fixture sanity：月合计须超单报告预算（旧口径必误报）');
+  assert.ok(chars <= 1000, 'fixture sanity：月合计须在报告数×预算内（新口径不超限）');
+  assert.equal(nov.over, false); // 旧口径 chars>500 误判超限；新口径 2 报告 × 500 → 预算内
+  assert.equal(rb.overCount, 0);
+});
+
+test('header-only shard has reports=0 and never flags over (headers are not billable)', () => {
+  const root = makeTmp('dispatch-budget-empty-');
+  write(root, 'workflow/delegations.md', '# 委派台账\n');
+  write(root, 'workflow/delegations.d/2026-11.md', shard(0)); // 只有表头/分隔行，无数据行
+  write(root, '.agents/config/dispatch.json', read('templates/engine/.agents/config/dispatch.json'));
+  const rb = reportBudgetStats(root);
+  const nov = rb.byMonth.find((x) => x.ym === '2026-11');
+  assert.equal(nov.reports, 0);
+  assert.ok(nov.chars > 0); // 表头仍有字数，但不属任何一份报告、不计费
+  assert.equal(nov.over, false); // reports=0 一律不判超限（表头字数不误判）
+  assert.equal(rb.overCount, 0);
 });
 
 test('agg-delegations prints the budget section and marks over-budget months', () => {
@@ -86,8 +121,8 @@ test('agg-delegations prints the budget section and marks over-budget months', (
   });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /## 派发报告预算（单源 \.agents\/config\/dispatch\.json reportBudgetChars=500；advisory 只计量不阻断）/);
-  assert.match(r.stdout, /2026-11｜delegations\.d\/2026-11\.md 正文字符 \d+\/500（口径：分片去空白字符合计，非逐报告全文） ❌ 超限/);
-  assert.match(r.stdout, /2026-10｜delegations\.d\/2026-10\.md 正文字符 \d+\/500（口径：分片去空白字符合计，非逐报告全文） ✅ 预算内/);
+  assert.match(r.stdout, /2026-11｜delegations\.d\/2026-11\.md 正文字符 \d+\/500（口径：1 报告×500，分片去空白字符合计） ❌ 超限 \+\d+/);
+  assert.match(r.stdout, /2026-10｜delegations\.d\/2026-10\.md 正文字符 \d+\/500（口径：1 报告×500，分片去空白字符合计） ✅ 预算内/);
 });
 
 test('budget metering is advisory: missing dispatch.json still lists chars without verdict', () => {
@@ -115,7 +150,7 @@ test('outcome-metrics surfaces over-budget months through its aggregation', () =
   const md = renderMarkdown(m);
   assert.match(md, /派发报告预算超限/);
   assert.match(md, /超限 1\/2 月/);
-  assert.match(md, /非逐报告全文/); // 口径在列名/单元格标明
+  assert.match(md, /报告数×单报告预算/); // 口径在列名/单元格标明（按月·报告数加权）
 });
 
 test('outcome-metrics lists budget sources as missing when absent', () => {
