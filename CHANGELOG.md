@@ -2,6 +2,22 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.4.1]
+
+### 新增
+
+- feat(changelog): CHANGELOG 机制化——Conventional Commits 单源渲染 + --check 防漂移进 CI
+- feat(engine): observability 默认定价表——claude 官方标价快照 21 键（来源 platform.claude.com）
+
+### 修复
+
+- fix(changelog): 评审六项——.gitattributes 钉 LF 防假红、发版序列补 amend 语义、git 层容错去栈、兜底桶单源化、CLAUDE.md 补 --notes、分支测试（PR #59）
+- fix(check-loop): 回归证据词表补仓库验证脚本族 scripts/verify/**/*.mjs
+- fix: 评审三处——reports 限委派节、schema 双键说明、doctor advisory 收敛（PR #57）
+- fix(engine): check-scope-range 跳过范围内已删除/更名的 plan（不再 exit 2 阻断推送） (#58)
+- fix(doctor): userHooks 宿主（codex）不适用 hook 规格降级为 guarantee advisory
+- fix(engine): 派发预算超限改按「报告数×单报告预算」月口径判定，reports=0 不计费
+
 ## [2.4.0]
 
 ### 新增
