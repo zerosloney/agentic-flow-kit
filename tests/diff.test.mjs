@@ -212,3 +212,18 @@ test('diff output is localized in English', () => {
   assert.match(diff.stdout, /Total \d+: unchanged/);
 });
 
+test('diff readback recovers injected model: inherit (commandcode shells stay unchanged)', () => {
+  const dir = tmpRepo();
+  // --model-mode inherit：跳过探测，全角色落 inheritValue；commandcode 的壳会注入 model: inherit。
+  const r = run(['install', '--agent', 'commandcode', '--lang', 'zh-CN', '--stack', 'node',
+    '--model-mode', 'inherit', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(read(dir, '.commandcode/agents/independent-reviewer.md'), /^model: inherit$/m,
+    'install should inject the inherit line into commandcode review shells');
+
+  const result = diffJson(dir);
+  const item = itemOf(result, '.commandcode/agents/independent-reviewer.md');
+  assert.equal(item.kind, 'unchanged', 'injected inherit must not be reported as kit-updated');
+  assert.equal(result.summary.kitUpdated, 0);
+});
+
