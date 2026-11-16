@@ -16,6 +16,7 @@
 - **Deliverables**: 
   - 修改文件清单 + 每文件改动摘要
   - 验证结果 + 未解决阻塞/风险
+  - 报告预算：≤500 字符（单源 `.agents/config/dispatch.json` reportBudgetChars，advisory 只计量不阻断），结构化为「结论 / 证据路径 / 风险」；禁回传大段源码与完整日志，禁为取单字段全量回读状态/台账文件
 
 ## Constraints
 - **授权边界**: 只修改明确授权的文件。触及其他文件 $\rightarrow$ **HALT** $\rightarrow$ 说明原因。

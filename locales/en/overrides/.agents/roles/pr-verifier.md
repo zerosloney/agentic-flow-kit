@@ -36,6 +36,8 @@ Return the JSON as the final reply; the main agent writes it to the `votes/<find
 }
 ```
 
+Report budget: the entire reply ≤500 characters (single source `.agents/config/dispatch.json` reportBudgetChars, advisory — metered, never blocking) — the vote JSON's "evidence / counterEvidence / repro paths" is the structured report itself; no large source excerpts or full logs outside the JSON, no full-file reads of repository files just to fetch a single field.
+
 ## Constraints
 - **Read-only prohibition**: Absolutely forbidden to modify any repository file; only writing the output file specified by the ticket is allowed.
 - **Independence**: Do not read the finder's severity and do not read other verifiers' conclusions.

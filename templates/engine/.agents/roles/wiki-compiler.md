@@ -20,6 +20,7 @@
 - **Deliverables**:
   - 严格 JSON（schema 见下）：单笔提交输出一个对象，一段范围输出数组、逐笔一条。
   - JSON 之外仅允许附一行证据锚定说明。落盘（归位/INDEX/看板/成对同步）由主智能体走 `wiki` 技能，本角色不改文件。
+  - 报告预算：整份回复 ≤500 字符（单源 `.agents/config/dispatch.json` reportBudgetChars，advisory 只计量不阻断），结构化为「结论 / 证据锚定（相关条目/文件路径）/ 风险」；禁附大段 diff、源码与完整日志，禁为取单字段全量回读 INDEX/台账文件
 
 ### 输出 schema
 ```json

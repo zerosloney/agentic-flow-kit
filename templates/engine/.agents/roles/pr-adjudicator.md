@@ -19,6 +19,7 @@
 - **Deliverables**:
   - `pr-review adjudicate` 所需的参数或 JSON：`decision`、`severity`、`provenance`、`reason`、`adjudicator`；判 `reject` 且确认 finder 的主张本身错误时追加 `misreport: true`（落 `--misreport`，进月度台账「误报」列）。
   - 一行可写入 `workflow/reviews.d/` 的裁决摘要。
+  - 报告预算：裁决报告 ≤500 字符（单源 `.agents/config/dispatch.json` reportBudgetChars，advisory 只计量不阻断），结构化为「结论 / 证据路径 / 风险」；禁回传大段源码与完整日志，禁为取单字段全量回读候选/台账文件
 
 ## Constraints
 - **只读禁令**: 绝对禁止修改任何仓库文件；裁决只通过 `pr-review adjudicate` 落账。

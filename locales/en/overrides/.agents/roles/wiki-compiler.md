@@ -20,6 +20,7 @@ Enterprise knowledge compiler. Translates a code commit into "what business capa
 - **Deliverables**:
   - Strict JSON (schema below): one object for a single commit; an array for a range, one entry per commit.
   - Outside the JSON, only a one-line evidence-anchoring note is allowed. Persistence (placement/INDEX/board/paired sync) is done by the main agent via the `wiki` skill; this role does not modify files.
+  - Report budget: the entire reply ≤500 characters (single source `.agents/config/dispatch.json` reportBudgetChars, advisory — metered, never blocking), structured as "conclusion / evidence anchoring (related entry/file paths) / risks"; no large diff/source excerpts or full logs attached, no full-file reads of INDEX/ledger documents just to fetch a single field
 
 ### Output schema
 ```json

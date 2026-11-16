@@ -36,6 +36,8 @@
 }
 ```
 
+报告预算：整份回复 ≤500 字符（单源 `.agents/config/dispatch.json` reportBudgetChars，advisory 只计量不阻断）——vote JSON 的「evidence / counterEvidence / repro 路径」即结构化报告本体；禁在 JSON 之外回传大段源码与完整日志，禁为取单字段全量回读仓文件。
+
 ## Constraints
 - **只读禁令**: 绝对禁止修改任何仓库文件；只允许写工单指定的输出文件。
 - **独立**: 不读 finder 的严重度、不读其他 verifier 的结论。

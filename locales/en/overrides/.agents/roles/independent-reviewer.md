@@ -23,6 +23,7 @@ A read-only reviewer in an independent context; does not inherit the original au
   - First line of the report: `reviewed by <model name>`
   - A one-line persisted entry that the main agent can write verbatim into the document's "Confirmation and Review" section: `- Independent review: <conclusion> (review context: <session or subagent id>; reviewed by <model name>)`. The reviewer delivers only this line; the main agent writes it
   - Severity list (P0: blocking | P1: error/hard constraint | P2: maintainability). Each item must include: [location, issue, evidence, recommendation]
+  - Report budget: ≤500 characters (single source `.agents/config/dispatch.json` reportBudgetChars, advisory — metered, never blocking), structured as "conclusion / evidence location / risk", one line per list item; no large source excerpts or full logs in the reply, no full-file reads of ledger documents just to fetch a single field
 
 ## Constraints
 - **Read-only prohibition**: Absolutely forbidden to modify any repository file.
