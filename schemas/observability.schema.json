@@ -32,7 +32,7 @@
     },
     "pricing": {
       "type": "object",
-      "description": "模型价格表（每百万 token，美元）；usage 行自带 costUsd 时优先用行内值。",
+      "description": "模型价格表（每百万 token，美元）；usage 行自带 costUsd 时优先用行内值。键须与 usage 行的 model 值完全一致（精确匹配，无别名归一）。默认表为官方公开标价快照 2026-11-16（来源 platform.claude.com/docs/en/about-claude/pricing）；当前 usage 采集面仅 claude，其它模型自行补录 perMTok。claude-haiku-5-5 按官方 ≤100K prompt 档计价，>100K 档更高。",
       "additionalProperties": {
         "type": "object",
         "additionalProperties": false,
