@@ -1,8 +1,8 @@
 # agentic-flow-kit
 
-AI-Native 工作流引擎的独立安装器。一条 `npx` 命令把引擎装进任意项目：**工作流面**管任务怎么从需求跑到关单，**工程治理面**管多宿主接线、门禁、权限、观测怎么落地。零运行时依赖，只用 Node.js ≥ 22 内置模块。
+AI-Native 工作流引擎：**工作流面**管任务怎么从需求跑到关单，**工程治理面**管多宿主接线、门禁、权限、观测怎么落地。以零依赖安装器分发——一条 `npx` 命令把整套引擎装进任意项目，只依赖 Node.js ≥ 22 内置模块。
 
-- **零依赖**：安装器与引擎脚本全部 Node 内置模块，无 Python、无框架。
+- **零依赖**：引擎与安装器全部 Node 内置模块，无 Python、无框架。
 - **12 宿主一次铺开**：trae / codebuddy / codex / codeartsdoer / claude / opencode / qwen / pi / cline / commandcode / qoder / zcode；能力单源在 `src/hosts/registry.mjs`，新宿主可作插件接入。
 - **幂等安装与升级**：`install-manifest.json` 记文件哈希，冲突默认跳过、`--force` 覆盖；`upgrade` / `adopt` / `prune` / `diff` 全生命周期可回查。
 - **双语**：`--lang zh-CN`（默认）或 `en`，语言包覆盖文档、提示词、脚手架与安装器输出。
@@ -28,6 +28,56 @@ AI-Native 工作流引擎的独立安装器。一条 `npx` 命令把引擎装进
 - **门禁与体检**：`doctor`（含 `--attest` 安装证明链）、`check-local-gates` 墙钟预算门、`diff` 漂移比对。
 - **布局治理**：栈 profile（dotnet / node / ts / rust / go / java × 6 切面）、tier（lean / standard / enterprise）、devcontainer 校验 / 构建、CI 双发、多仓 workspace 聚合。
 
+## 引擎图表
+
+### 工作流：一轮任务的生命周期
+
+```
+需求
+ │
+ ├─ new-task 定级（L1 / L2 / L3，两问定级 + 触达面闭集；判低 → 机器硬拦）
+ │
+ ├─ L0 / L1 快速道
+ │    plan 即入口 ──→ 实现 ──→ 静态门 ──→ 关单
+ │
+ └─ L2 / L3 四并一阶段流（手动路由，stages）
+      Plan ──────→ Design ─────→ Build ──────→ Test ──────→ 关单
+      (intent)     (spec)        (plan+实现)    (静态门+独立复核)
+         │            │              │              │
+         └────────────┴──────────────┴──────────────┘
+            每阶段：人件门确认（原话代录入台账）/ 独立复核（L2/L3 强制）/ 产物落盘
+
+全自动执行器（pipeline-run，与手动路由二选一，禁混用）：
+  triage → intent → spec → plan → implement → verify → review → closeout → done
+    │         │        │       │         │         │         │
+    └─────────┴────────┴───────┴─────────┴─────────┴─────────┘
+      停机点：work-order 工单 ｜ await-confirm 人件门 ｜ gate-fail → onFail 退回
+      产物：workflow/tasks/<task>/（与手动路径隔离）｜ 恢复：inFlight 断点续跑
+```
+
+### 治理面：引擎如何落到项目
+
+```
+┌───────────────────────────── 目标项目 ─────────────────────────────┐
+│  .agents/  引擎声明面                                              │
+│    ├─ skills/  roles/  commands/   技能 / 角色契约 / 命令手册       │
+│    ├─ config/  pipeline · gates · model-roles …   机器可读策略     │
+│    └─ scripts/  hooks/             随包分发的运行时实现（flow-kit 调度）│
+│  workflow/  数据资产   任务文档 / 台账 / 证据 / 看板                │
+│  宿主目录  .claude/  .codebuddy/  …   各宿主原生声明面（命令/agent/技能）│
+└────────────────────────────────────────────────────────────────────┘
+        ▲ 安装 / 升级 / 漂移（manifest 哈希 · 冲突跳过 · adopt · prune · diff）
+        │
+┌───────┴──────────────── agentic-flow-kit ───────────────────────────┐
+│  src/hosts/registry.mjs   宿主能力单源（12 宿主 × 命令/技能/hooks/模型）│
+│    ├─→ gates 编译     gates.json → 各宿主 hook schema               │
+│    ├─→ 权限编译       allow / deny / ask → 宿主权限配置              │
+│    ├─→ MCP 编译       servers.json → 宿主 MCP 配置                   │
+│    └─→ 模型注入       code / judgment / review → 宿主 agent 模型      │
+│  doctor / check-local-gates   体检 · 安装证明链 · 墙钟预算门         │
+└────────────────────────────────────────────────────────────────────┘
+```
+
 ## 快速开始
 
 ```bash
@@ -39,16 +89,6 @@ npx agentic-flow-kit                      # 交互终端裸跑 = TUI 向导
 从源码运行把 `npx agentic-flow-kit` 换成 `node <仓库路径>/bin/flow-kit.mjs`。安装后脚本 / hook 随包运行时分发（`flow-kit run <script>` / `flow-kit hook <hook>`），项目内只落声明面；`flow-kit` 需在 PATH（CI 用 `npx --yes agentic-flow-kit`）。
 
 核心子命令：`install` / `add-host` / `upgrade` / `adopt` / `prune` / `diff` / `status` / `doctor` / `run` / `hook` / `agent-eval`。完整选项与退出码见各命令 `--help`。
-
-## 维护本仓
-
-- **无 build / lint / 依赖安装**：`npm test` 跑全部（`node --test tests/*.test.mjs`）；单文件 `node --test tests/install.test.mjs`；单用例加 `--test-name-pattern`。不要引入运行时依赖或测试框架。
-- **目录**：`src/` 安装器（宿主能力单源 `src/hosts/registry.mjs`）、`templates/` 引擎与宿主模板、`locales/` 语言包、`tests/`。
-- **改动的硬性约定**：宿主能力只登记 registry，禁止在 `plan.mjs` / `doctor.mjs` 写宿主分支；manifest 哈希按最终文本计算（渲染、语言覆盖、模型注入之后）；语言覆盖整文件替换非合并；TUI 只有 `src/tui/screen.mjs` 接触 stdin / stdout。
-- **测试约定**：`node:test` + `node:assert/strict`；安装测试在临时目录 `git init` 后 spawn CLI 并设 `FLOW_KIT_TEST=1`；宿主能力 / 安装行为改动补 `hosts.test.mjs` / `install.test.mjs` / `models.test.mjs`；中英文输出改动补 `tests/en.test.mjs`。
-- **发布**：semver tag 必须等于 `package.json` 的 `version`，否则 CI 中止 publish；`prepublishOnly` 重跑全部测试。
-- **本仓库不自安装引擎**（无 `.agents/`）：验证安装行为用临时目录 `--target <tmp>`。
-- **架构细节**（安装管线、渲染三单源、宿主能力矩阵、模型解析、TUI）：见 `CLAUDE.md`；工作流命令手册在目标项目的 `.agents/commands/`。
 
 ## 许可证
 
