@@ -72,7 +72,8 @@ export function readInjectedModels({ target, hosts = [] } = {}) {
         continue;
       }
       const value = getField(text, h.agents.modelField);
-      if (!value || value === h.agents.inheritValue) continue;
+      // inherit 也是磁盘注入态：跳过会让「注入了 inherit」的壳被判成无注入，diff 误报模板更新。
+      if (!value) continue;
       const role = modelRoleForAgent(name);
       if (!values[role]) values[role] = value;
     }

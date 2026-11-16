@@ -24,7 +24,7 @@
     },
     "stageArtifacts": {
       "type": "object",
-      "description": "stage → 产物文件清单（resume 产物判定用，支持 {spec}/{plan}/{entry} 占位符）。",
+      "description": "stage → 产物文件清单（resume 产物判定用，支持 {spec}/{plan}/{entry}/{apiDocs} 占位符；{apiDocs} 展开为任务目录 api.md，模板默认不声明）。",
       "additionalProperties": {
         "type": "array",
         "items": { "type": "string" }

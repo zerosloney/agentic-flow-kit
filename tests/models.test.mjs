@@ -182,6 +182,16 @@ test('readInjectedModels recovers role models from installed agents', () => {
   assert.equal(found.trae, undefined, 'hosts without a model field are ignored');
 });
 
+test('readInjectedModels keeps inherit values (diff 误报根因回归：跳过 inherit 值会让 diff 判模板更新)', () => {
+  const target = tmpDir();
+  const dir = path.join(target, '.claude', 'agents');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'implementer.md'), '---\nmodel: inherit\n---\n');
+  fs.writeFileSync(path.join(dir, 'independent-reviewer.md'), '---\nmodel: inherit\n---\n');
+  // inherit 也是磁盘注入态：回读必须保留，否则 diff/upgrade/remove-host 重建渲染会与磁盘不一致
+  assert.deepEqual(readInjectedModels({ target, hosts: ['claude'] }).claude, { code: 'inherit', review: 'inherit' });
+});
+
 test('resolveModels warns when review cannot differ from code', () => {
   const target = tmpDir();
   const result = resolveModels({

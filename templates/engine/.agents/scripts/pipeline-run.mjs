@@ -65,10 +65,10 @@ function loadPipelineConfig(root) {
   } catch { return {}; }
 }
 
-// {entry}|{spec}|{plan} 从 run.docs 解析；未指定的产物跳过校验（如 fix 流程无 plan）。
+// {entry}|{spec}|{plan}|{apiDocs} 从 run.docs 解析；未指定的产物跳过校验（如 fix 流程无 plan）。
 export function resolveArtifact(template, docs) {
   return String(template)
-    .replace(/\{(entry|spec|plan)\}/g, (_, k) => (docs && docs[k]) || '')
+    .replace(/\{(entry|spec|plan|apiDocs)\}/g, (_, k) => (docs && docs[k]) || '')
     .trim();
 }
 
@@ -445,7 +445,7 @@ function printRun(ctx, run, problems) {
     const fails = gates.filter((e) => e.exit !== 0).length;
     console.log(`  需求：${run.requirement}`);
     console.log(`  门执行 ${gates.length} 道（非零 ${fails}）；确认 ${run.events.filter((e) => e.type === 'confirm').length} 次；提交 ${run.events.filter((e) => e.type === 'commit').length} 笔`);
-    for (const d of [...new Set([run.docs?.entry, run.docs?.spec, run.docs?.plan].filter(Boolean))]) console.log(`  文档：${d}（${docState(ctx, d) || '?'}）`);
+    for (const d of [...new Set([run.docs?.entry, run.docs?.spec, run.docs?.plan, run.docs?.apiDocs].filter(Boolean))]) console.log(`  文档：${d}（${docState(ctx, d) || '?'}）`);
   } else if (run.stopType === 'aborted') {
     console.log(`\n== 已放弃（${run.abort?.to || ''}）== ${run.abort?.note || ''}`);
   }
@@ -675,6 +675,10 @@ async function advance(ctx, run, opt) {
   const entry = () => run.docs.entry;
   const topic = () => run.triage.topic;
 
+  // {apiDocs} 兜底派生：triage 分支已派生；此处覆盖「引擎升级前创建的旧 run」（triage 不重入），
+  // 保证声明即校验契约对存量 run 同样生效（幂等 ||，不覆盖既有值/自定义值）。
+  if (run.triage && run.docs) run.docs.apiDocs = run.docs.apiDocs || `${taskDirRel(run)}/api.md`;
+
   // 断点续跑（R3-5）：上次进程在门执行中被杀 → 记 resume 事件后从同一阶段重入。
   // 产物完整性（R6-2）：resume 事件带 artifacts/missing；缺失由下方产物契约门拦住，不会跳过重跑。
   if (run.inFlight) {
@@ -729,6 +733,9 @@ async function advance(ctx, run, opt) {
         run.triage = { kind: kv.kind, level: kv.level, module: kv.module || moduleList(ctx)[0] || 'general', topic: kv.topic || 'task', decidedBy: run.hint ? 'hint+ai' : 'ai', decidedAt: nowIso() };
         emit(run, { type: 'triage', ...run.triage });
         run.docs = run.docs || { entry: null, spec: null, plan: null };
+        // {apiDocs} 声明式占位符：与 intent/spec/plan 同目录族（taskDir 下 api.md），triage 定题后即可派生；
+        // 项目触达 API 契约面时自行在 stageArtifacts 声明，模板默认不强制（未声明 = 跳过校验）。
+        run.docs.apiDocs = run.docs.apiDocs || `${taskDirRel(run)}/api.md`;
         // 路由
         run.stage = K() === 'verify' ? 'verify' : K() === 'review' ? 'review-only' : K() === 'deploy' ? 'deploy-check'
           : K() === 'fix' ? 'incident-fill' : (L() === 'L1' ? 'plan-fill' : 'intent-fill');

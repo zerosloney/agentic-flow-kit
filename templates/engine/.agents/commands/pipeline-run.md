@@ -55,7 +55,7 @@ next: 按 run 停机点循环推进至 done
 - **断点续跑**：门执行前脚本把 run 标 `inFlight` 并落盘；进程被杀（CI 超时/中断）后 `next` 自动从该门重入，`resume --run <id>` 可显式续跑。恢复记 `resume` 事件，`status` 显示「↻ 中断于 …」。
 - **重试**：`next --retry <0-5>` 只作用于 verify 门；失败后重跑至多 N 次，每次记 `retry` 事件。耗尽仍红才进修复环 / `gate-fail`；重试不跳过 `--files` 核对。
 - **并行分支**：`next --parallel "check-a.mjs,check-b.mjs"` 让附加门与 `verify.mjs` 并发执行，任一非零即整体非零；事件带 `parallel` 组号。只接受门脚本名，拒绝路径分隔符。
-- **阶段产物契约**：`.agents/config/pipeline.json` 的 `stageArtifacts` 用 `{entry}/{spec}/{plan}` 声明产物；缺失或为空时在门执行前停 `gate-fail`（模板默认覆盖 `spec-confirm` / `plan-confirm` / `verify` / `closeout`）。
+- **阶段产物契约**：`.agents/config/pipeline.json` 的 `stageArtifacts` 用 `{entry}/{spec}/{plan}` 声明产物；缺失或为空时在门执行前停 `gate-fail`（模板默认覆盖 `spec-confirm` / `plan-confirm` / `verify` / `closeout`）。另有声明式 `{apiDocs}`——展开为任务目录 `api.md`（默认不声明，触达 API 契约面的项目可自行加入）；声明后对各 kind 全程生效（fix/verify 短路径同样校验，与 `{plan}` 按流程缺失即跳过的口径不同）。
 - **续跑幂等**：`docsCommit` 若发现 HEAD 已是同主题提交，不再重复提交（记 `resumed: true` 的 commit 事件）。
 
 ### 失败路由 / 任务状态（R6-1 / R6-2）

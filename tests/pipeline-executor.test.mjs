@@ -557,3 +557,43 @@ test('task dir: resume reports missing artifact under the task dir', () => {
   assert.equal(ev.artifacts, 'missing');
   assert.match(ev.missing[0], /阶段产物缺失：workflow\/tasks\/2026-11-13-foo\/plan\.md/);
 });
+
+test('task dir: {apiDocs} contract gates closeout on the task-dir api.md', () => {
+  const root = fixture({ stageArtifacts: { closeout: ['{apiDocs}'] } });
+  const taskDir = 'workflow/tasks/2026-11-13-foo';
+  // 引擎在 triage 决策点派生 apiDocs（与 entry/spec/plan 同一 docs 对象、同目录族）
+  writeRun(root, { stage: 'triage', triage: null, docs: null });
+  const t0 = runPipeline(root, ['next', '--run', 'test-run', '--triage', 'kind=require level=L2 module=wiki topic=foo'], TASK_ENV);
+  assert.equal(readRun(root).docs.apiDocs, `${taskDir}/api.md`, t0.stderr || t0.stdout);
+
+  // a) api.md 缺失 → closeout 前停 gate-fail，缺失信息指 taskDir 下的 api.md
+  const run1 = readRun(root);
+  fs.writeFileSync(path.join(root, '.agents', 'cache', 'pipeline-runs', 'test-run.json'),
+    JSON.stringify({ ...run1, stage: 'closeout', stopType: 'work-order', workOrder: null, awaitConfirm: null }, null, 2));
+  const r = runPipeline(root, ['next', '--run', 'test-run'], TASK_ENV);
+  assert.equal(r.status, 2, r.stderr || r.stdout);
+  assert.match(r.stdout + r.stderr, /阶段产物缺失：workflow\/tasks\/2026-11-13-foo\/api\.md/);
+  assert.equal(readRun(root).stopType, 'gate-fail');
+  assert.deepEqual(readRun(root).retries, {}, '产物契约失败（route:false）不消耗退回预算');
+
+  // b) 补 api.md 后同门通过——closeout 正常发出勾验收工单
+  fs.mkdirSync(path.join(root, taskDir), { recursive: true });
+  fs.writeFileSync(path.join(root, taskDir, 'api.md'), '# API\n\nx\n');
+  const again = runPipeline(root, ['next', '--run', 'test-run'], TASK_ENV);
+  assert.equal(again.status, 0, again.stderr || again.stdout);
+  const run2 = readRun(root);
+  assert.equal(run2.stopType, 'work-order');
+  assert.equal(run2.workOrder.kind, 'closeout');
+
+  // c) 旧 run 兜底：升级前创建的 run（docs 无 apiDocs 键、triage 不重入）——advance 顶部派生
+  //    让「声明即校验」对存量 run 生效：删键删文件后 next 应再停 gate-fail（无兜底则静默跳过、绿）
+  const runFile = path.join(root, '.agents', 'cache', 'pipeline-runs', 'test-run.json');
+  const legacy = readRun(root);
+  delete legacy.docs.apiDocs;
+  fs.writeFileSync(runFile, JSON.stringify(legacy, null, 2));
+  fs.rmSync(path.join(root, taskDir, 'api.md'));
+  const legacyNext = runPipeline(root, ['next', '--run', 'test-run'], TASK_ENV);
+  assert.equal(legacyNext.status, 2, legacyNext.stderr || legacyNext.stdout);
+  assert.equal(readRun(root).stopType, 'gate-fail', '旧 run 经兜底派生后契约门照常拦截');
+  assert.equal(readRun(root).docs.apiDocs, `${taskDir}/api.md`, '兜底派生补回 docs.apiDocs');
+});
