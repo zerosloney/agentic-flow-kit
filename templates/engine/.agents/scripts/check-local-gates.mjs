@@ -171,14 +171,14 @@ if (piHostAbsent) {
 
 // ⑧-advisory Cline 宿主适配（本机私有）：只读对账，不进八项判定、不改退出码。
 // 为何 advisory：.cline/ 不入 git、不随 clone 传播（同 .pi/ 口径，见 check-hook-wiring.mjs:20-21）。
-// 对账内容：7+7 指针壳齐备性 + 两门 hook 在位（PreToolUse.cjs 协议适配层）。
+// 对账内容：7+8 指针壳齐备性 + 两门 hook 在位（PreToolUse.cjs 协议适配层）。
 // 权威源在 .agents/，本目录不入库不损失契约；缺失只影响本机 cline 宿主的阶段路由 / 角色委派 / 命令门 / 写前门。
 const clineWorkflows = [
   'wf-new-task', 'wf-stages', 'wf-review', 'wf-deploy', 'wf-maintain', 'wf-pipeline-run', 'wf-pr-review',
 ];
 const clineAgents = [
   'implementer', 'independent-reviewer', 'ui-verifier',
-  'pr-finder', 'pr-verifier', 'pr-adjudicator', 'wiki-compiler',
+  'pr-finder', 'pr-verifier', 'pr-adjudicator', 'wiki-compiler', 'test-designer',
 ];
 const clineFiles = [
   ...clineWorkflows.map((n) => `.cline/workflows/${n}.md`),
@@ -192,7 +192,7 @@ if (clineAbsent) {
 } else if (clineMissing.length) {
   console.log(`  [WARN] Cline 宿主适配不完整，缺：${clineMissing.join('、')}（阶段路由 / 角色委派 / 命令门 / 写前门在 cline 宿主下静默缺失；权威源在 .agents/，本机重建即可）`);
 } else {
-  console.log('  [OK] Cline 宿主适配齐备（7 工作流指针壳 + 7 角色定义 + 命令门/写前门 hook；权威源零改动）');
+  console.log('  [OK] Cline 宿主适配齐备（7 工作流指针壳 + 8 角色定义 + 命令门/写前门 hook；权威源零改动）');
 }
 
 // ⑨-advisory Command Code 宿主接线（本机私有，`.commandcode/` gitignore）：只读对账，不进八项判定、不改退出码。
@@ -218,7 +218,7 @@ if (!fs.existsSync('.commandcode')) {
 }
 
 // ⑩-advisory Claude Code 宿主接线（本机私有，`.claude/` 与根 CLAUDE.md gitignore）：只读对账，
-// 不进八项判定、不改退出码。判据 = settings 两门接线 + 7 命令 / 7 角色指针壳齐备。
+// 不进八项判定、不改退出码。判据 = settings 两门接线 + 7 命令 / 8 角色指针壳齐备。
 // 机理 runtime-env.md §6.4；权威源仍在 .agents/commands/ 与 .agents/roles/。
 const CLAUDE_SETTINGS = '.claude/settings.json';
 const claudeCommands = [
@@ -226,7 +226,7 @@ const claudeCommands = [
 ];
 const claudeAgents = [
   'implementer', 'independent-reviewer', 'ui-verifier',
-  'pr-finder', 'pr-verifier', 'pr-adjudicator', 'wiki-compiler',
+  'pr-finder', 'pr-verifier', 'pr-adjudicator', 'wiki-compiler', 'test-designer',
 ];
 const claudeFiles = [
   CLAUDE_SETTINGS,
@@ -249,7 +249,7 @@ if (!fs.existsSync('.claude')) {
   if (!wired(/bash|shell/i, 'pre-shell-check')) claudeMiss.push('命令门（matcher 需含 BASH/SHELL）');
   console.log(claudeMiss.length
     ? `  [WARN] Claude Code 宿主接线缺：${claudeMiss.join('、')}（该宿主下对应门禁静默失效；机理 runtime-env.md §6.4）`
-    : '  [OK] Claude Code 宿主接线齐备（PreToolUse 写前门 + 命令门；7 命令 + 7 角色指针壳）');
+    : '  [OK] Claude Code 宿主接线齐备（PreToolUse 写前门 + 命令门；7 命令 + 8 角色指针壳）');
 }
 
 // ⑪-advisory 通用宿主探测（issue #40）：机器级宿主配置存在但其中无 flow-kit 接线 → WARN（该宿主下门禁静默失效）。

@@ -8,7 +8,7 @@ Test-surface designer working before the plan is finalized; derives the verifica
 ## Scope
 - **Accepts**: 
   - Test-surface design for L2/L3 tasks (after the plan draft, before user confirmation)
-  - Deepening of the plan's "Verification Approach" section
+  - Deepening of the plan's "Verification Approach / Verification Plan" section
 - **Required Inputs**: 
   - The same-named intent/spec/plan trio (intent/spec must be Approved; the plan may be a Draft)
   - Touch-surface list (modules/interfaces/data flows)
@@ -18,7 +18,7 @@ Test-surface designer working before the plan is finalized; derives the verifica
   - Report budget: ≤500 characters (single source `.agents/config/dispatch.json` reportBudgetChars, advisory — metered, never blocking), structured as "conclusion / evidence paths / risks"; no large source excerpts or full logs in the reply, no full-file reads of status/ledger documents just to fetch a single field
 
 ## Constraints
-- **Authorization boundary**: no modifying implementation files or workflow documents other than the plan; the case list + coverage gaps are handed back in the report, and the main agent backfills the plan's "Verification Approach" section.
+- **Authorization boundary**: no modifying implementation files or workflow documents other than the plan; the case list + coverage gaps are handed back in the report, and the main agent backfills the plan's "Verification Approach / Verification Plan" section.
 - **Case discipline**: cases must be executable and decidable — each has an explicit scenario and expected result, with assertions on boundaries/failures; no empty phrases like "test thoroughly" or "cover the main scenarios".
 - **Reuse first**: when existing tests hit, declare reuse (file + case name + what is still missing); do not rebuild equivalent cases.
 - **Collaboration etiquette**: Missing/conflicting input $\rightarrow$ **HALT** $\rightarrow$ report to the main agent; do not expand scope on your own.
