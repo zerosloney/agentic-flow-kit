@@ -9,7 +9,7 @@ import { reportBudgetStats } from '../templates/engine/.agents/scripts/agg-deleg
 import { collect, renderMarkdown } from '../templates/engine/.agents/scripts/outcome-metrics.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const ROLES = ['implementer', 'independent-reviewer', 'pr-adjudicator', 'pr-finder', 'pr-verifier', 'ui-verifier', 'wiki-compiler'];
+const ROLES = ['implementer', 'independent-reviewer', 'pr-adjudicator', 'pr-finder', 'pr-verifier', 'ui-verifier', 'wiki-compiler', 'test-designer'];
 
 function read(rel) {
   return fs.readFileSync(path.join(KIT, rel), 'utf8');
@@ -58,7 +58,7 @@ test('dispatch.json parses with valid budget fields and advisory note', () => {
   assert.match(cfg.note, /2026-11-16/); // 与 gate-budgets.json 同风格：note 写明依据与日期
 });
 
-test('all 7 role files (zh + en overrides) carry the report budget line', () => {
+test('all 8 role files (zh + en overrides) carry the report budget line', () => {
   for (const role of ROLES) {
     const zh = read(`templates/engine/.agents/roles/${role}.md`);
     assert.match(zh, /reportBudgetChars/, `${role}.md 缺预算单源引用`);

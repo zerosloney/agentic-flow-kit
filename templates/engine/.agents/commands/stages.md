@@ -39,6 +39,14 @@ delegation:
     when: 涉及 UI 改动且静态门已通过
     required: true
     fallback: main
+  - role: test-designer
+    instructions: .agents/roles/test-designer.md
+    when: L2/L3 plan 起草后、用户确认前(Build §1);advisory——跳过须在 plan「验证方式」节记一行自做理由
+    required: false
+    fallback: main
+    attach:
+      - 同名 intent/spec/plan 三件 + 触达面清单（模块/接口/数据流）
+      - 产物 = 用例清单 + 覆盖缺口声明；结论落 plan「验证方式」节，由主智能体回填
   - role: implementer
     instructions: .agents/roles/implementer.md
     when: plan 与改动文件清单均已确认,且工作包边界满足角色契约
@@ -155,7 +163,8 @@ L1 不在本章起草 plan，回 `.agents/commands/new-task.md` §L1 快速道�
 **Input**: `workflow/intents/{name}.md` (Approved) + `workflow/specs/{name}.md` (Approved)
 **Process**:
 1. **创建文档**: 复制 `_TEMPLATE.md` $\rightarrow$ `workflow/plans/{name}.md`，填写改动方案 / 任务拆解（每步带「文件」与判据）/ 执行顺序 / 验证计划
-2. **HALT**: 输出刚起草的 plan 全文 $\rightarrow$ 等待用户逐件确认。
+2. **测试面先行（advisory）**: L2/L3 于 plan 起草后、确认前委派 `test-designer` 深化「验证方式」节（触发/输入/产物以 frontmatter delegation 区与 `.agents/roles/test-designer.md` 为准，本文不复述；跳过须在 plan「验证方式」节记一行自做理由）。分工边界：test-designer 管测什么/怎么判，independent-reviewer 管改动对不对
+3. **HALT**: 输出刚起草的 plan 全文 $\rightarrow$ 等待用户逐件确认。
 **Output**: `workflow/plans/{name}.md` (Status: Approved)
 **Gates**:
 - **确认门 (confirm-doc)**: $\text{draft} \rightarrow \text{approved}$（口径见 `new-task.md` 快速道第 4 步）

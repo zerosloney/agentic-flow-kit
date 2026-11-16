@@ -333,6 +333,7 @@ const MODEL_ROLE_BY_AGENT = {
   'pr-finder': 'judgment',
   'ui-verifier': 'judgment',
   'wiki-compiler': 'judgment',
+  'test-designer': 'judgment',
 };
 
 export function modelRoleForAgent(rel) {

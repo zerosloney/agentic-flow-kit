@@ -82,6 +82,7 @@ test('agent templates map to model roles and respect each host extension', () =>
   assert.equal(modelRoleForAgent('agents/pr-verifier.md'), 'review');
   assert.equal(modelRoleForAgent('agents/ui-verifier.md'), 'judgment');
   assert.equal(modelRoleForAgent('agents/wiki-compiler.yml'), 'judgment');
+  assert.equal(modelRoleForAgent('agents/test-designer.md'), 'judgment');
 
   assert.ok(isAgentTemplate('claude', 'agents/implementer.md'));
   assert.ok(isAgentTemplate('cline', 'agents/implementer.yml'));

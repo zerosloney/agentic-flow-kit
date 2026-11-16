@@ -39,6 +39,14 @@ delegation:
     when: UI changes involved and static gates have passed
     required: true
     fallback: main
+  - role: test-designer
+    instructions: .agents/roles/test-designer.md
+    when: L2/L3 after the plan draft, before user confirmation (Build §1); advisory — a skip must record a one-line self-perform reason in the plan's "Verification Approach" section
+    required: false
+    fallback: main
+    attach:
+      - same-named intent/spec/plan trio + touch-surface list (modules/interfaces/data flows)
+      - deliverables = case list + coverage-gap statement; conclusions land in the plan's "Verification Approach" section, backfilled by the main agent
   - role: implementer
     instructions: .agents/roles/implementer.md
     when: plan and change-file list both confirmed, and the work-package boundary meets the role contract
@@ -155,7 +163,8 @@ L1 does not draft a plan in this chapter; return to `.agents/commands/new-task.m
 **Input**: `workflow/intents/{name}.md` (Approved) + `workflow/specs/{name}.md` (Approved)
 **Process**:
 1. **Create document**: copy `_TEMPLATE.md` $\rightarrow$ `workflow/plans/{name}.md`, fill in the change approach / task breakdown (each step with "files" and criteria) / execution order / verification plan
-2. **HALT**: output the just-drafted full plan $\rightarrow$ wait for the user's item-by-item confirmation.
+2. **Test surface first (advisory)**: for L2/L3, after the plan draft and before confirmation, delegate `test-designer` to deepen the "Verification Approach" section (trigger/inputs/deliverables per the frontmatter delegation block and `.agents/roles/test-designer.md`, not restated here; a skip must record a one-line self-perform reason in the plan's "Verification Approach" section). Division of labor: test-designer owns what to test and how to judge; independent-reviewer owns whether the change is correct
+3. **HALT**: output the just-drafted full plan $\rightarrow$ wait for the user's item-by-item confirmation.
 **Output**: `workflow/plans/{name}.md` (Status: Approved)
 **Gates**:
 - **Confirmation gate (confirm-doc)**: $\text{draft} \rightarrow \text{approved}$ (policy per `new-task.md` Fast Track step 4)
