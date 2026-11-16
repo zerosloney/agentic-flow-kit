@@ -64,12 +64,30 @@ export function readHookSpec(target) {
 
 // cfg.event 支持字符串或数组（如 claude 同时声明 PreToolUse 门与 PostToolUse 观测腿）；
 // matcher / timeout 仍按 tool 类别单源映射（cfg.matchers / cfg.timeouts）。
-function applicable(spec, cfg) {
+// 单条目不适用原因（event / tool / matcher）与 applicable() 共用同一判定，
+// doctor 的降级对账（inapplicableSpecs）据此给 guarantee advisory，两处口径不漂移。
+function inapplicableReason(item, cfg) {
   const events = Array.isArray(cfg?.event) ? cfg.event : [cfg?.event];
   const tools = Array.isArray(cfg?.tools) ? cfg.tools : null;
-  return spec.filter((item) => events.includes(item.event)
-    && (!tools || tools.includes(item.tool))
-    && typeof cfg?.matchers?.[item.tool] === 'string');
+  if (!events.includes(item.event)) return 'event';
+  if (tools && !tools.includes(item.tool)) return 'tool';
+  if (typeof cfg?.matchers?.[item.tool] !== 'string') return 'matcher';
+  return null;
+}
+
+function applicable(spec, cfg) {
+  return spec.filter((item) => inapplicableReason(item, cfg) === null);
+}
+
+// doctor 用：spec 中被 applicable() 静默过滤的条目及原因，让「宿主不支持的观测/门禁腿」
+// 降级可见而非无声缺失。返回 [{ item, reason }]，reason ∈ event / tool / matcher。
+export function inapplicableSpecs(cfg, spec) {
+  const out = [];
+  for (const item of spec || []) {
+    const reason = inapplicableReason(item, cfg);
+    if (reason) out.push({ item, reason });
+  }
+  return out;
 }
 
 // 中性条目 -> 宿主 hook 对象。form 决定命令形态：

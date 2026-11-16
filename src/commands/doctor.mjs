@@ -9,7 +9,7 @@ import { ciModeFor, ciTemplateRels, listFiles, readGatesSpecs, TEMPLATES } from 
 import { readMcpServers } from '../install/mcp.mjs';
 import { readToolPolicy } from '../install/tool-policy.mjs';
 import { checkDevcontainer } from '../install/devcontainer.mjs';
-import { findHookDrift } from '../install/hooks.mjs';
+import { findHookDrift, inapplicableSpecs } from '../install/hooks.mjs';
 import { inspectUserHookEntry } from '../install/user-hooks.mjs';
 import { listBaselines } from '../install/baseline.mjs';
 import { buildAttestation, writeAttestation } from '../install/attest.mjs';
@@ -20,6 +20,13 @@ import { RUNTIME_SCRIPTS, RUNTIME_HOOKS, KIT_ROOT } from './runtime.mjs';
 import { buildDiff } from './diff.mjs';
 
 const HOOK_FILES = ['pre-commit', 'commit-msg', 'post-commit', 'pre-merge-commit', 'pre-push'];
+
+// inapplicableSpecs() 的原因码 -> 文案键：宿主能力面不含该条目时解释降级原因。
+const HOOK_INAPPLICABLE_REASONS = {
+  event: 'doctor.hooksEventUnsupported',
+  tool: 'doctor.hooksToolUnsupported',
+  matcher: 'doctor.hooksMatcherUnsupported',
+};
 
 // MCP 运行时工具面：来自包内 server 实现（wiki-mcp.mjs）。新增工具时同步更新。
 // doctor 拿它和 toolPolicy.servers 声明做双向对账。
@@ -221,21 +228,30 @@ export function doctorCommand({ args, t }) {
       const rel = hostTargetRel(host, h.hooks.file);
       if (!spec) {
         add(false, `hooks ${host}`, t('doctor.hooksSpecInvalid', { path: '.agents/hooks/gates.json' }));
-      } else if (!fs.existsSync(path.join(target, rel))) {
-        add(false, `hooks ${host}`, t('doctor.hooksFileMissing', { path: rel }));
       } else {
-        try {
-          const root = JSON.parse(fs.readFileSync(path.join(target, rel), 'utf8'));
-          const drift = findHookDrift(root, spec, h.hooks.events);
-          if (drift.missing.length) {
-            add(false, `hooks ${host}`, t('doctor.hooksMissing', { path: rel, list: drift.missing.join(', ') }));
-          } else if (drift.extra.length) {
-            add(false, `hooks ${host}`, t('doctor.hooksExtra', { path: rel, list: drift.extra.join(', ') }));
-          } else {
-            add(true, `hooks ${host}`, `${rel}: ${drift.expected}`);
+        // 降级对账：gates.json 声明但宿主 hooks.events 不支持的条目，编译时被 applicable()
+        // 静默过滤。与权限 unsupported 同口径给 guarantee advisory，不做静默。
+        for (const { item, reason } of inapplicableSpecs(h.hooks.events, spec)) {
+          add(true, `guarantee ${host}`, t('doctor.hooksInapplicable', {
+            id: item.id, event: item.event, tool: item.tool, reason: t(HOOK_INAPPLICABLE_REASONS[reason]),
+          }), '', { warn: true });
+        }
+        if (!fs.existsSync(path.join(target, rel))) {
+          add(false, `hooks ${host}`, t('doctor.hooksFileMissing', { path: rel }));
+        } else {
+          try {
+            const root = JSON.parse(fs.readFileSync(path.join(target, rel), 'utf8'));
+            const drift = findHookDrift(root, spec, h.hooks.events);
+            if (drift.missing.length) {
+              add(false, `hooks ${host}`, t('doctor.hooksMissing', { path: rel, list: drift.missing.join(', ') }));
+            } else if (drift.extra.length) {
+              add(false, `hooks ${host}`, t('doctor.hooksExtra', { path: rel, list: drift.extra.join(', ') }));
+            } else {
+              add(true, `hooks ${host}`, `${rel}: ${drift.expected}`);
+            }
+          } catch {
+            add(false, `hooks ${host}`, t('doctor.hooksInvalid', { path: rel }));
           }
-        } catch {
-          add(false, `hooks ${host}`, t('doctor.hooksInvalid', { path: rel }));
         }
       }
     }

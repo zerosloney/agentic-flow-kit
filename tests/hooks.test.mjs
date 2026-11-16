@@ -179,6 +179,35 @@ test('claude wires the PostToolUse/Agent usage observation leg and doctor accept
   assert.equal(check.ok, true, JSON.stringify(check));
 });
 
+test('doctor reports inapplicable hook spec entries as a guarantee advisory', () => {
+  // codebuddy 只声明 PreToolUse：usage-collect（PostToolUse/agent）编译时被静默过滤，
+  // doctor 必须给 guarantee advisory 而非置词全无；接线对账不误报。
+  const dir = tmpRepo();
+  const installed = install(dir, 'codebuddy');
+  assert.equal(installed.status, 0, installed.stderr);
+  const doctor = json(run(['doctor', '--target', '.', '--json'], dir));
+  const advisory = doctor.checks.find((item) => item.name === 'guarantee codebuddy'
+    && /usage-collect/.test(item.detail));
+  assert.ok(advisory, JSON.stringify(doctor.checks));
+  assert.equal(advisory.ok, true);
+  assert.equal(advisory.warn, true);
+  assert.match(advisory.detail, /PostToolUse\/agent/);
+  assert.match(advisory.detail, /宿主未声明该事件/);
+  const wiring = doctor.checks.find((item) => item.name === 'hooks codebuddy');
+  assert.equal(wiring.ok, true, JSON.stringify(wiring));
+  assert.equal(doctor.summary.failed, 0);
+  const plain = run(['doctor', '--target', '.'], dir);
+  assert.equal(plain.status, 0, plain.stderr);
+  assert.match(plain.stdout, /! guarantee codebuddy/);
+
+  // claude 声明了 PostToolUse/Agent：同一规格条目全部适用，无降级 advisory。
+  const claudeDir = tmpRepo();
+  assert.equal(install(claudeDir, 'claude').status, 0);
+  const claudeDoctor = json(run(['doctor', '--target', '.', '--json'], claudeDir));
+  assert.equal(claudeDoctor.checks.some((item) => item.name === 'guarantee claude'
+    && /usage-collect/.test(item.detail)), false);
+});
+
 test('hosts without hooks.events keep the static template fallback', () => {
   for (const host of ['opencode', 'pi', 'cline']) {
     const plan = buildPlan({
