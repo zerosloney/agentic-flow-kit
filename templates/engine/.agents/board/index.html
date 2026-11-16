@@ -459,6 +459,7 @@ const STOP_LABEL = {
 const EVENT_DESC = {
   'run-created': '创建 run', 'work-order': '下发工单', triage: '定级', gate: '门执行',
   confirm: '确认', commit: '提交', stop: '停机', done: '完成', abort: '放弃',
+  route: '退回', 'route-enter': '重入', resume: '恢复',
 };
 
 async function refreshRuns() {
@@ -513,9 +514,15 @@ function runEventHtml(run) {
               ? `${esc(e.doc || '')} → ${esc(e.to || '')}${e.source ? ' · ' + esc(e.source) : ''}`
               : e.type === 'abort'
                 ? `→ ${esc(e.to || '')}`
-                : e.type === 'triage'
-                  ? `${esc(e.kind || '')} · ${esc(e.level || '')} · ${esc(e.module || '')}`
-                  : '';
+                  : e.type === 'triage'
+                    ? `${esc(e.kind || '')} · ${esc(e.level || '')} · ${esc(e.module || '')}`
+                    : e.type === 'route'
+                      ? `${esc(e.from || '')} → ${esc(e.to || '')} · ${e.attempt != null ? e.attempt : ''}/${e.cap != null ? e.cap : ''}`
+                      : e.type === 'route-enter'
+                        ? `${esc(e.from || '')} → ${esc(e.to || '')}`
+                        : e.type === 'resume'
+                          ? `中断于 ${esc(e.stage || '')} · 产物 ${esc(e.artifacts || '')}`
+                          : '';
     return `<div class="tl-item"><div class="tl-sub">${esc(t)}</div>` +
       (sub ? `<div class="tl-meta">${sub}</div>` : '') +
       `<div class="tl-meta">${esc((e.t || '').slice(0, 19).replace('T', ' '))}</div></div>`;

@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zerosloney/agentic-flow-kit/schemas/pipeline.schema.json",
+  "title": "agentic-flow-kit pipeline config",
+  "description": ".agents/config/pipeline.json：闭环执行器状态机登记表（stages / stopTypes / 阶段产物 / 失败路由表）。分工：本 schema 只管结构与取值域；「stage 在 pipeline-run.mjs 中是否可达、onFail 边是否悬空/死配置」属源码闭包分析，归 check-pipeline-state.mjs（analyze）执法，schema 不做跨文件判断。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "type": "integer", "minimum": 1, "description": "登记表版本，当前为 1。" },
+    "stages": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "全量 stage 闭集（含终态 'done'）。与 pipeline-run.mjs 里的赋值/分支字面量是否互为闭包，归 check-pipeline-state.mjs。"
+    },
+    "stopTypes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "停机类型闭集。与 pipeline-run.mjs 的 stopType 字面量是否互为闭包，归 check-pipeline-state.mjs。"
+    },
+    "stageArtifacts": {
+      "type": "object",
+      "description": "stage → 产物文件清单（resume 产物判定用，支持 {spec}/{plan}/{entry} 占位符）。",
+      "additionalProperties": {
+        "type": "array",
+        "items": { "type": "string" }
+      }
+    },
+    "onFail": {
+      "type": "object",
+      "description": "失败路由表（R6-1）：stage → {to, retry}。retry 是该阶段允许的最大失败次数（含），第 retry 次失败即停机不退回；未声明的阶段失败时原地停机。键/target 是否在闭集内且脚本可达、不得为终态 'done'，归 check-pipeline-state.mjs。",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["to", "retry"],
+        "properties": {
+          "to": { "type": "string", "description": "退回目标 stage。" },
+          "retry": { "type": "integer", "minimum": 0, "maximum": 5, "description": "允许的最大失败次数（含，0-5）；0 = 一次失败即停、不退回。" }
+        }
+      }
+    }
+  }
+}

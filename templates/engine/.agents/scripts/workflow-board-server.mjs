@@ -82,8 +82,14 @@ export function parseRunFile(text) {
 }
 
 // 单 run 卡片（/api/runs 载荷元素）：runId / requirement / stage / stopType / updatedAt / triage / 事件数 / 阶段条
+// 退回态（R6-1）：仅当 run 挂着未消费的 nextTarget 时，阶段条尾部追加「↩ 退回 <to>（<from> <attempt>/<cap>）」
+// ——attempt/cap 取该失败阶段最近一次 route 事件（stopGateFail 置 nextTarget 后必发 route）；route/route-enter
+// 事件细节已随 /api/run 事件流全量下发，卡片只补当前待重入的退回态。
 export function runCard(run) {
   const events = Array.isArray(run.events) ? run.events : [];
+  const route = run.nextTarget
+    ? [...events].reverse().find((e) => e.type === 'route' && e.from === run.stage)
+    : null;
   return {
     runId: run.runId,
     requirement: run.requirement || '',
@@ -92,7 +98,8 @@ export function runCard(run) {
     updatedAt: run.updatedAt || run.createdAt || '',
     triage: run.triage || null,
     eventCount: events.length,
-    stageBar: stageBar(run),
+    nextTarget: run.nextTarget || null,
+    stageBar: stageBar(run) + (route ? ` ↩ 退回 ${route.to}（${route.from} ${route.attempt}/${route.cap}）` : ''),
   };
 }
 
