@@ -16,6 +16,7 @@ import { createHash } from 'node:crypto';
 import { ENUMS } from './workflow-enums.mjs';
 import { stageBar } from './pipeline-run.mjs';
 import { loadAllConfirmations } from './ledger-loader.mjs';
+import { projectTasks } from './gen-workflow-index.mjs'; // 任务投影单源（2026-11-16 P3）：/api/board tasks 与 INDEX 同口径
 import { funnelFromLedger, loadFirstAdded, scanReviews, fmtMedianDays, calendarMonthsBetween } from './metrics-core.mjs';
 import { buildTour } from './dev-tour-model.mjs';
 
@@ -356,6 +357,7 @@ async function scanBoard() {
   const loop = loopBlocksSnapshot(); // hard-block 全局告警（单源 check-loop 后台刷新；null = 预热中/不可用）
   return {
     root: ROOT, pid: process.pid, startedAt: STARTED_AT, counts, cards,
+    tasks: projectTasks(ROOT), // 任务投影（2026-11-16 P3）：单源 gen-workflow-index.projectTasks，禁复制口径
     loopHardBlocks: loop.blocks, loopNote: loop.note || undefined,
     activeStatuses: [...ENUMS['doc.status.active'], ...ENUMS['incident.status.active']], // 枚举单源贯通前端（p2-batch2）
   };

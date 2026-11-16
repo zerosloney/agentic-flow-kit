@@ -8,6 +8,11 @@
 | Type | Level | Status | Date | Module | Topic | Progress |
 |---|---|---|---|---|---|---|
 
+## Task projection (0)
+
+| Name | Level | Status | Acceptance | Verify | Confirmations | Next |
+|---|---|---|---|---|---|---|
+
 ## Archive (read-only, no growth)
 
 (Historical terminal artifacts are listed by the generator after archiving.)
