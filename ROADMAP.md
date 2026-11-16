@@ -47,6 +47,8 @@
 | R4-2 | Spec / Tasks / Verify 工件规范 | 4 | M | `templates/scaffold/workflow/specs/` + 校验脚本 | DONE |
 | R4-3 | eval-log 证据格式 | 4 | S | `agent-eval.mjs`、`schemas/eval-log.schema.json` | DONE |
 | R5-1 | 运行时能力包内化 | 5 | L | `src/commands/runtime.mjs`、`flow-kit run/hook`、安装面收缩 | DONE |
+| R6-1 | 失败路由表 | 6 | M | `pipeline.json` `onFail`、`pipeline-run.mjs`、`check-pipeline-state.mjs` | DONE |
+| R6-2 | 任务状态与产物完整性恢复 | 6 | S | `pipeline-run.mjs` `retries` / `nextTarget` / `resume` | DONE |
 
 ## 3. Wave 1 — 生命周期闭环
 
@@ -333,7 +335,24 @@
 - **R5-1b（DONE）安装面收缩与迁移**：`buildPlan` 跳过 `.agents/scripts/**`、`.agents/hooks/*.cjs|mjs`、`.agents/tests/**`（`isRuntimeEnginePath` 单一判定源）；git 钩子、宿主 hooks、MCP、commands/skills 中的运行时调用统一改为 `flow-kit run x` / `flow-kit hook x`；manifest `schemaVersion` 1→2 迁移摘除旧运行时条目，并按旧哈希只删除未改动的磁盘副本（用户改动保留为 legacy）；`doctor` 报告遗留运行时文件与 `flow-kit` PATH advisory；CI 使用 `npx --yes agentic-flow-kit`，项目自建 `local-pre-commit` 优先于包内默认实现。
 - **验收**：`run/hook --list`、root 解析、未知入口退出码 2、从包执行不污染包目录；新装项目无 `.agents/scripts` / `.agents/hooks` 实现文件，`policy check`、`check-local-gates`、hooks 接线与安装测试全绿。规模 `L`（a：M，b：L）。
 
-## 8. 依赖关系
+## 8. Wave 6 — 本地工作流路由与任务状态
+
+目标：对照 LoopForge Local 的 `routing_table` 与 `workflow-state.json`，把 kit 执行器里唯一一条硬编码失败边搬进机器可读的路由表，并让 run 状态记录 per-stage 失败计数与产物完整性。只做本地 CLI 面，不涉及服务端。
+
+### R6-1 失败路由表
+
+- **目标**：`pipeline.json` 新增 `onFail`（按阶段键控 `{to, retry}`），取代 `FIX_CAP` 常量与硬编码的 `run.stage = 'fix'`。`retry` 是该阶段允许的最大失败次数（含），第 `retry` 次失败即停；未声明阶段默认退回自身且 `retry = 0`，与表引入前行为一致。
+- **落地（2026-11-16）**：模板只声明真实存在的那条边 `verify → fix`（`retry: 3`），不预留投机边。`stopGateFail` 统一查表并记 `route` 事件；产物契约失败与 verify-only 短路径显式 `route: false`——前者是前置条件不满足而非门拒绝成果，后者按设计不带修复环。`check-pipeline-state.mjs` 新增闭合校验：键与目标须登记且脚本可达、目标不得为终态 `done`、`retry` 须为 0-5 整数、键不得是死配置。
+- **验收**：`failRoute` 对缺失/非法配置回退默认值且不抛；verify 失败工单标题仍为 `修复环 1/3`、目标仍为 `fix`（行为不变证据）；预算耗尽仍 exit 2 且 `stage` 留在失败处；未声明阶段不产生 `route` 事件；静态门负例各自报红且真实配置仍闭合。规模 `M`。
+
+### R6-2 任务状态与产物完整性恢复
+
+- **目标**：run 文件以 `retries`（per-stage 失败计数 map）取代 `fixLoop`，消除双计数真值；`nextTarget` 记退回目标，停机期间 `stage` 留在失败处；`resume` 事件报告产物完整性。
+- **落地（2026-11-16）**：`bumpRetry` 是 `retries` 的唯一 mutation 点，`stopGateFail` 与 verify 非耗尽分支各调一次。`advance` 开头消费 `nextTarget` 并记 `route-enter`。`resume` 复用既有 `stageArtifactProblems` 判完整性，追加 `artifacts: complete|missing` 与 `missing` 清单，保留原 `stage` / `since` 字段。旧 run 文件以 `run.retries || {}` 容错读取。
+- **验收**：计数跨进程持久化；产物缺失时 `resume` 记 `missing` 且契约门仍拦住、不消耗退回预算；产物齐备时记 `complete` 并重跑被中断的门；`fixLoop` 全仓退役（含测试夹具）。规模 `S`。
+- **测试**：`tests/pipeline-executor.test.mjs` 新增 8 例（共 19 例）；`npm test` 全绿，`npm run lint:templates` 通过。
+
+## 9. 依赖关系
 
 ```text
 R1-1 diff ──┬─> R1-2 prune ──> R1-3 remove-host
@@ -347,7 +366,7 @@ R3-1 policy-as-code ──> R3-2 策略 diff ──> R3-3 证明链
 R3-4 技能包 ──> R3-10 模板/技能 lint（共享校验骨架）
 ```
 
-## 9. 完成定义（DoD）
+## 10. 完成定义（DoD）
 
 任何路线图条目完成，须同时满足：
 
@@ -358,7 +377,7 @@ R3-4 技能包 ──> R3-10 模板/技能 lint（共享校验骨架）
 - 文档更新：`README.md`、`CLAUDE.md`、本文件状态；涉及缺口时同步 `BACKLOG.md`；
 - 若进入门禁面：登记 `mechanism-registry.md` 并守住 `rule-budgets` 预算。
 
-## 10. 风险与不做清单
+## 11. 风险与不做清单
 
 **风险**
 

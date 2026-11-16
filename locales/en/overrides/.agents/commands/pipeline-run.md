@@ -53,12 +53,17 @@ The stage machine is aligned with the commands manual. Mutually exclusive with m
 - **Stage artifact contracts**: `stageArtifacts` in `.agents/config/pipeline.json` declares products with `{entry}/{spec}/{plan}`; a missing or empty product stops with `gate-fail` before the gate runs (the template covers `spec-confirm` / `plan-confirm` / `verify` / `closeout`).
 - **Resume idempotency**: if HEAD already carries the same subject, `docsCommit` does not commit again (a commit event with `resumed: true` is recorded).
 
+### Failure routing / task state (R6-1 / R6-2)
+
+- **Failure routing table**: `onFail` in `.agents/config/pipeline.json` declares `{to, retry}` per stage. `retry` is the maximum number of failures allowed at that stage (inclusive), and the `retry`-th failure stops. The template declares only `verify → fix` (`retry: 3`). An undeclared stage does not route and stops in place with `gate-fail`. Artifact-contract failures and the verify-only short path do not consume the routing budget. `check-pipeline-state.mjs` validates the table statically: keys and targets must be registered and reachable in the script, a target must not be terminal, and `retry` must be an integer in 0-5.
+- **Task state**: the run file records `retries` (per-stage failure counts) and `nextTarget` (the routing target). While stopped, `stage` stays at the failure point; `next` re-enters from `nextTarget` and records a `route-enter` event, and a routing decision records a `route` event (`from/to/attempt/cap`). The `resume` event carries `artifacts: complete|missing` plus a `missing` list; missing artifacts are still blocked by the contract gate rather than skipped.
+
 ## 🚫 Hard Discipline (violation breaks the protocol)
 
 | Operation | Consequence / machine behavior | Exception |
 |---|---|---|
 | Directly modify workflow status | $\rightarrow$ bypasses the only migration entry (confirm-doc) | The host never edits frontmatter directly |
 | Fabricate/reuse verbatim words | $\rightarrow$ exposed by cross-check against the ledger `confirmations.jsonl` | `--delegated` must be the current conversation's verbatim words |
-| Advance while broken | Fix loop exceeds the limit (3 times), stop and hand over to a human | Do not close out while verify is not green |
+| Advance while broken | Failures reach the `onFail` budget (verify defaults to 3), stop and hand over to a human | Do not close out while verify is not green |
 | Write run files | $\rightarrow$ conflicts with machine facts | The host is read-only |
 | Auto-approve human gates | `await-confirm` must relay key points and only `next --delegated` after receiving the user's verbatim go-ahead | Auto-triggering only means stage chaining and skill loading (new-task §1c coupling protocol); human gates are never crossed automatically |

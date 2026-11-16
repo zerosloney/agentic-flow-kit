@@ -42,10 +42,24 @@ export function analyze(source, config) {
   }
   if (!seenStages.has('triage')) problems.push("初始 stage 'triage' 未出现");
 
+  // 失败路由表（R6-1）：onFail 的键与目标都必须是闭集内且脚本可达的阶段，否则是死配置或悬空退回。
+  const onFail = config.onFail && typeof config.onFail === 'object' ? config.onFail : {};
+  for (const [stage, edge] of Object.entries(onFail)) {
+    if (!stages.has(stage)) problems.push(`onFail 键未登记：'${stage}'（补 stages）`);
+    else if (!handled.includes(stage)) problems.push(`onFail 声明的阶段在 pipeline-run 中不可达：'${stage}'`);
+    if (stage === 'done') problems.push("onFail 不得声明终态 'done'");
+    const to = edge?.to;
+    if (typeof to !== 'string' || !stages.has(to)) problems.push(`onFail['${stage}'].to 未登记：'${to}'`);
+    else if (!seenStages.has(to)) problems.push(`onFail['${stage}'].to 在 pipeline-run 中不可达：'${to}'`);
+    if (to === 'done') problems.push(`onFail['${stage}'] 不得路由到终态 'done'`);
+    const r = edge?.retry;
+    if (!Number.isInteger(r) || r < 0 || r > 5) problems.push(`onFail['${stage}'].retry 须为 0-5 整数（当前 ${JSON.stringify(r)}）`);
+  }
+
   return {
     ok: problems.length === 0,
     problems,
-    counts: { stages: stageLiterals.length, handled: handled.length, stopTypes: stopLiterals.length },
+    counts: { stages: stageLiterals.length, handled: handled.length, stopTypes: stopLiterals.length, onFail: Object.keys(onFail).length },
   };
 }
 

@@ -37,7 +37,6 @@ const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const KINDS = ['require', 'fix', 'verify', 'review', 'deploy']; // kind 词表单源（§25 预判执法段已于 2026-10-28 随 hygiene 退役，故仅本文件与工单 --hint/--triage 消费）
 const LEVELS = ['L0', 'L1', 'L2', 'L3'];
 const TERMINAL = ['done', 'superseded', 'cancelled', 'closed'];
-const FIX_CAP = 3;
 const GIT_NEVER_FLAGS = ['--no-verify', '-n']; // 不变量：任何 git 调用不得携带（防御性断言，正常路径不会拼出）
 
 function fail(msg, code = 1) { console.error('❌ ' + msg); process.exit(code); }
@@ -82,6 +81,22 @@ export function stageArtifactProblems(read, stage, docs, cfg) {
     else if (!String(text).trim()) problems.push(`阶段产物为空：${rel}（${stage} 契约）`);
   }
   return problems;
+}
+
+// 失败路由表（R6-1）：onFail[stage] = {to, retry}，retry 是该阶段允许的最大失败次数（含），
+// 第 retry 次失败即停。未声明的阶段退回自身且 retry=0，与表引入前行为一致；非法配置同样回退，不抛。
+export function failRoute(cfg, stage) {
+  const e = cfg?.onFail?.[stage];
+  const to = typeof e?.to === 'string' && e.to ? e.to : stage;
+  const retry = Number.isInteger(e?.retry) && e.retry >= 0 && e.retry <= 5 ? e.retry : 0;
+  return { to, retry };
+}
+
+// per-stage 失败计数的唯一 mutation 点：stopGateFail 与 verify 非耗尽分支各调一次，不双计数。
+function bumpRetry(run, stage) {
+  run.retries = run.retries || {};
+  run.retries[stage] = (run.retries[stage] || 0) + 1;
+  return run.retries[stage];
 }
 
 function moduleList(ctx) {
@@ -345,11 +360,16 @@ function stopConfirm(ctx, run, docRel, points, ledger) {
   printRun(ctx, run);
   process.exit(0);
 }
-function stopGateFail(ctx, run, stage, problems, exitHint) {
+function stopGateFail(ctx, run, stage, problems, exitHint, opts = {}) {
   run.workOrder = null;
   run.stopType = 'gate-fail';
   run.stage = stage;
   run.gateFail = { stage, problems };
+  // stage 留在失败处，nextTarget 记退回目标（R6-1）；route:false 用于前置条件失败与 verify-only 短路径。
+  const attempt = bumpRetry(run, stage);
+  const { to, retry } = failRoute(ctx.pipeline, stage);
+  run.nextTarget = opts.route === false || attempt >= retry ? null : to;
+  if (run.nextTarget) emit(run, { type: 'route', from: stage, to, attempt, cap: retry });
   emit(run, { type: 'stop', stopType: 'gate-fail', stage });
   saveRun(ctx, run);
   printRun(ctx, run, problems);
@@ -389,6 +409,7 @@ function printRun(ctx, run, problems) {
   const lv = run.triage ? ` ${run.triage.level}·${run.triage.kind}` : '';
   console.log(`\n▶ pipeline-run ${run.runId}${lv}  ${stageBar(run)}`);
   if (run.inFlight) console.log(`↻ 中断于 ${run.inFlight.stage}（自 ${run.inFlight.since}）——next 或 resume 会从该门重入`);
+  if (run.nextTarget) console.log(`↩ 退回 ${run.nextTarget} 重做（${run.stage} 失败 ${run.retries?.[run.stage] || 0}/${failRoute(ctx.pipeline, run.stage).retry}）——next 生效`);
   if (run.stopType === 'work-order' && run.workOrder) {
     const w = run.workOrder;
     console.log(`\n== 工单 #${w.id}（${w.kind}）${w.title} ==`);
@@ -624,9 +645,23 @@ async function advance(ctx, run, opt) {
   const topic = () => run.triage.topic;
 
   // 断点续跑（R3-5）：上次进程在门执行中被杀 → 记 resume 事件后从同一阶段重入。
+  // 产物完整性（R6-2）：resume 事件带 artifacts/missing；缺失由下方产物契约门拦住，不会跳过重跑。
   if (run.inFlight) {
-    emit(run, { type: 'resume', stage: run.inFlight.stage, since: run.inFlight.since });
+    const stage = run.inFlight.stage;
+    const missing = stageArtifactProblems((rel) => readDoc(ctx, rel), stage, run.docs, ctx.pipeline);
+    emit(run, {
+      type: 'resume', stage, since: run.inFlight.since,
+      artifacts: missing.length ? 'missing' : 'complete', ...(missing.length ? { missing } : {}),
+    });
     run.inFlight = null;
+    saveRun(ctx, run);
+  }
+
+  // 失败路由（R6-1）：停机期间 stage 留在失败处，nextTarget 记退回目标；本次从目标阶段重入。
+  if (run.nextTarget) {
+    emit(run, { type: 'route-enter', from: run.stage, to: run.nextTarget });
+    run.stage = run.nextTarget;
+    run.nextTarget = null;
     saveRun(ctx, run);
   }
 
@@ -636,7 +671,8 @@ async function advance(ctx, run, opt) {
 
     // 阶段产物契约（R3-5）：先校验本阶段声明的产物，再走阶段逻辑。
     const artifactProblems = stageArtifactProblems((rel) => readDoc(ctx, rel), s, run.docs, ctx.pipeline);
-    if (artifactProblems.length) stopGateFail(ctx, run, s, artifactProblems);
+    // 产物缺失是前置条件不满足，不是门拒绝成果：不消耗失败预算、不退回，补回产物后原阶段重跑。
+    if (artifactProblems.length) stopGateFail(ctx, run, s, artifactProblems, undefined, { route: false });
 
     if (s === 'triage') {
       if (!run.triage) {
@@ -865,10 +901,10 @@ async function advance(ctx, run, opt) {
       const r = await runGateGroup(ctx, run, s, jobs, opt.retry || 0);
       if (K() === 'verify') { // verify-only 短路径：不带修复环，绿即收、败即停
         if (r.exit === 0) stopDone(ctx, run);
-        stopGateFail(ctx, run, s, ['verify 未过（verify-only 不带修复环——人工处理后重跑，或立正式任务走闭环）']);
+        stopGateFail(ctx, run, s, ['verify 未过（verify-only 不带修复环——人工处理后重跑，或立正式任务走闭环）'], undefined, { route: false });
       }
       if (r.exit === 0) {
-        run.fixLoop = { count: 0, cap: FIX_CAP };
+        run.retries = { ...(run.retries || {}), [s]: 0 };
         // 代码提交（沙箱演练实证的缺口，2026-10-02）：verify 绿后、复核/关单前落一笔——
         // 文件集 = 当前非运行态、非 workflow 文档的改动（均已过 --files 授权核对）
         const codeFiles = (changedFiles(ctx, run) || []).filter((c) =>
@@ -880,15 +916,18 @@ async function advance(ctx, run, opt) {
         }
         run.stage = (L() === 'L2' || L() === 'L3') ? 'review' : 'closeout'; continue;
       }
-      run.fixLoop = run.fixLoop || { count: 0, cap: FIX_CAP };
-      run.fixLoop.count += 1;
+      const { to, retry } = failRoute(ctx.pipeline, s);
+      const attempt = (run.retries?.[s] || 0) + 1;
       const tail = (r.stderr || r.stdout).split(/\r?\n/).filter(Boolean).slice(-20).join('\n');
-      if (run.fixLoop.count >= run.fixLoop.cap) {
-        stopGateFail(ctx, run, s, [`修复环超限（${run.fixLoop.cap} 次）——人工介入或 abort`]);
+      if (attempt >= retry) {
+        stopGateFail(ctx, run, s, [retry > 0
+          ? `修复环超限（${retry} 次）——人工介入或 abort`
+          : 'verify 未过（该阶段未声明失败路由——人工处理后重跑 next）']);
       }
-      run.stage = 'fix';
+      bumpRetry(run, s);
+      run.stage = to;
       issueWO(ctx, run, wo(run, {
-        kind: 'fix', title: `修复环 ${run.fixLoop.count}/${run.fixLoop.cap}：verify 未过`, goal: '按失败输出修复后回跑',
+        kind: 'fix', title: `修复环 ${attempt}/${retry}：verify 未过`, goal: '按失败输出修复后回跑',
         instructions: [
           '1. 读下方「上次门失败输出」定位失败项',
           '2. 修复（授权面仍以 plan 为准，偏离即停）',
@@ -897,7 +936,7 @@ async function advance(ctx, run, opt) {
         context: { docPath: run.docs.plan, kbHits: [], stderrTail: tail, relatedDocs: [] },
         constraints: ['不绕门不改门；不 --no-verify'],
         acceptance: ['git 改动 ⊆ 回填清单', 'verify.mjs 重跑全绿'],
-      }), 'fix');
+      }), to);
     }
 
     if (s === 'review') {
@@ -1071,7 +1110,7 @@ if (isMain) {
     const run = {
       runId, requirement: req, hint: a.hint || '', createdAt: nowIso(), updatedAt: nowIso(),
       triage: null, stage: 'triage', stopType: 'work-order', workOrder: null, awaitConfirm: null,
-      fixLoop: { count: 0, cap: FIX_CAP }, docs: { entry: null, spec: null, plan: null },
+      retries: {}, nextTarget: null, docs: { entry: null, spec: null, plan: null },
       lastKbHits: [], lastFiles: [], events: [],
     };
     emit(run, { type: 'run-created', requirement: req });
@@ -1177,7 +1216,7 @@ function adoptRun(ctx, a) {
   const run = {
     runId: id, requirement: `(adopted ${nowIso()}——原需求原文已不可考，见 git 历史)`, hint: '', createdAt: nowIso(), updatedAt: nowIso(),
     triage: { kind: entry && entry.includes('incidents') ? 'fix' : 'require', level: 'L1', module: 'pipeline', topic, decidedBy: 'adopt', decidedAt: nowIso() },
-    stage: 'adopted', stopType: 'work-order', workOrder: null, awaitConfirm: null, fixLoop: { count: 0, cap: FIX_CAP },
+    stage: 'adopted', stopType: 'work-order', workOrder: null, awaitConfirm: null, retries: {}, nextTarget: null,
     docs: { entry, spec, plan }, lastKbHits: [], lastFiles: [], events: [{ t: nowIso(), type: 'adopt', entry, spec, plan }],
   };
   saveRun(ctx, run);
