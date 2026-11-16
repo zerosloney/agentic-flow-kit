@@ -12,6 +12,7 @@ import { makeTmp } from './helpers/tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPT = path.join(KIT, 'templates', 'engine', '.agents', 'scripts', 'check-scope-range.mjs');
+const SCOPE_SCRIPT = path.join(KIT, 'templates', 'engine', '.agents', 'scripts', 'check-scope.mjs');
 
 const git = (cwd, ...args) => {
   const r = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', ...args], { cwd, encoding: 'utf8' });
@@ -87,4 +88,29 @@ test('范围内 plan 被删除且无存活 plan：不判 exit 2，走「无 plan
   assert.notEqual(r.status, 2, `删除的 plan 不应触发 fail-loud:\n${out}`);
   assert.match(out, /不作承诺来源/);
   assert.match(out, /推送范围无 plan 新增\/修改——skip/);
+});
+
+// check-scope.mjs 补扫节白名单回归（2026-11-16 双轴评审）：plan 节名基线双名并存——
+// fill-plan.mjs 生成面为「验证计划」，_TEMPLATE.md 存量为「验证方式」；测试文件只在
+// 「验证方式」节点名时也须计入声明，不判越界。
+test('plan「验证方式」节声明的测试文件计入声明（--strict exit 0 双向对齐）', () => {
+  const dir = makeTmp('flow-kit-scope-verify-sec-');
+  git(dir, 'init', '-q');
+  write(dir, 'README.md', 'x\n');
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'c0');
+  write(dir, 'workflow/plans/2026-11-16-demo.md', [
+    '## 改动面',
+    '- src/demo.cs：<做什么>',
+    '',
+    '## 验证方式',
+    '- 新增测试：tests/DemoTests.cs 覆盖 <场景>',
+    '',
+  ].join('\n'));
+  write(dir, 'src/demo.cs', 'class Demo {}\n');
+  write(dir, 'tests/DemoTests.cs', 'class DemoTests {}\n');
+  const r = spawnSync(process.execPath, [SCOPE_SCRIPT, 'workflow/plans/2026-11-16-demo.md', '--strict', '--root', dir], { encoding: 'utf8' });
+  const out = `${r.stdout}${r.stderr}`;
+  assert.equal(r.status, 0, `「验证方式」节声明应计入，实际 exit ${r.status}:\n${out}`);
+  assert.match(out, /双向对齐/);
 });

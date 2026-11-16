@@ -26,13 +26,14 @@ import { fileURLToPath } from 'node:url';
 //   `…MaterialDbContext.cs` 同行）被判越界；②补扫「验证计划」节——新增测试文件常只在该节点名
 //   （推送实证：outbound-request-check-satisfaction-display 的 `…OutboundRequestCheckSatisfactionTests.cs`），
 //   计划点名即算声明，产品面判据本身不放宽。
+// 2026-11-16 修：③补扫「验证方式」节——节名双名并存（_TEMPLATE.md 存量「验证方式」/ fill-plan 生成「验证计划」），新测试文件也有只在该节点名的面。
 export const KNOWN_EXT = new Set(['.md', '.mjs', '.js', '.ts', '.json', '.txt', '.cs', '.csproj', '.sln', '.vue', '.ps1', '.sh', '.yml', '.yaml', '.sql', '.cjs']);
 export function extractDeclared(planAbs) {
   const declared = [];
   const lines = fs.readFileSync(planAbs, 'utf8').split(/\r?\n/);
   let inSec = false;
   for (const line of lines) {
-    if (/^##\s+(改动面|任务拆解|改动方案|验证计划)/.test(line)) { inSec = true; continue; }
+    if (/^##\s+(改动面|任务拆解|改动方案|验证计划|验证方式)/.test(line)) { inSec = true; continue; }
     if (inSec && /^##\s+/.test(line)) { inSec = false; continue; }
     if (!inSec) continue;
     for (const m of line.matchAll(/([a-zA-Z0-9._\/\\-]+\.[a-zA-Z0-9]+)/g)) {

@@ -82,6 +82,7 @@ test('agent templates map to model roles and respect each host extension', () =>
   assert.equal(modelRoleForAgent('agents/pr-verifier.md'), 'review');
   assert.equal(modelRoleForAgent('agents/ui-verifier.md'), 'judgment');
   assert.equal(modelRoleForAgent('agents/wiki-compiler.yml'), 'judgment');
+  assert.equal(modelRoleForAgent('agents/test-designer.md'), 'judgment');
 
   assert.ok(isAgentTemplate('claude', 'agents/implementer.md'));
   assert.ok(isAgentTemplate('cline', 'agents/implementer.yml'));
@@ -98,6 +99,23 @@ test('every static host agent template exists and maps to a known role', () => {
     for (const file of fs.readdirSync(dir)) {
       assert.ok(h.agents.ext === path.extname(file), `${name}/${file} should end with ${h.agents.ext}`);
       assert.ok(['code', 'judgment', 'review'].includes(modelRoleForAgent(file)), `${name}/${file} role`);
+    }
+  }
+});
+
+// 反向遍历：每个引擎角色在每个带 agents 能力的宿主都有壳（新角色接线防漏枚举）。
+test('every engine role has a shell in every agents-capable host', () => {
+  const rolesDir = path.join(KIT, 'templates', 'engine', '.agents', 'roles');
+  const roles = fs.readdirSync(rolesDir).filter((f) => f.endsWith('.md')).map((f) => f.slice(0, -'.md'.length));
+  // 已知缺口豁免（基线缺口，补齐后删除）：pr-adjudicator/pr-finder/pr-verifier 缺 zcode 壳（2026-11-16 评审证实为既有缺口，非本 PR 义务）
+  const KNOWN_GAPS = new Set(['zcode/pr-adjudicator', 'zcode/pr-finder', 'zcode/pr-verifier']);
+  for (const name of HOST_NAMES) {
+    const h = HOSTS[name];
+    if (!h.agents) continue; // codex / codeartsdoer 无 agents 面，自然跳过
+    for (const role of roles) {
+      if (KNOWN_GAPS.has(`${name}/${role}`)) continue;
+      const shell = path.join(KIT, 'templates', 'hosts', name, h.agents.dir, `${role}${h.agents.ext}`);
+      assert.ok(fs.existsSync(shell), `${name} 缺角色壳 ${h.agents.dir}/${role}${h.agents.ext}`);
     }
   }
 });

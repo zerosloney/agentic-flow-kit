@@ -44,6 +44,7 @@ const AGENT_DESC = {
   'pr-adjudicator': 'Read-only adjudicator for PR panel review; handles escalated candidates and returns verdicts',
   'pr-finder': 'Read-only finder for PR panel review; finds bugs independently per lens and returns candidate JSON',
   'pr-verifier': 'Read-only verifier for PR panel review; independently verifies a candidate and returns a vote JSON',
+  'test-designer': 'Designs the test surface for an L2/L3 plan draft and returns an executable case list with a coverage-gap statement; read-only analysis, never edits files',
   'tfs-pr': 'Self-hosted TFS / Azure DevOps Server PR skill, project-agnostic: detects the git repo/remote, derives collection/project/repo, guides PAT setup when missing; supports querying PRs, creating PRs (pull diff context to draft title/description), updating PR descriptions, conflict pre-checks and worktree-isolated resolution via REST API + PAT.',
 };
 
@@ -55,6 +56,7 @@ const AGENT_TITLE = {
   'pr-adjudicator': 'PR Adjudicator',
   'pr-finder': 'PR Finder',
   'pr-verifier': 'PR Verifier',
+  'test-designer': 'Test Designer',
 };
 
 // 宿主规则入口指针（rule/）：frontmatter 描述英文化，正文走指针壳通用分支。
