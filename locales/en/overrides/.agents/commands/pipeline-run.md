@@ -17,6 +17,7 @@ The stage machine is aligned with the commands manual. Mutually exclusive with m
 > **Reserved for later use**: currently zero runs (`cache/pipeline-runs/` empty) but not retired; before enabling, run a small task once to validate the state machine.
 
 > **Division of labor**: deterministic parts are driven by the `pipeline-run.mjs` state machine (fill-* $\rightarrow$ confirm-doc $\rightarrow$ verify.mjs $\rightarrow$ git, all exit codes recorded); the AI slot executes per the work-order protocol; human gates stop on arrival and their words are recorded verbatim; the host must not change state on its own.
+> **Artifact directory**: pipeline artifacts are collected into `workflow/tasks/<date>-<topic>/` (`intent.md`/`incident.md`/`spec.md`/`plan.md`), isolated from the manual path (`intents/`, `plans/`, `specs/`) — manual scanners do not scan `tasks/`; the two document families never interfere.
 
 ## 1. Protocol
 
