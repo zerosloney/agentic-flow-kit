@@ -27,5 +27,5 @@ This file provides guidance to the AI agent when working with code in this repos
 ## 仓库约定
 
 - Conventional Commits（`feat/fix/docs/ci/...`，主题常用中文，参照 git log）。
-- 发布：semver tag 必须与 `package.json` 的 `version` 完全一致，否则 CI 中止 publish；`prepublishOnly` 会重跑全部测试。
+- 发布：semver tag 必须与 `package.json` 的 `version` 完全一致，否则 CI 中止 publish；`prepublishOnly` 会重跑全部测试。发版序列为 bump version + `chore(release)` 提交 → `npm run changelog -- --write`（CHANGELOG.md 为全派生工件，勿手改；--write 改动 amend 进该 `chore(release)` 提交、tag 打在同一提交——走第二条提交会进 tag 区间却不在渲染产物，tag 后 `--check` 必红）→ 打 tag 推送；CI 以 `--check` 防漂移；release notes 可用 `npm run changelog -- --notes --to <version>` 生成底稿。
 - 注意：`templates/profiles/*/AGENTS.md` 与 `locales/*/overrides/AGENTS.md` 是发给目标项目的模板（含 `{{占位符}}`），**不是**本仓库的开发规则，不要据此约束本仓库的改动。

@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0 # changelog --check 需要 tag 区间（默认浅克隆拉不到 tag）
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -19,6 +21,7 @@ jobs:
       - run: npm run check:i18n
       - run: npm run lint:templates
       - run: npm run policy:check
+      - run: npm run changelog -- --check
       - run: npm run devcontainer:check
       - run: npm pack --dry-run
 
