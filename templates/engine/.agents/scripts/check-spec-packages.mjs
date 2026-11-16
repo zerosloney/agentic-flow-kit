@@ -35,7 +35,7 @@ export function checkPackage(root, name) {
   if (verify == null) problems.push('missing verify-report.md');
   else {
     if (!/^##\s*(?:\d+[.、)]\s*)?结果/m.test(verify)) problems.push('verify-report.md missing "## 结果"'); // 编号前缀容忍（issue #56）
-    if (!/^##\s*(?:\d+[.、)]\s*)?证据/m.test(verify)) problems.push('verify-report.md missing "## 证据"');
+    if (!/^##\s*(?:\d+[.、)]\s*)?证据/m.test(verify)) problems.push('verify-report.md missing "## 证据"'); // 编号前缀容忍（issue #56）
     if (!/^\s*结论\s*[:：]\s*(pass|fail|partial)\b/im.test(verify)) {
       problems.push('verify-report.md missing "结论: pass|fail|partial"');
     }

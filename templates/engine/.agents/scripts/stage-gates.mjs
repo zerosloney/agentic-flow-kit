@@ -164,7 +164,7 @@ export function entryStorageLegacy(root, abs) {
 export function incidentMarked(body) {
   let inTimeline = false;
   for (const l of String(body).replace(/\r\n/g, '\n').split('\n')) {
-    if (/^##\s/.test(l)) { inTimeline = /^##\s*时间线/.test(l); continue; }
+    if (/^##\s/.test(l)) { inTimeline = /^##\s*(?:\d+[.、)]\s*)?时间线/.test(l); continue; } // 编号前缀容忍（issue #56）
     if (inTimeline && MARK_RE.test(l)) return true;
   }
   return false;
@@ -439,7 +439,7 @@ export function parseIntentAcceptance(text) {
   const items = [];
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
-    if (/^##\s/.test(l)) { inSec = /^##\s*验收标准/.test(l); continue; }
+    if (/^##\s/.test(l)) { inSec = /^##\s*(?:\d+[.、)]\s*)?验收标准/.test(l); continue; } // 编号前缀容忍（issue #56）
     if (!inSec) continue;
     const m = /^\s*-\s*\[[ xX]\]\s*(.*)$/.exec(l);
     if (!m) continue;
@@ -760,7 +760,7 @@ export function incidentTrioGate(root, abs, rel) {
   } catch { added = ''; }
   if (!/^\d{4}-/.test(added)) return { ok: true, skipped: 'no-date' };
   if (added.slice(0, 10) < INCIDENT_TRIO_SINCE) return { ok: true, skipped: 'legacy-era' };
-  const idx = bodyLines.findIndex((l) => /^##\s*复盘三件套/.test(l));
+  const idx = bodyLines.findIndex((l) => /^##\s*(?:\d+[.、)]\s*)?复盘三件套/.test(l)); // 编号前缀容忍（issue #56）
   if (idx === -1) {
     return { ok: false, reason: '缺「## 复盘三件套」节', hint: '补复盘三件套（结构性修复 / 防复发验证 / 规范条目）后重试关单' };
   }

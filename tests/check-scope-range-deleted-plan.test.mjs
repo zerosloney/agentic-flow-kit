@@ -168,5 +168,6 @@ test('check-scope-range 声明 0 时出账提示（越界仍 --strict 判红）'
   const r = run(dir, c0, c1, ['--strict']);
   const out = `${r.stdout}${r.stderr}`;
   assert.match(out, /未解析到任何声明路径/);
+  assert.match(out, /声明 0：workflow\/plans\/2026-01-01-none\.md 未解析到/); // 逐 plan 口径出账（多 plan 合推时单份静默 0 也可见）
   assert.equal(r.status, 1, `声明 0 时产品件越界判定口径不变，实际 exit ${r.status}:\n${out}`);
 });
