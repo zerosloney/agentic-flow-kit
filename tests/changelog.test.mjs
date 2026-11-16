@@ -196,3 +196,23 @@ test('e2e：--notes 默认最新 tag；--to 接受待发版 version；未知版�
   const nMissing = run(root, ['--notes', '--to', '9.9.9']);
   assert.equal(nMissing.status, 1);
 });
+
+test('e2e：--check 无 CHANGELOG.md 报第 1 行差异；无 tag 仓库 --notes 报找不到版本', () => {
+  const root = seedRepo();
+  fs.rmSync(path.join(root, 'CHANGELOG.md'), { force: true }); // 显式确保不存在：走磁盘空串比对路径
+  const c = run(root, ['--check']);
+  assert.equal(c.status, 1);
+  assert.ok(c.stderr.includes('首个差异在第 1 行'), c.stderr);
+  assert.ok(c.stderr.includes('重跑 node tools/gen-changelog.mjs --write'), c.stderr);
+
+  // 无 tag 仓库：--notes 默认目标取 tags[0] 为 null → 找不到段 exit 1
+  const bare = makeTmp('fk-changelog-notag-');
+  git(bare, ['init', '-q']);
+  git(bare, ['config', 'user.email', 'test@example.com']);
+  git(bare, ['config', 'user.name', 'changelog-test']);
+  write(bare, 'package.json', `${JSON.stringify({ name: 'fixture', version: '1.0.0', private: true }, null, 2)}\n`);
+  commit(bare, 'feat: 只有提交没有 tag');
+  const n = run(bare, ['--notes']);
+  assert.equal(n.status, 1);
+  assert.ok(n.stderr.includes('找不到版本'), n.stderr);
+});

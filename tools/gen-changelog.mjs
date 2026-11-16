@@ -38,7 +38,7 @@ export function classify(subjects) {
     const parsed = parseSubject(line);
     const bucket = parsed
       ? BUCKETS.find((b) => b.types === null || b.types.includes(parsed.type))
-      : BUCKETS[3];
+      : BUCKETS.find((b) => b.types === null);
     entries.get(bucket.title).push(line); // 桶内保留原始 subject 全文
   }
   return BUCKETS.map((b) => ({ title: b.title, entries: entries.get(b.title) }));
@@ -169,31 +169,36 @@ function runMain(argv) {
     console.error(`[changelog] ${error.message}`);
     return 2;
   }
-  const { tags, sections } = buildSections(root);
-  if (args.mode === 'notes') {
-    const target = args.to ?? tags[0] ?? null; // 默认最新 tag 版本；--to 接受待发版 version（归一化比较）
-    const section = target && sections.find((s) => stripV(s.version) === stripV(target));
-    if (!section) {
-      console.error(`[changelog] 找不到版本 ${target} 的段（无 tag 且无待发版段）`);
+  try {
+    const { tags, sections } = buildSections(root);
+    if (args.mode === 'notes') {
+      const target = args.to ?? tags[0] ?? null; // 默认最新 tag 版本；--to 接受待发版 version（归一化比较）
+      const section = target && sections.find((s) => stripV(s.version) === stripV(target));
+      if (!section) {
+        console.error(`[changelog] 找不到版本 ${target} 的段（无 tag 且无待发版段）`);
+        return 1;
+      }
+      process.stdout.write(`${renderSection(section).join('\n')}\n`);
+      return 0;
+    }
+    const expected = renderChangelog(sections);
+    if (args.mode === 'write') {
+      fs.writeFileSync(changelogPath, expected, 'utf8');
+      console.log(`[changelog] CHANGELOG.md 已重渲染（${sections.length} 段）`);
+      return 0;
+    }
+    const disk = fs.existsSync(changelogPath) ? fs.readFileSync(changelogPath, 'utf8') : '';
+    const line = firstDiffLine(expected, disk);
+    if (line !== null) {
+      console.error(`[changelog] CHANGELOG.md 与期望内容不一致（首个差异在第 ${line} 行）。重跑 node tools/gen-changelog.mjs --write`);
       return 1;
     }
-    process.stdout.write(`${renderSection(section).join('\n')}\n`);
+    console.log(`[changelog] CHANGELOG.md 与生成结果一致（${sections.length} 段）`);
     return 0;
-  }
-  const expected = renderChangelog(sections);
-  if (args.mode === 'write') {
-    fs.writeFileSync(changelogPath, expected, 'utf8');
-    console.log(`[changelog] CHANGELOG.md 已重渲染（${sections.length} 段）`);
-    return 0;
-  }
-  const disk = fs.existsSync(changelogPath) ? fs.readFileSync(changelogPath, 'utf8') : '';
-  const line = firstDiffLine(expected, disk);
-  if (line !== null) {
-    console.error(`[changelog] CHANGELOG.md 与期望内容不一致（首个差异在第 ${line} 行）。重跑 node tools/gen-changelog.mjs --write`);
+  } catch (error) {
+    console.error(`[changelog] ${error.message}`); // git/IO 失败：单行干净退出非零（对齐 tools/policy-check.mjs 主流程）
     return 1;
   }
-  console.log(`[changelog] CHANGELOG.md 与生成结果一致（${sections.length} 段）`);
-  return 0;
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
