@@ -17,6 +17,8 @@
 //     --strict 直接拦推（L0 本就合法无 plan）。合并提交不给豁免（提交时刻 isMergeLike 同样跳过 L0 判定）。
 //     豁免按文件计且须独占：文件另被非 L0 提交（含合并提交）碰过即失豁免，防越界件搭 L0 便车。
 //   - plan 在工作区不可读 → exit 2（fail-loud，不静默放行；推送范围内改过的 plan 应已在工作区）。
+//     例外：范围内 plan 被后续提交删除/更名（HEAD 不存在）→ 按「删除的 plan 不构成承诺来源」跳过并出账，
+//     不判 exit 2（否则含 `git mv` plan 的分支永远推不上去；2026-11-16 实证）。
 //   - old 全零（新分支首推）→ skip（exit 0）：范围判不出时不把整段历史误判越界。
 //   - --strict 时越界件非空 exit 1；默认 advisory（exit 0 出报告）。
 // 白名单与宽松匹配规则与 check-scope.mjs 单源（import 复用，不复制正则）。
@@ -100,7 +102,16 @@ const isIntentSpecDoc = (f) => /^workflow\/(?:intents|specs)\/.+\.md$/i.test(f) 
 const isIncidentDoc = (f) => /^workflow\/incidents\/.+\.md$/i.test(f) && !f.endsWith('/INDEX.md');
 
 // 范围内新增/修改的 plan（删除的 plan 不构成承诺来源；plans 目录外不看）
-const plansInRange = changed.filter((f) => /^workflow\/plans\/.+\.md$/i.test(f) && !f.endsWith('/INDEX.md'));
+const plansInRangeAll = changed.filter((f) => /^workflow\/plans\/.+\.md$/i.test(f) && !f.endsWith('/INDEX.md'));
+// 2026-11-16 修（plan 更名实证）：范围内 plan 被后续提交删除/更名（`git mv` 逐提交取 diff-tree 且
+// --no-renames，产 D old + A new）时，old 路径在 HEAD 已不存在——原实现直接 exit 2 fail-loud，
+// 含 plan 更名的分支此后永远推不上去。上方注释已声明「删除的 plan 不构成承诺来源」，此处按同口径
+// 过滤 HEAD 不存在的路径；**存活的 plan 仍逐份读取**，读不到照样 exit 2（fail-loud 不放宽）。
+const plansInRange = plansInRangeAll.filter((f) => fs.existsSync(path.join(ROOT, f)));
+if (plansInRange.length !== plansInRangeAll.length) {
+  const gone = plansInRangeAll.filter((f) => !plansInRange.includes(f));
+  console.log(`▶ check-scope-range：范围内 ${gone.length} 份 plan 已在后续提交删除/更名，不作承诺来源：${gone.join('、')}`);
+}
 if (!plansInRange.length) {
   console.log('▶ check-scope-range：推送范围无 plan 新增/修改——skip（提交时刻顺序门已执法）');
   // 盲面封堵：范围零 plan 变更 ≠ 范围无事——多提交无 plan 合推可整段夹带产品面改动（提交时刻
