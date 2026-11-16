@@ -5,10 +5,12 @@
 // 检出边界：覆盖「钩子未挂 / --no-verify 且消息违规」；不覆盖「--no-verify 但消息恰好合法」（合法即无可报违规）。
 // 区间传递：三层基准
 //   ① --base 显式指定（本地复跑）；
-//   ② PR 构建（SYSTEM_PULLREQUEST_TARGETBRANCH 在场且 HEAD 是合并提交）：取合并提交的第一父（= 目标分支尖端）
-//      作基准，只判本 PR 引入的提交。原因（2026-11-05 实测 build 29054 假红）：PR 构建的 CI_PUSH_BEFORE 来自
-//      changes API「最老一笔的第一父」，该区间会拉入目标分支侧历史（main 上的「还原…」存量提交），
-//      把规则生效前的旧提交判红——规则只约束新提交，存量不该拦发布 PR。
+//   ② 合并提交检出（HEAD 是合并提交、两父，不限 PR 构建）：取合并提交的第一父（= 目标分支尖端）
+//      作基准，只判本次合并带进来的提交。原因（2026-11-05 实测 build 29054 假红；2026-11-16 装户实测
+//      build 29647 同类——issue #63）：CI_PUSH_BEFORE 来自 changes API「最老一笔的第一父」，该区间会
+//      拉入目标分支侧历史（main 上的「还原…」存量提交），把规则生效前的旧提交判红——规则只约束新提交，
+//      存量不该拦发布 PR。手工重档 / 直推合并结果等非 PR 构建同样落在合并提交上，故不以
+//      SYSTEM_PULLREQUEST_TARGETBRANCH 为前提（普通推送构建单父 HEAD 不受影响，仍走 ③）。
 //   ③ 推送构建：CI_PUSH_BEFORE；取不到 advisory 退回 HEAD~1（同泳道门退回口径）。
 // 本地测试可 --base <revision> 显式指定。违规 exit 1 并逐条列出（hash + message + 违规原因）。
 import fs from 'node:fs';
@@ -46,11 +48,10 @@ const gitOut = (args) => {
 let base = argOf('--base');
 let baseSource = '--base';
 if (!base) {
-  const isPrBuild = Boolean((process.env.SYSTEM_PULLREQUEST_TARGETBRANCH || '').trim());
   const parents = gitOut(['rev-list', '--parents', '-n', '1', 'HEAD']).trim().split(/\s+/).slice(1);
-  if (isPrBuild && parents.length > 1) {
+  if (parents.length > 1) {
     base = parents[0];
-    baseSource = 'PR 目标侧第一父';
+    baseSource = '合并提交第一父';
   }
 }
 if (!base) {
@@ -60,7 +61,7 @@ if (!base) {
 if (!base) {
   base = 'HEAD~1';
   baseSource = 'HEAD~1 回落';
-  console.error('ci-commit-hygiene: advisory: 无 --base / PR 合并检出 / CI_PUSH_BEFORE——退回 HEAD~1（同泳道门口径，多提交直推仅核末笔）');
+  console.error('ci-commit-hygiene: advisory: 无 --base / 合并提交检出 / CI_PUSH_BEFORE——退回 HEAD~1（同泳道门口径，多提交直推仅核末笔）');
 }
 base = gitOut(['rev-parse', base]).trim(); // 解析为 40 位 sha，顺带验证区间起点在本仓存在（不合法 loud fail）
 const head = gitOut(['rev-parse', 'HEAD']).trim();

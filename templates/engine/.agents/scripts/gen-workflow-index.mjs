@@ -65,7 +65,7 @@ function parseDoc(text) {
 
 // ---- 验收勾验统计：仅「## 验收标准」节内（至下一个 ## 标题），无该节返回 null（对照看板口径）----
 function parseAcceptance(text) {
-  const h = text.match(/^## 验收标准.*$/m);
+  const h = text.match(/^##\s*(?:\d+[.、)]\s*)?验收标准.*$/m); // 编号前缀容忍（issue #56）
   if (!h) return null;
   const rest = text.slice(h.index + h[0].length);
   const next = rest.match(/^## /m);

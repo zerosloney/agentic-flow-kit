@@ -139,10 +139,13 @@ if (!plansInRange.length) {
 }
 
 const declared = [];
+const plansWithNoDecl = []; // 逐 plan 记解析 0（issue #56 补充建议「本 plan」口径：多 plan 合推时单份静默 0 也要出账）
 for (const rel of plansInRange) {
   const abs = path.join(ROOT, rel);
   if (!fs.existsSync(abs)) { console.error(`check-scope-range: plan 不可读: ${rel}`); process.exit(2); }
-  declared.push(...extractDeclared(abs));
+  const own = extractDeclared(abs);
+  if (!own.length) plansWithNoDecl.push(rel);
+  declared.push(...own);
 }
 
 // L0 极简道提交的产品路径不进越界集（提交时刻已由 check-confirm-order 豁免 A 放行，推送侧同口径）。
@@ -151,6 +154,8 @@ const notLanded = declared.filter((df) => !changed.some((f) => matches(f, df)));
 
 console.log(`▶ check-scope-range（推送范围 plan 改动面对账）: ${oldSha.slice(0, 8)}..${newSha.slice(0, 8)}`);
 console.log(`  范围 plan ${plansInRange.length} 份（${plansInRange.join('、')}）｜ 声明 ${declared.length} ｜ 变更 ${changed.length}${l0ExemptSet.size ? ` ｜ L0 豁免 ${l0ExemptSet.size}` : ''}`);
+if (plansInRange.length && !declared.length) console.log('  ⚠ 声明 0：范围内 plan 未解析到任何声明路径——核对节名（编号前缀如「## 2. 改动面」已容忍，命中 0 多为节名漂移或整节缺失）');
+for (const rel of plansWithNoDecl) console.log(`  ⚠ 声明 0：${rel} 未解析到任何声明路径——核对节名（多 plan 合推时单份静默 0 会让其点名产品件走越界硬判）`);
 if (outOfScope.length) {
   console.log('  越界件（推送改了但范围内 plan 未声明）:');
   outOfScope.forEach((f) => console.log(`    - ${f}`));

@@ -27,13 +27,15 @@ import { fileURLToPath } from 'node:url';
 //   （推送实证：outbound-request-check-satisfaction-display 的 `…OutboundRequestCheckSatisfactionTests.cs`），
 //   计划点名即算声明，产品面判据本身不放宽。
 // 2026-11-16 修：③补扫「验证方式」节——节名双名并存（_TEMPLATE.md 存量「验证方式」/ fill-plan 生成「验证计划」），新测试文件也有只在该节点名的面。
+// 2026-11-16 修：④节标题容忍编号前缀（issue #56 装户实证：「## 2. 改动面」解析静默失效，声明 0 → --strict 拦推）——
+//   模型产出 plan 常带编号章节，机读统一容忍 `数字[.、)]` 前缀；解析为 0 时出账提示（见 main 输出），不再静默。
 export const KNOWN_EXT = new Set(['.md', '.mjs', '.js', '.ts', '.json', '.txt', '.cs', '.csproj', '.sln', '.vue', '.ps1', '.sh', '.yml', '.yaml', '.sql', '.cjs']);
 export function extractDeclared(planAbs) {
   const declared = [];
   const lines = fs.readFileSync(planAbs, 'utf8').split(/\r?\n/);
   let inSec = false;
   for (const line of lines) {
-    if (/^##\s+(改动面|任务拆解|改动方案|验证计划|验证方式)/.test(line)) { inSec = true; continue; }
+    if (/^##\s+(?:\d+[.、)]\s*)?(改动面|任务拆解|改动方案|验证计划|验证方式)/.test(line)) { inSec = true; continue; }
     if (inSec && /^##\s+/.test(line)) { inSec = false; continue; }
     if (!inSec) continue;
     for (const m of line.matchAll(/([a-zA-Z0-9._\/\\-]+\.[a-zA-Z0-9]+)/g)) {
@@ -101,6 +103,7 @@ const notLanded = declared.filter((df) => !changed.some((f) => matches(norm(f), 
 
 console.log(`▶ check-scope（plan 改动面 ↔ git 变更对账）: ${planRel}`);
 console.log(`  声明 ${declared.length} ｜ 变更 ${changed.length}${base ? `（${base}..HEAD）` : staged ? '（staged）' : '（工作区）'}`);
+if (!declared.length) console.log('  ⚠ 声明 0：未解析到任何声明路径——核对改动面/任务拆解/改动方案/验证计划/验证方式节是否存在（编号前缀如「## 2. 改动面」已容忍，命中 0 多为节名漂移或整节缺失）');
 if (outOfScope.length) {
   console.log('  越界件（改了未声明）:');
   outOfScope.forEach((f) => console.log(`    - ${f}`));
