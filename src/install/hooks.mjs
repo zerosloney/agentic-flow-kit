@@ -90,6 +90,18 @@ export function inapplicableSpecs(cfg, spec) {
   return out;
 }
 
+// doctor 用（userHooks 宿主，如 codex）：用户级接线只有单一 event，gates.json 中 event
+// 不符的条目（如 usage-collect 的 PostToolUse 观测腿）不会接线且无项目级 hooks 对账兜底，
+// 据此给 guarantee advisory。matcher 维度 userHooks 单一，只判 event。
+export function inapplicableForUserHooks(userHooks, spec) {
+  if (!userHooks) return [];
+  const out = [];
+  for (const item of spec || []) {
+    if (item.event !== userHooks.event) out.push({ item, reason: 'event' });
+  }
+  return out;
+}
+
 // 中性条目 -> 宿主 hook 对象。form 决定命令形态：
 // cli / cli-args 走包内入口（flow-kit hook <id>）；env/relative/args 保留旧模板兼容外部宿主。
 // cli 模板不含 {hook} 时为字面命令：适配层宿主固定调起随包适配器（命令不指向规格脚本本身）。

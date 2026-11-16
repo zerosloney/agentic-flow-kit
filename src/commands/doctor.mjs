@@ -9,7 +9,7 @@ import { ciModeFor, ciTemplateRels, listFiles, readGatesSpecs, TEMPLATES } from 
 import { readMcpServers } from '../install/mcp.mjs';
 import { readToolPolicy } from '../install/tool-policy.mjs';
 import { checkDevcontainer } from '../install/devcontainer.mjs';
-import { findHookDrift, inapplicableSpecs } from '../install/hooks.mjs';
+import { findHookDrift, inapplicableForUserHooks, inapplicableSpecs } from '../install/hooks.mjs';
 import { inspectUserHookEntry } from '../install/user-hooks.mjs';
 import { listBaselines } from '../install/baseline.mjs';
 import { buildAttestation, writeAttestation } from '../install/attest.mjs';
@@ -260,6 +260,13 @@ export function doctorCommand({ args, t }) {
     // matcher 过期（如旧版 ^(Bash)$）会形成静默绕过，与条目缺失一样按 fail 报；
     // 条目信任哈希编辑即失效，重新接线 / 修改后须在交互式宿主会话重新信任一次。
     if (h.userHooks) {
+      // 降级对账：userHooks 宿主（如 codex）只有单一 event，gates.json 中 event 不符的条目
+      // 不接线且没有项目级 hooks 对账兜底，与上方 h.hooks 分支同口径给 guarantee advisory。
+      for (const { item, reason } of inapplicableForUserHooks(h.userHooks, gates.hooks)) {
+        add(true, `guarantee ${host}`, t('doctor.hooksInapplicable', {
+          id: item.id, event: item.event, tool: item.tool, reason: t(HOOK_INAPPLICABLE_REASONS[reason]),
+        }), '', { warn: true });
+      }
       const status = inspectUserHookEntry({ host });
       if (status.state === 'ok') {
         add(true, `hooks ${host} (user)`, t('doctor.userHooksOk', { path: status.file, matcher: status.matcher, host }));
