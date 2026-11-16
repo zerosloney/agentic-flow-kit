@@ -208,6 +208,32 @@ test('doctor reports inapplicable hook spec entries as a guarantee advisory', ()
     && /usage-collect/.test(item.detail)), false);
 });
 
+test('doctor reports userHooks-only hosts the same inapplicable advisory', () => {
+  // codex 只有用户级单事件接线（~/.codex/hooks.json，PreToolUse）：usage-collect
+  // （PostToolUse/agent）不接线且无项目级 hooks 对账兜底，doctor 须给同构 guarantee
+  // advisory 而非静默；假 HOME 手法同 codex-host.test.mjs。
+  const dir = tmpRepo();
+  const home = makeTmp('flow-kit-codex-home-');
+  const env = { ...process.env, FLOW_KIT_TEST: '1', HOME: home, USERPROFILE: home };
+  const runIn = (args) => spawnSync(process.execPath, [BIN, ...args], { cwd: dir, encoding: 'utf8', env });
+  const installed = runIn(['install', '--agent', 'codex', '--stack', 'node', '--target', '.', '--json']);
+  assert.equal(installed.status, 0, installed.stderr);
+  const doctor = json(runIn(['doctor', '--target', '.', '--json']));
+  const advisory = doctor.checks.find((item) => item.name === 'guarantee codex'
+    && /usage-collect/.test(item.detail));
+  assert.ok(advisory, JSON.stringify(doctor.checks));
+  assert.equal(advisory.ok, true);
+  assert.equal(advisory.warn, true);
+  assert.match(advisory.detail, /PostToolUse\/agent/);
+  assert.match(advisory.detail, /宿主未声明该事件/);
+  // 用户级接线在位：不误报接线缺失；advisory 不改 exit 语义。
+  assert.equal(doctor.checks.find((item) => item.name === 'hooks codex (user)').ok, true);
+  assert.equal(doctor.summary.failed, 0);
+  const plain = runIn(['doctor', '--target', '.']);
+  assert.equal(plain.status, 0, plain.stderr);
+  assert.match(plain.stdout, /! guarantee codex/);
+});
+
 test('hosts without hooks.events keep the static template fallback', () => {
   for (const host of ['opencode', 'pi', 'cline']) {
     const plan = buildPlan({

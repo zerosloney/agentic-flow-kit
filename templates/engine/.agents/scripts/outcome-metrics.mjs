@@ -11,7 +11,7 @@
 //   - 行为评测通过率与陈旧面（.agents/evals/results.jsonl）
 //   - 返工提交占比（git log，可选）
 //   - 派发报告预算超限月（workflow/delegations.d 分片正文字数，advisory）——计量单源
-//     = agg-delegations.reportBudgetStats（口径：分片去空白字符合计，非逐报告全文，不造数）
+//     = agg-delegations.reportBudgetStats（口径：月合计 vs 报告数×单报告预算，分片去空白字符，不造数）
 //
 // 输出：workflow/metrics/outcome.md；--json 输出机器可读。
 // 诚实边界：只聚合已有台账；缺源在报告末尾单列，不造数、不把 0 当“很好”。
@@ -138,6 +138,8 @@ export function collect(root, { days = 30, now = Date.now()} = {}) {
   }
 
   // 6) 派发报告预算（dispatch-budget，advisory）：超限月进入聚合面。只加字段不加门禁；缺源入 missing。
+  //    overCount/overMonths 口径（2026-11-16 修正）：按月·报告数加权——月合计 > 该月报告数×单报告预算
+  //    才计超限月（旧口径月合计直比单报告预算，多报告月结构性误报）。字段形状不变，仅语义修正。
   const rb = reportBudgetStats(root);
   out.reportBudget = {
     budget: rb.budget,
@@ -165,7 +167,7 @@ export function renderMarkdown(m) {
     `| 行为评测陈旧面 | Leading | ${m.evals.stale}/${m.evals.signatures} 个签名过期；最新通过率 ${fmt(m.evals.lastPassRate)} |`,
     `| 复核采纳率 | Leading | ${fmt(m.review.adoptionRate)}（采纳 ${m.review.adopted} / 拒绝 ${m.review.rejected} / 误报 ${m.review.misreport}） |`,
     `| 返工提交占比 | Lagging | ${m.rework ? `${fmt(m.rework.rate)}（${m.rework.rework}/${m.rework.commits}）` : '—（无 git）'} |`,
-    `| 派发报告预算超限 | Leading | ${m.reportBudget && m.reportBudget.budget != null ? `预算 ${m.reportBudget.budget} 字符（advisory）；delegations.d 分片正文超限 ${m.reportBudget.overCount}/${m.reportBudget.shards} 月${m.reportBudget.overMonths.length ? `（${m.reportBudget.overMonths.join('、')}）` : ''}（口径：分片去空白字符合计，非逐报告全文）` : '—'} |`,
+    `| 派发报告预算超限 | Leading | ${m.reportBudget && m.reportBudget.budget != null ? `预算 ${m.reportBudget.budget} 字符（advisory）；delegations.d 分片正文超限 ${m.reportBudget.overCount}/${m.reportBudget.shards} 月${m.reportBudget.overMonths.length ? `（${m.reportBudget.overMonths.join('、')}）` : ''}（口径：月合计 vs 报告数×单报告预算，分片去空白字符）` : '—'} |`,
     `| 未关闭事故 | Lagging | ${m.incidents.open}/${m.incidents.total} |`,
     '',
   ];

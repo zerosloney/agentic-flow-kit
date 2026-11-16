@@ -180,3 +180,21 @@ test('run summarization ignores out-of-window runs and exposes failures', () => 
   assert.equal(out.gates.failed, 0);
   assert.equal(evalTimeline([], {}).models.length, 0);
 });
+
+test('template pricing table converts claude usage rows to cost', () => {
+  const root = makeTmp('observability-pricing-');
+  fs.mkdirSync(path.join(root, '.agents', 'config'), { recursive: true });
+  fs.copyFileSync(
+    new URL('../templates/engine/.agents/config/observability.json', import.meta.url),
+    path.join(root, '.agents', 'config', 'observability.json'),
+  );
+  fs.writeFileSync(path.join(root, '.agents', 'usage.jsonl'), `${JSON.stringify({
+    ts: iso(3600000), role: 'agent', model: 'claude-sonnet-4-5', inputTokens: 1000, outputTokens: 500, latencyMs: 1200, outcome: 'pass',
+  })}\n`);
+  const report = buildReport(root, { now: NOW });
+  assert.equal(report.cost.unpricedCalls, 0);
+  assert.ok(report.cost.pricedCalls >= 1);
+  assert.ok(Number.isFinite(report.cost.totalUsd) && report.cost.totalUsd > 0, 'claude row must convert to a positive cost');
+  const sonnet = report.cost.byModel.find((m) => m.model === 'claude-sonnet-4-5');
+  assert.ok(sonnet && sonnet.calls === 1 && Number.isFinite(sonnet.costUsd) && sonnet.costUsd > 0);
+});
