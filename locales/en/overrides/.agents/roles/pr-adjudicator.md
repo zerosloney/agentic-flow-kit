@@ -19,6 +19,7 @@ A read-only adjudicator in an independent context. Intervenes only when consensu
 - **Deliverables**:
   - Parameters or JSON required by `pr-review adjudicate`: `decision`, `severity`, `provenance`, `reason`, `adjudicator`; when rejecting and confirming that the finder's claim itself is wrong, add `misreport: true` (record via `--misreport`, entering the "misreport" column of the monthly ledger).
   - A one-line adjudication summary writable to `workflow/reviews.d/`.
+  - Report budget: adjudication report ≤500 characters (single source `.agents/config/dispatch.json` reportBudgetChars, advisory — metered, never blocking), structured as "conclusion / evidence paths / risks"; no large source excerpts or full logs in the reply, no full-file reads of candidates/ledger documents just to fetch a single field
 
 ## Constraints
 - **Read-only prohibition**: Absolutely forbidden to modify any repository file; adjudications are recorded only through `pr-review adjudicate`.

@@ -57,12 +57,17 @@ next: 按 run 停机点循环推进至 done
 - **阶段产物契约**：`.agents/config/pipeline.json` 的 `stageArtifacts` 用 `{entry}/{spec}/{plan}` 声明产物；缺失或为空时在门执行前停 `gate-fail`（模板默认覆盖 `spec-confirm` / `plan-confirm` / `verify` / `closeout`）。
 - **续跑幂等**：`docsCommit` 若发现 HEAD 已是同主题提交，不再重复提交（记 `resumed: true` 的 commit 事件）。
 
+### 失败路由 / 任务状态（R6-1 / R6-2）
+
+- **失败路由表**：`.agents/config/pipeline.json` 的 `onFail` 按阶段声明 `{to, retry}`；`retry` 是该阶段允许的最大失败次数（含），第 `retry` 次失败即停。模板默认只声明 `verify → fix`（`retry: 3`）。未声明的阶段不退回，原地停 `gate-fail`。产物契约失败与 verify-only 短路径不消耗退回预算。`check-pipeline-state.mjs` 静态校验该表：键与目标都须登记且脚本可达，目标不得是终态，`retry` 须为 0-5 整数。
+- **任务状态**：run 文件用 `retries`（per-stage 失败计数）与 `nextTarget`（退回目标）记录现场。停机时 `stage` 留在失败处，`next` 才从 `nextTarget` 重入并记 `route-enter` 事件；退回途中记 `route` 事件（`from/to/attempt/cap`）。`resume` 事件带 `artifacts: complete|missing` 与 `missing` 清单，产物缺失仍由契约门拦住，不会跳过重跑。
+
 ## 🚫 硬纪律 (违反即协议破坏)
 
 | 操作 | 后果 / 机器行为 | 例外 |
 |---|---|---|
 | 直改 workflow 状态 | → 绕过唯一迁移入口（confirm-doc） | 宿主永不直改 frontmatter |
 | 编造/复用原话 | → 台账 `confirmations.jsonl` 对质暴露 | `--delegated` 必须是当次对话原话 |
-| 带病推进 | 修复环超限 (3 次) 停机交人工 | verify 非绿不关单 |
+| 带病推进 | 失败次数达 `onFail` 预算（verify 默认 3 次）停机交人工 | verify 非绿不关单 |
 | 写 run 文件 | → 与机器事实冲突 | 宿主只读不写 |
 | 自动放行人件门 | `await-confirm` 须转述要点、拿到用户放行原话后才 `next --delegated` | 自动触发仅指阶段衔接与技能装载 (new-task §1c 联动协议)，任何人件门永不自动越过 |

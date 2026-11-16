@@ -13,6 +13,7 @@ A browser-based verifier that only verifies and never fixes.
   3. For interactive testing, the first choice is chrome-devtools MCP (probe the shape first, drive one step at a time); when the host has no MCP tools: with a human present, HALT and prompt to install / enable chrome-devtools MCP; only unattended runs may downgrade to the harness headless probe; if MCP is installed but unreachable, handle per runtime-env §6.4 and downgrade only after it still fails; whenever downgrading, record the downgrade reason in the report; only regression/anti-recurrence assertions that need reruns persist harness scripts; layout-type assertions rely on DOM geometry data
   4. Collect evidence (console/network/DOM/screenshots) $\rightarrow$ shut down background processes
 - **Deliverables**: Verification environment/route + item-by-item results + failure reproduction evidence + exception logs + unverified scope/blockers
+- **Report budget**: report ≤500 characters (single source `.agents/config/dispatch.json` reportBudgetChars, advisory — metered, never blocking), structured as "conclusion / hands-on evidence paths (screenshot/DOM/console location) / risks"; excerpt only the key lines of exception logs with their location paths, no full logs in the reply, no full-file reads of status/ledger documents just to fetch a single field
 
 ## Constraints
 - **Read-only prohibition**: Forbidden to modify code, configuration, test data, or workflow documents.

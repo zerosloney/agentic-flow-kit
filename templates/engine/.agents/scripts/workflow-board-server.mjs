@@ -16,6 +16,7 @@ import { createHash } from 'node:crypto';
 import { ENUMS } from './workflow-enums.mjs';
 import { stageBar } from './pipeline-run.mjs';
 import { loadAllConfirmations } from './ledger-loader.mjs';
+import { projectTasks } from './gen-workflow-index.mjs'; // 任务投影单源（2026-11-16 P3）：/api/board tasks 与 INDEX 同口径
 import { funnelFromLedger, loadFirstAdded, scanReviews, fmtMedianDays, calendarMonthsBetween } from './metrics-core.mjs';
 import { buildTour } from './dev-tour-model.mjs';
 
@@ -82,8 +83,14 @@ export function parseRunFile(text) {
 }
 
 // 单 run 卡片（/api/runs 载荷元素）：runId / requirement / stage / stopType / updatedAt / triage / 事件数 / 阶段条
+// 退回态（R6-1）：仅当 run 挂着未消费的 nextTarget 时，阶段条尾部追加「↩ 退回 <to>（<from> <attempt>/<cap>）」
+// ——attempt/cap 取该失败阶段最近一次 route 事件（stopGateFail 置 nextTarget 后必发 route）；route/route-enter
+// 事件细节已随 /api/run 事件流全量下发，卡片只补当前待重入的退回态。
 export function runCard(run) {
   const events = Array.isArray(run.events) ? run.events : [];
+  const route = run.nextTarget
+    ? [...events].reverse().find((e) => e.type === 'route' && e.from === run.stage)
+    : null;
   return {
     runId: run.runId,
     requirement: run.requirement || '',
@@ -92,7 +99,8 @@ export function runCard(run) {
     updatedAt: run.updatedAt || run.createdAt || '',
     triage: run.triage || null,
     eventCount: events.length,
-    stageBar: stageBar(run),
+    nextTarget: run.nextTarget || null,
+    stageBar: stageBar(run) + (route ? ` ↩ 退回 ${route.to}（${route.from} ${route.attempt}/${route.cap}）` : ''),
   };
 }
 
@@ -349,6 +357,7 @@ async function scanBoard() {
   const loop = loopBlocksSnapshot(); // hard-block 全局告警（单源 check-loop 后台刷新；null = 预热中/不可用）
   return {
     root: ROOT, pid: process.pid, startedAt: STARTED_AT, counts, cards,
+    tasks: projectTasks(ROOT), // 任务投影（2026-11-16 P3）：单源 gen-workflow-index.projectTasks，禁复制口径
     loopHardBlocks: loop.blocks, loopNote: loop.note || undefined,
     activeStatuses: [...ENUMS['doc.status.active'], ...ENUMS['incident.status.active']], // 枚举单源贯通前端（p2-batch2）
   };

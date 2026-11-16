@@ -212,11 +212,13 @@
   <input id="q" placeholder="过滤 标题 / slug / 文件…" spellcheck="false">
   <button id="view-runs" class="viewbtn" title="pipeline-run 执行器事件流">执行器</button>
   <button id="view-engine" class="viewbtn" title="引擎判定流水与门禁成本趋势">引擎</button>
+  <button id="view-tasks" class="viewbtn" title="任务投影：产物齐缺一览（单源 gen-workflow-index.projectTasks）">任务</button>
   <span id="sse"><i></i><span>连接断开</span></span>
 </header>
 <div id="board"></div>
 <div id="runs-view" style="display:none"></div>
 <div id="engine-view" style="display:none"></div>
+<div id="tasks-view" style="display:none"></div>
 
 <div id="drawer">
   <div id="d-head">
@@ -255,7 +257,8 @@ let ROOT = '';             // 仓库根（/api/board 返回，内链 vscode 协�
 let Q = '';                // 搜索过滤关键字
 let RUNS = [];            // 最近一次 /api/runs 的 run 卡片
 let RUN_CURRENT = null;    // 抽屉当前打开的 run
-let VIEW = 'board';        // 当前视图：board | runs
+let TASKS = [];            // 最近一次 /api/board 的任务投影（2026-11-16 P3，单源 projectTasks）
+let VIEW = 'board';        // 当前视图：board | runs | engine | tasks
 let RUN_TAB = 'timeline';  // run 抽屉当前 tab：timeline | workorder
 
 const $ = (s) => document.querySelector(s);
@@ -332,6 +335,7 @@ async function refreshBoard() {
     return false;
   }
   CARDS = data.cards;
+  TASKS = Array.isArray(data.tasks) ? data.tasks : [];
   ROOT = data.root || ROOT;
   if (Array.isArray(data.activeStatuses) && data.activeStatuses.length) ACTIVE_STATUSES = data.activeStatuses;
   CURRENT = CARDS.find((c) => c.file === CURRENT?.file) ?? CURRENT; // 重定位抽屉卡片，避免刷新后徽标/状态陈旧
@@ -390,7 +394,40 @@ async function refreshBoard() {
       cardHtml(fam, `<span class="chip">${esc(fam.head.status)}</span>`)).join('')}</div></div>`;
   }
   $('#board').innerHTML = html;
+  if (VIEW === 'tasks') renderTasks(); // 数据随看板载荷一并到达（同一 /api/board 响应）
   return true;
+}
+
+// ================= 任务视图（2026-11-16 P3 任务投影） =================
+// /api/board tasks 数组（单源 gen-workflow-index.projectTasks，与 INDEX「任务投影」节同口径）：
+// 只读列表 + 齐缺徽标 + advisory 下一步；样式沿用 run-card/卡片段落类，不另起炉灶。
+const ENTRY_STYLE = { intent: ['INTENT', 'var(--intent)'], incident: ['INCIDENT', 'var(--incident)'], plan: ['PLAN', 'var(--plan)'] };
+const VERIFY_COLOR = { pass: 'var(--ok)', fail: 'var(--bad)', partial: 'var(--warn)' };
+function renderTasks() {
+  const q = Q.trim().toLowerCase();
+  const list = TASKS.filter((t) => !q || (t.name + ' ' + t.title).toLowerCase().includes(q));
+  const html = list.map((t) => {
+    const [label, color] = ENTRY_STYLE[t.entryType] || [t.entryType, 'var(--border-strong)'];
+    const specBadge = t.spec
+      ? `<span class="acpt ${t.spec.tasksTotal && t.spec.tasksChecked === t.spec.tasksTotal ? 'full' : ''}" title="spec 包 tasks 勾验 ${t.spec.tasksChecked}/${t.spec.tasksTotal}">☑${t.spec.tasksChecked}/${t.spec.tasksTotal}</span>`
+      : '<span class="chip" title="无同名 spec 包 / spec 文档">缺 spec</span>';
+    const vc = t.spec && t.spec.verifyConclusion;
+    const verifyBadge = t.spec
+      ? (vc
+        ? `<span class="acpt" style="color:${VERIFY_COLOR[vc] || 'var(--muted)'};border-color:${VERIFY_COLOR[vc] || 'var(--border-strong)'}" title="spec 包 verify-report.md 结论">${esc(vc)}</span>`
+        : '<span class="chip" title="spec 包缺 verify-report.md 或无「结论:」行">缺 verify</span>')
+      : '';
+    return `<div class="run-card"><div class="row">` +
+      `<span class="type" style="background:${color}">${esc(label)}</span>` +
+      (t.level && t.level !== '—' ? `<span class="lv ${['L2','L3'].includes(t.level) ? 'hi' : ''}">${esc(t.level)}</span>` : '') +
+      `<span class="chip">${esc(t.status)}</span>` + specBadge + verifyBadge +
+      `<span class="chip" title="confirmations 台账行数（按文档名匹配）">确认 ${t.confirmations}</span>` +
+      `<span class="date">${esc(t.date)}</span></div>` +
+      `<div class="title">${esc(t.title)}</div>` +
+      `<div class="run-bar">下一步：<b>${esc(t.nextHint)}</b></div></div>`;
+  }).join('');
+  $('#tasks-view').innerHTML = `<h2 style="font:600 11px/1 var(--mono);letter-spacing:.12em;color:var(--muted);padding:4px 0 10px;">任务投影 · ${TASKS.length}</h2>` +
+    (html || '<div class="empty">—</div>');
 }
 
 function renderDrawer() {
@@ -459,6 +496,7 @@ const STOP_LABEL = {
 const EVENT_DESC = {
   'run-created': '创建 run', 'work-order': '下发工单', triage: '定级', gate: '门执行',
   confirm: '确认', commit: '提交', stop: '停机', done: '完成', abort: '放弃',
+  route: '退回', 'route-enter': '重入', resume: '恢复',
 };
 
 async function refreshRuns() {
@@ -513,9 +551,15 @@ function runEventHtml(run) {
               ? `${esc(e.doc || '')} → ${esc(e.to || '')}${e.source ? ' · ' + esc(e.source) : ''}`
               : e.type === 'abort'
                 ? `→ ${esc(e.to || '')}`
-                : e.type === 'triage'
-                  ? `${esc(e.kind || '')} · ${esc(e.level || '')} · ${esc(e.module || '')}`
-                  : '';
+                  : e.type === 'triage'
+                    ? `${esc(e.kind || '')} · ${esc(e.level || '')} · ${esc(e.module || '')}`
+                    : e.type === 'route'
+                      ? `${esc(e.from || '')} → ${esc(e.to || '')} · ${e.attempt != null ? e.attempt : ''}/${e.cap != null ? e.cap : ''}`
+                      : e.type === 'route-enter'
+                        ? `${esc(e.from || '')} → ${esc(e.to || '')}`
+                        : e.type === 'resume'
+                          ? `中断于 ${esc(e.stage || '')} · 产物 ${esc(e.artifacts || '')}`
+                          : '';
     return `<div class="tl-item"><div class="tl-sub">${esc(t)}</div>` +
       (sub ? `<div class="tl-meta">${sub}</div>` : '') +
       `<div class="tl-meta">${esc((e.t || '').slice(0, 19).replace('T', ' '))}</div></div>`;
@@ -714,13 +758,17 @@ function switchView(v) {
   VIEW = v;
   const isRuns = v === 'runs';
   const isEngine = v === 'engine';
-  $('#board').style.display = isRuns || isEngine ? 'none' : '';
+  const isTasks = v === 'tasks';
+  $('#board').style.display = isRuns || isEngine || isTasks ? 'none' : '';
   $('#runs-view').style.display = isRuns ? '' : 'none';
   $('#engine-view').style.display = isEngine ? '' : 'none';
+  $('#tasks-view').style.display = isTasks ? '' : 'none';
   $('#view-runs').classList.toggle('on', isRuns);
   $('#view-engine').classList.toggle('on', isEngine);
-  $('#q').placeholder = isRuns ? '过滤 runId / 需求 / 阶段…' : isEngine ? '过滤 规则名…' : '过滤 标题 / slug / 文件…';
-  if (isRuns) refreshRuns(); else if (isEngine) refreshEngine(); else refreshBoard();
+  $('#view-tasks').classList.toggle('on', isTasks);
+  $('#q').placeholder = isRuns ? '过滤 runId / 需求 / 阶段…' : isEngine ? '过滤 规则名…' : isTasks ? '过滤 任务名 / 标题…' : '过滤 标题 / slug / 文件…';
+  if (isTasks) refreshBoard(); // 任务与卡片同一 /api/board 载荷；refreshBoard 内按 VIEW 渲染任务区
+  else if (isRuns) refreshRuns(); else if (isEngine) refreshEngine(); else refreshBoard();
 }
 
 function openCard(card) { CURRENT = card; TAB = 'doc'; $('#drawer').classList.add('open'); renderDrawer(); }
@@ -802,6 +850,7 @@ document.querySelectorAll('#d-tabs button').forEach((b) => b.onclick = () => {
 });
 $('#view-runs').onclick = () => switchView(VIEW === 'runs' ? 'board' : 'runs');
 $('#view-engine').onclick = () => switchView(VIEW === 'engine' ? 'board' : 'engine');
+$('#view-tasks').onclick = () => switchView(VIEW === 'tasks' ? 'board' : 'tasks');
 
 // SSE：服务端 fs.watch 防抖后推送 changed → 看板与打开中的抽屉自动刷新
 const sse = new EventSource('/api/events');

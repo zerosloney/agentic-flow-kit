@@ -42,6 +42,8 @@ Return the JSON as the final reply; the main agent writes it to the `findings/<l
 
 When there are no findings, write `{"lens":"<id>","findings":[]}`.
 
+Report budget: the entire reply ≤500 characters (single source `.agents/config/dispatch.json` reportBudgetChars, advisory — metered, never blocking) — the findings JSON, with per-item "claim / evidence code path", is the structured report itself; no large source excerpts or full logs outside the JSON, no full-file reads of repository files just to fetch a single field.
+
 ## Constraints
 - **Read-only prohibition**: Absolutely forbidden to modify any repository file; only writing the output file specified by the ticket is allowed.
 - **Isolation**: Do not read other finders' output and do not guess other lenses' conclusions.

@@ -112,10 +112,14 @@ export const HOSTS = {
       file: 'settings.json',
       format: 'json',
       events: {
-        event: 'PreToolUse',
+        // event 数组 = 该宿主支持的多个 hook 事件（编译器按规格条目 event 匹配）。
+        // PostToolUse(Agent) 仅接 usage 观测腿（官方 hooks 文档实证：tool_response 含 usage/
+        // totalDurationMs/resolvedModel/agentId，只覆盖子代理最后一次 API 请求）；其余宿主无
+        // 公开证据，一律不接。
+        event: ['PreToolUse', 'PostToolUse'],
         container: 'hooks',
-        matchers: { write: 'Write|Edit|MultiEdit', shell: 'Bash' },
-        timeouts: { write: 120, shell: 800 },
+        matchers: { write: 'Write|Edit|MultiEdit', shell: 'Bash', agent: 'Agent' },
+        timeouts: { write: 120, shell: 800, agent: 10 },
         command: { form: 'cli', template: 'flow-kit hook {hook}' },
       },
     },

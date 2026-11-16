@@ -13,6 +13,7 @@
   3. 交互实测第一选择 chrome-devtools MCP（先探形、单步驱动）；宿主无 MCP 工具时：有人值守 HALT 并提示安装 / 启用 chrome-devtools MCP，无人值守才降级 harness headless 探针；MCP 已装不通按 runtime-env §6.4 处置后仍失败才降级；凡降级在报告记降级原因；需复跑的回归/防复发断言才落 harness 脚本；布局类断言以 DOM 几何数据为准
   4. 采集证据 (控制台/网络/DOM/截图) $\rightarrow$ 关闭后台进程
 - **Deliverables**: 验证环境/路由 + 逐项结果 + 失败复现证据 + 异常日志 + 未验证范围/阻塞项
+- **报告预算**: 报告 ≤500 字符（单源 `.agents/config/dispatch.json` reportBudgetChars，advisory 只计量不阻断），结构化为「结论 / 实测证据路径（截图/DOM/控制台落点）/ 风险」；异常日志只摘关键行并给落点路径，禁回传完整日志，禁为取单字段全量回读状态/台账文件
 
 ## Constraints
 - **只读禁令**: 禁修改代码、配置、测试数据或工作流文档。

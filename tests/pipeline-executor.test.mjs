@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { analyze } from '../templates/engine/.agents/scripts/check-pipeline-state.mjs';
 import {
   parseParallelList as parseParallel, parseRetryCap as parseRetry, resolveArtifact, resolveDocRel,
-  stageArtifactProblems,
+  stageArtifactProblems, failRoute,
 } from '../templates/engine/.agents/scripts/pipeline-run.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -67,14 +67,14 @@ if ((process.env.PIPELINE_FAKE_MODE || 'ok') === 'barrier') {
 const FAKE_GIT = `process.exit(0);
 `;
 
-function fixture({ stageArtifacts = { verify: ['{plan}'] }, withPlan = true } = {}) {
+function fixture({ stageArtifacts = { verify: ['{plan}'] }, withPlan = true, onFail = { verify: { to: 'fix', retry: 3 } } } = {}) {
   const root = makeTmp('pipeline-exec-');
   const write = (rel, text) => {
     const abs = path.join(root, rel);
     fs.mkdirSync(path.dirname(abs), { recursive: true });
     fs.writeFileSync(abs, text);
   };
-  write('.agents/config/pipeline.json', JSON.stringify({ version: 1, stages: [], stopTypes: [], stageArtifacts }, null, 2));
+  write('.agents/config/pipeline.json', JSON.stringify({ version: 1, stages: [], stopTypes: [], stageArtifacts, onFail }, null, 2));
   write('.agents/config/workflow-modules.txt', 'wiki\nbackend\n');
   write('.agents/scripts/verify.mjs', VERIFY_MJS);
   write('.agents/scripts/check-extra.mjs', EXTRA_MJS);
@@ -96,7 +96,8 @@ function writeRun(root, overrides = {}) {
     stopType: 'work-order',
     workOrder: null,
     awaitConfirm: null,
-    fixLoop: { count: 0, cap: 3 },
+    retries: {},
+    nextTarget: null,
     docs: { entry: 'workflow/intents/t.md', spec: null, plan: 'workflow/plans/t.md' },
     lastKbHits: [],
     lastFiles: [],
@@ -300,6 +301,174 @@ test('pipeline state machine stays statically closed after R3-5', () => {
   const res = analyze(src, cfg);
   assert.deepEqual(res.problems, []);
   assert.ok(res.ok);
+});
+
+test('R6-1: failRoute falls back to stop-in-place for missing or malformed edges', () => {
+  assert.deepEqual(failRoute({}, 'verify'), { to: 'verify', retry: 0 });
+  assert.deepEqual(failRoute(null, 'verify'), { to: 'verify', retry: 0 });
+  assert.deepEqual(failRoute({ onFail: { verify: { to: 'fix', retry: 3 } } }, 'verify'), { to: 'fix', retry: 3 });
+  assert.deepEqual(failRoute({ onFail: { verify: null } }, 'verify'), { to: 'verify', retry: 0 });
+  assert.deepEqual(failRoute({ onFail: { verify: { to: '', retry: 9 } } }, 'verify'), { to: 'verify', retry: 0 });
+  assert.deepEqual(failRoute({ onFail: { verify: { to: 'fix', retry: 2.5 } } }, 'verify'), { to: 'fix', retry: 0 });
+  assert.deepEqual(failRoute({ onFail: { verify: { to: 'fix', retry: 5 } } }, 'verify'), { to: 'fix', retry: 5 });
+});
+
+test('R6-1: verify failure routes to the table target and persists per-stage retries', () => {
+  const root = fixture();
+  writeRun(root);
+  const r = runPipeline(root, ['next', '--run', 'test-run'], { PIPELINE_FAKE_MODE: 'counter' });
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  assert.match(r.stdout, /修复环 1\/3：verify 未过/);
+  const run = readRun(root);
+  assert.equal(run.stage, 'fix');
+  assert.equal(run.stopType, 'work-order');
+  assert.equal(run.workOrder.kind, 'fix');
+  assert.deepEqual(run.retries, { verify: 1 });
+  assert.equal(run.fixLoop, undefined, '旧 fixLoop 计数已随路由表退役');
+  assert.equal(run.nextTarget, null);
+});
+
+test('R6-1: exhausted retry budget stops at the failure stage with exit 2', () => {
+  const root = fixture();
+  writeRun(root, { retries: { verify: 2 } });
+  const r = runPipeline(root, ['next', '--run', 'test-run'], { PIPELINE_FAKE_MODE: 'counter' });
+  assert.equal(r.status, 2, r.stderr || r.stdout);
+  assert.match(r.stdout + r.stderr, /修复环超限（3 次）/);
+  const run = readRun(root);
+  assert.equal(run.stage, 'verify', 'stage 留在失败处，不伪装成已退回');
+  assert.equal(run.stopType, 'gate-fail');
+  assert.equal(run.retries.verify, 3);
+  assert.equal(run.nextTarget, null);
+});
+
+test('R6-1: an undeclared stage keeps the pre-table stop-in-place behavior', () => {
+  const root = fixture({ onFail: {} });
+  writeRun(root);
+  const r = runPipeline(root, ['next', '--run', 'test-run'], { PIPELINE_FAKE_MODE: 'counter' });
+  assert.equal(r.status, 2, r.stderr || r.stdout);
+  assert.match(r.stdout + r.stderr, /未声明失败路由/);
+  const run = readRun(root);
+  assert.equal(run.stage, 'verify');
+  assert.equal(run.retries.verify, 1);
+  assert.equal(run.nextTarget, null, '未声明即不退回');
+  assert.equal(run.events.some((e) => e.type === 'route'), false);
+});
+
+test('R6-1: a declared edge routes a rejection and next re-enters the target', () => {
+  const root = fixture({ onFail: { triage: { to: 'triage', retry: 2 } } });
+  writeRun(root, { stage: 'triage', triage: null });
+  const args = ['next', '--run', 'test-run', '--triage', 'kind=bogus level=L1 module=wiki topic=test'];
+  const r = runPipeline(root, args);
+  assert.equal(r.status, 2, r.stderr || r.stdout);
+  assert.match(r.stdout, /退回 triage 重做/);
+  const run = readRun(root);
+  assert.equal(run.stage, 'triage');
+  assert.equal(run.nextTarget, 'triage');
+  assert.equal(run.retries.triage, 1);
+  const route = run.events.find((e) => e.type === 'route');
+  assert.deepEqual([route.from, route.to, route.attempt, route.cap], ['triage', 'triage', 1, 2]);
+
+  const again = runPipeline(root, args);
+  assert.equal(again.status, 2, again.stderr || again.stdout);
+  const run2 = readRun(root);
+  assert.ok(run2.events.some((e) => e.type === 'route-enter' && e.from === 'triage' && e.to === 'triage'));
+  assert.equal(run2.retries.triage, 2, '计数跨进程持久化');
+  assert.equal(run2.nextTarget, null, '预算耗尽后不再退回');
+});
+
+test('R6-2: resume reports missing artifacts and the contract gate still blocks', () => {
+  const root = fixture({ withPlan: false });
+  writeRun(root, { inFlight: { stage: 'verify', since: NOW } });
+  const r = runPipeline(root, ['resume', '--run', 'test-run']);
+  assert.equal(r.status, 2, r.stderr || r.stdout);
+  const run = readRun(root);
+  const ev = run.events.find((e) => e.type === 'resume');
+  assert.equal(ev.stage, 'verify');
+  assert.equal(ev.artifacts, 'missing');
+  assert.equal(ev.missing.length, 1);
+  assert.match(ev.missing[0], /阶段产物缺失：workflow\/plans\/t\.md/);
+  assert.equal(run.nextTarget, null, '前置条件失败不消耗退回预算');
+  assert.equal(run.events.some((e) => e.type === 'gate'), false);
+});
+
+test('R6-2: resume with complete artifacts re-runs the interrupted gate', () => {
+  const root = fixture();
+  writeRun(root, { inFlight: { stage: 'verify', since: NOW } });
+  const r = runPipeline(root, ['resume', '--run', 'test-run']);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const run = readRun(root);
+  const ev = run.events.find((e) => e.type === 'resume');
+  assert.equal(ev.artifacts, 'complete');
+  assert.equal(ev.missing, undefined);
+  assert.ok(run.events.some((e) => e.type === 'gate' && /verify\.mjs/.test(e.cmd)));
+  assert.equal(run.inFlight, null);
+  assert.equal(run.stage, 'closeout');
+});
+
+test('R6-2: artifact contract failure stops in place without consuming retry budget', () => {
+  const root = fixture({ withPlan: false });
+  writeRun(root);
+  const r = runPipeline(root, ['next', '--run', 'test-run']);
+  assert.equal(r.status, 2, r.stderr || r.stdout);
+  assert.match(r.stdout + r.stderr, /阶段产物缺失：workflow\/plans\/t\.md/);
+  const run = readRun(root);
+  assert.equal(run.stopType, 'gate-fail');
+  assert.deepEqual(run.retries, {}, '产物契约失败（route:false）不消耗退回预算');
+  assert.equal(run.nextTarget, null);
+  assert.equal(run.events.some((e) => e.type === 'route'), false);
+});
+
+test('R6-2: verify-only short path fails without consuming retry budget', () => {
+  const root = fixture();
+  writeRun(root, { triage: { kind: 'verify', level: 'L1', module: 'wiki', topic: 'test' } });
+  const r = runPipeline(root, ['next', '--run', 'test-run'], { PIPELINE_FAKE_MODE: 'counter' });
+  assert.equal(r.status, 2, r.stderr || r.stdout);
+  assert.match(r.stdout + r.stderr, /verify-only 不带修复环/);
+  const run = readRun(root);
+  assert.equal(run.stopType, 'gate-fail');
+  assert.deepEqual(run.retries, {}, 'verify-only 短路径（route:false）不消耗退回预算');
+  assert.equal(run.nextTarget, null);
+  assert.equal(run.events.some((e) => e.type === 'route'), false);
+});
+
+test('R6-1: static gate rejects dangling, terminal, out-of-range and dead onFail edges', () => {
+  const src = fs.readFileSync(PIPELINE, 'utf8');
+  const cfg = JSON.parse(fs.readFileSync(path.join(REPO, 'templates', 'engine', '.agents', 'config', 'pipeline.json'), 'utf8'));
+  const bad = (onFail) => analyze(src, { ...cfg, onFail });
+  const has = (res, text) => assert.ok(res.problems.includes(text), `期望命中「${text}」，实得：${res.problems.join(' | ')}`);
+
+  const dangling = bad({ verify: { to: 'nowhere', retry: 3 } });
+  assert.equal(dangling.ok, false);
+  has(dangling, "onFail['verify'].to 未登记：'nowhere'");
+
+  const terminal = bad({ verify: { to: 'done', retry: 3 } });
+  assert.equal(terminal.ok, false);
+  has(terminal, "onFail['verify'] 不得路由到终态 'done'");
+
+  const overBudget = bad({ verify: { to: 'fix', retry: 6 } });
+  assert.equal(overBudget.ok, false);
+  assert.ok(overBudget.problems.some((p) => /retry 须为 0-5 整数/.test(p)), overBudget.problems.join(' | '));
+
+  const unregistered = bad({ 'not-a-stage': { to: 'fix', retry: 1 } });
+  assert.equal(unregistered.ok, false);
+  has(unregistered, "onFail 键未登记：'not-a-stage'（补 stages）");
+
+  const deadKey = bad({ done: { to: 'fix', retry: 1 } });
+  assert.equal(deadKey.ok, false);
+  has(deadKey, "onFail 不得声明终态 'done'");
+
+  const emptyOnFail = bad({});
+  assert.equal(emptyOnFail.ok, false);
+  has(emptyOnFail, 'onFail 未声明任何失败路由：门失败将原地停机（模板契约至少声明 verify 退回边）');
+
+  const noOnFailKey = { ...cfg };
+  delete noOnFailKey.onFail;
+  const noKey = analyze(src, noOnFailKey);
+  assert.equal(noKey.ok, false);
+  has(noKey, 'onFail 未声明任何失败路由：门失败将原地停机（模板契约至少声明 verify 退回边）');
+
+  assert.deepEqual(analyze(src, cfg).problems, [], '真实配置仍须闭合');
+  assert.equal(analyze(src, cfg).counts.onFail, 1);
 });
 
 function waitForFile(file, ms) {

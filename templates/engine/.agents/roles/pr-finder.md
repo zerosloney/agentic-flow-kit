@@ -42,6 +42,8 @@
 
 无发现写 `{"lens":"<id>","findings":[]}`。
 
+报告预算：整份回复 ≤500 字符（单源 `.agents/config/dispatch.json` reportBudgetChars，advisory 只计量不阻断）——findings JSON 逐条「claim / evidence 代码路径」即结构化报告本体；禁在 JSON 之外回传大段源码与完整日志，禁为取单字段全量回读仓文件。
+
 ## Constraints
 - **只读禁令**: 绝对禁止修改任何仓库文件；只允许写工单指定的输出文件。
 - **隔离**: 不读其他 finder 的输出，不猜测其他镜头的结论。

@@ -53,6 +53,22 @@ test('registry covers all 12 hosts with complete, valid capabilities', () => {
   }
 });
 
+// usage 观测腿（2026-11-16 建）：PostToolUse(Agent) 仅 claude 实证支持（官方 hooks 文档），
+// 其余宿主无公开证据一律不接——这里守的是「只加 claude」的边界。
+test('only claude declares the PostToolUse/Agent usage observation leg', () => {
+  const events = HOSTS.claude.hooks.events;
+  assert.deepEqual(events.event, ['PreToolUse', 'PostToolUse']);
+  assert.equal(events.matchers.agent, 'Agent');
+  assert.equal(events.timeouts.agent, 10);
+  for (const name of HOST_NAMES) {
+    if (name === 'claude') continue;
+    const declared = HOSTS[name].hooks?.events?.event;
+    const list = Array.isArray(declared) ? declared : [declared];
+    assert.ok(!list.includes('PostToolUse'), `${name} must not wire PostToolUse`);
+    assert.equal(HOSTS[name].hooks?.events?.matchers?.agent, undefined, `${name} must not declare an agent matcher`);
+  }
+});
+
 test('hostTargetRel puts root memory at project root and everything else in the host dir', () => {
   assert.equal(hostTargetRel('claude', 'CLAUDE.md'), 'CLAUDE.md');
   assert.equal(hostTargetRel('claude', 'agents/implementer.md'), '.claude/agents/implementer.md');

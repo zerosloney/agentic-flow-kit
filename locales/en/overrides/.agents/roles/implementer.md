@@ -16,6 +16,7 @@ Implementer of tasks that the main agent has confirmed and that have a clear sco
 - **Deliverables**: 
   - Modified-file list + change summary per file
   - Verification results + unresolved blockers/risks
+  - Report budget: ≤500 characters (single source `.agents/config/dispatch.json` reportBudgetChars, advisory — metered, never blocking), structured as "conclusion / evidence paths / risks"; no large source excerpts or full logs in the reply, no full-file reads of status/ledger documents just to fetch a single field
 
 ## Constraints
 - **Authorization boundary**: Modify only explicitly authorized files. Touching other files $\rightarrow$ **HALT** $\rightarrow$ explain the reason.

@@ -20,5 +20,16 @@
         "timeout": 800
       }
     ]
+  },
+  {
+    "event": "PostToolUse",
+    "matcher": "Agent",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "flow-kit hook usage-collect",
+        "timeout": 10
+      }
+    ]
   }
 ]

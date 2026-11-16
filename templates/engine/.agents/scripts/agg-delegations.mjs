@@ -14,6 +14,10 @@
  * unrecorded-anchor-split：未记数分列「锚前存量 / 锚后待记」（外源调研建议：判据被存量污染时
  *       扩容裁定盲目）。总口径、直方图与门 2/3/4 判据均不变——实测门 3 由 blockingRework（77/50）钉死，
  *       与未记数无关，故本笔是展示面纠偏，不改变任何月度裁定。
+ * dispatch-budget（2026-11-16）：新增 §派发报告预算——预算单源 = .agents/config/dispatch.json（reportBudgetChars，
+ *       advisory 只计量不阻断）。台账无「派发报告全文」机器可读数据源（结果表单元格是一句话摘要），
+ *       故按 delegations.d/<YYYY-MM>.md 分片文档正文字数计量（去空白字符、月合计）并在输出列名标明口径，
+ *       不伪造逐报告数据；计量单源 = reportBudgetStats(root)，outcome-metrics.mjs 同源引用。
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -352,6 +356,46 @@ function upsertSnapshotRow(text, ym, row) {
   return `${before}\n${[SNAP_HEAD, ...rows].join('\n')}\n\n${after}`;
 }
 
+// ---- 派发报告预算（dispatch-budget；预算单源 = .agents/config/dispatch.json，advisory 只计量不阻断）----
+// loadDispatchConfig：读预算单源。文件缺失 → configMissing=true；文件在但 reportBudgetChars 非正整数 →
+// budget=null（计量面不因配置坏而 fail——advisory 口径下缺预算只降级为「只列字数不判超限」）。
+function loadDispatchConfig(root = ROOT) {
+  const file = path.join(root, '.agents', 'config', 'dispatch.json');
+  let cfg = null;
+  try {
+    cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    return { budget: null, configMissing: true };
+  }
+  const n = Number(cfg && cfg.reportBudgetChars);
+  return { budget: Number.isInteger(n) && n > 0 ? n : null, configMissing: false };
+}
+
+// reportBudgetStats(root)：预算计量单源（供本脚本输出与 outcome-metrics.mjs 聚合共用——禁各自复制口径）。
+// 诚实口径：台账/分片没有「派发报告全文」的机器可读数据源（结果表单元格是一句话摘要），故统计
+// delegations.d/<YYYY-MM>.md 分片文档正文字数（去空白字符、按文件名月份合计）并在输出列名标明口径，
+// 不伪造逐报告数据。over=null = 预算单源缺失/非法，只计量不判超限。
+function reportBudgetStats(root = ROOT) {
+  const { budget, configMissing } = loadDispatchConfig(root);
+  const dir = path.join(root, 'workflow', 'delegations.d');
+  const byMonth = [];
+  if (fs.existsSync(dir)) {
+    for (const f of fs.readdirSync(dir).sort()) {
+      const m = f.match(/^(\d{4}-\d{2})\.md$/);
+      if (!m) continue;
+      const chars = fs.readFileSync(path.join(dir, f), 'utf8').replace(/\s+/g, '').length;
+      byMonth.push({ ym: m[1], chars, over: budget == null ? null : chars > budget });
+    }
+  }
+  return {
+    budget,
+    configMissing,
+    byMonth,
+    overCount: byMonth.filter((x) => x.over === true).length,
+    hasShards: byMonth.length > 0,
+  };
+}
+
 function main() {
   let rows;
   try {
@@ -398,6 +442,27 @@ function main() {
     console.log(`  有效任务 ${m.total}（待修 ${m.pending}${m.unknown ? `、未知结果 ${m.unknown}` : ''}）｜一次通过 ${fmtRate(m.passRate)}｜平均返工 ${fmtNum(m.avgRework)}｜主兜底 ${fmtRate(m.fallbackRate)}｜incident 合计 ${Object.values(incidents).reduce((a, b) => a + b, 0)} 起\n`);
   }
 
+  // 派发报告预算（dispatch-budget）：advisory 只计量不阻断；口径在列名标明（分片正文合计，非逐报告全文）
+  let rb;
+  try {
+    rb = reportBudgetStats();
+  } catch (err) {
+    fail(`派发报告预算计量失败：${err.message}`);
+  }
+  console.log(`## 派发报告预算（单源 .agents/config/dispatch.json reportBudgetChars${rb.budget == null ? ' 缺失/非法' : `=${rb.budget}`}；advisory 只计量不阻断）`);
+  if (!rb.hasShards) {
+    console.log('  （workflow/delegations.d/ 无 .md 分片：无可计量数据，不造数）');
+  } else if (rb.configMissing) {
+    console.log('  （预算单源缺失/非法：只列字数，不判超限）');
+  }
+  for (const x of rb.byMonth.filter((x) => !argMonth || x.ym === argMonth)) {
+    const cell = rb.budget == null
+      ? `${x.ym}｜delegations.d/${x.ym}.md 正文字符 ${x.chars}`
+      : `${x.ym}｜delegations.d/${x.ym}.md 正文字符 ${x.chars}/${rb.budget}（口径：分片去空白字符合计，非逐报告全文）${x.over ? ` ❌ 超限 +${x.chars - rb.budget}` : ' ✅ 预算内'}`;
+    console.log(`  ${cell}`);
+  }
+  console.log('');
+
   console.log(`## ${WRITE ? '快照行（--write 落表口径）' : '可粘贴快照行（粘到 workflow/delegations.md §月度聚合快照）'}`);
   for (const r of snapshotRows) console.log(r);
 
@@ -436,4 +501,4 @@ const isMain = process.argv[1] && import.meta.url === pathToFileURL(process.argv
 if (isMain) {
   main();
 }
-export { parseResult, metrics, gateMonth, expansionVerdict, GATE, readLedger, upsertSnapshotRow, causeSummary, isReviewAdoption, taskKey, countIncidents, CAUSES, ADOPT_CAUSE, CAUSE_ANCHOR, GEN_BEGIN, GEN_END };
+export { parseResult, metrics, gateMonth, expansionVerdict, GATE, readLedger, upsertSnapshotRow, causeSummary, isReviewAdoption, taskKey, countIncidents, CAUSES, ADOPT_CAUSE, CAUSE_ANCHOR, GEN_BEGIN, GEN_END, loadDispatchConfig, reportBudgetStats };
