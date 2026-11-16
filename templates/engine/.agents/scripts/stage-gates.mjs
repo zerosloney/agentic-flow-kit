@@ -287,7 +287,7 @@ export function parseClarifyTable(text) {
   const lines = String(text || '').replace(/\r\n/g, '\n').split('\n');
   let start = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (/^##\s*歧义清单\s*$/.test(lines[i].trim())) { start = i; break; }
+    if (/^##\s*(?:\d+[.、)]\s*)?歧义清单\s*$/.test(lines[i].trim())) { start = i; break; } // 编号前缀容忍（issue #56）
   }
   if (start < 0) return { found: false, rows: [] };
   const rows = [];
@@ -369,7 +369,7 @@ export function parsePremiseTable(text) {
   const lines = String(text || '').replace(/\r\n/g, '\n').split('\n');
   let start = -1;
   for (let i = 0; i < lines.length; i++) {
-    if (/^##\s*前提质询\s*$/.test(lines[i].trim())) { start = i; break; }
+    if (/^##\s*(?:\d+[.、)]\s*)?前提质询\s*$/.test(lines[i].trim())) { start = i; break; } // 编号前缀容忍（issue #56）
   }
   if (start < 0) return { found: false, rows: [] };
   const rows = [];

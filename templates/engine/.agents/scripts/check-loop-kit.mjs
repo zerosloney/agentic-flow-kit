@@ -450,7 +450,7 @@ function verifyOneSha(shaRaw, evidenceStr, planBase) {
   // 关单实证；扩名而非改档，存量 done 档内容受指纹绑定禁改）
   let inDeclaredSec = false;
   for (const line of planLines) {
-    if (/^##\s+(改动面|任务拆解|改动方案|改动文件清单)/.test(line)) { inDeclaredSec = true; continue; }
+    if (/^##\s+(?:\d+[.、)]\s*)?(改动面|任务拆解|改动方案|改动文件清单)/.test(line)) { inDeclaredSec = true; continue; } // 编号前缀容忍（issue #56）
     if (inDeclaredSec && /^##\s+/.test(line)) { inDeclaredSec = false; continue; }
     if (inDeclaredSec) {
       const fileMatch = line.match(/([a-zA-Z0-9._\/-]+\.[a-zA-Z0-9]+)/);

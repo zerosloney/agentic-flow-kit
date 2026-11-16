@@ -29,13 +29,13 @@ export function checkPackage(root, name) {
   const tasks = read(path.join(dir, 'tasks.md'));
   const verify = read(path.join(dir, 'verify-report.md'));
   if (spec == null) problems.push('missing spec.md');
-  else if (!/^##\s*验收标准/m.test(spec) && !/^##\s*验收判据/m.test(spec)) problems.push('spec.md missing "## 验收标准"');
+  else if (!/^##\s*(?:\d+[.、)]\s*)?验收标准/m.test(spec) && !/^##\s*(?:\d+[.、)]\s*)?验收判据/m.test(spec)) problems.push('spec.md missing "## 验收标准"'); // 编号前缀容忍（issue #56）
   if (tasks == null) problems.push('missing tasks.md');
   else if (!/^\s*-\s*\[[ xX]\]/m.test(tasks)) problems.push('tasks.md has no checkbox items');
   if (verify == null) problems.push('missing verify-report.md');
   else {
-    if (!/^##\s*结果/m.test(verify)) problems.push('verify-report.md missing "## 结果"');
-    if (!/^##\s*证据/m.test(verify)) problems.push('verify-report.md missing "## 证据"');
+    if (!/^##\s*(?:\d+[.、)]\s*)?结果/m.test(verify)) problems.push('verify-report.md missing "## 结果"'); // 编号前缀容忍（issue #56）
+    if (!/^##\s*(?:\d+[.、)]\s*)?证据/m.test(verify)) problems.push('verify-report.md missing "## 证据"');
     if (!/^\s*结论\s*[:：]\s*(pass|fail|partial)\b/im.test(verify)) {
       problems.push('verify-report.md missing "结论: pass|fail|partial"');
     }

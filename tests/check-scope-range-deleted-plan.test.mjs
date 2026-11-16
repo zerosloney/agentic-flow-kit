@@ -114,3 +114,59 @@ test('plan「验证方式」节声明的测试文件计入声明（--strict exit
   assert.equal(r.status, 0, `「验证方式」节声明应计入，实际 exit ${r.status}:\n${out}`);
   assert.match(out, /双向对齐/);
 });
+
+// issue #56（2026-11-16 装户实证）：模型产出的 plan 常带编号章节（「## 2. 改动面」），机读节标题
+// 正则不容忍编号前缀时解析静默失效——声明 0 → --strict 把产品件全判越界、拦推。解析层统一容忍
+// `数字[.、)]` 前缀。
+test('plan 编号节标题「## 2. 改动面」照常解析声明（--strict exit 0 双向对齐）', () => {
+  const dir = makeTmp('fk-scope-numbered-');
+  git(dir, 'init', '-q');
+  write(dir, 'README.md', 'x\n');
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'c0');
+  write(dir, 'workflow/plans/2026-11-16-num.md', [
+    '## 2. 改动面（权威源路径）',
+    '- src/demo.cs：<做什么>',
+    '',
+  ].join('\n'));
+  // 工作区口径（默认）：plan 与产品件写盘不提交，与「验证方式」用例同形
+  write(dir, 'src/demo.cs', 'class Demo {}\n');
+  const r = spawnSync(process.execPath, [SCOPE_SCRIPT, 'workflow/plans/2026-11-16-num.md', '--strict', '--root', dir], { encoding: 'utf8' });
+  const out = `${r.stdout}${r.stderr}`;
+  assert.equal(r.status, 0, `编号标题应照常解析，实际 exit ${r.status}:\n${out}`);
+  assert.match(out, /声明 1/);
+  assert.match(out, /双向对齐/);
+});
+
+// issue #56 补充建议：声明解析为 0 时显式出账——区分「plan 没写」与「写了但解析没认」，不改退出码。
+test('check-scope 声明 0 时出账提示（advisory 路径退出码不变）', () => {
+  const dir = makeTmp('fk-scope-empty-');
+  git(dir, 'init', '-q');
+  write(dir, 'README.md', 'x\n');
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'c0');
+  write(dir, 'workflow/plans/2026-11-16-none.md', '# PLAN\n\n正文无机读节。\n');
+  const r = spawnSync(process.execPath, [SCOPE_SCRIPT, 'workflow/plans/2026-11-16-none.md', '--root', dir], { encoding: 'utf8' });
+  const out = `${r.stdout}${r.stderr}`;
+  assert.equal(r.status, 0, `advisory 退出码应不变，实际 exit ${r.status}:\n${out}`);
+  assert.match(out, /未解析到任何声明路径/);
+});
+
+// 同款出账在推送级对账（check-scope-range）：范围内 plan 声明 0 也须可见；越界硬判口径不变。
+test('check-scope-range 声明 0 时出账提示（越界仍 --strict 判红）', () => {
+  const dir = makeTmp('fk-scope-range-empty-');
+  git(dir, 'init', '-q');
+  write(dir, 'README.md', 'x\n');
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'c0');
+  const c0 = git(dir, 'rev-parse', 'HEAD');
+  write(dir, 'workflow/plans/2026-01-01-none.md', '# PLAN\n\n正文无机读节。\n');
+  write(dir, 'src/a.cs', 'class A {}\n');
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'c1 plan + code');
+  const c1 = git(dir, 'rev-parse', 'HEAD');
+  const r = run(dir, c0, c1, ['--strict']);
+  const out = `${r.stdout}${r.stderr}`;
+  assert.match(out, /未解析到任何声明路径/);
+  assert.equal(r.status, 1, `声明 0 时产品件越界判定口径不变，实际 exit ${r.status}:\n${out}`);
+});

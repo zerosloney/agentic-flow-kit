@@ -151,6 +151,7 @@ const notLanded = declared.filter((df) => !changed.some((f) => matches(f, df)));
 
 console.log(`▶ check-scope-range（推送范围 plan 改动面对账）: ${oldSha.slice(0, 8)}..${newSha.slice(0, 8)}`);
 console.log(`  范围 plan ${plansInRange.length} 份（${plansInRange.join('、')}）｜ 声明 ${declared.length} ｜ 变更 ${changed.length}${l0ExemptSet.size ? ` ｜ L0 豁免 ${l0ExemptSet.size}` : ''}`);
+if (plansInRange.length && !declared.length) console.log('  ⚠ 声明 0：范围内 plan 未解析到任何声明路径——核对节名（编号前缀如「## 2. 改动面」已容忍，命中 0 多为节名漂移或整节缺失）');
 if (outOfScope.length) {
   console.log('  越界件（推送改了但范围内 plan 未声明）:');
   outOfScope.forEach((f) => console.log(`    - ${f}`));
