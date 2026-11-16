@@ -86,7 +86,7 @@ agentic-flow-kit
 npx agentic-flow-kit install --agent claude --agent codebuddy --lang zh-CN --stack dotnet --target .
 
 # 或全局安装（包名 agentic-flow-kit，命令名 flow-kit）
-npm install -g agentic-flow-kit@2.3.0     # 跟最新版用 @latest
+npm install -g agentic-flow-kit@latest     # 需钉版本用 @<version>
 flow-kit install --agent claude --lang zh-CN --stack dotnet --target .
 
 npx agentic-flow-kit doctor --target .    # 装后体检
