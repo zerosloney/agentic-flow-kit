@@ -67,6 +67,19 @@ if ((process.env.PIPELINE_FAKE_MODE || 'ok') === 'barrier') {
 const FAKE_GIT = `process.exit(0);
 `;
 
+// 假 fill-* 脚本（pipeline 任务目录测试用）：按 --output 写一份带 frontmatter 的骨架文档，
+// 让 intent-fill / spec-fill / plan-fill 阶段可独立推进而不依赖真实模板渲染。
+const FILL_MJS = `import fs from 'node:fs';
+import path from 'node:path';
+const argv = process.argv.slice(2);
+const arg = (k) => { const i = argv.indexOf(k); return i >= 0 ? argv[i + 1] : ''; };
+const out = arg('--output');
+const level = arg('--level') || 'L1';
+const topic = arg('--topic') || 'task';
+fs.mkdirSync(path.dirname(out), { recursive: true });
+fs.writeFileSync(out, ['---', '状态: draft', '级别: ' + level, '模块: wiki', '---', '', '# ' + topic, '', '## 背景与问题', 'x', ''].join('\\n'));
+`;
+
 function fixture({ stageArtifacts = { verify: ['{plan}'] }, withPlan = true, onFail = { verify: { to: 'fix', retry: 3 } } } = {}) {
   const root = makeTmp('pipeline-exec-');
   const write = (rel, text) => {
@@ -79,6 +92,10 @@ function fixture({ stageArtifacts = { verify: ['{plan}'] }, withPlan = true, onF
   write('.agents/scripts/verify.mjs', VERIFY_MJS);
   write('.agents/scripts/check-extra.mjs', EXTRA_MJS);
   write('.agents/scripts/fake-git.mjs', FAKE_GIT);
+  write('.agents/scripts/fill-intent.mjs', FILL_MJS);
+  write('.agents/scripts/fill-spec.mjs', FILL_MJS);
+  write('.agents/scripts/fill-plan.mjs', FILL_MJS);
+  write('.agents/scripts/kb-search.mjs', 'process.exit(0);\n');
   write('workflow/intents/t.md', '---\n状态: draft\n级别: L1\n---\n\n## 验收标准\n\n- [ ] 待办\n');
   if (withPlan) write('workflow/plans/t.md', '---\n状态: draft\n级别: L1\n---\n\n## 改动方案\n\nx\n');
   return root;
@@ -482,3 +499,61 @@ function waitForFile(file, ms) {
     tick();
   });
 }
+
+// ── pipeline 任务目录（2026-11-16）：自动化产物落 workflow/tasks/<date>-<topic>/，与手动路径隔离 ──
+
+const TASK_ENV = { PIPELINE_RUN_TODAY: '2026-11-13' };
+
+test('task dir: intent-fill writes into workflow/tasks/<date>-<topic>/, manual dirs untouched', () => {
+  const root = fixture();
+  writeRun(root, {
+    stage: 'intent-fill',
+    docs: { entry: null, spec: null, plan: null },
+    triage: { kind: 'require', level: 'L2', module: 'wiki', topic: 'foo' },
+  });
+  const r = runPipeline(root, ['next', '--run', 'test-run'], TASK_ENV);
+  assert.ok(fs.existsSync(path.join(root, 'workflow', 'tasks', '2026-11-13-foo', 'intent.md')), r.stderr || r.stdout);
+  assert.equal(readRun(root).docs.entry, 'workflow/tasks/2026-11-13-foo/intent.md');
+  assert.deepEqual(fs.readdirSync(path.join(root, 'workflow', 'intents')), ['t.md'], '手动 intents/ 零写入');
+  assert.equal(fs.existsSync(path.join(root, 'workflow', 'specs')), false);
+});
+
+test('task dir: spec-fill and plan-fill land inside the task dir', () => {
+  const root = fixture();
+  const taskDir = 'workflow/tasks/2026-11-13-foo';
+  writeRun(root, {
+    stage: 'spec-fill',
+    docs: { entry: `${taskDir}/intent.md`, spec: null, plan: null },
+    triage: { kind: 'require', level: 'L2', module: 'wiki', topic: 'foo' },
+  });
+  const r = runPipeline(root, ['next', '--run', 'test-run'], TASK_ENV);
+  assert.ok(fs.existsSync(path.join(root, taskDir, 'spec.md')), r.stderr || r.stdout);
+  assert.equal(readRun(root).docs.spec, `${taskDir}/spec.md`);
+  assert.equal(fs.existsSync(path.join(root, 'workflow', 'specs', '2026-11-13-foo.md')), false);
+
+  writeRun(root, {
+    stage: 'plan-fill',
+    docs: { entry: `${taskDir}/intent.md`, spec: `${taskDir}/spec.md`, plan: null },
+    triage: { kind: 'require', level: 'L2', module: 'wiki', topic: 'foo' },
+  });
+  const r2 = runPipeline(root, ['next', '--run', 'test-run'], TASK_ENV);
+  assert.ok(fs.existsSync(path.join(root, taskDir, 'plan.md')), r2.stderr || r2.stdout);
+  assert.equal(readRun(root).docs.plan, `${taskDir}/plan.md`);
+  assert.equal(fs.existsSync(path.join(root, 'workflow', 'plans', '2026-11-13-foo.md')), false);
+});
+
+test('task dir: resume reports missing artifact under the task dir', () => {
+  const root = fixture();
+  const taskDir = 'workflow/tasks/2026-11-13-foo';
+  writeRun(root, {
+    stage: 'verify',
+    docs: { entry: `${taskDir}/intent.md`, spec: `${taskDir}/spec.md`, plan: `${taskDir}/plan.md` },
+    triage: { kind: 'require', level: 'L2', module: 'wiki', topic: 'foo' },
+    inFlight: { stage: 'verify', since: NOW },
+  });
+  const r = runPipeline(root, ['resume', '--run', 'test-run'], TASK_ENV);
+  assert.equal(r.status, 2, r.stderr || r.stdout);
+  const ev = readRun(root).events.find((e) => e.type === 'resume');
+  assert.equal(ev.artifacts, 'missing');
+  assert.match(ev.missing[0], /阶段产物缺失：workflow\/tasks\/2026-11-13-foo\/plan\.md/);
+});

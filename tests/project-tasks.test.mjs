@@ -144,3 +144,14 @@ test('CLI 生成器把任务投影写进 INDEX（fixture 全链路，抽查生�
   assert.ok(index.includes('| 2026-11-01-solo | L1 | approved | — | — | 0 | 齐备，待关单 |'));
   assert.ok(index.includes('## 档案计数'));
 });
+
+test('隔离：pipeline 任务目录（workflow/tasks/）不进入手动任务投影', () => {
+  const root = makeTmp('fk-ptasks-iso-');
+  // 手动路径任务（正常投影）
+  write(root, 'workflow/plans/2026-11-01-solo.md', zhDoc({ status: 'approved', level: 'L1', date: '2026-11-01' }, 'solo'));
+  // pipeline 自动化产物（2026-11-16 起 pipeline-run 落点）——手动扫描器不扫 tasks/
+  write(root, 'workflow/tasks/2026-11-02-auto/intent.md', zhDoc({ status: 'draft', level: 'L2', date: '2026-11-02' }, 'auto'));
+  write(root, 'workflow/tasks/2026-11-02-auto/plan.md', zhDoc({ status: 'draft', level: 'L2', date: '2026-11-02' }, 'auto'));
+  const tasks = projectTasks(root);
+  assert.deepEqual(tasks.map((t) => t.name), ['2026-11-01-solo'], 'tasks/ 下文档不参与手动投影');
+});

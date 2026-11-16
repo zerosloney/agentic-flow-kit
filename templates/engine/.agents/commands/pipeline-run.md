@@ -19,6 +19,7 @@ next: 按 run 停机点循环推进至 done
 > `.agents/config/pipeline.json` 内），再用一个小任务跑一次端到端 run——静态检查不能替代真实状态机验证。
 
 > **分工**：确定性部分由 `pipeline-run.mjs` 状态机驱动（fill-* $\rightarrow$ confirm-doc $\rightarrow$ verify.mjs $\rightarrow$ git，退出码全记录）；AI 槽位按工单协议执行；人件门到点即停、原话代录；宿主禁自行改状态。
+> **产物目录**：pipeline 产物收进 `workflow/tasks/<date>-<topic>/`（`intent.md`/`incident.md`/`spec.md`/`plan.md`），与手动路径（`intents/`、`plans/`、`specs/`）隔离——手动扫描器不扫 `tasks/`，两类文档互不干扰。
 > **fix 工单**：动手前 `flow-kit run fix-task.mjs start`，签收后 `stop`——窗口内既有测试只读。
 
 ## 1. 驱动协议 (Protocol)

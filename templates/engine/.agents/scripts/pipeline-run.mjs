@@ -42,6 +42,9 @@ const GIT_NEVER_FLAGS = ['--no-verify', '-n']; // 不变量：任何 git 调用�
 function fail(msg, code = 1) { console.error('❌ ' + msg); process.exit(code); }
 const nowIso = () => new Date().toISOString();
 const today = () => process.env.PIPELINE_RUN_TODAY || nowIso().slice(0, 10);
+// pipeline 任务目录（2026-11-16，仅自动化路径）：产物收进 workflow/tasks/<date>-<topic>/，
+// 与手动路径（intents/plans/specs）隔离——手动扫描器不扫 tasks/，两类文档互不干扰。
+const taskDirRel = (run) => `workflow/tasks/${today()}-${run.triage?.topic || 'task'}`;
 const pad = (n) => String(n).padStart(2, '0');
 
 // ── 环境解析（测试注入点） ─────────────────────────────────────────────
@@ -609,6 +612,7 @@ function checkAuthorized(ctx, run, filesCsv) {
 
 // locateDeployTarget：deploy 对象定位——--triage topic 显式优先，否则取 workflow/{intents,incidents}
 // 最新终态入口（文件名日期序）；同名 spec 存在才纳入（L1 无 spec 合法），plan 恒须同名在位。
+// pipeline 任务目录（workflow/tasks/<task>/，仅自动化路径产物）同样纳入候选，spec/plan 在目录内定位。
 function locateDeployTarget(ctx, run) {
   const all = [];
   for (const dir of ['intents', 'incidents']) {
@@ -620,12 +624,33 @@ function locateDeployTarget(ctx, run) {
       if (['done', 'closed'].includes(docState(ctx, rel))) all.push({ rel, base: f.replace(/\.md$/, '') });
     }
   }
+  const tasksDir = path.join(ctx.root, 'workflow', 'tasks');
+  if (fs.existsSync(tasksDir)) {
+    for (const t of fs.readdirSync(tasksDir)) {
+      const tdir = path.join(tasksDir, t);
+      if (!fs.existsSync(tdir) || !fs.statSync(tdir).isDirectory()) continue;
+      for (const f of ['intent.md', 'incident.md', 'plan.md']) {
+        const rel = `workflow/tasks/${t}/${f}`;
+        if (!fs.existsSync(path.join(ctx.root, rel))) continue;
+        if (['done', 'closed'].includes(docState(ctx, rel))) all.push({ rel, base: t, taskDir: `workflow/tasks/${t}` });
+        break;
+      }
+    }
+  }
   if (!all.length) return { entry: null };
   all.sort((a, b) => b.base.localeCompare(a.base));
   const topic = run.triage?.topic && run.triage.topic !== 'task' ? run.triage.topic : null;
   // 复核 P2-C 收紧：topic 须与去日期前缀后的主题段等值——子串匹配会误命中（topic=run 命中 pipeline-run）
   const hit = topic ? all.find((x) => x.base.replace(/^\d{4}-\d{2}-\d{2}-/, '') === topic) : all[0];
   if (!hit) return { entry: null };
+  if (hit.taskDir) {
+    const specRel = `${hit.taskDir}/spec.md`;
+    return {
+      entry: hit.rel,
+      spec: fs.existsSync(path.join(ctx.root, specRel)) ? specRel : null,
+      plan: `${hit.taskDir}/plan.md`,
+    };
+  }
   const specRel = `workflow/specs/${hit.base}.md`;
   return {
     entry: hit.rel,
@@ -714,7 +739,7 @@ async function advance(ctx, run, opt) {
 
     if (s === 'intent-fill' || s === 'incident-fill') {
       const isInc = s === 'incident-fill';
-      const rel = isInc ? `workflow/incidents/${today()}-${topic()}.md` : `workflow/intents/${today()}-${topic()}.md`;
+      const rel = `${taskDirRel(run)}/${isInc ? 'incident.md' : 'intent.md'}`;
       run.docs.entry = rel;
       const st = docState(ctx, rel);
       if (!st) {
@@ -724,6 +749,7 @@ async function advance(ctx, run, opt) {
           // incident 无 fill-* 工具：从 _TEMPLATE.md 复制骨架（机器步骤，记事件）
           const tplPath = path.join(ctx.root, 'workflow', 'incidents', '_TEMPLATE.md');
           try {
+            fs.mkdirSync(path.dirname(path.join(ctx.root, rel)), { recursive: true });
             fs.copyFileSync(tplPath, path.join(ctx.root, rel));
             emit(run, { type: 'gate', cmd: `cp workflow/incidents/_TEMPLATE.md ${rel}`, exit: 0, ms: 0 });
           } catch (e) { stopGateFail(ctx, run, s, [`incident 模板复制失败：${e.message}`]); }
@@ -774,7 +800,7 @@ async function advance(ctx, run, opt) {
     }
 
     if (s === 'spec-fill') {
-      const rel = `workflow/specs/${today()}-${topic()}.md`;
+      const rel = `${taskDirRel(run)}/spec.md`;
       run.docs.spec = rel;
       if (!docState(ctx, rel)) {
         const r = runNode(ctx, run, 'fill-spec.mjs', ['--level', L(), '--topic', topic(), '--output', rel]);
@@ -831,7 +857,7 @@ async function advance(ctx, run, opt) {
     }
 
     if (s === 'plan-fill') {
-      const rel = `workflow/plans/${today()}-${topic()}.md`;
+      const rel = `${taskDirRel(run)}/plan.md`;
       run.docs.plan = rel;
       if (L() === 'L1' && K() !== 'fix') run.docs.entry = rel;
       if (!docState(ctx, rel)) {

@@ -155,7 +155,7 @@ manifest 带 `schemaVersion`（当前为 1）。`upgrade` 在生成计划前按 
 
 ### 全自动执行器
 
-`pipeline-run` 用单命令驱动同一状态机（与手动阶段路由二选一，禁混用），循环读 stdout 末行的 `PIPELINE-STOP <type>` 停机标记分流：`work-order` 工单（读单干活）、`await-confirm` 人件门（转述要点索确认，放行原话代录）、`gate-fail` 门失败、`done` 完成、`aborted` 放弃。失败不硬闯：`onFail` 失败路由表按阶段退回（`.agents/config/pipeline.json` 声明，模板默认 `verify → fix`，带 per-stage 重试预算），支持断点续跑（inFlight + resume）。
+`pipeline-run` 用单命令驱动同一状态机（与手动阶段路由二选一，禁混用），循环读 stdout 末行的 `PIPELINE-STOP <type>` 停机标记分流：`work-order` 工单（读单干活）、`await-confirm` 人件门（转述要点索确认，放行原话代录）、`gate-fail` 门失败、`done` 完成、`aborted` 放弃。失败不硬闯：`onFail` 失败路由表按阶段退回（`.agents/config/pipeline.json` 声明，模板默认 `verify → fix`，带 per-stage 重试预算），支持断点续跑（inFlight + resume）。pipeline 产物收进 `workflow/tasks/<date>-<topic>/`，与手动路径（`intents/`/`plans/`/`specs/`）隔离——手动扫描器不扫 `tasks/`。
 
 > **保留待用**：暂零 run（`cache/pipeline-runs/` 空）但不退役；启用前先跑 `flow-kit run check-pipeline-state.mjs` 静态闭包检查（stage / stopType 都须在 `.agents/config/pipeline.json` 内），再用小任务端到端跑一次——静态检查不能替代真实状态机验证。
 
