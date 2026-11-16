@@ -33,6 +33,7 @@ node bin/flow-kit.mjs hook --list
 node bin/flow-kit.mjs doctor --target <tmp>
 node bin/flow-kit.mjs doctor --target <tmp> --attest --out proof.json
 npm run doctor:self                       # 对当前仓库执行 doctor（需当前仓库已安装引擎）
+npm run changelog -- --write          # 重渲染 CHANGELOG.md（Conventional Commits 单源）
 ```
 
 - 没有 build / lint 步骤，也没有依赖安装步骤。
