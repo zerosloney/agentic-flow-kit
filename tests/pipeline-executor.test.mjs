@@ -405,6 +405,32 @@ test('R6-2: resume with complete artifacts re-runs the interrupted gate', () => 
   assert.equal(run.stage, 'closeout');
 });
 
+test('R6-2: artifact contract failure stops in place without consuming retry budget', () => {
+  const root = fixture({ withPlan: false });
+  writeRun(root);
+  const r = runPipeline(root, ['next', '--run', 'test-run']);
+  assert.equal(r.status, 2, r.stderr || r.stdout);
+  assert.match(r.stdout + r.stderr, /阶段产物缺失：workflow\/plans\/t\.md/);
+  const run = readRun(root);
+  assert.equal(run.stopType, 'gate-fail');
+  assert.deepEqual(run.retries, {}, '产物契约失败（route:false）不消耗退回预算');
+  assert.equal(run.nextTarget, null);
+  assert.equal(run.events.some((e) => e.type === 'route'), false);
+});
+
+test('R6-2: verify-only short path fails without consuming retry budget', () => {
+  const root = fixture();
+  writeRun(root, { triage: { kind: 'verify', level: 'L1', module: 'wiki', topic: 'test' } });
+  const r = runPipeline(root, ['next', '--run', 'test-run'], { PIPELINE_FAKE_MODE: 'counter' });
+  assert.equal(r.status, 2, r.stderr || r.stdout);
+  assert.match(r.stdout + r.stderr, /verify-only 不带修复环/);
+  const run = readRun(root);
+  assert.equal(run.stopType, 'gate-fail');
+  assert.deepEqual(run.retries, {}, 'verify-only 短路径（route:false）不消耗退回预算');
+  assert.equal(run.nextTarget, null);
+  assert.equal(run.events.some((e) => e.type === 'route'), false);
+});
+
 test('R6-1: static gate rejects dangling, terminal, out-of-range and dead onFail edges', () => {
   const src = fs.readFileSync(PIPELINE, 'utf8');
   const cfg = JSON.parse(fs.readFileSync(path.join(REPO, 'templates', 'engine', '.agents', 'config', 'pipeline.json'), 'utf8'));
@@ -430,6 +456,16 @@ test('R6-1: static gate rejects dangling, terminal, out-of-range and dead onFail
   const deadKey = bad({ done: { to: 'fix', retry: 1 } });
   assert.equal(deadKey.ok, false);
   has(deadKey, "onFail 不得声明终态 'done'");
+
+  const emptyOnFail = bad({});
+  assert.equal(emptyOnFail.ok, false);
+  has(emptyOnFail, 'onFail 未声明任何失败路由：门失败将原地停机（模板契约至少声明 verify 退回边）');
+
+  const noOnFailKey = { ...cfg };
+  delete noOnFailKey.onFail;
+  const noKey = analyze(src, noOnFailKey);
+  assert.equal(noKey.ok, false);
+  has(noKey, 'onFail 未声明任何失败路由：门失败将原地停机（模板契约至少声明 verify 退回边）');
 
   assert.deepEqual(analyze(src, cfg).problems, [], '真实配置仍须闭合');
   assert.equal(analyze(src, cfg).counts.onFail, 1);

@@ -104,7 +104,8 @@ test('path lease: exclusive, takeover after ttl, release owner check', () => {
 });
 
 test('pipeline state closure catches unregistered stages', () => {
-  const config = { stages: ['triage', 'done'], stopTypes: ['work-order', 'done'] };
+  // onFail 至少留一条边是模板契约（check-pipeline-state 空表即不合法），最小 config 补 triage 自环
+  const config = { stages: ['triage', 'done'], stopTypes: ['work-order', 'done'], onFail: { triage: { to: 'triage', retry: 1 } } };
   const src = `
     run.stage = 'triage';
     run.stage = 'done';

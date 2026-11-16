@@ -92,7 +92,8 @@ export function failRoute(cfg, stage) {
   return { to, retry };
 }
 
-// per-stage 失败计数的唯一 mutation 点：stopGateFail 与 verify 非耗尽分支各调一次，不双计数。
+// per-stage 失败计数的唯一 mutation 点：stopGateFail（仅正常路由路径——route:false 短路径
+// 不消耗退回预算）与 verify 非耗尽分支各调一次，不双计数。
 function bumpRetry(run, stage) {
   run.retries = run.retries || {};
   run.retries[stage] = (run.retries[stage] || 0) + 1;
@@ -365,11 +366,16 @@ function stopGateFail(ctx, run, stage, problems, exitHint, opts = {}) {
   run.stopType = 'gate-fail';
   run.stage = stage;
   run.gateFail = { stage, problems };
-  // stage 留在失败处，nextTarget 记退回目标（R6-1）；route:false 用于前置条件失败与 verify-only 短路径。
-  const attempt = bumpRetry(run, stage);
+  // stage 留在失败处，nextTarget 记退回目标（R6-1）；route:false 用于前置条件失败与 verify-only
+  // 短路径——不消耗退回预算（commands/pipeline-run.md），retries 不动、原地停。
   const { to, retry } = failRoute(ctx.pipeline, stage);
-  run.nextTarget = opts.route === false || attempt >= retry ? null : to;
-  if (run.nextTarget) emit(run, { type: 'route', from: stage, to, attempt, cap: retry });
+  if (opts.route === false) {
+    run.nextTarget = null;
+  } else {
+    const attempt = bumpRetry(run, stage);
+    run.nextTarget = attempt >= retry ? null : to;
+    if (run.nextTarget) emit(run, { type: 'route', from: stage, to, attempt, cap: retry });
+  }
   emit(run, { type: 'stop', stopType: 'gate-fail', stage });
   saveRun(ctx, run);
   printRun(ctx, run, problems);

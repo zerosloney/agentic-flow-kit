@@ -43,7 +43,11 @@ export function analyze(source, config) {
   if (!seenStages.has('triage')) problems.push("初始 stage 'triage' 未出现");
 
   // 失败路由表（R6-1）：onFail 的键与目标都必须是闭集内且脚本可达的阶段，否则是死配置或悬空退回。
+  // 一条失败边都不声明同样不合法：门失败将原地停机，模板契约至少要留 verify 退回边。
   const onFail = config.onFail && typeof config.onFail === 'object' ? config.onFail : {};
+  if (Object.keys(onFail).length === 0) {
+    problems.push('onFail 未声明任何失败路由：门失败将原地停机（模板契约至少声明 verify 退回边）');
+  }
   for (const [stage, edge] of Object.entries(onFail)) {
     if (!stages.has(stage)) problems.push(`onFail 键未登记：'${stage}'（补 stages）`);
     else if (!handled.includes(stage)) problems.push(`onFail 声明的阶段在 pipeline-run 中不可达：'${stage}'`);
