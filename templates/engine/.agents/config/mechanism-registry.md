@@ -49,6 +49,7 @@
 | 策略即代码校验 | `flow-kit run policy check`（CI policy 作业；本地 `npm run policy:check`） | hard「未登记机制 / 枚举 / 角色模型引用 / 预算」计数 | 不退役（策略面主干） | 2026-11-13 建 | 现役 [不退役主干] | — |
 | SBOM 与许可证门 | `flow-kit run sbom-license.mjs --check`（verify.mjs 安全段 `sbom-license`；CI 模板 advisory 步） | 违规依赖数（deny/未知按策略；月）+ SBOM 漂移计数 | 不退役（供应链主干） | 2026-11-14 建（R3-8 第二片：SPDX 2.3 生成 + license-policy 闭集判定，零依赖零网络；lockfile 缺失 fail-closed exit 2） | 现役 [不退役主干] | — |
 | 开发容器声明门 | `flow-kit run check-devcontainer.mjs`（verify.mjs 安全段 `devcontainer`；CI 模板 advisory 步） | 容器声明违规数（镜像越白名单 / 浮动 tag / flow-kit 未钉版本；月） | 不退役（沙箱主干） | 2026-11-14 建（R3-8 第三片：devcontainer.json + Dockerfile 按栈生成，镜像白名单零网络门；项目未启用容器时 loud-skip 不判红） | 现役 [不退役主干] | — |
+| usage 观测腿（子代理凭据采集） | 宿主 PostToolUse(Agent)——`flow-kit hook usage-collect`（仅 claude，官方 hooks 文档实证：tool_response.usage 只覆盖子代理最后一次 API 请求；其余宿主无公开证据不接）→ `.agents/usage.jsonl`（gitignore 运行态，行 schema 单源 usage-log.mjs，observability.mjs 聚消费） | usage.jsonl `role=agent` 行数（月） | 连续 6 个有数据月零记录 → 评估退役（数据面非门禁） | 2026-11-16 建。与 2026-11-08 退役的 post-edit 反馈腿不同源：那条是写前门反馈腿（与写前门重复执法退役）；本条纯观测——只追加 jsonl、不回写不拦截、usage 缺失零写入、不读 transcript | 现役 [数据面] | — |
 
 ## 维护纪律
 

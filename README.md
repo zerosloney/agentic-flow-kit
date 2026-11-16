@@ -219,7 +219,7 @@ flow-kit add-skill @scope/pkg@1.0.0 --allow-network    # npm（npm install --no-
 
 ## Hook 接线
 
-Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/gates.json` 的 `hooks` 数组（事件、`write`/`shell` 工具类别、脚本、超时），安装器按注册表 `hooks.events` 编译成宿主 schema，并幂等合并进宿主配置：
+Hook 不再按宿主各维护一份静态壳。中性规格在 `.agents/hooks/gates.json` 的 `hooks` 数组（事件、`write`/`shell`/`agent` 工具类别、脚本、超时；`agent` 为观测类条目，如 claude 的 PostToolUse usage 采集），安装器按注册表 `hooks.events` 编译成宿主 schema，并幂等合并进宿主配置：
 
 | 宿主 | 文件 | 形态 |
 |---|---|---|

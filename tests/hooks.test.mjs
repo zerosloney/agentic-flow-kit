@@ -53,7 +53,8 @@ function readInstalledGroups(host, dir) {
   const config = HOSTS[host].hooks.events;
   const container = String(config.container || 'hooks').split('.');
   const events = container.reduce((node, key) => node?.[key], root);
-  return (events[config.event] || []).map((group) => ({ event: config.event, ...group }));
+  const names = Array.isArray(config.event) ? config.event : [config.event];
+  return names.flatMap((event) => (events[event] || []).map((group) => ({ event, ...group })));
 }
 
 function golden(host) {
@@ -162,6 +163,22 @@ test('doctor detects missing and stale hook wiring', () => {
   assert.equal(doctor.checks.find((item) => item.name === 'hooks claude').ok, true);
 });
 
+test('claude wires the PostToolUse/Agent usage observation leg and doctor accepts it', () => {
+  const dir = tmpRepo();
+  const r = install(dir, 'claude');
+  assert.equal(r.status, 0, r.stderr);
+  const config = readJson(hookFile('claude', dir));
+  assert.deepEqual(config.hooks.PostToolUse, [{
+    matcher: 'Agent',
+    hooks: [{ type: 'command', command: 'flow-kit hook usage-collect', timeout: 10 }],
+  }]);
+  // PreToolUse 两门不受观测腿影响
+  assert.deepEqual(config.hooks.PreToolUse.map((group) => group.matcher), ['Write|Edit|MultiEdit', 'Bash']);
+  const doctor = json(run(['doctor', '--target', '.', '--json'], dir));
+  const check = doctor.checks.find((item) => item.name === 'hooks claude');
+  assert.equal(check.ok, true, JSON.stringify(check));
+});
+
 test('hosts without hooks.events keep the static template fallback', () => {
   for (const host of ['opencode', 'pi', 'cline']) {
     const plan = buildPlan({
@@ -210,6 +227,6 @@ test('invalid hook specs are rejected and merge is a no-op on empty input', () =
   const root = { hooks: { PreToolUse: [] } };
   assert.equal(mergeHooksIntoRoot(root, [], HOSTS.claude.hooks.events), false);
   const drift = findHookDrift(root, spec(), HOSTS.claude.hooks.events);
-  assert.equal(drift.missing.length, 2);
+  assert.equal(drift.missing.length, 3);
   assert.equal(drift.extra.length, 0);
 });
