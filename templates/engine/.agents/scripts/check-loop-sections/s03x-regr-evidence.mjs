@@ -8,21 +8,19 @@ import {
   addedDateOf, warnEvidenceExempt, VERIFY_GREEN_RE, verifyEvidenceTruth,
   versionGreater, fmStatus, bindingSha256, readdirOrNull, isDirectoryOrNull,
 } from '../check-loop-kit.mjs';
+import { REGR_EVIDENCE_RE } from './regr-evidence-vocab.mjs';
 
 export function run() {
 // --- 3 扩展. incident 防复发验证证据门 [hard-block]（2026-10-09）---
 // 模板行 38 强制项的机器面：「防复发验证必须落到自动化用例或回归清单条目，禁止只写已人工验证」。
 // fixed/closed 且建档日 ≥ incidentRegrSince 的 incident，正文无自动化用例 / 回归清单引用 → hard。
-// 判据 = 宽匹配正则（引擎 .test.mjs / 后端 xunit / 前端测试目录 / 回归清单 / 冒烟 / 测试命令）——
+// 判据 = 宽匹配正则（引擎 .test.mjs / 后端 xunit / 前端测试目录 / 仓库验证脚本 scripts/verify / 回归清单 / 冒烟 / 测试命令）——
 // 门的是「落到可复跑的验证资产」，不是猜具体测试名；存量（< 锚）豁免。kitPolicy.incidentRegrSince
 // 缺键（v1-v5）→ 整体跳过。
 {
   const anchor = kitPolicy.incidentRegrSince;
   if (anchor) {
-    // 回归清单引用含分片路径（2026-10-28）：regression-checklist.md §6 分片制下防复发条目落
-    // workflow/regression-checklist.d/<YYYY-MM>.md（append-only 追加区），主台账读侧自动合并——
-    // 门禁正则须同认分片，否则只引分片的 incident 被误判「未落回归清单」（2026-10-27-aggrid-hover-popconfirm 实证）
-    const REGR_EVIDENCE_RE = /\.test\.mjs|backend\/[^\s]*[Tt]ests?[\/.]|\w+Tests\.cs|frontend\/[^\s]*(?:__tests__|tests?)\/|workflow\/regression-checklist\.md|workflow\/regression-checklist\.d\/|regression-smoke|npm\s+test|dotnet\s+test|run-tests/;
+    // 词表单源：regr-evidence-vocab.mjs（分片路径 2026-10-28、scripts/verify 验证脚本族 2026-11-16 两次补词）
     for (const inc of docFiles('incidents')) {
       const incSt = fmGet(inc, '状态');
       if (!['fixed', 'closed'].includes(incSt)) continue;
