@@ -65,10 +65,10 @@ function loadPipelineConfig(root) {
   } catch { return {}; }
 }
 
-// {entry}|{spec}|{plan} 从 run.docs 解析；未指定的产物跳过校验（如 fix 流程无 plan）。
+// {entry}|{spec}|{plan}|{apiDocs} 从 run.docs 解析；未指定的产物跳过校验（如 fix 流程无 plan）。
 export function resolveArtifact(template, docs) {
   return String(template)
-    .replace(/\{(entry|spec|plan)\}/g, (_, k) => (docs && docs[k]) || '')
+    .replace(/\{(entry|spec|plan|apiDocs)\}/g, (_, k) => (docs && docs[k]) || '')
     .trim();
 }
 
@@ -729,6 +729,9 @@ async function advance(ctx, run, opt) {
         run.triage = { kind: kv.kind, level: kv.level, module: kv.module || moduleList(ctx)[0] || 'general', topic: kv.topic || 'task', decidedBy: run.hint ? 'hint+ai' : 'ai', decidedAt: nowIso() };
         emit(run, { type: 'triage', ...run.triage });
         run.docs = run.docs || { entry: null, spec: null, plan: null };
+        // {apiDocs} 声明式占位符：与 intent/spec/plan 同目录族（taskDir 下 api.md），triage 定题后即可派生；
+        // 项目触达 API 契约面时自行在 stageArtifacts 声明，模板默认不强制（未声明 = 跳过校验）。
+        run.docs.apiDocs = run.docs.apiDocs || `${taskDirRel(run)}/api.md`;
         // 路由
         run.stage = K() === 'verify' ? 'verify' : K() === 'review' ? 'review-only' : K() === 'deploy' ? 'deploy-check'
           : K() === 'fix' ? 'incident-fill' : (L() === 'L1' ? 'plan-fill' : 'intent-fill');
