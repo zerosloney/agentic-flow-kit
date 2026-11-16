@@ -584,4 +584,16 @@ test('task dir: {apiDocs} contract gates closeout on the task-dir api.md', () =>
   const run2 = readRun(root);
   assert.equal(run2.stopType, 'work-order');
   assert.equal(run2.workOrder.kind, 'closeout');
+
+  // c) 旧 run 兜底：升级前创建的 run（docs 无 apiDocs 键、triage 不重入）——advance 顶部派生
+  //    让「声明即校验」对存量 run 生效：删键删文件后 next 应再停 gate-fail（无兜底则静默跳过、绿）
+  const runFile = path.join(root, '.agents', 'cache', 'pipeline-runs', 'test-run.json');
+  const legacy = readRun(root);
+  delete legacy.docs.apiDocs;
+  fs.writeFileSync(runFile, JSON.stringify(legacy, null, 2));
+  fs.rmSync(path.join(root, taskDir, 'api.md'));
+  const legacyNext = runPipeline(root, ['next', '--run', 'test-run'], TASK_ENV);
+  assert.equal(legacyNext.status, 2, legacyNext.stderr || legacyNext.stdout);
+  assert.equal(readRun(root).stopType, 'gate-fail', '旧 run 经兜底派生后契约门照常拦截');
+  assert.equal(readRun(root).docs.apiDocs, `${taskDir}/api.md`, '兜底派生补回 docs.apiDocs');
 });

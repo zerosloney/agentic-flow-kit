@@ -445,7 +445,7 @@ function printRun(ctx, run, problems) {
     const fails = gates.filter((e) => e.exit !== 0).length;
     console.log(`  需求：${run.requirement}`);
     console.log(`  门执行 ${gates.length} 道（非零 ${fails}）；确认 ${run.events.filter((e) => e.type === 'confirm').length} 次；提交 ${run.events.filter((e) => e.type === 'commit').length} 笔`);
-    for (const d of [...new Set([run.docs?.entry, run.docs?.spec, run.docs?.plan].filter(Boolean))]) console.log(`  文档：${d}（${docState(ctx, d) || '?'}）`);
+    for (const d of [...new Set([run.docs?.entry, run.docs?.spec, run.docs?.plan, run.docs?.apiDocs].filter(Boolean))]) console.log(`  文档：${d}（${docState(ctx, d) || '?'}）`);
   } else if (run.stopType === 'aborted') {
     console.log(`\n== 已放弃（${run.abort?.to || ''}）== ${run.abort?.note || ''}`);
   }
@@ -674,6 +674,10 @@ async function advance(ctx, run, opt) {
   const K = () => run.triage.kind;
   const entry = () => run.docs.entry;
   const topic = () => run.triage.topic;
+
+  // {apiDocs} 兜底派生：triage 分支已派生；此处覆盖「引擎升级前创建的旧 run」（triage 不重入），
+  // 保证声明即校验契约对存量 run 同样生效（幂等 ||，不覆盖既有值/自定义值）。
+  if (run.triage && run.docs) run.docs.apiDocs = run.docs.apiDocs || `${taskDirRel(run)}/api.md`;
 
   // 断点续跑（R3-5）：上次进程在门执行中被杀 → 记 resume 事件后从同一阶段重入。
   // 产物完整性（R6-2）：resume 事件带 artifacts/missing；缺失由下方产物契约门拦住，不会跳过重跑。
