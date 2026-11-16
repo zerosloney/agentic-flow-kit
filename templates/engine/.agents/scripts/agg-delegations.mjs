@@ -18,7 +18,8 @@
  *       advisory 只计量不阻断）。台账无「派发报告全文」机器可读数据源（结果表单元格是一句话摘要），
  *       故按 delegations.d/<YYYY-MM>.md 分片文档正文字数计量（去空白字符、月合计）并在输出列名标明口径，
  *       不伪造逐报告数据；计量单源 = reportBudgetStats(root)，outcome-metrics.mjs 同源引用。
- *       超限判定按月·报告数加权：over = 月合计 > 报告数×单报告预算（reports=分片数据行数，判定单源
+ *       超限判定按月·报告数加权：over = 月合计 > 报告数×单报告预算（reports=分片委派表数据行数——
+ *       splitTables 只取委派表，自做行不是派发报告不计 reports（2026-11-16 修正）；行判据单源
  *       ledger-shards.isDataRow('delegations')；reports=0 纯表头分片不计费不判超限）——月合计直比
  *       单报告预算会对多报告月结构性误报（PR #53 评审遗留）。
  */
@@ -378,7 +379,10 @@ function loadDispatchConfig(root = ROOT) {
 // 诚实口径：台账/分片没有「派发报告全文」的机器可读数据源（结果表单元格是一句话摘要），故统计
 // delegations.d/<YYYY-MM>.md 分片文档正文字数（去空白字符、按文件名月份合计）并在输出列名标明口径，
 // 不伪造逐报告数据。超限判定（2026-11-16 修正）按月·报告数加权：over = 月合计 > reports × 单报告预算；
-// reports = 分片内数据行数，判定单源 = ledger-shards.isDataRow（复用迁入判据，禁复制第三份实现）。
+// reports = 分片委派表数据行数（「N 报告」= 委派行数）：表归属单源 = splitTables（即 readLedger 拆
+// 委派/自做两表的既有单源，禁另写第三份节判定）——delegations 分片含「委派结果 / 自做任务结果」两节，
+// isDataRow 不含节上下文，整分片逐行计会把自做行也计成报告、虚增 reports×预算上限（2026-11-16 修正）；
+// 行判据单源 = ledger-shards.isDataRow（复用迁入判据，禁复制第三份实现）。
 // 旧口径月合计直比单报告预算，多报告月结构性误报。reports=0（纯表头/规则分片）一律 over=false：
 // 表头/分隔行不属任何一份报告、本就不该计费，避免表头字数被判超限。
 // over=null = 预算单源缺失/非法，只计量不判超限。
@@ -392,7 +396,7 @@ function reportBudgetStats(root = ROOT) {
       if (!m) continue;
       const text = fs.readFileSync(path.join(dir, f), 'utf8');
       const chars = text.replace(/\s+/g, '').length;
-      const reports = text.split(/\r?\n/).filter((l) => isDataRow('delegations', l)).length;
+      const reports = splitTables(text).delegated.filter((l) => isDataRow('delegations', l)).length;
       const over = budget == null ? null : reports > 0 && chars > reports * budget;
       byMonth.push({ ym: m[1], chars, reports, over });
     }
@@ -469,7 +473,7 @@ function main() {
     const limit = x.reports * rb.budget;
     const cell = rb.budget == null
       ? `${x.ym}｜delegations.d/${x.ym}.md 正文字符 ${x.chars}`
-      : `${x.ym}｜delegations.d/${x.ym}.md 正文字符 ${x.chars}/${limit}（口径：${x.reports} 报告×${rb.budget}，分片去空白字符合计）${x.over ? ` ❌ 超限 +${x.chars - limit}` : ' ✅ 预算内'}`;
+      : `${x.ym}｜delegations.d/${x.ym}.md 正文字符 ${x.chars}/${limit}（口径：${x.reports} 报告（=委派行数）×${rb.budget}，分片去空白字符合计）${x.over ? ` ❌ 超限 +${x.chars - limit}` : ' ✅ 预算内'}`;
     console.log(`  ${cell}`);
   }
   console.log('');

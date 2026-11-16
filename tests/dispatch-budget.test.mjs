@@ -113,6 +113,32 @@ test('header-only shard has reports=0 and never flags over (headers are not bill
   assert.equal(rb.overCount, 0);
 });
 
+test('self-done rows in the shard are not counted as reports (delegated rows only)', () => {
+  // delegations 分片含「委派结果 / 自做任务结果」两节：reports 只计委派节（自做行不是派发报告）。
+  // 委派 1 行（备注 600 字 > 500 预算）+ 自做 2 行：新口径 reports=1、上限=500 → 超限可辨识；
+  // 旧口径整分片逐行 isDataRow 会计 reports=3、上限=1500 → 600 字被误判预算内（本用例钉死该回归）。
+  const delegated = shardRows([600]);
+  const selfDone = [
+    '## 自做任务结果',
+    '',
+    '| 日期 | 任务一句话 | 结果 | 备注 | 返工原因 |',
+    '|------|------------|------|------|----------|',
+    '| 2026-11-11 | 自做任务甲 | 一次通过 | | |',
+    '| 2026-11-12 | 自做任务乙 | 一次通过 | | |',
+  ].join('\n');
+  const mixed = `${delegated}\n\n${selfDone}`;
+  const root = makeTmp('dispatch-budget-mixed-');
+  write(root, 'workflow/delegations.md', '# 委派台账\n');
+  write(root, 'workflow/delegations.d/2026-11.md', mixed);
+  write(root, '.agents/config/dispatch.json', read('templates/engine/.agents/config/dispatch.json'));
+  const rb = reportBudgetStats(root);
+  const nov = rb.byMonth.find((x) => x.ym === '2026-11');
+  assert.equal(nov.reports, 1); // 委派 1 行 + 自做 2 行 → 只计委派行
+  assert.equal(nov.chars, mixed.replace(/\s+/g, '').length); // 字数口径不变：整分片去空白字符
+  assert.equal(nov.over, true); // 上限=1×500：旧口径 reports=3→上限 1500 会误判预算内
+  assert.equal(rb.overCount, 1);
+});
+
 test('agg-delegations prints the budget section and marks over-budget months', () => {
   const root = seedBudgetRoot(makeTmp('dispatch-budget-cli-'));
   const r = spawnSync(process.execPath, [path.join(KIT, 'templates', 'engine', '.agents', 'scripts', 'agg-delegations.mjs')], {
@@ -121,8 +147,8 @@ test('agg-delegations prints the budget section and marks over-budget months', (
   });
   assert.equal(r.status, 0, r.stdout + r.stderr);
   assert.match(r.stdout, /## 派发报告预算（单源 \.agents\/config\/dispatch\.json reportBudgetChars=500；advisory 只计量不阻断）/);
-  assert.match(r.stdout, /2026-11｜delegations\.d\/2026-11\.md 正文字符 \d+\/500（口径：1 报告×500，分片去空白字符合计） ❌ 超限 \+\d+/);
-  assert.match(r.stdout, /2026-10｜delegations\.d\/2026-10\.md 正文字符 \d+\/500（口径：1 报告×500，分片去空白字符合计） ✅ 预算内/);
+  assert.match(r.stdout, /2026-11｜delegations\.d\/2026-11\.md 正文字符 \d+\/500（口径：1 报告（=委派行数）×500，分片去空白字符合计） ❌ 超限 \+\d+/);
+  assert.match(r.stdout, /2026-10｜delegations\.d\/2026-10\.md 正文字符 \d+\/500（口径：1 报告（=委派行数）×500，分片去空白字符合计） ✅ 预算内/);
 });
 
 test('budget metering is advisory: missing dispatch.json still lists chars without verdict', () => {

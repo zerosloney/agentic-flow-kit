@@ -223,6 +223,14 @@ export function doctorCommand({ args, t }) {
     }
 
     // Hook 接线：以 .agents/hooks/gates.json 为期望值，比对宿主配置里的托管条目。
+    // 降级对账 advisory（项目级 hooks.events 与用户级 userHooks 两分支共用，见各自分支注释）。
+    const addInapplicable = (host, list) => {
+      for (const { item, reason } of list) {
+        add(true, `guarantee ${host}`, t('doctor.hooksInapplicable', {
+          id: item.id, event: item.event, tool: item.tool, reason: t(HOOK_INAPPLICABLE_REASONS[reason]),
+        }), '', { warn: true });
+      }
+    };
     if (h.hooks?.events) {
       const spec = gates.hooks;
       const rel = hostTargetRel(host, h.hooks.file);
@@ -231,11 +239,7 @@ export function doctorCommand({ args, t }) {
       } else {
         // 降级对账：gates.json 声明但宿主 hooks.events 不支持的条目，编译时被 applicable()
         // 静默过滤。与权限 unsupported 同口径给 guarantee advisory，不做静默。
-        for (const { item, reason } of inapplicableSpecs(h.hooks.events, spec)) {
-          add(true, `guarantee ${host}`, t('doctor.hooksInapplicable', {
-            id: item.id, event: item.event, tool: item.tool, reason: t(HOOK_INAPPLICABLE_REASONS[reason]),
-          }), '', { warn: true });
-        }
+        addInapplicable(host, inapplicableSpecs(h.hooks.events, spec));
         if (!fs.existsSync(path.join(target, rel))) {
           add(false, `hooks ${host}`, t('doctor.hooksFileMissing', { path: rel }));
         } else {
@@ -262,11 +266,7 @@ export function doctorCommand({ args, t }) {
     if (h.userHooks) {
       // 降级对账：userHooks 宿主（如 codex）只有单一 event，gates.json 中 event 不符的条目
       // 不接线且没有项目级 hooks 对账兜底，与上方 h.hooks 分支同口径给 guarantee advisory。
-      for (const { item, reason } of inapplicableForUserHooks(h.userHooks, gates.hooks)) {
-        add(true, `guarantee ${host}`, t('doctor.hooksInapplicable', {
-          id: item.id, event: item.event, tool: item.tool, reason: t(HOOK_INAPPLICABLE_REASONS[reason]),
-        }), '', { warn: true });
-      }
+      addInapplicable(host, inapplicableForUserHooks(h.userHooks, gates.hooks));
       const status = inspectUserHookEntry({ host });
       if (status.state === 'ok') {
         add(true, `hooks ${host} (user)`, t('doctor.userHooksOk', { path: status.file, matcher: status.matcher, host }));
