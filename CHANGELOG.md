@@ -2,6 +2,25 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.5.0]
+
+### 新增
+
+- feat(engine): stageArtifacts 声明式 {apiDocs} 占位符——展开为任务目录 api.md，模板默认不声明，触达 API 契约面的项目自行加
+- feat(engine): 角色补位 test-designer——Build §1 测试面先行委派位（advisory，产物回填 plan 验证方式节）+ 十宿主壳与双语契约
+
+### 修复
+
+- fix(engine): 评审四项——stage-gates 补齐时间线/验收标准/复盘三件套同病正则、range 出账改逐 plan 口径、mechanism-registry 同步 #63 语义、行注补齐（PR #65）
+- fix(engine): 机读解析两处装户假红——合并提交基准取第一父不分 PR 构建（#63）+ 机读节标题容忍编号前缀与声明 0 出账（#56）
+- fix: 评审四项——旧 run {apiDocs} 兜底派生、声明即校验语义双语文档、status 文档列表补员、inherit 回读单元断言（PR #64）
+- fix: 基线缺口收尾——readInjectedModels 不再跳过 inherit 值（diff 模板更新误报 + remove-host 收敛丢行）+ pr-adjudicator/finder/verifier 补 zcode 壳（删反向遍历豁免）
+- fix(engine): 评审四项——验证节名双名兼容、check-scope 补扫「验证方式」、check-local-gates 八员清单、角色×宿主壳反向遍历测试（PR #62）
+
+### 其他
+
+- ci: 重触发 PR 事件（push 后 webhook 丢失）
+
 ## [2.4.1]
 
 ### 新增
