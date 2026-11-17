@@ -20,6 +20,8 @@ triggers:
 
 脚本：`flow-kit run pr-review`（子命令细节 `--help`）。按序执行，禁跳步：
 
+评审前先取 `tfs-pr context` 的 guide 逐提交导读定评审镜头顺序；CI 红先 `tfs-pr checks` 定位失败检查、聚焦修复后再派 finder（checks 只读定位，CI 红不改退出码）。
+
 1. `plan --base <ref> --head <ref>`；高风险快检加 `--fast`（单镜头档）。现场落 `.agents/tmp/pr-review/<runId>/`（run.json / briefs / tasks.json）
 2. 按 `tasks.json` 并行派 finder / verifier 子代理；角色契约见 `.agents/roles/pr-finder.md`、`pr-verifier.md`、`pr-adjudicator.md`
 3. 依序执行：`collect` → `verify` → `adjudicate`（escalated 项）→ `dispose` → `summary`

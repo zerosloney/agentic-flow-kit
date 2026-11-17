@@ -40,6 +40,17 @@ test('lint fails on missing skill frontmatter and pointer drift', () => {
   assert.match(errors, /implementer\.md: agent shell must reference \.agents\/roles\/implementer\.md/);
 });
 
+test('lint fails when a skill description exceeds the shared budget', () => {
+  const root = fixture();
+  const long = 'x'.repeat(301);
+  write(root, 'templates/engine/.agents/skills/verbose/SKILL.md', `---\nname: verbose\ndescription: ${long}\n---\n\n# Verbose\n`);
+  const result = runLint({ root, checks: ['frontmatter'] });
+  assert.equal(result.ok, false);
+  assert.match(result.sections[0].errors.join('\n'), /verbose\/SKILL\.md: description exceeds 300 chars/);
+  // 预算单源（BACKLOG #26）：工具面必须引用 src/skills/lint.mjs 的 DESCRIPTION_BUDGET，不自写数字。
+  assert.match(fs.readFileSync(path.join(KIT, 'tools', 'lint-templates.mjs'), 'utf8'), /DESCRIPTION_BUDGET/);
+});
+
 test('lint fails when installer locales drift', () => {
   const root = fixture();
   write(root, 'locales/zh-CN/installer.json', JSON.stringify({ a: '1', b: { c: '2' } }));
@@ -48,4 +59,35 @@ test('lint fails when installer locales drift', () => {
   assert.equal(result.ok, false);
   const errors = result.sections[0].errors.join('\n');
   assert.match(errors, /missing key "b\.c"/);
+});
+
+test('lint fails when the stage loading table loads an undistributed skill', () => {
+  const root = fixture();
+  write(root, 'templates/engine/.agents/commands/new-task.md', [
+    '# New Task',
+    '',
+    '| 阶段 | 进入即装载 |',
+    '|---|---|',
+    '| Plan（intent） | `grilling`（追问） |',
+    '| Design（spec） | `ghost-skill`；实现委派走 `implementer` 角色 |',
+    '',
+    '正文其余部分。',
+    '',
+  ].join('\n'));
+  write(root, 'templates/engine/.agents/skills/grilling/SKILL.md', '---\nname: grilling\ndescription: d\n---\n');
+  write(root, 'templates/engine/.agents/roles/implementer.md', '# Implementer\n');
+  const result = runLint({ root, checks: ['stage-skills'] });
+  assert.equal(result.ok, false);
+  const errors = result.sections[0].errors.join('\n');
+  assert.match(errors, /stage table loads "ghost-skill"/);
+  assert.doesNotMatch(errors, /"grilling"/);
+  assert.doesNotMatch(errors, /"implementer"/);
+});
+
+test('lint fails when the stage loading table is missing', () => {
+  const root = fixture();
+  write(root, 'templates/engine/.agents/commands/new-task.md', '# New Task\n\n没有装载表。\n');
+  const result = runLint({ root, checks: ['stage-skills'] });
+  assert.equal(result.ok, false);
+  assert.match(result.sections[0].errors.join('\n'), /stage loading table not found/);
 });

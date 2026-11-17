@@ -20,6 +20,8 @@ If any one is met, run the panel review; if none are met, use the graded review 
 
 Script: `flow-kit run pr-review` (subcommand details via `--help`). Execute in order; do not skip steps:
 
+Before review, fetch the `tfs-pr context` guide (per-commit walkthrough) to set the review lens order; on CI red, run `tfs-pr checks` first to locate failed checks and focus the fix before dispatching finders (checks is read-only locating; CI red does not change the exit code).
+
 1. `plan --base <ref> --head <ref>`; for high-risk quick checks add `--fast` (single-lens tier). Artifacts land in `.agents/tmp/pr-review/<runId>/` (run.json / briefs / tasks.json)
 2. Dispatch finder / verifier subagents in parallel per `tasks.json`; role contracts in `.agents/roles/pr-finder.md`, `pr-verifier.md`, `pr-adjudicator.md`
 3. Execute in order: `collect` → `verify` → `adjudicate` (escalated items) → `dispose` → `summary`

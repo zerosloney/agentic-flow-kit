@@ -1,6 +1,6 @@
 ---
 name: csharp-quality-gates
-description: C# backend quality gates — manual trigger entry for three deterministic gates — CRAP (complexity×coverage), mutation testing, duplicate code; built-in TEMP redirection for the local coverlet collection failure and discrimination of "is 0 coverage a collection fault or genuinely untested", report interpretation criteria, and test-backfill priority ordering; for questions like "is this change covered by tests / which methods should get tests first / is complexity or duplication over threshold / inventory the backend quality status". Command entry .agents/skills/csharp-quality-gates/scripts/quality-gates.mjs.
+description: C# backend quality gates — manual entry, 3 deterministic gates: CRAP (complexity×coverage)/mutation/duplicate code; TEMP redirect for coverlet failures (0 coverage: fault/untested), report reading, backfill order; for "is this covered / what to test first / over threshold / quality inventory".
 ---
 
 # csharp-quality-gates — C# backend quality gates (manual trigger)

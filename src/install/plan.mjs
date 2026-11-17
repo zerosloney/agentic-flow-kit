@@ -37,11 +37,22 @@ export function isRuntimeEnginePath(rel) {
   return false;
 }
 
+// enterprise-only 可选资产：仅 enterprise 档进安装计划（BACKLOG #25 形式化验证技能）。
+// 与 CI 交付面同一裁剪先例（buildPlan 第 5 步按 ciMode continue）；advisory 面，不进门禁。
+export const ENTERPRISE_ONLY_PREFIXES = ['.agents/skills/formal-verify/'];
+
+export function isEnterpriseOnlyPath(rel) {
+  const p = String(rel).replace(/\\/g, '/');
+  return ENTERPRISE_ONLY_PREFIXES.some((prefix) => p.startsWith(prefix));
+}
+
 export const RUNTIME_FILES = new Set([
   '.agents/verifications.jsonl',
   '.agents/judgments.jsonl',
   '.agents/evals/results.jsonl',
   '.agents/config/model-roles.local.json',
+  // 会话入口注入腿的用户开关（hooks/session-context.cjs 读）：用户所有，不进 manifest、升级不覆盖。
+  '.agents/config/session-context.local.json',
   '.agents/notes/runtime-env.local.md',
 ]);
 
@@ -358,6 +369,8 @@ export function buildPlan({
   // 1) 引擎核心（运行时脚本/hook 实现不进项目；项目只落声明式面）
   for (const rel of listFiles(path.join(TEMPLATES, 'engine'))) {
     if (isRuntimeEnginePath(rel)) continue;
+    // enterprise-only 可选资产按档裁剪：非 enterprise 档不进 plan（默认档体积零增长）。
+    if (tier !== 'enterprise' && isEnterpriseOnlyPath(rel)) continue;
     push(path.join(TEMPLATES, 'engine', rel), rel, 'engine', 10);
   }
 

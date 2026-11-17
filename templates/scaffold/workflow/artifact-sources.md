@@ -14,6 +14,9 @@
 | 评审结论 | PR / `workflow/reviews.d/` | 评审工具存链接或事件 id | 复核者 | 意见无采纳/拒绝结论 |
 | 事故与复盘 | `workflow/incidents/` | 事故平台存链接 + 影响面摘要 | on-call + owner | 复盘三件套缺一 |
 | 领域知识 | `wiki/` markdown | `wiki/` HTML 只是展示快照 | wiki owner | HTML 与 md 不一致 |
+| 领域术语 | `workflow/glossary.md` | spec / 代码注释 / wiki 只引用术语行，不复制定义 | 技术 lead（写法见 `.agents/skills/domain-modeling/SKILL.md`） | 代码里的名字与术语行不一致 |
+| 架构决策（ADR） | `workflow/adr/` markdown | 变更单 / PR 描述存链接；被取代的 ADR 改状态不删除 | 决策提出者 + 技术 lead | 状态仍 proposed 却已按该决策实现 |
+| 决策地图（探索态） | `workflow/decision-maps/` markdown | 外部工具只放链接；节点答案正文在 ADR / 术语表 / intent / spec，地图只留指针 | 主智能体 + 技术 lead（写法见 `.agents/skills/wayfinder/SKILL.md`） | 节点仍 open 却已按某答案实现，或全部节点已决而地图未 closed |
 | 记忆主张 | `workflow/claims.d/` | 不复制；其他文档引用 claim id | 主智能体 | 引用的原文已消失（broken） |
 | 行为评测 | `.agents/evals/results.jsonl` | CI 报告存链接 | 平台/引擎 owner | 凭证过期或签名不匹配 |
 

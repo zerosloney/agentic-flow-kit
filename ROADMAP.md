@@ -49,6 +49,11 @@
 | R5-1 | 运行时能力包内化 | 5 | L | `src/commands/runtime.mjs`、`flow-kit run/hook`、安装面收缩 | DONE |
 | R6-1 | 失败路由表 | 6 | M | `pipeline.json` `onFail`、`pipeline-run.mjs`、`check-pipeline-state.mjs` | DONE |
 | R6-2 | 任务状态与产物完整性恢复 | 6 | S | `pipeline-run.mjs` `retries` / `nextTarget` / `resume` | DONE |
+| R6-3 | 会话入口路由令注入（SessionStart） | 6 | S | `registry.mjs` `hooks.events` + `hooks/session-context.cjs` | DONE · BACKLOG #18 |
+| R6-4 | 探索态决策地图（wayfinder） | 6 | S | `skills/wayfinder/` + `workflow/decision-maps/` + `new-task`/`pipeline-run` 装载指针 | DONE · BACKLOG #20 |
+| R6-5 | PR 协作面易审化 + CI 红定位 | 6 | S | `skills/tfs-pr/` guide/checks + `commands/pr-review.md` 衔接 + `pipeline-run` 停机点 | DONE · BACKLOG #22 |
+| R6-6 | owner 视角摘要出口 | 6 | S | `owner-digest.mjs`（已完成 / 等我拍板 / 风险 三段，只读幂等，`--json`）+ `non-engineer-intent.md` 出口节（zh + en） | DONE · BACKLOG #23 |
+| R6-7 | 形式化验证资产（enterprise 可选技能） | 6 | S | `skills/formal-verify/`（zh + en）+ `plan.mjs` enterprise-only 裁剪（tier-only 门控，advisory 不进门） | DONE · BACKLOG #25 |
 
 ## 3. Wave 1 — 生命周期闭环
 
@@ -351,6 +356,41 @@
 - **落地（2026-11-16）**：`bumpRetry` 是 `retries` 的唯一 mutation 点，`stopGateFail` 与 verify 非耗尽分支各调一次。`advance` 开头消费 `nextTarget` 并记 `route-enter`。`resume` 复用既有 `stageArtifactProblems` 判完整性，追加 `artifacts: complete|missing` 与 `missing` 清单，保留原 `stage` / `since` 字段。旧 run 文件以 `run.retries || {}` 容错读取。
 - **验收**：计数跨进程持久化；产物缺失时 `resume` 记 `missing` 且契约门仍拦住、不消耗退回预算；产物齐备时记 `complete` 并重跑被中断的门；`fixLoop` 全仓退役（含测试夹具）。规模 `S`。
 - **测试**：`tests/pipeline-executor.test.mjs` 新增 8 例（共 19 例）；`npm test` 全绿，`npm run lint:templates` 通过。
+
+### R6-3 会话入口路由令注入（SessionStart）
+
+- **目标**：把「进入即装载」从技能正文里的文字约束变成宿主会话入口的机器接线——SessionStart 注入指针式路由令（指向 `commands/new-task.md` §1c 与 `skills/session-resume`），不复制红线正文；用户可一键关，幂等重放不重复追加。
+- **落地（2026-11-17）**：宿主能力仍单源在 `registry.mjs`——claude `hooks.events.event` 扩为数组并声明 `matchers.session`（会话启动方式五值，官方 hooks reference 实证 SessionStart 属 Context only、无决策面）；`install/hooks.mjs` 只增 `session` 工具类别，编译 / 合并 / 对账 / 降级全走既有通用路径，无宿主名分支。适配器 `hooks/session-context.cjs` 随包分发、经 `flow-kit hook session-context` 调起：零写操作、零 spawn、任何异常 exit 0，语言随 `manifest.language`；关闭开关 `.agents/config/session-context.local.json` 归用户所有（不进 manifest、升级不覆盖）。其余宿主未声明该事件 → 编译期过滤 + doctor guarantee advisory。
+- **验收**：claude 安装生成 SessionStart 接线且 doctor 对账绿；升级不重写文件、不重复追加；未声明宿主降级 advisory 且接线不误报；关闭开关只认显式 `false`；非 flow-kit 仓零输出。规模 `S`。
+- **测试**：`tests/session-context.test.mjs` 新增 6 例（适配器契约 + 包内入口）、`tests/hooks.test.mjs` 新增接线 / 幂等 / 降级 1 例、`tests/hosts.test.mjs` 新增「仅 claude 声明」边界 1 例；golden 夹具 `tests/fixtures/hooks/claude.json` 同步。
+
+### R6-4 探索态决策地图（wayfinder）
+
+- **目标**：给「大于一个会话」的工作补一个探索态投影——`intents/` 是单件诉求模型、`autonomous-run` 是执行合同，中间缺一张「还有哪些决定没做、谁挡着谁」的地图。节点 = **待决问题**（产出决策而非交付物），一次只解一个 frontier 节点，答案按去向送真相源，解完转 intent/spec 主线。
+- **落地（2026-11-17）**：新引擎技能 `wayfinder`（zh + en 整文件覆盖，本仓改写并标注思想来源）；新工件 `workflow/decision-maps/_TEMPLATE.md`（zh + en，节点表 / frontier / 收图三节），地图状态 `open/closed` 与节点状态 `open/decided/dropped` 都是**本地枚举**（沿 ADR 先例），不属四类文档、不走 `状态` 状态机、不经 confirm-doc 迁移、不进 `workflow/INDEX.md`；`artifact-sources.md` 补「决策地图（探索态）」唯一真相源行，`workflow/README.md`（zh + en）登记。装载指针两处：`new-task.md` §1c Plan 行与 `pipeline-run.md` 工单矩阵 draft 行（zh + en）。**不新增硬门、不新增台账、不进常驻注入面**，故不登记 mechanism-registry（无门禁增量，一进一出不适用）。节点分型复用 `new-task.md` §1「提问分型」单源（能跑出来/查出来的先跑探针，禁停下来问），问法 / 比选 / 术语与 ADR 分别指针到 `grilling` / `arena` / `domain-modeling`，不复制正文。
+- **验收**：技能与工件中英文覆盖齐（en 不回退中文）；随 install 落盘、生成宿主指针壳、进 manifest 与派生 engine-map 技能清单；填实的地图对既有门禁**惰性**（INDEX `--check` 仍绿且逐字节不变、任务投影与归档候选不含它、证据门 `skipped: 'type'`、confirm-doc 按路径跳过且 `workflow/` 全树零写、check-loop 退出码不变）；装载表裸名 `wayfinder` 可被 `lint:templates` stage-skills 解析，删技能即红（中英文表都点名）；地图只留指针不复制决策正文。规模 `S`。
+- **测试**：`tests/wayfinder.test.mjs` 新增 4 例（zh 落盘与单源登记 / en 覆盖不回退 / 门禁惰性实测 / 装载表解析与删技能负例）；`tests/install.test.mjs`、`tests/en.test.mjs` 的 §1c 绑定技能清单各加 `wayfinder`。
+
+### R6-5 PR 协作面易审化 + CI 红定位
+
+- **目标**：建 PR 前可产出逐提交导读（时间正序 = 建议阅读顺序），噪声历史只给清理建议不动手；CI 红能只读定位失败检查并给聚焦修复路径；禁自动合并、禁 force push，清理已推送历史须用户显式授权；不新增硬门。
+- **落地（2026-11-17）**：`tfs-pr.mjs` 新增 `guide` / `checks` 子命令（约 319 行）——`guide` 随 `context` 输出逐提交导读与五类噪声（fixup / merge / wip / non-conventional / duplicate）清理**建议**，只建议不代跑；`checks` 按 PR id / `--source` / `--build` 只读定位失败检查（timeline 取 FAIL 记录的 issues 与 log 指针，CI 红不改变退出码）。`tfs-pr/SKILL.md`（zh + en）§1 PAT 补 Build (Read) scope、§2 命令表补两行、§3 建 PR 前先 checks、新增 §8 导读与噪声清理 / §9 CI 红聚焦修复；`pr-review.md` 评审入口先 checks（CI 红不派 finder）、`pipeline-run.md` 停机点补 CI 红处置（zh + en）。
+- **验收**：guide 噪声建议覆盖五类且**永不改写历史**；checks 绿 / running / 空态不造数（无构建 loud-empty、异仓构建标注并给 `--build` 出路、401 html 报 Build scope 补救）；日志正文不抓取、只给 log 指针；双语文档在场且写明授权边界（禁自动合并 / 禁 force push / 清理已推送历史须用户显式授权）。规模 `S`。
+- **测试**：`tests/tfs-pr.test.mjs` 新增 9 例（guide 时序 / 噪声建议不代跑 / 阅读顺序与文本面、checks 定位 FAIL 与 log 指针 / 三态不造数 / `--build` 绕过分支查询并标注异仓 / 401 授权提示 / 技能随包携带且双语授权边界在位）；`npm test` 501/501 全绿。
+
+### R6-6 owner 视角摘要出口（owner-digest）
+
+- **目标**：`non-engineer-intent.md` 给了业务方「入口」（不经 git 产出 intent）但没有「出口」——owner 怎么一眼看到进展、待拍板与风险。补一个只读摘要出口，从既有台账派生「已完成 / 等我拍板 / 风险」三段，不新增台账、不造数。
+- **落地（2026-11-17）**：包内新脚本 `owner-digest.mjs`（`flow-kit run owner-digest [--days N] [--json]`，默认近 7 天周报口径）——已完成段：窗口内 git 提交（`gitSubjects`）+ 已了结验证（`verifications.jsonl`）+ 评审事件（`scanReviews` 单源，按月分桶取交集）；等我拍板段：judgments 最近有记录月仍报 BLOCK 的规则（WARN 只计数）+ delegations 结果列「返工待修」（pending）与无法判读（unknown）的行，未了结项不随时间窗消失故本段不限窗；风险段：未关闭 incidents + 返工提交占比 + 派发报告预算超限月（advisory）+ 缺源清单。口径全部复用 `agg-delegations` / `agg-judgments` / `metrics-core` / `outcome-metrics` 共享函数（后者最小 export 扩展，补 `gitSubjects` / `reworkStats` / `incidentOpen` 单源），不复制第三份实现。只读幂等：除 stdout 零写操作，markdown 不含生成时刻，同状态连跑逐字节相同；无数据显式报空，缺源单列不静默。`non-engineer-intent.md` 新增「看进展（出口）」节：zh 模板 + en 新建整文件覆盖（此前 en 回退 zh）。
+- **验收**：三段口径全部来自既有台账且与聚合脚本同源；只读、幂等（同状态连跑逐字节相同、目标目录零增改）；`--json` 与 markdown 措辞一致；无数据显式报空不造数；入口与出口双向在场（zh + en）。规模 `S`。
+- **测试**：`tests/owner-digest.test.mjs` 新增 6 例（富夹具三段逐条 / 空目标显式报空且缺源单列 / `--json` 与 markdown 措辞一致 / 同状态连跑逐字节相同 / 目标目录零增改 / CLI 契约：`--help` exit 0、坏 `--days` exit 2）；`npm test` 507/507 全绿。
+
+### R6-7 形式化验证资产（formal-verify，enterprise-only）
+
+- **目标**：给有状态机 / 并发 / 一致性高危面的项目提供形式化验证资产的方法与形状（不变式清单、状态机模型 + 性质用例、模型检查 / 性质测试接入），灵感来自 pstack `create-formal-verification-skill` / `maintain-formal-verification-skill`。定位为 **advisory 面**：不进 CI / pipeline / 任何门，不登记 mechanism-registry（未进门禁面故无一进一出）；结论由人下，验证工具缺失或项目无高危面时显式 SKIP（exit 0，不判红不造数）。
+- **落地（2026-11-17）**：新增引擎技能 `formal-verify`（zh 正文 + en 整文件覆盖，本仓改写并标注思想来源），正文六节：触发 / 定位与边界 / 适用面判定（状态机工件、锁事务并发、分布式一致性 3 类可核对线索，命中 ≥1 才开工）/ 资产创建（`.agents/formal/invariants.md` FV-x 清单、`.agents/formal/<name>.md` 状态机模型、工具无关接入 + 按栈举例：TLA+ / fast-check / proptest / Kani / go test）/ 维护腿（高危面改动复核 + 漂移候选只出不改）/ loud-skip 纪律。安装门控：`src/install/plan.mjs` 新增 `ENTERPRISE_ONLY_PREFIXES` / `isEnterpriseOnlyPath` 单源清单，引擎模板循环按 `tier !== 'enterprise'` 裁剪（复用第 5 步 CI 交付面按档 continue 的既有先例，不发明第二套机制）；宿主指针壳与派生 engine-map 以 plan 中的技能为源，自动纳管，无登记索引要补。
+- **验收**：仅 `--tier enterprise`（含 `--hardened` 等价路径）安装，默认档（lean/standard）安装体积零增长（技能目录 / manifest 前缀键 / 宿主指针壳三重不存在，默认档 zh/en 新装树签名实测逐字不变）；技能内自含「高危面判定」——按栈 profile 既有载体（`templates/profiles/<stack>/`）只承载 AGENTS.md、无按栈装技能机制，按既定取舍退化为 tier-only 门控，不新建机制；不做探测脚本（YAGNI，判定指令单源在技能正文）。
+- **测试**：`tests/formal-verify.test.mjs` 新增 6 例（standard/lean 两档三重不存在 + tier 记录 / enterprise zh 落盘 + manifest 纳管 + claude 指针壳 / enterprise en 整文件覆盖不回退中文 / enterprise zh 树 `skills lint` exit 0 / enterprise en 树无 formal-verify 新增错误）；`npm test` 516/516 全绿（基线 510 + 新增 6）；`lint:templates` 5 面全绿、`policy:check` 机制 36 行不变、`check:i18n` 143 文件不变。
 
 ## 9. 依赖关系
 

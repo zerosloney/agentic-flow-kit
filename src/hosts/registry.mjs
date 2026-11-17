@@ -116,10 +116,13 @@ export const HOSTS = {
         // PostToolUse(Agent) 仅接 usage 观测腿（官方 hooks 文档实证：tool_response 含 usage/
         // totalDurationMs/resolvedModel/agentId，只覆盖子代理最后一次 API 请求）；其余宿主无
         // 公开证据，一律不接。
-        event: ['PreToolUse', 'PostToolUse'],
+        // SessionStart 仅接会话入口路由令（官方 hooks reference 2026-11-17 核实：matcher = 启动方式
+        // startup|resume|clear|compact|fork，Context only 无决策面，plain stdout 注入为 system reminder；
+        // 启动时 MCP 不可用故只用 command 形态）。其余宿主未声明该事件 → doctor guarantee advisory 降级。
+        event: ['PreToolUse', 'PostToolUse', 'SessionStart'],
         container: 'hooks',
-        matchers: { write: 'Write|Edit|MultiEdit', shell: 'Bash', agent: 'Agent' },
-        timeouts: { write: 120, shell: 800, agent: 10 },
+        matchers: { write: 'Write|Edit|MultiEdit', shell: 'Bash', agent: 'Agent', session: 'startup|resume|clear|compact|fork' },
+        timeouts: { write: 120, shell: 800, agent: 10, session: 10 },
         command: { form: 'cli', template: 'flow-kit hook {hook}' },
       },
     },

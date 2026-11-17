@@ -23,7 +23,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { reportBudgetStats } from './agg-delegations.mjs';
 
-function readText(file) {
+export function readText(file) {
   try {
     return fs.readFileSync(file, 'utf8');
   } catch {
@@ -31,7 +31,7 @@ function readText(file) {
   }
 }
 
-function readJsonl(file) {
+export function readJsonl(file) {
   const rows = [];
   for (const line of readText(file).split(/\r?\n/)) {
     if (!line.trim()) continue;
@@ -44,7 +44,7 @@ function readJsonl(file) {
   return rows;
 }
 
-function within(ts, since) {
+export function within(ts, since) {
   const t = Date.parse(ts);
   return Number.isFinite(t) && t >= since;
 }
@@ -62,11 +62,30 @@ function listFiles(dir, re) {
   }
 }
 
-function frontmatterStatus(text) {
+export function frontmatterStatus(text) {
   const m = String(text).match(/^---\r?\n([\s\S]*?)\r?\n---/);
   if (!m) return '';
   const s = m[1].match(/^\s*状态:\s*(\S+)/m);
   return s ? s[1] : '';
+}
+
+// gitSubjects(root, since)：时间窗内提交主题列表（outcome-metrics 与 owner-digest 的同一 git 访问方式，
+// 禁第三份实现；非 git / 命令失败返回 null——调用方显式报「无 git」，不静默当 0）。
+export function gitSubjects(root, since) {
+  const git = spawnSync('git', ['log', `--since=${new Date(since).toISOString()}`, '--pretty=%s'], { encoding: 'utf8', cwd: root });
+  if (git.status !== 0) return null;
+  return git.stdout.split(/\r?\n/).filter(Boolean);
+}
+
+// reworkStats(subjects)：返工提交占比口径单源（fix/revert 前缀；collect 与 owner-digest 共用，禁复制第三份正则）。
+export function reworkStats(subjects) {
+  const rework = subjects.filter((s) => /^(fix|revert)(\(|:|!)/i.test(s)).length;
+  return { commits: subjects.length, rework, rate: pct(rework, subjects.length) };
+}
+
+// incidentOpen(text)：事故未关闭口径单源（frontmatter 状态不属 closed/done/已关闭；collect 与 owner-digest 共用）。
+export function incidentOpen(text) {
+  return !/closed|done|已关闭/i.test(frontmatterStatus(text));
 }
 
 export function collect(root, { days = 30, now = Date.now()} = {}) {
@@ -93,7 +112,7 @@ export function collect(root, { days = 30, now = Date.now()} = {}) {
   const incidentDir = path.join(root, 'workflow', 'incidents');
   const incidents = listFiles(incidentDir, /\.md$/).map((n) => readText(path.join(incidentDir, n)));
   if (!fs.existsSync(incidentDir)) missing.push('workflow/incidents/');
-  const open = incidents.filter((t) => !/closed|done|已关闭/i.test(frontmatterStatus(t))).length;
+  const open = incidents.filter((t) => incidentOpen(t)).length;
   out.incidents = { total: incidents.length, open, closed: incidents.length - open };
 
   // 3) 复核意见采纳率（事件级近似：数 reviews.d 表格里的采纳/拒绝/误报单元格）
@@ -129,13 +148,9 @@ export function collect(root, { days = 30, now = Date.now()} = {}) {
     stale: latest.length - fresh.length,
   };
 
-  // 5) 返工提交占比（可选：无 git 时省略）
-  const git = spawnSync('git', ['log', `--since=${new Date(since).toISOString()}`, '--pretty=%s'], { encoding: 'utf8', cwd: root });
-  if (git.status === 0) {
-    const subjects = git.stdout.split(/\r?\n/).filter(Boolean);
-    const rework = subjects.filter((s) => /^(fix|revert)(\(|:|!)/i.test(s)).length;
-    out.rework = { commits: subjects.length, rework, rate: pct(rework, subjects.length) };
-  }
+  // 5) 返工提交占比（可选：无 git 时省略——gitSubjects/reworkStats 单源，owner-digest 同源引用）
+  const subjects = gitSubjects(root, since);
+  if (subjects) out.rework = reworkStats(subjects);
 
   // 6) 派发报告预算（dispatch-budget，advisory）：超限月进入聚合面。只加字段不加门禁；缺源入 missing。
   //    overCount/overMonths 口径（2026-11-16 修正）：按月·报告数加权——月合计 > 该月报告数×单报告预算

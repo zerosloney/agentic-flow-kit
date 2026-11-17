@@ -34,12 +34,14 @@ The stage machine is aligned with the commands manual. Mutually exclusive with m
 | `done <runId>` | Report a summary (stage bar / gate count / commit chain) | Flow ends |
 | `aborted <runId>` | Report the abort state and archive location | Flow ends |
 
+> CI red and PR conflicts add no new stop type: they always go through the existing `gate-fail` / `await-confirm` stops; `tfs-pr checks` is a read-only locating aid only and takes no part in gates; automatic merge and automatic force push are forbidden.
+
 ### Work-Order Type Execution Matrix
 
 | Work-order type | Execution requirement | Load on entry (coupled, see new-task §1c) |
 |---|---|---|
 | **triage** | Grade and backfill `next --triage "kind=… level=… module=… topic=<English kebab>"` (choose the higher level when unsure) | None; kb search same as new-task §L1 Fast Track step 2 |
-| **draft** | Draft the specified document | intent→`grilling`; spec→`stages.md` Design §2 "Required Inputs" + `grilling` (branch comparison `arena`); plan→none |
+| **draft** | Draft the specified document | intent→`grilling` (a chain of open questions spanning sessions → build a `wayfinder` decision map first, draft once the nodes are resolved); spec→`stages.md` Design §2 "Required Inputs" + `grilling` (branch comparison `arena`); plan→none |
 | **implement / fix** | Implement per the authorized files $\rightarrow$ **stop on deviation** (public interface / unplanned files / new dependencies $\rightarrow$ stop and report, do not self-approve) | No mandatory skill; for fix-type with an unclear root cause, run `why` first |
 | **review / closeout** | Produce per the order and write to the specified location (after review-only reporting, finish with `--done`) | review→`review-method` (high-risk diff +`interrogate`); closeout→`shipyard-workflow-closeout` (§0 closeout self-check) |
 

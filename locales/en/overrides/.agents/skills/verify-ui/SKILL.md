@@ -1,6 +1,6 @@
 ---
 name: verify-ui
-description: UI change verification (read-only verification, no dirty data left). First choice chrome-devtools MCP — take_snapshot to explore shape + single-step drive + screenshot evidence; harness .mjs scripts are only a fallback path for regression/unattended runs, and any fallback must record one line of reason in the verification report.
+description: UI change verification (read-only, no dirty data left). First choice chrome-devtools MCP: take_snapshot to explore shape + single-step drive + screenshot evidence; harness .mjs scripts only for regression/unattended fallback, which must record a one-line reason in the verification report.
 ---
 
 # verify-ui — UI verification guide
@@ -70,8 +70,8 @@ description: UI change verification (read-only verification, no dirty data left)
 - `features/` holds one file per core feature; four sections, none may be missing when creating: reach path / drive / observable end state / Gotchas.
 - Verification and close-out spot checks take coverage from the map; current coverage follows the `features/` directory.
 - Create files synchronously when a new page or new main chain goes live; source waves from `frontend/src/router/index.ts` routes: route exists, map missing = to add; map exists, route missing = to delete or rewrite.
-- Coverage gaps / skeleton: `node .agents/skills/verify-ui/scripts/gen-verify-feature.mjs --check` (or `--json`) lists uncovered routes; `--route <path>` writes only the four H2 sections + TODO skeleton, inventing drive steps forbidden.
-- Monthly drift maintenance: ① take routes / component diffs of the recent month as source waves; ② run verification once only for touched features; ③ fix in at most one commit.
+- Coverage gaps / skeleton: `node .agents/skills/verify-ui/scripts/gen-verify-feature.mjs --check` (or `--json`) lists uncovered routes; `--route <path>` writes only the four H2 sections + TODO skeleton, inventing drive steps forbidden. Read-only reconciliation loud-skips green when the router file is absent or `features/` holds no map (not applicable to this repo ≠ drift; `--json` carries `skipped`), so `--check` is CI-able; `--route` generation still fails strictly.
+- Monthly drift maintenance (periodic trigger = `flow-kit run dream-run` phase E3, which runs the coverage leg + the dangling leg read-only and emits candidates without touching files): ① take routes / component diffs of the recent month as source waves; ② run verification once only for touched features; ③ fix in at most one commit.
 - For each failure first decide "map drift" or "code defect": the former fixes the map, the latter enters an incident; mixing them is forbidden.
 - Missing prerequisites → record as a failure and write the reason into that feature's Gotchas; weakening the verification path to pass is forbidden.
 - If a page / behavior does not match the map → fix the map first, then conclude.

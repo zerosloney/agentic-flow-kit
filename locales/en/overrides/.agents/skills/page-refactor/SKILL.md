@@ -1,6 +1,6 @@
 ---
 name: page-refactor
-description: Business feature page refactoring executor — refactor any business page/module following the pattern distilled from the purchase order (PO) template — shape inventory → target shape and table selection → build per references/templates.md (list page + create/view/edit entire module, supporting Drawer → overlay detail transition) → full assertion verification. Use when the user asks to "refactor a page / align with the purchase order page / refactor an entire module UI / refactor a list page / refactor a detail page".
+description: Refactor any business page/module on the purchase-order (PO) pattern: shape inventory → target shape/table selection → build per references/templates.md (list + create/view/edit, Drawer → overlay detail) → assertion-verified; for "refactor a page / align with PO page / module UI / list/detail page".
 ---
 
 # page-refactor — Business module refactoring (PO template pattern)

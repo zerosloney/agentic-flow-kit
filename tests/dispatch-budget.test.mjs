@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { reportBudgetStats } from '../templates/engine/.agents/scripts/agg-delegations.mjs';
 import { collect, renderMarkdown } from '../templates/engine/.agents/scripts/outcome-metrics.mjs';
+import { renderPlan } from '../templates/engine/.agents/scripts/fill-plan.mjs';
+import { buildTour } from '../templates/engine/.agents/scripts/dev-tour-model.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROLES = ['implementer', 'independent-reviewer', 'pr-adjudicator', 'pr-finder', 'pr-verifier', 'ui-verifier', 'wiki-compiler', 'test-designer'];
@@ -186,4 +188,166 @@ test('outcome-metrics lists budget sources as missing when absent', () => {
   assert.ok(m.missing.includes('workflow/delegations.d/'));
   const md = renderMarkdown(m);
   assert.match(md, /数据缺口/);
+});
+
+// BACKLOG #16：任务粒度判据（垂直切片 + 触达面预算，advisory）。
+// 三处必须同形状：模板（zh/en）、生成器 fill-plan、playbook stages.md Build §3（预算单源）。
+test('plan task rows carry a slice criterion in template, generator and playbook', () => {
+  const generated = renderPlan({ topic: 'slice', level: 'L2' }).body;
+  const tasks = generated.split('## 任务拆解')[1].split('## 执行顺序')[0];
+  assert.equal((tasks.match(/- \[ \] \d+\./g) || []).length, 2, 'two example tasks');
+  assert.equal((tasks.match(/- 切片：/g) || []).length, 2, 'every task row has a slice line');
+  assert.match(tasks, /stages\.md` Build §3/, 'generator points at the budget single source');
+
+  for (const rel of [
+    'templates/scaffold/workflow/plans/_TEMPLATE.md',
+    'locales/en/overrides/workflow/plans/_TEMPLATE.md',
+  ]) {
+    assert.equal((read(rel).match(/- 切片：/g) || []).length, 2, `${rel} must carry the same row shape`);
+  }
+
+  for (const rel of [
+    'templates/engine/.agents/commands/stages.md',
+    'locales/en/overrides/.agents/commands/stages.md',
+  ]) {
+    const text = read(rel);
+    assert.match(text, /≤5 /, `${rel} must state the file budget`);
+    assert.match(text, /≤400 /, `${rel} must state the diff budget`);
+    assert.match(text, /advisory/, `${rel} must keep the criterion advisory`);
+  }
+});
+
+test('slice rows do not disturb dev-tour step×file or dependency parsing', () => {
+  const root = makeTmp('dispatch-budget-slice-');
+  const git = { files: { 'src/api/supplier.ts': { added: 12, deleted: 1 }, 'src/views/SupplierList.vue': { added: 8, deleted: 2 } } };
+  const base = [
+    '---', '状态: approved', '级别: L2', '日期: 2026-11-17', '模块: pipeline', '---',
+    '# PLAN — slice', '', '## 任务拆解', '',
+    '- [ ] 1. 新建供应商端到端',
+    '   - 文件：src/api/supplier.ts',
+    '   - 判据：接口返回新行',
+    '   - 依赖：无（可立即开工）',
+    '   - 风险：低',
+    '- [ ] 2. 列表显示新行',
+    '   - 文件：src/views/SupplierList.vue',
+    '   - 判据：列表出现该行',
+    '   - 依赖：被任务 1 阻塞',
+    '   - 风险：低',
+    '',
+  ].join('\n');
+  const withSlices = base
+    .replace('   - 判据：接口返回新行', '   - 判据：接口返回新行\n   - 切片：新建后列表可查到该行；触达：1 文件 / 12 行')
+    .replace('   - 判据：列表出现该行', '   - 判据：列表出现该行\n   - 切片：列表渲染新行；触达：1 文件 / 8 行');
+
+  const docRel = 'workflow/plans/2026-11-17-slice.md';
+  const model = (text) => {
+    const abs = path.join(root, docRel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, text);
+    return buildTour({ root, docPath: docRel, git });
+  };
+  // 插入行只会移动行号；比较时剔除 line 字段，其余（步骤×文件、依赖边、解析健康度）必须逐字相同。
+  const dropLines = (v) => {
+    if (Array.isArray(v)) return v.map(dropLines);
+    if (v && typeof v === 'object') {
+      const out = {};
+      for (const [k, val] of Object.entries(v)) if (k !== 'line') out[k] = dropLines(val);
+      return out;
+    }
+    return v;
+  };
+  const shape = (m) => dropLines({
+    steps: m.steps.map((s) => ({ title: s.title, files: s.files.map((f) => (typeof f === 'string' ? f : f.path)).sort() })),
+    deps: m.deps,
+    parseHealth: m.parseHealth,
+  });
+  const before = shape(model(base));
+  const after = shape(model(withSlices));
+  assert.ok(before.steps.length >= 2, 'fixture must parse into steps');
+  assert.deepEqual(after, before, 'advisory slice rows must be inert to the tour model');
+});
+
+// BACKLOG #27：任务行形状单源漂移——模板（zh/en）与生成器 fill-plan 的骨架行类型集合必须一致。
+// 2026-11-17 实测漂移：模板有「依赖」无「文件」（复制模板起 plan 过不了 --strict 每步文件门），
+// 生成器有「文件」无「依赖」（生成器起 plan 缺 frontier 依赖锚）。统一行形状 = 文件/判据/切片/依赖/风险/留痕。
+const ROW_TYPES = ['文件', '判据', '切片', '依赖', '风险', '留痕'];
+
+// 取「任务拆解」节首任务块的行类型序列（有序比对，行顺序也属形状契约）
+function firstTaskRowTypes(text) {
+  const skeleton = text.split('## 任务拆解')[1].split('## 执行顺序')[0];
+  const first = skeleton.split('- [ ] 1.')[1].split('- [ ] 2.')[0];
+  return [...first.matchAll(/-\s*(文件|判据|切片|依赖|风险|留痕)[：:]/g)].map((m) => m[1]);
+}
+
+test('plan task-row shape is single-sourced: template (zh/en) row types equal the fill-plan skeleton', () => {
+  const genTypes = firstTaskRowTypes(renderPlan({ topic: 'shape', level: 'L2' }).body);
+  assert.deepEqual(genTypes, ROW_TYPES, 'fill-plan L2 skeleton must carry 文件/判据/切片/依赖/风险/留痕 in order');
+  for (const rel of [
+    'templates/scaffold/workflow/plans/_TEMPLATE.md',
+    'locales/en/overrides/workflow/plans/_TEMPLATE.md',
+  ]) {
+    assert.deepEqual(firstTaskRowTypes(read(rel)), genTypes, `${rel} row-type sequence must equal the generator skeleton`);
+  }
+});
+
+// 按骨架占位符逐行填实的夹具（两个任务各六行全填），路径用已知根目录前缀（backend/frontend）
+// ——extractPaths 裸路径只认已知根目录，无须真实仓库即可直认步骤文件。
+function fillSkeleton(text) {
+  return text
+    .replace('级别: L1', '级别: L2')
+    .replace('- [ ] 1. <任务>', '- [ ] 1. 新建供应商端到端')
+    .replace('- [ ] 2. <任务>', '- [ ] 2. 列表显示新行')
+    .replace('   - 文件：<本步会改的文件路径；每步至少一个；纯验证步骤写「验证步骤：无代码文件」>', '   - 文件：backend/src/api/supplier.ts')
+    .replace('   - 判据：<怎样算完成；尽量对应一个测试或可复现操作>', '   - 判据：接口返回新行')
+    .replace('   - 切片：<端到端可演示的行为，如「新建供应商后列表出现该行」>；触达：<N 文件 / M 行>', '   - 切片：新建后列表可查到该行；触达：1 文件 / 12 行')
+    .replace('   - 切片：<端到端可演示的行为>；触达：<N 文件 / M 行>', '   - 切片：新建后列表可查到该行；触达：1 文件 / 12 行')
+    .replace('   - 依赖：无（可立即开工）/ 被任务 <N> 阻塞', '   - 依赖：无（可立即开工）')
+    .replace('   - 风险：低 / 中 / 高（<原因>）', '   - 风险：低')
+    .replace('   - 文件：…', '   - 文件：frontend/src/views/SupplierList.vue')
+    .replace('   - 判据：…', '   - 判据：列表出现该行')
+    .replace('   - 切片：…；触达：…', '   - 切片：列表渲染新行；触达：1 文件 / 8 行')
+    .replace('   - 依赖：…', '   - 依赖：被任务 1 阻塞')
+    .replace('   - 风险：…', '   - 风险：低');
+}
+
+test('a plan filled from the template skeleton passes the gen-dev-tour --strict per-step file gate', () => {
+  const root = makeTmp('plan-shape-strict-');
+  const abs = path.join(root, 'workflow', 'plans', '2026-11-17-shape.md');
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, fillSkeleton(read('templates/scaffold/workflow/plans/_TEMPLATE.md')));
+  const r = spawnSync(process.execPath, [
+    path.join(KIT, 'templates', 'engine', '.agents', 'scripts', 'gen-dev-tour.mjs'),
+    abs, '--no-diff', '--json', '--strict',
+  ], { encoding: 'utf8' });
+  assert.equal(r.status, 0, `--strict gate must pass:\n${r.stderr}`);
+  const model = JSON.parse(r.stdout);
+  const steps = model.steps.filter((s) => s.source === 'tasks');
+  assert.equal(steps.length, 2, 'both template tasks parse as direct steps');
+  assert.deepEqual(steps.map((s) => [...s.files].sort()), [
+    ['backend/src/api/supplier.ts'],
+    ['frontend/src/views/SupplierList.vue'],
+  ], 'each task step must bind its 文件 row path directly');
+});
+
+test('fill-plan L2 skeleton carries dependency anchors and dev-tour derives the frontier from them', () => {
+  // 骨架本体含依赖锚（漂移的另一半：生成器曾有「文件」无「依赖」）
+  const genTasks = renderPlan({ topic: 'frontier', level: 'L2' }).body.split('## 任务拆解')[1].split('## 执行顺序')[0];
+  assert.equal((genTasks.match(/- 依赖：/g) || []).length, 2, 'generator skeleton must carry 依赖 rows for both example tasks');
+  const root = makeTmp('plan-shape-frontier-');
+  const docRel = 'workflow/plans/2026-11-17-frontier.md';
+  const abs = path.join(root, docRel);
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, fillSkeleton(renderPlan({ topic: 'frontier', level: 'L2' }).body));
+  const git = {
+    files: {
+      'backend/src/api/supplier.ts': { added: 12, deleted: 1 },
+      'frontend/src/views/SupplierList.vue': { added: 8, deleted: 2 },
+    },
+  };
+  const model = buildTour({ root, docPath: docRel, git });
+  assert.equal(model.deps.source, 'task-rows');
+  assert.deepEqual(model.deps.edges, [{ from: 'T1', to: 'T2' }], '「被任务 1 阻塞」must produce the declared edge');
+  assert.equal(model.deps.unresolved, 1, '「依赖：无（可立即开工）」has no predecessor to resolve (advisory, pre-existing behavior)');
+  const frontier = model.steps.filter((s) => s.source !== 'git' && s.source !== 'fallback' && !model.deps.edges.some((e) => e.to === s.id));
+  assert.deepEqual(frontier.map((s) => s.id), ['T1'], 'frontier = tasks with no unresolved blockers');
 });

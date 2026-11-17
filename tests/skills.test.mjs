@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { hashSkillDir, readLock, writeLock } from '../src/skills/lock.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const BIN = path.join(HERE, '..', 'bin', 'flow-kit.mjs');
@@ -151,4 +152,103 @@ test('network sources require --allow-network', () => {
   const n = cli(target, ['add-skill', 'some-npm-skill', '--target', target]);
   assert.equal(n.status, 2, n.stderr || n.stdout);
   assert.match(n.stderr, /--allow-network/);
+});
+
+// ---- #24 技能正文写作准入（BODY_* 规则） ----
+
+const BODY_RULE_IDS = ['BODY_IMPERATIVE', 'BODY_STEP_VERIFIABLE', 'BODY_DUPLICATED', 'BODY_LENGTH'];
+
+// 单源夹具：两句 ≥20 字的长句 ×3 处，触发跨技能重复判定。
+const DUP_PARAGRAPH = [
+  '这一段是两个技能正文之间共用的实现细节长句。',
+  '它讲述的是完全相同的背景说明与操作注意事项。',
+  '阅读者应当在两处看到一模一样的内容从而产生困惑。',
+].join('\n');
+
+// 含四类正文违规的正文：祈使句 / 可验证 / 单源（与另一技能共用段落）/ 长度预算。
+function violatingBody() {
+  return [
+    '# 正文违规夹具',
+    '',
+    '## 步骤',
+    '',
+    '1. 我们先讨论一下这个方案是否可行？',
+    '- 保持良好的代码风格与命名习惯。',
+    '',
+    DUP_PARAGRAPH,
+    '',
+    ...Array.from({ length: 405 }, (_, i) => `填充说明第 ${i + 1} 行，用于突破正文长度预算。`),
+    '',
+  ].join('\n');
+}
+
+function dropSkill(targetDir, name, body) {
+  const dir = path.join(targetDir, '.agents', 'skills', name);
+  fs.mkdirSync(dir, { recursive: true });
+  const text = ['---', `name: ${name}`, 'description: 正文写作准入夹具', '---', '', body].join('\n');
+  fs.writeFileSync(path.join(dir, 'SKILL.md'), text);
+  return dir;
+}
+
+test('body rules hard-fail a new unregistered skill with all four rule IDs', () => {
+  dropSkill(target, 'lint-bad-a', violatingBody());
+  dropSkill(target, 'lint-bad-b', violatingBody());
+  const r = cli(target, ['skills', 'lint', '--target', target, '--json']);
+  assert.equal(r.status, 1, r.stderr || r.stdout);
+  const report = JSON.parse(r.stdout);
+  assert.equal(report.ok, false);
+  for (const id of BODY_RULE_IDS) {
+    assert.ok(report.errors.some((e) => e.includes(`[${id}]`)), `errors 应含 ${id}`);
+  }
+});
+
+test('body rules are advisory-only for skills registered in the lockfile', () => {
+  const t2 = installedTarget();
+  const dirA = dropSkill(t2, 'lint-legacy-a', violatingBody());
+  const dirB = dropSkill(t2, 'lint-legacy-b', violatingBody());
+  const lock = readLock(t2);
+  for (const [name, dir] of [['lint-legacy-a', dirA], ['lint-legacy-b', dirB]]) {
+    const { files, checksum } = hashSkillDir(dir);
+    lock.skills[name] = {
+      source: { type: 'local', spec: dir, resolved: dir },
+      version: null,
+      checksum,
+      installedAt: new Date().toISOString(),
+      files,
+    };
+  }
+  writeLock(t2, lock);
+
+  const r = cli(t2, ['skills', 'lint', '--target', t2, '--json']);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const report = JSON.parse(r.stdout);
+  assert.equal(report.ok, true);
+  for (const id of BODY_RULE_IDS) {
+    assert.ok(
+      report.warnings.some((w) => w.startsWith('.agents/skills/lint-legacy-b:') && w.includes(`[${id}]`)),
+      `warnings 应含 lint-legacy-b 的 ${id}`,
+    );
+    assert.ok(!report.errors.some((e) => e.includes(`[${id}]`)), `errors 不应含 ${id}`);
+  }
+});
+
+test('body rules stay silent for a clean new unregistered skill', () => {
+  const t3 = installedTarget();
+  dropSkill(t3, 'lint-clean', [
+    '# lint-clean',
+    '',
+    '## 步骤',
+    '',
+    '1. 运行 `npm test` 并确认退出码为 0。',
+    '- 把命令输出原文写入 `tmp/evidence/lint-clean.md`。',
+    '- 对照 `workflow/INDEX.md` 逐条复核后再提交。',
+    '',
+  ].join('\n'));
+  const r = cli(t3, ['skills', 'lint', '--target', t3, '--json']);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const report = JSON.parse(r.stdout);
+  assert.equal(report.ok, true);
+  const hits = [...report.errors, ...report.warnings]
+    .filter((m) => m.startsWith('.agents/skills/lint-clean:') && /BODY_/.test(m));
+  assert.deepEqual(hits, []);
 });

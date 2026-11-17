@@ -1,6 +1,6 @@
 ---
 name: papercut-fix
-description: Fix a designated un-escalated papercut entry in workflow/papercuts.md (the loop executor that drives outstanding debt to 0). Locate the symptom by the line number given in the instruction/ledger, change the authoritative file per the "Planned fix" column, write back to the ledger, and run the verification gates; also used for mining recurring error classes and choosing an enforcement layer when the same mistake keeps recurring.
+description: Fix a designated un-escalated papercut in workflow/papercuts.md (loop executor driving debt to 0): locate by the given line number, fix the authoritative file per the "Planned fix" column, write back the ledger, run verification gates; also mines recurring error classes and picks enforcement layers.
 ---
 
 # papercut-fix — Single-papercut escalation executor
