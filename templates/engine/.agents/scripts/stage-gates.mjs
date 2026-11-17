@@ -43,6 +43,9 @@ export const INCIDENT_STATUSES = ['open', 'fixed', 'closed'];
 //   ③b 剔确认记录行（行首「- 确认结果:」「- 确认时间:」）——确认记录非承诺（frontmatter 同名键见②）
 //   ④ 勾选态归一：`- [x]`/`- [X]` → `- [ ]`（勾验收是关单动作，不是承诺变更）
 //   ⑤ 剔证据尾注：`（证据：…）`/`(证据:…)` 整段，及行内首个「证据：」至行尾
+//   ⑤' 表格证据列置空：表头含「证据」的列，数据行单元格内容置空（保留全部分隔符与列数；表头与
+//      分隔行原样保留——列的存在与命名属承诺面）——spec 验收判据表把证据写在独立列、单元格内无
+//      「证据：」token，仅回填证据列曾被判承诺改写（issue #67，2026-11-17）；行内形态（⑤）不动
 //   ⑥ 剔留痕尾注：行内首个「留痕：」至行尾（任务项实现留痕回填属关单动作，与证据尾注同口径；
 //      papercut 2026-10-30「留痕行漂移」）
 // 诚实边界：承诺若被藏进证据括号或复核行，机器看不见——不宣称通道关闭（同本模块信任边界声明口径）。
@@ -72,8 +75,37 @@ const stripEvidenceSegment = (l) => {
   return l.slice(0, open);
 };
 
+// ⑤' 实现注（issue #67 根修，单源在此一处、confirm-doc / check-loop 全链路生效）：表格块 = 连续以
+//   `|` 起始（容行首空白）的行，块首行为表头、次行为 `---` 分隔行；按 `|` 分割计列（单元格 trim 后
+//   凡含「证据」即证据列，允许多列）。仅数据行把证据列单元格内容置空且保留全部分隔符与列数——
+//   列结构变化（增删列、数据行列数漂移）仍被指纹捕捉；表头 / 分隔行原样保留。表格行先做列置空，
+//   行内规则（⑤/⑥）其后照常，两者可叠加、互不干扰（tests/stage-gates-headings.test.mjs 钉住）。
+//   诚实边界（同 ⑤）：把承诺藏进证据列机器看不见——单元格是自由文本，本归一按列头信任，不做语义甄别。
+const isTableLine = (l) => /^\s*\|/.test(l);
+const isSepRow = (l) => {
+  const cells = l.replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
+  return cells.length > 0 && cells.every((c) => /^:?-{2,}:?$/.test(c));
+};
+const stripEvidenceColumns = (lines) => {
+  const out = lines.slice();
+  for (let i = 0; i < out.length - 1; i++) {
+    if (!isTableLine(out[i]) || !isSepRow(out[i + 1])) continue;
+    const header = out[i].replace(/^\s*\|/, '').replace(/\|\s*$/, '').split('|').map((c) => c.trim());
+    const evCols = header.map((c, idx) => (c.includes('证据') ? idx : -1)).filter((idx) => idx >= 0);
+    if (!evCols.length) continue;
+    let j = i + 2;
+    for (; j < out.length && isTableLine(out[j]); j++) {
+      const cells = out[j].split('|'); // [首段空, 单元格…, 尾段]——只动单元格元素，管道符与列数原样保留
+      for (const c of evCols) if (c + 1 < cells.length) cells[c + 1] = '';
+      out[j] = cells.join('|');
+    }
+    i = j - 1; // 跳过本块数据行（数据行不会是下一块的表头，勿重复扫描）
+  }
+  return out;
+};
+
 export function commitmentFingerprint(text) {
-  const lines = Array.isArray(text) ? text : String(text).replace(/\r\n/g, '\n').split('\n');
+  const lines = stripEvidenceColumns(Array.isArray(text) ? text : String(text).replace(/\r\n/g, '\n').split('\n'));
   const out = [];
   let inFm = false;
   for (let i = 0; i < lines.length; i++) {

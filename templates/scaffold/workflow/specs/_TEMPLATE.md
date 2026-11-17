@@ -38,6 +38,7 @@
      日期口径：frontmatter「日期」与全绿行时间同为 UTC（fill-spec 默认即此）；手写勿用本地时区日期——UTC+8 凌晨 0–8 点落的全绿行日期为前一日，会对不上（硬拦，08:00 后重跑门即解）。
      verify-ui / vue-tsc / regression-smoke 等不在全量门里，改记证据文件路径。
      「状态」写「覆盖」而证据无效仍判未覆盖。人工走查状态写「人工」，证据列留空（仅「人工+空证据」豁免机器对账；截图等图片不在路径白名单，需留痕改存 .md 报告后引路径）。
+     承诺面口径（issue #67）：approved 后可回填证据列（承诺面指纹归一不含证据列内容）；done 后证据变更须走 superseded（done 档为全文冻结，见 check-loop-sections/s15-fingerprint.mjs）。
      无本节或表为空 → WARN。证据无效：仅 convergenceSince 时 WARN；convergenceHardSince 起 HARD-BLOCK。 -->
 | 判据（可观察行为） | 证据（测试文件 / 命令 / 证据文件） | 状态 | 对应验收 |
 |---|---|---|---|

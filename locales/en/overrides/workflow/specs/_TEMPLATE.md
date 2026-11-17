@@ -38,6 +38,7 @@
      Date semantics: the frontmatter "date" and the all-green line time are both UTC (fill-spec defaults to this); for hand-written files do not use a local-timezone date — an all-green line recorded between 00:00 and 08:00 UTC+8 gets the previous day's date and will not match (hard block; rerun the gate after 08:00 to resolve).
      verify-ui / vue-tsc / regression-smoke etc. are not part of the full gate; record an evidence file path instead.
      Writing "covered" as the status while the evidence is invalid still counts as not covered. For manual walkthroughs write "manual" as the status and leave the evidence column empty (only "manual + empty evidence" is exempt from machine reconciliation; images such as screenshots are not on the path allowlist — save them in a .md report and cite that path).
+     Commitment-surface semantics (issue #67): after approved, the evidence column may be backfilled (commitment-surface fingerprint normalization excludes evidence-column contents); after done, evidence changes must go through superseded (the done state freezes the whole file; see check-loop-sections/s15-fingerprint.mjs).
      Missing this section or an empty table → WARN. Invalid evidence: WARN only at convergenceSince; HARD-BLOCK from convergenceHardSince. -->
 | 判据（可观察行为） | 证据（测试文件 / 命令 / 证据文件） | 状态 | 对应验收 |
 |---|---|---|---|
