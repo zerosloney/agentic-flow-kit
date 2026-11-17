@@ -2,7 +2,10 @@
 // confirm-doc — 用户确认门（2026-09-26 confirm-gate-machine；2026-09-27 confirm-gate-delegated 加委托代录形态；同日 gate-coverage 收 incidents；同日 closing-coverage 加放弃态 --to）
 // 唯一确认入口：workflow/{intents,specs,plans} 文档（draft→approved 起草确认 / approved→done 关单确认）
 //   与 workflow/incidents 文档（open→fixed 修复落地确认 / fixed→closed 关单确认——不支持 open→closed 单跳，
-//   强制两跳留痕；2026-09-28 起 check-loop 15 对账）。放弃态走显式 `--to`（closing-coverage）：
+//   以及 workflow/tasks/<task>/<doc>.md（pipeline-run 自动化产物，2026-11-18 tasks-path 收编：
+//   执行器人件门文档全落 tasks/，路径闭集不含它会导致 confirm 静默跳过 → docsCommit 无变更 → gate-fail）——
+//   状态机与 docs 同（draft→approved→done）。
+//   incidents 不支持 open→closed 单跳，强制两跳留痕；2026-09-28 起 check-loop 15 对账。放弃态走显式 `--to`（closing-coverage）：
 //   --to cancelled 自 draft/approved/open/fixed（未确认过的东西谈不上被取代）；--to superseded 自
 //   approved/done/fixed/closed（已确认/闭环的结论被新档取代）。check-loop 检查 15 按「确认指纹 + 台账配对」
 //   对账（四终态另做内容绑定），无记录即 hard-block。
@@ -26,7 +29,7 @@
 //   调用总份数。check-loop 检查 15 的并录审计据此直读事实判定，不再从 quote 相等 + ts 接近反推
 //   （旧判据可被「换 quote」平凡规避、且合规逐件复用同句必然误报——见同名 incident）。
 // 指纹：内容 CRLF 归一 → 剔除「确认指纹:」行（防自引用）→ sha256；frontmatter 存前 16 位，台账存全量。
-// 用法：flow-kit run confirm-doc.mjs <workflow/intents|x.md> [<doc2>...] [--root <仓库根>]
+// 用法：flow-kit run confirm-doc.mjs <workflow/intents|x.md | workflow/tasks/<task>/plan.md> [<doc2>...] [--root <仓库根>]
 //       flow-kit run confirm-doc.mjs <doc...> --delegated "<用户对话原话>"（委托代录）
 //       flow-kit run confirm-doc.mjs <doc...> --delegated "<原话>" --batch（协作道批量：L1 多份一次代录）
 //       flow-kit run confirm-doc.mjs <doc...> --delegated "<原话>" --strict-quote（引文接地收硬：不成立即拒）
@@ -143,7 +146,8 @@ export function appendLedger(root, entry, opts = {}) {
   return writeConfirmation(root, entry, { shard: useShard });
 }
 
-const DOC_RE = /^workflow\/(intents|specs|plans|incidents)\/[^/]+\.md$/;
+// tasks/ 多一层任务目录：workflow/tasks/<task>/<doc>.md（pipeline-run 自动化产物，见文件头注）
+const DOC_RE = /^workflow\/(intents|specs|plans|incidents)\/[^/]+\.md$|^workflow\/tasks\/[^/]+\/[^/]+\.md$/;
 
 // fmLevel(nl)：frontmatter「级别:」值（无 frontmatter / 无该键 → ''）——AI 自治门与协作道批量门共用
 export function fmLevel(nl) {
@@ -269,7 +273,7 @@ if (isMain) {
     }
   }
   if (!docs.length) {
-    console.error('用法：flow-kit run confirm-doc.mjs <workflow/intents|specs|plans/x.md> [...]  [--root <仓库根>] [--delegated "<用户原话>" [--batch]]');
+    console.error('用法：flow-kit run confirm-doc.mjs <workflow/intents|specs|plans/x.md | workflow/tasks/<task>/x.md> [...]  [--root <仓库根>] [--delegated "<用户原话>" [--batch]]');
     process.exit(1);
   }
   if (delegated) {
@@ -313,7 +317,7 @@ if (isMain) {
   const famCache = new Map(); // 引文接地的同名家族正文缓存（一次调用内同一 doc 只读一次）
   for (const doc of docs) {
     if (!DOC_RE.test(doc)) {
-      console.error(`跳过 ${doc}：路径须匹配 workflow/{intents,specs,plans,incidents}/<文件>.md`);
+      console.error(`跳过 ${doc}：路径须匹配 workflow/{intents,specs,plans,incidents}/<文件>.md 或 workflow/tasks/<任务>/<文件>.md`);
       continue;
     }
     const abs = path.join(root, doc);

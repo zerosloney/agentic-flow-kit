@@ -96,7 +96,9 @@
 //     全局单调不可满足也不必要，单文件单调才是 append-only 的真实不变量）
 //   ② fingerprint 为 64 位 hex
 //   ③ source=chat-delegated 行必有非空 quote（原话对质面）
-//   ④ doc 匹配 workflow/(intents|specs|plans|incidents)/[^/]+.md 且当前树存在（**归档感知**，
+//   ④ doc 匹配 workflow/(intents|specs|plans|incidents)/[^/]+.md 或 workflow/tasks/<task>/[^/]+.md
+//     （2026-11-18 tasks-path：confirm-doc 收编 pipeline 自动化产物，不变量闭集同步扩展——未同步则
+//     tasks 行过 confirm 落台账必 HARD-BLOCK，gate-fail 后移一格）且当前树存在（**归档感知**，
 //     2026-10-13 archive-aware-doc：四目录原路径未命中再探 workflow/archive/*/）——关单即归档移动
 //     文件后行仍指向真实文档，移动轨迹由 git 历史承载；与 check-loop「配对门只扫四目录、归档件
 //     不触发」的归档语义对齐
@@ -245,14 +247,17 @@ const isShard = (rel) => rel.startsWith(`${SHARD_DIR}/`) && rel.endsWith('.jsonl
 // ④ 归档感知存在性（2026-10-13 archive-aware-doc）：四目录原路径未命中再探 workflow/archive/*/——
 // 归档是 sanctioned 的文档生命周期事件，行的审计价值（指向真实文档）不受移动影响；真消失（既不在
 // 四目录也无归档批次）仍拦。
+// tasks-path（2026-11-18）：confirm-doc 已收编 workflow/tasks/<task>/<doc>.md，闭集同步扩展——
+// 捕获组改存 workflow/ 之后的相对子路径，归档探测按子路径保形（四目录场景与旧路径逐字节一致；
+// tasks 归档惯例尚未落地，此处只是探测扩展，未命中仍按「真消失」拦）。
 const docExists = (doc) => {
   if (fs.existsSync(path.join(ROOT, doc))) return true;
-  const m = /^workflow\/(intents|specs|plans|incidents)\/([^/]+)\.md$/.exec(doc);
+  const m = /^workflow\/((?:intents|specs|plans|incidents)\/[^/]+|tasks\/[^/]+\/[^/]+)\.md$/.exec(doc);
   if (!m) return false;
   try {
     const arcRoot = path.join(ROOT, 'workflow', 'archive');
     for (const batch of fs.readdirSync(arcRoot)) {
-      if (fs.existsSync(path.join(arcRoot, batch, m[1], `${m[2]}.md`))) return true;
+      if (fs.existsSync(path.join(arcRoot, batch, `${m[1]}.md`))) return true;
     }
   } catch { /* archive 目录不存在 */ }
   return false;
@@ -699,10 +704,10 @@ function checkRows(text, label) {
       problems.push(`- [行级] ${at}：commit 非 16 位 hex（承诺面指纹）`);
     }
     if (e.source === 'chat-delegated' && !(typeof e.quote === 'string' && e.quote.trim())) problems.push(`- [行级] ${at}：chat-delegated 行缺非空 quote（原话对质面）`);
-    if (typeof e.doc !== 'string' || !/^workflow\/(intents|specs|plans|incidents)\/[^/]+\.md$/.test(e.doc)) {
-      problems.push(`- [行级] ${at}：doc 路径不在 workflow 四目录协议内`);
+    if (typeof e.doc !== 'string' || !/^workflow\/((?:intents|specs|plans|incidents)\/[^/]+|tasks\/[^/]+\/[^/]+)\.md$/.test(e.doc)) {
+      problems.push(`- [行级] ${at}：doc 路径不在 workflow 目录协议（四目录 + tasks）内`);
     } else if (!docExists(e.doc)) {
-      problems.push(`- [行级] ${at}：doc ${e.doc} 在当前树不存在（四目录与归档批次均未命中）`);
+      problems.push(`- [行级] ${at}：doc ${e.doc} 在当前树不存在（目录协议与归档批次均未命中）`);
     }
     if (!VALID_STAGES.has(e.stage)) problems.push(`- [行级] ${at}：stage「${e.stage || '缺失'}」不在合法跳转终态集`);
   });
