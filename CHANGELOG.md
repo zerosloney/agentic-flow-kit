@@ -2,6 +2,16 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.6.1]
+
+### 修复
+
+- fix(engine): 评测双臂发现两门语义缺陷——sbom-license 零依赖仓库 pass-with-note 不再 fail-closed、verify --scope 无 origin/零提交 loud-skip 降级指引（声明依赖无 lockfile 仍 fail-closed，git 故障仍 fail-loud），补 24 例破坏性/回归测试
+
+### 文档
+
+- docs(backlog): 行为评测重跑清账入账——12 子代理盲评 12/12 PASS 双树凭证落账、verify 两门修复记录、全仓模板 EOL 归一（586 文件转 CRLF，签名定型 fab13142/f0145f5）
+
 ## [2.6.0]
 
 ### 新增
