@@ -255,7 +255,7 @@ async function installFlow(ctx) {
 
   screen.print('');
   if (await confirmYes(ctx, t('tui.askDoctor'))) {
-    return doctorCommand({ args: { deep: false }, t, lang: selLang });
+    return doctorCommand({ args: { ...baseArgs(), deep: false }, t, lang: selLang });
   }
 }
 
@@ -312,7 +312,7 @@ async function doctorFlow(ctx) {
     ],
   });
   if (deep === null) return;
-  return doctorCommand({ args: { deep }, t, lang });
+  return doctorCommand({ args: { ...baseArgs(), deep }, t, lang });
 }
 
 function listHostsFlow(ctx) {

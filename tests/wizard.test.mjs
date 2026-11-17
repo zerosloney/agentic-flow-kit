@@ -9,6 +9,7 @@ import { buildInstallArgs } from '../src/tui/wizard.mjs';
 import { createScreen, runPrompt, QuitError } from '../src/tui/screen.mjs';
 import { createSelect, createMultiSelect } from '../src/tui/widgets.mjs';
 import { askText } from '../src/tui/prompts.mjs';
+import { makeTmp } from './helpers/tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
@@ -106,6 +107,52 @@ test('degraded wizard e2e: EOF at main menu exits 0 and prints the menu', () => 
   assert.ok(r.stdout.includes('安装'), 'degraded mode should print the first menu item');
   assert.ok(r.stdout.includes('退出'), 'degraded mode should print the last menu item');
   assert.equal(r.stderr.trim(), '', 'no stack traces expected');
+});
+
+// 回归锁：主菜单进体检 → 普通体检，doctor 必须正常产出而非抛 TypeError
+// （flows 内 doctor 调用须携带 baseArgs 的 flags，否则 cli/args.mjs flag() 解引用 args.flags 崩溃）
+test('degraded wizard e2e: menu 4 doctor normal check prints doctor output without TypeError', async () => {
+  const dir = makeTmp('flow-kit-wizard-doctor-');
+  spawnSync('git', ['init', '-q'], { cwd: dir });
+  const setup = spawnSync(process.execPath, [BIN, 'install', '--agent', 'trae', '--stack', 'node', '--target', '.'], {
+    cwd: dir,
+    encoding: 'utf8',
+    env: { ...process.env, FLOW_KIT_TEST: '1' },
+  });
+  assert.equal(setup.status, 0, setup.stderr);
+  const result = await new Promise((resolve, reject) => {
+    const child = spawn(process.execPath, [FIXTURE], { stdio: ['pipe', 'pipe', 'pipe'], cwd: dir });
+    let stdout = '';
+    let stderr = '';
+    let sentRun = false;
+    let sentQuit = false;
+    child.stdout.on('data', (d) => {
+      stdout += d;
+      // 体检子菜单出现后选第 1 项「普通体检」；doctor 汇总（或 TypeError，修复前的坏路径）落地后再拒绝「返回菜单」
+      if (!sentRun && stdout.includes('普通体检')) {
+        sentRun = true;
+        child.stdin.write('1\n');
+      } else if (sentRun && !sentQuit && /doctor (失败|全过)|Cannot read properties/.test(stdout)) {
+        sentQuit = true;
+        child.stdin.write('n\n');
+      }
+    });
+    child.stderr.on('data', (d) => { stderr += d; });
+    const timer = setTimeout(() => {
+      child.kill('SIGKILL');
+      reject(new Error('degraded wizard doctor flow did not finish within 10s'));
+    }, 10000);
+    child.on('close', (code) => {
+      clearTimeout(timer);
+      resolve({ code, stdout, stderr });
+    });
+    child.stdin.write('4\n'); // 主菜单第 4 项：体检
+  });
+  assert.equal(result.code, 0, result.stderr);
+  assert.ok(result.stdout.includes('install-manifest'), 'doctor check rows should print');
+  assert.ok(/doctor (失败|全过)/.test(result.stdout), 'doctor summary should print');
+  assert.ok(!result.stdout.includes('Cannot read properties'), 'TypeError must not leak into the wizard doctor flow');
+  assert.equal(result.stderr.trim(), '', 'no stack traces expected');
 });
 
 test('screen.render: cursor bookkeeping across grow, shrink and equal redraws', async () => {
