@@ -2,6 +2,18 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.6.0]
+
+### 新增
+
+- feat: 落地 BACKLOG 条目 15–27——五新技能、SessionStart 会话入口路由令与复盘/协作面补强
+
+### 文档
+
+- docs: 同步会话入口接线说明——CLAUDE.md hook 事件/工具闭集补 session 与编译期过滤 advisory，README 风险路由条目补 SessionStart 路由令（对应 BACKLOG #18）
+- docs: 官网双主题与内容扩展——深色工业控制台皮肤（本地记忆 + theme-color 同步）、12 宿主接线矩阵、命令台账/场景总览/实战案例/未来演进等章节，语义令牌化皮肤与动效降级，零外链不变
+- docs: 新增官网内容页——内嵌字体与图标子集零外链，修正中文字重与容器对齐，版本对齐 v2.5.0
+
 ## [2.5.0]
 
 ### 新增
