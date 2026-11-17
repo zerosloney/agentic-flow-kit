@@ -22,6 +22,13 @@ import { KIT_ROOT } from '../install/plan.mjs';
 
 const SUPPORTED_LANGS = new Set(LANGUAGES);
 
+// 顶层命令全集（run/hook 在 parseArgs 前分派，help 在短路块处理），unknown command 时提示候选。
+const COMMANDS = [
+  'install', 'add-host', 'upgrade', 'adopt', 'prune', 'remove-host', 'uninstall',
+  'doctor', 'diff', 'status', 'workspace', 'devcontainer', 'add-skill', 'remove-skill',
+  'skills', 'new-host', 'explain', 'list-hosts', 'run', 'hook', 'help',
+];
+
 function normalizeLang(input) {
   const lang = String(input || 'zh-CN');
   if (!SUPPORTED_LANGS.has(lang)) {
@@ -40,9 +47,24 @@ async function main(argv) {
     return runtimeCommand(argv[0], argv.slice(1));
   }
   const args = parseArgs(argv);
-  const command = args._[0] || (args.help || args.h ? 'help' : 'help');
+  const command = args._[0] || 'help';
   const lang = normalizeLang(args.lang);
   const t = makeT(lang);
+
+  // 无位置参数且无任何选项（含 --agent/--target 等值形参数，它们不进 flags.size）、交互终端 → 进入 TUI 向导（懒加载，避免影响脚本路径）
+  const wizardPath = !args._.length && args.flags.size === 0 && args.lang == null && args.agents.length === 0 && args.target == null
+    && process.stdin.isTTY && process.stdout.isTTY;
+
+  // --version / help 类请求（--help / -h / help）不读宿主注册表（help 是静态目录文案），
+  // 先于外部宿主加载短路，避免项目层坏 manifest 挡住版本与帮助输出；向导路径让路保持原语义。
+  if (flag(args, 'version') || flag(args, 'v')) {
+    console.log(readVersion());
+    return 0;
+  }
+  if (!wizardPath && (flag(args, 'help') || flag(args, 'h') || command === 'help' || command === '-h')) {
+    console.log(t('help', { version: readVersion() }));
+    return 0;
+  }
 
   // 外部宿主定义必须先于命令分派加载：install / doctor / list-hosts 等都从注册表读取能力面。
   loadExternalHosts({
@@ -51,20 +73,9 @@ async function main(argv) {
     t,
   });
 
-  // 无位置参数且无任何选项（含 --agent/--target 等值形参数，它们不进 flags.size）、交互终端 → 进入 TUI 向导（懒加载，避免影响脚本路径）
-  if (!args._.length && args.flags.size === 0 && args.lang == null && args.agents.length === 0 && args.target == null
-    && process.stdin.isTTY && process.stdout.isTTY) {
+  if (wizardPath) {
     const { wizardCommand } = await import('../tui/wizard.mjs');
     return wizardCommand({ t, lang });
-  }
-
-  if (flag(args, 'version') || flag(args, 'v')) {
-    console.log(readVersion());
-    return 0;
-  }
-  if ((flag(args, 'help') || flag(args, 'h')) && command !== 'help') {
-    console.log(t('help', { version: readVersion() }));
-    return 0;
   }
 
   switch (command) {
@@ -139,19 +150,14 @@ async function main(argv) {
       for (const probe of UNMANAGED_HOST_PROBES) {
         const detected = probe.signals.some((sig) => fs.existsSync(path.join(os.homedir(), probe.dir, sig)));
         if (detected) {
-          console.log(`[探测] ${probe.name}（~/${probe.dir}）——本机已检出但暂不受支持：install/upgrade 未接管其门禁；check-local-gates 的宿主探测段会给出接线告警。完整支持跟踪见 GitHub issue #41`);
+          console.log(t('listHosts.unmanagedProbe', { name: probe.name, dir: probe.dir }));
         }
       }
       return 0;
     }
-    case 'help':
-    case '--help':
-    case '-h':
-      console.log(t('help', { version: readVersion() }));
-      return 0;
     default:
       {
-        const err = new Error(`unknown command: ${command}`);
+        const err = new Error(`unknown command: ${command} (available: ${COMMANDS.join(', ')})`);
         err.code = 'BAD_COMMAND';
         throw err;
       }

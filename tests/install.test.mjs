@@ -438,3 +438,17 @@ test('doctor reports leftover runtime files as advisory only', () => {
   assert.equal(legacy.ok, true);
   assert.equal(legacy.warn, true);
 });
+
+// ---- P2-6：--target 指向普通文件时以语义化错误拒绝，不再落到 mkdir 的裸 ENOTDIR ----
+
+test('install rejects a plain-file --target with a semantic error', () => {
+  const dir = tmpRepo();
+  const fileTarget = path.join(dir, 'not-a-dir.txt');
+  fs.writeFileSync(fileTarget, 'x', 'utf8');
+
+  const r = run(['install', '--agent', 'trae', '--stack', 'node', '--lang', 'zh-CN', '--target', fileTarget], dir);
+  assert.equal(r.status, 3, `expect TARGET exit code, got ${r.status}: ${r.stderr}`);
+  assert.match(r.stderr, /不是目录/);
+  assert.match(r.stderr, /not-a-dir\.txt/);
+  assert.doesNotMatch(r.stderr, /ENOTDIR/);
+});

@@ -24,6 +24,7 @@
   "error.unknownHost": "未知宿主：{{name}}。可选：{{hosts}}",
   "error.badModel": "无效的 --model：{{value}}（格式：[宿主:]角色=模型，角色：code / judgment / review）",
   "error.noManifest": "目标未安装本引擎；先运行 install",
+  "error.targetNotDirectory": "目标不是目录：{{target}}——--target 需要指向项目目录",
   "error.userHooksConfig": "用户级 hooks 配置不是合法 JSON：{{path}}——请先修正该文件；本命令不会覆盖它",
   "error.noHostsInManifest": "manifest 未登记宿主；先运行 install",
   "error.migrationFailed": "manifest 迁移失败（{{file}}）：{{message}}；未写入任何变更",
@@ -300,5 +301,6 @@
   "devcontainer.checkFailed": "开发容器声明违规：{{problems}}",
   "devcontainer.dockerMissing": "docker 不在 PATH：无法验证容器可构建性（装 Docker Desktop 或改用 devcontainer CLI）",
   "devcontainer.buildOk": "容器镜像构建成功：{{image}}",
-  "devcontainer.buildFailed": "容器镜像构建失败：{{image}}"
+  "devcontainer.buildFailed": "容器镜像构建失败：{{image}}",
+  "listHosts.unmanagedProbe": "[探测] {{name}}（~/{{dir}}）——本机已检出但暂不受支持：install/upgrade 未接管其门禁；check-local-gates 的宿主探测段会给出接线告警。完整支持跟踪见 GitHub issue #41"
 }

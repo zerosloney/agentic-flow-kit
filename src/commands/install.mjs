@@ -3,6 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { flag } from '../cli/args.mjs';
+import { makeT } from '../i18n.mjs';
 import { buildPlan, CI_MODES, ciModeFor, ciTemplateRels } from '../install/plan.mjs';
 import { parseProfileArgs, STACKS } from '../install/profiles.mjs';
 import { applyPlan, readPlanEntry, summaryLine } from '../install/apply.mjs';
@@ -35,6 +36,13 @@ export function resolveTarget(args) {
   const target = path.resolve(args.target || process.cwd());
   if (!fs.existsSync(target)) {
     const err = new Error(`target not found: ${target}`);
+    err.code = 'TARGET_MISSING';
+    throw err;
+  }
+  if (!fs.statSync(target).isDirectory()) {
+    // 复用 TARGET_MISSING 让退出码落在目标类（3）；专用映射需改 src/cli/exit.mjs（本次范围外）。
+    const t = makeT(args.lang || 'zh-CN');
+    const err = new Error(t('error.targetNotDirectory', { target }));
     err.code = 'TARGET_MISSING';
     throw err;
   }

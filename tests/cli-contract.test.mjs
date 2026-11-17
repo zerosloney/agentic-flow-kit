@@ -106,6 +106,35 @@ test('CLI maps filesystem failures to exit code 5', () => {
   assert.match(r.stderr, /ENOTDIR|EEXIST|ENOENT/);
 });
 
+// ---- MAIN-1：--version / help 类请求不读外部宿主，项目层坏 manifest 不应挡住版本与帮助输出 ----
+
+test('version and help stay usable despite a broken project host manifest', () => {
+  const dir = tmpRepo();
+  fs.mkdirSync(path.join(dir, '.flow-kit', 'hosts'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.flow-kit', 'hosts', 'broken.json'), '{', 'utf8');
+
+  const v = run(['--version'], dir);
+  assert.equal(v.status, EXIT.OK, v.stderr);
+  assert.match(v.stdout, /^\d+\.\d+\.\d+/);
+
+  for (const argv of [['--help'], ['-h'], ['help']]) {
+    const h = run(argv, dir);
+    assert.equal(h.status, EXIT.OK, `${argv.join(' ')}: ${h.stderr}`);
+    assert.match(h.stdout, /agentic-flow-kit v/, argv.join(' '));
+  }
+});
+
+// ---- MAIN-5：unknown command 报错附可用命令候选 ----
+
+test('unknown command error lists available commands', () => {
+  const dir = tmpRepo();
+  const r = run(['nope'], dir);
+  assert.equal(r.status, EXIT.USAGE);
+  assert.match(r.stderr, /unknown command: nope/);
+  assert.match(r.stderr, /list-hosts/);
+  assert.match(r.stderr, /install/);
+});
+
 // ---- --json 输出契约 ----
 
 test('install --json keeps stdout pure JSON and human progress on stderr', () => {

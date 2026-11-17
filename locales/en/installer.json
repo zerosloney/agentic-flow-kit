@@ -24,6 +24,7 @@
   "error.unknownHost": "Unknown host: {{name}}. Available: {{hosts}}",
   "error.badModel": "Invalid --model: {{value}} (expected [host:]role=<id>; roles: code / judgment / review)",
   "error.noManifest": "Engine is not installed in the target; run install first",
+  "error.targetNotDirectory": "Target is not a directory: {{target}} — --target must point to a project directory",
   "error.userHooksConfig": "User-level hooks config is not valid JSON: {{path}} — fix the file first; this command will not overwrite it",
   "error.noHostsInManifest": "No hosts recorded in manifest; run install first",
   "error.migrationFailed": "Manifest migration failed ({{file}}): {{message}}; no changes were written",
@@ -300,5 +301,6 @@
   "devcontainer.checkFailed": "devcontainer declaration invalid: {{problems}}",
   "devcontainer.dockerMissing": "docker not on PATH: cannot verify the container builds (install Docker Desktop or use the devcontainer CLI)",
   "devcontainer.buildOk": "container image built: {{image}}",
-  "devcontainer.buildFailed": "container image build failed: {{image}}"
+  "devcontainer.buildFailed": "container image build failed: {{image}}",
+  "listHosts.unmanagedProbe": "[probe] {{name}} (~/{{dir}}) — detected on this machine but not yet supported: install/upgrade does not take over its gates; the check-local-gates host probe section will warn about the wiring. Track full support in GitHub issue #41"
 }
