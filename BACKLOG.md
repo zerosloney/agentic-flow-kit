@@ -57,7 +57,7 @@
 | 28 | 跨模型复核在新装项目不可达：`model-roles.json` 要求异构复核，但提交/仓库元数据不记录实现者模型族，复核者只能写 cross-model unavailable（2026-11-17 行为评测 en 树实测） | 提交署名模型族约定（如 commit trailer）或确认台账记录模型族，方案需过评审 | 新装树复核者能判定跨模型已满足或显式给出不可达原因；不新增硬门；zh/en 双写 | DONE |
 | 29 | PR 面板评审无收敛控制：finder/verifier 多轮往返可能重复报告既有问题、同类缺陷分批修，浪费派发预算（Anthropic 实测：一夜 50+ 轮 Review，59% 评论针对首轮已存在代码；对策=轮次上限、只审新增 diff、同类一次修完、不重复报已知） | `templates/engine/.agents/commands/pr-review.md` 流程节 + `.agents/roles/pr-{finder,verifier,adjudicator}.md` 角色契约（zh + en 同批改）；台账已落 `run.json/briefs`，补「已报问题不复报」消费规则 | 评审流程写明轮次上限（超限要求重估实现方案，不继续逐条修）；verifier 只复核新增 diff 与 escalated 项；同类问题合并单条处置；台账已有 finding 不重复派发；不新增硬门、机制须过 registry 一进一出评估；`npm test` 全绿 | DONE |
 | 30 | 行为评测只在内容签名变更时强制重跑，无周期回归：凭证对当前树绿 ≠ 模型/宿主环境漂移后仍绿（Anthropic 每日在历史事故案例上跑 AI Reviewer 复评召回/误报）。**口径（2026-11-17 定）：本条落引擎侧——本仓 CI 定时复跑引擎双臂基线，保「出厂凭证」的鲜；装户侧不属本条**（装户已有随包 `ci.yml` 的 `agent-eval check --advisory` 腿管自身内容变更，要定时自加 `schedule:`；引擎侧一处定时即对全部装户背书——漂移源=模型/宿主，在语言/栈/档位渲染下同批） | `.github/workflows/` 新增定时工作流（新构建步骤——落地前过确认门；频率周跑起步，按报告噪音调）复跑 `agent-eval` 双臂基线出 Δ/方差报告；只读报告，不自动覆盖凭证 | 周期任务对 golden-set 双臂复跑并出报告；凭证保持人工 `record`；无凭证/环境缺失 loud-skip 不判红；零运行时依赖不变；报告不产生硬门 | DONE |
-| 31 | 发布控制面（merge queue 合并前重检、feature flag 内部灰度、分阶段通道、开关快速回滚）缺位——超出「开发工作流引擎」现定位，先过定位决策再决定是否开工【能力扩展·定位待决策】 | 定位决策先落 ADR（v2.6.0 已装 `workflow/adr/`）；若决策进入，合 main 触发条件已存在（pr-review 触发规则），补排队重检与回滚开关语义后按 ROADMAP 流程补 R 条目 | 先产出 ADR：进/不进 + 理由；不进则关闭本条并记录依据；进则回填 ROADMAP 再执行；不默认开工、不预先设计 | TODO |
+| 31 | 发布控制面（merge queue 合并前重检、feature flag 内部灰度、分阶段通道、开关快速回滚）缺位——超出「开发工作流引擎」现定位，先过定位决策再决定是否开工【能力扩展·定位待决策】 | 定位决策先落 ADR（v2.6.0 已装 `workflow/adr/`）；若决策进入，合 main 触发条件已存在（pr-review 触发规则），补排队重检与回滚开关语义后按 ROADMAP 流程补 R 条目 | 先产出 ADR：进/不进 + 理由；不进则关闭本条并记录依据；进则回填 ROADMAP 再执行；不默认开工、不预先设计 | DONE |
 
 ## 落地记录（2026-11-12）
 
@@ -432,6 +432,11 @@
   若 CI 侧仍现系统性漂移，按 issue 内 CI 签名重定型一次即稳定（自愈）。
   验证：`npm test` 539/539 全绿；`lint:templates` 5 面、`check:i18n` 143 文件、`policy:check` 全绿；工作流 YAML 解析与 shell 片段本地实跑验证，
   真实 schedule 触发与 gh issue 各分支未验（上线后首跑观察）。
+- 条目 31（发布控制定位决策，2026-11-17 关闭，来源③）：owner 拍板**不进**。ADR 落 `docs/adr/2026-11-17-release-control-out-of-scope.md`
+  （本仓首份自用 ADR，按引擎自带 `workflow/adr/_TEMPLATE.md` 形状记录；状态 accepted、备选两案、依据含裁定原话与合入前质量门现状指针、
+  推断显式标注）。核心理由：merge queue / feature flag 灰度 / 分阶段通道 / 快速回滚是组织级交付平台职责，装户运行时异构且无需求实证，
+  与零依赖、不假设装户环境的安装器立场冲突；合入前质量门已由 L0–L3 定级路由 + pr-review 触发规则 + CI 确定性门禁覆盖。
+  不立 ROADMAP 条目；同类「文章有、引擎要不要有」的定位判定自此可引用本 ADR 先例。
 
 ## 能力扩展
 
