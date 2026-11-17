@@ -7,6 +7,11 @@
 // 基线选择：优先「最近一次全量（非 scope）绿行」的 headShort（调用方自本地台账 ∪ 仓库凭证
 // workflow/verify-evidence.md 读出，须为 HEAD 祖先），否则回落 merge-base(origin/main, HEAD)。
 // 前者让 scope 在长生命特性分支上可用（上次全量绿后只动文档 → 增量）；后者是冷启动基线。
+// 基线不可得的两种**环境态**（scope loud-skip 2026-11-17 行为评测②）单独分类：抛出的 Error 带
+// scopeSkip 标记（'no-commits' 仓库无任何提交 | 'no-origin' 无 origin 远端或取不到 origin/main
+// merge-base），调用方（verify.mjs 显式 --scope）据此 loud-skip exit 0 不判红，降级建议指向
+// check-scope.mjs（--base <sha> / --staged）与推送级 check-scope-range 兜底；其余解析失败
+// （diff 面为空、git 故障等）不带标记，维持原 fail-loud 口径不变。默认档两态照旧退回全量。
 // 仓库凭证兜底（verify-evidence-fallback 2026-10-22）：新 worktree 无本地台账时不再必然重付全量税。
 // 两态都**过包含**（基线越旧面越大 → 产品门多跑，安全侧）。
 // fail-loud：基线解析失败 / diff 面为空 → 抛错拒增量（跑全量），不猜。
@@ -123,7 +128,22 @@ export function computeDiffScope(git, baseHint = null, baseSourceHint = 'ledger'
     if (r.status !== 0) throw new Error(`git ${args.join(' ')} 失败——无法确定增量基线（先 git fetch origin，或跑全量 verify）`);
     return String(r.stdout || '').trim();
   };
-  const head = out(['rev-parse', 'HEAD']);
+  // 环境态失败单独分类（带 scopeSkip 标记供调用方 loud-skip；其余失败走 out() 的 fail-loud）。
+  const skip = (reason, message) => {
+    const e = new Error(message);
+    e.scopeSkip = reason;
+    throw e;
+  };
+  const headRev = git(['rev-parse', 'HEAD']);
+  if (headRev.status !== 0) {
+    // 区分「仓库无任何提交」（rev-list --all 为空且成功）与其他 git 故障——前者是 loud-skip 环境态。
+    const empty = git(['rev-list', '-n', '1', '--all']);
+    if (empty.status === 0 && !String(empty.stdout || '').trim()) {
+      skip('no-commits', '仓库尚无任何提交——diff 面增量基线不可得');
+    }
+    throw new Error('git rev-parse HEAD 失败——无法确定增量基线（先 git fetch origin，或跑全量 verify）');
+  }
+  const head = String(headRev.stdout || '').trim();
   let base = null;
   let baseSource = null;
   if (baseHint) {
@@ -131,7 +151,11 @@ export function computeDiffScope(git, baseHint = null, baseSourceHint = 'ledger'
     if (anc.status === 0) { base = baseHint; baseSource = baseSourceHint; }
   }
   if (!base) {
-    base = out(['merge-base', 'origin/main', 'HEAD']);
+    const mb = git(['merge-base', 'origin/main', 'HEAD']);
+    if (mb.status !== 0) {
+      skip('no-origin', '无 origin 远端（或取不到 origin/main merge-base）——diff 面增量基线不可得');
+    }
+    base = String(mb.stdout || '').trim();
     baseSource = 'origin/main';
   }
   const baseShort = out(['rev-parse', '--short', base]);

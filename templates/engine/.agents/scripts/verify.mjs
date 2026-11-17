@@ -24,6 +24,9 @@
 // 用法：flow-kit run verify.mjs [--full | --scope | --face <面> | --product | --mid] [--list] [--jobs N | --serial] [--help]
 //   **档位口径（命令侧单源，2026-11-08 补记）**：--scope = diff 面增量档（判据同缺省档，单源
 //     verify-scope.mjs）；--full = 显式全量；--scope 与 --full 互斥。命令侧档位口径以此头注为准。
+//   **--scope 环境态 loud-skip（2026-11-17 行为评测②）**：无 origin 远端（或取不到 origin/main
+//     merge-base）、仓库尚无任何提交时，增量基线不可得 → 输出原因与降级建议后 exit 0（不判红、不落账）；
+//     有 origin 的既有路径（含 diff 面为空的 fail-loud exit 2）零变化。
 //   --product = 业务面分档（cohort product + security），不落 all-gates 凭证。
 //   --mid = CI 中档（PR→develop / develop 直推）：业务面同 --product，但 backend-test 仅跑单元测试
 //       （--unit-only，不碰集成测试库）；不落 all-gates 凭证。三档口径见 §6.5（本地轻 / PR 中 / main 重）。
@@ -126,7 +129,8 @@ const GATES = [
   //   需要缺二进制即红：SECRETS_SCAN_REQUIRE_GITLEAKS=1（check-secrets exit 2）。
   { id: 'secrets-scan', cohort: 'security', name: '密钥扫描（gitleaks 优先 / lite 兜底，+基线）', cmd: 'flow-kit run check-secrets.mjs', folder: '.', type: 'shell' },
   // 供应链门（R3-8）：SBOM 生成 + 许可证策略检查（零依赖零网络，判据 = .agents/config/license-policy.json）。
-  // lockfile 缺失 = fail-closed exit 2；--check 只读比对 SBOM 漂移。与 secrets-scan 同属安全段。
+  // 声明了依赖但 lockfile 缺失 = fail-closed exit 2；零依赖（未声明依赖，静态判定）= pass-with-note skipped:'zero-dep'；
+  // --check 只读比对 SBOM 漂移。与 secrets-scan 同属安全段。
   { id: 'sbom-license', cohort: 'security', name: 'SBOM 与许可证策略（SPDX 2.3，零网络）', cmd: 'flow-kit run sbom-license.mjs --check', folder: '.', type: 'shell' },
   // 沙箱门（R3-8）：开发容器声明校验——镜像来源白名单 + 版本钉死 + 声明结构。
   // 判据 = .agents/config/devcontainer-policy.json；项目没有 .devcontainer/（未启用容器）→ 大声跳过不判红。
@@ -290,7 +294,8 @@ function usageText() {
     '',
     '档位（缺省 = diff 面增量；最近 24h 无全量绿行时自动回落 --full 并打印 ⏭️ 兜底行）：',
     '  --full      全量门（关单凭证；引擎段 + 业务面 + 安全段）',
-    '  --scope     diff 面增量（基线 = 最近全量绿行 headShort，回退 origin/main merge-base）',
+    '  --scope     diff 面增量（基线 = 最近全量绿行 headShort，回退 origin/main merge-base；',
+    '              无 origin / 零提交的本地仓 loud-skip exit 0 并给降级建议，不判红）',
     '  --face <面> 显式面覆盖增量档（backend|frontend|docs，逗号多值；与 --full/--scope 互斥；跳过 24h 兜底）',
     '  --product   业务面（product + security）',
     '  --mid       CI 中档（PR→develop / develop 直推）：业务面 + 后端只跑单测',
@@ -504,6 +509,14 @@ async function run() {
     } catch (e) {
       // 显式 --scope 保持 fail-loud（拒增量）；默认档退回全量——默认档不该因基线缺失整体失败。
       if (explicitScope) {
+        // 环境态 loud-skip（scope loud-skip 2026-11-17 行为评测②）：本地未推送仓（无 origin / 零提交）
+        // 增量基线不可得不再 exit 2——输出原因与降级建议，exit 0 不判红。有 origin 的既有路径零变化
+        // （diff 面为空等仍 fail-loud exit 2）；推送范围对账由 pre-push check-scope-range 硬门兜底。
+        if (e.scopeSkip) {
+          console.log(`[verify] ⏭️ --scope loud-skip：${e.message}——本次增量档不执行（exit 0，不判红）`);
+          console.log('[verify]    降级建议：plan↔git 对账用 flow-kit run check-scope.mjs <plan> --base <sha>（或 --staged）；推送级对账由 pre-push check-scope-range 硬门兜底');
+          process.exit(0);
+        }
         console.error(`[verify] --scope: ${e.message}`);
         process.exit(2);
       }

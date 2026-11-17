@@ -4,6 +4,10 @@
 //   本门管「带进来的依赖」：项目用了哪些第三方包、什么版本、什么许可证，违规即红。
 // 数据源 = lockfile（package-lock.json v2/v3 锁定树；npm ls --json 兜底），不联网。
 //   锁文件缺失时**不猜**：直接退出 2（fail-closed），避免「没装依赖 = 绿行」的假担保。
+//   唯一例外（zero-dep 2026-11-17 行为评测①）：无 lockfile **且** package.json 未声明任何
+//   dependencies/devDependencies/optionalDependencies（静态判定，不跑 npm、不联网）→ pass-with-note
+//   （skipped:'zero-dep' 口径，exit 0）——零依赖没有 SBOM 面，不是缺口；「声明了依赖却没 lockfile」
+//   才是真缺口，维持 fail-closed 与既有修法指引不变。
 // SBOM 输出：SPDX 2.3 JSON（spdx.json）——documentDescribes 根包、packages 数组带
 //   licenseConcluded / checksums（sha256 取自 lockfile integrity，base64→hex 转写）。
 // 许可证策略：.agents/config/license-policy.json（schema schemas/license-policy.schema.json）：
@@ -256,7 +260,15 @@ export function buildSpdx({ rootName, rootVersion, packages, generatedAt }) {
   };
 }
 
-function collectPackages(policy) {
+// 零依赖静态判定（zero-dep 2026-11-17）：package.json 未声明任何 dependencies / devDependencies /
+// optionalDependencies（缺字段或空对象都算未声明）。只读声明、不跑 npm、不联网——
+// 零依赖项目没有 SBOM 面，门走 pass-with-note（见头注），不算 fail-closed 缺口。
+export function isZeroDep(pkg) {
+  return ['dependencies', 'devDependencies', 'optionalDependencies']
+    .every((k) => !pkg[k] || typeof pkg[k] !== 'object' || Array.isArray(pkg[k]) || Object.keys(pkg[k]).length === 0);
+}
+
+function collectPackages(policy, pkgJson) {
   // 显式声明 lockfiles：按声明顺序读取并跨文件合并去重（name@version 同键取先声明文件中的条目）；
   // 声明了就必须存在——任一缺失直接 fail-closed，不回落根 lockfile 也不猜。
   if (policy.lockfiles && policy.lockfiles.length) {
@@ -278,9 +290,11 @@ function collectPackages(policy) {
       lockPaths: policy.lockfiles.map((rel) => path.join(ROOT, rel)),
     };
   }
-  // 未配置 lockfiles：现状路径——根 package-lock.json → npm ls 兜底 → fail-closed。
+  // 未配置 lockfiles：现状路径——根 package-lock.json → 零依赖判定 → npm ls 兜底 → fail-closed。
   const lock = readJson(path.join(ROOT, 'package-lock.json'));
   if (lock) return { source: 'package-lock.json', packages: packagesFromLockfile(lock), lockPaths: [path.join(ROOT, 'package-lock.json')] };
+  // 零依赖（静态判定）在 npm ls 之前短路：无 SBOM 面就不跑 npm（zero-dep 2026-11-17）。
+  if (isZeroDep(pkgJson || {})) return { source: null, packages: [], lockPaths: [], zeroDep: true };
   // lockfile 缺失时才尝试 npm ls（只读子进程、失败不致命）
   const r = spawnSync('npm', ['ls', '--json', '--all'], { cwd: ROOT, encoding: 'utf8', timeout: 60000, windowsHide: true });
   if (r.status === 0 && r.stdout) {
@@ -298,7 +312,28 @@ function main() {
   const rootName = String(pkg.name || 'unnamed-project');
   const rootVersion = String(pkg.version || '0.0.0');
   const policy = loadPolicy();
-  const { source, packages, lockPaths } = collectPackages(policy);
+  const { source, packages, lockPaths, zeroDep } = collectPackages(policy, pkg);
+  // 零依赖 pass-with-note（zero-dep 2026-11-17）：无 SBOM 面即无审计对象，门记 skip（skipped 口径）
+  // 而非 fail-closed——新装最小项目的 verify 快速道（L0/L1「verify 绿 → 单笔提交」）由此走得通。
+  if (zeroDep) {
+    const summary = {
+      ok: true,
+      skipped: 'zero-dep',
+      source: null,
+      packages: 0,
+      sbomPath: SBOM_REL,
+      sbomDrift: false,
+      violations: [],
+      warnings: [],
+      policy: { allow: policy.allow.length, deny: policy.deny.length, exceptions: Object.keys(policy.exceptions).length, unknownAction: policy.unknownAction, failOn: policy.failOn },
+    };
+    if (jsonOut) {
+      console.log(JSON.stringify(summary, null, 2));
+    } else {
+      console.log('[sbom-license] ⏭ 零依赖（package.json 未声明 dependencies/devDependencies/optionalDependencies）且无 lockfile——无 SBOM 面，跳过审计（不生成 SBOM）');
+    }
+    process.exit(0);
+  }
   if (!source || !packages.length) {
     console.error('sbom-license: 找不到 package-lock.json 且 npm ls 无结果——无依赖清单可审计（fail-closed）。');
     console.error('  修法：在项目根执行 npm install 生成 lockfile 后重跑；本门不猜测未锁定的依赖。');

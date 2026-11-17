@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { buildSpdx, judgeLicense, packagesFromLockfile, packagesFromNpmLs } from '../templates/engine/.agents/scripts/sbom-license.mjs';
+import { buildSpdx, judgeLicense, packagesFromLockfile, packagesFromNpmLs, isZeroDep } from '../templates/engine/.agents/scripts/sbom-license.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
@@ -128,12 +128,46 @@ test('buildSpdx emits SPDX-2.3 with deterministic ids and checksums', () => {
   assert.equal(JSON.stringify(again), JSON.stringify(spdx), 'same inputs must render identically');
 });
 
-test('missing lockfile fails closed with exit 2', () => {
+test('declared deps without lockfile fails closed with exit 2', () => {
+  // zero-dep 语义拆分后的真缺口面：声明了依赖但没有 lockfile——fail-closed 与修法指引不变。
   const dir = tmpRepo();
-  fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"demo-app","version":"1.0.0"}\n', 'utf8');
+  fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"demo-app","version":"1.0.0","dependencies":{"left-pad":"^1.3.0"}}\n', 'utf8');
   const r = run([], dir);
   assert.equal(r.status, 2, r.stderr);
   assert.match(r.stderr, /fail-closed/);
+});
+
+test('zero-dependency project passes with a note instead of failing closed', () => {
+  // 行为评测①回归：新装最小项目（无 lockfile + package.json 未声明依赖）曾把 verify 的
+  // sbom-license 门判红——零依赖没有 SBOM 面，门记 skip/pass（exit 0 + note），快速道走得通。
+  const dir = seededRepo();
+  fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"demo-app","version":"1.0.0"}\n', 'utf8');
+  const r = run([], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /零依赖/);
+  assert.match(r.stdout, /无 SBOM 面/);
+  assert.equal(fs.existsSync(path.join(dir, '.agents', 'sbom', 'spdx.json')), false, 'zero-dep must not write an SBOM');
+
+  // verify 门用的 --check 形态同口径：exit 0 + note，仍不落盘。
+  const check = run(['--check'], dir);
+  assert.equal(check.status, 0, check.stderr);
+  assert.match(check.stdout, /零依赖/);
+
+  // --json 机器面：skipped:'zero-dep' 口径（沿用 stage-gates skipped 惯例），ok=true。
+  const j = run(['--check', '--json'], dir);
+  assert.equal(j.status, 0, j.stderr);
+  const summary = JSON.parse(j.stdout);
+  assert.equal(summary.ok, true);
+  assert.equal(summary.skipped, 'zero-dep');
+  assert.equal(summary.packages, 0);
+});
+
+test('isZeroDep: empty dependency objects count as undeclared, non-empty do not', () => {
+  assert.equal(isZeroDep({}), true);
+  assert.equal(isZeroDep({ dependencies: {}, devDependencies: {}, optionalDependencies: {} }), true);
+  assert.equal(isZeroDep({ dependencies: { a: '^1.0.0' } }), false);
+  assert.equal(isZeroDep({ devDependencies: { b: '^2.0.0' } }), false);
+  assert.equal(isZeroDep({ optionalDependencies: { c: '^3.0.0' } }), false);
 });
 
 test('deny violation fails, exception waives, allow-list change heals', () => {
