@@ -2,6 +2,12 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.7.1]
+
+### 修复
+
+- fix: commitmentFingerprint 归一补表格证据列——spec 验收判据表补证据不再误判承诺面改写（fixes #67）
+
 ## [2.7.0]
 
 ### 新增
