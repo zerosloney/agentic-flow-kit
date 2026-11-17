@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { HOSTS, modelRoleForAgent } from '../hosts/registry.mjs';
+import { HOSTS, HOST_NAMES, modelRoleForAgent } from '../hosts/registry.mjs';
 import { getField } from '../install/frontmatter.mjs';
 import { probeModels } from './probe.mjs';
 import { knownFor } from './known.mjs';
@@ -34,7 +34,7 @@ export function parseModelFlags(values = []) {
     if (host) {
       const key = host.trim().toLowerCase();
       if (!HOSTS[key]) {
-        const err = new Error(`unknown host in --model: ${host}`);
+        const err = new Error(`unknown host in --model: ${host} (valid: ${HOST_NAMES.join(', ')})`);
         err.code = 'BAD_MODEL';
         err.value = raw;
         throw err;
@@ -276,8 +276,10 @@ export function resolveModels({
 
 export function summarizeModels(models) {
   if (!models?.hosts) return '-';
+  // TUI 跳过角色写入 '__none__' 哨兵（resolveModels 已识别），展示面与空值一样视为 inherit。
+  const shown = (v) => (v && v !== '__none__' ? v : 'inherit');
   return Object.entries(models.hosts)
-    .map(([host, roles]) => `${host}: ${ROLE_NAMES.map((r) => `${r}=${roles[r] || 'inherit'}`).join(' ')}`)
+    .map(([host, roles]) => `${host}: ${ROLE_NAMES.map((r) => `${r}=${shown(roles[r])}`).join(' ')}`)
     .join('; ');
 }
 

@@ -33,6 +33,13 @@ test('parseModelFlags accepts global and host-scoped forms', () => {
   assert.throws(() => parseModelFlags(['bogus=x']), /invalid --model/);
 });
 
+test('parseModelFlags unknown host error lists valid candidates', () => {
+  assert.throws(
+    () => parseModelFlags(['wat:code=x']),
+    (err) => err.code === 'BAD_MODEL' && /unknown host in --model: wat \(valid: .*claude/.test(err.message),
+  );
+});
+
 test('probeModels reads host config and env without executing anything', () => {
   const home = tmpDir();
   writeJson(path.join(home, '.claude', 'settings.json'), {
@@ -239,6 +246,11 @@ test('readLocalModelRoles reports missing and malformed files without throwing',
   const broken = readLocalModelRoles(target);
   assert.equal(broken.exists, true);
   assert.equal(broken.error, true);
+});
+
+test('summarizeModels shows the __none__ sentinel as inherit', () => {
+  const text = summarizeModels({ hosts: { claude: { code: 'sonnet', judgment: '__none__', review: '' } } });
+  assert.equal(text, 'claude: code=sonnet judgment=inherit review=inherit');
 });
 
 test('summarizeModels renders every host and role', () => {
