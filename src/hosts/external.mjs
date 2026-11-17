@@ -67,7 +67,7 @@ function normalizeSkills(raw, field, bad) {
   if (!SKILL_MODES.has(raw.mode)) bad(`\`${field}.mode\` must be one of: native, shared, index`);
   if (raw.mode !== 'native') return { mode: raw.mode };
   if (!isRelPath(raw.dir)) bad(`\`${field}.dir\` is required for native skills`);
-  if (!isString(raw.file) || raw.file.includes('/')) bad(`\`${field}.file\` is required for native skills`);
+  if (!isRelPath(raw.file) || raw.file.includes('/')) bad(`\`${field}.file\` must be a file name`);
   return { mode: raw.mode, dir: raw.dir, file: raw.file };
 }
 
@@ -116,6 +116,12 @@ function normalizeHookEvents(raw, field, bad) {
   }
   for (const key of ['rootDefaults', 'groupExtras', 'hookExtras']) {
     if (raw[key] != null && !isObject(raw[key])) bad(`\`${field}.${key}\` must be an object`);
+  }
+  // hookExtras 会 Object.assign 到已渲染的 hook 上；command / args 是安装器产物，禁止外部定义覆盖。
+  if (isObject(raw.hookExtras)) {
+    for (const key of ['command', 'args']) {
+      if (raw.hookExtras[key] != null) bad(`\`${field}.hookExtras.${key}\` must not be set (reserved for the compiled command)`);
+    }
   }
   return {
     event: raw.event,

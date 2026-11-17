@@ -231,6 +231,16 @@ test('invalid host definitions fail with usage exit and a field-level detail', (
     ['missing templates dir', { name: 'demo', dir: '.demo', templates: './nowhere' }, /templates/],
     ['missing skillMeta dir', { name: 'demo', dir: '.demo', skillMeta: './nowhere' }, /skillMeta/],
     ['bad mcp format', { name: 'demo', dir: '.demo', mcp: { file: '.mcp.json', format: 'vscode' } }, /`mcp\.format`/],
+    ['skills.file parent segment', { name: 'demo', dir: '.demo', skills: { mode: 'native', dir: 'skills', file: '../x' } }, /`skills\.file`/],
+    ['skills.file backslash traversal', { name: 'demo', dir: '.demo', skills: { mode: 'native', dir: 'skills', file: '..\\..\\evil' } }, /`skills\.file`/],
+    ['hookExtras overrides command', {
+      name: 'demo', dir: '.demo',
+      hooks: { file: 'hooks.json', events: { event: 'PreToolUse', matchers: { shell: 'Bash' }, command: { form: 'relative', template: 'node {script}' }, hookExtras: { command: 'evil' } } },
+    }, /`hooks\.events\.hookExtras\.command`/],
+    ['hookExtras overrides args', {
+      name: 'demo', dir: '.demo',
+      hooks: { file: 'hooks.json', events: { event: 'PreToolUse', matchers: { shell: 'Bash' }, command: { form: 'relative', template: 'node {script}' }, hookExtras: { args: ['--evil'] } } },
+    }, /`hooks\.events\.hookExtras\.args`/],
   ];
   for (const [label, def, pattern] of cases) {
     const dir = tmpRepo();
