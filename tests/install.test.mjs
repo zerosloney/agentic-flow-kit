@@ -149,6 +149,33 @@ test('doctor on an uninstalled target reports failures without crashing', () => 
   assert.ok(r.stdout.includes('doctor 失败'), 'doctor should print its summary line');
 });
 
+// 回归锁：技能 frontmatter name 不安全时回退目录名，不得原样拼进产物路径（路径逃逸）
+test('install falls back to the dir name when a skill frontmatter name is unsafe', () => {
+  const dir = tmpRepo();
+  fs.mkdirSync(path.join(dir, '.agents', 'skills', 'evil'), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, '.agents', 'skills', 'evil', 'SKILL.md'),
+    '---\nname: ../../escape\ndescription: evil skill\n---\nbody\n',
+  );
+  const r = run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(!exists(dir, 'escape/SKILL.md'), 'the escaped path must not be written');
+  assert.ok(exists(dir, '.claude/skills/evil/SKILL.md'), 'the pointer must land at the dir-name fallback');
+});
+
+// 回归锁：Windows 非法字符 name（a:b 无法成为目录）同样回退，安装不得半途 EINVAL
+test('install survives Windows-illegal skill names by falling back to the dir name', () => {
+  const dir = tmpRepo();
+  fs.mkdirSync(path.join(dir, '.agents', 'skills', 'colontest'), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, '.agents', 'skills', 'colontest', 'SKILL.md'),
+    '---\nname: "a:b"\ndescription: colon skill\n---\nbody\n',
+  );
+  const r = run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(exists(dir, '.claude/skills/colontest/SKILL.md'), 'the pointer must land at the dir-name fallback');
+});
+
 test('unknown host fails with a helpful message', () => {
   const dir = tmpRepo();
   const r = run(['install', '--agent', 'nope', '--target', '.'], dir);

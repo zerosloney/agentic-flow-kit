@@ -15,6 +15,7 @@ import { HOOKS_SPEC_REL, mergeHooksIntoRoot, parseHookSpec } from './hooks.mjs';
 import { compilePermissions, mergePermissionsIntoRoot, parsePermissionSpec } from './permissions.mjs';
 import { readPlanEntry } from './apply.mjs';
 import { parseFrontmatter, yamlScalar } from './frontmatter.mjs';
+import { SKILL_NAME_RE } from '../skills/lint.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const KIT_ROOT = path.resolve(HERE, '..', '..');
@@ -121,7 +122,8 @@ function readSkillMeta(entry) {
   let description = name;
   try {
     const fm = parseFrontmatter(fs.readFileSync(entry.srcAbs, 'utf8'));
-    if (fm.name) name = fm.name;
+    // name 会拼进宿主指针路径：只采信安全名字，否则回退目录名（坏名字的报告面是 lint 工具）
+    if (fm.name && SKILL_NAME_RE.test(fm.name)) name = fm.name;
     if (fm.description) description = fm.description;
   } catch {
     /* 源缺失时保留目录名 */
