@@ -3,6 +3,8 @@
 > 来源①：对 Anthropic《The components of agent memory》与《The AI-native SDLC playbook》的第一性原理对照。
 > 来源②（2026-11-17，条目 15–25）：对 `mattpocock/skills`（grill → to-spec → to-tickets → implement → code-review）
 > 与 `pstack`（poteto / Lauren Tan 工作流栈，24 条 principle-* + 元流程技能）的思想对照。
+> 来源③（2026-11-17，条目 29–31）：对 Anthropic《How the Claude Code team does code review》转述文（微信公众号）
+> 对照——多 Agent 评审收敛控制、评测集周期化、发布控制定位三项。
 > 执行顺序 = 编号顺序；标「能力扩展」的条目按仓库约定属 ROADMAP 面，执行时同步回填 ROADMAP。
 > 口径：本仓是安装器，条目同时覆盖 **引擎模板**（安装到目标项目）与 **安装器自身**（本仓）。
 > 状态：`TODO` / `WIP` / `DONE`。完成一项必须在同一提交更新本文件。
@@ -52,6 +54,10 @@
 | 24 | 技能正文无写作准入：`skills lint` 只查 frontmatter/触发冲突/描述长度（pstack `writing-for-agents` / `technical-writing` / `unslop`） | `src/skills/lint.mjs` + `tests/skills.test.mjs` | 新增正文 lint（祈使句、每步可验证、禁复制他处正文=单源、长度预算）；存量技能先 advisory 出报告，硬拦只对新技能；破坏性测试必红 | DONE |
 | 25 | 无形式化验证资产（pstack `create-formal-verification-skill` / `maintain-formal-verification-skill`）【能力扩展】 | 可选技能，按栈 profile 提供，仅 `--tier enterprise` 装 | 只面向有状态机/并发高危面的项目；验证工具缺失 loud-skip 不判红；默认档安装体积零增长；若进门则登记 mechanism-registry 并进一出一 | DONE |
 | 27 | plan 任务行形状两处单源漂移：`plans/_TEMPLATE.md` 有「依赖」行无「文件」行，`fill-plan.mjs` 生成骨架有「文件」行无「依赖」行——复制模板起的 plan 过不了 `gen-dev-tour --strict` 每步文件门，生成器起的 plan 缺 frontier 依赖锚（2026-11-17 执行条目 16 时实测发现） | `templates/scaffold/workflow/plans/_TEMPLATE.md` + `locales/en/overrides/workflow/plans/_TEMPLATE.md` 补「文件」行；`templates/engine/.agents/scripts/fill-plan.mjs` 任务拆解 hint 补「依赖」行 | 两处骨架行形状一致（文件 / 判据 / 切片 / 依赖 / 风险 / 留痕）；复制模板填实的 plan 能过 `gen-dev-tour --strict`；`renderPlan({level:'L2'})` 输出含依赖行且 dev-tour 能解析出 frontier；测试覆盖「模板与生成器同形状」 | DONE |
+| 28 | 跨模型复核在新装项目不可达：`model-roles.json` 要求异构复核，但提交/仓库元数据不记录实现者模型族，复核者只能写 cross-model unavailable（2026-11-17 行为评测 en 树实测） | 提交署名模型族约定（如 commit trailer）或确认台账记录模型族，方案需过评审 | 新装树复核者能判定跨模型已满足或显式给出不可达原因；不新增硬门；zh/en 双写 | TODO |
+| 29 | PR 面板评审无收敛控制：finder/verifier 多轮往返可能重复报告既有问题、同类缺陷分批修，浪费派发预算（Anthropic 实测：一夜 50+ 轮 Review，59% 评论针对首轮已存在代码；对策=轮次上限、只审新增 diff、同类一次修完、不重复报已知） | `templates/engine/.agents/commands/pr-review.md` 流程节 + `.agents/roles/pr-{finder,verifier,adjudicator}.md` 角色契约（zh + en 同批改）；台账已落 `run.json/briefs`，补「已报问题不复报」消费规则 | 评审流程写明轮次上限（超限要求重估实现方案，不继续逐条修）；verifier 只复核新增 diff 与 escalated 项；同类问题合并单条处置；台账已有 finding 不重复派发；不新增硬门、机制须过 registry 一进一出评估；`npm test` 全绿 | TODO |
+| 30 | 行为评测只在内容签名变更时强制重跑，无周期回归：凭证对当前树绿 ≠ 模型/宿主环境漂移后仍绿（Anthropic 每日在历史事故案例上跑 AI Reviewer 复评召回/误报） | CI 定时工作流（`.github/workflows/` 新增构建步骤——落地前过确认门）复跑 `agent-eval` 双臂基线出 Δ/方差报告；只读报告，不自动覆盖凭证 | 周期任务对 golden-set 双臂复跑并出报告；凭证保持人工 `record`；无凭证/环境缺失 loud-skip 不判红；零运行时依赖不变；报告不产生硬门 | TODO |
+| 31 | 发布控制面（merge queue 合并前重检、feature flag 内部灰度、分阶段通道、开关快速回滚）缺位——超出「开发工作流引擎」现定位，先过定位决策再决定是否开工【能力扩展·定位待决策】 | 定位决策先落 ADR（v2.6.0 已装 `workflow/adr/`）；若决策进入，合 main 触发条件已存在（pr-review 触发规则），补排队重检与回滚开关语义后按 ROADMAP 流程补 R 条目 | 先产出 ADR：进/不进 + 理由；不进则关闭本条并记录依据；进则回填 ROADMAP 再执行；不默认开工、不预先设计 | TODO |
 
 ## 落地记录（2026-11-12）
 
@@ -84,6 +90,31 @@
   2. `new-task.md` / `pipeline-run.md` / `stages.md` 曾引用不存在的 `grilling`、
      `codebase-design`、`domain-modeling` 技能——已由条目 15 补齐（2026-11-17，命令正文未改）。
      技能面增长同样改变内容签名：`9c7bbb08…` 凭证对当前树已失效，双臂评测须重跑（见 2026-11-17 落地记录）。
+
+## 行为评测重跑（2026-11-17，清账条目 15–27）
+
+- 复刻 2026-11-12 基线口径：`.agents/evals/tasks.tsv` 5 任务 × 2 棵新装树（zh / en，签名 `775f0703efb4` / `e84dcd56cc6a`）＝ **12 个独立子代理**；
+  证据脱敏洗牌（e01–e12）后**盲评**，以仓库状态与证据指针复核、不采信自评。zh 组 6 跑共享工作树（按各自 run-log 归因，联合态仅交叉参考）；en 组 6 跑隔离副本。
+- 结果 **12/12 PASS**：T1–T4 两树各 4/4；model-quality frontier / lean 两臂各 3/3（zh 5/5、en 5/5）。两树运行后签名复测不变；T3 的 draft.json 双树直检为合法 JSON。
+- 凭证已落两树 `.agents/evals/results.jsonl`，严格 `check` 双树 exit 0：passRate=1、tasks=5、model=glm-5.3、note 标注 re-baseline 与清账。
+- 新发现（当时真缺口，**①②已修**，③立条目 #28）：① `verify.mjs` 的 `sbom-license` 门在零依赖仓库 fail-closed（无 `package-lock.json` 即 11/14 门红，
+  5 个子代理撞上并按「不越门」纪律停）——**已修**：零依赖静态判定（不跑 npm、不联网）改 pass-with-note（`skipped:'zero-dep'` 口径，exit 0），
+  「声明了依赖却没 lockfile」仍 fail-closed（那才是真缺口）；`tests/sbom.test.mjs` 覆盖两态。
+  ② `verify.mjs --scope` 在无 origin 远端的本地仓 exit 2（2 个子代理撞上）——**已修**：无 origin / 零提交 loud-skip（exit 0 + 原因 +
+  降级建议指向 `check-scope.mjs --base/--staged` 与推送级 `check-scope-range` 兜底），有 origin 的既有路径零变化；`tests/verify-scope.test.mjs` 新增 8 例。
+  两处修复后 `npm test` **530/530 全绿**（基线 520 + 净增 10），`lint:templates` / `policy:check` / `check:i18n` 全绿。
+  ③ 跨模型复核在新装项目不可达（复核者只能写 cross-model unavailable）——已立条目 **#28**（TODO，方案需过评审）。
+- 采集备注：证据打包未捕获未跟踪目录内单文件（draft.json 以 run-log 内解析输出 + 主评测直检补证）。
+- en 基线值更正（2026-11-17 晚）：当前工作区 en 新装树真值为 **`e50047ca2863`**（59 敏感文件不变）——评测后 3 个 en SKILL.md
+  （csharp-quality-gates / page-refactor / papercut-fix）被某次 git 操作 LF→CRLF 归一，与条目 20/23 同一失效模式；字节差核对内容零变化，
+  且把评测时字节灌回可精确复现 `e84dcd56cc6a`。已对 `e50047ca2863` 补记同晚评测凭证（note 写明 EOL-only 外推关系），严格 `check` exit 0；
+  此后 en 以 `e50047ca2863` 为准绳。zh 不受影响（`775f0703efb4` 稳定）。
+- 全仓模板 EOL 归一（2026-11-17 晚，经用户确认执行）：templates/ + locales/ 下 586 个 LF 或混合行尾落盘文件统一转 CRLF
+  （签名面 25 + 非签名面安全 280 + 混合 1 + 其余非签名面 280；逐字节内容同一性验证 586/586；shell/CI 类 LF 文件经安全排查为 0，无排除项）。
+  终态 691 文件 CRLF 纯净、0 混合；git 侧 autocrlf 清洗后 diff 中性（仅剩 verify 两门修复的真实内容改动）。
+  新装树签名随之一次定型：zh **`fab13142d6f4`**、en **`f0145f530b21`**（59 敏感文件不变）；已对两值补记评测凭证（note 写明与前值内容同一、
+  12/12 盲评 PASS 沿用），严格 `check` 双树 exit 0。此漂移类别（EOL 归一翻转签名）自本条目起终结：此后签名变化即真实内容变化。
+- 至此「未验证边界」中条目 15–27 的双臂评测挂账**全部清账**；下节各条目记载的是当时挂账的历史。
 
 ## 落地记录（2026-11-17，条目 15–27）
 
@@ -333,6 +364,7 @@
   ——scaffold workflow 面与 `scripts/fill-plan.mjs` 均不在敏感清单（敏感面 = skills / commands / roles + 四个 config），预期「均不变」成立；
   `agent-eval check --advisory` 仍报 `no-eval-for-tree`。
 - **未验证边界（须知）**：
+> 2026-11-17 晚：双臂评测已重跑清账（12/12 PASS，凭证与口径见「行为评测重跑（2026-11-17，清账条目 15–27）」节）；下列各条目为当时挂账的历史记载。
   1. **双臂行为评测未重跑**：本会话子代理委派被禁用（`Explore` / `general-purpose` 均被 disallowedTools 拒），
      无法按 `skills/eval` 起独立子代理做盲评。敏感面已变（条目 15 新增三技能；条目 16 改 `stages.md` Build §3 zh + en；
      条目 17 改 `verify-ui/SKILL.md` 与 `dream/SKILL.md` zh + en）——
