@@ -38,6 +38,13 @@ function clip(text, max) {
   return out;
 }
 
+// 需要 manifest 的流统一从这里取：缺失即抛错终止，行为与各流内联写法一致。
+function requireManifest(t) {
+  const manifest = readManifest(process.cwd());
+  if (!manifest) throw new Error(t('error.noManifest'));
+  return manifest;
+}
+
 // 常规创建/更新只留在进度条上。冲突和非常规跳过先换行落盘，避免被下一帧 \\r 清掉。
 export function installProgressWrites({ action, msg, done, total }) {
   const writes = [];
@@ -93,7 +100,6 @@ async function modelFlow(ctx, hosts) {
   const cwd = process.cwd();
   const roleConfig = loadRoleConfig(cwd);
   const models = {};
-  let explicit = false;
 
   for (const host of hosts) {
     const h = HOSTS[host];
@@ -118,7 +124,6 @@ async function modelFlow(ctx, hosts) {
       continue;
     }
 
-    explicit = true;
     const values = {};
     for (const role of ROLE_NAMES) {
       const items = candidates.map((c) => ({ value: c.id, label: c.id, hint: c.source }));
@@ -156,7 +161,7 @@ async function modelFlow(ctx, hosts) {
     models[host] = values;
   }
 
-  return { models, explicit };
+  return { models };
 }
 
 // 安装流：宿主 → 语言 → 栈 → 模型 → 开关 → 计划确认 → 执行（进度行）→ 可选体检
@@ -262,8 +267,7 @@ async function installFlow(ctx) {
 async function upgradeFlow(ctx) {
   const { t, lang } = ctx;
   const cwd = process.cwd();
-  const manifest = readManifest(cwd);
-  if (!manifest) throw new Error(t('error.noManifest'));
+  const manifest = requireManifest(t);
   const recorded = STACKS.includes(manifest.stack) ? manifest.stack : 'empty';
   const detected = detectStackDetail(cwd);
   const stack = await pickOne(ctx, {
@@ -284,8 +288,7 @@ async function upgradeFlow(ctx) {
 
 async function addHostFlow(ctx) {
   const { t, lang } = ctx;
-  const manifest = readManifest(process.cwd());
-  if (!manifest) throw new Error(t('error.noManifest'));
+  const manifest = requireManifest(t);
   const installed = Array.isArray(manifest.hosts) ? manifest.hosts : [];
   const agents = await pickMany(ctx, {
     question: t('tui.addHostQuestion'),
@@ -326,8 +329,7 @@ function listHostsFlow(ctx) {
 
 async function removeHostFlow(ctx) {
   const { t, lang } = ctx;
-  const manifest = readManifest(process.cwd());
-  if (!manifest) throw new Error(t('error.noManifest'));
+  const manifest = requireManifest(t);
   const installed = HOST_NAMES.filter((name) => (manifest.hosts || []).includes(name));
   if (!installed.length) {
     showLines(ctx, [t('tui.removeHost.none')]);
@@ -354,8 +356,7 @@ async function removeHostFlow(ctx) {
 
 async function uninstallFlow(ctx) {
   const { t, lang } = ctx;
-  const manifest = readManifest(process.cwd());
-  if (!manifest) throw new Error(t('error.noManifest'));
+  const manifest = requireManifest(t);
   showLines(ctx, box(t('tui.planTitle'), [
     t('tui.plan.target', { target: process.cwd() }),
     t('tui.plan.hosts', { hosts: (manifest.hosts || []).join(', ') || '-' }),
