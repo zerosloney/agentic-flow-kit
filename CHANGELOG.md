@@ -2,6 +2,18 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.7.0]
+
+### 新增
+
+- feat: 落地 BACKLOG 条目 30——引擎侧定时「出厂凭证」新鲜度报告（eval-freshness）
+- feat: 落地 BACKLOG 条目 28/29——跨模型复核三阶判定与面板评审收敛控制
+
+### 文档
+
+- docs(backlog): 关闭 #31——发布控制不进引擎定位，ADR 记依据
+- docs: 官网版本徽标与命令页副标对齐 v2.6.1
+
 ## [2.6.1]
 
 ### 修复
