@@ -7,8 +7,9 @@ import path from 'node:path';
 // 与 MCP 合并共用“只改托管条目、保留用户内容”的语义，供后续权限编译复用。
 export const HOOKS_SPEC_REL = '.agents/hooks/gates.json';
 
-// write / shell 为写前、命令门；agent 为观测类条目（如 claude PostToolUse usage 采集），无决策面。
-const TOOLS = new Set(['write', 'shell', 'agent']);
+// write / shell 为写前、命令门；agent / session 为无决策面条目（agent = claude PostToolUse usage 采集，
+// session = claude SessionStart 路由令注入，只加上下文不拦截）。
+const TOOLS = new Set(['write', 'shell', 'agent', 'session']);
 const FORMS = new Set(['env', 'relative', 'args', 'cli', 'cli-args']);
 
 function hookIdOf(script) {

@@ -6,7 +6,7 @@
 // 凭据：PAT 只从 env 读取：多台服务器可按 base 主机名分存 TFS_PAT_<HOST>（非字母数字转 _ 大写，命中优先），
 //   回落全局 TFS_PAT；兜底 --pat-file <path>。不打印、不落盘。
 // 响应：先判 status / content-type 再 JSON.parse；认证失败常见形态是 401 + text/html。
-// 命令：target | setup | whoami | list | get | context | create | desc | conflicts
+// 命令：target | setup | whoami | list | get | context | create | desc | conflicts | checks
 // 退出：0 成功（含 EXISTING 幂等命中）；1 HTTP/API/网络错误；2 用法/配置错误。
 //
 // 用法：node tfs-pr.mjs target                 # 只解析并打印 base/project/repo/remote
@@ -15,11 +15,12 @@
 //       node tfs-pr.mjs list [--source b] [--target b] [--status active|all] [--json]
 //       node tfs-pr.mjs get <id> [--json]
 //       node tfs-pr.mjs context [--source b] [--target b] [--no-fetch] [--patch] [--json]
+//       node tfs-pr.mjs checks [<prId>] [--source b] [--build id] [--top n] [--json]   # 只读定位 CI 失败检查
 //       node tfs-pr.mjs create [--source b] [--target b] --title t --body-file f|- [--dry-run]
 //       node tfs-pr.mjs desc <id> --body-file f|- [--dry-run]
 //       node tfs-pr.mjs conflicts <id> [--no-fetch] [--json]
 //       node tfs-pr.mjs conflicts --source b --target b [--no-fetch] [--json]
-// 测试：node tfs-pr.test.mjs（本地 http 桩 + 临时 git 仓库，不触真实服务）
+// 测试：本仓 tests/tfs-pr.test.mjs（本地 http 桩 + 临时 git 仓库，不触真实服务）
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 
@@ -287,7 +288,7 @@ function resolvePat(target, { optional = false } = {}) {
   if (!pat) {
     throw new UsageError(
       `缺少 PAT（${keys.join(' / ')} 均未配置）。到 ${target.tokenUrl} 生成 Personal Access Token，` +
-      'scopes 勾 Code (Read & Write) + Pull Request (Read & Write)；' +
+      'scopes 勾 Code (Read & Write) + Pull Request (Read & Write) + Build (Read)（checks 定位 CI 需要）；' +
       `Windows 持久化：setx ${keys[0]} "<PAT>"（多台服务器按主机分存，单台用 TFS_PAT；新开终端生效）；` +
       'Linux/macOS：在 shell profile 中 export；' +
       `自检：node "${scriptPath}" whoami。` +
@@ -317,7 +318,7 @@ const authHeader = (pat) => `Basic ${Buffer.from(`:${pat}`).toString('base64')}`
 
 const authHint = (status, target) => {
   if (status === 401 || status === 403) {
-    return `认证失败：PAT 无效/过期/scope 不足（Code R&W + Pull Request R&W）。` +
+    return `认证失败：PAT 无效/过期/scope 不足（Code R&W + Pull Request R&W + Build R）。` +
       `到 ${target.tokenUrl} 重新生成，并确认 ${patEnvKeys(target).join(' 或 ')} 已在新进程生效。`;
   }
   if (status === 404) {
@@ -631,6 +632,135 @@ async function updateDesc(t, pat, id) {
   else console.log(`UPDATED #${result.id} description=${result.descriptionLength} 字符 ${result.url}`);
 }
 
+// ---------- 逐提交导读（易审化，只读）----------
+// 从 git log 派生每提交的类型/规模/文件与重点标记，并给噪声历史清理「建议」。
+// 本段永不改写历史、永不推送：已推送历史的清理须用户显式授权（SKILL §8），rebase/force push 一律不代跑。
+const CONVENTIONAL_TYPES = new Set(['feat', 'fix', 'refactor', 'perf', 'test', 'docs', 'style', 'build', 'ci', 'chore', 'revert']);
+const RECORD_SEP = '\u0001';
+const FIELD_SEP = '\u0002';
+
+function parseSubject(subject) {
+  const m = /^([A-Za-z]+)(?:\(([^)]*)\))?(!)?:\s*(.*)$/.exec(String(subject || ''));
+  if (!m) return { type: 'other', scope: '', breaking: false };
+  const type = m[1].toLowerCase();
+  return { type: CONVENTIONAL_TYPES.has(type) ? type : 'other', scope: m[2] || '', breaking: !!m[3] };
+}
+
+// numstat 一次拿到「每提交改了哪些文件 + 各文件增删行」，二进制文件增删为 `-`（记 null，不当 0）。
+function numstatBySha(text) {
+  const map = new Map();
+  for (const chunk of String(text).split(RECORD_SEP)) {
+    if (!chunk.trim()) continue;
+    const lines = chunk.split('\n');
+    const sha = lines[0].trim();
+    const files = [];
+    for (const line of lines.slice(1)) {
+      if (!line.trim()) continue;
+      const [a, d, ...rest] = line.split('\t');
+      const file = rest.join('\t');
+      if (!file) continue;
+      files.push({ path: file, added: a === '-' ? null : Number(a), deleted: d === '-' ? null : Number(d) });
+    }
+    map.set(sha, files);
+  }
+  return map;
+}
+
+function noiseOf({ subject, type, parents }, subjectCounts) {
+  const s = String(subject || '');
+  if (/^(fixup|squash|amend)!/i.test(s)) return { kind: 'fixup', suggestion: 'fixup/squash 提交：与目标提交合并后再推送' };
+  if (parents > 1) return { kind: 'merge', suggestion: '分支内合并提交：rebase 到目标分支可消除（改写历史须授权）' };
+  if (/^(wip|tmp|temp|draft|todo)([:(!\s]|$)/i.test(s)) return { kind: 'wip', suggestion: '临时提交：合并进正式提交或改写主题' };
+  if (type === 'other') return { kind: 'non-conventional', suggestion: '主题非 Conventional Commits：改写为 type(scope): 中文摘要' };
+  const key = s.trim().toLowerCase().replace(/\s+/g, ' ');
+  if ((subjectCounts.get(key) || 0) > 1) return { kind: 'duplicate', suggestion: '主题与其他提交重复：合并或改写以区分意图' };
+  return null;
+}
+
+function buildGuide({ sourceRef, targetRef, commitLimit, commitCount, analysis, push }) {
+  const range = `${targetRef}..${sourceRef}`;
+  const meta = gitOut(['log', '--reverse', '--topo-order', '--no-decorate', '--format=%x01%H%x02%h%x02%P%x02%cI%x02%s', `-${commitLimit}`, range]);
+  const nums = numstatBySha(gitOut(['log', '--reverse', '--topo-order', '--no-decorate', '--format=%x01%H', '--numstat', `-${commitLimit}`, range]));
+  const conflictSet = new Set(analysis.conflicts.files || []);
+  const overlapSet = new Set(analysis.overlap || []);
+
+  const rows = [];
+  for (const chunk of meta.split(RECORD_SEP)) {
+    if (!chunk.trim()) continue;
+    const [sha, short, parents, date, ...rest] = chunk.split(FIELD_SEP);
+    rows.push({ sha: (sha || '').trim(), short: (short || '').trim(), parents: (parents || '').trim(), date: (date || '').trim(), subject: rest.join(FIELD_SEP).trim() });
+  }
+  const subjectCounts = new Map();
+  for (const r of rows) {
+    const key = r.subject.trim().toLowerCase().replace(/\s+/g, ' ');
+    subjectCounts.set(key, (subjectCounts.get(key) || 0) + 1);
+  }
+
+  const commits = rows.map((r) => {
+    const files = nums.get(r.sha) || [];
+    const added = files.reduce((sum, f) => sum + (f.added || 0), 0);
+    const deleted = files.reduce((sum, f) => sum + (f.deleted || 0), 0);
+    const { type, scope, breaking } = parseSubject(r.subject);
+    const parentCount = r.parents ? r.parents.split(/\s+/).length : 0;
+    const hitConflict = files.filter((f) => conflictSet.has(f.path)).map((f) => f.path);
+    const hitOverlap = files.filter((f) => overlapSet.has(f.path)).map((f) => f.path);
+    const noise = noiseOf({ subject: r.subject, type, parents: parentCount }, subjectCounts);
+    const flags = [];
+    if (hitConflict.length) flags.push('conflict');
+    if (hitOverlap.length) flags.push('overlap');
+    if (breaking) flags.push('breaking');
+    if (type === 'revert') flags.push('revert');
+    if (noise) flags.push('noise');
+    const notes = [];
+    if (hitConflict.length) notes.push(`与目标分支文本冲突：${hitConflict.join(', ')}（先按 SKILL §5 解）`);
+    if (hitOverlap.length) notes.push(`双方都改过：${hitOverlap.join(', ')}（能自动合并也要过语义）`);
+    if (breaking) notes.push('主题带 !：破坏性契约变更，PR 描述须写清影响面与回滚');
+    if (type === 'revert') notes.push('回滚提交：确认回滚意图与被回滚范围');
+    return {
+      sha: r.sha, short: r.short, date: r.date, subject: r.subject,
+      type, scope, breaking, parents: parentCount,
+      files, added, deleted, flags, note: notes.join('；'), noise,
+    };
+  });
+
+  const types = {};
+  for (const c of commits) types[c.type] = (types[c.type] || 0) + 1;
+  const focus = commits.filter((c) => c.flags.some((f) => f !== 'noise')).map((c) => c.short);
+  const noise = commits.filter((c) => c.noise).map((c) => ({ short: c.short, subject: c.subject, kind: c.noise.kind, suggestion: c.noise.suggestion }));
+  const pushed = !!push && push.unpushed === false;
+  const notice = !noise.length ? '' : pushed
+    ? `已推送历史：以上 ${noise.length} 条只是清理建议。改写已推送历史（rebase/squash + force push）须用户显式授权，脚本与本技能都不代跑；未授权就保持原历史，把噪声写进 PR 描述让评审者知情。`
+    : `未推送（或推送状态未知）：以上 ${noise.length} 条可在本地整理后再推送；一旦推送，改写须用户显式授权（禁 force push，见 SKILL §5 / §8）。`;
+  return {
+    order: 'chronological',
+    limit: commitLimit,
+    truncated: commitCount > commits.length,
+    commits,
+    focus,
+    types,
+    noise,
+    notice,
+  };
+}
+
+function printGuide(g) {
+  console.log(`--- 逐提交导读（时间正序 = 建议阅读顺序，${g.commits.length} 条${g.truncated ? `，仅最近 ${g.limit} 条` : ''}）---`);
+  g.commits.forEach((c, i) => {
+    const size = `+${c.added}/-${c.deleted}`;
+    const mark = c.flags.length ? `  [${c.flags.join(',')}]` : '';
+    console.log(`  ${i + 1}. ${c.short} ${c.subject}  ${size} ${c.files.length} 文件${mark}`);
+    if (c.note) console.log(`     ${c.note}`);
+    if (c.files.length) console.log(`     files: ${c.files.slice(0, 8).map((f) => f.path).join(', ')}${c.files.length > 8 ? ` …（共 ${c.files.length}）` : ''}`);
+  });
+  console.log(`重点先看：${g.focus.length ? g.focus.join(', ') : '无（无冲突/重叠/破坏性/回滚标记）'}`);
+  console.log(`类型分布：${Object.entries(g.types).map(([k, v]) => `${k}=${v}`).join(' ') || '无'}`);
+  if (g.noise.length) {
+    console.log(`噪声历史（${g.noise.length} 条，只给建议，不代跑改写）：`);
+    for (const n of g.noise) console.log(`  ${n.short} [${n.kind}] ${n.subject} → ${n.suggestion}`);
+    console.log(g.notice);
+  }
+}
+
 function buildContext(t) {
   if (!isGitWorkTree()) throw new UsageError('context 需要当前目录是 git 仓库。');
   const source = resolveSourceBranch();
@@ -668,6 +798,7 @@ function buildContext(t) {
   const push = pushState(remote, sourceRef);
   const dirtyFiles = gitOut(['status', '--porcelain']).split(/\r?\n/).filter(Boolean);
   const patch = flag('--patch') ? gitRun(['diff', '--no-color', range], { allowFail: true }).stdout : '';
+  const guide = buildGuide({ sourceRef, targetRef, commitLimit, commitCount, analysis, push });
 
   return {
     source,
@@ -678,6 +809,7 @@ function buildContext(t) {
     mergeBase: analysis.mergeBase,
     commitCount,
     commits,
+    guide,
     files,
     nameStatus,
     stat,
@@ -710,6 +842,7 @@ function printContext(c) {
   console.log('diffstat:');
   console.log(c.stat || '(无变更)');
   if (c.shortstat) console.log(c.shortstat);
+  if (c.guide) printGuide(c.guide);
   if (c.patch) {
     console.log('--- patch ---');
     console.log(c.patch);
@@ -793,6 +926,175 @@ async function conflicts(t, pat, idArg) {
   return result;
 }
 
+// ---------- CI 检查（只读定位失败检查）----------
+// 只 GET builds / timeline：不排队构建、不改 PR、不合并。CI 红不改变退出码（仍 0），
+// 判红看输出的 CI= 与 JSON 的 ci 字段——本技能不新增硬门（SKILL §9）。
+const buildWebUrl = (t, b) =>
+  (b && b._links && b._links.web && b._links.web.href) ||
+  `${t.base}/${encodeURIComponent(t.project)}/_build/results?buildId=${b.id}`;
+
+async function fetchBuild(t, pat, id) {
+  return request(t, pat, 'GET', `/_apis/build/builds/${id}?api-version=${apiVersion}`);
+}
+
+async function fetchBuildsByBranch(t, pat, branch, top) {
+  const q = new URLSearchParams();
+  q.set('branchName', branch);
+  q.set('repositoryType', 'TfsGit');
+  q.set('queryOrder', 'queueTimeDescending');
+  q.set('$top', String(top));
+  q.set('api-version', apiVersion);
+  const data = await request(t, pat, 'GET', `/_apis/build/builds?${q}`);
+  return data.value || [];
+}
+
+async function fetchTimeline(t, pat, buildId) {
+  const data = await request(t, pat, 'GET', `/_apis/build/builds/${buildId}/timeline?api-version=${apiVersion}`);
+  return data.records || [];
+}
+
+// 父链给出「阶段 / 作业」上下文，让失败检查名（常是 Run tests 这类通名）可定位到具体 job。
+function recordPath(byId, rec) {
+  const names = [];
+  const seen = new Set([rec.id]);
+  let cur = rec;
+  while (cur && cur.parentId && !seen.has(cur.parentId)) {
+    seen.add(cur.parentId);
+    cur = byId.get(cur.parentId);
+    if (cur && cur.name) names.unshift(cur.name);
+  }
+  return names.join(' / ');
+}
+
+function failedChecks(records) {
+  const byId = new Map(records.map((r) => [r.id, r]));
+  const hasChild = new Set(records.map((r) => r.parentId).filter(Boolean));
+  const byOrder = (a, b) => (a.order || 0) - (b.order || 0);
+  const pick = (r) => ({
+    id: r.id,
+    name: r.name || '(未命名)',
+    type: r.type || '',
+    result: r.result || '',
+    state: r.state || '',
+    attempt: r.attempt || 1,
+    order: r.order || 0,
+    path: recordPath(byId, r),
+    errorCount: r.errorCount || 0,
+    warningCount: r.warningCount || 0,
+    issues: (r.issues || []).slice(0, 5).map((i) => ({ type: i.type || '', message: String(i.message || '').slice(0, 400) })),
+    log: { id: r.log && r.log.id != null ? r.log.id : null, url: (r.log && r.log.url) || '' },
+  });
+  return {
+    total: records.length,
+    failed: records.filter((r) => r.result === 'failed' && !hasChild.has(r.id)).sort(byOrder).map(pick),
+    warned: records.filter((r) => r.result === 'succeededWithIssues').sort(byOrder).map(pick),
+  };
+}
+
+async function checks(t, pat, idArg) {
+  const topRaw = Number(opt('--top'));
+  const top = Number.isFinite(topRaw) && topRaw > 0 ? Math.min(Math.floor(topRaw), 100) : 10;
+  const buildArg = opt('--build');
+  if (buildArg && !/^\d+$/.test(buildArg)) throw new UsageError(`--build 需要数字构建 id（收到「${buildArg}」）`);
+
+  let prId = null;
+  let branch = '';
+  let builds = [];
+  let repoNote = '';
+  if (buildArg) {
+    builds = [await fetchBuild(t, pat, buildArg)];
+    branch = stripRef(builds[0].sourceBranch || '');
+  } else {
+    if (idArg) {
+      const pr = await fetchPr(t, pat, idArg);
+      prId = pr.pullRequestId;
+      branch = stripRef(pr.sourceRefName);
+    } else {
+      branch = stripRef(opt('--source') || resolveSourceBranch());
+    }
+    if (!branch) throw new UsageError('checks 需要 PR id、--source <分支> 或 --build <id>。');
+    // PR 验证构建跑在 refs/pull/<id>/merge，普通 CI 跑在 refs/heads/<branch>：两处都查再按 id 去重。
+    const refs = prId ? [`refs/pull/${prId}/merge`, refOf(branch)] : [refOf(branch)];
+    const seen = new Set();
+    for (const ref of refs) {
+      for (const b of await fetchBuildsByBranch(t, pat, ref, top)) {
+        if (seen.has(b.id)) continue;
+        seen.add(b.id);
+        builds.push(b);
+      }
+    }
+    builds.sort((a, b) => String(b.queueTime || '').localeCompare(String(a.queueTime || '')));
+    const sameRepo = (b) => !b.repository || !b.repository.name
+      || String(b.repository.name).toLowerCase() === String(t.repo).toLowerCase();
+    const mine = builds.filter(sameRepo);
+    if (mine.length) builds = mine;
+    else if (builds.length) {
+      repoNote = `按分支命中 ${builds.length} 个构建，但 repository 名都与本仓 ${t.repo} 不符——已列出全部，请用 --build <id> 指定本仓构建。`;
+    }
+  }
+
+  const rows = builds.map((b) => ({
+    id: b.id,
+    buildNumber: b.buildNumber || '',
+    result: b.result || '',
+    status: b.status || '',
+    reason: b.reason || '',
+    sourceBranch: b.sourceBranch || '',
+    repository: (b.repository && b.repository.name) || '',
+    repoMatch: !b.repository || !b.repository.name
+      || String(b.repository.name).toLowerCase() === String(t.repo).toLowerCase(),
+    queueTime: b.queueTime || '',
+    finishTime: b.finishTime || '',
+    url: buildWebUrl(t, b),
+  }));
+
+  if (!rows.length) {
+    const empty = `未找到构建：branch=${branch}${prId ? ` pr=${prId}` : ''} repository=${t.repo}`
+      + `（repositoryType=TfsGit, api-version=${apiVersion}）。`
+      + '可能：CI 未配置/未触发、分支未推送、构建定义在别的 project、或老 TFS 不支持该过滤。'
+      + `用 --build <id> 直接指定，或到 ${t.base}/${encodeURIComponent(t.project)}/_build 人工核对。`;
+    const result = { branch, prId, builds: [], analyzed: null, ci: 'no-builds', empty, repoNote, timeline: null };
+    if (json) printJson(result);
+    else console.log(empty);
+    return result;
+  }
+
+  const latest = rows[0];
+  const tl = failedChecks(await fetchTimeline(t, pat, latest.id));
+  const b = builds.find((x) => x.id === latest.id) || {};
+  const ci = b.status !== 'completed' ? 'running'
+    : b.result === 'succeeded' && !tl.failed.length ? 'green'
+    : b.result === 'canceled' ? 'canceled'
+    : !b.result || b.result === 'none' ? 'unknown'
+    : 'red';
+  const result = { branch, prId, builds: rows, analyzed: latest.id, ci, repoNote, timeline: tl, empty: '' };
+
+  if (json) {
+    printJson(result);
+    return result;
+  }
+  console.log(`branch=${branch}${prId ? ` pr=#${prId}` : ''} builds=${rows.length}（api-version=${apiVersion}）`);
+  if (repoNote) console.log(repoNote);
+  for (const r of rows) {
+    console.log(`  #${r.id} ${r.buildNumber} [${r.result || '?'}/${r.status || '?'}] reason=${r.reason} branch=${r.sourceBranch} repo=${r.repository || '?'}${r.repoMatch ? '' : '（非本仓）'}`);
+  }
+  console.log(`分析构建 #${latest.id}（最新）：${latest.url}`);
+  console.log(`timeline records=${tl.total} failed=${tl.failed.length} succeededWithIssues=${tl.warned.length}`);
+  for (const f of tl.failed) {
+    console.log(`  FAIL [${f.type}] ${f.name}${f.path ? `  path: ${f.path}` : ''}  errors=${f.errorCount} warnings=${f.warningCount}${f.attempt > 1 ? ` attempt=${f.attempt}` : ''}`);
+    for (const i of f.issues) console.log(`    ${i.type || 'issue'}: ${i.message}`);
+    if (!f.issues.length) console.log('    （timeline 无 issues 明细：按 log 指针取日志正文）');
+    console.log(`    log: ${f.log.url || (f.log.id != null ? `logId=${f.log.id}（正文未抓取）` : '无')}`);
+  }
+  for (const w of tl.warned) console.log(`  WARN [${w.type}] ${w.name}  warnings=${w.warningCount}`);
+  console.log(`CI=${ci}`);
+  if (ci === 'red') {
+    console.log('聚焦修复：按 FAIL 记录的 issues 定位文件/行 → 只改该处 → 跑本地对应测试 → 推送后重跑 checks 复核；禁自动合并、禁 force push、禁绕门（SKILL §9）。');
+  }
+  if (ci === 'running') console.log('构建未完成：稍后重跑 checks，别把 running 当绿。');
+  return result;
+}
+
 async function whoami(t, pat) {
   // 部分版本（如 ADS 2020 / api-version 6.0）的 connectionData 要求预览版 API 标志，失败自动补 -preview 重试
   const hit = (v) => request(t, pat, 'GET', `/_apis/connectionData?api-version=${v}`, undefined, {
@@ -850,7 +1152,7 @@ function setup(t) {
   if (t.remote) console.log(`remote: ${t.remote} ${t.remoteUrl}`);
   console.log(`PAT 状态: ${stateOf('TFS_PAT')}${hostKey ? `；${stateOf(hostKey)}（${hostKey} 命中优先）` : ''}`);
   console.log(`PAT 门户: ${t.tokenUrl}`);
-  console.log('scopes: Code (Read & Write) + Pull Request (Read & Write)');
+  console.log('scopes: Code (Read & Write) + Pull Request (Read & Write) + Build (Read)（checks 定位 CI 需要）');
   console.log(hostKey
     ? `Windows 持久化: setx ${hostKey} "<PAT>"（多台服务器按主机分存；单台也可 setx TFS_PAT "<PAT>"）——新开终端后生效`
     : 'Windows 持久化: setx TFS_PAT "<PAT>"  （新开终端后生效）');
@@ -869,6 +1171,9 @@ function usage() {
   list [--source b] [--target b] [--status active|all] [--json]
   get <id> [--json]
   context [--source b] [--target b] [--no-fetch] [--patch] [--json]
+                                 附 guide：逐提交导读（时间正序）+ 噪声历史清理建议（只读，不代跑改写）
+  checks [<prId>] [--source b] [--build <id>] [--top n] [--json]
+                                 只读定位 CI 失败检查（builds + timeline）；CI 红仍退出 0，不合并、不排队构建
   create [--source b] [--target b] --title t --body-file f|- [--dry-run] [--json]
   desc <id> --body-file f|- [--dry-run] [--json]
   conflicts <id> [--no-fetch] [--json]
@@ -895,7 +1200,7 @@ async function main() {
     return;
   }
 
-  const known = new Set(['setup', 'whoami', 'list', 'get', 'create', 'desc', 'context', 'conflicts']);
+  const known = new Set(['setup', 'whoami', 'list', 'get', 'create', 'desc', 'context', 'conflicts', 'checks']);
   if (!known.has(cmd)) throw new UsageError(`未知子命令：${cmd}（可用：${[...known].join(', ')}）`);
 
   const t = resolveTarget();
@@ -912,7 +1217,7 @@ async function main() {
 
   // 位置参数 PR id：只认未被带值 flag 消费的独立数字参数——`conflicts --source 123 --target x` 的
   // 123 是 flag 值不是 id（2026-10-24 复核 E4：纯数字分支名曾被误判进 PR-id 模式发 HTTP）
-  const VALUE_FLAGS = new Set(['--source', '--target', '--body-file', '--base', '--project', '--repo', '--remote', '--status', '--limit', '--api-version', '--pat-file']);
+  const VALUE_FLAGS = new Set(['--source', '--target', '--body-file', '--base', '--project', '--repo', '--remote', '--status', '--limit', '--api-version', '--pat-file', '--build', '--top']);
   let idArg = '';
   for (let i = 1; i < argv.length; i++) {
     const a = argv[i];
@@ -934,6 +1239,7 @@ async function main() {
   else if (cmd === 'create') await createPr(t, pat);
   else if (cmd === 'desc') await updateDesc(t, pat, idArg);
   else if (cmd === 'conflicts') await conflicts(t, pat, idArg);
+  else if (cmd === 'checks') await checks(t, pat, idArg);
 }
 
 main().catch((e) => {

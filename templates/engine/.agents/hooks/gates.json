@@ -74,6 +74,15 @@
       "timeout": 10,
       "name": "usage-collect",
       "statusMessage": "usage 观测腿（PostToolUse/Agent 只追加 jsonl，不回写不拦截，缺 usage 零写入）"
+    },
+    {
+      "id": "session-context",
+      "event": "SessionStart",
+      "tool": "session",
+      "script": ".agents/hooks/session-context.cjs",
+      "timeout": 10,
+      "name": "session-context",
+      "statusMessage": "会话入口路由令（SessionStart 只注入指针，无决策面；session-context.local.json 可关）"
     }
   ]
 }

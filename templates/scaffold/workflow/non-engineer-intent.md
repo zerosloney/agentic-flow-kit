@@ -45,6 +45,10 @@ Date: <YYYY-MM-DD>
 - 状态只能由产品 owner 改；agent 不自行把 draft 改成 approved。
 - 一个 intent 只解决一个问题；拆得开就拆。
 
+## 看进展（出口）
+
+- 提交 intent 后想一眼看到进展、待拍板与风险：让能跑命令的人执行 `flow-kit run owner-digest`（默认近 7 天，`--days N` 调窗），输出「已完成 / 等我拍板 / 风险」三段摘要；只读，不改仓库文件。
+
 ## 技术侧配合
 
 - 仓库里跑 `flow-kit run fill-intent.mjs` 可生成骨架（有引擎时）。

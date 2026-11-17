@@ -179,6 +179,55 @@ test('claude wires the PostToolUse/Agent usage observation leg and doctor accept
   assert.equal(check.ok, true, JSON.stringify(check));
 });
 
+test('claude wires the SessionStart routing leg idempotently; undeclared hosts degrade to advisory', () => {
+  const dir = tmpRepo();
+  const r = install(dir, 'claude');
+  assert.equal(r.status, 0, r.stderr);
+  const file = hookFile('claude', dir);
+  const config = readJson(file);
+  assert.deepEqual(config.hooks.SessionStart, [{
+    matcher: 'startup|resume|clear|compact|fork',
+    hooks: [{ type: 'command', command: 'flow-kit hook session-context', timeout: 10 }],
+  }]);
+  // 注入腿不触碰两道门与 usage 观测腿
+  assert.deepEqual(config.hooks.PreToolUse.map((group) => group.matcher), ['Write|Edit|MultiEdit', 'Bash']);
+  assert.deepEqual(config.hooks.PostToolUse.map((group) => group.matcher), ['Agent']);
+  const doctor = json(run(['doctor', '--target', '.', '--json'], dir));
+  const wiring = doctor.checks.find((item) => item.name === 'hooks claude');
+  assert.equal(wiring.ok, true, JSON.stringify(wiring));
+  assert.equal(doctor.checks.some((item) => item.name === 'guarantee claude'
+    && /session-context/.test(item.detail)), false);
+
+  // 幂等重放：升级不重写文件、不重复追加注入腿
+  const before = fs.readFileSync(file, 'utf8');
+  assert.equal(run(['upgrade', '--target', '.', '--json'], dir).status, 0);
+  assert.equal(fs.readFileSync(file, 'utf8'), before);
+  assert.equal(before.split('flow-kit hook session-context').length - 1, 1);
+
+  // 用户开关归用户所有：默认不写、不进 manifest，写了升级也不覆盖（口径同 model-roles.local.json）
+  const localRel = '.agents/config/session-context.local.json';
+  assert.equal(fs.existsSync(path.join(dir, localRel)), false);
+  assert.ok(!readJson(path.join(dir, '.agents/install-manifest.json')).files[localRel]);
+  fs.writeFileSync(path.join(dir, localRel), '{"enabled":false}\n', 'utf8');
+  assert.equal(run(['upgrade', '--target', '.', '--json'], dir).status, 0);
+  assert.equal(fs.readFileSync(path.join(dir, localRel), 'utf8'), '{"enabled":false}\n');
+
+  // 未声明 SessionStart 的宿主：编译期过滤 + doctor guarantee advisory，接线对账不误报
+  const other = tmpRepo();
+  assert.equal(install(other, 'codebuddy').status, 0);
+  assert.equal(readJson(hookFile('codebuddy', other)).hooks.SessionStart, undefined);
+  const otherDoctor = json(run(['doctor', '--target', '.', '--json'], other));
+  const advisory = otherDoctor.checks.find((item) => item.name === 'guarantee codebuddy'
+    && /session-context/.test(item.detail));
+  assert.ok(advisory, JSON.stringify(otherDoctor.checks));
+  assert.equal(advisory.ok, true);
+  assert.equal(advisory.warn, true);
+  assert.match(advisory.detail, /SessionStart\/session/);
+  assert.match(advisory.detail, /宿主未声明该事件/);
+  assert.equal(otherDoctor.checks.find((item) => item.name === 'hooks codebuddy').ok, true);
+  assert.equal(otherDoctor.summary.failed, 0);
+});
+
 test('doctor reports inapplicable hook spec entries as a guarantee advisory', () => {
   // codebuddy 只声明 PreToolUse：usage-collect（PostToolUse/agent）编译时被静默过滤，
   // doctor 必须给 guarantee advisory 而非置词全无；接线对账不误报。
@@ -282,6 +331,7 @@ test('invalid hook specs are rejected and merge is a no-op on empty input', () =
   const root = { hooks: { PreToolUse: [] } };
   assert.equal(mergeHooksIntoRoot(root, [], HOSTS.claude.hooks.events), false);
   const drift = findHookDrift(root, spec(), HOSTS.claude.hooks.events);
-  assert.equal(drift.missing.length, 3);
+  // claude 声明全部四腿（写前门 / 命令门 / usage 观测 / 会话入口注入），空 root 即四条全缺。
+  assert.equal(drift.missing.length, 4);
   assert.equal(drift.extra.length, 0);
 });

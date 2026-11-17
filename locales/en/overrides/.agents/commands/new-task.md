@@ -38,7 +38,7 @@ After grading and before starting work, **copy verbatim** the step headings of t
 
 | Stage | Load on entry |
 |---|---|
-| Plan (intent) | `grilling` (questioning to solidify background/goals/non-goals) |
+| Plan (intent) | `grilling` (questioning to solidify background/goals/non-goals); `wayfinder` for a cross-session open surface (decision map, one open question at a time) |
 | Design (spec) | `grilling` (ambiguity checklist / solution stress test); `codebase-design` / `domain-modeling` as needed; `arena` for branching comparison; required inputs see `stages.md` Design §2 |
 | Build | No mandatory skill (implementation delegation goes through the `implementer` role) |
 | Test | `verify-ui` for frontend changes; `review-method` for L2/L3 independent review |

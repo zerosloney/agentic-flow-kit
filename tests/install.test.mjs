@@ -50,6 +50,8 @@ test('fresh install creates engine, host, scaffold and manifest', () => {
     'wiki/知识沉淀总览.html',
     'workflow/INDEX.md',
     'workflow/intents/_TEMPLATE.md',
+    'workflow/glossary.md',
+    'workflow/adr/_TEMPLATE.md',
     '.gitattributes',
     '.gitignore',
     'wiki/产品需求/.gitkeep',
@@ -171,6 +173,14 @@ test('claude install writes native skills and role models', () => {
   const skill = read(dir, '.claude/skills/verify-ui/SKILL.md');
   assert.match(skill, /\.agents\/skills\/verify-ui\/SKILL\.md/);
   assert.match(skill, /指针壳/);
+  // §1c 阶段装载表绑定的技能必须随包落盘，并生成宿主指针壳（BACKLOG #15 / #20）。
+  const manifestFiles = JSON.parse(read(dir, '.agents/install-manifest.json')).files;
+  for (const name of ['grilling', 'codebase-design', 'domain-modeling', 'wayfinder']) {
+    assert.ok(exists(dir, `.agents/skills/${name}/SKILL.md`), `missing engine skill ${name}`);
+    const shell = read(dir, `.claude/skills/${name}/SKILL.md`);
+    assert.match(shell, new RegExp(`\\.agents/skills/${name}/SKILL\\.md`));
+    assert.ok(manifestFiles[`.claude/skills/${name}/SKILL.md`], `${name} shell must be manifest-managed`);
+  }
   assert.match(read(dir, '.claude/agents/implementer.md'), /^model: haiku$/m);
   assert.match(read(dir, '.claude/agents/independent-reviewer.md'), /^model: opus$/m);
 

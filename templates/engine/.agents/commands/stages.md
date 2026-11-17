@@ -185,7 +185,7 @@ L1 不在本章起草 plan，回 `.agents/commands/new-task.md` §L1 快速道�
 **Input**: `workflow/plans/{name}.md` (Approved，含落盘的改动面与任务清单)
 **Process**:
 1. **会话重入**（压缩 / 新会话 / 交接续作必走）: 读 plan 任务清单勾选态 + `git status` / `git diff` 现场比对 $\rightarrow$ 重建进度再继续。勾选态与工作树不符（勾了未提交 / 提交了未勾）$\rightarrow$ 先对齐再写新代码；改动清单只在对话里时，以 plan 改动面 + 工作树为准并回填 plan
-2. **推进实现**: 按依赖执行任务——**frontier = 任务拆解中「依赖」行无未决阻塞的任务**，可并行派发（多 worktree 各自分支 / 委派「新开+合并范围」），纯顺序链即自上而下；**每完成一项立刻回填任务清单勾选与留痕**（commit SHA / 测试名 / 实测输出），并解锁依赖它的下游任务（每完成一项顺手刷新 `/tour?file=workflow/plans/{name}.md`，确认没有「文档外实际改动」）。满足 `.agents/roles/implementer.md` 边界时可委派 `implementer`（模型取 `model-roles.json`，本地覆盖优先，皆空 = 宿主默认）
+2. **推进实现**: 按依赖执行任务——**frontier = 任务拆解中「依赖」行无未决阻塞的任务**，可并行派发（多 worktree 各自分支 / 委派「新开+合并范围」），纯顺序链即自上而下；**每完成一项立刻回填任务清单勾选与留痕**（commit SHA / 测试名 / 实测输出），并解锁依赖它的下游任务（每完成一项顺手刷新 `/tour?file=workflow/plans/{name}.md`，确认没有「文档外实际改动」）。满足 `.agents/roles/implementer.md` 边界时可委派 `implementer`（模型取 `model-roles.json`，本地覆盖优先，皆空 = 宿主默认）。**派发前过切片判据（advisory，不阻断）**：每个待派任务须是一条窄而端到端可演示的垂直切片（能指着跑一次给人看），且触达面在预算内——默认 ≤5 个产品面文件、diff ≤400 行、触达文件与相关规范能装进一份上下文；超限**先拆成更小切片再派**，拆不动就在该任务「风险」行写明理由。任务行「切片」形状单源 = `workflow/plans/_TEMPLATE.md`「任务拆解」节；本节只定预算与超限处理，不新增硬门
 3. **架构约束**: 严禁自创旁路数据访问，必须遵循根/目录级 `AGENTS.md` 红线
 4. **L3 专项**: Schema 变更必须走项目约定维护方式，禁擅自引入迁移机制
 5. **变更管控**: 若需偏离 plan (改公共接口 / 动未列文件 / 引新依赖) $\rightarrow$ **HALT** $\rightarrow$ 确认后继续

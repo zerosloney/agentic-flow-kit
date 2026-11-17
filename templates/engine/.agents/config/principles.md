@@ -30,3 +30,7 @@
 | 并行编排 | 设计选型或多切片覆盖时 | `.agents/skills/arena/SKILL.md` |
 | 门轻闭环 | 想新增门/机制、扩门耗时，或发现机制纸面零使用时（用户基线 2026-10-29：门禁不能重、要简化、流程要闭环） | `workflow/gate-cost.md`（当前态单源）；`.agents/config/mechanism-registry.md`（退役棘轮） |
 | 质量门兜底 | 后端改动要判断「有没有测试兜住 / 哪些方法该先补测试」时 | `.agents/skills/csharp-quality-gates/SKILL.md`（手动触发；CRAP／变异／重复三道门） |
+| 类型面纪律 | 设计 DTO / 状态字段 / 外部输入解析，想让非法状态可表示时 | `.agents/commands/review.md` P1 走查表（API 入参边界 / 分页与状态语义 / 导入信任边界）；叠加 api 切面时另见 `.agents/notes/api-surface.md`「契约优先」 |
+| 幂等收敛 | 写命令 / 生命周期步骤 / 重试与续跑逻辑，担心中断后重放会重复落账时 | `.agents/commands/pipeline-run.md`「断点续跑 / 重试」「续跑幂等」；`.agents/skills/shipyard-workflow-closeout/SKILL.md` §5.1 重跑同一命令 |
+| 单写者先分离 | 多个 agent / 分支要写同一文件或同一张共享表时 | `.agents/skills/wiki/SKILL.md`「单写者」；`.agents/skills/arena/SKILL.md`「单写者」（先分页分臂，共享页再 `flow-kit run path-lease.mjs acquire`） |
+| 测行为不测实现 | 写或改测试、判「绿了没有」，或想改既有测试让门通过时 | `.agents/skills/review-method/SKILL.md`「可观察判据」（实现与测试同源仍可全绿）；`.agents/commands/stages.md` Test §1（禁以重跑绿关单、修复窗口写前门拒改既有测试） |

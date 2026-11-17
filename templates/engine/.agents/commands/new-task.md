@@ -38,7 +38,7 @@
 
 | 阶段 | 进入即装载 |
 |---|---|
-| Plan（intent） | `grilling`（追问压实背景/目标/非目标） |
+| Plan（intent） | `grilling`（追问压实背景/目标/非目标）；跨会话未决面 `wayfinder`（决策地图，一次解一个待决问题） |
 | Design（spec） | `grilling`（歧义清单 / 方案压力测试）；按需 `codebase-design` / `domain-modeling`；分叉比选 `arena`；必读输入见 `stages.md` Design §2 |
 | Build | 无强制技能（实现委派走 `implementer` 角色） |
 | Test | 涉前端改动 `verify-ui`；L2/L3 独立复核 `review-method` |

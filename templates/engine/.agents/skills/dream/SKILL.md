@@ -32,8 +32,10 @@ flow-kit run dream-run.mjs --execute    # 执行安全修复（仅终态件归�
 - D 错类候选（agg-judgments --retire-candidates）；
 - E 常驻面预算（rule-budget --all）；
 - E2 冷数据候选（agg-kb-usage --stale-days 90）——访问/命中遥测 + 置信度衰减，见 §5；
+- E3 验证特性地图漂移（gen-verify-feature --check + check-regression-consistency）——只出候选不改文件；无地图/无路由 loud-skip，处置走 verify-ui 月度波次；
 - G 主张依据（`claims.mjs recheck`）——只报告原文还在不在，退出码恒 0，见 §6；
 - H 经验回放（`session-log.mjs digest`）——把会话失败/纠正/拒绝聚成摘要；**无日志时明确写“无输入”**；
+- H2 技能复盘候选（`agg-skill-usage --days 90`）——失用（窗口内零提及）+ 关联（correction/failure/refusal 行提及技能名）两类候选，只报告不改正文；正文漂移归 B 与 `skills lint`，改正文须先走 `skills/eval` 双臂 + `agent-eval record`；
 - I 记忆表示（`memory-wiki.mjs --check`）——`wiki/_memory/` 是否与 claims/incidents/session-logs 同步；
 - J 注入层预算与上浮候选（`memory-tier.mjs audit/suggest`）——200 行 / 25KB 预算，候选只读；
 - J2 记忆生命周期（`memory-lifecycle.mjs report --check`）——状态迁移确定性、冲突消解、注入托管块最新与预算内；
@@ -53,6 +55,7 @@ flow-kit run dream-run.mjs --execute    # 执行安全修复（仅终态件归�
 
 - 错类候选：按 `.agents/skills/papercut-fix/SKILL.md` 错题回路处置（≥3 次立规则，落点阶梯 类型→门禁→测试→冒烟→prompt）。
 - 核验发现：修正笔记 / 登记 `workflow/papercuts.md`。
+- 技能复盘候选（H2）：失用先判「是否真该装载」（零提及 ≠ 未装载），关联候选按证据指针核对原文；改技能正文须先按 `.agents/skills/eval/SKILL.md` 跑双臂 + `agent-eval record` 落凭证，正文漂移归 B 与 `skills lint`。
 
 ## 5. 处置冷数据候选
 

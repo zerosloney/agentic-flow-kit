@@ -19,6 +19,10 @@
 
 各子目录内 `_TEMPLATE.md` 为起步模板，复制后填写，不直接改动模板本身。
 
+**领域口径工件（2026-11-17）**：`glossary.md` 是术语唯一真相源（一行一术语：定义 / 代码里的名字 / 反例 / 依据）；`adr/` 存架构决策记录（`YYYY-MM-DD-<主题>.md`，状态 proposed/accepted/superseded，被取代改状态不删除）。两者不是四类文档、不走 `状态` 状态机、不经 confirm-doc 迁移；写法与触发单源 = `.agents/skills/domain-modeling/SKILL.md`，真相源登记见 `artifact-sources.md`。改写它们若触及已 approved 文档的承诺面，仍须按上文「承诺面绑定」重新点头。
+
+**探索态工件（2026-11-17）**：`decision-maps/` 存跨会话工作的决策地图（`YYYY-MM-DD-<主题>.md`，一行一个**待决问题**；地图状态 open/closed、节点状态 open/decided/dropped 均为本地枚举）。同样不属四类文档、不走 `状态` 状态机、不经 confirm-doc 迁移、不进 `workflow/INDEX.md`；写法与触发单源 = `.agents/skills/wayfinder/SKILL.md`，真相源登记见 `artifact-sources.md`。节点答案的正文送 ADR / 术语表 / intent / spec，地图只留指针；答案若触及已 approved 文档的承诺面，仍须按上文「承诺面绑定」重新点头。
+
 根目录 `regression-checklist.md` 为**活文档回归清单**：deploy 回归必过条目与 incident 防复发验证的统一落点，随模块上线补充、随 incident 追加。
 
 **三份 append-only 台账已分片**（2026-10-13 ledger-shard-ledgers）：`regression-checklist` / `delegations` / `papercuts` 的数据行按月存 `workflow/<台账>.d/<YYYY-MM>.md`，主台账只留说明、表头与 GENERATED 区——消除「每次追加全量重写整文件」的体积与合并冲突面。读写单源 = `.agents/scripts/ledger-shards.mjs`（读侧自动合并主台账 ∪ 全部分片，既有消费者无需改动）；追加一行用 `flow-kit run ledger-shards.mjs --append <台账> --row "<行>"`。（第四份 `deploy-observations` 已随 deploy 仪式退役删除——2026-10-29 owner 拍板：实际发布不走 tag/24h 观察仪式，合入 = PR 创建→审查→回归→合并→归档，见 `deploy.md` 头注。）confirmations.d 分片始于 2026-10，2026-09 无分片（该月确认仅 git 口径可溯，历史缺口不回补）；jsonl 各台账 schema 代际以字段有无自描述（如 quoteGrounding 自 2026-10-24 起），不设版本字段（2026-11-05 决策）。

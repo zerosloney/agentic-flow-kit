@@ -2,8 +2,8 @@
 // dream-run — 离线梦境最小审计（2026-11-11，对照 Anthropic《The components of agent memory》）
 // 定位：可手动/定时触发的只读审计编排器。不发明新判定，只编排现有脚本完成「离线梦境」
 //   职能：修剪陈旧(A) / 拓扑修复(B) / Judge 对账(C) / 错类候选(D) / 记忆负债(E) /
-//   冷数据候选(E2) / 主张依据(G，只报告 quote 还在不在) / 经验回放(H，会话摘要) /
-//   记忆表示(I，memory-wiki) / 注入层预算与上浮候选(J) / 交付结果指标(K)，
+//   冷数据候选(E2) / 验证地图漂移(E3) / 主张依据(G，只报告 quote 还在不在) / 经验回放(H，会话摘要) /
+//   技能复盘候选(H2) / 记忆表示(I，memory-wiki) / 注入层预算与上浮候选(J) / 交付结果指标(K)，
 //   末尾追加 AI Judge 阶段(F)：抽取活跃 workflow 文档 + git 历史 + 确认/验证台账证据，
 //   生成抽样审计简报（tmp/dream-judge-brief-<date>.md），交由主智能体在下个会话委托
 //   independent-reviewer 角色核验——脚本只做采样与证据收集，判断由 AI 执行。
@@ -135,6 +135,27 @@ section('E2. 冷数据候选（agg-kb-usage --stale-days 90）');
 const cold = run('.agents/scripts/agg-kb-usage.mjs', ['--stale-days', '90']);
 add(cold.ok ? cold.out.trim() : `⚠ 冷数据统计失败: ${cold.err || cold.out}`);
 
+// ---------- 阶段 E3：验证特性地图漂移（只读对账，复用既有两腿，不新增判定） ----------
+// 覆盖腿（路由有地图无）= 项目侧 verify-ui 生成器；悬空腿（地图有路由/资产无）= 包内对账脚本。
+// 两腿都只出候选：改地图/补实测由主智能体按 verify-ui 月度波次处置，本阶段零写操作。
+// 机制登记：并入 mechanism-registry「Dreaming 持续运行链路」行（E2/E3），不新增机制行——
+//   一进一出以「合并进既有机制」满足；该行单行 896B 上限放不下增量理由，故理由留此注释。
+section('E3. 验证特性地图漂移（gen-verify-feature --check + check-regression-consistency）');
+const featureGen = path.join(ROOT, '.agents', 'skills', 'verify-ui', 'scripts', 'gen-verify-feature.mjs');
+if (!fs.existsSync(featureGen)) {
+  add('- ℹ️ loud-skip：项目侧无 verify-ui 生成器（.agents/skills/verify-ui/scripts/）——不判红');
+} else {
+  const cov = run(featureGen, ['--check']);
+  const covLabel = cov.status === 1 ? '覆盖缺口' : '覆盖腿未跑通';
+  const covOut = cov.out.trim() || cov.err;
+  add(cov.ok ? indent(covOut) : `- ${covLabel}（候选，不改文件）:\n${indent(covOut)}`);
+}
+const mapRefs = run('.agents/scripts/check-regression-consistency.mjs', []);
+const refLabel = mapRefs.status === 1 ? '地图/清单悬空引用' : '悬空腿未跑通';
+const refOut = mapRefs.out.trim() || mapRefs.err;
+add(mapRefs.ok ? indent(refOut) : `- ${refLabel}（候选，不改文件）:\n${indent(refOut)}`);
+add('- 处置：月度波次只对触及特性跑一次实测，修正最多一笔提交（口径 .agents/skills/verify-ui/SKILL.md 特性地图节）');
+
 // ---------- 阶段 G：主张依据（只报告，不写账） ----------
 section('G. 主张依据（claims recheck，只报告）');
 let claimRecheck = { held: 0, broken: 0, results: [] };
@@ -162,6 +183,19 @@ if (sess.ok) {
 } else {
   add(`⚠ 会话摘要失败: ${sess.err || sess.out}`);
 }
+
+// ---------- 阶段 H2：技能复盘候选（只报告，复用 session-log 经验面，不新增台账） ----------
+// 两类候选：失用（窗口内零提及）+ 关联（correction/failure/refusal 行提及技能名）。
+// 正文漂移**不在此判定**——既有面 = B 阶段 gen-engine-map --check + `flow-kit skills lint`
+//   （lockfile 正文漂移 / 触发词冲突），再判一遍就是条目 17 同型的重复判定。
+// 改技能正文须先走 skills/eval 双臂 + agent-eval record 落凭证；本阶段零写操作，只出候选与指针。
+// 数据源 = `.agents/cache/session-logs/*.jsonl` 的**文本提及**，不是装载遥测（引擎无技能装载埋点）：
+//   零提及 ≠ 未装载，故只出候选；「有数据月」不足时不产失用候选（同 agg-kb-usage / agg-judgments 口径）。
+// 机制登记：并入 mechanism-registry「Dreaming 持续运行链路」行（E2/E3 → E2/E3/H2），不新增机制行——
+//   一进一出以「合并进既有机制」满足；该行单行 896B 上限放不下增量理由，故理由留此注释（同 E3）。
+section('H2. 技能复盘候选（agg-skill-usage --days 90）');
+const skillReview = run('.agents/scripts/agg-skill-usage.mjs', ['--days', '90']);
+add(skillReview.ok ? indent(skillReview.out.trim()) : `⚠ 技能复盘候选失败: ${skillReview.err || skillReview.out}`);
 
 // ---------- 阶段 I：记忆表示（memory-wiki） ----------
 section('I. 记忆表示（memory-wiki --check）');

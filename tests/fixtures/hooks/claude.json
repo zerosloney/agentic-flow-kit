@@ -31,5 +31,16 @@
         "timeout": 10
       }
     ]
+  },
+  {
+    "event": "SessionStart",
+    "matcher": "startup|resume|clear|compact|fork",
+    "hooks": [
+      {
+        "type": "command",
+        "command": "flow-kit hook session-context",
+        "timeout": 10
+      }
+    ]
   }
 ]

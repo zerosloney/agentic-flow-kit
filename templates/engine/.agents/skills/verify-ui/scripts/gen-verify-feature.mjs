@@ -6,6 +6,8 @@
 // 口径：顶层路由 = router 里一段路径（排除 /login、/、/home、含 :param 的动态路由）。
 //   覆盖 = 任一 features/*.md 提到该路由（#/route 或 /route）。
 //   生成只写骨架（四段 H2 + TODO），不编造驱动步骤；填完再用于实测。
+//   只读对账（--check/--json/默认列举）在无路由表或无地图时 loud-skip 落绿：本仓不适用 ≠ 漂移，
+//   判红会让 --check 在每个非 Vue 前端仓恒红、进不了 CI（2026-11-17）。--route 生成仍严格失败。
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -19,6 +21,16 @@ const asJson = argv.includes('--json');
 const check = argv.includes('--check');
 const routeArg = argOf('--route');
 
+// loud-skip：只读对账遇到「本仓不适用」时落绿并说明原因，不判红（--json 带 skipped 供机器区分）。
+function loudSkip(reason) {
+  if (asJson) {
+    console.log(JSON.stringify({ skipped: true, reason, topLevel: [], covered: [], uncovered: [] }, null, 2));
+  } else {
+    console.log(`ℹ️  特性地图对账 loud-skip：${reason}——不判红（本仓不适用）`);
+  }
+  process.exit(0);
+}
+
 const root = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' });
 if (root.status !== 0 || !root.stdout.trim()) {
   console.error('gen-verify-feature: 不在 git 仓库');
@@ -27,8 +39,11 @@ if (root.status !== 0 || !root.stdout.trim()) {
 const ROOT = root.stdout.trim();
 const routerPath = path.join(ROOT, 'frontend', 'src', 'router', 'index.ts');
 if (!fs.existsSync(routerPath)) {
-  console.error('gen-verify-feature: 未找到 frontend/src/router/index.ts');
-  process.exit(2);
+  if (routeArg) {
+    console.error('gen-verify-feature: 未找到 frontend/src/router/index.ts');
+    process.exit(2);
+  }
+  loudSkip('未找到 frontend/src/router/index.ts');
 }
 const routes = new Set();
 for (const m of fs.readFileSync(routerPath, 'utf8').matchAll(/path:\s*'([^']+)'/g)) {
@@ -42,12 +57,13 @@ const topLevel = [...routes].filter((r) => {
 }).sort();
 
 const featuresDir = path.join(ROOT, '.agents', 'skills', 'verify-ui', 'features');
+const mapFiles = fs.existsSync(featuresDir) ? fs.readdirSync(featuresDir).filter((x) => x.endsWith('.md')) : [];
+// 无地图 = 还没建图（不是漂移）：只读对账 loud-skip；--route 是建图入口，必须继续。
+if (!routeArg && mapFiles.length === 0) loudSkip('features/ 无特性地图');
 const covered = new Set();
-if (fs.existsSync(featuresDir)) {
-  for (const f of fs.readdirSync(featuresDir).filter((x) => x.endsWith('.md'))) {
-    const text = fs.readFileSync(path.join(featuresDir, f), 'utf8');
-    for (const m of text.matchAll(/#?(\/[A-Za-z0-9_./:-]+)/g)) covered.add(m[1]);
-  }
+for (const f of mapFiles) {
+  const text = fs.readFileSync(path.join(featuresDir, f), 'utf8');
+  for (const m of text.matchAll(/#?(\/[A-Za-z0-9_./:-]+)/g)) covered.add(m[1]);
 }
 const uncovered = topLevel.filter((r) => !covered.has(r));
 

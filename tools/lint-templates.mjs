@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// 模板一致性 lint：frontmatter、i18n 覆盖、运行态污染、渲染矩阵与引用可解析性。
+// 模板一致性 lint：frontmatter、阶段装载表引用、i18n 覆盖、运行态污染、渲染矩阵与引用可解析性。
 // 只读；零依赖。`npm run lint:templates` 在 CI 与本地执行，失败退出 1。
 import fs from 'node:fs';
 import os from 'node:os';
@@ -15,6 +15,8 @@ import { HOST_DEFINITION_KEYS, HOOK_FORMS, validateHostDefinition } from '../src
 import { RUNTIME_SCRIPTS, RUNTIME_HOOKS, resolveRuntimeScript, resolveRuntimeHook } from '../src/commands/runtime.mjs';
 import { readKitVersion } from '../src/commands/install.mjs';
 import { LANGUAGES } from '../src/i18n.mjs';
+// description 预算单源（BACKLOG #26）：与 src/skills/lint.mjs 共用同一常量。
+import { DESCRIPTION_BUDGET } from '../src/skills/lint.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ROOT = path.resolve(HERE, '..');
@@ -72,7 +74,7 @@ function checkFrontmatter(root, result) {
       const fm = parseFrontmatter(fs.readFileSync(abs, 'utf8'));
       if (fm.name !== entry) sec.errors.push(`${rel}: frontmatter name must equal "${entry}" (got "${fm.name || ''}")`);
       if (!fm.description) sec.errors.push(`${rel}: frontmatter description is required`);
-      else if (fm.description.length > 1024) sec.errors.push(`${rel}: description exceeds 1024 chars`);
+      else if (fm.description.length > DESCRIPTION_BUDGET) sec.errors.push(`${rel}: description exceeds ${DESCRIPTION_BUDGET} chars`);
     }
   }
 
@@ -213,6 +215,58 @@ function collectRefs(text, pattern) {
   return out;
 }
 
+// §1c 阶段装载表用裸技能名（`grilling`）而不是路径引用，渲染矩阵的路径正则看不见它。
+// 这里单独解析装载表：表里「进入即装载」的每个技能/角色必须真的随包分发。
+const STAGE_TABLE_HEADERS = [['阶段', '进入即装载'], ['Stage', 'Load on entry']];
+
+function stageLoadTokens(text) {
+  const lines = String(text).split(/\r?\n/);
+  for (let i = 0; i < lines.length; i += 1) {
+    const cells = lines[i].split('|').map((cell) => cell.trim());
+    if (!STAGE_TABLE_HEADERS.some(([a, b]) => cells.includes(a) && cells.includes(b))) continue;
+    const tokens = new Set();
+    for (let j = i + 1; j < lines.length; j += 1) {
+      const line = lines[j].trim();
+      if (!line.startsWith('|')) break;
+      const cols = line.split('|').slice(1, -1).map((cell) => cell.trim());
+      if (cols.length < 2 || /^[-:\s]+$/.test(cols[0])) continue;
+      for (const [, token] of cols[1].matchAll(/`([^`]+)`/g)) {
+        if (/^[a-z0-9][a-z0-9-]*$/.test(token)) tokens.add(token);
+      }
+    }
+    return tokens;
+  }
+  return null;
+}
+
+function checkStageSkills(root, result) {
+  const sec = section('stage-skills');
+  result.sections.push(sec);
+  const sources = [
+    ['templates/engine/.agents/commands/new-task.md', true],
+    ['locales/en/overrides/.agents/commands/new-task.md', false],
+  ];
+  for (const [rel, required] of sources) {
+    const abs = path.join(root, rel);
+    if (!fs.existsSync(abs)) {
+      if (required) sec.errors.push(`${rel}: file not found`);
+      continue;
+    }
+    const tokens = stageLoadTokens(fs.readFileSync(abs, 'utf8'));
+    if (!tokens) {
+      sec.errors.push(`${rel}: §1c stage loading table not found`);
+      continue;
+    }
+    for (const token of tokens) {
+      const skill = path.join(root, 'templates/engine/.agents/skills', token, 'SKILL.md');
+      const role = path.join(root, 'templates/engine/.agents/roles', `${token}.md`);
+      if (fs.existsSync(skill) || fs.existsSync(role)) continue;
+      sec.errors.push(`${rel}: stage table loads "${token}" but neither .agents/skills/${token}/SKILL.md nor .agents/roles/${token}.md is distributed`);
+    }
+  }
+  return sec;
+}
+
 function checkRender(root, result) {
   const sec = section('render');
   result.sections.push(sec);
@@ -323,10 +377,11 @@ function checkRender(root, result) {
   return sec;
 }
 
-export function runLint({ root = DEFAULT_ROOT, external = true, checks = ['definitions', 'frontmatter', 'i18n', 'render'] } = {}) {
+export function runLint({ root = DEFAULT_ROOT, external = true, checks = ['definitions', 'frontmatter', 'stage-skills', 'i18n', 'render'] } = {}) {
   const result = { root, ok: false, sections: [] };
   if (checks.includes('definitions')) checkDefinitions(root, result);
   if (checks.includes('frontmatter')) checkFrontmatter(root, result);
+  if (checks.includes('stage-skills')) checkStageSkills(root, result);
   if (checks.includes('i18n')) checkI18n(root, result, { external });
   if (checks.includes('render')) checkRender(root, result);
   result.ok = result.sections.every((sec) => sec.errors.length === 0);

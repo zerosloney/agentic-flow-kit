@@ -70,8 +70,8 @@ description: UI 改动实测（只读验证、不留脏数据）。第一选择 
 - `features/` 每核心特性一文件，四段缺一不建：到达路径 / 驱动 / 可观察终态 / Gotchas。
 - 实测与关单抽验按地图取覆盖面；当前覆盖面以 `features/` 目录为准。
 - 新页面或新主链上线时同步建文件；以 `frontend/src/router/index.ts` 路由为源波次：路由有、地图无 = 待补；地图有、路由无 = 待删或改写。
-- 覆盖缺口 / 骨架：`node .agents/skills/verify-ui/scripts/gen-verify-feature.mjs --check`（或 `--json`）列未覆盖路由；`--route <path>` 只写四段 H2 + TODO 骨架，禁编造驱动步骤。
-- 月度漂移维护：① 取路由 / 组件近月 diff 作源波次；② 只对触及特性跑一次实测；③ 修正最多一笔提交。
+- 覆盖缺口 / 骨架：`node .agents/skills/verify-ui/scripts/gen-verify-feature.mjs --check`（或 `--json`）列未覆盖路由；`--route <path>` 只写四段 H2 + TODO 骨架，禁编造驱动步骤。只读对账在无路由表或 `features/` 无地图时 loud-skip 落绿（本仓不适用 ≠ 漂移，`--json` 带 `skipped`），故 `--check` 可入 CI；`--route` 生成仍严格失败。
+- 月度漂移维护（周期触发点 = `flow-kit run dream-run` 阶段 E3，只读跑覆盖腿 + 悬空腿出候选，不改文件）：① 取路由 / 组件近月 diff 作源波次；② 只对触及特性跑一次实测；③ 修正最多一笔提交。
 - 每个失败先判定「地图漂移」或「代码缺陷」：前者改地图，后者进 incident，禁混写。
 - 前置条件缺失 → 按失败记录并把原因写进该特性 Gotchas；禁为通过而弱化验证路径。
 - 发现页面 / 行为与地图不符 → 先修地图再出结论。

@@ -1,6 +1,6 @@
 ---
 name: tfs-pr
-description: Internal self-hosted TFS / Azure DevOps Server PR skill, project-agnostic — auto-detects the git repository and remote to derive collection/project/repo, guides creation and saves an env var when PAT is missing; query PR / create PR (context pulls diff to distill title and description) / update PR description / conflict pre-check and worktree-isolated resolution, via REST API + PAT (the az devops extension rejects http organization URLs, so az is unavailable). Command entry .agents/skills/tfs-pr/scripts/tfs-pr.mjs.
+description: Internal self-hosted TFS / Azure DevOps Server PR, project-agnostic: derive collection/project/repo from git remote, guided PAT setup; query / create / update description / conflict pre-check + worktree fix; context: per-commit guide, checks: CI reds read-only; REST + PAT. Entry scripts/tfs-pr.mjs.
 ---
 
 # tfs-pr — Internal TFS / Azure DevOps Server PR (project-agnostic)
@@ -23,7 +23,7 @@ tfs-pr target                          # base/project/repo/tokenUrl/prPage, zero
 
 ## 1. PAT: read → guide → use
 Store only in environment variables (never in argv / conversation / prints): single server uses global `TFS_PAT`; multiple servers store per base hostname `TFS_PAT_<HOST>` (non-alphanumerics become `_` uppercase, e.g., `TFS_PAT_10_0_0_1`, matched preferentially).
-- Probe and guide in one command: `tfs-pr setup` — prints process/user-level status of the two variables, dynamic portal `<base>/_usersSettings/tokens` (hardcoding site IP forbidden), setx command, whoami self-check. Not configured → give the user the three steps printed by setup: portal generation (scopes check Code Read&Write + Pull Request Read&Write + **Work Items Read** — required for verifying linked work items after creation; without this scope the verification step gets 401) → `setx <variable> "<PAT>"` (effective in a new terminal) → `tfs-pr whoami` real verification (non-empty length ≠ valid PAT).
+- Probe and guide in one command: `tfs-pr setup` — prints process/user-level status of the two variables, dynamic portal `<base>/_usersSettings/tokens` (hardcoding site IP forbidden), setx command, whoami self-check. Not configured → give the user the three steps printed by setup: portal generation (scopes check Code Read&Write + Pull Request Read&Write + Build (Read) (needed by checks to locate CI) + **Work Items Read** — required for verifying linked work items after creation; without this scope the verification step gets 401) → `setx <variable> "<PAT>"` (effective in a new terminal) → `tfs-pr whoami` real verification (non-empty length ≠ valid PAT).
 - After setx the current process does not inherit: read from registry and feed the script, the value must not appear on the command line: `TFS_PAT="$(powershell -NoProfile -Command "[Environment]::GetEnvironmentVariable('TFS_PAT','User')")" tfs-pr …` (same for split variables).
 - Fallback `--pat-file` only when the user explicitly does not use env vars; clean up with `rm -f`; if PAT leaks into conversation/logs/history → at wrap-up must remind to revoke and recreate in the portal.
 
@@ -35,18 +35,19 @@ Store only in environment variables (never in argv / conversation / prints): sin
 | Verify PAT | `tfs-pr whoami` | current identity + base/project/repo + PR page |
 | List PRs | `tfs-pr list [--source <b>] [--target <b>] [--status active\|all] [--json]` | `#12 [active/succeeded] feat/x → develop <title>` |
 | Get one | `tfs-pr get <id> [--json]` | status/mergeStatus + PR page URL; JSON contains the full description |
-| Pre-create context | `tfs-pr context [--source <b>] [--target <b>] [--no-fetch] [--patch] [--json]` | commits/files/stat/overlap/conflicts/push/dirty in one shot |
+| Pre-create context | `tfs-pr context [--source <b>] [--target <b>] [--no-fetch] [--patch] [--json]` | commits/files/stat/overlap/conflicts/push/dirty in one shot, plus the guide per-commit walkthrough and noise cleanup suggestions (see §8) |
 | Create PR | `tfs-pr create [--source <b>] [--target <b>] --title <t> --body-file <f\|-> [--dry-run] [--json]` | `CREATED #id …` or idempotent `EXISTING #id` |
 | Update description | `tfs-pr desc <id> --body-file <f\|-> [--dry-run] [--json]` | `UPDATED #id …` (already read back and compared) |
 | Conflict pre-check | `tfs-pr conflicts <id> [--no-fetch] [--json]` | fetch conflicts/overlap/mergeBase by PR branch |
 | Local conflict pre-check | `tfs-pr conflicts --source <b> --target <b> [--no-fetch] [--json]` | no PAT, no PR id needed |
+| CI red locator | `tfs-pr checks [<prId>] [--source <b>] [--build <id>] [--top n] [--json]` | read-only locating of failed checks (builds + timeline); CI red still exits 0, see §9 |
 
 - source defaults to current branch (detached HEAD requires `--source`); target defaults to `--target` / `TFS_TARGET` / `git config tfs-pr.target` / remote HEAD; branch names need no `refs/heads/` prefix.
 - `--body-file -` reads body from stdin, no temp file; body UTF-8 (BOM auto-stripped), Chinese and line breaks as-is.
 - `--dry-run` zero requests and no PAT needed; exit code 0 success (including EXISTING) / 1 HTTP·API·network error / 2 usage·configuration error.
 
 ## 3. Create PR: distill title and description from the diff
-1. `tfs-pr context --target <target branch> --json` (auto-fetch by default; `--no-fetch` only offline or fresh refs). Output: commits, files, stat/shortstat, overlap (both sides changed), conflicts (merge-tree; `conflictsSupported=false` means git does not support pre-check, do not treat as no conflict), push (unpushed/no remote branch), dirty (uncommitted changes).
+1. `tfs-pr context --target <target branch> --json` (auto-fetch by default; `--no-fetch` only offline or fresh refs). Output: commits, files, stat/shortstat, overlap (both sides changed), conflicts (merge-tree; `conflictsSupported=false` means git does not support pre-check, do not treat as no conflict), push (unpushed/no remote branch), dirty (uncommitted changes). Before creating the PR / reviewing, first read the attached guide per-commit walkthrough in the output to set the lens order (noise cleanup suggestions see §8).
 2. Pre-create checks: `push.unpushed` or no remote branch → normal `git push` first (if blocked by gates fix the root cause; `--no-verify` / force push forbidden); `dirty` → confirm whether uncommitted changes enter the PR, do not silently ignore; `conflicts.files` non-empty → resolve per §5 first; `overlap` non-empty but no textual conflict → manually review both changes for semantic confirmation.
 3. To see specific changes, read key files or `git diff origin/<target branch>...HEAD` (`--patch` may attach the full diff).
 4. **Title**: Conventional Commits Chinese `feat(scope): summary` (compound topics joined with `+`, about 70 characters, empty title / PR number forbidden); scope takes the main module/directory, the subject is distilled from the diff's main changes + commits, not a restatement of commit messages.
@@ -93,3 +94,19 @@ git push <remote> HEAD:<src>
 
 ## 7. Wrap-up criteria
 After query/create/update, status/mergeStatus match expectations (desc already read back and compared); **linked work items verified** (`curl -s -u ":$TFS_PAT" "<base>/<project>/_apis/git/repositories/<repo>/pullrequests/<id>/workitems?api-version=6.0"` lists them, verify each against expected work items — this repo defaults to no work-item link, non-empty must be explained; wrong links must be removed in the portal and rechecked as empty; when the PAT lacks the Work Items Read scope this step returns 401 and requires manual portal verification); PR page URL returned to the user; after conflict resolution push succeeds and conflicts no longer appear; temporary body/credential files deleted; PAT not in repository/logs/conversation, leaks reminded to revoke; report PR number, URL, status/mergeStatus, and verification actually performed; if tests were not run, say so explicitly.
+
+## 8. Per-commit guide and noisy-history cleanup suggestions
+`context` attaches a `guide` (per-commit walkthrough, chronological order = suggested reading order; latest 50 commits by default, truncation flagged) in both the text output and `--json`:
+- Per commit: short/subject, type/scope/breaking (`!` in the subject means breaking), parents (parent count), files (up to 8 paths listed), added/deleted (`+N/-M`), flags (conflict / overlap / breaking / revert / noise), note (hint for conflict/overlap/breaking/revert); it ends with "focus first" (focus: commits carrying non-noise flags) and the type distribution (types).
+- `noise` five cleanup suggestion kinds (fixup / merge / wip / non-conventional / duplicate), one suggestion each; suggestions only, the script never runs the rewrite for you.
+- `notice` comes in two authorization wordings: pushed history → rewriting it (rebase/squash + force push) **requires explicit user authorization**, and neither the script nor this skill runs it for you — without authorization keep the original history and record the noise in the PR description so reviewers know; unpushed (or push state unknown) → tidy locally before pushing; once pushed, rewriting likewise requires explicit user authorization (force push forbidden, see §5).
+- Hard boundary: on history cleanup this skill is read-only and advisory — it never merges automatically, never force-pushes automatically, and never runs rebase/squash for you; cleaning pushed history requires explicit user authorization before acting, and only for the exact cleanup the user named.
+
+## 9. CI red: locate failed checks and focus the fix
+`tfs-pr checks [<prId>] [--source <b>] [--build <id>] [--top n] [--json]`: read-only locating of failed checks; CI red does not change the exit code (still exits 0), takes no part in gates, queues no builds. The PAT needs the Build (Read) scope (§1; a `401 + text/html` error carries the Build scope remediation hint itself).
+- Usage: no argument → current branch; a PR id → that PR (validation builds run on `refs/pull/<id>/merge`, ordinary CI on the branch ref — both are queried and deduplicated by id); `--build <id>` targets a build directly; `--top n` caps the build count (default 10, max 100).
+- Output: builds list (id/buildNumber/result/status/reason/branch/repository, non-matching repos flagged) → analyzes the latest build's timeline: failed records give `FAIL [type] name`, the path parent chain, errors=errorCount, warnings, attempt, issue messages (`type: message`, at most 5), and a log pointer (URL or logId, body not fetched); `WARN` = succeededWithIssues. No issue details in the timeline → fetch the log body via the log pointer.
+- Verdict `CI=red|green|running|canceled|no-builds|unknown`: never treat running as green; rerun checks later.
+- No builds = loud-empty: states branch/pr/repository and likely causes (CI not configured/not triggered, branch not pushed, build definition in another project, old TFS not supporting the filter), with two ways out: `--build <id>` or manual inspection on the `_build` page.
+- Builds matched by branch whose repository name mismatches this repo → a repoNote is printed, listing all and asking to target this repo's build with `--build <id>`.
+- Action on `CI=red`: locate the file/line via the FAIL issues → change only that → run the corresponding local tests → push and rerun checks to confirm; do not enter review before the focused fix is done (run checks before dispatching finders in pr-review). No automatic merge, no force push, no gate bypass.

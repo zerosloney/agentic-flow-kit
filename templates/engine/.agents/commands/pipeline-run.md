@@ -37,12 +37,14 @@ next: 按 run 停机点循环推进至 done
 | `done <runId>` | 汇报总结 (阶段条/门数/提交链) | 流程结束 |
 | `aborted <runId>` | 汇报放弃态与留档位置 | 流程结束 |
 
+> CI 红与 PR 冲突不新增停机类型：一律走既有 `gate-fail` / `await-confirm` 停机；`tfs-pr checks` 只是只读定位手段，不参与门禁；禁自动合并、禁自动 force push。
+
 ### 工单类型执行矩阵
 
 | 工单类型 | 执行要求 | 进入即装载（联动，见 new-task §1c） |
 |---|---|---|
 | **triage** | 判级回填 `next --triage "kind=… level=… module=… topic=<英文kebab>"` (就高不就低) | 无；kb 检索同 new-task §L1 快速道第 2 步 |
-| **draft** | 起草指定文档 | intent→`grilling`；spec→`stages.md` Design §2「必读输入」+ `grilling`（分叉比选 `arena`）；plan→无 |
+| **draft** | 起草指定文档 | intent→`grilling`（未决问题成串且跨会话 → 先 `wayfinder` 立决策地图，节点解完再起草）；spec→`stages.md` Design §2「必读输入」+ `grilling`（分叉比选 `arena`）；plan→无 |
 | **implement / fix** | 按授权文件实现 $\rightarrow$ **偏离即停** (公共接口/计划外文件/新依赖 $\rightarrow$ 停机上报，不自行放行) | 无强制技能；fix 类根因不明先 `why` |
 | **review / closeout** | 按单产出并写入指定位 (review-only 汇报后 `--done` 收尾) | review→`review-method`（高风险 diff +`interrogate`）；closeout→`shipyard-workflow-closeout`（§0 关单自核） |
 

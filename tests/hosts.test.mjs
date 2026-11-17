@@ -57,7 +57,7 @@ test('registry covers all 12 hosts with complete, valid capabilities', () => {
 // 其余宿主无公开证据一律不接——这里守的是「只加 claude」的边界。
 test('only claude declares the PostToolUse/Agent usage observation leg', () => {
   const events = HOSTS.claude.hooks.events;
-  assert.deepEqual(events.event, ['PreToolUse', 'PostToolUse']);
+  assert.deepEqual(events.event, ['PreToolUse', 'PostToolUse', 'SessionStart']);
   assert.equal(events.matchers.agent, 'Agent');
   assert.equal(events.timeouts.agent, 10);
   for (const name of HOST_NAMES) {
@@ -66,6 +66,21 @@ test('only claude declares the PostToolUse/Agent usage observation leg', () => {
     const list = Array.isArray(declared) ? declared : [declared];
     assert.ok(!list.includes('PostToolUse'), `${name} must not wire PostToolUse`);
     assert.equal(HOSTS[name].hooks?.events?.matchers?.agent, undefined, `${name} must not declare an agent matcher`);
+  }
+});
+
+// 会话入口路由令（2026-11-17 建，BACKLOG #18）：SessionStart 仅 claude 有官方 hooks reference 实证
+// （matcher = 启动方式，Context only 无决策面）；其余宿主未声明 → 编译期过滤 + doctor guarantee advisory。
+test('only claude declares the SessionStart routing leg, with the documented source matchers', () => {
+  const events = HOSTS.claude.hooks.events;
+  assert.equal(events.matchers.session, 'startup|resume|clear|compact|fork');
+  assert.equal(events.timeouts.session, 10);
+  for (const name of HOST_NAMES) {
+    if (name === 'claude') continue;
+    const declared = HOSTS[name].hooks?.events?.event;
+    const list = Array.isArray(declared) ? declared : [declared];
+    assert.ok(!list.includes('SessionStart'), `${name} must not wire SessionStart without evidence`);
+    assert.equal(HOSTS[name].hooks?.events?.matchers?.session, undefined, `${name} must not declare a session matcher`);
   }
 });
 

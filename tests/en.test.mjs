@@ -90,6 +90,17 @@ test('en claude install writes English skill pointer and English descriptions', 
   const index = read(dir, '.trae/commands/wf-skills.md');
   assert.match(index, /Skills index/i);
   assert.match(index, /authoritative/i);
+
+  // 阶段装载表绑定的技能必须有整文件 en 覆盖，不回退中文（BACKLOG #15 / #20）。
+  for (const name of ['grilling', 'codebase-design', 'domain-modeling', 'wayfinder']) {
+    const body = read(dir, `.agents/skills/${name}/SKILL.md`);
+    assert.ok(body.includes('Idea source:'), `${name} must use the English override`);
+    assert.ok(!body.includes('思想来源'), `${name} must not fall back to the zh body`);
+    assert.match(read(dir, `.claude/skills/${name}/SKILL.md`), /Authoritative skill/i);
+  }
+  const glossary = read(dir, 'workflow/glossary.md');
+  assert.ok(glossary.includes('Maintenance discipline') && !glossary.includes('维护纪律'), 'glossary needs an English override');
+  assert.match(read(dir, 'workflow/adr/_TEMPLATE.md'), /^## Decision$/m);
 });
 
 test('en rust stack renders the English stack description', () => {

@@ -1,6 +1,6 @@
 ---
 name: dream
-description: "Offline Dreaming — periodic memory maintenance modeled on Anthropic's memory architecture: run the dream-run audit, read the report, delegate independent-reviewer to check AI Judge samples, write back papercuts/correction notes, and dispose of cold-data candidates; for use by the main agent when executing the Dreaming continuous-run loop within a session."
+description: "Offline Dreaming — periodic memory maintenance per Anthropic's memory architecture: run dream-run audit, read the report, delegate independent-reviewer on AI Judge samples, write back papercuts/correction notes, dispose cold-data candidates; for the main agent running the Dreaming loop in-session."
 ---
 
 # dream — Offline Dreaming continuous-run loop
@@ -32,6 +32,8 @@ Read the latest `tmp/dream-report-*.md`, focusing on:
 - D error-class candidates (agg-judgments --retire-candidates);
 - E resident-surface budget (rule-budget --all);
 - E2 cold-data candidates (agg-kb-usage --stale-days 90)—access/hit telemetry + confidence decay, see §5;
+- E3 verification feature-map drift (gen-verify-feature --check + check-regression-consistency)—candidates only, no file writes; loud-skip when there is no map / no router, disposition follows the verify-ui monthly wave;
+- H2 skill-review candidates (`agg-skill-usage --days 90`)—idle (zero mentions in the window) + linked (correction/failure/refusal rows naming a skill); candidates only, no body edits; body drift belongs to B and `skills lint`, and any body change must first pass the `skills/eval` dual arm plus `agent-eval record`;
 - F AI Judge sampling audit brief.
 
 ## 3. Verify AI Judge samples
@@ -47,6 +49,7 @@ Read the latest `tmp/dream-report-*.md`, focusing on:
 
 - Error-class candidates: handle via the recurring-error loop in `.agents/skills/papercut-fix/SKILL.md` (≥3 occurrences → establish a rule; placement ladder: type→gate→test→smoke→prompt).
 - Verification findings: correction notes / record in `workflow/papercuts.md`.
+- Skill-review candidates (H2): for idle ones first decide whether the skill should have loaded at all (zero mentions ≠ never loaded); check linked ones against their evidence pointers. Any skill body change must first pass the dual arm in `.agents/skills/eval/SKILL.md` plus `agent-eval record`; body drift belongs to B and `skills lint`.
 
 ## 5. Dispose of cold-data candidates
 
