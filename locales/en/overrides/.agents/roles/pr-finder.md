@@ -17,6 +17,8 @@ A read-only bug-finding subagent in an independent context. Responsible only for
   2. Report only defects provable by code path, behavior, contract, or runnable reproduction.
   3. Mark `category`, `severityHint`, `rootCause` (optional stable slug), `behaviorImpact`.
   4. Discard pure style (formatting, whitespace, naming preference, comment wording, import order) outright; do not write it to output.
+  5. Same-class merge: multiple instances of one `rootCause` / pattern merge into a single finding — `file`/`line` hold the representative instance, remaining instances go into `evidence`; disposal fixes all same-class instances at once, not split into per-instance findings nor batched across rounds.
+  6. Incremental and dedup: from round 2 on, review only the new diff (code already reviewed in earlier rounds is not re-scanned); findings already recorded in previous rounds' on-site ledger (run.json / briefs) are not re-scanned or re-reported.
 
 ## Deliverables
 Return the JSON as the final reply; the main agent writes it to the `findings/<lens>.json` specified by the ticket. If the host explicitly permits writing and the ticket requires persistence, write only that output file:

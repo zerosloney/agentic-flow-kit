@@ -54,8 +54,8 @@
 | 24 | 技能正文无写作准入：`skills lint` 只查 frontmatter/触发冲突/描述长度（pstack `writing-for-agents` / `technical-writing` / `unslop`） | `src/skills/lint.mjs` + `tests/skills.test.mjs` | 新增正文 lint（祈使句、每步可验证、禁复制他处正文=单源、长度预算）；存量技能先 advisory 出报告，硬拦只对新技能；破坏性测试必红 | DONE |
 | 25 | 无形式化验证资产（pstack `create-formal-verification-skill` / `maintain-formal-verification-skill`）【能力扩展】 | 可选技能，按栈 profile 提供，仅 `--tier enterprise` 装 | 只面向有状态机/并发高危面的项目；验证工具缺失 loud-skip 不判红；默认档安装体积零增长；若进门则登记 mechanism-registry 并进一出一 | DONE |
 | 27 | plan 任务行形状两处单源漂移：`plans/_TEMPLATE.md` 有「依赖」行无「文件」行，`fill-plan.mjs` 生成骨架有「文件」行无「依赖」行——复制模板起的 plan 过不了 `gen-dev-tour --strict` 每步文件门，生成器起的 plan 缺 frontier 依赖锚（2026-11-17 执行条目 16 时实测发现） | `templates/scaffold/workflow/plans/_TEMPLATE.md` + `locales/en/overrides/workflow/plans/_TEMPLATE.md` 补「文件」行；`templates/engine/.agents/scripts/fill-plan.mjs` 任务拆解 hint 补「依赖」行 | 两处骨架行形状一致（文件 / 判据 / 切片 / 依赖 / 风险 / 留痕）；复制模板填实的 plan 能过 `gen-dev-tour --strict`；`renderPlan({level:'L2'})` 输出含依赖行且 dev-tour 能解析出 frontier；测试覆盖「模板与生成器同形状」 | DONE |
-| 28 | 跨模型复核在新装项目不可达：`model-roles.json` 要求异构复核，但提交/仓库元数据不记录实现者模型族，复核者只能写 cross-model unavailable（2026-11-17 行为评测 en 树实测） | 提交署名模型族约定（如 commit trailer）或确认台账记录模型族，方案需过评审 | 新装树复核者能判定跨模型已满足或显式给出不可达原因；不新增硬门；zh/en 双写 | TODO |
-| 29 | PR 面板评审无收敛控制：finder/verifier 多轮往返可能重复报告既有问题、同类缺陷分批修，浪费派发预算（Anthropic 实测：一夜 50+ 轮 Review，59% 评论针对首轮已存在代码；对策=轮次上限、只审新增 diff、同类一次修完、不重复报已知） | `templates/engine/.agents/commands/pr-review.md` 流程节 + `.agents/roles/pr-{finder,verifier,adjudicator}.md` 角色契约（zh + en 同批改）；台账已落 `run.json/briefs`，补「已报问题不复报」消费规则 | 评审流程写明轮次上限（超限要求重估实现方案，不继续逐条修）；verifier 只复核新增 diff 与 escalated 项；同类问题合并单条处置；台账已有 finding 不重复派发；不新增硬门、机制须过 registry 一进一出评估；`npm test` 全绿 | TODO |
+| 28 | 跨模型复核在新装项目不可达：`model-roles.json` 要求异构复核，但提交/仓库元数据不记录实现者模型族，复核者只能写 cross-model unavailable（2026-11-17 行为评测 en 树实测） | 提交署名模型族约定（如 commit trailer）或确认台账记录模型族，方案需过评审 | 新装树复核者能判定跨模型已满足或显式给出不可达原因；不新增硬门；zh/en 双写 | DONE |
+| 29 | PR 面板评审无收敛控制：finder/verifier 多轮往返可能重复报告既有问题、同类缺陷分批修，浪费派发预算（Anthropic 实测：一夜 50+ 轮 Review，59% 评论针对首轮已存在代码；对策=轮次上限、只审新增 diff、同类一次修完、不重复报已知） | `templates/engine/.agents/commands/pr-review.md` 流程节 + `.agents/roles/pr-{finder,verifier,adjudicator}.md` 角色契约（zh + en 同批改）；台账已落 `run.json/briefs`，补「已报问题不复报」消费规则 | 评审流程写明轮次上限（超限要求重估实现方案，不继续逐条修）；verifier 只复核新增 diff 与 escalated 项；同类问题合并单条处置；台账已有 finding 不重复派发；不新增硬门、机制须过 registry 一进一出评估；`npm test` 全绿 | DONE |
 | 30 | 行为评测只在内容签名变更时强制重跑，无周期回归：凭证对当前树绿 ≠ 模型/宿主环境漂移后仍绿（Anthropic 每日在历史事故案例上跑 AI Reviewer 复评召回/误报） | CI 定时工作流（`.github/workflows/` 新增构建步骤——落地前过确认门）复跑 `agent-eval` 双臂基线出 Δ/方差报告；只读报告，不自动覆盖凭证 | 周期任务对 golden-set 双臂复跑并出报告；凭证保持人工 `record`；无凭证/环境缺失 loud-skip 不判红；零运行时依赖不变；报告不产生硬门 | TODO |
 | 31 | 发布控制面（merge queue 合并前重检、feature flag 内部灰度、分阶段通道、开关快速回滚）缺位——超出「开发工作流引擎」现定位，先过定位决策再决定是否开工【能力扩展·定位待决策】 | 定位决策先落 ADR（v2.6.0 已装 `workflow/adr/`）；若决策进入，合 main 触发条件已存在（pr-review 触发规则），补排队重检与回滚开关语义后按 ROADMAP 流程补 R 条目 | 先产出 ADR：进/不进 + 理由；不进则关闭本条并记录依据；进则回填 ROADMAP 再执行；不默认开工、不预先设计 | TODO |
 
@@ -116,7 +116,7 @@
   12/12 盲评 PASS 沿用），严格 `check` 双树 exit 0。此漂移类别（EOL 归一翻转签名）自本条目起终结：此后签名变化即真实内容变化。
 - 至此「未验证边界」中条目 15–27 的双臂评测挂账**全部清账**；下节各条目记载的是当时挂账的历史。
 
-## 落地记录（2026-11-17，条目 15–27）
+## 落地记录（2026-11-17，条目 15–29）
 
 - 新增引擎技能 `grilling` / `codebase-design` / `domain-modeling`（zh 正文 + 整文件 en 覆盖，均为本仓改写并标注思想来源，不复制上游正文）；
   新增 `workflow/glossary.md` 与 `workflow/adr/_TEMPLATE.md`（含 en 覆盖）；`artifact-sources.md` 补「领域术语」「架构决策（ADR）」两行真相源；
@@ -406,6 +406,21 @@
      条目 19 只改正文条目、未动 description——实测 en 树 `skills lint` 仍 exit 1 / 6 条同类错误（dream 357 字符等），该存量不变。
      条目 20 新增技能的 description 在预算内（zh 119 / en 247 字符）——实测 en 树仍 exit 1 / 同样 6 条存量错误，zh 树 exit 0，该存量不变。
      条目 25 新增技能 description 同在预算内（zh 148 / en 296 字符）——实测 enterprise en 树错误仍全部为该存量、无 formal-verify 新增（见 `tests/formal-verify.test.mjs`）。
+
+- 条目 28（跨模型复核可达性，2026-11-17）：方案取**台账记录**（commit trailer 不采——外泄 git 提交约定，留作后续可选增强）。
+  `independent-reviewer.md`「复核口径」必填输入加「实现者模型族」（委派工作取 delegations 委派表「被委派方」格；主智能体自做 = 请求方自报），
+  跨模型阶梯改三阶判定：①有记录且可指派异构 → 判「跨模型已满足」；②仅同族可指派 → 照跑复核记「跨模型不可得：仅同族可指派」；
+  ③无记录 → 记「跨模型不可得：无实现者模型族记录」。不可得仍是合法降级、不设硬门。scaffold `workflow/README.md` §量化补生产侧约定：
+  「被委派方」格自 2026-11-17 起记 `<子智能体/角色>@<模型族>`（存量行不回补）。已核实 `agg-delegations.mjs` 的 `actor: c[1]` 存而不用，
+  @ 后缀零破坏聚合口径。zh/en 同批（en override 语义等价短语），新增 `tests/cross-model-review.test.mjs`（2 用例）。
+- 条目 29（评审收敛控制，2026-11-17，来源③）：四规则 = 轮次上限 3（超限停逐条修、先重估整体实现方案）+ 第 2 轮起只审新增 diff +
+  台账已报 finding 不复报 + 同类问题合并单条。落点：`pr-review.md` 流程节**单条紧凑步骤 4**（上限与超限出口显式，三要素一行式，
+  细则指针到角色契约——review.md「不复述」惯例）；完整规则落 `pr-finder.md`（同类合并 + 增量去重）/ `pr-verifier.md`（增量复核 +
+  上一轮 escalated 遗留）/ `pr-adjudicator.md`（台账口径：已裁决不重复裁决）契约，zh/en 同批。
+  **预算事件**：首版命令文档步骤过详，en 安装树 `.agents/commands/` 合计 68445B 超 68096B 上限（`rule-budget` en 腿红）——
+  按表内 2026-11-06「不要继续抬上限」纪律**不抬档**，压缩后 68085B 过线（en 增量 198B）；`rule-budgets.txt` 零改动。
+  未碰 `pr-review.json` 与脚本；机制不进 registry（advisory 流程纪律、无机器判据，与 notes/pr-review-cost-discipline 同性质）。
+  验证：`npm test` 532/532 全绿（rule-budget 双语腿均绿）；`lint:templates` 5 面、`check:i18n` 143 文件、`policy:check` 36 行全绿。
 
 ## 能力扩展
 

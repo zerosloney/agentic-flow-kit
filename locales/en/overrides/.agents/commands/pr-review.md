@@ -25,6 +25,7 @@ Before review, fetch the `tfs-pr context` guide (per-commit walkthrough) to set 
 1. `plan --base <ref> --head <ref>`; for high-risk quick checks add `--fast` (single-lens tier). Artifacts land in `.agents/tmp/pr-review/<runId>/` (run.json / briefs / tasks.json)
 2. Dispatch finder / verifier subagents in parallel per `tasks.json`; role contracts in `.agents/roles/pr-finder.md`, `pr-verifier.md`, `pr-adjudicator.md`
 3. Execute in order: `collect` → `verify` → `adjudicate` (escalated items) → `dispose` → `summary`
+4. Convergence: over 3 rounds, stop per-item fixes, re-evaluate the approach; round 2+ reviews only the new diff, skips on-site-ledger findings, merges same-class items — details in role contracts
 
 ## Ledger
 

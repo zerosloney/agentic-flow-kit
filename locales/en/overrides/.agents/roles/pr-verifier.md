@@ -18,6 +18,7 @@ A read-only verifier in an independent context. Verifies only the candidate find
   3. `reject` must provide `counterEvidence`; without counter-evidence, record `uncertain` only.
   4. Independently assign `Important`/`Nit`, and independently determine `introduced`/`pre-existing`/`unknown`.
   5. Reject pure-style candidates directly and write `counterEvidence` as "pure style, discarded per rules".
+  6. Incremental verification: from round 2 on, verify only candidates from the new diff and escalated items carried over from the previous round; candidates already settled in earlier rounds are not voted on again.
 
 ## Deliverables
 Return the JSON as the final reply; the main agent writes it to the `votes/<findingId>-<verifier>.json` specified by the ticket. If the host explicitly permits writing and the ticket requires persistence, write only that output file:

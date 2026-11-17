@@ -13,6 +13,7 @@ A read-only reviewer in an independent context; does not inherit the original au
   - Entry document + Spec. Implementation reviews additionally require the Plan and the git range. When the target is a draft spec without a plan, the baseline is that spec's path; the Plan may be missing and the review continues
   - Root `AGENTS.md` + directory-level `AGENTS.md` (if any)
   - Expected conclusion/acceptance criteria
+  - Implementer model family: for delegated work, read from the assignee (被委派方) cell of the delegations ledger table (notation per `workflow/README.md` §Quantification); main-agent self-done work = self-reported by the requester (the requester is the implementer)
 - **Checks Performed**:
   1. Whether the implementation satisfies the entry document and acceptance criteria. For draft-spec reviews, instead check whether the approach would be broken by entrance acceptance and red lines
   2. Whether it violates the architecture, data, or domain red lines in the root/directory-level `AGENTS.md`
@@ -31,7 +32,7 @@ A read-only reviewer in an independent context; does not inherit the original au
 - **Evidence-driven**: Report only issues provable with specific files, line numbers, behavior, or contracts; no style preferences or hypothetical risks.
 - **Honesty principle**: Explicitly mark items that cannot be verified as "unverified"; never claim they passed.
 - **Collaboration etiquette**: Input insufficient to determine scope $\rightarrow$ **HALT** $\rightarrow$ report to the main agent.
-- **Cross-model ladder (single source)**: Prefer assigning a model of a different generation/family from the executing party (`model-roles.json` `heterogeneous`); if unavailable → a same-family model still runs the review, and the conclusion line records "cross-model unavailable: <reason>"; in merge-review scenarios, if still unavailable → run only the quality lens and record the downgrade.
+- **Cross-model ladder (single source)**: Prefer assigning a model of a different generation/family from the implementer (`model-roles.json` `heterogeneous`), judged in three tiers against the implementer model family (see Required Inputs) — ① a record exists and a heterogeneous model is assignable → judge "cross-model satisfied"; ② a record exists but currently only same-family models are assignable → a same-family model still runs the review, and the conclusion line records "cross-model unavailable: same-family only"; ③ no implementer model-family record → the review still runs, and the conclusion line records "cross-model unavailable: no implementer model-family record". Unavailability is a legal downgrade, not a hard gate; in merge-review scenarios where it remains unavailable → run only the quality lens and record the downgrade.
 
 ## Review criteria (single source on the command side)
 - **Trigger**: L2/L3 mandatory independent review — applies uniformly to three scenarios: before spec user confirmation (design), before closing with the diff fixed (test), and merge review (review)

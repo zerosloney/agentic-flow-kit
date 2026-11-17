@@ -43,7 +43,7 @@
 - **评审**：`.agents/commands/review.md`（按 P0 / P1 / P2 分级：机器兜底 + AI 自查出清单，用户决策定性与合入）
 - **PR 面板评审**：面板已退役为**手动工具**（2026-11-09 自动门退役）——pre-push / CI / pr-create 不再强制评审台账，需要时按 `.agents/commands/pr-review.md` 手动编排；建 PR 走 `flow-kit run pr-create.mjs ...`（先 gate 再调 `tfs-pr create`）
 - **上线**：`.agents/commands/deploy.md`（上线前必跑清单）
-- **量化**：委派/自做结果记 `delegations.md`，聚合跑 `flow-kit run agg-delegations.mjs`（**并发扩容门槛见该文件——数字达标前不扩并发**）；语料与常驻面体积的**月度快照**跑 `flow-kit run gen-workflow-metrics.mjs`（每月一行落 `metrics.md`，同月重跑即更新；明细看 stdout）
+- **量化**：委派/自做结果记 `delegations.md`，聚合跑 `flow-kit run agg-delegations.mjs`（**并发扩容门槛见该文件——数字达标前不扩并发**）；委派表「被委派方」格自 2026-11-17 起记 `<子智能体/角色>@<模型族>`（供 independent-reviewer 判跨模型复核；无 `@` 后缀 = 未记录；存量行不回补——同「历史缺口不回补」先例）；语料与常驻面体积的**月度快照**跑 `flow-kit run gen-workflow-metrics.mjs`（每月一行落 `metrics.md`，同月重跑即更新；明细看 stdout）
 - **追溯**：git 即审计。两条驱动路径二选一、禁混用——手动阶段路由（确认后的 workflow 文档用 `docs(workflow)` 收成一笔，代码提交另笔；L1 普通需求只有 plan，修复为 incident+plan，L2/L3 为入口+spec+plan）或 `pipeline-run` 状态机（按阶段 `docsCommit` 落同形态提交，驱动协议单源 `.agents/commands/pipeline-run.md`）。上线不走 tag/24h 观察仪式（release tag 与发布观察台账已退役，2026-10-29）。本地开发依靠 Independent Reviewer 做认知隔离自查，主干合并通过 TFS PR 团队评审与 git 历史形成完整审计证据
 - **级别**：L1 实现级（未命中 L2/L3；新需求的入口是 plan）｜ L2 规则 / 契约（编码权威 / 共享契约 / 既有接口语义 / 全局横切口径，触达面闭集见 `.agents/commands/new-task.md`）｜ L3 数据与运行时结构（schema / 迁移 SQL / DI 链 / 认证与中间件管线）。混合改动就高不就低
 

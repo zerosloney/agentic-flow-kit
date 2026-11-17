@@ -25,6 +25,7 @@ triggers:
 1. `plan --base <ref> --head <ref>`；高风险快检加 `--fast`（单镜头档）。现场落 `.agents/tmp/pr-review/<runId>/`（run.json / briefs / tasks.json）
 2. 按 `tasks.json` 并行派 finder / verifier 子代理；角色契约见 `.agents/roles/pr-finder.md`、`pr-verifier.md`、`pr-adjudicator.md`
 3. 依序执行：`collect` → `verify` → `adjudicate`（escalated 项）→ `dispose` → `summary`
+4. 收敛控制：超过 3 轮不再逐条修复，先重估整体实现方案；第 2 轮起只审新增 diff、现场台账已报 finding 不复报、同类问题合并单条——细则见角色契约
 
 ## 落账
 
