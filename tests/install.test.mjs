@@ -139,6 +139,16 @@ test('doctor passes after install', () => {
   assert.equal(r2.status, 0, r2.stdout);
 });
 
+// 回归锁：未安装目录（无 manifest）跑 doctor 不得崩——manifest 只能经可选链访问
+test('doctor on an uninstalled target reports failures without crashing', () => {
+  const dir = makeTmp('flow-kit-doctor-empty-');
+  const r = run(['doctor', '--target', '.'], dir);
+  assert.equal(r.status, 1, r.stderr);
+  assert.equal(r.stderr.trim(), '', 'no TypeError stack traces expected');
+  assert.ok(r.stdout.includes('install-manifest'), 'doctor should report the missing manifest');
+  assert.ok(r.stdout.includes('doctor 失败'), 'doctor should print its summary line');
+});
+
 test('unknown host fails with a helpful message', () => {
   const dir = tmpRepo();
   const r = run(['install', '--agent', 'nope', '--target', '.'], dir);

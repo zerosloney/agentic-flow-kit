@@ -318,7 +318,7 @@ export function doctorCommand({ args, t }) {
   // 组合式 profile：profile.json 是机器可读的组合凭证，必须与 manifest 一致。
   // 旧 profile.json 无 stacks 字段时按 [profile.stack] 归一，单栈安装照常对上。
   const surfaces = manifest?.surfaces || [];
-  const stacksList = manifest.stacks?.length ? manifest.stacks : [manifest.stack || 'empty'];
+  const stacksList = manifest?.stacks?.length ? manifest.stacks : [manifest?.stack || 'empty'];
   if (surfaces.length || stacksList.length > 1) {
     const rel = '.agents/config/profile.json';
     const abs = path.join(target, rel);
