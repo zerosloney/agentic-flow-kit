@@ -2,6 +2,22 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.8.0]
+
+### 修复
+
+- fix: __none__ 哨兵不再泄漏到模型计划展示，--model 未知宿主报错附候选列表
+- fix: CLI 入口健壮性——version/help 先于外部宿主加载、unknown command 附候选、非目录 --target 语义化报错、list-hosts 探测提示走 i18n
+- fix: 外部宿主 skills.file 改用 isRelPath 校验、hookExtras 禁止覆写 command/args——堵住反斜杠路径逃逸与已渲染命令覆盖两个信任边界缺口
+- fix: 派生重哈希按错误码分流——空 catch 把瞬时读错误（Windows EBUSY/EPERM）当生成器删文件，静默将文件从 manifest 永久除名（升级永久 skip、attest 不校验、uninstall 不清理）
+- fix: 技能 frontmatter name 采信前过 SKILL_NAME_RE——此前原样拼进宿主指针路径，../ 可逃逸宿主目录，Windows 非法字符致 flush 中途 EINVAL 半安装
+- fix: doctor 对未安装目标不再崩溃——manifest 为 null 时 stacks/stack 成员访问无守卫，空目录跑 doctor 必抛 reading 'stacks'
+- fix: wizard 体检流 argv 补齐 flags 集合——doctorCommand 内 flag() 解引用 args.flags，主菜单体检与安装后体检此前必抛 TypeError
+
+### 其他
+
+- refactor: TUI 流 manifest 读取收敛为 requireManifest，删除 modelFlow 死值 explicit
+
 ## [2.7.1]
 
 ### 修复
