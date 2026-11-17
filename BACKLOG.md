@@ -56,7 +56,7 @@
 | 27 | plan 任务行形状两处单源漂移：`plans/_TEMPLATE.md` 有「依赖」行无「文件」行，`fill-plan.mjs` 生成骨架有「文件」行无「依赖」行——复制模板起的 plan 过不了 `gen-dev-tour --strict` 每步文件门，生成器起的 plan 缺 frontier 依赖锚（2026-11-17 执行条目 16 时实测发现） | `templates/scaffold/workflow/plans/_TEMPLATE.md` + `locales/en/overrides/workflow/plans/_TEMPLATE.md` 补「文件」行；`templates/engine/.agents/scripts/fill-plan.mjs` 任务拆解 hint 补「依赖」行 | 两处骨架行形状一致（文件 / 判据 / 切片 / 依赖 / 风险 / 留痕）；复制模板填实的 plan 能过 `gen-dev-tour --strict`；`renderPlan({level:'L2'})` 输出含依赖行且 dev-tour 能解析出 frontier；测试覆盖「模板与生成器同形状」 | DONE |
 | 28 | 跨模型复核在新装项目不可达：`model-roles.json` 要求异构复核，但提交/仓库元数据不记录实现者模型族，复核者只能写 cross-model unavailable（2026-11-17 行为评测 en 树实测） | 提交署名模型族约定（如 commit trailer）或确认台账记录模型族，方案需过评审 | 新装树复核者能判定跨模型已满足或显式给出不可达原因；不新增硬门；zh/en 双写 | DONE |
 | 29 | PR 面板评审无收敛控制：finder/verifier 多轮往返可能重复报告既有问题、同类缺陷分批修，浪费派发预算（Anthropic 实测：一夜 50+ 轮 Review，59% 评论针对首轮已存在代码；对策=轮次上限、只审新增 diff、同类一次修完、不重复报已知） | `templates/engine/.agents/commands/pr-review.md` 流程节 + `.agents/roles/pr-{finder,verifier,adjudicator}.md` 角色契约（zh + en 同批改）；台账已落 `run.json/briefs`，补「已报问题不复报」消费规则 | 评审流程写明轮次上限（超限要求重估实现方案，不继续逐条修）；verifier 只复核新增 diff 与 escalated 项；同类问题合并单条处置；台账已有 finding 不重复派发；不新增硬门、机制须过 registry 一进一出评估；`npm test` 全绿 | DONE |
-| 30 | 行为评测只在内容签名变更时强制重跑，无周期回归：凭证对当前树绿 ≠ 模型/宿主环境漂移后仍绿（Anthropic 每日在历史事故案例上跑 AI Reviewer 复评召回/误报） | CI 定时工作流（`.github/workflows/` 新增构建步骤——落地前过确认门）复跑 `agent-eval` 双臂基线出 Δ/方差报告；只读报告，不自动覆盖凭证 | 周期任务对 golden-set 双臂复跑并出报告；凭证保持人工 `record`；无凭证/环境缺失 loud-skip 不判红；零运行时依赖不变；报告不产生硬门 | TODO |
+| 30 | 行为评测只在内容签名变更时强制重跑，无周期回归：凭证对当前树绿 ≠ 模型/宿主环境漂移后仍绿（Anthropic 每日在历史事故案例上跑 AI Reviewer 复评召回/误报）。**口径（2026-11-17 定）：本条落引擎侧——本仓 CI 定时复跑引擎双臂基线，保「出厂凭证」的鲜；装户侧不属本条**（装户已有随包 `ci.yml` 的 `agent-eval check --advisory` 腿管自身内容变更，要定时自加 `schedule:`；引擎侧一处定时即对全部装户背书——漂移源=模型/宿主，在语言/栈/档位渲染下同批） | `.github/workflows/` 新增定时工作流（新构建步骤——落地前过确认门；频率周跑起步，按报告噪音调）复跑 `agent-eval` 双臂基线出 Δ/方差报告；只读报告，不自动覆盖凭证 | 周期任务对 golden-set 双臂复跑并出报告；凭证保持人工 `record`；无凭证/环境缺失 loud-skip 不判红；零运行时依赖不变；报告不产生硬门 | DONE |
 | 31 | 发布控制面（merge queue 合并前重检、feature flag 内部灰度、分阶段通道、开关快速回滚）缺位——超出「开发工作流引擎」现定位，先过定位决策再决定是否开工【能力扩展·定位待决策】 | 定位决策先落 ADR（v2.6.0 已装 `workflow/adr/`）；若决策进入，合 main 触发条件已存在（pr-review 触发规则），补排队重检与回滚开关语义后按 ROADMAP 流程补 R 条目 | 先产出 ADR：进/不进 + 理由；不进则关闭本条并记录依据；进则回填 ROADMAP 再执行；不默认开工、不预先设计 | TODO |
 
 ## 落地记录（2026-11-12）
@@ -112,7 +112,7 @@
 - 全仓模板 EOL 归一（2026-11-17 晚，经用户确认执行）：templates/ + locales/ 下 586 个 LF 或混合行尾落盘文件统一转 CRLF
   （签名面 25 + 非签名面安全 280 + 混合 1 + 其余非签名面 280；逐字节内容同一性验证 586/586；shell/CI 类 LF 文件经安全排查为 0，无排除项）。
   终态 691 文件 CRLF 纯净、0 混合；git 侧 autocrlf 清洗后 diff 中性（仅剩 verify 两门修复的真实内容改动）。
-  新装树签名随之一次定型：zh **`fab13142d6f4`**、en **`f0145f530b21`**（59 敏感文件不变）；已对两值补记评测凭证（note 写明与前值内容同一、
+  新装树签名定型 fab13142d6f4/f0145f530b21（2026-11-17；规范行=tools/eval-freshness 的解析单源，zh **`fab13142d6f4`**、en **`f0145f530b21`** 59 敏感文件不变）；已对两值补记评测凭证（note 写明与前值内容同一、
   12/12 盲评 PASS 沿用），严格 `check` 双树 exit 0。此漂移类别（EOL 归一翻转签名）自本条目起终结：此后签名变化即真实内容变化。
 - 至此「未验证边界」中条目 15–27 的双臂评测挂账**全部清账**；下节各条目记载的是当时挂账的历史。
 
@@ -421,6 +421,17 @@
   按表内 2026-11-06「不要继续抬上限」纪律**不抬档**，压缩后 68085B 过线（en 增量 198B）；`rule-budgets.txt` 零改动。
   未碰 `pr-review.json` 与脚本；机制不进 registry（advisory 流程纪律、无机器判据，与 notes/pr-review-cost-discipline 同性质）。
   验证：`npm test` 532/532 全绿（rule-budget 双语腿均绿）；`lint:templates` 5 面、`check:i18n` 143 文件、`policy:check` 36 行全绿。
+- 条目 30（定时评测，2026-11-17 落地，来源③）：**口径=引擎侧**——本仓 CI 定时复算「出厂凭证」新鲜度，装户侧不属本条（装户已有随包 ci.yml 的 advisory 腿）。
+  三件套：`tools/eval-freshness.mjs`（零依赖；复用 agent-eval 的 `treeSignature`/`loadConfig`，有效期同源不自造；临时 git init 装 claude/node zh+en 双树复算签名，
+  对 BACKLOG 最后一次**规范定型行**逐树比对，定型日取该处向上最近 `（YYYY-MM-DD`；drift/stale/无基线一律 exit 0 advisory、真实异常才 exit 1、`--json` 供工作流拼正文）；
+  `.github/workflows/eval-freshness.yml`（周一 03:00 UTC cron + workflow_dispatch，`issues:write`，action-needed 时按 `eval-freshness` label 开/追评 issue、复绿自动关闭）；
+  `tests/eval-freshness.test.mjs`（7 用例：定型解析三态 / 日期三态 / 判定五态 / 端到端两态 exit 0）。
+  **行为复跑不进 CI**（无模型运行时）——报告显式指向人工双臂重评；闭环 = 漂移 → issue → 人工重评 → 新定型行入 BACKLOG → 下周复绿；凭证保持人工 record，零硬门。
+  首跑实况：规范定型行落「行为评测重跑（2026-11-17）」节（12 位双哈希）；当前树双树 MISMATCH——定型后的 2.6.1 批次与本日 #28/#29 均触及敏感面，
+  **人工双臂重评待排期**（action-needed 属预期正确行为，非误报）。EOL 边界：仓库已 CRLF 归一（条目 15–27 清账批），双平台装树字节一致；
+  若 CI 侧仍现系统性漂移，按 issue 内 CI 签名重定型一次即稳定（自愈）。
+  验证：`npm test` 539/539 全绿；`lint:templates` 5 面、`check:i18n` 143 文件、`policy:check` 全绿；工作流 YAML 解析与 shell 片段本地实跑验证，
+  真实 schedule 触发与 gh issue 各分支未验（上线后首跑观察）。
 
 ## 能力扩展
 

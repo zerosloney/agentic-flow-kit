@@ -1,0 +1,69 @@
+name: eval-freshness
+
+# BACKLOG #30（引擎侧）：每周一 03:00 UTC 复算「出厂凭证」新鲜度（确定性漂移检测）。
+# 双臂 = claude/node zh+en 新装树 treeSignature，对 BACKLOG.md 最后一次「签名定型 <hex>[/<hex>]」逐树比对；
+# 行为双臂重评需模型运行时，CI 不具备——drift/stale 走 issue → 人工重评 → 新「签名定型」写入 BACKLOG.md →
+# 下周复绿自动关 issue。全流程 advisory：正常路径不判红，只有工具真实异常（exit 1）让本 job 红。
+on:
+  schedule:
+    - cron: '0 3 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  freshness:
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+
+      - name: 复算出厂凭证新鲜度（drift/stale 均不判红）
+        id: report
+        run: |
+          set -euo pipefail
+          node tools/eval-freshness.mjs --json > eval-freshness.json
+          cat eval-freshness.json
+          echo "action-needed=$(node -p "JSON.parse(require('fs').readFileSync('eval-freshness.json','utf8')).actionNeeded")" >> "$GITHUB_OUTPUT"
+
+      - name: 拼 issue 正文
+        if: steps.report.outputs.action-needed == 'true'
+        run: |
+          {
+            echo '## 出厂凭证新鲜度报告（eval-freshness）'
+            echo ''
+            echo '- 口径：确定性漂移检测——claude/node zh+en 新装树 treeSignature vs BACKLOG.md「签名定型」；行为双臂重评需模型运行时，CI 不具备。'
+            echo '- 处理：人工双臂行为重评（BACKLOG #30 口径）→ 新「签名定型 <zh>/<en>」写入 BACKLOG.md → 下周一复绿、本 issue 自动关闭。'
+            echo ''
+            echo '```json'
+            cat eval-freshness.json
+            echo '```'
+          } > eval-freshness-body.md
+
+      - name: 确保 eval-freshness 标签存在
+        if: steps.report.outputs.action-needed == 'true'
+        run: gh label create eval-freshness --color D9760A --description "出厂凭证新鲜度漂移（advisory，人工重评闭环）" || true
+
+      - name: drift/stale → 追加或创建 issue
+        if: steps.report.outputs.action-needed == 'true'
+        run: |
+          NUMBER=$(gh issue list --label eval-freshness --state open --limit 1 --json number --jq '.[0].number // empty')
+          if [ -n "$NUMBER" ]; then
+            gh issue comment "$NUMBER" --body-file eval-freshness-body.md
+          else
+            gh issue create --title "出厂凭证漂移：行为评测需人工重评（eval-freshness）" --body-file eval-freshness-body.md --label eval-freshness
+          fi
+
+      - name: 复绿 → 关闭旧 issue
+        if: steps.report.outputs.action-needed == 'false'
+        run: |
+          NUMBER=$(gh issue list --label eval-freshness --state open --limit 1 --json number --jq '.[0].number // empty')
+          if [ -n "$NUMBER" ]; then
+            gh issue close "$NUMBER" --comment "本周复算全绿：zh/en 新装树签名与 BACKLOG「签名定型」一致且未超有效期，自动关闭。"
+          fi
