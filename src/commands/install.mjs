@@ -164,6 +164,39 @@ export function installLogNotable(action, msg) {
   return false;
 }
 
+// 派生工件会改写已写入的托管文件（如 workflow/INDEX.md）；重算这些文件的哈希，
+// 否则 manifest 记录的是生成前的文本，fresh install 会立刻显示为漂移。
+// 被生成器改写的文件登记到 derived，diff 不对其做静态模板比对。
+export function rehashDerivedArtifacts({ target, result, derived, beforeDerived, baselineEnabled, warn }) {
+  for (const rel of result.written || []) {
+    // 三方合并冲突/合并文件保留旧哈希，供 diff / doctor 继续提示未解决。
+    if ((result.skipRehash || []).includes(rel)) continue;
+    let text;
+    try {
+      text = fs.readFileSync(path.join(target, rel), 'utf8');
+    } catch (err) {
+      if (err?.code === 'ENOENT') {
+        /* 生成器删除的文件不保留 manifest 记录 */
+        delete result.files[rel];
+        derived.delete(rel);
+      } else {
+        // 瞬时读错误（Windows EBUSY/EPERM，杀毒/索引服务常见）：写入已成功、记录是写入文本的哈希，
+        // 保留记录留下可见漂移（doctor 可检出）而非静默失忆（升级永久 skip / uninstall 不清理）；
+        // 不 fail-loud，避免把瞬时错误放大成重跑半安装。
+        warn?.(`${rel}（读取失败 ${err?.code || err}，保留 manifest 记录）`);
+      }
+      continue;
+    }
+    const nextHash = sha256Text(text);
+    result.files[rel] = nextHash;
+    if (beforeDerived[rel] !== nextHash) {
+      derived.add(rel);
+      // 派生工件在安装期重写，基线同步为最终文本，避免下次升级误判。
+      if (baselineEnabled) writeBaseline(target, rel, text);
+    } else derived.delete(rel);
+  }
+}
+
 // CLI 缺省进度行：action 前缀 + 消息（TUI 经 onLog 接管渲染）
 function logLine(action, msg) {
   console.log(formatInstallLog(action, msg));
@@ -483,27 +516,16 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
     const beforeDerived = { ...result.files };
     const derived = new Set(previous?.derived || []);
     generateDerivedArtifacts(target);
-    // 派生工件会改写已写入的托管文件（如 workflow/INDEX.md）；重算这些文件的哈希，
-    // 否则 manifest 记录的是生成前的文本，fresh install 会立刻显示为漂移。
-    // 被生成器改写的文件登记到 derived，diff 不对其做静态模板比对。
-    for (const rel of result.written || []) {
-      // 三方合并冲突/合并文件保留旧哈希，供 diff / doctor 继续提示未解决。
-      if ((result.skipRehash || []).includes(rel)) continue;
-      try {
-        const text = fs.readFileSync(path.join(target, rel), 'utf8');
-        const nextHash = sha256Text(text);
-        result.files[rel] = nextHash;
-        if (beforeDerived[rel] !== nextHash) {
-          derived.add(rel);
-          // 派生工件在安装期重写，基线同步为最终文本，避免下次升级误判。
-          if (baselineEnabled) writeBaseline(target, rel, text);
-        } else derived.delete(rel);
-      } catch {
-        /* 生成器删除的文件不保留 manifest 记录 */
-        delete result.files[rel];
-        derived.delete(rel);
-      }
-    }
+    // 生成器运行后重算派生工件的哈希并登记 derived（细节见 rehashDerivedArtifacts）
+    rehashDerivedArtifacts({
+      target,
+      result,
+      derived,
+      beforeDerived,
+      baselineEnabled,
+      // 读失败告警走冲突通道：CLI 缺省 `! msg` 留行，TUI conflict 不被进度条吞掉
+      warn: (msg) => logger('conflict', msg, done, total),
+    });
     // 模型 ID 是机器本地状态：只写 gitignore 的 local 覆盖，不进 manifest。
     if (models && (commandLabel !== 'upgrade' || explicitModels)) {
       const saved = writeLocalModelRoles(target, models, {

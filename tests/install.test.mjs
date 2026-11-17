@@ -5,7 +5,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { detectStack, matchStack, STACKS } from '../src/commands/install.mjs';
+import { detectStack, matchStack, rehashDerivedArtifacts, STACKS } from '../src/commands/install.mjs';
+import { sha256Text } from '../src/install/manifest.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
@@ -174,6 +175,68 @@ test('install survives Windows-illegal skill names by falling back to the dir na
   const r = run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.'], dir);
   assert.equal(r.status, 0, r.stderr);
   assert.ok(exists(dir, '.claude/skills/colontest/SKILL.md'), 'the pointer must land at the dir-name fallback');
+});
+
+// 回归锁：派生重哈希遇非 ENOENT 读错误（如 Windows EBUSY/EPERM，此处以 EISDIR 目录占位为确定性替身）
+// 必须保留 manifest 记录并告警——静默除名会让升级永久 skip、uninstall 不清理。
+test('rehashDerivedArtifacts keeps the manifest record and warns on non-ENOENT read errors', () => {
+  const dir = makeTmp('flow-kit-rehash-');
+  fs.mkdirSync(path.join(dir, '.agents', 'skills', 'occupied'), { recursive: true });
+  const rel = '.agents/skills/occupied';
+  const result = { written: [rel], skipRehash: [], files: { [rel]: 'hash-from-apply' } };
+  const derived = new Set();
+  const warns = [];
+  rehashDerivedArtifacts({
+    target: dir,
+    result,
+    derived,
+    beforeDerived: { [rel]: 'hash-from-apply' },
+    baselineEnabled: false,
+    warn: (msg) => warns.push(msg),
+  });
+  assert.equal(result.files[rel], 'hash-from-apply', 'a non-ENOENT read error must not drop the manifest record');
+  assert.equal(warns.length, 1, 'exactly one warning should be emitted');
+  assert.ok(warns[0].includes(rel), 'the warning must name the file');
+  assert.ok(warns[0].includes('EISDIR'), 'the warning must carry the error code');
+  assert.equal(derived.size, 0, 'derived state must stay untouched');
+});
+
+// 锁语义：ENOENT = 生成器删了文件，manifest 记录随之删除、不告警
+test('rehashDerivedArtifacts drops the record when the generator deleted the file', () => {
+  const dir = makeTmp('flow-kit-rehash-');
+  const rel = '.agents/workflow/INDEX.md';
+  const result = { written: [rel], skipRehash: [], files: { [rel]: 'hash' } };
+  const derived = new Set([rel]);
+  rehashDerivedArtifacts({
+    target: dir,
+    result,
+    derived,
+    beforeDerived: { [rel]: 'hash' },
+    baselineEnabled: false,
+    warn: () => assert.fail('ENOENT must not warn'),
+  });
+  assert.ok(!(rel in result.files), 'the record must be dropped on ENOENT');
+  assert.equal(derived.size, 0, 'the file must leave the derived set');
+});
+
+// 锁语义：文件在且被生成器改写 → 哈希按最终文本重算、登记 derived
+test('rehashDerivedArtifacts recomputes hashes and registers generator-rewritten files', () => {
+  const dir = makeTmp('flow-kit-rehash-');
+  const rel = '.agents/workflow/INDEX.md';
+  fs.mkdirSync(path.join(dir, '.agents', 'workflow'), { recursive: true });
+  fs.writeFileSync(path.join(dir, rel), 'generator-final-text');
+  const result = { written: [rel], skipRehash: [], files: { [rel]: 'hash-before-generator' } };
+  const derived = new Set();
+  rehashDerivedArtifacts({
+    target: dir,
+    result,
+    derived,
+    beforeDerived: { [rel]: 'hash-before-generator' },
+    baselineEnabled: false,
+    warn: () => assert.fail('a clean read must not warn'),
+  });
+  assert.equal(result.files[rel], sha256Text('generator-final-text'), 'the hash must reflect the final text');
+  assert.ok(derived.has(rel), 'a rewritten file must be registered as derived');
 });
 
 test('unknown host fails with a helpful message', () => {
