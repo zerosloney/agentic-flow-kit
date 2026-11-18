@@ -17,7 +17,10 @@ export function readManifest(target) {
 export function writeManifest(target, manifest) {
   const file = path.join(target, MANIFEST_REL);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+  // 原子写：先落同目录确定性 tmp 再 rename——rename 前任何失败旧文件字节不动，残留 tmp 会被下次写覆盖（自愈）；不重试，失败上抛 fail-loud。
+  const tmp = `${file}.tmp`;
+  fs.writeFileSync(tmp, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+  fs.renameSync(tmp, file);
 }
 
 export function sha256Text(text) {
