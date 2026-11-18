@@ -2,6 +2,12 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.10.7]
+
+### 新增
+
+- feat: 规范版本落账/验证脏树摘要/enterprise 阻断分级——兼修首跑偏离误报与观测口径
+
 ## [2.10.6]
 
 ### 修复
