@@ -305,7 +305,7 @@ function normalizeCi(value, t) {
 // 整个安装流程（含 dry-run）持单写者锁：入口取锁，finally 释放，异常/崩溃路径同样解锁。
 export function runInstall(options) {
   const target = resolveTarget(options.args);
-  const releaseInstallLock = acquireInstallLock(target, { label: options.commandLabel });
+  const releaseInstallLock = acquireInstallLock(target, { label: options.commandLabel, t: options.t });
   try {
     return runInstallUnlocked(options);
   } finally {

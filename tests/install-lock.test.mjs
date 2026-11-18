@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { sha256Text } from '../src/install/manifest.mjs';
 import { userHooksLockFile } from '../src/install/lock.mjs';
+import { EXIT } from '../src/cli/exit.mjs';
 import { HOSTS } from '../src/hosts/registry.mjs';
 import { userHooksFile, wireUserHooks } from '../src/install/user-hooks.mjs';
 
@@ -46,7 +47,7 @@ test('fresh install lock blocks install with INSTALL_LOCKED holder info', () => 
   seedLock(dir, { pid: 432100, ts: Date.now(), command: 'install' });
 
   const r = run(INSTALL_ARGS, dir);
-  assert.notEqual(r.status, 0, `install must fail while a fresh lock is held: ${r.stdout}`);
+  assert.equal(r.status, EXIT.LOCK, `install must exit with the lock-conflict code: ${r.stderr}`);
   assert.match(r.stderr, /安装锁冲突/);
   assert.match(r.stderr, /pid 432100/);
   assert.match(r.stderr, /命令 install/);

@@ -73,11 +73,15 @@ test('exit code mapping covers every documented class', () => {
   assert.equal(EXIT.TARGET, 3);
   assert.equal(EXIT.HOST, 4);
   assert.equal(EXIT.IO, 5);
+  assert.equal(EXIT.LOCK, 6);
 
-  for (const code of ['BAD_COMMAND', 'BAD_LANG', 'BAD_MODEL', 'BAD_TIER', 'NO_HOSTS', 'MISSING_ARG', 'HOST_NOT_INSTALLED']) {
+  for (const code of ['BAD_COMMAND', 'BAD_LANG', 'BAD_MODEL', 'BAD_TIER', 'NO_HOSTS', 'MISSING_ARG', 'HOST_NOT_INSTALLED', 'INVALID_HOST_NAME', 'INVALID_HOST_DEF']) {
     assert.equal(exitCodeForError({ code }), EXIT.USAGE, code);
   }
-  for (const code of ['TARGET_MISSING', 'NO_MANIFEST', 'NO_HOSTS_IN_MANIFEST']) {
+  for (const code of ['INSTALL_LOCKED', 'USER_HOOKS_LOCKED']) {
+    assert.equal(exitCodeForError({ code }), EXIT.LOCK, code);
+  }
+  for (const code of ['TARGET_MISSING', 'NO_MANIFEST', 'NO_HOSTS_IN_MANIFEST', 'BAD_MANIFEST']) {
     assert.equal(exitCodeForError({ code }), EXIT.TARGET, code);
   }
   assert.equal(exitCodeForError({ code: 'UNKNOWN_HOST' }), EXIT.HOST);
@@ -95,6 +99,16 @@ test('CLI maps usage, target and host errors to their exit codes', () => {
   assert.equal(run(['install', '--agent', 'not-a-host', '--target', '.'], dir).status, EXIT.HOST);
   assert.equal(run(['diff', '--target', path.join(dir, 'missing')], dir).status, EXIT.TARGET);
   assert.equal(run(['diff', '--target', '.'], dir).status, EXIT.TARGET, 'no manifest yet');
+});
+
+test('CLI maps a corrupt install manifest to exit code 3', () => {
+  const dir = tmpRepo();
+  fs.mkdirSync(path.join(dir, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.agents', 'install-manifest.json'), '{', 'utf8');
+
+  const r = run(['install', '--agent', 'trae', '--lang', 'zh-CN', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r.status, EXIT.TARGET, r.stderr);
+  assert.match(r.stderr, /invalid install manifest/);
 });
 
 test('CLI maps filesystem failures to exit code 5', () => {

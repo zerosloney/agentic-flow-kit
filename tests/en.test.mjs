@@ -76,6 +76,18 @@ test('en install uses English command, memory, host and scaffold overrides', () 
   assert.ok(wiki.includes('合计：**1 份**知识文档'), 'generator anchor must remain');
 });
 
+test('en install lock conflict reports in English', () => {
+  const dir = tmpRepo();
+  fs.mkdirSync(path.join(dir, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.agents', 'install.lock'), JSON.stringify({ pid: 432100, ts: Date.now(), command: 'install' }), 'utf8');
+
+  const r = run(['install', '--agent', 'trae', '--lang', 'en', '--stack', 'node', '--target', '.'], dir);
+  assert.notEqual(r.status, 0, 'install must fail while a fresh lock is held');
+  assert.match(r.stderr, /Install lock conflict/);
+  assert.match(r.stderr, /pid 432100/);
+  assert.doesNotMatch(r.stderr, /安装锁冲突/, 'lock conflict must not leak the Chinese fallback under --lang en');
+});
+
 test('en claude install writes English skill pointer and English descriptions', () => {
   const dir = tmpRepo();
   const r = run(['install', '--agent', 'claude', '--agent', 'trae', '--stack', 'node', '--lang', 'en', '--target', '.'], dir);

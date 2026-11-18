@@ -148,7 +148,7 @@ export function wireUserHooks({ host, t }) {
     throw err;
   }
   const file = userHooksFile(spec);
-  const releaseLock = acquireLock(userHooksLockFile(file), USER_HOOKS_LOCK_OPTS);
+  const releaseLock = acquireLock(userHooksLockFile(file), { ...USER_HOOKS_LOCK_OPTS, t });
   try {
     const existed = fs.existsSync(file);
     const config = existed ? readUserHooksConfig(file) : { hooks: {} };
@@ -167,7 +167,7 @@ export function unwireUserHooks({ host, t }) {
   const spec = userHookSpec(host);
   if (!spec) return { host, removed: false, file: null };
   const file = userHooksFile(spec);
-  const releaseLock = acquireLock(userHooksLockFile(file), USER_HOOKS_LOCK_OPTS);
+  const releaseLock = acquireLock(userHooksLockFile(file), { ...USER_HOOKS_LOCK_OPTS, t });
   try {
     if (!fs.existsSync(file)) return { host, file, removed: false };
     const config = readUserHooksConfig(file);
