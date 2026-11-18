@@ -2,6 +2,12 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.10.5]
+
+### 其他
+
+- refactor: TUI 安装 argv 组装单一来源——buildInstallArgs 迁入 flows，installFlow 弃内联同构
+
 ## [2.10.4]
 
 ### 修复
