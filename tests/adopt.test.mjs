@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { EXIT } from '../src/cli/exit.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
@@ -41,6 +42,11 @@ function manifestOf(dir) {
 function json(r) {
   assert.equal(r.stdout.trim().startsWith('{'), true, `expected JSON, got: ${r.stdout.slice(0, 200)}`);
   return JSON.parse(r.stdout);
+}
+
+function seedLock(dir, info) {
+  fs.mkdirSync(path.join(dir, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.agents', 'install.lock'), JSON.stringify(info), 'utf8');
 }
 
 test('adopt reconstructs the manifest and leaves no drift', () => {
@@ -140,4 +146,17 @@ test('adopt with nothing recognizable exits 1 and writes no manifest', () => {
   assert.equal(r.status, 1, r.stderr);
   assert.equal(json(r).manifest, null);
   assert.equal(fs.existsSync(path.join(dir, '.agents/install-manifest.json')), false);
+});
+
+// 安装锁：adopt 直写 manifest，须与并发安装互斥。
+test('fresh install lock blocks adopt and leaves the manifest untouched', () => {
+  const dir = tmpRepo();
+  install(dir, ['trae']);
+  const before = manifestOf(dir);
+  seedLock(dir, { pid: 432112, ts: Date.now(), command: 'install' });
+
+  const r = run(['adopt', '--target', '.', '--json'], dir);
+  assert.equal(r.status, EXIT.LOCK, `lock conflict must exit ${EXIT.LOCK}: ${r.stdout} ${r.stderr}`);
+  assert.deepEqual(manifestOf(dir), before);
+  assert.equal(fs.existsSync(path.join(dir, '.agents/install.lock')), true, 'fresh lock must not be removed by the blocked run');
 });

@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { EXIT } from '../src/cli/exit.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
@@ -45,6 +46,11 @@ function manifestOf(dir) {
 function json(r) {
   assert.equal(r.stdout.trim().startsWith('{'), true, `expected JSON, got: ${r.stdout.slice(0, 200)}`);
   return JSON.parse(r.stdout);
+}
+
+function seedLock(dir, info) {
+  fs.mkdirSync(path.join(dir, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.agents', 'install.lock'), JSON.stringify(info), 'utf8');
 }
 
 test('remove-host keeps the other host and refreshes ignore blocks', () => {
@@ -204,4 +210,56 @@ test('uninstall keeps user-modified files until --force', () => {
   assert.equal(forced.status, 0, forced.stderr);
   assert.equal(exists(dir, '.agents/commands/new-task.md'), false);
   assert.equal(exists(dir, '.agents/install-manifest.json'), false);
+});
+
+// —— 安装锁：remove-host / uninstall 也是托管状态的写路径，必须与并发安装互斥 ——
+
+test('fresh install lock blocks remove-host and leaves the manifest untouched', () => {
+  const dir = tmpRepo();
+  install(dir, ['claude', 'trae']);
+  const before = manifestOf(dir);
+  seedLock(dir, { pid: 432100, ts: Date.now(), command: 'install' });
+
+  const r = run(['remove-host', 'trae', '--target', '.', '--json'], dir);
+  assert.equal(r.status, EXIT.LOCK, `lock conflict must exit ${EXIT.LOCK}: ${r.stdout} ${r.stderr}`);
+  assert.deepEqual(manifestOf(dir), before);
+  assert.ok(exists(dir, '.trae'), 'blocked run must not delete host files');
+  assert.ok(exists(dir, '.agents/install.lock'), 'fresh lock must not be removed by the blocked run');
+});
+
+test('fresh install lock blocks uninstall and leaves the manifest untouched', () => {
+  const dir = tmpRepo();
+  install(dir, ['trae']);
+  const before = manifestOf(dir);
+  seedLock(dir, { pid: 432101, ts: Date.now(), command: 'install' });
+
+  const r = run(['uninstall', '--target', '.', '--json'], dir);
+  assert.equal(r.status, EXIT.LOCK, `lock conflict must exit ${EXIT.LOCK}: ${r.stdout} ${r.stderr}`);
+  assert.deepEqual(manifestOf(dir), before);
+  assert.ok(exists(dir, '.agents/commands/new-task.md'), 'blocked run must not delete managed files');
+  assert.ok(exists(dir, '.agents/install.lock'), 'fresh lock must not be removed by the blocked run');
+});
+
+test('stale install lock is taken over and remove-host completes', () => {
+  const dir = tmpRepo();
+  install(dir, ['trae']);
+  seedLock(dir, { pid: 999999, ts: Date.now() - 16 * 60_000, command: 'upgrade' });
+
+  const r = run(['remove-host', 'trae', '--target', '.', '--json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(manifestOf(dir).hosts, []);
+  assert.equal(exists(dir, '.agents/install.lock'), false, 'stale lock must be released after success');
+});
+
+test('successful remove-host and uninstall leave no lock file behind', () => {
+  const dir = tmpRepo();
+  install(dir, ['claude', 'trae']);
+
+  const removed = run(['remove-host', 'trae', '--target', '.', '--json'], dir);
+  assert.equal(removed.status, 0, removed.stderr);
+  assert.equal(exists(dir, '.agents/install.lock'), false);
+
+  const uninstalled = run(['uninstall', '--target', '.', '--json'], dir);
+  assert.equal(uninstalled.status, 0, uninstalled.stderr);
+  assert.equal(exists(dir, '.agents/install.lock'), false);
 });

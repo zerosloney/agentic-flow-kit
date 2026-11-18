@@ -6,6 +6,7 @@ import path from 'node:path';
 import { flag } from '../cli/args.mjs';
 import { HOSTS } from '../hosts/registry.mjs';
 import { readManifest, writeManifest } from '../install/manifest.mjs';
+import { acquireInstallLock } from '../install/lock.mjs';
 import { resolveTarget, runInstall } from './install.mjs';
 import {
   LOCK_REL, SKILLS_REL, emptyLock, hashSkillDir, readLock, sha256Buffer, writeLock,
@@ -75,8 +76,26 @@ function emitResult(args, payload, human) {
   else console.log(human);
 }
 
+// add-skill 直写 manifest/skills.lock.json，须与并发安装互斥：入口取锁覆盖「读 manifest → 直写 manifest」。
+// refreshHostSurfaces 重放 runInstall（自带安装锁，O_EXCL 无进程内重入）：须在锁释放后调用，避免自撞；
+// 锁内外的语句顺序与既有行为一致（writeManifest → refresh → writeLock → 输出）。
 export function addSkillCommand({ args, t, lang }) {
   const target = resolveTarget(args);
+  const releaseInstallLock = acquireInstallLock(target, { label: 'add-skill', t });
+  let outcome;
+  try {
+    outcome = addSkillLocked({ args, t, lang, target });
+  } finally {
+    releaseInstallLock();
+  }
+  if (!outcome) return 0; // dry-run：结果已在锁内输出
+  refreshHostSurfaces({ args: outcome.refreshArgs, t, manifest: outcome.refreshManifest, commandLabel: 'add-skill' });
+  writeLock(target, outcome.lockNext);
+  emitResult(args, outcome.emit, outcome.human);
+  return 0;
+}
+
+function addSkillLocked({ args, t, lang, target }) {
   const manifest = requireManifest(target, t);
   const spec = args._.slice(1)[0];
   const source = resolveSkillSource(spec, {
@@ -121,7 +140,7 @@ export function addSkillCommand({ args, t, lang }) {
       emitResult(args, {
         command: 'add-skill', dryRun: true, name, source: entry.source, version: source.version, checksum, files: Object.keys(files).length,
       }, `[dry-run] 将安装技能 ${name}（${source.type} ${source.resolved}，${Object.keys(files).length} 个文件）`);
-      return 0;
+      return null;
     }
 
     const lockNext = lock.skills ? lock : emptyLock();
@@ -133,28 +152,46 @@ export function addSkillCommand({ args, t, lang }) {
     manifest.skills = { ...(manifest.skills || {}), [name]: entry };
     writeManifest(target, manifest);
 
-    refreshHostSurfaces({ args: { ...args, target }, t, manifest: readManifest(target) || manifest, commandLabel: 'add-skill' });
-    writeLock(target, lockNext);
-
-    emitResult(args, {
-      command: 'add-skill',
-      target,
-      name,
-      source: entry.source,
-      version: entry.version,
-      checksum,
-      files: Object.keys(files).length,
-      lockfile: path.join(target, LOCK_REL),
-      updated: exists,
-    }, `✅ 已${exists ? '更新' : '安装'}技能 ${name}（${source.type} ${source.resolved}，${Object.keys(files).length} 个文件，校验和 ${checksum.slice(0, 12)}…）`);
-    return 0;
+    return {
+      refreshArgs: { ...args, target },
+      refreshManifest: readManifest(target) || manifest,
+      lockNext,
+      emit: {
+        command: 'add-skill',
+        target,
+        name,
+        source: entry.source,
+        version: entry.version,
+        checksum,
+        files: Object.keys(files).length,
+        lockfile: path.join(target, LOCK_REL),
+        updated: exists,
+      },
+      human: `✅ 已${exists ? '更新' : '安装'}技能 ${name}（${source.type} ${source.resolved}，${Object.keys(files).length} 个文件，校验和 ${checksum.slice(0, 12)}…）`,
+    };
   } finally {
     source.cleanup();
   }
 }
 
+// remove-skill 同 add-skill：入口取锁覆盖「读 manifest → 删技能文件 → 直写 manifest/lockfile」；
+// refreshHostSurfaces（runInstall 自带锁）在锁释放后调用，避免 O_EXCL 重入自撞。
 export function removeSkillCommand({ args, t }) {
   const target = resolveTarget(args);
+  const releaseInstallLock = acquireInstallLock(target, { label: 'remove-skill', t });
+  let outcome;
+  try {
+    outcome = removeSkillLocked({ args, t, target });
+  } finally {
+    releaseInstallLock();
+  }
+  if (!outcome) return 0; // dry-run：结果已在锁内输出
+  refreshHostSurfaces({ args: outcome.refreshArgs, t, manifest: outcome.refreshManifest, commandLabel: 'remove-skill' });
+  emitResult(args, outcome.emit, outcome.human);
+  return 0;
+}
+
+function removeSkillLocked({ args, t, target }) {
   const manifest = requireManifest(target, t);
   const name = args._.slice(1)[0];
   if (!name) throw usageError('remove-skill 缺少技能名', 'MISSING_ARG');
@@ -181,7 +218,7 @@ export function removeSkillCommand({ args, t }) {
   if (flag(args, 'dry-run')) {
     emitResult(args, { command: 'remove-skill', dryRun: true, name, files: rels },
       `[dry-run] 将移除技能 ${name}（${rels.length} 个文件，其中用户改动 ${modified.length}）`);
-    return 0;
+    return null;
   }
 
   for (const rel of rels) {
@@ -201,11 +238,13 @@ export function removeSkillCommand({ args, t }) {
     delete lock.skills[name];
     writeLock(target, lock);
   }
-  refreshHostSurfaces({ args: { ...args, target }, t, manifest: readManifest(target) || manifest, commandLabel: 'remove-skill' });
 
-  emitResult(args, { command: 'remove-skill', target, name, removed: rels.length, forced: modified.length > 0 },
-    `✅ 已移除技能 ${name}（${rels.length} 个文件${modified.length ? `，其中 ${modified.length} 个由 --force 覆盖` : ''}）`);
-  return 0;
+  return {
+    refreshArgs: { ...args, target },
+    refreshManifest: readManifest(target) || manifest,
+    emit: { command: 'remove-skill', target, name, removed: rels.length, forced: modified.length > 0 },
+    human: `✅ 已移除技能 ${name}（${rels.length} 个文件${modified.length ? `，其中 ${modified.length} 个由 --force 覆盖` : ''}）`,
+  };
 }
 
 export function skillsCommand({ args, t, lang }) {

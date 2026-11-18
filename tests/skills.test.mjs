@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { hashSkillDir, readLock, writeLock } from '../src/skills/lock.mjs';
+import { EXIT } from '../src/cli/exit.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const BIN = path.join(HERE, '..', 'bin', 'flow-kit.mjs');
@@ -43,6 +44,11 @@ function makeSkill(parent, name, { description = '测试用技能', extra = true
   fs.writeFileSync(path.join(dir, 'SKILL.md'), fm);
   if (extra) fs.writeFileSync(path.join(dir, 'notes.txt'), '辅助文件\n');
   return dir;
+}
+
+function seedInstallLock(dir, info) {
+  fs.mkdirSync(path.join(dir, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.agents', 'install.lock'), JSON.stringify(info), 'utf8');
 }
 
 const target = installedTarget();
@@ -251,4 +257,33 @@ test('body rules stay silent for a clean new unregistered skill', () => {
   const hits = [...report.errors, ...report.warnings]
     .filter((m) => m.startsWith('.agents/skills/lint-clean:') && /BODY_/.test(m));
   assert.deepEqual(hits, []);
+});
+
+// —— 安装锁：add-skill / remove-skill 直写 manifest，须与并发安装互斥 ——
+
+test('fresh install lock blocks add-skill and leaves the manifest untouched', () => {
+  const t4 = installedTarget();
+  const before = JSON.parse(fs.readFileSync(path.join(t4, '.agents', 'install-manifest.json'), 'utf8'));
+  seedInstallLock(t4, { pid: 432110, ts: Date.now(), command: 'install' });
+
+  const src = makeSkill(work, 'locked-add-skill');
+  const r = cli(t4, ['add-skill', src, '--target', t4, '--json']);
+  assert.equal(r.status, EXIT.LOCK, `lock conflict must exit ${EXIT.LOCK}: ${r.stdout} ${r.stderr}`);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(t4, '.agents', 'install-manifest.json'), 'utf8')), before);
+  assert.equal(fs.existsSync(path.join(t4, '.agents', 'skills', 'locked-add-skill')), false, 'blocked run must not copy skill files');
+  assert.equal(fs.existsSync(path.join(t4, '.agents', 'install.lock')), true, 'fresh lock must not be removed by the blocked run');
+});
+
+test('fresh install lock blocks remove-skill and leaves the manifest untouched', () => {
+  const t5 = installedTarget();
+  const src = makeSkill(work, 'locked-remove-skill');
+  const added = cli(t5, ['add-skill', src, '--target', t5, '--json']);
+  assert.equal(added.status, 0, added.stderr || added.stdout);
+  const before = JSON.parse(fs.readFileSync(path.join(t5, '.agents', 'install-manifest.json'), 'utf8'));
+  seedInstallLock(t5, { pid: 432111, ts: Date.now(), command: 'install' });
+
+  const r = cli(t5, ['remove-skill', 'locked-remove-skill', '--target', t5, '--json']);
+  assert.equal(r.status, EXIT.LOCK, `lock conflict must exit ${EXIT.LOCK}: ${r.stdout} ${r.stderr}`);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(t5, '.agents', 'install-manifest.json'), 'utf8')), before);
+  assert.equal(fs.existsSync(path.join(t5, '.agents', 'skills', 'locked-remove-skill', 'SKILL.md')), true, 'blocked run must not delete skill files');
 });

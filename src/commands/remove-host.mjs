@@ -8,6 +8,7 @@ import {
   readPlanEntry, renderMergeBlock, replaceMergeBlock, stripMergeBlock,
 } from '../install/apply.mjs';
 import { MANIFEST_REL, readManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
+import { acquireInstallLock } from '../install/lock.mjs';
 import { stripMcpFromRoot } from '../install/mcp.mjs';
 import { stripHooksFromRoot } from '../install/hooks.mjs';
 import { stripManagedPermissions } from '../install/permissions.mjs';
@@ -151,7 +152,18 @@ function finish(ctx, result, strictFail) {
 }
 
 // remove-host：只删除目标宿主 category:host 的文件；引擎/栈/其他宿主保持不动。
+// 整个流程持安装锁（写 manifest、删宿主文件，须与并发安装互斥）：入口取锁，finally 释放。
 export function removeHostCommand({ args, t }) {
+  const target = resolveTarget(args);
+  const releaseInstallLock = acquireInstallLock(target, { label: 'remove-host', t });
+  try {
+    return removeHostUnlocked({ args, t });
+  } finally {
+    releaseInstallLock();
+  }
+}
+
+function removeHostUnlocked({ args, t }) {
   const { target, manifest, tt, lang } = resolveState(args, t);
   const names = (args.agents && args.agents.length ? args.agents : args._.slice(1))
     .map((name) => String(name).trim().toLowerCase())
@@ -377,7 +389,18 @@ export function removeHostCommand({ args, t }) {
 }
 
 // uninstall：删除全部托管文件；根记忆文件与用户改过的文件默认保留。
+// 整个流程持安装锁：入口取锁，finally 释放。
 export function uninstallCommand({ args, t }) {
+  const target = resolveTarget(args);
+  const releaseInstallLock = acquireInstallLock(target, { label: 'uninstall', t });
+  try {
+    return uninstallUnlocked({ args, t });
+  } finally {
+    releaseInstallLock();
+  }
+}
+
+function uninstallUnlocked({ args, t }) {
   const { target, manifest, tt, lang } = resolveState(args, t);
   const asJson = flag(args, 'json');
   const dryRun = flag(args, 'dry-run');

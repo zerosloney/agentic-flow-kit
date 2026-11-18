@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { flag } from '../cli/args.mjs';
 import { readManifest, writeManifest } from '../install/manifest.mjs';
+import { acquireInstallLock } from '../install/lock.mjs';
 import { makeT } from '../i18n.mjs';
 import { resolveTarget } from './install.mjs';
 import { buildDiff } from './diff.mjs';
@@ -28,7 +29,19 @@ export function cleanEmptyDirs(target, absFile) {
   }
 }
 
+// prune：删孤儿文件/空目录并改写 manifest，与并发安装互斥（空目录删除也可能误删刚建的托管目录）。
+// 整个流程持安装锁：入口取锁，finally 释放。
 export function pruneCommand({ args, t }) {
+  const target = resolveTarget(args);
+  const releaseInstallLock = acquireInstallLock(target, { label: 'prune', t });
+  try {
+    return pruneUnlocked({ args, t });
+  } finally {
+    releaseInstallLock();
+  }
+}
+
+function pruneUnlocked({ args, t }) {
   const target = resolveTarget(args);
   const manifest = readManifest(target);
   if (!manifest) {

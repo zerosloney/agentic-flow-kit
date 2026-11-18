@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { EXIT } from '../src/cli/exit.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
@@ -44,6 +45,11 @@ function writeManifest(dir, value) {
     `${JSON.stringify(value, null, 2)}\n`,
     'utf8',
   );
+}
+
+function seedLock(dir, info) {
+  fs.mkdirSync(path.join(dir, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.agents', 'install.lock'), JSON.stringify(info), 'utf8');
 }
 
 function sha(text) {
@@ -166,4 +172,19 @@ test('prune output is localized in English', () => {
   assert.match(r.stdout, /Prune orphaned files:/);
   assert.match(r.stdout, /delete legacy\/old\.md/);
   assert.match(r.stdout, /Done: deleted 1/);
+});
+
+// 安装锁：prune 删孤儿文件并改写 manifest，必须与并发安装互斥。
+test('fresh install lock blocks prune and leaves the manifest untouched', () => {
+  const dir = tmpRepo();
+  install(dir);
+  const abs = addOrphan(dir, 'legacy/locked.md', 'locked\n');
+  const before = readManifest(dir);
+  seedLock(dir, { pid: 432102, ts: Date.now(), command: 'install' });
+
+  const r = run(['prune', '--target', '.'], dir);
+  assert.equal(r.status, EXIT.LOCK, `lock conflict must exit ${EXIT.LOCK}: ${r.stdout} ${r.stderr}`);
+  assert.deepEqual(readManifest(dir), before);
+  assert.equal(fs.existsSync(abs), true, 'blocked run must not delete orphan files');
+  assert.equal(fs.existsSync(path.join(dir, '.agents/install.lock')), true, 'fresh lock must not be removed by the blocked run');
 });

@@ -3,6 +3,7 @@ import path from 'node:path';
 import { flag } from '../cli/args.mjs';
 import { listFiles, RUNTIME_DIRS, RUNTIME_FILES } from '../install/plan.mjs';
 import { CURRENT_SCHEMA_VERSION, MANIFEST_REL, readManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
+import { acquireInstallLock } from '../install/lock.mjs';
 import { extractMergeBlock, readPlanEntry, renderMergeBlock } from '../install/apply.mjs';
 import { HOSTS } from '../hosts/registry.mjs';
 import { detectHosts } from '../hosts/detect.mjs';
@@ -151,7 +152,19 @@ function scan({ target, plan, vars, hosts, existing }) {
   return { adopted, modified, missing, unrecognized, derived, mcpServers, managedPermissions };
 }
 
+// adopt：扫描接管并把结果直写 manifest，须与并发安装互斥。
+// 整个流程持安装锁（不重放 runInstall，无嵌套取锁）：入口取锁，finally 释放。
 export function adoptCommand({ args, t }) {
+  const target = resolveTarget(args);
+  const releaseInstallLock = acquireInstallLock(target, { label: 'adopt', t });
+  try {
+    return adoptUnlocked({ args, t });
+  } finally {
+    releaseInstallLock();
+  }
+}
+
+function adoptUnlocked({ args, t }) {
   const target = resolveTarget(args);
   const existing = readManifest(target);
   const detectedHosts = detectHosts(target);
