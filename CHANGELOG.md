@@ -2,6 +2,16 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.10.4]
+
+### 修复
+
+- fix: 模型解析宿主键归一口径——resolveModels/readInjectedModels 与 parseModelFlags 同源，混合大小写不再静默丢宿主
+
+### 其他
+
+- refactor: list-hosts 从分派层抽离——main.mjs 不再内联宿主表组装，18 个命令全部委托 commands/
+
 ## [2.10.3]
 
 ### 新增
