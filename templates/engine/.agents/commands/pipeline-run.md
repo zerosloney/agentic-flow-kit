@@ -14,9 +14,12 @@ next: 按 run 停机点循环推进至 done
 
 阶段机已对齐 commands 手册。与手动阶段路由二选一，禁混用。
 
-> **保留待用**：暂零 run（`cache/pipeline-runs/` 空）但不退役。启用前先跑
-> `flow-kit run check-pipeline-state.mjs`（静态闭包检查：stage/stopType 是否都在
-> `.agents/config/pipeline.json` 内），再用一个小任务跑一次端到端 run——静态检查不能替代真实状态机验证。
+> **实战已验证（2026-11-18）**：已完成首个端到端真实 run（triage → plan 起草/确认 → implement →
+> verify 门红路由 fix → closeout → done；22 门 / 3 确认 / 3 提交，确认台账配对成立）。启用前仍建议先跑
+> `flow-kit run check-pipeline-state.mjs`（静态闭包检查）。
+> **已知首跑问题（未修）**：零提交基线的全新装户，首个 implement/fix 门会把安装期生成/运行期再生的文件
+> （`.agents/notes/engine-map.md`、`tmp/verify-*.log`、`workflow/effective-policy.md`）误报为
+> 「偏离即停」——如实列入 `--files` 可推进，代价是 docsCommit 会把机器文件一并入库。
 
 > **分工**：确定性部分由 `pipeline-run.mjs` 状态机驱动（fill-* $\rightarrow$ confirm-doc $\rightarrow$ verify.mjs $\rightarrow$ git，退出码全记录）；AI 槽位按工单协议执行；人件门到点即停、原话代录；宿主禁自行改状态。
 > **产物目录**：pipeline 产物收进 `workflow/tasks/<date>-<topic>/`（`intent.md`/`incident.md`/`spec.md`/`plan.md`），与手动路径（`intents/`、`plans/`、`specs/`）隔离——手动扫描器不扫 `tasks/`，两类文档互不干扰。

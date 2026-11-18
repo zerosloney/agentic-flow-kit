@@ -68,17 +68,52 @@ function descriptor(host, dir, level) {
 
 test('enterprise snapshot: every config-capable host has a verified hardening posture', () => {
   const dir = tmpRepo();
-  for (const host of HOSTS_ALL) {
+  // 条目 38（ADR capability-guarantee-tiered-blocking）：hardening:none 宿主拒装 enterprise；
+  // blocked/allowed 名单从 registry 能力字段派生，不在测试里硬编码宿主名。
+  const blocked = HOSTS_ALL.filter((h) => (HOSTS[h]?.hardening?.level || 'none') === 'none');
+  const allowed = HOSTS_ALL.filter((h) => !blocked.includes(h));
+  for (const host of blocked) {
+    const r = install(dir, host, ['--tier', 'enterprise']);
+    assert.notEqual(r.status, 0, `${host} 应拒装`);
+    assert.match(r.stderr, /hardening/, `${host}: ${r.stderr}`);
+  }
+  for (const host of allowed) {
     const r = install(dir, host, ['--tier', 'enterprise']);
     assert.equal(r.status, 0, `${host}: ${r.stderr}`);
   }
   const manifest = readManifest(dir);
   assert.equal(manifest.tier, 'enterprise');
   assert.equal(manifest.hardened, true);
-  for (const host of HOSTS_ALL) {
+  for (const host of allowed) {
     const expected = JSON.parse(fs.readFileSync(path.join(FIXTURES, `${host}.json`), 'utf8'));
     assert.deepEqual(descriptor(host, dir, manifest.enterprise.hosts[host]), expected, host);
   }
+  assert.equal(manifest.hosts.some((h) => blocked.includes(h)), false, '被拒宿主不得落 manifest');
+});
+
+test('add-host into an enterprise install skips hardening:none hosts with a warning', () => {
+  const dir = tmpRepo();
+  assert.equal(install(dir, 'claude', ['--tier', 'enterprise']).status, 0);
+  const r = run(['add-host', 'opencode', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout + r.stderr, /hardening:none/, '部分拒装必须输出列明（不静默降级）');
+  const manifest = readManifest(dir);
+  assert.equal(manifest.hosts.includes('opencode'), false, '被拒宿主不得落 manifest');
+});
+
+test('doctor fails enterprise installs whose hosts include a hardening:none host', () => {
+  const dir = tmpRepo();
+  assert.equal(install(dir, 'claude', ['--tier', 'enterprise']).status, 0);
+  // 模拟 enterprise 装户的宿主集被引入无 hardened 接线者（手工改 manifest；add-host 路径会被安装期剔除）
+  const m = readManifest(dir);
+  m.enterprise.hosts.opencode = 'none';
+  m.hosts = [...(m.hosts || []), 'opencode'];
+  fs.writeFileSync(path.join(dir, '.agents/install-manifest.json'), JSON.stringify(m, null, 2));
+  const doctor = json(run(['doctor', '--target', '.', '--json'], dir));
+  const blocked = doctor.checks.find((c) => c.name === 'enterprise blocked hosts');
+  assert.ok(blocked, JSON.stringify(doctor.checks.map((c) => c.name)));
+  assert.equal(blocked.ok, false);
+  assert.match(blocked.detail, /opencode/);
 });
 
 test('manifest records the actual matrix and doctor shows tier, posture and gaps', () => {

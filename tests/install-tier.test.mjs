@@ -81,6 +81,31 @@ test('doctor reports the tier and does not fail on advisory gaps', () => {
   assert.match(r.stdout, /! guarantee trae/);
 });
 
+test('enterprise tier blocks hardening:none hosts: single host hard-fails, mixed installs the rest', () => {
+  // 单宿主全拒：exit 非零 + 不落 manifest
+  const d1 = tmpRepo();
+  const r1 = run(['install', '--agent', 'opencode', '--stack', 'node', '--tier', 'enterprise', '--target', '.'], d1);
+  assert.notEqual(r1.status, 0);
+  assert.match(r1.stderr, /hardening/);
+  assert.equal(fs.existsSync(path.join(d1, '.agents/install-manifest.json')), false, '拒装不得落盘');
+  // 混合：其余照装 + 输出列明被拒者（不静默降级）
+  const d2 = tmpRepo();
+  const r2 = run(['install', '--agent', 'opencode', '--agent', 'claude', '--stack', 'node', '--tier', 'enterprise', '--target', '.'], d2);
+  assert.equal(r2.status, 0, r2.stderr);
+  assert.match(r2.stdout + r2.stderr, /opencode/);
+  assert.deepEqual(manifest(d2).hosts, ['claude']);
+  // 常规档不受阻断
+  const d3 = tmpRepo();
+  assert.equal(run(['install', '--agent', 'opencode', '--stack', 'node', '--target', '.'], d3).status, 0);
+});
+
+test('enterprise blocking reads hardening levels from the registry, not host names', () => {
+  const src = fs.readFileSync(path.join(KIT, 'src/commands/install.mjs'), 'utf8');
+  for (const name of ['opencode', 'pi', 'cline', 'claude', 'qwen']) {
+    assert.doesNotMatch(src, new RegExp(`['"]${name}['"]`), `install.mjs 不得硬编码宿主名 ${name}`);
+  }
+});
+
 test('doctor warns on model drift between local config and installed agents', () => {
   const dir = tmpRepo();
   const r = run(['install', '--agent', 'claude', '--stack', 'node', '--model', 'claude:code=haiku', '--target', '.'], dir);

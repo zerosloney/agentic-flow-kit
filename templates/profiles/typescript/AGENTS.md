@@ -33,7 +33,7 @@
 | **修复 / 事故** | `.agents/commands/maintain.md` | L1 非事故只做 §1 立档后回快速道。线上事故与 L2/L3 读全文 |
 | **上线 / 发布** | `.agents/commands/deploy.md` | 静态门 → 回归检查（含 DB 验证）→ 授权 → PR 审查合并 |
 | **合入评审** | `.agents/commands/review.md` | P0/P1/P2 分级评审 → 结论定性 |
-| **自动化驱动** | `.agents/commands/pipeline-run.md` | 实验位保留待用：状态机尚未验证、零 run 记录，启用前须补状态机测试 |
+| **自动化驱动** | `.agents/commands/pipeline-run.md` | 2026-11-18 已端到端实战验证；首跑误报待修，见 pipeline-run.md 自述 |
 | **无人值守 / 过夜** | `.agents/skills/autonomous-run/SKILL.md` | 长跑合同：逐单元签收 + 停机条件；门禁与确认门不豁免 |
 | **性能 / 视觉对齐** | `.agents/skills/perf/SKILL.md` · `.agents/skills/visual-parity/SKILL.md` | 先基线后单变量；像素对齐只改样式 |
 

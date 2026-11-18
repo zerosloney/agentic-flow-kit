@@ -2,7 +2,11 @@
 // verify.mjs — 统一静态门编排（2026-10-09 质量增强版；2026-10-09 守护者自守护批次）
 // 用途：在关单或 CI 前一键过门——执行全部静态检查，逐项输出 pass/fail。
 // 语义：单源口径。确保本地 run-verify 与 Azure Pipeline 行为 100% 一致。
-// 凭证落账：全绿才落绿凭证；任一步红即落失败行，供根因分析。
+// 凭证落账：全绿才落绿凭证；任一步红即落失败行，供根因分析。绿/失败行均带 dirtyTree 脏树摘要
+//         （BACKLOG 34）：sha256(`git status --porcelain` 输出 + `git diff HEAD` 内容) 前 16 位——绑定
+//         「验证时刻工作树 = 基线提交 + 未提交改动」，封「verify 绿→commit 之间改码」的残余窗口。
+//         口径：干净树 = ''（porcelain 空，不再问 diff）；脏树 = 16 位 hex；git 不可用 / 非 git 根 =
+//         省略键（未知口径，同 headShort 降级风格，消费侧按未知处理）；存量无字段行 = 未知，不回填。
 // 自守护：scripts-syntax 门守引擎自身（2026-10-09 审计 P0-1：本文件曾因
 //         SyntaxError 进 CI 而全链静默）。--test-cmd 为 fixture 测试注入缝：给了它则只跑
 //         [test, check-loop] 两步夹具，绿行带 testCmd:true 标记（生产凭证不与之混淆，
@@ -75,6 +79,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { computeDiffScope, parseEvidenceGreens, EVIDENCE_REL, CI_UNILATERAL_GATE_IDS, PRODUCT_FACES } from './verify-scope.mjs';
 import { classifyFailure } from './failure-attribution.mjs';
+import { dirtyTreeDigest } from './git-tree-digest.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = process.env.FLOW_KIT_PROJECT_ROOT || process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
@@ -250,6 +255,9 @@ const readGateBudget = (root, key) => {
   return Number.isFinite(v) && v > 0 ? v : null;
 };
 
+// 脏树摘要（BACKLOG 34 验证证据绑定）：单源 git-tree-digest.mjs（干净 ''/脏 16hex/非 git 根 null）。
+// 头注「凭证落账」段有完整口径；失败不静默吞——降级值恒可判定。
+
 const recordFailure = (step, exitInfo, note, attribution) => {
   try {
     const entry = { ts: new Date().toISOString(), exitCode: typeof exitInfo === 'number' ? exitInfo : -1, suite: step, note };
@@ -257,6 +265,9 @@ const recordFailure = (step, exitInfo, note, attribution) => {
     // 存量豁免（2026-11-10）：此锚前的失败行与全部绿行（绿行无失败可归因，attribution 只标注失败，
     // 恒不落）可缺该字段——消费侧按未知处理，不回填不追溯（同 policy.mjs attributionSince 存量豁免纪律）。
     if (attribution) entry.attribution = attribution;
+    // 脏树摘要（BACKLOG 34）：失败行同样钉住当时工作树，红/绿同口径可对质（'' 干净 / hex 脏 / 缺键未知）。
+    const dirtyTree = dirtyTreeDigest(ROOT);
+    if (dirtyTree !== null) entry.dirtyTree = dirtyTree;
     if (process.env.PIPELINE_RUN_ID) entry.runId = process.env.PIPELINE_RUN_ID;
     fs.mkdirSync(path.join(ROOT, '.agents'), { recursive: true });
     fs.appendFileSync(path.join(ROOT, '.agents', 'verifications.jsonl'), `${JSON.stringify(entry)}\n`);
@@ -814,6 +825,10 @@ async function run() {
           .map((l) => l.slice(3).split(' -> ').pop().trim().replace(/^"|"$/g, '').replace(/\\/g, '/'))
           .filter((p) => /^(backend|frontend)\//.test(p)).sort();
       }
+      // 脏树摘要（BACKLOG 34）：'' = 干净树 / 16 位 hex = 脏树 / 缺键 = 未知（git 不可用）——
+      // 口径见 dirtyTreeDigest 头注；gen-verify-evidence 对非空摘要渲染「非干净树」标注。
+      const dirtyTree = dirtyTreeDigest(ROOT);
+      if (dirtyTree !== null) entry.dirtyTree = dirtyTree;
       const counts = parseCounts(outputs['test'] || '');
       if (counts) Object.assign(entry, counts);
       // 门禁成本入账（G8）：逐门毫秒 + 总耗时，metrics 消费。

@@ -5,6 +5,10 @@
 > 与 `pstack`（poteto / Lauren Tan 工作流栈，24 条 principle-* + 元流程技能）的思想对照。
 > 来源③（2026-11-17，条目 29–31）：对 Anthropic《How the Claude Code team does code review》转述文（微信公众号）
 > 对照——多 Agent 评审收敛控制、评测集周期化、发布控制定位三项。
+> 来源④（2026-11-18，条目 32–35）：对微信公众号《从团队研发规范到可执行的 SDLC Workflow》
+> （Harness Engineering ⑬·Nexum SDLC Workflow）的源码级机制对照——纪律机制（风险定级路由 / 承诺面指纹 /
+> 证据绑定 / 门禁棘轮）本仓已同构覆盖；缺口记录为任务级版本归属、未提交树证据、能力阻断分级，另附
+> pipeline 状态机「已建未证」事实。
 > 执行顺序 = 编号顺序；标「能力扩展」的条目按仓库约定属 ROADMAP 面，执行时同步回填 ROADMAP。
 > 口径：本仓是安装器，条目同时覆盖 **引擎模板**（安装到目标项目）与 **安装器自身**（本仓）。
 > 状态：`TODO` / `WIP` / `DONE`。完成一项必须在同一提交更新本文件。
@@ -21,6 +25,7 @@
 | 2 | Dreaming 没有“经验”输入 | `.agents/scripts/session-log.mjs`，`dream-run.mjs` 新增经验回放阶段 | 会话事件可追加/摘要；dream 报告引用摘要；无日志时显式报“无输入”而非静默 | DONE |
 | 3 | Stage 6 闭环状态机未验证 | `.agents/scripts/check-pipeline-state.mjs` | 静态闭合检查：每个 `run.stage` 赋值都有处理分支、`stopType` 在闭集内；测试覆盖 | DONE |
 | 15 | 阶段装载表引用三个未分发技能（`grilling` / `codebase-design` / `domain-modeling` 悬空，即下文「行为评测基线」缺口 2）；领域术语与架构决策无工件单源（matt `domain-modeling` / `codebase-design`） | `templates/engine/.agents/skills/{grilling,codebase-design,domain-modeling}/SKILL.md` + 同名 `locales/en/overrides/.agents/skills/` + `templates/scaffold/workflow/glossary.md`、`workflow/adr/_TEMPLATE.md` + `workflow/artifact-sources.md` 登记 + `tools/lint-templates.mjs` 装载表引用解析 | 三技能随 install 落盘并生成宿主指针壳；`lint:templates` 对「装载表引用不存在技能」必红（破坏性测试）；`skills lint`、en 覆盖检查、`npm test` 全绿；术语表与 ADR 在 artifact-sources 各有唯一真相源行；不改 `new-task.md`/`stages.md` 正文（保存量评测凭证） | DONE |
+| 32 | pipeline 状态机「已建未证」：`pipeline-run.mjs` 执行器、断点续跑、attempt/`await-confirm` 落盘俱在，但 `profiles/*/AGENTS.md` 自标「实验位保留待用：状态机尚未验证、零 run 记录，启用前须补状态机测试」；条目 3 只做了静态闭合检查，未覆盖运行时行为（来源④对照的唯一「有而未用」项） | 非编码：挑一个真实任务在装户全程走 `flow-kit run pipeline-run.mjs`，覆盖至少一次 `await-confirm` 停等与一次 `onFail` 重试；暴露问题逐条立新条目或落 ADR | 本文件「落地记录」节回填实战记录（停等/重试是否如实触发、与 confirmations 台账是否对得上）；`profiles/*/AGENTS.md` 的「零 run 记录」口径同笔修订 | DONE |
 
 ## P1 — 影响系统上限
 
@@ -37,6 +42,10 @@
 | 18 | 会话入口无宿主接线：§1c「进入即装载」只靠文字约束（pstack 用 SessionStart hook 注入路由令，且可一键关）【能力扩展】 | `src/hosts/registry.mjs` 的 `hooks.events` 增 session 类事件 + `src/install/hooks.mjs` 编译 + `engine/.agents/hooks/gates.json` 中性规格 + `doctor` 对账。**实际落点**：新增随包适配器 `engine/.agents/hooks/session-context.cjs`（只注入指针、零写操作、语言随 manifest）+ `session` 工具类别；仅 claude 声明 SessionStart（官方 hooks reference 实证：matcher = 启动方式五值、Context only 无决策面），其余宿主编译期过滤 + advisory；用户开关 `.agents/config/session-context.local.json` 入 `RUNTIME_FILES`（用户所有、升级不覆盖）；ROADMAP 镜像 R6-3 | 声明该事件的宿主生成接线，未声明者降级 guarantee advisory；用户可关且幂等重放不重复追加；`tests/hosts.test.mjs`、`tests/hooks.test.mjs` 覆盖新事件并更新 golden 夹具；宿主能力仍单源在 registry（禁按宿主名分支） | DONE |
 | 19 | 复盘不自动回写技能：dream 已有经验输入，但无「技能失用 / 误触发」候选（pstack `reflect` + `correct`）。**前提修正（2026-11-17 查证）**：① 引擎无技能装载/触发遥测（`session-log` 类型闭集只有 decision/failure/correction/refusal/note），只能做**文本提及**筛查——「零提及 ≠ 未装载」；② **正文漂移已有三张既有面**（`skills lint` 的 lockfile/触发词、kit `lint:templates` 的 stage-skills/render、dream B 的 `gen-engine-map --check`），不在此重复判定；③ 原验收「沿用 golden-set 口径」混淆两份资产——凭证路径是 `skills/eval` 双臂 + `agent-eval record`，`review-method/golden-set.md` 只贡献 Δ/方差复跑纪律 | `scripts/agg-skill-usage.mjs`（新，只读候选）+ `dream-run.mjs` 新 **H2** 阶段（H 之后 I 之前）+ `dream/SKILL.md` §2/§4（zh + en）+ `mechanism-registry.md` **既有 Dreaming 行**扩 H2（不新增机制行）+ `tests/skill-review.test.mjs` | 候选只报告不改技能正文，每条带证据指针与拟改落点；改技能必须走 `agent-eval` 双臂后才允许入面；无日志显式报「无输入」而非静默；测试覆盖 | DONE |
 | 26 | description 预算两处口径，en 覆盖超预算而 CI 全绿：`src/skills/lint.mjs` 用 300 字符，`tools/lint-templates.mjs` 自写 1024，6 个 en 技能描述超预算（en 安装树 `skills lint` 必红，zh 树全绿） | `tools/lint-templates.mjs` 改引 `DESCRIPTION_BUDGET` 单源 + 6 个 `locales/en/overrides/.agents/skills/{csharp-quality-gates,dream,page-refactor,papercut-fix,tfs-pr,verify-ui}/SKILL.md` 的 description 收敛 | 预算单源（lint-templates 不再自写数字）；zh 与 en 安装树 `skills lint` 均 0 错误；破坏性测试：超预算描述必红；description 属触发面，改后重跑 `agent-eval` 双臂或显式记未验证边界 | DONE |
+| 33 | 任务级规范版本归属缺失：workflow 文档 frontmatter 受限子集与 confirmations 台账行均不记录确认时刻的 policy/engine 版本，「这个任务按哪版规范确认过」只能靠仓级 `engine.json` + `effective-policy.md` 快照间接推断；kit 升级打断进行中任务时无「任务保留原版本、迁移重核」的判定依据（来源④） | `engine/.agents/scripts/confirm-doc.mjs` 台账行新增 `policyVersion` 字段（单源经 `policy.mjs` 的 `loadKitPolicy` 读取；**不改** frontmatter 受限子集）；核对既有消费者（`s15-fingerprint` 配对、`gen-workflow-metrics`）兼容性 | 每条新确认台账行携带当次 policyVersion；存量无字段行不判红（向前兼容）；s15 配对与 metrics 生成结果不变；测试覆盖新旧台账共存 | DONE |
+| 38 | 条目 35 ADR（capability-guarantee-tiered-blocking，accepted·进·窄化）的实现面：安装期 `--tier enterprise` 遇 `hardening:none` 宿主拒装 + doctor 对 enterprise 装户 hardened 接线缺失/漂移升格 fail；常规档 advisory 不变；「调整路径」级仅成文不新增机制 | `src/commands/install.mjs`（拒装判定与输出）+ `src/commands/doctor.mjs`（gaps 分级）+ `tests/hosts.test.mjs` / `tests/install.test.mjs` 断言 + `locales/*/installer.json` 文案 | enterprise×hardening:none 拒装且多宿主时装其余并逐个列明；enterprise 装户 doctor fail、常规档 warn 不变；分级单源 registry 能力字段（禁按宿主名分支，破坏性测试）；zh/en 文案齐；npm test 全绿 | DONE |
+| 35 | 能力缺口只有降级没有阻断：doctor 的 guaranteeGap（宿主无 hooks/modelField，相关保证只能 advisory）一律 warn，仅 enterprise 证明链缺失已 fail——「关键约束无法满足时阻断执行或调整路径」未按约束分级落地，hardened 档在 hardening:none 宿主上静默降级（来源④） | 设计先行：先落 ADR 定「关键约束」分级口径（哪些约束属阻断级、按 tier 还是按约束定，参照条目 31 模式）；实现面 `src/commands/doctor.mjs` guaranteeGap 分级 + 装配期语义（`--tier enterprise` 遇 `hardening:none` 拒装或显式降级确认） | ADR 先行（进/不进 + 分级口径），不默认开工；阻断只作用于分级内约束，codex/opencode/pi/cline 等无 hooks 宿主常规档不因此全红；宿主能力仍单源 registry（禁按宿主名分支）；测试覆盖分级判定 | DONE |
+| 36 | pipeline-run 首跑「偏离即停」误报（条目 32 实战发现）：变更检测的 pristine 集只认 manifest.files 哈希——安装期生成的 `.agents/notes/engine-map.md`（`GENERATED_ONLY` 不进 manifest）、verify 自产日志 `tmp/verify-secrets-scan.log`（tmp/ 未进 .gitignore.engine）、装后被再生成的 `workflow/effective-policy.md`（manifest 登记哈希漂移，再生成者待定位）全部漏网；零提交基线装户首个 implement/fix 门必拦，操作者被迫把机器文件列进 `--files`，docsCommit 随之把 verify 日志扫进 feat 提交（实测复现） | `engine/.agents/scripts/pipeline-run.mjs` 的 `manifestPristine` 扩集（+ `GENERATED_ONLY` + 运行时产物豁免）；装户侧 `tmp/` 进 `.gitignore.engine`；`effective-policy.md` 再生成方定位并随写随对账 | 全新装户首个 pipeline run 不把机器文件列入 `--files` 即可推进；docsCommit 不再吸入 verify 日志；`tests/pipeline-executor.test.mjs` 补「真实安装 + 派生/运行时文件」夹具（现夹具不装引擎故未暴露） | DONE |
 
 ## P2 — 结构性问题
 
@@ -58,6 +67,8 @@
 | 29 | PR 面板评审无收敛控制：finder/verifier 多轮往返可能重复报告既有问题、同类缺陷分批修，浪费派发预算（Anthropic 实测：一夜 50+ 轮 Review，59% 评论针对首轮已存在代码；对策=轮次上限、只审新增 diff、同类一次修完、不重复报已知） | `templates/engine/.agents/commands/pr-review.md` 流程节 + `.agents/roles/pr-{finder,verifier,adjudicator}.md` 角色契约（zh + en 同批改）；台账已落 `run.json/briefs`，补「已报问题不复报」消费规则 | 评审流程写明轮次上限（超限要求重估实现方案，不继续逐条修）；verifier 只复核新增 diff 与 escalated 项；同类问题合并单条处置；台账已有 finding 不重复派发；不新增硬门、机制须过 registry 一进一出评估；`npm test` 全绿 | DONE |
 | 30 | 行为评测只在内容签名变更时强制重跑，无周期回归：凭证对当前树绿 ≠ 模型/宿主环境漂移后仍绿（Anthropic 每日在历史事故案例上跑 AI Reviewer 复评召回/误报）。**口径（2026-11-17 定）：本条落引擎侧——本仓 CI 定时复跑引擎双臂基线，保「出厂凭证」的鲜；装户侧不属本条**（装户已有随包 `ci.yml` 的 `agent-eval check --advisory` 腿管自身内容变更，要定时自加 `schedule:`；引擎侧一处定时即对全部装户背书——漂移源=模型/宿主，在语言/栈/档位渲染下同批） | `.github/workflows/` 新增定时工作流（新构建步骤——落地前过确认门；频率周跑起步，按报告噪音调）复跑 `agent-eval` 双臂基线出 Δ/方差报告；只读报告，不自动覆盖凭证 | 周期任务对 golden-set 双臂复跑并出报告；凭证保持人工 `record`；无凭证/环境缺失 loud-skip 不判红；零运行时依赖不变；报告不产生硬门 | DONE |
 | 31 | 发布控制面（merge queue 合并前重检、feature flag 内部灰度、分阶段通道、开关快速回滚）缺位——超出「开发工作流引擎」现定位，先过定位决策再决定是否开工【能力扩展·定位待决策】 | 定位决策先落 ADR（v2.6.0 已装 `workflow/adr/`）；若决策进入，合 main 触发条件已存在（pr-review 触发规则），补排队重检与回滚开关语义后按 ROADMAP 流程补 R 条目 | 先产出 ADR：进/不进 + 理由；不进则关闭本条并记录依据；进则回填 ROADMAP 再执行；不默认开工、不预先设计 | DONE |
+| 34 | 验证证据不绑定未提交修改：`verify.mjs` 落账的全绿行只记基线 `headShort`，`gen-verify-evidence.mjs` 自认「短 SHA 只是基线提交，不等于被测内容」；「verify 绿→commit 之间改码」的残余窗口目前只靠「先提交后跑门」+ L1 单笔关单的流程约定封住，无技术性绑定（来源④） | `engine/.agents/scripts/verify.mjs` 落账处（全绿行与失败行）增记脏树摘要（`git status --porcelain` + `git diff HEAD` 内容的 sha256）；`gen-verify-evidence.mjs` 渲染时对脏树凭证标注「非干净树」 | 全绿/失败行带脏树摘要；干净树与脏树凭证在 `workflow/verify-evidence.md` 可区分；存量无字段行向前兼容；测试覆盖干净/脏树两态 | DONE |
+| 37 | pipeline-run 观测口径与实现漂移（条目 32 实战发现）：①`pipeline-run.md` 声称「退回途中记 route 事件（from/to/attempt/cap）」「每次失败记 retry 事件」，实测 events 只有 run-created/work-order/stop/triage/gate/confirm/commit/done——`retries` 计数器有而 route/retry 事件无；②done 摘要列出 `api.md（?）`——未声明 `{apiDocs}` 时 `docs.apiDocs` 仍被默认派生并打印 | `engine/.agents/scripts/pipeline-run.mjs`：route/retry 事件补落或文档改口径（二选一）；`apiDocs` 仅在 stageArtifacts 声明时派生/打印 | 实测 run 的 events 含 route/retry（或文档口径删除）；未声明 `{apiDocs}` 的 run 其 done 摘要不含 api.md 行；`tests/pipeline-executor.test.mjs` 补两态断言 | DONE |
 
 ## 落地记录（2026-11-12）
 
@@ -437,6 +448,59 @@
   推断显式标注）。核心理由：merge queue / feature flag 灰度 / 分阶段通道 / 快速回滚是组织级交付平台职责，装户运行时异构且无需求实证，
   与零依赖、不假设装户环境的安装器立场冲突；合入前质量门已由 L0–L3 定级路由 + pr-review 触发规则 + CI 确定性门禁覆盖。
   不立 ROADMAP 条目；同类「文章有、引擎要不要有」的定位判定自此可引用本 ADR 先例。
+
+## 落地记录（2026-11-18，条目 32）
+
+- **装户**：临时目录全新安装（trae / zh-CN / node，167 文件，零提交基线），`flow-kit run` 走包内运行时解析。
+- **任务**：`workflow/glossary.md` 登记术语「管线运行」（L1·require）。run `20261118-1543-…-8m5g`：
+  triage 工单 → plan 起草（门拦占位符残留 1 次，真实 gate-fail）→ plan 确认（await-confirm，台账 approved 行）
+  → 改动清单确认（对话级，run 事件不进台账）→ implement（`--files` 核对）→ verify 门红（埋真实假密钥，
+  secrets-lite 拦截，归因 real）→ 路由 fix 工单 → 修复后重报 `--files` → verify 全绿 → closeout 勾验收补证据
+  → done 确认（台账 done 行）→ `PIPELINE-STOP done`。合计 22 门（1 非零）、3 确认、3 提交。
+- **台账配对**：plan frontmatter `确认指纹: a37419c9f2e02b05` 与 `.agents/confirmations.d/plan.jsonl`
+  done 行指纹前 16 位一致；approved/done 两行 source=chat-delegated、quote 为当次原话。
+- **覆盖核对**：await-confirm 停等 ✓（3 次）；onFail 失败路由与 per-stage retries 记账 ✓
+  （route/retry 事件未落盘 → 条目 37）；台账配对 ✓。
+- **发现（立条目 36/37）**：首跑「偏离即停」三连误报（engine-map / verify 自产日志 / effective-policy 漂移）；
+  route/retry 事件缺失；done 摘要列出不存在的 `api.md（?）`。
+- **口径修订**：`profiles/*/AGENTS.md` ×7、`hosts/claude/CLAUDE.md`、`commands/pipeline-run.md`（zh+en）
+  的「实验位保留待用 / 暂零 run」段更新为「实战已验证 + 已知首跑问题」。
+
+- **条目 33（2026-11-18）**：`confirm-doc.mjs` 四个 `appendLedger` 落点行尾增 `policyVersion`（单源
+  `loadKitPolicy`，回退 1）；新增 `tests/confirm-doc-policy-version.test.mjs` 4 用例（在场值/回退/新旧共存
+  s15 真段配对含篡改负例/funnelFromLedger 新旧 deepEqual）；全量 619 pass / 0 fail。
+
+- **条目 34（2026-11-18）**：`verify.mjs` 绿/失败行增 `dirtyTree`（porcelain+diff HEAD 摘要前 16 位；
+  ''=干净、缺键=git 不可用不伪造）；`gen-verify-evidence.mjs` 对非空摘要标「非干净树」（存量无字段不误标）；
+  新增 `tests/verify-dirty-tree.test.mjs` 4 用例；全量 623 pass / 0 fail。附带核实：`.gitignore.engine`
+  未列根 `tmp/`（kit 仓自身有忽略），印证条目 36 落点。
+
+- **条目 35（2026-11-18）**：ADR `docs/adr/2026-11-18-capability-guarantee-tiered-blocking.md`
+  （accepted）：**进·窄化**——阻断只作用于「显式高档承诺未兑现」（enterprise 档 × hardening:none 宿主：
+  安装期拒装、体检期 fail）；常规档 advisory 不变；调整路径级成文不新增机制。实现面立 #38 跟踪，不默认开工。
+
+- **条目 36（2026-11-18）**：`pipeline-run.mjs` `RUNTIME_OWNED` 扩三项豁免（`.agents/notes/engine-map.md`、
+  `workflow/effective-policy.md`、`tmp/` 前缀）+ `templates/git/.gitignore.engine` 加根 `tmp/` +
+  R3-4 用例补机器文件在场夹具。effective-policy 定性：模板为占位符、生成器渲染含当日日期逐日合法漂移，
+  由 engine-artifacts 门自愈覆盖，真值源受 manifest 保护，故豁免而非 rehash。复验：全新装户零提交基线
+  `--files` 只报业务文件直接过门、docsCommit 零机器文件入库；全量 623 pass / 0 fail。
+  （过程中一次「承诺面漂移」拦截经核为操作者误改验收行括注所致，门行为正确，未立条目。）
+
+- **条目 37（2026-11-18）**：①真因 = verify→fix 走 `runGate` 专用分支（不经 `stopGateFail`），
+  退回不记 route 事件——已在 `bumpRetry` 后补 `emit route`（与 stopGateFail 同语义）+ 断言；
+  ②done 摘要对未产物的兜底派生 `apiDocs` 标「未产物」而非混用 `?`。全量 623 pass / 0 fail。
+
+- **条目 38（2026-11-18）**：enterprise 档阻断落地——`install.mjs` 拒装 `hardening:none` 宿主（单拒
+  exit 2 不落盘 / 混合照装其余 + warn 列明；upgrade 复用同管线自动覆盖）；`doctor.mjs` 对 enterprise
+  装户的 none 级宿主新增 `enterprise blocked hosts` fail（gaps 的 hooks 级仍 advisory，阈值统一 none）；
+  文案 3 键 zh/en 同步；`install-tier` / `enterprise` 测试 +4（含「判定读 registry 不硬编码宿主名」
+  破坏性测试）。全量 627 pass / 0 fail。
+
+- **测试审查（2026-11-18，ub-mode）**：对本轮新增/修改测试做突变验证——三个核心回归（RUNTIME_OWNED
+  豁免、verify→fix route 事件、enterprise 拒装）注入实现退化均被对应测试杀死；修一处空过断言
+  （done 摘要 apiDocs 条件断言改强）；补覆盖缺口三处（reconfirm 落点、digest 三态、零提交仓分支——
+  `dirtyTreeDigest` 抽至无副作用单源 `git-tree-digest.mjs`，因 verify.mjs 顶层 import 即跑主流程）。
+  全量 630 pass / 0 fail；lint:templates 与 check:i18n 均绿。
 
 ## 能力扩展
 

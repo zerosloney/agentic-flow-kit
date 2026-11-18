@@ -265,6 +265,11 @@ test('R3-5: archived terminal doc still counts as closed (done-confirm does not 
   const run = readRun(root);
   assert.equal(run.stage, 'done');
   assert.equal(run.stopType, 'done');
+  // 条目 37：apiDocs 是声明式兜底派生，文件未产物时 done 摘要标「未产物」，不得混用「?」。
+  // 先断言派生确实发生（否则 match 空过——条件断言等于没测）。
+  assert.ok(run.docs?.apiDocs, '该路径应触发 apiDocs 兜底派生');
+  assert.doesNotMatch(r.stdout, /api\.md（\?）/);
+  assert.match(r.stdout, /api\.md（未产物）/);
 });
 
 test('R3-4: empty module vocabulary disables triage module validation', () => {
@@ -301,6 +306,12 @@ test('R3-4: pristine install output is not counted as work-order changes', () =>
   }));
   fs.mkdirSync(path.join(root, 'workflow/wiki'), { recursive: true });
   fs.writeFileSync(path.join(root, 'workflow/wiki/e2e.md'), '新增文档\n');
+  // 条目 36 回归：机器生成/运行时产物不在 manifest 内（engine-map 装期生成、effective-policy 自愈
+  // 生成、tmp/ 为 verify 自产日志）——不得算作工单改动面，无需列入 --files。
+  fs.mkdirSync(path.join(root, 'tmp'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'tmp/verify-secrets-scan.log'), '机器日志\n');
+  fs.writeFileSync(path.join(root, '.agents/notes/engine-map.md'), '# 引擎地图\n');
+  fs.writeFileSync(path.join(root, 'workflow/effective-policy.md'), '# 快照\n');
   writeRun(root, {
     stage: 'implement',
     stopType: 'work-order',
@@ -343,6 +354,10 @@ test('R6-1: verify failure routes to the table target and persists per-stage ret
   assert.deepEqual(run.retries, { verify: 1 });
   assert.equal(run.fixLoop, undefined, '旧 fixLoop 计数已随路由表退役');
   assert.equal(run.nextTarget, null);
+  // 条目 37：verify→fix 专用分支的退回也记 route 事件（与 stopGateFail 同语义），否则事件账本无路由历史
+  const route = run.events.find((e) => e.type === 'route');
+  assert.ok(route, 'verify→fix 退回缺 route 事件');
+  assert.deepEqual([route.from, route.to, route.attempt, route.cap], ['verify', 'fix', 1, 3]);
 });
 
 test('R6-1: exhausted retry budget stops at the failure stage with exit 2', () => {

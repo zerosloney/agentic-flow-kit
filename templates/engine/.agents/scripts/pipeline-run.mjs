@@ -445,7 +445,9 @@ function printRun(ctx, run, problems) {
     const fails = gates.filter((e) => e.exit !== 0).length;
     console.log(`  需求：${run.requirement}`);
     console.log(`  门执行 ${gates.length} 道（非零 ${fails}）；确认 ${run.events.filter((e) => e.type === 'confirm').length} 次；提交 ${run.events.filter((e) => e.type === 'commit').length} 笔`);
-    for (const d of [...new Set([run.docs?.entry, run.docs?.spec, run.docs?.plan, run.docs?.apiDocs].filter(Boolean))]) console.log(`  文档：${d}（${docState(ctx, d) || '?'}）`);
+    // apiDocs 是声明式兜底派生（未声明 {apiDocs} 也会派生），文件未产物时标「未产物」而非 '?'——
+    // '?' 表示「存在但状态未知」，与不存在混用会误导（条目 37，2026-11-18 实测发现）。
+    for (const d of [...new Set([run.docs?.entry, run.docs?.spec, run.docs?.plan, run.docs?.apiDocs].filter(Boolean))]) console.log(`  文档：${d}（${docState(ctx, d) || (fs.existsSync(resolveDocRel(ctx, d)) ? '?' : '未产物')}）`);
   } else if (run.stopType === 'aborted') {
     console.log(`\n== 已放弃（${run.abort?.to || ''}）== ${run.abort?.note || ''}`);
   }
@@ -596,7 +598,13 @@ function changedFiles(ctx, run) {
 }
 
 // 脚本自身管理的运行态路径——confirm/gate/gen-index 副产物，不属宿主越权面（沙箱演练实证，2026-10-02）
-const RUNTIME_OWNED = ['.agents/cache/', '.agents/confirmations.jsonl', '.agents/confirmations.d/', 'workflow/INDEX.md'];
+// 运行期产物豁免（2026-11-18 条目 36 实测定位，与 manifestPristine 同纪律）：零提交基线装户首跑误报
+// 「偏离即停」的三来源——① `.agents/notes/engine-map.md`：GENERATED_ONLY，装期生成、从不进 manifest；
+// ② `tmp/`：verify 门自产日志目录（verify.mjs 落 `tmp/verify-*.log`，已随 .gitignore.engine 忽略）；
+// ③ `workflow/effective-policy.md`：自愈生成物（engine-artifacts 门漂移即重生成，渲染含当日日期、逐日
+// 合法漂移，rehash 无意义）。安全性同既有注释：三者真值源（policy.json / mechanism-registry /
+// engine.json / 引擎模板）均在 manifest 内受 pristine 保护，机器改动会被自愈覆盖或本就是机器输出。
+const RUNTIME_OWNED = ['.agents/cache/', '.agents/confirmations.jsonl', '.agents/confirmations.d/', 'workflow/INDEX.md', '.agents/notes/engine-map.md', 'workflow/effective-policy.md', 'tmp/'];
 
 function checkAuthorized(ctx, run, filesCsv) {
   const listed = String(filesCsv || '').split(/[,，]/).map((s) => s.trim().replace(/\\/g, '/')).filter(Boolean);
@@ -964,6 +972,9 @@ async function advance(ctx, run, opt) {
           : 'verify 未过（该阶段未声明失败路由——人工处理后重跑 next）']);
       }
       bumpRetry(run, s);
+      // 退回事件与 stopGateFail（L380）同语义：verify→fix 走本专用分支不经 stopGateFail，
+      // 不补则 run 事件账本看不到路由历史（条目 37，2026-11-18 实测发现）。
+      emit(run, { type: 'route', from: s, to, attempt, cap: retry });
       run.stage = to;
       issueWO(ctx, run, wo(run, {
         kind: 'fix', title: `修复环 ${attempt}/${retry}：verify 未过`, goal: '按失败输出修复后回跑',

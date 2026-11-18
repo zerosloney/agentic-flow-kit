@@ -344,7 +344,7 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
   // 渲染与 manifest 使用同一时间戳，避免 diff 把 {{installedAt}} 误判为模板更新。
   // 重跑/续装幂等：engine.json 已有 createdAt（{{installedAt}} 的渲染产物）时复用既有值。
   const installedAt = readEngineCreatedAt(target) || new Date().toISOString();
-  const hostSet = [...new Set([...(previous?.hosts || []), ...hosts])];
+  let hostSet = [...new Set([...(previous?.hosts || []), ...hosts])];
   const trackHosts = flag(args, 'track-hosts');
   // 档位：CLI > --hardened（=enterprise）> 既有 manifest > standard。
   // 档位只影响交付面（CI / 加固），不削弱引擎门禁。
@@ -353,6 +353,24 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
     t,
   );
   const hardened = flag(args, 'hardened') || tier === 'enterprise' || Boolean(previous?.hardened && !args.tier);
+  // 条目 38（ADR capability-guarantee-tiered-blocking，accepted·进·窄化）：enterprise 档承诺 hardened
+  // 接线，宿主 `hardening.level === 'none'` 无法满足——拒装该宿主（阈值与 doctor 体检期 fail 一致；
+  // hooks 级放行，其缺口仍走 gaps advisory）。判定单源读 registry 能力字段，禁按宿主名分支。
+  // 全部被拒 → 硬失败；部分被拒 → 剔除后照装其余并输出列明（不静默降级）。
+  if (hardened) {
+    const blocked = hostSet.filter((h) => (HOSTS[h]?.hardening?.level || 'none') === 'none');
+    if (blocked.length === hostSet.length) {
+      const err = new Error(t('error.enterpriseHostBlocked', { hosts: blocked.join(', ') }));
+      err.code = 'ENTERPRISE_HOST_BLOCKED';
+      throw err;
+    }
+    if (blocked.length) {
+      const blockedSet = new Set(blocked);
+      hostSet = hostSet.filter((h) => !blockedSet.has(h));
+      planHosts = planHosts.filter((h) => !blockedSet.has(h));
+      emit(t('warn.enterpriseHostSkipped', { hosts: blocked.join(', ') }));
+    }
+  }
   // CI 交付面：显式 --ci 优先；否则沿用 manifest 选择；都没有时按 tier 派生（buildPlan 内）。
   const ciChoice = args.ci !== undefined ? normalizeCi(args.ci, t) : (previous?.ci || null);
 

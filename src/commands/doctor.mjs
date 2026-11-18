@@ -373,6 +373,14 @@ export function doctorCommand({ args, t }) {
     if (enterprise.gaps.length) {
       add(true, 'enterprise gaps', t('doctor.enterpriseGaps', { gaps: enterprise.gaps.join(', ') }), '', { warn: true });
     }
+    // 条目 38：体检期阻断——enterprise 承诺未兑现（宿主 hardening.level === 'none'，如 enterprise
+    // 装户经 add-host 引入）fail；阈值与安装期拒装一致，hooks 级仍走 gaps advisory（不升级为 fail）。
+    const blockedHosts = Object.entries(enterprise.hosts)
+      .filter(([, level]) => level === 'none')
+      .map(([name]) => name);
+    if (blockedHosts.length) {
+      add(false, 'enterprise blocked hosts', t('doctor.enterpriseBlocked', { hosts: blockedHosts.join(', ') }));
+    }
     const missingProof = PROOF_CHAIN_FILES.filter((rel) => !fs.existsSync(path.join(target, rel)));
     if (missingProof.length) add(false, 'enterprise proof-chain', t('doctor.enterpriseProof', { list: missingProof.join(', ') }));
     else add(true, 'enterprise proof-chain', t('doctor.enterpriseProofOk'));
