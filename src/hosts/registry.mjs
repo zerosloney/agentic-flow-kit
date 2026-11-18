@@ -292,6 +292,16 @@ export const HOST_SOURCES = new Map(HOST_NAMES.map((name) => [name, 'builtin']))
 
 export function registerHost(name, def, source = 'external') {
   const key = String(name || '').trim().toLowerCase();
+  if (!key) {
+    const err = new Error('registerHost: host name must be a non-blank string');
+    err.code = 'INVALID_HOST_NAME';
+    throw err;
+  }
+  if (def === null || typeof def !== 'object' || Array.isArray(def)) {
+    const err = new Error('registerHost: host definition must be a non-null object');
+    err.code = 'INVALID_HOST_DEF';
+    throw err;
+  }
   HOSTS[key] = def;
   HOST_SOURCES.set(key, source);
   if (!HOST_NAMES.includes(key)) HOST_NAMES.push(key);

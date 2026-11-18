@@ -11,6 +11,7 @@ import {
   hostTargetRel,
   isAgentTemplate,
   modelRoleForAgent,
+  registerHost,
 } from '../src/hosts/registry.mjs';
 import { buildVars, render } from '../src/render/tokens.mjs';
 import { makeTmp } from './helpers/tmp.mjs';
@@ -233,4 +234,14 @@ test('list-hosts --json stays a plain host array without probe output', () => {
   const parsed = JSON.parse(r.stdout);
   assert.ok(Array.isArray(parsed));
   assert.doesNotMatch(r.stdout, /探测|Gemini/);
+});
+
+test('registerHost rejects a blank host name', () => {
+  assert.throws(() => registerHost(''), /host name/);
+  assert.throws(() => registerHost('   '), /host name/);
+});
+
+test('registerHost rejects a non-object host definition', () => {
+  assert.throws(() => registerHost('x', null), /host definition/);
+  assert.throws(() => registerHost('x', ['claude']), /host definition/);
 });
