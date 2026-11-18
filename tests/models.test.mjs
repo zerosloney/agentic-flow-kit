@@ -99,6 +99,30 @@ test('recommendRoles keeps review different from code when possible', () => {
   assert.notEqual(roles.review, roles.code);
 });
 
+test('recommendRoles records detected vs configured per role', () => {
+  // claude 有内置别名兜底：池值按探测值标注。
+  const known = recommendRoles({ host: 'claude', candidates: [] });
+  assert.equal(known.sources.code, 'detected');
+  assert.equal(known.sources.judgment, 'detected');
+
+  // claude 无已知别名且探测为空：走 roleConfig 兜底，标注 configured。
+  const fallback = recommendRoles({
+    host: 'trae',
+    candidates: [],
+    roleConfig: { roles: { code: { model: 'cfg-code' }, judgment: { model: 'cfg-judgment' } } },
+  });
+  assert.equal(fallback.code, 'cfg-code');
+  assert.equal(fallback.sources.code, 'configured');
+  assert.equal(fallback.sources.judgment, 'configured');
+  assert.equal(fallback.review, null);
+  assert.equal('review' in fallback.sources, false, '无值角色不记录来源');
+
+  // 真探测值仍标 detected。
+  const probed = recommendRoles({ host: 'trae', candidates: [{ id: 'provider/x', source: 'config' }] });
+  assert.equal(probed.code, 'provider/x');
+  assert.equal(probed.sources.code, 'detected');
+});
+
 test('resolveModels precedence: CLI > TUI > local > detection > inherit', () => {
   const target = tmpDir();
   writeJson(path.join(target, LOCAL_REL), {
@@ -152,6 +176,29 @@ test('resolveModels detects static config and falls back to inherit', () => {
   const inherit = resolveModels({ hosts: ['claude'], target, probe: false, mode: 'inherit' });
   assert.equal(inherit.hosts.claude.code, 'inherit');
   assert.equal(inherit.hosts.claude.review, 'inherit');
+});
+
+test('resolveModels labels role-config fallback as configured, not detected', () => {
+  const target = tmpDir();
+  const home = tmpDir();
+  // trae 无内置别名、空 home 下探测为空：推荐值来自 roleConfig 兜底而非探测。
+  const result = resolveModels({
+    hosts: ['trae'],
+    target,
+    home,
+    env: {},
+    roleConfig: {
+      roles: {
+        code: { model: 'cfg-code' },
+        judgment: { model: 'cfg-judgment' },
+        review: { model: 'cfg-review' },
+      },
+    },
+  });
+  assert.equal(result.hosts.trae.code, 'cfg-code');
+  assert.equal(result.hosts.trae.judgment, 'cfg-judgment');
+  assert.equal(result.hosts.trae.review, 'cfg-review');
+  assert.equal(result.source, 'configured');
 });
 
 test('resolveModels role summary does not depend on host order', () => {

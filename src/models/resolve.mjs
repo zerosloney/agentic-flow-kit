@@ -135,9 +135,11 @@ function unique(list) {
 }
 
 // 按角色推荐：先探测值，再用已核实的内置别名兜底。
+// sources 记录每个角色值的来源：探测池 → 'detected'；roleConfig 兜底 → 'configured'；无值不记录。
 export function recommendRoles({ host, candidates = [], roleConfig = null } = {}) {
   const detected = candidates.map((c) => (typeof c === 'string' ? c : c.id));
   const out = {};
+  const sources = {};
   for (const role of ROLE_NAMES) {
     const pool = unique([...detected, ...knownFor(host, role)]);
     let best = null;
@@ -150,10 +152,14 @@ export function recommendRoles({ host, candidates = [], roleConfig = null } = {}
       }
     }
     out[role] = best || pool[0] || roleConfig?.roles?.[role]?.model || null;
+    if (out[role]) sources[role] = best || pool[0] ? 'detected' : 'configured';
   }
   if (out.review && out.code && out.review === out.code) {
     out.review = unique([...detected, ...knownFor(host, 'review')]).find((id) => id !== out.code) || null;
+    if (out.review) sources.review = 'detected';
+    else delete sources.review;
   }
+  out.sources = sources;
   return out;
 }
 
@@ -210,7 +216,7 @@ export function resolveModels({
         // 未重新探测时，保留已安装子代理的模型；显式探测/推荐优先。
         const previousHost = !probe ? hostRoleValue(previous, host, role) : null;
         if (previousHost) chain.push([previousHost, 'previous']);
-        if (probe && recommended[role]) chain.push([recommended[role], 'detected']);
+        if (probe && recommended[role]) chain.push([recommended[role], recommended.sources[role]]);
       }
       if (chain.length) {
         values[role] = chain[0][0];
