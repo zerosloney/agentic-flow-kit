@@ -2,6 +2,14 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.10.1]
+
+### 修复
+
+- fix: registerHost 入口 fail-loud——空白名与非对象定义不再静默进注册表
+- fix: 模型角色兜底值来源标注为 configured——roleConfig 默认不再误标 detected
+- fix: 迁移清理资格持久化——schemaVersion 落盘后安装失败，重跑凭 pendingRemovals 完成清理不再丢
+
 ## [2.10.0]
 
 ### 新增
