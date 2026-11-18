@@ -5,6 +5,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { validateHostDefinition } from '../src/hosts/external.mjs';
+import { mergeHooksIntoRoot, parseHookSpec } from '../src/install/hooks.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
@@ -147,6 +149,85 @@ test('external hosts can opt into the hook compiler via hooks.events', () => {
   assert.equal(check.ok, true, check.detail);
 });
 
+const T = (key, vars) => `${vars.file}: ${vars.detail}`;
+
+function hostWithEvents(event) {
+  return validateHostDefinition({
+    name: 'demo',
+    dir: '.demo',
+    hooks: {
+      file: 'hooks.json',
+      events: {
+        event,
+        container: 'hooks',
+        matchers: { shell: 'Bash' },
+        tools: ['shell'],
+        timeouts: { shell: 600 },
+        command: { form: 'relative', template: 'node {script}' },
+      },
+    },
+  }, 'demo.json', T);
+}
+
+const SHELL_SPEC = () => parseHookSpec(JSON.stringify({ hooks: [
+  { event: 'PreToolUse', tool: 'shell', script: '.agents/hooks/a.cjs' },
+  { event: 'PostToolUse', tool: 'shell', script: '.agents/hooks/b.cjs' },
+] }));
+
+test('external host event arrays normalize like built-ins and compile each event', () => {
+  // 去空白、去重、保序，统一归一为数组（与内置 claude 的数组声明同形）。
+  const def = hostWithEvents(['PreToolUse', ' PostToolUse ', 'PostToolUse']);
+  assert.deepEqual(def.hooks.events.event, ['PreToolUse', 'PostToolUse']);
+
+  const cfg = def.hooks.events;
+  const root = {};
+  assert.equal(mergeHooksIntoRoot(root, SHELL_SPEC(), cfg), true);
+  assert.deepEqual(Object.keys(root.hooks).sort(), ['PostToolUse', 'PreToolUse']);
+  assert.equal(root.hooks.PreToolUse[0].hooks[0].command, 'node .agents/hooks/a.cjs');
+  assert.equal(root.hooks.PostToolUse[0].hooks[0].command, 'node .agents/hooks/b.cjs');
+});
+
+test('external host single-string event stays accepted (normalized to array)', () => {
+  assert.deepEqual(hostWithEvents('PreToolUse').hooks.events.event, ['PreToolUse']);
+});
+
+test('external host rejects invalid event arrays', () => {
+  for (const event of [[], ['PreToolUse', 42], ['PreToolUse', '   '], '   ', 42]) {
+    assert.throws(() => hostWithEvents(event), (err) => err.code === 'HOST_MANIFEST'
+      && /hooks\.events\.event/.test(err.message), JSON.stringify(event));
+  }
+});
+
+test('external host installs with a multi-event hooks.events declaration', () => {
+  const dir = tmpRepo();
+  writeHost(dir, 'demo', {
+    ...DEMO,
+    hooks: {
+      file: 'hooks.json',
+      events: {
+        event: ['PreToolUse', 'PostToolUse', 'SessionStart'],
+        container: 'hooks',
+        matchers: { write: 'Write|Edit', shell: 'Bash' },
+        tools: ['write', 'shell'],
+        timeouts: { write: 120, shell: 600 },
+        command: { form: 'relative', template: 'node {script}' },
+      },
+    },
+  });
+  writeTemplates(dir, 'demo', { 'hooks.json': '{"hooks":{}}\n' });
+
+  const r = installDemo(dir);
+  assert.equal(r.status, 0, r.stderr);
+  const hooks = JSON.parse(fs.readFileSync(path.join(dir, '.demo/hooks.json'), 'utf8'));
+  // 默认 gates 规格只有 PreToolUse 落在 write/shell 工具面：两条 matcher 分组都接线。
+  assert.deepEqual(hooks.hooks.PreToolUse.map((group) => group.matcher), ['Write|Edit', 'Bash']);
+
+  const doctor = json(run(['doctor', '--target', '.', '--json'], dir));
+  const check = doctor.checks.find((item) => item.name === 'hooks demo');
+  assert.ok(check);
+  assert.equal(check.ok, true, check.detail);
+});
+
 test('external hosts can opt into the permission compiler', () => {
   const dir = tmpRepo();
   writeHost(dir, 'demo', {
@@ -231,6 +312,7 @@ test('invalid host definitions fail with usage exit and a field-level detail', (
     ['missing templates dir', { name: 'demo', dir: '.demo', templates: './nowhere' }, /templates/],
     ['missing skillMeta dir', { name: 'demo', dir: '.demo', skillMeta: './nowhere' }, /skillMeta/],
     ['bad mcp format', { name: 'demo', dir: '.demo', mcp: { file: '.mcp.json', format: 'vscode' } }, /`mcp\.format`/],
+    ['mcp.scope not supported', { name: 'demo', dir: '.demo', mcp: { file: '.mcp.json', scope: 'project' } }, /`mcp\.scope`/],
     ['skills.file parent segment', { name: 'demo', dir: '.demo', skills: { mode: 'native', dir: 'skills', file: '../x' } }, /`skills\.file`/],
     ['skills.file backslash traversal', { name: 'demo', dir: '.demo', skills: { mode: 'native', dir: 'skills', file: '..\\..\\evil' } }, /`skills\.file`/],
     ['hookExtras overrides command', {

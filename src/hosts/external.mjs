@@ -78,10 +78,25 @@ const HOOK_FORM_SET = new Set(HOOK_FORMS);
 const CLI_FORMS = new Set(['cli', 'cli-args']);
 
 // hooks.events 让外部宿主也能接入 Hook 编译器；字段与内置注册表一致。
+// event 与内置同形：非空字符串或非空字符串数组（claude 即数组声明），统一归一为
+// 去空白、去重、保序的数组；消费面 hooks.mjs 对两种形态按成员匹配，语义不变。
+function normalizeHookEventList(raw, field, bad) {
+  const list = Array.isArray(raw) ? raw : [raw];
+  const events = [];
+  for (const item of list) {
+    if (typeof item !== 'string' || !item.trim()) bad(`\`${field}.event\` entries must be non-empty strings`);
+    const event = item.trim();
+    if (!events.includes(event)) events.push(event);
+  }
+  if (!events.length) bad(`\`${field}.event\` must not be empty`);
+  return events;
+}
+
 function normalizeHookEvents(raw, field, bad) {
   if (raw == null) return null;
   if (!isObject(raw)) bad(`\`${field}\` must be an object or null`);
-  if (!isString(raw.event)) bad(`\`${field}.event\` is required`);
+  if (!isString(raw.event) && !Array.isArray(raw.event)) bad(`\`${field}.event\` must be a non-empty string or an array of strings`);
+  const event = normalizeHookEventList(raw.event, field, bad);
   for (const key of ['container', 'matcherKey', 'hooksKey']) {
     if (raw[key] != null && !isString(raw[key])) bad(`\`${field}.${key}\` must be a string`);
   }
@@ -124,7 +139,7 @@ function normalizeHookEvents(raw, field, bad) {
     }
   }
   return {
-    event: raw.event,
+    event,
     ...(raw.container ? { container: raw.container } : {}),
     ...(raw.matcherKey ? { matcherKey: raw.matcherKey } : {}),
     ...(raw.hooksKey ? { hooksKey: raw.hooksKey } : {}),
@@ -188,6 +203,7 @@ function normalizeMcp(raw, field, bad) {
   if (raw == null) return null;
   if (!isObject(raw)) bad(`\`${field}\` must be an object or null`);
   if (!isRelPath(raw.file)) bad(`\`${field}.file\` must be a relative path`);
+  if (raw.scope != null) bad(`\`${field}.scope\` is not supported`);
   const format = raw.format == null ? 'claude' : raw.format;
   if (!MCP_FORMATS.has(format)) bad(`\`${field}.format\` must be one of: claude, opencode`);
   return { file: raw.file, format };

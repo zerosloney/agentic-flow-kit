@@ -130,7 +130,7 @@ export const HOSTS = {
     permissions: { container: 'permissions', syntax: 'colon', tool: 'Bash', tools: ['shell', 'read', 'web'] },
     // enterprise 档：managed-only 设置模板替换 settings.json，权限数组仍由 gates.json 编译
     hardening: { level: 'managed', settings: 'settings.hardened.json' },
-    mcp: { file: '.mcp.json', format: 'claude', scope: 'project' },
+    mcp: { file: '.mcp.json', format: 'claude' },
     modelProbe: {
       configs: ['~/.claude/settings.json'],
       env: ['ANTHROPIC_MODEL', 'CLAUDE_CODE_SUBAGENT_MODEL'],
@@ -148,7 +148,7 @@ export const HOSTS = {
     skills: { mode: 'native', dir: 'skills', file: 'SKILL.md' },
     hooks: null,
     // OpenCode 根配置使用 mcp 容器，local 命令是数组、env 字段名为 environment
-    mcp: { file: 'opencode.json', format: 'opencode', scope: 'project' },
+    mcp: { file: 'opencode.json', format: 'opencode' },
     hardening: { level: 'none' },
     modelProbe: { configs: ['~/.config/opencode/opencode.json'], env: ['OPENCODE_MODEL'], cli: [] },
   },
@@ -175,7 +175,7 @@ export const HOSTS = {
     // Qwen Code 在 .qwen/settings.json 使用 mcpServers 容器
     permissions: { container: 'permissions', syntax: 'space', tool: 'Bash', tools: ['shell'], extraAllow: [{ tool: 'shell', pat: 'dir' }] },
     hardening: { level: 'permissions' },
-    mcp: { file: '.qwen/settings.json', format: 'claude', scope: 'project' },
+    mcp: { file: '.qwen/settings.json', format: 'claude' },
     modelProbe: { configs: ['~/.qwen/settings.json'], env: ['QWEN_MODEL'], cli: [] },
   },
   pi: {
