@@ -2,6 +2,12 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.10.6]
+
+### 修复
+
+- fix: 角色推荐打分词边界与保守新近破平——minimax 误享 max/mini 提示、子串误命中 ocr1/4o3、旧日期快照同分压新版
+
 ## [2.10.5]
 
 ### 其他
