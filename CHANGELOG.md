@@ -2,6 +2,13 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.9.0]
+
+### 修复
+
+- fix: manifest 改原子写（tmp+rename）——半截写坏 JSON 致 readManifest 返回 null、安装史整体遗忘的路径关闭
+- fix: tasks-path——confirm-doc 与台账不变量闭集同步收编 workflow/tasks/<task>/ 路径
+
 ## [2.8.0]
 
 ### 修复
