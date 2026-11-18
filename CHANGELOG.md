@@ -2,6 +2,16 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.10.2]
+
+### 新增
+
+- feat: 安装锁退出码契约 6 与锁消息本地化——锁冲突可被脚本区分重试，消除 i18n 旁路
+
+### 修复
+
+- fix: 全 manifest 写路径持锁收口——remove-host/uninstall/prune/skills/adopt 不再与并发安装交错
+
 ## [2.10.1]
 
 ### 修复
