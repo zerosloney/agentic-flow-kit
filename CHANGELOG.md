@@ -2,6 +2,17 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.10.3]
+
+### 新增
+
+- feat: 外部宿主能力面对齐内置——hooks.event 支持多事件声明，mcp.scope 死字段清理（外部显式拒绝）
+
+### 修复
+
+- fix: 模型探测同意门知情性——TUI 确认与 CLI 审计行逐条列出将执行的命令
+- fix: wizard 命令执行期可中断——runPrompt 对称切换 raw/cooked，Ctrl+C 走原生 SIGINT；降级路径挂 SIGINT 监听语义对齐 EOF
+
 ## [2.10.2]
 
 ### 新增
