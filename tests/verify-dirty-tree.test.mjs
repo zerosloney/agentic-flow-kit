@@ -56,7 +56,7 @@ const lastGreen = (root) => readLedger(root).filter((e) => e.exitCode === 0 && e
 
 test('verify 全绿行：干净树落 dirtyTree 空串（可判定零值），凭证照常带 headShort', () => {
   const dir = initRepo('fk-dirty-clean-');
-  const r = runVerifyStub(dir, 'node -e process.exit(0)');
+  const r = runVerifyStub(dir, 'node -e "process.exit(0)"');
   const out = `${r.stdout}${r.stderr}`;
   assert.equal(r.status, 0, `stub 夹具应全绿，实际 exit ${r.status}:\n${out}`);
   const green = lastGreen(dir);
@@ -73,12 +73,12 @@ test('verify 全绿行：干净树落 dirtyTree 空串（可判定零值），�
 test('verify 全绿行：脏树落 16 位 hex 摘要，且随未提交内容变化', () => {
   const dir = initRepo('fk-dirty-dirty-');
   fs.writeFileSync(path.join(dir, 'README.md'), 'v1\n');
-  const r1 = runVerifyStub(dir, 'node -e process.exit(0)');
+  const r1 = runVerifyStub(dir, 'node -e "process.exit(0)"');
   assert.equal(r1.status, 0, `脏树首跑应全绿:\n${r1.stdout}${r1.stderr}`);
   const d1 = lastGreen(dir).dirtyTree;
   assert.match(d1, /^[0-9a-f]{16}$/, '脏树摘要应为 16 位 hex');
   fs.writeFileSync(path.join(dir, 'README.md'), 'v2\n');
-  const r2 = runVerifyStub(dir, 'node -e process.exit(0)');
+  const r2 = runVerifyStub(dir, 'node -e "process.exit(0)"');
   assert.equal(r2.status, 0, `脏树重跑应全绿:\n${r2.stdout}${r2.stderr}`);
   const d2 = lastGreen(dir).dirtyTree;
   assert.match(d2, /^[0-9a-f]{16}$/);
@@ -87,7 +87,7 @@ test('verify 全绿行：脏树落 16 位 hex 摘要，且随未提交内容变�
 
 test('verify 失败行：同样带 dirtyTree（干净树 = 空串）', () => {
   const dir = initRepo('fk-dirty-fail-');
-  const r = runVerifyStub(dir, 'node -e process.exit(1)');
+  const r = runVerifyStub(dir, 'node -e "process.exit(1)"');
   assert.equal(r.status, 1, `stub 失败应 exit 1，实际 ${r.status}`);
   const failRow = readLedger(dir).find((e) => e.exitCode !== 0);
   assert.ok(failRow, '应有失败行');
