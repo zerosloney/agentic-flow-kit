@@ -91,7 +91,19 @@ export async function migrateManifest({ target, manifest, dryRun = false, migrat
     log(`migrate ${migration.file}`);
   }
   const changed = applied.length > 0;
-  if (changed && !dryRun) writeManifest(target, current);
+  if (changed && !dryRun) {
+    // P2-4 清理资格持久化：schemaVersion 一旦落盘，重跑不再迁移，removals 就成了
+    // 一次性机会。把待删文件连同旧基线哈希写进 manifest，install/upgrade 末尾按
+    // 哈希守卫消费后清空（见 install.mjs）。只记有基线哈希的条目——无哈希本就
+    // 「宁可不删」，持久化也无法执行守卫删除。
+    const pendingRemovals = {};
+    for (const rel of removals) {
+      const hash = previousFiles[rel];
+      if (hash) pendingRemovals[rel] = hash;
+    }
+    if (Object.keys(pendingRemovals).length) current.pendingRemovals = pendingRemovals;
+    writeManifest(target, current);
+  }
   return {
     from,
     to: version,

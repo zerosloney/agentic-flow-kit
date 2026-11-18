@@ -544,6 +544,7 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
 
   let gitConfigured = false;
   const userHooks = [];
+  let migrationCleanup = null;
   if (!dryRun) {
     const beforeDerived = { ...result.files };
     const derived = new Set(previous?.derived || []);
@@ -618,18 +619,24 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
         : t('install.userHooksOk', { host: HOSTS[host].label || host, path: wired.file }));
     }
 
-    // R5-1b：迁移只摘 manifest；磁盘旧运行时文件在此按旧哈希安全删除。
-    let migrationCleanup = null;
-    if (migration?.removals?.length) {
+    // R5-1b + P2-4：迁移只摘 manifest；磁盘旧运行时文件在此按旧哈希安全删除。
+    // 清理资格持久化在 manifest.pendingRemovals（迁移落盘时写入，见 migrations.mjs）：
+    // 迁移落盘后、清理前任一环节失败（如 user-hooks fail-loud）时，重跑仍凭该字段完成
+    // 清理，而不是一次性机会。被用户改过的文件按哈希守卫保留。
+    const pendingRemovals = { ...manifest.pendingRemovals };
+    if (Object.keys(pendingRemovals).length) {
       migrationCleanup = cleanupMigratedFiles({
         target,
-        files: migration.previousFiles || {},
-        removals: migration.removals,
+        files: pendingRemovals,
+        removals: Object.keys(pendingRemovals),
         dryRun: false,
       });
       if (migrationCleanup.removed.length) {
         emit(t('install.runtimeCleanup', { count: migrationCleanup.removed.length }));
       }
+      // 清理资格一次性消费：删过（或守卫保留）即清空字段回写，避免滞留资格反复空转。
+      delete next.pendingRemovals;
+      writeManifest(target, next);
     }
     if (migration) migration.cleanup = migrationCleanup;
 
@@ -658,16 +665,18 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
       ci: ciModeFor({ tier, ci: ciChoice }),
       ...(enterprise ? { enterprise } : {}),
       ...(policyDiff ? { policyDiff } : {}),
-      ...(migration?.changed ? {
+      // P2-4：migration 块在有实际迁移、或发生了持久资格清理（恢复路径）时输出；
+      // removed 上报实际删除结果，keptLegacy 合并清理守卫保留的文件。
+      ...(migration?.changed || migrationCleanup?.removed.length ? {
         migration: {
-          from: migration.from,
-          to: migration.to,
-          changed: migration.changed,
-          dryRun: migration.dryRun,
-          applied: migration.applied,
-          notes: migration.notes,
-          removed: migration.cleanup?.removed || [],
-          keptLegacy: migration.keptLegacy || [],
+          from: migration?.from ?? manifest.schemaVersion,
+          to: migration?.to ?? manifest.schemaVersion,
+          changed: migration?.changed ?? false,
+          dryRun: migration?.dryRun ?? false,
+          applied: migration?.applied || [],
+          notes: migration?.notes || [],
+          removed: migrationCleanup?.removed || [],
+          keptLegacy: [...new Set([...(migration?.keptLegacy || []), ...(migrationCleanup?.kept || [])])],
         },
       } : {}),
       hosts: hostSet,

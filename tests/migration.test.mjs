@@ -169,3 +169,147 @@ test('1→2 drops runtime files and deletes only unmodified copies', async () =>
   assert.equal(fs.existsSync(path.join(dir, '.agents/scripts/modified.mjs')), true);
   assert.equal(fs.existsSync(path.join(dir, '.agents/hooks/gates.json')), true);
 });
+
+// ---- P2-4：清理资格持久化（manifest.pendingRemovals）----
+// schemaVersion 在迁移时就落盘，而清理排在安装末尾（user-hooks 接线之后）：中间任一环节
+// 失败（如 ~/.codex/hooks.json 损坏触发 USER_HOOKS_CONFIG fail-loud）后，重跑迁移不再执行，
+// removals 不再生成，旧运行时文件永久滞留。修复：迁移落盘时把待删文件连同旧基线哈希写进
+// manifest.pendingRemovals；install/upgrade 末尾按哈希守卫消费后清空字段并回写。
+
+test('migrateManifest persists pendingRemovals; dry-run and zero-change paths stay write-free', async () => {
+  const dir = tmpRepo();
+  const sha = (text) => crypto.createHash('sha256').update(text).digest('hex');
+  const write = (rel, text) => {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), text, 'utf8');
+  };
+  write('.agents/scripts/drop.mjs', 'drop');
+  write('.agents/scripts/modified.mjs', 'user changed');
+  write('.agents/hooks/drop.cjs', 'hook');
+  const files = {
+    '.agents/scripts/drop.mjs': sha('drop'),
+    '.agents/scripts/modified.mjs': sha('original'),
+    '.agents/hooks/drop.cjs': sha('hook'),
+  };
+  writeManifest(dir, { ...oldManifest(), schemaVersion: 1, files });
+
+  const first = await migrateManifest({ target: dir, manifest: readManifest(dir) });
+  assert.equal(first.changed, true);
+  // 落盘的清理资格 = 待删文件 + 旧基线哈希；被用户改过的文件不入册（守卫本就保留它）
+  assert.deepEqual(readManifest(dir).pendingRemovals, {
+    '.agents/scripts/drop.mjs': sha('drop'),
+    '.agents/hooks/drop.cjs': sha('hook'),
+  });
+
+  // 零变更路径零额外写：重跑迁移不改 manifest 一个字节
+  const manifestFile = path.join(dir, '.agents/install-manifest.json');
+  const before = fs.readFileSync(manifestFile, 'utf8');
+  const second = await migrateManifest({ target: dir, manifest: readManifest(dir) });
+  assert.equal(second.changed, false);
+  assert.equal(fs.readFileSync(manifestFile, 'utf8'), before);
+
+  // 只读迁移（dry-run）不落盘：schemaVersion 与 pendingRemovals 均维持写入前的磁盘状态
+  writeManifest(dir, { ...oldManifest(), schemaVersion: 1, files });
+  const dry = await migrateManifest({ target: dir, manifest: readManifest(dir), dryRun: true });
+  assert.equal(dry.changed, true);
+  assert.equal(readManifest(dir).pendingRemovals, undefined);
+  assert.equal(readManifest(dir).schemaVersion, 1);
+});
+
+test('upgrade consumes persisted pendingRemovals even when migration no longer runs', () => {
+  const dir = tmpRepo();
+  const sha = (text) => crypto.createHash('sha256').update(text).digest('hex');
+  const write = (rel, text) => {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), text, 'utf8');
+  };
+  write('.agents/scripts/drop.mjs', 'drop');
+  write('.agents/hooks/drop.cjs', 'hook');
+  write('.agents/scripts/modified.mjs', 'user changed');
+  // 状态注入：迁移已落盘（schemaVersion 最新）但清理未发生——pendingRemovals 在案，旧文件仍在盘
+  writeManifest(dir, {
+    ...oldManifest(),
+    schemaVersion: 2,
+    files: {},
+    pendingRemovals: {
+      '.agents/scripts/drop.mjs': sha('drop'),
+      '.agents/hooks/drop.cjs': sha('hook'),
+      '.agents/scripts/modified.mjs': sha('original'), // 与磁盘内容不符 → 哈希守卫保留
+    },
+  });
+
+  const r = spawnSync(process.execPath, [BIN, 'upgrade', '--target', '.', '--json'], {
+    cwd: dir,
+    encoding: 'utf8',
+    env: { ...process.env, FLOW_KIT_TEST: '1' },
+  });
+  assert.equal(r.status, 0, r.stderr);
+  // 哈希匹配的旧文件删除，被改文件保留，资格字段清空
+  assert.equal(fs.existsSync(path.join(dir, '.agents/scripts/drop.mjs')), false);
+  assert.equal(fs.existsSync(path.join(dir, '.agents/hooks/drop.cjs')), false);
+  assert.equal(fs.existsSync(path.join(dir, '.agents/scripts/modified.mjs')), true);
+  const manifest = JSON.parse(fs.readFileSync(path.join(dir, '.agents/install-manifest.json'), 'utf8'));
+  assert.equal(manifest.pendingRemovals, undefined);
+  // --json 的 removed 与持久消费口径一致：上报实际删除结果
+  const out = JSON.parse(r.stdout);
+  assert.deepEqual(out.migration.removed.sort(), ['.agents/hooks/drop.cjs', '.agents/scripts/drop.mjs']);
+  assert.deepEqual(out.migration.keptLegacy, ['.agents/scripts/modified.mjs']);
+
+  // 幂等：资格已消费，重跑不再报 migration、字段不再出现
+  const again = spawnSync(process.execPath, [BIN, 'upgrade', '--target', '.', '--json'], {
+    cwd: dir,
+    encoding: 'utf8',
+    env: { ...process.env, FLOW_KIT_TEST: '1' },
+  });
+  assert.equal(again.status, 0, again.stderr);
+  assert.equal(JSON.parse(again.stdout).migration, undefined);
+  assert.equal(
+    JSON.parse(fs.readFileSync(path.join(dir, '.agents/install-manifest.json'), 'utf8')).pendingRemovals,
+    undefined,
+  );
+});
+
+test('upgrade interrupted between migration write and cleanup recovers on rerun', () => {
+  const dir = tmpRepo();
+  const home = makeTmp('flow-kit-home-');
+  const sha = (text) => crypto.createHash('sha256').update(text).digest('hex');
+  const write = (rel, text) => {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), text, 'utf8');
+  };
+  write('.agents/scripts/drop.mjs', 'drop');
+  writeManifest(dir, {
+    ...oldManifest(),
+    schemaVersion: 1,
+    hosts: ['codex'],
+    files: { '.agents/scripts/drop.mjs': sha('drop') },
+  });
+
+  // 损坏的用户级 hooks 配置（假 HOME 手法同 codex-host.test.mjs）：upgrade 在迁移落盘之后、
+  // 清理之前 fail-loud，制造「迁移已落盘但清理未发生」的真实缺口
+  fs.mkdirSync(path.join(home, '.codex'), { recursive: true });
+  const hooksFile = path.join(home, '.codex', 'hooks.json');
+  fs.writeFileSync(hooksFile, '{ broken', 'utf8');
+  const env = { ...process.env, FLOW_KIT_TEST: '1', HOME: home, USERPROFILE: home };
+  const upgrade = () => spawnSync(process.execPath, [BIN, 'upgrade', '--target', '.', '--json'], {
+    cwd: dir,
+    encoding: 'utf8',
+    env,
+  });
+
+  const first = upgrade();
+  assert.notEqual(first.status, 0, 'corrupt ~/.codex/hooks.json must fail loud');
+  assert.equal(fs.existsSync(path.join(dir, '.agents/scripts/drop.mjs')), true);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dir, '.agents/install-manifest.json'), 'utf8')).pendingRemovals, {
+    '.agents/scripts/drop.mjs': sha('drop'),
+  });
+
+  // 修复用户配置后重跑：迁移不再执行，但凭持久化资格完成清理
+  fs.writeFileSync(hooksFile, '{}\n', 'utf8');
+  const second = upgrade();
+  assert.equal(second.status, 0, second.stderr);
+  assert.equal(fs.existsSync(path.join(dir, '.agents/scripts/drop.mjs')), false);
+  const manifest = JSON.parse(fs.readFileSync(path.join(dir, '.agents/install-manifest.json'), 'utf8'));
+  assert.equal(manifest.pendingRemovals, undefined);
+  assert.deepEqual(JSON.parse(second.stdout).migration.removed, ['.agents/scripts/drop.mjs']);
+});
