@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { dedupeEntries } from '../src/install/plan.mjs';
 import { parseProfileArgs, SURFACES } from '../src/install/profiles.mjs';
 import { makeT } from '../src/i18n.mjs';
-import { buildInstallArgs } from '../src/tui/wizard.mjs';
+import { buildInstallArgs } from '../src/tui/flows.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');

@@ -3,7 +3,7 @@
 // 任何一步 EOF（stdin 关闭）都干净退出返回码 0；Ctrl+C 同样以退出码 0 退出。
 import { createScreen, createLineReader, QuitError } from './screen.mjs';
 import { pickOne, confirmYes, showError } from './prompts.mjs';
-import { FLOWS, baseArgs } from './flows.mjs';
+import { FLOWS } from './flows.mjs';
 
 // 主菜单：无位置参数且无任何选项、交互终端时由 cli/main.mjs 懒加载进入
 export async function wizardCommand({ t, lang }) {
@@ -47,25 +47,4 @@ export async function wizardCommand({ t, lang }) {
   } finally {
     screen.restore();
   }
-}
-
-// 纯函数：向导选择 → runInstall 入参（argv 形状与 cli/args.mjs parseArgs 经 baseArgs 一致）。
-// git 配置 CLI 侧默认开，--no-git-config 关闭
-export function buildInstallArgs({ hosts, lang, stack, surfaces = [], gitConfig = true, dryRun = false, force = false, models = null }) {
-  const args = {
-    ...baseArgs(),
-    _: ['install'],
-    agents: hosts,
-    lang,
-    stack,
-    flags: new Set([
-      ...(gitConfig ? [] : ['no-git-config']),
-      ...(dryRun ? ['dry-run'] : []),
-      ...(force ? ['force'] : []),
-    ]),
-  };
-  // 模型参数保持 opt-in：默认路径不新增 flag，避免破坏既有 argv 断言。
-  if (models && Object.keys(models).length) args.tuiModels = models;
-  if (surfaces.length) args.surfaces = surfaces;
-  return args;
 }

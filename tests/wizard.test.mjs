@@ -5,7 +5,7 @@ import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildInstallArgs } from '../src/tui/wizard.mjs';
+import { buildInstallArgs } from '../src/tui/flows.mjs';
 import { createScreen, runPrompt, createLineReader, QuitError } from '../src/tui/screen.mjs';
 import { createSelect, createMultiSelect } from '../src/tui/widgets.mjs';
 import { askText } from '../src/tui/prompts.mjs';
@@ -50,6 +50,36 @@ test('buildInstallArgs: optional models are opt-in and keep flags unchanged', ()
   });
   assert.equal(modeled.flags.size, 0);
   assert.deepEqual(modeled.tuiModels, { claude: { code: 'haiku', judgment: 'opus', review: 'opus' } });
+});
+
+// installFlow 产参锁定：flows.mjs 调用点以 opts.includes(...) 直接映射为 gitConfig/dryRun/force
+// （git-config 在 pickMany 里默认勾选）。installFlow 是交互流，降级 e2e 触达需按每个组合跑完整
+// 问答脚本，故按调用点的真实映射表达式做表驱动断言；argv 对 installCommand 的效果由 CLI 侧安装测试覆盖。
+test('installFlow 产参锁定: opts → buildInstallArgs 映射 (mirrors flows.mjs call site)', () => {
+  const cases = [
+    { opts: [], flags: ['no-git-config'] }, // 全不勾：git 配置关闭
+    { opts: ['git-config'], flags: [] }, // 默认勾选：与 CLI 默认一致，无额外 flags
+    { opts: ['git-config', 'dry-run', 'force'], flags: ['dry-run', 'force'] },
+    { opts: ['dry-run'], flags: ['no-git-config', 'dry-run'] }, // git-config 被取消勾选
+  ];
+  for (const { opts, flags } of cases) {
+    const args = buildInstallArgs({
+      hosts: ['trae'],
+      lang: 'zh-CN',
+      stack: 'node',
+      surfaces: [],
+      gitConfig: opts.includes('git-config'),
+      dryRun: opts.includes('dry-run'),
+      force: opts.includes('force'),
+      models: null,
+    });
+    assert.deepEqual([...args.flags], flags, `opts=${JSON.stringify(opts)} should produce flags=${JSON.stringify(flags)}`);
+    assert.deepEqual(args._, ['install']);
+    assert.deepEqual(args.agents, ['trae']);
+    assert.equal(args.lang, 'zh-CN');
+    assert.equal(args.surfaces, undefined);
+    assert.equal(args.tuiModels, undefined);
+  }
 });
 
 test('askText degraded path reads a line and retries on validation error', async () => {

@@ -19,6 +19,27 @@ import { removeHostCommand, uninstallCommand } from '../commands/remove-host.mjs
 // flows 内部 argv 统一经 baseArgs 构造（形状与 cli/args.mjs parseArgs 一致：flag() 依赖 args.flags）
 export const baseArgs = () => ({ _: [], agents: [], flags: new Set() });
 
+// 纯函数：向导选择 → runInstall 入参（argv 形状与 cli/args.mjs parseArgs 经 baseArgs 一致）。
+// git 配置 CLI 侧默认开，--no-git-config 关闭
+export function buildInstallArgs({ hosts, lang, stack, surfaces = [], gitConfig = true, dryRun = false, force = false, models = null }) {
+  const args = {
+    ...baseArgs(),
+    _: ['install'],
+    agents: hosts,
+    lang,
+    stack,
+    flags: new Set([
+      ...(gitConfig ? [] : ['no-git-config']),
+      ...(dryRun ? ['dry-run'] : []),
+      ...(force ? ['force'] : []),
+    ]),
+  };
+  // 模型参数保持 opt-in：默认路径不新增 flag，避免破坏既有 argv 断言。
+  if (models && Object.keys(models).length) args.tuiModels = models;
+  if (surfaces.length) args.surfaces = surfaces;
+  return args;
+}
+
 function fileOf(msg) {
   const text = String(msg ?? '');
   const i = text.indexOf('（');
@@ -233,13 +254,16 @@ async function installFlow(ctx) {
   if (opts === null) return;
 
   const dryRun = opts.includes('dry-run');
-  // argv 形状与 wizard.mjs buildInstallArgs 一致：git 配置默认开，开关转 flags
-  const args = { ...baseArgs(), _: ['install'], agents: hosts, lang: selLang, stack };
-  if (surfaces.length) args.surfaces = surfaces;
-  if (modelResult.models && Object.keys(modelResult.models).length) args.tuiModels = modelResult.models;
-  if (!opts.includes('git-config')) args.flags.add('no-git-config');
-  if (dryRun) args.flags.add('dry-run');
-  if (opts.includes('force')) args.flags.add('force');
+  const args = buildInstallArgs({
+    hosts,
+    lang: selLang,
+    stack,
+    surfaces,
+    gitConfig: opts.includes('git-config'),
+    dryRun,
+    force: opts.includes('force'),
+    models: modelResult.models,
+  });
 
   const planLines = [
     t('tui.plan.target', { target: cwd }),
