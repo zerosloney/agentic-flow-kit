@@ -52,7 +52,9 @@ export function parseModelFlags(values = []) {
 // 避免把用户已配置的模型静默改写回 inherit。只在未重新探测时作为兜底。
 export function readInjectedModels({ target, hosts = [] } = {}) {
   const out = {};
-  for (const host of hosts) {
+  // 宿主键归一口径与 parseModelFlags/resolveModels 同源：防御未来调用方传原样用户输入时静默丢宿主。
+  for (const raw of hosts) {
+    const host = String(raw).trim().toLowerCase();
     const h = HOSTS[host];
     if (!h?.agents?.modelField) continue;
     const dir = path.join(target, h.dir, h.agents.dir);
@@ -183,8 +185,10 @@ export function resolveModels({
   const perHost = {};
   const candidates = {};
   const sources = new Set();
+  // 宿主键口径与 parseModelFlags 同源：trim + lowercase 归一后再查 HOSTS 与各级配置表。
+  const hostKeys = hosts.map((h) => String(h).trim().toLowerCase());
 
-  for (const host of hosts) {
+  for (const host of hostKeys) {
     const h = HOSTS[host];
     if (!h) continue;
 
@@ -262,7 +266,7 @@ export function resolveModels({
   const roles = {};
   for (const role of ROLE_NAMES) {
     // 角色摘要不依赖宿主顺序：取第一个真正解析出值的宿主。
-    const hostValue = hosts.map((host) => perHost[host]?.[role]).find(Boolean) || null;
+    const hostValue = hostKeys.map((host) => perHost[host]?.[role]).find(Boolean) || null;
     const value = cli.global?.[role]
       || roleValue(local.roles, role)
       || hostValue

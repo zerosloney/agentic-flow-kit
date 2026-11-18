@@ -224,6 +224,23 @@ test('resolveModels honors explicit local review even when equal to code', () =>
   assert.ok(result.warnings.some((w) => w.code === 'REVIEW_SAME_AS_CODE'));
 });
 
+test('resolveModels normalizes host keys like parseModelFlags', () => {
+  const target = tmpDir();
+  const home = tmpDir();
+  writeJson(path.join(home, '.claude', 'settings.json'), { model: 'claude-sonnet-5-5' });
+  const detected = resolveModels({ hosts: ['Claude'], target, home, env: {} });
+  assert.equal(detected.hosts.claude.code, 'claude-sonnet-5-5');
+  assert.equal(detected.roles.code.model, 'claude-sonnet-5-5');
+  // 混合大小写宿主名也要命中小写键的各级配置（cli 表由 parseModelFlags 产出，恒为小写键）。
+  const cli = resolveModels({
+    hosts: [' Claude '],
+    target,
+    probe: false,
+    cli: { global: {}, hosts: { claude: { code: 'cli-code' } } },
+  });
+  assert.equal(cli.hosts.claude.code, 'cli-code');
+});
+
 test('readInjectedModels recovers role models from installed agents', () => {
   const target = tmpDir();
   const dir = path.join(target, '.claude', 'agents');
@@ -234,6 +251,18 @@ test('readInjectedModels recovers role models from installed agents', () => {
   const found = readInjectedModels({ target, hosts: ['claude', 'trae'] });
   assert.deepEqual(found.claude, { code: 'haiku', review: 'opus', judgment: 'opus' });
   assert.equal(found.trae, undefined, 'hosts without a model field are ignored');
+});
+
+test('readInjectedModels normalizes host keys (大小写口径与 parseModelFlags/resolveModels 同源)', () => {
+  const target = tmpDir();
+  const dir = path.join(target, '.claude', 'agents');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'implementer.md'), '---\nmodel: haiku\n---\n');
+  // 混合大小写/空白宿主名：修复前裸 HOSTS[host] 查表不中，静默跳过丢回读
+  const found = readInjectedModels({ target, hosts: ['Claude', ' trae '] });
+  assert.deepEqual(found.claude, { code: 'haiku' }, 'mixed-case host must resolve like parseModelFlags');
+  assert.equal(found.trae, undefined, 'normalized key for field-less hosts');
+  assert.equal(found.Claude, undefined, 'output keyed by the normalized form');
 });
 
 test('readInjectedModels keeps inherit values (diff 误报根因回归：跳过 inherit 值会让 diff 判模板更新)', () => {
