@@ -147,16 +147,34 @@ export function createScreen({ input, output }) {
   return screen;
 }
 
-// 交互式单问：渲染 box → keypress 驱动 widget → 完成清掉区块返回 value；Ctrl+C / EOF 抛 QuitError
+// 交互式单问：渲染 box → keypress 驱动 widget → 完成清掉区块返回 value；Ctrl+C / EOF 抛 QuitError。
+// 问答期 raw、问答间 cooked：命令执行期（install/doctor 等）终端回常规模式，Ctrl+C 走 Node 默认
+// SIGINT 中断（raw 下 ISIG 关闭会吞掉 Ctrl+C），下一问开始自动重进 raw。
 export function runPrompt(screen, { title, question, hint, widget }) {
+  const input = screen.input;
+  // 每 prompt 开始重进 raw：条件与 setup 探测一致（非交互/降级不进），重入失败按现状继续（解码器仍挂）
+  if (screen.interactive) {
+    try {
+      input.setRawMode(true);
+    } catch {
+      /* 个别环境 raw 重入失败，保持既有输入路径 */
+    }
+  }
   const draw = () => screen.render(box(title, [cyan(`◆ ${question}`), '', ...widget.view(), '', dim(hint)]));
   draw();
   return new Promise((resolve, reject) => {
-    const input = screen.input;
     // keypress 与 close 监听成对清理，避免多问后监听器堆积
     const cleanup = () => {
       input.removeListener('keypress', onKey);
       input.removeListener('close', onClose);
+      // 恢复 cooked：让命令执行期可 Ctrl+C 中断、打入的行不再被本问误收
+      if (screen.interactive) {
+        try {
+          input.setRawMode(false);
+        } catch {
+          /* 非 TTY 无 raw mode */
+        }
+      }
     };
     const onKey = (key) => {
       // readline 对不完整/分片到达的转义序列会 emit ('keypress', undefined)，静默忽略
@@ -186,12 +204,24 @@ export function runPrompt(screen, { title, question, hint, widget }) {
 }
 
 // 降级读行器：整个会话共用一个 readline interface + 行队列，
-// 管道一次性到达的行按序消费不丢；EOF（stdin 关闭）resolve null，保证任意一步干净退出
+// 管道一次性到达的行按序消费不丢；EOF（stdin 关闭）resolve null，保证任意一步干净退出。
+// Ctrl+C（terminal 模式收到 \x03）与 EOF 同语义：resolve null + 清残行 + eof 置位，走既有 null → 退出链路。
+// 必须挂 SIGINT 监听接管：不挂时 readline 只 emit 'pause'（stdin 被暂停）并 close，残行仍会被下一读消费；
+// 挂了则不 pause/close，退出语义完全由这里接管，罕见环境行为收敛为确定。
 export function createLineReader(input, output) {
   const queue = [];
   let pending = null;
   let eof = false;
   const rl = readline.createInterface({ input, output });
+  const quit = () => {
+    queue.length = 0; // 丢弃滞留残行：退出后不得消费陈旧输入
+    eof = true;
+    if (pending) {
+      const resolve = pending;
+      pending = null;
+      resolve(null);
+    }
+  };
   rl.on('line', (line) => {
     if (pending) {
       const resolve = pending;
@@ -201,14 +231,8 @@ export function createLineReader(input, output) {
       queue.push(line);
     }
   });
-  rl.on('close', () => {
-    eof = true;
-    if (pending) {
-      const resolve = pending;
-      pending = null;
-      resolve(null);
-    }
-  });
+  rl.on('close', quit);
+  rl.on('SIGINT', quit);
   return () => new Promise((resolve) => {
     if (queue.length) return resolve(queue.shift());
     if (eof) return resolve(null);

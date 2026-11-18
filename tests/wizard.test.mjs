@@ -6,7 +6,7 @@ import { PassThrough } from 'node:stream';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildInstallArgs } from '../src/tui/wizard.mjs';
-import { createScreen, runPrompt, QuitError } from '../src/tui/screen.mjs';
+import { createScreen, runPrompt, createLineReader, QuitError } from '../src/tui/screen.mjs';
 import { createSelect, createMultiSelect } from '../src/tui/widgets.mjs';
 import { askText } from '../src/tui/prompts.mjs';
 import { makeTmp } from './helpers/tmp.mjs';
@@ -394,4 +394,76 @@ test('decoder: spurious stdin close must not kill the decoder (frozen prompt reg
   const out = await outText();
   assert.ok(out.includes('❯'), 'output should contain the cursor mark ❯');
   screen.restore();
+});
+
+// SCR-1 回归锁：prompt 结束必须恢复 cooked（命令执行期 ISIG 生效，Ctrl+C 走 Node 默认 SIGINT 中断，
+// 不再出现「wizard 安装挂死只能杀终端」）；下一问开始再重进 raw。rawMode 开关是可观察的输入模式契约。
+// 执行期打入的换行终结输入由仍挂着的解码器消费后丢弃（无 keypress 监听），不得滞留成下一问的输入；
+// 真 TTY 上 cooked 行缓冲会回显残行，内存流无行纪律，故按进程内可观察行为断言并以此为准。
+test('prompt lifecycle: raw during the prompt, cooked for command execution, raw again next prompt', async () => {
+  const input = new EventEmitter();
+  const rawLog = [];
+  input.setRawMode = (on) => { rawLog.push(on); };
+  input.isTTY = true;
+  const output = new PassThrough();
+  const screen = createScreen({ input, output });
+  screen.setup();
+  assert.equal(rawLog[0], true, 'setup enters raw mode');
+
+  const ask = () => runPrompt(screen, {
+    title: 'T',
+    question: 'Q',
+    hint: 'H',
+    widget: createSelect({ items: [{ value: 'first', label: 'First' }, { value: 'second', label: 'Second' }] }),
+  });
+
+  const p1 = ask();
+  assert.equal(rawLog.at(-1), true, 'prompt must run in raw mode');
+  input.emit('data', '\r');
+  assert.equal(await p1, 'first');
+  assert.equal(rawLog.at(-1), false, 'prompt end must restore cooked mode for the command-execution phase');
+
+  // 命令执行期：打入的回车在此被丢弃，不得预答下一问
+  input.emit('data', '\n');
+
+  const p2 = ask();
+  assert.equal(rawLog.at(-1), true, 'next prompt re-enters raw mode');
+  const preAnswered = await Promise.race([p2.then(() => true), new Promise((r) => setImmediate(() => r(false)))]);
+  assert.equal(preAnswered, false, 'execution-phase Enter must not pre-answer the next prompt');
+  input.emit('data', '\r');
+  assert.equal(await p2, 'first', 'fresh prompt starts from the first item with no residual selection');
+
+  screen.restore();
+});
+
+// SCR-2 回归锁：readline terminal 模式（构造时探测 output.isTTY）收到 \x03 会 emit 'SIGINT'；
+// 无监听时只 emit 'pause'，pending 的 reader() Promise 永久悬挂（wizard 冻结无输出）。
+// 修复语义与 EOF 一致：resolve null + eof 置位，走既有 null → 干净退出链路（wizard 对 null 与 QuitError 同为退出码 0）。
+test('degraded reader: SIGINT resolves the pending read with null instead of freezing', async () => {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  output.isTTY = true;
+  const reader = createLineReader(input, output);
+  const p = reader();
+  input.write('\x03');
+  const settled = await Promise.race([
+    p.then(() => 'resolved'),
+    new Promise((r) => setTimeout(() => r('hung'), 300)),
+  ]);
+  assert.equal(settled, 'resolved', 'pending read must not hang after SIGINT');
+  assert.equal(await p, null, 'SIGINT quits like EOF: resolve null');
+  assert.equal(await reader(), null, 'every later read quits too (EOF-identical semantics)');
+});
+
+// 无 pending 时 SIGINT 同样触发退出：滞留残行一并丢弃，后续读取不得消费陈旧行（否则多问一轮才退）
+test('degraded reader: SIGINT drops stale queued lines so no later read consumes them', async () => {
+  const input = new PassThrough();
+  const output = new PassThrough();
+  output.isTTY = true;
+  const reader = createLineReader(input, output);
+  input.write('5\n'); // 无 pending 读入：行滞留队列
+  await new Promise((r) => setTimeout(r, 20)); // 等 'line' 事件落队
+  input.write('\x03');
+  await new Promise((r) => setTimeout(r, 20)); // 等 data → keypress → SIGINT 处理完成
+  assert.equal(await reader(), null, 'stale line must be drained; the next read quits with null');
 });
