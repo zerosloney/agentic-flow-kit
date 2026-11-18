@@ -94,6 +94,15 @@ function hostItems({ installed = [], suggested = [], t }) {
   });
 }
 
+// allowProbe 确认问题：把宿主声明的探测命令逐条渲染进提示（知情同意；命令清单在 flows 组装，locale 只留句式）。
+export function allowProbeQuestion({ host, t }) {
+  const commands = (HOSTS[host]?.modelProbe?.cli || [])
+    .filter((c) => c?.command)
+    .map((c) => [c.command, ...(c.args || [])].join(' '))
+    .join('; ');
+  return t('tui.model.allowProbe', { host, commands });
+}
+
 // 模型配置流：静态探测 → 可选只读 CLI 探测 → 推荐确认 / 逐角色选择（含手填、inherit、跳过）。
 async function modelFlow(ctx, hosts) {
   const { t } = ctx;
@@ -107,7 +116,7 @@ async function modelFlow(ctx, hosts) {
 
     let candidates = probeModels({ host, target: cwd, allowCli: false });
     if (!candidates.length && (h.modelProbe?.cli || []).length) {
-      const allow = await confirmYes(ctx, t('tui.model.allowProbe', { host }));
+      const allow = await confirmYes(ctx, allowProbeQuestion({ host, t }));
       if (allow === null) return null;
       if (allow) candidates = probeModels({ host, target: cwd, allowCli: true });
     }

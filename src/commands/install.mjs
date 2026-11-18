@@ -375,6 +375,16 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
   const previousModels = commandLabel === 'upgrade'
     ? readInjectedModels({ target, hosts: planHosts })
     : {};
+  // --probe-models 非交互路径无法逐条确认：探测前把宿主声明的命令打到人类进度流（审计痕迹；--json 时走 stderr）。
+  if (flag(args, 'probe-models') && shouldProbe && modelMode !== 'inherit') {
+    for (const host of planHosts) {
+      const commands = (HOSTS[host]?.modelProbe?.cli || [])
+        .filter((c) => c?.command)
+        .map((c) => [c.command, ...(c.args || [])].join(' '))
+        .join('; ');
+      if (commands) emit(t('install.probeCli', { host, commands }));
+    }
+  }
   const models = flag(args, 'no-model-config') ? null : resolveModels({
     hosts: planHosts,
     target,

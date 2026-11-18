@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { stackItems } from '../src/tui/flows.mjs';
+import { allowProbeQuestion, stackItems } from '../src/tui/flows.mjs';
 import { makeT } from '../src/i18n.mjs';
 import { BASELINE_DIR } from '../src/install/baseline.mjs';
 
@@ -202,4 +202,24 @@ test('en install rejects a plain-file --target in English', () => {
   assert.equal(r.status, 3, `expect TARGET exit code, got ${r.status}: ${r.stderr}`);
   assert.match(`${r.stdout}${r.stderr}`, /not a directory/i);
   assert.doesNotMatch(`${r.stdout}${r.stderr}`, /ENOTDIR/);
+});
+
+// ---- EXT-2：模型探测同意门必须透露将执行的具体命令 ----
+
+test('en allowProbe confirm names the host-declared probe commands', () => {
+  const q = allowProbeQuestion({ host: 'commandcode', t: makeT('en') });
+  assert.match(q, /cmd --list-models/, 'the first declared command must appear verbatim');
+  assert.match(q, /commandcode --list-models/, 'the second declared command must appear verbatim');
+  assert.ok(!q.includes('探测'), 'en catalog must not fall back to the zh sentence');
+});
+
+test('en install --probe-models prints declared probe commands before probing', () => {
+  const dir = tmpRepo();
+  const r = run(['install', '--agent', 'commandcode', '--stack', 'node', '--probe-models', '--lang', 'en', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  // 审计行走 emit：--json 时落 stderr，人类模式随进度落 stdout——两侧都搜
+  const line = `${r.stderr}\n${r.stdout}`.split('\n').find((l) => l.includes('--list-models'));
+  assert.ok(line, 'audit line listing the probe commands should be printed before probing');
+  assert.match(line, /commandcode/, 'the audit line should name the host');
+  assert.match(line, /cmd --list-models/, 'the audit line should carry the exact command');
 });
