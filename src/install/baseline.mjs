@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { writeAtomicSync } from './atomic.mjs';
 
 // 基线留存：保存上次由工具写入的文本内容，供升级时做三方合并。
 // 目录默认被 .gitignore 忽略（.agents/.kit/）；可用 --no-baseline 关闭。
@@ -27,9 +28,7 @@ export function readBaseline(target, rel) {
 
 export function writeBaseline(target, rel, text) {
   if (isBinaryPath(rel)) return false;
-  const abs = baselinePath(target, rel);
-  fs.mkdirSync(path.dirname(abs), { recursive: true });
-  fs.writeFileSync(abs, text, 'utf8');
+  writeAtomicSync(baselinePath(target, rel), text);
   return true;
 }
 

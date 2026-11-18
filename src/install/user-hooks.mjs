@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { HOSTS } from '../hosts/registry.mjs';
+import { writeAtomicSync } from './atomic.mjs';
 
 // 用户级 hook 接线（issue #45 A 档）：部分宿主的 hooks 不在项目仓内，而在用户目录
 // （如 Codex 的 ~/.codex/hooks.json，Claude 风格 schema）。适配脚本随包分发、经
@@ -54,8 +55,7 @@ export function readUserHooksConfig(file) {
 }
 
 export function writeUserHooksConfig(file, config) {
-  fs.mkdirSync(path.dirname(file), { recursive: true });
-  fs.writeFileSync(file, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+  writeAtomicSync(file, `${JSON.stringify(config, null, 2)}\n`);
 }
 
 // 本工具接线条目的识别判据：command 全等，或 command 含 'flow-kit'（接管旧版/漂移接线）。
@@ -160,8 +160,8 @@ export function unwireUserHooks({ host, t }) {
   const spec = userHookSpec(host);
   if (!spec) return { host, removed: false, file: null };
   const file = userHooksFile(spec);
-  if (!fs.existsSync(file)) return { host, file, removed: false };
   try {
+    if (!fs.existsSync(file)) return { host, file, removed: false };
     const config = readUserHooksConfig(file);
     const removed = removeUserHookEntry(config, spec);
     if (removed) writeUserHooksConfig(file, config);
