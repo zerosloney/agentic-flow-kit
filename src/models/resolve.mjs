@@ -121,15 +121,36 @@ function hostRoleValue(hosts, host, role) {
   return typeof entry[role] === 'string' ? entry[role] : null;
 }
 
+// 词边界命中：'-' 是非词字符，o3-mini / pro-max / glm-5-air 这类合法族名仍命中；
+// 而 minimax 不得误享 max/mini、…ocr1 不得误享 r1、…4o3 不得误享 o3。
 const ROLE_HINTS = {
-  code: [/haiku/i, /flash/i, /mini/i, /small/i, /coder/i, /sonnet/i, /qwen/i],
-  judgment: [/opus/i, /o3/i, /r1/i, /reason/i, /thinking/i, /pro/i, /max/i, /glm-5/i, /deepseek/i],
-  review: [/opus/i, /pro/i, /max/i, /r1/i, /thinking/i, /glm-5/i, /deepseek/i],
+  code: [/\bhaiku\b/i, /\bflash\b/i, /\bmini\b/i, /\bsmall\b/i, /\bcoder\b/i, /\bsonnet\b/i, /\bqwen\b/i],
+  judgment: [/\bopus\b/i, /\bo3\b/i, /\br1\b/i, /\breason\b/i, /\bthinking\b/i, /\bpro\b/i, /\bmax\b/i, /\bglm-5\b/i, /\bdeepseek\b/i],
+  review: [/\bopus\b/i, /\bpro\b/i, /\bmax\b/i, /\br1\b/i, /\bthinking\b/i, /\bglm-5\b/i, /\bdeepseek\b/i],
 };
 
 function scoreModel(id, role) {
   const s = String(id);
   return (ROLE_HINTS[role] || []).reduce((score, re) => score + (re.test(s) ? 1 : 0), 0);
+}
+
+// 同分保守破平：仅当双方尾缀新近标记同类可比时才给偏序（新近者胜），否则返回 false 维持池序。
+// 刻意不做通用新近性推断：不发明匹配、不猜命名——标记缺失、异类（一日期戳一版本）一律不比。
+function preferNewer(a, b) {
+  const dateA = /-(\d{8})$/.exec(a); // Claude 快照惯例，如 claude-3-5-sonnet-20240620
+  const dateB = /-(\d{8})$/.exec(b);
+  if (dateA && dateB) return Number(dateA[1]) > Number(dateB[1]);
+  const verA = /(\d+(?:[.-]\d+)+)$/.exec(a); // 至少两段：不把 minimax-text-01 的 -01 当版本
+  const verB = /(\d+(?:[.-]\d+)+)$/.exec(b);
+  if (verA && verB) {
+    const segA = verA[1].split(/[.-]/).map(Number);
+    const segB = verB[1].split(/[.-]/).map(Number);
+    const len = Math.min(segA.length, segB.length);
+    for (let i = 0; i < len; i += 1) {
+      if (segA[i] !== segB[i]) return segA[i] > segB[i];
+    }
+  }
+  return false;
 }
 
 function unique(list) {
@@ -148,7 +169,8 @@ export function recommendRoles({ host, candidates = [], roleConfig = null } = {}
     let bestScore = 0;
     for (const id of pool) {
       const score = scoreModel(id, role);
-      if (score > bestScore) {
+      // 正分并列时按保守新近偏序破平（preferNewer）；零分并列与不可比情形维持池序先者胜。
+      if (score > bestScore || (score === bestScore && score > 0 && preferNewer(id, best))) {
         best = id;
         bestScore = score;
       }

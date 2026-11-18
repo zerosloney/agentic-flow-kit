@@ -334,3 +334,84 @@ test('summarizeModels renders every host and role', () => {
   assert.match(text, /claude: code=sonnet judgment=opus review=opus/);
   assert.equal(summarizeModels(null), '-');
 });
+
+// -- RES-1：ROLE_HINTS 词边界，子串不得误命中 --
+
+test('recommendRoles word boundary: minimax must not win judgment via /max/ substring', () => {
+  // 修复前 /max/i 子串命中 minimax：与真 max 候选同分，池序先到者胜 → minimax 误选。
+  const roles = recommendRoles({
+    host: 'trae',
+    candidates: [{ id: 'minimax-m2', source: 'config' }, { id: 'qwen-max', source: 'config' }],
+  });
+  assert.equal(roles.judgment, 'qwen-max');
+});
+
+test('recommendRoles word boundary: minimax must not win code via /mini/ substring', () => {
+  // 修复前 /mini/i 子串命中 minimax：与真 mini 候选同分，池序先到者胜。
+  const roles = recommendRoles({
+    host: 'trae',
+    candidates: [{ id: 'minimax-text-01', source: 'config' }, { id: 'gpt-4o-mini', source: 'config' }],
+  });
+  assert.equal(roles.code, 'gpt-4o-mini');
+});
+
+test('recommendRoles word boundary: r1/o3 do not match inside ocr1/4o3', () => {
+  // 修复前 /r1/i 命中 …ocr1、/o3/i 命中 …4o3：三者同分，池序先到者胜。
+  const roles = recommendRoles({
+    host: 'trae',
+    candidates: [
+      { id: 'pix-ocr1', source: 'config' },
+      { id: 'gpt-4o3', source: 'config' },
+      { id: 'kimi-thinking', source: 'config' },
+    ],
+  });
+  assert.equal(roles.judgment, 'kimi-thinking');
+});
+
+// -- RES-1：同分保守破平（仅同类新近标记可比）--
+
+test('recommendRoles freshness tie-break: newer date snapshot wins', () => {
+  // 同族双快照同分：修复前池序先到胜，旧日期快照压过新快照。
+  const roles = recommendRoles({
+    host: 'trae',
+    candidates: [
+      { id: 'claude-3-5-sonnet-20240620', source: 'config' },
+      { id: 'claude-3-7-sonnet-20250219', source: 'config' },
+    ],
+  });
+  assert.equal(roles.code, 'claude-3-7-sonnet-20250219');
+});
+
+test('recommendRoles freshness tie-break: higher version sequence wins', () => {
+  // 多段版本序列逐段比较：-4-5 高于 -3-5，旧格式在前也要选出高者。
+  const roles = recommendRoles({
+    host: 'trae',
+    candidates: [
+      { id: 'qwen3-coder-3-5', source: 'config' },
+      { id: 'qwen3-coder-4-5', source: 'config' },
+    ],
+  });
+  assert.equal(roles.code, 'qwen3-coder-4-5');
+});
+
+test('recommendRoles freshness tie-break: incomparable markers keep pool order', () => {
+  // 一日期戳一版本：异类不可比 → 池序先者胜（锁现状，防破平扩大化）。
+  const mixed = recommendRoles({
+    host: 'trae',
+    candidates: [
+      { id: 'claude-3-5-sonnet-20240620', source: 'config' },
+      { id: 'claude-sonnet-4-5', source: 'config' },
+    ],
+  });
+  assert.equal(mixed.code, 'claude-3-5-sonnet-20240620');
+
+  // 双方都无新近标记：维持池序先者胜。
+  const unmarked = recommendRoles({
+    host: 'trae',
+    candidates: [
+      { id: 'sonnet-dev', source: 'config' },
+      { id: 'sonnet-latest', source: 'config' },
+    ],
+  });
+  assert.equal(unmarked.code, 'sonnet-dev');
+});
