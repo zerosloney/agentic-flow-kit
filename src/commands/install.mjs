@@ -8,6 +8,7 @@ import { buildPlan, CI_MODES, ciModeFor, ciTemplateRels } from '../install/plan.
 import { parseProfileArgs, STACKS } from '../install/profiles.mjs';
 import { applyPlan, readPlanEntry, summaryLine } from '../install/apply.mjs';
 import { emptyManifest, readManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
+import { acquireInstallLock } from '../install/lock.mjs';
 import { cleanupMigratedFiles } from '../install/migrations.mjs';
 import { buildVars } from '../render/tokens.mjs';
 import { HOST_NAMES, HOSTS, resolveHost } from '../hosts/registry.mjs';
@@ -47,6 +48,17 @@ export function resolveTarget(args) {
     throw err;
   }
   return target;
+}
+
+// engine.json 的 createdAt 即 {{installedAt}} 的渲染产物（与 diff.mjs readInstalledAt 同口径）；
+// 重装时复用既有值可实现重跑/崩溃续装的字节幂等。读不到（首装/损坏）返回 null。
+function readEngineCreatedAt(target) {
+  try {
+    const engine = JSON.parse(fs.readFileSync(path.join(target, '.agents/config/engine.json'), 'utf8'));
+    return engine.createdAt || null;
+  } catch {
+    return null;
+  }
 }
 
 export function resolveHosts(args, t, fallback = []) {
@@ -290,7 +302,18 @@ function normalizeCi(value, t) {
 
 // onLog 回调契约：(action, msg, done, total) —— action ∈ create/update/skip/conflict/merge，
 // done/total 为已完成/总文件数，供 TUI 渲染 spinner 进度；缺省走 CLI 前缀行。
-export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories, commandLabel, stackOverride, stacksOverride = null, onLog = null, detectedHosts = [], migration = null, quiet = false }) {
+// 整个安装流程（含 dry-run）持单写者锁：入口取锁，finally 释放，异常/崩溃路径同样解锁。
+export function runInstall(options) {
+  const target = resolveTarget(options.args);
+  const releaseInstallLock = acquireInstallLock(target, { label: options.commandLabel });
+  try {
+    return runInstallUnlocked(options);
+  } finally {
+    releaseInstallLock();
+  }
+}
+
+function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categories, commandLabel, stackOverride, stacksOverride = null, onLog = null, detectedHosts = [], migration = null, quiet = false }) {
   const target = resolveTarget(args);
   const dryRun = flag(args, 'dry-run');
   const force = flag(args, 'force');
@@ -319,7 +342,8 @@ export function runInstall({ args, t, lang, hosts, planHosts = hosts, categories
   const surfaces = profile.surfaces;
   const projectName = args.name || path.basename(target);
   // 渲染与 manifest 使用同一时间戳，避免 diff 把 {{installedAt}} 误判为模板更新。
-  const installedAt = new Date().toISOString();
+  // 重跑/续装幂等：engine.json 已有 createdAt（{{installedAt}} 的渲染产物）时复用既有值。
+  const installedAt = readEngineCreatedAt(target) || new Date().toISOString();
   const hostSet = [...new Set([...(previous?.hosts || []), ...hosts])];
   const trackHosts = flag(args, 'track-hosts');
   // 档位：CLI > --hardened（=enterprise）> 既有 manifest > standard。

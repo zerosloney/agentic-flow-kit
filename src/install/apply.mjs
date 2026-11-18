@@ -223,6 +223,14 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
       continue;
     }
 
+    // 未跟踪但磁盘内容与本工具产物逐字节一致：视为重跑/崩溃续装残留，认领并纳入跟踪。
+    if (currentHash === sha256Text(text)) {
+      writes.push({ abs, text, targetRel: entry.targetRel, kind: entry.kind });
+      stats.create += 1;
+      log('create', `${entry.targetRel}（已存在且内容与本工具产物一致，纳入跟踪）`);
+      continue;
+    }
+
     stats.skip += 1;
     log('skip', `${entry.targetRel}（已存在且非本工具安装，跳过；--force 可覆盖）`);
   }

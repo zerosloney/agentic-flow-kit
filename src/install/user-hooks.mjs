@@ -3,6 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { HOSTS } from '../hosts/registry.mjs';
 import { writeAtomicSync } from './atomic.mjs';
+import { acquireLock, userHooksLockFile } from './lock.mjs';
 
 // 用户级 hook 接线（issue #45 A 档）：部分宿主的 hooks 不在项目仓内，而在用户目录
 // （如 Codex 的 ~/.codex/hooks.json，Claude 风格 schema）。适配脚本随包分发、经
@@ -134,6 +135,9 @@ function reraiseLocalized(err, file, t) {
   throw wrapped;
 }
 
+// 全局 hooks 配置的读改写互斥：两个项目并发安装时串行化（锁冲突 fail-loud，见 lock.mjs）。
+const USER_HOOKS_LOCK_OPTS = { label: 'user-hooks', errorCode: 'USER_HOOKS_LOCKED' };
+
 // 接线一个宿主的用户级 hooks（install/upgrade/add-host 用）。文件不存在时初始化 {hooks:{}}；
 // 未变更时不重写文件（字节稳定，条目信任哈希不被无谓刷新）。返回 { host, file, changed, created }。
 export function wireUserHooks({ host, t }) {
@@ -144,6 +148,7 @@ export function wireUserHooks({ host, t }) {
     throw err;
   }
   const file = userHooksFile(spec);
+  const releaseLock = acquireLock(userHooksLockFile(file), USER_HOOKS_LOCK_OPTS);
   try {
     const existed = fs.existsSync(file);
     const config = existed ? readUserHooksConfig(file) : { hooks: {} };
@@ -152,6 +157,8 @@ export function wireUserHooks({ host, t }) {
     return { host, file, changed: Boolean(result.changed), created: !existed };
   } catch (err) {
     reraiseLocalized(err, file, t);
+  } finally {
+    releaseLock();
   }
 }
 
@@ -160,6 +167,7 @@ export function unwireUserHooks({ host, t }) {
   const spec = userHookSpec(host);
   if (!spec) return { host, removed: false, file: null };
   const file = userHooksFile(spec);
+  const releaseLock = acquireLock(userHooksLockFile(file), USER_HOOKS_LOCK_OPTS);
   try {
     if (!fs.existsSync(file)) return { host, file, removed: false };
     const config = readUserHooksConfig(file);
@@ -168,6 +176,8 @@ export function unwireUserHooks({ host, t }) {
     return { host, file, removed };
   } catch (err) {
     reraiseLocalized(err, file, t);
+  } finally {
+    releaseLock();
   }
 }
 
