@@ -2,6 +2,16 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.10.0]
+
+### 新增
+
+- feat: 安装单写者锁与崩溃续装——内容认领、createdAt 复用、user-hooks 按配置派生全局锁
+
+### 修复
+
+- fix: 写入安全收敛——原子写推广至 baseline/user-hooks，readManifest 区分缺失与损坏
+
 ## [2.9.0]
 
 ### 修复
