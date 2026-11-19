@@ -4,7 +4,7 @@ import { flag } from '../cli/args.mjs';
 import { listFiles, RUNTIME_DIRS, RUNTIME_FILES } from '../install/plan.mjs';
 import { CURRENT_SCHEMA_VERSION, MANIFEST_REL, readManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
 import { acquireInstallLock } from '../install/lock.mjs';
-import { extractMergeBlock, readPlanEntry, renderMergeBlock } from '../install/apply.mjs';
+import { dedupeMergeBlock, extractMergeBlock, readPlanEntry, renderMergeBlock } from '../install/apply.mjs';
 import { HOSTS } from '../hosts/registry.mjs';
 import { detectHosts } from '../hosts/detect.mjs';
 import { buildState } from './diff.mjs';
@@ -102,10 +102,13 @@ function scan({ target, plan, vars, hosts, existing }) {
         continue;
       }
       const { begin, end, block } = renderMergeBlock(entry, vars);
-      const found = extractMergeBlock(fs.readFileSync(abs, 'utf8'), begin, end);
+      const text = fs.readFileSync(abs, 'utf8');
+      const found = extractMergeBlock(text, begin, end);
+      // 期望块先按磁盘块外内容去重（issue #68），与 install / diff 比对口径一致。
+      const expected = dedupeMergeBlock(block, text, begin, end);
       if (!found) {
         modified.push({ path: rel, reason: 'merge-block-missing' });
-      } else if (norm(found) === norm(block).replace(/\n$/, '')) {
+      } else if (norm(found) === norm(expected).replace(/\n$/, '')) {
         adopt(rel);
       } else {
         modified.push({ path: rel, reason: 'merge-block-differs' });

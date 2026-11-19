@@ -452,3 +452,73 @@ test('install rejects a plain-file --target with a semantic error', () => {
   assert.match(r.stderr, /not-a-dir\.txt/);
   assert.doesNotMatch(r.stderr, /ENOTDIR/);
 });
+
+// ---- issue #68：合并块幂等——块外已有条目不重复写进块，块尾不累积空行 ----
+
+test('install dedupes engine ignore entries already present outside the merge block', () => {
+  const dir = tmpRepo();
+  fs.writeFileSync(path.join(dir, '.gitignore'), 'node_modules/\ntmp/\n');
+  const r = run(['install', '--agent', 'trae', '--lang', 'zh-CN', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+
+  const gitignore = read(dir, '.gitignore');
+  const tmpLines = gitignore.split('\n').filter((line) => line.trim() === 'tmp/');
+  assert.equal(tmpLines.length, 1, `tmp/ must appear exactly once:\n${gitignore}`);
+  assert.match(gitignore, /# >>> agentic-flow-kit ignores/);
+  assert.match(gitignore, /\.agents\/\.kit\//, 'block-only entries must stay in the block');
+});
+
+// 预置两份合并文件（LF 内容）：install 经 mergeBlock 归一化为 LF 后，
+// 首次 upgrade 即应双报「已是最新」且字节不变（.gitattributes 模板在 Windows 检出为 CRLF，
+// 不预置时首次 upgrade 会先做一次既有的 EOL 归一化重写）。
+test('upgrade reports merge files as up to date and leaves their bytes untouched', () => {
+  const dir = tmpRepo();
+  fs.writeFileSync(path.join(dir, '.gitignore'), 'node_modules/\n');
+  fs.writeFileSync(path.join(dir, '.gitattributes'), '*.log text\n');
+  const r1 = run(['install', '--agent', 'trae', '--lang', 'zh-CN', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r1.status, 0, r1.stderr);
+  const beforeIg = fs.readFileSync(path.join(dir, '.gitignore'));
+  const beforeGa = fs.readFileSync(path.join(dir, '.gitattributes'));
+
+  const r2 = run(['upgrade', '--target', '.'], dir);
+  assert.equal(r2.status, 0, r2.stderr);
+  assert.match(r2.stdout, /\.gitignore（已是最新）/);
+  assert.match(r2.stdout, /\.gitattributes（已是最新）/);
+  assert.ok(fs.readFileSync(path.join(dir, '.gitignore')).equals(beforeIg), '.gitignore bytes must stay put');
+  assert.ok(fs.readFileSync(path.join(dir, '.gitattributes')).equals(beforeGa), '.gitattributes bytes must stay put');
+});
+
+// 模拟旧版本产物：块尾多一个空行（end 标记后两个换行）→ upgrade 收敛为单尾换行且不再改动
+test('upgrade converges legacy trailing blank lines after the merge block', () => {
+  const dir = tmpRepo();
+  fs.writeFileSync(path.join(dir, '.gitignore'), 'node_modules/\n');
+  const r1 = run(['install', '--agent', 'trae', '--lang', 'zh-CN', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r1.status, 0, r1.stderr);
+  const abs = path.join(dir, '.gitignore');
+  fs.writeFileSync(abs, `${fs.readFileSync(abs, 'utf8')}\n`, 'utf8');
+
+  const r2 = run(['upgrade', '--target', '.'], dir);
+  assert.equal(r2.status, 0, r2.stderr);
+  const converged = fs.readFileSync(abs, 'utf8');
+  assert.ok(converged.endsWith('# <<< agentic-flow-kit ignores\n'), 'must end with a single newline after the end marker');
+  assert.ok(!converged.endsWith('\n\n'), 'legacy extra blank line must be gone');
+
+  const r3 = run(['upgrade', '--target', '.'], dir);
+  assert.equal(r3.status, 0, r3.stderr);
+  assert.match(r3.stdout, /\.gitignore（已是最新）/);
+  assert.ok(fs.readFileSync(abs, 'utf8') === converged, 'a converged file must not change again');
+});
+
+test('diff classifies .gitignore as unchanged when user entries overlap the block', () => {
+  const dir = tmpRepo();
+  fs.writeFileSync(path.join(dir, '.gitignore'), 'node_modules/\ntmp/\n');
+  const r = run(['install', '--agent', 'trae', '--lang', 'zh-CN', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+
+  const d = JSON.parse(run(['diff', '--target', '.', '--json'], dir).stdout);
+  const item = d.items.find((it) => it.targetRel === '.gitignore');
+  assert.ok(item, '.gitignore must be part of the diff');
+  assert.equal(item.kind, 'unchanged');
+  assert.equal(d.summary.kitUpdated, 0);
+  assert.equal(d.summary.userModified, 0);
+});
