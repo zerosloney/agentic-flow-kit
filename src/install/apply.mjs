@@ -24,18 +24,50 @@ function eolOf(text) {
   return text.includes('\r\n') ? '\r\n' : '\n';
 }
 
+// 幂等去重（issue #68）：块外用户已有的行（trim 后比较，注释行同口径）不再写进托管块。
+export function dedupeMergeBlock(block, existing, begin, end) {
+  const beginIdx = existing.indexOf(begin);
+  const endIdx = existing.indexOf(end);
+  const outside = beginIdx >= 0 && endIdx > beginIdx
+    ? existing.slice(0, beginIdx) + existing.slice(endIdx + end.length)
+    : existing;
+  const seen = new Set(
+    outside
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .filter(Boolean),
+  );
+  const lines = block.split('\n');
+  return lines
+    .filter((line, i) => i === 0 || i >= lines.length - 2 || !line.trim() || !seen.has(line.trim()))
+    .join('\n');
+}
+
+// 块体（不含 begin/end 标记与尾换行）：去重后按文件 EOL 归一化。
+function blockBody(block, existing, begin, end, eol) {
+  const deduped = dedupeMergeBlock(block, existing, begin, end);
+  const stripped = deduped.endsWith('\n') ? deduped.slice(0, -1) : deduped;
+  return stripped.replace(/\r?\n/g, eol);
+}
+
+// 替换路径拼接：块体无尾换行；块后只剩换行（或为空）时收敛为单个 eol，EOF 不再累积空行。
+function spliceBlock(existing, body, beginIdx, endIdx, end, eol) {
+  let post = existing.slice(endIdx + end.length);
+  if (!post || /^(?:\r?\n)+$/.test(post)) post = eol;
+  return existing.slice(0, beginIdx) + body + post;
+}
+
 function mergeBlock(existing, block, begin, end) {
   const eol = eolOf(existing);
-  const normalized = block.replace(/\r?\n/g, eol);
+  const body = blockBody(block, existing, begin, end, eol);
   const beginIdx = existing.indexOf(begin);
   const endIdx = existing.indexOf(end);
   if (beginIdx >= 0 && endIdx > beginIdx) {
-    const after = endIdx + end.length;
-    return existing.slice(0, beginIdx) + normalized + existing.slice(after);
+    return spliceBlock(existing, body, beginIdx, endIdx, end, eol);
   }
   const sep = existing.length && !existing.endsWith(eol) ? eol : '';
   const gap = existing.length ? eol : '';
-  return `${existing}${sep}${gap}${normalized}${eol}`;
+  return `${existing}${sep}${gap}${body}${eol}`;
 }
 
 export function readPlanEntry(entry, vars) {
@@ -73,13 +105,14 @@ export function extractMergeBlock(text, begin, end) {
 }
 
 // 就地替换托管块，保留块外用户内容与文件 EOL；块不存在时原样返回。
+// 与 mergeBlock 替换路径同口径：去重 + 块体无尾换行 + post 收敛，避免 EOF 空行累积。
 export function replaceMergeBlock(existing, block, begin, end) {
   const beginIdx = existing.indexOf(begin);
   const endIdx = existing.indexOf(end);
   if (beginIdx < 0 || endIdx <= beginIdx) return existing;
   const eol = eolOf(existing);
-  const normalized = block.replace(/\r?\n/g, eol);
-  return existing.slice(0, beginIdx) + normalized + existing.slice(endIdx + end.length);
+  const body = blockBody(block, existing, begin, end, eol);
+  return spliceBlock(existing, body, beginIdx, endIdx, end, eol);
 }
 
 // 移除托管块及其后的换行；块前由插入逻辑补的空行一并回收。

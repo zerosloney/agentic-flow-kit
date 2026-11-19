@@ -4,7 +4,7 @@ import { flag } from '../cli/args.mjs';
 import { buildPlan } from '../install/plan.mjs';
 import { buildVars } from '../render/tokens.mjs';
 import { readManifest, sha256Text } from '../install/manifest.mjs';
-import { readPlanEntry, renderMergeBlock, extractMergeBlock } from '../install/apply.mjs';
+import { readPlanEntry, renderMergeBlock, extractMergeBlock, dedupeMergeBlock } from '../install/apply.mjs';
 import { readInjectedModels } from '../models/resolve.mjs';
 import { makeT } from '../i18n.mjs';
 import { readKitVersion, resolveTarget } from './install.mjs';
@@ -114,11 +114,16 @@ export function classifyEntry({ target, entry, vars, managedHash, derived = fals
   }
   let kitChanged;
   if (expected.block != null) {
-    const actualBlock = exists
-      ? extractMergeBlock(fs.readFileSync(abs, 'utf8'), expected.begin, expected.end)
+    const text = exists ? fs.readFileSync(abs, 'utf8') : null;
+    const actualBlock = text != null
+      ? extractMergeBlock(text, expected.begin, expected.end)
       : null;
+    // 期望块先按磁盘块外内容去重（issue #68）：块外已有的行不写进块，比对口径一致。
+    const expectedBlock = text != null
+      ? dedupeMergeBlock(expected.block, text, expected.begin, expected.end)
+      : expected.block;
     kitChanged = !actualBlock
-      || normalizeEol(actualBlock) !== normalizeEol(expected.block.trimEnd());
+      || normalizeEol(actualBlock) !== normalizeEol(expectedBlock.trimEnd());
   } else {
     const baseline = managedHash ?? actualHash;
     kitChanged = !exists || expected.expectedHash !== baseline;
