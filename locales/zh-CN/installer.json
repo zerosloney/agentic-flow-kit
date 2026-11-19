@@ -149,6 +149,8 @@
   "doctor.baseline": "基线：{{count}} 个文件（v{{version}}）",
   "doctor.baselineMissing": "未找到基线目录（基线不随 clone 传播；flow-kit install --baseline-only --target . 可重建）",
   "doctor.baselineOrphans": "存在无主基线 {{count}} 个（prune --baseline 可清理）",
+  "doctor.ledgerBaselineMissing": "存在确认台账但未声明历史基线：check-ledger-invariant 将按全史扫描，基线外历史违规会照常上报",
+  "doctor.ledgerBaselineHint": "在 .agents/notes/ledger-history-baseline.md 写一行 LEDGER_HISTORY_BASELINE=<提交sha>，或设同名环境变量 LEDGER_HISTORY_BASELINE",
   "doctor.modelDrift": "模型漂移：{{host}}/{{role}} 安装值 {{installed}} ≠ 本地 {{local}}；按 model-upgrade 技能先评测再升级",
   "doctor.enterprise": "档位 {{tier}} / 姿态 {{posture}} / 宿主 {{hosts}} / 缺口 {{gaps}}",
   "doctor.enterpriseGaps": "企业档加固缺口：{{gaps}}（无权限面，仅 hooks 或不可配置）",

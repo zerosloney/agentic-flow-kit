@@ -131,6 +131,16 @@ export function doctorCommand({ args, t }) {
   add(/merge=jsonl-union/.test(attr), '.gitattributes jsonl-union', attr ? '' : t('doctor.fileMissing'));
   add(/merge=ours/.test(attr), '.gitattributes ours', attr ? '' : t('doctor.fileMissing'));
 
+  // 台账历史基线声明（issue #69 advisory）：已有确认台账而未声明基线时，check-ledger-invariant
+  // 按全史扫描并把基线外历史违规照常上报（装户首跑易假红）；文件或 env 任一声明的即视为已声明。
+  const hasLedger = fs.existsSync(path.join(target, '.agents', 'confirmations.jsonl'))
+    || fs.existsSync(path.join(target, '.agents', 'confirmations.d'));
+  if (manifest && hasLedger
+    && !fs.existsSync(path.join(target, '.agents', 'notes', 'ledger-history-baseline.md'))
+    && !process.env.LEDGER_HISTORY_BASELINE) {
+    add(true, 'ledger baseline', t('doctor.ledgerBaselineMissing'), t('doctor.ledgerBaselineHint'), { warn: true });
+  }
+
   for (const hook of HOOK_FILES) {
     add(fs.existsSync(path.join(target, '.githooks', hook)), `hook ${hook}`, '');
   }
