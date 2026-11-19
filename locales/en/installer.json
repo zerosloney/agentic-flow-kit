@@ -149,6 +149,8 @@
   "doctor.baseline": "Baseline: {{count}} file(s) (v{{version}})",
   "doctor.baselineMissing": "Baseline directory is missing (baselines are not carried by clone; run flow-kit install --baseline-only --target . to rebuild)",
   "doctor.baselineOrphans": "{{count}} orphan baseline(s) (run prune --baseline to clean up)",
+  "doctor.ledgerBaselineMissing": "Confirmation ledger exists but no history baseline is declared: check-ledger-invariant will scan full history and report pre-baseline violations as usual",
+  "doctor.ledgerBaselineHint": "Write a LEDGER_HISTORY_BASELINE=<commit sha> line into .agents/notes/ledger-history-baseline.md, or set the LEDGER_HISTORY_BASELINE environment variable",
   "doctor.modelDrift": "Model drift: {{host}}/{{role}} installed {{installed}} != local {{local}}; run the model-upgrade eval before upgrading",
   "doctor.enterprise": "Tier {{tier}} / posture {{posture}} / hosts {{hosts}} / gaps {{gaps}}",
   "doctor.enterpriseGaps": "Enterprise hardening gaps: {{gaps}} (no permission surface; hooks-only or unconfigurable)",

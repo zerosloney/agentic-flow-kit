@@ -157,6 +157,25 @@ test('en doctor suggests install --baseline-only when the baseline is missing', 
   assert.match(`${r.stdout}${r.stderr}`, /install --baseline-only/);
 });
 
+// issue #69：ledger baseline advisory 两键的中英双侧断言（en 输出英文、zh 回退不串英文文案）。
+test('en doctor reports the missing ledger baseline declaration in English', () => {
+  const dir = tmpRepo();
+  assert.equal(run(['install', '--agent', 'trae', '--stack', 'node', '--lang', 'en', '--target', '.'], dir).status, 0);
+  fs.mkdirSync(path.join(dir, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.agents/confirmations.jsonl'), '{"ts":"2026-11-20T00:00:00.000Z"}\n', 'utf8');
+
+  const en = run(['doctor', '--target', '.', '--lang', 'en'], dir);
+  assert.match(`${en.stdout}${en.stderr}`, /no history baseline is declared/);
+  assert.doesNotMatch(`${en.stdout}${en.stderr}`, /未声明历史基线/, 'en output must not fall back to the zh sentence');
+  // Hint（fix）只在 --json 的 fix 字段输出：人读模式仅失败项打 fix 行，warn 项不打。
+  const enJson = run(['doctor', '--target', '.', '--lang', 'en', '--json'], dir);
+  const item = JSON.parse(enJson.stdout).checks.find((c) => c.name === 'ledger baseline');
+  assert.match(item.fix, /ledger-history-baseline\.md/);
+
+  const zh = run(['doctor', '--target', '.', '--lang', 'zh-CN'], dir);
+  assert.match(`${zh.stdout}${zh.stderr}`, /未声明历史基线/);
+});
+
 test('en codex install reports user-level wiring with the re-trust reminder', () => {
   const dir = tmpRepo();
   const home = makeTmp('flow-kit-en-home-');

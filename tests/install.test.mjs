@@ -439,6 +439,30 @@ test('doctor reports leftover runtime files as advisory only', () => {
   assert.equal(legacy.warn, true);
 });
 
+// issue #69：已有确认台账而未声明历史基线 → advisory warn；写入声明文件后该项消失。
+test('doctor warns when the confirmation ledger exists without a history baseline declaration', () => {
+  const dir = tmpRepo();
+  assert.equal(run(['install', '--agent', 'trae', '--stack', 'node', '--target', '.'], dir).status, 0);
+  fs.mkdirSync(path.join(dir, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.agents/confirmations.jsonl'), '{"ts":"2026-11-20T00:00:00.000Z"}\n', 'utf8');
+
+  const before = run(['doctor', '--target', '.', '--json'], dir);
+  assert.equal(before.status, 0, before.stderr);
+  const item = JSON.parse(before.stdout).checks.find((c) => c.name === 'ledger baseline');
+  assert.ok(item, 'doctor should report the missing ledger baseline declaration');
+  assert.equal(item.ok, true);
+  assert.equal(item.warn, true);
+  assert.match(item.fix, /ledger-history-baseline\.md/);
+
+  fs.mkdirSync(path.join(dir, '.agents/notes'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.agents/notes/ledger-history-baseline.md'),
+    'LEDGER_HISTORY_BASELINE=0123456789abcdef0123456789abcdef01234567\n', 'utf8');
+  const after = run(['doctor', '--target', '.', '--json'], dir);
+  assert.equal(after.status, 0, after.stderr);
+  assert.ok(!JSON.parse(after.stdout).checks.some((c) => c.name === 'ledger baseline'),
+    'declared baseline must clear the advisory');
+});
+
 // ---- P2-6：--target 指向普通文件时以语义化错误拒绝，不再落到 mkdir 的裸 ENOTDIR ----
 
 test('install rejects a plain-file --target with a semantic error', () => {

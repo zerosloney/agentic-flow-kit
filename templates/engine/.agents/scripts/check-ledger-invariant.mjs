@@ -69,6 +69,10 @@
 //       与 PR647/8c2e1b1d 同病理）。
 //     两笔的终态在 main 与 develop 的合并树中均已归零（main 树 == 8c2e1b1d，develop 全量新增），
 //     无行级丢失。事件登记 workflow/papercuts.d/2026-11.md。
+//   2026-11-20 issue #69：基线声明来源扩为三级——env LEDGER_HISTORY_BASELINE（测试覆盖口）>
+//     仓库声明文件 .agents/notes/ledger-history-baseline.md（owner 在装户仓内声明，内置基线只对本仓
+//     有效）> 内置基线。与内置同值的 env 不再误报「测试用覆盖口」；无任何有效基线时 loud 提示
+//     「未声明历史基线 / 全史扫描」及声明方式，不再静默（仍 fail-open 于深度、fail-closed 于内容）。
 //
 // 模式：
 //   历史全扫（缺省，CI 机器门）：对主台账与每个分片各自遍历其提交历史（时间正序），每次变更必须以
@@ -127,12 +131,22 @@ const REBUILD_MANIFEST_REL = '.agents/config/ledger-rebuild-manifest.json';
 // 历史基线（owner 声明 2026-10-13，取当日台账 ts 全序恢复提交；2026-10-14 前移至 8c2e1b1d、
 // 2026-10-15 再前移至 b6cfd0db、2026-10-16 四前移至 46beeb7152、2026-10-26 五前移至 9a0370e8、
 // 2026-10-27 六前移至 e3ceb6c9（豁免 830027060b/e3ceb6c9 整取单侧丢行，同 PR647/b8ce1247 先例）——
-// 六次皆 owner 声明，缘由详见头注；env 覆盖供测试）
+// 六次皆 owner 声明，缘由详见头注；解析链与优先级见下 HISTORY_BASELINE / issue #69）
 const BUILTIN_BASELINE = (() => {
   const raw = 'e3ceb6c901918db828774ddae9370788df0cda68';
   // 装户新仓没有本仓基线提交：解析不出即视为无内置基线，避免新仓每条门禁都报警。
   try { execFileSync('git', ['cat-file', '-e', `${raw}^{commit}`], { cwd: ROOT, stdio: 'ignore' }); return raw; }
   catch { return ''; }
+})();
+// 仓库内 owner 声明基线（issue #69）：装户仓在 .agents/notes/ledger-history-baseline.md 写
+// LEDGER_HISTORY_BASELINE=<sha> 自行声明历史基线——内置基线只对 kit 本仓有效，env 是测试覆盖口，
+// 仓内声明是装户仓的常规来源。文件缺失/读失败/无匹配即视为未声明（''）。
+const REPO_BASELINE = (() => {
+  try {
+    const m = fs.readFileSync(path.join(ROOT, '.agents', 'notes', 'ledger-history-baseline.md'), 'utf8')
+      .match(/LEDGER_HISTORY_BASELINE=([0-9a-f]{7,40})/);
+    return m ? m[1] : '';
+  } catch { return ''; }
 })();
 // 2026-11-05 定点豁免（owner 声明，缘由见头注「2026-11-05 定点豁免」）：main 线两次回滚提交。
 // 只跳过这两笔自身的前缀/并集比对，其后提交仍以其 blob 为基线续扫——不缩小 develop 侧扫描面。
@@ -140,9 +154,11 @@ const LEGACY_EXEMPT = new Map([
   ['4f70a882c2826c413f46ab08f11ac52d1799d85e', '还原“已合并 PR 657”：整块回滚，主台账删 57335B（回滚对价）'],
   ['e25127d5a9e84f2b39d4e2b9f409e07983cd4928', 'PR 659 合并提交：同一还原的服务端合并收口，父母并集丢 131 行（TFS 无 union 驱动）'],
 ]);
+// 基线解析链（issue #69）：env LEDGER_HISTORY_BASELINE（测试覆盖口）> 仓库声明文件 > 内置基线；
+// 首个有值者经 cat-file 校验，解析不出即视为无基线（全史扫描 + loud 提示，见 postBaselineSet），
+// 不把任何来源的哈希当硬事实。
 const HISTORY_BASELINE = (() => {
-  const v = process.env.LEDGER_HISTORY_BASELINE || BUILTIN_BASELINE;
-  // 装户新仓没有本仓基线提交：解析不出即视为无基线（全史扫描），不把本仓哈希当硬事实。
+  const v = process.env.LEDGER_HISTORY_BASELINE || REPO_BASELINE || BUILTIN_BASELINE;
   try { execFileSync('git', ['cat-file', '-e', `${v}^{commit}`], { cwd: ROOT, stdio: 'ignore' }); return v; }
   catch { return ''; }
 })();
@@ -454,14 +470,17 @@ function historyShas(rel) {
   return historyIndex().get(rel) || [];
 }
 
-// 基线后提交集（含基线可达性探测）。基线不可解析分诊（2026-10-29 papercut 收口，d/2026-10.md 10-28/10-29 两行）：
-//   ① 覆盖值（env，测试用口）解析失败 → loud WARN + 回落内置 owner 基线，**不退全史**——此前静默回退
-//     全史曾双害：报 75 条已被 owner 豁免的历史违规（verify 假红 + fail-fast 跳过其后 8 门，一度被
-//     误判为 HEAD 既存红）；且把门拖进全史档（gate-cost 窗口 ledger-invariant 中位 182.4s/峰 797.6s
-//     的双峰来源，快路径实测 ~2.8s）。覆盖值是「测试用」入口，残留垃圾值零信息量，回落默认基线
-//     ≠ 吞异常（WARN 保可见）。
-//   ② 内置基线解析失败（对象库异常/怪浅克隆）→ loud WARN + null = 全史扫描——fail-open 于深度、
-//     fail-closed 于内容的既有口径不变，只是不再无声。
+// 基线后提交集（含基线可达性探测）。基线不可解析分诊（2026-10-29 papercut 收口，d/2026-10.md 10-28/10-29 两行；
+// 声明来源三级化见 2026-11-20 issue #69）：
+//   ① 覆盖值（env，测试用口；与内置/仓库声明基线同值时不算覆盖，不刷告警）解析失败 → loud WARN +
+//     回落仓库声明基线 → 内置 owner 基线，**不退全史**——此前静默回退全史曾双害：报 75 条已被 owner
+//     豁免的历史违规（verify 假红 + fail-fast 跳过其后 8 门，一度被误判为 HEAD 既存红）；且把门拖进
+//     全史档（gate-cost 窗口 ledger-invariant 中位 182.4s/峰 797.6s 的双峰来源，快路径实测 ~2.8s）。
+//     覆盖值是「测试用」入口，残留垃圾值零信息量，回落默认基线 ≠ 吞异常（WARN 保可见）。
+//   ② 生效基线（仓库声明或内置）解析失败（对象库异常/怪浅克隆）→ loud WARN + null = 全史扫描——
+//     fail-open 于深度、fail-closed 于内容的既有口径不变，只是不再无声。
+//   ③ 无任何有效基线（env/仓库声明/内置皆缺，issue #69）→ loud WARN 指明声明方式 + null = 全史扫描——
+//     原先静默全史，装户首跑报一堆与它无关的历史丢行且无任何解释。
 let _postBaseline;
 const postBaselineSet = () => {
   if (_postBaseline !== undefined) return _postBaseline;
@@ -470,30 +489,33 @@ const postBaselineSet = () => {
     return new Set(gitText(['rev-list', `${val}..HEAD`]).split(/\s+/).filter(Boolean));
   };
   const override = process.env.LEDGER_HISTORY_BASELINE;
-  if (override && override !== BUILTIN_BASELINE) {
+  if (override && override !== BUILTIN_BASELINE && override !== REPO_BASELINE) {
     try {
       _postBaseline = resolve(override);
       console.error(`[warn] LEDGER_HISTORY_BASELINE 覆盖生效（${override}）——测试用覆盖口，基线外提交不豁免`);
     } catch {
-      console.error(`[warn] LEDGER_HISTORY_BASELINE="${override}" 在本仓解析不出（持久 shell 残留覆盖值？判据 env | grep LEDGER_HISTORY_BASELINE）——覆盖不生效，回落内置基线 ${BUILTIN_BASELINE.slice(0, 10)}，不退全史`);
+      const fallback = REPO_BASELINE || BUILTIN_BASELINE;
+      console.error(`[warn] LEDGER_HISTORY_BASELINE="${override}" 在本仓解析不出（持久 shell 残留覆盖值？判据 env | grep LEDGER_HISTORY_BASELINE）——覆盖不生效，回落${REPO_BASELINE ? '仓库声明基线' : '内置基线'} ${fallback.slice(0, 10)}，不退全史`);
       try {
-        _postBaseline = resolve(BUILTIN_BASELINE);
+        _postBaseline = resolve(fallback);
       } catch {
-        console.error('[warn] 内置基线亦解析不出——基线不生效，全史扫描（对象库异常请排查）');
+        console.error('[warn] 声明基线亦解析不出——基线不生效，全史扫描（对象库异常请排查）');
         _postBaseline = null;
       }
     }
     return _postBaseline;
   }
-  // 新装户无内置基线（哈希在本仓不存在）：直接按全史扫描，不刷无意义告警。
-  if (!BUILTIN_BASELINE) {
+  // 无任何有效基线（env/仓库声明/内置皆缺）：loud 提示声明方式后按全史扫描（issue #69）——
+  // 不再静默；仍返回 null，fail-open 于深度、fail-closed 于内容的口径不变。
+  if (!HISTORY_BASELINE) {
+    console.error('[warn] 未声明历史基线（或声明值在本仓解析不出）——按全史扫描，基线外历史违规将照常上报。仓库所有者请声明基线：在 .agents/notes/ledger-history-baseline.md 写一行 LEDGER_HISTORY_BASELINE=<提交sha>，或设同名环境变量 LEDGER_HISTORY_BASELINE');
     _postBaseline = null;
     return _postBaseline;
   }
   try {
-    _postBaseline = resolve(BUILTIN_BASELINE);
+    _postBaseline = resolve(HISTORY_BASELINE);
   } catch {
-    console.error(`[warn] 内置基线 ${BUILTIN_BASELINE.slice(0, 10)} 在本仓解析不出——基线不生效，全史扫描（对象库异常请排查）`);
+    console.error(`[warn] 历史基线 ${HISTORY_BASELINE.slice(0, 10)} 在本仓解析不出——基线不生效，全史扫描（对象库异常请排查）`);
     _postBaseline = null;
   }
   return _postBaseline;
