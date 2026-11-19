@@ -8,6 +8,10 @@
 
 - feat: 规范版本落账/验证脏树摘要/enterprise 阻断分级——兼修首跑偏离误报与观测口径
 
+### 修复
+
+- fix: stub 门命令 POSIX 引号——Linux /bin/sh 下 node -e 裸括号语法错误致 CI 两红
+
 ## [2.10.6]
 
 ### 修复
