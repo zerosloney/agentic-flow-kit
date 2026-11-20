@@ -2,6 +2,20 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.10.8]
+
+### 新增
+
+- feat: 台账历史基线支持仓库内声明——env > .agents/notes 声明文件 > 内置基线，无基线 fail-loud
+
+### 修复
+
+- fix: .gitignore/.gitattributes 合并块幂等化——块外既有条目不重复入块、收敛块尾空行
+
+### 其他
+
+- chore: 重渲染 CHANGELOG——tag 2.10.7 收编 stub 修复提交（f220c17）后未重渲染致 --check 必红
+
 ## [2.10.7]
 
 ### 新增
