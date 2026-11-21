@@ -2,6 +2,12 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.11.0]
+
+### 新增
+
+- feat: 支持按 git 远端自动适配 CI 与 PR 平台，解耦重命名 workflow-closeout
+
 ## [2.10.8]
 
 ### 新增
