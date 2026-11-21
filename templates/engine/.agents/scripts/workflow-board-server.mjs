@@ -101,7 +101,18 @@ export function runCard(run) {
     eventCount: events.length,
     nextTarget: run.nextTarget || null,
     stageBar: stageBar(run) + (route ? ` ↩ 退回 ${route.to}（${route.from} ${route.attempt}/${route.cap}）` : ''),
+    docs: run.docs || null,
+    route: route ? { to: route.to, from: route.from, attempt: route.attempt, cap: route.cap } : null,
+    retries: run.retries || null,
+    workOrder: run.workOrder ? { id: run.workOrder.id, kind: run.workOrder.kind, title: run.workOrder.title, goal: run.workOrder.goal } : null,
+    awaitConfirm: run.awaitConfirm ? { doc: run.awaitConfirm.doc, points: run.awaitConfirm.points, ledger: Boolean(run.awaitConfirm.ledger) } : null,
+    gateFail: run.gateFail ? { gate: run.gateFail.gate, exit: run.gateFail.exit, hint: run.gateFail.hint } : null,
   };
+}
+
+export function activeRunsCount(runs) {
+  const list = runs || scanRuns();
+  return list.filter((r) => r && r.stopType && !['done', 'aborted'].includes(r.stopType)).length;
 }
 
 // 扫 pipeline-runs/ 全部 run → 卡片数组，按 updatedAt 倒序（无目录/空目录 → []）
@@ -360,6 +371,7 @@ async function scanBoard() {
     tasks: projectTasks(ROOT), // 任务投影（2026-11-16 P3）：单源 gen-workflow-index.projectTasks，禁复制口径
     loopHardBlocks: loop.blocks, loopNote: loop.note || undefined,
     activeStatuses: [...ENUMS['doc.status.active'], ...ENUMS['incident.status.active']], // 枚举单源贯通前端（p2-batch2）
+    activeRuns: activeRunsCount(),
   };
 }
 
@@ -465,7 +477,6 @@ function watchDir(dir) {
     broadcast('watchdead');
   }
 }
-watchDir(WORKFLOW);
 // 台账 append → 同一 changed 广播（引擎视图实时跟随门禁运行）。regen/compact 是临时文件 + rename
 // 重写——rename 事件后旧 inode 监听失效，关掉重挂；文件暂缺（全新装机未跑过门禁）不挂不报错。
 function watchLedger(file) {
@@ -478,8 +489,6 @@ function watchLedger(file) {
     w.on('error', () => { try { w.close(); } catch { } });
   } catch { /* 暂缺：不挂，台账生成后进程重启再挂 */ }
 }
-watchLedger(JUDGMENTS);
-watchLedger(VERIFICATIONS);
 // 25s 心跳：防半开连接；顺带清理已断开的 client
 setInterval(() => { for (const res of sseClients) { if (res.destroyed) sseClients.delete(res); else res.write(': ping\n\n'); } }, 25000).unref();
 
@@ -676,6 +685,9 @@ server.on('error', (e) => {
 // isMain 守卫（board-kb-p1）：parseLoopHardBlocks 可被测试 import（import 不 listen）
 const isMain = process.argv[1] && process.argv[1].endsWith('workflow-board-server.mjs');
 if (isMain) {
+  watchDir(WORKFLOW);
+  watchLedger(JUDGMENTS);
+  watchLedger(VERIFICATIONS);
   // 供应商资产钉扎（2026-10-11 D1，fail-closed）：vendored marked.min.js 供应链完整性——版本与 sha256
   // 双钉，替换/篡改即拒启动（看板渲染 workflow 内容，防供应链注入；「hash everything」自洽补全）。
   // CRLF 容差（2026-10-22 board-slot-strict 冒烟实测踩坑）：钉扎哈希按 git 规范内容（LF）取——

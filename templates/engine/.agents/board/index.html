@@ -62,6 +62,9 @@
   #runs-view { display: flex; flex-direction: column; height: calc(100vh - 58px); overflow-y: auto; padding: 14px 22px 28px; gap: 10px; }
   .run-card { background: var(--card); border: 1px solid var(--border); border-left: 3px solid var(--border-strong); border-radius: 4px; padding: 12px 14px; cursor: pointer; transition: background .15s ease-out, border-color .15s ease-out, transform .15s ease-out, box-shadow .15s ease-out; }
   .run-card:hover { background: var(--card-hover); border-color: var(--border-strong); transform: translateY(-1px); box-shadow: var(--shadow-1); }
+  .run-card.active { border-left-color: var(--intent); }
+  .run-card.done { border-left-color: var(--ok); }
+  .run-card.fail { border-left-color: var(--bad); }
   .run-card .row { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-bottom: 7px; }
   .run-card .title { font-size: 13px; line-height: 1.6; }
   .run-bar { font: 12px/1.6 var(--mono); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 4px; }
@@ -72,6 +75,30 @@
   .stopchip.gate-fail { color: var(--bad); border: 1px solid var(--bad); }
   .stopchip.done { color: var(--ok); border: 1px solid var(--ok); }
   .stopchip.aborted { color: var(--muted); border: 1px solid var(--border-strong); }
+
+  /* 阶段流向图（Stage Flow）与产物标签 */
+  .stage-flow { display: flex; align-items: center; gap: 4px; margin-top: 10px; padding: 7px 9px; background: var(--surface); border: 1px solid var(--border); border-radius: 3px; overflow-x: auto; }
+  .sf-node { display: inline-flex; align-items: center; gap: 5px; font: 600 11px/1 var(--mono); color: var(--muted); padding: 3px 7px; border-radius: 2px; background: var(--card); border: 1px solid var(--border); white-space: nowrap; }
+  .sf-node .sf-dot { font-size: 10px; line-height: 1; }
+  .sf-node.past { color: var(--ok); border-color: rgba(62,113,87,.3); background: rgba(62,113,87,.06); }
+  .sf-node.past .sf-dot { color: var(--ok); }
+  .sf-node.cur { color: var(--text); border-color: var(--text); background: var(--card-hover); font-weight: 700; box-shadow: 0 0 0 1px var(--text); }
+  .sf-node.cur .sf-dot { color: var(--accent); }
+  .sf-node.cur.work-order { border-color: var(--intent); color: var(--intent); box-shadow: 0 0 0 1px var(--intent); }
+  .sf-node.cur.await-confirm { border-color: var(--warn); color: var(--warn); box-shadow: 0 0 0 1px var(--warn); }
+  .sf-node.cur.gate-fail { border-color: var(--bad); color: var(--bad); box-shadow: 0 0 0 1px var(--bad); }
+  .sf-node.cur.done, .sf-node.done { color: var(--ok); border-color: var(--ok); background: rgba(62,113,87,.12); font-weight: 700; box-shadow: 0 0 0 1px var(--ok); }
+  .sf-node.cur.done .sf-dot, .sf-node.done .sf-dot { color: var(--ok); }
+  .sf-node.future { color: var(--faint); border-style: dashed; }
+  .sf-arrow { font: 10px/1 var(--mono); color: var(--border-strong); flex-shrink: 0; padding: 0 1px; }
+  .sf-arrow.past { color: var(--ok); }
+  .sf-arrow.future { color: var(--border); }
+  .route-pill { display: inline-flex; align-items: center; gap: 5px; font: 500 11px/1.4 var(--mono); color: var(--bad); background: rgba(160,75,53,.07); border: 1px solid rgba(160,75,53,.25); border-radius: 2px; padding: 2px 7px; margin-top: 6px; }
+  .run-arts { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .art-tag { display: inline-flex; align-items: center; gap: 4px; font: 500 11px/1.3 var(--mono); color: var(--muted); background: var(--bg); border: 1px solid var(--border); border-radius: 2px; padding: 2px 6px; text-decoration: none; cursor: pointer; transition: border-color .15s ease-out, color .15s ease-out; }
+  .art-tag:hover { color: var(--text); border-color: var(--border-strong); }
+  .art-tag b { color: var(--text); font-weight: 600; }
+  .badge-pulse { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); margin-left: 6px; vertical-align: middle; animation: breath 2s infinite ease-in-out; }
 
   /* 引擎视图（2026-10-22 board-engine-views）：门禁成本趋势 + 判定流水 */
   #engine-view { height: calc(100vh - 58px); overflow-y: auto; padding: 14px 22px 40px; display: flex; flex-direction: column; gap: 18px; }
@@ -210,7 +237,7 @@
   <span class="chip" id="c-plans"></span><span class="chip" id="c-specs"></span>
   <span class="chip" id="c-alerts" style="display:none"></span>
   <input id="q" placeholder="过滤 标题 / slug / 文件…" spellcheck="false">
-  <button id="view-runs" class="viewbtn" title="pipeline-run 执行器事件流">执行器</button>
+  <button id="view-runs" class="viewbtn" title="pipeline-run 执行器事件流">执行器<span id="runs-badge" class="badge-pulse" style="display:none"></span></button>
   <button id="view-engine" class="viewbtn" title="引擎判定流水与门禁成本趋势">引擎</button>
   <button id="view-tasks" class="viewbtn" title="任务投影：产物齐缺一览（单源 gen-workflow-index.projectTasks）">任务</button>
   <span id="sse"><i></i><span>连接断开</span></span>
@@ -231,8 +258,10 @@
   <div id="d-tabs">
     <button data-tab="doc" class="on">文档</button>
     <button data-tab="hist">修改历史</button>
+    <button data-tab="overview" class="run-tab" style="display:none">概览</button>
     <button data-tab="timeline" class="run-tab" style="display:none">时间线</button>
-    <button data-tab="workorder" class="run-tab" style="display:none">工单</button>
+    <button data-tab="workorder" class="run-tab" style="display:none">工单/停机</button>
+    <button data-tab="artifacts" class="run-tab" style="display:none">产物清单</button>
   </div>
   <div id="d-body"></div>
 </div>
@@ -259,7 +288,7 @@ let RUNS = [];            // 最近一次 /api/runs 的 run 卡片
 let RUN_CURRENT = null;    // 抽屉当前打开的 run
 let TASKS = [];            // 最近一次 /api/board 的任务投影（2026-11-16 P3，单源 projectTasks）
 let VIEW = 'board';        // 当前视图：board | runs | engine | tasks
-let RUN_TAB = 'timeline';  // run 抽屉当前 tab：timeline | workorder
+let RUN_TAB = 'overview';  // run 抽屉当前 tab：overview | timeline | workorder | artifacts
 
 const $ = (s) => document.querySelector(s);
 const esc = (s) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -354,6 +383,8 @@ async function refreshBoard() {
   const ca = $('#c-alerts');
   ca.style.display = nAlerts ? '' : 'none';
   if (nAlerts) { ca.textContent = `⚠ 断档 ${nAlerts}`; ca.style.color = 'var(--bad)'; }
+  const rb = $('#runs-badge');
+  if (rb) rb.style.display = (data.activeRuns && data.activeRuns > 0) ? '' : 'none';
   // hard-block 全局告警条（单源 check-loop，2026-09-27 board-kb-p1）：check-loop hard 项自动跟随
   let loopBar = $('#loop-alerts');
   if (!loopBar) {
@@ -488,7 +519,7 @@ async function loadHist() {
     : '<div class="none">暂无提交记录（文件尚未 commit；git 历史只包含已提交的修改）</div>';
 }
 
-// ================= 执行器视图（2026-10-04 board-run-panel） =================
+// ================= 执行器视图（2026-10-04 board-run-panel / 2026-11-21 阶段流与产物流增强） =================
 // 只读 pipeline-runs/ 事件流（机器事实），不读 orchestration-runs.jsonl（自报态）。
 const STOP_LABEL = {
   'work-order': '工单', 'await-confirm': '等待确认', 'gate-fail': '门拒绝', done: '完成', aborted: '已放弃',
@@ -498,6 +529,96 @@ const EVENT_DESC = {
   confirm: '确认', commit: '提交', stop: '停机', done: '完成', abort: '放弃',
   route: '退回', 'route-enter': '重入', resume: '恢复',
 };
+const ART_LABEL = {
+  entry: '入口', spec: 'SPEC', plan: 'PLAN', tasks: '任务',
+  verifyReport: '验收', apiDocs: 'API', changes: '改动',
+};
+
+function getStageSequence(run) {
+  const s = run.stage;
+  const isDone = s === 'done' || run.stopType === 'done';
+  const kind = run.triage?.kind;
+  const level = run.triage?.level;
+  let base = [];
+  if (kind === 'verify') {
+    base = [['Verify', s === 'verify' || isDone]];
+  } else if (kind === 'review') {
+    base = [['Review', s === 'review-only' || isDone]];
+  } else if (kind === 'deploy') {
+    base = [
+      ['Checklist', ['deploy-check', 'deploy-prep'].includes(s)],
+      ['Authorize', s === 'deploy-await' || isDone],
+    ];
+  } else {
+    base = [
+      ['Plan', (level === 'L1' && kind !== 'fix'
+        ? ['plan-fill', 'plan-draft', 'plan-confirm', 'triage']
+        : ['intent-fill', 'intent-draft', 'intent-confirm', 'incident-fill', 'incident-draft', 'incident-confirm', 'triage']).includes(s)],
+      ['Design', ['spec-fill', 'spec-draft', 'spec-review', 'spec-confirm'].includes(s)],
+      ['Build', (level === 'L1' && kind !== 'fix'
+        ? ['changes-confirm', 'implement', 'fix', 'changes-verify']
+        : ['plan-fill', 'plan-draft', 'plan-confirm', 'changes-confirm', 'implement', 'fix', 'changes-verify']).includes(s)],
+      ['Test', ['verify', 'review', 'closeout', 'done-confirm', 'incident-fixed-confirm', 'incident-closed-confirm', 'direct-commit'].includes(s)],
+    ];
+  }
+  base.push(['Done', isDone]);
+  return base;
+}
+
+function renderStageFlowHtml(run) {
+  const seq = getStageSequence(run);
+  const s = run.stage;
+  const isDone = s === 'done' || run.stopType === 'done';
+  let curIdx = isDone ? seq.length - 1 : seq.findIndex(([, cur]) => cur);
+  if (curIdx === -1) curIdx = 0;
+
+  const stopType = run.stopType || '';
+  const stopClass = ['work-order', 'await-confirm', 'gate-fail'].includes(stopType) ? stopType : '';
+
+  return `<div class="stage-flow">${seq.map(([name], i) => {
+    let state = 'future';
+    let dot = '…';
+    if (isDone) {
+      if (i < seq.length - 1) { state = 'past'; dot = '✓'; }
+      else { state = 'cur done'; dot = '✓'; }
+    } else {
+      if (i < curIdx) { state = 'past'; dot = '✓'; }
+      else if (i === curIdx) {
+        state = `cur ${stopClass}`.trim();
+        dot = '●';
+      } else {
+        state = 'future';
+        dot = '…';
+      }
+    }
+    const arrow = i < seq.length - 1
+      ? `<span class="sf-arrow ${i < curIdx ? 'past' : 'future'}">──▶</span>`
+      : '';
+    return `<span class="sf-node ${state}"><span class="sf-dot">${dot}</span>${esc(name)}</span>${arrow}`;
+  }).join('')}</div>`;
+}
+
+function renderArtifactsHtml(docs) {
+  if (!docs || typeof docs !== 'object') return '';
+  const tags = [];
+  for (const [k, v] of Object.entries(docs)) {
+    if (!v) continue;
+    const label = ART_LABEL[k] || k;
+    if (Array.isArray(v)) {
+      for (const item of v) {
+        if (typeof item === 'string' && item) {
+          const name = item.split('/').pop();
+          tags.push(`<a class="art-tag" data-file="${esc(item)}" title="${esc(item)}"><b>${esc(label)}</b> ${esc(name)}</a>`);
+        }
+      }
+    } else if (typeof v === 'string') {
+      const name = v.split('/').pop();
+      tags.push(`<a class="art-tag" data-file="${esc(v)}" title="${esc(v)}"><b>${esc(label)}</b> ${esc(name)}</a>`);
+    }
+  }
+  if (!tags.length) return '';
+  return `<div class="run-arts">${tags.join('')}</div>`;
+}
 
 async function refreshRuns() {
   let data;
@@ -508,15 +629,22 @@ async function refreshRuns() {
   } catch (e) {
     return false;
   }
-  RUNS = data.cards || []; // 键名 cards 对齐 /api/runs 载荷（intent 2026-10-04-board-run-panel 验收#1）
+  RUNS = data.cards || [];
+  const activeCount = RUNS.filter((r) => r.stopType && !['done', 'aborted'].includes(r.stopType)).length;
+  const rb = $('#runs-badge');
+  if (rb) rb.style.display = activeCount > 0 ? '' : 'none';
+
   const q = Q.trim().toLowerCase();
   const list = RUNS.filter((r) => !q || (r.runId + ' ' + r.requirement + ' ' + r.stage).toLowerCase().includes(q));
   const html = list.length
     ? list.map((r) => {
         const stop = STOP_LABEL[r.stopType] || esc(r.stopType || '');
         const stopCls = r.stopType || '';
-        const bar = r.stageBar || '';
-        return `<div class="run-card" data-run="${esc(r.runId)}">` +
+        const cardState = r.stopType === 'done' ? 'done' : r.stopType === 'gate-fail' ? 'fail' : (r.stopType && r.stopType !== 'aborted') ? 'active' : '';
+        const routePill = r.route
+          ? `<div class="route-pill" title="退回重做">↩ 退回 <b>${esc(r.route.to)}</b>（${esc(r.route.from)} 失败 ${r.route.attempt}/${r.route.cap} 次）</div>`
+          : '';
+        return `<div class="run-card ${cardState}" data-run="${esc(r.runId)}">` +
           `<div class="row">` +
           `<span class="type" style="background:var(--spec)">RUN</span>` +
           `<span class="lv">${esc(r.triage?.level || '')}</span>` +
@@ -525,7 +653,9 @@ async function refreshRuns() {
           `</div>` +
           `<div class="title">${esc(r.requirement || r.runId)}</div>` +
           `<div class="run-bar">${esc(r.runId)} · <b>${esc(r.stage || '')}</b>${r.eventCount ? ` · ${r.eventCount} 事件` : ''}</div>` +
-          (bar ? `<div class="run-bar">${esc(bar)}</div>` : '') +
+          renderStageFlowHtml(r) +
+          routePill +
+          renderArtifactsHtml(r.docs) +
           `</div>`;
       }).join('')
     : '<div class="empty">暂无 run</div>';
@@ -533,7 +663,7 @@ async function refreshRuns() {
   return true;
 }
 
-// —— run 抽屉：时间线 + 工单/确认详情 ——
+// —— run 抽屉：概览 + 时间线 + 工单/停机详情 + 产物清单 ——
 function runEventHtml(run) {
   const evs = run.events || [];
   if (!evs.length) return '<div class="none">暂无事件</div>';
@@ -564,6 +694,37 @@ function runEventHtml(run) {
       (sub ? `<div class="tl-meta">${sub}</div>` : '') +
       `<div class="tl-meta">${esc((e.t || '').slice(0, 19).replace('T', ' '))}</div></div>`;
   }).join('')}</div>`;
+}
+
+function loadRunOverview() {
+  if (!RUN_CURRENT) return;
+  const r = RUN_CURRENT;
+  const stop = STOP_LABEL[r.stopType] || r.stopType || '运行中';
+  const route = r.route;
+  const routeBox = route
+    ? `<div class="route-pill" style="margin: 10px 0;">↩ 退回 <b>${esc(route.to)}</b>（${esc(route.from)} 失败 ${route.attempt}/${route.cap} 次）</div>`
+    : '';
+
+  let details = '';
+  if (r.workOrder) {
+    details = `<p><b>当前工单：</b>#${r.workOrder.id} · ${esc(r.workOrder.kind)} - ${esc(r.workOrder.title || '')}</p>`;
+  } else if (r.awaitConfirm) {
+    details = `<p><b>等待确认：</b>${esc(r.awaitConfirm.doc || '')}（${esc(r.awaitConfirm.points || '')}）</p>`;
+  } else if (r.gateFail) {
+    details = `<p><b>门禁拒绝：</b>${esc(r.gateFail.gate || '')} (exit ${esc(String(r.gateFail.exit ?? ''))})</p>`;
+  }
+
+  $('#d-body').innerHTML =
+    `<div class="md">` +
+    `<h2>${esc(r.requirement || r.runId)}</h2>` +
+    `<p style="color:var(--muted);font-family:var(--mono);font-size:12px">Run ID: <code>${esc(r.runId)}</code> · 阶段: <b>${esc(r.stage || '')}</b> · 状态: <b>${esc(stop)}</b></p>` +
+    renderStageFlowHtml(r) +
+    routeBox +
+    (r.triage ? `<p><b>定级：</b>${esc(r.triage.kind || '')} · ${esc(r.triage.level || '')} · ${esc(r.triage.module || '')}</p>` : '') +
+    details +
+    `<h3>产物概览</h3>` +
+    (r.docs ? renderArtifactsHtml(r.docs) : '<p class="none">暂无产物</p>') +
+    `</div>`;
 }
 
 function loadRunTimeline() {
@@ -598,7 +759,48 @@ function loadRunWorkOrder() {
       `</div>`;
     return;
   }
+  const g = RUN_CURRENT.gateFail;
+  if (g) {
+    $('#d-body').innerHTML =
+      `<div class="md"><h2>门禁拒绝 (${esc(g.gate || '')})</h2>` +
+      `<p>退出码：<code>${esc(String(g.exit ?? ''))}</code></p>` +
+      (g.hint ? `<p>排查提示：${esc(g.hint)}</p>` : '') +
+      `</div>`;
+    return;
+  }
+  if (RUN_CURRENT.stopType === 'done') {
+    $('#d-body').innerHTML = `<div class="md"><h2>流水线已完成</h2><p>当前 run 已通过全部阶段和门禁，顺利归档收口。</p></div>`;
+    return;
+  }
   $('#d-body').innerHTML = '<div class="none">当前无工单（已停机在非工单点或已完成）</div>';
+}
+
+function loadRunArtifacts() {
+  if (!RUN_CURRENT) return;
+  const docs = RUN_CURRENT.docs;
+  if (!docs || !Object.keys(docs).length) {
+    $('#d-body').innerHTML = '<div class="none">暂无关联产物文档</div>';
+    return;
+  }
+  const rows = [];
+  for (const [k, v] of Object.entries(docs)) {
+    if (!v) continue;
+    const label = ART_LABEL[k] || k;
+    if (Array.isArray(v)) {
+      for (const item of v) {
+        if (typeof item === 'string' && item) {
+          rows.push(`<tr><td><b>${esc(label)}</b></td><td><a class="art-tag" data-file="${esc(item)}">${esc(item)}</a></td></tr>`);
+        }
+      }
+    } else if (typeof v === 'string') {
+      rows.push(`<tr><td><b>${esc(label)}</b></td><td><a class="art-tag" data-file="${esc(v)}">${esc(v)}</a></td></tr>`);
+    }
+  }
+  $('#d-body').innerHTML =
+    `<div class="md"><h2>产物清单</h2>` +
+    `<p style="font-size:12px;color:var(--muted)">点击产物直接在抽屉中查看内容：</p>` +
+    (rows.length ? `<table><tr><th>类型</th><th>文件路径</th></tr>${rows.join('')}</table>` : '<div class="none">暂无可用产物</div>') +
+    `</div>`;
 }
 
 function renderRunDrawer() {
@@ -610,13 +812,16 @@ function renderRunDrawer() {
     ` <span class="chip">${esc(RUN_CURRENT.stage || '')}</span>`;
   $('#d-title').textContent = RUN_CURRENT.requirement || RUN_CURRENT.runId;
   $('#d-related').innerHTML = `<a class="runid">${esc(RUN_CURRENT.runId)}</a>`;
-  // run 抽屉：显示时间线/工单 tab，隐藏文档/历史 tab
+  // run 抽屉：显示 run 相关 tab，隐藏文档/历史 tab
   document.querySelectorAll('#d-tabs button').forEach((b) => {
     const isRunTab = b.classList.contains('run-tab');
     b.style.display = isRunTab ? '' : 'none';
     b.classList.toggle('on', b.dataset.tab === RUN_TAB);
   });
-  if (RUN_TAB === 'timeline') loadRunTimeline(); else loadRunWorkOrder();
+  if (RUN_TAB === 'overview') loadRunOverview();
+  else if (RUN_TAB === 'timeline') loadRunTimeline();
+  else if (RUN_TAB === 'workorder') loadRunWorkOrder();
+  else if (RUN_TAB === 'artifacts') loadRunArtifacts();
 }
 
 async function openRun(runId) {
@@ -630,7 +835,7 @@ async function openRun(runId) {
     const data = await resp.json();
     RUN_CURRENT = data.run || null;
     if (!RUN_CURRENT) throw new Error('run 为空');
-    RUN_TAB = 'timeline';
+    RUN_TAB = 'overview';
     renderRunDrawer();
   } catch (e) {
     $('#d-title').textContent = '加载失败';
@@ -806,6 +1011,12 @@ function onDocLink(e, a) {
 }
 
 document.addEventListener('click', (e) => {
+  const artTag = e.target.closest('.art-tag');
+  if (artTag) {
+    e.stopPropagation();
+    viewFile(artTag.dataset.file);
+    return;
+  }
   const dLink = e.target.closest('#d-body a');
   if (dLink) { onDocLink(e, dLink); return; }
   // 展开区文档条目 → 开抽屉（先于卡片命中，条目在卡内）
@@ -841,9 +1052,9 @@ document.addEventListener('click', (e) => {
     return;
   }
 });
-$('#d-close').onclick = () => { $('#drawer').classList.remove('open'); };
-document.addEventListener('keydown', (e) => { if (e.key === 'Escape') $('#drawer').classList.remove('open'); });
-// 抽屉 tab：run 抽屉（时间线/工单）与文档抽屉（文档/历史）分开处理
+$('#d-close').onclick = () => { $('#drawer').classList.remove('open'); RUN_CURRENT = null; };
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { $('#drawer').classList.remove('open'); RUN_CURRENT = null; } });
+// 抽屉 tab：run 抽屉（概览/时间线/工单/产物）与文档抽屉（文档/历史）分开处理
 document.querySelectorAll('#d-tabs button').forEach((b) => b.onclick = () => {
   if (b.classList.contains('run-tab') && RUN_CURRENT) { RUN_TAB = b.dataset.tab; renderRunDrawer(); }
   else if (!b.classList.contains('run-tab')) { TAB = b.dataset.tab; renderDrawer(); }
@@ -855,9 +1066,20 @@ $('#view-tasks').onclick = () => switchView(VIEW === 'tasks' ? 'board' : 'tasks'
 // SSE：服务端 fs.watch 防抖后推送 changed → 看板与打开中的抽屉自动刷新
 const sse = new EventSource('/api/events');
 sse.addEventListener('changed', () => {
-  refreshBoard().then((ok) => { if (ok) renderDrawer(); });
+  refreshBoard().then((ok) => { if (ok && !RUN_CURRENT) renderDrawer(); });
   if (VIEW === 'runs') refreshRuns();
   if (VIEW === 'engine') refreshEngine();
+  if (RUN_CURRENT) {
+    fetch(`/api/run?file=${encodeURIComponent(RUN_CURRENT.runId + '.json')}`)
+      .then((r) => r.ok ? r.json() : null)
+      .then((data) => {
+        if (data?.run) {
+          RUN_CURRENT = data.run;
+          renderRunDrawer();
+        }
+      })
+      .catch(() => {});
+  }
 });
 sse.addEventListener('watchdead', () => { $('#sse').classList.remove('on'); $('#sse').classList.add('poll'); $('#sse span:last-child').textContent = '监听失效 · 60s 轮询'; });
 sse.onopen = () => { $('#sse').classList.add('on'); $('#sse').classList.remove('poll'); $('#sse span:last-child').textContent = '实时'; };
