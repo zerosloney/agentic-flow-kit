@@ -27,6 +27,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { loadKitPolicy } from './policy.mjs';
+import { externalReviewId } from './touch-set.mjs';
 
 export const ENTRY_STATUSES = ['approved', 'done'];
 export const INCIDENT_STATUSES = ['open', 'fixed', 'closed'];
@@ -285,11 +286,10 @@ export function reviewLineFor(root, base) {
       for (const l of lines) found.push(l.trim());
     }
   }
-  if (!found.length) return { ok: false, reason: 'intent 与 spec 均无「- 独立复核：」落盘行' };
-  if (!found.some((l) => /复核上下文：/.test(l))) {
-    return { ok: false, reason: '独立复核行缺「复核上下文：<会话/子代理 id>」（独立性声明无可证伪基底）' };
-  }
-  return { ok: true, line: found.find((l) => /复核上下文：/.test(l)) };
+  if (!found.length) return { ok: false, reason: '写 - 独立复核：<结论> 复核上下文：<外部会话或子代理 id>。' };
+  const line = found.find((l) => externalReviewId(l));
+  if (!line) return { ok: false, reason: '写复核上下文：<外部会话或子代理 id>。禁止占位符。' };
+  return { ok: true, line };
 }
 
 // laneOfDoc：泳道单源取法（2026-10-10 收敛系列 2 起**级别单字段协议**——原 risk_level 双字段协议

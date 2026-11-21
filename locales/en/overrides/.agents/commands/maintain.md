@@ -18,6 +18,8 @@ next: .agents/commands/stages.md Plan chapter (if the retrospective needs a new 
 
 # Maintain · File an Incident + Retrospective Trio
 
+Read `.agents/skills/why/SKILL.md` first.
+
 For L1 that is not a production incident, a recurrence, data, or a contract change: do only §1 (file the document), then return to `.agents/commands/new-task.md` §L1 Fast Track. §0 stop-the-bleeding and §2 the retrospective trio are reserved for production incidents and L2/L3. An incident must still be filed.
 
 ## 0. Active Incident (Emergency Stop-the-Bleeding)

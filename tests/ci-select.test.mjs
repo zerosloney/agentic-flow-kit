@@ -86,6 +86,40 @@ test('invalid --ci value fails the install', () => {
   assert.match(`${r.stdout}${r.stderr}`, /--ci/);
 });
 
+function addOrigin(dir, url) {
+  spawnSync('git', ['remote', 'add', 'origin', url], { cwd: dir });
+}
+
+test('github origin installs only the github workflow', () => {
+  const dir = tmpRepo();
+  addOrigin(dir, 'https://github.com/example/repo.git');
+  const r = run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(fs.existsSync(path.join(dir, '.github/workflows/ci.yml')));
+  assert.equal(fs.existsSync(path.join(dir, 'azure-pipelines.yml')), false);
+  assert.equal(manifest(dir).ci, 'github');
+});
+
+test('azure origin installs only the azure pipeline', () => {
+  const dir = tmpRepo();
+  addOrigin(dir, 'https://dev.azure.com/org/project/_git/repo');
+  const r = run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(fs.existsSync(path.join(dir, 'azure-pipelines.yml')));
+  assert.equal(fs.existsSync(path.join(dir, '.github/workflows/ci.yml')), false);
+  assert.equal(manifest(dir).ci, 'azure');
+});
+
+test('unrecognized origin installs no CI', () => {
+  const dir = tmpRepo();
+  addOrigin(dir, 'https://gitlab.com/example/repo.git');
+  const r = run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.existsSync(path.join(dir, 'azure-pipelines.yml')), false);
+  assert.equal(fs.existsSync(path.join(dir, '.github/workflows/ci.yml')), false);
+  assert.equal(manifest(dir).ci, 'none');
+});
+
 test('enterprise with --ci github satisfies the CI policy check', () => {
   const dir = tmpRepo();
   const r = run(['install', '--agent', 'claude', '--stack', 'node', '--tier', 'enterprise', '--ci', 'github', '--target', '.'], dir);

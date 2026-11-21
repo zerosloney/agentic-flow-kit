@@ -41,7 +41,16 @@ function readProfileInfo(target) {
   }
 }
 
-function baseManifest({ target, existing, hosts, lang, stack, stacks = null, tier, hardened, projectName, trackHosts, installedAt, surfaces }) {
+function detectCi(target) {
+  const hasAzure = fs.existsSync(path.join(target, 'azure-pipelines.yml'));
+  const hasGithub = fs.existsSync(path.join(target, '.github/workflows/ci.yml'));
+  if (hasAzure && hasGithub) return 'both';
+  if (hasAzure) return 'azure';
+  if (hasGithub) return 'github';
+  return 'none';
+}
+
+function baseManifest({ target, existing, hosts, lang, stack, stacks = null, tier, hardened, projectName, trackHosts, installedAt, surfaces, ci = null }) {
   const next = {
     ...(existing || {}),
     kit: 'agentic-flow-kit',
@@ -61,6 +70,7 @@ function baseManifest({ target, existing, hosts, lang, stack, stacks = null, tie
     derived: existing?.derived || [],
     files: existing?.files || {},
   };
+  if (ci) next.ci = ci;
   // 多栈序列与 install 同规则：>1 才记 stacks，单栈接管不留旧字段。
   if (stacks?.length > 1) next.stacks = stacks;
   else delete next.stacks;
@@ -196,6 +206,7 @@ function adoptUnlocked({ args, t }) {
   const projectName = args.name || existing?.projectName || path.basename(target);
   const installedAt = existing?.installedAt || engineInfo?.createdAt || new Date().toISOString();
   const trackHosts = Boolean(existing?.trackHosts || flag(args, 'track-hosts'));
+  const ci = existing?.ci || detectCi(target);
   const dryRun = flag(args, 'dry-run');
   const asJson = flag(args, 'json');
 
@@ -204,7 +215,7 @@ function adoptUnlocked({ args, t }) {
   let best = null;
   for (const language of candidates) {
     const manifest = baseManifest({
-      target, existing, hosts, lang: language, stack, stacks: declaredStacks, surfaces, tier, hardened, projectName, trackHosts, installedAt,
+      target, existing, hosts, lang: language, stack, stacks: declaredStacks, surfaces, tier, hardened, projectName, trackHosts, installedAt, ci,
     });
     const { plan, vars } = buildState({ target, manifest });
     const result = scan({ target, plan, vars, hosts, existing });
@@ -219,7 +230,7 @@ function adoptUnlocked({ args, t }) {
   const willWrite = result.adopted.length > 0 || Boolean(existing);
   if (!dryRun && willWrite) {
     const next = baseManifest({
-      target, existing, hosts, lang: language, stack, stacks: declaredStacks, surfaces, tier, hardened, projectName, trackHosts, installedAt,
+      target, existing, hosts, lang: language, stack, stacks: declaredStacks, surfaces, tier, hardened, projectName, trackHosts, installedAt, ci,
     });
     next.files = files;
     next.derived = derived;

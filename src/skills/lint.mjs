@@ -10,8 +10,7 @@ import { SKILLS_REL, diffAgainstLock, readLock } from './lock.mjs';
 
 export const DESCRIPTION_BUDGET = 300;
 export const SKILL_NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
-// #24 正文长度预算（去 frontmatter 后的正文行数）：模板树现状正文上界 187 行
-// （page-refactor，zh/en 两树一致），取约两倍余量给合理增长留空间。
+// #24 正文长度预算（去 frontmatter 后的正文行数）：取约两倍余量给合理增长留空间。
 export const BODY_BUDGET_LINES = 400;
 // 单源判定口径：正文长句（去标点/空白归一后 ≥20 字）在不同技能间重复 ≥3 处视为复制正文。
 const BODY_DUP_MIN_SENTENCES = 3;

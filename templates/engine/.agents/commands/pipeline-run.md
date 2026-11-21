@@ -46,10 +46,10 @@ next: 按 run 停机点循环推进至 done
 
 | 工单类型 | 执行要求 | 进入即装载（联动，见 new-task §1c） |
 |---|---|---|
-| **triage** | 判级回填 `next --triage "kind=… level=… module=… topic=<英文kebab>"` (就高不就低) | 无；kb 检索同 new-task §L1 快速道第 2 步 |
-| **draft** | 起草指定文档 | intent→`grilling`（未决问题成串且跨会话 → 先 `wayfinder` 立决策地图，节点解完再起草）；spec→`stages.md` Design §2「必读输入」+ `grilling`（分叉比选 `arena`）；plan→无 |
-| **implement / fix** | 按授权文件实现 $\rightarrow$ **偏离即停** (公共接口/计划外文件/新依赖 $\rightarrow$ 停机上报，不自行放行) | 无强制技能；fix 类根因不明先 `why` |
-| **review / closeout** | 按单产出并写入指定位 (review-only 汇报后 `--done` 收尾) | review→`review-method`（高风险 diff +`interrogate`）；closeout→`shipyard-workflow-closeout`（§0 关单自核） |
+| **triage** | 回填 `next --triage "kind=… level=… module=… topic=<英文kebab>"`。闭集词命中则级别写到该档。不足即停。 | 不装技能。 |
+| **draft** | 起草指定文档 | 装载同 `new-task.md` §1c（含 `wayfinder` 决策地图）：intent→Plan，spec→Design，plan→Build。 |
+| **implement / fix** | 只改 plan「改动方案」内的路径。`--files` 与 git status 一致。计划外路径停 `await-confirm`。禁止自行放行。 | 装载同 `new-task.md` §1c：implement→Build，fix→Maintain。 |
+| **review / closeout** | 按单产出并写入指定位 (review-only 汇报后 `--done` 收尾) | 装载同 `new-task.md` §1c：review→Review，closeout→Test。 |
 
 3. **放弃**: 用户明确不做 $\rightarrow$ `abort --run <id> --to superseded|cancelled --delegated "<原话>"` (approved 文档逐份走 confirm-doc --to)
 4. **观测** (可选): `status [--run <id>] [--json]` 全量事件流水 / `watch` 终端轮询视图

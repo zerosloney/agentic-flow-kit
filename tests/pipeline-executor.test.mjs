@@ -11,6 +11,7 @@ import {
   parseParallelList as parseParallel, parseRetryCap as parseRetry, resolveArtifact, resolveDocRel,
   stageArtifactProblems, failRoute,
 } from '../templates/engine/.agents/scripts/pipeline-run.mjs';
+import { touchProblems, externalReviewId, filesOutsidePlan } from '../templates/engine/.agents/scripts/touch-set.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..');
@@ -286,6 +287,7 @@ test('R3-4: pristine install output is not counted as work-order changes', () =>
   const pristineRel = '.agents/notes/managed.md';
   fs.mkdirSync(path.join(root, '.agents/notes'), { recursive: true });
   fs.writeFileSync(path.join(root, pristineRel), '安装产物\n');
+  fs.writeFileSync(path.join(root, 'workflow/plans/t.md'), '---\n状态: draft\n级别: L1\n---\n\n## 改动方案\n\nworkflow/wiki/e2e.md\n');
   const files = {};
   const walk = (dir) => {
     for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
@@ -611,4 +613,66 @@ test('task dir: {apiDocs} contract gates closeout on the task-dir api.md', () =>
   assert.equal(legacyNext.status, 2, legacyNext.stderr || legacyNext.stdout);
   assert.equal(readRun(root).stopType, 'gate-fail', '旧 run 经兜底派生后契约门照常拦截');
   assert.equal(readRun(root).docs.apiDocs, `${taskDir}/api.md`, '兜底派生补回 docs.apiDocs');
+});
+
+test('touch set: prose hits, template lines do not', () => {
+  assert.deepEqual(touchProblems('本次改共享契约', 'L1'), ['触达共享契约。级别写 L2。']);
+  assert.deepEqual(touchProblems('改 schema', 'L2'), ['触达schema。级别写 L3。']);
+  assert.deepEqual(touchProblems('改 schema', 'L3'), []);
+  assert.deepEqual(touchProblems('- [ ] 编码权威 → 级别至少 L2', 'L1'), []);
+  assert.deepEqual(touchProblems('- [x] 规则变更 → 级别至少 L2', 'L1'), ['触达红线。级别写 L2。']);
+  assert.equal(externalReviewId('复核上下文：<会话或子代理 id>'), '');
+  assert.equal(externalReviewId('- 独立复核：通过（复核上下文：sess-9f3a2c）'), 'sess-9f3a2c');
+  assert.deepEqual(filesOutsidePlan(['src/b.mjs', 'src/a.mjs'], 'src/a.mjs'), ['src/b.mjs']);
+});
+
+test('triage stops when the requirement hits the closed set below level', () => {
+  const root = fixture();
+  writeRun(root, { stage: 'triage', triage: null, requirement: '调整共享契约的字段', docs: { entry: null, spec: null, plan: null } });
+  const r = runPipeline(root, ['next', '--run', 'test-run', '--triage', 'kind=require level=L1 module=wiki topic=touch']);
+  assert.equal(r.status, 2, r.stderr || r.stdout);
+  assert.match(r.stdout + r.stderr, /触达共享契约。级别写 L2。/);
+  assert.equal(readRun(root).stage, 'triage');
+});
+
+test('spec-review and review reject a placeholder id', () => {
+  const root = fixture();
+  const spec = 'workflow/tasks/2026-11-13-foo/spec.md';
+  fs.mkdirSync(path.dirname(path.join(root, spec)), { recursive: true });
+  fs.writeFileSync(path.join(root, spec), '## 确认与复核\n\n- 独立复核：P0 无（复核上下文：<会话或子代理 id>）\n');
+  writeRun(root, {
+    stage: 'spec-review',
+    docs: { entry: 'workflow/tasks/2026-11-13-foo/intent.md', spec, plan: 'workflow/plans/t.md' },
+    triage: { kind: 'require', level: 'L3', module: 'wiki', topic: 'foo' },
+  });
+  const bad = runPipeline(root, ['next', '--run', 'test-run']);
+  assert.equal(bad.status, 2, bad.stderr || bad.stdout);
+  assert.match(bad.stdout + bad.stderr, /禁止占位符/);
+
+  fs.writeFileSync(path.join(root, spec), '## 确认与复核\n\n- 独立复核：通过（复核上下文：sess-9f3a2c）\n');
+  const ok = runPipeline(root, ['next', '--run', 'test-run']);
+  assert.equal(ok.status, 0, ok.stderr || ok.stdout);
+  assert.equal(readRun(root).stopType, 'await-confirm');
+  assert.equal(readRun(root).stage, 'spec-confirm');
+});
+
+test('implement stops for paths outside the plan until delegated', () => {
+  const root = fixture();
+  fs.writeFileSync(path.join(root, 'workflow/plans/t.md'), '---\n状态: draft\n级别: L1\n---\n\n## 改动方案\n\nsrc/a.mjs\n');
+  writeRun(root, {
+    stage: 'implement',
+    stopType: 'work-order',
+    workOrder: { id: 4, kind: 'implement' },
+    docs: { entry: 'workflow/plans/t.md', spec: null, plan: 'workflow/plans/t.md' },
+  });
+  const blocked = runPipeline(root, ['next', '--run', 'test-run', '--files', 'src/b.mjs']);
+  assert.equal(blocked.status, 0, blocked.stderr || blocked.stdout);
+  assert.match(blocked.stdout, /计划外：src\/b.mjs/);
+  assert.equal(readRun(root).stopType, 'await-confirm');
+  assert.equal(readRun(root).stage, 'implement');
+
+  const passed = runPipeline(root, ['next', '--run', 'test-run', '--files', 'src/b.mjs', '--delegated', '可以改 src/b.mjs']);
+  assert.equal(passed.status, 0, passed.stderr || passed.stdout);
+  assert.notEqual(readRun(root).stage, 'implement');
+  assert.ok(readRun(root).events.some((e) => e.type === 'confirm' && e.to === 'files'));
 });

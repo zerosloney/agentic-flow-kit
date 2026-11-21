@@ -32,6 +32,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { touchProblems, externalReviewId, filesOutsidePlan } from './touch-set.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const KINDS = ['require', 'fix', 'verify', 'review', 'deploy']; // kind 词表单源（§25 预判执法段已于 2026-10-28 随 hygiene 退役，故仅本文件与工单 --hint/--triage 消费）
@@ -614,8 +615,11 @@ function checkAuthorized(ctx, run, filesCsv) {
   const beyond = changed.filter((c) =>
     !listed.includes(c) && !RUNTIME_OWNED.some((ro) => (ro.endsWith('/') ? c.startsWith(ro) : c === ro)));
   if (beyond.length) return { ok: false, problems: [`git 改动超出回填清单（偏离即停）：${beyond.join('、')}`] };
+  const runtime = (c) => RUNTIME_OWNED.some((ro) => (ro.endsWith('/') ? c.startsWith(ro) : c === ro));
+  const section = sectionBody(readDoc(ctx, run.docs?.plan) || '', '改动方案') || '';
+  const extra = filesOutsidePlan(listed, section).filter((c) => !runtime(c));
   run.lastFiles = listed;
-  return { ok: true };
+  return { ok: true, extra };
 }
 
 // locateDeployTarget：deploy 对象定位——--triage topic 显式优先，否则取 workflow/{intents,incidents}
@@ -728,16 +732,14 @@ async function advance(ctx, run, opt) {
               '3. 回填：next --triage "kind=require|fix|verify|review|deploy level=L1-L3 module=<词表> topic=<英文kebab>"',
             ],
             context: { docPath: '.agents/commands/new-task.md', kbHits: [], stderrTail: '', relatedDocs: ['workflow/INDEX.md'] },
-            constraints: ['判级就高不就低；勾红线必 L2+；module 取 .agents/config/workflow-modules.txt 词表'],
-            acceptance: ['--triage 三值枚举合法（脚本校验）', '红线词命中而 level<L2 会打 warning（回填者负责就高）'],
+            constraints: ['按 new-task.md §1 定级。命中闭集词就写到该档。'],
+            acceptance: ['枚举合法', '级别不低于闭集词要求'],
           }), 'triage');
         }
         const kv = parseKV(opt.triage);
         const problems = validateTriage(ctx, kv);
+        problems.push(...touchProblems(run.requirement, kv.level));
         if (problems.length) stopGateFail(ctx, run, 'triage', problems);
-        if (/红线|契约|schema|公共接口/.test(run.requirement) && LEVELS.indexOf(kv.level) < LEVELS.indexOf('L2')) {
-          console.log('⚠️ warning：需求文本命中红线关键词而 level<L2——判级应就高（继续，但责任在回填者）');
-        }
         run.triage = { kind: kv.kind, level: kv.level, module: kv.module || moduleList(ctx)[0] || 'general', topic: kv.topic || 'task', decidedBy: run.hint ? 'hint+ai' : 'ai', decidedAt: nowIso() };
         emit(run, { type: 'triage', ...run.triage });
         run.docs = run.docs || { entry: null, spec: null, plan: null };
@@ -839,27 +841,27 @@ async function advance(ctx, run, opt) {
     if (s === 'spec-draft') {
       const problems = validateDraftContent(readDoc(ctx, run.docs.spec), 'spec', L());
       if (problems.length) stopGateFail(ctx, run, s, problems);
-      run.stage = L() === 'L3' ? 'spec-review' : 'spec-confirm';
-      if (L() === 'L3') {
+      if (L() === 'L2' || L() === 'L3') {
+        run.stage = 'spec-review';
         issueWO(ctx, run, wo(run, {
-          kind: 'review', title: `独立复核 spec：${run.docs.spec}`, goal: 'L3 强制：新上下文只读复核，结论写入 spec「确认与复核」节',
+          kind: 'review', title: `独立复核 spec：${run.docs.spec}`, goal: '另开外部会话或子代理。只读。写入复核行。',
           instructions: [
-            '1. 以独立视角读 spec 全文与入口 intent',
-            '2. 找会破坏方案的缺口（问「什么会坏」而非「好不好」）',
-            '3. 结论写入目标文档「## 确认与复核」节：复核行以 `- 独立复核：` 起、含「复核上下文：<会话或子代理 id>；reviewed by <模型名>」（无此节则在文末追加）',
-            '4. 完成后回跑 next——脚本校验结论与复核上下文在节',
+            '另开外部会话或子代理。只读。',
+            '写入一行：- 独立复核：<结论> 复核上下文：<id>',
+            'id 取该会话或子代理标识。禁止占位符。',
           ],
           context: { docPath: run.docs.spec, kbHits: [], stderrTail: '', relatedDocs: [] },
-          constraints: ['只读复核 + 仅在 spec 确认与复核节追加结论；不改其他内容'],
-          acceptance: ['spec「确认与复核」节含 `- 独立复核：` 行且含「复核上下文：」'],
+          constraints: ['只写「确认与复核」一节。'],
+          acceptance: ['复核上下文是外部会话或子代理 id'],
         }), 'spec-review');
       }
+      run.stage = 'spec-confirm';
       stopConfirm(ctx, run, run.docs.spec, summarizeDoc(readDoc(ctx, run.docs.spec)), true);
     }
 
     if (s === 'spec-review') {
       const body = sectionBody(readDoc(ctx, run.docs.spec) || '', '确认与复核') || '';
-      if (!(/P0\s*\/\s*P1/.test(body) || /P0/.test(body) || /P1/.test(body)) || !/复核上下文：/.test(body)) stopGateFail(ctx, run, s, ['spec「确认与复核」节缺复核结论或「复核上下文：」落盘行（格式见 .agents/roles/independent-reviewer.md）']);
+      if (!externalReviewId(body)) stopGateFail(ctx, run, s, ['写 - 独立复核：<结论> 复核上下文：<外部会话或子代理 id>。禁止占位符。']);
       run.stage = 'spec-confirm';
       stopConfirm(ctx, run, run.docs.spec, summarizeDoc(readDoc(ctx, run.docs.spec)), true);
     }
@@ -930,8 +932,8 @@ async function advance(ctx, run, opt) {
           '4. 完成后回填改动文件清单：next --files "a.mjs,b.md"',
         ],
         context: { docPath: run.docs.plan, kbHits: [], stderrTail: '', relatedDocs: planFiles.slice(0, 8) },
-        constraints: [`授权文件以 plan 改动方案为准；回填 --files 清单必须与 git status 实际改动一致（脚本核对）`],
-        acceptance: ['git 改动 ⊆ 回填清单', '后续 verify 门（npm test + check-loop 经 verify.mjs）全绿'],
+        constraints: ['只改「改动方案」列出的路径。--files 与 git status 一致。计划外路径停等确认。'],
+        acceptance: ['git 改动 ⊆ --files', '--files ⊆ 改动方案，或已 --delegated'],
       }), 'implement');
     }
 
@@ -939,6 +941,10 @@ async function advance(ctx, run, opt) {
       if (!opt.files) { printRun(ctx, run); process.exit(0); } // 无 --files 重入：重发当前工单（run.workOrder 保留）
       const a = checkAuthorized(ctx, run, opt.files);
       if (!a.ok) stopGateFail(ctx, run, s, a.problems);
+      if (a.extra.length && !opt.delegated) {
+        stopConfirm(ctx, run, run.docs.plan || '', `计划外：${a.extra.join('、')}。改 plan，或 next --delegated "<原话>" 放行。`, false);
+      }
+      if (a.extra.length) emit(run, { type: 'confirm', doc: run.docs.plan || '', to: 'files', source: 'conversation', quote: opt.delegated });
       run.stage = 'verify'; continue;
     }
 
@@ -992,19 +998,8 @@ async function advance(ctx, run, opt) {
     if (s === 'review') {
       const target = run.docs.spec || entry();
       const body = sectionBody(readDoc(ctx, target) || '', '确认与复核') || '';
-      if (!(/P0\s*\/\s*P1/.test(body) || /P0/.test(body) || /P1/.test(body)) || !/复核上下文：/.test(body)) {
-        issueWO(ctx, run, wo(run, {
-          kind: 'review', title: `独立复核（L2/L3）：实现与文档对照`, goal: '读入口+spec+plan+diff，产出 P0/P1/P2 清单并把结论写入 spec「确认与复核」节',
-          instructions: [
-            '1. 独立读入口/spec/plan 与本次 diff（git diff + 相关文件）',
-            '2. 逐项对照验收标准找缺口（file:line 证据）',
-            '3. 结论写入目标文档「## 确认与复核」节：复核行以 `- 独立复核：` 起、含「复核上下文：<会话或子代理 id>；reviewed by <模型名>」（无此节则在文末追加）',
-            '4. 定性与合入时机由用户拍板——复核只交证据',
-          ],
-          context: { docPath: target, kbHits: [], stderrTail: '', relatedDocs: [entry(), run.docs.plan].filter(Boolean) },
-          constraints: ['只读 + 仅在 spec 确认与复核节追加结论'],
-          acceptance: ['spec「确认与复核」节含 `- 独立复核：` 行且含「复核上下文：」'],
-        }), 'review');
+      if (!externalReviewId(body)) {
+        stopGateFail(ctx, run, s, ['写 - 独立复核：<结论> 复核上下文：<外部会话或子代理 id>。禁止占位符。']);
       }
       run.stage = K() === 'fix' ? 'closeout' : 'closeout';
       continue;

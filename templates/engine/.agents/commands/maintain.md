@@ -18,6 +18,8 @@ next: .agents/commands/stages.md Plan 章(若复盘需要新 intent)
 
 # Maintain · 立 incident + 复盘三件套
 
+先读 `.agents/skills/why/SKILL.md`。
+
 L1 且不是线上事故、复发、数据或契约：只做 §1 立档，然后回 `.agents/commands/new-task.md` §L1 快速道。§0 止血和 §2 复盘三件套留给线上事故和 L2/L3。incident 仍然要立。
 
 ## 0. 紧急止血 (Active Incident)

@@ -31,12 +31,13 @@ function manifest(dir) {
   return JSON.parse(read(dir, '.agents/install-manifest.json'));
 }
 
-test('standard tier installs CI but not hardened settings', () => {
+test('standard tier without a known remote installs no CI and not hardened settings', () => {
   const dir = tmpRepo();
   const r = run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.'], dir);
   assert.equal(r.status, 0, r.stderr);
-  assert.ok(fs.existsSync(path.join(dir, 'azure-pipelines.yml')));
-  assert.ok(fs.existsSync(path.join(dir, '.github/workflows/ci.yml')));
+  assert.equal(fs.existsSync(path.join(dir, 'azure-pipelines.yml')), false);
+  assert.equal(fs.existsSync(path.join(dir, '.github/workflows/ci.yml')), false);
+  assert.equal(manifest(dir).ci, 'none');
   assert.equal(manifest(dir).tier, 'standard');
   assert.equal(manifest(dir).hardened, false);
   assert.doesNotMatch(read(dir, '.claude/settings.json'), /allowManagedPermissionRulesOnly/);

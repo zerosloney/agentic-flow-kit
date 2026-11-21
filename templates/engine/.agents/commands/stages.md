@@ -62,6 +62,8 @@ L1 的立档、实现、验证与关单都在 `.agents/commands/new-task.md` §L
 
 # Plan · L2/L3 立 intent
 
+先装 `new-task.md` §1c Plan 行。
+
 级别已由 `new-task.md` 定；本章按级别分叉执行，禁重新定级。
 
 ## 1. 准入与捷径
@@ -97,6 +99,8 @@ L1 的立档、实现、验证与关单都在 `.agents/commands/new-task.md` §L
 - **需求拷问**: `grilling` (答完回填 6 节)
 
 # Design · 起 spec
+
+先装 `new-task.md` §1c Design 行。
 
 ## 1. 准入与级别判断
 **Input**: `workflow/intents/{name}.md` (Approved) 或已确认的 incident 草稿。级别为 L2 或 L3。
@@ -148,7 +152,7 @@ L2/L3 强制：委派 `independent-reviewer`；触发、形态、必填输入与
 |---|---|---|
 | 路由认定入口 | → 整轮返工 | 必须提供文件+行号的实测证据 |
 | 自行推定交互 | → UI 与需求不符 | 必须由用户确认形态 |
-| L3 自查冒充 | `.agents/skills/shipyard-workflow-closeout/SKILL.md` §0.3 HALT。check-loop 对缺复核上下文只 WARN | 必须由 `independent-reviewer` 执行 |
+| L3 自查冒充 | `.agents/skills/workflow-closeout/SKILL.md` §0.3 HALT。check-loop 对缺复核上下文只 WARN | 必须由 `independent-reviewer` 执行 |
 | 带着「待澄清」走确认门 | `confirm-doc` 拒（歧义未清，exit 2，不落盘不记账）；缺维 / 依据为空同样拒 | 先问用户拿判定再落态 |
 | 前提不经质询进事实源 | `confirm-doc` 拒（前提质询缺节 / 空 / 占位 / 缺反问或缺依据，exit 2） | 无解读风险须写「无关键前提」行并给理由 |
 | 把可实验项问用户 | 多一轮确认税，且答案本就跑得出来 | 先查库 / 跑 eval / 原型，依据写实验结论 |
@@ -156,6 +160,8 @@ L2/L3 强制：委派 `independent-reviewer`；触发、形态、必填输入与
 | 跳过必读输入 / 约束映射缺 backend/frontend AGENTS 条目 | → 独立复核驳回返工（映射缺源视同未做约束核对） | 两份目录规范是全仓契约基准，与本次改动面无关；wiki 无命中可豁免第 1 项（须写明检索词） |
 
 # Build · 起 plan + 写代码
+
+先装 `new-task.md` §1c Build 行。
 
 L1 不在本章起草 plan，回 `.agents/commands/new-task.md` §L1 快速道第 4 步；本章只为 L2/L3 实现，或委派 implementer（§3）、处理偏离 plan。
 
@@ -213,6 +219,8 @@ L1 不在本章起草 plan，回 `.agents/commands/new-task.md` §L1 快速道�
 
 # Test · 静态门 + UI 实测
 
+先装 `new-task.md` §1c Test 行。
+
 本章留给 L2/L3、切库冒烟、flaky 和独立复核。
 
 ## 1. 静态门 (Static Gates)
@@ -249,7 +257,7 @@ L1 不在本章起草 plan，回 `.agents/commands/new-task.md` §L1 快速道�
 ## 5. 确认后关单 (Closure)
 L1 关单即 `.agents/commands/new-task.md` 快速道第 6 步的单笔提交（默认不开关单技能，仅 plan 独立关单场景打开——口径单源 new-task.md 第 6 步）；本节从 L2/L3 新需求和修复类起。
 **Process**:
-1. **验证与关单**: 按 `.agents/skills/shipyard-workflow-closeout/SKILL.md`。
+1. **验证与关单**: 按 `.agents/skills/workflow-closeout/SKILL.md`。
 2. **验收勾验**:
    - **L2/L3 新需求**: 逐条勾验 intent「验收标准」 $\rightarrow$ 补证据 $\rightarrow$ intent $\text{approved} \rightarrow \text{done}$
    - **修复类**: 验证防复发落地 $\rightarrow$ incident $\text{open} \rightarrow \text{fixed} \rightarrow \text{closed}$

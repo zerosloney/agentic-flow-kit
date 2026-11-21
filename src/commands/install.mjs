@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { flag } from '../cli/args.mjs';
 import { makeT } from '../i18n.mjs';
 import { buildPlan, CI_MODES, ciModeFor, ciTemplateRels } from '../install/plan.mjs';
+import { forgeFromRemote, originUrl } from '../install/forge.mjs';
 import { parseProfileArgs, STACKS } from '../install/profiles.mjs';
 import { applyPlan, readPlanEntry, summaryLine } from '../install/apply.mjs';
 import { emptyManifest, readManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
@@ -371,8 +372,10 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
       emit(t('warn.enterpriseHostSkipped', { hosts: blocked.join(', ') }));
     }
   }
-  // CI 交付面：显式 --ci 优先；否则沿用 manifest 选择；都没有时按 tier 派生（buildPlan 内）。
-  const ciChoice = args.ci !== undefined ? normalizeCi(args.ci, t) : (previous?.ci || null);
+  // CI 交付面：显式 --ci 优先；否则重放 manifest。都没有时按 origin 择一（github / azure），认不出时 enterprise 档双发以满足策略承诺，其余档写 none。lean 仍不发。
+  const ciChoice = args.ci !== undefined
+    ? normalizeCi(args.ci, t)
+    : (previous?.ci || (tier === 'lean' ? null : (forgeFromRemote(originUrl(target)) || (tier === 'enterprise' ? 'both' : 'none'))));
 
   let modelFlags;
   try {
@@ -617,7 +620,7 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
       baselineVersion: baselineEnabled ? KIT_VERSION : null,
       files: result.files,
     };
-    // CI 交付面只记显式选择：无 --ci 且 manifest 未记录时保持字段缺席（等价历史双发行为）。
+    // 新安装记下择一结果，upgrade 重放。lean 且未显式选择不写字段。
     if (ciChoice) next.ci = ciChoice;
     else delete next.ci;
     // 多栈序列只记显式/重放出的多栈；单栈安装不写 stacks 字段（manifest 字节与历史一致）。

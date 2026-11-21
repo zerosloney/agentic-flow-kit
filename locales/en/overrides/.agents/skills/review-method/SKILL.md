@@ -52,29 +52,6 @@ Judgment items outside the P0/P1 table. Constraints: repo written standards prev
 
 Performance three (beyond the P1 pagination clause): N+1 queries, unbounded fetches/loops, large objects on hot paths.
 
-### Storage host selection (added 2026-10-23, source incident 2026-10-23-pml-pbs-relation-host)
-
-During the new/old system coexistence period, **host table selection for business relation tables (A↔B many-to-many) must answer "does the old system already have a synonym table"**:
-
-- The old system already has it → **reuse**, and fix that table's column semantics in the spec (which table the FK points to, type-code criteria, which columns are not persisted and need read-time back-inquiry).
-- Truly new → the spec states **why not reuse**.
-- When reusing a shared table, **structure must not change** (no added column/index/constraint); dedup and constraints are handled by the server side.
-
-Review action: for every new table or new mapping in the spec/diff, check the old system source or DB metadata once for an existing synonym table.
-
-**Why a human/review agent must actively check**: `SchemaLedgerDriftTests` only validates "whether declared table structures match the real DB" — correct structure = green, cannot discover "this table should never have been created"; static gates are also blind to "two table sets for the same business relation". On 2026-09-28 "associated PBS single-value to multi-value" thus a private table `MM_PML_ProductionPMLPBS` was created by default, coexisting with the old system's existing table `BOM_PalletPBS_Relation` for a long time, until the 2026-10-23 user instruction changed it back to reuse.
-
-### Whether persisted column semantics are rewritten by display demands (added 2026-10-23, source incident 2026-10-23-pml-quota-substitute-identity-overwrite)
-
-When the requirement says "this field should display as X", first distinguish **display projection** from **storage identity rewrite**:
-
-- **Display projection**: only change the read side/frontend mapping, underlying column semantics unchanged → preferred.
-- **Storage identity rewrite**: writing "what should be displayed" as an override of an existing column → only when that column's semantics should genuinely change, and must answer three questions: after override **where does the original value go** (trace column / restorable?), **can it roll back**, **do all downstream consumers of that column use the same criteria**.
-
-Review action: for every sentence in the spec like "rewrite column X" "column X updated to Y", first ask "what did column X originally represent? **should** this semantics change?" — do not only check "it is self-consistent after the change".
-
-**Why a human/review agent must actively check**: static gates only see structure and compilability, cannot read column semantics; if tests and implementation share the same source, wrong criteria get **frozen into expectations** (this case's 20 cases all asserted the old criteria and were all green before the change), making the wrong criteria itself undiscoverable; once a spec is written as the "source of truth" it also keeps reinforcing itself. In this case spec `2026-10-13-pml-quota-substitute-rewrite` item two implemented "whose identity the quota row displays after substitution" as "rewriting the quota row's material identity (code/name/spec/stock-unit/unit/TAG)", and **passed item-by-item independent review**, until the 2026-10-23 user instruction reversed it.
-
 ### Spec half-landing verification (added 2026-11-02, source batch three)
 
 Before reviewing a spec/plan `done` declaration, check each "observable criterion": can each criterion be pointed to code, a test, or an executable script? If not pointable = half-landing; half-landing must not be marked `done`; add tests or downgrade to a registered item and leave a pointer in incident/notes.

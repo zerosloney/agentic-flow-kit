@@ -70,13 +70,14 @@ const installCodeartsdoer = (repo) => runWith(['install', '--agent', 'codeartsdo
 
 test('install --agent codeartsdoer wires .github/hooks at the repo root', () => {
   const repo = tmpRepo();
+  spawnSync('git', ['remote', 'add', 'origin', 'https://github.com/example/repo.git'], { cwd: repo });
   const r = installCodeartsdoer(repo);
   assert.equal(r.status, 0, r.stderr);
 
   // 根锚定：hooks 文件在仓根 .github/hooks/ 下，绝不落到宿主点目录里
   assert.equal(fs.existsSync(hooksFile(repo)), true, `${SPEC().file} at repo root`);
   assert.equal(fs.existsSync(path.join(repo, '.codeartsdoer/.github')), false, 'no hooks under host dir');
-  // 与 git 模板 .github/workflows/ 同存互不干扰（standard 档双发 CI）
+  // GitHub origin 只装 .github/workflows，与 .github/hooks 同存
   assert.equal(fs.existsSync(path.join(repo, '.github/workflows/ci.yml')), true, 'workflows co-exist');
 
   const config = JSON.parse(fs.readFileSync(hooksFile(repo), 'utf8'));

@@ -31,7 +31,7 @@ L1 已在 `.agents/commands/new-task.md` §L1 快速道关单，不打开本文�
 
 ## 4. 合入授权与 PR (Authorization & PR)
 1. **用户授权**: 仅接受用户本人在对话内一句 "上" 或同义确认
-2. **PR 创建**: 面板评审触发口径以 `.agents/commands/pr-review.md` 为准（满足其触发规则才跑），再 `flow-kit run pr-create.mjs create --source <分支> --target <目标> --title "<Conventional Commits 中文>" --body-file <file>`——描述带 Test 三件证据（Summary / Evidence / Merge Danger，形态见 `review.md`）；自动评审门已退役（2026-11-09），pr-create 仅转调 tfs-pr；手动面板跑过时在 Evidence 追加一行 `面板评审：<runId>（Important n / Nit n / Pre-existing n）`
+2. **PR 创建**: 面板评审触发口径以 `.agents/commands/pr-review.md` 为准（满足其触发规则才跑），再 `flow-kit run pr-create.mjs create --source <分支> --target <目标> --title "<Conventional Commits 中文>" --body-file <file>`——描述带 Test 三件证据（Summary / Evidence / Merge Danger，形态见 `review.md`）；自动评审门已退役（2026-11-09）。pr-create 按 origin 分路：GitHub 走 gh，Azure 走 tfs-pr，认不出即停。手动面板跑过时在 Evidence 追加一行 `面板评审：<runId>（Important n / Nit n / Pre-existing n）`
 3. **审查**: 按 `.agents/commands/review.md` 分级评审（逻辑 → 安全 → 对照 spec/plan）——审查不通过不合并
 4. **合并留痕**: 记录 PR 号 + 合并 commit SHA；发布流水线执行（若有）由用户在平台人工审批
 **Output**: PR 审查记录 + 合并 SHA

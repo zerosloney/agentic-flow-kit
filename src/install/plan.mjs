@@ -337,8 +337,8 @@ function addMcpEntries({ plan, target, hosts }) {
   }
 }
 
-// CI 交付面二选一：azure-pipelines.yml 与 .github/workflows/ci.yml 各自独立可发。
-// ciModeFor：显式 ci 优先；缺省按 tier 派生（lean 不发，standard/enterprise 双发）。
+// CI 交付面：一个仓一套。显式 ci 优先。未记录时 lean 不发；旧 manifest 无 ci 字段视为 both。
+// 新安装由 install 按 origin 写成 github / azure / none，不再缺省双发。
 export const CI_MODES = ['azure', 'github', 'none', 'both'];
 export function ciModeFor({ tier, ci }) {
   if (ci && CI_MODES.includes(ci)) return ci;

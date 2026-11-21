@@ -40,10 +40,10 @@ The stage machine is aligned with the commands manual. Mutually exclusive with m
 
 | Work-order type | Execution requirement | Load on entry (coupled, see new-task §1c) |
 |---|---|---|
-| **triage** | Grade and backfill `next --triage "kind=… level=… module=… topic=<English kebab>"` (choose the higher level when unsure) | None; kb search same as new-task §L1 Fast Track step 2 |
-| **draft** | Draft the specified document | intent→`grilling` (a chain of open questions spanning sessions → build a `wayfinder` decision map first, draft once the nodes are resolved); spec→`stages.md` Design §2 "Required Inputs" + `grilling` (branch comparison `arena`); plan→none |
-| **implement / fix** | Implement per the authorized files $\rightarrow$ **stop on deviation** (public interface / unplanned files / new dependencies $\rightarrow$ stop and report, do not self-approve) | No mandatory skill; for fix-type with an unclear root cause, run `why` first |
-| **review / closeout** | Produce per the order and write to the specified location (after review-only reporting, finish with `--done`) | review→`review-method` (high-risk diff +`interrogate`); closeout→`shipyard-workflow-closeout` (§0 closeout self-check) |
+| **triage** | Backfill `next --triage "kind=… level=… module=… topic=<English kebab>"`. A closed-set term requires that level. Too low stops. | Do not load a skill. |
+| **draft** | Draft the specified document | Load the same `new-task.md` §1c row (with `wayfinder` decision map): intent→Plan, spec→Design, plan→Build. |
+| **implement / fix** | Edit only paths listed in the plan change section. `--files` must match git status. Paths outside the plan stop at `await-confirm`. Do not self-approve. | Load the same `new-task.md` §1c row: implement→Build, fix→Maintain. |
+| **review / closeout** | Produce per the order and write to the specified location (after review-only reporting, finish with `--done`) | Load the same `new-task.md` §1c row: review→Review, closeout→Test. |
 
 3. **Abort**: the user explicitly declines $\rightarrow$ `abort --run <id> --to superseded|cancelled --delegated "<verbatim words>"` (approved documents go through confirm-doc --to one by one)
 4. **Observe** (optional): `status [--run <id>] [--json]` full event stream / `watch` terminal polling view

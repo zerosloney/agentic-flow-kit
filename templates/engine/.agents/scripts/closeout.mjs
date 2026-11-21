@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // closeout.mjs — 关单序列串接（closeout-skill-hardening 2026-11-08）
-// 把 .agents/skills/shipyard-workflow-closeout/SKILL.md §3–§5 的固定三步收成一次调用：
+// 把 .agents/skills/workflow-closeout/SKILL.md §3–§5 的固定三步收成一次调用：
 //   ① confirm-doc 落终态 → ② gen-workflow-index 重生成 → ③ git add 固定路径清单 → ④ commit。
 // 动机：三步顺序与路径清单每次相同，手工逐条跑时漏 add 分片 / 夹带无关文件是高发段；收成入口后
 // 技能正文从操作手册缩成调用 + 判据。提交一律不用 --no-verify（钩子照常跑）。

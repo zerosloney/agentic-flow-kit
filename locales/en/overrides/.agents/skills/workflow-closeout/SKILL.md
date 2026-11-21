@@ -1,9 +1,9 @@
 ---
-name: shipyard-workflow-closeout
-description: Shipyard.Material close-out sequence — verify --scope, acceptance checklist, closeout.mjs writing terminal state/index/commit, machine gates and failure recovery. Used to bring workflow documents to done/closed.
+name: workflow-closeout
+description: Close-out sequence: verify --scope, acceptance checklist, closeout.mjs writing terminal state/index/commit, machine gates and failure recovery. Used to bring workflow documents to done/closed.
 ---
 
-# Shipyard.Material close-out confirmation gate operation sequence
+# Close-out confirmation gate
 
 ## Goal
 Bring approved workflow documents to terminal state and leave auditable verification evidence, confirmation shards, and an index.
@@ -25,7 +25,7 @@ Check four items against the document family to close; if any is missing → fil
 
 1. **Pairing self-check**: sibling documents of the same family present — L2/L3 intent must have same-named spec and plan (confirm-doc's `specConfirmed` / `planConfirmedFor` hard gates); intent (including legacy L1) must have a same-named plan; incident must have a same-named plan (L2/L3 additionally must have a same-named spec). L1 pairing remains a self-check: 2026-10-21 gate minimization downgraded the pairing hard gate to WARN, not re-hardened here.
 2. **incident trio** (when closing an incident): `## 复盘三件套` section contains `1. 结构性修复 / 2. 防复发验证 / 3. 规范条目` all three + "whether a new intent is needed" line; if "yes" → the referenced intent path exists. Criterion single source `stage-gates.mjs / incidentTrioGate`, hard-blocked by confirm-doc for →fixed/→closed; legacy documents before the 2026-11-09 first-anchor addition and documents declaring `流程: legacy` / `存量确认态豁免（` remain manual self-check (same criteria).
-3. **L2/L3 review context required**: persisted line format `- 独立复核：…（复核上下文：<session/subagent id>）`, starting with `- 独立复核：` and containing "复核上下文："; L2/L3 intent→done hard-blocked by confirm-doc's `reviewLineFor`, spec/plan and L1 remain self-check. If missing → **HALT**: go back to `.agents/commands/stages.md` Test §4 to add the independent review, persist that line, then close.
+3. **L2/L3 review line**: write `- 独立复核：<conclusion> 复核上下文：<external session or subagent id>`. The id is that external session or subagent. Placeholders are forbidden. L2/L3 is hard-blocked by `reviewLineFor`. If missing, stop: return to `.agents/commands/stages.md` Test §4, add the line, then close.
 4. **Commitment surface not rewritten (new 2026-10-27)**: if the **commitment surface** (criteria text / red lines / goal / change plan) was changed after approval, the user must **nod again** before close-out — run `flow-kit run confirm-doc.mjs <doc> --reconfirm --delegated "<user's original utterance>"` to re-record the commitment-surface fingerprint (does not advance status). **Checking acceptance + evidence backfill / `确认结果` / review-line anchor changes do not count as commitment changes** (normalized; normal close-out unaffected).
 
 Completion criteria: four items pass; machine gates per confirm-doc rejection messages, human self-check items verified one by one.

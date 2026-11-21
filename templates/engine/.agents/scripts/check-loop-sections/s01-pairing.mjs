@@ -6,20 +6,17 @@
 // （2026-10-28 减重第二刀：本段扫描面默认收窄为「本轮 diff 触及的 workflow 文档」；CHECK_LOOP_FULL=1 全量。）
 import {
   fs, os, path, spawnSync, createHash, createRequire, fileURLToPath,
-  loadEnums, auditEnabled, loadKitPolicy, hasFreshVerifyLine, laneOfDoc, MARK_RE,
+  loadEnums, auditEnabled, loadKitPolicy, hasFreshVerifyLine, MARK_RE,
   SCRIPT_DIR, GIT, REV_ARG, REV, ROOT, ENUMS, inSet, stOkDoc,
   spawnGit, gitOut, linesOf, fmGet, WF, DOC_DIRS, blockers, warnings, kitPolicy, isTracked, docFiles,
   addedDateOf, warnEvidenceExempt, VERIFY_GREEN_RE, verifyEvidenceTruth,
   versionGreater, fmStatus, bindingSha256, readdirOrNull, isDirectoryOrNull,
 } from '../check-loop-kit.mjs';
+import { touchProblems, externalReviewId } from '../touch-set.mjs';
 
-// 红线判低：非 high 勾了「→ 级别 / 级别至少 L2|L3」即 hard。L1 plan 即入口后，plan 正文同样扫描。
 function pushRedline(file, base, lvl) {
-  if (laneOfDoc(lvl) === 'high') return;
-  const redlineTouched = (linesOf(file) || [])
-    .some((l) => /^- \[x\]/.test(l) && /(\$\\rightarrow\$|→)\s*级别|级别至少\s*L[23]/.test(l));
-  if (redlineTouched) {
-    blockers.push(`- [红线判低] ${base} 级别为 ${lvl || '缺失'} 但触达红线已勾选（规则/契约或 schema/结构面）——协作道不受理 STOP 级改动：就高不就低，把「级别」升至 L2/L3 并补同名 spec`);
+  for (const p of touchProblems((linesOf(file) || []).join('\n'), lvl)) {
+    blockers.push(`- [红线判低] ${base} ${p}`);
   }
 }
 
@@ -74,8 +71,8 @@ for (const spec of docFiles('specs')) {
     const rvDate = fmGet(spec, '日期') || (/^\d{4}-\d{2}-\d{2}$/.test(base.slice(0, 10)) ? base.slice(0, 10) : '');
     if (rvDate >= kitPolicy.reviewerSince) {
       const rvLine = (linesOf(spec) || []).find((l) => /^- 独立复核：/.test(l));
-      if (rvLine && !/复核上下文：/.test(rvLine)) {
-        warnings.push(`- [WARN 复核上下文缺失] ${base} 独立复核行缺「复核上下文：<会话/子代理 id>」——独立性声明无可证伪基底（C2，reviewerSince ${kitPolicy.reviewerSince}）`);
+      if (rvLine && !externalReviewId(rvLine)) {
+        warnings.push(`- [WARN 复核上下文缺失] ${base} 写外部会话或子代理 id。禁止占位符。`);
       }
     }
   }

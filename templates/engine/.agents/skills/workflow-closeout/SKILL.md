@@ -1,9 +1,9 @@
 ---
-name: shipyard-workflow-closeout
-description: Shipyard.Material 关单序列：verify --scope、验收勾验、closeout.mjs 落终态/索引/提交、机器门与失败恢复。用于把 workflow 文档收到 done/closed。
+name: workflow-closeout
+description: 关单序列：verify --scope、验收勾验、closeout.mjs 落终态/索引/提交、机器门与失败恢复。用于把 workflow 文档收到 done/closed。
 ---
 
-# Shipyard.Material 关单确认门操作序列
+# 关单确认门
 
 ## 目标
 把已批准的 workflow 文档收到终态，并留下可对账的验证凭证、确认分片和索引。
@@ -25,7 +25,7 @@ description: Shipyard.Material 关单序列：verify --scope、验收勾验、cl
 
 1. **配对自核**：同族同名件齐否——L2/L3 intent 须有同名 spec 与 plan（confirm-doc 的 `specConfirmed` / `planConfirmedFor` 硬门）；intent（含存量 L1）须有同名 plan；incident 须有同名 plan（L2/L3 另须同名 spec）。L1 配对仍是自核：2026-10-21 门禁极小化已把配对硬门降为 WARN，不在此重硬。
 2. **incident 三件套**（关 incident 时）：`## 复盘三件套` 节内 `1. 结构性修复 / 2. 防复发验证 / 3. 规范条目` 三节齐 +「是否需要新 intent」行；选「是」→ 引用的 intent 路径存在。判据单源 `stage-gates.mjs / incidentTrioGate`，由 confirm-doc 对 →fixed/→closed 硬拦；2026-11-09 首加锚前的存量件与 `流程: legacy` / `存量确认态豁免（` 声明件仍人工自核（判据同上）。
-3. **L2/L3 复核上下文必填**：落盘行格式 `- 独立复核：…（复核上下文：<会话/子代理 id>）`，以 `- 独立复核：` 起行且含「复核上下文：」；L2/L3 intent→done 由 confirm-doc 的 `reviewLineFor` 硬拦，spec/plan 与 L1 仍自核。缺则 **HALT**：回 `.agents/commands/stages.md` Test §4 补独立复核并落盘该行后再关。
+3. **L2/L3 复核行**：写 `- 独立复核：<结论> 复核上下文：<外部会话或子代理 id>`。id 取外部会话或子代理标识。禁止占位符。L2/L3 由 `reviewLineFor` 硬拦。缺则停：回 `.agents/commands/stages.md` Test §4 补行后再关。
 4. **承诺面未被改写（2026-10-27 新增）**：approved 之后若改过**承诺面**（判据文本 / 红线 / 目标 / 改动方案），须先让用户**重新点头**再关单——跑 `flow-kit run confirm-doc.mjs <doc> --reconfirm --delegated "<用户原话>"` 重录承诺面指纹（不推进状态）。**勾验收 + 证据回填 / `确认结果` / 复核行改锚不算改承诺**（已归一，正常关单不受影响）。
 
 完成标准：四项通过；机器门以 confirm-doc 的拒绝信息为准，人工自核项逐条核对。

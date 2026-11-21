@@ -1,22 +1,15 @@
 #!/usr/bin/env node
-// pr-create.mjs — 本仓建 PR 的唯一推荐入口（2026-11-06）
-//
-// 原样转调 .agents/skills/tfs-pr/scripts/tfs-pr.mjs create。
-// （2026-11-09 退役注记：前置的 pr-review 评审门已随自动触发拆除——本脚本不再跑 gate，
-//   评审改为手动按需，编排见 .agents/commands/pr-review.md。）
-//
+// pr-create — 按 origin 建 PR。GitHub → gh；Azure → tfs-pr。认不出即停。
 // 用法：
 //   flow-kit run pr-create.mjs create --source <branch> --target <branch> \
 //     --title "<Conventional Commits 中文>" --body-file <file>
-//   flow-kit run pr-create.mjs --source <branch> --target <branch> --title ... --body-file ...
-//
-// 选项：全部原样传给 tfs-pr create（--dry-run / --json / --title / --body-file / ...）。
-//
-// 退出码：0 成功；1 tfs-pr 失败；2 用法/环境错误。
+// 退出码：0 成功；1 托管命令失败；2 用法或远端不可识别。
+// 测试钩子：PR_CREATE_GH=<script.mjs> 时用 node 跑该脚本代替 gh。
 
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { forgeFromRemote, originUrl } from './forge.mjs';
 
 const ROOT = (() => {
   const r = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' });
@@ -30,19 +23,61 @@ process.chdir(ROOT);
 
 const rawArgs = process.argv.slice(2);
 if (!rawArgs.length || rawArgs.includes('--help') || rawArgs.includes('-h')) {
-  console.log(`pr-create.mjs — 转调 tfs-pr create
+  console.log(`pr-create.mjs — 按 origin 建 PR
 
 用法：
   flow-kit run pr-create.mjs create --source <branch> --target <branch> \\
     --title "<Conventional Commits 中文>" --body-file <file>
 
-选项：
-  其余参数原样传给 tfs-pr create
+分路：
+  GitHub origin → gh pr create
+  Azure origin  → tfs-pr create
+  其他或无 origin → 停止
 `);
   process.exit(0);
 }
 
-// 转调 tfs-pr create
+function opt(name) {
+  const i = rawArgs.indexOf(name);
+  if (i < 0 || i + 1 >= rawArgs.length) return null;
+  return rawArgs[i + 1];
+}
+
+const remote = originUrl(ROOT);
+const forge = forgeFromRemote(remote);
+if (!forge) {
+  console.error(`pr-create: 远端不是 GitHub 或 Azure：${remote || '无 origin'}。停止。`);
+  process.exit(2);
+}
+
+if (forge === 'github') {
+  const ghArgs = ['pr', 'create'];
+  const source = opt('--source');
+  const target = opt('--target');
+  const title = opt('--title');
+  const body = opt('--body-file');
+  if (source) ghArgs.push('--head', source);
+  if (target) ghArgs.push('--base', target);
+  if (title) ghArgs.push('--title', title);
+  if (body) ghArgs.push('--body-file', body);
+  if (rawArgs.includes('--json')) ghArgs.push('--json', 'url,number');
+  if (rawArgs.includes('--dry-run')) {
+    console.log(`gh ${ghArgs.join(' ')}`);
+    process.exit(0);
+  }
+  const hook = process.env.PR_CREATE_GH;
+  const cmd = hook ? process.execPath : 'gh';
+  const argv = hook ? [hook, ...ghArgs] : ghArgs;
+  const created = spawnSync(cmd, argv, { cwd: ROOT, encoding: 'utf8' });
+  if (created.error) {
+    console.error('pr-create: 未找到 gh。');
+    process.exit(2);
+  }
+  if (created.stdout) process.stdout.write(created.stdout);
+  if (created.stderr) process.stderr.write(created.stderr);
+  process.exit(created.status === null ? 1 : created.status);
+}
+
 const tfsPr = path.join(ROOT, '.agents/skills/tfs-pr/scripts/tfs-pr.mjs');
 if (!fs.existsSync(tfsPr)) {
   console.error(`pr-create: 找不到 tfs-pr 脚本：${tfsPr}`);

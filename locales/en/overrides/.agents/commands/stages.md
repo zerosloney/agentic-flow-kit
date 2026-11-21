@@ -62,6 +62,8 @@ L1's filing, implementation, verification, and closeout are all in `.agents/comm
 
 # Plan · L2/L3 File Intent
 
+Load `new-task.md` §1c Plan row.
+
 The level is already set by `new-task.md`; this chapter branches by level and must not re-grade.
 
 ## 1. Admission and Shortcuts
@@ -97,6 +99,8 @@ The level is already set by `new-task.md`; this chapter branches by level and mu
 - **Requirement grilling**: `grilling` (backfill the 6 sections after answering)
 
 # Design · Draft Spec
+
+Load `new-task.md` §1c Design row.
 
 ## 1. Admission and Level Judgment
 **Input**: `workflow/intents/{name}.md` (Approved) or a confirmed incident draft. Level is L2 or L3.
@@ -148,14 +152,16 @@ L2/L3 mandatory: delegate `independent-reviewer`; trigger, form, required inputs
 |---|---|---|
 | Routing guesses the entry | → whole-round rework | Must provide measured evidence with file+line |
 | Presuming interaction | → UI does not match requirements | Form must be confirmed by the user |
-| L3 self-check masquerade | `.agents/skills/shipyard-workflow-closeout/SKILL.md` §0.3 HALT. check-loop only WARNs on missing review context | Must be executed by `independent-reviewer` |
-| Passing the confirmation gate with "待澄清" unresolved | `confirm-doc` rejects (ambiguity unresolved, exit 2, no persistence, no accounting); missing dimension / empty basis also rejected | Ask the user for a decision before transitioning |
-| Premises entering the fact source without interrogation | `confirm-doc` rejects (premise interrogation missing section / empty / placeholder / missing counter-question or basis, exit 2) | If there is no interpretation risk, write a "no key premises" line with a reason |
+| L3 self-check masquerade | `.agents/skills/workflow-closeout/SKILL.md` §0.3 HALT. check-loop only WARNs on missing review context | Must be executed by `independent-reviewer` |
+| Passing confirmation gate with "待澄清" unresolved | `confirm-doc` rejects (ambiguity unresolved, exit 2, no persistence, no accounting); missing dimension / empty basis also rejected | Ask user for decision before transitioning |
+| Premises entering fact source without interrogation | `confirm-doc` rejects (premise interrogation missing section / empty / placeholder / missing counter-question or basis, exit 2) | If no interpretation risk, write "no key premises" with reason |
 | Asking the user about experimentable items | Extra round of confirmation tax, and the answer is obtainable by running | Query DB / run eval / prototype first; write the experiment conclusion as the basis |
 | "Decided" without writing a basis | `confirm-doc` rejects (equivalent to not having thought) | The basis must be identifiable (section number / code path / DB query result) |
 | Skipping required inputs / constraint mapping missing backend/frontend AGENTS entries | → independent review rejects and reworks (a missing mapping source counts as not doing the constraint check) | The two directory specs are the repository-wide contract baseline, independent of this change's surface; wiki no-hit may exempt item 1 (must state the search terms) |
 
 # Build · Draft Plan + Write Code
+
+Load `new-task.md` §1c Build row.
 
 L1 does not draft a plan in this chapter; return to `.agents/commands/new-task.md` §L1 Fast Track step 4; this chapter is only for L2/L3 implementation, or delegating implementer (§3), handling plan deviations.
 
@@ -213,6 +219,8 @@ L1 does not draft a plan in this chapter; return to `.agents/commands/new-task.m
 
 # Test · Static Gates + UI Verification
 
+Load `new-task.md` §1c Test row.
+
 This chapter is for L2/L3, DB-switch smoke tests, flaky, and independent review.
 
 ## 1. Static Gates
@@ -246,9 +254,9 @@ This chapter is for L2/L3, DB-switch smoke tests, flaky, and independent review.
 **Output**: review conclusion (Approved / Reject) + opinion-level ledger line; signature and persistence policy per the role's "Review Policy"
 
 ## 5. Closeout After Confirmation (Closure)
-L1 closeout is the single commit in `.agents/commands/new-task.md` Fast Track step 6 (by default the closeout skill is not opened; it is opened only for the plan-independent-closeout scenario — policy single source new-task.md step 6); this section starts from L2/L3 new requirements and fix-type work.
+L1 closeout is the single commit in `.agents/commands/new-task.md` Fast Track step 6 (closeout skill opened only for plan-independent-closeout — policy single source new-task.md step 6); this section covers L2/L3 new requirements and fix-type work.
 **Process**:
-1. **Verify and close out**: per `.agents/skills/shipyard-workflow-closeout/SKILL.md`.
+1. **Verify and close out**: per `.agents/skills/workflow-closeout/SKILL.md`.
 2. **Acceptance check-off**:
    - **L2/L3 new requirement**: check off the intent's "acceptance criteria" one by one $\rightarrow$ backfill evidence $\rightarrow$ intent $\text{approved} \rightarrow \text{done}$
    - **Fix-type**: verify recurrence-prevention landing $\rightarrow$ incident $\text{open} \rightarrow \text{fixed} \rightarrow \text{closed}$

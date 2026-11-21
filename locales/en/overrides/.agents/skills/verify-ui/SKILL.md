@@ -32,7 +32,7 @@ description: UI change verification (read-only, no dirty data left). First choic
 
 ### Session and capture rules (same criteria for both paths)
 - Reach the FE origin before injection; same-document hash switches do not reload the document, after seeding a full-page reload is required.
-- Default identity = JWT claims of the seeded token; only when testing "an identity different from the token" manually seed `auth_user` (take the login response's `jobNo` / `displayName` / `dept`).
+- Default identity = JWT claims of the seeded token. When testing an identity different from the token, seed `auth_user` from this repo's login response.
 - Synthetic JWT only applies to pages calling zero-authorization APIs: `exp = Math.floor(Date.now()/1000) + 1800`, never write far-future; after injection go through about:blank and then hard-navigate.
 - If the page issues token-bearing APIs and 401 clears the session back to `/login`: for real data dependencies use account-pool login (account pool single source `.agents/notes/runtime-env.md` §6.1a).
 - Exclude OPTIONS preflight from request counts; assertion counts use API responses, do not count DOM (virtual scrolling / virtual columns render only the visible window).
@@ -42,13 +42,13 @@ description: UI change verification (read-only, no dirty data left). First choic
 - MCP uses a persistent profile (localStorage retained across rounds): clear localStorage before seeding, or pass `isolatedContext` to `new_page`.
 - On "The browser is already running for …chrome-profile" → kill residual processes whose command line contains `chrome-devtools-mcp` (handling recorded in runtime-env §6.4).
 - `take_screenshot`'s `filePath` is limited by the MCP workspace whitelist (some hosts reject both repo paths and session directories, empirically 2026-10-31): when writing is rejected do not retry paths repeatedly, switch to **inline screenshot without `filePath`** for archiving; evidence validity is based on the `.md` report's DOM/API assertions (spec acceptance criteria never recognize image paths anyway).
-- `upload_file` triggering `input[type=file]` may likewise be fully rejected by the whitelist for repo/session paths (empirically 2026-11-07): do not try paths, inject in-page instead — a temporary read-only HTTP server (e.g., `npx serve` on a random port) serves the fixture, `evaluate_script` fetches it into a File, puts it into `DataTransfer`, then `dispatchEvent(new Event('change', {bubbles:true}))` to the antd upload input; before injection record `modalCount` as 1 to prevent stale modal DOM misalignment (MTO modal residual after close previously caused PML injection misalignment; reload clears residue). Verify: the uploaded item tag/preview API receives file rows matching the fixture row count.
+- `upload_file` triggering `input[type=file]` may likewise be fully rejected by the whitelist for repo/session paths (empirically 2026-11-07): do not try paths, inject in-page instead — a temporary read-only HTTP server (e.g., `npx serve` on a random port) serves the fixture, `evaluate_script` fetches it into a File, puts it into `DataTransfer`, then `dispatchEvent(new Event('change', {bubbles:true}))` to the upload input. Record the modal count before injection so a stale modal DOM does not misalign. Verify: the uploaded item receives the same number of file rows as the fixture.
 
 ## Workflow
 
 ### 1. Environment preparation
 - Start API / frontend per `.agents/notes/runtime-env.md`; record all started processes.
-- Multiple worktrees in parallel: set `SHIPYARD_SLOT` so the three port groups API / frontend / CDP shift together (port literal single source `scripts/verify/e2e/ports.mjs`, port table in runtime-env §6.1b).
+- Multiple worktrees in parallel: shift API / frontend / CDP together using this repo's port table. Port literals live in `scripts/verify/e2e/ports.mjs`.
 - Only harness / fallback paths start their own browser: newer Chromium kernel headless (e.g., Edge `--headless=new`); on the MCP path the browser instance is managed by MCP, do not start another manually.
 - Start long-lived services as separate processes (e.g., PowerShell `Start-Process`); no pipe at the end of the start command.
 
@@ -64,12 +64,12 @@ description: UI change verification (read-only, no dirty data left). First choic
 - Close all processes started by this flow.
 - Report by `page / step / expected vs actual / evidence`; append "feature map coverage M/N" (M = features covered this time, N = total `features/` entries) on the last line, listing uncovered items one by one.
 - Record defects only; do not directly fix code.
-- Write the UI verification report to `workflow/evidence/<YYYY-MM-DD>-<topic>.md`: header records environment / reproduction commands, assertion table each row carries a "corresponding acceptance An" column (shape reference `workflow/evidence/2026-10-24-purchase-contract-template-print-ui.md`). A report left in the session or `tmp/` = verification not closed out.
+- Write the UI verification report to `workflow/evidence/<YYYY-MM-DD>-<topic>.md`: header records environment / reproduction commands, assertion table each row carries a "corresponding acceptance An" column. A report left in the session or `tmp/` = verification not closed out.
 
 ## Feature map (features/)
 - `features/` holds one file per core feature; four sections, none may be missing when creating: reach path / drive / observable end state / Gotchas.
 - Verification and close-out spot checks take coverage from the map; current coverage follows the `features/` directory.
-- Create files synchronously when a new page or new main chain goes live; source waves from `frontend/src/router/index.ts` routes: route exists, map missing = to add; map exists, route missing = to delete or rewrite.
+- Create files synchronously when a new page or new main chain goes live. Use this repo's route table as the source: route exists and map missing = add; map exists and route missing = delete or rewrite.
 - Coverage gaps / skeleton: `node .agents/skills/verify-ui/scripts/gen-verify-feature.mjs --check` (or `--json`) lists uncovered routes; `--route <path>` writes only the four H2 sections + TODO skeleton, inventing drive steps forbidden. Read-only reconciliation loud-skips green when the router file is absent or `features/` holds no map (not applicable to this repo ≠ drift; `--json` carries `skipped`), so `--check` is CI-able; `--route` generation still fails strictly.
 - Monthly drift maintenance (periodic trigger = `flow-kit run dream-run` phase E3, which runs the coverage leg + the dangling leg read-only and emits candidates without touching files): ① take routes / component diffs of the recent month as source waves; ② run verification once only for touched features; ③ fix in at most one commit.
 - For each failure first decide "map drift" or "code defect": the former fixes the map, the latter enters an incident; mixing them is forbidden.
@@ -93,20 +93,20 @@ description: UI change verification (read-only, no dirty data left). First choic
 - Wrap the assertion body in try/catch: in catch append a failed assertion (with error message) and count it in the summary, with exit code 1 accordingly; "run halfway + print GREEN + exit code 0" is forbidden.
 
 ### DOM location and interaction
-- Form location inside overlays / drawers / modals must always be scoped to the overlay root (e.g., `.pml-detail .ant-form-item`); global `querySelector` / `querySelectorAll` forbidden.
+- Form location inside overlays / drawers / modals must always be scoped to the overlay root. Global `querySelector` / `querySelectorAll` is forbidden.
 - Locate input boxes by placeholder within the target container.
 - Normalize both sides of text comparisons with `.replace(/\s+/g,'')` (antd inserts spaces into two-character Chinese buttons).
 - Visibility criterion uses `getClientRects().length > 0` or `getBoundingClientRect().width > 0`; `offsetParent` forbidden (always null under a `position: fixed` ancestor).
 - The `a-select` clear icon renders only on hover: dispatch mouseenter / mouseover first, wait one tick, then click.
-- The antd pagination size-changer dropdown cannot be opened via synthetic events (focus + dispatched keydown Enter is also unstable): the real path = click the combobox uid with the click tool; measure with the invariant "each option `scrollWidth <= clientWidth+1` and dropdown width ≥ widest option scrollWidth"; if the dropdown animation has not finished, measuring yields 0 size, wait ≥600ms before measuring (2026-11-06 PML pagination verification).
-- Small controls inside modals (e.g., paginator) are squeezed out of the a11y snapshot by the large table behind (output over limit truncation makes the uid unavailable): temporarily `setAttribute('aria-hidden','e2e-hide')` on the background table container to shrink the tree, obtain the uid, perform the real click, then remove the attribute; be careful not to hide the modal's own table as well (2026-11-06 PML verification).
+- The antd pagination size-changer dropdown cannot be opened via synthetic events (focus + dispatched keydown Enter is also unstable): the real path = click the combobox uid with the click tool; measure with the invariant "each option `scrollWidth <= clientWidth+1` and dropdown width ≥ widest option scrollWidth"; if the dropdown animation has not finished, measuring yields 0 size. Wait ≥600ms before measuring.
+- Small controls inside modals (e.g., paginator) are squeezed out of the a11y snapshot by the large table behind (output over limit truncation makes the uid unavailable): temporarily `setAttribute('aria-hidden','e2e-hide')` on the background table container to shrink the tree, obtain the uid, perform the real click, then remove the attribute; be careful not to hide the modal's own table as well.
 - If an `a-select` cannot be selected via synthetic events → use real mouse + keyboard: CDP `Input.dispatchMouseEvent` opens it, `ArrowDown` + `Enter` selects; between multiple selects press `Escape` first to close the previous dropdown; query options limited to the last visible dropdown (`.ant-select-dropdown:not(.ant-select-dropdown-hidden)`).
 - Locate segmented / radio / tabs by rendered form (e.g., `.ant-radio-button-wrapper`), do not only look for `<button>`.
 - Table selection state: clear leftover checkmarks by deduplicating rows by `data-row-key` and clicking row by row, and execute in two ticks separately from subsequent selection; clicking the header select-all in indeterminate / none state is "select all", not "clear".
 - The first tbody row of an antd table with `:scroll={y}` is `.ant-table-measure-row` (height 0, no `ant-table-cell` class): skip it for row-height / cell measurements.
 - `ctx.evaluate` already returns an object, do not wrap it again in `JSON.parse`.
-- "Back"-type buttons on the detail overlay use `history.back()`: empirically clicking it goes back to the previous step or even `about:blank` (hit during 2026-11-03 purchase order detail verification) — to return to the list use refresh or direct re-navigation; never click "Back" as a close action.
-- Before asserting, confirm the overlay content has rendered (header button group appears): a document created in a parallel session may fail to load detail, leaving only the "Back" button in the overlay (empirically 2026-11-03) — switch to a known sample document, do not judge a feature defect from this.
+- "Back"-type buttons on the detail overlay use `history.back()`: clicking it goes back to the previous step or even `about:blank`. To return to the list, refresh or navigate again. Do not click "Back" as a close action.
+- Before asserting, confirm the overlay content has rendered (header button group appears): a document created in a parallel session may fail to load detail, leaving only the "Back" button in the overlay. Switch to a known sample document. Do not judge a feature defect from this.
 
 ### AG Grid list page
 - Cell overhead is 32px (padding 15×2 + border 2), not 16 / 24.
