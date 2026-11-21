@@ -46,7 +46,7 @@ The stage machine is aligned with the commands manual. Mutually exclusive with m
 | **review / closeout** | Produce per the order and write to the specified location (after review-only reporting, finish with `--done`) | Load the same `new-task.md` §1c row: review→Review, closeout→Test. |
 
 3. **Abort**: the user explicitly declines $\rightarrow$ `abort --run <id> --to superseded|cancelled --delegated "<verbatim words>"` (approved documents go through confirm-doc --to one by one)
-4. **Observe** (optional): `status [--run <id>] [--json]` full event stream / `watch` terminal polling view
+4. **Observe** (optional): `status [--run <id>] [--json]` full event stream / `watch` (or `dashboard`) TUI view
 
 ### Resume / Retry / Parallel Branches (R3-5)
 

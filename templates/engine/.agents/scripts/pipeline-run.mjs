@@ -19,7 +19,8 @@
 //                                   [--retry <0-5>] [--parallel "check-a.mjs,check-b.mjs"]
 //   flow-kit run pipeline-run.mjs resume [--run <id>] [--retry <0-5>] [--parallel "…"]
 //   flow-kit run pipeline-run.mjs status [--run <id>] [--adopt] [--json]
-//   flow-kit run pipeline-run.mjs watch [--run <id>] [--interval 2]
+//   flow-kit run pipeline-run.mjs watch [--run <id>] [--interval 2] [--once]
+//   flow-kit run pipeline-run.mjs dashboard [--run <id>] [--interval 2] [--once]
 //   flow-kit run pipeline-run.mjs abort --run <id> [--to superseded|cancelled] [--delegated "<原话>"]
 // 断点续跑（R3-5）：门执行前把 run 标 inFlight 并落盘，进程被杀后 next/resume 自动从该门重入；
 //       docsCommit 以 HEAD 同主题提交判幂等，避免续跑重复提交。
@@ -458,6 +459,230 @@ function printRun(ctx, run, problems) {
         : run.stopType === 'aborted' ? `PIPELINE-STOP aborted ${run.runId}`
           : `PIPELINE-STOP done ${run.runId}`;
   console.log(stopLine.trim());
+}
+
+// ── 实时 TUI 阶段监控看板 ─────────────────────────────────────────────
+const ESC = '\x1b';
+const ANSI_RE = /\x1b\[[0-9;]*[A-Za-z]|\x1b\][^\x07]*(?:\x07|\x1b\\)/g;
+
+export function stripAnsi(s) {
+  return String(s ?? '').replace(ANSI_RE, '');
+}
+
+const WIDE_RE = /[\u1100-\u115F\u2E80-\uA4CF\uAC00-\uD7A3\uF900-\uFAFF\uFE30-\uFE6F\uFF00-\uFF60\uFFE0-\uFFE6]/;
+
+export function visualWidth(s) {
+  let w = 0;
+  for (const ch of stripAnsi(s)) w += WIDE_RE.test(ch) ? 2 : 1;
+  return w;
+}
+
+export function truncate(s, maxW) {
+  const str = String(s ?? '');
+  if (visualWidth(str) <= maxW) return str;
+  let res = '';
+  let curW = 0;
+  const targetW = Math.max(1, maxW - 1);
+  for (const ch of str) {
+    const cw = WIDE_RE.test(ch) ? 2 : 1;
+    if (curW + cw > targetW) break;
+    res += ch;
+    curW += cw;
+  }
+  return res + '…';
+}
+
+function padRight(s, targetW) {
+  const str = String(s ?? '');
+  const vw = visualWidth(str);
+  if (vw >= targetW) return str;
+  return str + ' '.repeat(targetW - vw);
+}
+
+function makeColor(noColor) {
+  if (noColor) {
+    const id = (x) => String(x ?? '');
+    return {
+      bold: id, dim: id, cyan: id, green: id, yellow: id, red: id, magenta: id, blue: id, gray: id,
+      bgCyan: id, bgGreen: id, bgYellow: id, bgRed: id, bgBlue: id,
+    };
+  }
+  const p = (code, reset) => (x) => `${ESC}${code}${String(x ?? '')}${ESC}${reset}`;
+  return {
+    bold: p('[1m', '[22m'),
+    dim: p('[2m', '[22m'),
+    cyan: p('[36m', '[39m'),
+    green: p('[32m', '[39m'),
+    yellow: p('[33m', '[39m'),
+    red: p('[31m', '[39m'),
+    magenta: p('[35m', '[39m'),
+    blue: p('[34m', '[39m'),
+    gray: p('[90m', '[39m'),
+    bgCyan: p('[46;30m', '[49;39m'),
+    bgGreen: p('[42;30m', '[49;39m'),
+    bgYellow: p('[43;30m', '[49;39m'),
+    bgRed: p('[41;37m', '[49;39m'),
+    bgBlue: p('[44;37m', '[49;39m'),
+  };
+}
+
+export function renderDashboard(ctx, run, options = {}) {
+  const width = Math.max(50, Number(options.width) || 80);
+  const W = width - 4; // 内部对齐宽度
+  const noColor = options.noColor ?? Boolean(process.env.NO_COLOR);
+  const clr = makeColor(noColor);
+  const lines = [];
+
+  const topBorder = (title) => {
+    const tw = visualWidth(title);
+    return clr.cyan('┌─ ') + clr.bold(title) + ' ' + clr.cyan('─'.repeat(Math.max(0, W - tw - 1)) + '┐');
+  };
+  const sectionDivider = (title) => {
+    const tw = visualWidth(title);
+    return clr.cyan('├─ ') + clr.bold(title) + ' ' + clr.cyan('─'.repeat(Math.max(0, W - tw - 1)) + '┤');
+  };
+  const row = (content) => `${clr.cyan('│')} ${padRight(content, W)} ${clr.cyan('│')}`;
+  const bottomBorder = () => clr.cyan('└' + '─'.repeat(W + 2) + '┘');
+
+  // 1. 顶部基础信息与阶段流向图
+  const title = `Pipeline 看板: ${run.runId}`;
+  lines.push(topBorder(title));
+
+  const lv = run.triage ? `${run.triage.level} · ${run.triage.kind} · ${run.triage.module || 'repo'} · ${run.triage.topic || 'task'}` : '待分流 (pending triage)';
+  lines.push(row(`需求: ${truncate(run.requirement, W - 6)}`));
+  lines.push(row(`标签: ${clr.cyan(lv)}`));
+
+  // 阶段序列
+  const s = run.stage;
+  const seq = run.triage?.kind === 'verify' ? [['Verify', s === 'verify' || s === 'done']]
+    : run.triage?.kind === 'review' ? [['Review', s === 'review-only' || s === 'done']]
+      : run.triage?.kind === 'deploy' ? [['Checklist', ['deploy-check', 'deploy-prep'].includes(s)], ['Authorize', s === 'deploy-await' || s === 'done']]
+        : [['Plan', (run.triage?.level === 'L1' && run.triage?.kind !== 'fix'
+            ? ['plan-fill', 'plan-draft', 'plan-confirm', 'triage']
+            : ['intent-fill', 'intent-draft', 'intent-confirm', 'incident-fill', 'incident-draft', 'incident-confirm', 'triage']).includes(s)],
+          ['Design', ['spec-fill', 'spec-draft', 'spec-review', 'spec-confirm'].includes(s)],
+          ['Build', (run.triage?.level === 'L1' && run.triage?.kind !== 'fix'
+            ? ['changes-confirm', 'implement', 'fix', 'changes-verify']
+            : ['plan-fill', 'plan-draft', 'plan-confirm', 'changes-confirm', 'implement', 'fix', 'changes-verify']).includes(s)],
+          ['Test', ['verify', 'review', 'closeout', 'done-confirm', 'incident-fixed-confirm', 'incident-closed-confirm', 'direct-commit'].includes(s) || s === 'done']];
+  const curIdx = seq.findIndex(([, cur]) => cur);
+
+  const stageItems = seq.map(([name], i) => {
+    if (i < curIdx) return clr.green(`[✓ ${name}]`);
+    if (i === curIdx) return clr.bold(clr.cyan(`»${name}«`));
+    return clr.dim(`[… ${name}]`);
+  });
+  stageItems.push(s === 'done' ? clr.green('[✓ Done]') : clr.dim('[… Done]'));
+  const stageFlow = stageItems.join(clr.dim(' ──▶ '));
+  lines.push(row(`流向: ${stageFlow}`));
+
+  // 状态概览行
+  let stateDesc = `阶段: ${s} │ 停机类型: ${run.stopType}`;
+  if (run.inFlight) stateDesc += ` │ ${clr.yellow(`↻ 中断于 ${run.inFlight.stage}`)}`;
+  if (run.nextTarget) stateDesc += ` │ ${clr.red(`↩ 退回 ${run.nextTarget}`)}`;
+  lines.push(row(truncate(stateDesc, W)));
+
+  // 2. 当前停机点详情卡片
+  lines.push(sectionDivider('当前停机状态'));
+  if (run.stopType === 'work-order' && run.workOrder) {
+    const w = run.workOrder;
+    lines.push(row(clr.bold(clr.yellow(`工单 #${w.id} (${w.kind}) ${truncate(w.title, W - 20)}`))));
+    if (w.goal) lines.push(row(`目标: ${truncate(w.goal, W - 6)}`));
+    if (w.instructions?.length) {
+      for (const ins of w.instructions.slice(0, 2)) {
+        lines.push(row(`  ${clr.dim('•')} ${truncate(ins, W - 4)}`));
+      }
+    }
+    const nextCmd = `flow-kit run pipeline-run.mjs next${w.kind === 'implement' || w.kind === 'fix' ? ' --files "<git-status-files>"' : ''}`;
+    lines.push(row(`${clr.cyan('▶ 下一步:')} ${clr.bold(nextCmd)}`));
+  } else if (run.stopType === 'await-confirm' && run.awaitConfirm) {
+    const c = run.awaitConfirm;
+    lines.push(row(clr.bold(clr.yellow(`等待确认${c.ledger ? ' (台账级文档确认)' : ' (对话级确认)'}`))));
+    if (c.doc) lines.push(row(`文档: ${c.doc}`));
+    if (c.points) lines.push(row(`要点: ${truncate(c.points, W - 6)}`));
+    lines.push(row(`${clr.cyan('▶ 下一步:')} ${clr.bold('flow-kit run pipeline-run.mjs next --delegated "<用户原话>"')}`));
+  } else if (run.stopType === 'gate-fail') {
+    lines.push(row(clr.bold(clr.red(`门禁拒绝 (阶段: ${run.stage})`))));
+    const probs = options.problems || run.gateFail?.problems || [];
+    if (probs.length) {
+      for (const p of probs.slice(0, 3)) {
+        lines.push(row(`  ${clr.red('✖')} ${truncate(p, W - 4)}`));
+      }
+    }
+    lines.push(row(`${clr.cyan('▶ 下一步:')} 修复上述问题后原路重跑 ${clr.bold('flow-kit run pipeline-run.mjs next')}`));
+  } else if (run.stopType === 'done') {
+    lines.push(row(clr.bold(clr.green('流程全部完成 (All Stages Completed)'))));
+    const gates = (run.events || []).filter((e) => e.type === 'gate');
+    const fails = gates.filter((e) => e.exit !== 0).length;
+    const confirms = (run.events || []).filter((e) => e.type === 'confirm').length;
+    const commits = (run.events || []).filter((e) => e.type === 'commit').length;
+    lines.push(row(`统计: 门执行 ${gates.length} 道 (失败 ${fails}) │ 确认 ${confirms} 次 │ 提交 ${commits} 笔`));
+    lines.push(row(`${clr.green('✔')} 所有闭环门禁已全数通过`));
+  } else if (run.stopType === 'aborted') {
+    lines.push(row(clr.bold(clr.red(`已放弃 (${run.abort?.to || 'cancelled'})`))));
+    if (run.abort?.note) lines.push(row(`说明: ${truncate(run.abort.note, W - 6)}`));
+    lines.push(row(`${clr.dim('⊘')} 任务已终止`));
+  } else {
+    lines.push(row(`状态: ${run.stopType}`));
+  }
+
+  // 3. 产物文档表格
+  lines.push(sectionDivider('产物文档'));
+  const docList = [
+    ['entry', run.docs?.entry],
+    ['spec', run.docs?.spec],
+    ['plan', run.docs?.plan],
+    ['apiDocs', run.docs?.apiDocs],
+  ].filter(([, p]) => Boolean(p));
+
+  if (docList.length === 0) {
+    lines.push(row(clr.dim('  (暂无关联工作流文档)')));
+  } else {
+    for (const [type, rel] of docList) {
+      const rawSt = docState(ctx, rel);
+      const absPath = resolveDocRel(ctx, rel);
+      const st = rawSt || (fs.existsSync(absPath) ? '?' : '未产物');
+      const badge = (st === 'approved' || st === 'done') ? clr.green(`[${st}]`)
+        : st === 'draft' ? clr.yellow(`[${st}]`)
+        : st === '未产物' ? clr.dim(`[${st}]`)
+        : clr.red(`[${st}]`);
+      const typeCol = padRight(type, 8);
+      const relCol = padRight(truncate(rel, Math.max(10, W - 24)), Math.max(10, W - 22));
+      lines.push(row(`  ${clr.dim(typeCol)} ${relCol} ${badge}`));
+    }
+  }
+
+  // 4. 最近事件流水
+  lines.push(sectionDivider('最近事件流水'));
+  const recent = (run.events || []).slice(-5);
+  if (recent.length === 0) {
+    lines.push(row(clr.dim('  (暂无事件流水)')));
+  } else {
+    for (const e of recent) {
+      const time = (e.t || '').slice(11, 19) || '--:--:--';
+      const type = padRight(e.type || 'event', 11);
+      const bits = [];
+      if (e.cmd) bits.push(`${e.cmd}${e.exit !== undefined ? ` [exit ${e.exit}]` : ''}`);
+      if (e.doc) bits.push(e.doc);
+      if (e.quote) bits.push(`「${e.quote}」`);
+      if (e.subject) bits.push(e.subject);
+      if (e.type === 'retry') bits.push(`attempt ${e.attempt}/${e.cap}`);
+      if (e.type === 'resume') bits.push(`from ${e.stage}`);
+      if (e.id) bits.push(`#${e.id}`);
+      const detail = bits.join(' │ ') || '-';
+      lines.push(row(`  ${clr.dim(time)} │ ${clr.cyan(type)} │ ${truncate(detail, Math.max(10, W - 26))}`));
+    }
+  }
+
+  // 5. 底栏与快捷键说明
+  lines.push(bottomBorder());
+  const tStr = String(options.now || nowIso()).slice(11, 19);
+  const footer = options.once
+    ? clr.dim(` (单次快照模式 · ${tStr})`)
+    : ` ${clr.bold('[R]')} 刷新  ${clr.dim('│')}  ${clr.bold('[Q]')} 退出  ${clr.dim(`(每 ${options.interval || 2}s 自动轮询 · ${tStr})`)}`;
+  lines.push(footer);
+
+  return lines;
 }
 
 // ── triage / 路径 ──────────────────────────────────────────────────────
@@ -1121,7 +1346,7 @@ async function advance(ctx, run, opt) {
 }
 
 // ── 子命令 ─────────────────────────────────────────────────────────────
-const BOOL_FLAGS = new Set(['adopt', 'json', 'done']); // 复核 P2-5：布尔旗标不吞下一参
+const BOOL_FLAGS = new Set(['adopt', 'json', 'done', 'once']); // 复核 P2-5：布尔旗标不吞下一参
 function parseArgs(argv) {
   const out = { cmd: argv[0], positional: [] };
   for (let i = 1; i < argv.length; i++) {
@@ -1195,20 +1420,76 @@ if (isMain) {
       console.log('  ' + bits.join(' | '));
     }
     process.exit(0);
-  } else if (cmd === 'watch') {
+  } else if (cmd === 'watch' || cmd === 'dashboard') {
     const interval = Math.max(1, Number(a.interval) || 2);
+    const once = Boolean(a.once);
+    const id = a.run || latestRunId(ctx);
+    if (!id) {
+      console.log('无 run');
+      process.exit(0);
+    }
+    const run = loadRun(ctx, id);
+    if (!run) {
+      console.log(`run ${id} 不存在`);
+      process.exit(1);
+    }
+
+    if (once) {
+      const lines = renderDashboard(ctx, run, {
+        width: Math.max(60, Math.min(100, process.stdout.columns || 80)),
+        now: nowIso(),
+        once: true,
+      });
+      console.log(lines.join('\n'));
+      process.exit(0);
+    }
+
     const render = () => {
-      const id = a.run || latestRunId(ctx);
-      console.log('\x1B[2J\x1B[H');
-      if (!id) { console.log('无 run'); return; }
-      const run = loadRun(ctx, id);
-      if (!run) { console.log(`run ${id} 不存在`); return; }
-      printRun(ctx, run);
-      const recent = run.events.slice(-5);
-      console.log('最近事件：');
-      for (const e of recent) console.log(`  ${e.t.slice(11, 19)} ${e.type} ${e.cmd ? e.cmd.slice(0, 50) : ''} ${e.exit !== undefined && e.type === 'gate' ? `exit=${e.exit}` : ''}`);
-      console.log(`（每 ${interval}s 刷新，Ctrl+C 退出）`);
+      const curId = a.run || latestRunId(ctx);
+      const currentRun = (curId ? loadRun(ctx, curId) : null) || run;
+      const lines = renderDashboard(ctx, currentRun, {
+        width: Math.max(60, Math.min(100, process.stdout.columns || 80)),
+        now: nowIso(),
+        interval,
+      });
+      if (process.stdout.isTTY) {
+        process.stdout.write('\x1b[H' + lines.join('\n') + '\n\x1b[J');
+      } else {
+        console.log(lines.join('\n'));
+      }
     };
+
+    const cleanup = () => {
+      if (process.stdout.isTTY) {
+        process.stdout.write('\x1b[?25h');
+      }
+      if (process.stdin.isTTY && process.stdin.setRawMode) {
+        try { process.stdin.setRawMode(false); } catch {}
+        process.stdin.pause();
+      }
+    };
+
+    process.on('SIGINT', () => { cleanup(); process.exit(0); });
+    process.on('exit', () => cleanup());
+
+    if (process.stdout.isTTY) {
+      process.stdout.write('\x1b[?25l\x1b[2J\x1b[H');
+    }
+
+    if (process.stdin.isTTY && process.stdin.setRawMode) {
+      process.stdin.setRawMode(true);
+      process.stdin.resume();
+      process.stdin.setEncoding('utf8');
+      process.stdin.on('data', (key) => {
+        if (key === '\u0003' || key === 'q' || key === 'Q') {
+          cleanup();
+          process.exit(0);
+        } else if (key === 'r' || key === 'R') {
+          render();
+        }
+      });
+    }
+
     render();
     setInterval(render, interval * 1000);
   } else if (cmd === 'abort') {
@@ -1238,7 +1519,7 @@ if (isMain) {
     printRun(ctx, run);
     process.exit(0);
   } else {
-    fail(`未知命令：${cmd ?? ''}（start | next | status | watch | abort，用法见文件头注释）`);
+    fail(`未知命令：${cmd ?? ''}（start | next | status | watch | dashboard | abort，用法见文件头注释）`);
   }
 }
 
@@ -1270,4 +1551,4 @@ function adoptRun(ctx, a) {
   console.log('  提示：adopt 不推断断点位置——按文档现状人工续走（next 会按 stage 拒绝，请对照事件缺失情况手动接续或另起 run）');
 }
 
-export default { parseKV, validateDraftContent, closeoutComplete, placeholdersIn, stageBar };
+export default { parseKV, validateDraftContent, closeoutComplete, placeholdersIn, stageBar, renderDashboard, stripAnsi, visualWidth, truncate };

@@ -52,7 +52,7 @@ next: 按 run 停机点循环推进至 done
 | **review / closeout** | 按单产出并写入指定位 (review-only 汇报后 `--done` 收尾) | 装载同 `new-task.md` §1c：review→Review，closeout→Test。 |
 
 3. **放弃**: 用户明确不做 $\rightarrow$ `abort --run <id> --to superseded|cancelled --delegated "<原话>"` (approved 文档逐份走 confirm-doc --to)
-4. **观测** (可选): `status [--run <id>] [--json]` 全量事件流水 / `watch` 终端轮询视图
+4. **观测** (可选): `status [--run <id>] [--json]` 全量事件流水 / `watch`（或 `dashboard`）TUI 监控看板
 5. **并行写同一页**: 多个 arm 要改同一 `workflow/` 或 `wiki/` 页面时，先 `flow-kit run path-lease.mjs acquire --path <page> --owner <arm>`，写完 `release`；一页一 writer。
 
 ### 断点续跑 / 重试 / 并行分支（R3-5）

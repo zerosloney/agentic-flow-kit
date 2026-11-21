@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { analyze } from '../templates/engine/.agents/scripts/check-pipeline-state.mjs';
 import {
   parseParallelList as parseParallel, parseRetryCap as parseRetry, resolveArtifact, resolveDocRel,
-  stageArtifactProblems, failRoute,
+  stageArtifactProblems, failRoute, renderDashboard, stripAnsi, visualWidth, truncate,
 } from '../templates/engine/.agents/scripts/pipeline-run.mjs';
 import { touchProblems, externalReviewId, filesOutsidePlan } from '../templates/engine/.agents/scripts/touch-set.mjs';
 
@@ -675,4 +675,145 @@ test('implement stops for paths outside the plan until delegated', () => {
   assert.equal(passed.status, 0, passed.stderr || passed.stdout);
   assert.notEqual(readRun(root).stage, 'implement');
   assert.ok(readRun(root).events.some((e) => e.type === 'confirm' && e.to === 'files'));
+});
+
+test('renderDashboard: visualWidth, stripAnsi, and truncate handles ASCII and CJK', () => {
+  assert.equal(stripAnsi('\x1b[31mhello\x1b[39m'), 'hello');
+  assert.equal(visualWidth('hello'), 5);
+  assert.equal(visualWidth('你好'), 4);
+  assert.equal(visualWidth('\x1b[32m你好\x1b[39m world'), 10);
+  assert.equal(truncate('123456789', 5), '1234…');
+  assert.equal(truncate('测试文字截断', 6), '测试…');
+});
+
+test('renderDashboard: renders work-order with stage flow and pixel-perfect borders', () => {
+  const root = fixture();
+  const ctx = { root, pipeline: {} };
+  const run = {
+    runId: '20261121-223000-task',
+    requirement: '实现 Pipeline 实时 TUI 阶段监控看板',
+    triage: { level: 'L1', kind: 'require', module: 'pipeline', topic: 'tui-dash' },
+    stage: 'implement',
+    stopType: 'work-order',
+    workOrder: {
+      id: 3,
+      kind: 'implement',
+      title: '实现看板组件',
+      goal: '按设计完成代码与自测',
+      instructions: ['实现 renderDashboard', '补齐测试'],
+    },
+    docs: { entry: 'workflow/intents/t.md', spec: null, plan: 'workflow/plans/t.md' },
+    events: [
+      { t: '2026-11-21T12:00:00.000Z', type: 'run-created' },
+      { t: '2026-11-21T12:01:00.000Z', type: 'gate', cmd: 'verify.mjs', exit: 0 },
+      { t: '2026-11-21T12:02:00.000Z', type: 'work-order', id: 3 },
+    ],
+  };
+
+  const width = 80;
+  const lines = renderDashboard(ctx, run, { width, noColor: false });
+  assert.ok(lines.length >= 15);
+
+  // 校验包含标题与工单关键字段
+  const text = lines.map(stripAnsi).join('\n');
+  assert.match(text, /Pipeline 看板: 20261121-223000-task/);
+  assert.match(text, /实现 Pipeline 实时 TUI 阶段监控看板/);
+  assert.match(text, /工单 #3 \(implement\) 实现看板组件/);
+  assert.match(text, /flow-kit run pipeline-run\.mjs next/);
+  assert.match(text, /产物文档/);
+  assert.match(text, /最近事件流水/);
+
+  // 阶段流向图高亮当前阶段
+  assert.match(text, /»Build«/);
+
+  // 严格检验外框每行的视觉对齐宽度（包含 CJK 与 ANSI）
+  // 排除最后一行的 footer（无外框）
+  const framedLines = lines.slice(0, -1);
+  for (let i = 0; i < framedLines.length; i++) {
+    const vw = visualWidth(framedLines[i]);
+    assert.equal(vw, width, `Line ${i} visualWidth is ${vw}, expected ${width}:\n${framedLines[i]}`);
+  }
+});
+
+test('renderDashboard: renders await-confirm, gate-fail, done, and aborted stopTypes', () => {
+  const root = fixture();
+  const ctx = { root, pipeline: {} };
+
+  // await-confirm
+  const confirmRun = {
+    runId: 'run-confirm',
+    requirement: '等待用户确认',
+    stage: 'plan-confirm',
+    stopType: 'await-confirm',
+    awaitConfirm: { doc: 'workflow/plans/t.md', points: '确认改动方案与影响面', ledger: true },
+    events: [],
+  };
+  const confirmText = renderDashboard(ctx, confirmRun, { width: 70, noColor: true }).join('\n');
+  assert.match(confirmText, /等待确认/);
+  assert.match(confirmText, /next --delegated/);
+
+  // gate-fail
+  const failRun = {
+    runId: 'run-fail',
+    requirement: '门禁阻拦',
+    stage: 'verify',
+    stopType: 'gate-fail',
+    gateFail: { problems: ['单元测试未通过', '存在未跟踪文件'] },
+    events: [],
+  };
+  const failText = renderDashboard(ctx, failRun, { width: 70, noColor: true }).join('\n');
+  assert.match(failText, /门禁拒绝 \(阶段: verify\)/);
+  assert.match(failText, /单元测试未通过/);
+
+  // done
+  const doneRun = {
+    runId: 'run-done',
+    requirement: '已完工',
+    stage: 'done',
+    stopType: 'done',
+    docs: { entry: 'workflow/intents/t.md' },
+    events: [
+      { t: '2026-11-21T12:00:00.000Z', type: 'gate', exit: 0 },
+      { t: '2026-11-21T12:01:00.000Z', type: 'confirm' },
+      { t: '2026-11-21T12:02:00.000Z', type: 'commit' },
+    ],
+  };
+  const doneText = renderDashboard(ctx, doneRun, { width: 70, noColor: true }).join('\n');
+  assert.match(doneText, /流程全部完成/);
+  assert.match(doneText, /门执行 1 道/);
+
+  // aborted
+  const abortRun = {
+    runId: 'run-abort',
+    requirement: '放弃任务',
+    stage: 'plan-draft',
+    stopType: 'aborted',
+    abort: { to: 'cancelled', note: '方案过时' },
+    events: [],
+  };
+  const abortText = renderDashboard(ctx, abortRun, { width: 70, noColor: true }).join('\n');
+  assert.match(abortText, /已放弃 \(cancelled\)/);
+  assert.match(abortText, /方案过时/);
+});
+
+test('CLI: watch and dashboard --once snapshots active run and exits 0', () => {
+  const root = fixture();
+  writeRun(root, {
+    stage: 'implement',
+    stopType: 'work-order',
+    workOrder: { id: 2, kind: 'implement', title: 'CLI 测试', goal: '测试快照模式' },
+    docs: { entry: 'workflow/plans/t.md', plan: 'workflow/plans/t.md' },
+  });
+
+  const resWatch = runPipeline(root, ['watch', '--once', '--run', 'test-run']);
+  assert.equal(resWatch.status, 0, resWatch.stderr || resWatch.stdout);
+  assert.match(resWatch.stdout, /Pipeline 看板: test-run/);
+  assert.match(resWatch.stdout, /工单 #2 \(implement\) CLI 测试/);
+  assert.match(resWatch.stdout, /单次快照模式/);
+
+  const resDash = runPipeline(root, ['dashboard', '--once', '--run', 'test-run']);
+  assert.equal(resDash.status, 0, resDash.stderr || resDash.stdout);
+  assert.match(resDash.stdout, /Pipeline 看板: test-run/);
+  assert.match(resDash.stdout, /工单 #2 \(implement\) CLI 测试/);
+  assert.match(resDash.stdout, /单次快照模式/);
 });
