@@ -21,7 +21,8 @@
 //   flow-kit run pipeline-run.mjs gate <gate.mjs> [--run <id>] [--retry <0-5>]
 //   flow-kit run pipeline-run.mjs status [--run <id>] [--adopt] [--json]
 //   flow-kit run pipeline-run.mjs watch [--run <id>] [--interval 2] [--once]
-//   flow-kit run pipeline-run.mjs dashboard [--run <id>] [--interval 2] [--once]
+//   flow-kit run pipeline-run.mjs dashboard [--run <id>] [--interval 2] [--once] [--inspect]
+//   flow-kit run pipeline-run.mjs inspect [target] [--run <id>] [--max-lines <n>] [--json]
 //   flow-kit run pipeline-run.mjs abort --run <id> [--to superseded|cancelled] [--delegated "<原话>"]
 // 断点续跑（R3-5）：门执行前把 run 标 inFlight 并落盘，进程被杀后 next/resume 自动从该门重入；
 //       docsCommit 以 HEAD 同主题提交判幂等，避免续跑重复提交。
@@ -433,6 +434,118 @@ export function pruneWorkOrderContext(context, budgetChars = 1200) {
   return prunedContext;
 }
 
+// ── 智能门禁失败归因分析（Smart Fix Attribution） ────────────────────────
+export function analyzeGateFailure(input, context = {}) {
+  const parts = [];
+  if (Array.isArray(input)) parts.push(...input.map(String));
+  else if (input != null) parts.push(String(input));
+  if (Array.isArray(context.problems)) parts.push(...context.problems.map(String));
+  const text = parts.join('\n');
+  const docPath = context.docPath || '';
+
+  // 1. 常驻面 / 体积预算超限 (budget-exceeded)
+  const mBudget = text.match(/(?:常驻面超限|超上限|budget exceeded)[：:]\s*([^\s:：]+)\s+(\d+B?)\s*>\s*(?:(?:上限|limit)\s*)?(\d+B?)/i)
+    || text.match(/([^\s:：]+\.md)\s+(\d+B?)\s*>\s*(?:(?:上限|limit)\s*)?(\d+B?)/i);
+  if (mBudget) {
+    const file = mBudget[1].replace(/\\/g, '/');
+    const actual = mBudget[2];
+    const limit = mBudget[3];
+    return {
+      category: 'budget-exceeded',
+      title: '常驻面体积超限',
+      summary: `${file} 体积 (${actual}) 超过预算上限 (${limit})`,
+      suggestedAction: `精简 ${file} 正文与历史注释，或依一进一出原则将非核心描述下沉至 skills/`,
+      impactedFiles: [file],
+      debugCmd: 'flow-kit run rule-budget.mjs --all',
+    };
+  }
+
+  // 2. 范围偏离 / 偏离即停 / 未授权文件改动 (scope-deviation)
+  const mScope = text.match(/(?:git 改动超出回填清单|超出回填清单|偏离即停|计划外)[^：:\n]*[：:]\s*([^\n]+)/i);
+  if (mScope) {
+    const fileListStr = mScope[1].trim();
+    const rawFiles = fileListStr.split(/[、,，\s]+/).filter(Boolean).map((f) => f.replace(/^['"`]|['"`]$/g, '').replace(/\\/g, '/'));
+    const files = rawFiles.filter((f) => f && !f.startsWith('--') && !f.includes('改 plan'));
+    return {
+      category: 'scope-deviation',
+      title: '改动范围超出计划 (偏离即停)',
+      summary: `检测到计划外文件变更: ${files.join('、') || fileListStr}`,
+      suggestedAction: '若属必须改动，通过 --files 补齐回填清单；若超出方案，须向用户请求原话授权 (next --delegated)',
+      impactedFiles: files,
+      debugCmd: 'git status -s',
+    };
+  }
+
+  // 3. 阶段产物契约缺失 (artifact-missing)
+  const mArt = text.match(/(?:阶段产物(?:缺失|为空)|缺少\s+([\w./-]+\.md)\s+产物契约)[：:]?\s*([^\n（(]+)?/i);
+  if (mArt) {
+    const file = (mArt[2] || mArt[1] || '').trim().replace(/\\/g, '/');
+    return {
+      category: 'artifact-missing',
+      title: '阶段契约产物缺失',
+      summary: `当前阶段必需产物未就绪: ${file || '契约文档缺失'}`,
+      suggestedAction: `检查前置阶段起草结果，确保 ${file || '指定产物'} 写入并在任务目录落盘`,
+      impactedFiles: file ? [file] : [],
+      debugCmd: 'flow-kit run pipeline-run.mjs inspect',
+    };
+  }
+
+  // 4. 策略与机制一致性漂移 (policy-drift)
+  if (/\[policy-ci\]|策略面不一致|机制未登记|mechanisms\.required|policy-check/i.test(text)) {
+    return {
+      category: 'policy-drift',
+      title: '策略与机制注册表漂移',
+      summary: 'policy.json 与 mechanism-registry.md 策略配置存在未登记机制或不一致',
+      suggestedAction: '运行 node tools/policy-check.mjs 进行双向核对，同步机制注册表与 policy 配置',
+      impactedFiles: ['.agents/config/mechanism-registry.md', '.agents/config/policy.json'],
+      debugCmd: 'node tools/policy-check.mjs',
+    };
+  }
+
+  // 5. 工作流文档格式/规范不合规 (template-lint)
+  const mLint = text.match(/(?:模板占位符残留|frontmatter 缺|缺节|未勾验收)[：:]?\s*([^\n]+)?/i);
+  if (mLint) {
+    return {
+      category: 'template-lint',
+      title: '工作流文档规范校验未通过',
+      summary: `文档规范错误: ${mLint[0].trim()}`,
+      suggestedAction: '编辑文档补齐缺失章节/frontmatter、清理 {{占位符}} 并勾选验收项',
+      impactedFiles: docPath ? [docPath] : [],
+      debugCmd: 'flow-kit run check-pipeline-state.mjs',
+    };
+  }
+
+  // 6. 单元/集成测试断言失败 (test-failure)
+  const mTestFile = text.match(/(?:test at|FAIL|FAIL tests\/)\s*([^\s:]+\.test\.(?:mjs|js|ts|cjs))(?::(\d+))?/i)
+    || text.match(/([\w./\\-]+\.test\.(?:mjs|js|ts|cjs))/i);
+  const mAssert = text.match(/(?:AssertionError|ERR_ASSERTION)[^\n]*?(?:\[.*?\])?\s*([^\n]+)/i)
+    || text.match(/✖\s+([^\n]+?)\s+\((\d+(?:\.\d+)?ms)\)/i);
+
+  if (mTestFile || mAssert || /assert\.\w+\s*failed/i.test(text)) {
+    const testFile = mTestFile ? mTestFile[1].replace(/\\/g, '/') : null;
+    const testLine = mTestFile?.[2] ? `:${mTestFile[2]}` : '';
+    const failDetail = mAssert ? mAssert[1].trim() : '断言失败';
+    return {
+      category: 'test-failure',
+      title: '测试用例断言未通过',
+      summary: testFile ? `测试 ${testFile}${testLine} 失败: ${failDetail}` : `断言失败: ${failDetail}`,
+      suggestedAction: testFile ? `修复 ${testFile} 涉及的逻辑实现并复测` : '检查代码实现是否满足测试前置条件与边界要求',
+      impactedFiles: testFile ? [testFile] : [],
+      debugCmd: testFile ? `node --test ${testFile}` : 'flow-kit run pipeline-run.mjs gate verify.mjs',
+    };
+  }
+
+  // 7. 通用未知门禁错误 (unknown)
+  return {
+    category: 'unknown',
+    title: '门禁检查未通过',
+    summary: '门禁返回非零退出码，具体原因参见错误日志',
+    suggestedAction: '查看详细错误输出定位异常，单门调试复验',
+    impactedFiles: [],
+    debugCmd: 'flow-kit run pipeline-run.mjs gate verify.mjs',
+  };
+}
+
 // ── 工单构建 ───────────────────────────────────────────────────────────
 function wo(ctxOrRun, runOrO, oOrNothing) {
   let ctx, run, o;
@@ -475,10 +588,11 @@ function stopConfirm(ctx, run, docRel, points, ledger) {
   process.exit(0);
 }
 function stopGateFail(ctx, run, stage, problems, exitHint, opts = {}) {
+  const analysis = analyzeGateFailure(problems, { stage, problems });
   run.workOrder = null;
   run.stopType = 'gate-fail';
   run.stage = stage;
-  run.gateFail = { stage, problems };
+  run.gateFail = { stage, problems, analysis };
   // stage 留在失败处，nextTarget 记退回目标（R6-1）；route:false 用于前置条件失败与 verify-only
   // 短路径——不消耗退回预算（commands/pipeline-run.md），retries 不动、原地停。
   const { to, retry } = failRoute(ctx.pipeline, stage);
@@ -549,6 +663,10 @@ function printRun(ctx, run, problems) {
     console.log(`\n== 工单 #${w.id}（${w.kind}）${w.title} ==`);
     console.log(`目标：${w.goal}`);
     for (const s of w.instructions) console.log(`  ${s}`);
+    if (w.fixAnalysis && w.fixAnalysis.category !== 'unknown') {
+      console.log(`💡 [智能归因] ${w.fixAnalysis.title}：${w.fixAnalysis.summary}`);
+      if (w.fixAnalysis.debugCmd) console.log(`🔧 [定向调试] ${w.fixAnalysis.debugCmd}`);
+    }
     if (w.context?.budget?.pruned) {
       console.log(`[上下文预算] 已按预算精简：${w.context.budget.originalChars}c → ${w.context.budget.prunedChars}c (节约 ${w.context.budget.savingsPercent}%)`);
     }
@@ -567,6 +685,13 @@ function printRun(ctx, run, problems) {
   } else if (run.stopType === 'gate-fail') {
     console.log(`\n== 门拒绝（exit 2，不绕不吞——修复后原路重跑 next）==`);
     for (const p of problems || run.gateFail?.problems || []) console.log(`  - ${p}`);
+    const analysis = run.gateFail?.analysis || analyzeGateFailure(problems || run.gateFail?.problems || [], { stage: run.stage });
+    if (analysis && analysis.category !== 'unknown') {
+      console.log(`\n💡 智能归因: [${analysis.title}] ${analysis.summary}`);
+      console.log(`🎯 推荐动作: ${analysis.suggestedAction}`);
+      if (analysis.impactedFiles?.length) console.log(`📁 涉及文件: ${analysis.impactedFiles.join(', ')}`);
+      if (analysis.debugCmd) console.log(`🔧 定向命令: ${analysis.debugCmd}`);
+    }
     console.log(`\n调试与定向重试建议：`);
     console.log(`  - 单门调试：flow-kit run pipeline-run.mjs gate <门脚本名.mjs> [--run ${run.runId}]`);
     console.log(`  - 定向验证：flow-kit run pipeline-run.mjs next --gate <门脚本名.mjs> [--run ${run.runId}]`);
@@ -627,10 +752,42 @@ export function truncate(s, maxW) {
   return res + '…';
 }
 
+export function truncateAnsi(s, maxW) {
+  const str = String(s ?? '');
+  if (visualWidth(str) <= maxW) return str;
+  let res = '';
+  let curW = 0;
+  const targetW = Math.max(1, maxW - 1);
+  let inEscape = false;
+  let escapeBuf = '';
+  for (let i = 0; i < str.length; i++) {
+    const ch = str[i];
+    if (ch === '\x1b') {
+      inEscape = true;
+      escapeBuf = ch;
+      continue;
+    }
+    if (inEscape) {
+      escapeBuf += ch;
+      if (/[A-Za-z]/.test(ch)) {
+        inEscape = false;
+        res += escapeBuf;
+        escapeBuf = '';
+      }
+      continue;
+    }
+    const cw = WIDE_RE.test(ch) ? 2 : 1;
+    if (curW + cw > targetW) break;
+    res += ch;
+    curW += cw;
+  }
+  return res + (str.includes('\x1b') ? '…\x1b[0m' : '…');
+}
+
 function padRight(s, targetW) {
   const str = String(s ?? '');
   const vw = visualWidth(str);
-  if (vw >= targetW) return str;
+  if (vw >= targetW) return truncateAnsi(str, targetW);
   return str + ' '.repeat(targetW - vw);
 }
 
@@ -729,6 +886,12 @@ export function renderDashboard(ctx, run, options = {}) {
     const w = run.workOrder;
     lines.push(row(clr.bold(clr.yellow(`工单 #${w.id} (${w.kind}) ${truncate(w.title, W - 20)}`))));
     if (w.goal) lines.push(row(`目标: ${truncate(w.goal, W - 6)}`));
+    if (w.fixAnalysis && w.fixAnalysis.category !== 'unknown') {
+      lines.push(row(`  ${clr.yellow('💡 智能归因:')} ${clr.bold(w.fixAnalysis.title)}: ${truncate(w.fixAnalysis.summary, W - 18)}`));
+      if (w.fixAnalysis.debugCmd) {
+        lines.push(row(`  ${clr.dim('🔧 定向调试:')} ${clr.cyan(truncate(w.fixAnalysis.debugCmd, W - 16))}`));
+      }
+    }
     if (w.context?.budget?.pruned) {
       lines.push(row(`  ${clr.green('⚡ 上下文预算:')} ${w.context.budget.originalChars}c → ${w.context.budget.prunedChars}c (节约 ${w.context.budget.savingsPercent}%)`));
     }
@@ -748,6 +911,14 @@ export function renderDashboard(ctx, run, options = {}) {
   } else if (run.stopType === 'gate-fail') {
     lines.push(row(clr.bold(clr.red(`门禁拒绝 (阶段: ${run.stage})`))));
     const probs = options.problems || run.gateFail?.problems || [];
+    const analysis = run.gateFail?.analysis || (probs.length ? analyzeGateFailure(probs, { stage: run.stage }) : null);
+    if (analysis && analysis.category !== 'unknown') {
+      lines.push(row(`  ${clr.yellow('💡 归因:')} ${clr.bold(analysis.title)} (${analysis.category})`));
+      lines.push(row(`     ${truncate(analysis.summary, W - 6)}`));
+      if (analysis.debugCmd) {
+        lines.push(row(`  ${clr.cyan('🔧 建议调试:')} ${truncate(analysis.debugCmd, W - 16)}`));
+      }
+    }
     if (probs.length) {
       for (const p of probs.slice(0, 3)) {
         lines.push(row(`  ${clr.red('✖')} ${truncate(p, W - 4)}`));
@@ -831,7 +1002,393 @@ export function renderDashboard(ctx, run, options = {}) {
     : (options.selector ? ` ${clr.bold('[F]')} 过滤  ${clr.dim('│')}` : '');
   const footer = options.once
     ? clr.dim(` (单次快照模式 · ${tStr})`)
-    : `${navHelp} ${clr.bold('[R]')} 刷新  ${clr.dim('│')}  ${clr.bold('[Q]')} 退出  ${clr.dim(`(每 ${options.interval || 2}s 自动轮询 · ${tStr})`)}`;
+    : `${navHelp} ${clr.bold('[V]')} 检视产物  ${clr.dim('│')}  ${clr.bold('[R]')} 刷新  ${clr.dim('│')}  ${clr.bold('[Q]')} 退出  ${clr.dim(`(每 ${options.interval || 2}s 自动轮询 · ${tStr})`)}`;
+  lines.push(footer);
+
+  return lines;
+}
+
+// ── Markdown 终端高亮与排版 ───────────────────────────────────────────
+export function renderMarkdown(text, options = {}) {
+  const width = Math.max(40, Number(options.width) || 80);
+  const noColor = options.noColor ?? Boolean(process.env.NO_COLOR);
+  const clr = makeColor(noColor);
+  const rawLines = String(text || '').replace(/\r\n/g, '\n').split('\n');
+  const out = [];
+  let inCode = false;
+
+  for (let i = 0; i < rawLines.length; i++) {
+    const raw = rawLines[i];
+    const trimmed = raw.trim();
+
+    // Code fence
+    if (trimmed.startsWith('```')) {
+      inCode = !inCode;
+      const lang = trimmed.slice(3).trim();
+      out.push(clr.gray(inCode ? `┌─── [${lang || 'code'}] ` + '─'.repeat(Math.max(0, width - 12 - (lang ? lang.length : 4))) : '└───' + '─'.repeat(Math.max(0, width - 4))));
+      continue;
+    }
+    if (inCode) {
+      out.push(clr.gray('│ ') + clr.dim(raw));
+      continue;
+    }
+
+    // Dividers
+    if (/^(\-{3,}|\*{3,}|_{3,})$/.test(trimmed)) {
+      out.push(clr.dim('─'.repeat(Math.min(width, 60))));
+      continue;
+    }
+
+    // GitHub alerts: > [!NOTE], > [!TIP], > [!WARNING], > [!CAUTION], > [!IMPORTANT]
+    const alertMatch = trimmed.match(/^>\s*\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION|CRITICAL)\]/i);
+    if (alertMatch) {
+      const type = alertMatch[1].toUpperCase();
+      let alertTag = `ℹ [NOTE]`;
+      let alertFn = clr.cyan;
+      if (type === 'TIP') { alertTag = `💡 [TIP]`; alertFn = clr.green; }
+      else if (type === 'IMPORTANT') { alertTag = `★ [IMPORTANT]`; alertFn = clr.magenta; }
+      else if (type === 'WARNING') { alertTag = `⚠ [WARNING]`; alertFn = clr.yellow; }
+      else if (type === 'CAUTION' || type === 'CRITICAL') { alertTag = `⛔ [${type}]`; alertFn = clr.red; }
+      out.push(alertFn(clr.bold(`┌─ ${alertTag} ` + '─'.repeat(Math.max(0, width - alertTag.length - 6)))));
+      continue;
+    }
+
+    // Blockquote
+    if (trimmed.startsWith('>')) {
+      const content = trimmed.replace(/^>\s*/, '');
+      out.push(clr.cyan('│ ') + clr.dim(content));
+      continue;
+    }
+
+    // Headers
+    if (trimmed.startsWith('# ')) {
+      const title = trimmed.slice(2);
+      out.push('');
+      out.push(clr.bold(clr.cyan(`═══ ${title} ═══`)));
+      continue;
+    }
+    if (trimmed.startsWith('## ')) {
+      const title = trimmed.slice(3);
+      out.push('');
+      out.push(clr.bold(clr.cyan(`─── ${title} ───`)));
+      continue;
+    }
+    if (trimmed.startsWith('### ')) {
+      const title = trimmed.slice(4);
+      out.push(clr.bold(clr.yellow(`▶ ${title}`)));
+      continue;
+    }
+
+    // Table rows
+    if (trimmed.startsWith('|') && trimmed.endsWith('|')) {
+      if (/^\|[\s\-:|]+\|$/.test(trimmed)) {
+        out.push(clr.dim('├' + '─'.repeat(Math.min(width - 2, 50)) + '┤'));
+      } else {
+        const cells = trimmed.slice(1, -1).split('|').map((c) => c.trim());
+        out.push(clr.cyan('│ ') + cells.join(clr.cyan(' │ ')) + clr.cyan(' │'));
+      }
+      continue;
+    }
+
+    // Task list / bullets
+    if (/^[\*\-]\s*\[([ xX])\]/.test(trimmed)) {
+      const checked = /^[\*\-]\s*\[[xX]\]/.test(trimmed);
+      const rest = trimmed.replace(/^[\*\-]\s*\[[ xX]\]\s*/, '');
+      out.push(checked ? clr.green('  [✓] ') + rest : clr.dim('  [ ] ') + rest);
+      continue;
+    }
+    if (/^[\*\-]\s+/.test(trimmed)) {
+      out.push(clr.cyan('  • ') + trimmed.replace(/^[\*\-]\s+/, ''));
+      continue;
+    }
+    if (/^\d+\.\s+/.test(trimmed)) {
+      const numMatch = trimmed.match(/^(\d+\.)\s+(.*)$/);
+      if (numMatch) {
+        out.push(clr.yellow(`  ${numMatch[1]} `) + numMatch[2]);
+        continue;
+      }
+    }
+
+    // Frontmatter fence
+    if (trimmed === '---') {
+      out.push(clr.dim('┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈┈'));
+      continue;
+    }
+
+    // Regular line with inline formatting
+    let line = raw;
+    line = line.replace(/\*\*([^*]+)\*\*/g, (_, m) => clr.bold(m));
+    line = line.replace(/`([^`]+)`/g, (_, m) => clr.yellow(m));
+    out.push(line);
+  }
+
+  return out;
+}
+
+// ── 产物提取与检视 ─────────────────────────────────────────────────────
+export function inspectArtifact(ctx, run, target) {
+  const norm = String(target || '').trim();
+  const lower = norm.toLowerCase();
+
+  // 1. 直接文件路径检查
+  if (norm.includes('/') || norm.includes('\\') || norm.endsWith('.md')) {
+    const absPath = path.isAbsolute(norm) ? norm : path.join(ctx.root, norm);
+    if (fs.existsSync(absPath)) {
+      try {
+        const text = fs.readFileSync(absPath, 'utf8');
+        const st = fmGet(text, '状态');
+        return {
+          ok: true,
+          type: 'doc',
+          rel: path.relative(ctx.root, absPath).replace(/\\/g, '/'),
+          title: `文件产物: ${path.basename(absPath)}`,
+          state: st || 'raw',
+          content: text,
+        };
+      } catch (err) {
+        return { ok: false, type: 'doc', rel: norm, error: `读取文件失败: ${err.message}` };
+      }
+    }
+  }
+
+  // 2. 具名产物类型检索
+  if (lower === 'entry' || lower === 'intent') {
+    const rel = run.docs?.entry;
+    if (!rel) return { ok: false, type: 'entry', error: '当前 Run 尚未关联 entry/intent 文档' };
+    const text = readDoc(ctx, rel);
+    if (text === null) return { ok: false, type: 'entry', rel, error: `文档尚未生成或不存在：${rel}` };
+    return { ok: true, type: 'entry', rel, title: `需求意图 (entry): ${rel}`, state: docState(ctx, rel) || 'unknown', content: text };
+  }
+
+  if (lower === 'spec') {
+    const rel = run.docs?.spec;
+    if (!rel) return { ok: false, type: 'spec', error: '当前 Run 尚未关联 spec 规格文档' };
+    const text = readDoc(ctx, rel);
+    if (text === null) return { ok: false, type: 'spec', rel, error: `文档尚未生成或不存在：${rel}` };
+    return { ok: true, type: 'spec', rel, title: `技术规格 (spec): ${rel}`, state: docState(ctx, rel) || 'unknown', content: text };
+  }
+
+  if (lower === 'plan') {
+    const rel = run.docs?.plan;
+    if (!rel) return { ok: false, type: 'plan', error: '当前 Run 尚未关联 plan 执行计划文档' };
+    const text = readDoc(ctx, rel);
+    if (text === null) return { ok: false, type: 'plan', rel, error: `文档尚未生成或不存在：${rel}` };
+    return { ok: true, type: 'plan', rel, title: `执行计划 (plan): ${rel}`, state: docState(ctx, rel) || 'unknown', content: text };
+  }
+
+  if (lower === 'api' || lower === 'apidocs') {
+    const rel = run.docs?.apiDocs;
+    if (!rel) return { ok: false, type: 'api', error: '当前 Run 尚未关联 api.md 文档契约' };
+    const text = readDoc(ctx, rel);
+    if (text === null) return { ok: false, type: 'api', rel, error: `文档尚未生成或不存在：${rel}` };
+    return { ok: true, type: 'api', rel, title: `API 契约 (apiDocs): ${rel}`, state: docState(ctx, rel) || 'unknown', content: text };
+  }
+
+  if (lower === 'work-order' || lower === 'workorder' || lower === 'wo' || lower === 'order') {
+    const w = run.workOrder;
+    if (!w) return { ok: false, type: 'work-order', error: '当前 Run 无活跃工单' };
+    const lines = [
+      `# 工单 #${w.id} (${w.kind}) ${w.title || ''}`,
+      '',
+      `- **目标**: ${w.goal || '未说明'}`,
+      `- **当前阶段**: ${run.stage}`,
+    ];
+    if (w.context?.budget?.pruned) {
+      lines.push(`- **上下文预算**: ${w.context.budget.originalChars}c → ${w.context.budget.prunedChars}c (节约 ${w.context.budget.savingsPercent}%)`);
+    }
+    if (w.instructions?.length) {
+      lines.push('', '## 执行指令');
+      w.instructions.forEach((ins, idx) => lines.push(`${idx + 1}. ${ins}`));
+    }
+    if (w.relatedDocs?.length) {
+      lines.push('', '## 关联参考文档');
+      w.relatedDocs.forEach((d) => lines.push(`- \`${d}\``));
+    }
+    if (w.kbHits?.length) {
+      lines.push('', '## 知识库匹配参考');
+      w.kbHits.forEach((hit) => lines.push(`- ${hit}`));
+    }
+    if (w.context?.stderrTail) {
+      lines.push('', '## 上次门禁失败日志 (截断)', '```', w.context.stderrTail, '```');
+    }
+    return { ok: true, type: 'work-order', title: `工单 #${w.id} (${w.kind})`, content: lines.join('\n') };
+  }
+
+  if (lower === 'problems' || lower === 'problem' || lower === 'fail' || lower === 'gate') {
+    const probs = run.gateFail?.problems || [];
+    const recentGates = (run.events || []).filter((e) => e.type === 'gate' && e.exit !== 0);
+    const analysis = run.gateFail?.analysis || run.workOrder?.fixAnalysis || (probs.length ? analyzeGateFailure(probs, { stage: run.stage }) : null);
+    if (!probs.length && !recentGates.length && (!analysis || analysis.category === 'unknown')) {
+      return { ok: true, type: 'problems', title: '门禁检查正常', content: '### 门禁检查状态\n\n- 当前阶段无门禁失败问题 (No gate problems recorded)' };
+    }
+    const lines = [`# 门禁拒绝记录 (阶段: ${run.gateFail?.stage || run.stage})`, ''];
+    if (analysis && analysis.category !== 'unknown') {
+      lines.push(`> [!WARNING] **智能归因诊断**: ${analysis.title} (\`${analysis.category}\`)`);
+      lines.push(`> - **核心原因**: ${analysis.summary}`);
+      if (analysis.impactedFiles?.length) {
+        lines.push(`> - **涉及文件**: ${analysis.impactedFiles.map((f) => `\`${f}\``).join('、')}`);
+      }
+      lines.push(`> - **修复建议**: ${analysis.suggestedAction}`);
+      if (analysis.debugCmd) {
+        lines.push(`> - **推荐调试**: \`${analysis.debugCmd}\``);
+      }
+      lines.push('');
+    }
+    if (probs.length) {
+      lines.push('## 拦截问题清单');
+      probs.forEach((p, idx) => lines.push(`${idx + 1}. ✖ ${p}`));
+    }
+    if (recentGates.length) {
+      lines.push('', '## 失败门禁列表');
+      recentGates.forEach((g) => lines.push(`- \`${g.cmd}\` [退出码: ${g.exit}] (${(g.t || '').slice(11, 19)})`));
+    }
+    return { ok: true, type: 'problems', title: `门禁拦截记录 (${probs.length} 项问题)`, content: lines.join('\n') };
+  }
+
+  if (lower === 'risk' || lower === 'intercept' || lower === 'risk-intercept' || lower === 'risk-intercept.md') {
+    const candidates = [
+      path.join(taskDirRel(run), 'risk-intercept.md'),
+      'workflow/intents/risk-intercept.md',
+    ];
+    for (const c of candidates) {
+      const text = readDoc(ctx, c);
+      if (text !== null) {
+        return { ok: true, type: 'risk', rel: c, title: `风控阻断记录: ${c}`, state: docState(ctx, c) || 'intercept', content: text };
+      }
+    }
+    try {
+      const wfDir = path.join(ctx.root, 'workflow');
+      if (fs.existsSync(wfDir)) {
+        const queue = [wfDir];
+        while (queue.length > 0) {
+          const d = queue.shift();
+          const entries = fs.readdirSync(d, { withFileTypes: true });
+          for (const ent of entries) {
+            const full = path.join(d, ent.name);
+            if (ent.isDirectory()) queue.push(full);
+            else if (ent.isFile() && ent.name.includes('risk-intercept')) {
+              const rel = path.relative(ctx.root, full).replace(/\\/g, '/');
+              const text = fs.readFileSync(full, 'utf8');
+              return { ok: true, type: 'risk', rel, title: `风控阻断记录: ${rel}`, state: docState(ctx, rel) || 'intercept', content: text };
+            }
+          }
+        }
+      }
+    } catch {}
+    return { ok: false, type: 'risk', error: '未发现 risk-intercept.md 风险拦截产物文档' };
+  }
+
+  if (lower === 'diff') {
+    const r = spawnSync(ctx.gitPrefix[0], [...ctx.gitPrefix.slice(1), 'diff', 'HEAD'], { cwd: ctx.root, encoding: 'utf8', windowsHide: true });
+    const diff = r.stdout || '';
+    if (!diff.trim()) {
+      return { ok: true, type: 'diff', title: 'Git 工作区差异', content: '### Git Diff\n\n- 当前工作区与 HEAD 无差异 (Working tree clean)' };
+    }
+    return { ok: true, type: 'diff', title: 'Git 工作区差异 (git diff HEAD)', content: '```diff\n' + diff + '\n```' };
+  }
+
+  // 3. Fallback / 自动目标
+  if (!norm || lower === 'auto') {
+    if (run.stopType === 'work-order' && run.workOrder) return inspectArtifact(ctx, run, 'work-order');
+    if (run.stopType === 'gate-fail') return inspectArtifact(ctx, run, 'problems');
+    if (run.stage?.startsWith('plan') && run.docs?.plan) return inspectArtifact(ctx, run, 'plan');
+    if (run.stage?.startsWith('spec') && run.docs?.spec) return inspectArtifact(ctx, run, 'spec');
+    if (run.docs?.entry) return inspectArtifact(ctx, run, 'entry');
+    if (run.docs?.plan) return inspectArtifact(ctx, run, 'plan');
+    return inspectArtifact(ctx, run, 'work-order');
+  }
+
+  return { ok: false, type: 'unknown', error: `未知产物目标：${norm}（支持: entry | spec | plan | api | work-order | problems | risk | diff 或直接文件相对路径）` };
+}
+
+export function getAvailableTargets(ctx, run) {
+  const targets = [];
+  if (run.docs?.entry && readDoc(ctx, run.docs.entry) !== null) targets.push('entry');
+  if (run.docs?.spec && readDoc(ctx, run.docs.spec) !== null) targets.push('spec');
+  if (run.docs?.plan && readDoc(ctx, run.docs.plan) !== null) targets.push('plan');
+  if (run.docs?.apiDocs && readDoc(ctx, run.docs.apiDocs) !== null) targets.push('api');
+  if (run.workOrder) targets.push('work-order');
+  if ((run.gateFail?.problems || []).length || (run.events || []).some((e) => e.type === 'gate' && e.exit !== 0)) targets.push('problems');
+  return targets.length ? targets : ['work-order'];
+}
+
+export function renderInspect(ctx, run, options = {}) {
+  const width = Math.max(50, Number(options.width) || 80);
+  const W = width - 4;
+  const noColor = options.noColor ?? Boolean(process.env.NO_COLOR);
+  const clr = makeColor(noColor);
+  const lines = [];
+
+  const topBorder = (title) => {
+    const tw = visualWidth(title);
+    return clr.cyan('┌─ ') + clr.bold(title) + ' ' + clr.cyan('─'.repeat(Math.max(0, W - tw - 1)) + '┐');
+  };
+  const sectionDivider = (title) => {
+    const tw = visualWidth(title);
+    return clr.cyan('├─ ') + clr.bold(title) + ' ' + clr.cyan('─'.repeat(Math.max(0, W - tw - 1)) + '┤');
+  };
+  const row = (content) => `${clr.cyan('│')} ${padRight(content, W)} ${clr.cyan('│')}`;
+  const bottomBorder = () => clr.cyan('└' + '─'.repeat(W + 2) + '┘');
+
+  const avail = getAvailableTargets(ctx, run);
+  let activeTarget = options.target || avail[0];
+  const art = inspectArtifact(ctx, run, activeTarget);
+
+  // 1. Header
+  const sel = options.selector;
+  let title = `Pipeline 产物检视: ${run.runId}`;
+  if (sel && sel.total > 0) {
+    const filterText = sel.filter === 'active' ? '活跃' : sel.filter === 'attention' ? '需关注' : '全部';
+    title = `Pipeline 产物检视 [${sel.current}/${sel.total} · ${filterText}]: ${run.runId}`;
+  }
+  lines.push(topBorder(title));
+
+  const stageInfo = `阶段: ${run.stage} │ 状态: ${run.stopType}`;
+  lines.push(row(truncate(stageInfo, W)));
+
+  // Tabs
+  const tabItems = avail.map((t, i) => {
+    const isCur = t === (art.type || activeTarget);
+    const label = `[${i + 1}:${t}]`;
+    return isCur ? clr.bold(clr.cyan(`»${label}«`)) : clr.dim(label);
+  });
+  lines.push(row(`标签页: ${tabItems.join(' ')}`));
+
+  // 2. Content Section
+  const dividerTitle = art.ok ? (art.title || `产物内容: ${activeTarget}`) : `产物未就绪: ${activeTarget}`;
+  lines.push(sectionDivider(truncate(dividerTitle, W - 6)));
+
+  if (!art.ok) {
+    lines.push(row(clr.yellow(`⚠️ ${art.error || '未找到该产物'}`)));
+    lines.push(row(clr.dim(`  提示: 当前阶段可能尚未生成该产物，或指定的目标名称不存在。`)));
+  } else {
+    if (art.state) {
+      lines.push(row(`${clr.dim('状态:')} ${clr.bold(clr.green(art.state))}${art.rel ? ` │ ${clr.dim('路径:')} ${art.rel}` : ''}`));
+      lines.push(row(clr.dim('─'.repeat(W))));
+    }
+    const rendered = renderMarkdown(art.content, { width: W - 2, noColor });
+    const offset = Math.max(0, Number(options.scrollOffset) || 0);
+    const maxL = options.maxLines !== undefined && options.maxLines > 0 ? options.maxLines : (options.once ? 200 : 18);
+    const slice = rendered.slice(offset, offset + maxL);
+
+    for (const l of slice) {
+      lines.push(row(l));
+    }
+    if (rendered.length > offset + maxL) {
+      lines.push(row(clr.dim(`... (剩余 ${rendered.length - (offset + maxL)} 行已折叠，按 ▼/j 往下滚动或 CLI 加 --max-lines 0 查看全量)`)));
+    }
+  }
+
+  // 3. Footer
+  lines.push(bottomBorder());
+  const tStr = String(options.now || nowIso()).slice(11, 19);
+  const navHelp = options.selector && options.selector.total > 1
+    ? ` ${clr.bold('[◄/►]')} 切换 Run  ${clr.dim('│')}`
+    : '';
+  const tabHelp = avail.length > 1 ? `[1-${avail.length}/Tab]` : '[Tab]';
+  const footer = options.once
+    ? clr.dim(` (产物快照模式 · ${tStr})`)
+    : `${navHelp} ${clr.bold(tabHelp)} 切产物  ${clr.dim('│')}  ${clr.bold('[▲/▼/j/k]')} 滚动  ${clr.dim('│')}  ${clr.bold('[Esc/B]')} 看板  ${clr.dim('│')}  ${clr.bold('[Q]')} 退出  ${clr.dim(`(${tStr})`)}`;
   lines.push(footer);
 
   return lines;
@@ -1411,6 +1968,7 @@ async function advance(ctx, run, opt) {
       const { to, retry } = failRoute(ctx.pipeline, s);
       const attempt = (run.retries?.[s] || 0) + 1;
       const tail = (r.stderr || r.stdout).split(/\r?\n/).filter(Boolean).slice(-20).join('\n');
+      const analysis = analyzeGateFailure(r.stderr || r.stdout, { stage: s, docPath: run.docs?.plan });
       if (attempt >= retry) {
         stopGateFail(ctx, run, s, [retry > 0
           ? `修复环超限（${retry} 次）——人工介入或 abort`
@@ -1421,16 +1979,26 @@ async function advance(ctx, run, opt) {
       // 不补则 run 事件账本看不到路由历史（条目 37，2026-11-18 实测发现）。
       emit(run, { type: 'route', from: s, to, attempt, cap: retry });
       run.stage = to;
+      const fixRelatedDocs = Array.from(new Set([
+        ...analysis.impactedFiles,
+        ...(run.docs?.plan ? [run.docs.plan] : []),
+      ])).slice(0, 8);
+      const fixInstructions = [
+        ...(analysis.category !== 'unknown' ? [
+          `0. [智能归因]: ${analysis.title} - ${analysis.suggestedAction}`,
+          ...(analysis.debugCmd ? [`   [定向调试]: ${analysis.debugCmd}`] : []),
+        ] : []),
+        '1. 读下方「上次门失败输出」定位失败项',
+        '2. 修复（授权面仍以 plan 为准，偏离即停）',
+        '3. 完成后回填：next --files "…"（脚本重核对改动面并重跑 verify）',
+      ];
       issueWO(ctx, run, wo(run, {
         kind: 'fix', title: `修复环 ${attempt}/${retry}：verify 未过`, goal: '按失败输出修复后回跑',
-        instructions: [
-          '1. 读下方「上次门失败输出」定位失败项',
-          '2. 修复（授权面仍以 plan 为准，偏离即停）',
-          '3. 完成后回填：next --files "…"（脚本重核对改动面并重跑 verify）',
-        ],
-        context: { docPath: run.docs.plan, kbHits: [], stderrTail: tail, relatedDocs: [] },
+        instructions: fixInstructions,
+        context: { docPath: run.docs.plan, kbHits: [], stderrTail: tail, relatedDocs: fixRelatedDocs },
         constraints: ['不绕门不改门；不 --no-verify'],
         acceptance: ['git 改动 ⊆ 回填清单', 'verify.mjs 重跑全绿'],
+        fixAnalysis: analysis,
       }), to);
     }
 
@@ -1574,7 +2142,7 @@ async function advance(ctx, run, opt) {
 }
 
 // ── 子命令 ─────────────────────────────────────────────────────────────
-const BOOL_FLAGS = new Set(['adopt', 'json', 'done', 'once', 'step', 'interactive-gate']); // 复核 P2-5：布尔旗标不吞下一参
+const BOOL_FLAGS = new Set(['adopt', 'json', 'done', 'once', 'step', 'interactive-gate', 'inspect']); // 复核 P2-5：布尔旗标不吞下一参
 function parseArgs(argv) {
   const out = { cmd: argv[0], positional: [] };
   for (let i = 1; i < argv.length; i++) {
@@ -1674,6 +2242,9 @@ if (isMain) {
     let filterMode = typeof a.filter === 'string' && ['all', 'active', 'attention'].includes(a.filter)
       ? a.filter
       : 'all';
+    let viewMode = a.inspect ? 'inspect' : 'dashboard';
+    let inspectTarget = typeof a.inspect === 'string' ? a.inspect : (a.positional[0] || undefined);
+    let scrollOffset = 0;
 
     let runList = listAllRuns(ctx, filterMode);
     if (!runList.length && filterMode !== 'all') {
@@ -1700,12 +2271,16 @@ if (isMain) {
     const run = runList[activeIndex] || runList[0];
 
     if (once) {
-      const lines = renderDashboard(ctx, run, {
+      const opts = {
         width: Math.max(60, Math.min(100, process.stdout.columns || 80)),
         now: nowIso(),
         once: true,
+        target: inspectTarget,
         selector: runList.length > 1 ? { current: activeIndex + 1, total: runList.length, filter: filterMode } : undefined,
-      });
+      };
+      const lines = viewMode === 'inspect'
+        ? renderInspect(ctx, run, opts)
+        : renderDashboard(ctx, run, opts);
       console.log(lines.join('\n'));
       process.exit(0);
     }
@@ -1717,12 +2292,17 @@ if (isMain) {
         if (activeIndex >= runList.length) activeIndex = Math.max(0, runList.length - 1);
       }
       const currentRun = runList[activeIndex] || run;
-      const lines = renderDashboard(ctx, currentRun, {
+      const opts = {
         width: Math.max(60, Math.min(100, process.stdout.columns || 80)),
         now: nowIso(),
         interval,
+        target: inspectTarget,
+        scrollOffset,
         selector: { current: activeIndex + 1, total: runList.length, filter: filterMode },
-      });
+      };
+      const lines = viewMode === 'inspect'
+        ? renderInspect(ctx, currentRun, opts)
+        : renderDashboard(ctx, currentRun, opts);
       if (process.stdout.isTTY) {
         process.stdout.write('\x1b[H' + lines.join('\n') + '\n\x1b[J');
       } else {
@@ -1757,12 +2337,70 @@ if (isMain) {
           process.exit(0);
         } else if (key === 'r' || key === 'R') {
           render();
-        } else if (key === '\u001b[D' || key === 'h' || key === 'H' || key === 'p' || key === 'P' || key === '[') {
+        } else if (key === 'v' || key === 'V') {
+          viewMode = viewMode === 'dashboard' ? 'inspect' : 'dashboard';
+          scrollOffset = 0;
+          render();
+        } else if (key === '\u001b' || key === 'b' || key === 'B') {
+          if (viewMode === 'inspect') {
+            viewMode = 'dashboard';
+            scrollOffset = 0;
+            render();
+          }
+        } else if (key === 'w' || key === 'W') {
+          viewMode = 'inspect';
+          inspectTarget = 'work-order';
+          scrollOffset = 0;
+          render();
+        } else if (key === 'p' || key === 'P') {
+          viewMode = 'inspect';
+          inspectTarget = 'problems';
+          scrollOffset = 0;
+          render();
+        } else if (key === '1') {
+          if (viewMode === 'inspect') { inspectTarget = 'entry'; scrollOffset = 0; render(); }
+        } else if (key === '2') {
+          if (viewMode === 'inspect') { inspectTarget = 'spec'; scrollOffset = 0; render(); }
+        } else if (key === '3') {
+          if (viewMode === 'inspect') { inspectTarget = 'plan'; scrollOffset = 0; render(); }
+        } else if (key === '4') {
+          if (viewMode === 'inspect') { inspectTarget = 'work-order'; scrollOffset = 0; render(); }
+        } else if (key === '5') {
+          if (viewMode === 'inspect') { inspectTarget = 'problems'; scrollOffset = 0; render(); }
+        } else if (key === '\t') {
+          if (viewMode === 'inspect') {
+            const currentRun = runList[activeIndex] || run;
+            const avail = getAvailableTargets(ctx, currentRun);
+            const curIdx = avail.indexOf(inspectTarget || avail[0]);
+            const nextIdx = (curIdx + 1) % avail.length;
+            inspectTarget = avail[nextIdx];
+            scrollOffset = 0;
+            render();
+          } else if (runList.length > 1) {
+            activeIndex = (activeIndex + 1) % runList.length;
+            render();
+          }
+        } else if (key === '\u001b[B' || key === 'j' || key === 'J') {
+          if (viewMode === 'inspect') {
+            scrollOffset += 3;
+            render();
+          }
+        } else if (key === '\u001b[A' || key === 'k' || key === 'K') {
+          if (viewMode === 'inspect') {
+            scrollOffset = Math.max(0, scrollOffset - 3);
+            render();
+          }
+        } else if (key === 'g') {
+          if (viewMode === 'inspect') {
+            scrollOffset = 0;
+            render();
+          }
+        } else if (key === '\u001b[D' || key === 'h' || key === 'H' || key === '[') {
           if (runList.length > 1) {
             activeIndex = (activeIndex - 1 + runList.length) % runList.length;
             render();
           }
-        } else if (key === '\u001b[C' || key === 'l' || key === 'L' || key === 'n' || key === 'N' || key === ']' || key === '\t') {
+        } else if (key === '\u001b[C' || key === 'l' || key === 'L' || key === 'n' || key === 'N' || key === ']') {
           if (runList.length > 1) {
             activeIndex = (activeIndex + 1) % runList.length;
             render();
@@ -1791,6 +2429,23 @@ if (isMain) {
 
     render();
     setInterval(render, interval * 1000);
+  } else if (cmd === 'inspect') {
+    const run = resolveRun(ctx, a);
+    const target = a.positional[0] || a.target;
+    const maxLines = a['max-lines'] !== undefined ? Number(a['max-lines']) : 0;
+    if (a.json) {
+      const art = inspectArtifact(ctx, run, target);
+      console.log(JSON.stringify(art, null, 2));
+      process.exit(0);
+    }
+    const lines = renderInspect(ctx, run, {
+      width: Math.max(60, Math.min(100, process.stdout.columns || 80)),
+      target,
+      maxLines,
+      once: true,
+    });
+    console.log(lines.join('\n'));
+    process.exit(0);
   } else if (cmd === 'abort') {
     if (!a.run) fail('abort 必填 --run <id>');
     const run = loadRun(ctx, a.run);
@@ -1837,7 +2492,7 @@ if (isMain) {
       process.exit(2);
     }
   } else {
-    fail(`未知命令：${cmd ?? ''}（start | next | status | watch | dashboard | abort | gate，用法见文件头注释）`);
+    fail(`未知命令：${cmd ?? ''}（start | next | status | watch | dashboard | inspect | abort | gate，用法见文件头注释）`);
   }
 }
 
@@ -1869,4 +2524,4 @@ function adoptRun(ctx, a) {
   console.log('  提示：adopt 不推断断点位置——按文档现状人工续走（next 会按 stage 拒绝，请对照事件缺失情况手动接续或另起 run）');
 }
 
-export default { parseKV, validateDraftContent, closeoutComplete, placeholdersIn, stageBar, renderDashboard, stripAnsi, visualWidth, truncate, parseGateName, pruneWorkOrderContext, listAllRuns };
+export default { parseKV, validateDraftContent, closeoutComplete, placeholdersIn, stageBar, renderDashboard, stripAnsi, visualWidth, truncate, truncateAnsi, parseGateName, pruneWorkOrderContext, listAllRuns, renderMarkdown, inspectArtifact, getAvailableTargets, renderInspect, analyzeGateFailure };

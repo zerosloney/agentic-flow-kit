@@ -14,12 +14,8 @@ next: 按 run 停机点循环推进至 done
 
 阶段机已对齐 commands 手册。与手动阶段路由二选一，禁混用。
 
-> **实战已验证（2026-11-18）**：已完成首个端到端真实 run（triage → plan 起草/确认 → implement →
-> verify 门红路由 fix → closeout → done；22 门 / 3 确认 / 3 提交，确认台账配对成立）。启用前仍建议先跑
-> `flow-kit run check-pipeline-state.mjs`（静态闭包检查）。
-> **已知首跑问题（未修）**：零提交基线的全新装户，首个 implement/fix 门会把安装期生成/运行期再生的文件
-> （`.agents/notes/engine-map.md`、`tmp/verify-*.log`、`workflow/effective-policy.md`）误报为
-> 「偏离即停」——如实列入 `--files` 可推进，代价是 docsCommit 会把机器文件一并入库。
+> **实战已验证（2026-11-18）**：首个端到端真实 run 验证通过（22 门 / 3 确认 / 3 提交，台账配对成立）。启用前建议跑 `flow-kit run check-pipeline-state.mjs` 静态闭包检查。
+> **已知首跑问题**：零提交基线全新装户，首个 implement/fix 门可能把安装期生成文件误报「偏离即停」——如实列入 `--files` 推进。
 
 > **分工**：确定性部分由 `pipeline-run.mjs` 状态机驱动（fill-* $\rightarrow$ confirm-doc $\rightarrow$ verify.mjs $\rightarrow$ git，退出码全记录）；AI 槽位按工单协议执行；人件门到点即停、原话代录；宿主禁自行改状态。
 > **产物目录**：pipeline 产物收进 `workflow/tasks/<date>-<topic>/`（`intent.md`/`incident.md`/`spec.md`/`plan.md`），与手动路径（`intents/`、`plans/`、`specs/`）隔离——手动扫描器不扫 `tasks/`，两类文档互不干扰。
@@ -53,8 +49,20 @@ next: 按 run 停机点循环推进至 done
 | **review / closeout** | 按单产出并写入指定位 (review-only 汇报后 `--done` 收尾) | 装载同 `new-task.md` §1c：review→Review，closeout→Test。 |
 
 3. **放弃**: 用户明确不做 $\rightarrow$ `abort --run <id> --to superseded|cancelled --delegated "<原话>"` (approved 文档逐份走 confirm-doc --to)
-4. **观测** (可选): `status [--run <id>] [--json]` 全量事件流水 / `watch`（或 `dashboard`）TUI 监控看板
+4. **观测与检视** (可选): `status [--run <id>] [--json]` 全量事件流水 / `watch`（或 `dashboard`）TUI 监控看板 / `inspect [target]` 终端产物检视
 5. **并行写同一页**: 多个 arm 要改同一 `workflow/` 或 `wiki/` 页面时，先 `flow-kit run path-lease.mjs acquire --path <page> --owner <arm>`，写完 `release`；一页一 writer。
+
+### 终端产物检视与 TUI 看板联动 (inspect / dashboard -v)
+
+- **终端产物检视 (`inspect [target]`)**：格式化高亮产物、工单、门禁拦截或风控报告：
+  - `inspect`：智能检视当前核心产物或工单；`--json` 输出结构体；
+  - `inspect intent|spec|plan|api`：指定检视意图、规格、计划或 API 契约；
+  - `inspect work-order`（或 `wo`）：全屏检视当前工单指令与失败日志；
+  - `inspect problems`：检视门禁拦截原因；`inspect risk`：检视风控阻断报告；
+  - `inspect <path>`：直接格式化高亮任意相对路径 Markdown 产物（如 `workflow/intents/risk-intercept.md`）。
+- **TUI 看板快捷键 (`dashboard` / `watch`)**：
+  - `V` 切换阶段流与产物检视；`W` 直达工单详情；`P` 直达门禁拦截详情；
+  - 检视视图下 `1-5`/`Tab` 轮转标签，`▲/▼`/`j/k` 滚动长文，`Esc`/`B` 返回总看板。
 
 ### 断点续跑 / 重试 / 并行分支（R3-5）
 
@@ -72,8 +80,9 @@ next: 按 run 停机点循环推进至 done
 
 ### 失败路由 / 任务状态（R6-1 / R6-2）
 
-- **失败路由表**：`.agents/config/pipeline.json` 的 `onFail` 按阶段声明 `{to, retry}`；`retry` 是该阶段允许的最大失败次数（含），第 `retry` 次失败即停。模板默认只声明 `verify → fix`（`retry: 3`）。未声明的阶段不退回，原地停 `gate-fail`。产物契约失败与 verify-only 短路径不消耗退回预算。`check-pipeline-state.mjs` 静态校验该表：键与目标都须登记且脚本可达，目标不得是终态，`retry` 须为 0-5 整数。
-- **任务状态**：run 文件用 `retries`（per-stage 失败计数）与 `nextTarget`（退回目标）记录现场。停机时 `stage` 留在失败处，`next` 才从 `nextTarget` 重入并记 `route-enter` 事件；退回途中记 `route` 事件（`from/to/attempt/cap`）。`resume` 事件带 `artifacts: complete|missing` 与 `missing` 清单，产物缺失仍由契约门拦住，不会跳过重跑。
+- **失败路由表**：`pipeline.json` 的 `onFail` 声明 `{to, retry}`（默认 `verify → fix`，`retry: 3`）；未声明阶段原地停 `gate-fail`。契约失败与 verify-only 短路径不消耗退回预算。`check-pipeline-state.mjs` 静态校验合法性。
+- **任务状态**：run 文件用 `retries` 与 `nextTarget` 记录现场。停机时 `stage` 留在失败处，`next` 从 `nextTarget` 重入；退回记 `route` 事件，恢复记 `resume` 事件（带产物清单）。
+- **智能归因（Smart Fix）**：门禁拦截或退回 `fix` 时自动提取特征归因（测试/预算/偏离/契约/策略/格式），挂载针对性建议、涉及文件与定向命令（如 `next --gate <门>`）。
 
 ### 跨模型评审自适应降级与工单上下文预算
 

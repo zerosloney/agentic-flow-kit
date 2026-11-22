@@ -46,7 +46,25 @@ The stage machine is aligned with the commands manual. Mutually exclusive with m
 | **review / closeout** | Produce per the order and write to the specified location (after review-only reporting, finish with `--done`) | Load the same `new-task.md` §1c row: review→Review, closeout→Test. |
 
 3. **Abort**: the user explicitly declines $\rightarrow$ `abort --run <id> --to superseded|cancelled --delegated "<verbatim words>"` (approved documents go through confirm-doc --to one by one)
-4. **Observe** (optional): `status [--run <id>] [--json]` full event stream / `watch` (or `dashboard`) TUI view
+4. **Observe** (optional): `status [--run <id>] [--json]` full event stream / `watch` (or `dashboard`) TUI view / `inspect [target]` terminal artifact view
+
+### Terminal Artifact Inspection and TUI Dashboard Integration (inspect / dashboard -v)
+
+- **Terminal Artifact Inspection (`inspect [target]`)**: Formatted preview of workflow artifacts, work-orders, gate failures, or risk reports:
+  - `inspect`: Smart inspect of current core artifact or work order; `--json` outputs raw structure;
+  - `inspect intent|spec|plan|api`: Inspect specific intent, spec, plan, or API contracts;
+  - `inspect work-order` (or `wo`): Inspect current work order details and failure logs;
+  - `inspect problems`: Inspect gate failure reasons; `inspect risk`: Inspect risk intercept report;
+  - `inspect <path>`: Direct formatted preview for any relative Markdown file (e.g. `workflow/intents/risk-intercept.md`).
+- **TUI Dashboard Shortcuts (`dashboard` / `watch`)**:
+  - `V` toggles between stage flow and artifact inspect view; `W` jumps to work-order; `P` jumps to gate failures;
+  - In inspect view: `1-5`/`Tab` cycles artifact tabs, `▲/▼`/`j/k` scrolls content, `Esc`/`B` returns to main dashboard.
+
+### Single-Step Debugging and Gate Isolation (--step / gate / --gate)
+
+- **Single-Step Debugging (`--step`)**: Pauses at stage transition boundaries (`PIPELINE-STOP step <runId> <stage>`, exit 0) for inspecting documents before entering next stage; rerun `next --step` to keep single-stepping, or `next` to resume full speed.
+- **Standalone Gate Debugging (`gate <script.mjs>`)**: Executes a single gate script directly on the current run (`flow-kit run pipeline-run.mjs gate <script.mjs> [--run <id>] [--retry <0-5>]`), recording debug events without altering stage routing.
+- **Targeted Gate Re-run (`next --gate <script.mjs>`)**: Selectively runs a specific gate in the verify stage; `--interactive-gate` prints diagnostic prompts during verification.
 
 ### Resume / Retry / Parallel Branches (R3-5)
 
@@ -58,8 +76,9 @@ The stage machine is aligned with the commands manual. Mutually exclusive with m
 
 ### Failure routing / task state (R6-1 / R6-2)
 
-- **Failure routing table**: `onFail` in `.agents/config/pipeline.json` declares `{to, retry}` per stage. `retry` is the maximum number of failures allowed at that stage (inclusive), and the `retry`-th failure stops. The template declares only `verify → fix` (`retry: 3`). An undeclared stage does not route and stops in place with `gate-fail`. Artifact-contract failures and the verify-only short path do not consume the routing budget. `check-pipeline-state.mjs` validates the table statically: keys and targets must be registered and reachable in the script, a target must not be terminal, and `retry` must be an integer in 0-5.
-- **Task state**: the run file records `retries` (per-stage failure counts) and `nextTarget` (the routing target). While stopped, `stage` stays at the failure point; `next` re-enters from `nextTarget` and records a `route-enter` event, and a routing decision records a `route` event (`from/to/attempt/cap`). The `resume` event carries `artifacts: complete|missing` plus a `missing` list; missing artifacts are still blocked by the contract gate rather than skipped.
+- **Failure routing table**: `onFail` in `.agents/config/pipeline.json` declares `{to, retry}` per stage (`verify → fix`, `retry: 3`). Undeclared stages stop in place with `gate-fail`. Contract failures and verify-only short paths do not consume the budget.
+- **Task state**: the run file records `retries` and `nextTarget`. While stopped, `stage` stays at the failure point; `next` re-enters from `nextTarget`. Routing emits a `route` event and resume emits a `resume` event (with artifact checklist).
+- **Smart Fix Attribution**: On gate failure or routing to `fix`, the executor automatically attributes errors into six categories (tests, rule budget, scope deviation, missing artifacts, policy drift, lint format), attaching targeted fix advice, impacted files, and debug commands (e.g. `next --gate <gate.mjs>`).
 
 ### Review Downgrade and Work-Order Context Budget
 

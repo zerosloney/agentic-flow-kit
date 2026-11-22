@@ -9,8 +9,9 @@ import { fileURLToPath } from 'node:url';
 import { analyze } from '../templates/engine/.agents/scripts/check-pipeline-state.mjs';
 import {
   parseParallelList as parseParallel, parseRetryCap as parseRetry, resolveArtifact, resolveDocRel,
-  stageArtifactProblems, failRoute, renderDashboard, stripAnsi, visualWidth, truncate, parseGateName,
-  pruneWorkOrderContext, listAllRuns,
+  stageArtifactProblems, failRoute, renderDashboard, stripAnsi, visualWidth, truncate, truncateAnsi, parseGateName,
+  pruneWorkOrderContext, listAllRuns, renderMarkdown, inspectArtifact, getAvailableTargets, renderInspect,
+  analyzeGateFailure,
 } from '../templates/engine/.agents/scripts/pipeline-run.mjs';
 import { touchProblems, externalReviewId, parseReviewMetadata, filesOutsidePlan } from '../templates/engine/.agents/scripts/touch-set.mjs';
 
@@ -1124,4 +1125,326 @@ test('dashboard --once runs cleanly from CLI', () => {
   assert.equal(res.status, 0, res.stderr || res.stdout);
   assert.match(res.stdout, /Pipeline 看板: test-dash-run/);
   assert.match(res.stdout, /单次快照模式/);
+});
+
+test('renderMarkdown: formats headers, alerts, lists, and code blocks', () => {
+  const md = [
+    '# 主标题',
+    '## 二级标题',
+    '### 三级标题',
+    '> [!WARNING]',
+    '> 这是一个警告提示',
+    '- [x] 已完成项',
+    '- [ ] 待办项',
+    '- 普通列表',
+    '1. 步骤一',
+    '```javascript',
+    'const a = 1;',
+    '```',
+  ].join('\n');
+
+  const lines = renderMarkdown(md, { noColor: true, width: 60 });
+  const text = lines.join('\n');
+  assert.match(text, /═══ 主标题 ═══/);
+  assert.match(text, /─── 二级标题 ───/);
+  assert.match(text, /▶ 三级标题/);
+  assert.match(text, /\[WARNING\]/);
+  assert.match(text, /\[✓\] 已完成项/);
+  assert.match(text, /\[ \] 待办项/);
+  assert.match(text, /• 普通列表/);
+  assert.match(text, /1\. 步骤一/);
+  assert.match(text, /\[javascript\]/);
+  assert.match(text, /const a = 1;/);
+});
+
+test('inspectArtifact: resolves entry, spec, plan, work-order, problems, and risk documents', () => {
+  const root = fixture();
+  const ctx = { root, gitPrefix: ['git'] };
+
+  // 1. 创建测试产物文件
+  const taskDir = path.join(root, 'workflow', 'tasks', '2026-11-22-test-topic');
+  fs.mkdirSync(taskDir, { recursive: true });
+  fs.writeFileSync(path.join(taskDir, 'intent.md'), '---\n状态: approved\n---\n# 意图说明\n测试意图正文');
+  fs.writeFileSync(path.join(taskDir, 'spec.md'), '---\n状态: draft\n---\n# 规格说明\n测试规格');
+  fs.writeFileSync(path.join(taskDir, 'risk-intercept.md'), '---\n状态: intercept\n---\n> [!CAUTION]\n拦截敏感权限操作');
+
+  const run = {
+    runId: '20261122-120000-test-topic',
+    stage: 'plan-confirm',
+    stopType: 'work-order',
+    docs: {
+      entry: 'workflow/tasks/2026-11-22-test-topic/intent.md',
+      spec: 'workflow/tasks/2026-11-22-test-topic/spec.md',
+      plan: 'workflow/tasks/2026-11-22-test-topic/plan.md',
+    },
+    workOrder: {
+      id: 'plan-draft-1',
+      kind: 'draft',
+      title: '起草 Plan 执行计划',
+      goal: '起草完成 plan.md',
+      instructions: ['1. 填入改动方案', '2. 填入验证步骤'],
+    },
+    gateFail: {
+      problems: ['缺少 plan.md 产物契约'],
+    },
+  };
+
+  // 1. entry
+  const entryArt = inspectArtifact(ctx, run, 'entry');
+  assert.equal(entryArt.ok, true);
+  assert.equal(entryArt.type, 'entry');
+  assert.equal(entryArt.state, 'approved');
+  assert.match(entryArt.content, /测试意图正文/);
+
+  // 2. spec
+  const specArt = inspectArtifact(ctx, run, 'spec');
+  assert.equal(specArt.ok, true);
+  assert.equal(specArt.type, 'spec');
+  assert.equal(specArt.state, 'draft');
+
+  // 3. plan (不存在)
+  const planArt = inspectArtifact(ctx, run, 'plan');
+  assert.equal(planArt.ok, false);
+  assert.match(planArt.error, /文档尚未生成或不存在/);
+
+  // 4. work-order
+  const woArt = inspectArtifact(ctx, run, 'work-order');
+  assert.equal(woArt.ok, true);
+  assert.equal(woArt.type, 'work-order');
+  assert.match(woArt.content, /起草 Plan 执行计划/);
+
+  // 5. problems
+  const probArt = inspectArtifact(ctx, run, 'problems');
+  assert.equal(probArt.ok, true);
+  assert.equal(probArt.type, 'problems');
+  assert.match(probArt.content, /缺少 plan\.md 产物契约/);
+
+  // 6. risk (自动发现在任务目录下的 risk-intercept.md)
+  const riskArt = inspectArtifact(ctx, run, 'risk');
+  assert.equal(riskArt.ok, true);
+  assert.equal(riskArt.type, 'risk');
+  assert.match(riskArt.content, /拦截敏感权限操作/);
+
+  // 7. 直接路径查询
+  const directArt = inspectArtifact(ctx, run, 'workflow/tasks/2026-11-22-test-topic/risk-intercept.md');
+  assert.equal(directArt.ok, true);
+  assert.equal(directArt.type, 'doc');
+  assert.match(directArt.content, /拦截敏感权限操作/);
+
+  // 8. 可用标签页
+  const avail = getAvailableTargets(ctx, run);
+  assert.ok(avail.includes('entry'));
+  assert.ok(avail.includes('spec'));
+  assert.ok(!avail.includes('plan'));
+  assert.ok(avail.includes('work-order'));
+  assert.ok(avail.includes('problems'));
+});
+
+test('renderInspect: formats artifact viewer layout with tabs, status, and footer', () => {
+  const root = fixture();
+  const ctx = { root, gitPrefix: ['git'] };
+  const taskDir = path.join(root, 'workflow', 'tasks', '2026-11-22-demo');
+  fs.mkdirSync(taskDir, { recursive: true });
+  fs.writeFileSync(path.join(taskDir, 'intent.md'), '---\n状态: approved\n---\n# 需求意图\n- 目标: 验证检视器排版');
+
+  const run = {
+    runId: '20261122-demo-task',
+    stage: 'intent-confirm',
+    stopType: 'await-confirm',
+    docs: {
+      entry: 'workflow/tasks/2026-11-22-demo/intent.md',
+    },
+  };
+
+  const lines = renderInspect(ctx, run, {
+    noColor: true,
+    target: 'entry',
+    selector: { current: 1, total: 2, filter: 'all' },
+  });
+  const text = lines.join('\n');
+  assert.match(text, /Pipeline 产物检视 \[1\/2 · 全部\]: 20261122-demo-task/);
+  assert.match(text, /阶段: intent-confirm │ 状态: await-confirm/);
+  assert.match(text, /标签页: »\[1:entry\]«/);
+  assert.match(text, /需求意图 \(entry\): workflow\/tasks\/2026-11-22-demo\/intent\.md/);
+  assert.match(text, /状态: approved/);
+  assert.match(text, /═══ 需求意图 ═══/);
+  assert.match(text, /• 目标: 验证检视器排版/);
+  assert.match(text, /\[Tab\] 切产物/);
+  assert.match(text, /\[Esc\/B\] 看板/);
+});
+
+test('CLI: inspect subcommand formats artifacts or outputs JSON', () => {
+  const root = fixture();
+  const taskDir = path.join(root, 'workflow', 'tasks', '2026-11-22-cli-inspect');
+  fs.mkdirSync(taskDir, { recursive: true });
+  fs.writeFileSync(path.join(taskDir, 'intent.md'), '---\n状态: approved\n---\n# 需求说明\n- 任务目标: CLI 产物检视通过');
+
+  const run = {
+    runId: 'test-cli-inspect-run',
+    stage: 'intent-confirm',
+    stopType: 'await-confirm',
+    docs: {
+      entry: 'workflow/tasks/2026-11-22-cli-inspect/intent.md',
+    },
+    workOrder: {
+      id: 'wo-test',
+      kind: 'review',
+      title: '评审工单',
+    },
+  };
+  writeRun(root, run);
+
+  // 1. inspect 纯文本模式
+  const resText = runPipeline(root, ['inspect', 'entry', '--run', 'test-cli-inspect-run']);
+  assert.equal(resText.status, 0, resText.stderr || resText.stdout);
+  assert.match(resText.stdout, /Pipeline 产物检视: test-cli-inspect-run/);
+  assert.match(resText.stdout, /需求意图/);
+  assert.match(resText.stdout, /CLI 产物检视通过/);
+
+  // 2. inspect --json 机器读取模式
+  const resJson = runPipeline(root, ['inspect', 'entry', '--run', 'test-cli-inspect-run', '--json']);
+  assert.equal(resJson.status, 0, resJson.stderr || resJson.stdout);
+  const parsed = JSON.parse(resJson.stdout);
+  assert.equal(parsed.ok, true);
+  assert.equal(parsed.type, 'entry');
+  assert.equal(parsed.state, 'approved');
+  assert.match(parsed.content, /CLI 产物检视通过/);
+
+  // 3. dashboard --once --inspect
+  const resDash = runPipeline(root, ['dashboard', '--run', 'test-cli-inspect-run', '--once', '--inspect']);
+  assert.equal(resDash.status, 0, resDash.stderr || resDash.stdout);
+  assert.match(resDash.stdout, /Pipeline 产物检视: test-cli-inspect-run/);
+  assert.match(resDash.stdout, /产物快照模式/);
+});
+
+test('analyzeGateFailure: attributes failure patterns across six error categories', () => {
+  // 1. budget-exceeded
+  const aBudget = analyzeGateFailure('常驻面超限：.agents/commands/pipeline-run.md 11179B > 上限 10752B');
+  assert.equal(aBudget.category, 'budget-exceeded');
+  assert.equal(aBudget.title, '常驻面体积超限');
+  assert.deepEqual(aBudget.impactedFiles, ['.agents/commands/pipeline-run.md']);
+  assert.match(aBudget.suggestedAction, /精简 \.agents\/commands\/pipeline-run\.md/);
+  assert.equal(aBudget.debugCmd, 'flow-kit run rule-budget.mjs --all');
+
+  // 2. scope-deviation
+  const aScope = analyzeGateFailure('git 改动超出回填清单（偏离即停）：src/foo.mjs、lib/bar.mjs');
+  assert.equal(aScope.category, 'scope-deviation');
+  assert.equal(aScope.title, '改动范围超出计划 (偏离即停)');
+  assert.ok(aScope.impactedFiles.includes('src/foo.mjs'));
+  assert.ok(aScope.impactedFiles.includes('lib/bar.mjs'));
+  assert.equal(aScope.debugCmd, 'git status -s');
+
+  // 3. artifact-missing
+  const aArt = analyzeGateFailure('阶段产物缺失：workflow/tasks/2026-11-22-demo/plan.md（plan 契约，见 pipeline.json）');
+  assert.equal(aArt.category, 'artifact-missing');
+  assert.equal(aArt.title, '阶段契约产物缺失');
+  assert.deepEqual(aArt.impactedFiles, ['workflow/tasks/2026-11-22-demo/plan.md']);
+  assert.match(aArt.debugCmd, /pipeline-run\.mjs inspect/);
+
+  // 4. policy-drift
+  const aPolicy = analyzeGateFailure('[policy-ci] ❌ 策略面不一致（机制 35 行 != policy.json 36 行）');
+  assert.equal(aPolicy.category, 'policy-drift');
+  assert.equal(aPolicy.title, '策略与机制注册表漂移');
+  assert.ok(aPolicy.impactedFiles.includes('.agents/config/policy.json'));
+  assert.equal(aPolicy.debugCmd, 'node tools/policy-check.mjs');
+
+  // 5. template-lint
+  const aLint = analyzeGateFailure('模板占位符残留：{{topic}}、{{module}}', { docPath: 'workflow/tasks/demo/spec.md' });
+  assert.equal(aLint.category, 'template-lint');
+  assert.equal(aLint.title, '工作流文档规范校验未通过');
+  assert.deepEqual(aLint.impactedFiles, ['workflow/tasks/demo/spec.md']);
+  assert.equal(aLint.debugCmd, 'flow-kit run check-pipeline-state.mjs');
+
+  // 6. test-failure
+  const rawTestOutput = `
+test at tests/rule-budget.test.mjs:43:1
+✖ dotnet profile fresh install passes its own shipped budgets in both languages (8818.5723ms)
+  AssertionError [ERR_ASSERTION]: [zh-CN] rule-budget exit 1
+  常驻面超限：.agents/commands/pipeline-run.md 11179B > 上限 10752B
+`;
+  // budget-exceeded 优先于通用断言
+  const aTestBudget = analyzeGateFailure(rawTestOutput);
+  assert.equal(aTestBudget.category, 'budget-exceeded');
+
+  // 纯测试断言失败
+  const rawPureTest = `
+test at tests/unit-calc.test.mjs:15:2
+✖ sum computes correct result (12.3ms)
+  AssertionError [ERR_ASSERTION]: Expected 4 to equal 5
+`;
+  const aTest = analyzeGateFailure(rawPureTest);
+  assert.equal(aTest.category, 'test-failure');
+  assert.equal(aTest.title, '测试用例断言未通过');
+  assert.deepEqual(aTest.impactedFiles, ['tests/unit-calc.test.mjs']);
+  assert.equal(aTest.debugCmd, 'node --test tests/unit-calc.test.mjs');
+
+  // 7. unknown
+  const aUnknown = analyzeGateFailure('Some unexpected crash code: 137');
+  assert.equal(aUnknown.category, 'unknown');
+  assert.equal(aUnknown.title, '门禁检查未通过');
+});
+
+test('inspectArtifact and renderDashboard: surfaces Smart Fix attribution', () => {
+  const root = fixture();
+  const ctx = { root, gitPrefix: ['git'] };
+
+  const analysis = {
+    category: 'budget-exceeded',
+    title: '常驻面体积超限',
+    summary: '.agents/commands/pipeline-run.md 11179B > 上限 10752B',
+    suggestedAction: '精简文档文字至上限内',
+    impactedFiles: ['.agents/commands/pipeline-run.md'],
+    debugCmd: 'node --test tests/rule-budget.test.mjs',
+  };
+
+  const run = {
+    runId: '20261122-smart-fix-run',
+    stage: 'fix',
+    stopType: 'work-order',
+    workOrder: {
+      id: 2,
+      kind: 'fix',
+      title: '修复环 1/3：verify 未过',
+      goal: '按失败输出修复后回跑',
+      instructions: [
+        '0. [智能归因]: 常驻面体积超限 - 精简文档文字至上限内',
+        '   [定向调试]: node --test tests/rule-budget.test.mjs',
+        '1. 读下方输出修复',
+      ],
+      context: {
+        docPath: 'workflow/tasks/demo/plan.md',
+        relatedDocs: ['.agents/commands/pipeline-run.md'],
+      },
+      fixAnalysis: analysis,
+    },
+    gateFail: {
+      stage: 'verify',
+      problems: ['常驻面超限：.agents/commands/pipeline-run.md 11179B > 上限 10752B'],
+      analysis,
+    },
+  };
+
+  // 1. inspect problems 包含智能归因与警示块
+  const art = inspectArtifact(ctx, run, 'problems');
+  assert.equal(art.ok, true);
+  assert.match(art.content, /> \[!WARNING\] \*\*智能归因诊断\*\*: 常驻面体积超限/);
+  assert.match(art.content, /> - \*\*核心原因\*\*: \.agents\/commands\/pipeline-run\.md 11179B > 上限 10752B/);
+  assert.match(art.content, /> - \*\*涉及文件\*\*: `\.agents\/commands\/pipeline-run\.md`/);
+  assert.match(art.content, /> - \*\*推荐调试\*\*: `node --test tests\/rule-budget\.test\.mjs`/);
+
+  // 2. renderDashboard 展示归因与定向调试命令
+  const dashLines = renderDashboard(ctx, run, { noColor: true });
+  const dashText = dashLines.join('\n');
+  assert.match(dashText, /💡 智能归因: 常驻面体积超限/);
+  assert.match(dashText, /🔧 定向调试: node --test tests\/rule-budget\.test\.mjs/);
+
+  // 3. gate-fail stopType 同样展示归因
+  const failRun = {
+    ...run,
+    stopType: 'gate-fail',
+    workOrder: null,
+  };
+  const failDash = renderDashboard(ctx, failRun, { noColor: true }).join('\n');
+  assert.match(failDash, /💡 归因: 常驻面体积超限 \(budget-exceeded\)/);
+  assert.match(failDash, /🔧 建议调试: node --test tests\/rule-budget\.test\.mjs/);
 });
