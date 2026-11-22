@@ -9,6 +9,9 @@ import {
   runCard,
   activeRunsCount,
   safeRunPath,
+  checkCsrf,
+  isValidRunId,
+  isValidGateName,
 } from '../templates/engine/.agents/scripts/workflow-board-server.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -170,4 +173,83 @@ test('Web 看板 index.html 阶段图、产物流与呼吸徽标静态结构检�
   assert.ok(html.includes('function loadRunOverview('), '应定义 loadRunOverview');
   assert.ok(html.includes('function loadRunArtifacts('), '应定义 loadRunArtifacts');
   assert.ok(html.includes('data.activeRuns'), 'refreshBoard 中应处理 data.activeRuns');
+});
+
+test('checkCsrf Origin 与 Host 校验规则', () => {
+  const port = 8933;
+  // 无 origin / 无 referer（同源脚本、终端 curl 或非浏览器调用）-> 放行
+  assert.equal(checkCsrf({ headers: {} }, port), true);
+
+  // 本地 127.0.0.1 或 localhost 且端口匹配 -> 放行
+  assert.equal(checkCsrf({ headers: { origin: 'http://127.0.0.1:8933' } }, port), true);
+  assert.equal(checkCsrf({ headers: { origin: 'http://localhost:8933' } }, port), true);
+
+  // VS Code / Cursor / Trae webview scheme -> 放行
+  assert.equal(checkCsrf({ headers: { origin: 'vscode-webview://webview-panel' } }, port), true);
+
+  // 跨端口或恶意域名 -> 拦截
+  assert.equal(checkCsrf({ headers: { origin: 'http://127.0.0.1:9000' } }, port), false);
+  assert.equal(checkCsrf({ headers: { origin: 'http://localhost:9000' } }, port), false);
+  assert.equal(checkCsrf({ headers: { origin: 'http://evil.com' } }, port), false);
+  assert.equal(checkCsrf({ headers: { origin: 'http://attacker.com:8933' } }, port), false);
+
+  // Referer 兜底校验
+  assert.equal(checkCsrf({ headers: { referer: 'http://127.0.0.1:8933/board' } }, port), true);
+  assert.equal(checkCsrf({ headers: { referer: 'http://evil.com/phish' } }, port), false);
+});
+
+test('isValidRunId 与 isValidGateName 安全白名单校验', () => {
+  // runId
+  assert.equal(isValidRunId('2026-11-21-feat-test'), true);
+  assert.equal(isValidRunId('run-123_abc'), true);
+  assert.equal(isValidRunId(''), false);
+  assert.equal(isValidRunId('../secret'), false);
+  assert.equal(isValidRunId('a'.repeat(80)), false);
+  assert.equal(isValidRunId('test;rm -rf'), false);
+
+  // gate
+  assert.equal(isValidGateName('check-loop'), true);
+  assert.equal(isValidGateName('verify'), true);
+  assert.equal(isValidGateName('verify-fast'), true);
+  assert.equal(isValidGateName('check-local-gates'), true);
+  assert.equal(isValidGateName('check-links'), true);
+  assert.equal(isValidGateName(''), false);
+  assert.equal(isValidGateName('rm-rf'), false);
+  assert.equal(isValidGateName('curl'), false);
+  assert.equal(isValidGateName('../../gate'), false);
+});
+
+test('Web 看板 index.html 交互动作面板与控制函数静态结构检查', () => {
+  const html = fs.readFileSync(INDEX_HTML, 'utf8');
+
+  // 1. 样式类
+  assert.ok(html.includes('.act-panel'), '应包含 .act-panel 样式');
+  assert.ok(html.includes('.act-title'), '应包含 .act-title 样式');
+  assert.ok(html.includes('.act-btn'), '应包含 .act-btn 样式');
+  assert.ok(html.includes('.act-input'), '应包含 .act-input 样式');
+  assert.ok(html.includes('.act-log'), '应包含 .act-log 样式');
+
+  // 2. JS 核心控制函数
+  assert.ok(html.includes('function renderActionPanelHtml('), '应定义 renderActionPanelHtml');
+  assert.ok(html.includes('async function executeNext('), '应定义 executeNext');
+  assert.ok(html.includes('async function executeRerunGate('), '应定义 executeRerunGate');
+  assert.ok(html.includes('async function executeAbort('), '应定义 executeAbort');
+  assert.ok(html.includes('async function fillGitChangedFiles('), '应定义 fillGitChangedFiles');
+  assert.ok(html.includes('function copyCmd('), '应定义 copyCmd');
+});
+
+test('VS Code tasks.json 模板完整性与任务配置结构检查', () => {
+  const TASKS_PATH = path.join(REPO, 'templates', 'engine', '.vscode', 'tasks.json');
+  assert.ok(fs.existsSync(TASKS_PATH), 'templates/engine/.vscode/tasks.json 必须存在');
+
+  const content = JSON.parse(fs.readFileSync(TASKS_PATH, 'utf8'));
+  assert.equal(content.version, '2.0.0');
+  assert.ok(Array.isArray(content.tasks), 'tasks 必须是数组');
+
+  const labels = content.tasks.map((t) => t.label);
+  assert.ok(labels.some((l) => l.includes('打开流程看板')), '应包含 打开流程看板 任务');
+  assert.ok(labels.some((l) => l.includes('流水线推进下一步')), '应包含 流水线推进下一步 任务');
+  assert.ok(labels.some((l) => l.includes('运行本地全量门禁')), '应包含 运行本地全量门禁 任务');
+  assert.ok(labels.some((l) => l.includes('流水线状态与排查')), '应包含 流水线状态与排查 任务');
+  assert.ok(labels.some((l) => l.includes('检查闭环健康度')), '应包含 检查闭环健康度 任务');
 });

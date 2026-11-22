@@ -102,6 +102,24 @@
   .art-tag b { color: var(--text); font-weight: 600; }
   .badge-pulse { display: inline-block; width: 6px; height: 6px; border-radius: 50%; background: var(--ok); margin-left: 6px; vertical-align: middle; animation: breath 2s infinite ease-in-out; }
 
+  /* 交互控制动作面板（Action Panel） */
+  .act-panel { margin: 12px 0 16px; padding: 12px 14px; background: var(--card); border: 1px solid var(--border-strong); border-radius: 4px; box-shadow: var(--shadow-1); }
+  .act-title { display: flex; align-items: center; justify-content: space-between; font: 600 12px/1 var(--mono); color: var(--text); margin-bottom: 8px; letter-spacing: .05em; }
+  .act-desc { font-size: 12px; color: var(--muted); margin-bottom: 10px; line-height: 1.5; }
+  .act-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+  .act-btn { display: inline-flex; align-items: center; gap: 5px; font: 600 11px/1 var(--mono); padding: 5px 11px; border-radius: 3px; border: 1px solid var(--border-strong); background: var(--surface); color: var(--text); cursor: pointer; transition: all .15s ease-out; }
+  .act-btn:hover:not(:disabled) { background: var(--card-hover); border-color: var(--text); }
+  .act-btn:disabled { opacity: .5; cursor: not-allowed; }
+  .act-btn.primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .act-btn.primary:hover:not(:disabled) { opacity: .9; }
+  .act-btn.danger { color: var(--bad); border-color: rgba(160,75,53,.4); background: rgba(160,75,53,.06); }
+  .act-btn.danger:hover:not(:disabled) { background: rgba(160,75,53,.15); border-color: var(--bad); }
+  .act-btn.warn { color: var(--warn); border-color: rgba(184,134,11,.4); background: rgba(184,134,11,.06); }
+  .act-btn.warn:hover:not(:disabled) { background: rgba(184,134,11,.15); border-color: var(--warn); }
+  .act-input { flex: 1; min-width: 160px; font: 12px/1.4 var(--mono); padding: 4px 8px; border: 1px solid var(--border); border-radius: 3px; background: var(--bg); color: var(--text); }
+  .act-input:focus { outline: none; border-color: var(--text); }
+  .act-log { margin-top: 10px; padding: 8px 10px; border-radius: 3px; background: var(--bg); border: 1px solid var(--border); font: 11.5px/1.5 var(--mono); color: var(--muted); max-height: 140px; overflow-y: auto; white-space: pre-wrap; word-break: break-all; }
+
   /* 引擎视图（2026-10-22 board-engine-views）：门禁成本趋势 + 判定流水 */
   #engine-view { height: calc(100vh - 58px); overflow-y: auto; padding: 14px 22px 40px; display: flex; flex-direction: column; gap: 18px; }
   .eng-sec { background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 14px 16px 16px; }
@@ -702,6 +720,185 @@ function runEventHtml(run) {
   }).join('')}</div>`;
 }
 
+// ================= 流水线动作与快捷控制（2026-11-22 IDE 视窗化与快捷交互） =================
+function copyCmd(cmd) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(cmd)
+      .then(() => toast('已复制命令到剪贴板'))
+      .catch(() => toast(`命令: ${cmd}`));
+  } else {
+    toast(`命令: ${cmd}`);
+  }
+}
+
+async function fillGitChangedFiles() {
+  const input = document.getElementById('act-files-input');
+  if (!input) return;
+  toast('正在检测 Git 改动…');
+  try {
+    const resp = await fetch('/api/git/status');
+    const data = await resp.json();
+    if (data.ok && Array.isArray(data.files)) {
+      if (data.files.length) {
+        input.value = data.files.join(',');
+        toast(`已填入 ${data.files.length} 个改动文件`);
+      } else {
+        toast('工作区干净，无改动文件');
+      }
+    } else {
+      toast('无法获取 Git 改动：' + (data.error || '未知错误'));
+    }
+  } catch (e) {
+    toast('Git 状态检测失败：' + e.message);
+  }
+}
+
+async function executeNext(runId, opts = {}) {
+  const logEl = document.getElementById('act-log-box');
+  if (logEl) { logEl.style.display = 'block'; logEl.textContent = '正在推进流水线…\n'; }
+  toast('正在执行流水线推进…');
+  try {
+    const resp = await fetch('/api/pipeline/next', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ runId, ...opts }),
+    });
+    const res = await resp.json();
+    if (!resp.ok) throw new Error(res.error || `HTTP ${resp.status}`);
+    if (logEl) {
+      logEl.textContent += `执行结果: ${res.ok ? '成功 (OK)' : '未通过 (Exit ' + res.exit + ')'}\n` +
+        (res.stdout ? res.stdout + '\n' : '') +
+        (res.stderr ? res.stderr + '\n' : '');
+    }
+    toast(res.ok ? '流水线推进已就绪' : `推进遇到门禁/需人工处理 (退出码: ${res.exit})`);
+    setTimeout(() => { if (RUN_CURRENT?.runId === runId) openRun(runId); }, 1500);
+  } catch (err) {
+    if (logEl) logEl.textContent += `执行异常: ${err.message}\n`;
+    toast(`推进失败: ${err.message}`);
+  }
+}
+
+async function executeNextWithFiles(runId, opts = {}) {
+  const input = document.getElementById('act-files-input');
+  const files = input ? input.value.trim() : '';
+  const payload = { ...opts };
+  if (files) payload.files = files;
+  await executeNext(runId, payload);
+}
+
+async function executeRerunGate(gate) {
+  const logEl = document.getElementById('act-log-box');
+  if (logEl) { logEl.style.display = 'block'; logEl.textContent = `正在运行门禁 ${gate}…\n`; }
+  toast(`正在运行门禁 ${gate}…`);
+  try {
+    const resp = await fetch('/api/pipeline/gate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ gate }),
+    });
+    const res = await resp.json();
+    if (!resp.ok) throw new Error(res.error || `HTTP ${resp.status}`);
+    if (logEl) {
+      logEl.textContent += `门禁 ${gate} 结束 (退出码: ${res.exit})。\n` +
+        (res.stdout ? res.stdout + '\n' : '') +
+        (res.stderr ? res.stderr + '\n' : '');
+    }
+    toast(res.ok ? `门禁 ${gate} 通过` : `门禁 ${gate} 失败 (exit ${res.exit})`);
+  } catch (err) {
+    if (logEl) logEl.textContent += `执行异常: ${err.message}\n`;
+    toast(`门禁运行失败: ${err.message}`);
+  }
+}
+
+async function executeAbort(runId) {
+  if (!confirm(`确定要终止流水线 ${runId} 吗？`)) return;
+  toast('正在终止流水线…');
+  try {
+    const resp = await fetch('/api/pipeline/abort', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ runId, delegated: '通过看板手动终止' }),
+    });
+    const res = await resp.json();
+    if (!resp.ok) throw new Error(res.error || `HTTP ${resp.status}`);
+    toast('流水线已终止');
+    setTimeout(() => { openRun(runId); }, 1000);
+  } catch (err) {
+    toast(`终止失败: ${err.message}`);
+  }
+}
+
+function renderActionPanelHtml(r) {
+  if (!r) return '';
+  const stop = r.stopType;
+  const isFinished = ['done', 'aborted'].includes(stop);
+  let title = '流水线控制与快捷交互';
+  let desc = '可通过看板快捷发起推进或诊断，亦可复制 CLI 命令至终端执行。';
+  let actions = '';
+
+  if (stop === 'await-confirm') {
+    title = '⚡ 确认门待确认 (Review & Confirm)';
+    desc = `等待确认文档：<code>${esc(r.awaitConfirm?.doc || '')}</code>。要点：${esc(r.awaitConfirm?.points || '人件门审查')}`;
+    actions =
+      `<button class="act-btn primary" onclick="executeNext('${esc(r.runId)}', { confirm: true })">一键确认并推进</button>` +
+      `<button class="act-btn" onclick="executeNext('${esc(r.runId)}', { confirm: true, step: true })">确认并单步推进 (--step)</button>` +
+      `<button class="act-btn" onclick="copyCmd('flow-kit run pipeline-run.mjs next --delegated &quot;看板确认推进&quot;')">复制推进命令</button>`;
+  } else if (stop === 'work-order') {
+    const w = r.workOrder;
+    title = `📋 工单待执行 (#${w?.id || '—'} · ${esc(w?.kind || '')})`;
+    desc = `${esc(w?.title || '')} · 目标: ${esc(w?.goal || '')}`;
+    actions =
+      `<div style="display:flex;align-items:center;gap:6px;width:100%;margin-bottom:6px">` +
+      `<input id="act-files-input" class="act-input" placeholder="改动文件 (可选，逗号分隔，如 src/foo.mjs,tests/bar.mjs)" />` +
+      `<button class="act-btn" onclick="fillGitChangedFiles()">检测 Git 改动</button>` +
+      `</div>` +
+      `<button class="act-btn primary" onclick="executeNextWithFiles('${esc(r.runId)}')">推进下一步 (Next)</button>` +
+      `<button class="act-btn" onclick="executeNextWithFiles('${esc(r.runId)}', { step: true })">单步推进 (--step)</button>` +
+      `<button class="act-btn" onclick="copyCmd('flow-kit run pipeline-run.mjs next')">复制推进命令</button>`;
+  } else if (stop === 'gate-fail') {
+    const g = r.gateFail?.gate || '';
+    title = `🚨 门禁未通过 (${esc(g)})`;
+    desc = `退出码: <code>${esc(String(r.gateFail?.exit ?? ''))}</code>。${esc(r.gateFail?.hint || '代码已打回，修复后可单门重测或原路推进。')}`;
+    actions =
+      (g ? `<button class="act-btn warn" onclick="executeRerunGate('${esc(g)}')">重跑此门禁 (${esc(g)})</button>` : '') +
+      `<button class="act-btn" onclick="executeRerunGate('check-local-gates')">门禁自检 (check-local-gates)</button>` +
+      `<button class="act-btn primary" onclick="executeNext('${esc(r.runId)}')">修复后原路推进</button>` +
+      `<button class="act-btn" onclick="copyCmd('flow-kit run pipeline-run.mjs next')">复制推进命令</button>`;
+  } else if (stop === 'step') {
+    title = '⏸️ 单步调试暂停 (Step Paused)';
+    desc = `流水线已在阶段转换边界暂停（就绪阶段: <code>${esc(r.stage || '')}</code>）。`;
+    actions =
+      `<button class="act-btn primary" onclick="executeNext('${esc(r.runId)}', { step: true })">单步推进下一步 (--step)</button>` +
+      `<button class="act-btn" onclick="executeNext('${esc(r.runId)}')">连续推进至完成</button>` +
+      `<button class="act-btn" onclick="copyCmd('flow-kit run pipeline-run.mjs next --step')">复制推进命令</button>`;
+  } else if (stop === 'done') {
+    title = '✅ 流水线已完成 (Pipeline Completed)';
+    desc = '该 run 已顺利通过全量验证门禁并收口完成。';
+    actions = `<button class="act-btn" onclick="copyCmd('flow-kit run check-loop.mjs')">运行闭环健康检查</button>`;
+  } else if (stop === 'aborted') {
+    title = '🛑 流水线已终止 (Aborted)';
+    desc = '当前 run 已被人工或系统终止。';
+  } else {
+    title = `🔄 流水线运行中 (${esc(r.stage || '')})`;
+    actions =
+      `<button class="act-btn primary" onclick="executeNext('${esc(r.runId)}')">推进 (Next)</button>` +
+      `<button class="act-btn" onclick="executeNext('${esc(r.runId)}', { step: true })">单步推进 (--step)</button>`;
+  }
+
+  const abortBtn = !isFinished
+    ? `<button class="act-btn danger" style="margin-left:auto" onclick="executeAbort('${esc(r.runId)}')">终止 Run</button>`
+    : '';
+
+  return (
+    `<div class="act-panel">` +
+    `<div class="act-title"><span>${title}</span>${abortBtn}</div>` +
+    `<div class="act-desc">${desc}</div>` +
+    (actions ? `<div class="act-bar">${actions}</div>` : '') +
+    `<div id="act-log-box" class="act-log" style="display:none"></div>` +
+    `</div>`
+  );
+}
+
 function loadRunOverview() {
   if (!RUN_CURRENT) return;
   const r = RUN_CURRENT;
@@ -731,6 +928,7 @@ function loadRunOverview() {
     renderStageFlowHtml(r) +
     routeBox +
     downgradeBox +
+    renderActionPanelHtml(r) +
     (r.triage ? `<p><b>定级：</b>${esc(r.triage.kind || '')} · ${esc(r.triage.level || '')} · ${esc(r.triage.module || '')}</p>` : '') +
     details +
     `<h3>产物概览</h3>` +
@@ -754,6 +952,7 @@ function loadRunWorkOrder() {
       `<div class="md"><h2>工单 #${w.id} · ${esc(w.kind)}</h2>` +
       `<p><b>${esc(w.title || '')}</b></p>` +
       budgetChip +
+      renderActionPanelHtml(RUN_CURRENT) +
       `<p>目标：${esc(w.goal || '')}</p>` +
       (w.instructions?.length ? `<ul>${w.instructions.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : '') +
       (w.context?.kbHits?.length ? `<p>查重命中：</p><ul>${w.context.kbHits.slice(0, 6).map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : '') +
@@ -768,6 +967,7 @@ function loadRunWorkOrder() {
   if (c) {
     $('#d-body').innerHTML =
       `<div class="md"><h2>等待确认</h2>` +
+      renderActionPanelHtml(RUN_CURRENT) +
       `<p>文档：<code>${esc(c.doc || '')}</code></p>` +
       `<p>确认门要点：${esc(c.points || '')}</p>` +
       `<p>${c.ledger ? '将经 confirm-doc 代录入台账（对话内明确确认后逐份代录，台账记原话）。' : '对话级确认，记 run 事件不进台账。'}</p>` +
@@ -778,20 +978,30 @@ function loadRunWorkOrder() {
   if (g) {
     $('#d-body').innerHTML =
       `<div class="md"><h2>门禁拒绝 (${esc(g.gate || '')})</h2>` +
+      renderActionPanelHtml(RUN_CURRENT) +
       `<p>退出码：<code>${esc(String(g.exit ?? ''))}</code></p>` +
       (g.hint ? `<p>排查提示：${esc(g.hint)}</p>` : '') +
       `</div>`;
     return;
   }
   if (RUN_CURRENT.stopType === 'step') {
-    $('#d-body').innerHTML = `<div class="md"><h2>单步调试暂停</h2><p>当前流水线已在阶段转换边界暂停（就绪阶段: <code>${esc(RUN_CURRENT.stage || '')}</code>），等待人工复核或单步推进。</p><p>继续推进命令：<code>flow-kit run pipeline-run.mjs next [--step]</code></p></div>`;
+    $('#d-body').innerHTML =
+      `<div class="md"><h2>单步调试暂停</h2>` +
+      renderActionPanelHtml(RUN_CURRENT) +
+      `<p>当前流水线已在阶段转换边界暂停（就绪阶段: <code>${esc(RUN_CURRENT.stage || '')}</code>），等待人工复核或单步推进。</p><p>继续推进命令：<code>flow-kit run pipeline-run.mjs next [--step]</code></p></div>`;
     return;
   }
   if (RUN_CURRENT.stopType === 'done') {
-    $('#d-body').innerHTML = `<div class="md"><h2>流水线已完成</h2><p>当前 run 已通过全部阶段和门禁，顺利归档收口。</p></div>`;
+    $('#d-body').innerHTML =
+      `<div class="md"><h2>流水线已完成</h2>` +
+      renderActionPanelHtml(RUN_CURRENT) +
+      `<p>当前 run 已通过全部阶段和门禁，顺利归档收口。</p></div>`;
     return;
   }
-  $('#d-body').innerHTML = '<div class="none">当前无工单（已停机在非工单点或已完成）</div>';
+  $('#d-body').innerHTML =
+    `<div class="md">` +
+    renderActionPanelHtml(RUN_CURRENT) +
+    '<div class="none">当前无工单（已停机在非工单点或已完成）</div></div>';
 }
 
 function loadRunArtifacts() {
@@ -830,7 +1040,10 @@ function renderRunDrawer() {
     ` <span class="chip">${esc(RUN_CURRENT.stopType || '')}</span>` +
     ` <span class="chip">${esc(RUN_CURRENT.stage || '')}</span>`;
   $('#d-title').textContent = RUN_CURRENT.requirement || RUN_CURRENT.runId;
-  $('#d-related').innerHTML = `<a class="runid">${esc(RUN_CURRENT.runId)}</a>`;
+  const isFinished = ['done', 'aborted'].includes(RUN_CURRENT.stopType);
+  $('#d-related').innerHTML =
+    `<a class="runid">${esc(RUN_CURRENT.runId)}</a>` +
+    (!isFinished ? ` <button class="act-btn danger" style="padding:2px 7px;font-size:10px" onclick="executeAbort('${esc(RUN_CURRENT.runId)}')">终止</button>` : '');
   // run 抽屉：显示 run 相关 tab，隐藏文档/历史 tab
   document.querySelectorAll('#d-tabs button').forEach((b) => {
     const isRunTab = b.classList.contains('run-tab');

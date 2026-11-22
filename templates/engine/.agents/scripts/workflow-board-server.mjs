@@ -542,6 +542,51 @@ function loopBlocksSnapshot() {
   return loopCache.v;
 }
 
+// ---- 本地安全控制辅助（2026-11-22 IDE 控制回路）----
+// CSRF 防护：仅认本机环回与 VS Code / IDE 内置 webview origin / referer
+export function checkCsrf(req, port = PORT) {
+  const origin = req.headers?.origin;
+  const referer = req.headers?.referer;
+  const allowed = [
+    `http://127.0.0.1:${port}`,
+    `http://localhost:${port}`,
+    'vscode-webview://',
+  ];
+  if (origin) {
+    return allowed.some((prefix) => origin === prefix || origin.startsWith(prefix));
+  }
+  if (referer) {
+    return allowed.some((prefix) => referer === prefix || referer.startsWith(prefix));
+  }
+  return true;
+}
+
+// runId 格式校验防路径穿越与非法注入（仅字母、数字、连字符、下划线，1~64 字符）
+export function isValidRunId(runId) {
+  return typeof runId === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(runId);
+}
+
+// 门禁脚本白名单校验（仅限标准 check-* / verify* 脚本名）
+export function isValidGateName(gate) {
+  return typeof gate === 'string' && /^(check-[a-z0-9-]+|verify(-[a-z0-9-]+)?)$/.test(gate);
+}
+
+async function readReqJson(req, limit = 65536) {
+  const chunks = [];
+  let total = 0;
+  for await (const c of req) {
+    total += c.length;
+    if (total > limit) {
+      const err = new Error(`body 超过 ${limit} 字节`);
+      err.code = 'ERR_BODY_TOO_LARGE';
+      throw err;
+    }
+    chunks.push(c);
+  }
+  const raw = Buffer.concat(chunks).toString('utf8').trim();
+  return raw ? JSON.parse(raw) : {};
+}
+
 const server = http.createServer(async (req, res) => {
   try {
     // Host 校验（DNS rebinding 缓解，2026-09-27 board-kb-p1）：本地只读服务只认本机 Host
@@ -590,6 +635,138 @@ const server = http.createServer(async (req, res) => {
         console.error(`读 run 失败（${rel}）:`, e.message); // 权限/占用等如实 500 留痕，不并成 404
         return sendJson(res, 500, { error: `读 run 失败：${e.message}` });
       }
+    }
+
+    // 流水线控制回路（2026-11-22 IDE 视窗化与快捷交互）：next 推进 / abort 中止 / gate 重测 / git status 改动检测
+    if (url.pathname === '/api/pipeline/next') {
+      if (req.method !== 'POST') return sendJson(res, 405, { error: '仅接受 POST' });
+      if (!checkCsrf(req, PORT)) return sendJson(res, 403, { error: 'Origin 不受信任（CSRF 防御拦截）' });
+      let body;
+      try {
+        body = await readReqJson(req);
+      } catch (e) {
+        return sendJson(res, 400, { error: `请求体解析失败: ${e.message}` });
+      }
+      const args = ['next'];
+      if (body.runId) {
+        if (!isValidRunId(body.runId)) return sendJson(res, 400, { error: '非法的 runId 格式' });
+        args.push('--run', body.runId);
+      }
+      if (body.delegated) args.push('--delegated', String(body.delegated));
+      if (body.files) args.push('--files', String(body.files));
+      if (body.step) args.push('--step');
+      if (body.done) args.push('--done');
+      if (body.gate && isValidGateName(body.gate)) args.push('--gate', body.gate);
+
+      const script = path.join(SCRIPTS_DIR, 'pipeline-run.mjs');
+      if (!fs.existsSync(script)) return sendJson(res, 500, { error: `执行器脚本不存在: ${script}` });
+
+      execFile(process.execPath, [script, ...args], {
+        cwd: ROOT,
+        env: { ...process.env, FLOW_KIT_PROJECT_ROOT: ROOT, FLOW_KIT_RUNTIME_SCRIPTS: SCRIPTS_DIR },
+        encoding: 'utf8',
+        maxBuffer: 10 * 1024 * 1024,
+        windowsHide: true,
+      }, (err, stdout, stderr) => {
+        broadcast('changed');
+        return sendJson(res, 200, {
+          ok: !err,
+          exit: err ? (typeof err.code === 'number' ? err.code : 1) : 0,
+          stdout: stdout || '',
+          stderr: stderr || '',
+        });
+      });
+      return;
+    }
+
+    if (url.pathname === '/api/pipeline/abort') {
+      if (req.method !== 'POST') return sendJson(res, 405, { error: '仅接受 POST' });
+      if (!checkCsrf(req, PORT)) return sendJson(res, 403, { error: 'Origin 不受信任（CSRF 防御拦截）' });
+      let body;
+      try {
+        body = await readReqJson(req);
+      } catch (e) {
+        return sendJson(res, 400, { error: `请求体解析失败: ${e.message}` });
+      }
+      if (!body.runId || !isValidRunId(body.runId)) {
+        return sendJson(res, 400, { error: '缺少或非法的 runId' });
+      }
+      const args = ['abort', '--run', body.runId];
+      if (body.to && ['superseded', 'cancelled'].includes(body.to)) {
+        args.push('--to', body.to);
+      }
+      if (body.delegated) args.push('--delegated', String(body.delegated));
+
+      const script = path.join(SCRIPTS_DIR, 'pipeline-run.mjs');
+      if (!fs.existsSync(script)) return sendJson(res, 500, { error: `执行器脚本不存在: ${script}` });
+
+      execFile(process.execPath, [script, ...args], {
+        cwd: ROOT,
+        env: { ...process.env, FLOW_KIT_PROJECT_ROOT: ROOT, FLOW_KIT_RUNTIME_SCRIPTS: SCRIPTS_DIR },
+        encoding: 'utf8',
+        maxBuffer: 10 * 1024 * 1024,
+        windowsHide: true,
+      }, (err, stdout, stderr) => {
+        broadcast('changed');
+        return sendJson(res, 200, {
+          ok: !err,
+          exit: err ? (typeof err.code === 'number' ? err.code : 1) : 0,
+          stdout: stdout || '',
+          stderr: stderr || '',
+        });
+      });
+      return;
+    }
+
+    if (url.pathname === '/api/pipeline/gate') {
+      if (req.method !== 'POST') return sendJson(res, 405, { error: '仅接受 POST' });
+      if (!checkCsrf(req, PORT)) return sendJson(res, 403, { error: 'Origin 不受信任（CSRF 防御拦截）' });
+      let body;
+      try {
+        body = await readReqJson(req);
+      } catch (e) {
+        return sendJson(res, 400, { error: `请求体解析失败: ${e.message}` });
+      }
+      const gate = String(body.gate || '').trim();
+      if (!isValidGateName(gate)) {
+        return sendJson(res, 400, { error: `非法的门禁名称: ${gate}` });
+      }
+      const script = path.join(SCRIPTS_DIR, `${gate}.mjs`);
+      if (!fs.existsSync(script)) {
+        return sendJson(res, 404, { error: `门禁脚本不存在: ${gate}.mjs` });
+      }
+
+      execFile(process.execPath, [script], {
+        cwd: ROOT,
+        env: { ...process.env, FLOW_KIT_PROJECT_ROOT: ROOT, FLOW_KIT_RUNTIME_SCRIPTS: SCRIPTS_DIR },
+        encoding: 'utf8',
+        maxBuffer: 10 * 1024 * 1024,
+        windowsHide: true,
+      }, (err, stdout, stderr) => {
+        return sendJson(res, 200, {
+          ok: !err,
+          gate,
+          exit: err ? (typeof err.code === 'number' ? err.code : 1) : 0,
+          stdout: stdout || '',
+          stderr: stderr || '',
+        });
+      });
+      return;
+    }
+
+    if (url.pathname === '/api/git/status') {
+      execFile('git', ['status', '--porcelain', '-uall'], { cwd: ROOT, encoding: 'utf8', windowsHide: true }, (err, stdout, stderr) => {
+        if (err) return sendJson(res, 500, { error: `git status 执行失败: ${stderr || err.message}` });
+        const files = [];
+        for (const line of stdout.split(/\r?\n/)) {
+          if (!line.trim()) continue;
+          const parts = line.slice(3).trim();
+          const target = parts.includes('->') ? parts.split('->').pop().trim() : parts;
+          if (target) files.push(target.replace(/^"|"$/g, ''));
+        }
+        return sendJson(res, 200, { ok: true, files });
+      });
+      return;
     }
 
     // 开发全景：/api/tour 返回模型；/tour 返回单页模板（模板内 __TOUR_FILE__ 指向当前文档）

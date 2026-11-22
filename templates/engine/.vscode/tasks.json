@@ -1,0 +1,48 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Flow: 打开流程看板 (Open Visual Board)",
+      "type": "shell",
+      "command": "flow-kit run workflow-board-server.mjs",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "Flow: 流水线推进下一步 (Pipeline Next)",
+      "type": "shell",
+      "command": "flow-kit run pipeline-run.mjs next",
+      "problemMatcher": [],
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "Flow: 运行本地全量门禁 (Run Verify Gates)",
+      "type": "shell",
+      "command": "flow-kit run verify.mjs",
+      "problemMatcher": [],
+      "group": {
+        "kind": "test",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "Flow: 流水线状态与排查 (Pipeline Status)",
+      "type": "shell",
+      "command": "flow-kit run pipeline-run.mjs status",
+      "problemMatcher": []
+    },
+    {
+      "label": "Flow: 检查闭环健康度 (Check Loop)",
+      "type": "shell",
+      "command": "flow-kit run check-loop.mjs",
+      "problemMatcher": []
+    }
+  ]
+}
