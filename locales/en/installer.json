@@ -325,5 +325,14 @@
   "doctor.policyRemoteOk": "Remote policy baseline in sync: {{url}} ({{ref}})",
   "doctor.policyRemoteDrift": "Detected {{count}} drifts from remote policy baseline: {{url}}",
   "doctor.policyRemoteHint": "Run flow-kit policy check to view diff, or flow-kit policy sync to align",
-  "doctor.policyRemoteError": "Remote policy baseline unreachable or validation failed: {{error}}"
+  "doctor.policyRemoteError": "Remote policy baseline unreachable or validation failed: {{error}}",
+  "bundle.packed": "Offline bundle packed: {{file}} ({{count}} files, {{size}}, SHA-256: {{digest}})",
+  "bundle.inspected": "Offline bundle overview: {{file}} (kit v{{version}}, created at {{createdAt}}, {{count}} files, {{size}})",
+  "bundle.verified": "Offline bundle integrity verified: {{file}} ({{count}} files intact, digest: {{digest}})",
+  "bundle.unpacked": "Offline bundle unpacked successfully (extracted {{count}} files into {{dir}})",
+  "doctor.bundleOk": "Offline distribution bundle provenance verified: {{file}} (digest: {{digest}}, v{{version}})",
+  "error.bundleUsage": "Usage: flow-kit bundle <pack|inspect|verify|unpack> [options]",
+  "error.bundleNotFound": "Bundle does not exist or is inaccessible: {{path}}",
+  "error.bundleInvalid": "Invalid offline bundle: {{detail}}",
+  "error.bundleCorrupted": "Bundle integrity verification failed: {{detail}}"
 }

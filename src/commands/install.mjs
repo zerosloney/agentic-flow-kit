@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { flag } from '../cli/args.mjs';
 import { makeT } from '../i18n.mjs';
-import { buildPlan, CI_MODES, ciModeFor, ciTemplateRels } from '../install/plan.mjs';
+import { buildPlan, CI_MODES, ciModeFor, ciTemplateRels, TEMPLATES, LOCALES } from '../install/plan.mjs';
+import { prepareBundleForInstall } from './bundle.mjs';
 import { forgeFromRemote, originUrl } from '../install/forge.mjs';
 import { parseProfileArgs, STACKS } from '../install/profiles.mjs';
 import { applyPlan, readPlanEntry, summaryLine } from '../install/apply.mjs';
@@ -325,7 +326,13 @@ export function runInstall(options) {
 }
 
 function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categories, commandLabel, stackOverride, stacksOverride = null, onLog = null, detectedHosts = [], migration = null, quiet = false }) {
-  const target = resolveTarget(args);
+  const bundleArg = args.bundle || null;
+  const bundleHandle = bundleArg ? prepareBundleForInstall(bundleArg, t) : null;
+  const templatesRoot = bundleHandle?.templatesRoot || TEMPLATES;
+  const localesRoot = bundleHandle?.localesRoot || LOCALES;
+
+  try {
+    const target = resolveTarget(args);
   const dryRun = flag(args, 'dry-run');
   const force = flag(args, 'force');
   const asJson = flag(args, 'json');
@@ -450,6 +457,8 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
     managedPermissions: previous?.managedPermissions || {},
     devcontainer: devcontainerEnabled,
     ci: ciChoice,
+    templatesRoot,
+    localesRoot,
   });
   let done = 0;
   const total = plan.entries.length;
@@ -483,6 +492,8 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
       managedPermissions: previous?.managedPermissions || {},
       devcontainer: devcontainerEnabled,
       ci: ciChoice,
+      templatesRoot,
+      localesRoot,
     });
     const rebuildVars = buildVars({
       target,
@@ -630,6 +641,11 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
       baselineVersion: baselineEnabled ? KIT_VERSION : null,
       files: result.files,
     };
+    if (bundleHandle?.bundleInfo) {
+      next.bundle = bundleHandle.bundleInfo;
+    } else if (previous?.bundle) {
+      next.bundle = previous.bundle;
+    }
     // 新安装记下择一结果，upgrade 重放。lean 且未显式选择不写字段。
     if (ciChoice) next.ci = ciChoice;
     else delete next.ci;
@@ -735,5 +751,8 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
       gitConfigured,
     }, null, 2));
   }
-  return flag(args, 'strict') && result.stats.conflict > 0 ? 1 : 0;
+    return flag(args, 'strict') && result.stats.conflict > 0 ? 1 : 0;
+  } finally {
+    bundleHandle?.cleanup();
+  }
 }

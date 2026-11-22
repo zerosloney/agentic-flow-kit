@@ -76,14 +76,14 @@ export function listFiles(dir) {
   return out;
 }
 
-function localeOverride(lang, targetRel) {
-  const p = path.join(LOCALES, lang, 'overrides', targetRel);
+function localeOverride(lang, targetRel, localesRoot = LOCALES) {
+  const p = path.join(localesRoot, lang, 'overrides', targetRel);
   return fs.existsSync(p) ? p : null;
 }
 
-function applyLocaleOverrides(lang, entries) {
+function applyLocaleOverrides(lang, entries, localesRoot = LOCALES) {
   for (const entry of entries) {
-    const override = localeOverride(lang, entry.targetRel);
+    const override = localeOverride(lang, entry.targetRel, localesRoot);
     if (!override) continue;
     // 保留模板来源：explain 需要同时报告静态模板与语言覆盖。
     if (entry.srcAbs && !entry.templateAbs) entry.templateAbs = entry.srcAbs;
@@ -138,14 +138,14 @@ function buildSkillsList(skills, t) {
     .join('\n');
 }
 
-function addGeneratedSkillSurfaces({ plan, hosts, skillEntries, t }) {
+function addGeneratedSkillSurfaces({ plan, hosts, skillEntries, t, hostMetaDir = HOST_META }) {
   const skills = skillEntries.map(readSkillMeta).sort((a, b) => a.name.localeCompare(b.name));
 
   for (const host of hosts) {
     const h = HOSTS[host];
     if (!h?.skills) continue;
     // 外部宿主可自带技能入口模板（skillMeta）；内置宿主用包内 host-meta。
-    const metaDir = h.skillMeta || path.join(HOST_META, host);
+    const metaDir = h.skillMeta || path.join(hostMetaDir, host);
 
     if (h.skills.mode === 'native') {
       const template = readTemplate(path.join(metaDir, 'skill-pointer.md'), [
@@ -183,7 +183,7 @@ function addGeneratedSkillSurfaces({ plan, hosts, skillEntries, t }) {
       : `${h.dir}/SKILLS.md`;
     const templateAbs = hasCommands
       ? path.join(metaDir, 'skill-index.md')
-      : path.join(HOST_META, 'SKILLS.md');
+      : path.join(hostMetaDir, 'SKILLS.md');
     const template = readTemplate(templateAbs, [
       '---',
       'description: {{indexDescription}}',
@@ -210,9 +210,9 @@ function addGeneratedSkillSurfaces({ plan, hosts, skillEntries, t }) {
 // 宿主 Hook / 权限接线的中性规格来自引擎模板的 gates.json（语言覆盖优先）。
 // 编译器按 registry 的 hooks.events / permissions 生成宿主 schema，并以静态宿主模板为底稿；
 // 没有相应能力的宿主继续使用静态模板，行为不变。
-function readGatesText(lang) {
-  const override = localeOverride(lang, HOOKS_SPEC_REL);
-  const abs = override || path.join(TEMPLATES, 'engine', HOOKS_SPEC_REL);
+function readGatesText(lang, templatesRoot = TEMPLATES, localesRoot = LOCALES) {
+  const override = localeOverride(lang, HOOKS_SPEC_REL, localesRoot);
+  const abs = override || path.join(templatesRoot, 'engine', HOOKS_SPEC_REL);
   try {
     return fs.readFileSync(abs, 'utf8');
   } catch {
@@ -221,14 +221,14 @@ function readGatesText(lang) {
 }
 
 // doctor 与安装共用同一个规格源（kit 模板 + 语言覆盖），避免“安装成功、doctor 立刻报漂移”。
-export function readGatesSpecs(lang) {
-  const text = readGatesText(lang);
+export function readGatesSpecs(lang, templatesRoot = TEMPLATES, localesRoot = LOCALES) {
+  const text = readGatesText(lang, templatesRoot, localesRoot);
   if (!text) return { hooks: null, permissions: null };
   return { hooks: parseHookSpec(text), permissions: parsePermissionSpec(text) };
 }
 
-function addHostConfigEntries({ plan, target, hosts, lang, stacks, hardened, managedPermissions = {} }) {
-  const gatesText = readGatesText(lang);
+function addHostConfigEntries({ plan, target, hosts, lang, stacks, hardened, managedPermissions = {}, templatesRoot = TEMPLATES, localesRoot = LOCALES }) {
+  const gatesText = readGatesText(lang, templatesRoot, localesRoot);
   if (!gatesText) return;
   const hookSpec = parseHookSpec(gatesText);
   const permissionSpec = parsePermissionSpec(gatesText);
@@ -359,6 +359,7 @@ export function ciTemplateRels(mode) {
 export function buildPlan({
   target, hosts, lang, stack, stacks = null, projectName, categories, models = null, tier = 'standard', hardened = false, mcp = true,
   surfaces = [], managedPermissions = {}, devcontainer = true, ci = null,
+  templatesRoot = TEMPLATES, localesRoot = LOCALES,
 }) {
   const t = makeT(lang);
   const plan = [];
@@ -369,25 +370,25 @@ export function buildPlan({
   };
 
   // 1) 引擎核心（运行时脚本/hook 实现不进项目；项目只落声明式面）
-  for (const rel of listFiles(path.join(TEMPLATES, 'engine'))) {
+  for (const rel of listFiles(path.join(templatesRoot, 'engine'))) {
     if (isRuntimeEnginePath(rel)) continue;
     // enterprise-only 可选资产按档裁剪：非 enterprise 档不进 plan（默认档体积零增长）。
     if (tier !== 'enterprise' && isEnterpriseOnlyPath(rel)) continue;
-    push(path.join(TEMPLATES, 'engine', rel), rel, 'engine', 10);
+    push(path.join(templatesRoot, 'engine', rel), rel, 'engine', 10);
   }
 
   // 2) 项目 profile（栈相关配置与 AGENTS.md）；多栈按声明顺序叠加，同名文件后者覆盖（20 + index）。
   const stackList = stacks?.length ? stacks : [stack];
   stackList.forEach((s, index) => {
-    for (const rel of listFiles(path.join(TEMPLATES, 'profiles', s))) {
-      push(path.join(TEMPLATES, 'profiles', s, rel), rel, 'profile', 20 + index);
+    for (const rel of listFiles(path.join(templatesRoot, 'profiles', s))) {
+      push(path.join(templatesRoot, 'profiles', s, rel), rel, 'profile', 20 + index);
     }
   });
 
   // 2.5) surface 叠加：同一 targetRel 由后声明的 surface 覆盖（21 + index > 20）。
   // 单 stack 安装不产生任何额外文件，保持行为不变。
   surfaces.forEach((surface, index) => {
-    const dir = path.join(TEMPLATES, 'surfaces', surface);
+    const dir = path.join(templatesRoot, 'surfaces', surface);
     for (const rel of listFiles(dir)) push(path.join(dir, rel), rel, 'profile', 21 + index);
   });
   if (surfaces.length || stackList.length > 1) {
@@ -407,7 +408,7 @@ export function buildPlan({
   for (const host of hosts) {
     const h = HOSTS[host];
     if (!h) continue;
-    const templatesDir = h.templates || path.join(TEMPLATES, 'hosts', host);
+    const templatesDir = h.templates || path.join(templatesRoot, 'hosts', host);
     const hardeningSource = h.hardening?.settings || null;
     for (const rel of listFiles(templatesDir)) {
       // 加固配置是宿主主配置的替换源，不作为独立文件安装。
@@ -426,25 +427,25 @@ export function buildPlan({
   }
 
   // 3.4) Hook / 权限接线编译（中性 gates.json -> 宿主 schema）；多栈白名单按声明顺序取并集。
-  addHostConfigEntries({ plan, target, hosts, lang, stacks: stackList, hardened, managedPermissions });
+  addHostConfigEntries({ plan, target, hosts, lang, stacks: stackList, hardened, managedPermissions, templatesRoot, localesRoot });
 
   // 3.5) MCP 配置合并（--no-mcp 时整段跳过）
   if (mcp) addMcpEntries({ plan, target, hosts });
 
   // 4) 数据资产脚手架（空目录由 scaffold 中的 .gitkeep 保证）
-  for (const rel of listFiles(path.join(TEMPLATES, 'scaffold'))) {
-    push(path.join(TEMPLATES, 'scaffold', rel), rel, 'scaffold', 10);
+  for (const rel of listFiles(path.join(templatesRoot, 'scaffold'))) {
+    push(path.join(templatesRoot, 'scaffold', rel), rel, 'scaffold', 10);
   }
 
   // 5) git 门禁与合并策略
   const ciMode = ciModeFor({ tier, ci });
-  for (const rel of listFiles(path.join(TEMPLATES, 'git'))) {
+  for (const rel of listFiles(path.join(templatesRoot, 'git'))) {
     // CI 交付面按选择裁剪：lean 档缺省不生成（小项目先跑本地钩子）；显式 --ci 优先于 tier 派生。
     if (rel === 'azure-pipelines.yml' && (ciMode === 'github' || ciMode === 'none')) continue;
     if (rel.startsWith('.github/') && (ciMode === 'azure' || ciMode === 'none')) continue;
-    if (rel === '.gitattributes') push(path.join(TEMPLATES, 'git', rel), '.gitattributes', 'git', 40, 'merge-gitattributes');
-    else if (rel === '.gitignore.engine') push(path.join(TEMPLATES, 'git', rel), '.gitignore', 'git', 40, 'merge-gitignore');
-    else push(path.join(TEMPLATES, 'git', rel), rel, 'git', 40);
+    if (rel === '.gitattributes') push(path.join(templatesRoot, 'git', rel), '.gitattributes', 'git', 40, 'merge-gitattributes');
+    else if (rel === '.gitignore.engine') push(path.join(templatesRoot, 'git', rel), '.gitignore', 'git', 40, 'merge-gitignore');
+    else push(path.join(templatesRoot, 'git', rel), rel, 'git', 40);
   }
 
   // 6) 开发容器（R3-8 沙箱面）：devcontainer.json + Dockerfile，按栈选官方基础镜像。
@@ -464,7 +465,7 @@ export function buildPlan({
   }
 
   // 7) 语言包覆盖（按目标路径镜像）
-  applyLocaleOverrides(lang, plan);
+  applyLocaleOverrides(lang, plan, localesRoot);
   let deduped = dedupeEntries(plan);
 
   // 8) 从覆盖后的 .agents/skills/<name>/SKILL.md 生成宿主技能面
@@ -484,10 +485,10 @@ export function buildPlan({
   } catch {
     /* 目标尚无 .agents/skills：跳过外部技能面 */
   }
-  addGeneratedSkillSurfaces({ plan, hosts, skillEntries, t });
+  addGeneratedSkillSurfaces({ plan, hosts, skillEntries, t, hostMetaDir: path.join(templatesRoot, 'host-meta') });
 
   // 生成项同样允许按目标路径覆盖，然后二次去重（静态宿主文件优先级更高）
-  applyLocaleOverrides(lang, plan);
+  applyLocaleOverrides(lang, plan, localesRoot);
   deduped = dedupeEntries(plan);
 
   if (categories && categories.length) deduped = deduped.filter((e) => categories.includes(e.category));

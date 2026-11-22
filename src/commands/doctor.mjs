@@ -422,6 +422,15 @@ export function doctorCommand({ args, t }) {
     }
   }
 
+  // 离线安装包溯源体检
+  if (manifest?.bundle) {
+    add(true, 'bundle', t('doctor.bundleOk', {
+      file: manifest.bundle.file,
+      digest: String(manifest.bundle.digest || '').slice(0, 12),
+      version: manifest.bundle.version || 'unknown',
+    }));
+  }
+
   // 模型配置是用户本地状态：存在则校验，缺失不失败（旧安装保持 doctor 全过）。
   const localModels = readLocalModelRoles(target);
   if (localModels.error) {

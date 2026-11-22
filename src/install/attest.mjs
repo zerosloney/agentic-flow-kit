@@ -83,6 +83,7 @@ function manifestCore(manifest) {
     tier: manifest.tier ?? null,
     hardened: Boolean(manifest.hardened),
     baselineVersion: manifest.baselineVersion ?? null,
+    ...(manifest.bundle ? { bundle: { file: manifest.bundle.file, digest: manifest.bundle.digest, version: manifest.bundle.version } } : {}),
     files: Object.fromEntries(Object.entries(manifest.files || {}).sort(([a], [b]) => a.localeCompare(b))),
   };
 }
@@ -171,6 +172,7 @@ export function buildAttestation(target) {
     surfaces: core.surfaces,
     tier: core.tier,
     hardened: core.hardened,
+    ...(core.bundle ? { bundle: core.bundle } : {}),
     policy: policyInfo,
     manifest: {
       schemaVersion: core.schemaVersion,

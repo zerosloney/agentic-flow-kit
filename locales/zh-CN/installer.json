@@ -325,5 +325,14 @@
   "doctor.policyRemoteOk": "远程策略基线已对齐：{{url}}（{{ref}}）",
   "doctor.policyRemoteDrift": "检测到与远程策略基线存在 {{count}} 项漂移：{{url}}",
   "doctor.policyRemoteHint": "运行 flow-kit policy check 查看差异，或 flow-kit policy sync 进行对齐",
-  "doctor.policyRemoteError": "远程策略基线无法连接或校验失败：{{error}}"
+  "doctor.policyRemoteError": "远程策略基线无法连接或校验失败：{{error}}",
+  "bundle.packed": "离线安装包已生成：{{file}}（共 {{count}} 个文件，{{size}}，SHA-256: {{digest}}）",
+  "bundle.inspected": "离线安装包概览：{{file}}（kit v{{version}}，生成时间 {{createdAt}}，共 {{count}} 个文件，{{size}}）",
+  "bundle.verified": "离线安装包完整性校验通过：{{file}}（{{count}} 个文件无篡改，摘要: {{digest}}）",
+  "bundle.unpacked": "离线安装包解包成功（已提取 {{count}} 个文件到目录 {{dir}}）",
+  "doctor.bundleOk": "离线分发包溯源通过：{{file}}（摘要: {{digest}}，v{{version}}）",
+  "error.bundleUsage": "用法：flow-kit bundle <pack|inspect|verify|unpack> [options]",
+  "error.bundleNotFound": "安装包不存在或无法访问：{{path}}",
+  "error.bundleInvalid": "无效的离线安装包：{{detail}}",
+  "error.bundleCorrupted": "安装包完整性校验失败：{{detail}}"
 }

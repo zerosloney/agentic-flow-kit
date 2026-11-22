@@ -18,6 +18,7 @@ import { devcontainerCommand } from '../commands/devcontainer.mjs';
 import { addSkillCommand, removeSkillCommand, skillsCommand } from '../commands/skills.mjs';
 import { newHostCommand } from '../commands/new-host.mjs';
 import { policyCommand } from '../commands/policy.mjs';
+import { bundleCommand } from '../commands/bundle.mjs';
 import { KIT_ROOT } from '../install/plan.mjs';
 
 const SUPPORTED_LANGS = new Set(LANGUAGES);
@@ -26,7 +27,7 @@ const SUPPORTED_LANGS = new Set(LANGUAGES);
 const COMMANDS = [
   'install', 'add-host', 'upgrade', 'adopt', 'prune', 'remove-host', 'uninstall',
   'doctor', 'diff', 'status', 'workspace', 'devcontainer', 'add-skill', 'remove-skill',
-  'skills', 'new-host', 'explain', 'list-hosts', 'policy', 'run', 'hook', 'help',
+  'skills', 'new-host', 'explain', 'list-hosts', 'policy', 'bundle', 'run', 'hook', 'help',
 ];
 
 function normalizeLang(input) {
@@ -124,6 +125,8 @@ async function main(argv) {
       return listHostsCommand({ args, t, lang });
     case 'policy':
       return policyCommand({ args, t });
+    case 'bundle':
+      return bundleCommand({ args, t });
     default:
       {
         const err = new Error(`unknown command: ${command} (available: ${COMMANDS.join(', ')})`);
