@@ -23,6 +23,7 @@ import { listHandoffFiles, verifyHandoffEnvelope } from '../install/handoff.mjs'
 import { checkMcpGatewayHealth } from '../install/mcp-gateway.mjs';
 import { checkArchHealth } from '../install/arch-guard.mjs';
 import { checkSandboxHealth } from '../install/sandbox.mjs';
+import { checkSkillsEvalHealth } from '../skills/eval-harness.mjs';
 import { RUNTIME_SCRIPTS, RUNTIME_HOOKS, KIT_ROOT } from './runtime.mjs';
 import { buildDiff } from './diff.mjs';
 
@@ -551,6 +552,12 @@ export function doctorCommand({ args, t }) {
   const sandboxHealth = checkSandboxHealth(target, t);
   if (sandboxHealth) {
     add(sandboxHealth.ok, sandboxHealth.name, sandboxHealth.detail, sandboxHealth.fix || '', { warn: sandboxHealth.warn });
+  }
+
+  // 技能回归评测凭证与基准用例巡检
+  const skillsEvalHealth = checkSkillsEvalHealth(target, t);
+  if (skillsEvalHealth) {
+    add(skillsEvalHealth.ok, skillsEvalHealth.name, skillsEvalHealth.detail, skillsEvalHealth.fix || '', { warn: skillsEvalHealth.warn });
   }
 
   // 模型配置是用户本地状态：存在则校验，缺失不失败（旧安装保持 doctor 全过）。

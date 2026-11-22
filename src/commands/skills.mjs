@@ -13,6 +13,7 @@ import {
 } from '../skills/lock.mjs';
 import { lintSkillDir, lintSkills, readEvalTaskIds } from '../skills/lint.mjs';
 import { copySkillDir, resolveSkillSource } from '../skills/source.mjs';
+import { runSkillEvalSuite, DEFAULT_EVAL_THRESHOLD } from '../skills/eval-harness.mjs';
 
 function usageError(message, code) {
   const err = new Error(message);
@@ -249,10 +250,17 @@ function removeSkillLocked({ args, t, target }) {
 
 export function skillsCommand({ args, t, lang }) {
   const sub = args._[1];
-  if (sub !== 'lint') {
-    const err = usageError(`未知 skills 子命令：${sub || '(空)'}（可用：lint）`, 'BAD_COMMAND');
-    throw err;
+  if (sub === 'lint') {
+    return lintSkillsSubcommand({ args, t });
   }
+  if (sub === 'eval') {
+    return evalSkillsSubcommand({ args, t });
+  }
+  const err = usageError(`未知 skills 子命令：${sub || '(空)'}（可用：lint, eval）`, 'BAD_COMMAND');
+  throw err;
+}
+
+function lintSkillsSubcommand({ args, t }) {
   const target = resolveTarget(args);
   requireManifest(target, t);
   const result = lintSkills(target, { verifyLock: !flag(args, 'no-verify-lock') });
@@ -272,5 +280,77 @@ export function skillsCommand({ args, t, lang }) {
       ? `✅ 技能检查通过（${result.skills.length} 个技能${result.warnings.length ? `，${result.warnings.length} 条告警` : ''}）`
       : `❌ 技能检查失败（${result.errors.length} 条错误 / ${result.warnings.length} 条告警）`);
   }
+  return result.ok ? 0 : 1;
+}
+
+function evalSkillsSubcommand({ args, t }) {
+  const target = resolveTarget(args);
+  requireManifest(target, t);
+
+  const skill = args.skill || (args._[2] && !args._[2].startsWith('-') ? args._[2] : null);
+  const dataset = args.dataset || null;
+  const threshold = args.threshold != null ? Number(args.threshold) : DEFAULT_EVAL_THRESHOLD;
+  const strict = flag(args, 'strict');
+  const record = flag(args, 'record');
+  const sandbox = flag(args, 'sandbox');
+  const asJson = flag(args, 'json');
+
+  const result = runSkillEvalSuite(target, {
+    skill,
+    dataset,
+    threshold,
+    strict,
+    record,
+    sandbox,
+  });
+
+  if (!result.ok && !result.suites?.length) {
+    if (asJson) {
+      console.log(JSON.stringify({ command: 'skills eval', target, ok: false, error: result.error }, null, 2));
+    } else {
+      console.error(`❌ ${result.error}`);
+    }
+    return 1;
+  }
+
+  if (asJson) {
+    console.log(JSON.stringify({
+      command: 'skills eval',
+      target,
+      ok: result.ok,
+      threshold: result.threshold,
+      strict: result.strict,
+      suites: result.suites,
+    }, null, 2));
+  } else {
+    for (const suite of result.suites) {
+      console.log(`\n📦 技能评测：${suite.skill} (用例集: ${suite.dataset})`);
+      for (const c of suite.cases) {
+        if (c.ok) {
+          console.log(`  ✅ [${c.id}] ${c.title} (${c.durationMs}ms)`);
+        } else {
+          console.log(`  ❌ [${c.id}] ${c.title} (${c.durationMs}ms)`);
+          for (const err of c.errors) console.log(`     - ${err}`);
+        }
+      }
+      const ratePct = (suite.passRate * 100).toFixed(1);
+      const threshPct = (suite.threshold * 100).toFixed(1);
+      if (suite.outcome === 'pass') {
+        console.log(`  🎯 评测达标：通过率 ${ratePct}% (${suite.passed}/${suite.total}) ≥ 阈值 ${threshPct}%`);
+      } else {
+        console.log(`  ⚠️ 评测未达标：通过率 ${ratePct}% (${suite.passed}/${suite.total}) < 阈值 ${threshPct}%`);
+      }
+      if (suite.recorded) {
+        console.log(`  📝 评测凭证已记录至 ${suite.recorded.logFile}`);
+      }
+    }
+
+    if (result.ok) {
+      console.log(`\n✅ 技能回归评测全部通过！`);
+    } else {
+      console.error(`\n❌ 存在未达标的技能评测项！`);
+    }
+  }
+
   return result.ok ? 0 : 1;
 }
