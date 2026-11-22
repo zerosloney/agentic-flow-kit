@@ -20,7 +20,11 @@
     "review": {
       "model": null,
       "purpose": "独立复核：须与实现模型不同",
-      "heterogeneous": true
+      "heterogeneous": true,
+      "fallbacks": [
+        "secondary",
+        "host-default"
+      ]
     }
   }
 }

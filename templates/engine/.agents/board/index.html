@@ -531,6 +531,7 @@ const EVENT_DESC = {
   confirm: '确认', commit: '提交', stop: '停机', done: '完成', abort: '放弃',
   route: '退回', 'route-enter': '重入', resume: '恢复',
   'step-pause': '单步暂停', 'step-resume': '单步恢复',
+  'review-downgrade': '评审降级',
 };
 const ART_LABEL = {
   entry: '入口', spec: 'SPEC', plan: 'PLAN', tasks: '任务',
@@ -692,7 +693,9 @@ function runEventHtml(run) {
                         ? `${esc(e.from || '')} → ${esc(e.to || '')}`
                         : e.type === 'resume'
                           ? `中断于 ${esc(e.stage || '')} · 产物 ${esc(e.artifacts || '')}`
-                          : '';
+                          : e.type === 'review-downgrade'
+                            ? `评审降级 · ${esc(e.reason || '')}${e.reviewer ? ' · ' + esc(e.reviewer) : ''}`
+                            : '';
     return `<div class="tl-item"><div class="tl-sub">${esc(t)}</div>` +
       (sub ? `<div class="tl-meta">${sub}</div>` : '') +
       `<div class="tl-meta">${esc((e.t || '').slice(0, 19).replace('T', ' '))}</div></div>`;
@@ -706,6 +709,10 @@ function loadRunOverview() {
   const route = r.route;
   const routeBox = route
     ? `<div class="route-pill" style="margin: 10px 0;">↩ 退回 <b>${esc(route.to)}</b>（${esc(route.from)} 失败 ${route.attempt}/${route.cap} 次）</div>`
+    : '';
+  const downgradeEv = (r.events || []).find((e) => e.type === 'review-downgrade');
+  const downgradeBox = downgradeEv
+    ? `<div class="route-pill" style="margin: 10px 0; background: rgba(234, 179, 8, 0.15); border-color: rgba(234, 179, 8, 0.4); color: #eab308;">⚠️ 评审降级：${esc(downgradeEv.reason || '跨模型评审自适应降级')}${downgradeEv.reviewer ? ` (${esc(downgradeEv.reviewer)})` : ''}</div>`
     : '';
 
   let details = '';
@@ -723,6 +730,7 @@ function loadRunOverview() {
     `<p style="color:var(--muted);font-family:var(--mono);font-size:12px">Run ID: <code>${esc(r.runId)}</code> · 阶段: <b>${esc(r.stage || '')}</b> · 状态: <b>${esc(stop)}</b></p>` +
     renderStageFlowHtml(r) +
     routeBox +
+    downgradeBox +
     (r.triage ? `<p><b>定级：</b>${esc(r.triage.kind || '')} · ${esc(r.triage.level || '')} · ${esc(r.triage.module || '')}</p>` : '') +
     details +
     `<h3>产物概览</h3>` +
@@ -739,9 +747,13 @@ function loadRunWorkOrder() {
   if (!RUN_CURRENT) return;
   const w = RUN_CURRENT.workOrder;
   if (w) {
+    const budgetChip = w.context?.budget?.pruned
+      ? `<div class="chip" style="margin-bottom:8px;color:var(--ok);border-color:var(--ok)">⚡ 上下文已按预算精简：${w.context.budget.originalChars}c → ${w.context.budget.prunedChars}c (节约 ${w.context.budget.savingsPercent}%)</div>`
+      : '';
     $('#d-body').innerHTML =
       `<div class="md"><h2>工单 #${w.id} · ${esc(w.kind)}</h2>` +
       `<p><b>${esc(w.title || '')}</b></p>` +
+      budgetChip +
       `<p>目标：${esc(w.goal || '')}</p>` +
       (w.instructions?.length ? `<ul>${w.instructions.map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : '') +
       (w.context?.kbHits?.length ? `<p>查重命中：</p><ul>${w.context.kbHits.slice(0, 6).map((s) => `<li>${esc(s)}</li>`).join('')}</ul>` : '') +

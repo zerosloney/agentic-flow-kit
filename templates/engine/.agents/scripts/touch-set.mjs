@@ -57,6 +57,35 @@ export function externalReviewId(text) {
   return id;
 }
 
+export function parseReviewMetadata(text) {
+  const str = String(text || '');
+  const id = externalReviewId(str);
+
+  let reviewerModel = '';
+  const modelMatch = str.match(/(?:reviewed\s+by|复核模型|评审模型|模型|reviewer)[:：\s]+([A-Za-z0-9_.-]+)/i);
+  if (modelMatch) {
+    reviewerModel = modelMatch[1].trim();
+  }
+
+  let isDowngraded = false;
+  let downgradeReason = '';
+  const dgMatch = str.match(/(?:跨模型降级|跨模型不可得|自适应降级|降级|downgrade|fallback)[:：\s]+([^\r\n；;。]+)/i);
+  if (dgMatch) {
+    isDowngraded = true;
+    downgradeReason = dgMatch[1].trim();
+  } else if (/跨模型降级|跨模型不可得|自适应降级|评审降级/.test(str)) {
+    isDowngraded = true;
+    downgradeReason = '跨模型评审自适应降级';
+  }
+
+  return {
+    id,
+    reviewerModel,
+    isDowngraded,
+    downgradeReason,
+  };
+}
+
 const PATH_RE = /(?:^|[\s`'"（(])((?:[\w.-]+\/)+[\w.-]*|[\w.-]+\.(?:mjs|cjs|js|ts|tsx|jsx|vue|cs|java|go|py|rs|sql|json|yml|yaml|md|xml|html|css))/g;
 
 export function planPaths(section) {

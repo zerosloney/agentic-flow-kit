@@ -10,8 +10,9 @@ import { analyze } from '../templates/engine/.agents/scripts/check-pipeline-stat
 import {
   parseParallelList as parseParallel, parseRetryCap as parseRetry, resolveArtifact, resolveDocRel,
   stageArtifactProblems, failRoute, renderDashboard, stripAnsi, visualWidth, truncate, parseGateName,
+  pruneWorkOrderContext, listAllRuns,
 } from '../templates/engine/.agents/scripts/pipeline-run.mjs';
-import { touchProblems, externalReviewId, filesOutsidePlan } from '../templates/engine/.agents/scripts/touch-set.mjs';
+import { touchProblems, externalReviewId, parseReviewMetadata, filesOutsidePlan } from '../templates/engine/.agents/scripts/touch-set.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..');
@@ -917,4 +918,210 @@ test('CLI: next --gate executes targeted gate script in verify stage and records
 
   const runData = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'cache', 'pipeline-runs', 'test-run.json'), 'utf8'));
   assert.ok(runData.events.some((e) => e.type === 'gate-tested' && e.script === 'check-extra.mjs' && e.exit === 0));
+});
+
+test('parseReviewMetadata extracts ID, model, and downgrade details', () => {
+  // 1. Normal review without downgrade
+  const meta1 = parseReviewMetadata('- 独立复核：通过 复核上下文：subagent-session-123 评审模型：claude-3-7-sonnet');
+  assert.equal(meta1.id, 'subagent-session-123');
+  assert.equal(meta1.reviewerModel, 'claude-3-7-sonnet');
+  assert.equal(meta1.isDowngraded, false);
+  assert.equal(meta1.downgradeReason, '');
+
+  // 2. Review with downgrade note
+  const meta2 = parseReviewMetadata('- 独立复核：通过 复核上下文：reviewer-99 (跨模型降级：高阶模型配额耗尽，降级至 host-default)');
+  assert.equal(meta2.id, 'reviewer-99');
+  assert.equal(meta2.isDowngraded, true);
+  assert.match(meta2.downgradeReason, /高阶模型配额耗尽/);
+
+  // 3. Review without ID
+  const meta3 = parseReviewMetadata('- 独立复核：待定');
+  assert.equal(meta3.id, '');
+  assert.equal(meta3.isDowngraded, false);
+});
+
+test('pruneWorkOrderContext trims context fields and records budget savings', () => {
+  // Within budget
+  const smallCtx = { relatedDocs: ['a.md'], kbHits: ['hit1'], stderrTail: 'error' };
+  const resSmall = pruneWorkOrderContext(smallCtx, 1200);
+  assert.equal(resSmall.budget.pruned, false);
+  assert.equal(resSmall.budget.savingsPercent, 0);
+
+  // Over budget
+  const largeCtx = {
+    relatedDocs: ['a.md', 'b.md', 'c.md', 'd.md', 'e.md', 'a.md'],
+    kbHits: [
+      'A'.repeat(200),
+      'B'.repeat(200),
+      'C'.repeat(200),
+      'D'.repeat(200),
+    ],
+    stderrTail: Array.from({ length: 20 }, (_, i) => `Line ${i + 1}: detailed error stack dump here`).join('\n'),
+  };
+  const resLarge = pruneWorkOrderContext(largeCtx, 500);
+  assert.equal(resLarge.budget.pruned, true);
+  assert.ok(resLarge.budget.savingsPercent > 0);
+  assert.equal(resLarge.relatedDocs.length, 4); // deduped & max 4
+  assert.equal(resLarge.kbHits.length, 3); // max 3
+  assert.ok(resLarge.kbHits[0].endsWith('...'));
+  assert.ok(resLarge.stderrTail.includes('... [跳过'));
+  assert.ok(resLarge.stderrTail.length <= 400);
+});
+
+test('CLI: spec-review emits review-downgrade event when metadata has downgrade declaration', () => {
+  const root = fixture();
+  const specRel = 'workflow/tasks/2026-11-13-test-topic/spec.md';
+  const specAbs = path.join(root, specRel);
+  fs.mkdirSync(path.dirname(specAbs), { recursive: true });
+  fs.writeFileSync(specAbs, [
+    '---',
+    '状态: draft',
+    '级别: L1',
+    '模块: wiki',
+    '---',
+    '',
+    '# Spec',
+    '',
+    '## 确认与复核',
+    '- 独立复核：通过 复核上下文：reviewer-session-77 (跨模型降级：配额告警切换备用模型)',
+  ].join('\n'));
+
+  writeRun(root, {
+    stage: 'spec-review',
+    stopType: 'work-order',
+    docs: { entry: 'workflow/intents/t.md', spec: specRel, plan: null },
+  });
+
+  const res = runPipeline(root, ['next', '--run', 'test-run']);
+  assert.equal(res.status, 0, res.stderr || res.stdout);
+  assert.match(res.stdout, /PIPELINE-STOP await-confirm/);
+
+  const runData = readRun(root, 'test-run');
+  const dg = runData.events.find((e) => e.type === 'review-downgrade');
+  assert.ok(dg, 'must emit review-downgrade event');
+  assert.equal(dg.stage, 'spec-review');
+  assert.match(dg.reason, /配额告警/);
+});
+
+test('CLI: spec-review emits review-downgrade event when --review-downgrade flag is used', () => {
+  const root = fixture();
+  const specRel = 'workflow/tasks/2026-11-13-test-topic/spec.md';
+  const specAbs = path.join(root, specRel);
+  fs.mkdirSync(path.dirname(specAbs), { recursive: true });
+  fs.writeFileSync(specAbs, [
+    '---',
+    '状态: draft',
+    '级别: L1',
+    '模块: wiki',
+    '---',
+    '',
+    '# Spec',
+    '',
+    '## 确认与复核',
+    '- 独立复核：通过 复核上下文：subagent-999',
+  ].join('\n'));
+
+  writeRun(root, {
+    stage: 'spec-review',
+    stopType: 'work-order',
+    docs: { entry: 'workflow/intents/t.md', spec: specRel, plan: null },
+  });
+
+  const res = runPipeline(root, ['next', '--run', 'test-run', '--review-downgrade', '主模型限流强制降级']);
+  assert.equal(res.status, 0, res.stderr || res.stdout);
+  assert.match(res.stdout, /PIPELINE-STOP await-confirm/);
+
+  const runData = readRun(root, 'test-run');
+  const dg = runData.events.find((e) => e.type === 'review-downgrade');
+  assert.ok(dg, 'must emit review-downgrade event');
+  assert.equal(dg.reason, '主模型限流强制降级');
+});
+
+test('work-order context applies pruning and attaches budget info', () => {
+  const root = fixture();
+  const dispatchPath = path.join(root, '.agents', 'config', 'dispatch.json');
+  fs.mkdirSync(path.dirname(dispatchPath), { recursive: true });
+  fs.writeFileSync(dispatchPath, JSON.stringify({
+    note: "2026-11-16 只计量不阻断",
+    workOrderContextBudgetChars: 300,
+  }));
+
+  const res = runPipeline(root, ['start', '用户需求', '--hint', 'kind=require level=L1 module=wiki topic=test-budget']);
+  assert.equal(res.status, 0, res.stderr || res.stdout);
+
+  const runFile = fs.readdirSync(path.join(root, '.agents', 'cache', 'pipeline-runs')).find((f) => f.endsWith('.json'));
+  assert.ok(runFile);
+  const runData = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'cache', 'pipeline-runs', runFile), 'utf8'));
+  assert.ok(runData.workOrder);
+  assert.ok(runData.workOrder.context.budget);
+  assert.equal(runData.workOrder.context.budget.budgetChars, 300);
+});
+
+test('listAllRuns discovers runs and filters by all / active / attention', () => {
+  const root = fixture();
+  const runsDir = path.join(root, '.agents', 'cache', 'pipeline-runs');
+  fs.mkdirSync(runsDir, { recursive: true });
+
+  const r1 = { runId: '20261122-1001-task-a', stopType: 'work-order', stage: 'triage', requirement: 'req A', events: [] };
+  const r2 = { runId: '20261122-1002-task-b', stopType: 'done', stage: 'done', requirement: 'req B', events: [] };
+  const r3 = { runId: '20261122-1003-task-c', stopType: 'await-confirm', stage: 'spec-confirm', requirement: 'req C', events: [] };
+  const r4 = { runId: '20261122-1004-task-d', stopType: 'aborted', stage: 'plan-draft', requirement: 'req D', events: [] };
+
+  for (const r of [r1, r2, r3, r4]) {
+    fs.writeFileSync(path.join(runsDir, `${r.runId}.json`), JSON.stringify(r));
+  }
+
+  const ctx = { runsDir, root };
+  const all = listAllRuns(ctx, 'all');
+  assert.equal(all.length, 4);
+  assert.equal(all[0].runId, '20261122-1004-task-d'); // newest first
+
+  const active = listAllRuns(ctx, 'active');
+  assert.equal(active.length, 2);
+  assert.deepEqual(active.map((r) => r.runId), ['20261122-1003-task-c', '20261122-1001-task-a']);
+
+  const attention = listAllRuns(ctx, 'attention');
+  assert.equal(attention.length, 2);
+  assert.deepEqual(attention.map((r) => r.runId), ['20261122-1003-task-c', '20261122-1001-task-a']);
+});
+
+test('renderDashboard formats multi-run selector header and footer', () => {
+  const root = fixture();
+  const run = {
+    runId: '20261122-1001-task-a',
+    requirement: '测试多 Run 看板切换',
+    stage: 'implement',
+    stopType: 'work-order',
+    workOrder: { id: 1, kind: 'implement', title: '实现特性', goal: '通过所有测试' },
+    docs: {},
+    events: [],
+  };
+
+  const lines = renderDashboard({ root }, run, {
+    selector: { current: 1, total: 3, filter: 'active' },
+    noColor: true,
+  });
+  const text = lines.join('\n');
+  assert.match(text, /Pipeline 看板 \[1\/3 · 活跃\]: 20261122-1001-task-a/);
+  assert.match(text, /\[◄\/►\] 切换 Run/);
+  assert.match(text, /\[F\] 过滤/);
+
+  // 单次快照模式下无快捷键轮询文字
+  const onceLines = renderDashboard({ root }, run, {
+    selector: { current: 1, total: 3, filter: 'all' },
+    noColor: true,
+    once: true,
+  });
+  const onceText = onceLines.join('\n');
+  assert.match(onceText, /Pipeline 看板 \[1\/3 · 全部\]: 20261122-1001-task-a/);
+  assert.match(onceText, /单次快照模式/);
+});
+
+test('dashboard --once runs cleanly from CLI', () => {
+  const root = fixture();
+  writeRun(root, { runId: 'test-dash-run', stage: 'triage', stopType: 'work-order' });
+  const res = runPipeline(root, ['dashboard', '--run', 'test-dash-run', '--once']);
+  assert.equal(res.status, 0, res.stderr || res.stdout);
+  assert.match(res.stdout, /Pipeline 看板: test-dash-run/);
+  assert.match(res.stdout, /单次快照模式/);
 });

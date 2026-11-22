@@ -2,5 +2,6 @@
   "version": 1,
   "maxParallel": 2,
   "reportBudgetChars": 500,
-  "note": "派发报告预算（advisory）：单份报告 ≤ reportBudgetChars 字符、并发派发 ≤ maxParallel，超限只计量不阻断，由主智能体按内容自行取舍。500 字符依据结构化报告模板（结论 2-3 句 + 证据路径 2-3 条 + 风险 1 句）估算取整；计量口径见 agg-delegations.mjs（delegations.d/ 分片去空白正文字符，月合计，非逐报告全文——台账无报告原文数据源，不造数）。2026-11-16 定档。"
+  "workOrderContextBudgetChars": 1200,
+  "note": "派发报告预算（advisory）：单份报告 ≤ reportBudgetChars 字符、并发派发 ≤ maxParallel，工单上下文预算 ≤ workOrderContextBudgetChars 字符，超限只计量不阻断，由主智能体按内容自行取舍。500 字符依据结构化报告模板（结论 2-3 句 + 证据路径 2-3 条 + 风险 1 句）估算取整；计量口径见 agg-delegations.mjs（delegations.d/ 分片去空白正文字符，月合计，非逐报告全文——台账无报告原文数据源，不造数）。2026-11-16 定档。"
 }

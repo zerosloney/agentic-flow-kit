@@ -61,6 +61,11 @@ The stage machine is aligned with the commands manual. Mutually exclusive with m
 - **Failure routing table**: `onFail` in `.agents/config/pipeline.json` declares `{to, retry}` per stage. `retry` is the maximum number of failures allowed at that stage (inclusive), and the `retry`-th failure stops. The template declares only `verify → fix` (`retry: 3`). An undeclared stage does not route and stops in place with `gate-fail`. Artifact-contract failures and the verify-only short path do not consume the routing budget. `check-pipeline-state.mjs` validates the table statically: keys and targets must be registered and reachable in the script, a target must not be terminal, and `retry` must be an integer in 0-5.
 - **Task state**: the run file records `retries` (per-stage failure counts) and `nextTarget` (the routing target). While stopped, `stage` stays at the failure point; `next` re-enters from `nextTarget` and records a `route-enter` event, and a routing decision records a `route` event (`from/to/attempt/cap`). The `resume` event carries `artifacts: complete|missing` plus a `missing` list; missing artifacts are still blocked by the contract gate rather than skipped.
 
+### Review Downgrade and Work-Order Context Budget
+
+- **Review Downgrade**: In `spec-review` and `review` stages, the executor parses review metadata (reviewer ID, model, and downgrade declaration). If an external model is unavailable or exhausted, declare a downgrade in the document (e.g. `跨模型降级: <reason>`) or run CLI `next --review-downgrade "<reason>"`. The executor records a `review-downgrade` event and highlights the warning on the dashboard without blocking the pipeline.
+- **Context Budgeting**: Work-order dispatch automatically prunes context against `workOrderContextBudgetChars` (default 1200) from `.agents/config/dispatch.json`: dedupes `relatedDocs` (top 4), trims `kbHits` (top 3, max 120 chars each), collapses `stderrTail` (top 3 and bottom 5 lines, max 400 chars), and attaches a `budget` metrics section.
+
 ## 🚫 Hard Discipline (violation breaks the protocol)
 
 | Operation | Consequence / machine behavior | Exception |

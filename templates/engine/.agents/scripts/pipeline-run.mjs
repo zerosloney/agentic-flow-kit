@@ -34,7 +34,7 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { touchProblems, externalReviewId, filesOutsidePlan } from './touch-set.mjs';
+import { touchProblems, externalReviewId, parseReviewMetadata, filesOutsidePlan } from './touch-set.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const KINDS = ['require', 'fix', 'verify', 'review', 'deploy']; // kind 词表单源（§25 预判执法段已于 2026-10-28 随 hygiene 退役，故仅本文件与工单 --hint/--triage 消费）
@@ -57,13 +57,28 @@ function ctxEnv(overrideRoot) {
   // 空格分隔；支持双引号包裹（Windows 的 process.execPath 常在「Program Files」下）。
   const gitPrefix = (process.env.PIPELINE_RUN_GIT_BIN || 'git')
     .match(/"[^"]+"|\S+/g)?.map((x) => x.replace(/^"|"$/g, '')) || ['git'];
-  return { root, bin, gitPrefix, runsDir: path.join(root, '.agents', 'cache', 'pipeline-runs'), pipeline: loadPipelineConfig(root) };
+  return {
+    root,
+    bin,
+    gitPrefix,
+    runsDir: path.join(root, '.agents', 'cache', 'pipeline-runs'),
+    pipeline: loadPipelineConfig(root),
+    dispatch: loadDispatchConfig(root),
+  };
 }
 
 // 阶段产物契约（R3-5）：可选配置，缺失/非法时退回空对象（不改变旧行为）。
 function loadPipelineConfig(root) {
   try {
     const cfg = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'config', 'pipeline.json'), 'utf8'));
+    return cfg && typeof cfg === 'object' ? cfg : {};
+  } catch { return {}; }
+}
+
+// 派发与预算配置（可选，缺失/非法时退回空对象）
+function loadDispatchConfig(root) {
+  try {
+    const cfg = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'config', 'dispatch.json'), 'utf8'));
     return cfg && typeof cfg === 'object' ? cfg : {};
   } catch { return {}; }
 }
@@ -141,6 +156,23 @@ function latestRunId(ctx) {
     if (r && !['done', 'aborted'].includes(r.stopType)) return ids[i];
   }
   return ids[ids.length - 1] || null;
+}
+
+export function listAllRuns(ctx, filter = 'all') {
+  if (!fs.existsSync(ctx.runsDir)) return [];
+  const ids = fs.readdirSync(ctx.runsDir).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5)).sort().reverse();
+  const runs = [];
+  for (const id of ids) {
+    const r = loadRun(ctx, id);
+    if (!r) continue;
+    if (filter === 'active') {
+      if (['done', 'aborted'].includes(r.stopType)) continue;
+    } else if (filter === 'attention') {
+      if (!['work-order', 'await-confirm', 'gate-fail', 'step'].includes(r.stopType)) continue;
+    }
+    runs.push(r);
+  }
+  return runs;
 }
 
 function newRunId(requirement) {
@@ -344,12 +376,86 @@ function summarizeDoc(text) {
   return body.slice(0, 3).join(' / ').slice(0, 200);
 }
 
+// ── 工单上下文精简与 Token 预算（Option 2） ─────────────────────────────
+export function pruneWorkOrderContext(context, budgetChars = 1200) {
+  if (!context || typeof context !== 'object') {
+    return { budget: { originalChars: 0, prunedChars: 0, budgetChars, pruned: false, savingsPercent: 0 } };
+  }
+  const originalChars = JSON.stringify(context).length;
+  if (originalChars <= budgetChars) {
+    return {
+      ...context,
+      budget: { originalChars, prunedChars: originalChars, budgetChars, pruned: false, savingsPercent: 0 },
+    };
+  }
+
+  const prunedContext = { ...context };
+
+  // 1. 去重并保留前 4 条关联文档
+  if (Array.isArray(prunedContext.relatedDocs)) {
+    prunedContext.relatedDocs = [...new Set(prunedContext.relatedDocs)].slice(0, 4);
+  }
+
+  // 2. 智能裁剪 kbHits：至多保留前 3 条，单条超 120 字符截断
+  if (Array.isArray(prunedContext.kbHits)) {
+    prunedContext.kbHits = prunedContext.kbHits.slice(0, 3).map((h) => {
+      const s = String(h || '');
+      return s.length > 120 ? s.slice(0, 117) + '...' : s;
+    });
+  }
+
+  // 3. 智能折叠 stderrTail：首 3 行错误 + 尾 5 行退出，中间行折叠，总长不超过 400 字符
+  if (typeof prunedContext.stderrTail === 'string' && prunedContext.stderrTail) {
+    const lines = prunedContext.stderrTail.split(/\r?\n/).filter(Boolean);
+    if (lines.length > 8) {
+      const head = lines.slice(0, 3);
+      const tail = lines.slice(-5);
+      const skipped = lines.length - 8;
+      prunedContext.stderrTail = [...head, `... [跳过 ${skipped} 行堆栈/输出] ...`, ...tail].join('\n');
+    }
+    if (prunedContext.stderrTail.length > 400) {
+      prunedContext.stderrTail = prunedContext.stderrTail.slice(0, 397) + '...';
+    }
+  }
+
+  const prunedChars = JSON.stringify(prunedContext).length;
+  const pruned = prunedChars < originalChars;
+  const savingsPercent = originalChars > 0 ? Math.max(0, Math.round(((originalChars - prunedChars) / originalChars) * 100)) : 0;
+
+  prunedContext.budget = {
+    originalChars,
+    prunedChars,
+    budgetChars,
+    pruned,
+    savingsPercent,
+  };
+
+  return prunedContext;
+}
+
 // ── 工单构建 ───────────────────────────────────────────────────────────
-function wo(run, o) {
+function wo(ctxOrRun, runOrO, oOrNothing) {
+  let ctx, run, o;
+  if (oOrNothing !== undefined) {
+    ctx = ctxOrRun;
+    run = runOrO;
+    o = oOrNothing;
+  } else {
+    run = ctxOrRun;
+    o = runOrO;
+    ctx = null;
+  }
   const order = { id: (run.events.filter((e) => e.type === 'work-order').length + 1), ...o };
+  const budgetChars = ctx?.dispatch?.workOrderContextBudgetChars || 1200;
+  if (order.context) {
+    order.context = pruneWorkOrderContext(order.context, budgetChars);
+  }
   return order;
 }
 function issueWO(ctx, run, order, nextStage) {
+  if (order.context && (!order.context.budget || order.context.budget.budgetChars !== (ctx?.dispatch?.workOrderContextBudgetChars || 1200))) {
+    order.context = pruneWorkOrderContext(order.context, ctx?.dispatch?.workOrderContextBudgetChars || 1200);
+  }
   run.workOrder = order;
   run.stopType = 'work-order';
   run.stage = nextStage;
@@ -433,11 +539,19 @@ function printRun(ctx, run, problems) {
   console.log(`\n▶ pipeline-run ${run.runId}${lv}  ${stageBar(run)}`);
   if (run.inFlight) console.log(`↻ 中断于 ${run.inFlight.stage}（自 ${run.inFlight.since}）——next 或 resume 会从该门重入`);
   if (run.nextTarget) console.log(`↩ 退回 ${run.nextTarget} 重做（${run.stage} 失败 ${run.retries?.[run.stage] || 0}/${failRoute(ctx.pipeline, run.stage).retry}）——next 生效`);
+  const dgs = (run.events || []).filter((e) => e.type === 'review-downgrade');
+  if (dgs.length) {
+    const lastDg = dgs[dgs.length - 1];
+    console.log(`⚠️ [评审降级] ${lastDg.reason || '跨模型评审自适应降级'}${lastDg.reviewer ? ` (${lastDg.reviewer})` : ''}`);
+  }
   if (run.stopType === 'work-order' && run.workOrder) {
     const w = run.workOrder;
     console.log(`\n== 工单 #${w.id}（${w.kind}）${w.title} ==`);
     console.log(`目标：${w.goal}`);
     for (const s of w.instructions) console.log(`  ${s}`);
+    if (w.context?.budget?.pruned) {
+      console.log(`[上下文预算] 已按预算精简：${w.context.budget.originalChars}c → ${w.context.budget.prunedChars}c (节约 ${w.context.budget.savingsPercent}%)`);
+    }
     if (w.context?.kbHits?.length) console.log(`查重命中：\n  ${w.context.kbHits.slice(0, 6).join('\n  ')}`);
     if (w.context?.stderrTail) console.log(`上次门失败输出（尾 20 行）：\n  ${w.context.stderrTail}`);
     console.log('约束：');
@@ -566,7 +680,12 @@ export function renderDashboard(ctx, run, options = {}) {
   const bottomBorder = () => clr.cyan('└' + '─'.repeat(W + 2) + '┘');
 
   // 1. 顶部基础信息与阶段流向图
-  const title = `Pipeline 看板: ${run.runId}`;
+  const sel = options.selector;
+  let title = `Pipeline 看板: ${run.runId}`;
+  if (sel && sel.total > 0) {
+    const filterText = sel.filter === 'active' ? '活跃' : sel.filter === 'attention' ? '需关注' : '全部';
+    title = `Pipeline 看板 [${sel.current}/${sel.total} · ${filterText}]: ${run.runId}`;
+  }
   lines.push(topBorder(title));
 
   const lv = run.triage ? `${run.triage.level} · ${run.triage.kind} · ${run.triage.module || 'repo'} · ${run.triage.topic || 'task'}` : '待分流 (pending triage)';
@@ -601,6 +720,7 @@ export function renderDashboard(ctx, run, options = {}) {
   let stateDesc = `阶段: ${s} │ 停机类型: ${run.stopType}`;
   if (run.inFlight) stateDesc += ` │ ${clr.yellow(`↻ 中断于 ${run.inFlight.stage}`)}`;
   if (run.nextTarget) stateDesc += ` │ ${clr.red(`↩ 退回 ${run.nextTarget}`)}`;
+  if ((run.events || []).some((e) => e.type === 'review-downgrade')) stateDesc += ` │ ${clr.yellow('[评审降级]')}`;
   lines.push(row(truncate(stateDesc, W)));
 
   // 2. 当前停机点详情卡片
@@ -609,6 +729,9 @@ export function renderDashboard(ctx, run, options = {}) {
     const w = run.workOrder;
     lines.push(row(clr.bold(clr.yellow(`工单 #${w.id} (${w.kind}) ${truncate(w.title, W - 20)}`))));
     if (w.goal) lines.push(row(`目标: ${truncate(w.goal, W - 6)}`));
+    if (w.context?.budget?.pruned) {
+      lines.push(row(`  ${clr.green('⚡ 上下文预算:')} ${w.context.budget.originalChars}c → ${w.context.budget.prunedChars}c (节约 ${w.context.budget.savingsPercent}%)`));
+    }
     if (w.instructions?.length) {
       for (const ins of w.instructions.slice(0, 2)) {
         lines.push(row(`  ${clr.dim('•')} ${truncate(ins, W - 4)}`));
@@ -693,6 +816,7 @@ export function renderDashboard(ctx, run, options = {}) {
       if (e.subject) bits.push(e.subject);
       if (e.type === 'retry') bits.push(`attempt ${e.attempt}/${e.cap}`);
       if (e.type === 'resume') bits.push(`from ${e.stage}`);
+      if (e.type === 'review-downgrade') bits.push(`[降级] ${e.reason || ''}`);
       if (e.id) bits.push(`#${e.id}`);
       const detail = bits.join(' │ ') || '-';
       lines.push(row(`  ${clr.dim(time)} │ ${clr.cyan(type)} │ ${truncate(detail, Math.max(10, W - 26))}`));
@@ -702,9 +826,12 @@ export function renderDashboard(ctx, run, options = {}) {
   // 5. 底栏与快捷键说明
   lines.push(bottomBorder());
   const tStr = String(options.now || nowIso()).slice(11, 19);
+  const navHelp = options.selector && options.selector.total > 1
+    ? ` ${clr.bold('[◄/►]')} 切换 Run  ${clr.dim('│')}  ${clr.bold('[F]')} 过滤  ${clr.dim('│')}`
+    : (options.selector ? ` ${clr.bold('[F]')} 过滤  ${clr.dim('│')}` : '');
   const footer = options.once
     ? clr.dim(` (单次快照模式 · ${tStr})`)
-    : ` ${clr.bold('[R]')} 刷新  ${clr.dim('│')}  ${clr.bold('[Q]')} 退出  ${clr.dim(`(每 ${options.interval || 2}s 自动轮询 · ${tStr})`)}`;
+    : `${navHelp} ${clr.bold('[R]')} 刷新  ${clr.dim('│')}  ${clr.bold('[Q]')} 退出  ${clr.dim(`(每 ${options.interval || 2}s 自动轮询 · ${tStr})`)}`;
   lines.push(footer);
 
   return lines;
@@ -1132,7 +1259,16 @@ async function advance(ctx, run, opt) {
 
     if (s === 'spec-review') {
       const body = sectionBody(readDoc(ctx, run.docs.spec) || '', '确认与复核') || '';
-      if (!externalReviewId(body)) stopGateFail(ctx, run, s, ['写 - 独立复核：<结论> 复核上下文：<外部会话或子代理 id>。禁止占位符。']);
+      const meta = parseReviewMetadata(body);
+      if (!meta.id) stopGateFail(ctx, run, s, ['写 - 独立复核：<结论> 复核上下文：<外部会话或子代理 id>。禁止占位符。']);
+      if (meta.isDowngraded || opt.reviewDowngrade) {
+        emit(run, {
+          type: 'review-downgrade',
+          stage: s,
+          reason: opt.reviewDowngrade || meta.downgradeReason || '跨模型评审自适应降级',
+          reviewer: meta.reviewerModel || 'default',
+        });
+      }
       run.stage = 'spec-confirm';
       stopConfirm(ctx, run, run.docs.spec, summarizeDoc(readDoc(ctx, run.docs.spec)), true);
     }
@@ -1301,8 +1437,17 @@ async function advance(ctx, run, opt) {
     if (s === 'review') {
       const target = run.docs.spec || entry();
       const body = sectionBody(readDoc(ctx, target) || '', '确认与复核') || '';
-      if (!externalReviewId(body)) {
+      const meta = parseReviewMetadata(body);
+      if (!meta.id) {
         stopGateFail(ctx, run, s, ['写 - 独立复核：<结论> 复核上下文：<外部会话或子代理 id>。禁止占位符。']);
+      }
+      if (meta.isDowngraded || opt.reviewDowngrade) {
+        emit(run, {
+          type: 'review-downgrade',
+          stage: s,
+          reason: opt.reviewDowngrade || meta.downgradeReason || '跨模型评审自适应降级',
+          reviewer: meta.reviewerModel || 'default',
+        });
       }
       run.stage = K() === 'fix' ? 'closeout' : 'closeout';
       if (stepMode) stopStep(ctx, run, run.stage);
@@ -1436,7 +1581,17 @@ function parseArgs(argv) {
     const a = argv[i];
     if (a.startsWith('--')) {
       const k = a.slice(2);
-      if (BOOL_FLAGS.has(k)) out[k] = true; else out[k] = argv[++i] ?? true;
+      if (BOOL_FLAGS.has(k)) {
+        out[k] = true;
+      } else {
+        const next = argv[i + 1];
+        if (next !== undefined && !next.startsWith('--')) {
+          out[k] = next;
+          i++;
+        } else {
+          out[k] = true;
+        }
+      }
     } else out.positional.push(a);
   }
   return out;
@@ -1486,6 +1641,9 @@ if (isMain) {
       step: a.step === true,
       gate: typeof a.gate === 'string' ? usage(() => parseGateName(a.gate)) : undefined,
       interactiveGate: a['interactive-gate'] === true,
+      reviewDowngrade: typeof a['review-downgrade'] === 'string'
+        ? a['review-downgrade']
+        : (a['review-downgrade'] === true ? '跨模型评审自适应降级' : undefined),
     });
   } else if (cmd === 'status') {
     if (a.adopt) { adoptRun(ctx, a); process.exit(0); }
@@ -1504,6 +1662,7 @@ if (isMain) {
       if (e.type === 'step-pause') bits.push(`paused at ${e.stage}`);
       if (e.type === 'step-resume') bits.push(`resumed at ${e.stage}`);
       if (e.type === 'gate-tested') bits.push(`tested ${e.script} exit ${e.exit}`);
+      if (e.type === 'review-downgrade') bits.push(`[评审降级] ${e.reason || ''}${e.reviewer ? ` (${e.reviewer})` : ''}`);
       if (e.parallel) bits.push(e.parallel);
       if (e.id) bits.push(`#${e.id}`);
       console.log('  ' + bits.join(' | '));
@@ -1512,34 +1671,57 @@ if (isMain) {
   } else if (cmd === 'watch' || cmd === 'dashboard') {
     const interval = Math.max(1, Number(a.interval) || 2);
     const once = Boolean(a.once);
-    const id = a.run || latestRunId(ctx);
-    if (!id) {
+    let filterMode = typeof a.filter === 'string' && ['all', 'active', 'attention'].includes(a.filter)
+      ? a.filter
+      : 'all';
+
+    let runList = listAllRuns(ctx, filterMode);
+    if (!runList.length && filterMode !== 'all') {
+      filterMode = 'all';
+      runList = listAllRuns(ctx, filterMode);
+    }
+    if (!runList.length) {
       console.log('无 run');
       process.exit(0);
     }
-    const run = loadRun(ctx, id);
-    if (!run) {
-      console.log(`run ${id} 不存在`);
-      process.exit(1);
+
+    let activeIndex = 0;
+    if (a.run) {
+      const idx = runList.findIndex((r) => r.runId === a.run);
+      if (idx >= 0) activeIndex = idx;
+    } else {
+      const latest = latestRunId(ctx);
+      if (latest) {
+        const idx = runList.findIndex((r) => r.runId === latest);
+        if (idx >= 0) activeIndex = idx;
+      }
     }
+
+    const run = runList[activeIndex] || runList[0];
 
     if (once) {
       const lines = renderDashboard(ctx, run, {
         width: Math.max(60, Math.min(100, process.stdout.columns || 80)),
         now: nowIso(),
         once: true,
+        selector: runList.length > 1 ? { current: activeIndex + 1, total: runList.length, filter: filterMode } : undefined,
       });
       console.log(lines.join('\n'));
       process.exit(0);
     }
 
     const render = () => {
-      const curId = a.run || latestRunId(ctx);
-      const currentRun = (curId ? loadRun(ctx, curId) : null) || run;
+      const freshList = listAllRuns(ctx, filterMode);
+      if (freshList.length) {
+        runList = freshList;
+        if (activeIndex >= runList.length) activeIndex = Math.max(0, runList.length - 1);
+      }
+      const currentRun = runList[activeIndex] || run;
       const lines = renderDashboard(ctx, currentRun, {
         width: Math.max(60, Math.min(100, process.stdout.columns || 80)),
         now: nowIso(),
         interval,
+        selector: { current: activeIndex + 1, total: runList.length, filter: filterMode },
       });
       if (process.stdout.isTTY) {
         process.stdout.write('\x1b[H' + lines.join('\n') + '\n\x1b[J');
@@ -1574,6 +1756,34 @@ if (isMain) {
           cleanup();
           process.exit(0);
         } else if (key === 'r' || key === 'R') {
+          render();
+        } else if (key === '\u001b[D' || key === 'h' || key === 'H' || key === 'p' || key === 'P' || key === '[') {
+          if (runList.length > 1) {
+            activeIndex = (activeIndex - 1 + runList.length) % runList.length;
+            render();
+          }
+        } else if (key === '\u001b[C' || key === 'l' || key === 'L' || key === 'n' || key === 'N' || key === ']' || key === '\t') {
+          if (runList.length > 1) {
+            activeIndex = (activeIndex + 1) % runList.length;
+            render();
+          }
+        } else if (key === 'f' || key === 'F') {
+          const filters = ['all', 'active', 'attention'];
+          const nextIdx = (filters.indexOf(filterMode) + 1) % filters.length;
+          filterMode = filters[nextIdx];
+          const filtered = listAllRuns(ctx, filterMode);
+          if (filtered.length) {
+            runList = filtered;
+            activeIndex = 0;
+          }
+          render();
+        } else if (key === 'a' || key === 'A') {
+          filterMode = 'all';
+          const all = listAllRuns(ctx, 'all');
+          if (all.length) {
+            runList = all;
+            activeIndex = 0;
+          }
           render();
         }
       });
@@ -1659,4 +1869,4 @@ function adoptRun(ctx, a) {
   console.log('  提示：adopt 不推断断点位置——按文档现状人工续走（next 会按 stage 拒绝，请对照事件缺失情况手动接续或另起 run）');
 }
 
-export default { parseKV, validateDraftContent, closeoutComplete, placeholdersIn, stageBar, renderDashboard, stripAnsi, visualWidth, truncate, parseGateName };
+export default { parseKV, validateDraftContent, closeoutComplete, placeholdersIn, stageBar, renderDashboard, stripAnsi, visualWidth, truncate, parseGateName, pruneWorkOrderContext, listAllRuns };

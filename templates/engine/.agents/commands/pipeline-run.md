@@ -75,6 +75,15 @@ next: 按 run 停机点循环推进至 done
 - **失败路由表**：`.agents/config/pipeline.json` 的 `onFail` 按阶段声明 `{to, retry}`；`retry` 是该阶段允许的最大失败次数（含），第 `retry` 次失败即停。模板默认只声明 `verify → fix`（`retry: 3`）。未声明的阶段不退回，原地停 `gate-fail`。产物契约失败与 verify-only 短路径不消耗退回预算。`check-pipeline-state.mjs` 静态校验该表：键与目标都须登记且脚本可达，目标不得是终态，`retry` 须为 0-5 整数。
 - **任务状态**：run 文件用 `retries`（per-stage 失败计数）与 `nextTarget`（退回目标）记录现场。停机时 `stage` 留在失败处，`next` 才从 `nextTarget` 重入并记 `route-enter` 事件；退回途中记 `route` 事件（`from/to/attempt/cap`）。`resume` 事件带 `artifacts: complete|missing` 与 `missing` 清单，产物缺失仍由契约门拦住，不会跳过重跑。
 
+### 跨模型评审自适应降级与工单上下文预算
+
+- **跨模型评审自适应降级（Review Downgrade）**：在 `spec-review` 与 `review` 阶段，执行器自动解析「确认与复核」中的复核元数据（评审 ID、模型及降级声明）。若外部模型受限或配额耗尽，文档内声明降级（如 `跨模型降级：高阶配额耗尽，降级至 host-default`），或 CLI 调用 `next --review-downgrade "<原因>"`，执行器记录 `review-downgrade` 事件，并在状态与 Dashboard 中高亮标出降级提示，平滑进入确认门而不阻断流水线。
+- **工单上下文精简与 Token 预算（Context Pruning & Budgeting）**：工单派发时按 `.agents/config/dispatch.json` 中的 `workOrderContextBudgetChars`（默认 1200 字符）自动精简工单上下文：
+  - `relatedDocs` 自动去重并保留最多 4 条；
+  - `kbHits` 知识库命中最多保留 3 条，单条超 120 字符截断；
+  - `stderrTail` 上次门失败输出折叠（保留首 3 行与尾 5 行，中间行折叠，上限 400 字符）；
+  - 工单 `context` 结构体挂载 `budget` 计量数据（原字符数、精简后字符数、节约百分比），TUI 与 Web 监控看板直观展示节约信息。
+
 ## 🚫 硬纪律 (违反即协议破坏)
 
 | 操作 | 后果 / 机器行为 | 例外 |

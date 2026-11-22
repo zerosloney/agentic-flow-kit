@@ -42,6 +42,9 @@ frontend/AGENTS.md 9216
 # 2026-11-15 kit 模板对齐（issue #44）：review.md en 渲染实测 8755B 超通配行 8704——按 stages.md 先例开专用行
 # 重定上限 9728B（zh 渲染实测 ≤8704 未超）。
 .agents/commands/review.md 9728
+# 2026-11-22 kit 闭环能力增强：pipeline-run.md 增补评审降级与上下文预算协议
+# 实测 zh 9707B 超通配行 8704——按 review.md 先例开专用行重定上限 10752B。
+.agents/commands/pipeline-run.md 10752
 # 2026-10-21 第五轮：路由表去重与快速道检索前移后重定目录上限。实测 commands 合计 41256B（索引 LF），
 # 上限 67584→44144B（余量 2888B ≈ 7.0%）。单篇上限 8704B 不变（峰值 new-task.md 6121B）。
 # 2026-10-22 第六轮：develop 合并（MTO 批 commands 增改）与本地引擎批并集后实测合计 44189B，
@@ -56,7 +59,8 @@ frontend/AGENTS.md 9216
 # 超第八轮上限 2454B——属长期能力增长，重定上限 48900→52500B（余量 1146B ≈ 2.2%）。
 # 纪律不变：后续再增命令先按一进一出下沉/删除（正文继续下沉 skills/），不要继续抬上限。
 # 2026-11-15 kit 模板对齐（issue #44）：commands/ en 渲染实测合计 63535B，52500→68096B（口径见 backend-scope 行上方注记）。
-.agents/commands/ 68096
+# 2026-11-22 kit 闭环能力增强：pipeline-run.md 增补，en 实测合计 68913B，重定上限 68096→71680B（余量 2767B ≈ 4.0%）。
+.agents/commands/ 71680
 # 2026-10-15 规则面一进一出（减重手段②）：check-loop 段数上限——锚日升格只增不减的对冲面；
 # 超上限进门先退役一段（候选见 agg-judgments --retire-candidates；段编号承重不重排，退役 = 段体
 # 删除 + SECTIONS 行摘除，编号留疤）。
