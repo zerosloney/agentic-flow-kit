@@ -29,6 +29,7 @@ export const STACK_IMAGES = {
   rust: 'mcr.microsoft.com/devcontainers/rust:1',
   go: 'mcr.microsoft.com/devcontainers/go:1.23',
   java: 'mcr.microsoft.com/devcontainers/java:21',
+  python: 'mcr.microsoft.com/devcontainers/python:3.12',
   empty: 'mcr.microsoft.com/devcontainers/base:ubuntu-24.04',
 };
 
@@ -40,6 +41,7 @@ export const STACK_CONTAINER_USER = {
   rust: 'vscode',
   go: 'vscode',
   java: 'vscode',
+  python: 'vscode',
   empty: 'vscode',
 };
 
@@ -60,6 +62,7 @@ export const STACK_PROVISIONS_NODE = {
   rust: true,
   go: true,
   java: true,
+  python: true,
   empty: true,
 };
 
@@ -70,6 +73,7 @@ export const STACK_EXTENSIONS = {
   rust: ['rust-lang.rust-analyzer'],
   go: ['golang.go'],
   java: ['redhat.java'],
+  python: ['ms-python.python'],
   empty: [],
 };
 

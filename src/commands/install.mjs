@@ -99,6 +99,11 @@ const STACK_MARKERS = [
     label: 'pom.xml / build.gradle',
     match: (names) => ['pom.xml', 'build.gradle', 'build.gradle.kts'].find((n) => names.includes(n)) || null,
   },
+  {
+    stack: 'python',
+    label: 'pyproject.toml / requirements.txt',
+    match: (names) => ['pyproject.toml', 'requirements.txt', 'setup.py', 'Pipfile'].find((n) => names.includes(n)) || null,
+  },
   { stack: 'typescript', label: 'tsconfig.json', match: (names) => (names.includes('tsconfig.json') ? 'tsconfig.json' : null) },
   { stack: 'node', label: 'package.json', match: (names) => (names.includes('package.json') ? 'package.json' : null) },
 ];

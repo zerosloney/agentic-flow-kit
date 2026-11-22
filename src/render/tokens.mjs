@@ -37,6 +37,12 @@ const STACK_DEFAULTS = {
       apiPort: 8080,
       webPort: 5173,
     },
+    python: {
+      description: 'Python 项目（pyproject.toml 或 requirements.txt）。',
+      descriptionEn: 'A Python project (pyproject.toml or requirements.txt).',
+      apiPort: 8000,
+      webPort: 5173,
+    },
     empty: {
       description: '项目技术栈按实际填写。',
       descriptionEn: 'Fill in the project stack description.',
@@ -56,6 +62,7 @@ export const STACK_SHELL = {
   rust: ['cargo build', 'cargo run', 'cargo test', 'cargo check'],
   go: ['go build', 'go run', 'go test'],
   java: ['mvn compile', 'mvn test', 'mvn -q test', 'gradle test', 'gradlew test', 'gradlew.bat test', './gradlew test'],
+  python: ['python -m pytest', 'pytest', 'python main.py', 'python -m', 'uv run', 'poetry run'],
 };
 
 function stackAllowFragment(stack, tool, sep) {

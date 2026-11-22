@@ -80,6 +80,7 @@ test('every stack image ships the baked tooling its container needs', () => {
     rust: { user: 'vscode', node: true },
     go: { user: 'vscode', node: true },
     java: { user: 'vscode', node: true },
+    python: { user: 'vscode', node: true },
     empty: { user: 'vscode', node: true },
   };
   for (const [stack, want] of Object.entries(expectations)) {

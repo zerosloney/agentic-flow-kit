@@ -71,6 +71,7 @@
   "tui.stack.rust": "Rust",
   "tui.stack.go": "Go",
   "tui.stack.java": "Java",
+  "tui.stack.python": "Python",
   "tui.stack.empty": "未指定",
   "tui.currentStack": "当前",
   "tui.upgradeStackQuestion": "选择本次升级的技术栈",

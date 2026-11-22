@@ -370,6 +370,12 @@ test('detectStack reads rust, go, java and typescript markers before package.jso
   write('build.gradle.kts');
   assert.equal(detectStack(dir), 'java');
   reset();
+  write('pyproject.toml');
+  assert.equal(detectStack(dir), 'python');
+  reset();
+  write('requirements.txt');
+  assert.equal(detectStack(dir), 'python');
+  reset();
   write('tsconfig.json');
   write('package.json');
   assert.equal(detectStack(dir), 'typescript');
@@ -380,9 +386,11 @@ test('detectStack reads rust, go, java and typescript markers before package.jso
   write('App.csproj');
   write('Cargo.toml');
   assert.equal(detectStack(dir), 'dotnet');
-  for (const stack of ['typescript', 'rust', 'go', 'java']) {
+  for (const stack of ['typescript', 'rust', 'go', 'java', 'python']) {
     assert.ok(STACKS.includes(stack), stack);
   }
+  assert.deepEqual(matchStack(['pyproject.toml', 'package.json']), { stack: 'python', file: 'pyproject.toml' });
+  assert.deepEqual(matchStack(['requirements.txt']), { stack: 'python', file: 'requirements.txt' });
   assert.deepEqual(matchStack(['tsconfig.json', 'package.json']), { stack: 'typescript', file: 'tsconfig.json' });
   assert.deepEqual(matchStack(['Cargo.toml', 'package.json']), { stack: 'rust', file: 'Cargo.toml' });
   assert.deepEqual(matchStack(['App.sln', 'App.csproj']), { stack: 'dotnet', file: 'App.sln' });
