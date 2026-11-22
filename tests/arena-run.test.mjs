@@ -1,0 +1,249 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
+import { makeTmp } from './helpers/tmp.mjs';
+import {
+  initArena,
+  statusArena,
+  evalArena,
+  reportArena,
+  adoptArena,
+  cleanupArena,
+  readArenaMeta,
+  GIT,
+} from '../templates/engine/.agents/scripts/arena-run.mjs';
+
+const SCRIPT_PATH = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '../templates/engine/.agents/scripts/arena-run.mjs'
+);
+
+function initTestRepo() {
+  const dir = makeTmp('arena-test-');
+  spawnSync(GIT, ['init', '-q'], { cwd: dir });
+  spawnSync(GIT, ['config', 'user.name', 'ArenaTester'], { cwd: dir });
+  spawnSync(GIT, ['config', 'user.email', 'arena@example.com'], { cwd: dir });
+  spawnSync(GIT, ['config', 'commit.gpgsign', 'false'], { cwd: dir });
+
+  // 基础文件与提交
+  fs.writeFileSync(path.join(dir, 'math.js'), 'export function add(a, b) { return a + b; }\n', 'utf8');
+  fs.writeFileSync(
+    path.join(dir, 'test.js'),
+    `import assert from 'node:assert/strict';\nimport { add } from './math.js';\nassert.equal(add(1, 2), 3);\n`,
+    'utf8'
+  );
+  fs.writeFileSync(
+    path.join(dir, 'package.json'),
+    JSON.stringify({ name: 'arena-test', type: 'module', scripts: { test: 'node test.js' } }, null, 2),
+    'utf8'
+  );
+
+  spawnSync(GIT, ['add', '.'], { cwd: dir });
+  spawnSync(GIT, ['commit', '-m', 'chore: initial commit'], { cwd: dir });
+  return dir;
+}
+
+test('initArena: 正常初始化派生独立 worktree 与元数据', () => {
+  const root = initTestRepo();
+  const meta = initArena({
+    root,
+    topic: 'calc-opt',
+    arms: ['plan-fast', 'plan-safe'],
+  });
+
+  assert.equal(meta.topic, 'calc-opt');
+  assert.equal(meta.status, 'open');
+  assert.ok(meta.baseCommit);
+  assert.ok(meta.arms['plan-fast']);
+  assert.ok(meta.arms['plan-safe']);
+
+  // 验证工作树物理目录创建
+  const fastDir = path.join(root, meta.arms['plan-fast'].dir);
+  const safeDir = path.join(root, meta.arms['plan-safe'].dir);
+  assert.ok(fs.existsSync(fastDir));
+  assert.ok(fs.existsSync(safeDir));
+
+  // 验证 worktree 带有基础文件
+  assert.ok(fs.existsSync(path.join(fastDir, 'math.js')));
+  assert.ok(fs.existsSync(path.join(safeDir, 'math.js')));
+
+  // 清理
+  cleanupArena({ root, topic: 'calc-opt' });
+});
+
+test('initArena: 校验参数有效性 (topic 与 arms 数量)', () => {
+  const root = initTestRepo();
+
+  assert.throws(
+    () => initArena({ root, topic: 'bad/topic', arms: ['a', 'b'] }),
+    /--topic 必须为合法/
+  );
+
+  assert.throws(
+    () => initArena({ root, topic: 'valid-topic', arms: ['only-one'] }),
+    /打擂至少需要 2 个候选臂/
+  );
+});
+
+test('statusArena: 正确汇报各臂未提交脏文件与改动统计', () => {
+  const root = initTestRepo();
+  initArena({
+    root,
+    topic: 'perf-duel',
+    arms: ['arm-a', 'arm-b'],
+  });
+
+  const meta = readArenaMeta(root, 'perf-duel');
+  const dirA = path.join(root, meta.arms['arm-a'].dir);
+
+  // 在 arm-a 修改 math.js
+  fs.writeFileSync(path.join(dirA, 'math.js'), 'export function add(a, b) { return (a | 0) + (b | 0); }\n', 'utf8');
+
+  const st = statusArena({ root, topic: 'perf-duel' });
+  assert.equal(st.status, 'open');
+  assert.equal(st.arms['arm-a'].dirty, true);
+  assert.equal(st.arms['arm-b'].dirty, false);
+  assert.ok(st.arms['arm-a'].diffStat.includes('math.js'));
+
+  cleanupArena({ root, topic: 'perf-duel' });
+});
+
+test('evalArena & reportArena: 机器独立跑测、生成对质矩阵并识别胜出底座', () => {
+  const root = initTestRepo();
+  initArena({
+    root,
+    topic: 'algo-bakeoff',
+    arms: ['plan-correct', 'plan-broken'],
+  });
+
+  const meta = readArenaMeta(root, 'algo-bakeoff');
+  const correctDir = path.join(root, meta.arms['plan-correct'].dir);
+  const brokenDir = path.join(root, meta.arms['plan-broken'].dir);
+
+  // plan-correct: 保持正确并添加乘法函数
+  fs.appendFileSync(path.join(correctDir, 'math.js'), 'export function mul(a, b) { return a * b; }\n');
+
+  // plan-broken: 破坏加法函数使其抛错
+  fs.writeFileSync(path.join(brokenDir, 'math.js'), 'export function add(a, b) { throw new Error("broken"); }\n');
+
+  // 执行评测
+  const evaluated = evalArena({
+    root,
+    topic: 'algo-bakeoff',
+    testCmd: 'node test.js',
+  });
+
+  assert.equal(evaluated.arms['plan-correct'].evaluation.testStatus, 'PASS');
+  assert.equal(evaluated.arms['plan-correct'].evaluation.exitCode, 0);
+  assert.ok(evaluated.arms['plan-correct'].evaluation.durationMs >= 0);
+  assert.equal(evaluated.arms['plan-correct'].evaluation.diff.filesChanged, 1);
+  assert.ok(evaluated.arms['plan-correct'].evaluation.diff.insertions > 0);
+
+  assert.equal(evaluated.arms['plan-broken'].evaluation.testStatus, 'FAIL');
+  assert.notEqual(evaluated.arms['plan-broken'].evaluation.exitCode, 0);
+
+  // 验证对质报告生成
+  const reportPath = path.join(root, 'tradeoffs.md');
+  const md = reportArena({
+    root,
+    topic: 'algo-bakeoff',
+    output: reportPath,
+  });
+
+  assert.ok(md.includes('### 方案打擂实测对质矩阵'));
+  assert.ok(md.includes('plan-correct'));
+  assert.ok(md.includes('✅ PASS'));
+  assert.ok(md.includes('🌟 推荐底座'));
+  assert.ok(md.includes('plan-broken'));
+  assert.ok(md.includes('❌ FAIL'));
+  assert.ok(md.includes('⚠️ 测试未通过'));
+
+  assert.ok(fs.existsSync(reportPath));
+  assert.equal(fs.readFileSync(reportPath, 'utf8'), md);
+
+  cleanupArena({ root, topic: 'algo-bakeoff' });
+});
+
+test('adoptArena: 成功将胜出臂改动应用至主工程并支持 clean 收擂', () => {
+  const root = initTestRepo();
+  initArena({
+    root,
+    topic: 'feature-duel',
+    arms: ['winner-arm', 'loser-arm'],
+  });
+
+  const meta = readArenaMeta(root, 'feature-duel');
+  const winDir = path.join(root, meta.arms['winner-arm'].dir);
+
+  // 在 winner-arm 新增工具文件
+  fs.writeFileSync(path.join(winDir, 'util.js'), 'export const VERSION = "2.0";\n', 'utf8');
+
+  // 采纳 winner-arm
+  const adoptRes = adoptArena({
+    root,
+    topic: 'feature-duel',
+    arm: 'winner-arm',
+    clean: true,
+  });
+
+  assert.equal(adoptRes.ok, true);
+  assert.equal(adoptRes.adoptedArm, 'winner-arm');
+  assert.equal(adoptRes.cleaned, true);
+
+  // 验证主工程收到了 winner-arm 的新文件
+  assert.ok(fs.existsSync(path.join(root, 'util.js')));
+  assert.equal(
+    fs.readFileSync(path.join(root, 'util.js'), 'utf8').replace(/\r\n/g, '\n'),
+    'export const VERSION = "2.0";\n'
+  );
+
+  // 验证 clean 后沙盒已移除
+  assert.equal(fs.existsSync(path.join(root, '.agents', 'arena', 'feature-duel')), false);
+});
+
+test('CLI 完整闭环: init -> status -> cleanup 命令行调用', () => {
+  const root = initTestRepo();
+
+  // init via CLI
+  const rInit = spawnSync(process.execPath, [
+    SCRIPT_PATH,
+    'init',
+    '--topic', 'cli-duel',
+    '--arms', 'arm-x,arm-y',
+    '--root', root,
+    '--json',
+  ], { encoding: 'utf8' });
+
+  assert.equal(rInit.status, 0, rInit.stderr);
+  const initData = JSON.parse(rInit.stdout);
+  assert.equal(initData.topic, 'cli-duel');
+
+  // status via CLI
+  const rStatus = spawnSync(process.execPath, [
+    SCRIPT_PATH,
+    'status',
+    '--topic', 'cli-duel',
+    '--root', root,
+    '--json',
+  ], { encoding: 'utf8' });
+
+  assert.equal(rStatus.status, 0, rStatus.stderr);
+  const statusData = JSON.parse(rStatus.stdout);
+  assert.equal(statusData.status, 'open');
+  assert.ok(statusData.arms['arm-x']);
+
+  // cleanup via CLI
+  const rClean = spawnSync(process.execPath, [
+    SCRIPT_PATH,
+    'cleanup',
+    '--topic', 'cli-duel',
+    '--root', root,
+    '--json',
+  ], { encoding: 'utf8' });
+
+  assert.equal(rClean.status, 0, rClean.stderr);
+  assert.equal(fs.existsSync(path.join(root, '.agents', 'arena', 'cli-duel')), false);
+});

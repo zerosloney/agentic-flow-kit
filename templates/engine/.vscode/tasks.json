@@ -43,6 +43,12 @@
       "type": "shell",
       "command": "flow-kit run check-loop.mjs",
       "problemMatcher": []
+    },
+    {
+      "label": "Flow: 查看方案打擂状态 (Arena Status)",
+      "type": "shell",
+      "command": "flow-kit run arena-run.mjs status",
+      "problemMatcher": []
     }
   ]
 }

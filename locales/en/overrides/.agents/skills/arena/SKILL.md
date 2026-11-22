@@ -39,6 +39,7 @@ description: Design-selection bakeoff — give N independent arms the same brief
 ## Where it lives in this repo
 
 - Dispatch: the `tasks[]` batch of `task`; the `judgment` role in `model-roles.json`.
+- Physical arena runner: use `flow-kit run arena-run.mjs` (`init` creates git worktree isolated sandboxes → arms implement → `eval` collects benchmarks and diff metrics → `report` generates the decision matrix → `adopt` applies the winning base and cleans up).
 - Review: after choosing the design, take it apart with multiple lenses per `.agents/skills/interrogate/SKILL.md`.
 - Proof: `.agents/skills/blast-radius/SKILL.md` (the reason it is safe is X, so run code to prove it).
 - Record: `workflow/delegations.md`; aggregate with `flow-kit run agg-delegations.mjs`.
@@ -47,4 +48,4 @@ description: Design-selection bakeoff — give N independent arms the same brief
 
 - Arms do not share conclusions; sharing the brief is enough.
 - Do not merge all N options—pick one base, and grafts must be concrete down to file/function.
-- Do not use arena for coupled implementation (same file/contract); use serial instead.
+- Coupled implementation (same file/contract): use `flow-kit run arena-run.mjs` with git worktree isolated sandboxes for live code bakeoffs and machine metric showdowns; without worktree isolation, concurrent edits to the same files in a single workspace are strictly forbidden.

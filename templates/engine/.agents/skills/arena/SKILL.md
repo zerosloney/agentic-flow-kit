@@ -43,6 +43,7 @@ description: 设计选型 bakeoff——同一 brief 给 N 个独立臂（不同�
 ## 本仓落点
 
 - 派发：`task` 的 `tasks[]` 批次；`model-roles.json` 的 `judgment` 角色。
+- 物理打擂执行器：使用 `flow-kit run arena-run.mjs`（`init` 开辟 git worktree 隔离沙盒 → 各臂独立实现 → `eval` 机器跑分比测 → `report` 生成对质矩阵 → `adopt` 采纳获胜底座并 clean 收擂）。
 - 复核：选定设计后按 `.agents/skills/interrogate/SKILL.md` 多镜拆。
 - 证明：`.agents/skills/blast-radius/SKILL.md`（安全因为 X 要跑代码）。
 - 落账：`workflow/delegations.md`；聚合 `flow-kit run agg-delegations.mjs`。
@@ -51,4 +52,4 @@ description: 设计选型 bakeoff——同一 brief 给 N 个独立臂（不同�
 
 - 臂之间不共享结论；共享 brief 即可。
 - 不把 N 个方案全合进去——选一个底座，嫁接要具体到文件/函数。
-- 耦合实现（同一文件/同一契约）不用 arena，用串行。
+- 耦合实现（同一文件/同一契约）：可通过 `flow-kit run arena-run.mjs` 开辟 git worktree 隔离沙盒进行代码打擂与机器实测对质；无沙盒隔离时严禁在单工作区并发修改同一文件。
