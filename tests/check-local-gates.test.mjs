@@ -67,10 +67,11 @@ test('manifest missing skips project-dir sweep silently', () => {
   assert.doesNotMatch(r.stdout, /未纳入 manifest/);
 });
 
-test('gemini probe warns on unmanaged machine-level config', () => {
+test('antigravity (.gemini) dir outside manifest is listed', () => {
   const cwd = makeTmp('fk-gates-cwd-');
   const home = makeTmp('fk-gates-home-');
-  writeFile(home, '.gemini/settings.json', JSON.stringify({ theme: 'auto' }));
+  fs.mkdirSync(path.join(cwd, '.gemini'));
+  writeFile(cwd, '.agents/install-manifest.json', JSON.stringify({ hosts: ['claude'] }));
   const r = runGates(cwd, home);
-  assert.match(r.stdout, /\[WARN\] Gemini CLI 宿主已启用但未接入 flow-kit 门禁/);
+  assert.match(r.stdout, /已探测到未纳入 manifest 的宿主目录：\.gemini/);
 });

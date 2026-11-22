@@ -193,21 +193,12 @@ test('en codex install reports user-level wiring with the re-trust reminder', ()
 
 // ---- MAIN-3：list-hosts 未纳管宿主探测提示走 i18n，--lang en 下不再输出中文 ----
 
-test('en list-hosts prints the unmanaged-host probe line in English', () => {
-  const home = makeTmp('flow-kit-en-home-');
-  fs.mkdirSync(path.join(home, '.gemini'), { recursive: true });
-  fs.writeFileSync(path.join(home, '.gemini', 'settings.json'), '{}');
-
-  const r = spawnSync(process.execPath, [BIN, 'list-hosts', '--lang', 'en'], {
-    cwd: KIT,
-    encoding: 'utf8',
-    env: { ...process.env, HOME: home, USERPROFILE: home, FLOW_KIT_TEST: '1' },
-  });
-  assert.equal(r.status, 0, r.stderr);
-  const line = r.stdout.split('\n').find((l) => l.includes('Gemini CLI'));
-  assert.ok(line, 'probe line should be printed for the detected unmanaged host');
-  assert.match(line, /\[probe\]/);
-  assert.ok(!line.includes('探测'), 'must not fall back to the zh probe line');
+test('en list-hosts unmanagedProbe i18n translation is in English', async () => {
+  const { makeT } = await import('../src/i18n.mjs');
+  const t = makeT('en');
+  const line = t('listHosts.unmanagedProbe', { name: 'Gemini CLI', dir: '.gemini' });
+  assert.match(line, /\[probe\] Gemini CLI \(~\/\.gemini\) — detected on this machine but not yet supported/);
+  assert.doesNotMatch(line, /探测/);
 });
 
 // ---- P2-6：--target 指向普通文件时给出英文语义化错误 ----

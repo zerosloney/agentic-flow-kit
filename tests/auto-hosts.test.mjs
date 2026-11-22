@@ -53,6 +53,9 @@ test('root config and memory files are detection signals', () => {
 
   fs.writeFileSync(path.join(dir, '.cursorrules'), '# cursor\n', 'utf8');
   assert.ok(detectHosts(dir).includes('cursor'));
+
+  fs.writeFileSync(path.join(dir, 'GEMINI.md'), '# antigravity\n', 'utf8');
+  assert.ok(detectHosts(dir).includes('antigravity'));
 });
 
 test('install --auto-hosts adopts detected hosts and reports them in JSON', () => {

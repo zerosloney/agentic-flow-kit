@@ -18,10 +18,10 @@ import { makeTmp } from './helpers/tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-test('registry covers all 13 hosts with complete, valid capabilities', () => {
-  assert.equal(HOST_NAMES.length, 13);
+test('registry covers all 14 hosts with complete, valid capabilities', () => {
+  assert.equal(HOST_NAMES.length, 14);
   assert.deepEqual([...HOST_NAMES].sort(), [
-    'claude', 'cline', 'codeartsdoer', 'codebuddy', 'codex', 'commandcode', 'cursor', 'opencode',
+    'antigravity', 'claude', 'cline', 'codeartsdoer', 'codebuddy', 'codex', 'commandcode', 'cursor', 'opencode',
     'pi', 'qoder', 'qwen', 'trae', 'zcode',
   ]);
 
@@ -46,6 +46,7 @@ test('registry covers all 13 hosts with complete, valid capabilities', () => {
   }
 
   // 已核实的 .agents 原生宿主
+  assert.equal(HOSTS.antigravity.skills.mode, 'shared');
   assert.equal(HOSTS.qwen.skills.mode, 'shared');
   assert.equal(HOSTS.commandcode.skills.mode, 'shared');
   // 已核实的宿主原生 skills 目录
@@ -87,6 +88,7 @@ test('only claude declares the SessionStart routing leg, with the documented sou
 
 test('hostTargetRel puts root memory at project root and everything else in the host dir', () => {
   assert.equal(hostTargetRel('claude', 'CLAUDE.md'), 'CLAUDE.md');
+  assert.equal(hostTargetRel('antigravity', 'GEMINI.md'), 'GEMINI.md');
   assert.equal(hostTargetRel('claude', 'agents/implementer.md'), '.claude/agents/implementer.md');
   assert.equal(hostTargetRel('trae', 'commands/wf-new-task.md'), '.trae/commands/wf-new-task.md');
   assert.throws(() => hostTargetRel('nope', 'x'), /unknown host/);
@@ -198,18 +200,16 @@ function seedFakeHome(rel) {
   return home;
 }
 
-test('UNMANAGED_HOST_PROBES mirrors the check-local-gates probe table', () => {
-  assert.deepEqual(UNMANAGED_HOST_PROBES, [
-    { name: 'Gemini CLI', dir: '.gemini', signals: ['settings.json'] },
-  ]);
+test('UNMANAGED_HOST_PROBES is empty now that codex and antigravity/gemini are builtin', () => {
+  assert.deepEqual(UNMANAGED_HOST_PROBES, []);
 });
 
-test('list-hosts prints a probe line for a detected unmanaged host', () => {
+test('antigravity is builtin: listed in list-hosts without unmanaged probe line', () => {
   const home = seedFakeHome('.gemini/settings.json');
   const r = runWithHome(['list-hosts'], home);
   assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /\[探测\] Gemini CLI/);
-  assert.match(r.stdout, /暂不受支持/);
+  assert.match(r.stdout, /antigravity\tAntigravity CLI\t\.gemini/);
+  assert.doesNotMatch(r.stdout, /\[探测\]/);
 });
 
 test('codex is builtin: no probe line even when its user hooks file exists', () => {

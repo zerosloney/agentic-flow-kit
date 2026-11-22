@@ -12,7 +12,7 @@ import { emptyManifest, readManifest, sha256Text, writeManifest } from '../insta
 import { acquireInstallLock } from '../install/lock.mjs';
 import { cleanupMigratedFiles } from '../install/migrations.mjs';
 import { buildVars } from '../render/tokens.mjs';
-import { HOST_NAMES, HOSTS, resolveHost } from '../hosts/registry.mjs';
+import { HOST_NAMES, HOSTS, resolveHost, canonicalHostName } from '../hosts/registry.mjs';
 import { detectHosts } from '../hosts/detect.mjs';
 import { configureGit, isGitRepo } from '../git/config.mjs';
 import { isBinaryPath, writeBaseline } from '../install/baseline.mjs';
@@ -78,7 +78,7 @@ export function resolveHosts(args, t, fallback = []) {
       err.code = 'UNKNOWN_HOST';
       throw err;
     }
-    const key = String(name).trim().toLowerCase();
+    const key = canonicalHostName(name);
     if (!out.includes(key)) out.push(key);
   }
   return out;

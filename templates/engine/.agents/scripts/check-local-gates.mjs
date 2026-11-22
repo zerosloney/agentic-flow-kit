@@ -258,7 +258,6 @@ if (!fs.existsSync('.claude')) {
 // advisory：只读对账，不进八项判定、不改退出码（同 ⑧⑨⑩ 口径）。
 const HOST_PROBES = [
   { name: 'Codex', dir: '.codex', signals: ['hooks.json', 'config.toml'] },
-  { name: 'Gemini CLI', dir: '.gemini', signals: ['settings.json'] },
 ];
 for (const probe of HOST_PROBES) {
   const probeDir = path.join(os.homedir(), probe.dir);
@@ -286,8 +285,10 @@ const KNOWN_HOST_DIRS = {
   pi: '.pi',
   cline: '.cline',
   commandcode: '.commandcode',
+  cursor: '.cursor',
   qoder: '.qoder',
   zcode: '.zcode',
+  antigravity: '.gemini',
 };
 let manifestHosts = null;
 try { manifestHosts = JSON.parse(fs.readFileSync('.agents/install-manifest.json', 'utf8')).hosts; } catch { /* 无 manifest = 整段跳过 */ }

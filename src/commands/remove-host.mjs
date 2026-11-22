@@ -14,7 +14,7 @@ import { stripHooksFromRoot } from '../install/hooks.mjs';
 import { stripManagedPermissions } from '../install/permissions.mjs';
 import { BASELINE_DIR } from '../install/baseline.mjs';
 import { unwireUserHooks } from '../install/user-hooks.mjs';
-import { HOSTS, HOST_NAMES } from '../hosts/registry.mjs';
+import { HOSTS, HOST_NAMES, canonicalHostName } from '../hosts/registry.mjs';
 import { readInjectedModels } from '../models/resolve.mjs';
 import { makeT } from '../i18n.mjs';
 import { computeEnterprise, readKitVersion, resolveTarget } from './install.mjs';
@@ -166,7 +166,7 @@ export function removeHostCommand({ args, t }) {
 function removeHostUnlocked({ args, t }) {
   const { target, manifest, tt, lang } = resolveState(args, t);
   const names = (args.agents && args.agents.length ? args.agents : args._.slice(1))
-    .map((name) => String(name).trim().toLowerCase())
+    .map((name) => canonicalHostName(name))
     .filter(Boolean);
   if (!names.length) {
     const err = new Error(tt('error.removeHostUsage', { hosts: HOST_NAMES.join(', ') }));

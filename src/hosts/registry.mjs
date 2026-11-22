@@ -289,16 +289,41 @@ export const HOSTS = {
     hardening: { level: 'hooks' },
     modelProbe: { configs: ['~/.zcode/config.json'], env: [], cli: [] },
   },
+  antigravity: {
+    dir: '.gemini',
+    label: 'Antigravity CLI',
+    tracked: false,
+    rootMemory: 'GEMINI.md',
+    detect: ['GEMINI.md', '.gemini'],
+    commands: null,
+    agents: null,
+    skills: { mode: 'shared' },
+    hooks: null,
+    mcp: { file: '.gemini/mcp_config.json', format: 'claude' },
+    hardening: { level: 'none' },
+    modelProbe: {
+      configs: ['~/.gemini/antigravity-cli/settings.json', '~/.gemini/settings.json'],
+      env: ['ANTIGRAVITY_MODEL', 'GEMINI_MODEL'],
+      cli: [],
+    },
+  },
 };
 
 export const HOST_NAMES = Object.keys(HOSTS);
 
 // 已知但暂不受支持的宿主探测面（issue #41 C 档）：list-hosts 与 check-local-gates 的机器级探测共用。
 // 宿主被正式支持（内置或 external host plugin）后，把对应项从此表移除并在 HOSTS/插件登记。
-// Codex 已内置（issue #45），自此表移除。
-export const UNMANAGED_HOST_PROBES = [
-  { name: 'Gemini CLI', dir: '.gemini', signals: ['settings.json'] },
-];
+// Codex（issue #45）与 Antigravity CLI / Gemini 已内置，自此表移除。
+export const UNMANAGED_HOST_PROBES = [];
+
+export const HOST_ALIASES = {
+  gemini: 'antigravity',
+};
+
+export function canonicalHostName(name) {
+  const key = String(name || '').trim().toLowerCase();
+  return HOST_ALIASES[key] || key;
+}
 
 // 来源：builtin / user / project / cli。外部定义由 src/hosts/external.mjs 注册。
 export const HOST_SOURCES = new Map(HOST_NAMES.map((name) => [name, 'builtin']));
@@ -327,7 +352,8 @@ export function hostSource(name) {
 
 
 export function resolveHost(name) {
-  const key = String(name || '').trim().toLowerCase();
+  let key = String(name || '').trim().toLowerCase();
+  if (HOST_ALIASES[key]) key = HOST_ALIASES[key];
   if (!HOSTS[key]) {
     const err = new Error(`unknown host: ${name}`);
     err.code = 'UNKNOWN_HOST';
@@ -338,7 +364,9 @@ export function resolveHost(name) {
 
 // 宿主模板相对路径 -> 目标相对路径。rootMemory / rootRels 文件放项目根，其余放宿主点目录。
 export function hostTargetRel(name, rel) {
-  const h = HOSTS[name];
+  let key = String(name || '').trim().toLowerCase();
+  if (HOST_ALIASES[key]) key = HOST_ALIASES[key];
+  const h = HOSTS[key];
   if (!h) {
     const err = new Error(`unknown host: ${name}`);
     err.code = 'UNKNOWN_HOST';
@@ -368,7 +396,9 @@ export function modelRoleForAgent(rel) {
 }
 
 export function isAgentTemplate(hostName, rel) {
-  const h = HOSTS[hostName];
+  let key = String(hostName || '').trim().toLowerCase();
+  if (HOST_ALIASES[key]) key = HOST_ALIASES[key];
+  const h = HOSTS[key];
   if (!h?.agents) return false;
   const normalized = String(rel).replace(/\\/g, '/');
   return normalized.startsWith(`${h.agents.dir}/`) && normalized.endsWith(h.agents.ext);

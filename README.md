@@ -3,7 +3,7 @@
 AI-Native 工作流引擎：**工作流面**管任务怎么从需求跑到关单，**工程治理面**管多宿主接线、门禁、权限、观测怎么落地。以零依赖安装器分发——一条 `npx` 命令把整套引擎装进任意项目，只依赖 Node.js ≥ 22 内置模块。
 
 - **零依赖**：引擎与安装器全部 Node 内置模块，无 Python、无框架。
-- **13 宿主一次铺开**：trae / codebuddy / codex / codeartsdoer / claude / opencode / qwen / pi / cline / commandcode / cursor / qoder / zcode；能力单源在 `src/hosts/registry.mjs`，新宿主可作插件接入。
+- **14 宿主一次铺开**：trae / codebuddy / codex / codeartsdoer / claude / opencode / qwen / pi / cline / commandcode / cursor / qoder / zcode / antigravity；能力单源在 `src/hosts/registry.mjs`，新宿主可作插件接入。
 - **幂等安装与升级**：`install-manifest.json` 记文件哈希，冲突默认跳过、`--force` 覆盖；`upgrade` / `adopt` / `prune` / `diff` 全生命周期可回查。
 - **双语**：`--lang zh-CN`（默认）或 `en`，语言包覆盖文档、提示词、脚手架与安装器输出。
 - **交互向导**：交互终端裸跑进 TUI；非交互自动降级编号问答。
@@ -21,7 +21,7 @@ AI-Native 工作流引擎：**工作流面**管任务怎么从需求跑到关单
 
 ### 工程治理：怎么管住
 
-- **Hook 中性规格编译**：`gates.json` 单一事实源，按 13 宿主 schema 编译接线（含 Codex 用户级 hooks、CodeArtsDoer `.github/hooks`），托管条目幂等合并、用户条目保留；宿主不支持的规格降级为 doctor guarantee advisory。
+- **Hook 中性规格编译**：`gates.json` 单一事实源，按 14 宿主 schema 编译接线（含 Codex 用户级 hooks、CodeArtsDoer `.github/hooks`），托管条目幂等合并、用户条目保留；宿主不支持的规格降级为 doctor guarantee advisory。
 - **权限编译**：allow / deny / ask 同源编译到各宿主；企业档按宿主能力分级加固。
 - **MCP 接线**：`servers.json` 声明，安装器编译到宿主配置。
 - **模型按角色**：code / judgment / review 三角色，安装时探测推荐或手填，按宿主注入或继承。
@@ -70,7 +70,7 @@ AI-Native 工作流引擎：**工作流面**管任务怎么从需求跑到关单
           （manifest 哈希记最终文本 · 冲突默认跳过 · adopt 接管 · prune 清孤儿）
 
 agentic-flow-kit
-├─ src/hosts/registry.mjs    宿主能力单源（13 宿主 × 命令 / 技能 / hooks / 模型）
+├─ src/hosts/registry.mjs    宿主能力单源（14 宿主 × 命令 / 技能 / hooks / 模型）
 │  ├─→ gates 编译      gates.json → 各宿主 hook schema
 │  ├─→ 权限编译        allow / deny / ask → 宿主权限配置
 │  ├─→ MCP 编译        servers.json → 宿主 MCP 配置
