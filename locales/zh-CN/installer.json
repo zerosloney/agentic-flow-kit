@@ -367,5 +367,18 @@
   "error.handoffUsage": "用法：flow-kit handoff <create|verify|list> [options]",
   "error.handoffNotFound": "未找到指定的交接信封文件：{{path}}",
   "error.handoffInvalid": "无效的交接信封文件：{{detail}}",
-  "error.handoffTainted": "交接信封触发防污染规则：{{detail}}"
+  "error.handoffTainted": "交接信封触发防污染规则：{{detail}}",
+  "mcp.auditTitle": "MCP 工具调用审计（过去 {{days}} 天）：",
+  "mcp.auditSummary": "  总调用: {{total}} | 放行: {{allowed}} | 拦截: {{denied}} | Token 消耗: {{tokens}}",
+  "mcp.auditNone": "过去 {{days}} 天内未发现 MCP 工具调用审计记录",
+  "mcp.checkAllowed": "MCP 工具权限预检放行：{{tool}}（角色: {{role}}，安全等级: {{level}}）",
+  "mcp.checkDenied": "MCP 工具权限预检拦截：{{tool}}（角色: {{role}}，判定: {{decision}}，原因: {{reason}}）",
+  "mcp.statsTitle": "MCP 工具调用统计面板（过去 {{days}} 天）：",
+  "doctor.mcpAuditOk": "MCP 工具调用审计正常（共 {{total}} 次调用，{{denied}} 次被拦截）",
+  "doctor.mcpAuditAnomalies": "过去 24 小时发现异常 MCP 拦截（{{denied}} / {{total}} 次被拒，存在潜在越权或注入探测）",
+  "doctor.mcpAuditHint": "运行 flow-kit mcp audit --days 1 查看受阻流水明细",
+  "doctor.mcpConfigInvalid": "MCP 网关配置文件语法错误或非合法对象：{{path}}",
+  "error.mcpUsage": "用法：flow-kit mcp <audit|check-call|stats> [options]",
+  "error.mcpCheckUsage": "用法：flow-kit mcp check-call <tool> [--role <role>] [--server <server>] [--args '<json>'] [--record] [--json]",
+  "error.mcpArgsInvalid": "无效的参数 JSON 字符串：{{detail}}"
 }

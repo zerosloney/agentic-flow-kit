@@ -367,5 +367,18 @@
   "error.handoffUsage": "Usage: flow-kit handoff <create|verify|list> [options]",
   "error.handoffNotFound": "Specified handoff envelope file not found: {{path}}",
   "error.handoffInvalid": "Invalid handoff envelope file: {{detail}}",
-  "error.handoffTainted": "Handoff envelope triggered context contamination rule: {{detail}}"
+  "error.handoffTainted": "Handoff envelope triggered context contamination rule: {{detail}}",
+  "mcp.auditTitle": "MCP tool audit log (past {{days}} days):",
+  "mcp.auditSummary": "  Total calls: {{total}} | Allowed: {{allowed}} | Denied: {{denied}} | Tokens used: {{tokens}}",
+  "mcp.auditNone": "No MCP tool audit records found in the past {{days}} days",
+  "mcp.checkAllowed": "MCP tool pre-flight check ALLOWED: {{tool}} (role: {{role}}, level: {{level}})",
+  "mcp.checkDenied": "MCP tool pre-flight check DENIED: {{tool}} (role: {{role}}, decision: {{decision}}, reason: {{reason}})",
+  "mcp.statsTitle": "MCP tool usage statistics (past {{days}} days):",
+  "doctor.mcpAuditOk": "MCP tool audit healthy ({{total}} calls, {{denied}} denied)",
+  "doctor.mcpAuditAnomalies": "Abnormal MCP tool denials in past 24h ({{denied}} / {{total}} denied, potential unauthorized or probe attempts)",
+  "doctor.mcpAuditHint": "Run flow-kit mcp audit --days 1 to inspect blocked calls",
+  "doctor.mcpConfigInvalid": "MCP gateway config syntax error or invalid object: {{path}}",
+  "error.mcpUsage": "Usage: flow-kit mcp <audit|check-call|stats> [options]",
+  "error.mcpCheckUsage": "Usage: flow-kit mcp check-call <tool> [--role <role>] [--server <server>] [--args '<json>'] [--record] [--json]",
+  "error.mcpArgsInvalid": "Invalid args JSON string: {{detail}}"
 }

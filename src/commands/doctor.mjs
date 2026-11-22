@@ -20,6 +20,7 @@ import { readLocalPolicy, checkPolicyDriftSync } from './policy.mjs';
 import { verifySbom } from './sbom.mjs';
 import { verifySignature, signPayload, readSignatureFile, writeSignatureFile } from '../install/notary.mjs';
 import { listHandoffFiles, verifyHandoffEnvelope } from '../install/handoff.mjs';
+import { checkMcpGatewayHealth } from '../install/mcp-gateway.mjs';
 import { RUNTIME_SCRIPTS, RUNTIME_HOOKS, KIT_ROOT } from './runtime.mjs';
 import { buildDiff } from './diff.mjs';
 
@@ -530,6 +531,12 @@ export function doctorCommand({ args, t }) {
         }));
       }
     }
+  }
+
+  // 动态 MCP 网关健康度与审计异常巡检
+  const mcpHealth = checkMcpGatewayHealth(target, t);
+  if (mcpHealth) {
+    add(mcpHealth.ok, mcpHealth.name, mcpHealth.detail, mcpHealth.fix || '', { warn: mcpHealth.warn });
   }
 
   // 模型配置是用户本地状态：存在则校验，缺失不失败（旧安装保持 doctor 全过）。

@@ -22,6 +22,7 @@ import { bundleCommand } from '../commands/bundle.mjs';
 import { sbomCommand } from '../commands/sbom.mjs';
 import { keygenCommand, signCommand, verifySigCommand } from '../commands/notary.mjs';
 import { handoffCommand } from '../commands/handoff.mjs';
+import { mcpCommand } from '../commands/mcp.mjs';
 import { KIT_ROOT } from '../install/plan.mjs';
 
 const SUPPORTED_LANGS = new Set(LANGUAGES);
@@ -31,7 +32,7 @@ const COMMANDS = [
   'install', 'add-host', 'upgrade', 'adopt', 'prune', 'remove-host', 'uninstall',
   'doctor', 'diff', 'status', 'workspace', 'devcontainer', 'add-skill', 'remove-skill',
   'skills', 'new-host', 'explain', 'list-hosts', 'policy', 'bundle', 'sbom',
-  'keygen', 'sign', 'verify-sig', 'handoff', 'run', 'hook', 'help',
+  'keygen', 'sign', 'verify-sig', 'handoff', 'mcp', 'run', 'hook', 'help',
 ];
 
 function normalizeLang(input) {
@@ -141,6 +142,8 @@ async function main(argv) {
       return verifySigCommand({ args, t });
     case 'handoff':
       return handoffCommand({ args, t });
+    case 'mcp':
+      return mcpCommand({ args, t });
     default:
       {
         const err = new Error(`unknown command: ${command} (available: ${COMMANDS.join(', ')})`);
