@@ -18,10 +18,10 @@ import { makeTmp } from './helpers/tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-test('registry covers all 12 hosts with complete, valid capabilities', () => {
-  assert.equal(HOST_NAMES.length, 12);
+test('registry covers all 13 hosts with complete, valid capabilities', () => {
+  assert.equal(HOST_NAMES.length, 13);
   assert.deepEqual([...HOST_NAMES].sort(), [
-    'claude', 'cline', 'codeartsdoer', 'codebuddy', 'codex', 'commandcode', 'opencode',
+    'claude', 'cline', 'codeartsdoer', 'codebuddy', 'codex', 'commandcode', 'cursor', 'opencode',
     'pi', 'qoder', 'qwen', 'trae', 'zcode',
   ]);
 

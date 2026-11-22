@@ -94,7 +94,7 @@ test('external host installs commands, agents and skill index; diff/upgrade/adop
   const demo = hosts.find((h) => h.name === 'demo');
   assert.equal(demo.source, 'project');
   assert.equal(demo.dir, '.demo');
-  assert.equal(hosts.filter((h) => h.source === 'builtin').length, 12);
+  assert.equal(hosts.filter((h) => h.source === 'builtin').length, 13);
 
   const diff = json(run(['diff', '--target', '.', '--json'], dir));
   assert.equal(diff.summary.unchanged, diff.summary.total);

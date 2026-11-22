@@ -1,0 +1,10 @@
+---
+description: AI-Native 开发工作流指引与全局红线
+globs: *
+alwaysApply: true
+---
+本文件是指针壳，只是入口指引；执行时读取权威源，不在此复制正文。
+
+- 治理路由与全局红线单源：根 `AGENTS.md`（执行任何任务前先完整阅读）。
+- 引擎权威面：`.agents/`（commands / skills / config 的权威正文都在该目录，本目录只有指针）。
+- 技能索引：`.cursor/SKILLS.md`（查看可用技能与调用入口）。

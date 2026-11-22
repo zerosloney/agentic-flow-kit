@@ -50,6 +50,9 @@ test('root config and memory files are detection signals', () => {
 
   fs.writeFileSync(path.join(dir, '.mcp.json'), '{}\n', 'utf8');
   assert.ok(detectHosts(dir).includes('claude'));
+
+  fs.writeFileSync(path.join(dir, '.cursorrules'), '# cursor\n', 'utf8');
+  assert.ok(detectHosts(dir).includes('cursor'));
 });
 
 test('install --auto-hosts adopts detected hosts and reports them in JSON', () => {

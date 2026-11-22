@@ -18,6 +18,7 @@ const HOST_DIRS = {
   pi: '.pi',
   cline: '.cline',
   commandcode: '.commandcode',
+  cursor: '.cursor',
   qoder: '.qoder',
   zcode: '.zcode',
 };
@@ -62,6 +63,7 @@ const AGENT_TITLE = {
 // 宿主规则入口指针（rule/）：frontmatter 描述英文化，正文走指针壳通用分支。
 const RULE_DESC = {
   'flow-kit': 'Rule entry pointer: governance routing and red lines live in the root AGENTS.md; engine authority lives in .agents/',
+  workflow: 'AI-Native development workflow guidance and global red lines',
 };
 
 function walk(dir, rel = '') {
@@ -100,7 +102,7 @@ const normalize = (text) => text.replace(/\r\n/g, '\n');
 for (const host of Object.keys(HOST_DIRS)) {
   const dir = path.join(T, host);
   for (const rel of walk(dir)) {
-    const base = path.basename(rel).replace(/\.(md|yml|yaml)$/i, '');
+    const base = path.basename(rel).replace(/\.(md|mdc|yml|yaml)$/i, '');
     const skill = rel.match(/^skills\/([^/]+)\/SKILL\.md$/);
     const desc = COMMAND_DESC[base] || AGENT_DESC[base] || RULE_DESC[base] || (skill ? SKILL_DESC[skill[1]] : undefined);
     const abs = path.join(dir, rel);
@@ -120,17 +122,32 @@ Single source of truth: root \`AGENTS.md\` (read it fully before starting). Host
       continue;
     }
 
-    // 规则文件：两条固定规则，直接生成英文。
-    if (rel.startsWith('rules/') && /\.md$/i.test(rel)) {
+    // 规则文件：固定规则，直接生成英文。
+    if (rel.startsWith('rules/') && /\.(md|mdc)$/i.test(rel)) {
+      if (base === 'workflow') {
+        overrides.set(outRel, `---
+description: AI-Native development workflow guidance and global red lines
+globs: *
+alwaysApply: true
+---
+This file is a pointer shell. Read the authoritative source at execution time; do not copy the body here.
+
+- Governance routing and global red lines: root \`AGENTS.md\` (read fully before any task).
+- Engine authority: \`.agents/\` (commands, skills, and configuration live there; this directory holds only pointers).
+- Skills index: \`.cursor/SKILLS.md\` (view available skills and invocation entries).
+`);
+        continue;
+      }
       const isBackend = rel.includes('backend');
       const scope = isBackend ? 'backend' : 'frontend';
       const name = isBackend ? 'backend/AGENTS.md' : 'frontend/AGENTS.md';
       const detail = isBackend
         ? 'including §6 data integrity / API contract / database operation hard constraints'
         : 'including the BC/G gates and Never rules';
+      const globsLine = rel.endsWith('.mdc') ? `globs: ${scope}/**\nalwaysApply: false` : 'alwaysApply: true';
       overrides.set(outRel, `---
 description: Read ${name} before changing ${scope} files
-alwaysApply: true
+${globsLine}
 ---
 Before modifying or reviewing any file under \`${scope}/\`, read and follow \`${name}\` (${detail}).
 `);

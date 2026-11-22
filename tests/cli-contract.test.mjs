@@ -262,7 +262,7 @@ test('list-hosts --json lists the registry surface', () => {
   const r = run(['list-hosts', '--json'], KIT);
   assert.equal(r.status, EXIT.OK, r.stderr);
   const hosts = parseSingleJson(r);
-  assert.equal(hosts.length, 12);
+  assert.equal(hosts.length, 13);
   const claude = hosts.find((h) => h.name === 'claude');
   assert.ok(claude);
   assert.equal(claude.dir, '.claude');

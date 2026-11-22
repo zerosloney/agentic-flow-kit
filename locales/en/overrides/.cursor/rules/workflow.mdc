@@ -1,0 +1,10 @@
+---
+description: AI-Native development workflow guidance and global red lines
+globs: *
+alwaysApply: true
+---
+This file is a pointer shell. Read the authoritative source at execution time; do not copy the body here.
+
+- Governance routing and global red lines: root `AGENTS.md` (read fully before any task).
+- Engine authority: `.agents/` (commands, skills, and configuration live there; this directory holds only pointers).
+- Skills index: `.cursor/SKILLS.md` (view available skills and invocation entries).
