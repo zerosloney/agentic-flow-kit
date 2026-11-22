@@ -6,7 +6,7 @@
 // 列结构变化（增删列 / 列数漂移）仍须被指纹捕捉。
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { parseClarifyTable, parsePremiseTable, commitmentFingerprint } from '../templates/engine/.agents/scripts/stage-gates.mjs';
+import { parseClarifyTable, parsePremiseTable, commitmentFingerprint, laneOfDoc, draftGateFor } from '../templates/engine/.agents/scripts/stage-gates.mjs';
 
 const SPEC = [
   '# SPEC — demo',
@@ -108,3 +108,18 @@ test('表头不含「证据」的表不剥列：数据单元格含「证据」�
   const b = commitmentFingerprint(['| 维度 | 结论 |', '|---|---|', '| 数据口径 | 证据充分 |', ''].join('\n'));
   assert.notEqual(b, a);
 });
+
+test('laneOfDoc and draftGateFor: L0 fast-track allows low-lane bypass as self-entry plan', () => {
+  assert.equal(laneOfDoc('L0'), 'low');
+  assert.equal(laneOfDoc('L1'), 'low');
+  assert.equal(laneOfDoc('L2'), 'high');
+  assert.equal(laneOfDoc('L3'), 'high');
+
+  const root = process.cwd();
+  const gateRes = draftGateFor('plan', root, 'nonexistent-l0-standalone-task', { level: 'L0' });
+  assert.equal(gateRes.ok, true);
+  assert.equal(gateRes.laneBypass, true);
+  assert.equal(gateRes.entry.selfEntry, true);
+  assert.equal(gateRes.entry.level, 'L0');
+});
+

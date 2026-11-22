@@ -64,19 +64,20 @@ const FULL_SECTIONS = [
 
 export function renderPlan({ topic, level = 'L1', date = TODAY, lite = false }) {
   if (!LEVELS.includes(level)) throw new Error('level 不在枚举 ' + LEVELS.join('|') + '：' + level);
-  const sections = level === 'L1' ? (lite ? L1_LITE_SECTIONS : L1_SECTIONS) : FULL_SECTIONS;
+  const isLiteLevel = level === 'L0' || level === 'L1';
+  const sections = isLiteLevel ? ((lite || level === 'L0') ? L1_LITE_SECTIONS : L1_SECTIONS) : FULL_SECTIONS;
   // 日期写进 frontmatter（2026-10-27）：此前 renderPlan 收了 date 参数却从不落 frontmatter，
   // 致 plan 无「日期」字段——委派台账在场门（confirm-doc）与检查 18 均以日期为适用前提，
   // 缺日期即整段跳过 = 本门对绝大多数 L2/L3 plan 静默失效。文件名兜底为第二道保险。
   const fm = '---\n状态: draft\n级别: ' + level + '\n日期: ' + date + '\n模块: pipeline\n---\n';
-  const entryLine = level === 'L1'
-    ? '对应入口：本 plan（L1 不再另立 intent）。修复类另保留 ../incidents/YYYY-MM-DD-<主题>.md\n对应 spec：省略\n\n'
+  const entryLine = isLiteLevel
+    ? '对应入口：本 plan（' + level + ' 不再另立 intent）。修复类另保留 ../incidents/YYYY-MM-DD-<主题>.md\n对应 spec：省略\n\n'
     : '对应入口：../intents/YYYY-MM-DD-<主题>.md 或 ../incidents/YYYY-MM-DD-<主题>.md（保留实际一项）\n对应 spec：../specs/YYYY-MM-DD-<主题>.md\n\n';
-  let body = '# PLAN — ' + topic + '\n\n<!-- L2/L3 与 intents/ 或 incidents/ 下同名入口配对，且须先有 ../specs/ 同名 spec；L1 本文件即入口 -->\n<!-- frontmatter 受限子集：状态∈draft/approved/done/superseded/cancelled；级别∈L1/L2/L3；正文不再写状态/级别行 -->\n<!-- L1：一份 plan 收口来源/目标/红线/改动/验证/验收。L2/L3 仍走 intent + spec + 下面 4 节 -->\n\n' + entryLine;
+  let body = '# PLAN — ' + topic + '\n\n<!-- L2/L3 与 intents/ 或 incidents/ 下同名入口配对，且须先有 ../specs/ 同名 spec；L0/L1 本文件即入口 -->\n<!-- frontmatter 受限子集：状态∈draft/approved/done/superseded/cancelled；级别∈L0/L1/L2/L3；正文不再写状态/级别行 -->\n<!-- L0/L1：一份 plan 收口来源/目标/红线/改动/验证/验收。L2/L3 仍走 intent + spec + 下面 4 节 -->\n\n' + entryLine;
   for (const { title, hint } of sections) {
     body += '## ' + title + '\n\n' + hint + '\n\n';
   }
-  body += '## 确认与复核\n\n> 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节（确认环节的机器可见态），done 只在关单出现——禁从 draft 直跳 done（papercut）。\n- 确认结果：approved（YYYY-MM-DD 用户对话内确认）；done（YYYY-MM-DD 关单，随入口文档置终态）\n- 确认门记录：plan 草稿全文过目 + 改动清单确认（stages.md Build 两道门，逐次，不合并）\n- 复核：L1 不要求独立复核\n\n> 开发全景：`flow-kit run gen-dev-tour.mjs <本文件>`；看板实时版 `/tour?file=<本文件>`。步骤取「任务拆解/步骤」，文件取任务每步「- 文件：…」或「改动方案」，git 工作树补实际改动（口径 `.agents/skills/dev-tour/SKILL.md`）。\n';
+  body += '## 确认与复核\n\n> 确认 = 用户在对话内一句话通过；确认后本 plan 状态 draft → approved 并回填本节（确认环节的机器可见态），done 只在关单出现——禁从 draft 直跳 done（papercut）。\n- 确认结果：approved（YYYY-MM-DD 用户对话内确认）；done（YYYY-MM-DD 关单，随入口文档置终态）\n- 确认门记录：plan 草稿全文过目 + 改动清单确认（stages.md Build 两道门，逐次，不合并）\n- 复核：L0/L1 不要求独立复核\n\n> 开发全景：`flow-kit run gen-dev-tour.mjs <本文件>`；看板实时版 `/tour?file=<本文件>`。步骤取「任务拆解/步骤」，文件取任务每步「- 文件：…」或「改动方案」，git 工作树补实际改动（口径 `.agents/skills/dev-tour/SKILL.md`）。\n';
   return { frontmatter: fm, body: fm + body, sections: sections.map((s) => s.title) };
 }
 
@@ -85,7 +86,7 @@ if (isMain) {
   const a = parseArgs(process.argv.slice(2));
   if (!a.topic || !a.output) fail('必填：--topic / --output；选填：--level（默认 L1）/ --root');
   if (!LEVELS.includes(a.level)) fail('level 必须在 ' + LEVELS.join('|') + '：' + a.level);
-  if (a.lite && a.level !== 'L1') fail('--lite 仅支持 --level L1');
+  if (a.lite && a.level !== 'L1' && a.level !== 'L0') fail('--lite 仅支持 --level L0 或 L1');
   const ws = resolveWorkspace(a.output, a.root);
   if (ws) {
     const gate = draftGateFor('plan', ws.root, ws.base, { level: a.level });
@@ -100,6 +101,6 @@ if (isMain) {
   const { body } = renderPlan(a);
   fs.mkdirSync(path.dirname(a.output), { recursive: true });
   fs.writeFileSync(a.output, body);
-  console.log('✅ 已生成 plan 草稿：' + a.output + '（状态 draft / 级别 ' + a.level + ' / ' + (a.level === 'L1' ? (a.lite ? 'L1-lite 三节（plan 即入口）' : 'L1 五节（plan 即入口）') : '完整 4 节') + '）');
+  console.log('✅ 已生成 plan 草稿：' + a.output + '（状态 draft / 级别 ' + a.level + ' / ' + ((a.level === 'L0' || a.level === 'L1') ? ((a.lite || a.level === 'L0') ? (a.level + '-lite 三节（plan 即入口）') : 'L1 五节（plan 即入口）') : '完整 4 节') + '）');
 }
 export default renderPlan;

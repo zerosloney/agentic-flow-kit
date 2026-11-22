@@ -11,7 +11,7 @@ import {
   parseParallelList as parseParallel, parseRetryCap as parseRetry, resolveArtifact, resolveDocRel,
   stageArtifactProblems, failRoute, renderDashboard, stripAnsi, visualWidth, truncate, truncateAnsi, parseGateName,
   pruneWorkOrderContext, listAllRuns, renderMarkdown, inspectArtifact, getAvailableTargets, renderInspect,
-  analyzeGateFailure,
+  analyzeGateFailure, manifestPristine, isRuntimeOrManaged, checkAuthorized, validateDraftContent, closeoutComplete,
 } from '../templates/engine/.agents/scripts/pipeline-run.mjs';
 import { touchProblems, externalReviewId, parseReviewMetadata, filesOutsidePlan } from '../templates/engine/.agents/scripts/touch-set.mjs';
 
@@ -1447,4 +1447,165 @@ test('inspectArtifact and renderDashboard: surfaces Smart Fix attribution', () =
   const failDash = renderDashboard(ctx, failRun, { noColor: true }).join('\n');
   assert.match(failDash, /💡 归因: 常驻面体积超限 \(budget-exceeded\)/);
   assert.match(failDash, /🔧 建议调试: node --test tests\/rule-budget\.test\.mjs/);
+});
+
+test('manifestPristine: CRLF file matches manifest sha256 computed from LF', () => {
+  const root = makeTmp('pipeline-crlf-');
+  const rel = 'src/example.txt';
+  const lfContent = 'hello\nworld\n';
+  const crlfContent = 'hello\r\nworld\r\n';
+  const hash = crypto.createHash('sha256').update(lfContent, 'utf8').digest('hex');
+
+  fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+  fs.mkdirSync(path.join(root, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(root, rel), crlfContent);
+  fs.writeFileSync(path.join(root, '.agents', 'install-manifest.json'), JSON.stringify({
+    kit: 'agentic-flow-kit',
+    files: { [rel]: hash },
+  }));
+
+  const pristine = manifestPristine({ root });
+  assert.ok(pristine.has(rel), 'CRLF file should be recognized as pristine when normalized LF hash matches');
+});
+
+test('isRuntimeOrManaged: matches runtime allowlist and installer merge-blocks', () => {
+  const root = makeTmp('pipeline-runtime-');
+  const ctx = { root };
+
+  // Runtime owned
+  assert.equal(isRuntimeOrManaged(ctx, '.agents/cache/foo.json'), true);
+  assert.equal(isRuntimeOrManaged(ctx, '.agents/config/model-roles.local.json'), true);
+  assert.equal(isRuntimeOrManaged(ctx, '.agents/config/session-context.local.json'), true);
+  assert.equal(isRuntimeOrManaged(ctx, '.agents/notes/runtime-env.local.md'), true);
+  assert.equal(isRuntimeOrManaged(ctx, '.agents/.kit/baseline/snapshot.json'), true);
+  assert.equal(isRuntimeOrManaged(ctx, '.agents/verifications.jsonl'), true);
+  assert.equal(isRuntimeOrManaged(ctx, '.agents/judgments.jsonl'), true);
+  assert.equal(isRuntimeOrManaged(ctx, '.agents/evals/report.json'), true);
+  assert.equal(isRuntimeOrManaged(ctx, '.agents/install-manifest.json'), true);
+
+  // Managed merge blocks in .gitattributes and .gitignore
+  fs.writeFileSync(path.join(root, '.gitattributes'), '# <!-- magpie:begin -->\n* text=auto eol=lf\n# <!-- magpie:end -->\n');
+  fs.writeFileSync(path.join(root, '.gitignore'), '# agentic-flow-kit managed\n.agents/cache/\n');
+  assert.equal(isRuntimeOrManaged(ctx, '.gitattributes'), true);
+  assert.equal(isRuntimeOrManaged(ctx, '.gitignore'), true);
+
+  // Normal user file
+  assert.equal(isRuntimeOrManaged(ctx, 'src/index.js'), false);
+  assert.equal(isRuntimeOrManaged(ctx, 'README.md'), false);
+});
+
+test('checkAuthorized: tolerates zero-commit cold start runtime files and gives actionable suggestions on error', () => {
+  const root = fixture();
+  assert.equal(spawnSync('git', ['init', '-q'], { cwd: root }).status, 0);
+
+  // Pristine install file with CRLF
+  const pristineRel = '.agents/notes/managed.md';
+  const lfText = '管理说明\n';
+  const crlfText = '管理说明\r\n';
+  const hash = crypto.createHash('sha256').update(lfText, 'utf8').digest('hex');
+  fs.mkdirSync(path.join(root, '.agents/notes'), { recursive: true });
+  fs.writeFileSync(path.join(root, pristineRel), crlfText);
+
+  // Runtime owned untracked files
+  fs.mkdirSync(path.join(root, '.agents/config'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.agents/config/model-roles.local.json'), '{"roles":{}}\n');
+  fs.mkdirSync(path.join(root, '.agents/.kit/baseline'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.agents/.kit/baseline/snapshot.json'), '{}\n');
+
+  // Populate all existing fixture files into manifest, with pristineRel using LF hash (while on disk it has CRLF)
+  const files = {};
+  const walk = (dir) => {
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, ent.name);
+      const rel = path.relative(root, abs).replace(/\\/g, '/');
+      if (ent.isDirectory()) {
+        if (rel === '.git' || rel === '.agents/cache') continue;
+        walk(abs);
+      } else if (rel !== '.agents/install-manifest.json') {
+        files[rel] = crypto.createHash('sha256').update(fs.readFileSync(abs)).digest('hex');
+      }
+    }
+  };
+  walk(root);
+  files[pristineRel] = hash;
+
+  // Manifest
+  fs.writeFileSync(path.join(root, '.agents/install-manifest.json'), JSON.stringify({
+    kit: 'agentic-flow-kit',
+    files,
+  }));
+
+  // Work order modifies only my-file.txt
+  fs.writeFileSync(path.join(root, 'my-file.txt'), 'hello\n');
+
+  const ctx = { root, gitPrefix: ['git'], runsDir: path.join(root, '.agents', 'cache', 'pipeline-runs') };
+  const run = { runId: 'test-cold-start', stage: 'implement', events: [] };
+
+  // 1. When my-file.txt is listed, check passes (runtime and CRLF pristine are exempt)
+  const okRes = checkAuthorized(ctx, run, 'my-file.txt');
+  assert.equal(okRes.ok, true);
+
+  // 2. When an unexpected user file is present, check fails with actionable diagnostic
+  fs.writeFileSync(path.join(root, 'unexpected.txt'), 'extra\n');
+  const failRes = checkAuthorized(ctx, run, 'my-file.txt');
+  assert.equal(failRes.ok, false);
+  assert.match(failRes.problems[0], /git 改动超出回填清单（偏离即停）/);
+  assert.match(failRes.problems[0], /git 改动超出回填清单（偏离即停）：unexpected\.txt/);
+  assert.match(failRes.problems[0], /请将其加入 --files/);
+});
+
+test('L0 fast-track: validateDraftContent and closeoutComplete accept lite sections', () => {
+  const l0Draft = [
+    '---',
+    '状态: draft',
+    '级别: L0',
+    '模块: wiki',
+    '---',
+    '',
+    '# 修复微小文案',
+    '',
+    '## 改动方案',
+    '修改 README.md 中的笔误。',
+    '',
+    '## 验证与验收',
+    '- [ ] 文案修改正确',
+    '',
+  ].join('\n');
+
+  // L0 plan passes with lite sections (empty problems array)
+  const draftProbs = validateDraftContent(l0Draft, 'plan', 'L0');
+  assert.equal(draftProbs.length, 0, `Expected 0 problems, got: ${draftProbs.join('; ')}`);
+
+  // Standard L1 plan fails if missing required sections
+  const l1FailProbs = validateDraftContent(l0Draft, 'plan', 'L1');
+  assert.ok(l1FailProbs.length > 0);
+  assert.match(l1FailProbs.join('\n'), /缺节/);
+
+  // L0 closeoutComplete passes when criteria are checked with evidence
+  const l0Done = l0Draft.replace('- [ ] 文案修改正确', '- [x] 文案修改正确（证据：commit abc）');
+  const closeRes = closeoutComplete(l0Done);
+  assert.equal(closeRes.ok, true, `Expected closeout ok, got: ${closeRes.problems?.join('; ')}`);
+});
+
+test('L0 fast-track: pipeline triage routes L0 directly to plan-fill with --lite', () => {
+  const root = fixture();
+  writeRun(root, {
+    triage: null,
+    stage: 'triage',
+    stopType: 'work-order',
+    workOrder: { id: 1, kind: 'triage' },
+    docs: { entry: null, spec: null, plan: null },
+  });
+
+  const r = runPipeline(root, ['next', '--run', 'test-run', '--triage', 'kind=require level=L0 module=wiki topic=micro-fix']);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+
+  const run = readRun(root);
+  // Routes directly to plan-draft (having completed plan-fill), skipping intent-fill and spec-fill
+  assert.equal(run.triage.level, 'L0');
+  assert.equal(run.stage, 'plan-draft');
+  assert.equal(run.stopType, 'work-order');
+  assert.equal(run.workOrder.kind, 'draft');
+  assert.match(run.docs.plan, /plan\.md$/);
+  assert.equal(run.docs.entry, run.docs.plan); // L0 plan is self-entry
 });

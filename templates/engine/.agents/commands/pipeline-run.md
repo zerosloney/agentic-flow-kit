@@ -15,7 +15,7 @@ next: 按 run 停机点循环推进至 done
 阶段机已对齐 commands 手册。与手动阶段路由二选一，禁混用。
 
 > **实战已验证（2026-11-18）**：首个端到端真实 run 验证通过（22 门 / 3 确认 / 3 提交，台账配对成立）。启用前建议跑 `flow-kit run check-pipeline-state.mjs` 静态闭包检查。
-> **已知首跑问题**：零提交基线全新装户，首个 implement/fix 门可能把安装期生成文件误报「偏离即停」——如实列入 `--files` 推进。
+> **冷启动自愈**：全新装户与零提交基线已通过安装清单与运行态白名单实现自适应放行，首跑不再误报「偏离即停」。
 
 > **分工**：确定性部分由 `pipeline-run.mjs` 状态机驱动（fill-* $\rightarrow$ confirm-doc $\rightarrow$ verify.mjs $\rightarrow$ git，退出码全记录）；AI 槽位按工单协议执行；人件门到点即停、原话代录；宿主禁自行改状态。
 > **产物目录**：pipeline 产物收进 `workflow/tasks/<date>-<topic>/`（`intent.md`/`incident.md`/`spec.md`/`plan.md`），与手动路径（`intents/`、`plans/`、`specs/`）隔离——手动扫描器不扫 `tasks/`，两类文档互不干扰。

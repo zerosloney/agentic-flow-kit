@@ -298,8 +298,8 @@ export function reviewLineFor(root, base) {
 // suspect 消费规则：红线类检查按 low 执行（拦红线）；豁免类门（起草豁免/--batch/--auto/逐阶段深度）
 // 按 high 执行（不豁免）。
 export function laneOfDoc(level) {
-  if (!/^L[1-3]$/.test(level || '')) return 'suspect';
-  return level === 'L1' ? 'low' : 'high';
+  if (!/^L[0-3]$/.test(level || '')) return 'suspect';
+  return (level === 'L0' || level === 'L1') ? 'low' : 'high';
 }
 
 // ---- 歧义清单门（clarify-ledger 2026-10-22）----
@@ -550,16 +550,16 @@ export function draftGateFor(kind, root, base, opts = {}) {
     if (entry.kind === 'intent' && entry.status === 'draft' && lane === 'low') {
       return { ok: true, entry, laneBypass: true };
     }
-    // L1 plan 即入口：没有 intent/incident 时，这份 plan 自己就是入口。
-    // 文件已在则级别以文件为准（禁止用 --level L1 把已有 L2 plan 放行）；尚未落盘才认 opts.level。
+    // L0/L1 plan 即入口：没有 intent/incident 时，这份 plan 自己就是入口。
+    // 文件已在则级别以文件为准（禁止用 --level L0/L1 把已有 L2 plan 放行）；尚未落盘才认 opts.level。
     if (kind === 'plan' && entry.kind === null) {
       const planAbs = path.join(root, 'workflow', 'plans', `${base}.md`);
       const declared = fs.existsSync(planAbs) ? readFm(planAbs, '级别') : (opts.level || '');
-      if (declared === 'L1') {
+      if (declared === 'L0' || declared === 'L1') {
         return {
           ok: true,
           entry: {
-            ok: true, kind: 'plan', rel: `workflow/plans/${base}.md`, level: 'L1',
+            ok: true, kind: 'plan', rel: `workflow/plans/${base}.md`, level: declared,
             status: fs.existsSync(planAbs) ? (readFm(planAbs, '状态') || 'draft') : 'draft',
             selfEntry: true, legacy: false,
           },
@@ -578,11 +578,11 @@ export function draftGateFor(kind, root, base, opts = {}) {
   // spec 起草与确认。注意：库存量信号**本身即等于入口已确认**（judgeDoc 的 `台账行 || 存量口径`，
   // 与检查 1 / 15 / 配对门同口径）——台账豁免发生在 judgeDoc，不在本处；本处不做二次豁免
   // （第三轮复核 P2-1：原句「台账要求不豁免」把两件事写反，已订正）。
-  if (!entry.storageLegacy && !/^L[1-3]$/.test(entry.level)) {
+  if (!entry.storageLegacy && !/^L[0-3]$/.test(entry.level)) {
     return {
       ok: false,
       reason: `入口缺合法「级别」字段（现「${entry.level || '缺失'}」，无法判定前置深度）`,
-      hint: '先给入口补「级别: L1-L3」字段，再继续',
+      hint: '先给入口补「级别: L0-L3」字段，再继续',
     };
   }
   if (kind === 'plan' && !entry.storageLegacy && (entry.level === 'L2' || entry.level === 'L3')) {
@@ -732,7 +732,7 @@ export function acceptanceEvidenceGate(root, abs, rel) {
     const base = path.basename(rel);
     const hasIntent = fs.existsSync(path.join(root, 'workflow', 'intents', base));
     const hasIncident = fs.existsSync(path.join(root, 'workflow', 'incidents', base));
-    isTarget = readFm(abs, '级别') === 'L1' && !hasIntent && !hasIncident;
+    isTarget = (readFm(abs, '级别') === 'L0' || readFm(abs, '级别') === 'L1') && !hasIntent && !hasIncident;
   }
   if (!isTarget) return { ok: true };
   const secIdx = bodyLines.findIndex((l) => /^##\s*[^#]*验收标准/.test(l));

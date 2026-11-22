@@ -345,23 +345,30 @@ export function validateDraftContent(text, kind, level) {
   if (kind !== 'incident' && !fmGet(text, '级别')) problems.push('frontmatter 缺「级别:」行');
   const ph = placeholdersIn(text);
   if (ph.length) problems.push(`模板占位符残留：${ph.join('、')}`);
+  const isLite = level === 'L0' || level === 'L1';
   const required = {
-    intent: level === 'L1' ? ['背景与问题', '目标', '验收标准'] : ['背景与问题', '历史教训/防复发', '目标', '非目标', '约束', '验收标准'],
+    intent: isLite ? ['背景与问题', '目标', '验收标准'] : ['背景与问题', '历史教训/防复发', '目标', '非目标', '约束', '验收标准'],
     spec: ['功能行为', '数据流', '系统改动', '约束遵守映射'],
-    plan: level === 'L1' ? ['入口', '改动方案', '约束与风险', '验证计划', '验收标准'] : ['改动方案', '任务拆解', '执行顺序', '验证计划'],
+    plan: isLite ? ['入口', '改动方案', '约束与风险', '验证计划', '验收标准'] : ['改动方案', '任务拆解', '执行顺序', '验证计划'],
     incident: ['时间线', '根因', '复盘三件套'],
   }[kind] || [];
   for (const sec of required) {
     const b = sectionBody(text, sec);
-    if (b === null) { if (!(level === 'L1' && ['非目标', '约束', '任务拆解', '执行顺序'].includes(sec))) problems.push(`缺节：## ${sec}`); }
-    else if (!b) problems.push(`节为空：## ${sec}`);
+    if (b === null) {
+      if (isLite && ['非目标', '约束', '任务拆解', '执行顺序', '约束与风险', ...(level === 'L0' ? ['入口'] : [])].includes(sec)) continue;
+      if (isLite && (sec === '验证计划' || sec === '验收标准') && sectionBody(text, '验证与验收') !== null) continue;
+      problems.push(`缺节：## ${sec}`);
+    } else if (!b) {
+      problems.push(`节为空：## ${sec}`);
+    }
   }
   return problems;
 }
 
 export function closeoutComplete(text) {
-  const body = sectionBody(text, '验收标准');
-  if (body === null) return { ok: false, problems: ['缺「## 验收标准」节'] };
+  let body = sectionBody(text, '验收标准');
+  if (body === null) body = sectionBody(text, '验证与验收');
+  if (body === null) return { ok: false, problems: ['缺「## 验收标准」或「## 验证与验收」节'] };
   const lines = body.split(/\r?\n/);
   const open = lines.filter((l) => /^\s*-\s\[\s\]\s/.test(l));
   // 复核 P2-6：证据冒号后须直接跟内容（非空白、非收括号）——「（证据：）」空值不算过
@@ -636,11 +643,11 @@ export function stageBar(run) {
   const seq = run.triage?.kind === 'verify' ? [['Verify', s === 'verify' || s === 'done']]
     : run.triage?.kind === 'review' ? [['Review', s === 'review-only' || s === 'done']]
       : run.triage?.kind === 'deploy' ? [['Checklist', ['deploy-check', 'deploy-prep'].includes(s)], ['Authorize', s === 'deploy-await' || s === 'done']]
-        : [['Plan', (run.triage?.level === 'L1' && run.triage?.kind !== 'fix'
+        : [['Plan', ((run.triage?.level === 'L0' || run.triage?.level === 'L1') && run.triage?.kind !== 'fix'
             ? ['plan-fill', 'plan-draft', 'plan-confirm', 'triage']
             : ['intent-fill', 'intent-draft', 'intent-confirm', 'incident-fill', 'incident-draft', 'incident-confirm', 'triage']).includes(s)],
           ['Design', ['spec-fill', 'spec-draft', 'spec-review', 'spec-confirm'].includes(s)],
-          ['Build', (run.triage?.level === 'L1' && run.triage?.kind !== 'fix'
+          ['Build', ((run.triage?.level === 'L0' || run.triage?.level === 'L1') && run.triage?.kind !== 'fix'
             ? ['changes-confirm', 'implement', 'fix', 'changes-verify']
             : ['plan-fill', 'plan-draft', 'plan-confirm', 'changes-confirm', 'implement', 'fix', 'changes-verify']).includes(s)],
           ['Test', ['verify', 'review', 'closeout', 'done-confirm', 'incident-fixed-confirm', 'incident-closed-confirm', 'direct-commit'].includes(s) || s === 'done']];
@@ -854,11 +861,11 @@ export function renderDashboard(ctx, run, options = {}) {
   const seq = run.triage?.kind === 'verify' ? [['Verify', s === 'verify' || s === 'done']]
     : run.triage?.kind === 'review' ? [['Review', s === 'review-only' || s === 'done']]
       : run.triage?.kind === 'deploy' ? [['Checklist', ['deploy-check', 'deploy-prep'].includes(s)], ['Authorize', s === 'deploy-await' || s === 'done']]
-        : [['Plan', (run.triage?.level === 'L1' && run.triage?.kind !== 'fix'
+        : [['Plan', ((run.triage?.level === 'L0' || run.triage?.level === 'L1') && run.triage?.kind !== 'fix'
             ? ['plan-fill', 'plan-draft', 'plan-confirm', 'triage']
             : ['intent-fill', 'intent-draft', 'intent-confirm', 'incident-fill', 'incident-draft', 'incident-confirm', 'triage']).includes(s)],
           ['Design', ['spec-fill', 'spec-draft', 'spec-review', 'spec-confirm'].includes(s)],
-          ['Build', (run.triage?.level === 'L1' && run.triage?.kind !== 'fix'
+          ['Build', ((run.triage?.level === 'L0' || run.triage?.level === 'L1') && run.triage?.kind !== 'fix'
             ? ['changes-confirm', 'implement', 'fix', 'changes-verify']
             : ['plan-fill', 'plan-draft', 'plan-confirm', 'changes-confirm', 'implement', 'fix', 'changes-verify']).includes(s)],
           ['Test', ['verify', 'review', 'closeout', 'done-confirm', 'incident-fixed-confirm', 'incident-closed-confirm', 'direct-commit'].includes(s) || s === 'done']];
@@ -1500,7 +1507,7 @@ function docsCommit(ctx, run, files, subject) {
 
 // 安装产物（manifest 有记录且磁盘哈希未变）不是工单改动：fresh install 尚未提交基线时，
 // git status 会把全部托管文件列为 untracked，旧逻辑误判为「改动超出回填清单」。
-function manifestPristine(ctx) {
+export function manifestPristine(ctx) {
   const pristine = new Set();
   let manifest;
   try {
@@ -1511,7 +1518,16 @@ function manifestPristine(ctx) {
   for (const [rel, hash] of Object.entries(manifest.files || {})) {
     try {
       const buf = fs.readFileSync(path.join(ctx.root, rel));
-      if (crypto.createHash('sha256').update(buf).digest('hex') === hash) pristine.add(rel);
+      const rawHash = crypto.createHash('sha256').update(buf).digest('hex');
+      if (rawHash === hash) {
+        pristine.add(rel);
+      } else {
+        // CRLF 兼容容错：Windows 或 core.autocrlf 转换下的文本文件归一为 LF 后比对
+        const norm = buf.toString('utf8').replace(/\r\n/g, '\n');
+        if (crypto.createHash('sha256').update(norm, 'utf8').digest('hex') === hash) {
+          pristine.add(rel);
+        }
+      }
     } catch {
       /* 缺失/不可读：不算 pristine，按普通改动处理 */
     }
@@ -1549,19 +1565,53 @@ function changedFiles(ctx, run) {
 // ③ `workflow/effective-policy.md`：自愈生成物（engine-artifacts 门漂移即重生成，渲染含当日日期、逐日
 // 合法漂移，rehash 无意义）。安全性同既有注释：三者真值源（policy.json / mechanism-registry /
 // engine.json / 引擎模板）均在 manifest 内受 pristine 保护，机器改动会被自愈覆盖或本就是机器输出。
-const RUNTIME_OWNED = ['.agents/cache/', '.agents/confirmations.jsonl', '.agents/confirmations.d/', 'workflow/INDEX.md', '.agents/notes/engine-map.md', 'workflow/effective-policy.md', 'tmp/'];
+// 冷启动与运行期白名单（完整覆盖安装期本地配置、基线快照与凭证产物）：
+const RUNTIME_OWNED = [
+  '.agents/cache/',
+  '.agents/confirmations.jsonl',
+  '.agents/confirmations.d/',
+  'workflow/INDEX.md',
+  '.agents/notes/engine-map.md',
+  'workflow/effective-policy.md',
+  'tmp/',
+  '.agents/.kit/',
+  '.agents/config/model-roles.local.json',
+  '.agents/config/session-context.local.json',
+  '.agents/notes/runtime-env.local.md',
+  '.agents/verifications.jsonl',
+  '.agents/judgments.jsonl',
+  '.agents/evals/',
+  '.agents/install-manifest.json',
+];
 
-function checkAuthorized(ctx, run, filesCsv) {
+export function isRuntimeOrManaged(ctx, file) {
+  if (RUNTIME_OWNED.some((ro) => (ro.endsWith('/') ? file.startsWith(ro) : file === ro))) return true;
+  if (file === '.gitattributes' || file === '.gitignore') {
+    try {
+      const content = fs.readFileSync(path.join(ctx.root, file), 'utf8');
+      if (content.includes('magpie:begin') || content.includes('agentic-flow-kit')) return true;
+    } catch {}
+  }
+  return false;
+}
+
+export function checkAuthorized(ctx, run, filesCsv) {
   const listed = String(filesCsv || '').split(/[,，]/).map((s) => s.trim().replace(/\\/g, '/')).filter(Boolean);
   if (!listed.length) return { ok: false, problems: ['须以 --files 回填本工单实际改动的文件清单（逗号分隔）'] };
   const changed = changedFiles(ctx, run);
   if (changed === null) return { ok: false, problems: ['git status 失败，无法核对改动面'] };
   const beyond = changed.filter((c) =>
-    !listed.includes(c) && !RUNTIME_OWNED.some((ro) => (ro.endsWith('/') ? c.startsWith(ro) : c === ro)));
-  if (beyond.length) return { ok: false, problems: [`git 改动超出回填清单（偏离即停）：${beyond.join('、')}`] };
-  const runtime = (c) => RUNTIME_OWNED.some((ro) => (ro.endsWith('/') ? c.startsWith(ro) : c === ro));
+    !listed.includes(c) && !isRuntimeOrManaged(ctx, c));
+  if (beyond.length) {
+    return {
+      ok: false,
+      problems: [
+        `git 改动超出回填清单（偏离即停）：${beyond.join('、')}（若属本工单计划内改动，请将其加入 --files；若是未提交的基线残留，可先 git commit 提交干净基线）`,
+      ],
+    };
+  }
   const section = sectionBody(readDoc(ctx, run.docs?.plan) || '', '改动方案') || '';
-  const extra = filesOutsidePlan(listed, section).filter((c) => !runtime(c));
+  const extra = filesOutsidePlan(listed, section).filter((c) => !isRuntimeOrManaged(ctx, c));
   run.lastFiles = listed;
   return { ok: true, extra };
 }
@@ -1678,9 +1728,9 @@ async function advance(ctx, run, opt) {
           issueWO(ctx, run, wo(run, {
             kind: 'triage', title: '判级与分类', goal: '读需求与 new-task.md 判级闭集，输出 kind/level/module/topic',
             instructions: [
-              '1. 读 .agents/commands/new-task.md §1 风险定级（L2 触达面闭集 / L1 默认档 / L3 结构面）',
+              '1. 读 .agents/commands/new-task.md §1 风险定级（L0 极简道 / L1 默认档 / L2 触达面闭集 / L3 结构面）',
               `2. 对需求定级：「${run.requirement}」${run.hint ? `（预判参考：${run.hint}）` : ''}`,
-              '3. 回填：next --triage "kind=require|fix|verify|review|deploy level=L1-L3 module=<词表> topic=<英文kebab>"',
+              '3. 回填：next --triage "kind=require|fix|verify|review|deploy level=L0-L3 module=<词表> topic=<英文kebab>"',
             ],
             context: { docPath: '.agents/commands/new-task.md', kbHits: [], stderrTail: '', relatedDocs: ['workflow/INDEX.md'] },
             constraints: ['按 new-task.md §1 定级。命中闭集词就写到该档。'],
@@ -1699,7 +1749,7 @@ async function advance(ctx, run, opt) {
         run.docs.apiDocs = run.docs.apiDocs || `${taskDirRel(run)}/api.md`;
         // 路由
         run.stage = K() === 'verify' ? 'verify' : K() === 'review' ? 'review-only' : K() === 'deploy' ? 'deploy-check'
-          : K() === 'fix' ? 'incident-fill' : (L() === 'L1' ? 'plan-fill' : 'intent-fill');
+          : K() === 'fix' ? 'incident-fill' : ((L() === 'L0' || L() === 'L1') ? 'plan-fill' : 'intent-fill');
         if (stepMode) stopStep(ctx, run, run.stage);
         continue;
       }
@@ -1766,7 +1816,7 @@ async function advance(ctx, run, opt) {
       } else {
         emit(run, { type: 'confirm', doc: entry(), to: 'draft-ok', source: 'conversation', quote: opt.delegated });
       }
-      run.stage = L() === 'L1' ? 'plan-fill' : 'spec-fill';
+      run.stage = (L() === 'L0' || L() === 'L1') ? 'plan-fill' : 'spec-fill';
       if (stepMode) stopStep(ctx, run, run.stage);
       continue;
     }
@@ -1842,21 +1892,21 @@ async function advance(ctx, run, opt) {
     if (s === 'plan-fill') {
       const rel = `${taskDirRel(run)}/plan.md`;
       run.docs.plan = rel;
-      if (L() === 'L1' && K() !== 'fix') run.docs.entry = rel;
+      if ((L() === 'L0' || L() === 'L1') && K() !== 'fix') run.docs.entry = rel;
       if (!docState(ctx, rel)) {
-        const r = runNode(ctx, run, 'fill-plan.mjs', ['--level', L(), '--topic', topic(), '--output', rel]);
+        const r = runNode(ctx, run, 'fill-plan.mjs', ['--level', L(), ...(L() === 'L0' ? ['--lite'] : []), '--topic', topic(), '--output', rel]);
         if (r.exit !== 0) stopGateFail(ctx, run, s, [`fill-plan exit ${r.exit}（G1 前置门或参数）：${(r.stderr || r.stdout).split(/\r?\n/).slice(-3).join(' | ')}`]);
       }
       run.stage = 'plan-draft';
       issueWO(ctx, run, wo(run, {
-        kind: 'draft', title: `起草 plan：${rel}`, goal: `计划文档（${L() === 'L1' ? '入口/改动方案/约束与风险/验证计划/验收标准' : '完整 4 节：改动方案/任务拆解/执行顺序/验证计划'}）`,
+        kind: 'draft', title: `起草 plan：${rel}`, goal: `计划文档（${(L() === 'L0' || L() === 'L1') ? (L() === 'L0' ? 'L0 极简三节：入口/改动方案/验证与验收' : 'L1 五节：入口/改动方案/约束与风险/验证计划/验收标准') : '完整 4 节：改动方案/任务拆解/执行顺序/验证计划'}）`,
         instructions: [
           '1. 骨架已由 fill-plan 生成，填实各节',
           '2. 改动方案逐文件列「做什么+判据」——后续 implement 工单的授权面以此为准',
           '3. 验证计划对齐入口验收标准',
           '4. 完成后回跑 next——脚本机器校验',
         ],
-        context: { docPath: rel, kbHits: [], stderrTail: '', relatedDocs: [L() === 'L1' && K() !== 'fix' ? '.agents/commands/new-task.md' : '.agents/commands/stages.md'] },
+        context: { docPath: rel, kbHits: [], stderrTail: '', relatedDocs: [(L() === 'L0' || L() === 'L1') && K() !== 'fix' ? '.agents/commands/new-task.md' : '.agents/commands/stages.md'] },
         constraints: ['只改该文档'],
         acceptance: ['节齐全非空', '无占位符残留'],
       }), 'plan-draft');
@@ -2524,4 +2574,4 @@ function adoptRun(ctx, a) {
   console.log('  提示：adopt 不推断断点位置——按文档现状人工续走（next 会按 stage 拒绝，请对照事件缺失情况手动接续或另起 run）');
 }
 
-export default { parseKV, validateDraftContent, closeoutComplete, placeholdersIn, stageBar, renderDashboard, stripAnsi, visualWidth, truncate, truncateAnsi, parseGateName, pruneWorkOrderContext, listAllRuns, renderMarkdown, inspectArtifact, getAvailableTargets, renderInspect, analyzeGateFailure };
+export default { parseKV, validateDraftContent, closeoutComplete, placeholdersIn, stageBar, renderDashboard, stripAnsi, visualWidth, truncate, truncateAnsi, parseGateName, pruneWorkOrderContext, listAllRuns, renderMarkdown, inspectArtifact, getAvailableTargets, renderInspect, analyzeGateFailure, manifestPristine, isRuntimeOrManaged, checkAuthorized };
