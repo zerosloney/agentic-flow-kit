@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 import { analyze } from '../templates/engine/.agents/scripts/check-pipeline-state.mjs';
 import {
   parseParallelList as parseParallel, parseRetryCap as parseRetry, resolveArtifact, resolveDocRel,
-  stageArtifactProblems, failRoute, renderDashboard, stripAnsi, visualWidth, truncate,
+  stageArtifactProblems, failRoute, renderDashboard, stripAnsi, visualWidth, truncate, parseGateName,
 } from '../templates/engine/.agents/scripts/pipeline-run.mjs';
 import { touchProblems, externalReviewId, filesOutsidePlan } from '../templates/engine/.agents/scripts/touch-set.mjs';
 
@@ -816,4 +816,105 @@ test('CLI: watch and dashboard --once snapshots active run and exits 0', () => {
   assert.match(resDash.stdout, /Pipeline 看板: test-run/);
   assert.match(resDash.stdout, /工单 #2 \(implement\) CLI 测试/);
   assert.match(resDash.stdout, /单次快照模式/);
+});
+
+test('parseGateName: accepts valid gate script names, rejects paths and non-mjs', () => {
+  assert.equal(parseGateName('verify.mjs'), 'verify.mjs');
+  assert.equal(parseGateName('check-loop.mjs'), 'check-loop.mjs');
+  assert.equal(parseGateName('custom_gate.1.mjs'), 'custom_gate.1.mjs');
+
+  assert.throws(() => parseGateName(''), /--gate 必填门脚本名/);
+  assert.throws(() => parseGateName(null), /--gate 必填门脚本名/);
+  assert.throws(() => parseGateName('../verify.mjs'), /只接受 \.mjs 脚本名/);
+  assert.throws(() => parseGateName('foo/verify.mjs'), /只接受 \.mjs 脚本名/);
+  assert.throws(() => parseGateName('verify.js'), /只接受 \.mjs 脚本名/);
+  assert.throws(() => parseGateName('pipeline-run.mjs'), /只接受 \.mjs 脚本名/);
+});
+
+test('renderDashboard: renders step stopType state and actionable next step', () => {
+  const ctx = { root: '/repo' };
+  const stepRun = {
+    runId: 'run-step-demo',
+    requirement: '分步调试演示',
+    stage: 'verify',
+    stopType: 'step',
+    docs: { entry: 'workflow/intents/t.md', plan: 'workflow/plans/t.md' },
+    events: [
+      { t: '2026-11-21T12:00:00.000Z', type: 'step-pause', stage: 'verify' },
+    ],
+  };
+  const stepText = renderDashboard(ctx, stepRun, { width: 70, noColor: true }).join('\n');
+  assert.match(stepText, /单步暂停 \(已就绪阶段: verify\)/);
+  assert.match(stepText, /流水线已在阶段转换边界暂停/);
+  assert.match(stepText, /flow-kit run pipeline-run\.mjs next --step/);
+});
+
+test('CLI: start and next with --step pauses at state transition boundaries', () => {
+  const root = fixture();
+  // start issues initial triage work-order
+  const resStart = runPipeline(root, ['start', '用户需求', '--hint', 'kind=require level=L1 module=wiki topic=my-step-task', '--step']);
+  assert.equal(resStart.status, 0, resStart.stderr || resStart.stdout);
+  assert.match(resStart.stdout, /PIPELINE-STOP work-order/);
+
+  // next with --triage and --step completes triage and pauses at transition boundary to plan-fill
+  const resTriage = runPipeline(root, ['next', '--triage', 'kind=require level=L1 module=wiki topic=my-step-task', '--step']);
+  assert.equal(resTriage.status, 0, resTriage.stderr || resTriage.stdout);
+  assert.match(resTriage.stdout, /PIPELINE-STOP step/);
+  assert.match(resTriage.stdout, /单步暂停/);
+  assert.match(resTriage.stdout, /阶段就绪：plan-fill/);
+
+  // read run file
+  const runFile = fs.readdirSync(path.join(root, '.agents', 'cache', 'pipeline-runs')).find((f) => f.endsWith('.json'));
+  assert.ok(runFile, 'run file must exist');
+  const runData = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'cache', 'pipeline-runs', runFile), 'utf8'));
+  assert.equal(runData.stopType, 'step');
+  assert.equal(runData.stage, 'plan-fill');
+  assert.ok(runData.events.some((e) => e.type === 'step-pause' && e.stage === 'plan-fill'));
+
+  // next --step resumes from step-pause and enters plan-fill (which issues draft work-order)
+  const resNext = runPipeline(root, ['next', '--step']);
+  assert.equal(resNext.status, 0, resNext.stderr || resNext.stdout);
+  assert.match(resNext.stdout, /PIPELINE-STOP work-order/);
+
+  const runData2 = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'cache', 'pipeline-runs', runFile), 'utf8'));
+  assert.ok(runData2.events.some((e) => e.type === 'step-resume' && e.stage === 'plan-fill'));
+  assert.equal(runData2.stopType, 'work-order');
+  assert.equal(runData2.stage, 'plan-draft');
+});
+
+test('CLI: gate subcommand executes single gate script directly', () => {
+  const root = fixture();
+  writeRun(root, {
+    stage: 'verify',
+    stopType: 'work-order',
+  });
+
+  // verify.mjs exits 0
+  const resGate = runPipeline(root, ['gate', 'verify.mjs', '--run', 'test-run']);
+  assert.equal(resGate.status, 0, resGate.stderr || resGate.stdout);
+  assert.match(resGate.stdout, /门 verify\.mjs 验证通过 \(exit 0\)/);
+
+  // check-extra.mjs with PIPELINE_FAKE_EXTRA_EXIT=2
+  const resFail = runPipeline(root, ['gate', 'check-extra.mjs', '--run', 'test-run'], { PIPELINE_FAKE_EXTRA_EXIT: '2' });
+  assert.equal(resFail.status, 2);
+  assert.match(resFail.stderr, /门 check-extra\.mjs 验证未通过 \(exit 2\)/);
+});
+
+test('CLI: next --gate executes targeted gate script in verify stage and records gate-tested', () => {
+  const root = fixture({ withPlan: true });
+  fs.mkdirSync(path.join(root, 'workflow', 'plans'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'workflow', 'plans', 't.md'), '# plan\n');
+
+  writeRun(root, {
+    stage: 'verify',
+    stopType: 'work-order',
+    docs: { entry: 'workflow/plans/t.md', plan: 'workflow/plans/t.md' },
+  });
+
+  const res = runPipeline(root, ['next', '--gate', 'check-extra.mjs', '--run', 'test-run']);
+  assert.equal(res.status, 0, res.stderr || res.stdout);
+  assert.match(res.stdout, /定向门 check-extra\.mjs 验证通过 \(exit 0\)/);
+
+  const runData = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'cache', 'pipeline-runs', 'test-run.json'), 'utf8'));
+  assert.ok(runData.events.some((e) => e.type === 'gate-tested' && e.script === 'check-extra.mjs' && e.exit === 0));
 });

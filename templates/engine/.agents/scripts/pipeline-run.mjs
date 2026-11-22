@@ -14,10 +14,11 @@
 //       PIPELINE_RUN_TODAY（文档日期锚定，默认当天——测试固定日期消除时钟依赖，2026-10-03 实证：测试硬编码日期跨日即红）。
 //       npm 不直接调用——测试门统一走 verify.mjs。
 // 用法：
-//   flow-kit run pipeline-run.mjs start "<需求原文>" [--hint "kind=require level=L1 module=wiki"]
+//   flow-kit run pipeline-run.mjs start "<需求原文>" [--hint "kind=require level=L1 module=wiki"] [--step]
 //   flow-kit run pipeline-run.mjs next [--run <id>] [--triage "kind=|level=|module=|topic="] [--delegated "<原话>"] [--files "a,b"]
-//                                   [--retry <0-5>] [--parallel "check-a.mjs,check-b.mjs"]
-//   flow-kit run pipeline-run.mjs resume [--run <id>] [--retry <0-5>] [--parallel "…"]
+//                                   [--retry <0-5>] [--parallel "check-a.mjs,check-b.mjs"] [--step] [--gate <gate.mjs>] [--interactive-gate]
+//   flow-kit run pipeline-run.mjs resume [--run <id>] [--retry <0-5>] [--parallel "…"] [--step]
+//   flow-kit run pipeline-run.mjs gate <gate.mjs> [--run <id>] [--retry <0-5>]
 //   flow-kit run pipeline-run.mjs status [--run <id>] [--adopt] [--json]
 //   flow-kit run pipeline-run.mjs watch [--run <id>] [--interval 2] [--once]
 //   flow-kit run pipeline-run.mjs dashboard [--run <id>] [--interval 2] [--once]
@@ -206,7 +207,8 @@ function runNodeAsync(ctx, run, script, args, group) {
 }
 
 function mergeGateResults(results) {
-  const exit = results.some((r) => r.exit !== 0) ? 1 : 0;
+  const fail = results.find((r) => r.exit !== 0);
+  const exit = fail ? (fail.exit || 1) : 0;
   const stdout = results.map((r) => r.stdout).join('');
   const stderr = results.map((r) => (results.length > 1 ? `[${r.script}]\n${r.stderr}` : r.stderr)).join('');
   return { exit, stdout, stderr };
@@ -396,6 +398,16 @@ function stopDone(ctx, run) {
   printRun(ctx, run);
   process.exit(0);
 }
+function stopStep(ctx, run, nextStage) {
+  run.workOrder = null;
+  run.stopType = 'step';
+  run.stage = nextStage;
+  emit(run, { type: 'step-pause', stage: nextStage });
+  emit(run, { type: 'stop', stopType: 'step', stage: nextStage });
+  saveRun(ctx, run);
+  printRun(ctx, run);
+  process.exit(0);
+}
 
 // ── 输出（人类可读 + 机器标记） ────────────────────────────────────────
 export function stageBar(run) {
@@ -441,6 +453,14 @@ function printRun(ctx, run, problems) {
   } else if (run.stopType === 'gate-fail') {
     console.log(`\n== 门拒绝（exit 2，不绕不吞——修复后原路重跑 next）==`);
     for (const p of problems || run.gateFail?.problems || []) console.log(`  - ${p}`);
+    console.log(`\n调试与定向重试建议：`);
+    console.log(`  - 单门调试：flow-kit run pipeline-run.mjs gate <门脚本名.mjs> [--run ${run.runId}]`);
+    console.log(`  - 定向验证：flow-kit run pipeline-run.mjs next --gate <门脚本名.mjs> [--run ${run.runId}]`);
+    console.log(`  - 单步重入：flow-kit run pipeline-run.mjs next --step [--run ${run.runId}]`);
+  } else if (run.stopType === 'step') {
+    console.log(`\n== 单步暂停 ==`);
+    console.log(`  阶段就绪：${run.stage}`);
+    console.log(`  继续推进：flow-kit run pipeline-run.mjs next${run.runId ? ` --run ${run.runId}` : ''} [--step]`);
   } else if (run.stopType === 'done') {
     console.log(`\n== 完成 ==`);
     const gates = run.events.filter((e) => e.type === 'gate');
@@ -456,8 +476,9 @@ function printRun(ctx, run, problems) {
   const stopLine = run.stopType === 'work-order' ? `PIPELINE-STOP work-order ${run.runId} ${run.workOrder?.id}`
     : run.stopType === 'await-confirm' ? `PIPELINE-STOP await-confirm ${run.runId} ${run.awaitConfirm?.doc || ''}`
       : run.stopType === 'gate-fail' ? `PIPELINE-STOP gate-fail ${run.runId} ${run.stage}`
-        : run.stopType === 'aborted' ? `PIPELINE-STOP aborted ${run.runId}`
-          : `PIPELINE-STOP done ${run.runId}`;
+        : run.stopType === 'step' ? `PIPELINE-STOP step ${run.runId} ${run.stage}`
+          : run.stopType === 'aborted' ? `PIPELINE-STOP aborted ${run.runId}`
+            : `PIPELINE-STOP done ${run.runId}`;
   console.log(stopLine.trim());
 }
 
@@ -622,6 +643,10 @@ export function renderDashboard(ctx, run, options = {}) {
     lines.push(row(clr.bold(clr.red(`已放弃 (${run.abort?.to || 'cancelled'})`))));
     if (run.abort?.note) lines.push(row(`说明: ${truncate(run.abort.note, W - 6)}`));
     lines.push(row(`${clr.dim('⊘')} 任务已终止`));
+  } else if (run.stopType === 'step') {
+    lines.push(row(clr.bold(clr.cyan(`单步暂停 (已就绪阶段: ${run.stage})`))));
+    lines.push(row(`流水线已在阶段转换边界暂停，等待人工确认或单步推进。`));
+    lines.push(row(`${clr.cyan('▶ 下一步:')} 单步推进 ${clr.bold('flow-kit run pipeline-run.mjs next --step')} 或全速继续 ${clr.bold('flow-kit run pipeline-run.mjs next')}`));
   } else {
     lines.push(row(`状态: ${run.stopType}`));
   }
@@ -706,6 +731,16 @@ export function parseParallelList(s) {
     if (!out.some((j) => j.script === name)) out.push({ script: name, args: [] });
   }
   return out;
+}
+
+// --gate（定向门验证/单门调试）：只接受 .mjs 门脚本名，拒绝目录穿越与 pipeline-run.mjs 自身。
+export function parseGateName(s) {
+  if (!s || typeof s !== 'string') throw new Error('--gate 必填门脚本名：--gate verify.mjs');
+  const name = s.trim();
+  if (!/^[A-Za-z0-9._-]+\.mjs$/.test(name) || name === 'pipeline-run.mjs') {
+    throw new Error(`门脚本只接受 .mjs 脚本名（如 verify.mjs、check-loop.mjs）：${name}`);
+  }
+  return name;
 }
 
 export function parseRetryCap(v) {
@@ -907,6 +942,7 @@ function kbGate(ctx, run, types) {
 }
 
 async function advance(ctx, run, opt) {
+  const stepMode = Boolean(opt.step);
   const L = () => run.triage.level;
   const K = () => run.triage.kind;
   const entry = () => run.docs.entry;
@@ -934,6 +970,12 @@ async function advance(ctx, run, opt) {
     emit(run, { type: 'route-enter', from: run.stage, to: run.nextTarget });
     run.stage = run.nextTarget;
     run.nextTarget = null;
+    saveRun(ctx, run);
+  }
+
+  // 单步恢复：若此前停机在 step 转换边界，记 step-resume 事件
+  if (run.stopType === 'step') {
+    emit(run, { type: 'step-resume', stage: run.stage });
     saveRun(ctx, run);
   }
 
@@ -974,9 +1016,12 @@ async function advance(ctx, run, opt) {
         // 路由
         run.stage = K() === 'verify' ? 'verify' : K() === 'review' ? 'review-only' : K() === 'deploy' ? 'deploy-check'
           : K() === 'fix' ? 'incident-fill' : (L() === 'L1' ? 'plan-fill' : 'intent-fill');
+        if (stepMode) stopStep(ctx, run, run.stage);
         continue;
       }
-      run.stage = 'intent-fill'; continue;
+      run.stage = 'intent-fill';
+      if (stepMode) stopStep(ctx, run, run.stage);
+      continue;
     }
 
     if (s === 'intent-fill' || s === 'incident-fill') {
@@ -1038,6 +1083,7 @@ async function advance(ctx, run, opt) {
         emit(run, { type: 'confirm', doc: entry(), to: 'draft-ok', source: 'conversation', quote: opt.delegated });
       }
       run.stage = L() === 'L1' ? 'plan-fill' : 'spec-fill';
+      if (stepMode) stopStep(ctx, run, run.stage);
       continue;
     }
 
@@ -1095,7 +1141,9 @@ async function advance(ctx, run, opt) {
       if (!opt.delegated) stopConfirm(ctx, run, run.docs.spec, run.awaitConfirm?.points || '', true);
       const r = confirmOrResume(ctx, run, run.docs.spec, opt.delegated);
       if (!r.ok) stopGateFail(ctx, run, s, [r.msg]);
-      run.stage = 'plan-fill'; continue;
+      run.stage = 'plan-fill';
+      if (stepMode) stopStep(ctx, run, run.stage);
+      continue;
     }
 
     if (s === 'plan-fill') {
@@ -1170,13 +1218,41 @@ async function advance(ctx, run, opt) {
         stopConfirm(ctx, run, run.docs.plan || '', `计划外：${a.extra.join('、')}。改 plan，或 next --delegated "<原话>" 放行。`, false);
       }
       if (a.extra.length) emit(run, { type: 'confirm', doc: run.docs.plan || '', to: 'files', source: 'conversation', quote: opt.delegated });
-      run.stage = 'verify'; continue;
+      run.stage = 'verify';
+      if (stepMode) stopStep(ctx, run, run.stage);
+      continue;
     }
 
     if (s === 'verify') {
       // 并行分支 + 重试（R3-5）：附加门与 verify 并发；--retry 只增加门重跑次数，不掩盖失败。
-      const jobs = [{ script: 'verify.mjs', args: [] }, ...(opt.parallel || [])];
+      const jobs = opt.gate
+        ? [{ script: opt.gate, args: [] }]
+        : [{ script: 'verify.mjs', args: [] }, ...(opt.parallel || [])];
+      if (opt.interactiveGate) {
+        console.log(`\n[门禁交互] 准备执行门: ${jobs.map((j) => j.script).join(' + ')} (阶段: ${s}, retry: ${opt.retry || 0})`);
+        if (process.stdin.isTTY) {
+          process.stdout.write('  按回车键继续执行门禁...');
+          const buf = Buffer.alloc(1);
+          try { fs.readSync(0, buf, 0, 1); } catch {}
+          console.log('');
+        }
+      }
       const r = await runGateGroup(ctx, run, s, jobs, opt.retry || 0);
+      if (opt.gate && opt.gate !== 'verify.mjs') {
+        if (r.exit === 0) {
+          console.log(`\n✅ 定向门 ${opt.gate} 验证通过 (exit 0)`);
+          emit(run, { type: 'gate-tested', script: opt.gate, exit: 0 });
+          saveRun(ctx, run);
+          printRun(ctx, run);
+          process.exit(0);
+        } else {
+          console.error(`\n❌ 定向门 ${opt.gate} 验证未通过 (exit ${r.exit})`);
+          emit(run, { type: 'gate-tested', script: opt.gate, exit: r.exit });
+          saveRun(ctx, run);
+          printRun(ctx, run, [`定向门 ${opt.gate} 验证未通过 (exit ${r.exit})`]);
+          process.exit(2);
+        }
+      }
       if (K() === 'verify') { // verify-only 短路径：不带修复环，绿即收、败即停
         if (r.exit === 0) stopDone(ctx, run);
         stopGateFail(ctx, run, s, ['verify 未过（verify-only 不带修复环——人工处理后重跑，或立正式任务走闭环）'], undefined, { route: false });
@@ -1192,7 +1268,9 @@ async function advance(ctx, run, opt) {
           const c = docsCommit(ctx, run, codeFiles, `${verb}(${run.triage.module}): ${briefReq(run)}（pipeline-run ${run.runId}）`);
           if (!c.ok) stopGateFail(ctx, run, s, [c.msg]);
         }
-        run.stage = (L() === 'L2' || L() === 'L3') ? 'review' : 'closeout'; continue;
+        run.stage = (L() === 'L2' || L() === 'L3') ? 'review' : 'closeout';
+        if (stepMode) stopStep(ctx, run, run.stage);
+        continue;
       }
       const { to, retry } = failRoute(ctx.pipeline, s);
       const attempt = (run.retries?.[s] || 0) + 1;
@@ -1227,6 +1305,7 @@ async function advance(ctx, run, opt) {
         stopGateFail(ctx, run, s, ['写 - 独立复核：<结论> 复核上下文：<外部会话或子代理 id>。禁止占位符。']);
       }
       run.stage = K() === 'fix' ? 'closeout' : 'closeout';
+      if (stepMode) stopStep(ctx, run, run.stage);
       continue;
     }
 
@@ -1285,7 +1364,11 @@ async function advance(ctx, run, opt) {
       stopConfirm(ctx, run, rest[0], `${label}——逐份原话，一次一份（余 ${rest.length} 份）`, true);
     }
 
-    if (s === 'verify-only') { run.stage = 'verify'; continue; }
+    if (s === 'verify-only') {
+      run.stage = 'verify';
+      if (stepMode) stopStep(ctx, run, run.stage);
+      continue;
+    }
     if (s === 'review-only') {
       if (opt.done) stopDone(ctx, run); // 评审清单交付即收（宿主向用户汇报后回填 --done）
       issueWO(ctx, run, wo(run, {
@@ -1346,7 +1429,7 @@ async function advance(ctx, run, opt) {
 }
 
 // ── 子命令 ─────────────────────────────────────────────────────────────
-const BOOL_FLAGS = new Set(['adopt', 'json', 'done', 'once']); // 复核 P2-5：布尔旗标不吞下一参
+const BOOL_FLAGS = new Set(['adopt', 'json', 'done', 'once', 'step', 'interactive-gate']); // 复核 P2-5：布尔旗标不吞下一参
 function parseArgs(argv) {
   const out = { cmd: argv[0], positional: [] };
   for (let i = 1; i < argv.length; i++) {
@@ -1385,7 +1468,7 @@ if (isMain) {
     };
     emit(run, { type: 'run-created', requirement: req });
     saveRun(ctx, run);
-    await advance(ctx, run, {}); // 首停机点 = triage 工单
+    await advance(ctx, run, { step: a.step === true }); // 首停机点 = triage 工单
   } else if (cmd === 'next' || cmd === 'resume') {
     const run = resolveRun(ctx, a);
     if (cmd === 'resume' && !run.inFlight) {
@@ -1400,6 +1483,9 @@ if (isMain) {
       parallel: typeof a.parallel === 'string' ? usage(() => parseParallelList(a.parallel)) : [],
       retry: usage(() => parseRetryCap(a.retry)),
       done: a.done === true,
+      step: a.step === true,
+      gate: typeof a.gate === 'string' ? usage(() => parseGateName(a.gate)) : undefined,
+      interactiveGate: a['interactive-gate'] === true,
     });
   } else if (cmd === 'status') {
     if (a.adopt) { adoptRun(ctx, a); process.exit(0); }
@@ -1415,6 +1501,9 @@ if (isMain) {
       if (e.subject) bits.push(e.subject.slice(0, 50));
       if (e.type === 'retry') bits.push(`attempt ${e.attempt}/${e.cap} exit ${e.exit}`);
       if (e.type === 'resume') bits.push(`from ${e.stage}`);
+      if (e.type === 'step-pause') bits.push(`paused at ${e.stage}`);
+      if (e.type === 'step-resume') bits.push(`resumed at ${e.stage}`);
+      if (e.type === 'gate-tested') bits.push(`tested ${e.script} exit ${e.exit}`);
       if (e.parallel) bits.push(e.parallel);
       if (e.id) bits.push(`#${e.id}`);
       console.log('  ' + bits.join(' | '));
@@ -1518,8 +1607,27 @@ if (isMain) {
     saveRun(ctx, run);
     printRun(ctx, run);
     process.exit(0);
+  } else if (cmd === 'gate') {
+    const run = resolveRun(ctx, a);
+    const script = a.positional[0] || a.gate;
+    if (!script) fail('gate 必填门脚本名：flow-kit run pipeline-run.mjs gate <script.mjs> [--run <id>]');
+    const gateName = usage(() => parseGateName(script));
+    const scriptPath = path.join(ctx.bin, gateName);
+    if (!fs.existsSync(scriptPath)) fail(`门脚本不存在：${gateName}（预期位置: ${scriptPath}）`);
+    const cap = usage(() => parseRetryCap(a.retry));
+    console.log(`\n🔍 开始执行单门调试: ${gateName} (run: ${run.runId}, stage: ${run.stage}, retryCap: ${cap})...`);
+    const r = await runGateGroup(ctx, run, `${run.stage}-gate-debug`, [{ script: gateName, args: [] }], cap);
+    if (r.stdout) process.stdout.write(r.stdout);
+    if (r.stderr) process.stderr.write(r.stderr);
+    if (r.exit === 0) {
+      console.log(`\n✅ 门 ${gateName} 验证通过 (exit 0)`);
+      process.exit(0);
+    } else {
+      console.error(`\n❌ 门 ${gateName} 验证未通过 (exit ${r.exit})`);
+      process.exit(2);
+    }
   } else {
-    fail(`未知命令：${cmd ?? ''}（start | next | status | watch | dashboard | abort，用法见文件头注释）`);
+    fail(`未知命令：${cmd ?? ''}（start | next | status | watch | dashboard | abort | gate，用法见文件头注释）`);
   }
 }
 
@@ -1551,4 +1659,4 @@ function adoptRun(ctx, a) {
   console.log('  提示：adopt 不推断断点位置——按文档现状人工续走（next 会按 stage 拒绝，请对照事件缺失情况手动接续或另起 run）');
 }
 
-export default { parseKV, validateDraftContent, closeoutComplete, placeholdersIn, stageBar, renderDashboard, stripAnsi, visualWidth, truncate };
+export default { parseKV, validateDraftContent, closeoutComplete, placeholdersIn, stageBar, renderDashboard, stripAnsi, visualWidth, truncate, parseGateName };

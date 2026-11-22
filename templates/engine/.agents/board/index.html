@@ -74,6 +74,7 @@
   .stopchip.await-confirm { color: var(--warn); border: 1px solid var(--warn); }
   .stopchip.gate-fail { color: var(--bad); border: 1px solid var(--bad); }
   .stopchip.done { color: var(--ok); border: 1px solid var(--ok); }
+  .stopchip.step { color: var(--accent); border: 1px solid var(--accent); }
   .stopchip.aborted { color: var(--muted); border: 1px solid var(--border-strong); }
 
   /* 阶段流向图（Stage Flow）与产物标签 */
@@ -87,6 +88,7 @@
   .sf-node.cur.work-order { border-color: var(--intent); color: var(--intent); box-shadow: 0 0 0 1px var(--intent); }
   .sf-node.cur.await-confirm { border-color: var(--warn); color: var(--warn); box-shadow: 0 0 0 1px var(--warn); }
   .sf-node.cur.gate-fail { border-color: var(--bad); color: var(--bad); box-shadow: 0 0 0 1px var(--bad); }
+  .sf-node.cur.step { border-color: var(--accent); color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   .sf-node.cur.done, .sf-node.done { color: var(--ok); border-color: var(--ok); background: rgba(62,113,87,.12); font-weight: 700; box-shadow: 0 0 0 1px var(--ok); }
   .sf-node.cur.done .sf-dot, .sf-node.done .sf-dot { color: var(--ok); }
   .sf-node.future { color: var(--faint); border-style: dashed; }
@@ -522,12 +524,13 @@ async function loadHist() {
 // ================= 执行器视图（2026-10-04 board-run-panel / 2026-11-21 阶段流与产物流增强） =================
 // 只读 pipeline-runs/ 事件流（机器事实），不读 orchestration-runs.jsonl（自报态）。
 const STOP_LABEL = {
-  'work-order': '工单', 'await-confirm': '等待确认', 'gate-fail': '门拒绝', done: '完成', aborted: '已放弃',
+  'work-order': '工单', 'await-confirm': '等待确认', 'gate-fail': '门拒绝', done: '完成', aborted: '已放弃', step: '单步暂停',
 };
 const EVENT_DESC = {
   'run-created': '创建 run', 'work-order': '下发工单', triage: '定级', gate: '门执行',
   confirm: '确认', commit: '提交', stop: '停机', done: '完成', abort: '放弃',
   route: '退回', 'route-enter': '重入', resume: '恢复',
+  'step-pause': '单步暂停', 'step-resume': '单步恢复',
 };
 const ART_LABEL = {
   entry: '入口', spec: 'SPEC', plan: 'PLAN', tasks: '任务',
@@ -573,7 +576,7 @@ function renderStageFlowHtml(run) {
   if (curIdx === -1) curIdx = 0;
 
   const stopType = run.stopType || '';
-  const stopClass = ['work-order', 'await-confirm', 'gate-fail'].includes(stopType) ? stopType : '';
+  const stopClass = ['work-order', 'await-confirm', 'gate-fail', 'step'].includes(stopType) ? stopType : '';
 
   return `<div class="stage-flow">${seq.map(([name], i) => {
     let state = 'future';
@@ -766,6 +769,10 @@ function loadRunWorkOrder() {
       `<p>退出码：<code>${esc(String(g.exit ?? ''))}</code></p>` +
       (g.hint ? `<p>排查提示：${esc(g.hint)}</p>` : '') +
       `</div>`;
+    return;
+  }
+  if (RUN_CURRENT.stopType === 'step') {
+    $('#d-body').innerHTML = `<div class="md"><h2>单步调试暂停</h2><p>当前流水线已在阶段转换边界暂停（就绪阶段: <code>${esc(RUN_CURRENT.stage || '')}</code>），等待人工复核或单步推进。</p><p>继续推进命令：<code>flow-kit run pipeline-run.mjs next [--step]</code></p></div>`;
     return;
   }
   if (RUN_CURRENT.stopType === 'done') {

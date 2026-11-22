@@ -96,7 +96,8 @@
       "await-confirm",
       "gate-fail",
       "done",
-      "aborted"
+      "aborted",
+      "step"
     ]
   },
   "roles": {

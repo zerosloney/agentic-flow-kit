@@ -32,7 +32,7 @@
     "incident-closed-confirm",
     "done"
   ],
-  "stopTypes": ["work-order", "await-confirm", "gate-fail", "done", "aborted"],
+  "stopTypes": ["work-order", "await-confirm", "gate-fail", "done", "aborted", "step"],
   "stageArtifacts": {
     "spec-confirm": ["{spec}"],
     "plan-confirm": ["{plan}"],

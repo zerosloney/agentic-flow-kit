@@ -37,6 +37,7 @@ next: 按 run 停机点循环推进至 done
 | `work-order <runId> <工单id>` | 读工单全文 $\rightarrow$ **按单干活** (见下表) | `next` (implement/fix 须 `--files "a,b"`) |
 | `await-confirm <runId> <doc>` | **人件门**: 转述要点索确认 $\rightarrow$ 用户放行后 | `next --delegated "<用户原话>"` (逐字原话) |
 | `gate-fail <runId> <stage>` | 读 problems 原因 $\rightarrow$ 修复后原路重跑 | `next` (禁绕门/禁 `--no-verify`) |
+| `step <runId> <stage>` | **单步调试暂停**: 转换边界已就绪 $\rightarrow$ 复核后推进 | `next [--step]` (带 `--step` 继行单步，否则全速) |
 | `done <runId>` | 汇报总结 (阶段条/门数/提交链) | 流程结束 |
 | `aborted <runId>` | 汇报放弃态与留档位置 | 流程结束 |
 
@@ -62,6 +63,12 @@ next: 按 run 停机点循环推进至 done
 - **并行分支**：`next --parallel "check-a.mjs,check-b.mjs"` 让附加门与 `verify.mjs` 并发执行，任一非零即整体非零；事件带 `parallel` 组号。只接受门脚本名，拒绝路径分隔符。
 - **阶段产物契约**：`.agents/config/pipeline.json` 的 `stageArtifacts` 用 `{entry}/{spec}/{plan}` 声明产物；缺失或为空时在门执行前停 `gate-fail`（模板默认覆盖 `spec-confirm` / `plan-confirm` / `verify` / `closeout`）。另有声明式 `{apiDocs}`——展开为任务目录 `api.md`（默认不声明，触达 API 契约面的项目可自行加入）；声明后对各 kind 全程生效（fix/verify 短路径同样校验，与 `{plan}` 按流程缺失即跳过的口径不同）。
 - **续跑幂等**：`docsCommit` 若发现 HEAD 已是同主题提交，不再重复提交（记 `resumed: true` 的 commit 事件）。
+
+### 单步调试与门禁定向排查（--step / gate / --gate）
+
+- **单步调试（`--step`）**：在阶段转换边界暂停（`PIPELINE-STOP step <runId> <stage>`，exit 0），使宿主或开发者可在进入下一阶段（如生成骨架、跑门、关单）前检查当前文档与环境；回跑 `next --step` 继行单步，回跑 `next` 则全速恢复。
+- **单门独立调试（`gate <script.mjs>`）**：在当前 run 现场直接调试执行单个门脚本（`flow-kit run pipeline-run.mjs gate <script.mjs> [--run <id>] [--retry <0-5>]`），独立输出门标准输出与退出码并落盘调试事件，不推移阶段路由。
+- **定向门复验（`next --gate <script.mjs>`）**：在 verify 阶段定向试跑特定门；`--interactive-gate` 则在执行门禁时打印诊断信息（TTY 环境下提供确认交互）。
 
 ### 失败路由 / 任务状态（R6-1 / R6-2）
 
