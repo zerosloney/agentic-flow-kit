@@ -43,6 +43,12 @@ const STACK_DEFAULTS = {
       apiPort: 8000,
       webPort: 5173,
     },
+    cpp: {
+      description: 'C / C++ 项目（CMake 或 Makefile）。',
+      descriptionEn: 'A C / C++ project (CMake or Makefile).',
+      apiPort: 8080,
+      webPort: 5173,
+    },
     empty: {
       description: '项目技术栈按实际填写。',
       descriptionEn: 'Fill in the project stack description.',
@@ -63,6 +69,7 @@ export const STACK_SHELL = {
   go: ['go build', 'go run', 'go test'],
   java: ['mvn compile', 'mvn test', 'mvn -q test', 'gradle test', 'gradlew test', 'gradlew.bat test', './gradlew test'],
   python: ['python -m pytest', 'pytest', 'python main.py', 'python -m', 'uv run', 'poetry run'],
+  cpp: ['cmake --build', 'cmake -B', 'ctest', 'make', 'make test', 'ninja', 'clang-tidy', 'clang-format'],
 };
 
 function stackAllowFragment(stack, tool, sep) {

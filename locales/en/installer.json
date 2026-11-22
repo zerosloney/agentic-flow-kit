@@ -72,6 +72,7 @@
   "tui.stack.go": "Go",
   "tui.stack.java": "Java",
   "tui.stack.python": "Python",
+  "tui.stack.cpp": "C / C++",
   "tui.stack.empty": "Unspecified",
   "tui.currentStack": "current",
   "tui.upgradeStackQuestion": "Select the stack for this upgrade",

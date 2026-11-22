@@ -239,6 +239,13 @@ if (STACKS.includes('python')) {
     pushProduct('pytest', 'Python tests', 'python -m pytest');
   }
 }
+if (STACKS.includes('cpp')) {
+  if (fs.existsSync('CMakeLists.txt')) {
+    pushProduct('ctest', 'CTest tests', 'ctest --output-on-failure');
+  } else if (fs.existsSync('Makefile')) {
+    pushProduct('make-test', 'Make test', 'make test');
+  }
+}
 
 // 计数捕获：优先 run-tests 的「断言合计」汇总行，退路取末条「合计: PASS x / FAIL y」
 //（夹具假命令与单套件输出皆走退路；无匹配则省略计数键，exitCode 才是硬事实）。

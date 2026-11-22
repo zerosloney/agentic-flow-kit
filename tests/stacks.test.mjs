@@ -242,3 +242,42 @@ test('java profile installs governance configs and activates maven/gradle gates'
   assert.equal(gates.status, 0, gates.stderr);
   assert.match(gates.stdout, /maven-test/);
 });
+
+test('cpp profile installs governance configs and activates ctest gate', () => {
+  const dir = tmpRepo();
+  fs.writeFileSync(path.join(dir, 'CMakeLists.txt'), 'cmake_minimum_required(VERSION 3.10)\n');
+  assert.equal(run(['install', '--agent', 'claude', '--stack', 'cpp', '--target', '.'], dir).status, 0);
+
+  assert.ok(fs.existsSync(path.join(dir, '.agents/config/lane-surfaces.txt')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/config/rule-budgets.txt')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/config/test-impact-map.json')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/config/workflow-modules.txt')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/hooks/commit-check.config.json')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/hooks/delete-guard-allowlist.txt')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/notes/runtime-env.md')));
+
+  const env = read(dir, '.agents/notes/runtime-env.md');
+  assert.match(env, /8080/);
+  assert.match(env, /cmake|ctest/);
+
+  const agents = read(dir, 'AGENTS.md');
+  assert.match(agents, /8080/);
+  assert.match(agents, /C \/ C\+\+ 项目/);
+
+  const gates = run(['run', 'verify', '--list'], dir);
+  assert.equal(gates.status, 0, gates.stderr);
+  assert.match(gates.stdout, /ctest/);
+});
+
+test('cpp profile auto-detection and make-test fallback', () => {
+  const dir = tmpRepo();
+  fs.writeFileSync(path.join(dir, 'Makefile'), 'test:\n\t@echo ok\n');
+  const r = run(['install', '--agent', 'claude', '--target', '.', '--json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  const out = JSON.parse(r.stdout);
+  assert.equal(out.stack, 'cpp');
+
+  const gates = run(['run', 'verify', '--list'], dir);
+  assert.equal(gates.status, 0, gates.stderr);
+  assert.match(gates.stdout, /make-test/);
+});

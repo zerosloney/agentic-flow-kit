@@ -104,6 +104,11 @@ const STACK_MARKERS = [
     label: 'pyproject.toml / requirements.txt',
     match: (names) => ['pyproject.toml', 'requirements.txt', 'setup.py', 'Pipfile'].find((n) => names.includes(n)) || null,
   },
+  {
+    stack: 'cpp',
+    label: 'CMakeLists.txt / Makefile',
+    match: (names) => ['CMakeLists.txt', 'Makefile', 'configure.ac', 'meson.build'].find((n) => names.includes(n)) || null,
+  },
   { stack: 'typescript', label: 'tsconfig.json', match: (names) => (names.includes('tsconfig.json') ? 'tsconfig.json' : null) },
   { stack: 'node', label: 'package.json', match: (names) => (names.includes('package.json') ? 'package.json' : null) },
 ];

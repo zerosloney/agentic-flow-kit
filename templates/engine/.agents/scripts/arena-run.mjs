@@ -245,6 +245,10 @@ export function evalArena({ root: explicitRoot, topic, testCmd, timeoutMs = 1200
         command = 'pytest';
       } else if (fs.existsSync(path.join(armDir, 'go.mod'))) {
         command = 'go test ./...';
+      } else if (fs.existsSync(path.join(armDir, 'CMakeLists.txt'))) {
+        command = 'ctest --output-on-failure';
+      } else if (fs.existsSync(path.join(armDir, 'Makefile'))) {
+        command = 'make test';
       }
     }
     if (!command) command = 'node -e "process.exit(0)"';
