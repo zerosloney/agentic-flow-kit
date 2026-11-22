@@ -24,6 +24,7 @@ import { keygenCommand, signCommand, verifySigCommand } from '../commands/notary
 import { handoffCommand } from '../commands/handoff.mjs';
 import { mcpCommand } from '../commands/mcp.mjs';
 import { metricsCommand } from '../commands/metrics.mjs';
+import { archCommand } from '../commands/arch.mjs';
 import { KIT_ROOT } from '../install/plan.mjs';
 
 const SUPPORTED_LANGS = new Set(LANGUAGES);
@@ -33,7 +34,7 @@ const COMMANDS = [
   'install', 'add-host', 'upgrade', 'adopt', 'prune', 'remove-host', 'uninstall',
   'doctor', 'diff', 'status', 'workspace', 'devcontainer', 'add-skill', 'remove-skill',
   'skills', 'new-host', 'explain', 'list-hosts', 'policy', 'bundle', 'sbom',
-  'keygen', 'sign', 'verify-sig', 'handoff', 'mcp', 'metrics', 'run', 'hook', 'help',
+  'keygen', 'sign', 'verify-sig', 'handoff', 'mcp', 'metrics', 'arch', 'run', 'hook', 'help',
 ];
 
 function normalizeLang(input) {
@@ -147,6 +148,8 @@ async function main(argv) {
       return mcpCommand({ args, t });
     case 'metrics':
       return metricsCommand({ args, t });
+    case 'arch':
+      return archCommand({ args, t });
     default:
       {
         const err = new Error(`unknown command: ${command} (available: ${COMMANDS.join(', ')})`);

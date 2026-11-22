@@ -386,5 +386,19 @@
   "metrics.checkFailed": "AI-DORA 效能指标未达到质量门禁基线要求：",
   "metrics.exported": "指标数据已导出至：{{file}}",
   "error.metricsUsage": "用法：flow-kit metrics <report|export|check> [options]",
-  "error.metricsThresholdExceeded": "AI-DORA 门禁未通过，共发现 {{count}} 项违规"
+  "error.metricsThresholdExceeded": "AI-DORA 门禁未通过，共发现 {{count}} 项违规",
+  "arch.initOk": "架构分层边界配置文件已生成（预设: {{preset}}）：{{file}}",
+  "arch.noConfig": "未找到架构分层配置（可运行 flow-kit arch init 初始化生成）",
+  "arch.noConfigHint": "未检测到 .agents/config/architecture.json；可运行 flow-kit arch init 生成预设分层规约",
+  "arch.checkTitle": "扫描项目模块依赖拓扑图（共 {{count}} 个源文件）：",
+  "arch.checkPass": "✅ 架构分层防线核验全过（无循环依赖，无跨层与私有违规）",
+  "arch.checkFailed": "❌ 架构契约检查失败（发现 {{cycles}} 个循环依赖，{{layerViolations}} 个分层越界，{{privateViolations}} 个私有穿透）：",
+  "arch.graphExported": "架构依赖拓扑图已导出至：{{file}}",
+  "doctor.archOk": "架构分层契约核验通过（扫描 {{files}} 个模块文件，未发现跨层侵蚀）",
+  "doctor.archViolations": "架构分层契约检查发现 {{count}} 项违规（存在循环依赖或跨层侵蚀）",
+  "doctor.archFixHint": "运行 flow-kit arch check 查看架构违规明细并重构导入依赖",
+  "doctor.archError": "架构分层配置解析失败：{{detail}}",
+  "error.archUsage": "用法：flow-kit arch <init|check|graph> [options]",
+  "error.archConfigExists": "架构配置文件已存在：{{path}}；使用 --force 覆盖",
+  "error.archCheckFailed": "架构分层检查未通过，严格模式阻断"
 }

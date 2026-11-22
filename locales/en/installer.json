@@ -386,5 +386,19 @@
   "metrics.checkFailed": "AI-DORA engineering metrics failed quality gate requirements:",
   "metrics.exported": "Metrics exported to: {{file}}",
   "error.metricsUsage": "Usage: flow-kit metrics <report|export|check> [options]",
-  "error.metricsThresholdExceeded": "AI-DORA quality gate failed with {{count}} violation(s)"
+  "error.metricsThresholdExceeded": "AI-DORA quality gate failed with {{count}} violation(s)",
+  "arch.initOk": "Architecture layering config created (preset: {{preset}}): {{file}}",
+  "arch.noConfig": "No architecture configuration found (run flow-kit arch init to initialize)",
+  "arch.noConfigHint": "No .agents/config/architecture.json found; run flow-kit arch init to generate preset rules",
+  "arch.checkTitle": "Analyzing project dependency graph (total {{count}} source files):",
+  "arch.checkPass": "✅ Architecture layering checks passed (no circular dependencies or boundary violations)",
+  "arch.checkFailed": "❌ Architecture check failed (found {{cycles}} circular dependencies, {{layerViolations}} layer violations, {{privateViolations}} private import violations):",
+  "arch.graphExported": "Architecture dependency graph exported to: {{file}}",
+  "doctor.archOk": "Architecture layering verified (scanned {{files}} module files, no cross-layer erosion)",
+  "doctor.archViolations": "Architecture check detected {{count}} violation(s) (circular dependency or cross-layer import)",
+  "doctor.archFixHint": "Run flow-kit arch check to inspect violations and refactor imports",
+  "doctor.archError": "Architecture configuration error: {{detail}}",
+  "error.archUsage": "Usage: flow-kit arch <init|check|graph> [options]",
+  "error.archConfigExists": "Architecture config already exists: {{path}}; use --force to overwrite",
+  "error.archCheckFailed": "Architecture check failed; blocked in strict mode"
 }
