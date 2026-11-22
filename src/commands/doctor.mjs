@@ -22,6 +22,7 @@ import { verifySignature, signPayload, readSignatureFile, writeSignatureFile } f
 import { listHandoffFiles, verifyHandoffEnvelope } from '../install/handoff.mjs';
 import { checkMcpGatewayHealth } from '../install/mcp-gateway.mjs';
 import { checkArchHealth } from '../install/arch-guard.mjs';
+import { checkSandboxHealth } from '../install/sandbox.mjs';
 import { RUNTIME_SCRIPTS, RUNTIME_HOOKS, KIT_ROOT } from './runtime.mjs';
 import { buildDiff } from './diff.mjs';
 
@@ -544,6 +545,12 @@ export function doctorCommand({ args, t }) {
   const archHealth = checkArchHealth(target, t);
   if (archHealth) {
     add(archHealth.ok, archHealth.name, archHealth.detail, archHealth.fix || '', { warn: archHealth.warn });
+  }
+
+  // 可插拔即时沙箱与高危指令隔离巡检
+  const sandboxHealth = checkSandboxHealth(target, t);
+  if (sandboxHealth) {
+    add(sandboxHealth.ok, sandboxHealth.name, sandboxHealth.detail, sandboxHealth.fix || '', { warn: sandboxHealth.warn });
   }
 
   // 模型配置是用户本地状态：存在则校验，缺失不失败（旧安装保持 doctor 全过）。

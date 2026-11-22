@@ -1,0 +1,88 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://github.com/zerosloney/agentic-flow-kit/schemas/sandbox.schema.json",
+  "title": "agentic-flow-kit sandbox configuration",
+  "description": ".agents/config/sandbox.json：可插拔执行沙箱与高危指令物理隔离策略配置。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version"],
+  "properties": {
+    "$schema": { "type": "string" },
+    "version": { "const": 1 },
+    "mode": {
+      "type": "string",
+      "enum": ["auto", "strict", "always", "disabled"],
+      "default": "auto",
+      "description": "路由模式：auto（高危走沙箱，安全走宿主）、strict（非纯只读均走沙箱，无沙箱引擎时阻断）、always（恒定走沙箱）、disabled（全走宿主）"
+    },
+    "engine": {
+      "type": "string",
+      "enum": ["auto", "docker", "podman"],
+      "default": "auto",
+      "description": "容器运行时引擎：auto（自动探测 docker / podman）、docker、podman"
+    },
+    "image": {
+      "type": "string",
+      "description": "自定义容器镜像；若不指定则自动根据栈 Profile 继承官方 Devcontainer 基础镜像"
+    },
+    "network": {
+      "type": "string",
+      "enum": ["bridge", "none", "host"],
+      "default": "bridge",
+      "description": "网络隔离策略：bridge（桥接联网）、none（完全脱网气隙模式）、host（共享宿主网络）"
+    },
+    "dropPrivileges": {
+      "type": "boolean",
+      "default": true,
+      "description": "是否以镜像自带的非 root 用户（如 node/vscode）执行，避免宿主提权风险"
+    },
+    "containerUser": {
+      "type": "string",
+      "description": "显式指定的容器内执行用户（未指定时根据栈自动取 node 或 vscode）"
+    },
+    "workdir": {
+      "type": "string",
+      "default": "/workspace",
+      "description": "项目工作空间挂载到容器内的目标目录"
+    },
+    "stripEnv": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "需要从宿主环境变量中脱敏清除的敏感密钥通配符列表（如 AWS_*、GITHUB_*、*_TOKEN）"
+    },
+    "passEnv": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "显式允许透传至容器的环境变量白名单"
+    },
+    "rules": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "safePatterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "显式判定为安全的指令正则/通配模式列表"
+        },
+        "dangerousPatterns": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "显式判定为高危并强制进沙箱的指令正则/通配模式列表"
+        }
+      }
+    },
+    "mounts": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["source", "target"],
+        "properties": {
+          "source": { "type": "string" },
+          "target": { "type": "string" },
+          "readonly": { "type": "boolean" }
+        }
+      },
+      "description": "额外的只读或读写挂载点"
+    }
+  }
+}
