@@ -464,5 +464,7 @@
   "gate.diffNotaryNoChanges": "增量范围内未涉及公证签名凭据变更（共 {{count}} 个文件变更）",
   "gate.diffPolicyNoChanges": "增量范围内未涉及中央策略规约变更（共 {{count}} 个文件变更）",
   "gate.badgeSaved": "已生成门禁状态徽章：{{file}}",
+  "hud.title": "终端多智能体与防护状态看板",
+  "hud.controls": "快捷键：按 [q] 或 [Ctrl+C] 退出实时监控",
   "error.gateUsage": "用法：flow-kit gate [check|badge|init-ci] [options]"
 }

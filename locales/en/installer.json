@@ -464,5 +464,7 @@
   "gate.diffNotaryNoChanges": "0 signed proofs or handoffs modified in diff scope ({{count}} files changed)",
   "gate.diffPolicyNoChanges": "0 policy definitions modified in diff scope ({{count}} files changed)",
   "gate.badgeSaved": "Gate badge generated: {{file}}",
+  "hud.title": "Terminal Multi-Agent & Shield HUD",
+  "hud.controls": "Controls: Press [q] or [Ctrl+C] to quit live view",
   "error.gateUsage": "Usage: flow-kit gate [check|badge|init-ci] [options]"
 }

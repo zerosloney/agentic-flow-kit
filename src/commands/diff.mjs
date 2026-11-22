@@ -244,10 +244,17 @@ export function diffCommand({ args, t }) {
   return strictExit(args, result);
 }
 
-export function statusCommand({ args, t }) {
+export async function statusCommand({ args, t }) {
   const target = resolveTarget(args);
+
+  if (flag(args, 'hud')) {
+    const { hudCommand } = await import('./hud.mjs');
+    return hudCommand({ args, t, lang: args.lang || 'zh-CN' });
+  }
+
   const manifest = requireManifest(target, t);
   const tt = args.lang ? t : makeT(manifest.language || 'zh-CN');
+
   const result = buildDiff({ target, manifest });
   if (flag(args, 'json')) {
     console.log(JSON.stringify({

@@ -27,6 +27,7 @@ import { metricsCommand } from '../commands/metrics.mjs';
 import { archCommand } from '../commands/arch.mjs';
 import { sandboxCommand } from '../commands/sandbox.mjs';
 import { gateCommand, ciCommand } from '../commands/gate.mjs';
+import { hudCommand } from '../commands/hud.mjs';
 import { KIT_ROOT } from '../install/plan.mjs';
 
 const SUPPORTED_LANGS = new Set(LANGUAGES);
@@ -37,7 +38,7 @@ const COMMANDS = [
   'doctor', 'diff', 'status', 'workspace', 'devcontainer', 'add-skill', 'remove-skill',
   'skills', 'new-host', 'explain', 'list-hosts', 'policy', 'bundle', 'sbom',
   'keygen', 'sign', 'verify-sig', 'handoff', 'mcp', 'metrics', 'arch', 'sandbox',
-  'gate', 'ci', 'run', 'hook', 'help',
+  'gate', 'ci', 'hud', 'run', 'hook', 'help',
 ];
 
 function normalizeLang(input) {
@@ -159,6 +160,8 @@ async function main(argv) {
       return gateCommand({ args, t, lang });
     case 'ci':
       return ciCommand({ args, t, lang });
+    case 'hud':
+      return hudCommand({ args, t, lang });
     default:
       {
         const err = new Error(`unknown command: ${command} (available: ${COMMANDS.join(', ')})`);

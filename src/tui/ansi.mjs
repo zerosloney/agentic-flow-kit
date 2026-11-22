@@ -23,6 +23,9 @@ export const cyan = paint('[36m', '[39m');
 export const dim = paint('[2m', '[22m');
 export const green = paint('[32m', '[39m');
 export const red = paint('[31m', '[39m');
+export const yellow = paint('[33m', '[39m');
+export const bold = paint('[1m', '[22m');
+export const magenta = paint('[35m', '[39m');
 
 export const SPINNER_FRAMES = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
 
