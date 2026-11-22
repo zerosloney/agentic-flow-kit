@@ -234,6 +234,11 @@ if (STACKS.includes('java')) {
     pushProduct('gradle-test', 'Gradle tests', 'gradle test');
   }
 }
+if (STACKS.includes('python')) {
+  if (fs.existsSync('pyproject.toml') || fs.existsSync('requirements.txt') || fs.existsSync('pytest.ini') || fs.existsSync('setup.py') || fs.existsSync('setup.cfg')) {
+    pushProduct('pytest', 'Python tests', 'python -m pytest');
+  }
+}
 
 // 计数捕获：优先 run-tests 的「断言合计」汇总行，退路取末条「合计: PASS x / FAIL y」
 //（夹具假命令与单套件输出皆走退路；无匹配则省略计数键，exitCode 才是硬事实）。

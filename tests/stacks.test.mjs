@@ -164,3 +164,81 @@ test('verify gates follow the union of the declared stacks', () => {
   assert.match(tsGates.stdout, /node-test/);
   assert.doesNotMatch(tsGates.stdout, /backend-/);
 });
+
+test('python profile installs governance configs and activates pytest gate', () => {
+  const dir = tmpRepo();
+  fs.writeFileSync(path.join(dir, 'pyproject.toml'), '[tool.pytest]\n');
+  assert.equal(run(['install', '--agent', 'claude', '--stack', 'python', '--target', '.'], dir).status, 0);
+
+  assert.ok(fs.existsSync(path.join(dir, '.agents/config/lane-surfaces.txt')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/config/rule-budgets.txt')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/config/test-impact-map.json')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/config/workflow-modules.txt')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/hooks/commit-check.config.json')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/hooks/delete-guard-allowlist.txt')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/notes/runtime-env.md')));
+
+  const env = read(dir, '.agents/notes/runtime-env.md');
+  assert.match(env, /8000/);
+  assert.match(env, /uvicorn|pytest/);
+
+  const agents = read(dir, 'AGENTS.md');
+  assert.match(agents, /8000/);
+  assert.match(agents, /Python 项目/);
+
+  const gates = run(['run', 'verify', '--list'], dir);
+  assert.equal(gates.status, 0, gates.stderr);
+  assert.match(gates.stdout, /pytest/);
+});
+
+test('go profile installs governance configs and activates go-test gate', () => {
+  const dir = tmpRepo();
+  fs.writeFileSync(path.join(dir, 'go.mod'), 'module example.com/test\n\ngo 1.23\n');
+  assert.equal(run(['install', '--agent', 'claude', '--stack', 'go', '--target', '.'], dir).status, 0);
+
+  assert.ok(fs.existsSync(path.join(dir, '.agents/config/lane-surfaces.txt')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/config/rule-budgets.txt')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/config/test-impact-map.json')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/config/workflow-modules.txt')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/hooks/commit-check.config.json')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/hooks/delete-guard-allowlist.txt')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/notes/runtime-env.md')));
+
+  const env = read(dir, '.agents/notes/runtime-env.md');
+  assert.match(env, /8080/);
+  assert.match(env, /go run/);
+
+  const agents = read(dir, 'AGENTS.md');
+  assert.match(agents, /8080/);
+  assert.match(agents, /Go 项目/);
+
+  const gates = run(['run', 'verify', '--list'], dir);
+  assert.equal(gates.status, 0, gates.stderr);
+  assert.match(gates.stdout, /go-test/);
+});
+
+test('java profile installs governance configs and activates maven/gradle gates', () => {
+  const dir = tmpRepo();
+  fs.writeFileSync(path.join(dir, 'pom.xml'), '<project></project>\n');
+  assert.equal(run(['install', '--agent', 'claude', '--stack', 'java', '--target', '.'], dir).status, 0);
+
+  assert.ok(fs.existsSync(path.join(dir, '.agents/config/lane-surfaces.txt')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/config/rule-budgets.txt')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/config/test-impact-map.json')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/config/workflow-modules.txt')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/hooks/commit-check.config.json')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/hooks/delete-guard-allowlist.txt')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/notes/runtime-env.md')));
+
+  const env = read(dir, '.agents/notes/runtime-env.md');
+  assert.match(env, /8080/);
+  assert.match(env, /mvn|gradle/);
+
+  const agents = read(dir, 'AGENTS.md');
+  assert.match(agents, /8080/);
+  assert.match(agents, /Java 项目/);
+
+  const gates = run(['run', 'verify', '--list'], dir);
+  assert.equal(gates.status, 0, gates.stderr);
+  assert.match(gates.stdout, /maven-test/);
+});

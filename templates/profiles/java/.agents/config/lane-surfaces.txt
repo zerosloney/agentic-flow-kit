@@ -1,0 +1,12 @@
+# L2 触达面清单（单源：本文件——check-lane-surface.mjs 共读，verify.mjs lane-surface-ci「泳道完整性」门禁）
+# 格式：每行一条 ERE（grep -E 兼容），匹配暂存/diff 文件的仓库相对路径（/ 分隔）。
+#   # 注释与空行忽略；本文件缺失或清单为空 = 检查跳过（新装户默认空）。
+#   正则语法错误行 → 门禁 fail-closed 阻断。
+# 段协议：`## engine` / `## product` 行切换后续 ERE 类别——
+#   engine  = 引擎/门禁自身面：无活跃入口时仅 advisory；
+#   product = 产品契约/schema 面：按路径归因，执法点 = verify.mjs lane-surface-ci 关单/CI 硬拦。
+## engine
+^templates/
+^\.agents/(scripts|hooks)/
+^\.githooks/
+## product
