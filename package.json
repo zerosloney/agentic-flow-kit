@@ -7,6 +7,9 @@
   "bin": {
     "flow-kit": "bin/flow-kit.mjs"
   },
+  "exports": {
+    "./kernel": "./src/kernel/index.mjs"
+  },
   "engines": {
     "node": ">=22"
   },
