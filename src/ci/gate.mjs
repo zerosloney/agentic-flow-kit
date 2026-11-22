@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { checkArchHealth } from '../install/arch-guard.mjs';
 import { checkSkillsEvalHealth } from '../skills/eval-harness.mjs';
 import { checkMcpGatewayHealth } from '../install/mcp-gateway.mjs';
@@ -7,6 +8,42 @@ import { checkSandboxHealth } from '../install/sandbox.mjs';
 import { verifySignature, readSignatureFile } from '../install/notary.mjs';
 import { listHandoffFiles, verifyHandoffEnvelope } from '../install/handoff.mjs';
 import { computeAiDoraMetrics, checkMetricsThresholds } from '../install/metrics.mjs';
+
+/**
+ * 解析 Git 差异变更集文件列表（用于增量卡口 / PR 范围收敛）
+ */
+export function resolveChangedFiles(target, { since = null } = {}) {
+  const files = new Set();
+  try {
+    const diffArgs = since
+      ? ['diff', '--name-only', `${since}...HEAD`]
+      : ['diff', '--name-only', 'HEAD~1...HEAD'];
+    let res = spawnSync('git', diffArgs, { encoding: 'utf8', cwd: target });
+    if (res.status !== 0 && since) {
+      res = spawnSync('git', ['diff', '--name-only', since], { encoding: 'utf8', cwd: target });
+    }
+    if (res.status === 0 && res.stdout) {
+      for (const line of res.stdout.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (trimmed) files.add(trimmed.replace(/\\/g, '/'));
+      }
+    }
+
+    // 兼顾工作区未暂存及已暂存的未提交改动
+    const statRes = spawnSync('git', ['status', '--porcelain'], { encoding: 'utf8', cwd: target });
+    if (statRes.status === 0 && statRes.stdout) {
+      for (const line of statRes.stdout.split(/\r?\n/)) {
+        if (!line.trim()) continue;
+        const filePath = line.slice(3).trim();
+        const actual = filePath.includes('->') ? filePath.split('->').pop().trim() : filePath;
+        if (actual) files.add(actual.replace(/\\/g, '/'));
+      }
+    }
+  } catch {
+    return null;
+  }
+  return Array.from(files);
+}
 
 /**
  * 校验公证签名证明链与防篡改
@@ -166,44 +203,84 @@ function checkPolicyGuard(target, t) {
 /**
  * 执行全要素零信任合流门禁卡口检测
  */
-export function runGateChecks({ target, strict = false, rules = null, thresholds = {}, t }) {
+export function runGateChecks({
+  target,
+  strict = false,
+  rules = null,
+  thresholds = {},
+  diff = false,
+  since = null,
+  t,
+}) {
   const selectedRules = rules && rules.length ? new Set(rules.map((r) => r.trim().toLowerCase())) : null;
   const isEnabled = (name) => !selectedRules || selectedRules.has(name);
 
   const startMs = Date.now();
   const guards = [];
 
+  // 计算增量 PR 差异集文件
+  let changedFiles = null;
+  let diffScoping = null;
+  if (diff || since) {
+    changedFiles = resolveChangedFiles(target, { since });
+    if (changedFiles) {
+      diffScoping = {
+        active: true,
+        since: since || 'HEAD~1',
+        changedCount: changedFiles.length,
+        files: changedFiles,
+      };
+    }
+  }
+
   // 1. Architecture Layering & Boundary Guard
   if (isEnabled('arch')) {
     const archStart = Date.now();
     try {
-      const res = checkArchHealth(target, t);
-      if (!res) {
-        guards.push({
-          name: 'arch',
-          title: t('gate.guardArchTitle') || 'Architecture Layering & Boundary Guard',
-          status: 'skipped',
-          reason: t('arch.noConfig') || 'No architecture layering config found (optional)',
-          durationMs: Date.now() - archStart,
-        });
-      } else if (!res.ok) {
-        guards.push({
-          name: 'arch',
-          title: t('gate.guardArchTitle') || 'Architecture Layering & Boundary Guard',
-          status: 'failed',
-          reason: res.detail || res.reason,
-          hint: res.fix || res.hint || t('doctor.archFixHint'),
-          details: { violations: res.violations, cycles: res.cycles, layerViolations: res.layerViolations, privateViolations: res.privateViolations },
-          durationMs: Date.now() - archStart,
-        });
-      } else {
+      const archConfigPath = path.join(target, '.agents', 'config', 'architecture.json');
+      const hasArchConfig = fs.existsSync(archConfigPath);
+      const touchesArch = !diffScoping || (hasArchConfig && changedFiles.some(
+        (f) => f.startsWith('src/') || f.includes('architecture.json'),
+      ));
+
+      if (diffScoping && hasArchConfig && !touchesArch) {
         guards.push({
           name: 'arch',
           title: t('gate.guardArchTitle') || 'Architecture Layering & Boundary Guard',
           status: 'passed',
-          reason: res.detail || res.reason || t('arch.checkPass') || 'No circular dependencies or boundary violations',
+          reason: t('gate.diffArchNoChanges', { count: changedFiles.length })
+            || `0 architecture layer files modified in diff scope (${changedFiles.length} files changed)`,
           durationMs: Date.now() - archStart,
         });
+      } else {
+        const res = checkArchHealth(target, t);
+        if (!res) {
+          guards.push({
+            name: 'arch',
+            title: t('gate.guardArchTitle') || 'Architecture Layering & Boundary Guard',
+            status: 'skipped',
+            reason: t('arch.noConfig') || 'No architecture layering config found (optional)',
+            durationMs: Date.now() - archStart,
+          });
+        } else if (!res.ok) {
+          guards.push({
+            name: 'arch',
+            title: t('gate.guardArchTitle') || 'Architecture Layering & Boundary Guard',
+            status: 'failed',
+            reason: res.detail || res.reason,
+            hint: res.fix || res.hint || t('doctor.archFixHint'),
+            details: { violations: res.violations, cycles: res.cycles, layerViolations: res.layerViolations, privateViolations: res.privateViolations },
+            durationMs: Date.now() - archStart,
+          });
+        } else {
+          guards.push({
+            name: 'arch',
+            title: t('gate.guardArchTitle') || 'Architecture Layering & Boundary Guard',
+            status: 'passed',
+            reason: res.detail || res.reason || t('arch.checkPass') || 'No circular dependencies or boundary violations',
+            durationMs: Date.now() - archStart,
+          });
+        }
       }
     } catch (e) {
       guards.push({
@@ -220,32 +297,47 @@ export function runGateChecks({ target, strict = false, rules = null, thresholds
   if (isEnabled('skills')) {
     const skillStart = Date.now();
     try {
-      const res = checkSkillsEvalHealth(target, t);
-      if (!res) {
-        guards.push({
-          name: 'skills',
-          title: t('gate.guardSkillsTitle') || 'Skills Regression Eval Guard',
-          status: 'skipped',
-          reason: t('gate.guardSkillsNoSkills') || 'No custom skills installed',
-          durationMs: Date.now() - skillStart,
-        });
-      } else if (!res.ok) {
-        guards.push({
-          name: 'skills',
-          title: t('gate.guardSkillsTitle') || 'Skills Regression Eval Guard',
-          status: res.warn && !strict ? 'warned' : 'failed',
-          reason: res.detail,
-          hint: res.fix || res.hint,
-          durationMs: Date.now() - skillStart,
-        });
-      } else {
+      const touchesSkills = !diffScoping || changedFiles.some(
+        (f) => f.startsWith('.agents/skills/') || f.startsWith('.agents/evals/'),
+      );
+
+      if (diffScoping && !touchesSkills) {
         guards.push({
           name: 'skills',
           title: t('gate.guardSkillsTitle') || 'Skills Regression Eval Guard',
           status: 'passed',
-          reason: res.detail || t('doctor.skillsEvalOk', { count: res.count }),
+          reason: t('gate.diffSkillsNoChanges', { count: changedFiles.length })
+            || `0 skill assets modified in diff scope (${changedFiles.length} files changed)`,
           durationMs: Date.now() - skillStart,
         });
+      } else {
+        const res = checkSkillsEvalHealth(target, t);
+        if (!res) {
+          guards.push({
+            name: 'skills',
+            title: t('gate.guardSkillsTitle') || 'Skills Regression Eval Guard',
+            status: 'skipped',
+            reason: t('gate.guardSkillsNoSkills') || 'No custom skills installed',
+            durationMs: Date.now() - skillStart,
+          });
+        } else if (!res.ok) {
+          guards.push({
+            name: 'skills',
+            title: t('gate.guardSkillsTitle') || 'Skills Regression Eval Guard',
+            status: res.warn && !strict ? 'warned' : 'failed',
+            reason: res.detail,
+            hint: res.fix || res.hint,
+            durationMs: Date.now() - skillStart,
+          });
+        } else {
+          guards.push({
+            name: 'skills',
+            title: t('gate.guardSkillsTitle') || 'Skills Regression Eval Guard',
+            status: 'passed',
+            reason: res.detail || t('doctor.skillsEvalOk', { count: res.count }),
+            durationMs: Date.now() - skillStart,
+          });
+        }
       }
     } catch (e) {
       guards.push({
@@ -262,32 +354,47 @@ export function runGateChecks({ target, strict = false, rules = null, thresholds
   if (isEnabled('mcp')) {
     const mcpStart = Date.now();
     try {
-      const res = checkMcpGatewayHealth(target, t);
-      if (!res) {
-        guards.push({
-          name: 'mcp',
-          title: t('gate.guardMcpTitle') || 'MCP Gateway & RBAC Audit Guard',
-          status: 'skipped',
-          reason: t('gate.guardMcpPass') || 'No MCP gateway config defined (optional)',
-          durationMs: Date.now() - mcpStart,
-        });
-      } else if (!res.ok) {
-        guards.push({
-          name: 'mcp',
-          title: t('gate.guardMcpTitle') || 'MCP Gateway & RBAC Audit Guard',
-          status: res.warn && !strict ? 'warned' : 'failed',
-          reason: res.detail || res.reason,
-          hint: res.fix || res.hint,
-          durationMs: Date.now() - mcpStart,
-        });
-      } else {
+      const touchesMcp = !diffScoping || changedFiles.some(
+        (f) => f.startsWith('.agents/mcp') || f.includes('mcp.json'),
+      );
+
+      if (diffScoping && !touchesMcp) {
         guards.push({
           name: 'mcp',
           title: t('gate.guardMcpTitle') || 'MCP Gateway & RBAC Audit Guard',
           status: 'passed',
-          reason: res.detail || t('gate.guardMcpPass') || '0 unauthorized or blocked privilege escalations',
+          reason: t('gate.diffMcpNoChanges', { count: changedFiles.length })
+            || `0 MCP configurations modified in diff scope (${changedFiles.length} files changed)`,
           durationMs: Date.now() - mcpStart,
         });
+      } else {
+        const res = checkMcpGatewayHealth(target, t);
+        if (!res) {
+          guards.push({
+            name: 'mcp',
+            title: t('gate.guardMcpTitle') || 'MCP Gateway & RBAC Audit Guard',
+            status: 'skipped',
+            reason: t('gate.guardMcpPass') || 'No MCP gateway config defined (optional)',
+            durationMs: Date.now() - mcpStart,
+          });
+        } else if (!res.ok) {
+          guards.push({
+            name: 'mcp',
+            title: t('gate.guardMcpTitle') || 'MCP Gateway & RBAC Audit Guard',
+            status: res.warn && !strict ? 'warned' : 'failed',
+            reason: res.detail || res.reason,
+            hint: res.fix || res.hint,
+            durationMs: Date.now() - mcpStart,
+          });
+        } else {
+          guards.push({
+            name: 'mcp',
+            title: t('gate.guardMcpTitle') || 'MCP Gateway & RBAC Audit Guard',
+            status: 'passed',
+            reason: res.detail || t('gate.guardMcpPass') || '0 unauthorized or blocked privilege escalations',
+            durationMs: Date.now() - mcpStart,
+          });
+        }
       }
     } catch (e) {
       guards.push({
@@ -304,32 +411,47 @@ export function runGateChecks({ target, strict = false, rules = null, thresholds
   if (isEnabled('sandbox')) {
     const sbStart = Date.now();
     try {
-      const res = checkSandboxHealth(target, t);
-      if (!res) {
-        guards.push({
-          name: 'sandbox',
-          title: t('gate.guardSandboxTitle') || 'Container Sandbox Isolation Guard',
-          status: 'skipped',
-          reason: t('sandbox.noConfig') || 'No sandbox config found (optional)',
-          durationMs: Date.now() - sbStart,
-        });
-      } else if (!res.ok) {
-        guards.push({
-          name: 'sandbox',
-          title: t('gate.guardSandboxTitle') || 'Container Sandbox Isolation Guard',
-          status: res.warn && !strict ? 'warned' : 'failed',
-          reason: res.detail || res.reason,
-          hint: res.fix || res.hint,
-          durationMs: Date.now() - sbStart,
-        });
-      } else {
+      const touchesSandbox = !diffScoping || changedFiles.some(
+        (f) => f.includes('sandbox.json') || f.includes('Dockerfile') || f.includes('devcontainer'),
+      );
+
+      if (diffScoping && !touchesSandbox) {
         guards.push({
           name: 'sandbox',
           title: t('gate.guardSandboxTitle') || 'Container Sandbox Isolation Guard',
           status: 'passed',
-          reason: res.detail || 'Container sandbox ready',
+          reason: t('gate.diffSandboxNoChanges', { count: changedFiles.length })
+            || `0 sandbox configurations modified in diff scope (${changedFiles.length} files changed)`,
           durationMs: Date.now() - sbStart,
         });
+      } else {
+        const res = checkSandboxHealth(target, t);
+        if (!res) {
+          guards.push({
+            name: 'sandbox',
+            title: t('gate.guardSandboxTitle') || 'Container Sandbox Isolation Guard',
+            status: 'skipped',
+            reason: t('sandbox.noConfig') || 'No sandbox config found (optional)',
+            durationMs: Date.now() - sbStart,
+          });
+        } else if (!res.ok) {
+          guards.push({
+            name: 'sandbox',
+            title: t('gate.guardSandboxTitle') || 'Container Sandbox Isolation Guard',
+            status: res.warn && !strict ? 'warned' : 'failed',
+            reason: res.detail || res.reason,
+            hint: res.fix || res.hint,
+            durationMs: Date.now() - sbStart,
+          });
+        } else {
+          guards.push({
+            name: 'sandbox',
+            title: t('gate.guardSandboxTitle') || 'Container Sandbox Isolation Guard',
+            status: 'passed',
+            reason: res.detail || 'Container sandbox ready',
+            durationMs: Date.now() - sbStart,
+          });
+        }
       }
     } catch (e) {
       guards.push({
@@ -346,9 +468,24 @@ export function runGateChecks({ target, strict = false, rules = null, thresholds
   if (isEnabled('notary')) {
     const notaryStart = Date.now();
     try {
-      const res = checkNotaryProofGuard(target, t);
-      res.durationMs = Date.now() - notaryStart;
-      guards.push(res);
+      const touchesNotary = !diffScoping || changedFiles.some(
+        (f) => f.startsWith('.agents/notary') || f.endsWith('.sig') || f.startsWith('.agents/handoffs/'),
+      );
+
+      if (diffScoping && !touchesNotary) {
+        guards.push({
+          name: 'notary',
+          title: t('gate.guardNotaryTitle') || 'Cryptographic Notary & Proof Integrity',
+          status: 'passed',
+          reason: t('gate.diffNotaryNoChanges', { count: changedFiles.length })
+            || `0 signed proofs or handoffs modified in diff scope (${changedFiles.length} files changed)`,
+          durationMs: Date.now() - notaryStart,
+        });
+      } else {
+        const res = checkNotaryProofGuard(target, t);
+        res.durationMs = Date.now() - notaryStart;
+        guards.push(res);
+      }
     } catch (e) {
       guards.push({
         name: 'notary',
@@ -364,9 +501,21 @@ export function runGateChecks({ target, strict = false, rules = null, thresholds
   if (isEnabled('policy')) {
     const policyStart = Date.now();
     try {
-      const res = checkPolicyGuard(target, t);
-      res.durationMs = Date.now() - policyStart;
-      guards.push(res);
+      const touchesPolicy = !diffScoping || changedFiles.some((f) => f.includes('policy.json'));
+      if (diffScoping && !touchesPolicy) {
+        guards.push({
+          name: 'policy',
+          title: t('gate.guardPolicyTitle') || 'Central Enterprise Policy Alignment',
+          status: 'passed',
+          reason: t('gate.diffPolicyNoChanges', { count: changedFiles.length })
+            || `0 policy definitions modified in diff scope (${changedFiles.length} files changed)`,
+          durationMs: Date.now() - policyStart,
+        });
+      } else {
+        const res = checkPolicyGuard(target, t);
+        res.durationMs = Date.now() - policyStart;
+        guards.push(res);
+      }
     } catch (e) {
       guards.push({
         name: 'policy',
@@ -428,6 +577,7 @@ export function runGateChecks({ target, strict = false, rules = null, thresholds
     passed,
     strict,
     target,
+    diffScoping,
     createdAt: new Date().toISOString(),
     durationMs: Date.now() - startMs,
     summary: {
@@ -442,6 +592,67 @@ export function runGateChecks({ target, strict = false, rules = null, thresholds
 }
 
 /**
+ * 生成 Shields.io 徽章 / SVG / JSON 状态徽章
+ */
+export function generateGateBadge(result, { format = 'markdown' } = {}) {
+  const isApproved = result.passed;
+  let verdict = 'APPROVED';
+  let color = '2ea44f'; // brightgreen
+  const label = 'AI Gate';
+
+  if (!isApproved) {
+    if (result.summary.failed === 0 && result.summary.warned > 0) {
+      verdict = 'WARNED';
+      color = 'dfb317'; // yellow
+    } else {
+      verdict = 'REJECTED';
+      color = 'd73a49'; // red
+    }
+  }
+
+  const fmt = String(format || 'markdown').toLowerCase();
+  if (fmt === 'svg') {
+    const textW = verdict.length * 9 + 20;
+    const totalW = 60 + textW;
+    const textMid = 60 + textW / 2;
+    return `<svg xmlns="http://www.w3.org/2000/svg" width="${totalW}" height="20" role="img" aria-label="${label}: ${verdict}">
+  <linearGradient id="s" x2="0" y2="100%">
+    <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+    <stop offset="1" stop-opacity=".1"/>
+  </linearGradient>
+  <clipPath id="r">
+    <rect width="${totalW}" height="20" rx="3" fill="#fff"/>
+  </clipPath>
+  <g clip-path="url(#r)">
+    <rect width="60" height="20" fill="#555"/>
+    <rect x="60" width="${textW}" height="20" fill="#${color}"/>
+    <rect width="${totalW}" height="20" fill="url(#s)"/>
+  </g>
+  <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="110">
+    <text aria-hidden="true" x="310" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)" textLength="480">${label}</text>
+    <text x="310" y="140" transform="scale(.1)" fill="#fff" textLength="480">${label}</text>
+    <text aria-hidden="true" x="${textMid * 10}" y="150" fill="#010101" fill-opacity=".3" transform="scale(.1)">${verdict}</text>
+    <text x="${textMid * 10}" y="140" transform="scale(.1)" fill="#fff">${verdict}</text>
+  </g>
+</svg>`;
+  }
+
+  if (fmt === 'json') {
+    return JSON.stringify({
+      schemaVersion: 1,
+      label,
+      message: verdict,
+      color,
+      isError: !isApproved,
+    }, null, 2);
+  }
+
+  // markdown / shields.io
+  const badgeUrl = `https://img.shields.io/badge/AI--Gate-${encodeURIComponent(verdict)}-${color}?logo=shield`;
+  return `[![AI Gate: ${verdict}](${badgeUrl})](https://github.com/agentic-flow-kit)`;
+}
+
+/**
  * 渲染终端高可读性 ANSI 纯文本报告
  */
 export function renderGateText(result, t) {
@@ -451,6 +662,11 @@ export function renderGateText(result, t) {
     `\n${badge} ${t('gate.title') || 'AI-Native Zero-Trust Quality Gate'}: ${result.verdict}`,
     `----------------------------------------------------------------------`,
   ];
+
+  if (result.diffScoping?.active) {
+    lines.push(`🔍 ${t('gate.diffScopingScope', { since: result.diffScoping.since, count: result.diffScoping.changedCount }) || `Scope: Incremental PR Diff (since: ${result.diffScoping.since}, ${result.diffScoping.changedCount} files modified)`}`);
+    lines.push(`----------------------------------------------------------------------`);
+  }
 
   for (const g of result.guards) {
     let icon = '✔';
@@ -502,10 +718,15 @@ export function renderGateMarkdown(result, t) {
     `# 🛡️ AI-Native Zero-Trust Quality Gate: ${badge}`,
     '',
     `> **Target:** \`${result.target}\` | **Mode:** \`${result.strict ? 'Strict' : 'Standard'}\` | **Duration:** ${result.durationMs}ms`,
-    '',
-    `| Status | Guardian | Verdict / Diagnosis | Remediation |`,
-    `| :---: | :--- | :--- | :--- |`,
   ];
+
+  if (result.diffScoping?.active) {
+    lines.push(`> **Diff Scoping:** \`${result.diffScoping.since}...HEAD\` (${result.diffScoping.changedCount} files modified)`);
+  }
+
+  lines.push('');
+  lines.push(`| Status | Guardian | Verdict / Diagnosis | Remediation |`);
+  lines.push(`| :---: | :--- | :--- | :--- |`);
 
   for (const g of result.guards) {
     let statusIcon = '✅ Pass';

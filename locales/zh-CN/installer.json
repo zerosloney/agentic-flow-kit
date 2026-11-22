@@ -456,5 +456,13 @@
   "gate.guardMetricsTitle": "AI-DORA 研发效能与质量底线门禁",
   "gate.metricsPass": "AI-DORA 综合评级: {{tier}}，各项指标在质量底线内",
   "gate.ciInitOk": "已生成 CI 自动化门禁流水线配置（{{provider}}）：{{file}}",
-  "error.gateUsage": "用法：flow-kit gate [check|init-ci] [options]"
+  "gate.diffScopingScope": "增量检测范围：{{since}}...HEAD（共变更 {{count}} 个文件）",
+  "gate.diffArchNoChanges": "增量范围内未涉及架构分层文件变更（共 {{count}} 个文件变更）",
+  "gate.diffSkillsNoChanges": "增量范围内未涉及技能或评测套件变更（共 {{count}} 个文件变更）",
+  "gate.diffMcpNoChanges": "增量范围内未涉及 MCP 工具网关配置变更（共 {{count}} 个文件变更）",
+  "gate.diffSandboxNoChanges": "增量范围内未涉及沙箱配置变更（共 {{count}} 个文件变更）",
+  "gate.diffNotaryNoChanges": "增量范围内未涉及公证签名凭据变更（共 {{count}} 个文件变更）",
+  "gate.diffPolicyNoChanges": "增量范围内未涉及中央策略规约变更（共 {{count}} 个文件变更）",
+  "gate.badgeSaved": "已生成门禁状态徽章：{{file}}",
+  "error.gateUsage": "用法：flow-kit gate [check|badge|init-ci] [options]"
 }

@@ -456,5 +456,13 @@
   "gate.guardMetricsTitle": "AI-DORA Quality Baseline Guard",
   "gate.metricsPass": "AI-DORA tier: {{tier}}, all metrics within baseline",
   "gate.ciInitOk": "CI workflow scaffold generated ({{provider}}): {{file}}",
-  "error.gateUsage": "Usage: flow-kit gate [check|init-ci] [options]"
+  "gate.diffScopingScope": "Diff scope: {{since}}...HEAD ({{count}} files modified)",
+  "gate.diffArchNoChanges": "0 architecture layer files modified in diff scope ({{count}} files changed)",
+  "gate.diffSkillsNoChanges": "0 skill assets modified in diff scope ({{count}} files changed)",
+  "gate.diffMcpNoChanges": "0 MCP configurations modified in diff scope ({{count}} files changed)",
+  "gate.diffSandboxNoChanges": "0 sandbox configurations modified in diff scope ({{count}} files changed)",
+  "gate.diffNotaryNoChanges": "0 signed proofs or handoffs modified in diff scope ({{count}} files changed)",
+  "gate.diffPolicyNoChanges": "0 policy definitions modified in diff scope ({{count}} files changed)",
+  "gate.badgeSaved": "Gate badge generated: {{file}}",
+  "error.gateUsage": "Usage: flow-kit gate [check|badge|init-ci] [options]"
 }

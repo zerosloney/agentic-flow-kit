@@ -11,6 +11,7 @@ import {
   renderGateText,
   renderGateMarkdown,
   generateCiWorkflow,
+  generateGateBadge,
 } from '../src/ci/gate.mjs';
 import { generateKeyPair, signPayload, writeSignatureFile } from '../src/install/notary.mjs';
 import { recordSkillEvalLog } from '../src/skills/eval-harness.mjs';
@@ -153,7 +154,59 @@ test('generateCiWorkflow generates valid GitHub Actions and GitLab CI files', ()
   assert.match(gl.content, /agentic-flow-kit gate/);
 });
 
-test('CLI flow-kit gate and ci commands e2e integration', () => {
+test('generateGateBadge outputs valid markdown, svg, and json badges', () => {
+  const dir = makeTmp('flow-kit-gate-badge-');
+  const resApproved = runGateChecks({ target: dir, strict: false, t });
+
+  // 1. Markdown badge
+  const mdBadge = generateGateBadge(resApproved, { format: 'markdown' });
+  assert.match(mdBadge, /img\.shields\.io\/badge\/AI--Gate-APPROVED-2ea44f/);
+
+  // 2. SVG badge
+  const svgBadge = generateGateBadge(resApproved, { format: 'svg' });
+  assert.match(svgBadge, /<svg xmlns="http:\/\/www\.w3\.org\/2000\/svg"/);
+  assert.match(svgBadge, /APPROVED/);
+
+  // 3. JSON badge
+  const jsonBadgeStr = generateGateBadge(resApproved, { format: 'json' });
+  const jsonBadge = JSON.parse(jsonBadgeStr);
+  assert.equal(jsonBadge.label, 'AI Gate');
+  assert.equal(jsonBadge.message, 'APPROVED');
+  assert.equal(jsonBadge.color, '2ea44f');
+});
+
+test('diff scoping restricts check scope to modified files', () => {
+  const dir = makeTmp('flow-kit-gate-diff-');
+  spawnSync('git', ['init'], { cwd: dir });
+  spawnSync('git', ['config', 'user.name', 'test'], { cwd: dir });
+  spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: dir });
+
+  // 提交初始文件（含有效架构配置）
+  fs.mkdirSync(path.join(dir, '.agents', 'config'), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, '.agents', 'config', 'architecture.json'),
+    JSON.stringify({ version: '1.0', layers: [{ name: 'a', pattern: 'src/**' }], rules: [] }),
+    'utf8'
+  );
+  fs.writeFileSync(path.join(dir, 'README.md'), '# Initial', 'utf8');
+  spawnSync('git', ['add', '.'], { cwd: dir });
+  spawnSync('git', ['commit', '-m', 'initial'], { cwd: dir });
+
+  // 仅修改一个无关文档文件
+  fs.writeFileSync(path.join(dir, 'README.md'), '# Updated docs', 'utf8');
+
+  const res = runGateChecks({ target: dir, diff: true, t });
+  assert.equal(res.passed, true);
+  assert.equal(res.diffScoping?.active, true);
+  assert.equal(res.diffScoping.changedCount, 1);
+
+  // 架构守护和技能守护应识别为无需全量扫描（增量快通）
+  const archGuard = res.guards.find((g) => g.name === 'arch');
+  assert.equal(archGuard.status, 'passed');
+  assert.match(archGuard.reason, /diff scope|增量/);
+});
+
+test('CLI flow-kit gate, ci and badge commands e2e integration', () => {
   const dir = makeTmp('flow-kit-gate-cli-');
 
   // 1. flow-kit gate 默认执行
@@ -182,7 +235,13 @@ test('CLI flow-kit gate and ci commands e2e integration', () => {
   assert.equal(r4.status, 0);
   assert.equal(fs.existsSync(path.join(dir, '.github', 'workflows', 'ai-gate.yml')), true);
 
-  // 5. 阻断场景退出码为 1
+  // 5. flow-kit gate badge 生成徽章
+  const r5 = run(['gate', 'badge', '--target', dir, '--format', 'svg', '--out', 'badge.svg'], dir);
+  assert.equal(r5.status, 0);
+  assert.equal(fs.existsSync(path.join(dir, 'badge.svg')), true);
+  assert.match(fs.readFileSync(path.join(dir, 'badge.svg'), 'utf8'), /<svg/);
+
+  // 6. 阻断场景退出码为 1
   fs.mkdirSync(path.join(dir, '.agents', 'config'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'src', 'x'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'src', 'y'), { recursive: true });
@@ -201,7 +260,7 @@ test('CLI flow-kit gate and ci commands e2e integration', () => {
   fs.writeFileSync(path.join(dir, 'src', 'x', 'a.mjs'), `import '../y/b.mjs';\n`, 'utf8');
   fs.writeFileSync(path.join(dir, 'src', 'y', 'b.mjs'), `import '../x/a.mjs';\n`, 'utf8');
 
-  const r5 = run(['gate', '--target', dir], dir);
-  assert.equal(r5.status, 1);
-  assert.match(r5.stdout, /REJECTED/);
+  const r6 = run(['gate', '--target', dir], dir);
+  assert.equal(r6.status, 1);
+  assert.match(r6.stdout, /REJECTED/);
 });
