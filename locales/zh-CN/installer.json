@@ -380,5 +380,11 @@
   "doctor.mcpConfigInvalid": "MCP 网关配置文件语法错误或非合法对象：{{path}}",
   "error.mcpUsage": "用法：flow-kit mcp <audit|check-call|stats> [options]",
   "error.mcpCheckUsage": "用法：flow-kit mcp check-call <tool> [--role <role>] [--server <server>] [--args '<json>'] [--record] [--json]",
-  "error.mcpArgsInvalid": "无效的参数 JSON 字符串：{{detail}}"
+  "error.mcpArgsInvalid": "无效的参数 JSON 字符串：{{detail}}",
+  "metrics.reportTitle": "AI-DORA 研发效能度量大盘（过去 {{days}} 天）：",
+  "metrics.checkPass": "AI-DORA 效能质量门禁通过（当前综合评级: {{tier}}）",
+  "metrics.checkFailed": "AI-DORA 效能指标未达到质量门禁基线要求：",
+  "metrics.exported": "指标数据已导出至：{{file}}",
+  "error.metricsUsage": "用法：flow-kit metrics <report|export|check> [options]",
+  "error.metricsThresholdExceeded": "AI-DORA 门禁未通过，共发现 {{count}} 项违规"
 }

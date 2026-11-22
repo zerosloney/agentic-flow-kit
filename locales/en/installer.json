@@ -380,5 +380,11 @@
   "doctor.mcpConfigInvalid": "MCP gateway config syntax error or invalid object: {{path}}",
   "error.mcpUsage": "Usage: flow-kit mcp <audit|check-call|stats> [options]",
   "error.mcpCheckUsage": "Usage: flow-kit mcp check-call <tool> [--role <role>] [--server <server>] [--args '<json>'] [--record] [--json]",
-  "error.mcpArgsInvalid": "Invalid args JSON string: {{detail}}"
+  "error.mcpArgsInvalid": "Invalid args JSON string: {{detail}}",
+  "metrics.reportTitle": "AI-DORA engineering metrics report (past {{days}} days):",
+  "metrics.checkPass": "AI-DORA quality gate passed (current tier: {{tier}})",
+  "metrics.checkFailed": "AI-DORA engineering metrics failed quality gate requirements:",
+  "metrics.exported": "Metrics exported to: {{file}}",
+  "error.metricsUsage": "Usage: flow-kit metrics <report|export|check> [options]",
+  "error.metricsThresholdExceeded": "AI-DORA quality gate failed with {{count}} violation(s)"
 }
