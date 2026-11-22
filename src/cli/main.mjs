@@ -26,6 +26,7 @@ import { mcpCommand } from '../commands/mcp.mjs';
 import { metricsCommand } from '../commands/metrics.mjs';
 import { archCommand } from '../commands/arch.mjs';
 import { sandboxCommand } from '../commands/sandbox.mjs';
+import { gateCommand, ciCommand } from '../commands/gate.mjs';
 import { KIT_ROOT } from '../install/plan.mjs';
 
 const SUPPORTED_LANGS = new Set(LANGUAGES);
@@ -35,7 +36,8 @@ const COMMANDS = [
   'install', 'add-host', 'upgrade', 'adopt', 'prune', 'remove-host', 'uninstall',
   'doctor', 'diff', 'status', 'workspace', 'devcontainer', 'add-skill', 'remove-skill',
   'skills', 'new-host', 'explain', 'list-hosts', 'policy', 'bundle', 'sbom',
-  'keygen', 'sign', 'verify-sig', 'handoff', 'mcp', 'metrics', 'arch', 'sandbox', 'run', 'hook', 'help',
+  'keygen', 'sign', 'verify-sig', 'handoff', 'mcp', 'metrics', 'arch', 'sandbox',
+  'gate', 'ci', 'run', 'hook', 'help',
 ];
 
 function normalizeLang(input) {
@@ -153,6 +155,10 @@ async function main(argv) {
       return archCommand({ args, t });
     case 'sandbox':
       return sandboxCommand({ args, t });
+    case 'gate':
+      return gateCommand({ args, t, lang });
+    case 'ci':
+      return ciCommand({ args, t, lang });
     default:
       {
         const err = new Error(`unknown command: ${command} (available: ${COMMANDS.join(', ')})`);
