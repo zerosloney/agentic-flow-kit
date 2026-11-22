@@ -334,5 +334,13 @@
   "error.bundleUsage": "用法：flow-kit bundle <pack|inspect|verify|unpack> [options]",
   "error.bundleNotFound": "安装包不存在或无法访问：{{path}}",
   "error.bundleInvalid": "无效的离线安装包：{{detail}}",
-  "error.bundleCorrupted": "安装包完整性校验失败：{{detail}}"
+  "error.bundleCorrupted": "安装包完整性校验失败：{{detail}}",
+  "sbom.exported": "已导出 AI 软件物料清单：{{file}}（格式: {{format}}，组件数: {{count}}，证明根: {{root}}）",
+  "sbom.verified": "AI 软件物料清单完整性核验通过：{{file}}（未发现篡改）",
+  "doctor.sbomOk": "AI 软件物料清单完整性通过：{{file}}",
+  "doctor.sbomDrift": "AI 软件物料清单与当前环境存在漂移或被篡改：{{problems}}",
+  "error.sbomUsage": "用法：flow-kit sbom <export|verify> [options]",
+  "error.sbomNotFound": "未找到指定的 SBOM 文件：{{path}}",
+  "error.sbomInvalid": "无效的 SBOM 文件：{{detail}}",
+  "error.sbomTampered": "SBOM 校验失败：{{detail}}"
 }

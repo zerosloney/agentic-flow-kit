@@ -17,6 +17,7 @@ import { compilePermissions, permissionDrift } from '../install/permissions.mjs'
 import { ROLE_NAMES, readInjectedModels, readLocalModelRoles } from '../models/resolve.mjs';
 import { computeEnterprise, GIT_HOOKS, PROOF_CHAIN_FILES, resolveTarget } from './install.mjs';
 import { readLocalPolicy, checkPolicyDriftSync } from './policy.mjs';
+import { verifySbom } from './sbom.mjs';
 import { RUNTIME_SCRIPTS, RUNTIME_HOOKS, KIT_ROOT } from './runtime.mjs';
 import { buildDiff } from './diff.mjs';
 
@@ -429,6 +430,22 @@ export function doctorCommand({ args, t }) {
       digest: String(manifest.bundle.digest || '').slice(0, 12),
       version: manifest.bundle.version || 'unknown',
     }));
+  }
+
+  // SBOM 完整性体检（如果存在 .agents/sbom.json 或显式 --sbom）
+  const sbomPath = args.sbom || (fs.existsSync(path.join(target, '.agents', 'sbom.json')) ? path.join(target, '.agents', 'sbom.json') : null);
+  if (sbomPath && fs.existsSync(sbomPath)) {
+    try {
+      const sbomData = JSON.parse(fs.readFileSync(sbomPath, 'utf8'));
+      const verifyRes = verifySbom({ target, sbomData, t });
+      if (verifyRes.ok) {
+        add(true, 'sbom', t('doctor.sbomOk', { file: path.basename(sbomPath) }));
+      } else {
+        add(false, 'sbom', t('doctor.sbomDrift', { problems: verifyRes.problems.join('; ') }));
+      }
+    } catch (e) {
+      add(false, 'sbom', t('doctor.sbomDrift', { problems: e.message }));
+    }
   }
 
   // 模型配置是用户本地状态：存在则校验，缺失不失败（旧安装保持 doctor 全过）。

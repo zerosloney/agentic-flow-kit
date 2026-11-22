@@ -334,5 +334,13 @@
   "error.bundleUsage": "Usage: flow-kit bundle <pack|inspect|verify|unpack> [options]",
   "error.bundleNotFound": "Bundle does not exist or is inaccessible: {{path}}",
   "error.bundleInvalid": "Invalid offline bundle: {{detail}}",
-  "error.bundleCorrupted": "Bundle integrity verification failed: {{detail}}"
+  "error.bundleCorrupted": "Bundle integrity verification failed: {{detail}}",
+  "sbom.exported": "Exported AI Software Bill of Materials: {{file}} (format: {{format}}, components: {{count}}, proof root: {{root}})",
+  "sbom.verified": "AI Software Bill of Materials integrity verified: {{file}} (no tampering detected)",
+  "doctor.sbomOk": "AI Software Bill of Materials integrity verified: {{file}}",
+  "doctor.sbomDrift": "AI Software Bill of Materials drifted or tampered: {{problems}}",
+  "error.sbomUsage": "Usage: flow-kit sbom <export|verify> [options]",
+  "error.sbomNotFound": "Specified SBOM file not found: {{path}}",
+  "error.sbomInvalid": "Invalid SBOM file: {{detail}}",
+  "error.sbomTampered": "SBOM verification failed: {{detail}}"
 }

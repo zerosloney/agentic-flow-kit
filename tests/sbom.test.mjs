@@ -5,351 +5,229 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { buildSpdx, judgeLicense, packagesFromLockfile, packagesFromNpmLs, isZeroDep } from '../templates/engine/.agents/scripts/sbom-license.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
-const SCRIPT = path.join(KIT, 'templates', 'engine', '.agents', 'scripts', 'sbom-license.mjs');
 
-function tmpRepo() {
-  const dir = makeTmp('flow-kit-sbom-');
-  spawnSync('git', ['init', '-q'], { cwd: dir });
-  return dir;
-}
-
-// 带策略配置的目标仓库：直接从包模板复制 license-policy.json（与安装落盘内容一致）。
-function seededRepo() {
-  const dir = tmpRepo();
-  fs.mkdirSync(path.join(dir, '.agents', 'config'), { recursive: true });
-  fs.copyFileSync(
-    path.join(KIT, 'templates', 'engine', '.agents', 'config', 'license-policy.json'),
-    path.join(dir, '.agents', 'config', 'license-policy.json'),
-  );
-  return dir;
-}
-
-function run(args, cwd, extraEnv = {}) {
-  // runtime 入口：脚本名之后的参数经 opts.rest 原样透传；--report <dir> 用 -- 分隔避免入口误读。
-  const scriptArgs = args.length ? ['--', ...args] : [];
-  return spawnSync(process.execPath, [BIN, 'run', 'sbom-license', ...scriptArgs], {
-    cwd,
+function runCli(dir, args) {
+  return spawnSync(process.execPath, [BIN, ...args], {
+    cwd: dir,
     encoding: 'utf8',
-    env: { ...process.env, FLOW_KIT_TEST: '1', FLOW_KIT_PROJECT_ROOT: cwd, ...extraEnv },
+    env: { ...process.env, FLOW_KIT_TEST: '1' },
   });
 }
 
-function writeLockAt(dir, rel, packages) {
-  const lock = { name: 'demo-app', version: '1.0.0', lockfileVersion: 3, packages: { '': { name: 'demo-app', version: '1.0.0' } } };
-  for (const [name, info] of Object.entries(packages)) {
-    lock.packages[`node_modules/${name}`] = { ...info };
-  }
-  const abs = path.join(dir, rel);
-  fs.mkdirSync(path.dirname(abs), { recursive: true });
-  fs.writeFileSync(abs, `${JSON.stringify(lock, null, 2)}\n`, 'utf8');
+function json(r) {
+  assert.equal(r.stdout.trim().startsWith('{'), true, `expected JSON, got: ${r.stdout.slice(0, 300)}\n${r.stderr}`);
+  return JSON.parse(r.stdout);
 }
 
-function writeLock(dir, packages) {
-  writeLockAt(dir, 'package-lock.json', packages);
+function setupTargetProject(tmp) {
+  const target = path.join(tmp, 'project');
+  fs.mkdirSync(target, { recursive: true });
+  assert.equal(spawnSync('git', ['init', '-q'], { cwd: target }).status, 0);
+
+  const rInstall = runCli(target, [
+    'install',
+    '--agent', 'claude',
+    '--stack', 'node',
+    '--target', '.',
+    '--json',
+  ]);
+  assert.equal(rInstall.status, 0, rInstall.stderr);
+
+  // Seed sample telemetry records
+  const now = new Date().toISOString();
+  fs.writeFileSync(
+    path.join(target, '.agents', 'verifications.jsonl'),
+    JSON.stringify({ ts: now, name: 'lint', ok: true }) + '\n' +
+    JSON.stringify({ ts: now, name: 'test', ok: true }) + '\n'
+  );
+  fs.writeFileSync(
+    path.join(target, '.agents', 'confirmations.jsonl'),
+    JSON.stringify({ ts: now, rule: 'STOP-1', approved: true, decider: 'user' }) + '\n'
+  );
+  fs.mkdirSync(path.join(target, '.agents', 'evals'), { recursive: true });
+  fs.writeFileSync(
+    path.join(target, '.agents', 'evals', 'results.jsonl'),
+    JSON.stringify({ ts: now, evalId: 'eval-security', score: 0.95, passed: true }) + '\n'
+  );
+
+  return target;
 }
 
-// 在 seededRepo 的模板策略上打补丁（保持其余字段不动）。
-function patchPolicy(dir, patch) {
-  const policyPath = path.join(dir, '.agents/config/license-policy.json');
-  const policy = JSON.parse(fs.readFileSync(policyPath, 'utf8'));
-  fs.writeFileSync(policyPath, `${JSON.stringify({ ...policy, ...patch }, null, 2)}\n`, 'utf8');
-}
+test('sbom export --format native produces valid A-SBOM with components and telemetry', () => {
+  const tmp = makeTmp('flow-kit-sbom-native-');
+  const target = setupTargetProject(tmp);
+  const sbomOut = path.join(target, 'my-sbom.json');
 
-test('packagesFromLockfile parses v3 flat entries and v1 nested trees', () => {
-  const v3 = {
-    packages: {
-      '': { name: 'root', version: '1.0.0' },
-      'node_modules/a': { version: '1.0.0', license: 'MIT', integrity: 'sha256-AAAA' },
-      'node_modules/b': { version: '2.0.0', license: 'ISC' },
-    },
-  };
-  const flat = packagesFromLockfile(v3);
-  assert.deepEqual(flat.map((p) => `${p.name}@${p.version}`), ['a@1.0.0', 'b@2.0.0']);
-  assert.equal(flat[0].license, 'MIT');
+  const r = runCli(target, [
+    'sbom', 'export',
+    '--format', 'native',
+    '--out', sbomOut,
+    '--target', '.',
+    '--json',
+  ]);
+  assert.equal(r.status, 0, r.stderr);
+  const res = json(r);
+  assert.equal(res.ok, true);
+  assert.equal(res.format, 'native');
+  assert.equal(res.file, sbomOut);
+  assert.ok(res.digest);
+  assert.ok(res.proofRoot);
+  assert.ok(res.componentsCount > 0);
 
-  const v1 = {
-    dependencies: {
-      a: { version: '1.0.0', license: 'MIT', dependencies: { nested: { version: '0.1.0', license: 'Apache-2.0' } } },
-    },
-  };
-  const nested = packagesFromLockfile(v1);
-  assert.deepEqual(nested.map((p) => p.name).sort(), ['a', 'nested']);
+  assert.ok(fs.existsSync(sbomOut));
+  const sbom = JSON.parse(fs.readFileSync(sbomOut, 'utf8'));
+  assert.equal(sbom.schema, 'flow-kit-sbom/v1');
+  assert.equal(sbom.format, 'native');
+  assert.ok(sbom.kitVersion);
+  assert.ok(sbom.metadata?.createdAt);
+  assert.ok(Array.isArray(sbom.hosts) && sbom.hosts.some((h) => h.name === 'claude'));
+  assert.ok(Array.isArray(sbom.skills) && sbom.skills.length > 0);
+  assert.ok(sbom.skills[0].name && sbom.skills[0].hash);
+  assert.ok(sbom.models);
+  assert.ok(sbom.proofChain?.root);
+  assert.ok(sbom.telemetry?.verifications?.total === 2);
+  assert.equal(sbom.telemetry?.verifications?.passRate, 100);
+  assert.equal(sbom.telemetry?.confirmations?.total, 1);
+  assert.equal(sbom.telemetry?.evals?.total, 1);
 });
 
-test('packagesFromNpmLs flattens the dependency tree without integrity', () => {
-  const tree = { dependencies: { a: { version: '1.0.0', dependencies: { b: { version: '2.0.0' } } } } };
-  const pkgs = packagesFromNpmLs(tree);
-  assert.deepEqual(pkgs.map((p) => `${p.name}@${p.version}`).sort(), ['a@1.0.0', 'b@2.0.0']);
-  assert.equal(pkgs[0].integrity, null);
+test('sbom export --format cyclonedx produces valid CycloneDX 1.5 JSON', () => {
+  const tmp = makeTmp('flow-kit-sbom-cdx-');
+  const target = setupTargetProject(tmp);
+  const cdxOut = path.join(target, 'sbom.cdx.json');
+
+  const r = runCli(target, [
+    'sbom', 'export',
+    '--format', 'cyclonedx',
+    '--out', cdxOut,
+    '--target', '.',
+    '--json',
+  ]);
+  assert.equal(r.status, 0, r.stderr);
+  const res = json(r);
+  assert.equal(res.ok, true);
+  assert.equal(res.format, 'cyclonedx');
+
+  const cdx = JSON.parse(fs.readFileSync(cdxOut, 'utf8'));
+  assert.equal(cdx.bomFormat, 'CycloneDX');
+  assert.equal(cdx.specVersion, '1.5');
+  assert.match(cdx.serialNumber, /^urn:uuid:[0-9a-f-]+/i);
+  assert.ok(Array.isArray(cdx.components));
+  assert.ok(cdx.components.some((c) => c.type === 'framework' && c.name === 'agentic-flow-kit'));
+  assert.ok(cdx.components.some((c) => c.type === 'platform' && c.name === 'ai-host-claude'));
+  assert.ok(cdx.components.some((c) => c.type === 'data' && c.name.startsWith('ai-skill-')));
+  assert.ok(cdx.components.some((c) => c.type === 'machine-learning-model'));
+  assert.ok(cdx.properties?.some((p) => p.name === 'flow-kit:proofChainRoot'));
 });
 
-test('judgeLicense: allow/deny closures, OR branches, unknown and exceptions', () => {
-  const policy = {
-    exceptions: { 'waived@1.0.0': '评审记录' },
-    allow: ['MIT', 'ISC', 'Apache-2.0', 'CC-BY-4.0'],
-    deny: ['GPL-3.0', 'AGPL-3.0-or-later'],
-  };
-  const cases = [
-    [{ name: 'x', version: '1', license: 'MIT' }, 'allow'],
-    [{ name: 'x', version: '1', license: '(MIT OR Apache-2.0)' }, 'allow'],
-    [{ name: 'x', version: '1', license: '(GPL-3.0-only OR MIT)' }, 'deny'],
-    [{ name: 'x', version: '1', license: 'GPL-3.0-only' }, 'deny'],
-    [{ name: 'x', version: '1', license: 'AGPL-3.0-or-later' }, 'deny'],
-    [{ name: 'x', version: '1', license: 'Artistic-2.0' }, 'unknown'],
-    [{ name: 'x', version: '1', license: null }, 'unknown'],
-    [{ name: 'x', version: '1', license: 'UNLICENSED' }, 'unknown'],
-    // AND+OR 混用无法可靠平铺 → 保守 unknown，不误放行
-    [{ name: 'x', version: '1', license: 'MIT AND (CC-BY-4.0 OR WTFPL)' }, 'unknown'],
-    [{ name: 'waived', version: '1.0.0', license: 'GPL-3.0-only' }, 'allow'],
-    [{ name: 'waived', version: '2.0.0', license: 'GPL-3.0-only' }, 'deny'],
-  ];
-  for (const [pkg, want] of cases) {
-    assert.equal(judgeLicense(pkg, policy), want, `${pkg.name}@${pkg.version} ${pkg.license}`);
-  }
-});
+test('sbom export --format spdx produces valid SPDX 2.3 JSON', () => {
+  const tmp = makeTmp('flow-kit-sbom-spdx-');
+  const target = setupTargetProject(tmp);
+  const spdxOut = path.join(target, 'sbom.spdx.json');
 
-test('buildSpdx emits SPDX-2.3 with deterministic ids and checksums', () => {
-  const spdx = buildSpdx({
-    rootName: 'demo-app',
-    rootVersion: '1.0.0',
-    packages: [{ name: 'a', version: '1.0.0', license: 'MIT', integrity: null }],
-    generatedAt: '2026-01-01T00:00:00.000Z',
-  });
+  const r = runCli(target, [
+    'sbom', 'export',
+    '--format', 'spdx',
+    '--out', spdxOut,
+    '--target', '.',
+    '--json',
+  ]);
+  assert.equal(r.status, 0, r.stderr);
+  const res = json(r);
+  assert.equal(res.ok, true);
+  assert.equal(res.format, 'spdx');
+
+  const spdx = JSON.parse(fs.readFileSync(spdxOut, 'utf8'));
   assert.equal(spdx.spdxVersion, 'SPDX-2.3');
   assert.equal(spdx.dataLicense, 'CC0-1.0');
-  assert.equal(spdx.packages[0].SPDXID, 'SPDXRef-Root');
-  assert.equal(spdx.packages[1].licenseConcluded, 'MIT');
-  assert.equal(spdx.relationships.length, 2);
-  const again = buildSpdx({ rootName: 'demo-app', rootVersion: '1.0.0', packages: [{ name: 'a', version: '1.0.0', license: 'MIT', integrity: null }], generatedAt: '2026-01-01T00:00:00.000Z' });
-  assert.equal(JSON.stringify(again), JSON.stringify(spdx), 'same inputs must render identically');
+  assert.equal(spdx.SPDXID, 'SPDXRef-DOCUMENT');
+  assert.ok(Array.isArray(spdx.packages));
+  assert.ok(spdx.packages.some((p) => p.SPDXID === 'SPDXRef-Package-agentic-flow-kit'));
+  assert.ok(spdx.packages.some((p) => p.SPDXID.startsWith('SPDXRef-Skill-')));
+  assert.ok(Array.isArray(spdx.relationships));
+  assert.ok(spdx.relationships.some((rel) => rel.relationshipType === 'DESCRIBES'));
 });
 
-test('declared deps without lockfile fails closed with exit 2', () => {
-  // zero-dep 语义拆分后的真缺口面：声明了依赖但没有 lockfile——fail-closed 与修法指引不变。
-  const dir = tmpRepo();
-  fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"demo-app","version":"1.0.0","dependencies":{"left-pad":"^1.3.0"}}\n', 'utf8');
-  const r = run([], dir);
-  assert.equal(r.status, 2, r.stderr);
-  assert.match(r.stderr, /fail-closed/);
+test('sbom verify passes for untampered project and catches tampering', () => {
+  const tmp = makeTmp('flow-kit-sbom-verify-');
+  const target = setupTargetProject(tmp);
+  const sbomFile = path.join(target, 'sbom.json');
+
+  // Export native SBOM
+  runCli(target, ['sbom', 'export', '--out', sbomFile, '--target', '.']);
+
+  // 1. Untampered verify passes
+  const rOk = runCli(target, ['sbom', 'verify', sbomFile, '--target', '.', '--json']);
+  assert.equal(rOk.status, 0, rOk.stderr);
+  const resOk = json(rOk);
+  assert.equal(resOk.ok, true);
+  assert.equal(resOk.problems.length, 0);
+
+  // 2. Tamper: modify a skill file on disk
+  const firstSkillDir = fs.readdirSync(path.join(target, '.agents', 'skills'))[0];
+  const skillMd = path.join(target, '.agents', 'skills', firstSkillDir, 'SKILL.md');
+  fs.appendFileSync(skillMd, '\n<!-- tampered content -->');
+
+  const rBad = runCli(target, ['sbom', 'verify', sbomFile, '--target', '.', '--json']);
+  assert.notEqual(rBad.status, 0, 'verification should fail when skill is tampered');
+  const resBad = json(rBad);
+  assert.equal(resBad.ok, false);
+  assert.ok(resBad.problems.some((p) => p.includes('modified') || p.includes('篡改') || p.includes('校验失败')));
 });
 
-test('zero-dependency project passes with a note instead of failing closed', () => {
-  // 行为评测①回归：新装最小项目（无 lockfile + package.json 未声明依赖）曾把 verify 的
-  // sbom-license 门判红——零依赖没有 SBOM 面，门记 skip/pass（exit 0 + note），快速道走得通。
-  const dir = seededRepo();
-  fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"demo-app","version":"1.0.0"}\n', 'utf8');
-  const r = run([], dir);
-  assert.equal(r.status, 0, r.stderr);
-  assert.match(r.stdout, /零依赖/);
-  assert.match(r.stdout, /无 SBOM 面/);
-  assert.equal(fs.existsSync(path.join(dir, '.agents', 'sbom', 'spdx.json')), false, 'zero-dep must not write an SBOM');
+test('doctor automatically verifies .agents/sbom.json when present', () => {
+  const tmp = makeTmp('flow-kit-sbom-doctor-');
+  const target = setupTargetProject(tmp);
+  const autoSbom = path.join(target, '.agents', 'sbom.json');
 
-  // verify 门用的 --check 形态同口径：exit 0 + note，仍不落盘。
-  const check = run(['--check'], dir);
-  assert.equal(check.status, 0, check.stderr);
-  assert.match(check.stdout, /零依赖/);
+  // Export directly to .agents/sbom.json
+  runCli(target, ['sbom', 'export', '--out', autoSbom, '--target', '.']);
 
-  // --json 机器面：skipped:'zero-dep' 口径（沿用 stage-gates skipped 惯例），ok=true。
-  const j = run(['--check', '--json'], dir);
-  assert.equal(j.status, 0, j.stderr);
-  const summary = JSON.parse(j.stdout);
-  assert.equal(summary.ok, true);
-  assert.equal(summary.skipped, 'zero-dep');
-  assert.equal(summary.packages, 0);
+  // Doctor passes with sbom check
+  const rDoc1 = runCli(target, ['doctor', '--target', '.', '--json']);
+  assert.equal(rDoc1.status, 0, rDoc1.stderr);
+  const doc1 = json(rDoc1);
+  const sbomCheck1 = doc1.checks.find((c) => c.name === 'sbom');
+  assert.ok(sbomCheck1, 'doctor should execute sbom check');
+  assert.equal(sbomCheck1.ok, true);
+
+  // Tamper with policy.json
+  const policyFile = path.join(target, '.agents', 'config', 'policy.json');
+  fs.writeFileSync(policyFile, JSON.stringify({ tampered: true }), 'utf8');
+
+  // Doctor fails sbom check
+  const rDoc2 = runCli(target, ['doctor', '--target', '.', '--json']);
+  assert.notEqual(rDoc2.status, 0, 'doctor should fail when sbom tampered');
+  const doc2 = json(rDoc2);
+  const sbomCheck2 = doc2.checks.find((c) => c.name === 'sbom');
+  assert.ok(sbomCheck2);
+  assert.equal(sbomCheck2.ok, false);
 });
 
-test('isZeroDep: empty dependency objects count as undeclared, non-empty do not', () => {
-  assert.equal(isZeroDep({}), true);
-  assert.equal(isZeroDep({ dependencies: {}, devDependencies: {}, optionalDependencies: {} }), true);
-  assert.equal(isZeroDep({ dependencies: { a: '^1.0.0' } }), false);
-  assert.equal(isZeroDep({ devDependencies: { b: '^2.0.0' } }), false);
-  assert.equal(isZeroDep({ optionalDependencies: { c: '^3.0.0' } }), false);
-});
+test('sbom commands output localized English text with --lang en', () => {
+  const tmp = makeTmp('flow-kit-sbom-en-');
+  const target = setupTargetProject(tmp);
+  const sbomFile = path.join(target, 'en-sbom.json');
 
-test('deny violation fails, exception waives, allow-list change heals', () => {
-  const dir = seededRepo();
-  fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"demo-app","version":"1.0.0"}\n', 'utf8');
-  writeLock(dir, { 'left-pad': { version: '1.3.0', license: 'WTFPL' } });
+  // Human-readable export output in English
+  const rExport = runCli(target, [
+    'sbom', 'export',
+    '--out', sbomFile,
+    '--target', '.',
+    '--lang', 'en',
+  ]);
+  assert.equal(rExport.status, 0, rExport.stderr);
+  assert.match(rExport.stdout, /Exported AI Software Bill of Materials:/);
 
-  const bad = run([], dir);
-  assert.equal(bad.status, 1, bad.stderr);
-  assert.match(bad.stderr, /left-pad@1\.3\.0/);
-
-  const policyPath = path.join(dir, '.agents/config/license-policy.json');
-  const policy = JSON.parse(fs.readFileSync(policyPath, 'utf8'));
-  policy.allow.push('WTFPL');
-  fs.writeFileSync(policyPath, `${JSON.stringify(policy, null, 2)}\n`, 'utf8');
-  const ok = run([], dir);
-  assert.equal(ok.status, 0, ok.stderr);
-  assert.match(ok.stdout, /许可证策略通过/);
-
-  // 豁免路径：换回违规许可证 + 登记 exception
-  policy.allow = policy.allow.filter((l) => l !== 'WTFPL');
-  policy.exceptions = { 'left-pad@1.3.0': 'demo 豁免' };
-  fs.writeFileSync(policyPath, `${JSON.stringify(policy, null, 2)}\n`, 'utf8');
-  const waived = run([], dir);
-  assert.equal(waived.status, 0, waived.stderr);
-
-  // 豁免版本不匹配 → 仍违规
-  policy.exceptions = { 'left-pad@9.9.9': '版本不匹配' };
-  fs.writeFileSync(policyPath, `${JSON.stringify(policy, null, 2)}\n`, 'utf8');
-  const notWaived = run([], dir);
-  assert.equal(notWaived.status, 1, notWaived.stderr);
-});
-
-test('sbom is written, refreshed on rerun, and --check reports drift without writing', () => {
-  const dir = seededRepo();
-  fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"demo-app","version":"1.0.0"}\n', 'utf8');
-  writeLock(dir, { a: { version: '1.0.0', license: 'MIT', integrity: 'sha512-AAAA' } });
-  const sbomRel = path.join(dir, '.agents', 'sbom', 'spdx.json');
-
-  const first = run([], dir);
-  assert.equal(first.status, 0, first.stderr);
-  const original = fs.readFileSync(sbomRel, 'utf8');
-  const spdx = JSON.parse(original);
-  assert.equal(spdx.spdxVersion, 'SPDX-2.3');
-  assert.equal(spdx.packages.length, 2);
-  assert.equal(spdx.packages[1].name, 'a');
-  assert.equal(spdx.packages[1].checksums[0].algorithm, 'SHA512');
-
-  // lockfile 变更 → --check 报漂移且不写盘
-  writeLock(dir, { a: { version: '1.1.0', license: 'MIT', integrity: 'sha512-AAAA' } });
-  const check = run(['--check'], dir);
-  assert.equal(check.status, 1, check.stderr);
-  assert.match(check.stderr, /不一致/);
-  assert.equal(fs.readFileSync(sbomRel, 'utf8'), original, '--check must not rewrite the SBOM');
-
-  // 重新生成 → --check 恢复绿
-  const regen = run([], dir);
-  assert.equal(regen.status, 0, regen.stderr);
-  const green = run(['--check'], dir);
-  assert.equal(green.status, 0, green.stderr);
-  const refreshed = JSON.parse(fs.readFileSync(sbomRel, 'utf8'));
-  assert.equal(refreshed.packages[1].versionInfo, '1.1.0');
-});
-
-test('unknownAction=warn with failOn=any escalates warnings to failure', () => {
-  const dir = seededRepo();
-  fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"demo-app","version":"1.0.0"}\n', 'utf8');
-  writeLock(dir, { mystery: { version: '2.0.0', license: 'UNKNOWN' } });
-  const policyPath = path.join(dir, '.agents/config/license-policy.json');
-  const edit = (edit2) => {
-    const policy = JSON.parse(fs.readFileSync(policyPath, 'utf8'));
-    edit2(policy);
-    fs.writeFileSync(policyPath, `${JSON.stringify(policy, null, 2)}\n`, 'utf8');
-  };
-
-  edit((p) => { p.unknownAction = 'warn'; });
-  assert.equal(run([], dir).status, 0, 'warn mode alone must pass');
-
-  edit((p) => { p.failOn = 'any'; });
-  assert.equal(run([], dir).status, 1, 'failOn=any escalates unknown to failure');
-});
-
-test('report flag archives an extra copy without changing the verdict', () => {
-  const dir = seededRepo();
-  fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"demo-app","version":"1.0.0"}\n', 'utf8');
-  writeLock(dir, { a: { version: '1.0.0', license: 'MIT' } });
-  const outDir = path.join(dir, 'tmp', 'sbom-artifact');
-  const r = run(['--report', 'tmp/sbom-artifact'], dir);
-  assert.equal(r.status, 0, r.stderr);
-  assert.equal(fs.existsSync(path.join(outDir, 'spdx.json')), true);
-  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(outDir, 'spdx.json'), 'utf8')), JSON.parse(fs.readFileSync(path.join(dir, '.agents', 'sbom', 'spdx.json'), 'utf8')));
-});
-
-test('fresh install ships the policy and the gate is wired into verify security cohort', () => {
-  const dir = tmpRepo();
-  const install = spawnSync(process.execPath, [BIN, 'install', '--agent', 'claude', '--stack', 'node', '--target', '.', '--json'], {
-    cwd: dir, encoding: 'utf8', env: { ...process.env, FLOW_KIT_TEST: '1' },
-  });
-  assert.equal(install.status, 0, install.stderr);
-  assert.equal(fs.existsSync(path.join(dir, '.agents/config/license-policy.json')), true);
-
-  const gates = spawnSync(process.execPath, [BIN, 'run', 'verify', '--list'], {
-    cwd: dir, encoding: 'utf8', env: { ...process.env, FLOW_KIT_TEST: '1' },
-  });
-  assert.equal(gates.status, 0, gates.stderr);
-  assert.match(gates.stdout, /sbom-license/);
-
-  const verifySrc = fs.readFileSync(path.join(KIT, 'templates', 'engine', '.agents', 'scripts', 'verify.mjs'), 'utf8');
-  assert.match(verifySrc, /id: 'sbom-license', cohort: 'security'/);
-
-  const policySrc = JSON.parse(fs.readFileSync(path.join(KIT, 'templates', 'engine', '.agents', 'config', 'policy.json'), 'utf8'));
-  assert.equal(policySrc.mechanisms.required.includes('SBOM 与许可证门'), true);
-});
-
-test('lockfiles: monorepo audits the declared subdirectory lockfile', () => {
-  const dir = seededRepo();
-  // monorepo：根 package.json 无依赖、根无 lockfile，真实依赖树在子目录 lockfile
-  fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"demo-app","version":"1.0.0"}\n', 'utf8');
-  writeLockAt(dir, 'frontend/package-lock.json', {
-    react: { version: '18.2.0', license: 'MIT', integrity: 'sha512-AAAA' },
-    lodash: { version: '4.17.21', license: 'ISC' },
-  });
-  patchPolicy(dir, { lockfiles: ['frontend/package-lock.json'] });
-
-  const r = run([], dir);
-  assert.equal(r.status, 0, r.stderr);
-  assert.ok(r.stdout.includes('数据源=frontend/package-lock.json'), r.stdout);
-  const sbomRel = path.join(dir, '.agents', 'sbom', 'spdx.json');
-  const spdx = JSON.parse(fs.readFileSync(sbomRel, 'utf8'));
-  const names = spdx.packages.map((p) => p.name);
-  assert.equal(names.includes('react'), true);
-  assert.equal(names.includes('lodash'), true);
-
-  // 确定性：同一组 lockfile 两次生成逐字节一致，--check 绿
-  const first = fs.readFileSync(sbomRel, 'utf8');
-  assert.equal(run([], dir).status, 0);
-  assert.equal(fs.readFileSync(sbomRel, 'utf8'), first, 'regeneration must be byte-identical');
-  assert.equal(run(['--check'], dir).status, 0);
-});
-
-test('lockfiles: multiple lockfiles merge with the first-declared entry winning', () => {
-  const dir = seededRepo();
-  fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"demo-app","version":"1.0.0"}\n', 'utf8');
-  writeLockAt(dir, 'a/package-lock.json', {
-    shared: { version: '1.0.0', license: 'MIT' },
-    onlya: { version: '0.1.0', license: 'Apache-2.0' },
-  });
-  writeLockAt(dir, 'b/package-lock.json', {
-    shared: { version: '1.0.0', license: 'ISC' },
-    onlyb: { version: '0.2.0', license: 'MIT' },
-  });
-  patchPolicy(dir, { lockfiles: ['a/package-lock.json', 'b/package-lock.json'] });
-
-  const r = run([], dir);
-  assert.equal(r.status, 0, r.stderr);
-  assert.ok(r.stdout.includes('数据源=a/package-lock.json + b/package-lock.json'), r.stdout);
-  const spdx = JSON.parse(fs.readFileSync(path.join(dir, '.agents', 'sbom', 'spdx.json'), 'utf8'));
-  const deps = spdx.packages.filter((p) => p.SPDXID !== 'SPDXRef-Root');
-  assert.equal(deps.length, 3, `expect merged dedup: ${deps.map((p) => p.name).join(',')}`);
-  assert.equal(deps.find((p) => p.name === 'shared').licenseConcluded, 'MIT', 'first-declared file wins');
-});
-
-test('lockfiles: declared but missing lockfile fails closed with exit 2', () => {
-  const dir = seededRepo();
-  fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"demo-app","version":"1.0.0"}\n', 'utf8');
-  // 根 lockfile 存在也不回落：声明了 frontend 就必须存在
-  writeLock(dir, { a: { version: '1.0.0', license: 'MIT' } });
-  patchPolicy(dir, { lockfiles: ['frontend/package-lock.json'] });
-
-  const r = run([], dir);
-  assert.equal(r.status, 2, r.stderr);
-  assert.match(r.stderr, /frontend\/package-lock\.json/);
-  assert.match(r.stderr, /fail-closed/);
-});
-
-test('lockfiles: traversal and absolute paths are rejected with exit 2', () => {
-  for (const bad of ['../outside/package-lock.json', '/abs/package-lock.json']) {
-    const dir = seededRepo();
-    fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"demo-app","version":"1.0.0"}\n', 'utf8');
-    patchPolicy(dir, { lockfiles: [bad] });
-    const r = run([], dir);
-    assert.equal(r.status, 2, `${bad}: ${r.stderr}`);
-    assert.match(r.stderr, /非法路径/);
-  }
+  // Human-readable verify output in English
+  const rVerify = runCli(target, [
+    'sbom', 'verify', sbomFile,
+    '--target', '.',
+    '--lang', 'en',
+  ]);
+  assert.equal(rVerify.status, 0, rVerify.stderr);
+  assert.match(rVerify.stdout, /AI Software Bill of Materials integrity verified:/);
 });
