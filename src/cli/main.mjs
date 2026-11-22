@@ -20,6 +20,7 @@ import { newHostCommand } from '../commands/new-host.mjs';
 import { policyCommand } from '../commands/policy.mjs';
 import { bundleCommand } from '../commands/bundle.mjs';
 import { sbomCommand } from '../commands/sbom.mjs';
+import { keygenCommand, signCommand, verifySigCommand } from '../commands/notary.mjs';
 import { KIT_ROOT } from '../install/plan.mjs';
 
 const SUPPORTED_LANGS = new Set(LANGUAGES);
@@ -28,7 +29,8 @@ const SUPPORTED_LANGS = new Set(LANGUAGES);
 const COMMANDS = [
   'install', 'add-host', 'upgrade', 'adopt', 'prune', 'remove-host', 'uninstall',
   'doctor', 'diff', 'status', 'workspace', 'devcontainer', 'add-skill', 'remove-skill',
-  'skills', 'new-host', 'explain', 'list-hosts', 'policy', 'bundle', 'sbom', 'run', 'hook', 'help',
+  'skills', 'new-host', 'explain', 'list-hosts', 'policy', 'bundle', 'sbom',
+  'keygen', 'sign', 'verify-sig', 'run', 'hook', 'help',
 ];
 
 function normalizeLang(input) {
@@ -130,6 +132,12 @@ async function main(argv) {
       return bundleCommand({ args, t });
     case 'sbom':
       return sbomCommand({ args, t });
+    case 'keygen':
+      return keygenCommand({ args, t });
+    case 'sign':
+      return signCommand({ args, t });
+    case 'verify-sig':
+      return verifySigCommand({ args, t });
     default:
       {
         const err = new Error(`unknown command: ${command} (available: ${COMMANDS.join(', ')})`);

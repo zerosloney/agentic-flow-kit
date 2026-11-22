@@ -18,6 +18,7 @@ import { ROLE_NAMES, readInjectedModels, readLocalModelRoles } from '../models/r
 import { computeEnterprise, GIT_HOOKS, PROOF_CHAIN_FILES, resolveTarget } from './install.mjs';
 import { readLocalPolicy, checkPolicyDriftSync } from './policy.mjs';
 import { verifySbom } from './sbom.mjs';
+import { verifySignature, signPayload, readSignatureFile, writeSignatureFile } from '../install/notary.mjs';
 import { RUNTIME_SCRIPTS, RUNTIME_HOOKS, KIT_ROOT } from './runtime.mjs';
 import { buildDiff } from './diff.mjs';
 
@@ -448,6 +449,62 @@ export function doctorCommand({ args, t }) {
     }
   }
 
+  // 密码学公证签名校验（如果存在 .agents/attestation.sig 或 .agents/sbom.sig）
+  let pubKeyPath = args.pubkey ? path.resolve(args.pubkey) : null;
+  if (!pubKeyPath && args.key) {
+    const candidatePub = String(args.key).endsWith('.pub.pem') ? path.resolve(args.key) : path.resolve(args.key).replace(/\.pem$/, '.pub.pem');
+    if (fs.existsSync(candidatePub)) pubKeyPath = candidatePub;
+  }
+  if (!pubKeyPath && fs.existsSync(path.join(target, '.agents', 'keys', 'flow-kit-key.pub.pem'))) {
+    pubKeyPath = path.join(target, '.agents', 'keys', 'flow-kit-key.pub.pem');
+  }
+
+  const attestSigPath = path.join(target, '.agents', 'attestation.sig');
+  if (fs.existsSync(attestSigPath)) {
+    if (!pubKeyPath || !fs.existsSync(pubKeyPath)) {
+      add(false, 'signature attestation', t('doctor.sigMissingKey'));
+    } else {
+      try {
+        const pubKey = fs.readFileSync(pubKeyPath, 'utf8');
+        const sigObj = readSignatureFile(attestSigPath);
+        const payload = fs.existsSync(path.join(target, '.agents', 'attestation.json'))
+          ? JSON.parse(fs.readFileSync(path.join(target, '.agents', 'attestation.json'), 'utf8'))
+          : buildAttestation(target);
+        const verifyRes = verifySignature({ payload, signatureObject: sigObj, publicKeyPem: pubKey });
+        if (verifyRes.ok) {
+          add(true, 'signature attestation', t('doctor.sigAttestationOk', { fp: verifyRes.fingerprint }));
+        } else {
+          add(false, 'signature attestation', t('doctor.sigAttestationFailed', { detail: verifyRes.detail || verifyRes.error }));
+        }
+      } catch (e) {
+        add(false, 'signature attestation', t('doctor.sigAttestationFailed', { detail: e.message }));
+      }
+    }
+  }
+
+  const sbomSigPath = path.join(target, '.agents', 'sbom.sig');
+  if (fs.existsSync(sbomSigPath)) {
+    if (!pubKeyPath || !fs.existsSync(pubKeyPath)) {
+      add(false, 'signature sbom', t('doctor.sigMissingKey'));
+    } else if (!sbomPath || !fs.existsSync(sbomPath)) {
+      add(false, 'signature sbom', t('doctor.sigMissingSbom'));
+    } else {
+      try {
+        const pubKey = fs.readFileSync(pubKeyPath, 'utf8');
+        const sigObj = readSignatureFile(sbomSigPath);
+        const payload = JSON.parse(fs.readFileSync(sbomPath, 'utf8'));
+        const verifyRes = verifySignature({ payload, signatureObject: sigObj, publicKeyPem: pubKey });
+        if (verifyRes.ok) {
+          add(true, 'signature sbom', t('doctor.sigSbomOk', { fp: verifyRes.fingerprint }));
+        } else {
+          add(false, 'signature sbom', t('doctor.sigSbomFailed', { detail: verifyRes.detail || verifyRes.error }));
+        }
+      } catch (e) {
+        add(false, 'signature sbom', t('doctor.sigSbomFailed', { detail: e.message }));
+      }
+    }
+  }
+
   // 模型配置是用户本地状态：存在则校验，缺失不失败（旧安装保持 doctor 全过）。
   const localModels = readLocalModelRoles(target);
   if (localModels.error) {
@@ -496,6 +553,30 @@ export function doctorCommand({ args, t }) {
         add(true, 'attestation-output', t('doctor.attestationWritten', { path: written }));
       } catch (error) {
         add(false, 'attestation-output', error.message);
+      }
+    }
+    if (flag(args, 'sign')) {
+      const keyPath = args.key ? path.resolve(args.key) : path.join(target, '.agents', 'keys', 'flow-kit-key.pem');
+      if (!fs.existsSync(keyPath)) {
+        add(false, 'attestation-signature', t('error.keyNotFound', { path: keyPath }));
+      } else {
+        try {
+          const privKey = fs.readFileSync(keyPath, 'utf8');
+          if (!args.out) {
+            writeAttestation(path.join(target, '.agents', 'attestation.json'), attestation);
+          }
+          const sig = signPayload({
+            payload: attestation,
+            privateKeyPem: privKey,
+            algorithm: args.algorithm || 'ed25519',
+            target: 'attestation',
+          });
+          const sigOut = args.out ? `${path.resolve(args.out)}.sig` : path.join(target, '.agents', 'attestation.sig');
+          writeSignatureFile(sigOut, sig);
+          add(true, 'attestation-signature', t('doctor.attestationSigned', { path: sigOut, fp: sig.publicKeyFingerprint }));
+        } catch (error) {
+          add(false, 'attestation-signature', error.message);
+        }
       }
     }
   }

@@ -9,6 +9,7 @@ import { readMcpServers } from '../install/mcp.mjs';
 import { readToolPolicy } from '../install/tool-policy.mjs';
 import { HOSTS } from '../hosts/registry.mjs';
 import { resolveTarget } from './install.mjs';
+import { signPayload, verifySignature, readSignatureFile, writeSignatureFile } from '../install/notary.mjs';
 
 export const SBOM_SCHEMA = 'flow-kit-sbom/v1';
 export const CYCLONEDX_SPEC = '1.5';
@@ -495,6 +496,25 @@ export function sbomCommand({ args, t }) {
     const days = Number(args.days || 30);
     const res = exportSbom({ target, out, format, days, t });
 
+    if (args.sign || args.flags.has('sign')) {
+      const keyPath = args.key ? path.resolve(args.key) : path.join(target, '.agents', 'keys', 'flow-kit-key.pem');
+      if (!fs.existsSync(keyPath)) {
+        fail('KEY_NOT_FOUND', t('error.keyNotFound', { path: keyPath }));
+      }
+      const privKey = fs.readFileSync(keyPath, 'utf8');
+      const sbomContent = readJson(res.file);
+      const sig = signPayload({
+        payload: sbomContent,
+        privateKeyPem: privKey,
+        algorithm: args.algorithm || 'ed25519',
+        target: 'sbom',
+      });
+      const sigFile = args.sig ? path.resolve(args.sig) : `${res.file}.sig`;
+      writeSignatureFile(sigFile, sig);
+      res.signatureFile = sigFile;
+      res.fingerprint = sig.publicKeyFingerprint;
+    }
+
     if (asJson) {
       console.log(JSON.stringify(res, null, 2));
     } else {
@@ -504,6 +524,13 @@ export function sbomCommand({ args, t }) {
         count: res.componentsCount,
         root: (res.proofRoot || '').slice(0, 16),
       }));
+      if (res.signatureFile) {
+        console.log(t('notary.signedOk', {
+          target: 'sbom',
+          file: res.signatureFile,
+          fp: res.fingerprint,
+        }));
+      }
     }
     return 0;
   }
@@ -524,10 +551,44 @@ export function sbomCommand({ args, t }) {
     }
 
     const res = verifySbom({ target, sbomData, t });
+
+    if (args.key) {
+      const pubKeyPath = path.resolve(args.key);
+      if (!fs.existsSync(pubKeyPath)) {
+        fail('KEY_NOT_FOUND', t('error.keyNotFound', { path: pubKeyPath }));
+      }
+      const pubKey = fs.readFileSync(pubKeyPath, 'utf8');
+      const sigPath = args.sig ? path.resolve(args.sig) : `${sbomAbs}.sig`;
+      if (!fs.existsSync(sigPath)) {
+        res.ok = false;
+        res.problems.push(t('error.sigNotFound', { path: sigPath }));
+      } else {
+        const sigObj = readSignatureFile(sigPath);
+        const sigVerify = verifySignature({ payload: sbomData, signatureObject: sigObj, publicKeyPem: pubKey });
+        if (!sigVerify.ok) {
+          res.ok = false;
+          res.problems.push(t('error.sigFailed', { detail: sigVerify.detail || sigVerify.error }));
+        } else {
+          res.signature = {
+            ok: true,
+            fingerprint: sigVerify.fingerprint,
+            algorithm: sigVerify.algorithm,
+          };
+        }
+      }
+    }
+
     if (asJson) {
       console.log(JSON.stringify(res, null, 2));
     } else if (res.ok) {
       console.log(t('sbom.verified', { file: sbomAbs }));
+      if (res.signature) {
+        console.log(t('notary.verifiedOk', {
+          target: 'sbom',
+          file: args.sig ? path.resolve(args.sig) : `${sbomAbs}.sig`,
+          fp: res.signature.fingerprint,
+        }));
+      }
     } else {
       console.error(res.problems.join('\n'));
     }

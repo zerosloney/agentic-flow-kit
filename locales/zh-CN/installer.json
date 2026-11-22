@@ -342,5 +342,20 @@
   "error.sbomUsage": "用法：flow-kit sbom <export|verify> [options]",
   "error.sbomNotFound": "未找到指定的 SBOM 文件：{{path}}",
   "error.sbomInvalid": "无效的 SBOM 文件：{{detail}}",
-  "error.sbomTampered": "SBOM 校验失败：{{detail}}"
+  "error.sbomTampered": "SBOM 校验失败：{{detail}}",
+  "notary.keygenOk": "公钥/私钥对生成成功（算法: {{alg}}）：\n  私钥: {{priv}}\n  公钥: {{pub}}\n  公钥指纹: {{fp}}",
+  "notary.signedOk": "签名完成（目标: {{target}}）：已输出至 {{file}}（公钥指纹: {{fp}}）",
+  "notary.verifiedOk": "签名验签通过（目标: {{target}}）：{{file}}（签名者指纹: {{fp}}）",
+  "doctor.sigAttestationOk": "证明链公证签名有效（签名者指纹: {{fp}}）",
+  "doctor.sigAttestationFailed": "证明链公证签名无效或被篡改：{{detail}}",
+  "doctor.sigSbomOk": "SBOM 公证签名有效（签名者指纹: {{fp}}）",
+  "doctor.sigSbomFailed": "SBOM 公证签名无效或被篡改：{{detail}}",
+  "doctor.sigMissingKey": "发现公证签名文件但缺少公钥（使用 --pubkey <file> 指定公钥）",
+  "doctor.sigMissingSbom": "发现 SBOM 签名文件但未找到对应的 SBOM 文件",
+  "doctor.attestationSigned": "证明链公证签名已生成：{{path}}（公钥指纹: {{fp}}）",
+  "error.notaryUsage": "用法：flow-kit <keygen|sign|verify-sig> [options]",
+  "error.keyExists": "密钥已存在：{{path}}；使用 --force 覆盖",
+  "error.keyNotFound": "密钥文件不存在：{{path}}",
+  "error.sigNotFound": "签名文件不存在：{{path}}",
+  "error.sigFailed": "公证签名验证失败：{{detail}}"
 }
