@@ -123,18 +123,23 @@ if (process.env.CHECK_LOOP_ROOT) {
     clearGitCache(); // 换根（main→worktree）后作废缓存（core 键含 cwd，此为防御性清空）
   }
 }
-// 枚举单源（<root>/.agents/config/workflow-enums.txt——fixture 契约：缺文件/缺键 fail-loud）
+// 枚举单源（<root>/.agents/config/workflow-enums.txt——fixture 契约：缺文件=未装引擎资产 loud-skip
+// exit 0（issue #73，2026-11-22：外部编排宿主无 .agents/ 资产）；缺键/坏数据=fail-loud exit 1）
 let ENUMS;
 try {
   ENUMS = loadEnums(path.join(ROOT, '.agents', 'config', 'workflow-enums.txt'));
 } catch (e) {
   const msg = String(e.message || '');
   if (msg.includes('不可读')) {
-    console.error(`check-loop: 缺 ${path.join('.agents', 'config', 'workflow-enums.txt')}(枚举单源)——本仓自有件，从 git 历史恢复后重试`);
+    // 未装引擎资产 loud-skip（issue #73，2026-11-22）：外部编排宿主仅脚本方式消费引擎、无 .agents/
+    // 资产，缺枚举单源是常态而非故障——exit 0 放行。双受众口径：编排消费方=交付状态由编排方注入，
+    // 跳过即预期；kit 自装项目见此行即异常（枚举单源丢失，从 git 历史恢复）。
+    console.error(`check-loop: 未安装引擎资产（缺 ${path.join('.agents', 'config', 'workflow-enums.txt')} 枚举单源）——跳过闭环门禁扫描（外部编排消费方：交付状态由编排方注入；kit 自装项目见此行即异常：枚举单源丢失，从 git 历史恢复）`);
+    process.exit(0);
   } else {
     console.error('check-loop: 枚举单源 ' + msg);
+    process.exit(1);
   }
-  process.exit(1);
 }
 const inSet = (v, arr) => arr.includes(v);
 const stOkDoc = (st) => inSet(st, ENUMS['doc.status.confirmed']);

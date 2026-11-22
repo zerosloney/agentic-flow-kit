@@ -14,6 +14,14 @@ const WIKI = 'wiki';
 const problems = [];
 const notes = [];
 
+// 未启用知识库面（issue #73，2026-11-22）：kit 自装项目恒有 wiki/（模板自带），外部编排宿主仅
+// 脚本方式消费引擎、无知识库面——目录缺失须在首个 readdirSync 之前 loud-skip exit 0（先例：
+// sbom-license「零依赖跳过」/ check-devcontainer「跳过：…——不判红」；此前 ENOENT 崩栈）。
+if (!fs.existsSync(WIKI)) {
+  console.log('[wiki-consistency] 跳过：项目无 wiki/ 主题目录（未启用知识库面）——不判红。');
+  process.exit(0);
+}
+
 // 类型判定：Dirent 直判（2026-11-06 P1）——原实现每条目一次 statSync（wiki 803 文件 / 212 目录，
 // 多轮遍历累计 ~2000+ 次 stat，Windows ~0.5-1ms/次）；symlink 回落 statSync 保持原语义（跟随链接）。
 const isDirEntry = (e, parent) => e.isDirectory() || (e.isSymbolicLink() && fs.statSync(path.join(parent, e.name)).isDirectory());

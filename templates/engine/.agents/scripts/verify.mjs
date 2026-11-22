@@ -84,6 +84,21 @@ import { dirtyTreeDigest } from './git-tree-digest.mjs';
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = process.env.FLOW_KIT_PROJECT_ROOT || process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
 const AGENTS_RUNTIME = path.resolve(SCRIPT_DIR, '..');
+// 引擎资产安装判定（issue #73，2026-11-22）：外部编排宿主（自有交付状态机，仅脚本方式消费引擎）无
+// .agents/config/engine.json——硬依赖安装资产的门与 kit 自有凭证落盘对宿主不适用，loud-skip。
+// kit 自装项目恒有 engine.json（install 落盘的清单），判据与门禁面零变化。夹具模式（--test-cmd /
+// --stub-gate）不参与：夹具根走测试缝，凭证落账是既有断言面。testCmd/stubCmd 是 run() 内参数解析
+// 产物（声明位置靠后），故此处仅声明缺省、赋值单点在 run() 夹具旗标校验之后。
+let engineAssetsAbsent = false;
+// 两门 id 单源 GATES 主表（生成物漂移单门 + 密钥扫描门——后者挂载脚本 check-secrets.mjs，issue 口径以脚本名称之）。
+const ASSET_GATE_IDS = new Set(['engine-artifacts', 'secrets-scan']);
+// issue #73 凭证跳过注记一轮一次：失败行 / 全绿落账 / 摘要生成三处跳过点共享，最早到达者打、其余静默。
+let engineAssetSkipNoted = false;
+const noteEngineAssetSkip = () => {
+  if (engineAssetSkipNoted) return;
+  engineAssetSkipNoted = true;
+  console.error('[verify] ⏭️ 未安装引擎资产——凭证落账/摘要生成跳过（外部编排消费方自管交付状态；issue #73）');
+};
 // verify 从包内运行时执行时，门命令里的 flow-kit run|hook 改为包内绝对路径：
 // 不依赖 flow-kit 是否在当前进程 PATH（本地 node bin/flow-kit.mjs、直接 node 执行均可用）。
 const localizeRuntimeCmd = (cmd) => String(cmd)
@@ -271,6 +286,13 @@ const readGateBudget = (root, key) => {
 // 头注「凭证落账」段有完整口径；失败不静默吞——降级值恒可判定。
 
 const recordFailure = (step, exitInfo, note, attribution) => {
+  // 引擎资产缺失（issue #73，2026-11-22）：失败行不落宿主仓——外部编排消费方自管交付状态，kit
+  // 台账写入对宿主是文件污染。exit 码与 stderr 摘要契约不变（调用方已打），只跳落盘副作用；
+  // loud 注记一轮一次（后续全绿落账点静默，同款判定见尾段落账段与摘要生成段）。
+  if (engineAssetsAbsent) {
+    noteEngineAssetSkip();
+    return;
+  }
   try {
     const entry = { ts: new Date().toISOString(), exitCode: typeof exitInfo === 'number' ? exitInfo : -1, suite: step, note };
     // 归因（gate-health 2026-10-22）：env / flaky / real——红单可读，AI 不在假红上反复重跑。
@@ -293,6 +315,8 @@ const recordFailure = (step, exitInfo, note, attribution) => {
 // 尾部 40 行——fail-fast 红从「只知道 exit 1」变为可当场定性（papercuts 2026-10-17 拟修①；
 // 先例：后端门红无法区分已知负载偶发与新回归，只能盲跑复跑）。落盘失败不改裁决（同 recordFailure 容错）。
 const persistGateLog = (gate, r) => {
+  // 引擎资产缺失（issue #73）：tmp/verify-*.log 留痕同样不写宿主仓——返回 null（失败 note 不附 log 路径）。
+  if (engineAssetsAbsent) return null;
   try {
     const dir = path.join(ROOT, 'tmp');
     fs.mkdirSync(dir, { recursive: true });
@@ -382,6 +406,9 @@ async function run() {
     console.error('[verify] --stub-gate 只允许配合 CHECK_LOOP_ROOT 夹具根（禁止在真实仓库落无关单凭证）');
     process.exit(2);
   }
+  // 引擎资产判定赋值（issue #73 单一定义点）：testCmd / stubCmd 已解析完毕——夹具旗标在位即不判定
+  // （夹具根走测试缝；判定语义与双受众口径见 AGENTS_RUNTIME 旁的声明处注释）。
+  engineAssetsAbsent = !testCmd && !stubCmd && !fs.existsSync(path.join(ROOT, '.agents', 'config', 'engine.json'));
   // --face（2026-11-08 档 1-B）：显式面覆盖——不做工作区脏路径自动面检测，直接按给定面裁门（增量档）。
   // 合法值单源 = verify-scope 面枚举（PRODUCT_FACES 的 face 字段，docs = 显式「无产品面」）；逗号多值。
   const fi = argv.indexOf('--face');
@@ -576,7 +603,13 @@ async function run() {
   const localLedgerSkip = !testCmd && !stubCmd && !process.env.TF_BUILD
     && !!scope && !scope.ledgerTouched;
   const envSkipIds = localLedgerSkip ? CI_ONLY_GATE_IDS : new Set();
-  const gates = testCmd ? fixtureGates(testCmd)
+  // 引擎资产缺失（issue #73）：两门 loud-skip 记入 envSkips——绿行记录跳过事实（带 envSkips 的行
+  // 按既有锚点规则不作增量锚，语义正确）。门本体在执行前裁剪（--list 分支之后的裁剪点）。
+  if (engineAssetsAbsent) {
+    envSkipIds.add('engine-artifacts');
+    envSkipIds.add('secrets-scan');
+  }
+  let gates = testCmd ? fixtureGates(testCmd)
     : stubCmd ? [{ id: 'stub', cohort: 'engine', name: '夹具单门', cmd: stubCmd, folder: '.', type: 'shell' }]
     : engineOnly ? GATES.filter((g) => g.cohort === 'engine')
     : productOnly ? GATES.filter((g) => g.cohort !== 'engine') // 业务面：product + security（CI main）
@@ -627,9 +660,22 @@ async function run() {
     }
     // 干跑展示裁剪（档 1-B）：跳过说明走 stderr——stdout 保持纯 id，管道消费方不受影响。
     if (scopeMode) console.error(`[verify] ⏭️ ${UNILATERAL_NOTE}`);
+    // 引擎资产缺失（issue #73）：--list 不裁 stdout 的 id 清单（裸 --list 门表恒 22 叙事锚不动），
+    // stderr 一行说明执行期将裁两门（secrets-scan 挂载 check-secrets.mjs，随门一并跳过）。
+    if (engineAssetsAbsent) console.error(`[verify] ⏭️ 未安装引擎资产（无 .agents/config/engine.json）——跳过 ${[...ASSET_GATE_IDS].join('、')} 门（check-secrets.mjs 密钥扫描随 secrets-scan 一并跳过；外部编排消费方；issue #73）`);
     const verbose = argv.includes('--verbose');
     for (const g of gates) console.log(verbose ? `${g.id}\t${g.cmd}` : g.id);
     process.exit(0);
+  }
+
+  // 引擎资产缺失裁剪（issue #73，2026-11-22）：外部编排宿主无 .agents/config/engine.json——
+  // engine-artifacts（workflow-index 重生成器 ENOENT 崩）/ secrets-scan（check-secrets.mjs 缺基线
+  // exit 2 拒跑）两门硬依赖安装资产，宿主面 loud-skip。--list 已在上分支 exit（叙事锚不动，stderr
+  // 已注记）；跳过事实经上方 envSkipIds 进绿行 envSkips。kit 自装项目恒有 engine.json，此分支
+  // 不可达，门禁面零变化。
+  if (engineAssetsAbsent) {
+    gates = gates.filter((g) => !ASSET_GATE_IDS.has(g.id));
+    console.error(`[verify] ⏭️ 未安装引擎资产（无 .agents/config/engine.json）——跳过 ${[...ASSET_GATE_IDS].join('、')} 门（check-secrets.mjs 密钥扫描随 secrets-scan 一并跳过；外部编排消费方；issue #73）`);
   }
 
   // 并发档位（2026-10-16 并行编排）：门之间无共享状态（各自独立进程 + 独立工作目录），串行编排下
@@ -870,9 +916,15 @@ async function run() {
       // 单边化 CI（本地不再有「只跑单测」的后端门），该字段若继续落账反而失真；无消费方读它
       // （policy.mjs hasFreshVerifyLine / gen-verify-evidence 均不消费），集成执法点照旧在 pre-push 与 CI 重档。
       if (process.env.PIPELINE_RUN_ID) entry.runId = process.env.PIPELINE_RUN_ID;
-      fs.mkdirSync(path.join(ROOT, '.agents'), { recursive: true });
-      fs.appendFileSync(path.join(ROOT, '.agents', 'verifications.jsonl'), `${JSON.stringify(entry)}\n`);
-      console.log(`[verify] 🧾 全绿凭证已落账 verifications.jsonl`);
+      // 引擎资产缺失（issue #73）：凭证不落宿主仓——loud 注记一轮一次，全绿轮由此处（最早到达点）
+      // 打，失败轮已由失败行打过，后续摘要生成点静默。
+      if (engineAssetsAbsent) {
+        noteEngineAssetSkip();
+      } else {
+        fs.mkdirSync(path.join(ROOT, '.agents'), { recursive: true });
+        fs.appendFileSync(path.join(ROOT, '.agents', 'verifications.jsonl'), `${JSON.stringify(entry)}\n`);
+        console.log(`[verify] 🧾 全绿凭证已落账 verifications.jsonl`);
+      }
     } catch (e) {
       console.error(`[verify] ⚠️ 凭证落账失败: ${e.message}`);
     }
@@ -898,11 +950,15 @@ async function run() {
       if (over) {
         console.log('[verify] ⚠️ 门禁成本超预算——下一批须退役一门（一进一出；候选 flow-kit run agg-judgments.mjs --retire-candidates）');
       }
-      const gen = spawnSync(process.execPath, [path.join(SCRIPT_DIR, 'gen-verify-evidence.mjs'), '--root', ROOT], { encoding: 'utf8' });
-      if (gen.status === 0) {
-        if (gen.stdout) process.stdout.write(String(gen.stdout).trimEnd() + '\n');
-      } else {
-        console.error(`[verify] ⚠️ 绿凭证摘要生成失败（${String(gen.stderr || gen.stdout || '').trim().slice(0, 200)}）——绿裁决不变，手动补跑 flow-kit run gen-verify-evidence.mjs`);
+      // 引擎资产缺失（issue #73）：摘要生成（workflow/verify-evidence.md 落盘）同样不进宿主仓——
+      // 注记已由更早到达的落账点打过（一轮一次），此处静默跳过。
+      if (!engineAssetsAbsent) {
+        const gen = spawnSync(process.execPath, [path.join(SCRIPT_DIR, 'gen-verify-evidence.mjs'), '--root', ROOT], { encoding: 'utf8' });
+        if (gen.status === 0) {
+          if (gen.stdout) process.stdout.write(String(gen.stdout).trimEnd() + '\n');
+        } else {
+          console.error(`[verify] ⚠️ 绿凭证摘要生成失败（${String(gen.stderr || gen.stdout || '').trim().slice(0, 200)}）——绿裁决不变，手动补跑 flow-kit run gen-verify-evidence.mjs`);
+        }
       }
     }
   }
