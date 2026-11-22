@@ -357,5 +357,15 @@
   "error.keyExists": "密钥已存在：{{path}}；使用 --force 覆盖",
   "error.keyNotFound": "密钥文件不存在：{{path}}",
   "error.sigNotFound": "签名文件不存在：{{path}}",
-  "error.sigFailed": "公证签名验证失败：{{detail}}"
+  "error.sigFailed": "公证签名验证失败：{{detail}}",
+  "handoff.created": "交接信封已创建：{{id}}（{{from}} → {{to}}，共 {{count}} 个工件）",
+  "handoff.verified": "交接信封核验通过：{{id}}（{{from}} → {{to}}，共 {{count}} 个工件无漂移）",
+  "handoff.listTitle": "工作区交接信封列表（共 {{count}} 份）：",
+  "handoff.none": "当前没有待交接信封",
+  "doctor.handoffOk": "交接信封有效：{{id}}（{{from}} → {{to}}）",
+  "doctor.handoffDrift": "交接信封核验失败或工件发生漂移：{{id}}（{{problems}}）",
+  "error.handoffUsage": "用法：flow-kit handoff <create|verify|list> [options]",
+  "error.handoffNotFound": "未找到指定的交接信封文件：{{path}}",
+  "error.handoffInvalid": "无效的交接信封文件：{{detail}}",
+  "error.handoffTainted": "交接信封触发防污染规则：{{detail}}"
 }

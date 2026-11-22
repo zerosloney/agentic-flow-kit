@@ -357,5 +357,15 @@
   "error.keyExists": "Key file already exists: {{path}}; use --force to overwrite",
   "error.keyNotFound": "Key file not found: {{path}}",
   "error.sigNotFound": "Signature file not found: {{path}}",
-  "error.sigFailed": "Signature verification failed: {{detail}}"
+  "error.sigFailed": "Signature verification failed: {{detail}}",
+  "handoff.created": "Handoff envelope created: {{id}} ({{from}} → {{to}}, {{count}} artifacts)",
+  "handoff.verified": "Handoff envelope verified: {{id}} ({{from}} → {{to}}, {{count}} artifacts intact)",
+  "handoff.listTitle": "Workspace handoff envelopes (total {{count}}):",
+  "handoff.none": "No handoff envelopes found",
+  "doctor.handoffOk": "Handoff envelope verified: {{id}} ({{from}} → {{to}})",
+  "doctor.handoffDrift": "Handoff envelope verification failed or artifacts drifted: {{id}} ({{problems}})",
+  "error.handoffUsage": "Usage: flow-kit handoff <create|verify|list> [options]",
+  "error.handoffNotFound": "Specified handoff envelope file not found: {{path}}",
+  "error.handoffInvalid": "Invalid handoff envelope file: {{detail}}",
+  "error.handoffTainted": "Handoff envelope triggered context contamination rule: {{detail}}"
 }

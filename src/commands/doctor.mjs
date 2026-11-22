@@ -19,6 +19,7 @@ import { computeEnterprise, GIT_HOOKS, PROOF_CHAIN_FILES, resolveTarget } from '
 import { readLocalPolicy, checkPolicyDriftSync } from './policy.mjs';
 import { verifySbom } from './sbom.mjs';
 import { verifySignature, signPayload, readSignatureFile, writeSignatureFile } from '../install/notary.mjs';
+import { listHandoffFiles, verifyHandoffEnvelope } from '../install/handoff.mjs';
 import { RUNTIME_SCRIPTS, RUNTIME_HOOKS, KIT_ROOT } from './runtime.mjs';
 import { buildDiff } from './diff.mjs';
 
@@ -501,6 +502,32 @@ export function doctorCommand({ args, t }) {
         }
       } catch (e) {
         add(false, 'signature sbom', t('doctor.sigSbomFailed', { detail: e.message }));
+      }
+    }
+  }
+
+  // 多智能体接力协同契约体检（如果存在 .agents/handoffs/）
+  const handoffsDir = path.join(target, '.agents', 'handoffs');
+  if (fs.existsSync(handoffsDir)) {
+    const handoffFiles = listHandoffFiles(target);
+    for (const hItem of handoffFiles) {
+      const pubKey = pubKeyPath && fs.existsSync(pubKeyPath) ? fs.readFileSync(pubKeyPath, 'utf8') : null;
+      const verifyRes = verifyHandoffEnvelope({
+        target,
+        envelope: hItem.envelope,
+        publicKeyPem: pubKey,
+      });
+      if (verifyRes.ok) {
+        add(true, `handoff ${hItem.envelope.id}`, t('doctor.handoffOk', {
+          id: hItem.envelope.id,
+          from: hItem.envelope.fromRole,
+          to: hItem.envelope.toRole,
+        }));
+      } else {
+        add(false, `handoff ${hItem.envelope.id}`, t('doctor.handoffDrift', {
+          id: hItem.envelope.id,
+          problems: verifyRes.problems.join('; '),
+        }));
       }
     }
   }
