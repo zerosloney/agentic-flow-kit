@@ -16,6 +16,7 @@ import { buildAttestation, writeAttestation } from '../install/attest.mjs';
 import { compilePermissions, permissionDrift } from '../install/permissions.mjs';
 import { ROLE_NAMES, readInjectedModels, readLocalModelRoles } from '../models/resolve.mjs';
 import { computeEnterprise, GIT_HOOKS, PROOF_CHAIN_FILES, resolveTarget } from './install.mjs';
+import { readLocalPolicy, checkPolicyDriftSync } from './policy.mjs';
 import { RUNTIME_SCRIPTS, RUNTIME_HOOKS, KIT_ROOT } from './runtime.mjs';
 import { buildDiff } from './diff.mjs';
 
@@ -406,6 +407,19 @@ export function doctorCommand({ args, t }) {
     }
   } else if (manifest?.hardened) {
     add(true, 'hardened', t('doctor.hardenedHint'), '', { warn: true });
+  }
+
+  // 远程中央策略基线对账：存在 policy.json 且声明了 remote 时，核对与中央基线的漂移状态
+  const localPolicy = readLocalPolicy(target);
+  if (localPolicy?.remote?.url) {
+    const check = checkPolicyDriftSync(target, localPolicy, null, t);
+    if (!check.ok) {
+      add(true, 'policy-remote unreachable', t('doctor.policyRemoteError', { error: check.error }), '', { warn: true });
+    } else if (!check.synced) {
+      add(true, 'policy-remote drift', t('doctor.policyRemoteDrift', { count: check.changes.length, url: localPolicy.remote.url }), t('doctor.policyRemoteHint'), { warn: true });
+    } else {
+      add(true, 'policy-remote', t('doctor.policyRemoteOk', { url: localPolicy.remote.url, ref: check.ref }));
+    }
   }
 
   // 模型配置是用户本地状态：存在则校验，缺失不失败（旧安装保持 doctor 全过）。

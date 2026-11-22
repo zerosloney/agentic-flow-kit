@@ -123,7 +123,12 @@ export function buildAttestation(target) {
   const policy = readJson(policyFile);
   const policyDigest = jsonDigest(policyFile);
   const policyInfo = policyDigest
-    ? { present: true, version: policy?.version ?? null, digest: policyDigest }
+    ? {
+        present: true,
+        version: policy?.version ?? null,
+        digest: policyDigest,
+        ...(policy?.remote ? { remote: { url: policy.remote.url, ref: policy.remote.ref || null } } : {}),
+      }
     : { present: false, version: null, digest: null };
 
   const resultsFile = path.join(target, EVAL_RESULTS);

@@ -312,5 +312,18 @@
   "devcontainer.dockerMissing": "docker not on PATH: cannot verify the container builds (install Docker Desktop or use the devcontainer CLI)",
   "devcontainer.buildOk": "container image built: {{image}}",
   "devcontainer.buildFailed": "container image build failed: {{image}}",
-  "listHosts.unmanagedProbe": "[probe] {{name}} (~/{{dir}}) — detected on this machine but not yet supported: install/upgrade does not take over its gates; the check-local-gates host probe section will warn about the wiring. Track full support in GitHub issue #41"
+  "listHosts.unmanagedProbe": "[probe] {{name}} (~/{{dir}}) — detected on this machine but not yet supported: install/upgrade does not take over its gates; the check-local-gates host probe section will warn about the wiring. Track full support in GitHub issue #41",
+  "error.policyUsage": "Usage: flow-kit policy <link|check|sync> [options]",
+  "error.policyNoRemote": "No remote policy baseline linked; run flow-kit policy link <url> [--ref <ref>] to link",
+  "error.policyNotFound": "Policy definition not found: {{path}}",
+  "error.policyRemoteNotFound": "Remote baseline location does not exist or is invalid: {{path}}",
+  "error.policyRemoteFetch": "Failed to fetch remote policy baseline: {{error}}",
+  "policy.linked": "Linked central policy baseline: {{url}} (ref: {{ref}})",
+  "policy.synced": "Local policy is in sync with remote baseline, no drift detected",
+  "policy.driftTitle": "Detected {{count}} policy baseline drifts:",
+  "policy.syncComplete": "Policy baseline sync completed (updated {{count}} policy surfaces)",
+  "doctor.policyRemoteOk": "Remote policy baseline in sync: {{url}} ({{ref}})",
+  "doctor.policyRemoteDrift": "Detected {{count}} drifts from remote policy baseline: {{url}}",
+  "doctor.policyRemoteHint": "Run flow-kit policy check to view diff, or flow-kit policy sync to align",
+  "doctor.policyRemoteError": "Remote policy baseline unreachable or validation failed: {{error}}"
 }

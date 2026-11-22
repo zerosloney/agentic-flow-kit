@@ -312,5 +312,18 @@
   "devcontainer.dockerMissing": "docker 不在 PATH：无法验证容器可构建性（装 Docker Desktop 或改用 devcontainer CLI）",
   "devcontainer.buildOk": "容器镜像构建成功：{{image}}",
   "devcontainer.buildFailed": "容器镜像构建失败：{{image}}",
-  "listHosts.unmanagedProbe": "[探测] {{name}}（~/{{dir}}）——本机已检出但暂不受支持：install/upgrade 未接管其门禁；check-local-gates 的宿主探测段会给出接线告警。完整支持跟踪见 GitHub issue #41"
+  "listHosts.unmanagedProbe": "[探测] {{name}}（~/{{dir}}）——本机已检出但暂不受支持：install/upgrade 未接管其门禁；check-local-gates 的宿主探测段会给出接线告警。完整支持跟踪见 GitHub issue #41",
+  "error.policyUsage": "用法：flow-kit policy <link|check|sync> [options]",
+  "error.policyNoRemote": "当前未绑定远程策略基线；使用 flow-kit policy link <url> [--ref <ref>] 进行绑定",
+  "error.policyNotFound": "未找到策略定义：{{path}}",
+  "error.policyRemoteNotFound": "远程基线地址不存在或无效：{{path}}",
+  "error.policyRemoteFetch": "拉取远程策略基线失败：{{error}}",
+  "policy.linked": "已绑定中央策略基线：{{url}}（ref: {{ref}}）",
+  "policy.synced": "本地策略与远程基线完全一致，未发现漂移",
+  "policy.driftTitle": "发现 {{count}} 项策略基线漂移：",
+  "policy.syncComplete": "策略基线同步完成（已更新 {{count}} 个策略面）",
+  "doctor.policyRemoteOk": "远程策略基线已对齐：{{url}}（{{ref}}）",
+  "doctor.policyRemoteDrift": "检测到与远程策略基线存在 {{count}} 项漂移：{{url}}",
+  "doctor.policyRemoteHint": "运行 flow-kit policy check 查看差异，或 flow-kit policy sync 进行对齐",
+  "doctor.policyRemoteError": "远程策略基线无法连接或校验失败：{{error}}"
 }

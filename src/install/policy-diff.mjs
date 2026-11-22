@@ -191,7 +191,7 @@ function policyChanges(changes, rel, beforeText, afterText) {
   diffJson(changes, 'policy', rel, parseJson(beforeText), parseJson(afterText));
 }
 
-const HANDLERS = new Map([
+export const HANDLERS = new Map([
   ['gates.json', gateChanges],
   ['gate-budgets.json', gateBudgetChanges],
   ['rule-budgets.txt', ruleBudgetChanges],
@@ -203,6 +203,19 @@ const HANDLERS = new Map([
   ['agent-eval.json', evalChanges],
   ['policy.json', policyChanges],
 ]);
+
+// 语义对比两个文本（按文件名分发处理器，未命中则走普通 JSON / 文本对比）
+export function diffPolicyTexts(rel, beforeText, afterText) {
+  const changes = [];
+  if (beforeText === afterText) return changes;
+  const handler = HANDLERS.get(path.basename(rel));
+  if (handler) {
+    handler(changes, rel, beforeText, afterText);
+  } else {
+    diffJson(changes, 'policy', rel, parseJson(beforeText), parseJson(afterText));
+  }
+  return changes;
+}
 
 function templatePolicy() {
   return parseJson(readText(path.join(TEMPLATES, 'engine', POLICY_REL))) || {};
