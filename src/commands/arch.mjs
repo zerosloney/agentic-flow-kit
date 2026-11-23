@@ -29,7 +29,7 @@ export function archCommand({ args, t }) {
         fail('CONFIG_EXISTS', t('error.archConfigExists', { path: ARCH_CONFIG_REL }));
       }
 
-      initArchConfig(target, { preset });
+      initArchConfig(target, { preset, t });
       console.log(t('arch.initOk', { preset, file: ARCH_CONFIG_REL }));
       return 0;
     }

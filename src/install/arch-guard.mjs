@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { makeT } from '../i18n.mjs';
 
 export const ARCH_CONFIG_REL = path.join('.agents', 'config', 'architecture.json');
 
@@ -410,7 +411,16 @@ export function loadArchConfig(root) {
 
 export function initArchConfig(root, options = {}) {
   const presetKey = options.preset || 'clean';
-  const preset = ARCH_PRESETS[presetKey] || ARCH_PRESETS.clean;
+  const preset = ARCH_PRESETS[presetKey];
+  if (!preset) {
+    const t = options.t || makeT('zh-CN');
+    const err = new Error(t('error.archPresetUnknown', {
+      value: presetKey,
+      presets: Object.keys(ARCH_PRESETS).join(' / '),
+    }));
+    err.code = 'BAD_ARGS';
+    throw err;
+  }
   const file = path.join(root, ARCH_CONFIG_REL);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, `${JSON.stringify(preset, null, 2)}\n`, 'utf8');

@@ -18,6 +18,7 @@ import {
   evaluateArchitecture,
   initArchConfig,
   ARCH_CONFIG_REL,
+  ARCH_PRESETS,
 } from '../src/install/arch-guard.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -260,4 +261,38 @@ test('CLI flow-kit arch init, check, and graph integration', () => {
   assert.equal(rCheckFail.status, 1);
   assert.match(rCheckFail.stderr, /架构契约检查失败/);
   assert.match(rCheckFail.stderr, /Boundary Violation/);
+});
+
+test('initArchConfig rejects unknown presets with BAD_ARGS and writes nothing', () => {
+  const tmp = makeTmp();
+
+  assert.throws(
+    () => initArchConfig(tmp, { preset: 'clen' }),
+    (err) => {
+      assert.equal(err.code, 'BAD_ARGS');
+      assert.match(err.message, /未知的架构预设/);
+      assert.match(err.message, /clean/);
+      assert.match(err.message, /ddd/);
+      assert.match(err.message, /layered/);
+      return true;
+    },
+  );
+  assert.equal(fs.existsSync(path.join(tmp, ARCH_CONFIG_REL)), false);
+});
+
+test('initArchConfig accepts a known preset', () => {
+  const tmp = makeTmp();
+
+  const preset = initArchConfig(tmp, { preset: 'ddd' });
+  assert.deepEqual(preset, ARCH_PRESETS.ddd);
+  assert.deepEqual(JSON.parse(fs.readFileSync(path.join(tmp, ARCH_CONFIG_REL), 'utf8')), ARCH_PRESETS.ddd);
+});
+
+test('CLI arch init exits 2 on unknown preset', () => {
+  const tmp = makeTmp();
+
+  const bad = run(['arch', 'init', '--preset', 'clen', '--target', tmp], KIT);
+  assert.equal(bad.status, 2);
+  assert.match(bad.stderr, /未知的架构预设/);
+  assert.equal(fs.existsSync(path.join(tmp, ARCH_CONFIG_REL)), false);
 });

@@ -109,12 +109,12 @@ test('explain reports orphan manifest entries', () => {
   assert.match(r.stdout, /模板：无/);
 });
 
-test('explain exits 1 for unmanaged files', () => {
+test('explain exits 2 for unmanaged files', () => {
   const dir = tmpRepo();
   install(dir);
   fs.writeFileSync(path.join(dir, 'README.local.md'), 'local\n', 'utf8');
   const r = run(['explain', 'README.local.md', '--target', '.'], dir);
-  assert.equal(r.status, 1);
+  assert.equal(r.status, 2);
   assert.match(r.stderr, /文件未托管/);
 });
 

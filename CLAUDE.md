@@ -73,7 +73,7 @@ node tools/new-host.mjs myhost [--hooks] [--permissions] [--mcp claude|opencode]
 - 目标不存在 → 创建；目标哈希等于 manifest → 更新；被用户改过 → 三方合并或冲突跳过；非本工具安装 → 跳过；`--force` 覆盖。
 - 文本直写文件的基线保存在 `.agents/.kit/baseline/<targetRel>`（默认 gitignore；`--no-baseline` 关闭，`--baseline` 重新开启）。升级时若用户改过且模板相对基线确有变化，以 baseline 为 base、磁盘为 ours、新模板为 theirs 调用 `git merge-file`：clean 自动写回并把基线更新为模板侧内容，conflict 写冲突标记、保留 manifest 旧哈希并计入 `conflict`。无基线、二进制或 git 不可用时回退为哈希冲突跳过。合并块 / MCP / hooks 配置不存基线（自身已有合并语义）。
 - `.gitattributes` / `.gitignore` 使用带标记的合并块，重复执行不重复追加。
-- manifest 的哈希记录的是**最终文本**：模板渲染、语言覆盖、模型注入都完成之后才计算；`manifest.schemaVersion` 记录 manifest 结构版本（当前 1）；`manifest.baseline` / `baselineVersion` 记录基线状态，基线内容不参与哈希；`manifest.managedPermissions` 记录上次编译进各宿主配置的权限条目，`manifest.mergeOrigins` 记录合并型配置首次安装时是否已存在。
+- manifest 的哈希记录的是**最终文本**：模板渲染、语言覆盖、模型注入都完成之后才计算；`manifest.schemaVersion` 记录 manifest 结构版本（当前 3）；`manifest.baseline` / `baselineVersion` 记录基线状态，基线内容不参与哈希；`manifest.managedPermissions` 记录上次编译进各宿主配置的权限条目，`manifest.mergeOrigins` 记录合并型配置首次安装时是否已存在。
 - `src/install/migrations.mjs` 在 `upgrade` 前按 `manifest.schemaVersion` 顺序加载 `migrations/<from>-<to>.mjs`，全部成功后才写 manifest，失败零写盘；`--dry-run` 只报告，`--json` 增加 `migration`。迁移只转换 manifest，不改目标文件；缺失 schemaVersion 视为 0，高于当前支持版本时拒绝升级。
 - 派生工件（如 `workflow/INDEX.md`）生成后会重算哈希，并把被生成器改写的路径登记到 `manifest.derived`；`diff` 不对这些路径做静态模板比对。
 
@@ -140,7 +140,7 @@ Hook 接线在 `src/install/hooks.mjs`：中性规格来自引擎模板 `.agents
 
 开发容器（R3-8 沙箱面）在 `src/install/devcontainer.mjs`：该文件是「栈 → 官方基础镜像 / 扩展」映射与渲染规则的单源（`STACK_IMAGES` / `STACK_EXTENSIONS`）。`buildPlan` 生成 `category: 'devcontainer'`、优先级 41 的两条 `kind: 'generated'` 条目（`.devcontainer/devcontainer.json` + `.devcontainer/Dockerfile`），Dockerfile 里 `ARG FLOW_KIT_VERSION=<安装器版本>` 钉死随镜像安装的 kit 版本；`--no-devcontainer` 关闭，选择记进 `manifest.devcontainer`，`upgrade` 按 manifest 重放（不静默重开）。白名单（`allowedImagePrefixes` / `forbiddenTags` / `requirePinnedFlowKit`）落在项目内 `.agents/config/devcontainer-policy.json`（schema `schemas/devcontainer-policy.schema.json`），运行时门 `templates/engine/.agents/scripts/check-devcontainer.mjs` 与 `doctor` 共读这一份，避免两处策略各说各话；门挂在 verify 安全段 `devcontainer`（项目没有 `.devcontainer/` 时大声跳过不判红），CLI `flow-kit devcontainer check|build`（`build` 需要 docker，缺失退出 2）。容器身份与 node 供给按镜像核对：`STACK_CONTAINER_USER`（node/typescript → `node`，其余 → `vscode`）与 `STACK_PROVISIONS_NODE`（只有 typescript-node 真带 node；dotnet/go/java 上游是 node feature `version: "none"`、只有 nvm 壳，rust/empty 无 node——这些栈在 Dockerfile 里以 `ARG NODE_VERSION` + 官方 tar 包 sha256 补装），生成器（`src/install/devcontainer.mjs`）与运行时门（`check-devcontainer.mjs`）两侧同表、必须同步；门从 `install-manifest.json` 读 stack，因此身份/镜像/补装写错都会当场判红。
 
-「容器可构建」的证据由 `tools/devcontainer-build.mjs` 产出，两层分开记账：静态层（零 docker）逐栈生成 `.devcontainer/` 并用 `checkDevcontainer` 校验全部 7 栈，`npm run devcontainer:check`（`--dry-run`）在 CI 的 test 作业里跑；构建层需要 docker，对选定栈真跑 `docker build` + 冒烟 `docker run`，docker 缺失时 fail-closed 退出 2（不假装构建过），钉的版本尚未发布到 npm 时构建退回 `latest` 并记账。kit 自身 CI 的 `devcontainer-build` 矩阵作业跑 node/dotnet 两个代表栈；目标项目 CI 模板里的同名作业默认关闭（仓库变量 `FLOW_KIT_DEVCONTAINER_BUILD=true` 才开），避免默认拉镜像。
+「容器可构建」的证据由 `tools/devcontainer-build.mjs` 产出，两层分开记账：静态层（零 docker）逐栈生成 `.devcontainer/` 并用 `checkDevcontainer` 校验全部 8 栈，`npm run devcontainer:check`（`--dry-run`）在 CI 的 test 作业里跑；构建层需要 docker，对选定栈真跑 `docker build` + 冒烟 `docker run`，docker 缺失时 fail-closed 退出 2（不假装构建过），钉的版本尚未发布到 npm 时构建退回 `latest` 并记账。kit 自身 CI 的 `devcontainer-build` 矩阵作业跑 node/dotnet 两个代表栈；目标项目 CI 模板里的同名作业默认关闭（仓库变量 `FLOW_KIT_DEVCONTAINER_BUILD=true` 才开），避免默认拉镜像。
 
 技能安装由 `skills.mode` 驱动：
 

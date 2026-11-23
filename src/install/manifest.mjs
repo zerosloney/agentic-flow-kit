@@ -4,7 +4,7 @@ import crypto from 'node:crypto';
 import { writeAtomicSync } from './atomic.mjs';
 
 export const MANIFEST_REL = '.agents/install-manifest.json';
-export const CURRENT_SCHEMA_VERSION = 2;
+export const CURRENT_SCHEMA_VERSION = 3;
 
 // 两态：文件不存在 → null（未安装）；存在但坏 JSON / 根非对象 → 抛错（fail-loud，
 // 不再把损坏 manifest 静默当未安装）。修复指引：git 恢复，或确认废弃后删除重装。

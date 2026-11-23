@@ -6,7 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { EXIT, exitCodeForError } from '../src/cli/exit.mjs';
+import { EXIT, exitCodeForError, REGISTERED_ERROR_CODES, IO_ERROR_CODES } from '../src/cli/exit.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
@@ -91,6 +91,47 @@ test('exit code mapping covers every documented class', () => {
   assert.equal(exitCodeForError(new Error('boom')), EXIT.CONFLICT);
   assert.equal(exitCodeForError({ code: 'SOMETHING_ELSE' }), EXIT.CONFLICT);
   assert.equal(exitCodeForError(null), EXIT.CONFLICT);
+});
+
+test('every err.code referenced in src is registered in exit.mjs', () => {
+  const SRC = path.join(KIT, 'src');
+  const nativeIo = new Set(IO_ERROR_CODES);
+  const patterns = [
+    /fail\(\s*'([A-Z][A-Z0-9_]+)'/g,
+    /err\.code\s*=\s*'([A-Z][A-Z0-9_]+)'/g,
+    /code:\s*'([A-Z][A-Z0-9_]+)'/g,
+    /fail\([^\n]*?,\s*'([A-Z][A-Z0-9_]+)'\s*\)/g,
+  ];
+  const found = new Map();
+  const walk = (dir) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, entry.name);
+      if (entry.isDirectory()) {
+        walk(abs);
+        continue;
+      }
+      if (!/\.(mjs|cjs|js)$/.test(entry.name)) continue;
+      const text = fs.readFileSync(abs, 'utf8');
+      for (const re of patterns) {
+        re.lastIndex = 0;
+        let match;
+        while ((match = re.exec(text))) {
+          const code = match[1];
+          if (nativeIo.has(code)) continue;
+          found.set(code, path.relative(KIT, abs));
+        }
+      }
+    }
+  };
+  walk(SRC);
+  const unregistered = [...found.keys()]
+    .filter((code) => !Object.prototype.hasOwnProperty.call(REGISTERED_ERROR_CODES, code))
+    .sort();
+  assert.deepEqual(
+    unregistered,
+    [],
+    `unregistered err.code in src/: ${unregistered.map((code) => `${code} (${found.get(code)})`).join(', ')}`,
+  );
 });
 
 test('CLI maps usage, target and host errors to their exit codes', () => {

@@ -1133,7 +1133,7 @@ $ flow-kit run pipeline-run.mjs <span class="kw">--task</span> feat-auth
         </div>
         <div class="d">
           <h4>从零装入引擎并编译到各宿主</h4>
-          <p>安装器会生成 <code>.agents/**</code> 引擎目录、各宿主适配目录、Git 门禁、CI 双发与 devcontainer，并写入一份安装清单（manifest）记录每个托管文件的哈希。</p>
+          <p>安装器会生成 <code>.agents/**</code> 引擎目录、各宿主适配目录、Git 门禁、按 origin 自适应的 CI 与 devcontainer，并写入一份安装清单（manifest）记录每个托管文件的哈希。</p>
           <ul>
             <li><code>--auto-hosts</code> 自动扫描项目中已有的 AI 目录（<code>.claude</code> / <code>.trae</code> 等）并预选安装</li>
             <li><code>--agent &lt;host&gt;</code> 可重复或逗号分隔，指定要接线的宿主</li>
@@ -1603,8 +1603,8 @@ $ flow-kit run pipeline-run.mjs <span class="kw">--task</span> feat-auth
           <span class="ex">flow-kit install --ci both</span>
         </div>
         <div class="d">
-          <h4>CI 交付面双发</h4>
-          <p>生成 <code>azure-pipelines.yml</code> 与 <code>.github/workflows/ci.yml</code>。<code>standard</code> / <code>enterprise</code> 档默认双发，<code>lean</code> 档等价于 <code>none</code>。选择结果写入清单，<code>upgrade</code> 时自动重放。</p>
+          <h4>CI 交付面自适应</h4>
+          <p>生成 <code>azure-pipelines.yml</code> 与 <code>.github/workflows/ci.yml</code>。全新安装按 origin 自适应：GitHub → <code>github</code>、Azure → <code>azure</code>，识别不出时 <code>enterprise</code> 档双发、其余 <code>none</code>，<code>lean</code> 等价于 <code>none</code>。选择结果写入清单，<code>upgrade</code> 时自动重放。</p>
         </div>
       </div>
     </div>
