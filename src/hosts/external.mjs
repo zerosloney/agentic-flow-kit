@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { registerHost } from './registry.mjs';
+import { HOSTS, registerHost } from './registry.mjs';
 
 // 外部宿主定义：JSON 描述能力面，可选同目录模板树提供 command / agent 等静态文件。
 // 校验手写（零依赖）；错误信息带字段名，便于直接修 JSON。
@@ -11,6 +11,7 @@ const REL_PATH_RE = /^[A-Za-z0-9._-]+(\/[A-Za-z0-9._-]+)*$/;
 const EXT_RE = /^\.[A-Za-z0-9]+$/;
 const SKILL_MODES = new Set(['native', 'shared', 'index']);
 const HOOK_FORMATS = new Set(['json']);
+const MAX_MANIFEST_BYTES = 1024 * 1024;
 export const HOST_DEFINITION_KEYS = [
   'name', 'dir', 'label', 'tracked', 'rootMemory', 'detect', 'templates', 'skillMeta',
   'commands', 'agents', 'skills', 'hooks', 'permissions', 'hardening', 'mcp', 'modelProbe',
@@ -309,8 +310,14 @@ export function validateHostDefinition(raw, file, t) {
 function loadFile(abs, source, t) {
   let text;
   try {
+    const stat = fs.statSync(abs);
+    // 信任边界：项目内 JSON 来自仓库，先限大小再读，避免巨大/特殊文件拖垮进程。
+    if (stat.size > MAX_MANIFEST_BYTES) {
+      throw invalid(t, abs, `manifest too large (${stat.size} bytes, limit ${MAX_MANIFEST_BYTES})`);
+    }
     text = fs.readFileSync(abs, 'utf8');
   } catch (err) {
+    if (err.code === 'HOST_MANIFEST') throw err;
     const wrapped = new Error(t('error.hostManifestRead', { file: abs, detail: err.code || err.message }));
     wrapped.code = 'HOST_MANIFEST';
     throw wrapped;
@@ -322,6 +329,12 @@ function loadFile(abs, source, t) {
     throw invalid(t, abs, `invalid JSON: ${err.message}`);
   }
   const def = validateHostDefinition(raw, abs, t);
+  // 项目层 JSON 随仓库分发，属不可信输入：只能新增宿主，不能重定义既有宿主
+  // （内置或用户层），否则克隆来的仓库就能改写已装宿主的权限/门禁能力。
+  // 显式 --host-manifest 仍在 cli 层覆盖，保留人工覆盖通道。
+  if (source === 'project' && Object.prototype.hasOwnProperty.call(HOSTS, raw.name)) {
+    throw invalid(t, abs, `\`name\` ${raw.name} already exists; project-level hosts may only add new hosts (use --host-manifest to override explicitly)`);
+  }
   registerHost(raw.name, def, source);
   return raw.name;
 }
