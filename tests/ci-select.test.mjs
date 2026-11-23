@@ -120,6 +120,57 @@ test('unrecognized origin installs no CI', () => {
   assert.equal(manifest(dir).ci, 'none');
 });
 
+// 模拟 ≤2.10 的旧 manifest：没有 ci 字段，交付面只能从 files 推断。
+function stripCiField(dir) {
+  const m = manifest(dir);
+  delete m.ci;
+  fs.writeFileSync(path.join(dir, '.agents/install-manifest.json'), `${JSON.stringify(m, null, 2)}\n`);
+}
+
+test('legacy manifest without ci keeps both CI files on upgrade despite a github origin', () => {
+  const dir = tmpRepo();
+  addOrigin(dir, 'https://github.com/example/repo.git');
+  const r = run(['install', '--agent', 'claude', '--stack', 'node', '--ci', 'both', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  stripCiField(dir);
+  const up = run(['upgrade', '--target', '.'], dir);
+  assert.equal(up.status, 0, up.stderr);
+  assert.equal(manifest(dir).ci, 'both');
+  assert.ok('azure-pipelines.yml' in manifest(dir).files);
+  assert.ok('.github/workflows/ci.yml' in manifest(dir).files);
+  assert.ok(fs.existsSync(path.join(dir, 'azure-pipelines.yml')));
+  assert.ok(fs.existsSync(path.join(dir, '.github/workflows/ci.yml')));
+  const diff = run(['diff', '--all', '--strict', '--target', '.'], dir);
+  assert.equal(diff.status, 0, `${diff.stdout}${diff.stderr}`);
+});
+
+test('legacy lean manifest without ci stays CI-free on upgrade', () => {
+  const dir = tmpRepo();
+  addOrigin(dir, 'https://github.com/example/repo.git');
+  const r = run(['install', '--agent', 'claude', '--stack', 'node', '--tier', 'lean', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(manifest(dir).ci, undefined);
+  const up = run(['upgrade', '--target', '.'], dir);
+  assert.equal(up.status, 0, up.stderr);
+  assert.equal(fs.existsSync(path.join(dir, 'azure-pipelines.yml')), false);
+  assert.equal(fs.existsSync(path.join(dir, '.github/workflows/ci.yml')), false);
+  assert.ok(['none', undefined].includes(manifest(dir).ci));
+});
+
+test('legacy manifest with only the azure pipeline replays azure and adds no github CI', () => {
+  const dir = tmpRepo();
+  addOrigin(dir, 'https://github.com/example/repo.git');
+  const r = run(['install', '--agent', 'claude', '--stack', 'node', '--ci', 'azure', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  stripCiField(dir);
+  const up = run(['upgrade', '--target', '.'], dir);
+  assert.equal(up.status, 0, up.stderr);
+  assert.equal(manifest(dir).ci, 'azure');
+  assert.ok(fs.existsSync(path.join(dir, 'azure-pipelines.yml')));
+  assert.equal(fs.existsSync(path.join(dir, '.github/workflows/ci.yml')), false);
+  assert.equal('.github/workflows/ci.yml' in manifest(dir).files, false);
+});
+
 test('enterprise with --ci github satisfies the CI policy check', () => {
   const dir = tmpRepo();
   const r = run(['install', '--agent', 'claude', '--stack', 'node', '--tier', 'enterprise', '--ci', 'github', '--target', '.'], dir);

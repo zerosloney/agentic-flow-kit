@@ -5,12 +5,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { checkDevcontainer } from '../src/install/devcontainer.mjs';
+import {
+  checkDevcontainer,
+  STACK_IMAGES,
+  STACK_CONTAINER_USER,
+  STACK_PROVISIONS_NODE,
+} from '../src/install/devcontainer.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
 const JSON_REL = path.join('.devcontainer', 'devcontainer.json');
 const DOCKERFILE_REL = path.join('.devcontainer', 'Dockerfile');
+const CHECK_SCRIPT = path.join(KIT, 'templates', 'engine', '.agents', 'scripts', 'check-devcontainer.mjs');
 
 function tmpRepo() {
   const dir = makeTmp('flow-kit-dc-');
@@ -99,6 +105,52 @@ test('every stack image ships the baked tooling its container needs', () => {
     const state = checkDevcontainer({ target: dir, stack });
     assert.equal(state.ok, true, `${stack}: ${state.problems.join('; ')}`);
   }
+});
+
+// 运行时门禁脚本出于零依赖直接执行，不导出表；从源码文本解析后与生成器导出逐项对账。
+function checkScriptTables() {
+  const src = fs.readFileSync(CHECK_SCRIPT, 'utf8');
+  const grab = (name) => {
+    const m = new RegExp(`const ${name} = (\\{[\\s\\S]*?\\});`).exec(src);
+    assert.ok(m, `check-devcontainer.mjs 缺少 ${name}`);
+    return new Function(`"use strict"; return (${m[1]});`)();
+  };
+  return { images: grab('STACK_IMAGES'), users: grab('STACK_USER'), needsNode: grab('STACK_NEEDS_NODE') };
+}
+
+test('the runtime gate stack tables stay in lockstep with the generator', () => {
+  const gate = checkScriptTables();
+  // 镜像与容器身份必须与生成器键集合、取值逐一相同（新增栈漏配会让测试失败）。
+  assert.deepEqual(gate.images, STACK_IMAGES);
+  assert.deepEqual(gate.users, STACK_CONTAINER_USER);
+  // 门禁把「不补装 node」表示为缺省键，因此按布尔语义对账，并禁止多出未知栈。
+  for (const [stack, needs] of Object.entries(STACK_PROVISIONS_NODE)) {
+    assert.equal(Boolean(gate.needsNode[stack]), needs, `${stack}: STACK_NEEDS_NODE 与生成器不一致`);
+  }
+  for (const stack of Object.keys(gate.needsNode)) {
+    assert.ok(stack in STACK_PROVISIONS_NODE, `STACK_NEEDS_NODE 多出生成器没有的栈：${stack}`);
+  }
+});
+
+test('the gate enforces the python stack image instead of silently skipping it', () => {
+  const dir = tmpRepo();
+  const r = run(['install', '--agent', 'claude', '--stack', 'python', '--target', '.', '--json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+
+  const ok = run(['run', 'check-devcontainer.mjs'], dir);
+  assert.equal(ok.status, 0, ok.stderr);
+
+  const dockerAbs = path.join(dir, DOCKERFILE_REL);
+  const good = fs.readFileSync(dockerAbs, 'utf8');
+  assert.match(good, /^FROM mcr\.microsoft\.com\/devcontainers\/python:3\.12$/m);
+  // 换成同在白名单、同钉 tag 的错误镜像：只有「镜像与栈不符」能判红，
+  // 证明门禁确实识别 python 栈，而不是因表缺失跳过该检查。
+  fs.writeFileSync(dockerAbs, good.replace(/^FROM .+$/m, 'FROM mcr.microsoft.com/devcontainers/typescript-node:22'), 'utf8');
+  const gate = run(['run', 'check-devcontainer.mjs', '--json'], dir);
+  assert.equal(gate.status, 1, gate.stderr);
+  const summary = JSON.parse(gate.stdout);
+  assert.equal(summary.ok, false);
+  assert.match(summary.problems.join('; '), /镜像与栈不符[^;]*python/);
 });
 
 test('the gate rejects a node tarball extracted outside /usr/local', () => {
@@ -258,8 +310,8 @@ test('the CI evidence tool statically validates every stack', () => {
   assert.equal(r.status, 0, r.stderr);
   const payload = JSON.parse(r.stdout);
   assert.equal(payload.ok, true);
-  assert.deepEqual(payload.stacks, ['dotnet', 'node', 'typescript', 'rust', 'go', 'java', 'empty']);
-  assert.equal(payload.results.length, 7);
+  assert.deepEqual(payload.stacks, ['dotnet', 'node', 'typescript', 'rust', 'go', 'java', 'python', 'empty']);
+  assert.equal(payload.results.length, 8);
   assert.equal(payload.results.every((x) => x.ok), true, JSON.stringify(payload.results));
 });
 
