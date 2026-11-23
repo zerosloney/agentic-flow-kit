@@ -65,6 +65,8 @@ export function gatherHudState(target, t, { cache = null, now = Date.now(), ttlM
 
     let handoffs = [];
     let tamperedHandoffs = 0;
+    let warnedHandoffs = 0;
+    const handoffWarnings = [];
     const pubKeyPath = resolvePublicKeyPath(absTarget);
     const pubKey = fs.existsSync(pubKeyPath) ? fs.readFileSync(pubKeyPath, 'utf8') : null;
 
@@ -72,7 +74,15 @@ export function gatherHudState(target, t, { cache = null, now = Date.now(), ttlM
       handoffs = listHandoffFiles(absTarget);
       for (const h of handoffs) {
         const v = verifyHandoffEnvelope({ target: absTarget, envelope: h.envelope, publicKeyPem: pubKey });
-        if (!v.ok) tamperedHandoffs += 1;
+        if (!v.ok) {
+          tamperedHandoffs += 1;
+        } else if (v.warnings && v.warnings.length) {
+          // 可疑指令不阻断交接，但必须可见：hud 统计并在面板列出。
+          warnedHandoffs += 1;
+          for (const w of v.warnings) {
+            if (handoffWarnings.length < 5) handoffWarnings.push(w);
+          }
+        }
       }
     } catch {}
 
@@ -83,6 +93,8 @@ export function gatherHudState(target, t, { cache = null, now = Date.now(), ttlM
       completed: handoffs.filter((h) => h.envelope?.status === 'completed').length,
       rejected: handoffs.filter((h) => h.envelope?.status === 'rejected').length,
       tampered: tamperedHandoffs,
+      warned: warnedHandoffs,
+      warnings: handoffWarnings,
       clean: tamperedHandoffs === 0,
     };
 
@@ -197,6 +209,9 @@ export function renderHudView(state, t) {
     `Envelopes : ${bold(handoffs.total)} total  ${dim('│')}  Pending: ${yellow(handoffs.pending)}  ${dim('│')}  Accepted: ${green(handoffs.accepted)}  ${dim('│')}  Completed: ${cyan(handoffs.completed)}`,
     `Integrity : ${contamStatus}`,
   ];
+  if (handoffs.warned) {
+    handoffLines.push(`Warnings  : ${yellow(`⚠ ${handoffs.warned} envelope(s) with suspicious directives`)}`);
+  }
   out.push(...box(bold('🤝 Multi-Agent Task Mesh & Handoffs'), handoffLines));
   out.push('');
 
