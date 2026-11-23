@@ -7,7 +7,6 @@ export const MCP_AUDIT_LOG_REL = '.agents/mcp-audit.jsonl';
 
 // 默认 MCP RBAC 角色与等级策略
 export const DEFAULT_GATEWAY_POLICY = {
-  mode: 'rbac',
   roles: {
     planner: {
       allow: ['wiki_search', 'read_file', 'list_dir', 'read_resource'],
@@ -135,18 +134,25 @@ export function readGatewayPolicy(target) {
   }
   try {
     const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    // owner 拍板 2026-11-23：mode 键从未实现执法差异，已删除；显式写入即报错（fail-loud，不静默无效）。
+    if (Object.prototype.hasOwnProperty.call(parsed, 'mode')) {
+      const err = new Error('配置键 mode 从未实现执法差异，已移除——请从 mcp-gateway 配置中删除该键');
+      err.code = 'BAD_POLICY';
+      throw err;
+    }
     const roles = { ...DEFAULT_GATEWAY_POLICY.roles };
     for (const [name, config] of Object.entries(parsed.roles || {})) {
       roles[name] = mergeRoleConfig(DEFAULT_GATEWAY_POLICY.roles[name], config);
     }
     return {
-      mode: parsed.mode || DEFAULT_GATEWAY_POLICY.mode,
       roles,
       levels: mergeLevels(DEFAULT_GATEWAY_POLICY.levels, parsed.levels),
       parameterRules: mergeParameterRules(DEFAULT_GATEWAY_POLICY.parameterRules, parsed.parameterRules),
       rateLimits: { ...DEFAULT_GATEWAY_POLICY.rateLimits, ...(parsed.rateLimits || {}) },
     };
-  } catch {
+  } catch (e) {
+    // JSON 损坏仍按既有风格回退默认策略；仅 BAD_POLICY（显式 mode 键）穿透抛出。
+    if (e && e.code === 'BAD_POLICY') throw e;
     return DEFAULT_GATEWAY_POLICY;
   }
 }

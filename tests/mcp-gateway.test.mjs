@@ -393,6 +393,36 @@ test('readGatewayPolicy keeps built-in role allow list when user adds a deny', (
   assert.equal(denied.decision, 'DENIED_RBAC');
 });
 
+test('readGatewayPolicy rejects config that explicitly sets the removed mode key', () => {
+  const tmp = makeTmp('flow-kit-mcp-policy-mode-');
+  fs.mkdirSync(path.join(tmp, '.agents', 'config'), { recursive: true });
+  fs.writeFileSync(
+    path.join(tmp, MCP_GATEWAY_CONFIG_REL),
+    JSON.stringify({ mode: 'rbac', roles: { coder: { deny: ['write_file'] } } }),
+    'utf8',
+  );
+
+  // owner 拍板 2026-11-23：mode 键已删除，显式写入 fail-loud 报 BAD_POLICY
+  assert.throws(
+    () => readGatewayPolicy(tmp),
+    (err) => err.code === 'BAD_POLICY' && err.message.includes('mode'),
+  );
+});
+
+test('readGatewayPolicy returns policy without a mode key when config omits it', () => {
+  const tmp = makeTmp('flow-kit-mcp-policy-nomode-');
+  fs.mkdirSync(path.join(tmp, '.agents', 'config'), { recursive: true });
+  fs.writeFileSync(
+    path.join(tmp, MCP_GATEWAY_CONFIG_REL),
+    JSON.stringify({ roles: { coder: { deny: ['write_file'] } } }),
+    'utf8',
+  );
+
+  const policy = readGatewayPolicy(tmp);
+  assert.ok(!('mode' in policy));
+  assert.ok(policy.roles.coder.deny.includes('write_file'));
+});
+
 test('readGatewayPolicy keeps default guardrails when config empties levels and parameterRules', () => {
   const tmp = makeTmp('flow-kit-mcp-policy-empty-');
   fs.mkdirSync(path.join(tmp, '.agents', 'config'), { recursive: true });

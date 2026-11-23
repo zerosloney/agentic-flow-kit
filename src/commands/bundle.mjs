@@ -252,8 +252,8 @@ export function readBundle(filePath, t = null) {
 function isUnsafeBundleRel(rel) {
   if (typeof rel !== 'string' || rel.length === 0) return true;
   if (path.isAbsolute(rel) || path.posix.isAbsolute(rel) || path.win32.isAbsolute(rel)) return true;
+  // owner 拍板 2026-11-23：startsWith('..') 误杀 ..data 等合法前缀名，收窄为段级穿越判定。
   return [path.posix.normalize(rel), path.win32.normalize(rel)].some((norm) => {
-    if (norm.startsWith('..')) return true;
     return norm.split(/[\\/]/).includes('..');
   });
 }

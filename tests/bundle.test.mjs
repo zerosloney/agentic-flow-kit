@@ -227,7 +227,7 @@ test('bundle commands print localized English text with --lang en', () => {
 test('bundle unpack rejects path traversal rels before writing', () => {
   const tmp = makeTmp('flow-kit-bundle-traversal-');
   const content = 'pwned';
-  const maliciousRels = ['../evil.txt', '..\\evil.txt', '/tmp/x'];
+  const maliciousRels = ['../evil.txt', '..\\evil.txt', '/tmp/x', 'a/../../etc/passwd'];
   const files = {};
   for (const rel of maliciousRels) {
     files[rel] = { encoding: 'utf8', content, hash: sha256(Buffer.from(content, 'utf8')) };
@@ -250,6 +250,25 @@ test('bundle unpack rejects path traversal rels before writing', () => {
   assert.equal(fs.existsSync(outDir), false, 'unpack must not create the output directory');
   assert.equal(fs.existsSync(path.join(tmp, 'evil.txt')), false, 'must not write outside the target directory');
   assert.deepEqual(fs.readdirSync(tmp), [], 'unpack must not write any file');
+});
+
+test('bundle unpack allows rels whose segments merely start with dots', () => {
+  const tmp = makeTmp('flow-kit-bundle-dotdata-');
+  const content = 'ok';
+  const rel = '..data/x.md';
+  const files = { [rel]: { encoding: 'utf8', content, hash: sha256(Buffer.from(content, 'utf8')) } };
+  const fileHashes = Object.fromEntries(Object.entries(files).map(([r, entry]) => [r, entry.hash]));
+  const digest = sha256(canonical({ files: fileHashes }));
+  const handle = {
+    isDir: false,
+    path: path.join(tmp, 'dotdata.bundle.json'),
+    bundle: { $schema: 'flow-kit-bundle/v1', bundleVersion: 1, digest, meta: {}, files },
+  };
+
+  const outDir = path.join(tmp, 'out');
+  const result = unpackBundle(handle, outDir);
+  assert.equal(result.ok, true);
+  assert.equal(fs.readFileSync(path.join(outDir, '..data', 'x.md'), 'utf8'), content);
 });
 
 test('bundle directory verify covers extra hosts/ entries and detects tampering', () => {
