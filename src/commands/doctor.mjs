@@ -18,7 +18,7 @@ import { ROLE_NAMES, readInjectedModels, readLocalModelRoles } from '../models/r
 import { computeEnterprise, GIT_HOOKS, PROOF_CHAIN_FILES, resolveTarget } from './install.mjs';
 import { readLocalPolicy, checkPolicyDriftSync } from './policy.mjs';
 import { verifySbom } from './sbom.mjs';
-import { verifySignature, signPayload, readSignatureFile, writeSignatureFile } from '../install/notary.mjs';
+import { verifySignature, signPayload, readSignatureFile, writeSignatureFile, resolvePublicKeyPath } from '../install/notary.mjs';
 import { listHandoffFiles, verifyHandoffEnvelope } from '../install/handoff.mjs';
 import { checkMcpGatewayHealth } from '../install/mcp-gateway.mjs';
 import { checkArchHealth } from '../install/arch-guard.mjs';
@@ -460,9 +460,8 @@ export function doctorCommand({ args, t }) {
     const candidatePub = String(args.key).endsWith('.pub.pem') ? path.resolve(args.key) : path.resolve(args.key).replace(/\.pem$/, '.pub.pem');
     if (fs.existsSync(candidatePub)) pubKeyPath = candidatePub;
   }
-  if (!pubKeyPath && fs.existsSync(path.join(target, '.agents', 'keys', 'flow-kit-key.pub.pem'))) {
-    pubKeyPath = path.join(target, '.agents', 'keys', 'flow-kit-key.pub.pem');
-  }
+  // 公钥路径单源：keygen 默认优先，legacy .agents/notary/public.pem 回退（PR #77 审查跟进）
+  if (!pubKeyPath) pubKeyPath = resolvePublicKeyPath(target);
 
   const attestSigPath = path.join(target, '.agents', 'attestation.sig');
   if (fs.existsSync(attestSigPath)) {

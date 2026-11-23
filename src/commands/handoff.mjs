@@ -8,6 +8,7 @@ import {
   writeHandoffFile,
   listHandoffFiles,
 } from '../install/handoff.mjs';
+import { resolvePublicKeyPath } from '../install/notary.mjs';
 import { resolveTarget } from './install.mjs';
 
 function fail(code, message) {
@@ -138,9 +139,8 @@ export function handoffCommand({ args, t }) {
     }
 
     let publicKeyPem = null;
-    const pubKeyCandidate = args.key
-      ? path.resolve(args.key)
-      : path.join(target, '.agents', 'keys', 'flow-kit-key.pub.pem');
+    // 公钥路径单源：keygen 默认优先，legacy .agents/notary/public.pem 回退（PR #77 审查跟进）
+    const pubKeyCandidate = args.key ? path.resolve(args.key) : resolvePublicKeyPath(target);
     if (fs.existsSync(pubKeyCandidate)) {
       publicKeyPem = fs.readFileSync(pubKeyCandidate, 'utf8');
     }

@@ -414,7 +414,6 @@
   "sandbox.inspectMode": "Execution routing mode: {{mode}}",
   "sandbox.routeDecision": "Command routing decision: {{route}} (risk level: {{level}}, dangerous: {{dangerous}}, reason: {{reason}})",
   "sandbox.routeBlocked": "Strict security block: command risk {{level}} requires sandbox isolation, but no container engine is available",
-  "sandbox.routeDegraded": "⚠️ Container engine unavailable, dangerous command degraded to host execution (reason: {{warning}})",
   "sandbox.execDryRun": "Sandbox isolation execution command (dry-run):\n  {{command}}",
   "sandbox.engineMissing": "No available container runtime (docker or podman) found in PATH",
   "doctor.sandboxOk": "Sandbox isolation runtime ready (engine: {{engine}}, mode: {{mode}}, network: {{network}})",

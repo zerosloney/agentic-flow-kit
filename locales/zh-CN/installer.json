@@ -414,7 +414,6 @@
   "sandbox.inspectMode": "执行路由模式：{{mode}}",
   "sandbox.routeDecision": "指令路由裁决：{{route}}（风险等级: {{level}}，高危标记: {{dangerous}}，原因: {{reason}}）",
   "sandbox.routeBlocked": "严格安全阻断：指令风险等级为 {{level}} 必须在沙箱中执行，但未检测到可用容器运行时引擎",
-  "sandbox.routeDegraded": "⚠️ 沙箱引擎不可用，高危指令已降级至宿主环境执行（原因: {{warning}}）",
   "sandbox.execDryRun": "沙箱隔离执行命令（dry-run 预演）：\n  {{command}}",
   "sandbox.engineMissing": "未在 PATH 中找到可用的容器运行时（docker 或 podman）",
   "doctor.sandboxOk": "沙箱隔离运行时就绪（引擎: {{engine}}，模式: {{mode}}，网络: {{network}}）",

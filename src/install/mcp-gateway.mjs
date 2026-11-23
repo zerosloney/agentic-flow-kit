@@ -189,39 +189,37 @@ export function evaluateMcpCall({
       tool,
     };
   }
-  if (roleConfig) {
-    const allows = Array.isArray(roleConfig.allow) ? roleConfig.allow : [];
-    const denies = Array.isArray(roleConfig.deny) ? roleConfig.deny : [];
+  const allows = Array.isArray(roleConfig.allow) ? roleConfig.allow : [];
+  const denies = Array.isArray(roleConfig.deny) ? roleConfig.deny : [];
 
-    const isExplicitlyAllowed = allows.includes(tool);
-    const isWildcardAllowed = allows.includes('*');
-    const isExplicitlyDenied = denies.includes(tool);
-    const isWildcardDenied = denies.includes('*');
+  const isExplicitlyAllowed = allows.includes(tool);
+  const isWildcardAllowed = allows.includes('*');
+  const isExplicitlyDenied = denies.includes(tool);
+  const isWildcardDenied = denies.includes('*');
 
-    if (isExplicitlyDenied) {
+  if (isExplicitlyDenied) {
+    return {
+      allowed: false,
+      decision: 'DENIED_RBAC',
+      reason: `Role '${role}' is explicitly denied from invoking tool '${tool}'`,
+      level,
+      role,
+      server,
+      tool,
+    };
+  }
+
+  if (!isExplicitlyAllowed) {
+    if (isWildcardDenied || (!isWildcardAllowed && Array.isArray(roleConfig.allow))) {
       return {
         allowed: false,
         decision: 'DENIED_RBAC',
-        reason: `Role '${role}' is explicitly denied from invoking tool '${tool}'`,
+        reason: `Role '${role}' is not authorized to invoke tool '${tool}'`,
         level,
         role,
         server,
         tool,
       };
-    }
-
-    if (!isExplicitlyAllowed) {
-      if (isWildcardDenied || (!isWildcardAllowed && Array.isArray(roleConfig.allow))) {
-        return {
-          allowed: false,
-          decision: 'DENIED_RBAC',
-          reason: `Role '${role}' is not authorized to invoke tool '${tool}'`,
-          level,
-          role,
-          server,
-          tool,
-        };
-      }
     }
   }
 

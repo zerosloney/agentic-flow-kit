@@ -233,3 +233,52 @@ test('en install --probe-models prints declared probe commands before probing', 
   assert.match(line, /commandcode/, 'the audit line should name the host');
   assert.match(line, /cmd --list-models/, 'the audit line should carry the exact command');
 });
+
+// ---- PR #77 审查跟进：本 PR 新增 5 个 en 键的输出断言（archPresetUnknown / policy.syncConflict* / gate.diffScopeFailed）----
+
+test('en arch init rejects an unknown preset in English with the USAGE exit code', () => {
+  const dir = tmpRepo();
+  const r = run(['arch', 'init', '--preset', 'bogus', '--lang', 'en', '--target', '.'], dir);
+  assert.equal(r.status, 2, `BAD_ARGS should map to USAGE(2), got ${r.status}: ${r.stderr}`);
+  assert.match(`${r.stdout}${r.stderr}`, /Unknown architecture preset: bogus \(expected clean \/ ddd \/ layered\)/);
+  assert.doesNotMatch(`${r.stdout}${r.stderr}`, /未知的架构预设/, 'en output must not fall back to the zh sentence');
+});
+
+test('en policy sync conflict reports the skipped surfaces in English', () => {
+  const central = makeTmp('flow-kit-en-central-conflict-');
+  const target = tmpRepo();
+  const rel = '.agents/config/gate-budgets.json';
+  assert.equal(run(['install', '--agent', 'claude', '--stack', 'node', '--lang', 'en', '--target', '.'], target).status, 0);
+
+  const remotePolicy = {
+    $schema: 'policy/config@1',
+    version: 2,
+    surfaces: { gateBudgets: rel },
+  };
+  fs.mkdirSync(path.join(central, '.agents', 'config'), { recursive: true });
+  fs.writeFileSync(path.join(central, '.agents', 'config', 'policy.json'), JSON.stringify(remotePolicy, null, 2), 'utf8');
+  fs.writeFileSync(path.join(central, rel), fs.readFileSync(path.join(target, rel)));
+
+  assert.equal(run(['policy', 'link', central, '--target', '.'], target).status, 0);
+
+  // 用户本地调优 + 中央基线改为不同内容 → sync 检出冲突，保留本地版本
+  fs.writeFileSync(path.join(target, rel), JSON.stringify({ fullMs: 4242, userTuned: true }, null, 2), 'utf8');
+  fs.writeFileSync(path.join(central, rel), JSON.stringify({ fullMs: 999999 }, null, 2), 'utf8');
+
+  const r = run(['policy', 'sync', '--target', '.', '--lang', 'en'], target);
+  assert.equal(r.status, 0, r.stderr);
+  const out = `${r.stdout}${r.stderr}`;
+  assert.match(out, /Skipped 1 policy surface\(s\) with local changes:/);
+  assert.match(out, /! gateBudgets \(\.agents\/config\/gate-budgets\.json\) has local changes; kept the local version/);
+  assert.match(out, /Run flow-kit diff to review the differences and resolve them, then retry/);
+  assert.doesNotMatch(out, /策略面/, 'en output must not fall back to the zh sentence');
+});
+
+test('en gate warns in English when the diff scope cannot be resolved', () => {
+  // 非 git 目录：resolveChangedFiles 返回 null，门禁回退全量检查并输出英文告警
+  const dir = makeTmp('flow-kit-en-gate-nongit-');
+  const r = run(['gate', '--target', dir, '--diff', '--lang', 'en'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stderr, /Failed to resolve diff scope \(git diff\/status unavailable\); falling back to full checks/);
+  assert.doesNotMatch(r.stderr, /差异集解析失败/, 'en output must not fall back to the zh sentence');
+});

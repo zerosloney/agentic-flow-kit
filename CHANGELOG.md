@@ -38,6 +38,7 @@
 
 ### 修复
 
+- fix(review): notary 公钥路径单源接入补全，清理沙箱降级孤儿键并补 en 输出测试
 - fix(hosts): 项目层宿主定义不得重定义既有宿主，并限制定义文件大小
 - fix(hud): 展示 handoff 可疑指令告警，不再只看篡改计数
 - fix(metrics): OTel service.version 跟随包版本，不再硬编码
