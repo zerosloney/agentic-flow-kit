@@ -7,6 +7,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { EXIT, exitCodeForError, REGISTERED_ERROR_CODES, IO_ERROR_CODES } from '../src/cli/exit.mjs';
+import { COMMANDS } from '../src/cli/main.mjs';
+import { STACKS } from '../src/install/profiles.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
@@ -188,6 +190,27 @@ test('unknown command error lists available commands', () => {
   assert.match(r.stderr, /unknown command: nope/);
   assert.match(r.stderr, /list-hosts/);
   assert.match(r.stderr, /install/);
+});
+
+// ---- help 目录与单源对齐：COMMANDS 全覆盖、--stack 列表取自 STACKS 闭集 ----
+
+test('help lists every top-level command', () => {
+  const dir = tmpRepo();
+  const h = run(['--help'], dir);
+  assert.equal(h.status, EXIT.OK, h.stderr);
+  // help 自身是帮助入口，不在用法目录里列。
+  for (const name of COMMANDS.filter((c) => c !== 'help')) {
+    assert.match(h.stdout, new RegExp(`^  flow-kit ${name}(\\s|$)`, 'm'), `help 缺少命令: ${name}`);
+  }
+});
+
+test('help stack list follows the STACKS closed set', () => {
+  const dir = tmpRepo();
+  for (const lang of ['zh-CN', 'en']) {
+    const h = run(['--lang', lang, '--help'], dir);
+    assert.equal(h.status, EXIT.OK, `${lang}: ${h.stderr}`);
+    assert.ok(h.stdout.includes(STACKS.join('|')), `${lang}: --stack 列表与 STACKS 不一致`);
+  }
 });
 
 // ---- --json 输出契约 ----

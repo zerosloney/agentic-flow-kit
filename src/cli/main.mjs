@@ -3,7 +3,7 @@ import path from 'node:path';
 import { parseArgs, flag } from './args.mjs';
 import { makeT, LANGUAGES } from '../i18n.mjs';
 import { loadExternalHosts } from '../hosts/external.mjs';
-import { installCommand } from '../commands/install.mjs';
+import { installCommand, STACKS } from '../commands/install.mjs';
 import { doctorCommand } from '../commands/doctor.mjs';
 import { addHostCommand } from '../commands/add-host.mjs';
 import { upgradeCommand } from '../commands/upgrade.mjs';
@@ -74,7 +74,7 @@ async function main(argv) {
     return 0;
   }
   if (!wizardPath && (flag(args, 'help') || flag(args, 'h') || command === 'help' || command === '-h')) {
-    console.log(t('help', { version: readVersion() }));
+    console.log(t('help', { version: readVersion(), stacks: STACKS.join('|') }));
     return 0;
   }
 
@@ -179,4 +179,4 @@ function readVersion() {
   }
 }
 
-export { main, normalizeLang, SUPPORTED_LANGS, flag };
+export { main, normalizeLang, SUPPORTED_LANGS, flag, COMMANDS };
