@@ -2,6 +2,22 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.12.3]
+
+### 修复
+
+- fix(engine): reviewer 只读红线——契约升格 HALT 指令与台账 review-fix 申报判红
+- fix(wiki): en 覆盖看板 DATA 空注册——新装 en verify 全绿
+- fix(kernel): mergeThreeWay 守卫补非数值 status 分支
+- fix(engine): treeSignature 哈希前 CRLF→LF 归一，双平台凭证签名一致
+- fix(cli): --help 补齐治理供应链 14 命令与漏列选项，--stack 列表取 STACKS 单源
+- fix(engine): check-scope-range 关单归档的 plan 不再误报「无 plan 变更」advisory
+
+### 文档
+
+- docs(backlog): 行为评测双臂重评（2026-11-23）与新签名定型
+- docs: 订正 README/CLAUDE/站点漂移，补齐治理与供应链命令文档
+
 ## [2.12.1]
 
 ### 修复
