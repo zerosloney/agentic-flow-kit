@@ -6,6 +6,8 @@
 //   - 只判越界方向（改了未声明）= hard；未落件（声明未改）仅 advisory 打印——多任务合推时声明先行、
 //     代码后推是合法节奏，硬判未落件必误报。
 //   - 范围内无 plan 新增/修改 → skip（exit 0）：该推送不携带新承诺，沿用提交时刻 check-confirm-order 执法。
+//     例外（2026-11-23，issue #79）：范围内 plan 随关单归档（`git mv` 到 workflow/archive/<月>/plans/）时，
+//     本段确有 plan（终态），按「已承诺」skip——不再打「无 plan 变更」盲面 advisory（原实现只看 HEAD 存活路径）。
 //   - 盲面封堵（2026-11-10）：skip 前补 advisory——范围含产品面改动（判据单源复用 verify-scope.mjs
 //     PRODUCT_FACES/classifyFace，再扣 AGENTS.md 引擎面：.agents/.zcode/.githooks/宿主适配/workflow/wiki/
 //     根 package.json/azure-pipelines.yml）且无 intent/spec 立档变更 → 打警告，exit 码不变、--strict 不升硬。
@@ -108,11 +110,23 @@ const plansInRangeAll = changed.filter((f) => /^workflow\/plans\/.+\.md$/i.test(
 // 含 plan 更名的分支此后永远推不上去。上方注释已声明「删除的 plan 不构成承诺来源」，此处按同口径
 // 过滤 HEAD 不存在的路径；**存活的 plan 仍逐份读取**，读不到照样 exit 2（fail-loud 不放宽）。
 const plansInRange = plansInRangeAll.filter((f) => fs.existsSync(path.join(ROOT, f)));
-if (plansInRange.length !== plansInRangeAll.length) {
-  const gone = plansInRangeAll.filter((f) => !plansInRange.includes(f));
+const gone = plansInRangeAll.filter((f) => !plansInRange.includes(f));
+if (gone.length) {
   console.log(`▶ check-scope-range：范围内 ${gone.length} 份 plan 已在后续提交删除/更名，不作承诺来源：${gone.join('、')}`);
 }
 if (!plansInRange.length) {
+  // 关单即归档（2026-11-23，issue #79）：confirm-doc 落终态后把 plan `git mv` 到
+  // workflow/archive/<月>/plans/，HEAD 侧 workflow/plans/ 旧路径消失。此时范围**确有 plan**
+  // （终态承诺），与「范围内压根没有 plan」是两回事——前者按已承诺 skip，盲面 advisory 只对后者。
+  // 用同范围归档路径落盘区分「被删除」（放弃，仍走下方 skip + advisory）与「被归档」（关单）。
+  const archived = gone.filter((f) => {
+    const base = path.basename(f);
+    return changed.some((c) => /^workflow\/archive\/[^/]+\/plans\//i.test(c) && path.basename(c) === base);
+  });
+  if (archived.length) {
+    console.log(`▶ check-scope-range：范围内 ${archived.length} 份 plan 已随关单归档，按已承诺处理——skip`);
+    process.exit(0);
+  }
   console.log('▶ check-scope-range：推送范围无 plan 新增/修改——skip（提交时刻顺序门已执法）');
   // 盲面封堵：范围零 plan 变更 ≠ 范围无事——多提交无 plan 合推可整段夹带产品面改动（提交时刻
   // check-confirm-order 只看单条提交，原样静默 skip 即漏过）。只补 advisory：打印不拦截，exit 码不变，
