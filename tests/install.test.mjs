@@ -554,3 +554,48 @@ test('diff classifies .gitignore as unchanged when user entries overlap the bloc
   assert.equal(d.summary.kitUpdated, 0);
   assert.equal(d.summary.userModified, 0);
 });
+
+// ---- 审查遗留批 2026-11-23：旧 manifest（无 ci 字段）且从未装过 CI 文件时，upgrade 不再无条件回退
+// 'both'，而是复用全新安装的 origin 探测（认不出 → none；enterprise 保持 both）。----
+
+// 模拟旧 manifest（≤2.10，无 ci 字段）：删掉 manifest 里的 ci 字段。
+function stripLegacyCiField(dir) {
+  const mf = path.join(dir, '.agents', 'install-manifest.json');
+  const m = JSON.parse(fs.readFileSync(mf, 'utf8'));
+  delete m.ci;
+  fs.writeFileSync(mf, JSON.stringify(m, null, 2), 'utf8');
+}
+
+test('upgrade of a legacy standard install without CI files keeps CI off when no origin', () => {
+  const dir = tmpRepo(); // 无 origin 远端
+  const r = run(['install', '--agent', 'trae', '--tier', 'standard', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(exists(dir, '.github/workflows/ci.yml'), false, 'fresh install without origin must not emit CI');
+  assert.equal(exists(dir, 'azure-pipelines.yml'), false);
+  stripLegacyCiField(dir);
+
+  const up = run(['upgrade', '--target', '.'], dir);
+  assert.equal(up.status, 0, up.stderr);
+  // 修复前：非 lean 一律回退 'both'，从未有 CI 的旧装会被凭空补发双份 CI 文件。
+  assert.equal(exists(dir, '.github/workflows/ci.yml'), false, 'no-origin legacy install must not gain github CI');
+  assert.equal(exists(dir, 'azure-pipelines.yml'), false, 'no-origin legacy install must not gain azure CI');
+  assert.equal(JSON.parse(read(dir, '.agents/install-manifest.json')).ci, 'none');
+});
+
+test('upgrade of a legacy standard install adopts github CI from the origin remote', () => {
+  const dir = tmpRepo();
+  const remote = spawnSync('git', ['remote', 'add', 'origin', 'https://github.com/acme/widgets.git'], { cwd: dir });
+  assert.equal(remote.status, 0, remote.stderr);
+  // --ci none：github 远端下也不装 CI 文件，制造「manifest.files 无 CI 记录」的 legacy 现场，
+  // 迫使 upgrade 走 origin 探测而不是 manifest.files 推导。
+  const r = run(['install', '--agent', 'trae', '--tier', 'standard', '--ci', 'none', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(exists(dir, '.github/workflows/ci.yml'), false);
+  stripLegacyCiField(dir);
+
+  const up = run(['upgrade', '--target', '.'], dir);
+  assert.equal(up.status, 0, up.stderr);
+  assert.equal(exists(dir, '.github/workflows/ci.yml'), true, 'github origin must provision github CI on legacy upgrade');
+  assert.equal(exists(dir, 'azure-pipelines.yml'), false, 'github origin must not provision azure CI');
+  assert.equal(JSON.parse(read(dir, '.agents/install-manifest.json')).ci, 'github');
+});

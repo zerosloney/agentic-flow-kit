@@ -37,6 +37,7 @@ const STACK_IMAGES = {
   go: 'mcr.microsoft.com/devcontainers/go:1.23',
   java: 'mcr.microsoft.com/devcontainers/java:21',
   python: 'mcr.microsoft.com/devcontainers/python:3.12',
+  cpp: 'mcr.microsoft.com/devcontainers/cpp:1',
   empty: 'mcr.microsoft.com/devcontainers/base:ubuntu-24.04',
 };
 const STACK_USER = {
@@ -47,12 +48,13 @@ const STACK_USER = {
   go: 'vscode',
   java: 'vscode',
   python: 'vscode',
+  cpp: 'vscode',
   empty: 'vscode',
 };
 // 镜像里是否真有 node 可执行文件（不是「有没有 nvm 目录」）：只有 typescript-node:22
 // 带 NODE_VERSION；dotnet / go / java 上游是 node feature `version: "none"`（只有 nvm 壳），
 // rust / base 连 node feature 都没有。生成器据此在 Dockerfile 里补装。
-const STACK_NEEDS_NODE = { dotnet: true, rust: true, go: true, java: true, python: true, empty: true };
+const STACK_NEEDS_NODE = { dotnet: true, rust: true, go: true, java: true, python: true, cpp: true, empty: true };
 
 // 安装 manifest 里的 stack 是这里的唯一事实来源（manifest 缺失时退到 empty）。
 function readStack() {

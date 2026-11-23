@@ -87,6 +87,7 @@ test('every stack image ships the baked tooling its container needs', () => {
     go: { user: 'vscode', node: true },
     java: { user: 'vscode', node: true },
     python: { user: 'vscode', node: true },
+    cpp: { user: 'vscode', node: true },
     empty: { user: 'vscode', node: true },
   };
   for (const [stack, want] of Object.entries(expectations)) {
@@ -301,6 +302,26 @@ test('upgrade can turn the container off and on explicitly', () => {
   assert.equal(fs.existsSync(path.join(dir, DOCKERFILE_REL)), true);
 });
 
+// 审查遗留批 2026-11-23：cpp 栈此前在四张表全缺失，容器内无 Node、flow-kit 全挂；这里钉死镜像、
+// 身份（vscode）与 node tar 补装分支的硬断言。
+test('cpp stack renders the official image with node tarball provisioning', () => {
+  const dir = tmpRepo();
+  const r = run(['install', '--agent', 'claude', '--stack', 'cpp', '--target', '.', '--json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  const dockerfile = fs.readFileSync(path.join(dir, DOCKERFILE_REL), 'utf8');
+  assert.match(dockerfile, /^FROM mcr\.microsoft\.com\/devcontainers\/cpp:1$/m);
+  assert.match(dockerfile, /^USER vscode$/m);
+  assert.equal(readDoc(dir).remoteUser, 'vscode');
+  // 官方 cpp 镜像不烘焙 node：必须钉版本补装（ARG NODE_VERSION + nodejs.org 官方 tar + sha256 校验）。
+  assert.match(dockerfile, /^ARG NODE_VERSION=\d+\.\d+\.\d+$/m);
+  assert.match(dockerfile, /https:\/\/nodejs\.org\/dist\/v\d+\.\d+\.\d+\/node-v\d+\.\d+\.\d+-linux-(x64|arm64)\.tar\.gz/);
+  assert.match(dockerfile, /curl -fsSL -o "\$tmp" "\$url"/);
+  assert.match(dockerfile, /sha256sum -c/);
+  assert.match(dockerfile, /tar -xzf "\$tmp" -C \/usr\/local --strip-components=1/);
+  const state = checkDevcontainer({ target: dir, stack: 'cpp' });
+  assert.equal(state.ok, true, state.problems.join('; '));
+});
+
 test('the CI evidence tool statically validates every stack', () => {
   const r = spawnSync(process.execPath, [path.join(KIT, 'tools', 'devcontainer-build.mjs'), '--dry-run', '--json'], {
     cwd: KIT,
@@ -310,8 +331,8 @@ test('the CI evidence tool statically validates every stack', () => {
   assert.equal(r.status, 0, r.stderr);
   const payload = JSON.parse(r.stdout);
   assert.equal(payload.ok, true);
-  assert.deepEqual(payload.stacks, ['dotnet', 'node', 'typescript', 'rust', 'go', 'java', 'python', 'empty']);
-  assert.equal(payload.results.length, 8);
+  assert.deepEqual(payload.stacks, ['dotnet', 'node', 'typescript', 'rust', 'go', 'java', 'python', 'cpp', 'empty']);
+  assert.equal(payload.results.length, 9);
   assert.equal(payload.results.every((x) => x.ok), true, JSON.stringify(payload.results));
 });
 

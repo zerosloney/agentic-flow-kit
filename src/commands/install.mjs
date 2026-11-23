@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { flag } from '../cli/args.mjs';
 import { makeT } from '../i18n.mjs';
@@ -24,14 +23,10 @@ import {
   parseModelFlags, readInjectedModels, resolveModels, summarizeModels, writeLocalModelRoles,
 } from '../models/resolve.mjs';
 
-export function readKitVersion() {
-  try {
-    const pkg = JSON.parse(fs.readFileSync(fileURLToPath(new URL('../../package.json', import.meta.url)), 'utf8'));
-    return pkg.version || '0.0.0';
-  } catch {
-    return '0.0.0';
-  }
-}
+// 审查遗留批 2026-11-23：实现迁往 src/install/version.mjs 单源；此处 import + 再导出，
+// 既有外部导入方（tools/lint-templates、tui/hud、workspace、bundle）零变化，模块内 KIT_VERSION 照常可用。
+import { readKitVersion } from '../install/version.mjs';
+export { readKitVersion };
 
 const KIT_VERSION = readKitVersion();
 
@@ -390,8 +385,9 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
     }
   }
   // CI 交付面：显式 --ci 优先；其次重放 manifest。旧 manifest（≤2.10，无 ci 字段）按既有交付面
-  // （manifest.files 里实际安装的 CI 文件）推导，不得按 origin 重新探测而搁浅旧 CI 文件；无文件时按档位回退。
-  // 全新安装按 origin 择一（github / azure），认不出时 enterprise 档双发以满足策略承诺，其余档写 none。lean 仍不发。
+  // （manifest.files 里实际安装的 CI 文件）推导，不得按 origin 重新探测而搁浅旧 CI 文件；从未装过 CI
+  // （无文件）时按全新安装同款的 origin 探测择一（github / azure），认不出回 none——不回 both，避免
+  // 给从未有 CI 的旧装凭空补发双份 CI 文件（enterprise 保持双发以满足策略承诺）。lean 仍不发。
   const legacyCiFromFiles = (m) => {
     if (!m?.files) return null;
     const hasGithub = '.github/workflows/ci.yml' in m.files;
@@ -406,7 +402,10 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
     : previous
       ? (previous.ci !== undefined && previous.ci !== null
         ? previous.ci
-        : (legacyCiFromFiles(previous) || (previous.tier === 'lean' ? 'none' : 'both')))
+        : (legacyCiFromFiles(previous)
+          // 审查遗留批 2026-11-23：无既有 CI 文件时复用全新安装的 origin 探测，不再无条件回退 both。
+          // lean 档与全新安装同口径：恒不发 CI（ci-select 回归）。
+          || (tier === 'lean' ? null : (forgeFromRemote(originUrl(target)) || (tier === 'enterprise' ? 'both' : 'none')))))
       : (tier === 'lean' ? null : (forgeFromRemote(originUrl(target)) || (tier === 'enterprise' ? 'both' : 'none')));
 
   let modelFlags;

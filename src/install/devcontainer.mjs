@@ -30,6 +30,8 @@ export const STACK_IMAGES = {
   go: 'mcr.microsoft.com/devcontainers/go:1.23',
   java: 'mcr.microsoft.com/devcontainers/java:21',
   python: 'mcr.microsoft.com/devcontainers/python:3.12',
+  // cpp:1 是 MCR 上真实存在的 tag（2026-11-23 核对 v2 tags/list；风格对齐 rust:1 的浮动 major tag）。
+  cpp: 'mcr.microsoft.com/devcontainers/cpp:1',
   empty: 'mcr.microsoft.com/devcontainers/base:ubuntu-24.04',
 };
 
@@ -42,6 +44,7 @@ export const STACK_CONTAINER_USER = {
   go: 'vscode',
   java: 'vscode',
   python: 'vscode',
+  cpp: 'vscode',
   empty: 'vscode',
 };
 
@@ -63,6 +66,7 @@ export const STACK_PROVISIONS_NODE = {
   go: true,
   java: true,
   python: true,
+  cpp: true,
   empty: true,
 };
 
@@ -74,6 +78,7 @@ export const STACK_EXTENSIONS = {
   go: ['golang.go'],
   java: ['redhat.java'],
   python: ['ms-python.python'],
+  cpp: ['ms-vscode.cpptools'],
   empty: [],
 };
 
@@ -138,7 +143,7 @@ export function renderDevcontainerJson({ projectName, stack, apiPort, webPort })
 // 生成 Dockerfile。产物分两种形态：
 //   - 镜像自带可执行的 node（node / typescript）：直接以镜像的非 root 用户
 //     `npm install -g`。这些镜像的 PATH 已含 node 与 npm 全局目录。
-//   - 镜像没有 node（dotnet / rust / go / java / empty，见 STACK_PROVISIONS_NODE）：
+//   - 镜像没有 node（dotnet / rust / go / java / python / cpp / empty，见 STACK_PROVISIONS_NODE）：
 //     先以 root 装 node（钉死版本 + 校验 sha256），再切到镜像自带的非 root 用户装 flow-kit。
 // 两处都以「镜像自带用户」为准，不新造用户：新造用户需要 UID/GID/家目录全对齐，
 // 而上游镜像已经建好了对应身份。
