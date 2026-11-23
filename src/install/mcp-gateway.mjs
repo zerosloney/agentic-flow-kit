@@ -70,6 +70,21 @@ export const DEFAULT_GATEWAY_POLICY = {
   },
 };
 
+function mergeRoleConfig(base, override) {
+  const merged = { ...base, ...override };
+  for (const key of ['allow', 'deny']) {
+    if (Array.isArray(base?.[key]) || Array.isArray(override?.[key])) {
+      merged[key] = [
+        ...new Set([
+          ...(Array.isArray(base?.[key]) ? base[key] : []),
+          ...(Array.isArray(override?.[key]) ? override[key] : []),
+        ]),
+      ];
+    }
+  }
+  return merged;
+}
+
 export function readGatewayPolicy(target) {
   const file = path.join(target, MCP_GATEWAY_CONFIG_REL);
   if (!fs.existsSync(file)) {
@@ -77,9 +92,13 @@ export function readGatewayPolicy(target) {
   }
   try {
     const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    const roles = { ...DEFAULT_GATEWAY_POLICY.roles };
+    for (const [name, config] of Object.entries(parsed.roles || {})) {
+      roles[name] = mergeRoleConfig(DEFAULT_GATEWAY_POLICY.roles[name], config);
+    }
     return {
       mode: parsed.mode || DEFAULT_GATEWAY_POLICY.mode,
-      roles: { ...DEFAULT_GATEWAY_POLICY.roles, ...(parsed.roles || {}) },
+      roles,
       levels: { ...DEFAULT_GATEWAY_POLICY.levels, ...(parsed.levels || {}) },
       parameterRules: Array.isArray(parsed.parameterRules) ? parsed.parameterRules : DEFAULT_GATEWAY_POLICY.parameterRules,
       rateLimits: { ...DEFAULT_GATEWAY_POLICY.rateLimits, ...(parsed.rateLimits || {}) },
@@ -159,39 +178,48 @@ export function evaluateMcpCall({
 
   // 2. Role-Based Access Control (RBAC)
   const roleConfig = activePolicy.roles?.[role];
-  if (roleConfig) {
-    const allows = Array.isArray(roleConfig.allow) ? roleConfig.allow : [];
-    const denies = Array.isArray(roleConfig.deny) ? roleConfig.deny : [];
+  if (!roleConfig) {
+    return {
+      allowed: false,
+      decision: 'DENIED_RBAC',
+      reason: `Unknown role '${role}' is not authorized to invoke tool '${tool}'`,
+      level,
+      role,
+      server,
+      tool,
+    };
+  }
+  const allows = Array.isArray(roleConfig.allow) ? roleConfig.allow : [];
+  const denies = Array.isArray(roleConfig.deny) ? roleConfig.deny : [];
 
-    const isExplicitlyAllowed = allows.includes(tool);
-    const isWildcardAllowed = allows.includes('*');
-    const isExplicitlyDenied = denies.includes(tool);
-    const isWildcardDenied = denies.includes('*');
+  const isExplicitlyAllowed = allows.includes(tool);
+  const isWildcardAllowed = allows.includes('*');
+  const isExplicitlyDenied = denies.includes(tool);
+  const isWildcardDenied = denies.includes('*');
 
-    if (isExplicitlyDenied) {
+  if (isExplicitlyDenied) {
+    return {
+      allowed: false,
+      decision: 'DENIED_RBAC',
+      reason: `Role '${role}' is explicitly denied from invoking tool '${tool}'`,
+      level,
+      role,
+      server,
+      tool,
+    };
+  }
+
+  if (!isExplicitlyAllowed) {
+    if (isWildcardDenied || (!isWildcardAllowed && Array.isArray(roleConfig.allow))) {
       return {
         allowed: false,
         decision: 'DENIED_RBAC',
-        reason: `Role '${role}' is explicitly denied from invoking tool '${tool}'`,
+        reason: `Role '${role}' is not authorized to invoke tool '${tool}'`,
         level,
         role,
         server,
         tool,
       };
-    }
-
-    if (!isExplicitlyAllowed) {
-      if (isWildcardDenied || (!isWildcardAllowed && allows.length > 0)) {
-        return {
-          allowed: false,
-          decision: 'DENIED_RBAC',
-          reason: `Role '${role}' is not authorized to invoke tool '${tool}'`,
-          level,
-          role,
-          server,
-          tool,
-        };
-      }
     }
   }
 

@@ -6,7 +6,7 @@
 //   2) 构建层（需要 docker）：对选定栈真跑 docker build + docker run，产出「容器可构建且可运行」的硬证据。
 //      环境失守（docker 不在 PATH）→ 退出 2（fail-closed），绝不假装构建过。
 // 用法：node tools/devcontainer-build.mjs [--stacks node,dotnet] [--json] [--dry-run] [--no-run]
-//   --stacks  要真构建的栈（逗号分隔，默认 node；环境变量 FLOW_KIT_DC_STACKS 同效）。静态层恒覆盖全部 7 栈。
+//   --stacks  要真构建的栈（逗号分隔，默认 node；环境变量 FLOW_KIT_DC_STACKS 同效）。静态层恒覆盖全部 8 栈。
 //   --dry-run 只生成 + 静态校验 + 打印将要执行的 docker 命令，不真构建。
 //   --no-run  只 build，不跑起容器做冒烟。
 // 退出码：0 全过；1 有静态违规或构建失败；2 环境失守（docker 缺失）。
@@ -20,7 +20,7 @@ import { checkDevcontainer } from '../src/install/devcontainer.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const KIT = path.resolve(HERE, '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
-const ALL_STACKS = ['dotnet', 'node', 'typescript', 'rust', 'go', 'java', 'empty'];
+const ALL_STACKS = ['dotnet', 'node', 'typescript', 'rust', 'go', 'java', 'python', 'empty'];
 const BUILD_TIMEOUT_MS = 25 * 60 * 1000;
 
 const argv = process.argv.slice(2);
@@ -87,7 +87,7 @@ function record(entry) {
   if (entry.detail) console.log(`   ${entry.detail}`);
 }
 
-// ---- 静态层：全部 7 栈，零 docker 依赖
+// ---- 静态层：全部 8 栈，零 docker 依赖
 for (const stack of ALL_STACKS) {
   const { dir, error } = generate(stack);
   if (error) {

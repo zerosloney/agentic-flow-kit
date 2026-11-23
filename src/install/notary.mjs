@@ -15,6 +15,17 @@ export const ALGORITHMS = {
   RSA_SHA256: 'rsa-sha256',
 };
 
+export const DEFAULT_KEY_NAME = 'flow-kit-key';
+
+// 默认公钥位置（keygen/sign/verify 的约定路径），兼容手工放置的历史路径 .agents/notary/public.pem
+export function resolvePublicKeyPath(target) {
+  const primary = path.join(target, '.agents', 'keys', `${DEFAULT_KEY_NAME}.pub.pem`);
+  const legacy = path.join(target, '.agents', 'notary', 'public.pem');
+  if (fs.existsSync(primary)) return primary;
+  if (fs.existsSync(legacy)) return legacy;
+  return primary;
+}
+
 export function sha256(value) {
   return crypto.createHash('sha256').update(value).digest('hex');
 }

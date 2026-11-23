@@ -13,7 +13,7 @@ import {
   pruneWorkOrderContext, listAllRuns, renderMarkdown, inspectArtifact, getAvailableTargets, renderInspect,
   analyzeGateFailure, manifestPristine, isRuntimeOrManaged, checkAuthorized, validateDraftContent, closeoutComplete,
 } from '../templates/engine/.agents/scripts/pipeline-run.mjs';
-import { touchProblems, externalReviewId, parseReviewMetadata, filesOutsidePlan } from '../templates/engine/.agents/scripts/touch-set.mjs';
+import { touchProblems, externalReviewId, parseReviewMetadata, filesOutsidePlan, planPaths } from '../templates/engine/.agents/scripts/touch-set.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..');
@@ -626,6 +626,22 @@ test('touch set: prose hits, template lines do not', () => {
   assert.equal(externalReviewId('复核上下文：<会话或子代理 id>'), '');
   assert.equal(externalReviewId('- 独立复核：通过（复核上下文：sess-9f3a2c）'), 'sess-9f3a2c');
   assert.deepEqual(filesOutsidePlan(['src/b.mjs', 'src/a.mjs'], 'src/a.mjs'), ['src/b.mjs']);
+});
+
+test('touch set: fill-plan L3 hint span is a form line, real schema lines still trip', () => {
+  // fill-plan.mjs 的 L1 计划模板自带提示行（长 span，含 schema 字样）；保留即落盘不应误报
+  const hint = '- L3 追加：<含 schema 变更：备份 + 回滚 SQL 就绪后执行；仅运行时 / 管线：回退上一 release tag + 配置开关预案>';
+  assert.deepEqual(touchProblems(hint, 'L1'), []);
+  assert.deepEqual(touchProblems(hint, 'L2'), []);
+  // 防过度豁免：真实 L1 计划正文提到 schema 仍须报错
+  assert.deepEqual(touchProblems('本次改动含 schema 变更', 'L1'), ['触达schema。级别写 L3。']);
+});
+
+test('touch set: bold markdown paths are collected into the plan allowlist', () => {
+  const section = '改动：**src/a.mjs** 改文案';
+  assert.ok(planPaths(section).has('src/a.mjs'));
+  assert.deepEqual(filesOutsidePlan(['src/a.mjs'], section), []);
+  assert.deepEqual(filesOutsidePlan(['src/a.mjs', 'src/b.mjs'], section), ['src/b.mjs']);
 });
 
 test('triage stops when the requirement hits the closed set below level', () => {
@@ -1480,14 +1496,22 @@ test('isRuntimeOrManaged: matches runtime allowlist and installer merge-blocks',
   assert.equal(isRuntimeOrManaged(ctx, '.agents/.kit/baseline/snapshot.json'), true);
   assert.equal(isRuntimeOrManaged(ctx, '.agents/verifications.jsonl'), true);
   assert.equal(isRuntimeOrManaged(ctx, '.agents/judgments.jsonl'), true);
-  assert.equal(isRuntimeOrManaged(ctx, '.agents/evals/report.json'), true);
+  // 评测凭证是可归因的零信任证据面，必须由工单在 --files 显式申报
+  assert.equal(isRuntimeOrManaged(ctx, '.agents/evals/report.json'), false);
+  assert.equal(isRuntimeOrManaged(ctx, '.agents/evals/results.jsonl'), false);
   assert.equal(isRuntimeOrManaged(ctx, '.agents/install-manifest.json'), true);
 
   // Managed merge blocks in .gitattributes and .gitignore
-  fs.writeFileSync(path.join(root, '.gitattributes'), '# <!-- magpie:begin -->\n* text=auto eol=lf\n# <!-- magpie:end -->\n');
-  fs.writeFileSync(path.join(root, '.gitignore'), '# agentic-flow-kit managed\n.agents/cache/\n');
+  fs.writeFileSync(path.join(root, '.gitattributes'), '# >>> agentic-flow-kit gitattributes\n* text=auto eol=lf\n# <<< agentic-flow-kit gitattributes\n');
+  fs.writeFileSync(path.join(root, '.gitignore'), '# >>> agentic-flow-kit ignores\n.agents/cache/\n# <<< agentic-flow-kit ignores\n');
   assert.equal(isRuntimeOrManaged(ctx, '.gitattributes'), true);
   assert.equal(isRuntimeOrManaged(ctx, '.gitignore'), true);
+
+  // 裸名称或旧 magpie 标记不是托管块：不得豁免
+  fs.writeFileSync(path.join(root, '.gitattributes'), '# <!-- magpie:begin -->\n* text=auto eol=lf\n# <!-- magpie:end -->\n');
+  fs.writeFileSync(path.join(root, '.gitignore'), '# agentic-flow-kit managed\n.agents/cache/\n');
+  assert.equal(isRuntimeOrManaged(ctx, '.gitattributes'), false);
+  assert.equal(isRuntimeOrManaged(ctx, '.gitignore'), false);
 
   // Normal user file
   assert.equal(isRuntimeOrManaged(ctx, 'src/index.js'), false);
@@ -1552,6 +1576,68 @@ test('checkAuthorized: tolerates zero-commit cold start runtime files and gives 
   assert.match(failRes.problems[0], /git 改动超出回填清单（偏离即停）/);
   assert.match(failRes.problems[0], /git 改动超出回填清单（偏离即停）：unexpected\.txt/);
   assert.match(failRes.problems[0], /请将其加入 --files/);
+});
+
+test('checkAuthorized: run-owned workflow docs are exempt from extra but unplanned code is not', () => {
+  const root = fixture();
+  assert.equal(spawnSync('git', ['init', '-q'], { cwd: root }).status, 0);
+  assert.equal(spawnSync('git', ['add', '-A'], { cwd: root }).status, 0);
+  assert.equal(spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'baseline'], { cwd: root }).status, 0);
+
+  // run 自身文档落在任务目录，均未提交（关单才入库）；plan 的「改动方案」只列 src/planned.mjs
+  const taskDir = 'workflow/tasks/2026-11-13-test';
+  const write = (rel, text) => {
+    fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    fs.writeFileSync(path.join(root, rel), text);
+  };
+  write(`${taskDir}/entry.md`, '---\n状态: draft\n级别: L1\n---\n\n# 需求\n');
+  write(`${taskDir}/spec.md`, '---\n状态: draft\n级别: L1\n---\n\n## 验收标准\n\n- [ ] ok\n');
+  write(`${taskDir}/plan.md`, '---\n状态: draft\n级别: L1\n---\n\n## 改动方案\n\n- src/planned.mjs：改文案\n');
+  write(`${taskDir}/api.md`, '# API\n');
+  write(`${taskDir}/notes.md`, '# 任务内附加文档（未登记在 docs）\n');
+  write('src/planned.mjs', 'export const x = 1;\n');
+
+  const ctx = { root, gitPrefix: ['git'], runsDir: path.join(root, '.agents', 'cache', 'pipeline-runs') };
+  const run = {
+    runId: 'test-owned', stage: 'implement', events: [],
+    createdAt: NOW, triage: { topic: 'test' },
+    docs: { entry: `${taskDir}/entry.md`, spec: `${taskDir}/spec.md`, plan: `${taskDir}/plan.md`, apiDocs: `${taskDir}/api.md` },
+  };
+
+  const ownedListed = [
+    run.docs.entry, run.docs.spec, run.docs.plan, run.docs.apiDocs, `${taskDir}/notes.md`, 'src/planned.mjs',
+  ].join(', ');
+  const okRes = checkAuthorized(ctx, run, ownedListed);
+  assert.equal(okRes.ok, true, JSON.stringify(okRes.problems));
+  assert.deepEqual(okRes.extra, [], 'run 自身文档与计划内代码都不应算计划外');
+
+  // 对照：真正的计划外代码文件仍必须出现在 extra
+  write('src/rogue.mjs', 'export const y = 2;\n');
+  const extraRes = checkAuthorized(ctx, run, `${ownedListed}, src/rogue.mjs`);
+  assert.equal(extraRes.ok, true);
+  assert.deepEqual(extraRes.extra, ['src/rogue.mjs']);
+});
+
+test('checkAuthorized: eval evidence changes stop unless declared in --files', () => {
+  const root = fixture();
+  assert.equal(spawnSync('git', ['init', '-q'], { cwd: root }).status, 0);
+  assert.equal(spawnSync('git', ['add', '-A'], { cwd: root }).status, 0);
+  assert.equal(spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'baseline'], { cwd: root }).status, 0);
+
+  // 工单改写评测凭证：未申报 → 偏离即停；显式申报 → 放行
+  fs.mkdirSync(path.join(root, '.agents/evals'), { recursive: true });
+  fs.writeFileSync(path.join(root, '.agents/evals/results.jsonl'), '{"ts":"2026-01-01T00:00:00Z","exitCode":0}\n');
+
+  const ctx = { root, gitPrefix: ['git'], runsDir: path.join(root, '.agents', 'cache', 'pipeline-runs') };
+  const run = { runId: 'test-eval', stage: 'implement', events: [], docs: { plan: 'workflow/plans/t.md' } };
+
+  const blocked = checkAuthorized(ctx, run, 'workflow/plans/t.md');
+  assert.equal(blocked.ok, false);
+  assert.match(blocked.problems[0], /偏离即停/);
+  assert.match(blocked.problems[0], /\.agents\/evals\/results\.jsonl/);
+
+  const allowed = checkAuthorized(ctx, run, 'workflow/plans/t.md, .agents/evals/results.jsonl');
+  assert.equal(allowed.ok, true);
 });
 
 test('L0 fast-track: validateDraftContent and closeoutComplete accept lite sections', () => {

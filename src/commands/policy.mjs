@@ -282,6 +282,7 @@ function syncCommand({ args, t, target, asJson }) {
 
   const remoteHandle = resolveRemotePolicy({ url, ref, target, t });
   const updatedFiles = [];
+  const conflicts = [];
 
   try {
     const remotePolicy = remoteHandle.policy;
@@ -308,13 +309,30 @@ function syncCommand({ args, t, target, asJson }) {
       const remoteText = remoteHandle.readText(rel);
       if (typeof remoteText === 'string') {
         const localPath = path.join(target, rel);
-        fs.mkdirSync(path.dirname(localPath), { recursive: true });
         const normalized = remoteText.replace(/\r\n/g, '\n');
+        const remoteHash = sha256Text(normalized);
+        const managedHash = manifest?.files && rel in manifest.files ? manifest.files[rel] : null;
+
+        // 用户改过的托管策略面不静默覆盖：与 manifest 对账后跳过，交由用户解决。
+        if (managedHash && fs.existsSync(localPath)) {
+          const localHash = sha256File(localPath);
+          if (localHash !== managedHash) {
+            conflicts.push({
+              surface: key,
+              rel,
+              local: localHash.slice(0, 12),
+              remote: remoteHash.slice(0, 12),
+            });
+            continue;
+          }
+        }
+
+        fs.mkdirSync(path.dirname(localPath), { recursive: true });
         writeAtomicSync(localPath, normalized);
         updatedFiles.push(rel);
 
         if (manifest?.files && rel in manifest.files) {
-          manifest.files[rel] = sha256Text(normalized);
+          manifest.files[rel] = remoteHash;
         }
       }
     }
@@ -340,13 +358,22 @@ function syncCommand({ args, t, target, asJson }) {
         ref,
         updatedCount: updatedFiles.length,
         updatedFiles,
+        conflicts,
       }, null, 2));
     } else {
       console.log(t('policy.syncComplete', { count: updatedFiles.length }));
       for (const rel of updatedFiles) {
         console.log(`  ✓ ${rel}`);
       }
+      if (conflicts.length > 0) {
+        console.log(t('policy.syncConflictTitle', { count: conflicts.length }));
+        for (const conflict of conflicts) {
+          console.log(t('policy.syncConflictLine', { surface: conflict.surface, rel: conflict.rel }));
+        }
+        console.log(t('policy.syncConflictHint'));
+      }
     }
+    if (args.flags.has('strict') && conflicts.length > 0) return 1;
     return 0;
   } finally {
     remoteHandle.cleanup();

@@ -249,6 +249,15 @@ export function readBundle(filePath, t = null) {
   return { isDir: false, path: abs, bundle };
 }
 
+function isUnsafeBundleRel(rel) {
+  if (typeof rel !== 'string' || rel.length === 0) return true;
+  if (path.isAbsolute(rel) || path.posix.isAbsolute(rel) || path.win32.isAbsolute(rel)) return true;
+  return [path.posix.normalize(rel), path.win32.normalize(rel)].some((norm) => {
+    if (norm.startsWith('..')) return true;
+    return norm.split(/[\\/]/).includes('..');
+  });
+}
+
 export function verifyBundle(bundleHandle, t = null) {
   if (bundleHandle.isDir) {
     const dir = bundleHandle.path;
@@ -256,7 +265,10 @@ export function verifyBundle(bundleHandle, t = null) {
     const corruptions = [];
     const fileHashes = {};
 
-    const items = walkDir(path.join(dir, 'templates')).concat(walkDir(path.join(dir, 'locales')));
+    const items = [];
+    for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+      if (ent.isDirectory()) items.push(...walkDir(path.join(dir, ent.name)));
+    }
     for (const item of items) {
       const rel = path.relative(dir, item.abs).replace(/\\/g, '/');
       const buf = fs.readFileSync(item.abs);
@@ -291,6 +303,9 @@ export function verifyBundle(bundleHandle, t = null) {
   const fileHashes = {};
 
   for (const [rel, entry] of Object.entries(bundle.files || {})) {
+    if (isUnsafeBundleRel(rel)) {
+      corruptions.push(`${rel} (unsafe path)`);
+    }
     let buf;
     if (entry.encoding === 'base64') {
       buf = Buffer.from(entry.content, 'base64');

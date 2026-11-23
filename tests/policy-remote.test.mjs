@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import crypto from 'node:crypto';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
@@ -127,6 +128,119 @@ test('policy check and sync against central baseline detects drift and converges
   // 验证 manifest 哈希已被更新
   const manifest = JSON.parse(fs.readFileSync(path.join(target, '.agents', 'install-manifest.json'), 'utf8'));
   assert.ok(manifest.files['.agents/config/gate-budgets.json']);
+});
+
+test('policy sync skips user-modified managed surfaces and reports conflicts', () => {
+  const central = makeTmp('flow-kit-central-conflict-');
+  const target = installTarget();
+  const rel = '.agents/config/gate-budgets.json';
+  const localPath = path.join(target, rel);
+  const manifestPath = path.join(target, '.agents', 'install-manifest.json');
+
+  const remotePolicy = {
+    $schema: 'policy/config@1',
+    version: 2,
+    surfaces: { gateBudgets: rel },
+  };
+  fs.mkdirSync(path.join(central, '.agents', 'config'), { recursive: true });
+  fs.writeFileSync(path.join(central, '.agents', 'config', 'policy.json'), JSON.stringify(remotePolicy, null, 2));
+  fs.writeFileSync(path.join(central, rel), fs.readFileSync(localPath));
+
+  assert.equal(runCli(target, ['policy', 'link', central, '--target', '.']).status, 0);
+
+  const beforeManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  const beforeHash = beforeManifest.files[rel];
+  assert.ok(beforeHash, 'installed surface must be tracked in manifest');
+
+  // 用户本地治理调优
+  const userContent = JSON.stringify({ fullMs: 4242, userTuned: true }, null, 2);
+  fs.writeFileSync(localPath, userContent);
+
+  // 中央基线同步到不同内容
+  const remoteContent = JSON.stringify({ fullMs: 999999 }, null, 2);
+  fs.writeFileSync(path.join(central, rel), remoteContent);
+
+  const syncRes = runCli(target, ['policy', 'sync', '--target', '.', '--json', '--strict']);
+  assert.equal(syncRes.status, 1, syncRes.stderr);
+  const out = json(syncRes);
+  assert.equal(out.conflicts.length, 1);
+  assert.equal(out.conflicts[0].surface, 'gateBudgets');
+  assert.equal(out.conflicts[0].rel, rel);
+  assert.ok(out.conflicts[0].local);
+  assert.ok(out.conflicts[0].remote);
+  assert.equal(out.updatedFiles.includes(rel), false);
+
+  // 本地内容与 manifest 记录均保持不变
+  assert.equal(fs.readFileSync(localPath, 'utf8'), userContent);
+  const afterManifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  assert.equal(afterManifest.files[rel], beforeHash);
+});
+
+test('policy sync without strict still writes unmodified managed surfaces', () => {
+  const central = makeTmp('flow-kit-central-clean-');
+  const target = installTarget();
+  const rel = '.agents/config/gate-budgets.json';
+  const localPath = path.join(target, rel);
+  const manifestPath = path.join(target, '.agents', 'install-manifest.json');
+
+  const remotePolicy = {
+    $schema: 'policy/config@1',
+    version: 2,
+    surfaces: { gateBudgets: rel },
+  };
+  fs.mkdirSync(path.join(central, '.agents', 'config'), { recursive: true });
+  fs.writeFileSync(path.join(central, '.agents', 'config', 'policy.json'), JSON.stringify(remotePolicy, null, 2));
+  fs.writeFileSync(path.join(central, rel), fs.readFileSync(localPath));
+
+  assert.equal(runCli(target, ['policy', 'link', central, '--target', '.']).status, 0);
+  const beforeHash = JSON.parse(fs.readFileSync(manifestPath, 'utf8')).files[rel];
+  assert.ok(beforeHash);
+
+  const remoteContent = JSON.stringify({ fullMs: 777777 }, null, 2);
+  fs.writeFileSync(path.join(central, rel), remoteContent);
+
+  const syncRes = runCli(target, ['policy', 'sync', '--target', '.', '--json', '--strict']);
+  assert.equal(syncRes.status, 0, syncRes.stderr);
+  const out = json(syncRes);
+  assert.deepEqual(out.conflicts, []);
+  assert.ok(out.updatedFiles.includes(rel));
+  assert.equal(fs.readFileSync(localPath, 'utf8'), remoteContent);
+
+  const expectedHash = crypto.createHash('sha256').update(remoteContent, 'utf8').digest('hex');
+  assert.equal(JSON.parse(fs.readFileSync(manifestPath, 'utf8')).files[rel], expectedHash);
+  assert.notEqual(expectedHash, beforeHash);
+});
+
+test('policy sync writes surfaces not tracked by the manifest', () => {
+  const central = makeTmp('flow-kit-central-untracked-');
+  const target = installTarget();
+  const rel = '.agents/config/custom-surface.json';
+  const localPath = path.join(target, rel);
+  const manifestPath = path.join(target, '.agents', 'install-manifest.json');
+
+  const remotePolicy = {
+    $schema: 'policy/config@1',
+    version: 1,
+    surfaces: { custom: rel },
+  };
+  fs.mkdirSync(path.join(central, '.agents', 'config'), { recursive: true });
+  fs.writeFileSync(path.join(central, '.agents', 'config', 'policy.json'), JSON.stringify(remotePolicy, null, 2));
+  const remoteContent = JSON.stringify({ from: 'central' }, null, 2);
+  fs.writeFileSync(path.join(central, rel), remoteContent);
+
+  assert.equal(runCli(target, ['policy', 'link', central, '--target', '.']).status, 0);
+  fs.mkdirSync(path.dirname(localPath), { recursive: true });
+  fs.writeFileSync(localPath, JSON.stringify({ from: 'user' }, null, 2));
+
+  const syncRes = runCli(target, ['policy', 'sync', '--target', '.', '--json']);
+  assert.equal(syncRes.status, 0, syncRes.stderr);
+  const out = json(syncRes);
+  assert.deepEqual(out.conflicts, []);
+  assert.ok(out.updatedFiles.includes(rel));
+  assert.equal(fs.readFileSync(localPath, 'utf8'), remoteContent);
+
+  // 非托管面维持现行为：不新增 manifest 记录
+  assert.equal(rel in JSON.parse(fs.readFileSync(manifestPath, 'utf8')).files, false);
 });
 
 test('doctor and attestation verify remote policy status and chain binding', () => {

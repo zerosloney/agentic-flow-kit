@@ -101,7 +101,9 @@ export async function migrateManifest({ target, manifest, dryRun = false, migrat
       const hash = previousFiles[rel];
       if (hash) pendingRemovals[rel] = hash;
     }
-    if (Object.keys(pendingRemovals).length) current.pendingRemovals = pendingRemovals;
+    // 与既有资格合并而非覆盖：上一次迁移后的清理若中断，遗留资格不能被后续迁移抹掉。
+    const mergedRemovals = { ...(current.pendingRemovals || {}), ...pendingRemovals };
+    if (Object.keys(mergedRemovals).length) current.pendingRemovals = mergedRemovals;
     writeManifest(target, current);
   }
   return {

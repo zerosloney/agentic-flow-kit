@@ -4,6 +4,7 @@ import { readManifest } from '../install/manifest.mjs';
 import { readKitVersion } from '../commands/install.mjs';
 import { runGateChecks } from '../ci/gate.mjs';
 import { listHandoffFiles, verifyHandoffEnvelope } from '../install/handoff.mjs';
+import { resolvePublicKeyPath } from '../install/notary.mjs';
 import { findSkillDatasets } from '../skills/eval-harness.mjs';
 import { computeAiDoraMetrics } from '../install/metrics.mjs';
 import { box, cyan, green, red, yellow, bold, dim, magenta } from './ansi.mjs';
@@ -11,7 +12,7 @@ import { box, cyan, green, red, yellow, bold, dim, magenta } from './ansi.mjs';
 /**
  * 汇总当前项目的全景运行时状态数据（用于终端实时多智能体看板）
  */
-export function gatherHudState(target, t) {
+export function gatherHudState(target, t, { cache = null, now = Date.now(), ttlMs = 30000 } = {}) {
   const absTarget = path.resolve(target || process.cwd());
   const manifest = readManifest(absTarget) || {};
   let kitVersion = 'unknown';
@@ -50,31 +51,59 @@ export function gatherHudState(target, t) {
   };
 
   // 2. 零信任质量门禁与哨兵状态
-  const gateResult = runGateChecks({ target: absTarget, strict: false, t });
-
   // 3. 多智能体交接网格 (Handoff Mesh)
-  let handoffs = [];
-  let tamperedHandoffs = 0;
-  const pubKeyPath = path.join(absTarget, '.agents', 'notary', 'public.pem');
-  const pubKey = fs.existsSync(pubKeyPath) ? fs.readFileSync(pubKeyPath, 'utf8') : null;
+  // 这两段（门禁全量守卫 + RSA 验签）较昂贵：传入 cache 时按 TTL 复用。
+  let gateResult;
+  let handoffStats;
+  const cacheFresh = cache != null && cache.at != null && now - cache.at < ttlMs;
 
-  try {
-    handoffs = listHandoffFiles(absTarget);
-    for (const h of handoffs) {
-      const v = verifyHandoffEnvelope({ target: absTarget, envelope: h.envelope, publicKeyPem: pubKey });
-      if (!v.ok) tamperedHandoffs += 1;
+  if (cacheFresh) {
+    gateResult = cache.gate;
+    handoffStats = cache.handoffs;
+  } else {
+    gateResult = runGateChecks({ target: absTarget, strict: false, t });
+
+    let handoffs = [];
+    let tamperedHandoffs = 0;
+    let warnedHandoffs = 0;
+    const handoffWarnings = [];
+    const pubKeyPath = resolvePublicKeyPath(absTarget);
+    const pubKey = fs.existsSync(pubKeyPath) ? fs.readFileSync(pubKeyPath, 'utf8') : null;
+
+    try {
+      handoffs = listHandoffFiles(absTarget);
+      for (const h of handoffs) {
+        const v = verifyHandoffEnvelope({ target: absTarget, envelope: h.envelope, publicKeyPem: pubKey });
+        if (!v.ok) {
+          tamperedHandoffs += 1;
+        } else if (v.warnings && v.warnings.length) {
+          // 可疑指令不阻断交接，但必须可见：hud 统计并在面板列出。
+          warnedHandoffs += 1;
+          for (const w of v.warnings) {
+            if (handoffWarnings.length < 5) handoffWarnings.push(w);
+          }
+        }
+      }
+    } catch {}
+
+    handoffStats = {
+      total: handoffs.length,
+      pending: handoffs.filter((h) => h.envelope?.status === 'pending').length,
+      accepted: handoffs.filter((h) => h.envelope?.status === 'accepted').length,
+      completed: handoffs.filter((h) => h.envelope?.status === 'completed').length,
+      rejected: handoffs.filter((h) => h.envelope?.status === 'rejected').length,
+      tampered: tamperedHandoffs,
+      warned: warnedHandoffs,
+      warnings: handoffWarnings,
+      clean: tamperedHandoffs === 0,
+    };
+
+    if (cache != null) {
+      cache.at = now;
+      cache.gate = gateResult;
+      cache.handoffs = handoffStats;
     }
-  } catch {}
-
-  const handoffStats = {
-    total: handoffs.length,
-    pending: handoffs.filter((h) => h.envelope?.status === 'pending').length,
-    accepted: handoffs.filter((h) => h.envelope?.status === 'accepted').length,
-    completed: handoffs.filter((h) => h.envelope?.status === 'completed').length,
-    rejected: handoffs.filter((h) => h.envelope?.status === 'rejected').length,
-    tampered: tamperedHandoffs,
-    clean: tamperedHandoffs === 0,
-  };
+  }
 
   // 4. 技能套件评测基准 (Skills Benchmark)
   let installedSkillsCount = 0;
@@ -180,6 +209,9 @@ export function renderHudView(state, t) {
     `Envelopes : ${bold(handoffs.total)} total  ${dim('│')}  Pending: ${yellow(handoffs.pending)}  ${dim('│')}  Accepted: ${green(handoffs.accepted)}  ${dim('│')}  Completed: ${cyan(handoffs.completed)}`,
     `Integrity : ${contamStatus}`,
   ];
+  if (handoffs.warned) {
+    handoffLines.push(`Warnings  : ${yellow(`⚠ ${handoffs.warned} envelope(s) with suspicious directives`)}`);
+  }
   out.push(...box(bold('🤝 Multi-Agent Task Mesh & Handoffs'), handoffLines));
   out.push('');
 
@@ -227,6 +259,7 @@ export async function hudWatchLoop({
   t,
   lang = 'zh-CN',
   interval = 2,
+  gateTtlMs = 30000,
   inputStream = process.stdin,
   outputStream = process.stdout,
 }) {
@@ -239,6 +272,8 @@ export async function hudWatchLoop({
 
   let running = true;
   let timer = null;
+  // watch 会话级缓存：昂贵段（门禁守卫 + handoff 验签）按 TTL 刷新
+  const cache = {};
 
   const cleanup = () => {
     running = false;
@@ -255,7 +290,7 @@ export async function hudWatchLoop({
   const redraw = () => {
     if (!running) return;
     try {
-      const state = gatherHudState(target, t);
+      const state = gatherHudState(target, t, { cache, ttlMs: gateTtlMs });
       const view = renderHudView(state, t);
       // 清全屏并重置光标到左上角，隐藏光标防抖动
       outputStream.write('\x1b[2J\x1b[H\x1b[?25l' + view + '\n');

@@ -389,10 +389,25 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
       emit(t('warn.enterpriseHostSkipped', { hosts: blocked.join(', ') }));
     }
   }
-  // CI 交付面：显式 --ci 优先；否则重放 manifest。都没有时按 origin 择一（github / azure），认不出时 enterprise 档双发以满足策略承诺，其余档写 none。lean 仍不发。
+  // CI 交付面：显式 --ci 优先；其次重放 manifest。旧 manifest（≤2.10，无 ci 字段）按既有交付面
+  // （manifest.files 里实际安装的 CI 文件）推导，不得按 origin 重新探测而搁浅旧 CI 文件；无文件时按档位回退。
+  // 全新安装按 origin 择一（github / azure），认不出时 enterprise 档双发以满足策略承诺，其余档写 none。lean 仍不发。
+  const legacyCiFromFiles = (m) => {
+    if (!m?.files) return null;
+    const hasGithub = '.github/workflows/ci.yml' in m.files;
+    const hasAzure = 'azure-pipelines.yml' in m.files;
+    if (hasGithub && hasAzure) return 'both';
+    if (hasGithub) return 'github';
+    if (hasAzure) return 'azure';
+    return null; // 两个都没有：无 CI（如 lean）
+  };
   const ciChoice = args.ci !== undefined
     ? normalizeCi(args.ci, t)
-    : (previous?.ci || (tier === 'lean' ? null : (forgeFromRemote(originUrl(target)) || (tier === 'enterprise' ? 'both' : 'none'))));
+    : previous
+      ? (previous.ci !== undefined && previous.ci !== null
+        ? previous.ci
+        : (legacyCiFromFiles(previous) || (previous.tier === 'lean' ? 'none' : 'both')))
+      : (tier === 'lean' ? null : (forgeFromRemote(originUrl(target)) || (tier === 'enterprise' ? 'both' : 'none')));
 
   let modelFlags;
   try {

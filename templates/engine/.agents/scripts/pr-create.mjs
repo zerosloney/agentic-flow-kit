@@ -60,7 +60,6 @@ if (forge === 'github') {
   if (target) ghArgs.push('--base', target);
   if (title) ghArgs.push('--title', title);
   if (body) ghArgs.push('--body-file', body);
-  if (rawArgs.includes('--json')) ghArgs.push('--json', 'url,number');
   if (rawArgs.includes('--dry-run')) {
     console.log(`gh ${ghArgs.join(' ')}`);
     process.exit(0);
@@ -73,9 +72,21 @@ if (forge === 'github') {
     console.error('pr-create: 未找到 gh。');
     process.exit(2);
   }
+  if (rawArgs.includes('--json')) {
+    // gh pr create 不支持 --json；从 stdout 提取 PR URL/编号，stdout 只留最终单对象。
+    const match = /https?:\/\/\S+\/pull\/(\d+)/.exec(created.stdout || '');
+    if (match) {
+      process.stdout.write(JSON.stringify({ ok: true, url: match[0], number: Number(match[1]) }) + '\n');
+    } else {
+      process.stdout.write(JSON.stringify({ ok: created.status === 0, url: null, number: null }) + '\n');
+      if (created.stdout) process.stderr.write(created.stdout);
+      if (created.stderr) process.stderr.write(created.stderr);
+    }
+    process.exit(created.status === 0 ? 0 : 1);
+  }
   if (created.stdout) process.stdout.write(created.stdout);
   if (created.stderr) process.stderr.write(created.stderr);
-  process.exit(created.status === null ? 1 : created.status);
+  process.exit(created.status === 0 ? 0 : 1);
 }
 
 const tfsPr = path.join(ROOT, '.agents/skills/tfs-pr/scripts/tfs-pr.mjs');
@@ -86,4 +97,4 @@ if (!fs.existsSync(tfsPr)) {
 const hasCreate = rawArgs[0] === 'create';
 const tfsArgs = hasCreate ? rawArgs : ['create', ...rawArgs];
 const created = spawnSync(process.execPath, [tfsPr, ...tfsArgs], { cwd: ROOT, stdio: 'inherit' });
-process.exit(created.status === null ? 1 : created.status);
+process.exit(created.status === 0 ? 0 : 1);

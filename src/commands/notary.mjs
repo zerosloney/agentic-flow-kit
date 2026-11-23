@@ -6,6 +6,7 @@ import {
   verifySignature,
   readSignatureFile,
   writeSignatureFile,
+  resolvePublicKeyPath,
 } from '../install/notary.mjs';
 import { buildAttestation } from '../install/attest.mjs';
 import { resolveTarget } from './install.mjs';
@@ -143,7 +144,8 @@ export function verifySigCommand({ args, t }) {
   const targetType = String(args._[1] || 'attestation').toLowerCase();
   const target = resolveTarget(args);
 
-  const keyPath = args.key ? path.resolve(args.key) : path.join(target, '.agents', 'keys', 'flow-kit-key.pub.pem');
+  // 公钥路径单源：keygen 默认优先，legacy .agents/notary/public.pem 回退（PR #77 审查跟进）
+  const keyPath = args.key ? path.resolve(args.key) : resolvePublicKeyPath(target);
   if (!fs.existsSync(keyPath)) {
     fail('KEY_NOT_FOUND', t('error.keyNotFound', { path: keyPath }));
   }

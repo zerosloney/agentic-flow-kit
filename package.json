@@ -1,6 +1,6 @@
 {
   "name": "agentic-flow-kit",
-  "version": "2.11.0",
+  "version": "2.12.0",
   "description": "AI-Native workflow engine installer: generate .agents, git hooks, host adapters, wiki/workflow scaffolds from zero.",
   "license": "MIT",
   "type": "module",

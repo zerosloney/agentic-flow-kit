@@ -147,6 +147,61 @@ test('evaluateSkillCase handles status, stdout regex, json assertions and timeou
   assert.match(res4.errors[0], /Execution timed out/);
 });
 
+// 参考 tests/sandbox.test.mjs 的 PATH 操纵手法：在 PATH 前置一个假的容器引擎目录，
+// 让 executeSandbox 走真实 spawn 路径。POSIX 用可执行 sh 脚本；Windows 的 spawnSync
+// 不解析 .cmd，改用 node.exe 副本（docker.exe 收到 `run ...` 时把 `run` 当脚本执行）。
+function installFakeDocker(shimDir, cwd) {
+  const marker = '{"result":"sandbox-ok"}';
+  if (process.platform === 'win32') {
+    const exe = path.join(shimDir, 'docker.exe');
+    try {
+      fs.linkSync(process.execPath, exe);
+    } catch {
+      fs.copyFileSync(process.execPath, exe);
+    }
+    fs.writeFileSync(path.join(cwd, 'run'), `process.stdout.write(${JSON.stringify(marker)} + '\\n');\n`);
+  } else {
+    const exe = path.join(shimDir, 'docker');
+    fs.writeFileSync(
+      exe,
+      '#!/bin/sh\n'
+      + 'if [ "$1" = "--version" ]; then echo "fake-docker 0.0.0"; exit 0; fi\n'
+      + `printf '%s\\n' '${marker}'\n`,
+    );
+    fs.chmodSync(exe, 0o755);
+  }
+}
+
+test('evaluateSkillCase sandbox branch executes executeSandbox with object args', () => {
+  const target = makeTarget();
+  const shimDir = makeTmp('flow-kit-fake-docker-');
+  installFakeDocker(shimDir, target);
+
+  const savedPath = process.env.PATH;
+  try {
+    process.env.PATH = `${shimDir}${path.delimiter}${savedPath}`;
+    const sandboxCase = {
+      id: 'case-sandbox',
+      title: 'Sandboxed case runs inside fake engine',
+      // 若误走宿主执行会打印 host-ran；沙盒分支只应拿到假引擎的 sandbox-ok。
+      command: ['node', '-e', 'console.log("host-ran")'],
+      expect: {
+        status: 0,
+        stdout: '/sandbox-ok/',
+        json: { result: 'sandbox-ok' },
+      },
+    };
+    const res = evaluateSkillCase(sandboxCase, { target, sandbox: true });
+    assert.doesNotMatch(res.stderr, /TypeError/);
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stdout, /sandbox-ok/);
+    assert.equal(res.ok, true, (res.errors || []).join('; ') || res.stderr);
+    assert.equal(res.errors.length, 0);
+  } finally {
+    process.env.PATH = savedPath;
+  }
+});
+
 test('runSkillEvalSuite and recordSkillEvalLog records evidence', () => {
   const target = makeTarget();
 

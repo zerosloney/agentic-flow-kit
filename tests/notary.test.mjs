@@ -12,6 +12,7 @@ import {
   verifySignature,
   readSignatureFile,
   writeSignatureFile,
+  resolvePublicKeyPath,
   ALGORITHMS,
 } from '../src/install/notary.mjs';
 
@@ -31,6 +32,28 @@ function initRepo() {
   spawnSync('git', ['init', '-q'], { cwd: dir });
   return dir;
 }
+
+test('resolvePublicKeyPath prefers default path and falls back to legacy', () => {
+  const defaultPath = (dir) => path.join(dir, '.agents', 'keys', 'flow-kit-key.pub.pem');
+  const legacyPath = (dir) => path.join(dir, '.agents', 'notary', 'public.pem');
+
+  // 1. 仅默认路径存在 → 返回默认
+  const withDefault = makeTmp('notary-resolve-default-');
+  fs.mkdirSync(path.dirname(defaultPath(withDefault)), { recursive: true });
+  fs.writeFileSync(defaultPath(withDefault), 'PUBLIC', 'utf8');
+  assert.equal(resolvePublicKeyPath(withDefault), defaultPath(withDefault));
+
+  // 2. 仅 legacy 存在 → 返回 legacy
+  const withLegacy = makeTmp('notary-resolve-legacy-');
+  fs.mkdirSync(path.dirname(legacyPath(withLegacy)), { recursive: true });
+  fs.writeFileSync(legacyPath(withLegacy), 'PUBLIC', 'utf8');
+  assert.equal(resolvePublicKeyPath(withLegacy), legacyPath(withLegacy));
+
+  // 3. 都不存在 → 返回默认路径字符串（尚不存在）
+  const empty = makeTmp('notary-resolve-empty-');
+  assert.equal(resolvePublicKeyPath(empty), defaultPath(empty));
+  assert.equal(fs.existsSync(resolvePublicKeyPath(empty)), false);
+});
 
 test('generateKeyPair supports Ed25519, P-256, and RSA-SHA256 with consistent fingerprints', () => {
   for (const alg of ['ed25519', 'p256', 'rsa']) {

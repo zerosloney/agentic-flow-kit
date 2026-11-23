@@ -43,8 +43,8 @@ test('migrateManifest upgrades an old manifest, is idempotent, and supports dry-
   writeManifest(dir, oldManifest());
   const first = await migrateManifest({ target: dir, manifest: readManifest(dir) });
   assert.equal(first.changed, true);
-  assert.deepEqual(first.applied, ['0-1', '1-2']);
-  assert.equal(readManifest(dir).schemaVersion, 2);
+  assert.deepEqual(first.applied, ['0-1', '1-2', '2-3']);
+  assert.equal(readManifest(dir).schemaVersion, 3);
 
   const second = await migrateManifest({ target: dir, manifest: readManifest(dir) });
   assert.equal(second.changed, false);
@@ -106,7 +106,7 @@ test('upgrade migrates an old manifest without touching user files', () => {
   });
   assert.equal(dry.status, 0, dry.stderr);
   const dryOut = JSON.parse(dry.stdout);
-  assert.deepEqual(dryOut.migration.applied, ['0-1', '1-2']);
+  assert.deepEqual(dryOut.migration.applied, ['0-1', '1-2', '2-3']);
   assert.equal(JSON.parse(fs.readFileSync(manifestFile, 'utf8')).schemaVersion, undefined);
 
   const real = spawnSync(process.execPath, [BIN, 'upgrade', '--target', '.', '--json'], {
@@ -115,7 +115,7 @@ test('upgrade migrates an old manifest without touching user files', () => {
     env: { ...process.env, FLOW_KIT_TEST: '1' },
   });
   assert.equal(real.status, 0, real.stderr);
-  assert.equal(JSON.parse(fs.readFileSync(manifestFile, 'utf8')).schemaVersion, 2);
+  assert.equal(JSON.parse(fs.readFileSync(manifestFile, 'utf8')).schemaVersion, 3);
   assert.equal(fs.readFileSync(path.join(dir, 'notes/user.txt'), 'utf8'), 'keep me\n');
 
   const again = spawnSync(process.execPath, [BIN, 'upgrade', '--target', '.', '--json'], {
@@ -149,7 +149,7 @@ test('1→2 drops runtime files and deletes only unmodified copies', async () =>
   writeManifest(dir, { ...oldManifest(), schemaVersion: 1, files });
 
   const first = await migrateManifest({ target: dir, manifest: readManifest(dir) });
-  assert.equal(first.manifest.schemaVersion, 2);
+  assert.equal(first.manifest.schemaVersion, 3);
   assert.deepEqual(Object.keys(first.manifest.files).sort(), ['.agents/hooks/gates.json']);
   assert.deepEqual(first.removals.sort(), [
     '.agents/hooks/drop.cjs',
@@ -312,4 +312,129 @@ test('upgrade interrupted between migration write and cleanup recovers on rerun'
   const manifest = JSON.parse(fs.readFileSync(path.join(dir, '.agents/install-manifest.json'), 'utf8'));
   assert.equal(manifest.pendingRemovals, undefined);
   assert.deepEqual(JSON.parse(second.stdout).migration.removed, ['.agents/scripts/drop.mjs']);
+});
+
+// ---- 2→3：技能改名 shipyard-workflow-closeout → workflow-closeout（v2.11.0）----
+// 旧 manifest 仍托管旧技能正文与宿主指针；迁移摘除条目并登记旧哈希，upgrade 末尾按哈希清理。
+
+const OLD_SKILL_BODY = '.agents/skills/shipyard-workflow-closeout/SKILL.md';
+const OLD_SKILL_POINTER = '.claude/skills/shipyard-workflow-closeout/SKILL.md';
+const NEW_SKILL_BODY = '.agents/skills/workflow-closeout/SKILL.md';
+
+function writeRel(dir, rel, text) {
+  fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+  fs.writeFileSync(path.join(dir, rel), text, 'utf8');
+}
+
+test('2→3 drops renamed skill entries and persists their old hashes as pending removals', async () => {
+  const dir = tmpRepo();
+  const sha = (text) => crypto.createHash('sha256').update(text).digest('hex');
+  writeRel(dir, OLD_SKILL_BODY, 'old body');
+  writeRel(dir, OLD_SKILL_POINTER, 'old pointer');
+  writeRel(dir, NEW_SKILL_BODY, 'new body');
+  const files = {
+    [OLD_SKILL_BODY]: sha('old body'),
+    [OLD_SKILL_POINTER]: sha('old pointer'),
+    [NEW_SKILL_BODY]: sha('new body'),
+    '.claude/settings.json': sha('{}'),
+  };
+  writeManifest(dir, { ...oldManifest(), schemaVersion: 2, files });
+
+  const result = await migrateManifest({ target: dir, manifest: readManifest(dir) });
+  assert.equal(result.changed, true);
+  assert.deepEqual(result.applied, ['2-3']);
+
+  const manifest = readManifest(dir);
+  assert.equal(manifest.schemaVersion, 3);
+  assert.deepEqual(Object.keys(manifest.files).sort(), [NEW_SKILL_BODY, '.claude/settings.json'].sort());
+  assert.deepEqual(manifest.pendingRemovals, {
+    [OLD_SKILL_BODY]: sha('old body'),
+    [OLD_SKILL_POINTER]: sha('old pointer'),
+  });
+  // 迁移只动 manifest：磁盘旧文件仍在，等 upgrade 末尾按哈希守卫清理
+  assert.equal(fs.existsSync(path.join(dir, OLD_SKILL_BODY)), true);
+  assert.equal(fs.existsSync(path.join(dir, OLD_SKILL_POINTER)), true);
+});
+
+test('2→3 leaves manifests without the renamed skill untouched', async () => {
+  const dir = tmpRepo();
+  const sha = (text) => crypto.createHash('sha256').update(text).digest('hex');
+  const files = {
+    [NEW_SKILL_BODY]: sha('new body'),
+    '.claude/settings.json': sha('{}'),
+  };
+  writeManifest(dir, { ...oldManifest(), schemaVersion: 2, files });
+
+  const result = await migrateManifest({ target: dir, manifest: readManifest(dir) });
+  assert.deepEqual(result.applied, ['2-3']);
+  const manifest = readManifest(dir);
+  assert.equal(manifest.schemaVersion, 3);
+  assert.deepEqual(manifest.files, files);
+  assert.equal(manifest.pendingRemovals, undefined);
+});
+
+test('migration merge keeps an earlier interrupted pendingRemovals instead of dropping it', async () => {
+  const dir = tmpRepo();
+  const sha = (text) => crypto.createHash('sha256').update(text).digest('hex');
+  const leftoverRel = '.agents/scripts/legacy-runtime.mjs';
+  writeRel(dir, OLD_SKILL_BODY, 'old body');
+  const files = {
+    [OLD_SKILL_BODY]: sha('old body'),
+    '.claude/settings.json': sha('{}'),
+  };
+  // 上次 1→2 迁移已落盘但清理中断：资格残留、schemaVersion 已是 2。
+  writeManifest(dir, {
+    ...oldManifest(),
+    schemaVersion: 2,
+    files,
+    pendingRemovals: { [leftoverRel]: sha('legacy') },
+  });
+
+  await migrateManifest({ target: dir, manifest: readManifest(dir) });
+  const manifest = readManifest(dir);
+  assert.equal(manifest.schemaVersion, 3);
+  assert.equal(manifest.pendingRemovals[leftoverRel], sha('legacy'));
+  assert.equal(manifest.pendingRemovals[OLD_SKILL_BODY], sha('old body'));
+});
+
+test('upgrade 2→3 deletes unmodified renamed-skill files, keeps user edits, and dry-run writes nothing', () => {
+  const dir = tmpRepo();
+  const sha = (text) => crypto.createHash('sha256').update(text).digest('hex');
+  writeRel(dir, OLD_SKILL_BODY, 'old body');
+  writeRel(dir, OLD_SKILL_POINTER, 'user edited pointer');
+  const files = {
+    [OLD_SKILL_BODY]: sha('old body'),
+    [OLD_SKILL_POINTER]: sha('original pointer'),
+  };
+  writeManifest(dir, { ...oldManifest(), schemaVersion: 2, files });
+  const manifestFile = path.join(dir, '.agents/install-manifest.json');
+
+  const dry = spawnSync(process.execPath, [BIN, 'upgrade', '--target', '.', '--dry-run', '--json'], {
+    cwd: dir,
+    encoding: 'utf8',
+    env: { ...process.env, FLOW_KIT_TEST: '1' },
+  });
+  assert.equal(dry.status, 0, dry.stderr);
+  assert.equal(fs.existsSync(path.join(dir, OLD_SKILL_BODY)), true);
+  assert.equal(fs.existsSync(path.join(dir, OLD_SKILL_POINTER)), true);
+  assert.equal(JSON.parse(fs.readFileSync(manifestFile, 'utf8')).schemaVersion, 2);
+
+  const real = spawnSync(process.execPath, [BIN, 'upgrade', '--target', '.', '--json'], {
+    cwd: dir,
+    encoding: 'utf8',
+    env: { ...process.env, FLOW_KIT_TEST: '1' },
+  });
+  assert.equal(real.status, 0, real.stderr);
+  // 未改动的旧文件按旧哈希删除；用户改过的按哈希守卫保留
+  assert.equal(fs.existsSync(path.join(dir, OLD_SKILL_BODY)), false);
+  assert.equal(fs.existsSync(path.join(dir, OLD_SKILL_POINTER)), true);
+
+  const manifest = JSON.parse(fs.readFileSync(manifestFile, 'utf8'));
+  assert.equal(manifest.schemaVersion, 3);
+  assert.equal(manifest.pendingRemovals, undefined);
+  assert.equal(Object.keys(manifest.files).some((rel) => rel.includes('shipyard-workflow-closeout')), false);
+  const out = JSON.parse(real.stdout);
+  assert.deepEqual(out.migration.applied, ['2-3']);
+  assert.deepEqual(out.migration.removed, [OLD_SKILL_BODY]);
+  assert.deepEqual(out.migration.keptLegacy, [OLD_SKILL_POINTER]);
 });

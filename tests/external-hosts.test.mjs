@@ -246,7 +246,7 @@ test('external hosts can opt into the permission compiler', () => {
   ]);
 });
 
-test('priority is builtin < user < project < --host-manifest', () => {
+test('priority is builtin < user < --host-manifest; project layer may only add new hosts', () => {
   const project = tmpRepo();
   const home = tmpDir('flow-kit-home-');
   const env = { HOME: home, USERPROFILE: home };
@@ -255,7 +255,6 @@ test('priority is builtin < user < project < --host-manifest', () => {
 
   const trae = (label) => ({ name: 'trae', dir: '.trae', label, skills: { mode: 'index' } });
   fs.writeFileSync(path.join(userHosts, 'trae.json'), JSON.stringify(trae('User Trae')), 'utf8');
-  writeHost(project, 'trae', trae('Project Trae'));
 
   const cliFile = path.join(project, 'cli-trae.json');
   fs.writeFileSync(cliFile, JSON.stringify(trae('CLI Trae')), 'utf8');
@@ -266,20 +265,22 @@ test('priority is builtin < user < project < --host-manifest', () => {
     return jsonArray(r).find((h) => h.name === 'trae');
   };
 
-  assert.equal(lookup().label, 'Project Trae');
-  assert.equal(lookup().source, 'project');
-
-  fs.rmSync(path.join(project, '.flow-kit', 'hosts', 'trae.json'));
+  // 用户层可覆盖内置宿主
   assert.equal(lookup().label, 'User Trae');
   assert.equal(lookup().source, 'user');
 
+  // 项目层随仓库分发，不允许重定义既有宿主（内置或用户层）
+  writeHost(project, 'trae', trae('Project Trae'));
+  const rejected = run(['list-hosts', '--target', '.', '--json'], project, env);
+  assert.equal(rejected.status, 2, rejected.stderr);
+  assert.match(rejected.stderr, /already exists/);
+  fs.rmSync(path.join(project, '.flow-kit', 'hosts', 'trae.json'));
+
+  // 显式 --host-manifest 仍可覆盖
   assert.equal(lookup(['--host-manifest', 'cli-trae.json']).label, 'CLI Trae');
   assert.equal(lookup(['--host-manifest', 'cli-trae.json']).source, 'cli');
 
-  fs.rmSync(path.join(userHosts, 'trae.json'));
-  assert.equal(lookup(['--host-manifest', 'cli-trae.json']).label, 'CLI Trae');
-  assert.equal(lookup(['--host-manifest', 'cli-trae.json']).source, 'cli');
-
+  fs.rmSync(userHosts, { recursive: true });
   fs.rmSync(cliFile);
   assert.equal(lookup().label, 'Trae');
   assert.equal(lookup().source, 'builtin');
@@ -340,4 +341,42 @@ test('invalid host definitions fail with usage exit and a field-level detail', (
   const r = installDemo(dir);
   assert.equal(r.status, 2);
   assert.match(r.stderr, /invalid JSON/);
+});
+
+// ---- 加载边界：项目层不可重定义既有宿主，定义文件限大小 ----
+// 项目内 .flow-kit/hosts/*.json 随仓库分发，属不可信输入：允许新增宿主，但不能
+// 改写内置/用户层宿主的权限与门禁能力；显式 --host-manifest 仍是覆盖通道。
+
+test('project-level host JSON cannot redefine a built-in host', () => {
+  const dir = tmpRepo();
+  writeHost(dir, 'claude', { name: 'claude', dir: '.claude' });
+  const r = run(['list-hosts', '--target', '.', '--json'], dir);
+  assert.equal(r.status, 2, r.stderr);
+  assert.match(r.stderr, /already exists/);
+  assert.match(r.stderr, /--host-manifest/);
+});
+
+test('user-level host JSON may still override a built-in host', () => {
+  const dir = tmpRepo();
+  const home = makeTmp('flow-kit-home-');
+  const hostsDir = path.join(home, '.flow-kit', 'hosts');
+  fs.mkdirSync(hostsDir, { recursive: true });
+  fs.writeFileSync(path.join(hostsDir, 'claude.json'),
+    JSON.stringify({ name: 'claude', dir: '.claude-alt' }), 'utf8');
+
+  const r = run(['list-hosts', '--target', '.', '--json'], dir, { HOME: home, USERPROFILE: home });
+  assert.equal(r.status, 0, r.stderr);
+  const claude = jsonArray(r).find((h) => h.name === 'claude');
+  assert.equal(claude.source, 'user');
+  assert.equal(claude.dir, '.claude-alt');
+});
+
+test('oversized host manifest is rejected before parsing', () => {
+  const dir = tmpRepo();
+  writeHost(dir, 'huge', { name: 'huge', dir: '.huge' });
+  const file = path.join(dir, '.flow-kit', 'hosts', 'huge.json');
+  fs.writeFileSync(file, JSON.stringify({ name: 'huge', dir: '.huge', pad: 'x'.repeat(1024 * 1024) }), 'utf8');
+  const r = run(['list-hosts', '--target', '.', '--json'], dir);
+  assert.equal(r.status, 2, r.stderr);
+  assert.match(r.stderr, /too large/);
 });

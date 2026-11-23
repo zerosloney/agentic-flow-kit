@@ -1580,7 +1580,6 @@ const RUNTIME_OWNED = [
   '.agents/notes/runtime-env.local.md',
   '.agents/verifications.jsonl',
   '.agents/judgments.jsonl',
-  '.agents/evals/',
   '.agents/install-manifest.json',
 ];
 
@@ -1589,10 +1588,30 @@ export function isRuntimeOrManaged(ctx, file) {
   if (file === '.gitattributes' || file === '.gitignore') {
     try {
       const content = fs.readFileSync(path.join(ctx.root, file), 'utf8');
-      if (content.includes('magpie:begin') || content.includes('agentic-flow-kit')) return true;
+      if (content.includes('# >>> agentic-flow-kit')) return true;
     } catch {}
   }
   return false;
+}
+
+// run 自身拥有的文档（intent/incident/spec/plan/api 等）：到关单才随提交入库，implement/fix 回填时
+// 必然同时出现在 git status 与 --files 中；不豁免则每单合法回填都会被判「计划外」而自锁 await-confirm。
+// 仅豁免登记过的具体文档与本 run 的任务目录，不放大为整个 workflow/ 目录；run.docs 为空时不做豁免。
+function runOwnedPaths(run) {
+  const docs = run && run.docs;
+  if (!docs) return [];
+  const owned = Object.values(docs).filter((p) => typeof p === 'string' && p).map((p) => p.replace(/\\/g, '/'));
+  if (!owned.length) return [];
+  // 任务目录优先取 docs 已落入 workflow/tasks/<task>/ 的前缀（跨日续跑仍指向原目录），
+  // 否则按 run 创建日 + topic 还原 taskDirRel 的写法。
+  const taskPrefix = owned.map((p) => p.match(/^(workflow\/tasks\/[^/]+\/)/)).find(Boolean);
+  if (taskPrefix) owned.push(taskPrefix[1].replace(/\/$/, ''));
+  else {
+    const date = String(run.createdAt || '').slice(0, 10);
+    const topic = run.triage && run.triage.topic;
+    if (date && topic) owned.push(`workflow/tasks/${date}-${topic}`);
+  }
+  return owned;
 }
 
 export function checkAuthorized(ctx, run, filesCsv) {
@@ -1611,7 +1630,9 @@ export function checkAuthorized(ctx, run, filesCsv) {
     };
   }
   const section = sectionBody(readDoc(ctx, run.docs?.plan) || '', '改动方案') || '';
-  const extra = filesOutsidePlan(listed, section).filter((c) => !isRuntimeOrManaged(ctx, c));
+  const owned = runOwnedPaths(run);
+  const isOwned = (f) => owned.some((o) => f === o || f.startsWith(`${o}/`));
+  const extra = filesOutsidePlan(listed, section).filter((c) => !isRuntimeOrManaged(ctx, c) && !isOwned(c));
   run.lastFiles = listed;
   return { ok: true, extra };
 }
