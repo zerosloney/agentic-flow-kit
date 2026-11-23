@@ -507,7 +507,11 @@ export function checkSkillsEvalHealth(target, t) {
       problems.push(t('doctor.skillsEvalMissing', { skill: ds.skill }));
       continue;
     }
-    const latest = entries.sort((a, b) => Date.parse(b.ts) - Date.parse(a.ts))[0];
+    // 最新条 = 时间戳最大者；同毫秒并列时取文件内后记条目（记录序即时间序——
+    // 纯 sort 在并列时按稳定序取先记者，快机器上连续两次落账会取错，CI 偶发红，2026-11-23）。
+    const latest = entries.reduce((best, e) => (
+      !best || Date.parse(e.ts) >= Date.parse(best.ts) ? e : best
+    ), null);
     if (latest.outcome !== 'pass') {
       hasFailing = true;
       problems.push(t('doctor.skillsEvalFailed', {
