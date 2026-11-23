@@ -171,3 +171,29 @@ test('check-scope-range 声明 0 时出账提示（越界仍 --strict 判红）'
   assert.match(out, /声明 0：workflow\/plans\/2026-01-01-none\.md 未解析到/); // 逐 plan 口径出账（多 plan 合推时单份静默 0 也可见）
   assert.equal(r.status, 1, `声明 0 时产品件越界判定口径不变，实际 exit ${r.status}:\n${out}`);
 });
+
+// issue #79（2026-11-23 装户实证）：「关单即归档」把 plan `git mv` 到 workflow/archive/<月>/plans/ 后，
+// HEAD 侧 workflow/plans/ 为空，原实现落进「无 plan 变更」盲面分支——每次正常关单推送都误报 advisory，
+// 且与前一行「范围内 plan 已在后续提交删除/更名」自相矛盾。归档 ≠ 删除：同范围归档路径落盘即按已承诺 skip。
+test('范围内 plan 随关单归档（mv → workflow/archive）：按已承诺 skip，不打「无 plan 变更」advisory', () => {
+  const dir = makeTmp('flow-kit-scope-archived-plan-');
+  git(dir, 'init', '-q');
+  write(dir, 'README.md', 'x\n');
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'c0');
+  const c0 = git(dir, 'rev-parse', 'HEAD');
+  write(dir, 'workflow/plans/2026-01-01-archived-fix.md', PLAN_BODY);
+  write(dir, 'src/a.cs', 'class A {}\n');
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-q', '-m', 'c1 plan + code');
+  fs.mkdirSync(path.join(dir, 'workflow/archive/2026-01/plans'), { recursive: true });
+  git(dir, 'mv', 'workflow/plans/2026-01-01-archived-fix.md', 'workflow/archive/2026-01/plans/2026-01-01-archived-fix.md');
+  git(dir, 'commit', '-q', '-m', 'c2 close + archive');
+  const c2 = git(dir, 'rev-parse', 'HEAD');
+  const r = run(dir, c0, c2, ['--strict']);
+  const out = `${r.stdout}${r.stderr}`;
+  assert.equal(r.status, 0, `关单归档不应判红，实际 exit ${r.status}:\n${out}`);
+  assert.match(out, /已随关单归档，按已承诺处理——skip/);
+  assert.doesNotMatch(out, /推送范围无 plan 新增\/修改/);
+  assert.doesNotMatch(out, /范围内无 plan 变更/);
+});
