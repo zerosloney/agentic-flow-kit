@@ -2,6 +2,50 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.12.0]
+
+### 新增
+
+- feat(manifest)!: schemaVersion 2→3 清理改名技能，补齐错误码登记与 CLI 文案
+- feat(kernel): 支持安装机件判据原语门面 exports 单源复用
+- feat(templates): 支持外部编排档最小协议工单模板 new-task
+- feat(hud): 支持终端实时多智能体与防护状态看板 flow-kit hud
+- feat(gate): 支持增量 PR 差异集收敛与状态徽章生成 (flow-kit gate badge)
+- feat(gate): 支持 AI 研发零信任 CI/CD 全要素守卫卡口与工作流脚手架
+- feat(skills): 支持自定义技能热插拔沙盒与回归评测套件 (阶段五·模块三)
+- feat(sandbox): 支持可插拔式即时沙箱路由与高危执行物理隔离 (阶段五·模块二)
+- feat(arch): 支持代码架构分层边界与防侵蚀守护 (阶段五·模块一)
+- feat(metrics): 支持 AI-DORA 研发效能度量大盘与 OpenTelemetry 导出 (阶段四·模块四)
+- feat(mcp): 支持动态 MCP RBAC 权限与调用审计网关 (阶段四·模块三)
+- feat(handoff): 支持多智能体接力协同契约与上下文防污染协议 (阶段四·模块二)
+- feat(notary): 支持企业级密码学公证签名与合规验签闭环 (阶段四·模块一)
+- feat(sbom): 支持 AI 原生物料清单导出核验与工程效能遥测审计 (阶段三·模块三)
+- feat(bundle): 支持无网离线安装包打包分发与动态宿主清单及证明链溯源绑定 (阶段三·模块二)
+- feat(policy): 支持企业级中央策略面与远程基线对账及证明链绑定 (阶段三·模块一)
+- feat(profiles): 支持 C / C++ 语言栈 Profile 官方支持与 CTest/Make 门禁验证
+- feat(arena): 支持本地并发方案打擂执行器与 worktree 隔离实测对质
+- feat(board): 支持 IDE 视窗化任务集成与看板流水线快捷交互回路
+- feat(pipeline): 支持零提交冷启动自愈与渐进式 L0 极简道治理
+- feat(profiles): 支持 Python、Go、Java 技术栈全套治理配置与测试门禁
+- feat(pipeline): 支持智能门禁失败归因 (Smart Fix) 与微任务短路径
+- feat(hosts): 支持 antigravity 宿主与 gemini 别名适配
+- feat(hosts): 支持 cursor 宿主与 .cursor/rules/*.mdc 单源编译
+- feat(profiles): 新增 Python 语言栈 Profile 支持
+- feat(engine): 支持评审模型自适应降级、工单预算裁剪与 TUI 看板多 Run 切换
+- feat(engine): pipeline 支持单步调试模式与单门排查交互
+- feat(board): Web 看板支持 pipeline 阶段流图可视化、产物跳转与实时流式刷新
+- feat(engine): 实现 pipeline 实时 TUI 阶段监控看板与快照模式
+
+### 修复
+
+- fix(metrics): OTel service.version 跟随包版本，不再硬编码
+- fix(pr-create): --json 不再透传 gh，退出码按 0/1 契约映射
+- fix(install): 升级按已装 CI 文件重放交付面，devcontainer 门禁补齐 python
+- fix(pipeline): 评测凭证须申报、解除计划外门自锁、触达与 handoff 分级修正
+- fix(gate): 差异集解析失败回退全量检查，公证密钥对齐 keygen 默认路径
+- fix(security): 收紧离线包解包、MCP RBAC、沙箱路由与策略同步边界
+- fix(gate): 支持未装引擎资产宿主的门禁 loud-skip 与零残留消费
+
 ## [2.11.0]
 
 ### 新增
