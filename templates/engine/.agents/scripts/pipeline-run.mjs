@@ -1375,7 +1375,11 @@ export function renderInspect(ctx, run, options = {}) {
     }
     const rendered = renderMarkdown(art.content, { width: W - 2, noColor });
     const offset = Math.max(0, Number(options.scrollOffset) || 0);
-    const maxL = options.maxLines !== undefined && options.maxLines > 0 ? options.maxLines : (options.once ? 200 : 18);
+    // 审查遗留批 2026-11-23：显式传 0（CLI --max-lines 0）= 不限行数，与折叠提示一致（此前 0 落回 200，
+    // 提示让用户「--max-lines 0 查看全量」却永远看不到全量）；未传时维持 once=200 / 交互=18 的旧行为。
+    const maxL = options.maxLines === undefined
+      ? (options.once ? 200 : 18)
+      : (options.maxLines > 0 ? options.maxLines : Infinity);
     const slice = rendered.slice(offset, offset + maxL);
 
     for (const l of slice) {
@@ -2270,6 +2274,14 @@ if (isMain) {
       process.exit(0);
     }
     if (run.stopType === 'done' || run.stopType === 'aborted') { printRun(ctx, run); process.exit(0); }
+    // 审查遗留批 2026-11-23：--gate 预检（对齐 gate 子命令）——门名拼错不再 spawn exit 1 掉进修复环；
+    // 非 verify 阶段传 --gate 显式报错（原先被静默忽略，误以为定向门已跑）。
+    if (typeof a.gate === 'string' && a.gate) {
+      if (run.stage !== 'verify') fail(`--gate 仅 verify 阶段可用（当前阶段：${run.stage}）——先推进到 verify 再定向跑门`, 2);
+      const gateName = usage(() => parseGateName(a.gate));
+      const gatePath = path.join(ctx.bin, gateName);
+      if (!fs.existsSync(gatePath)) fail(`门脚本不存在：${gateName}（预期位置: ${gatePath}）`);
+    }
     await advance(ctx, run, {
       triage: typeof a.triage === 'string' ? a.triage : undefined,
       delegated: typeof a.delegated === 'string' ? a.delegated : undefined,
@@ -2503,7 +2515,8 @@ if (isMain) {
   } else if (cmd === 'inspect') {
     const run = resolveRun(ctx, a);
     const target = a.positional[0] || a.target;
-    const maxLines = a['max-lines'] !== undefined ? Number(a['max-lines']) : 0;
+    // 审查遗留批 2026-11-23：未传旗标时传 undefined（renderInspect 维持默认 200）；显式 0 = 全量。
+    const maxLines = a['max-lines'] !== undefined ? Number(a['max-lines']) : undefined;
     if (a.json) {
       const art = inspectArtifact(ctx, run, target);
       console.log(JSON.stringify(art, null, 2));

@@ -331,12 +331,17 @@ export function reportArena({ root: explicitRoot, topic, output } = {}) {
       rows.push(`| **${arm}** | ⏳ 未评测 (PENDING) | — | — | 待执行 eval |`);
       continue;
     }
-    const statusIcon = ev.testStatus === 'PASS' ? '✅ PASS' : '❌ FAIL';
-    const dur = `${ev.durationMs.toLocaleString()} ms`;
-    const diffStr = `+${ev.diff.insertions} / -${ev.diff.deletions} (${ev.diff.filesChanged} files)`;
+    // 审查遗留批 2026-11-23：MISSING_WORKTREE 按 skip/missing 展示（不计失败，不误报 ❌ FAIL）；
+    // 缺失臂无 durationMs/diff 字段，占位「—」——此前整份报告在此直接 TypeError 崩掉。
+    const missing = ev.testStatus === 'MISSING_WORKTREE';
+    const statusIcon = missing ? '⏭️ SKIP (工作树缺失)' : (ev.testStatus === 'PASS' ? '✅ PASS' : '❌ FAIL');
+    const dur = missing ? '—' : `${ev.durationMs.toLocaleString()} ms`;
+    const diffStr = ev.diff ? `+${ev.diff.insertions} / -${ev.diff.deletions} (${ev.diff.filesChanged} files)` : '—';
 
     let verdict = '可选候选';
-    if (ev.testStatus === 'FAIL') {
+    if (missing) {
+      verdict = '⏭️ 工作树缺失（跳过，不计失败）';
+    } else if (ev.testStatus === 'FAIL') {
       verdict = '⚠️ 测试未通过 (需排障)';
     } else if (arm === bestPassArm) {
       verdict = '🌟 推荐底座 (通过且耗时最优)';
@@ -506,7 +511,7 @@ function printHelp() {
   status   检视打擂进行态、代码脏污与 diff 规模
            [--topic <name>] [--json]
   eval     在各臂沙盒中独立跑测，采集耗时与度量
-           --topic <name> [--test-cmd "npm test"]
+           --topic <name> [--test-cmd "npm test"] [--timeout-ms <毫秒>]
   report   输出决策对质矩阵表格 (Markdown)
            --topic <name> [--output <path.md>]
   adopt    采纳指定获胜臂，应用改动至主工作区
@@ -582,6 +587,7 @@ async function main() {
           root,
           topic: args.topic,
           testCmd: args['test-cmd'],
+          timeoutMs: args['timeout-ms'] !== undefined ? Number(args['timeout-ms']) : undefined, // 审查遗留批 2026-11-23：CLI --timeout-ms 透传（此前恒 120s 默认）
         });
         if (args.json) {
           console.log(JSON.stringify(ev, null, 2));

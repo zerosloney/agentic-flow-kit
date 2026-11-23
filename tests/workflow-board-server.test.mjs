@@ -1,6 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import http from 'node:http';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -12,6 +13,7 @@ import {
   checkCsrf,
   isValidRunId,
   isValidGateName,
+  handleBoardRequest,
 } from '../templates/engine/.agents/scripts/workflow-board-server.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -252,4 +254,61 @@ test('VS Code tasks.json 模板完整性与任务配置结构检查', () => {
   assert.ok(labels.some((l) => l.includes('运行本地全量门禁')), '应包含 运行本地全量门禁 任务');
   assert.ok(labels.some((l) => l.includes('流水线状态与排查')), '应包含 流水线状态与排查 任务');
   assert.ok(labels.some((l) => l.includes('检查闭环健康度')), '应包含 检查闭环健康度 任务');
+});
+
+// 端点级测试（审查遗留批 2026-11-23）：用内存 http 挂真实请求处理器（import 不 listen，isMain 守卫不变）。
+// 只测不 spawn 子进程的校验分支（405/403/400/404），不触发 pipeline-run / 门禁脚本执行。
+// Host/Origin 头须与服务端固定的 PORT 常量（默认 8933）一致才过 Host/CSRF 校验，与实际 socket 端口无关，
+// 故用裸 http.request 显式置头（fetch 会丢弃受限的 Host 头）。
+test('pipeline 控制端点: /api/pipeline/next 与 /api/pipeline/gate 的校验分支', async () => {
+  const server = http.createServer(handleBoardRequest);
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const socketPort = server.address().port;
+  const srvHost = `127.0.0.1:8933`; // 服务端 Host 校验与 checkCsrf 白名单都按模块常量 PORT=8933 判定
+
+  const request = (method, pathname, body, headers = {}) =>
+    new Promise((resolve, reject) => {
+      const req = http.request(
+        { host: '127.0.0.1', port: socketPort, method, path: pathname, headers: { Host: srvHost, ...headers } },
+        (res) => {
+          let raw = '';
+          res.on('data', (d) => { raw += d; });
+          res.on('end', () => {
+            let json = null;
+            try { json = JSON.parse(raw); } catch { /* 非 JSON 响应体原样忽略 */ }
+            resolve({ status: res.statusCode, json });
+          });
+        },
+      );
+      req.on('error', reject);
+      if (body !== undefined) req.write(JSON.stringify(body));
+      req.end();
+    });
+
+  const postJson = (pathname, body, extraHeaders = {}) =>
+    request('POST', pathname, body, { 'Content-Type': 'application/json', Origin: `http://${srvHost}`, ...extraHeaders });
+
+  try {
+    // 方法与 CSRF（两控制端点各一条）
+    const badMethod = await request('GET', '/api/pipeline/next');
+    assert.equal(badMethod.status, 405);
+    const badOrigin = await postJson('/api/pipeline/next', { gate: 'verify' }, { Origin: 'http://evil.example' });
+    assert.equal(badOrigin.status, 403);
+
+    // /api/pipeline/next：非法 gate 名 400（审查遗留批 2026-11-23：不再静默丢弃后全量跑 verify）
+    const badGateNext = await postJson('/api/pipeline/next', { gate: 'not-a-gate' });
+    assert.equal(badGateNext.status, 400);
+    assert.match(badGateNext.json.error, /非法的门禁名称/);
+    assert.match(badGateNext.json.error, /not-a-gate/);
+
+    // /api/pipeline/gate：非法 gate 名 400（对齐行为）；合法格式但脚本缺失 404
+    const badGate = await postJson('/api/pipeline/gate', { gate: 'drop-table' });
+    assert.equal(badGate.status, 400);
+    assert.match(badGate.json.error, /非法的门禁名称/);
+    const missingGate = await postJson('/api/pipeline/gate', { gate: 'verify-nonexistent' });
+    assert.equal(missingGate.status, 404);
+    assert.match(missingGate.json.error, /门禁脚本不存在/);
+  } finally {
+    server.close();
+  }
 });

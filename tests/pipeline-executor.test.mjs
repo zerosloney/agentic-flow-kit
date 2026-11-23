@@ -644,6 +644,20 @@ test('touch set: bold markdown paths are collected into the plan allowlist', () 
   assert.deepEqual(filesOutsidePlan(['src/a.mjs', 'src/b.mjs'], section), ['src/b.mjs']);
 });
 
+test('touch set: bare key=value stays out of the allowlist, --flag= and checkbox ] forms still collected', () => {
+  // 审查遗留批 2026-11-23：裸 key=value 赋值不再被提取进授权面（此前会放行名为 value.json 的
+  // 计划外文件，放宽「偏离即停」）；`=` 收窄为本意所在的长旗标形态（--out=x.mjs）
+  const bare = '配置赋值 name=value.json 不进授权面';
+  assert.equal(planPaths(bare).has('value.json'), false);
+  assert.equal(planPaths(bare).has('value.js'), false);
+  assert.deepEqual(filesOutsidePlan(['value.json'], bare), ['value.json']);
+  const flag = '自验产物 --out=report.mjs 落盘';
+  assert.ok(planPaths(flag).has('report.mjs'), '旗标形态 --out=x.mjs 仍进允许集');
+  assert.deepEqual(filesOutsidePlan(['report.mjs', 'other.mjs'], flag), ['other.mjs']);
+  // `]` 边界：复选框紧贴路径的清单行仍可入选允许集
+  assert.ok(planPaths('- [x]src/a.mjs').has('src/a.mjs'));
+});
+
 test('triage stops when the requirement hits the closed set below level', () => {
   const root = fixture();
   writeRun(root, { stage: 'triage', triage: null, requirement: '调整共享契约的字段', docs: { entry: null, spec: null, plan: null } });
@@ -937,6 +951,49 @@ test('CLI: next --gate executes targeted gate script in verify stage and records
   assert.ok(runData.events.some((e) => e.type === 'gate-tested' && e.script === 'check-extra.mjs' && e.exit === 0));
 });
 
+test('CLI: next --gate with a misspelled gate fails fast instead of spawning into the fix loop', () => {
+  // 审查遗留批 2026-11-23：--gate 预检脚本存在（对齐 gate 子命令）——拼错门名不再 spawn exit 1 进修复环
+  const root = fixture();
+  writeRun(root, { stage: 'verify' });
+  const res = runPipeline(root, ['next', '--gate', 'check-nonsense.mjs', '--run', 'test-run']);
+  assert.equal(res.status, 1, res.stderr || res.stdout);
+  assert.match(res.stderr, /门脚本不存在/);
+  const runData = readRun(root);
+  assert.equal(runData.stage, 'verify', 'run 停在原阶段，未进修复环');
+  assert.equal(runData.stopType, 'work-order');
+  assert.ok(!runData.events.some((e) => e.type === 'gate'), '未产生任何门执行事件');
+});
+
+test('CLI: next --gate outside the verify stage errors explicitly instead of being ignored', () => {
+  // 审查遗留批 2026-11-23：非 verify 阶段给 --gate 显式报错（原先被静默忽略，误以为定向门已跑）
+  const root = fixture();
+  writeRun(root, { stage: 'triage' });
+  const res = runPipeline(root, ['next', '--gate', 'verify.mjs', '--run', 'test-run']);
+  assert.equal(res.status, 2, res.stderr || res.stdout);
+  assert.match(res.stderr, /--gate 仅 verify 阶段可用/);
+});
+
+test('CLI: inspect --max-lines 0 renders the full artifact, default still caps at 200', () => {
+  // 审查遗留批 2026-11-23：折叠提示让用户「--max-lines 0 查看全量」，但 0 曾落回 200 行——提示与实现一致
+  const root = fixture();
+  writeRun(root, { stage: 'verify' });
+  const docLines = [];
+  for (let i = 1; i <= 220; i++) docLines.push(`word-${String(i).padStart(3, '0')}`);
+  fs.writeFileSync(path.join(root, 'doc.md'), `${docLines.join('\n')}\n`);
+
+  const full = runPipeline(root, ['inspect', 'doc.md', '--max-lines', '0']);
+  assert.equal(full.status, 0, full.stderr || full.stdout);
+  assert.ok(full.stdout.includes('word-220'), '0 = 不限行数（含最后一行）');
+  assert.ok(!full.stdout.includes('已折叠'), '0 = 全量时不出现折叠提示');
+
+  const capped = runPipeline(root, ['inspect', 'doc.md', '--max-lines', '10']);
+  assert.ok(capped.stdout.includes('word-010') && !capped.stdout.includes('word-011'), '正数按行数截断');
+
+  const fallback = runPipeline(root, ['inspect', 'doc.md']);
+  assert.ok(!fallback.stdout.includes('word-220'), '未传旗标仍按默认 200 行折叠');
+  assert.ok(fallback.stdout.includes('已折叠'));
+});
+
 test('parseReviewMetadata extracts ID, model, and downgrade details', () => {
   // 1. Normal review without downgrade
   const meta1 = parseReviewMetadata('- 独立复核：通过 复核上下文：subagent-session-123 评审模型：claude-3-7-sonnet');
@@ -955,6 +1012,27 @@ test('parseReviewMetadata extracts ID, model, and downgrade details', () => {
   const meta3 = parseReviewMetadata('- 独立复核：待定');
   assert.equal(meta3.id, '');
   assert.equal(meta3.isDowngraded, false);
+});
+
+test('parseReviewMetadata downgrade detection: prose mentions do not trigger, line-start declarations do', () => {
+  // 审查遗留批 2026-11-23：裸词（降级/downgrade/fallback）仅认行首键值式显式声明——
+  // 此前正文 prose 提及即误判，spec-review/review 每次通过都重发 review-downgrade 事件，看板恒挂黄标
+  const prose1 = parseReviewMetadata('- 独立复核：通过 复核上下文：sess-9f3a2c 结论：本方案无需降级，如受限再评估 fallback 方案');
+  assert.equal(prose1.isDowngraded, false, '正文提及「降级/fallback」不再触发');
+  const prose2 = parseReviewMetadata('结论：如需降级：见回退预案');
+  assert.equal(prose2.isDowngraded, false, '行中「降级：」不再是显式声明');
+  const prose3 = parseReviewMetadata('reviewer may downgrade to L1 checks');
+  assert.equal(prose3.isDowngraded, false, '行中英文 downgrade 不再触发');
+
+  // 显式声明行（行首，容忍列表/引用前缀）仍触发并提取原因
+  const decl1 = parseReviewMetadata('- 独立复核：通过 复核上下文：sess-9f3a2c\n- 降级：高阶配额耗尽，降级至 host-default');
+  assert.equal(decl1.isDowngraded, true);
+  assert.match(decl1.downgradeReason, /高阶配额耗尽/);
+  const decl2 = parseReviewMetadata('fallback: local model only');
+  assert.equal(decl2.isDowngraded, true);
+  assert.equal(decl2.downgradeReason, 'local model only');
+  const decl3 = parseReviewMetadata('> 降级：配额受限，转 host-default');
+  assert.equal(decl3.isDowngraded, true);
 });
 
 test('pruneWorkOrderContext trims context fields and records budget savings', () => {

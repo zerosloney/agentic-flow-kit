@@ -69,7 +69,12 @@ export function parseReviewMetadata(text) {
 
   let isDowngraded = false;
   let downgradeReason = '';
-  const dgMatch = str.match(/(?:跨模型降级|跨模型不可得|自适应降级|降级|downgrade|fallback)[:：\s]+([^\r\n；;。]+)/i);
+  // 审查遗留批 2026-11-23：降级判定收窄——复合标记（跨模型降级/跨模型不可得/自适应降级）仍按子串识别
+  //（可出现在结论文行内）；裸词（评审降级/降级/downgrade/fallback）仅认行首键值式显式声明行。
+  // 此前正文 prose 提及裸词即误判，spec-review/review 每次通过都重发 review-downgrade 事件，看板恒挂黄标。
+  const dgMatch =
+    str.match(/(?:跨模型降级|跨模型不可得|自适应降级)[:：\s]+([^\r\n；;。]+)/i) ||
+    str.match(/(?:^|\r?\n)[ \t]*(?:[-*+]\s+|>)?\s*(?:评审降级|降级|downgrade|fallback)[ \t]*[:：=][ \t]*([^\r\n；;。]+)/i);
   if (dgMatch) {
     isDowngraded = true;
     downgradeReason = dgMatch[1].trim();
@@ -86,7 +91,10 @@ export function parseReviewMetadata(text) {
   };
 }
 
-const PATH_RE = /(?:^|[\s`'"（(*=\]])((?:[\w.-]+\/)+[\w.-]*|[\w.-]+\.(?:mjs|cjs|js|ts|tsx|jsx|vue|cs|java|go|py|rs|sql|json|yml|yaml|md|xml|html|css))/g;
+// 审查遗留批 2026-11-23：`=` 前缀收窄到长旗标语境（--out=x.json 旗标形态）；裸 key=value 赋值不再
+// 被提取进 plan 授权面（此前会放行名为 value.json 的计划外文件，违背「偏离即停」）。`]` 保留：复选框
+// 紧贴路径的清单行（- [x]src/a.mjs）仍可入选允许集。
+const PATH_RE = /(?:^|[\s`'"（(*\]]|--[\w-]+=)((?:[\w.-]+\/)+[\w.-]*|[\w.-]+\.(?:mjs|cjs|js|ts|tsx|jsx|vue|cs|java|go|py|rs|sql|json|yml|yaml|md|xml|html|css))/g;
 
 export function planPaths(section) {
   const out = new Set();

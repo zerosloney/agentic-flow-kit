@@ -247,3 +247,50 @@ test('CLI 完整闭环: init -> status -> cleanup 命令行调用', () => {
   assert.equal(rClean.status, 0, rClean.stderr);
   assert.equal(fs.existsSync(path.join(root, '.agents', 'arena', 'cli-duel')), false);
 });
+
+test('evalArena: CLI --timeout-ms 透传到各臂跑测（此前恒 120s 默认）', () => {
+  // 审查遗留批 2026-11-23：经 CLI 分发传极小超时，臂被杀判 FAIL 且耗时极短——证明 timeoutMs 生效
+  const root = initTestRepo();
+  initArena({ root, topic: 'timeout-duel', arms: ['arm-slow', 'arm-also-slow'] });
+
+  const rEval = spawnSync(process.execPath, [
+    SCRIPT_PATH,
+    'eval',
+    '--topic', 'timeout-duel',
+    '--test-cmd', 'node test.js',
+    '--timeout-ms', '1',
+    '--root', root,
+    '--json',
+  ], { encoding: 'utf8' });
+
+  assert.equal(rEval.status, 0, rEval.stderr);
+  const evaluated = JSON.parse(rEval.stdout);
+  for (const arm of ['arm-slow', 'arm-also-slow']) {
+    assert.equal(evaluated.arms[arm].evaluation.testStatus, 'FAIL', `${arm} 被 1ms 超时杀掉`);
+    assert.ok(evaluated.arms[arm].evaluation.durationMs < 5000, `${arm} 耗时远小于 120s 默认值，透传生效`);
+  }
+
+  cleanupArena({ root, topic: 'timeout-duel' });
+});
+
+test('reportArena: MISSING_WORKTREE 按 skip 展示不计失败，报告不再崩溃', () => {
+  // 审查遗留批 2026-11-23：缺失臂原按 ❌ FAIL 展示且 durationMs/diff 字段缺失会 TypeError 崩掉整份报告
+  const root = initTestRepo();
+  initArena({ root, topic: 'missing-duel', arms: ['arm-alive', 'arm-gone'] });
+
+  const meta = readArenaMeta(root, 'missing-duel');
+  fs.rmSync(path.join(root, meta.arms['arm-gone'].dir), { recursive: true, force: true });
+
+  const evaluated = evalArena({ root, topic: 'missing-duel', testCmd: 'node test.js' });
+  assert.equal(evaluated.arms['arm-gone'].evaluation.testStatus, 'MISSING_WORKTREE');
+  assert.equal(evaluated.arms['arm-gone'].evaluation.exitCode, -1);
+  assert.equal(evaluated.arms['arm-alive'].evaluation.testStatus, 'PASS');
+
+  const md = reportArena({ root, topic: 'missing-duel' });
+  assert.ok(md.includes('⏭️ SKIP (工作树缺失)'), '缺失臂按 skip 展示');
+  assert.ok(md.includes('工作树缺失（跳过，不计失败）'), 'verdict 不计失败');
+  assert.ok(!md.includes('❌ FAIL'), '缺失臂不再误报 FAIL（唯一存活臂 PASS）');
+  assert.ok(md.includes('🌟 推荐底座'), '存活臂照常参与裁决推荐');
+
+  cleanupArena({ root, topic: 'missing-duel' });
+});

@@ -587,7 +587,9 @@ async function readReqJson(req, limit = 65536) {
   return raw ? JSON.parse(raw) : {};
 }
 
-const server = http.createServer(async (req, res) => {
+// 审查遗留批 2026-11-23：请求处理器抽出为导出函数——/api/pipeline/* 控制端点可做端点级测试
+//（import 不 listen，isMain 守卫不变；作为服务运行时行为与原内联处理器完全一致）。
+export async function handleBoardRequest(req, res) {
   try {
     // Host 校验（DNS rebinding 缓解，2026-09-27 board-kb-p1）：本地只读服务只认本机 Host
     const host = String(req.headers.host || '');
@@ -656,7 +658,12 @@ const server = http.createServer(async (req, res) => {
       if (body.files) args.push('--files', String(body.files));
       if (body.step) args.push('--step');
       if (body.done) args.push('--done');
-      if (body.gate && isValidGateName(body.gate)) args.push('--gate', body.gate);
+      // 审查遗留批 2026-11-23：非法 gate 名不再静默丢弃后全量跑 verify（误导「定向门已验」），
+      // 对齐 /api/pipeline/gate 的 400 行为。
+      if (body.gate) {
+        if (!isValidGateName(body.gate)) return sendJson(res, 400, { error: `非法的门禁名称: ${String(body.gate)}` });
+        args.push('--gate', body.gate);
+      }
 
       const script = path.join(SCRIPTS_DIR, 'pipeline-run.mjs');
       if (!fs.existsSync(script)) return sendJson(res, 500, { error: `执行器脚本不存在: ${script}` });
@@ -851,7 +858,9 @@ const server = http.createServer(async (req, res) => {
     }
     sendJson(res, 500, { error: e.message });
   }
-});
+}
+
+const server = http.createServer(handleBoardRequest);
 
 // 绑定失败明确退出（EADDRINUSE 常见于直跑撞端口；ensure-board 会先探活选端口，这里兜底可读报错）
 server.on('error', (e) => {
