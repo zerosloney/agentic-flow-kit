@@ -14,7 +14,6 @@ import { computeAiDoraMetrics, checkMetricsThresholds } from '../install/metrics
  */
 export function resolveChangedFiles(target, { since = null } = {}) {
   const files = new Set();
-  let resolved = false;
   try {
     const diffArgs = since
       ? ['diff', '--name-only', `${since}...HEAD`]
@@ -23,35 +22,49 @@ export function resolveChangedFiles(target, { since = null } = {}) {
     if (res.status !== 0 && since) {
       res = spawnSync('git', ['diff', '--name-only', since], { encoding: 'utf8', cwd: target });
     }
-    if (res.status === 0) {
-      resolved = true;
-      if (res.stdout) {
-        for (const line of res.stdout.split(/\r?\n/)) {
-          const trimmed = line.trim();
-          if (trimmed) files.add(trimmed.replace(/\\/g, '/'));
-        }
+    // 安全修复批 2026-11-23（fail-closed）：diff 调用失败（含浅克隆下 HEAD~1 不可达、零提交仓）
+    // 时无法判定增量范围，直接返回 null 让调用方回退全量检查——不允许 porcelain 腿把
+    // 「浅克隆干净检出」误判成空差异集放行全部增量守卫。
+    if (res.status !== 0) return null;
+
+    if (res.stdout) {
+      for (const line of res.stdout.split(/\r?\n/)) {
+        const trimmed = line.trim();
+        if (trimmed) files.add(trimmed.replace(/\\/g, '/'));
       }
     }
 
-    // 兼顾工作区未暂存及已暂存的未提交改动
+    // 兼顾工作区未暂存及已暂存的未提交改动（仅作为 diff 成功后的补充，不单独决定 resolved）
     const statRes = spawnSync('git', ['status', '--porcelain'], { encoding: 'utf8', cwd: target });
-    if (statRes.status === 0) {
-      resolved = true;
-      if (statRes.stdout) {
-        for (const line of statRes.stdout.split(/\r?\n/)) {
-          if (!line.trim()) continue;
-          const filePath = line.slice(3).trim();
-          const actual = filePath.includes('->') ? filePath.split('->').pop().trim() : filePath;
-          if (actual) files.add(actual.replace(/\\/g, '/'));
-        }
+    if (statRes.status === 0 && statRes.stdout) {
+      for (const line of statRes.stdout.split(/\r?\n/)) {
+        if (!line.trim()) continue;
+        const filePath = line.slice(3).trim();
+        const actual = filePath.includes('->') ? filePath.split('->').pop().trim() : filePath;
+        if (actual) files.add(actual.replace(/\\/g, '/'));
       }
     }
   } catch {
     return null;
   }
-  // 所有 git 命令均失败（非 git 仓库 / 浅克隆 / git 不可用）时无法判定差异集
-  if (!resolved) return null;
   return Array.from(files);
+}
+
+/**
+ * 判定变更文件集是否触碰公证证据链（导出纯函数供单测）
+ * 安全修复批 2026-11-23（fail-closed）：判定集从「签名/交接文件」扩展到公证载荷
+ * （attestation / sbom）——只改载荷不改签名文件同样必须触发验签，防绕过。
+ * 路径锚点须与载荷落盘路径同步（.agents/attestation.json / .agents/sbom.json，见 commands/notary.mjs）。
+ */
+export function notaryTouches(files) {
+  const list = Array.isArray(files) ? files : [];
+  return list.some((f) =>
+    f.startsWith('.agents/notary')
+    || f.endsWith('.sig')
+    || f.startsWith('.agents/handoffs/')
+    || f.startsWith('.agents/attestation')
+    || f.startsWith('.agents/sbom'),
+  );
 }
 
 /**
@@ -482,9 +495,7 @@ export function runGateChecks({
   if (isEnabled('notary')) {
     const notaryStart = Date.now();
     try {
-      const touchesNotary = !diffScoping || changedFiles.some(
-        (f) => f.startsWith('.agents/notary') || f.endsWith('.sig') || f.startsWith('.agents/handoffs/'),
-      );
+      const touchesNotary = !diffScoping || notaryTouches(changedFiles);
 
       if (diffScoping && !touchesNotary) {
         guards.push({
@@ -546,13 +557,15 @@ export function runGateChecks({
     const metricsStart = Date.now();
     try {
       const metrics = computeAiDoraMetrics(target, { days: 30 });
-      const violations = checkMetricsThresholds(metrics, thresholds);
+      // 安全修复批 2026-11-23：checkMetricsThresholds 返回 { ok, violations } 对象，
+      // 此处按对象解构取 violations——原先误当数组取 .length 恒为 undefined，守卫形同虚设
+      const { violations } = checkMetricsThresholds(metrics, thresholds);
       if (violations.length > 0) {
         guards.push({
           name: 'metrics',
           title: t('gate.guardMetricsTitle') || 'AI-DORA Quality Baseline Guard',
           status: 'failed',
-          reason: violations.map((v) => `${v.metric}: ${v.actual} (limit: ${v.limit})`).join('; '),
+          reason: violations.join('; '),
           details: { tier: metrics.dora.tier, violations },
           durationMs: Date.now() - metricsStart,
         });

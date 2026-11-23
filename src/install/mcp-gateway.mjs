@@ -85,6 +85,49 @@ function mergeRoleConfig(base, override) {
   return merged;
 }
 
+// 安全修复批 2026-11-23（fail-closed）：levels 逐键与默认并集——用户配置只能增补清单，
+// 不能用空数组/缺失清单摘除默认禁令（如 L3 危险操作清单）。
+function mergeLevels(defaults, overrides) {
+  const merged = { ...defaults };
+  for (const [key, list] of Object.entries(overrides || {})) {
+    merged[key] = [
+      ...new Set([
+        ...(Array.isArray(merged[key]) ? merged[key] : []),
+        ...(Array.isArray(list) ? list : []),
+      ]),
+    ];
+  }
+  return merged;
+}
+
+// 安全修复批 2026-11-23（fail-closed）：parameterRules 按 tool 身份键与默认并集——
+// 默认护栏规则不可整表删除，同一 tool 的 denyPatterns/denyPaths 只能增补。
+function mergeParameterRules(defaults, overrides) {
+  const merged = defaults.map((rule) => ({ ...rule }));
+  const byTool = new Map(merged.map((rule) => [rule.tool, rule]));
+  for (const rule of Array.isArray(overrides) ? overrides : []) {
+    if (!rule || typeof rule !== 'object' || typeof rule.tool !== 'string') continue;
+    const existing = byTool.get(rule.tool);
+    if (!existing) {
+      const copy = { ...rule };
+      merged.push(copy);
+      byTool.set(rule.tool, copy);
+      continue;
+    }
+    for (const key of ['denyPatterns', 'denyPaths']) {
+      if (Array.isArray(rule[key])) {
+        existing[key] = [
+          ...new Set([
+            ...(Array.isArray(existing[key]) ? existing[key] : []),
+            ...rule[key],
+          ]),
+        ];
+      }
+    }
+  }
+  return merged;
+}
+
 export function readGatewayPolicy(target) {
   const file = path.join(target, MCP_GATEWAY_CONFIG_REL);
   if (!fs.existsSync(file)) {
@@ -99,8 +142,8 @@ export function readGatewayPolicy(target) {
     return {
       mode: parsed.mode || DEFAULT_GATEWAY_POLICY.mode,
       roles,
-      levels: { ...DEFAULT_GATEWAY_POLICY.levels, ...(parsed.levels || {}) },
-      parameterRules: Array.isArray(parsed.parameterRules) ? parsed.parameterRules : DEFAULT_GATEWAY_POLICY.parameterRules,
+      levels: mergeLevels(DEFAULT_GATEWAY_POLICY.levels, parsed.levels),
+      parameterRules: mergeParameterRules(DEFAULT_GATEWAY_POLICY.parameterRules, parsed.parameterRules),
       rateLimits: { ...DEFAULT_GATEWAY_POLICY.rateLimits, ...(parsed.rateLimits || {}) },
     };
   } catch {
@@ -210,7 +253,9 @@ export function evaluateMcpCall({
   }
 
   if (!isExplicitlyAllowed) {
-    if (isWildcardDenied || (!isWildcardAllowed && Array.isArray(roleConfig.allow))) {
+    // 安全修复批 2026-11-23（fail-closed）：去掉「allow 键存在才拒」的宽松条件——
+    // allow 缺失与 allow: [] 同义，都是闭集；deny-only 角色不再全放行
+    if (isWildcardDenied || !isWildcardAllowed) {
       return {
         allowed: false,
         decision: 'DENIED_RBAC',

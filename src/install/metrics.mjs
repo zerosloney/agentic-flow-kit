@@ -118,10 +118,13 @@ export function computeAiDoraMetrics(root, options = {}) {
   const openIncidents = incidents.filter((t) => !/closed|done|已关闭/i.test(t)).length;
 
   // 3. 变更失败率 (Change Failure Rate - CFR)
+  // 安全修复批 2026-11-23（fail-closed）：窗口内无可判数据时分母为 0，CFR 返回 null
+  // 而不是冒充 0（0% 曾把空台账直接抬进 Elite 评级）
   const denominator = totalVerifications + openIncidents;
-  const cfr = denominator > 0
+  const hasJudgableData = denominator > 0;
+  const cfr = hasJudgableData
     ? Math.round(((failedVerifications + openIncidents) / denominator) * 1000) / 10
-    : 0;
+    : null;
 
   // 4. 交付与合流频次 (Deployment Frequency - DF)
   const subjects = gitSubjects(root, since);
@@ -151,8 +154,12 @@ export function computeAiDoraMetrics(root, options = {}) {
     : 100;
 
   // 7. 综合评级 (DORA Performance Tier)
+  // 安全修复批 2026-11-23（fail-closed）：窗口内无任何可判数据时不评 Elite/High，
+  // tier 标记 Insufficient（cfr 为 null 时不参与数值比较）
   let doraTier = 'Medium';
-  if (cfr <= 15 && (passRate == null || passRate >= 80) && (mttrSeconds == null || mttrSeconds <= 3600)) {
+  if (!hasJudgableData) {
+    doraTier = 'Insufficient';
+  } else if (cfr <= 15 && (passRate == null || passRate >= 80) && (mttrSeconds == null || mttrSeconds <= 3600)) {
     doraTier = 'Elite';
   } else if (cfr <= 30 && (passRate == null || passRate >= 65)) {
     doraTier = 'High';
@@ -287,20 +294,38 @@ export function renderMetricsMarkdown(m) {
 export function checkMetricsThresholds(metrics, thresholds = {}) {
   const violations = [];
 
-  if (thresholds.maxCfr != null && metrics.dora.changeFailureRate > Number(thresholds.maxCfr)) {
-    violations.push(`CFR (${metrics.dora.changeFailureRate}%) exceeds threshold (${thresholds.maxCfr}%)`);
+  // 安全修复批 2026-11-23（fail-closed）：阈值已声明而对应指标为 null/缺失时计 violation，
+  // 不再静默跳过（null > x 恒 false 曾让空台账直接判过）
+  if (thresholds.maxCfr != null) {
+    if (metrics.dora.changeFailureRate == null) {
+      violations.push(`CFR data missing (threshold declared: max ${thresholds.maxCfr}%)`);
+    } else if (metrics.dora.changeFailureRate > Number(thresholds.maxCfr)) {
+      violations.push(`CFR (${metrics.dora.changeFailureRate}%) exceeds threshold (${thresholds.maxCfr}%)`);
+    }
   }
 
-  if (thresholds.maxMttr != null && metrics.dora.mttrSeconds != null && metrics.dora.mttrSeconds > Number(thresholds.maxMttr)) {
-    violations.push(`MTTR (${metrics.dora.mttrSeconds}s) exceeds threshold (${thresholds.maxMttr}s)`);
+  if (thresholds.maxMttr != null) {
+    if (metrics.dora.mttrSeconds == null) {
+      violations.push(`MTTR data missing (threshold declared: max ${thresholds.maxMttr}s)`);
+    } else if (metrics.dora.mttrSeconds > Number(thresholds.maxMttr)) {
+      violations.push(`MTTR (${metrics.dora.mttrSeconds}s) exceeds threshold (${thresholds.maxMttr}s)`);
+    }
   }
 
-  if (thresholds.minPassRate != null && metrics.aiEngineering.passRate != null && metrics.aiEngineering.passRate < Number(thresholds.minPassRate)) {
-    violations.push(`Pass Rate (${metrics.aiEngineering.passRate}%) below required minimum (${thresholds.minPassRate}%)`);
+  if (thresholds.minPassRate != null) {
+    if (metrics.aiEngineering.passRate == null) {
+      violations.push(`Pass Rate data missing (threshold declared: min ${thresholds.minPassRate}%)`);
+    } else if (metrics.aiEngineering.passRate < Number(thresholds.minPassRate)) {
+      violations.push(`Pass Rate (${metrics.aiEngineering.passRate}%) below required minimum (${thresholds.minPassRate}%)`);
+    }
   }
 
-  if (thresholds.maxRework != null && metrics.aiEngineering.reworkRate != null && metrics.aiEngineering.reworkRate > Number(thresholds.maxRework)) {
-    violations.push(`Rework rate (${metrics.aiEngineering.reworkRate}%) exceeds threshold (${thresholds.maxRework}%)`);
+  if (thresholds.maxRework != null) {
+    if (metrics.aiEngineering.reworkRate == null) {
+      violations.push(`Rework rate data missing (threshold declared: max ${thresholds.maxRework}%)`);
+    } else if (metrics.aiEngineering.reworkRate > Number(thresholds.maxRework)) {
+      violations.push(`Rework rate (${metrics.aiEngineering.reworkRate}%) exceeds threshold (${thresholds.maxRework}%)`);
+    }
   }
 
   return {

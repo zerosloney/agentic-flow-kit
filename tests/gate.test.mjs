@@ -9,6 +9,7 @@ import { makeT } from '../src/i18n.mjs';
 import {
   runGateChecks,
   resolveChangedFiles,
+  notaryTouches,
   renderGateText,
   renderGateMarkdown,
   generateCiWorkflow,
@@ -159,6 +160,37 @@ test('runGateChecks notary guard passes when public key is at default keygen pat
   assert.equal(notaryGuard.details.count, 1);
 });
 
+test('notaryTouches covers signatures, payloads, and handoffs in diff scope', () => {
+  // 触碰判定五类：公证目录 / 任意签名文件 / 交接信封 / attestation 载荷 / sbom 载荷
+  assert.equal(notaryTouches(['.agents/notary/public.pem']), true);
+  assert.equal(notaryTouches(['src/a.mjs', 'release.sbom.export.sig']), true);
+  assert.equal(notaryTouches(['.agents/handoffs/H-001.json']), true);
+  assert.equal(notaryTouches(['.agents/attestation.json']), true);
+  assert.equal(notaryTouches(['.agents/sbom.json']), true);
+
+  // 非公证资产触碰不触发验签（安全修复批 2026-11-23：载荷纳入判定集，防改载荷绕过验签）
+  assert.equal(notaryTouches(['README.md', 'src/index.mjs']), false);
+  assert.equal(notaryTouches([]), false);
+  assert.equal(notaryTouches(null), false);
+});
+
+test('runGateChecks metrics guard fails on empty ledger with declared thresholds', () => {
+  const dir = makeTmp('flow-kit-gate-metrics-empty-');
+  const res = runGateChecks({
+    target: dir,
+    strict: false,
+    thresholds: { maxCfr: 15 },
+    t,
+  });
+
+  // 安全修复批 2026-11-23：空台账 CFR 为 null 不冒充 0，阈值已声明而数据缺失计 violation
+  const metricsGuard = res.guards.find((g) => g.name === 'metrics');
+  assert.ok(metricsGuard);
+  assert.equal(metricsGuard.status, 'failed');
+  assert.match(metricsGuard.reason, /CFR data missing/);
+  assert.equal(res.passed, false);
+});
+
 test('generateCiWorkflow generates valid GitHub Actions and GitLab CI files', () => {
   const dir = makeTmp('flow-kit-gate-ci-');
 
@@ -221,8 +253,10 @@ test('diff scoping restricts check scope to modified files', () => {
   spawnSync('git', ['add', '.'], { cwd: dir });
   spawnSync('git', ['commit', '-m', 'initial'], { cwd: dir });
 
-  // 仅修改一个无关文档文件
+  // 第二个提交让 HEAD~1 可达（安全修复批 2026-11-23 后：diff 失败即回退全量，不再被 porcelain 顶替）
   fs.writeFileSync(path.join(dir, 'README.md'), '# Updated docs', 'utf8');
+  spawnSync('git', ['add', '.'], { cwd: dir });
+  spawnSync('git', ['commit', '-m', 'docs: update readme'], { cwd: dir });
 
   const res = runGateChecks({ target: dir, diff: true, t });
   assert.equal(res.passed, true);
@@ -240,15 +274,37 @@ test('resolveChangedFiles returns null when git cannot resolve the diff scope', 
   assert.equal(resolveChangedFiles(dir), null);
 });
 
-test('resolveChangedFiles returns an array in a clean git repository', () => {
+test('resolveChangedFiles returns null in a zero-commit repository (fail-closed)', () => {
   const dir = makeTmp('flow-kit-gate-clean-diff-');
   spawnSync('git', ['init'], { cwd: dir });
   spawnSync('git', ['config', 'user.name', 'test'], { cwd: dir });
   spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: dir });
 
-  const changed = resolveChangedFiles(dir);
-  assert.ok(Array.isArray(changed));
-  assert.deepEqual(changed, []);
+  // 安全修复批 2026-11-23：零提交仓 HEAD~1 不可达，diff 失败即返回 null 回退全量，
+  // 不再被 porcelain 腿误判为「空差异集」放行增量守卫
+  assert.equal(resolveChangedFiles(dir), null);
+});
+
+test('resolveChangedFiles returns null in a shallow clone (fail-closed)', () => {
+  const src = makeTmp('flow-kit-gate-shallow-src-');
+  spawnSync('git', ['init'], { cwd: src });
+  spawnSync('git', ['config', 'user.name', 'test'], { cwd: src });
+  spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: src });
+  fs.writeFileSync(path.join(src, 'README.md'), '# shallow source', 'utf8');
+  spawnSync('git', ['add', '.'], { cwd: src });
+  const commitRes = spawnSync('git', ['commit', '-m', 'initial'], { cwd: src, encoding: 'utf8' });
+  assert.equal(commitRes.status, 0, commitRes.stderr);
+
+  const dst = makeTmp('flow-kit-gate-shallow-clone-');
+  const cloneUrl = `file:///${src.replace(/\\/g, '/')}`;
+  const cloneRes = spawnSync('git', ['clone', '--depth', '1', cloneUrl, dst], { encoding: 'utf8' });
+  assert.equal(cloneRes.status, 0, cloneRes.stderr);
+
+  // 浅克隆下 HEAD~1 不可达：差异集判 null → gate 回退全量并告警，而不是空集放行
+  assert.equal(resolveChangedFiles(dst), null);
+
+  const res = runGateChecks({ target: dst, diff: true, t });
+  assert.equal(res.diffScoping, null);
 });
 
 test('runGateChecks falls back to full checks when diff scope cannot be resolved', () => {

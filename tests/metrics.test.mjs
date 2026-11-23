@@ -25,7 +25,9 @@ test('computeAiDoraMetrics handles empty directory gracefully', () => {
 
   assert.equal(res.windowDays, 14);
   assert.equal(typeof res.since, 'string');
-  assert.equal(res.dora.changeFailureRate, 0);
+  // 安全修复批 2026-11-23：空台账 CFR 为 null 不冒充 0，tier 不评 Elite 标记 Insufficient
+  assert.equal(res.dora.changeFailureRate, null);
+  assert.equal(res.doraTier, 'Insufficient');
   assert.equal(res.dora.mttrSeconds, null);
   assert.equal(res.aiEngineering.totalVerifications, 0);
   assert.equal(res.aiEngineering.passRate, null);
@@ -213,6 +215,39 @@ test('checkMetricsThresholds evaluates thresholds and detects violations', () =>
   });
   assert.equal(failRes.ok, false);
   assert.equal(failRes.violations.length, 4);
+});
+
+test('checkMetricsThresholds flags declared thresholds when metric data is missing', () => {
+  // 安全修复批 2026-11-23：阈值已声明而指标为 null/缺失时计 violation，不再静默跳过
+  const emptyMetrics = {
+    doraTier: 'Insufficient',
+    dora: { changeFailureRate: null, mttrSeconds: null },
+    aiEngineering: { passRate: null, reworkRate: null },
+  };
+
+  const res = checkMetricsThresholds(emptyMetrics, {
+    maxCfr: 15,
+    maxMttr: 3600,
+    minPassRate: 80,
+    maxRework: 25,
+  });
+  assert.equal(res.ok, false);
+  assert.equal(res.violations.length, 4);
+  assert.ok(res.violations.every((v) => /data missing/.test(v)));
+
+  // 未声明阈值的指标不因数据缺失报 violation
+  const partial = checkMetricsThresholds(emptyMetrics, { maxCfr: 15 });
+  assert.equal(partial.ok, false);
+  assert.equal(partial.violations.length, 1);
+  assert.match(partial.violations[0], /CFR data missing/);
+
+  // 有真实数据时行为不变：阈值内判过
+  const withData = checkMetricsThresholds({
+    dora: { changeFailureRate: 10, mttrSeconds: 1200 },
+    aiEngineering: { passRate: 90, reworkRate: 5 },
+  }, { maxCfr: 15, maxMttr: 3600, minPassRate: 80, maxRework: 25 });
+  assert.equal(withData.ok, true);
+  assert.equal(withData.violations.length, 0);
 });
 
 test('CLI flow-kit metrics report, export, and check integration', () => {
