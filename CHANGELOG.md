@@ -2,6 +2,23 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.12.1]
+
+### 修复
+
+- fix(review): owner 拍板三项落地——bundle 误杀收窄、NOT_MANAGED 归类注记、MCP mode 死键删除
+- fix(pr-create): 非 json 路径透传原生退出码，azure/tfs 分支补 --json 单对象
+- fix(engine): touch-set 判定收窄、inspect 全量、next --gate 预检与看板/arena 边界修正
+- fix(security): 沙箱包装器逃逸、disabled 遇 strict 收紧、坏配置 loud 回退与 handoff 工件越界拦截
+- fix(gate): init-ci 覆盖门、--name-only 非 ASCII 路径修正与 kit 版本读取单源
+- fix(install): cpp 栈补齐 devcontainer 映射，legacy 升级 CI 回退按远端探测与档位
+- fix(security): 门禁与网关 fail-closed 收紧安全修复批（P1×2 + P2×3）
+- fix(skills): 评测健康检查同毫秒并列时取后记条目
+
+### 文档
+
+- docs: CLAUDE.md 宿主数同步 14 与 handoff 分级口径补记
+
 ## [2.12.0]
 
 ### 新增
