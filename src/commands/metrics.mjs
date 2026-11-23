@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { flag } from '../cli/args.mjs';
-import { resolveTarget } from './install.mjs';
+import { readKitVersion, resolveTarget } from './install.mjs';
 import {
   computeAiDoraMetrics,
   exportOpenTelemetryMetrics,
@@ -47,7 +47,7 @@ export function metricsCommand({ args, t }) {
 
     case 'export': {
       const format = String(args.format || 'otel').toLowerCase();
-      const version = args.version || '2.11.0';
+      const version = args.version || readKitVersion();
       const outFile = args.out ? path.resolve(target, args.out) : null;
 
       const metrics = computeAiDoraMetrics(target, { days });

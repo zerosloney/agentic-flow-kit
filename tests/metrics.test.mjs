@@ -117,6 +117,14 @@ test('exportOpenTelemetryMetrics produces standard OTel ResourceMetrics format',
   assert.ok(Array.isArray(otel.resourceMetrics));
   assert.equal(otel.resourceMetrics.length, 1);
 
+  // 默认 service.version 跟随 package.json，发版后不会停在旧值
+  const kitVersion = JSON.parse(fs.readFileSync(path.join(KIT, 'package.json'), 'utf8')).version;
+  const defaultAttrs = Object.fromEntries(
+    exportOpenTelemetryMetrics(mockMetrics).resourceMetrics[0].resource.attributes
+      .map((a) => [a.key, a.value.stringValue || a.value.intValue]),
+  );
+  assert.equal(defaultAttrs['service.version'], kitVersion);
+
   const rm = otel.resourceMetrics[0];
   const attrs = Object.fromEntries(rm.resource.attributes.map((a) => [a.key, a.value.stringValue || a.value.intValue]));
   assert.equal(attrs['service.name'], 'agentic-flow-kit');
