@@ -7,6 +7,8 @@ import { fileURLToPath } from 'node:url';
 import { makeTmp } from './helpers/tmp.mjs';
 import { makeT } from '../src/i18n.mjs';
 import { gatherHudState, renderHudView, hudWatchLoop } from '../src/tui/hud.mjs';
+import { createHandoffEnvelope, writeHandoffFile } from '../src/install/handoff.mjs';
+import { generateKeyPair } from '../src/install/notary.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
@@ -15,6 +17,38 @@ const t = makeT('zh-CN');
 function run(args, cwd) {
   return spawnSync(process.execPath, [BIN, ...args], { cwd, encoding: 'utf8' });
 }
+
+test('gatherHudState reuses expensive gate/handoff results within TTL', () => {
+  const dir = makeTmp('flow-kit-hud-cache-');
+  const cache = {};
+
+  const state1 = gatherHudState(dir, t, { cache, now: 1000, ttlMs: 30000 });
+  assert.ok(cache.at === 1000);
+  assert.equal(cache.gate, state1.gate);
+
+  // TTL 内：复用同一对象
+  const state2 = gatherHudState(dir, t, { cache, now: 2000, ttlMs: 30000 });
+  assert.equal(state2.gate, state1.gate);
+  assert.equal(state2.handoffs, state1.handoffs);
+  assert.equal(cache.at, 1000);
+
+  // 超过 TTL：重算并刷新缓存时间
+  const state3 = gatherHudState(dir, t, { cache, now: 31001, ttlMs: 30000 });
+  assert.notEqual(state3.gate, state1.gate);
+  assert.notEqual(state3.handoffs, state1.handoffs);
+  assert.equal(cache.at, 31001);
+  assert.equal(cache.gate, state3.gate);
+});
+
+test('gatherHudState recomputes every call when no cache is passed', () => {
+  const dir = makeTmp('flow-kit-hud-nocache-');
+
+  const state1 = gatherHudState(dir, t);
+  const state2 = gatherHudState(dir, t);
+
+  assert.notEqual(state2.gate, state1.gate);
+  assert.notEqual(state2.handoffs, state1.handoffs);
+});
 
 test('gatherHudState collects 5-panel comprehensive data', () => {
   const dir = makeTmp('flow-kit-hud-state-');
@@ -112,4 +146,29 @@ test('CLI flow-kit hud and status --hud integration', () => {
   const r3 = run(['status', '--hud', '--target', dir], dir);
   assert.equal(r3.status, 0);
   assert.match(r3.stdout, /LIVE MULTI-AGENT & SHIELD HUD/);
+});
+
+test('gatherHudState verifies signed handoff with default keygen public key', () => {
+  const dir = makeTmp('flow-kit-hud-handoff-key-');
+
+  // keygen 默认落盘位置：.agents/keys/flow-kit-key.pub.pem
+  const { publicKey, privateKey } = generateKeyPair();
+  const keysDir = path.join(dir, '.agents', 'keys');
+  fs.mkdirSync(keysDir, { recursive: true });
+  fs.writeFileSync(path.join(keysDir, 'flow-kit-key.pub.pem'), publicKey, 'utf8');
+
+  const envelope = createHandoffEnvelope({
+    target: dir,
+    fromRole: 'code',
+    toRole: 'review',
+    task: 'hud-check',
+    summary: 'signed handoff',
+    signWithKey: privateKey,
+  });
+  writeHandoffFile(path.join(dir, '.agents', 'handoffs', `${envelope.id}.json`), envelope);
+
+  const state = gatherHudState(dir, t);
+  assert.equal(state.handoffs.total, 1);
+  assert.equal(state.handoffs.tampered, 0);
+  assert.equal(state.handoffs.clean, true);
 });

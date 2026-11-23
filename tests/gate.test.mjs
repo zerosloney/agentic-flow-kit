@@ -8,6 +8,7 @@ import { makeTmp } from './helpers/tmp.mjs';
 import { makeT } from '../src/i18n.mjs';
 import {
   runGateChecks,
+  resolveChangedFiles,
   renderGateText,
   renderGateMarkdown,
   generateCiWorkflow,
@@ -136,6 +137,28 @@ test('runGateChecks blocks on tampered attestation notary proof', () => {
   assert.equal(notaryGuard.status, 'failed');
 });
 
+test('runGateChecks notary guard passes when public key is at default keygen path', () => {
+  const dir = makeTmp('flow-kit-gate-notary-default-key-');
+
+  // keygen 默认落盘位置：.agents/keys/flow-kit-key.pub.pem
+  const { publicKey, privateKey } = generateKeyPair();
+  const keysDir = path.join(dir, '.agents', 'keys');
+  fs.mkdirSync(keysDir, { recursive: true });
+  fs.writeFileSync(path.join(keysDir, 'flow-kit-key.pub.pem'), publicKey, 'utf8');
+
+  const payload = { spec: 'workflow-v1', author: 'agent', timestamp: '2026-11-22' };
+  const sigObj = signPayload({ payload, privateKeyPem: privateKey });
+  writeSignatureFile(path.join(dir, '.agents', 'attestation.sig'), sigObj);
+  fs.writeFileSync(path.join(dir, '.agents', 'attestation.json'), JSON.stringify(payload), 'utf8');
+
+  const res = runGateChecks({ target: dir, strict: false, t });
+  const notaryGuard = res.guards.find((g) => g.name === 'notary');
+  assert.ok(notaryGuard);
+  assert.equal(notaryGuard.status, 'passed', notaryGuard.reason);
+  assert.doesNotMatch(notaryGuard.reason, /public key|公钥/i);
+  assert.equal(notaryGuard.details.count, 1);
+});
+
 test('generateCiWorkflow generates valid GitHub Actions and GitLab CI files', () => {
   const dir = makeTmp('flow-kit-gate-ci-');
 
@@ -152,6 +175,12 @@ test('generateCiWorkflow generates valid GitHub Actions and GitLab CI files', ()
   assert.equal(fs.existsSync(gl.path), true);
   assert.match(gl.content, /ai-gate:/);
   assert.match(gl.content, /agentic-flow-kit gate/);
+  // 声明的工件必须真实存在：gate 只写 markdown，不得声明从未生成的 JUnit 报告
+  assert.doesNotMatch(gl.content, /junit:/);
+  assert.doesNotMatch(gl.content, /gate-summary\.xml/);
+  assert.match(gl.content, /paths:/);
+  assert.match(gl.content, /gate-summary\.md/);
+  assert.match(gl.content, /when: always/);
 });
 
 test('generateGateBadge outputs valid markdown, svg, and json badges', () => {
@@ -204,6 +233,52 @@ test('diff scoping restricts check scope to modified files', () => {
   const archGuard = res.guards.find((g) => g.name === 'arch');
   assert.equal(archGuard.status, 'passed');
   assert.match(archGuard.reason, /diff scope|增量/);
+});
+
+test('resolveChangedFiles returns null when git cannot resolve the diff scope', () => {
+  const dir = makeTmp('flow-kit-gate-nongit-');
+  assert.equal(resolveChangedFiles(dir), null);
+});
+
+test('resolveChangedFiles returns an array in a clean git repository', () => {
+  const dir = makeTmp('flow-kit-gate-clean-diff-');
+  spawnSync('git', ['init'], { cwd: dir });
+  spawnSync('git', ['config', 'user.name', 'test'], { cwd: dir });
+  spawnSync('git', ['config', 'user.email', 'test@test.com'], { cwd: dir });
+
+  const changed = resolveChangedFiles(dir);
+  assert.ok(Array.isArray(changed));
+  assert.deepEqual(changed, []);
+});
+
+test('runGateChecks falls back to full checks when diff scope cannot be resolved', () => {
+  const dir = makeTmp('flow-kit-gate-nongit-diff-');
+  fs.mkdirSync(path.join(dir, '.agents', 'config'), { recursive: true });
+  fs.mkdirSync(path.join(dir, 'src', 'a'), { recursive: true });
+  fs.mkdirSync(path.join(dir, 'src', 'b'), { recursive: true });
+
+  fs.writeFileSync(
+    path.join(dir, '.agents', 'config', 'architecture.json'),
+    JSON.stringify({
+      version: '1.0',
+      layers: [
+        { name: 'a', pattern: 'src/a/**' },
+        { name: 'b', pattern: 'src/b/**' },
+      ],
+      rules: [{ from: 'a', canOnlyImport: ['b'] }],
+    }),
+    'utf8'
+  );
+  fs.writeFileSync(path.join(dir, 'src', 'a', 'index.mjs'), `import '../b/index.mjs';\n`, 'utf8');
+  fs.writeFileSync(path.join(dir, 'src', 'b', 'index.mjs'), `import '../a/index.mjs';\n`, 'utf8');
+
+  const res = runGateChecks({ target: dir, diff: true, t });
+  assert.equal(res.diffScoping, null);
+  assert.equal(res.passed, false);
+  assert.equal(res.verdict, 'REJECTED');
+
+  const archGuard = res.guards.find((g) => g.name === 'arch');
+  assert.equal(archGuard.status, 'failed');
 });
 
 test('CLI flow-kit gate, ci and badge commands e2e integration', () => {

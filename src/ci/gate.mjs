@@ -5,7 +5,7 @@ import { checkArchHealth } from '../install/arch-guard.mjs';
 import { checkSkillsEvalHealth } from '../skills/eval-harness.mjs';
 import { checkMcpGatewayHealth } from '../install/mcp-gateway.mjs';
 import { checkSandboxHealth } from '../install/sandbox.mjs';
-import { verifySignature, readSignatureFile } from '../install/notary.mjs';
+import { verifySignature, readSignatureFile, resolvePublicKeyPath } from '../install/notary.mjs';
 import { listHandoffFiles, verifyHandoffEnvelope } from '../install/handoff.mjs';
 import { computeAiDoraMetrics, checkMetricsThresholds } from '../install/metrics.mjs';
 
@@ -14,6 +14,7 @@ import { computeAiDoraMetrics, checkMetricsThresholds } from '../install/metrics
  */
 export function resolveChangedFiles(target, { since = null } = {}) {
   const files = new Set();
+  let resolved = false;
   try {
     const diffArgs = since
       ? ['diff', '--name-only', `${since}...HEAD`]
@@ -22,26 +23,34 @@ export function resolveChangedFiles(target, { since = null } = {}) {
     if (res.status !== 0 && since) {
       res = spawnSync('git', ['diff', '--name-only', since], { encoding: 'utf8', cwd: target });
     }
-    if (res.status === 0 && res.stdout) {
-      for (const line of res.stdout.split(/\r?\n/)) {
-        const trimmed = line.trim();
-        if (trimmed) files.add(trimmed.replace(/\\/g, '/'));
+    if (res.status === 0) {
+      resolved = true;
+      if (res.stdout) {
+        for (const line of res.stdout.split(/\r?\n/)) {
+          const trimmed = line.trim();
+          if (trimmed) files.add(trimmed.replace(/\\/g, '/'));
+        }
       }
     }
 
     // 兼顾工作区未暂存及已暂存的未提交改动
     const statRes = spawnSync('git', ['status', '--porcelain'], { encoding: 'utf8', cwd: target });
-    if (statRes.status === 0 && statRes.stdout) {
-      for (const line of statRes.stdout.split(/\r?\n/)) {
-        if (!line.trim()) continue;
-        const filePath = line.slice(3).trim();
-        const actual = filePath.includes('->') ? filePath.split('->').pop().trim() : filePath;
-        if (actual) files.add(actual.replace(/\\/g, '/'));
+    if (statRes.status === 0) {
+      resolved = true;
+      if (statRes.stdout) {
+        for (const line of statRes.stdout.split(/\r?\n/)) {
+          if (!line.trim()) continue;
+          const filePath = line.slice(3).trim();
+          const actual = filePath.includes('->') ? filePath.split('->').pop().trim() : filePath;
+          if (actual) files.add(actual.replace(/\\/g, '/'));
+        }
       }
     }
   } catch {
     return null;
   }
+  // 所有 git 命令均失败（非 git 仓库 / 浅克隆 / git 不可用）时无法判定差异集
+  if (!resolved) return null;
   return Array.from(files);
 }
 
@@ -49,7 +58,7 @@ export function resolveChangedFiles(target, { since = null } = {}) {
  * 校验公证签名证明链与防篡改
  */
 function checkNotaryProofGuard(target, t) {
-  const pubKeyPath = path.join(target, '.agents', 'notary', 'public.pem');
+  const pubKeyPath = resolvePublicKeyPath(target);
   const pubKey = fs.existsSync(pubKeyPath) ? fs.readFileSync(pubKeyPath, 'utf8') : null;
 
   const attestationSigPath = path.join(target, '.agents', 'attestation.sig');
@@ -230,6 +239,11 @@ export function runGateChecks({
         changedCount: changedFiles.length,
         files: changedFiles,
       };
+    } else {
+      // 无法解析差异集时回退全量检查（fail-closed），而不是把空集当作有效范围跳过守卫
+      process.stderr.write(
+        `${t('gate.diffScopeFailed') || 'Failed to resolve diff scope, falling back to full checks'}\n`,
+      );
     }
   }
 
@@ -773,8 +787,6 @@ ai-gate:
   script:
     - npx --yes agentic-flow-kit gate --strict --markdown --out gate-summary.md
   artifacts:
-    reports:
-      junit: gate-summary.xml
     paths:
       - gate-summary.md
     when: always
