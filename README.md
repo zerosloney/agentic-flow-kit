@@ -14,7 +14,7 @@ AI-Native 工作流引擎：**工作流面**管任务怎么从需求跑到关单
 
 - **风险定级路由**（`new-task`）：L1 / L2 / L3 判级 + 触达面闭集，判低有机器硬拦；L0 / L1 走快速道。会话入口由 `SessionStart` 腿注入指针式路由令（仅 claude 有官方实证，`session-context.local.json` 可关）。
 - **手动阶段流**（`stages`）：Plan 立 intent → Design 起 spec → Build 起 plan + 实现 → Test 静态门 + 独立复核 + 关单；L2 / L3 强制独立复核（新会话、固定 git range）。
-- **全自动执行器**（`pipeline-run`）：单命令驱动状态机，`PIPELINE-STOP` 停机点分流（工单 / 人件门原话代录 / 门失败 / 完成）；`onFail` 失败路由 + 重试预算 + 断点续跑；产物落 `workflow/tasks/<task>/`，与手动路径隔离。**保留待用**：目前零真实 run，启用前先跑 `check-pipeline-state.mjs` 静态闭包检查，再用小任务端到端验证。
+- **全自动执行器**（`pipeline-run`）：单命令驱动状态机，`PIPELINE-STOP` 停机点分流（工单 / 人件门原话代录 / 门失败 / 完成）；`onFail` 失败路由 + 重试预算 + 断点续跑；产物落 `workflow/tasks/<task>/`，与手动路径隔离。**实战已验证（2026-11-18）**：首个端到端真实 run 通过（22 门 / 3 确认 / 3 提交，台账配对成立）；启用前建议先跑 `check-pipeline-state.mjs` 静态闭包检查。
 - **任务投影与看板**：`projectTasks` 单源聚合 INDEX.md 任务表 + 本地 SSE 看板（`workflow-board-server.mjs`）。
 - **证据链**：确认台账（原话代录 + 对质）、独立复核落盘、verify 证据绑定 runId、Spec / Tasks / Verify 三件套（`check-spec-packages` 可入 CI）。
 - **观测**：usage 凭证采集（`PostToolUse(Agent)` 观测腿，缺字段零写入）、observability 聚合、门禁墙钟预算（advisory，数据驱动退役）。
@@ -26,7 +26,7 @@ AI-Native 工作流引擎：**工作流面**管任务怎么从需求跑到关单
 - **MCP 接线**：`servers.json` 声明，安装器编译到宿主配置。
 - **模型按角色**：code / judgment / review 三角色，安装时探测推荐或手填，按宿主注入或继承。
 - **门禁与体检**：`doctor`（含 `--attest` 安装证明链）、`check-local-gates` 墙钟预算门、`diff` 漂移比对。
-- **布局治理**：栈 profile（dotnet / node / ts / rust / go / java × 6 切面）、tier（lean / standard / enterprise）、devcontainer 校验 / 构建、CI 按远端择一（GitHub 或 Azure）、多仓 workspace 聚合。
+- **布局治理**：栈 profile（dotnet / node / typescript / rust / go / java / python / cpp / empty）、tier（lean / standard / enterprise）、devcontainer 校验 / 构建、CI 按远端择一（GitHub 或 Azure）、多仓 workspace 聚合。
 
 ## 引擎图表
 

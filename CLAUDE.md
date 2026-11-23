@@ -81,7 +81,7 @@ node tools/new-host.mjs myhost [--hooks] [--permissions] [--mcp claude|opencode]
 
 `diff` / `status` 复用 `buildPlan`、manifest 哈希与 `readInjectedModels`，只读输出 `unchanged` / `user-modified` / `kit-updated` / `orphan` / `missing`；不传 `--lang` 时跟随 manifest 语言。`prune` 复用同一套 orphan 分类：哈希与 manifest 一致才删，用户改过的保留并提示，`--force` 覆盖，删除后清理空目录；`prune --baseline` 额外清理 manifest 中已无对应文件的基线。`explain` 复用 `buildState` 与 `classifyEntry`，输出模板来源、语言覆盖、模型注入和哈希；语言覆盖会在 plan 条目上记录 `templateAbs` / `localeOverride`。
 
-所有命令共享 `--json` 与退出码契约（`src/cli/exit.mjs`）：`--json` 时 stdout 只允许最终单对象，人类进度走 stderr；`--strict` 把冲突/漂移变成退出码 1。码值：0 成功、1 冲突或严格模式漂移、2 用法、3 target/manifest 缺失、4 未知宿主、5 IO。新增错误类型时在 `exit.mjs` 登记 `err.code`，不要在命令里直接 `process.exit`。
+所有命令共享 `--json` 与退出码契约（`src/cli/exit.mjs`）：`--json` 时 stdout 只允许最终单对象，人类进度走 stderr；`--strict` 把冲突/漂移变成退出码 1。码值：0 成功、1 冲突或严格模式漂移、2 用法、3 target/manifest 缺失、4 未知宿主、5 IO、6 安装锁冲突（可重试）。新增错误类型时在 `exit.mjs` 登记 `err.code`，不要在命令里直接 `process.exit`。
 
 `add-host` 只写 `category: 'host'`，并保留已安装的 stack / language；`upgrade` 按 manifest 记录的宿主和语言重放。`upgrade --explain-policy` 在应用前用 `src/install/policy-diff.mjs` 对比磁盘与本次渲染文本，只做策略面语义差分（gates / budgets / enums / roles / policy）；有变化才打印，`--json` 增加 `policyDiff`。
 
@@ -118,6 +118,24 @@ node tools/new-host.mjs myhost [--hooks] [--permissions] [--mcp claude|opencode]
 
 `src/commands/workspace.mjs` 提供 `workspace init` / `workspace status`：清单固定为 `.flow-kit/workspace.json`（schema `schemas/workspace.schema.json`），只记录显式 `--repos` 列出的仓库，不做隐式发现。仓库必须在根目录内且含 `.git`；每仓独立安装，workspace 只读取各仓 `.agents/install-manifest.json` 的宿主 / 栈 / 语言 / 版本摘要。`init` 幂等并保留 `createdAt`；`status` 只读、路径消失标 `missingPath`。非法仓库 `BAD_REPO` → 退出码 2，缺清单 `NO_WORKSPACE` → 3；`--repos` 支持空格分隔（收集到下一个 `--flag`）与逗号分隔。`workspaceCommand` 由 `main.mjs` 在 `workspace` 子命令分派，不加载安装计划。
 
+## 治理与供应链命令
+
+安装管线之外，`src/cli/main.mjs` 还分派了以下命令（用法目录见 `flow-kit --help`）：
+
+| 命令 | 实现 | 作用 |
+|---|---|---|
+| `policy <link\|check\|sync>` | `src/commands/policy.mjs` | 策略即代码：校验 / 关联 / 同步策略面（机制登记、预算上限、枚举引用） |
+| `bundle <pack\|inspect\|verify\|unpack>` | `src/commands/bundle.mjs` | 把模板、语言包与外部宿主清单打成可校验的分发包，并支持检视、校验、解包 |
+| `sbom <export\|verify>` | `src/commands/sbom.mjs` | SBOM 导出与校验（支持签名 / 验签） |
+| `keygen` / `sign` / `verify-sig` | `src/commands/notary.mjs`、`src/install/notary.mjs` | 公证与数字签名：生成密钥、对工件签名、验签 |
+| `handoff <create\|verify\|list>` | `src/commands/handoff.mjs`、`src/install/handoff.mjs` | 多智能体接力：生成 / 验签 / 列出接力信封；验签时做上下文防污染扫描与工件路径核验 |
+| `mcp <audit\|check-call\|stats>` | `src/commands/mcp.mjs`、`src/install/mcp-gateway.mjs` | MCP 网关的角色权限：审计调用、按角色判定单次调用、统计 |
+| `metrics <report\|export\|check>` | `src/commands/metrics.mjs`、`src/install/metrics.mjs` | AI-DORA 指标：报告 / OpenTelemetry 导出 / 阈值检查 |
+| `arch <init\|check\|graph>` | `src/commands/arch.mjs`、`src/install/arch-guard.mjs` | 架构守卫：按预设初始化、检查边界违规、输出依赖图 |
+| `sandbox <inspect\|init\|route\|exec>` | `src/commands/sandbox.mjs`、`src/install/sandbox.mjs` | 沙箱：检视引擎与策略现状、初始化策略、按指令高危等级路由、在沙箱内执行 |
+| `gate [check\|badge\|init-ci]` | `src/commands/gate.mjs`、`src/ci/gate.mjs` | 门禁卡口：按变更集跑检查、生成徽章、生成 CI 工作流；`ci` 是同一处理器的别名（`flow-kit ci init` 等价 `gate init-ci`） |
+| `hud` | `src/commands/hud.mjs`、`src/tui/hud.mjs` | 项目看板快照；`--watch` 实时刷新，`--json` 结构化输出 |
+
 ## 宿主能力注册表
 
 `src/hosts/registry.mjs` 是宿主能力的单一来源，不要在 `plan.mjs` / `doctor.mjs` 里为某个宿主写硬编码分支。字段包括：
@@ -140,7 +158,7 @@ Hook 接线在 `src/install/hooks.mjs`：中性规格来自引擎模板 `.agents
 
 开发容器（R3-8 沙箱面）在 `src/install/devcontainer.mjs`：该文件是「栈 → 官方基础镜像 / 扩展」映射与渲染规则的单源（`STACK_IMAGES` / `STACK_EXTENSIONS`）。`buildPlan` 生成 `category: 'devcontainer'`、优先级 41 的两条 `kind: 'generated'` 条目（`.devcontainer/devcontainer.json` + `.devcontainer/Dockerfile`），Dockerfile 里 `ARG FLOW_KIT_VERSION=<安装器版本>` 钉死随镜像安装的 kit 版本；`--no-devcontainer` 关闭，选择记进 `manifest.devcontainer`，`upgrade` 按 manifest 重放（不静默重开）。白名单（`allowedImagePrefixes` / `forbiddenTags` / `requirePinnedFlowKit`）落在项目内 `.agents/config/devcontainer-policy.json`（schema `schemas/devcontainer-policy.schema.json`），运行时门 `templates/engine/.agents/scripts/check-devcontainer.mjs` 与 `doctor` 共读这一份，避免两处策略各说各话；门挂在 verify 安全段 `devcontainer`（项目没有 `.devcontainer/` 时大声跳过不判红），CLI `flow-kit devcontainer check|build`（`build` 需要 docker，缺失退出 2）。容器身份与 node 供给按镜像核对：`STACK_CONTAINER_USER`（node/typescript → `node`，其余 → `vscode`）与 `STACK_PROVISIONS_NODE`（只有 typescript-node 真带 node；dotnet/go/java 上游是 node feature `version: "none"`、只有 nvm 壳，rust/empty 无 node——这些栈在 Dockerfile 里以 `ARG NODE_VERSION` + 官方 tar 包 sha256 补装），生成器（`src/install/devcontainer.mjs`）与运行时门（`check-devcontainer.mjs`）两侧同表、必须同步；门从 `install-manifest.json` 读 stack，因此身份/镜像/补装写错都会当场判红。
 
-「容器可构建」的证据由 `tools/devcontainer-build.mjs` 产出，两层分开记账：静态层（零 docker）逐栈生成 `.devcontainer/` 并用 `checkDevcontainer` 校验全部 8 栈，`npm run devcontainer:check`（`--dry-run`）在 CI 的 test 作业里跑；构建层需要 docker，对选定栈真跑 `docker build` + 冒烟 `docker run`，docker 缺失时 fail-closed 退出 2（不假装构建过），钉的版本尚未发布到 npm 时构建退回 `latest` 并记账。kit 自身 CI 的 `devcontainer-build` 矩阵作业跑 node/dotnet 两个代表栈；目标项目 CI 模板里的同名作业默认关闭（仓库变量 `FLOW_KIT_DEVCONTAINER_BUILD=true` 才开），避免默认拉镜像。
+「容器可构建」的证据由 `tools/devcontainer-build.mjs` 产出，两层分开记账：静态层（零 docker）逐栈生成 `.devcontainer/` 并用 `checkDevcontainer` 校验全部 9 栈，`npm run devcontainer:check`（`--dry-run`）在 CI 的 test 作业里跑；构建层需要 docker，对选定栈真跑 `docker build` + 冒烟 `docker run`，docker 缺失时 fail-closed 退出 2（不假装构建过），钉的版本尚未发布到 npm 时构建退回 `latest` 并记账。kit 自身 CI 的 `devcontainer-build` 矩阵作业跑 node/dotnet 两个代表栈；目标项目 CI 模板里的同名作业默认关闭（仓库变量 `FLOW_KIT_DEVCONTAINER_BUILD=true` 才开），避免默认拉镜像。
 
 技能安装由 `skills.mode` 驱动：
 
@@ -170,7 +188,7 @@ Hook 接线在 `src/install/hooks.mjs`：中性规格来自引擎模板 `.agents
 ## 模板与语言分层
 
 - `templates/engine/`：通用 `.agents/` 引擎。
-- `templates/profiles/<stack>/`：dotnet / node / typescript / rust / go / java / empty 的栈配置与 `AGENTS.md`。
+- `templates/profiles/<stack>/`：dotnet / node / typescript / rust / go / java / python / cpp / empty 的栈配置与 `AGENTS.md`。
 - `templates/surfaces/<surface>/`：组合式切面 `frontend` / `api` / `data`，按声明顺序以优先级 21+ 叠加在 stack（20）之上；同名路径后声明者覆盖。仅当存在 surface 时生成 `.agents/config/profile.json`；`src/install/profiles.mjs` 是闭集与解析的单一来源，`manifest.surfaces` 记录组合。
 - `templates/scaffold/`：`wiki/`、`workflow/` 数据资产骨架。
 - `templates/git/`：五钩子、`.gitattributes`、`.gitignore` 合并块。

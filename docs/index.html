@@ -1110,7 +1110,7 @@ $ flow-kit run pipeline-run.mjs <span class="kw">--task</span> feat-auth
         <span class="kick">Manual</span>
         <h2 class="h">使用手册：<br>每项能力怎么用。</h2>
       </div>
-      <p class="sub">全部命令与配置项均取自本仓源码实现（v2.7.1 · Node.js ≥ 22）。示例可直接复制执行。</p>
+      <p class="sub">全部命令与配置项均取自本仓源码实现（v2.12.1 · Node.js ≥ 22）。示例可直接复制执行。</p>
     </div>
 
     <nav class="man-nav rv" id="man-nav">
@@ -1121,6 +1121,7 @@ $ flow-kit run pipeline-run.mjs <span class="kw">--task</span> feat-auth
       <a href="#m-workflow">工作流与门禁</a>
       <a href="#m-config">配置与模型</a>
       <a href="#m-team">团队与工作区</a>
+      <a href="#m-governance">治理与供应链</a>
     </nav>
 
     <!-- ===== 安装与宿主 ===== -->
@@ -1143,7 +1144,7 @@ $ flow-kit run pipeline-run.mjs <span class="kw">--task</span> feat-auth
           <ul>
             <li><code>--auto-hosts</code> 自动扫描项目中已有的 AI 目录（<code>.claude</code> / <code>.trae</code> 等）并预选安装</li>
             <li><code>--agent &lt;host&gt;</code> 可重复或逗号分隔，指定要接线的宿主</li>
-            <li><code>--stack &lt;name&gt;</code> 技术栈 profile：<code>dotnet / node / typescript / rust / go / java / empty</code></li>
+            <li><code>--stack &lt;name&gt;</code> 技术栈 profile：<code>dotnet / node / typescript / rust / go / java / python / cpp / empty</code></li>
             <li><code>--surface frontend|api|data</code> 切面，可叠加</li>
             <li><code>--tier lean|standard|enterprise</code> 治理档位</li>
             <li><code>--dry-run</code> 只打印计划，不写盘</li>
@@ -1469,7 +1470,7 @@ $ flow-kit run pipeline-run.mjs <span class="kw">--task</span> feat-auth
             <li><code>gate-fail</code> 脚本门失败：按 <code>onFail</code> 路由并消耗重试预算</li>
             <li><code>done</code> / <code>aborted</code> 终态</li>
           </ul>
-          <div class="mnote"><i data-lucide="info" class="ic"></i>执行器目前保留待用：启用前先跑 <code>check-pipeline-state.mjs</code> 静态闭包检查，再用小任务端到端验证。</div>
+          <div class="mnote"><i data-lucide="info" class="ic"></i>实战已验证（2026-11-18）：首个端到端真实 run 通过（22 门 / 3 确认 / 3 提交，台账配对成立）；启用前建议先跑 <code>check-pipeline-state.mjs</code> 静态闭包检查。</div>
         </div>
       </div>
 
@@ -1613,6 +1614,207 @@ $ flow-kit run pipeline-run.mjs <span class="kw">--task</span> feat-auth
           <p>生成 <code>azure-pipelines.yml</code> 与 <code>.github/workflows/ci.yml</code>。全新安装按 origin 自适应：GitHub → <code>github</code>、Azure → <code>azure</code>，识别不出时 <code>enterprise</code> 档双发、其余 <code>none</code>，<code>lean</code> 等价于 <code>none</code>。选择结果写入清单，<code>upgrade</code> 时自动重放。</p>
         </div>
       </div>
+    </div>
+    <!-- ===== 治理、供应链与运行观测 ===== -->
+    <div class="mgroup" id="m-governance">
+      <div class="gh rv">
+        <span class="n">08</span>
+        <span class="t">治理、供应链与运行观测</span>
+        <span class="d">策略基线、架构守卫、物料清单、签名与沙箱</span>
+      </div>
+
+      <div class="mrow rv">
+        <div class="cmd">
+          <span class="c">flow-kit <span class="op">policy</span> link|check|sync</span>
+          <span class="ex">flow-kit policy check</span>
+        </div>
+        <div class="d">
+          <h4>中央策略基线：绑定、查漂移、同步</h4>
+          <p><code>policy link &lt;url|目录&gt;</code> 把中央策略基线（Git 仓库或本地目录里的 policy.json）绑定到本项目；<code>check</code> 逐个策略面对比本地与远程基线，报告漂移明细；<code>sync</code> 把基线内容写回本地策略面。</p>
+          <ul>
+            <li><code>--strict</code> 存在漂移或冲突时以非零退出码结束，可直接当 CI 卡口</li>
+            <li><code>--ref &lt;name&gt;</code> 指定基线分支或标签，默认 <code>main</code></li>
+            <li><code>--json</code> 结构化输出结果</li>
+          </ul>
+          <div class="flags"><span class="key">--strict</span><span class="key">--ref</span><span class="key">--json</span><span class="key">--target</span></div>
+          <div class="mnote"><i data-lucide="info" class="ic"></i><code>check</code> 与 <code>sync</code> 需要先 <code>link</code> 绑定基线；sync 遇到你改过的托管策略面不会静默覆盖，会跳过并列出冲突——按提示先跑 <code>flow-kit diff</code> 解决后再重试。</div>
+        </div>
+      </div>
+
+      <div class="mrow rv">
+        <div class="cmd">
+          <span class="c">flow-kit <span class="op">arch</span> init|check|graph</span>
+          <span class="ex">flow-kit arch check</span>
+        </div>
+        <div class="d">
+          <h4>架构守卫：分层边界、循环依赖、依赖图</h4>
+          <p><code>arch init</code> 按预设生成 <code>.agents/config/architecture.json</code>（预设 <code>clean</code> / <code>ddd</code> / <code>layered</code>）；<code>arch check</code> 扫描模块依赖，校验循环依赖、分层越界与私有穿透；<code>arch graph</code> 导出依赖拓扑图。</p>
+          <ul>
+            <li><code>init --preset &lt;name&gt;</code> 选预设（默认 <code>clean</code>），已有配置需 <code>--force</code> 覆盖</li>
+            <li><code>check --strict</code> 有违规时以非零退出码结束</li>
+            <li><code>graph --format mermaid|json|text --out &lt;file&gt;</code> 指定格式与落盘位置</li>
+          </ul>
+          <div class="flags"><span class="key">--preset</span><span class="key">--force</span><span class="key">--strict</span><span class="key">--format</span><span class="key">--out</span></div>
+        </div>
+      </div>
+
+      <div class="mrow rv">
+        <div class="cmd">
+          <span class="c">flow-kit <span class="op">gate</span> check|badge|init-ci</span>
+          <span class="ex">flow-kit gate check --strict</span>
+        </div>
+        <div class="d">
+          <h4>门禁卡口：按变更集检查、出徽章、生成 CI</h4>
+          <p><code>gate check</code> 运行零信任门禁守卫（策略基线、架构分层、技能评测、MCP 网关、沙箱、公证与交接链、AI-DORA 指标）；<code>gate badge</code> 把结果渲染成状态徽章；<code>gate init-ci</code> 生成 CI 门禁流水线配置（<code>--provider github|gitlab</code>，默认 github）。<code>ci</code> 是 <code>gate</code> 的别名：<code>flow-kit ci init</code> 等价 <code>gate init-ci</code>。</p>
+          <ul>
+            <li><code>--diff</code> / <code>--since &lt;ref&gt;</code> 只对变更集内的文件执行守卫</li>
+            <li><code>--strict</code> 连警告也判不通过</li>
+            <li><code>--badge-out &lt;file&gt;</code> 检查的同时落地徽章文件</li>
+          </ul>
+          <div class="flags"><span class="key">--strict</span><span class="key">--diff</span><span class="key">--since</span><span class="key">--rules</span><span class="key">--json</span><span class="key">--badge-out</span></div>
+        </div>
+      </div>
+
+      <div class="mrow rv">
+        <div class="cmd">
+          <span class="c">flow-kit <span class="op">hud</span></span>
+          <span class="ex">flow-kit hud</span>
+        </div>
+        <div class="d">
+          <h4>项目看板：一次快照或实时刷新</h4>
+          <p>把引擎版本、宿主与模型配置、门禁守卫结果、交接信封与 AI-DORA 指标汇总成一块终端看板；默认渲染一次快照，<code>--watch</code> 按间隔循环刷新。</p>
+          <ul>
+            <li><code>--json</code> 输出结构化状态，退出码跟随门禁结果</li>
+            <li><code>--watch</code> / <code>-w</code> 实时看板循环</li>
+            <li><code>--interval &lt;sec&gt;</code> 刷新间隔，默认 2 秒</li>
+          </ul>
+          <div class="flags"><span class="key">--json</span><span class="key">--watch</span><span class="key">--interval</span><span class="key">--target</span></div>
+          <div class="mnote"><i data-lucide="info" class="ic"></i>单次快照渲染完即退出，方便嵌进脚本与 CI 日志；<code>--watch</code> 会一直循环，适合挂在旁边常驻。</div>
+        </div>
+      </div>
+
+      <div class="mrow rv">
+        <div class="cmd">
+          <span class="c">flow-kit <span class="op">sbom</span> export|verify</span>
+          <span class="ex">flow-kit sbom export</span>
+        </div>
+        <div class="d">
+          <h4>AI 软件物料清单：导出与核验</h4>
+          <p><code>sbom export</code> 从安装清单生成 AI 软件物料清单（宿主、技能、模型角色、策略面与证明链根），默认写入 <code>.agents/sbom.json</code>；<code>sbom verify &lt;file&gt;</code> 对照当前项目核验清单，发现组件缺失或哈希不符即报告篡改。</p>
+          <ul>
+            <li><code>--format native|cyclonedx|spdx</code> 输出格式，默认 <code>native</code></li>
+            <li><code>--days &lt;n&gt;</code> 汇总最近 N 天的活动，默认 30</li>
+            <li><code>--sign --key &lt;pem&gt;</code> 导出的同时对清单签名</li>
+          </ul>
+          <div class="flags"><span class="key">--format</span><span class="key">--days</span><span class="key">--out</span><span class="key">--sign</span><span class="key">--key</span><span class="key">--json</span></div>
+          <div class="mnote"><i data-lucide="info" class="ic"></i><code>--sign</code> 需要私钥已存在（先用 <code>flow-kit keygen</code> 生成）。</div>
+        </div>
+      </div>
+
+      <div class="mrow rv">
+        <div class="cmd">
+          <span class="c">flow-kit <span class="op">keygen</span> / <span class="op">sign</span> / <span class="op">verify-sig</span></span>
+          <span class="ex">flow-kit keygen --name release</span>
+        </div>
+        <div class="d">
+          <h4>签名公证：生成密钥、签名、验签</h4>
+          <p><code>keygen</code> 生成非对称密钥对（<code>ed25519</code> / <code>ecdsa-p256</code> / <code>rsa-sha256</code>），默认落到 <code>.agents/keys/</code>；<code>sign [attestation|sbom]</code> 对安装证明链或物料清单签名；<code>verify-sig</code> 用公钥验签。</p>
+          <ul>
+            <li><code>keygen --name &lt;name&gt;</code> 自定义密钥名，默认 <code>flow-kit-key</code>；已存在需 <code>--force</code></li>
+            <li><code>sign sbom --file &lt;path&gt;</code> 签指定文件，目标类型默认 <code>attestation</code></li>
+            <li><code>verify-sig --key &lt;pem&gt; --sig &lt;file&gt;</code> 指定公钥与签名文件</li>
+          </ul>
+          <div class="flags"><span class="key">--name</span><span class="key">--type</span><span class="key">--key</span><span class="key">--file</span><span class="key">--sig</span><span class="key">--json</span></div>
+        </div>
+      </div>
+
+      <div class="mrow rv">
+        <div class="cmd">
+          <span class="c">flow-kit <span class="op">bundle</span> pack|inspect|verify|unpack</span>
+          <span class="ex">flow-kit bundle pack</span>
+        </div>
+        <div class="d">
+          <h4>离线安装包：打包、校验、解包</h4>
+          <p><code>bundle pack</code> 把引擎 <code>templates/</code> 与 <code>locales/</code> 打成自带 SHA-256 摘要的离线包，默认命名 <code>flow-kit-v&lt;版本&gt;.bundle.json</code>；<code>inspect</code> 看包概览，<code>verify</code> 逐文件校验，<code>unpack</code> 解包到目录。</p>
+          <ul>
+            <li><code>pack --gzip</code> 压缩输出，<code>--out &lt;file&gt;</code> 自定义路径</li>
+            <li><code>unpack &lt;file&gt; &lt;dir&gt;</code> 指定解包目录</li>
+          </ul>
+          <div class="flags"><span class="key">--gzip</span><span class="key">--out</span><span class="key">--file</span><span class="key">--json</span></div>
+          <div class="mnote"><i data-lucide="info" class="ic"></i>空气隔离环境：在有网机器 <code>pack</code>，把包拷到目标机后 <code>flow-kit install --bundle &lt;file&gt;</code> 直接从包安装。</div>
+        </div>
+      </div>
+
+      <div class="mrow rv">
+        <div class="cmd">
+          <span class="c">flow-kit <span class="op">handoff</span> create|verify|list</span>
+          <span class="ex">flow-kit handoff create --from implementer --to reviewer --task T-42</span>
+        </div>
+        <div class="d">
+          <h4>多智能体接力：交接信封</h4>
+          <p><code>handoff create</code> 把当前变更工件锁进结构化交接信封（来源与目标角色、任务、逐文件指纹），写入 <code>.agents/handoffs/</code>；<code>verify</code> 核对工件指纹是否漂移；<code>list</code> 列出全部信封。</p>
+          <ul>
+            <li><code>--from</code> / <code>--to</code> 必填：交接双方角色</li>
+            <li><code>--artifacts a.md,b.md</code> 指定工件清单，默认取 Git 工作区变更</li>
+            <li><code>--sign</code> 用公证密钥给信封签名，<code>--task</code> / <code>--summary</code> 标注任务</li>
+          </ul>
+          <div class="flags"><span class="key">--from</span><span class="key">--to</span><span class="key">--task</span><span class="key">--artifacts</span><span class="key">--sign</span><span class="key">--json</span></div>
+          <div class="mnote"><i data-lucide="info" class="ic"></i>创建前会做防污染扫描：命中敏感凭据（密钥、Token）时拒绝创建；可疑指令只记入告警，不阻断交接。</div>
+        </div>
+      </div>
+
+      <div class="mrow rv">
+        <div class="cmd">
+          <span class="c">flow-kit <span class="op">mcp</span> audit|check-call|stats</span>
+          <span class="ex">flow-kit mcp audit --days 7</span>
+        </div>
+        <div class="d">
+          <h4>MCP 工具权限：预检、审计、统计</h4>
+          <p><code>mcp check-call &lt;tool&gt;</code> 按角色与安全等级预检一次工具调用是否放行；<code>audit</code> 查询最近 N 天的调用审计（判定、原因、耗时）；<code>stats</code> 按角色与工具聚合放行/拦截数。审计记录落在 <code>.agents/mcp-audit.jsonl</code>。</p>
+          <ul>
+            <li><code>check-call --role coder --record</code> 指定角色（默认 <code>coder</code>）并把预检写入审计</li>
+            <li><code>audit --days 7 --decision DENIED_RBAC</code> 按时间窗与判定过滤</li>
+            <li><code>stats --days 30</code> 统计窗口，默认 30 天</li>
+          </ul>
+          <div class="flags"><span class="key">--days</span><span class="key">--role</span><span class="key">--server</span><span class="key">--decision</span><span class="key">--json</span><span class="key">--summary</span></div>
+        </div>
+      </div>
+
+      <div class="mrow rv">
+        <div class="cmd">
+          <span class="c">flow-kit <span class="op">sandbox</span> inspect|init|route|exec</span>
+          <span class="ex">flow-kit sandbox route npm test</span>
+        </div>
+        <div class="d">
+          <h4>沙箱隔离：按指令风险路由执行</h4>
+          <p><code>sandbox inspect</code> 报告容器引擎、基础镜像、网络与路由模式；<code>init</code> 生成 <code>.agents/config/sandbox.json</code>；<code>route &lt;command&gt;</code> 对指令做风险裁决（L0–L3 等级、高危标记），只裁决不执行；<code>exec &lt;command&gt;</code> 把指令放进容器执行。</p>
+          <ul>
+            <li><code>init --mode auto|always|strict|disabled</code> 执行路由模式</li>
+            <li><code>route --strict</code> 高危指令在没有容器引擎时直接拒绝</li>
+            <li><code>exec --dry-run --offline</code> 只打印完整容器命令 / 断网运行</li>
+          </ul>
+          <div class="flags"><span class="key">--mode</span><span class="key">--engine</span><span class="key">--network</span><span class="key">--strict</span><span class="key">--dry-run</span><span class="key">--offline</span></div>
+          <div class="mnote"><i data-lucide="info" class="ic"></i>要执行的命令直接跟在子命令后面（如 <code>route npm test</code>），不需要 <code>--</code> 分隔符；<code>exec</code> 需要本机有 docker / podman 等容器引擎。</div>
+        </div>
+      </div>
+
+      <div class="mrow rv">
+        <div class="cmd">
+          <span class="c">flow-kit <span class="op">metrics</span> report|export|check</span>
+          <span class="ex">flow-kit metrics report --days 30</span>
+        </div>
+        <div class="d">
+          <h4>AI-DORA 效能指标：报告、导出、门禁</h4>
+          <p><code>metrics report</code> 汇总最近 N 天的 AI-DORA 指标（验证通过率、自愈耗时 MTTR 等，并给出综合评级）渲染成 Markdown 大盘；<code>export</code> 导出 JSON（默认 OpenTelemetry 格式）；<code>check</code> 按阈值做质量门禁，未达基线即以非零退出码失败。</p>
+          <ul>
+            <li><code>--days &lt;n&gt;</code> 统计窗口，默认 30 天</li>
+            <li><code>check --max-cfr &lt;值&gt;</code> 等覆盖默认阈值基线</li>
+            <li><code>report --out &lt;file&gt;</code> 报告落盘</li>
+          </ul>
+          <div class="flags"><span class="key">--days</span><span class="key">--json</span><span class="key">--markdown</span><span class="key">--out</span><span class="key">--format</span></div>
+        </div>
+      </div>
+
     </div>
   </section>
 

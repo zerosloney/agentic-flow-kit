@@ -13,7 +13,7 @@ import { makeT, LANGUAGES } from '../i18n.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const KIT_ROOT = path.resolve(HERE, '..', '..');
-// 运行时源暂与引擎模板同源：包安装后即可执行，R5-1b 再收缩安装面。
+// 运行时源与引擎模板同源：包安装后即可执行；R5-1b 起实现文件不再写入目标项目，统一经本入口调起。
 export const RUNTIME_ROOT = path.join(KIT_ROOT, 'templates', 'engine', '.agents');
 export const RUNTIME_SCRIPTS = path.join(RUNTIME_ROOT, 'scripts');
 export const RUNTIME_HOOKS = path.join(RUNTIME_ROOT, 'hooks');
