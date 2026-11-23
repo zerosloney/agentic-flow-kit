@@ -79,6 +79,46 @@ test('fresh install creates engine, host, scaffold and manifest', () => {
   assert.equal(engine.options.language, 'zh-CN');
 });
 
+test('wiki board en override keeps the scaffold DATA registry', () => {
+  // zh DATA 是 JSON.stringify 风格（双引号、无尾逗号）：
+  // 从 `const DATA = ` 后第一个 `{` 起做大括号深度计数截取 JSON 再 parse。
+  const extractData = (html) => {
+    const marker = html.indexOf('const DATA = ');
+    assert.ok(marker >= 0, 'missing `const DATA = ` marker');
+    const begin = html.indexOf('{', marker);
+    assert.ok(begin > marker, 'missing DATA object');
+    let depth = 0;
+    for (let i = begin; i < html.length; i++) {
+      if (html[i] === '{') depth++;
+      else if (html[i] === '}') {
+        depth--;
+        if (depth === 0) return JSON.parse(html.slice(begin, i + 1));
+      }
+    }
+    assert.fail('unbalanced braces in DATA block');
+  };
+
+  const scaffold = extractData(read(KIT, 'templates/scaffold/wiki/知识沉淀总览.html'));
+  const en = extractData(read(KIT, 'locales/en/overrides/wiki/知识沉淀总览.html'));
+
+  assert.deepEqual(en.summary, scaffold.summary);
+  const namesOf = (data) => data.topics.map((t) => t.name).sort();
+  assert.deepEqual(namesOf(en), namesOf(scaffold));
+  for (const topic of scaffold.topics) {
+    const enTopic = en.topics.find((t) => t.name === topic.name);
+    const filesOf = (t) => t.files.map((f) => f.file).sort();
+    assert.deepEqual(filesOf(enTopic), filesOf(topic), `topic ${topic.name} file registry drifted`);
+  }
+
+  const diskTopics = fs.readdirSync(path.join(KIT, 'templates/scaffold/wiki'), { withFileTypes: true })
+    .filter((e) => e.isDirectory() && e.name !== 'drafts-archive')
+    .map((e) => e.name);
+  const dataTopics = namesOf(scaffold);
+  for (const dir of diskTopics) {
+    assert.ok(dataTopics.includes(dir), `board DATA missing scaffold topic dir ${dir}`);
+  }
+});
+
 test('add-host accepts a positional host and adds the memory file', () => {
   const dir = tmpRepo();
   const r1 = run(['install', '--agent', 'trae', '--lang', 'zh-CN', '--stack', 'node', '--target', '.'], dir);
