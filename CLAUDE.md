@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 项目概览
 
-`agentic-flow-kit` 是一个 Node.js ≥ 22、ESM、零运行时依赖的安装器 CLI。它把 AI-Native 工作流引擎（`.agents/`）、git 门禁、宿主适配层和 `wiki`/`workflow` 脚手架从零生成到任意项目，并按 10 个宿主（Trae、CodeBuddy、Claude Code、OpenCode、Qwen、PI、Cline、Command Code、Qoder、ZCode）各自的原生目录规范落盘。
+`agentic-flow-kit` 是一个 Node.js ≥ 22、ESM、零运行时依赖的安装器 CLI。它把 AI-Native 工作流引擎（`.agents/`）、git 门禁、宿主适配层和 `wiki`/`workflow` 脚手架从零生成到任意项目，并按 14 个宿主（Trae、CodeBuddy、Codex、CodeArtsDoer、Claude Code、OpenCode、Qwen、PI、Cline、Command Code、Cursor、Qoder、ZCode、Antigravity）各自的原生目录规范落盘（清单以 `src/hosts/registry.mjs` 为单源）。
 
 - 包入口：`bin/flow-kit.mjs`；npm bin 名 `flow-kit`。
 - 安装目标项目由 `--target` 指定，默认当前目录。
@@ -192,6 +192,7 @@ Hook 接线在 `src/install/hooks.mjs`：中性规格来自引擎模板 `.agents
 ## AI-Native 治理面（引擎模板）
 
 - 行为评测：`flow-kit run agent-eval`（实现随包）；敏感面在 `.agents/config/agent-eval.json`，凭证是 `.agents/evals/results.jsonl`（内容签名，不是提交号）。
+- 多智能体接力（handoff）：信封验签 + 指令面检查（SECRET_LEAK 硬拒；SUSPICIOUS_DIRECTIVE 计 warnings，verify 文本输出与 hud 看板均可见并计入 warned 聚合）。
 - 经验与记忆：`session-log.mjs`（运行态日志）、`memory-wiki.mjs`（生成 `wiki/_memory/`）、`memory-tier.mjs`（200 行 / 25KB 注入层）、`path-lease.mjs`（单写者租约）。
 - 记忆生命周期：`memory-lifecycle.mjs` 把记忆做成确定性状态机（candidate / active / dormant / retired / superseded；记录 `.agents/memory/records.jsonl`，迁移审计 `.agents/memory/audit.jsonl`）：`decay` 只依赖 `now - max(lastHitAt, createdAt)`，`conflict` 按来源权威 rank → 时间 → id 裁决并保留双方来源，`promote` 只替换注入层 `memory:auto:begin/end` 托管块且写前用 `memory-tiers.json` 预算预检（超限不落状态），`query` 统一检索记录 / claims / incidents / papercuts / 联邦仓库并把命中写回 `.agents/cache/memory-hits.jsonl`，`report --check` 在预算溢出、托管块陈旧或未消解冲突时退出 1。口径 `.agents/config/memory-lifecycle.json`（schema `schemas/memory-lifecycle.schema.json`）；CI 为 advisory。
 - 修复保护：`fix-task.mjs` 落 `.agents/cache/fix-task.json`，`pre-write-check.cjs` §2.5 在窗口内拦既有测试写入。
