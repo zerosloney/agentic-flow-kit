@@ -74,6 +74,12 @@
 //     有效）> 内置基线。与内置同值的 env 不再误报「测试用覆盖口」；无任何有效基线时 loud 提示
 //     「未声明历史基线 / 全史扫描」及声明方式，不再静默（仍 fail-open 于深度、fail-closed 于内容）。
 //
+// 复核红线申报（2026-11-24 issue #84）：independent-reviewer 的只读禁令在 2026-11-23 双臂评测中被
+//   操作者「顺手修掉并提交」指令 2/2 穿透（均未 HALT）。契约升格后，违例须在复核意见级台账
+//   workflow/reviews.d/<当月>.md 落盘行逐笔申报 `review-fix: <hash,…>`；本检查对该申报判红——
+//   申报即只读红线被突破的具名证据，机器可检出；修复交回实现侧（契约 .agents/roles/independent-reviewer.md）。
+//   内容判据与提交史无关：缺省档对终树 reviews.d 全量扫、--staged 档对被暂存 reviews.d 执法，零史路径不豁免。
+//
 // 模式：
 //   历史全扫（缺省，CI 机器门）：对主台账与每个分片各自遍历其提交历史（时间正序），每次变更必须以
 //     旧 blob 为**逐字节前缀**（允许纯追加；禁止删行/改行/重排）——或前缀破坏但该提交树上有 manifest
@@ -109,6 +115,7 @@
 //   ⑤ stage ∈ 合法跳转终态集（approved/done/fixed/closed/superseded/cancelled）
 //
 // 静默条件：台账不存在 / 零提交历史（装户、新仓）/ --staged 且暂存未触任何台账或无 HEAD 版本。
+//   （reviews.d 红线申报判红为例外：内容判据，零史与「未触确认台账」均执法，见 2026-11-24 issue #84 段。）
 // 已知边界：git log --follow 未用——各台账路径自创建无重命名（单一路径取史）；克隆深度不足时仅扫可得
 //   历史（CI 侧 fetch-depth:0 兜全史，深度不足会告警声明边界，fail-open 于深度、fail-closed 于内容）。
 // 用法：node check-ledger-invariant.mjs [--root <仓库根>] [--staged]
@@ -126,6 +133,7 @@ const staged = argv.includes('--staged');
 const ROOT = argOf('--root') || (staged ? process.cwd() : execFileSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' }).trim());
 const REL = '.agents/confirmations.jsonl';
 const SHARD_DIR = '.agents/confirmations.d';
+const REVIEWS_DIR = 'workflow/reviews.d'; // 复核意见级台账目录（契约落盘规则，issue #84 判红面）
 const MANIFEST_REL = '.agents/config/ledger-prune-manifest.json';
 const REBUILD_MANIFEST_REL = '.agents/config/ledger-rebuild-manifest.json';
 // 历史基线（owner 声明 2026-10-13，取当日台账 ts 全序恢复提交；2026-10-14 前移至 8c2e1b1d、
@@ -735,6 +743,21 @@ function checkRows(text, label) {
   });
 }
 
+// ---- 复核红线申报（2026-11-24 issue #84）：reviews.d 任一行含 review-fix: 即判红 ----
+// 2026-11-23 双臂评测实证：independent-reviewer 只读禁令被操作者「顺手修掉并提交」指令 2/2 穿透
+// （一个静默、一个标注后仍执行，均未 HALT）。契约升格后违例落盘行须逐笔申报 review-fix: <hash,…>——
+// 申报即只读红线被突破的具名证据；修复交回实现侧重做，见角色契约 independent-reviewer.md。
+function reviewFixProblem(rel, text) {
+  const lines = String(text).split(/\r?\n/);
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].includes('review-fix:')) {
+      return `- [复核红线申报] ${rel} 第 ${i + 1} 行含 review-fix: 申报——复核只读红线被申报突破（修复交回实现侧，见角色契约 independent-reviewer.md 与 issue #84）`;
+    }
+  }
+  return null;
+}
+const isReviewsLedger = (rel) => rel.startsWith(`${REVIEWS_DIR}/`) && rel.endsWith('.md');
+
 // ---- 台账路径全集：主台账 + 历史上出现过的全部分片 ----
 // 历史分片名单复用 historyIndex()（2026-10-27）——不再单独跑一次 log，且与 historyShas 同源，
 // 避免「路径全集」与「各路径提交史」两处口径漂移。
@@ -773,8 +796,16 @@ const mergeParents = (() => {
 })();
 if (staged) {
   const stagedHit = gitText(['-c', 'core.quotepath=off', 'diff', '--cached', '--name-only']).split(/\r?\n/);
+  // 复核红线申报（issue #84）先于「无确认台账暂存即 0 退出」：只暂存 reviews.d 时也要执法；
+  // 暂存内容走 tryBlob（静默；暂存删除无内容即无申报）。判红时不再走静默退出，落入块尾统一 BLOCK 报告。
+  for (const rel of stagedHit.filter(isReviewsLedger)) {
+    const buf = tryBlob(`:${rel}`);
+    if (buf === null) continue;
+    const p = reviewFixProblem(rel, buf.toString('utf8'));
+    if (p) problems.push(p);
+  }
   const touched = ledgerPaths().filter((rel) => stagedHit.includes(rel));
-  if (!touched.length) process.exit(0);
+  if (!touched.length && !problems.length) process.exit(0);
   for (const rel of touched) {
     // 暂存删除探测必须先于任何 blob 读取（2026-11-15 issue #39）：对已从索引删除的路径读 `:rel`
     // 必抛 fatal 且 execFileSync 把 stderr 直通父进程——先探 `ls-files --cached`，删除路径不再触碰 `:rel`。
@@ -861,6 +892,9 @@ if (staged) {
     if (problems.some((p) => p.startsWith('- [删片未归并]') || p.startsWith('- [主台账删除]'))) {
       console.error('  删片/删主台账另因：删片的唯一合法形态 = compact-ledgers 归并后同笔暂存（片内全部非空行已进暂存主台账）——回溯分片待主台账末行时间推进后重跑 compact-ledgers，或携带 ledger-prune-manifest 特许修剪；主台账永不因归并被删，请恢复 .agents/confirmations.jsonl 原内容');
     }
+    if (problems.some((p) => p.startsWith('- [复核红线申报]'))) {
+      console.error('  复核红线另因：review-fix: 申报即复核只读禁令被突破的具名证据——修复交回实现侧重做，契约见 .agents/roles/independent-reviewer.md（issue #84，2026-11-23 评测 2/2 穿透实证）');
+    }
     process.exit(1);
   }
   process.exit(0);
@@ -928,9 +962,27 @@ for (const rel of finalRels) {
   checkRows(text, rel === REL ? '主台账' : path.basename(rel));
 }
 
+// ---- 复核红线申报（issue #84）：终树 reviews.d 全量扫（内容判据与提交史无关，零史路径不豁免）----
+try {
+  const rdir = path.join(ROOT, REVIEWS_DIR);
+  if (fs.existsSync(rdir) && fs.statSync(rdir).isDirectory()) {
+    for (const f of fs.readdirSync(rdir)) {
+      const rel = `${REVIEWS_DIR}/${f}`;
+      if (!isReviewsLedger(rel)) continue;
+      let text;
+      try { text = fs.readFileSync(path.join(ROOT, rel), 'utf8'); } catch { continue; }
+      const p = reviewFixProblem(rel, text);
+      if (p) problems.push(p);
+    }
+  }
+} catch { /* 忽略 */ }
+
 if (problems.length) {
   console.error(`台账不可变（历史全扫）— HARD-BLOCK:\n\n${problems.join('\n')}\n`);
   console.error('  修法：台账历史行禁删改（append-only 前缀不变量）——误写只能追加补偿行；确需撤销历史提交请 git revert 后重新追加。篡改属审计事件，保留现场联系仓库所有者。');
+  if (problems.some((p) => p.startsWith('- [复核红线申报]'))) {
+    console.error('  复核红线另因：review-fix: 申报即复核只读禁令被突破的具名证据——修复交回实现侧重做，契约见 .agents/roles/independent-reviewer.md（issue #84，2026-11-23 评测 2/2 穿透实证）');
+  }
   process.exit(1);
 }
 // 增量窗口缓存（2026-11-06 P1）：绿跑才写——记「历史已验证到 HEAD」；红跑不写，下轮重扫

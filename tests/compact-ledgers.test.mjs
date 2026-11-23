@@ -180,3 +180,49 @@ test('集成：compact 部分归并 → 追加时序单调 → 全扫绿 → --s
   assert.ok(!r6.stderr.includes('fatal: ambiguous'), `stderr 不应有 git fatal 噪声：${r6.stderr}`);
   git(dir, ['reset', '-q', '--hard', 'HEAD']);
 });
+
+// ---- 复核红线申报（2026-11-24 issue #84）：reviews.d 任一行含 review-fix: 标记即判红 ----
+// 2026-11-23 双臂评测实证 independent-reviewer 只读禁令 2/2 被操作者「顺手修掉并提交」指令穿透。
+// 契约升格后违例须在复核意见级台账逐笔申报 review-fix: <hash,…>，台账不变量对申报判红——申报即
+// 只读红线被突破的具名证据（修复交回实现侧）。锁四件事：全扫正/负例、--staged 只暂存 reviews.d 正/负例。
+test('集成：reviews.d 含 review-fix: 申报 → 全扫与 --staged 判红；普通复核行不红', () => {
+  const dir = makeTmp('flow-kit-reviews-fix-');
+  git(dir, ['init', '-q']);
+  git(dir, ['config', 'user.email', 'test@example.com']);
+  git(dir, ['config', 'user.name', 'tester']);
+
+  const ledger = path.join(dir, 'workflow', 'reviews.d', '2026-11.md');
+  fs.mkdirSync(path.dirname(ledger), { recursive: true });
+  const normalLine = '- 2026-11-23 spec 复核：Approved（reviewed by glm-4.7）\n';
+
+  // 负例（全扫）：普通意见级台账行（无申报标记）→ 不因本规则 exit 1
+  fs.writeFileSync(ledger, `# 评审意见级台账 2026-11\n\n${normalLine}`);
+  git(dir, ['add', '-A']);
+  git(dir, ['commit', '-q', '-m', 'reviews: normal opinion ledger']);
+  const r1 = runScript(CHECKER, dir, ['--root', dir]);
+  assert.equal(r1.status, 0, `全扫(普通复核行) 应绿: ${r1.stdout}\n${r1.stderr}`);
+
+  // 正例（全扫）：申报行含 review-fix: → exit 1 且输出含红线说明
+  fs.appendFileSync(ledger, '- 2026-11-24 违例申报：复核会话顺手修复并提交了 src/a.ts（review-fix: abc1234567）\n');
+  git(dir, ['add', '-A']);
+  git(dir, ['commit', '-q', '-m', 'reviews: declare review-fix violation']);
+  const r2 = runScript(CHECKER, dir, ['--root', dir]);
+  assert.equal(r2.status, 1, `全扫(review-fix 申报) 应 exit 1: ${r2.stdout}\n${r2.stderr}`);
+  assert.match(r2.stderr, /\[复核红线申报\]/);
+  assert.ok(r2.stderr.includes('issue #84'), `stderr 应含 issue #84 指引: ${r2.stderr}`);
+
+  // 负例（--staged）：只暂存 reviews.d（未触任何确认台账）且无申报 → 仍走静默 0 退出
+  const ledger2 = path.join(dir, 'workflow', 'reviews.d', '2026-12.md');
+  fs.writeFileSync(ledger2, `# 评审意见级台账 2026-12\n\n${normalLine}`);
+  git(dir, ['add', '-A']);
+  const r3 = runScript(CHECKER, dir, ['--staged']);
+  assert.equal(r3.status, 0, `--staged(普通复核行) 应绿: ${r3.stdout}\n${r3.stderr}`);
+
+  // 正例（--staged）：只暂存含申报的 reviews.d → exit 1（未触确认台账也不得静默放行）
+  fs.appendFileSync(ledger2, '- 2026-11-24 违例申报：顺手修复并提交了 src/b.ts（review-fix: deadbeef）\n');
+  git(dir, ['add', '-A']);
+  const r4 = runScript(CHECKER, dir, ['--staged']);
+  assert.equal(r4.status, 1, `--staged(review-fix 申报) 应 exit 1: ${r4.stdout}\n${r4.stderr}`);
+  assert.match(r4.stderr, /\[复核红线申报\]/);
+  assert.match(r4.stderr, /review-fix/);
+});
