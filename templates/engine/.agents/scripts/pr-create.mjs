@@ -3,7 +3,7 @@
 // 用法：
 //   flow-kit run pr-create.mjs create --source <branch> --target <branch> \
 //     --title "<Conventional Commits 中文>" --body-file <file>
-// 退出码：0 成功；1 托管命令失败；2 用法或远端不可识别。
+// 退出码：非 json 透传托管命令原生退出码（异常兜底 1），--json 统一 0/1；2 用法或远端不可识别。
 // 测试钩子：PR_CREATE_GH=<script.mjs> 时用 node 跑该脚本代替 gh。
 
 import fs from 'node:fs';
@@ -86,7 +86,8 @@ if (forge === 'github') {
   }
   if (created.stdout) process.stdout.write(created.stdout);
   if (created.stderr) process.stderr.write(created.stderr);
-  process.exit(created.status === 0 ? 0 : 1);
+  // 审查遗漏补 2026-11-23：非 json 路径透传原生退出码
+  process.exit(typeof created.status === 'number' ? created.status : 1);
 }
 
 const tfsPr = path.join(ROOT, '.agents/skills/tfs-pr/scripts/tfs-pr.mjs');
@@ -96,5 +97,19 @@ if (!fs.existsSync(tfsPr)) {
 }
 const hasCreate = rawArgs[0] === 'create';
 const tfsArgs = hasCreate ? rawArgs : ['create', ...rawArgs];
+if (rawArgs.includes('--json')) {
+  // tfs-pr 认识 --json（create 成功输出含 url 的 JSON），原样转发；捕获输出提取 PR URL/编号，stdout 只留最终单对象。
+  const created = spawnSync(process.execPath, [tfsPr, ...tfsArgs], { cwd: ROOT, encoding: 'utf8' });
+  const match = /https?:\/\/\S+\/pullrequest\/(\d+)/i.exec(created.stdout || '');
+  if (match) {
+    process.stdout.write(JSON.stringify({ ok: true, url: match[0], number: Number(match[1]) }) + '\n');
+  } else {
+    process.stdout.write(JSON.stringify({ ok: created.status === 0, url: null, number: null }) + '\n');
+    if (created.stdout) process.stderr.write(created.stdout);
+    if (created.stderr) process.stderr.write(created.stderr);
+  }
+  process.exit(created.status === 0 ? 0 : 1);
+}
 const created = spawnSync(process.execPath, [tfsPr, ...tfsArgs], { cwd: ROOT, stdio: 'inherit' });
-process.exit(created.status === 0 ? 0 : 1);
+// 审查遗漏补 2026-11-23：非 json 路径透传原生退出码
+process.exit(typeof created.status === 'number' ? created.status : 1);

@@ -93,14 +93,14 @@ test('pr-create without --json passes gh stdout through unchanged', () => {
   assert.equal(r.stdout, 'https://github.com/a/b/pull/42\n');
 });
 
-test('pr-create maps a non-zero gh exit to 1 instead of forwarding the raw code', () => {
+test('pr-create without --json forwards the raw gh exit code', () => {
   const dir = repo('https://github.com/a/b.git');
   const stub = path.join(dir, 'gh-stub.mjs');
-  fs.writeFileSync(stub, "process.stderr.write('gh: unknown flag\\n');\nprocess.exit(3);\n");
+  fs.writeFileSync(stub, "process.stderr.write('gh: PR already exists\\n');\nprocess.exit(8);\n");
   const r = run(dir, ['create', '--title', 'feat: x'], { PR_CREATE_GH: stub });
-  assert.equal(r.status, 1, r.stderr);
+  assert.equal(r.status, 8, r.stderr);
   assert.equal(r.signal, null);
-  assert.match(r.stderr, /gh: unknown flag/);
+  assert.match(r.stderr, /gh: PR already exists/);
 });
 
 test('pr-create --json maps a non-zero gh exit to 1', () => {
@@ -112,13 +112,40 @@ test('pr-create --json maps a non-zero gh exit to 1', () => {
   assert.deepEqual(JSON.parse(r.stdout), { ok: false, url: null, number: null });
 });
 
-test('pr-create maps a non-zero tfs-pr exit to 1 instead of forwarding the raw code', () => {
+test('pr-create without --json forwards the raw tfs-pr exit code', () => {
   const dir = repo('https://dev.azure.com/org/project/_git/repo');
   const script = path.join(dir, '.agents/skills/tfs-pr/scripts/tfs-pr.mjs');
   fs.mkdirSync(path.dirname(script), { recursive: true });
   fs.writeFileSync(script, 'process.exit(3);\n');
   const r = run(dir, ['create', '--title', 'feat: x']);
+  assert.equal(r.status, 3, r.stderr);
+});
+
+test('pr-create --json on azure extracts the pullrequest URL into one JSON object and forwards --json', () => {
+  const dir = repo('https://dev.azure.com/org/project/_git/repo');
+  const script = path.join(dir, '.agents/skills/tfs-pr/scripts/tfs-pr.mjs');
+  fs.mkdirSync(path.dirname(script), { recursive: true });
+  const log = path.join(dir, 'tfs-log.txt');
+  fs.writeFileSync(script, [
+    "import fs from 'node:fs';",
+    `fs.writeFileSync(${JSON.stringify(log)}, process.argv.slice(2).join('\\n'));`,
+    "process.stdout.write('https://dev.azure.com/org/project/_git/repo/pullrequest/7\\n');",
+  ].join('\n'));
+  const r = run(dir, ['create', '--title', 'feat: x', '--json']);
+  assert.equal(r.status, 0, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout), { ok: true, url: 'https://dev.azure.com/org/project/_git/repo/pullrequest/7', number: 7 });
+  assert.match(fs.readFileSync(log, 'utf8'), /--json/);
+});
+
+test('pr-create --json on azure with a failing tfs-pr reports ok false and keeps raw output off stdout', () => {
+  const dir = repo('https://dev.azure.com/org/project/_git/repo');
+  const script = path.join(dir, '.agents/skills/tfs-pr/scripts/tfs-pr.mjs');
+  fs.mkdirSync(path.dirname(script), { recursive: true });
+  fs.writeFileSync(script, "process.stderr.write('tfs-pr: HTTP 401\\n');\nprocess.exit(1);\n");
+  const r = run(dir, ['create', '--title', 'feat: x', '--json']);
   assert.equal(r.status, 1, r.stderr);
+  assert.deepEqual(JSON.parse(r.stdout), { ok: false, url: null, number: null });
+  assert.match(r.stderr, /tfs-pr: HTTP 401/);
 });
 
 test('pr-create --json without a PR URL reports null and keeps raw output off stdout', () => {
