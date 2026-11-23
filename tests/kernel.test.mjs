@@ -95,6 +95,24 @@ test('契约锚：agentic-flow-kit/kernel 经 package.json exports 自引用解�
   for (const key of Object.keys(kernel)) assert.equal(typeof kernel[key], 'function', `${key} 应为函数`);
 });
 
+test('mergeThreeWay：git 被信号杀死（status 非数值）→ { status: "unavailable" }（尽力而为：POSIX shim 触发，Windows 由 Linux CI 真跑）', (t) => {
+  if (process.platform === 'win32') {
+    t.skip('Windows 无法以 shim 造出非数值 status（spawn 不走 POSIX shim），由 Linux CI 执行真断言');
+    return;
+  }
+  const shimDir = makeTmp('fk-kernel-signal-shim-');
+  fs.writeFileSync(path.join(shimDir, 'git'), '#!/bin/sh\nkill -9 $$\n', { mode: 0o755 });
+  const originalPath = process.env.PATH;
+  let merged;
+  try {
+    process.env.PATH = `${shimDir}${path.delimiter}${originalPath}`;
+    merged = mergeThreeWay({ base: 'a\n', ours: 'a\n', theirs: 'a\n' });
+  } finally {
+    process.env.PATH = originalPath;
+  }
+  assert.deepEqual(merged, { status: 'unavailable' });
+});
+
 test('mergeThreeWay：git 不可用（PATH 清空）→ { status: "unavailable" }（尽力而为：本机 PATH 清空后仍能解析 git 则跳过）', (t) => {
   const originalPath = process.env.PATH;
   let probe;

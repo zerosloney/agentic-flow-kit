@@ -55,7 +55,8 @@ export function mergeThreeWay({ base, ours, theirs }) {
       { encoding: 'utf8', windowsHide: true },
     );
     // git merge-file 的退出码是冲突块数量（最多 127）；>=128 才是 git 自身错误。
-    if (result.error || result.status < 0 || result.status > 127) return { status: 'unavailable' };
+    // git 被信号杀死时 status 为 null（null < 0 / null > 127 均为 false），非数值须显式归入 unavailable（#82）。
+    if (result.error || typeof result.status !== 'number' || result.status < 0 || result.status > 127) return { status: 'unavailable' };
     return {
       status: result.status === 0 ? 'clean' : 'conflict',
       text: result.stdout,
