@@ -176,9 +176,10 @@ export function evaluateSkillCase(caseItem, { target, timeoutMs, sandbox = false
 
   if (sandbox) {
     try {
-      const res = executeSandbox(target, fullCommandString, {
-        json: true,
-        stdio: 'pipe',
+      const res = executeSandbox({
+        target,
+        command: fullCommandString,
+        options: { json: true, stdio: 'pipe' },
       });
       status = res.status ?? 1;
       stdout = res.stdout || '';

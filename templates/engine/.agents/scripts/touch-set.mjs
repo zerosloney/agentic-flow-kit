@@ -15,7 +15,7 @@ function isFormLine(line) {
   if (!t || t.startsWith('>') || t.startsWith('<!--')) return true;
   if (/^- \[ \]/.test(t)) return true;
   if (/→|\$\\rightarrow\$/.test(t) && /级别|L[23]/.test(t)) return true;
-  if (/<[^>\n]{1,40}>/.test(t)) return true;
+  if (/<[^>\n]{1,200}>/.test(t)) return true;
   return false;
 }
 
@@ -86,7 +86,7 @@ export function parseReviewMetadata(text) {
   };
 }
 
-const PATH_RE = /(?:^|[\s`'"（(])((?:[\w.-]+\/)+[\w.-]*|[\w.-]+\.(?:mjs|cjs|js|ts|tsx|jsx|vue|cs|java|go|py|rs|sql|json|yml|yaml|md|xml|html|css))/g;
+const PATH_RE = /(?:^|[\s`'"（(*=\]])((?:[\w.-]+\/)+[\w.-]*|[\w.-]+\.(?:mjs|cjs|js|ts|tsx|jsx|vue|cs|java|go|py|rs|sql|json|yml|yaml|md|xml|html|css))/g;
 
 export function planPaths(section) {
   const out = new Set();

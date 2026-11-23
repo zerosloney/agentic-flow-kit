@@ -97,6 +97,8 @@ export function createHandoffEnvelope({
   const createdAt = new Date().toISOString();
 
   // 1. 扫描元数据与假设防污染
+  // 分级口径：凭证泄露（SECRET_LEAK / SECRET_FILE / ARTIFACT_SECRET）硬拒；
+  // 可疑指令（SUSPICIOUS_DIRECTIVE）是启发式的，仅记入 warnings，不阻断交接。
   const summaryTaint = scanTaint(summary);
   const assumptionsTaint = scanTaint(assumptions.join('\n'));
   const allFindings = [...summaryTaint.findings, ...assumptionsTaint.findings];
@@ -127,6 +129,7 @@ export function createHandoffEnvelope({
     artifactEntries.push(info);
   }
 
+  // 只对凭证类发现硬拒；SUSPICIOUS_DIRECTIVE 仅作为告警保留在信封中。
   if (allFindings.some((f) => f.type === 'SECRET_LEAK' || f.type === 'SECRET_FILE' || f.type === 'ARTIFACT_SECRET')) {
     const details = allFindings.map((f) => `${f.type}: ${f.name}`).join('; ');
     const err = new Error(`Context contamination detected: ${details}`);
@@ -147,6 +150,7 @@ export function createHandoffEnvelope({
     assumptions: Array.isArray(assumptions) ? assumptions.map(String) : [],
     verifications: Array.isArray(verifications) ? verifications : [],
     contextIsolation: {
+      // clean 表示未发现任何污点；warnings 列出全部发现（凭证与可疑指令都记录）。
       clean: allFindings.length === 0,
       warnings: allFindings.map((f) => `${f.type}: ${f.name}`),
     },
@@ -176,12 +180,13 @@ export function verifyHandoffEnvelope({
   allowedRoles = null,
 }) {
   const problems = [];
+  const warnings = [];
 
   if (!envelope || typeof envelope !== 'object') {
-    return { ok: false, problems: ['Envelope is missing or not an object'] };
+    return { ok: false, problems: ['Envelope is missing or not an object'], warnings };
   }
   if (envelope.schema !== HANDOFF_SCHEMA) {
-    return { ok: false, problems: [`Unsupported handoff schema: ${envelope.schema}`] };
+    return { ok: false, problems: [`Unsupported handoff schema: ${envelope.schema}`], warnings };
   }
 
   // 角色合法性核验
@@ -204,10 +209,13 @@ export function verifyHandoffEnvelope({
     }
   }
 
-  // 防污染重新复核
+  // 防污染重新复核（与创建侧同一分级口径）：
+  // 凭证泄露类发现进 problems 并导致 ok:false；可疑指令只进 warnings，不阻断交接。
   const taint = scanTaint(envelope.summary + '\n' + (envelope.assumptions || []).join('\n'));
-  if (!taint.clean) {
-    for (const f of taint.findings) {
+  for (const f of taint.findings) {
+    if (f.type === 'SUSPICIOUS_DIRECTIVE') {
+      warnings.push(`Context taint warning: ${f.type} (${f.name})`);
+    } else {
       problems.push(`Context taint: ${f.type} (${f.name})`);
     }
   }
@@ -245,6 +253,7 @@ export function verifyHandoffEnvelope({
     artifactsCount: (envelope.artifacts || []).length,
     signatureVerified,
     problems,
+    warnings,
   };
 }
 
