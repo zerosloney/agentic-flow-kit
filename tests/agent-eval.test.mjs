@@ -111,3 +111,14 @@ test('agent-eval config is itself sensitive', () => {
   write(root, '.agents/config/agent-eval.json', JSON.stringify({ threshold: 0.1 }));
   assert.notEqual(treeSignature(root).signature, before);
 });
+
+test('signature ignores CRLF/LF difference, content change still drifts', () => {
+  const lfRoot = tmp();
+  write(lfRoot, '.agents/skills/demo/SKILL.md', 'x\n');
+  const crlfRoot = tmp();
+  write(crlfRoot, '.agents/skills/demo/SKILL.md', 'x\r\n');
+  assert.equal(treeSignature(lfRoot).signature, treeSignature(crlfRoot).signature);
+
+  write(crlfRoot, '.agents/skills/demo/SKILL.md', 'changed\r\n');
+  assert.notEqual(treeSignature(lfRoot).signature, treeSignature(crlfRoot).signature);
+});

@@ -127,6 +127,8 @@ export function treeSignature(root, cfg = loadConfig(root), only = null) {
     } catch {
       buf = Buffer.from('<missing>');
     }
+    // issue #81：入哈希前 CRLF→LF 归一，对齐 kernel hashText 口径（Windows 检出不产生签名漂移）。
+    buf = Buffer.from(buf.toString('utf8').replace(/\r\n/g, '\n'), 'utf8');
     h.update(rel);
     h.update('\0');
     h.update(buf);
