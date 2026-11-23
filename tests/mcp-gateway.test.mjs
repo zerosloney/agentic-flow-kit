@@ -292,3 +292,58 @@ test('CLI mcp check-call, audit and stats commands work end-to-end', () => {
   assert.equal(c6.status, 0);
   assert.match(c6.stdout, /execute_command/);
 });
+
+test('evaluateMcpCall treats an explicit empty allow list as a closed allowlist', () => {
+  const policy = {
+    ...DEFAULT_GATEWAY_POLICY,
+    roles: { frozen: { allow: [], deny: [] } },
+  };
+  const r = evaluateMcpCall({ policy, role: 'frozen', tool: 'read_file' });
+  assert.equal(r.allowed, false);
+  assert.equal(r.decision, 'DENIED_RBAC');
+
+  const denyOnlyPolicy = {
+    ...DEFAULT_GATEWAY_POLICY,
+    roles: { auditor: { deny: ['write_file'] } },
+  };
+  const readOnly = evaluateMcpCall({ policy: denyOnlyPolicy, role: 'auditor', tool: 'read_file' });
+  assert.equal(readOnly.allowed, true);
+  const denied = evaluateMcpCall({ policy: denyOnlyPolicy, role: 'auditor', tool: 'write_file' });
+  assert.equal(denied.allowed, false);
+  assert.equal(denied.decision, 'DENIED_RBAC');
+});
+
+test('evaluateMcpCall denies unknown roles (fail-closed)', () => {
+  const r = evaluateMcpCall({ role: 'intruder', tool: 'read_file' });
+  assert.equal(r.allowed, false);
+  assert.equal(r.decision, 'DENIED_RBAC');
+  assert.match(r.reason, /intruder/);
+  assert.match(r.reason, /read_file/);
+});
+
+test('readGatewayPolicy keeps built-in role allow list when user adds a deny', () => {
+  const tmp = makeTmp('flow-kit-mcp-policy-');
+  fs.mkdirSync(path.join(tmp, '.agents', 'config'), { recursive: true });
+  fs.writeFileSync(
+    path.join(tmp, MCP_GATEWAY_CONFIG_REL),
+    JSON.stringify({ roles: { coder: { deny: ['write_file'] } } }),
+    'utf8',
+  );
+
+  const policy = readGatewayPolicy(tmp);
+  assert.ok(policy.roles.coder.allow.includes('*'));
+  assert.ok(policy.roles.coder.deny.includes('dangerous_system_exec'));
+  assert.ok(policy.roles.coder.deny.includes('write_file'));
+
+  const allowed = evaluateMcpCall({ target: tmp, role: 'coder', tool: 'read_file' });
+  assert.equal(allowed.allowed, true);
+
+  const denied = evaluateMcpCall({
+    target: tmp,
+    role: 'coder',
+    tool: 'write_file',
+    args: { path: 'a.md', content: 'hello' },
+  });
+  assert.equal(denied.allowed, false);
+  assert.equal(denied.decision, 'DENIED_RBAC');
+});

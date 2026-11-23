@@ -78,18 +78,24 @@ export const L3_DANGEROUS_PATTERNS = [
   /(?:~|\$HOME)\/(?:\.ssh|\.aws|\.kube|\.gnupg)/i,
 ];
 
+// 仅在命令起始位置匹配工具名：字符串开头，或 ; && || | ( 换行 之后（允许前导空白）。
+// 避免把提交说明等 prose 里的单词（如 "make it work"）误判为危险命令。
+function commandStartPattern(body) {
+  return new RegExp(`(?:^|[;&|(\\n]\\s*)${body}`, 'i');
+}
+
 export const L2_DANGEROUS_PATTERNS = [
   // 包管理器全局/外部依赖安装与升级
-  /\b(?:npm|pnpm|yarn|bun)\s+(?:install|i|add|update)\b/i,
-  /\b(?:pip|pip3|poetry|pipenv)\s+(?:install|add)\b/i,
-  /\b(?:cargo)\s+(?:install|add)\b/i,
-  /\b(?:go)\s+(?:get|install)\b/i,
-  /\b(?:gem)\s+install\b/i,
-  /\b(?:apt|apt-get|apk|yum|dnf|pacman|brew)\s+install\b/i,
+  commandStartPattern('(?:npm|pnpm|yarn|bun)\\s+(?:install|i|add|update)\\b'),
+  commandStartPattern('(?:pip|pip3|poetry|pipenv)\\s+(?:install|add)\\b'),
+  commandStartPattern('(?:cargo)\\s+(?:install|add)\\b'),
+  commandStartPattern('(?:go)\\s+(?:get|install)\\b'),
+  commandStartPattern('(?:gem)\\s+install\\b'),
+  commandStartPattern('(?:apt|apt-get|apk|yum|dnf|pacman|brew)\\s+install\\b'),
   // 外部网络数据拉取工具
-  /\b(?:curl|wget|scp|sftp|rsync|nc|netcat|telnet|ftp)\b/i,
+  commandStartPattern('(?:curl|wget|scp|sftp|rsync|nc|netcat|telnet|ftp)\\b'),
   // 外部编译构建
-  /\b(?:make|cmake\s+--build|ninja|gcc|g\+\+|clang)\b/i,
+  commandStartPattern('(?:make|cmake\\s+--build|ninja|gcc|g\\+\\+|clang)\\b'),
 ];
 
 export const L0_SAFE_PATTERNS = [
@@ -408,7 +414,6 @@ export function routeCommand({
   const mode = config.mode || 'auto';
   let route = 'host';
   let canExecute = true;
-  let warning = null;
   let reason = classification.reason;
 
   if (mode === 'disabled') {
@@ -436,8 +441,8 @@ export function routeCommand({
     if (classification.dangerous) {
       route = 'sandbox';
       if (!engineInfo.available) {
-        route = 'host';
-        warning = 'Container engine unavailable; dangerous command degraded to host execution';
+        canExecute = false;
+        reason = `Dangerous command (risk ${classification.level}) requires sandbox isolation, but no container engine is available`;
       }
     } else {
       route = 'host';
@@ -449,7 +454,6 @@ export function routeCommand({
     level: classification.level,
     dangerous: classification.dangerous,
     reason,
-    warning,
     canExecute,
     engine: engineInfo,
   };

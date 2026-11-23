@@ -5,9 +5,23 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import crypto from 'node:crypto';
+import { packBundle, readBundle, unpackBundle, verifyBundle } from '../src/commands/bundle.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
+
+function sha256(value) {
+  return crypto.createHash('sha256').update(value).digest('hex');
+}
+
+function canonical(value) {
+  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${canonical(value[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
 
 function runCli(dir, args) {
   return spawnSync(process.execPath, [BIN, ...args], {
@@ -208,4 +222,72 @@ test('bundle commands print localized English text with --lang en', () => {
   const rUnpack = runCli(tmp, ['bundle', 'unpack', bundlePath, '--out', unpackDir, '--lang', 'en']);
   assert.equal(rUnpack.status, 0, rUnpack.stderr);
   assert.match(rUnpack.stdout, /Offline bundle unpacked successfully/);
+});
+
+test('bundle unpack rejects path traversal rels before writing', () => {
+  const tmp = makeTmp('flow-kit-bundle-traversal-');
+  const content = 'pwned';
+  const maliciousRels = ['../evil.txt', '..\\evil.txt', '/tmp/x'];
+  const files = {};
+  for (const rel of maliciousRels) {
+    files[rel] = { encoding: 'utf8', content, hash: sha256(Buffer.from(content, 'utf8')) };
+  }
+  const fileHashes = Object.fromEntries(Object.entries(files).map(([rel, entry]) => [rel, entry.hash]));
+  const digest = sha256(canonical({ files: fileHashes }));
+  const handle = {
+    isDir: false,
+    path: path.join(tmp, 'evil.bundle.json'),
+    bundle: { $schema: 'flow-kit-bundle/v1', bundleVersion: 1, digest, meta: {}, files },
+  };
+
+  const outDir = path.join(tmp, 'out');
+  assert.throws(
+    () => unpackBundle(handle, outDir),
+    (err) => err.code === 'BUNDLE_CORRUPTED'
+      && maliciousRels.every((rel) => err.message.includes(rel)),
+  );
+
+  assert.equal(fs.existsSync(outDir), false, 'unpack must not create the output directory');
+  assert.equal(fs.existsSync(path.join(tmp, 'evil.txt')), false, 'must not write outside the target directory');
+  assert.deepEqual(fs.readdirSync(tmp), [], 'unpack must not write any file');
+});
+
+test('bundle directory verify covers extra hosts/ entries and detects tampering', () => {
+  const tmp = makeTmp('flow-kit-bundle-dir-hosts-');
+  const hostDir = path.join(tmp, 'external-host');
+  fs.mkdirSync(path.join(hostDir, 'commands'), { recursive: true });
+  fs.writeFileSync(path.join(hostDir, 'host.json'), '{"name":"demo"}\n', 'utf8');
+  fs.writeFileSync(path.join(hostDir, 'commands', 'run.md'), '---\nname: run\n---\nrun\n', 'utf8');
+
+  const bundlePath = path.join(tmp, 'hosts.bundle.json');
+  packBundle({ out: bundlePath, extraHostDirs: [hostDir] });
+  const packed = JSON.parse(fs.readFileSync(bundlePath, 'utf8'));
+  assert.ok(packed.files['hosts/host.json'], 'bundle should contain hosts/host.json');
+  assert.ok(packed.files['hosts/commands/run.md'], 'bundle should contain nested hosts file');
+
+  const unpackDir = path.join(tmp, 'unpacked');
+  unpackBundle(readBundle(bundlePath), unpackDir);
+
+  const verified = verifyBundle(readBundle(unpackDir));
+  assert.equal(verified.ok, true);
+  assert.equal(verified.fileCount, Object.keys(packed.files).length);
+
+  fs.writeFileSync(path.join(unpackDir, 'hosts', 'host.json'), '{"name":"tampered"}\n', 'utf8');
+  assert.throws(
+    () => verifyBundle(readBundle(unpackDir)),
+    (err) => err.code === 'BUNDLE_CORRUPTED' && /digest mismatch/.test(err.message),
+  );
+});
+
+test('bundle directory verify passes for plain bundle without hosts/', () => {
+  const tmp = makeTmp('flow-kit-bundle-dir-plain-');
+  const bundlePath = path.join(tmp, 'plain.bundle.json');
+  packBundle({ out: bundlePath });
+
+  const unpackDir = path.join(tmp, 'unpacked');
+  unpackBundle(readBundle(bundlePath), unpackDir);
+
+  const verified = verifyBundle(readBundle(unpackDir));
+  assert.equal(verified.ok, true);
+  assert.ok(verified.fileCount > 0);
 });

@@ -116,9 +116,6 @@ export function sandboxCommand({ args, t }) {
           dangerous: decision.dangerous ? 'true' : 'false',
           reason: decision.reason,
         }));
-        if (decision.warning) {
-          console.warn(t('sandbox.routeDegraded', { warning: decision.warning }));
-        }
         if (!decision.canExecute) {
           console.error(t('sandbox.routeBlocked', { level: decision.level }));
         }
