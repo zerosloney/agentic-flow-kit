@@ -122,6 +122,33 @@ test('hudWatchLoop degrades gracefully in non-TTY mode', async () => {
   assert.match(output, /LIVE MULTI-AGENT & SHIELD HUD/);
 });
 
+test('hudWatchLoop non-TTY watch exits by gate result like snapshot mode (审查遗留批 2026-11-23)', async () => {
+  const dir = makeTmp('flow-kit-hud-watch-fail-');
+  // 损坏的 policy.json 触发确定性 gate 失败
+  fs.mkdirSync(path.join(dir, '.agents'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.agents', 'policy.json'), '{ broken', 'utf8');
+
+  let output = '';
+  const mockOutput = {
+    isTTY: false,
+    write: (chunk) => {
+      output += chunk;
+    },
+  };
+  const mockInput = { isTTY: false };
+
+  const code = await hudWatchLoop({
+    target: dir,
+    t,
+    inputStream: mockInput,
+    outputStream: mockOutput,
+  });
+
+  // 非 TTY 降级路径按聚合 gate 结果返回，对齐快照口径：failed gate → exit 1
+  assert.equal(code, 1);
+  assert.match(output, /REJECTED/);
+});
+
 test('CLI flow-kit hud and status --hud integration', () => {
   const dir = makeTmp('flow-kit-hud-cli-');
 

@@ -164,6 +164,48 @@ test('evaluateMcpCall enforces token and call rate limits', () => {
   assert.equal(r2.decision, 'DENIED_RATE_LIMIT');
 });
 
+test('evaluateMcpCall rate-limit stats skip corrupt timestamps instead of truncating (审查遗留批 2026-11-23)', () => {
+  const tmp = makeTmp('flow-kit-mcp-badts-');
+  const auditPath = path.join(tmp, MCP_AUDIT_LOG_REL);
+  fs.mkdirSync(path.dirname(auditPath), { recursive: true });
+
+  const now = Date.now();
+  const goodLine = (agoMs) => JSON.stringify({
+    schema: 'flow-kit-mcp-audit/v1',
+    timestamp: new Date(now - agoMs).toISOString(),
+    role: 'coder',
+    tool: 'wiki_search',
+    decision: 'ALLOWED',
+    tokens: 0,
+  });
+  const corruptLine = JSON.stringify({
+    schema: 'flow-kit-mcp-audit/v1',
+    timestamp: 'not-a-timestamp',
+    role: 'coder',
+    tool: 'wiki_search',
+    decision: 'ALLOWED',
+  });
+
+  // 好行 - 坏行 - 好行：坏行夹在中间；修复前坏行触发 break，会把更早的好行截断出统计区间
+  fs.writeFileSync(auditPath, `${goodLine(1000)}\n${corruptLine}\n${goodLine(2000)}\n`, 'utf8');
+
+  const policy = {
+    ...DEFAULT_GATEWAY_POLICY,
+    rateLimits: { maxCallsPerMinute: 2, maxCallsPerHour: 100 },
+  };
+
+  // 两条好行都应计入 → 第 3 次调用触发分钟级限流拒绝
+  const res = evaluateMcpCall({
+    target: tmp,
+    policy,
+    role: 'coder',
+    tool: 'wiki_search',
+  });
+  assert.equal(res.allowed, false);
+  assert.equal(res.decision, 'DENIED_RATE_LIMIT');
+  assert.match(res.reason, /calls\/min/);
+});
+
 test('recordMcpAudit and queryMcpAudit compute accurate analytics', () => {
   const tmp = makeTmp('flow-kit-mcp-audit-');
 

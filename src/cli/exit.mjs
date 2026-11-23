@@ -70,6 +70,8 @@ const BY_CODE = {
   BUNDLE_CORRUPTED: EXIT.CONFLICT,
   ARCH_CHECK_FAILED: EXIT.CONFLICT,
   METRICS_CHECK_FAILED: EXIT.CONFLICT,
+  // warning 码也登记以防扫描守卫（审查遗留批 2026-11-23）：该码只作 resolve.mjs 的
+  // warnings.push、从不 throw，但 cli-contract 源码扫描要求 src/ 内出现的 code 一律登记。
   REVIEW_SAME_AS_CODE: EXIT.CONFLICT,
   IO: EXIT.IO,
   FILE_NOT_FOUND: EXIT.IO,

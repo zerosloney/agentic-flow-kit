@@ -138,6 +138,20 @@ export function handoffCommand({ args, t }) {
       fail('INVALID_JSON', t('error.handoffInvalid', { detail: 'Cannot parse JSON file' }));
     }
 
+    // 审查遗留批 2026-11-23：verify 前先核验信封内工件路径必须仍落在 target 内，
+    // 阻断 `../` 逃逸信封借工件哈希比对探测 target 外任意文件。
+    const targetAbs = path.resolve(target);
+    const targetBase = targetAbs.endsWith(path.sep) ? targetAbs : targetAbs + path.sep;
+    for (const art of envelope.artifacts || []) {
+      if (!art || typeof art.path !== 'string') {
+        fail('INVALID_JSON', `Handoff artifact entry has no valid path field: ${JSON.stringify(art)}`);
+      }
+      const resolved = path.resolve(targetAbs, art.path);
+      if (resolved !== targetAbs && !resolved.startsWith(targetBase)) {
+        fail('INVALID_JSON', `Handoff artifact path escapes target directory: ${art.path}`);
+      }
+    }
+
     let publicKeyPem = null;
     // 公钥路径单源：keygen 默认优先，legacy .agents/notary/public.pem 回退（PR #77 审查跟进）
     const pubKeyCandidate = args.key ? path.resolve(args.key) : resolvePublicKeyPath(target);

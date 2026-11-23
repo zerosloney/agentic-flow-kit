@@ -80,8 +80,13 @@ export const L3_DANGEROUS_PATTERNS = [
 
 // 仅在命令起始位置匹配工具名：字符串开头，或 ; && || | ( 换行 之后（允许前导空白）。
 // 避免把提交说明等 prose 里的单词（如 "make it work"）误判为危险命令。
+// 审查遗留批 2026-11-23：工具名前允许可重复的包装器前缀（sudo/nohup/timeout 等有限闭集），
+// 使 `sudo npm install`、`xargs make` 这类包装逃逸仍命中 L2；包装器参数段禁止跨越
+// 命令边界符（; & | ( 换行），保证回溯有界且不会跨段误命中。
+const WRAPPER_PREFIX_SOURCE = '(?:(?:sudo|doas|nohup|nice|time|xargs|env|timeout)(?:\\s+[^\\s;&|()]+)*\\s+)*';
+
 function commandStartPattern(body) {
-  return new RegExp(`(?:^|[;&|(\\n]\\s*)${body}`, 'i');
+  return new RegExp(`(?:^|[;&|(\\n]\\s*)${WRAPPER_PREFIX_SOURCE}${body}`, 'i');
 }
 
 export const L2_DANGEROUS_PATTERNS = [
@@ -170,6 +175,9 @@ export function loadSandboxConfig(target) {
       },
     };
   } catch (err) {
+    // 审查遗留批 2026-11-23：配置损坏回退默认前必须大声提示，不能静默吞掉。
+    // 运行时警告面向终端，沿用本模块 reason 的英文字面量风格（非 i18n 面）。
+    console.error(`[flow-kit] Warning: sandbox config file is unreadable (${file}): ${err.message}. Falling back to the default sandbox config.`);
     return {
       exists: true,
       error: err.message,
@@ -417,8 +425,22 @@ export function routeCommand({
   let reason = classification.reason;
 
   if (mode === 'disabled') {
-    route = 'host';
-    canExecute = true;
+    if (strict) {
+      // 审查遗留批 2026-11-23：调用方显式 --strict 时 disabled 不生效，
+      // 按 auto 语义执行（高危命令须隔离，无引擎即拒绝），reason 注明覆盖来源。
+      if (classification.dangerous) {
+        route = 'sandbox';
+        if (!engineInfo.available) {
+          canExecute = false;
+          reason = `Strict flag overrides disabled mode: dangerous command (risk ${classification.level}) requires sandbox isolation, but no container engine is available`;
+        }
+      } else {
+        route = 'host';
+      }
+    } else {
+      route = 'host';
+      canExecute = true;
+    }
   } else if (mode === 'always') {
     route = 'sandbox';
     if (!engineInfo.available) {

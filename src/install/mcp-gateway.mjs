@@ -340,6 +340,11 @@ export function evaluateMcpCall({
             try {
               const item = JSON.parse(lines[i]);
               const tTime = new Date(item.timestamp).getTime();
+              if (Number.isNaN(tTime)) {
+                // 审查遗留批 2026-11-23：坏 timestamp 行只跳过自身，
+                // 不得触发 break 截断后续（更早的）统计区间。
+                continue;
+              }
               if (tTime >= oneHourAgo) {
                 callsInHour += 1;
                 tokensInHour += (item.tokens || 0);

@@ -222,6 +222,42 @@ test('CLI handoff create, verify, and list end-to-end', () => {
   assert.equal(failData.ok, false);
 });
 
+test('CLI handoff verify rejects artifact paths escaping the target (审查遗留批 2026-11-23)', () => {
+  const dir = initRepo();
+  const serviceFile = path.join(dir, 'service.js');
+  fs.writeFileSync(serviceFile, 'export function run() { return 42; }\n', 'utf8');
+
+  const createRes = run([
+    'handoff', 'create',
+    '--from', 'code',
+    '--to', 'review',
+    '--task', 'escape-probe',
+    '--artifacts', 'service.js',
+    '--target', dir,
+    '--json',
+  ], dir);
+  assert.equal(createRes.status, 0, createRes.stderr);
+  const createData = JSON.parse(createRes.stdout);
+
+  // 构造 ../ 逃逸信封：工件路径指向 target 外，且文件真实存在，
+  // 以证明拒绝来自路径越界拦截而非「工件缺失」。
+  const outsideFile = path.join(path.dirname(dir), `outside-${path.basename(dir)}.txt`);
+  fs.writeFileSync(outsideFile, 'probe file outside the target\n', 'utf8');
+  try {
+    const envelope = readHandoffFile(createData.file);
+    envelope.artifacts[0].path = `../${path.basename(outsideFile)}`;
+    const evilPath = path.join(dir, '.agents', 'handoffs', 'evil.json');
+    writeHandoffFile(evilPath, envelope);
+
+    const verifyEscape = run(['handoff', 'verify', evilPath, '--target', dir, '--json'], dir);
+    assert.notEqual(verifyEscape.status, 0);
+    assert.match(verifyEscape.stderr, /escapes target directory/);
+    assert.ok(!verifyEscape.stdout.includes('"ok"'), 'escaped envelope must be rejected before verification output');
+  } finally {
+    fs.rmSync(outsideFile, { force: true });
+  }
+});
+
 test('doctor integration checks handoff integrity', () => {
   const dir = initRepo();
   const installRes = run(['install', '--agent', 'codex', '--stack', 'node', '--target', dir], dir);

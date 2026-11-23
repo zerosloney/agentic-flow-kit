@@ -263,11 +263,12 @@ export async function hudWatchLoop({
   inputStream = process.stdin,
   outputStream = process.stdout,
 }) {
-  // 非 TTY 或重定向输出时降级为快照输出
+  // 非 TTY 或重定向输出时降级为快照输出（审查遗留批 2026-11-23：
+  // 退出码对齐快照口径，按聚合 gate 结果返回而非恒 0）
   if (!inputStream.isTTY || !outputStream.isTTY) {
     const state = gatherHudState(target, t);
     outputStream.write(renderHudView(state, t) + '\n');
-    return 0;
+    return state.gate.passed ? 0 : 1;
   }
 
   let running = true;
