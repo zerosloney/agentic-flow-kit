@@ -15,12 +15,15 @@ import { computeAiDoraMetrics, checkMetricsThresholds } from '../install/metrics
 export function resolveChangedFiles(target, { since = null } = {}) {
   const files = new Set();
   try {
+    // 审查遗留批 2026-11-23：git 默认对非 ASCII 路径输出 C 转义（core.quotepath），中文文件名会被
+    // 折成 "文档/\350\257\264\346\230\216.md" 漏判/错判。先例：engine scripts 的 git 调用一律加
+    // -c core.quotepath=off（papercuts 2026-09 教训）。
     const diffArgs = since
-      ? ['diff', '--name-only', `${since}...HEAD`]
-      : ['diff', '--name-only', 'HEAD~1...HEAD'];
+      ? ['-c', 'core.quotepath=off', 'diff', '--name-only', `${since}...HEAD`]
+      : ['-c', 'core.quotepath=off', 'diff', '--name-only', 'HEAD~1...HEAD'];
     let res = spawnSync('git', diffArgs, { encoding: 'utf8', cwd: target });
     if (res.status !== 0 && since) {
-      res = spawnSync('git', ['diff', '--name-only', since], { encoding: 'utf8', cwd: target });
+      res = spawnSync('git', ['-c', 'core.quotepath=off', 'diff', '--name-only', since], { encoding: 'utf8', cwd: target });
     }
     // 安全修复批 2026-11-23（fail-closed）：diff 调用失败（含浅克隆下 HEAD~1 不可达、零提交仓）
     // 时无法判定增量范围，直接返回 null 让调用方回退全量检查——不允许 porcelain 腿把
@@ -35,7 +38,7 @@ export function resolveChangedFiles(target, { since = null } = {}) {
     }
 
     // 兼顾工作区未暂存及已暂存的未提交改动（仅作为 diff 成功后的补充，不单独决定 resolved）
-    const statRes = spawnSync('git', ['status', '--porcelain'], { encoding: 'utf8', cwd: target });
+    const statRes = spawnSync('git', ['-c', 'core.quotepath=off', 'status', '--porcelain'], { encoding: 'utf8', cwd: target });
     if (statRes.status === 0 && statRes.stdout) {
       for (const line of statRes.stdout.split(/\r?\n/)) {
         if (!line.trim()) continue;
@@ -789,10 +792,17 @@ export function renderGateMarkdown(result, t) {
 /**
  * 生成 CI 自动化工作流配置
  */
-export function generateCiWorkflow({ provider = 'github', target, t }) {
+export function generateCiWorkflow({ provider = 'github', target, t, force = false }) {
   const normProvider = String(provider).toLowerCase();
   if (normProvider === 'gitlab') {
     const gitlabPath = path.join(target, '.gitlab-ci.yml');
+    // 审查遗留批 2026-11-23：已存在的 .gitlab-ci.yml 不再无条件覆盖（fail-closed）——
+    // 用户手写的 CI 配置被静默重写属于破坏性副作用；--force 才允许覆盖。
+    if (fs.existsSync(gitlabPath) && !force) {
+      const err = new Error(t('gate.ciExists', { path: '.gitlab-ci.yml' }));
+      err.code = 'CONFIG_EXISTS';
+      throw err;
+    }
     const content = `# AI-Native Zero-Trust Quality Gate
 ai-gate:
   stage: test

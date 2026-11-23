@@ -13,7 +13,8 @@ export async function gateCommand({ args, t, lang = 'zh-CN' }) {
   // 1. 初始化 CI 工作流流水线 (flow-kit gate init-ci / flow-kit ci init)
   if (sub === 'init-ci' || sub === 'init' || flag(args, 'init-ci')) {
     const provider = args.provider || 'github';
-    const wf = generateCiWorkflow({ provider, target, t });
+    // 审查遗留批 2026-11-23：透传 --force；目标 CI 文件已存在时由 generateCiWorkflow 抛 CONFIG_EXISTS。
+    const wf = generateCiWorkflow({ provider, target, t, force: flag(args, 'force') });
     const relPath = path.relative(target, wf.path);
     console.log(t('gate.ciInitOk', { provider, file: relPath }) || `CI workflow scaffold generated (${provider}): ${relPath}`);
     return 0;

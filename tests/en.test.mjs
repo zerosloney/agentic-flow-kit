@@ -282,3 +282,15 @@ test('en gate warns in English when the diff scope cannot be resolved', () => {
   assert.match(r.stderr, /Failed to resolve diff scope \(git diff\/status unavailable\); falling back to full checks/);
   assert.doesNotMatch(r.stderr, /差异集解析失败/, 'en output must not fall back to the zh sentence');
 });
+
+// ---- 审查遗留批 2026-11-23：gate init-ci 拒绝覆盖已有 .gitlab-ci.yml（gate.ciExists）的英文输出 ----
+
+test('en gate init-ci reports the existing .gitlab-ci.yml conflict in English', () => {
+  const dir = tmpRepo();
+  assert.equal(run(['gate', 'init-ci', '--provider', 'gitlab', '--lang', 'en', '--target', '.'], dir).status, 0);
+
+  const r = run(['gate', 'init-ci', '--provider', 'gitlab', '--lang', 'en', '--target', '.'], dir);
+  assert.equal(r.status, 1, `CONFIG_EXISTS should map to CONFLICT(1), got ${r.status}: ${r.stderr}`);
+  assert.match(r.stderr, /CI gate workflow config already exists: \.gitlab-ci\.yml; use --force to overwrite/);
+  assert.doesNotMatch(r.stderr, /已存在/, 'en output must not fall back to the zh sentence');
+});

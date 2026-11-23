@@ -215,6 +215,72 @@ test('generateCiWorkflow generates valid GitHub Actions and GitLab CI files', ()
   assert.match(gl.content, /when: always/);
 });
 
+// 审查遗留批 2026-11-23：init-ci 对已存在的 .gitlab-ci.yml 不再无条件覆盖——默认抛 CONFIG_EXISTS
+// （exit.mjs 登记 → 退出码 1），只有 --force 才允许重写用户手改过的 CI 配置。
+test('generateCiWorkflow refuses to overwrite an existing GitLab CI file without force', () => {
+  const dir = makeTmp('flow-kit-gate-ci-exists-');
+  const first = generateCiWorkflow({ provider: 'gitlab', target: dir, t });
+  assert.equal(first.created, true);
+
+  // 模拟用户手改：默认重跑不得静默覆盖
+  fs.writeFileSync(first.path, '# user-tuned pipeline', 'utf8');
+  assert.throws(
+    () => generateCiWorkflow({ provider: 'gitlab', target: dir, t }),
+    (err) => {
+      assert.equal(err.code, 'CONFIG_EXISTS');
+      assert.match(err.message, /\.gitlab-ci\.yml/);
+      return true;
+    }
+  );
+  assert.equal(fs.readFileSync(first.path, 'utf8'), '# user-tuned pipeline', 'existing file must not be silently overwritten');
+
+  // --force 才覆盖
+  const forced = generateCiWorkflow({ provider: 'gitlab', target: dir, t, force: true });
+  assert.equal(forced.created, true);
+  assert.match(fs.readFileSync(forced.path, 'utf8'), /ai-gate:/);
+});
+
+// CLI 侧端到端：CONFIG_EXISTS 走 exit.mjs 契约（退出码 1），--force 放行。
+test('gate init-ci exits 1 on an existing .gitlab-ci.yml and --force overwrites', () => {
+  const dir = makeTmp('flow-kit-gate-initci-cli-');
+  const first = run(['gate', 'init-ci', '--provider', 'gitlab', '--target', dir], dir);
+  assert.equal(first.status, 0, first.stderr);
+
+  const again = run(['gate', 'init-ci', '--provider', 'gitlab', '--target', dir], dir);
+  assert.equal(again.status, 1, `CONFIG_EXISTS should map to CONFLICT(1), got ${again.status}: ${again.stderr}`);
+  assert.match(again.stderr, /\.gitlab-ci\.yml/);
+
+  const forced = run(['gate', 'init-ci', '--provider', 'gitlab', '--force', '--target', dir], dir);
+  assert.equal(forced.status, 0, forced.stderr);
+  assert.match(fs.readFileSync(path.join(dir, '.gitlab-ci.yml'), 'utf8'), /ai-gate:/);
+});
+
+// 审查遗留批 2026-11-23：git 默认把非 ASCII 路径 C 转义（"文档/\350\257\264..."），增量范围漏判。
+// resolveChangedFiles 的 git 调用必须带 -c core.quotepath=off 返回原样路径。
+test('resolveChangedFiles returns raw paths for non-ASCII filenames', () => {
+  const dir = makeTmp('flow-kit-gate-quotepath-');
+  const git = (args) => {
+    const r = spawnSync('git', args, { cwd: dir, encoding: 'utf8' });
+    assert.equal(r.status, 0, `git ${args.join(' ')} failed: ${r.stderr}`);
+  };
+  git(['init']);
+  git(['config', 'user.name', 'test']);
+  git(['config', 'user.email', 'test@test.com']);
+  fs.writeFileSync(path.join(dir, 'README.md'), '# initial', 'utf8');
+  git(['add', '.']);
+  git(['commit', '-m', 'initial']);
+  // 第二个提交引入中文文件名，让 HEAD~1...HEAD 的差异集恰好含非 ASCII 路径
+  fs.mkdirSync(path.join(dir, '文档'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '文档', '说明.md'), '# 中文路径', 'utf8');
+  git(['add', '.']);
+  git(['commit', '-m', 'docs: add chinese doc']);
+
+  const files = resolveChangedFiles(dir);
+  assert.ok(Array.isArray(files), 'diff scope must resolve');
+  assert.ok(files.includes('文档/说明.md'), `expected raw CJK path, got ${JSON.stringify(files)}`);
+  assert.ok(!files.some((f) => /\\\d{3}/.test(f)), 'must not return C-quoted octal escapes');
+});
+
 test('generateGateBadge outputs valid markdown, svg, and json badges', () => {
   const dir = makeTmp('flow-kit-gate-badge-');
   const resApproved = runGateChecks({ target: dir, strict: false, t });

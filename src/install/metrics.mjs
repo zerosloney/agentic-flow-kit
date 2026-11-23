@@ -2,15 +2,11 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { queryMcpAudit } from './mcp-gateway.mjs';
+import { readKitVersion } from './version.mjs';
 
 // 服务版本跟随包版本，避免发版后 OTel service.version 停留在旧值。
-const KIT_VERSION = (() => {
-  try {
-    return JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8')).version || '0.0.0';
-  } catch {
-    return '0.0.0';
-  }
-})();
+// 审查遗留批 2026-11-23：改用 src/install/version.mjs 单源，替换本地 IIFE 双读。
+const KIT_VERSION = readKitVersion();
 
 function readText(file) {
   try {
