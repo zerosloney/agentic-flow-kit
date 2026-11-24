@@ -207,3 +207,10 @@
     "allowFiles": ["frontend/src/utils/notify.ts"]
   }
   ```
+
+## .agents/rules/ and plugins (rules v1)
+
+- **Purpose**: Unified rule model — `stack.json` (kit-managed) ← `project.json` (project-owned) ← `local.json` (gitignored) merged as layers; later layers replace the whole rule with the same id; `{ "id": "...", "enabled": false }` disables a lower-layer rule.
+- **Execution**: `flow-kit rules validate | explain <id> | init [--force] | check [--staged|--range <old>..<new>|--files a,b] [--with-commands] [--prefix k,l] [--face k,l] [--phase p]`; pre-commit, the host write gate, and verify's code gates already use it; legacy config files are still projected by the legacy adapter (`rules validate` prints the migration hint).
+- **Plugins**: `.agents/rules/plugins/<module>.mjs` run as subprocesses (stdin JSON `{version,root,files,face}`, stdout JSON `{violations:[{file,line,message}]}`); register them explicitly in `project.json`'s `plugins` array (id/module/face/phase/severity/timeoutMs) — directories are never auto-loaded; timeouts/crashes are reported as violations with the registered severity.
+- **Unconfigured semantics**: empty rules layers = no extra rules; legacy configs stay in effect.

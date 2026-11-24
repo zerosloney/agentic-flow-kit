@@ -56,6 +56,7 @@
   "rules.unsupported": "未迁入规则模型（仍由原门执行）：{{items}}",
   "rules.initExists": "已存在 {{rel}}（用 --force 覆盖）",
   "rules.initWritten": "已生成 {{rel}}（{{count}} 条规则，来自旧配置投影）",
+  "rules.legacyHint": "legacy 层：旧配置文件仍是权威；迁移用 `flow-kit rules init` 生成 project.json（同 id 覆盖 legacy），确认后再逐条删旧配置。",
   "error.badStack": "无效的 --stack：{{value}}（可选 {{stacks}}）",
   "error.badSurface": "无效的 surface：{{surface}}（可选 {{surfaces}}）",
   "error.archPresetUnknown": "未知的架构预设：{{value}}（可选 {{presets}}）",

@@ -85,6 +85,7 @@ ${JSON.stringify(body, null, 2)}\n`);
       waivers: active.length,
       expired: expired.length,
     }));
+    if (loaded.layers.includes('legacy')) console.log(t('rules.legacyHint'));
     if (loaded.unsupported.length) {
       console.log(t('rules.unsupported', { items: loaded.unsupported.map((u) => `${u.group}(${u.count})`).join(', ') }));
     }

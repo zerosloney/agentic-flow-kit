@@ -313,6 +313,39 @@ function evalNavProperties(rule, ctx) {
   return { violations };
 }
 
+function evalPlugin(rule, ctx) {
+  const a = rule.assert.args;
+  const modulePath = path.join(ctx.root, '.agents', 'rules', 'plugins', `${a.module}.mjs`);
+  const fail = (detail) => ({ violations: [{ ruleId: rule.id, severity: rule.severity, message: rule.message, detail }] });
+  if (!fs.existsSync(modulePath)) return fail(`插件不存在：.agents/rules/plugins/${a.module}.mjs`);
+  const payload = JSON.stringify({ version: 1, root: ctx.root, files: ctx.changed || null, face: rule.face });
+  const r = spawnSync(process.execPath, [modulePath], {
+    cwd: ctx.root,
+    input: payload,
+    encoding: 'utf8',
+    timeout: rule.timeoutMs || a.timeoutMs || 10000,
+  });
+  if (r.error) return fail(`插件执行失败：${r.error.message}`);
+  if (r.status !== 0) return fail(`插件退出码 ${r.status}：${String(r.stderr || '').trim().slice(-400)}`);
+  let out;
+  try {
+    out = JSON.parse(r.stdout || '{}');
+  } catch {
+    return fail('插件输出不是 JSON');
+  }
+  const list = Array.isArray(out.violations) ? out.violations : [];
+  return {
+    violations: list.map((v) => ({
+      ruleId: rule.id,
+      severity: rule.severity,
+      message: rule.message,
+      file: v && v.file,
+      line: v && v.line,
+      detail: (v && (v.message || v.detail)) || '',
+    })),
+  };
+}
+
 function evalEnv(rule) {
   const a = rule.assert.args;
   const value = process.env[a.name];
@@ -377,6 +410,7 @@ export function evaluateModel(model, { root, changed = null, diff = null, withCo
     else if (kind === 'absence') outcome = evalAbsence(rule, ctx);
     else if (kind === 'inventory') outcome = evalInventory(rule, ctx);
     else if (kind === 'navProperties') outcome = evalNavProperties(rule, ctx);
+    else if (kind === 'plugin') outcome = evalPlugin(rule, ctx);
     else if (kind === 'env') outcome = evalEnv(rule);
     else if (kind === 'command') outcome = evalCommand(rule, ctx);
     else outcome = { violations: [{ ruleId: rule.id, severity: 'block', message: rule.message, detail: `未知原语 ${kind}` }] };

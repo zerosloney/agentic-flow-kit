@@ -9,7 +9,7 @@ export const FACES = ['ui', 'code', 'tests', 'data', 'any'];
 export const PHASES = ['pre-commit', 'pre-write', 'pre-push', 'verify', 'local', 'always'];
 export const SEVERITIES = ['block', 'warn'];
 export const SCOPES = ['repo', 'diff'];
-export const ASSERT_KINDS = ['content', 'require', 'absence', 'inventory', 'env', 'command', 'navProperties'];
+export const ASSERT_KINDS = ['content', 'require', 'absence', 'inventory', 'env', 'command', 'navProperties', 'plugin'];
 
 const RULE_KEYS = new Set([
   'id', 'face', 'phase', 'severity', 'scope', 'when', 'files', 'assert', 'message', 'level', 'enabled', 'timeoutMs', 'waiverFile', '_note',
@@ -78,6 +78,9 @@ function validateArgs(kind, args, at) {
       break;
     case 'command':
       if (typeof args.run !== 'string' || !args.run) fail(at, 'command 需要 run');
+      break;
+    case 'plugin':
+      if (typeof args.module !== 'string' || !args.module) fail(at, 'plugin 需要 module（.agents/rules/plugins/<module>.mjs）');
       break;
     default:
       fail(at, `未知原语 ${kind}（允许：${ASSERT_KINDS.join(' / ')}）`);
@@ -151,12 +154,30 @@ export function loadLayer(root, rel, name) {
     if (w.expires !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(String(w.expires))) throw new RulesConfigError(`${rel}: waivers[${i}] expires 必须是 YYYY-MM-DD`);
     if (w.reason !== undefined && typeof w.reason !== 'string') throw new RulesConfigError(`${rel}: waivers[${i}] reason 必须是字符串`);
   });
+  // 插件条目（子进程扩展点）：{ id, module, face, phase, severity?, timeoutMs?, message? }
+  const plugins = Array.isArray(data.plugins) ? data.plugins : [];
+  plugins.forEach((p, i) => {
+    const at = `${rel}: plugins[${i}]`;
+    if (!isObj(p)) throw new RulesConfigError(`${at} 必须是对象`);
+    for (const key of Object.keys(p)) {
+      if (!['id', 'module', 'face', 'phase', 'severity', 'timeoutMs', 'message', '_note'].includes(key)) throw new RulesConfigError(`${at} 未知字段「${key}」`);
+    }
+    if (typeof p.id !== 'string' || !/^[a-z0-9][a-z0-9._-]*$/.test(p.id)) throw new RulesConfigError(`${at} id 缺失或不合规`);
+    if (typeof p.module !== 'string' || !/^[A-Za-z0-9._-]+$/.test(p.module)) throw new RulesConfigError(`${at} module 缺失或不合规`);
+    if (!FACES.includes(p.face)) throw new RulesConfigError(`${at} face 非法（${FACES.join(' / ')}）`);
+    if (!PHASES.includes(p.phase)) throw new RulesConfigError(`${at} phase 非法（${PHASES.join(' / ')}）`);
+    if (p.severity !== undefined && !SEVERITIES.includes(p.severity)) throw new RulesConfigError(`${at} severity 非法`);
+    if (p.timeoutMs !== undefined && (!Number.isInteger(p.timeoutMs) || p.timeoutMs <= 0)) throw new RulesConfigError(`${at} timeoutMs 必须是正整数`);
+    if (p.message !== undefined && (!isObj(p.message) || typeof p.message.zh !== 'string' || typeof p.message.en !== 'string')) {
+      throw new RulesConfigError(`${at} message 必须是 {zh,en}`);
+    }
+  });
   const faces = isObj(data.faces) ? data.faces : {};
   for (const key of Object.keys(faces)) {
     if (!['ui', 'code', 'tests', 'data'].includes(key)) throw new RulesConfigError(`${rel}: faces.${key} 未知面`);
     if (!Array.isArray(faces[key]) || faces[key].some((s) => typeof s !== 'string' || !s)) throw new RulesConfigError(`${rel}: faces.${key} 必须是字符串数组`);
   }
-  return { name, rules, waivers, faces };
+  return { name, rules, waivers, faces, plugins };
 }
 
 /** 分层合并：同 id 后者整条替换；faces 按键替换；waivers 追加（同 rule+glob 后者覆盖）。 */
@@ -171,6 +192,20 @@ export function mergeLayers(layers) {
     for (const rule of layer.rules) {
       byId.set(rule.id, rule);
       provenance.set(rule.id, layer.name);
+    }
+    // 插件条目（可选）折算成 plugin 规则：列表是「显式白名单」，不自动加载目录。
+    for (const p of layer.plugins || []) {
+      byId.set(p.id, {
+        id: p.id,
+        face: p.face,
+        phase: p.phase,
+        severity: p.severity || 'warn',
+        scope: 'repo',
+        assert: { kind: 'plugin', args: { module: p.module } },
+        message: p.message || { zh: p.id, en: p.id },
+        ...(p.timeoutMs ? { timeoutMs: p.timeoutMs } : {}),
+      });
+      provenance.set(p.id, layer.name);
     }
     for (const w of layer.waivers) {
       waivers.set(`${w.rule}::${w.glob || '*'}`, w);

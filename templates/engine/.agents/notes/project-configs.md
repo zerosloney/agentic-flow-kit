@@ -207,3 +207,10 @@
     "allowFiles": ["frontend/src/utils/notify.ts"]
   }
   ```
+
+## .agents/rules/ 与插件（rules v1）
+
+- **作用**：统一规则模型——`stack.json`（kit 管理）← `project.json`（项目所有）← `local.json`（git 忽略）三层合并，同 id 后者整条替换；`{ "id": "...", "enabled": false }` 即可禁用下层同名规则。
+- **执行入口**：`flow-kit rules validate | explain <id> | init [--force] | check [--staged|--range <old>..<new>|--files a,b] [--with-commands] [--prefix k,l] [--face k,l] [--phase p]`；pre-commit、宿主写前门与 verify 的 code 门已走该入口；旧配置文件仍由 legacy 适配器投影（`rules validate` 会提示迁移路径）。
+- **插件**：`.agents/rules/plugins/<module>.mjs` 子进程执行（stdin JSON `{version,root,files,face}`，stdout JSON `{violations:[{file,line,message}]}`）；在 `project.json` 的 `plugins` 数组显式登记（id/module/face/phase/severity/timeoutMs），不自动加载目录；超时/崩溃按登记的 severity 记为违例。
+- **未配置语义**：`rules` 层全空 = 没有额外规则；legacy 配置仍生效。
