@@ -7,14 +7,16 @@ import { buildPlan, CI_MODES, ciModeFor, ciTemplateRels, TEMPLATES, LOCALES } fr
 import { prepareBundleForInstall } from './bundle.mjs';
 import { forgeFromRemote, originUrl } from '../install/forge.mjs';
 import { parseProfileArgs, STACKS } from '../install/profiles.mjs';
+import { stackMarkers } from '../install/stack-registry.mjs';
 import { applyPlan, readPlanEntry, summaryLine } from '../install/apply.mjs';
 import { emptyManifest, readManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
 import { acquireInstallLock } from '../install/lock.mjs';
 import { cleanupMigratedFiles } from '../install/migrations.mjs';
+import { scanGateConfigs } from '../install/gate-summary.mjs';
 import { buildVars } from '../render/tokens.mjs';
 import { HOST_NAMES, HOSTS, resolveHost, canonicalHostName } from '../hosts/registry.mjs';
 import { detectHosts } from '../hosts/detect.mjs';
-import { configureGit, isGitRepo } from '../git/config.mjs';
+import { configureGit, HOOKS_PATH, isGitRepo, readLocalHooksPath } from '../git/config.mjs';
 import { isBinaryPath, writeBaseline } from '../install/baseline.mjs';
 import { wireUserHooks } from '../install/user-hooks.mjs';
 import { explainPolicyDiff, renderPolicyDiff } from '../install/policy-diff.mjs';
@@ -80,34 +82,9 @@ export function resolveHosts(args, t, fallback = []) {
   return out;
 }
 
-// 根目录标记，先匹配者胜出。package.json 放在最后，避免吞掉 Cargo.toml / go.mod / pom.xml / tsconfig.json。
+// 根目录标记（单源：stack-registry.mjs，顺序即优先级；package.json 在最后，避免吞掉 Cargo.toml / go.mod / pom.xml / tsconfig.json）。
 // label 是菜单上的典型标记；match 返回实际命中的文件名。
-const STACK_MARKERS = [
-  {
-    stack: 'dotnet',
-    label: '.sln / .csproj',
-    match: (names) => names.find((n) => n.endsWith('.sln')) || names.find((n) => n.endsWith('.csproj')) || null,
-  },
-  { stack: 'rust', label: 'Cargo.toml', match: (names) => (names.includes('Cargo.toml') ? 'Cargo.toml' : null) },
-  { stack: 'go', label: 'go.mod', match: (names) => (names.includes('go.mod') ? 'go.mod' : null) },
-  {
-    stack: 'java',
-    label: 'pom.xml / build.gradle',
-    match: (names) => ['pom.xml', 'build.gradle', 'build.gradle.kts'].find((n) => names.includes(n)) || null,
-  },
-  {
-    stack: 'python',
-    label: 'pyproject.toml / requirements.txt',
-    match: (names) => ['pyproject.toml', 'requirements.txt', 'setup.py', 'Pipfile'].find((n) => names.includes(n)) || null,
-  },
-  {
-    stack: 'cpp',
-    label: 'CMakeLists.txt / Makefile',
-    match: (names) => ['CMakeLists.txt', 'Makefile', 'configure.ac', 'meson.build'].find((n) => names.includes(n)) || null,
-  },
-  { stack: 'typescript', label: 'tsconfig.json', match: (names) => (names.includes('tsconfig.json') ? 'tsconfig.json' : null) },
-  { stack: 'node', label: 'package.json', match: (names) => (names.includes('package.json') ? 'package.json' : null) },
-];
+const STACK_MARKERS = stackMarkers();
 
 export function stackMarkerLabel(stack) {
   return STACK_MARKERS.find((marker) => marker.stack === stack)?.label || '';
@@ -397,6 +374,13 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
     if (hasAzure) return 'azure';
     return null; // 两个都没有：无 CI（如 lean）
   };
+  // 远端托管平台 → CI 交付面：只有 GitHub / Azure 有内置模板；GitLab 等已知平台不出 CI
+  // （否则会回退成 both，凭空注入两个错平台的 CI 文件）。
+  const ciFromForge = (forge) => {
+    if (forge === 'github' || forge === 'azure') return forge;
+    if (forge === 'gitlab') return 'none';
+    return null;
+  };
   const ciChoice = args.ci !== undefined
     ? normalizeCi(args.ci, t)
     : previous
@@ -405,8 +389,38 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
         : (legacyCiFromFiles(previous)
           // 审查遗留批 2026-11-23：无既有 CI 文件时复用全新安装的 origin 探测，不再无条件回退 both。
           // lean 档与全新安装同口径：恒不发 CI（ci-select 回归）。
-          || (tier === 'lean' ? null : (forgeFromRemote(originUrl(target)) || (tier === 'enterprise' ? 'both' : 'none')))))
-      : (tier === 'lean' ? null : (forgeFromRemote(originUrl(target)) || (tier === 'enterprise' ? 'both' : 'none')));
+          || (tier === 'lean' ? null : (ciFromForge(forgeFromRemote(originUrl(target))) || (tier === 'enterprise' ? 'both' : 'none')))))
+      : (tier === 'lean' ? null : (ciFromForge(forgeFromRemote(originUrl(target))) || (tier === 'enterprise' ? 'both' : 'none')));
+
+  // 项目形态 / 端口 / 脚手架档位：显式参数 > manifest 重放 > 缺省（web / 栈默认端口 / full）。
+  const PRODUCT_MODES = ['web', 'api', 'library', 'cli'];
+  const SCAFFOLD_MODES = ['full', 'minimal', 'none'];
+  const product = String(args.product || previous?.product || 'web').toLowerCase();
+  if (!PRODUCT_MODES.includes(product)) {
+    const err = new Error(t('error.badProduct', { value: args.product || '', modes: PRODUCT_MODES.join(', ') }));
+    err.code = 'BAD_PRODUCT';
+    throw err;
+  }
+  const parsePort = (raw, flagName) => {
+    if (raw === undefined) return undefined;
+    const n = Number(raw);
+    if (!Number.isInteger(n) || n < 1 || n > 65535) {
+      const err = new Error(t('error.badPort', { flag: flagName, value: String(raw) }));
+      err.code = 'BAD_PORT';
+      throw err;
+    }
+    return n;
+  };
+  const ports = {
+    api: parsePort(args['api-port'], '--api-port') ?? previous?.ports?.api,
+    web: parsePort(args['web-port'], '--web-port') ?? previous?.ports?.web,
+  };
+  const scaffoldMode = String(args.scaffold || previous?.scaffold || 'full').toLowerCase();
+  if (!SCAFFOLD_MODES.includes(scaffoldMode)) {
+    const err = new Error(t('error.badScaffold', { value: args.scaffold || '', modes: SCAFFOLD_MODES.join(', ') }));
+    err.code = 'BAD_SCAFFOLD';
+    throw err;
+  }
 
   let modelFlags;
   try {
@@ -471,6 +485,7 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
     managedPermissions: previous?.managedPermissions || {},
     devcontainer: devcontainerEnabled,
     ci: ciChoice,
+    scaffold: scaffoldMode,
     templatesRoot,
     localesRoot,
   });
@@ -486,6 +501,8 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
     kitVersion: KIT_VERSION,
     installedAt,
     trackHosts,
+    ports,
+    product,
   });
 
   // --baseline-only：只重建基线目录，不重装。基线（.agents/.kit/baseline）被 .gitignore 忽略，
@@ -506,6 +523,7 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
       managedPermissions: previous?.managedPermissions || {},
       devcontainer: devcontainerEnabled,
       ci: ciChoice,
+      scaffold: scaffoldMode,
       templatesRoot,
       localesRoot,
     });
@@ -519,6 +537,8 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
       kitVersion: KIT_VERSION,
       installedAt,
       trackHosts,
+      ports,
+      product,
     });
     const managed = previous.files || {};
     const rebuilt = [];
@@ -643,6 +663,8 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
       surfaces,
       projectName,
       trackHosts,
+      product,
+      ...(scaffoldMode !== 'full' ? { scaffold: scaffoldMode } : {}),
       derived: [...derived].filter((rel) => result.files[rel]).sort(),
       tier,
       hardened,
@@ -666,6 +688,12 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
     // 多栈序列只记显式/重放出的多栈；单栈安装不写 stacks 字段（manifest 字节与历史一致）。
     if (stacks.length > 1) next.stacks = stacks;
     else delete next.stacks;
+    // 端口只记显式/重放的值；缺省端口继续跟随栈注册表（升级时不会被旧默认值钉死）。
+    const portState = {};
+    if (ports.api !== undefined) portState.api = ports.api;
+    if (ports.web !== undefined) portState.web = ports.web;
+    if (Object.keys(portState).length) next.ports = portState;
+    else delete next.ports;
     enterprise = computeEnterprise({ target, hosts: hostSet, hardened, ci: ciChoice });
     if (enterprise) {
       next.enterprise = enterprise;
@@ -713,6 +741,13 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
 
     const gitConfig = flag(args, 'git-config') || (!flag(args, 'no-git-config') && isGitRepo(target));
     if (gitConfig && isGitRepo(target)) {
+      // configureGit 会覆盖旧值，必须先读；只记一次（清单已有该字段，含 null，就保留），
+      // 否则升级/重装会把本工具自己的 .githooks 误记成「安装前的值」。
+      if (!('prevHooksPath' in next)) {
+        const prev = readLocalHooksPath(target);
+        next.prevHooksPath = prev === HOOKS_PATH ? null : prev;
+        writeManifest(target, next);
+      }
       configureGit(target);
       gitConfigured = true;
       emit(t('install.gitConfig'));
@@ -720,6 +755,21 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
       emit(t('install.gitSkip'));
     }
     emit(t('install.next'));
+    // 门禁配置一览：未配置 = SKIP（规则在项目里，机制随包）。升级老装户时这条尤其重要——
+    // 内置规则改读配置后，不补配置的项目门禁会从「执法」变成「静默跳过」。
+    const gateSummary = scanGateConfigs(target);
+    if (gateSummary.invalid.length) {
+      emit(t('install.gateInvalid', { files: gateSummary.invalid.join(', ') }));
+    }
+    if (gateSummary.missing.length) {
+      emit(t('install.gateMissing', {
+        count: gateSummary.missing.length,
+        files: gateSummary.missing.join(', '),
+        doc: '.agents/notes/project-configs.md',
+      }));
+    } else {
+      emit(t('install.gateConfigured'));
+    }
   }
 
   if (asJson) {

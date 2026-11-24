@@ -3,7 +3,7 @@
 Single source of truth: root `AGENTS.md` (read it fully before starting). This file is the Claude Code host memory mirror; do not duplicate authoritative rules here.
 
 ## Runtime / Setup
-- Frontend dev server `{{webPort}}` → API `http://localhost:{{apiPort}}`.
+- {{productNote}}
 - After clone: `flow-kit run check-local-gates.mjs --fix`.
 - Never use `--no-verify` for commit / merge / push.
 

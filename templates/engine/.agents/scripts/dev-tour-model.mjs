@@ -160,7 +160,7 @@ export function extractPaths(text, repo = null) {
   for (const m of src.matchAll(/(?:^|[\s(（:：,，;；])((?:backend|frontend|tests|db|database|sql|scripts|tools|integration|wiki|workflow|\.agents)\/[^\s`'"“”‘’，。；、)）]+)/g)) {
     add(m[1]);
   }
-  // 3) 未反引号的中段路径（如步骤标题里的 pml/index.vue）：含 / + 已知代码扩展名 + 能消解到仓库真实文件，
+  // 3) 未反引号的中段路径（如步骤标题里的 widgets/index.vue）：含 / + 已知代码扩展名 + 能消解到仓库真实文件，
   //    三条件同时满足才收——否则静默丢弃（防 if/else 类杂型 token 噪音，上轮实测 719 个）。
   //    消解复用 resolvePath 但不给上下文（确定性后缀/目录反推/basename 唯一，不打分不猜测）。
   if (repo) {
@@ -1060,7 +1060,7 @@ export function buildTour(opts = {}) {
     for (const raw of st.files) {
       const rawGuesses = [];
       let rp = resolvePath(raw, universe, repo, ctx, rawGuesses);
-      // 裸文件名（MaterialCodePushService.cs）若仓库里只有一个同名文件，优先落到本步骤其他文件的共同目录
+      // 裸文件名（如 PushService.ts）若仓库里只有一个同名文件，优先落到本步骤其他文件的共同目录
       if (!raw.includes('/') && (repo.byBase.get(raw) || []).length === 1) {
         const dirs = st.files.filter((x) => x !== raw).map((x) => x.split('/').slice(0, -1).join('/')).filter(Boolean);
         const freq = new Map();

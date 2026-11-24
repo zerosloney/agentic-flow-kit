@@ -17,8 +17,8 @@ description: C# 后端质量门——CRAP（复杂度×覆盖）、变异测试�
 
 ## 触发 / 不触发
 
-- **触发**：「后端质量现状 / 这改动有没有测试兜住 / 哪些方法该先补测试 / 复杂度有没有超标 / 有没有重复代码 / 变异测试怎么跑」；改动落在 `backend/` 且涉及业务逻辑；补完一批测试想验证"测试是不是真的在测"。
-- **不触发**：纯前端改动（本仓 C# 门不覆盖 `frontend/`）；只想知道"能不能编译"（用 `commit-check.config.json` 的 build 段）；只想知道"跑不跑得过测试"（直接 `dotnet test`）。
+- **触发**：「后端质量现状 / 这改动有没有测试兜住 / 哪些方法该先补测试 / 复杂度有没有超标 / 有没有重复代码 / 变异测试怎么跑」；改动落在后端源码目录且涉及业务逻辑；补完一批测试想验证"测试是不是真的在测"。
+- **不触发**：纯前端改动（本门不覆盖前端目录）；只想知道"能不能编译"（用 `commit-check.config.json` 的 build 段）；只想知道"跑不跑得过测试"（直接 `dotnet test`）。
 - **不替代** `verify` 门禁：本技能是**手动触发**的诊断与盘点工具，不进提交门禁，不改任何门禁配置。
 
 ## 0. 前置探测
@@ -58,10 +58,10 @@ qg all                      # coverage → crap → dup（不含 mutate，太慢
 - 现象：测试全绿、代码确实调了生产服务，但 cobertura 里 `lines-covered=0`——每个类每行 hits 都是 0。
 - 根因：coverlet 把插桩后的模块写到 `%TEMP%\<模块名>_<guid>` 再加载；该文件在默认 TEMP 下丢失，testhost 退出时抛**未处理** `FileNotFoundException`（进程 -532462766），命中数据没落进报告。
 - 判据：测试明明 `new XxxService(...)` 调了生产代码，cobertura 却全 0。
-- 修法：`qg coverage` 已把 `TEMP`/`TMP` 改道到 `.agents/tmp/quality-gates/tmp`；实测改道后 `lines-covered=23701/37805`（line-rate 0.6269）。
+- 修法：`qg coverage` 已把 `TEMP`/`TMP` 改道到 `.agents/tmp/quality-gates/tmp`；实测改道后 coverage 正常产出（数字随工程而异）。
 - **脚本守卫**：`coverage` 在 `lines-valid>0 && lines-covered==0` 时**报错退出 2**，不产出"零覆盖"结论；`crap` 拿到这种文件也会拒跑。
 
-> 同机另两条死路：`--collect:"Code Coverage"`（Microsoft.CodeCoverage）只产出 0KB 空文件；`/p:CollectCoverage=true` 需要 `coverlet.msbuild` 包（本仓只有 `coverlet.collector`）。**别再在这两条上耗时间。**
+> 同机另两条死路：`--collect:"Code Coverage"`（Microsoft.CodeCoverage）只产出 0KB 空文件；`/p:CollectCoverage=true` 需要 `coverlet.msbuild` 包（工程是否装有该包需自查）。**别再在这两条上耗时间。**
 
 ## 3. 报告解读：先分清「采集坏了」vs「代码没被测到」
 
@@ -71,26 +71,23 @@ qg all                      # coverage → crap → dup（不含 mutate，太慢
 2. **CRAP 表读法**：按 CRAP 从差到好排，最上面那些"又复杂又没覆盖"才是优先级；**别只看 CRAP 绝对值**——一个 CC=2 但覆盖 100% 的方法 CRAP=2，不是问题。
 3. **变异得分读法**：得分低有两种成因，处置完全不同——
    - (a) **测试无效**：NoCoverage 少、被杀比例低 → 断言太松，测试通过但没验证逻辑；
-   - **本仓实测是 (b)**：NoCoverage 多（607/23274 变异点落在没人测到的代码路径上）→ **该路径缺测试**，不是断言不够严。先分清再动手。
-4. **重复检测读法**：PMD 的 `--minimum-tokens` 是相似度旋钮（默认 100 ≈ dryer 的 0.8 相似度档）；同一文件内多行命中优先看"三处共用同一 helper"这类结构性重复（`PurchaseOrderService.cs` 2026-10-31 基线快照 451/775 行、62 行/397 token；行号为基线值，非当前）。
+   - **常见成因是 (b)**：NoCoverage 多（变异点落在没人测到的代码路径上）→ **该路径缺测试**，不是断言不够严。先分清再动手。
+4. **重复检测读法**：PMD 的 `--minimum-tokens` 是相似度旋钮（默认 100 ≈ dryer 的 0.8 相似度档）；同一文件内多行命中优先看"三处共用同一 helper"这类结构性重复（示例：单文件 451/775 行、62 行/397 token 的基线快照；行号为基线值，非当前）。
 
 ## 4. 补测优先级
 
 **判据 = 零覆盖 ∧ 高 CRAP**，不是 CRAP 绝对值。脚本已按此排好序（`qg crap` 输出的"零覆盖且超阈值"清单）。
 
-本仓 2026-10-31 基线：方法总数 1622，**零覆盖 1264（78%）**，超阈值 323，其中 319 个同时零覆盖。Top：
+基线口径：先在**本工程**跑 `qg coverage` 与 `qg crap` 取得方法总数、零覆盖数、超阈值数；零覆盖方法按 CRAP 排序先补测。下表仅示范报告格式（数值以本工程实测为准）：
 
 | 方法 | CC | CRAP |
 |---|---|---|
-| `PMLService.FinishMatchAsync` | 74 | 5550 |
-| `MaterialCodeImportService.PreviewAsync` | 58 | 3422 |
-| `OutboundOrderService.MatchAndLockCoreAsync` | 53 | 2862 |
-| `MaterialCodeService.CreateAsync` | 51 | 2652 |
-| `MaterialCodeImportService.ValidateImportRowsAsync` | 49 | 2450 |
+| `<Service>.MethodAAsync` | `<CC>` | `<CRAP>` |
+| `<Service>.MethodBAsync` | `<CC>` | `<CRAP>` |
 
-**为什么 78% 零覆盖**：只有集成测试覆盖的服务在常规档位是盲区——`tests/Shipyard.Material.IntegrationTests/` 需要 DB，CI mid 档 `backend-test` 带 `--unit-only`（不连测试库），full 档因 CI 未定义 `TEST_DB_CONN` 走共享 dev 库逃生。`ExchangeRateImportService` 就是典型：唯一测试在集成测试工程里，变异测试里把 Excel 表头字符串全换成 `""` 依然全绿。
+**为什么会有大量零覆盖**：只有集成测试覆盖的服务在常规档位是盲区——集成测试需要测试库，CI 常规档位只跑单测工程（不连测试库），全量档位若未配置测试库连接则只能走共享库逃生。典型：某服务唯一测试在集成测试工程里，变异测试把输入字符串全换掉依然全绿。
 
-补测方向因此是两条：**把不碰 DB 的纯逻辑下沉到单测**（Excel 表头/模板生成、校验口径这类），或**给 CI 配 `TEST_DB_CONN`** 走真实集成档。
+补测方向因此是两条：**把不碰 DB 的纯逻辑下沉到单测**（表头/模板生成、校验口径这类），或**为集成档配置项目测试库连接**（见 `.agents/config/local-gates.json` 的 testDb 声明）走真实集成档。
 
 ## 5. 输出格式
 
@@ -103,7 +100,7 @@ qg all                      # coverage → crap → dup（不含 mutate，太慢
 
 ## 6. 本仓落点与边界
 
-- 门禁单源：`.agents/hooks/commit-check.config.json`（build 段 = `dotnet build Shipyard.Material.sln`；**checks 段当前为空**，本地提交门不跑测试）。本技能**不改**该文件。
+- 门禁单源：`.agents/hooks/commit-check.config.json`（build 段命令见该文件，如 `dotnet build <解决方案>.sln`；**checks 段按项目填写，默认为空**，本地提交门不跑测试）。本技能**不改**该文件。
 - 与 ub-mode 的接口：First Make it Work → 补测试（让 TDD 有落点）；Then Make it Right → 三道门；Practice → Keep a Log（本技能的结论就是决策日志的素材）。
 - 与 `review-method` 的接口：复核 diff 时，"影响面证明"可用本技能的 dup/crap 补机器证据。
-- 边界：只跑**单测工程**（集成测试要 DB，本机无 DB 会挂）；Stryker **必须定点**（全量 2 万+ 变异点不可接受）；不写任何仓库文件（除本技能自身目录）；不提交代码。
+- 边界：只跑**单测工程**（集成测试要测试库，无库会挂）；Stryker **必须定点**（全量变异点耗时不可接受）；不写任何仓库文件（除本技能自身目录）；不提交代码。

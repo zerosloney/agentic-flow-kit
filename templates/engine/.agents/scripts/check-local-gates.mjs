@@ -1,25 +1,28 @@
 #!/usr/bin/env node
 // check-local-gates.mjs — 门卫上岗自检（eli5 卡片 4，2026-10-08）
-// 本机两条 clone 必做配置 + 钩子文件在位 + 工具链（node/dotnet）在位 + TEST_DB_CONN 专用测试库八项检测；--fix 自动修配置项（文件类缺失给恢复指引，不代修）。
-// ⑥ 起工具链按「环境变量（仅浏览器 CHROME_PATH）→ 本机登记 runtime-env.local.md → 标准安装位置探测」解析并回显路径（机理 runtime-env.md §6.3，
+// 本机两条 clone 必做配置 + 钩子文件在位 + 工具链（node/dotnet）在位 + 项目声明的必设环境变量（可选）检测；--fix 自动修配置项（文件类缺失给恢复指引，不代修）。
+// 栈条件化：appsettings 合并保护（② merge.ours.driver / ③ .gitattributes 的 merge=ours 行）仅 dotnet 栈适用，
+//   非 dotnet 打 [info] 跳过（不进结果集、不影响退出码）；jsonl 并集合并项（②b / ③ 的 jsonl 行）保持通用。
+// ⑥ 起工具链按「环境变量（仅浏览器 CHROME_PATH）→ 本机登记 runtime-env.local.md → 标准安装位置探测（按平台 Windows/macOS/Linux 分派）→ PATH（where/which）兜底」解析并回显路径（机理 runtime-env.md §6.3，
 // 2026-10-10 本机事实出库——绝对路径不再入库登记，新机按回显补登记即可）。
 // 鸡生蛋约束：钩子没挂时任何钩子面检测不可达，故自检必须是独立脚本 + 显著入口（README 入门节 / AGENTS.md 头部）。
 // 用法：flow-kit run check-local-gates.mjs [--fix]
 // 退出码：0 全过 / 1 有缺。零工作区副作用（只读 git config + 文件存在性检测）。
-// 另有 PI 宿主接线 advisory（只读、允许缺省、不进八项判定与退出码；.pi/ 不随 clone 传播，硬查会让他机假红）。
+// 另有 PI 宿主接线 advisory（只读、允许缺省、不进硬项判定与退出码；.pi/ 不随 clone 传播，硬查会让他机假红）。
 
-import { execFileSync, execSync } from 'node:child_process';
+import { execFileSync, execSync, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 
 const fix = process.argv.includes('--fix');
-// Stack profile（agentic-flow-kit）：dotnet / TEST_DB_CONN 检查仅 dotnet 栈适用；多栈任一命中即检查。
+// Stack profile（agentic-flow-kit）：dotnet 检查仅 dotnet 栈适用；多栈任一命中即检查。
+// engine.json 缺失/坏 → 视为未声明栈（跳过栈相关项，由 doctor 报安装面问题），不再默认按 dotnet 执法。
 const STACKS = (() => {
   try {
     const options = JSON.parse(fs.readFileSync('.agents/config/engine.json', 'utf8')).options || {};
-    return options.stacks?.length ? options.stacks : [options.stack || 'dotnet'];
-  } catch { return ['dotnet']; }
+    return options.stacks?.length ? options.stacks : (options.stack ? [options.stack] : []);
+  } catch { return []; }
 })();
 const git = (args) => {
   try { return execFileSync('git', args, { encoding: 'utf8' }).trim(); } catch { return ''; }
@@ -33,23 +36,33 @@ const hooksPath = git(['config', 'core.hooksPath']);
 check(hooksPath === '.githooks', 'core.hooksPath → .githooks',
   hooksPath ? `当前值: ${hooksPath}` : '未配置', 'git config core.hooksPath .githooks');
 
-// ② merge.ours.driver（appsettings.json 合并保护的本地开关）
-const ours = git(['config', 'merge.ours.driver']);
-check(ours === 'true', 'merge.ours.driver = true',
-  ours ? `当前值: ${ours}` : '未配置', 'git config merge.ours.driver true');
+// ② merge.ours.driver（appsettings.json 合并保护的本地开关）——仅 dotnet 栈适用；非 dotnet 跳过（info，不进结果集）
+const isDotnet = STACKS.includes('dotnet');
+if (isDotnet) {
+  const ours = git(['config', 'merge.ours.driver']);
+  check(ours === 'true', 'merge.ours.driver = true',
+    ours ? `当前值: ${ours}` : '未配置', 'git config merge.ours.driver true');
+} else {
+  console.log('  [info] 非 dotnet 栈：appsettings 合并保护不适用（跳过）');
+}
 
-// ②b merge.jsonl-union.driver（.agents/*.jsonl 台账并发去重合并驱动）
+// ②b merge.jsonl-union.driver（.agents/*.jsonl 台账并发去重合并驱动）——通用
 const jsonlDriver = git(['config', 'merge.jsonl-union.driver']);
 const expectedJsonlDriver = 'flow-kit run git-merge-jsonl %O %A %B';
 check(jsonlDriver === expectedJsonlDriver, 'merge.jsonl-union.driver（台账并发并集合并驱动）',
   jsonlDriver ? `当前值: ${jsonlDriver}` : '未配置', `git config merge.jsonl-union.driver "${expectedJsonlDriver}"`);
 
-// ③ .gitattributes 的 merge=ours 与 merge=jsonl-union 行（仓库侧声明，与 ②/②b 配对生效）
+// ③ .gitattributes 的 merge=ours 与 merge=jsonl-union 行（仓库侧声明，与 ②/②b 配对生效）；merge=ours 行仅 dotnet 栈判定
 const gaText = fs.existsSync('.gitattributes') ? fs.readFileSync('.gitattributes', 'utf8').replace(/\r/g, '') : '';
 const gaOursOk = /^(?:.*\/)?appsettings\.json\s+merge=ours$/m.test(gaText);
 const gaJsonlOk = /^\.agents\/\*\.jsonl\s+merge=jsonl-union$/m.test(gaText);
-check(gaOursOk && gaJsonlOk, '.gitattributes 含 appsettings merge=ours 与 jsonl merge=jsonl-union 行',
-  (!gaOursOk ? 'appsettings 行缺失; ' : '') + (!gaJsonlOk ? '.agents/*.jsonl 行缺失' : ''), null);
+if (isDotnet) {
+  check(gaOursOk && gaJsonlOk, '.gitattributes 含 appsettings merge=ours 与 jsonl merge=jsonl-union 行',
+    (!gaOursOk ? 'appsettings 行缺失; ' : '') + (!gaJsonlOk ? '.agents/*.jsonl 行缺失' : ''), null);
+} else {
+  check(gaJsonlOk, '.gitattributes 含 jsonl merge=jsonl-union 行',
+    gaJsonlOk ? '' : '.agents/*.jsonl 行缺失', null);
+}
 
 // ④ 五钩子文件在位（防「配了 hooksPath 但文件缺」的假上岗）
 const hooks = ['pre-commit', 'pre-merge-commit', 'commit-msg', 'pre-push', 'post-commit'];
@@ -97,29 +110,68 @@ const resolveOnDisk = (name, probes, envVar) => {
   return [envVal, reg, ...probes].filter(Boolean).find((p) => fs.existsSync(p)) ?? null;
 };
 const dotnetPath = STACKS.includes('dotnet') ? resolveOnDisk('dotnet', ['C:/Program Files/dotnet/dotnet.exe']) : '';
-const dotnetVer = dotnetPath ? (() => { try { return execFileSync(dotnetPath, ['--version'], { encoding: 'utf8' }).trim(); } catch { return ''; } })() : '';
+// PATH 兜底：声明位置只覆盖 Windows 标准安装；macOS/Linux 与自定义安装经 PATH 解析。
+const dotnetCmd = dotnetPath || (STACKS.includes('dotnet') ? 'dotnet' : '');
+const dotnetVer = dotnetCmd ? (() => { try { return execFileSync(dotnetCmd, ['--version'], { encoding: 'utf8' }).trim(); } catch { return ''; } })() : '';
 if (STACKS.includes('dotnet')) {
-  check(dotnetVer !== '', 'dotnet 在位且可执行（静态门 build/test 依赖；标准位置无则登记 runtime-env.local.md）',
-    dotnetPath ? `路径 ${dotnetPath} 无法执行 --version` : '未找到：标准位置与 runtime-env.local.md 登记均无（模板 runtime-env.local.example.md）',
+  check(dotnetVer !== '', 'dotnet 在位且可执行（静态门 build/test 依赖；PATH / 标准位置 / runtime-env.local.md 命中其一即可）',
+    dotnetPath ? `路径 ${dotnetPath} 无法执行 --version` : '未找到：PATH、标准位置与 runtime-env.local.md 登记均无（模板 runtime-env.local.example.md）',
     null);
 }
-const browserPath = resolveOnDisk('browser', [
-  'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-  'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
-  'C:/Program Files/Google/Chrome/Application/chrome.exe',
-  'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
-], 'CHROME_PATH');
+// 标准安装位置按平台分派（Windows / macOS / Linux）；自定义安装与非标准前缀由末位 PATH 兜底命中。
+const BROWSER_PROBES = process.platform === 'darwin'
+  ? [
+    '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+    '/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge',
+    '/Applications/Chromium.app/Contents/MacOS/Chromium',
+  ]
+  : process.platform === 'linux'
+    ? [
+      '/usr/bin/google-chrome',
+      '/usr/bin/google-chrome-stable',
+      '/usr/bin/chromium',
+      '/usr/bin/chromium-browser',
+      '/snap/bin/chromium',
+    ]
+    : [
+      'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
+      'C:/Program Files/Microsoft/Edge/Application/msedge.exe',
+      'C:/Program Files/Google/Chrome/Application/chrome.exe',
+      'C:/Program Files (x86)/Google/Chrome/Application/chrome.exe',
+    ];
+const browserPath = resolveOnDisk('browser', BROWSER_PROBES, 'CHROME_PATH')
+  || ['google-chrome', 'chromium', 'microsoft-edge', 'chrome']
+    .find((name) => spawnSync(winShell ? 'where' : 'which', [name], { encoding: 'utf8' }).status === 0)
+  || null;
 
-// ⑦ TEST_DB_CONN 专用测试库（写用例 fail-loud 守卫的前置供给，2026-10-29；机理 runtime-env.md §6.5 / TestDbWriteGuard）：
-// 未设或指向共享 dev 库（DEVE_CSS_YZGY）时，串行直跑的写用例会被守卫拦截——本项把暴露提前到上岗自检。
-// 分区机制已退役（2026-10-30）：本项为集成测试唯一库供给（必设）。含口令不代修——按 runtime-env §6.5
-// 口径以 appsettings 同源凭据拼装后 setx（连接串不入库）。
-if (STACKS.includes('dotnet')) {
-  const tdc = process.env.TEST_DB_CONN || '';
-  const tdcDb = (/(?:Database|Initial Catalog)\s*=\s*([^;]+)/i.exec(tdc) || [])[1]?.trim() || '';
-  check(!!tdcDb && tdcDb.toUpperCase() !== 'DEVE_CSS_YZGY', 'TEST_DB_CONN 专用测试库已设且不指向共享 dev 库',
-    !tdc ? '未设置：串行直跑写用例将被 TestDbWriteGuard fail-loud 拦截（setx TEST_DB_CONN "<Server 同 appsettings;Database=Deve_CSS_SuHao;...>"，见 runtime-env §6.5）'
-         : `指向共享 dev 库（Database=${tdcDb}）：写用例将被拦截`, null);
+// ⑦ 项目声明的必设环境变量（可选）：.agents/config/local-gates.json 的 testDb。
+// 未配置 = 该项目没有「专用测试库」约束 → 明确跳过（不静默、不误拦）；配置损坏 = fail-loud。
+const localGatesPath = path.join('.agents', 'config', 'local-gates.json');
+let localGates = null;
+if (fs.existsSync(localGatesPath)) {
+  try {
+    localGates = JSON.parse(fs.readFileSync(localGatesPath, 'utf8'));
+  } catch (e) {
+    check(false, 'local-gates.json 可解析', `解析失败：${e.message}`, null);
+  }
+}
+const tdb = localGates && typeof localGates.testDb === 'object' && localGates.testDb ? localGates.testDb : null;
+if (!fs.existsSync(localGatesPath) || localGates) {
+  if (tdb && typeof tdb.env === 'string' && tdb.env) {
+    const envName = tdb.env;
+    const forbidden = Array.isArray(tdb.forbiddenDatabases)
+      ? tdb.forbiddenDatabases.map((x) => String(x).toUpperCase())
+      : [];
+    const conn = process.env[envName] || '';
+    const dbName = (/(?:Database|Initial Catalog)\s*=\s*([^;]+)/i.exec(conn) || [])[1]?.trim() || '';
+    const hit = dbName ? forbidden.includes(dbName.toUpperCase()) : false;
+    check(!!dbName && !hit, `${envName} 已设且不指向禁用库（${localGatesPath} 声明）`,
+      !conn ? `未设置（${envName} 需指向项目专用测试库）`
+        : hit ? `指向禁用库（Database=${dbName}）`
+          : '连接串未解析出 Database/Initial Catalog', null);
+  } else {
+    console.log(`  [SKIP] 必设环境变量守卫未配置（${localGatesPath} 的 testDb，可选）`);
+  }
 }
 
 let fail = 0;
@@ -145,11 +197,11 @@ console.log(dotnetVer !== '' ? `  [echo] dotnet → ${dotnetVer}（${dotnetPath}
 console.log(browserPath
   ? `  [echo] UI 浏览器 → ${browserPath}`
   : '  [echo] UI 浏览器 → 未解析到（env CHROME_PATH / runtime-env.local.md browser 行 / 标准位置均未命中有效路径；UI 实测前设其一）');
-// ⑧-advisory PI 宿主接线（本机私有）：只读对账，不进八项判定、不改退出码。
+// ⑧-advisory PI 宿主接线（本机私有）：只读对账，不进硬项判定、不改退出码。
 // 为何 advisory：.pi/ 不入 git、不随 clone 传播；列为硬检查会让他机恒红
 // （同 .agents/scripts/check-hook-wiring.mjs:20-21 的入库宿主白名单口径）。
 const piWiringFiles = [
-  '.pi/extensions/shipyard-gates.ts',
+  '.pi/extensions/flow-kit-gates.ts',
   '.pi/extensions/lib/gates-core.cjs',
 ];
 const piMissing = piWiringFiles.filter((f) => !fs.existsSync(f));
@@ -169,7 +221,7 @@ if (piHostAbsent) {
     : '  [WARN] PI 宿主接线齐备但 project trust 未检出（.pi/extensions 加载需项目 trust；pi 会话可能无门禁）');
 }
 
-// ⑧-advisory Cline 宿主适配（本机私有）：只读对账，不进八项判定、不改退出码。
+// ⑧-advisory Cline 宿主适配（本机私有）：只读对账，不进硬项判定、不改退出码。
 // 为何 advisory：.cline/ 不入 git、不随 clone 传播（同 .pi/ 口径，见 check-hook-wiring.mjs:20-21）。
 // 对账内容：7+8 指针壳齐备性 + 两门 hook 在位（PreToolUse.cjs 协议适配层）。
 // 权威源在 .agents/，本目录不入库不损失契约；缺失只影响本机 cline 宿主的阶段路由 / 角色委派 / 命令门 / 写前门。
@@ -195,7 +247,7 @@ if (clineAbsent) {
   console.log('  [OK] Cline 宿主适配齐备（7 工作流指针壳 + 8 角色定义 + 命令门/写前门 hook；权威源零改动）');
 }
 
-// ⑨-advisory Command Code 宿主接线（本机私有，`.commandcode/` gitignore）：只读对账，不进八项判定、不改退出码。
+// ⑨-advisory Command Code 宿主接线（本机私有，`.commandcode/` gitignore）：只读对账，不进硬项判定、不改退出码。
 // 判据 = 接线宣称 ↔ 实态：PreToolUse 的 matcher 须各自指向 .agents/hooks 两门（matcher 目标是
 // tool_display_name：WRITE|EDIT 与 SHELL），否则该宿主下门禁静默失效。
 const CC_SETTINGS = '.commandcode/settings.json';
@@ -218,7 +270,7 @@ if (!fs.existsSync('.commandcode')) {
 }
 
 // ⑩-advisory Claude Code 宿主接线（本机私有，`.claude/` 与根 CLAUDE.md gitignore）：只读对账，
-// 不进八项判定、不改退出码。判据 = settings 两门接线 + 7 命令 / 8 角色指针壳齐备。
+// 不进硬项判定、不改退出码。判据 = settings 两门接线 + 7 命令 / 8 角色指针壳齐备。
 // 机理 runtime-env.md §6.4；权威源仍在 .agents/commands/ 与 .agents/roles/。
 const CLAUDE_SETTINGS = '.claude/settings.json';
 const claudeCommands = [
@@ -255,7 +307,7 @@ if (!fs.existsSync('.claude')) {
 // ⑪-advisory 通用宿主探测（issue #40）：机器级宿主配置存在但其中无 flow-kit 接线 → WARN（该宿主下门禁静默失效）。
 // 数据表驱动：宿主被 kit 正式支持（issue #41）后此表对应项退役、由 registry 安装面接管。
 // 权威表在 src/hosts/registry.mjs 的 UNMANAGED_HOST_PROBES（runtime 脚本自包含，此为静态镜像，两处同步）。
-// advisory：只读对账，不进八项判定、不改退出码（同 ⑧⑨⑩ 口径）。
+// advisory：只读对账，不进硬项判定、不改退出码（同 ⑧⑨⑩ 口径）。
 const HOST_PROBES = [
   { name: 'Codex', dir: '.codex', signals: ['hooks.json', 'config.toml'] },
 ];
@@ -308,4 +360,4 @@ if (fail > 0) {
     : '\n门卫未全上岗——逐条执行上方修复命令，或一键: flow-kit run check-local-gates --fix');
   process.exit(1);
 }
-console.log('\n[PASS] 八项全过——门卫已上岗（pre-commit 硬拦 / 整树强制编译 pre-merge-commit / 闭环扫描 pre-push / evict+积压提醒 post-commit / 台账并集合并；机理详见 .agents/notes/runtime-env.md §7）。');
+console.log('\n[PASS] 硬项全过——门卫已上岗（pre-commit 硬拦 / 整树强制编译 pre-merge-commit / 闭环扫描 pre-push / evict+积压提醒 post-commit / 台账并集合并；机理详见 .agents/notes/runtime-env.md §7）。');

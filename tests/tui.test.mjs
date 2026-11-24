@@ -32,7 +32,7 @@ test('stack menu names the matched file and keeps the losing marker', () => {
   assert.equal(ts.hint, '检测到 tsconfig.json · TypeScript 项目。');
   assert.equal(node.label, 'Node.js');
   assert.equal(node.hint, 'package.json · Node.js 项目。');
-  assert.equal(dotnet.hint, '.sln / .csproj · ASP.NET Core 后端 + Vue 3 前端 + SQL Server。');
+  assert.equal(dotnet.hint, '.sln / .csproj · ASP.NET Core 后端服务。');
 
   const empty = stackItems({
     detected: { stack: 'empty', file: null },
@@ -47,7 +47,7 @@ test('stack menu names the matched file and keeps the losing marker', () => {
     lang: 'zh-CN',
     t: makeT('zh-CN'),
   }).find((it) => it.value === 'dotnet');
-  assert.equal(csproj.hint, '检测到 App.csproj · ASP.NET Core 后端 + Vue 3 前端 + SQL Server。');
+  assert.equal(csproj.hint, '检测到 App.csproj · ASP.NET Core 后端服务。');
 
   const recorded = stackItems({
     detected: { stack: 'typescript', file: 'tsconfig.json' },

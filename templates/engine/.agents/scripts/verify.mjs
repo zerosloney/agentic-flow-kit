@@ -25,6 +25,10 @@
 //         product cohort，本地增量档单边化 CI——执法点 = --mid/--full）。
 //         2026-11-14 21 门（R3-8 供应链：sbom-license 安全段 +1——SBOM/许可证策略零网络门）。
 //         2026-11-14 22 门（R3-8 沙箱：devcontainer 安全段 +1——开发容器声明零网络门）。
+//         2026-11-24 product-gates（基础表通用化收尾）：六道母项目产品门（backend-build / backend-test /
+//         frontend-lint / frontend-unit-test / frontend-build / code-notify-guard）与 RUN_E2E 条件门
+//         frontend-e2e 移出基础表——技术栈产品门改由项目 .agents/config/product-gates[.<名称>].json 配置，
+//         门表三层来源 = 基础门 + 项目产品门（配置）+ 栈自动门；dotnet profile 随附中性默认配置（全带 when 守卫）。
 // 用法：flow-kit run verify.mjs [--full | --scope | --face <面> | --product | --mid] [--list] [--jobs N | --serial] [--help]
 //   **档位口径（命令侧单源，2026-11-08 补记）**：--scope = diff 面增量档（判据同缺省档，单源
 //     verify-scope.mjs）；--full = 显式全量；--scope 与 --full 互斥。命令侧档位口径以此头注为准。
@@ -39,9 +43,11 @@
 //     frontend-build）＋代码四门（code-architecture / code-audit-fields / code-delete-guard /
 //     code-notify-guard，审计 P2「--no-verify 远端兜底缺口」接入）——执法点单边移交
 //     CI（--full / --mid / --product 三档与 azure-pipelines 一字不变）；secrets-scan、sbom-license、
-//     引擎段与 wiki-consistency 照跑。门表叙事锚恒 22（裸 --list，2026-11-14 R3-8 +2），增量档裁剪在
-//     执行期与 --list --scope / --face 干跑可见（跳过说明行）。
-//   --face <面> = 显式面覆盖（合法值 = verify-scope 面枚举 backend|frontend|docs，逗号多值）：不做工作区
+//     引擎段与 wiki-consistency 照跑。门表三层来源 = 基础门 + 项目产品门（.agents/config/product-gates*
+//     .json 配置，2026-11-24 起，「恒 22」叙事退役）+ 栈自动门；增量档裁剪在执行期与 --list --scope /
+//     --face 干跑可见（跳过说明行）。
+//   --face <面> = 显式面覆盖（合法值 = project-faces 派生的面标签 backend|frontend|tests|data + docs，
+//     逗号多值）：不做工作区
 //     脏路径自动面检测，直接按给定面裁门；与 --full 互斥（亦拒 --scope / 分档 / 夹具旗标）；跳过 24h 兜底
 //     （显式面 = 操作者已判读）；绿行记 entry.face，face 绿行因 loud-skip ledger-invariant 不作增量锚。
 //       flow-kit run verify.mjs --stub-gate <cmd>   （仅 CHECK_LOOP_ROOT 夹具；走生产尾段，不打 testCmd）
@@ -56,8 +62,9 @@
 //   **分层跑（2026-10-23，P0-1 改口径）**：engine-code 触面 → 引擎套件全量；业务/文档面 →
 //     `npm test -- --fast`（跳过最慢 9 套件，不再整门跳过）。全量 / --engine / CI / 零裁剪仍全量。
 //     绿行 `fastTests` 标记可审计。
-//   --list：按执行序打印门 id 后退出（含 RUN_E2E=1 时的条件门），不执行；裸 --list 不参与裁剪（门表恒 22），
-//     配 --scope / --face 干跑展示增量档裁剪结果（跳过说明行走 stderr，stdout 保持纯 id 可管道）。
+  //   --list：按执行序打印门 id 后退出（含项目产品门；when 未满足的门不进清单，stderr 打 SKIP 行），不执行；
+//     裸 --list 不参与裁剪（门表 = 基础门 + 项目产品门 + 栈自动门），配 --scope / --face 干跑展示增量档
+//     裁剪结果（跳过说明行走 stderr，stdout 保持纯 id 可管道）。
 //   --jobs / --serial：并发档位与串行回退（见上「编排」）。
 // 沿革：verify-evidence（凭证落账）；2026-10-09 统一质量检查门禁 d009965（九门）；
 //       guardian-selfcheck（修 :31 缺 =、GATES 加 scripts-syntax/engine-tests、
@@ -77,13 +84,68 @@ import os from 'node:os';
 import { spawn, spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { computeDiffScope, parseEvidenceGreens, EVIDENCE_REL, CI_UNILATERAL_GATE_IDS, PRODUCT_FACES } from './verify-scope.mjs';
+import { computeDiffScope, parseEvidenceGreens, EVIDENCE_REL, loadProductFaces, ciUnilateralGateIds } from './verify-scope.mjs';
+import { loadFaces, isProductPath } from './faces.mjs';
 import { classifyFailure } from './failure-attribution.mjs';
 import { dirtyTreeDigest } from './git-tree-digest.mjs';
+import { t } from './lang.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = process.env.FLOW_KIT_PROJECT_ROOT || process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
 const AGENTS_RUNTIME = path.resolve(SCRIPT_DIR, '..');
+// 产品面单源（2026-11-24 faces 收尾）：faces 配置在门表装配前加载一次，供脏路径过滤与面裁门共用。
+// 配置错误 fail-closed exit 2（不能静默当「未配置」全触发——漏跑该红的门比不跑更危险）。
+const FACES_REL = '.agents/config/project-faces.json';
+const PROJECT_FACES = (() => {
+  try { return loadFaces(ROOT); } catch (e) {
+    console.error(t(`[verify] 配置错误：${FACES_REL}——${e.message}（fail-closed，拒绝运行）`, `[verify] config error: ${FACES_REL} — ${e.message} (fail-closed, refusing to run)`, ROOT));
+    process.exit(2);
+  }
+})();
+// 面 → 门映射派生自 project-faces + product-gates；product-gates 解析失败同 fail-closed。
+const PRODUCT_FACES = (() => {
+  try { return loadProductFaces(ROOT, PROJECT_FACES); } catch (e) {
+    console.error(t(`[verify] ${e.message}（fail-closed，拒绝运行）`, `[verify] ${e.message} (fail-closed, refusing to run)`, ROOT));
+    process.exit(2);
+  }
+})();
+const CI_UNILATERAL_GATE_IDS = ciUnilateralGateIds(PRODUCT_FACES);
+
+// 门禁配置汇总（2026-11-24 门禁配置可见性）：「哪些项目侧门配置在场 / 缺席」一行说清——未配置 =
+// 对应门 SKIP，不必翻四份文件才知道门为什么没跑。product-gates 以通配族计一项；notify-guard 无
+// 配置文件（SKIP 判据在门本体）。任一份 JSON 解析失败 → 显式报「配置错误：<文件>」并 exit 2
+// （fail-closed：坏配置不能当没配置放过）。--list 走 stderr（stdout 保持纯 id），运行结束走 stdout。
+const GATE_CONFIG_ITEMS = [
+  ['product-gates', null],
+  ['architecture-redlines.json', '.agents/hooks/architecture-redlines.json'],
+  ['delete-guard.json', '.agents/hooks/delete-guard.json'],
+  ['audit-fields.json', '.agents/hooks/audit-fields.json'],
+  ['commit-check.config.json', '.agents/hooks/commit-check.config.json'],
+  ['local-gates.json', '.agents/config/local-gates.json'],
+  ['project-faces.json', '.agents/config/project-faces.json'],
+];
+const GATE_CONFIG_SUMMARY = (() => {
+  const configured = [];
+  const missing = [];
+  for (const [name, rel] of GATE_CONFIG_ITEMS) {
+    const files = rel ? [rel] : (() => {
+      try {
+        return fs.readdirSync(path.join(ROOT, '.agents', 'config'))
+          .filter((f) => f === 'product-gates.json' || /^product-gates\..+\.json$/.test(f))
+          .map((f) => path.posix.join('.agents', 'config', f));
+      } catch { return []; }
+    })();
+    const present = files.filter((f) => fs.existsSync(path.join(ROOT, f)));
+    for (const f of present) {
+      try { JSON.parse(fs.readFileSync(path.join(ROOT, f), 'utf8')); } catch (e) {
+        console.error(t(`[verify] 配置错误：${f}——门禁配置失守（JSON 解析失败：${e.message}）——拒绝运行`, `[verify] config error: ${f} — gate config is broken (JSON parse failed: ${e.message}) — refusing to run`, ROOT));
+        process.exit(2);
+      }
+    }
+    (present.length ? configured : missing).push(name);
+  }
+  return t(`门禁配置：已配置 ${configured.length} / 未配置 ${missing.length}（未配置=SKIP：${missing.length ? missing.join('、') : '无'}）`, `Gate config: configured ${configured.length} / missing ${missing.length} (missing=SKIP: ${missing.length ? missing.join(', ') : 'none'})`, ROOT);
+})();
 // 引擎资产安装判定（issue #73，2026-11-22）：外部编排宿主（自有交付状态机，仅脚本方式消费引擎）无
 // .agents/config/engine.json——硬依赖安装资产的门与 kit 自有凭证落盘对宿主不适用，loud-skip。
 // kit 自装项目恒有 engine.json（install 落盘的清单），判据与门禁面零变化。夹具模式（--test-cmd /
@@ -97,7 +159,7 @@ let engineAssetSkipNoted = false;
 const noteEngineAssetSkip = () => {
   if (engineAssetSkipNoted) return;
   engineAssetSkipNoted = true;
-  console.error('[verify] ⏭️ 未安装引擎资产——凭证落账/摘要生成跳过（外部编排消费方自管交付状态；issue #73）');
+  console.error(t('[verify] ⏭️ 未安装引擎资产——凭证落账/摘要生成跳过（外部编排消费方自管交付状态；issue #73）', '[verify] ⏭️ engine assets not installed — skipping credential ledger / summary generation (external orchestration consumers manage their own delivery state; issue #73)', ROOT));
 };
 // verify 从包内运行时执行时，门命令里的 flow-kit run|hook 改为包内绝对路径：
 // 不依赖 flow-kit 是否在当前进程 PATH（本地 node bin/flow-kit.mjs、直接 node 执行均可用）。
@@ -118,101 +180,81 @@ const localizeRuntimeCmd = (cmd) => String(cmd)
 const GATES = [
   // guardian（2026-10-16 并行编排）：本门未过则后序门一并不启动——引擎脚本不可解析时其余门无意义，
   // 且夹具根（CHECK_LOOP_ROOT 指向无脚本目录）下若并行铺开，16 门会在假根里乱跑（原 verify.test 场景 7 口径）。
-  { id: 'scripts-syntax', cohort: 'engine', guardian: true, name: '引擎脚本语法自检', cmd: 'flow-kit run check-scripts-syntax.mjs', folder: '.', type: 'shell' },
-  { id: 'workflows-check', cohort: 'engine', name: '编排脚本检查', cmd: 'flow-kit run workflows-check.mjs', folder: '.', type: 'shell' },
-  { id: 'rule-budget', cohort: 'engine', name: '常驻面预算检查', cmd: 'flow-kit run rule-budget.mjs --all', folder: '.', type: 'shell' },
+  { id: 'scripts-syntax', cohort: 'engine', guardian: true, name: t('引擎脚本语法自检', 'Engine script syntax self-check', ROOT), cmd: 'flow-kit run check-scripts-syntax.mjs', folder: '.', type: 'shell' },
+  { id: 'workflows-check', cohort: 'engine', name: t('编排脚本检查', 'Orchestration script check', ROOT), cmd: 'flow-kit run workflows-check.mjs', folder: '.', type: 'shell' },
+  { id: 'rule-budget', cohort: 'engine', name: t('常驻面预算检查', 'Always-on surface budget check', ROOT), cmd: 'flow-kit run rule-budget.mjs --all', folder: '.', type: 'shell' },
   // 本地门禁挂载自检（2026-10-25 优化1，WARN 档）：判据与 check-local-gates.mjs ①-④ 对齐（单源，一边改
   // 另一边须跟）。默认 WARN 缺配只告警；CI（TF_BUILD）/非 git 根 loud-skip；升格 = cmd 加 --strict（owner 拍板）。
-  { id: 'local-gate-config', cohort: 'engine', name: '本地门禁挂载自检（WARN 档）', cmd: 'flow-kit run check-local-gate-config.mjs', folder: '.', type: 'shell' },
+  { id: 'local-gate-config', cohort: 'engine', name: t('本地门禁挂载自检（WARN 档）', 'Local gate wiring self-check (WARN tier)', ROOT), cmd: 'flow-kit run check-local-gate-config.mjs', folder: '.', type: 'shell' },
   // 生成物漂移单门（2026-10-28 引擎减重第三刀；2026-11-08 档 2-E 改自愈）：effective-policy / engine-map /
   // workflow-index 三门机制相同（跑生成器 --check 比对磁盘），合并为一次调用；漂移 → 原地重生成自愈后按
   // 通过计，重生成/复检失败才红（判据与自愈单源在 check-engine-artifacts.mjs，各档含 --full 同语义）。
-  { id: 'engine-artifacts', cohort: 'engine', name: '生成物漂移检查（3 份）', cmd: 'flow-kit run check-engine-artifacts.mjs', folder: '.', type: 'shell' },
+  { id: 'engine-artifacts', cohort: 'engine', name: t('生成物漂移检查（3 份）', 'Generated artifact drift check (3 files)', ROOT), cmd: 'flow-kit run check-engine-artifacts.mjs', folder: '.', type: 'shell' },
   // 默认硬门。hygiene 段已于 2026-10-28 全部退役（只跑 hard 5 段）。
-  { id: 'check-loop', cohort: 'engine', name: '闭环门禁校验', cmd: 'flow-kit run check-loop.mjs', folder: '.', type: 'shell' },
-  { id: 'ledger-doc-presence', cohort: 'engine', name: '台账指针存在性', cmd: 'flow-kit run check-ledger-doc-presence.mjs', folder: '.', type: 'shell' },
+  { id: 'check-loop', cohort: 'engine', name: t('闭环门禁校验', 'Closed-loop gate check', ROOT), cmd: 'flow-kit run check-loop.mjs', folder: '.', type: 'shell' },
+  { id: 'ledger-doc-presence', cohort: 'engine', name: t('台账指针存在性', 'Ledger pointer presence', ROOT), cmd: 'flow-kit run check-ledger-doc-presence.mjs', folder: '.', type: 'shell' },
   // 确认台账不变量（ledger-invariant-ci）：历史全扫挂进引擎段——此前该门自称 CI 机器门
   // 却从未进任何门表，71 处存量断档积累数月无人见（当日 DAG 感知重写 + HISTORY_BASELINE 声明后
   // 首次全绿，方具挂门条件）。pre-commit 仅 --staged 前缀面，全史审计由此门独担。
   // verify-diet 二批（2026-10-21 P0-2，owner 拍板）：本地关单不再重复付全史扫描（~37s）——TF_BUILD 外
   // 执行期 loud-skip（diff 面触台账即回列；门表/--list 恒 22，同 lane-surface-ci「本地跳过」先例）；全史审计由 CI 独担
   // （main 全量 verify 含本门；develop 最小 CI 面 secrets+check-loop 不含本门——2026-10-25 起），新违规仍被提交时刻 --staged 增量门当场拦。
-  { id: 'ledger-invariant', cohort: 'engine', name: '确认台账不变量（历史全扫）', cmd: 'flow-kit run check-ledger-invariant.mjs', folder: '.', type: 'shell' },
+  { id: 'ledger-invariant', cohort: 'engine', name: t('确认台账不变量（历史全扫）', 'Confirmation ledger invariant (full history scan)', ROOT), cmd: 'flow-kit run check-ledger-invariant.mjs', folder: '.', type: 'shell' },
   // 泳道 diff 面（ai-native-review-p1）：CI（TF_BUILD/合并提交检出）按基准执法——产品契约面
   // 改动须 diff 内协伴 L2+ 入口；本地手跑无基准事实 → 脚本内 advisory 跳过（显式 --base origin/main 可预检）。
-  { id: 'lane-surface-ci', cohort: 'engine', name: '泳道完整性（CI diff 面；本地无基准则跳过）', cmd: 'flow-kit run check-lane-surface.mjs --ci', folder: '.', type: 'shell' },
+  { id: 'lane-surface-ci', cohort: 'engine', name: t('泳道完整性（CI diff 面；本地无基准则跳过）', 'Lane integrity (CI diff surface; skipped locally without baseline)', ROOT), cmd: 'flow-kit run check-lane-surface.mjs --ci', folder: '.', type: 'shell' },
   // 安全段（2026-10-14 决定 4 / G5 插队）：密钥扫描。
   // secrets-scan：gitleaks detect + 基线（.gitleaks-baseline.json，存量豁免清单，用户拍板——
   //   2026-10-15 扩 6 处权限Key 标识符，见 check-secrets.mjs 头注）；
   //   **2026-10-29 起恒执法**：gitleaks 三处解析皆缺（典型 = CI agent 装不上）→ 自动降级为纯 Node
   //   兜底扫描 check-secrets-lite.mjs（同一基线做文件级豁免），不再 loud-skip；输出首行标明执法者。
   //   需要缺二进制即红：SECRETS_SCAN_REQUIRE_GITLEAKS=1（check-secrets exit 2）。
-  { id: 'secrets-scan', cohort: 'security', name: '密钥扫描（gitleaks 优先 / lite 兜底，+基线）', cmd: 'flow-kit run check-secrets.mjs', folder: '.', type: 'shell' },
+  { id: 'secrets-scan', cohort: 'security', name: t('密钥扫描（gitleaks 优先 / lite 兜底，+基线）', 'Secret scan (gitleaks preferred / lite fallback, +baseline)', ROOT), cmd: 'flow-kit run check-secrets.mjs', folder: '.', type: 'shell' },
   // 供应链门（R3-8）：SBOM 生成 + 许可证策略检查（零依赖零网络，判据 = .agents/config/license-policy.json）。
   // 声明了依赖但 lockfile 缺失 = fail-closed exit 2；零依赖（未声明依赖，静态判定）= pass-with-note skipped:'zero-dep'；
   // --check 只读比对 SBOM 漂移。与 secrets-scan 同属安全段。
-  { id: 'sbom-license', cohort: 'security', name: 'SBOM 与许可证策略（SPDX 2.3，零网络）', cmd: 'flow-kit run sbom-license.mjs --check', folder: '.', type: 'shell' },
+  { id: 'sbom-license', cohort: 'security', name: t('SBOM 与许可证策略（SPDX 2.3，零网络）', 'SBOM and license policy (SPDX 2.3, offline)', ROOT), cmd: 'flow-kit run sbom-license.mjs --check', folder: '.', type: 'shell' },
   // 沙箱门（R3-8）：开发容器声明校验——镜像来源白名单 + 版本钉死 + 声明结构。
   // 判据 = .agents/config/devcontainer-policy.json；项目没有 .devcontainer/（未启用容器）→ 大声跳过不判红。
-  { id: 'devcontainer', cohort: 'security', name: '开发容器声明（镜像白名单 + 版本钉死）', cmd: 'flow-kit run check-devcontainer.mjs', folder: '.', type: 'shell' },
+  { id: 'devcontainer', cohort: 'security', name: t('开发容器声明（镜像白名单 + 版本钉死）', 'Dev container declaration (image allowlist + pinned versions)', ROOT), cmd: 'flow-kit run check-devcontainer.mjs', folder: '.', type: 'shell' },
   // 依赖漏洞审计三门（nuget-audit / frontend-audit-prod / frontend-audit-devtool）2026-10-16 退役
   //   （owner 指令）：三者皆依赖公网漏洞服务（npm `/-/npm/v1/security/*`、NuGet 源索引的
   //   `VulnerabilityInfo`），内网镜像均不代理该面（实测见 runtime-env §6.4「漏洞数据源实测」），
   //   冷缓存/网络抖动即假红、换内网源即假绿——判据不可靠，故整族退出关单门表。
   //   退役留档：机制台账两行（NuGet 漏洞门 / 前端依赖审计）+ papercuts 2026-10-16 行。
-  // —— 代码四门（2026-11-11 owner 拍板接入 product cohort；2026-11-10 审计 P2「--no-verify 远端兜底缺口」
-  //    修复）：原 .agents/hooks pre-commit 专用四门（local-pre-commit.mjs 同批脚本，判据单源不变），
+  // —— 代码三门（2026-11-11 owner 拍板接入 product cohort；2026-11-10 审计 P2「--no-verify 远端兜底缺口」
+  //    修复）：原 .agents/hooks pre-commit 专用门（local-pre-commit.mjs 同批脚本，判据单源不变），
   //    随本表进 CI --mid/--full 执法；本地 pre-commit 保留为最早拦截点（.githooks/pre-commit 口径已同步）。
-  //    四门 id 已入 verify-scope 的 CI_UNILATERAL_GATE_IDS——本地增量档单边化 CI。
-  { id: 'code-architecture', cohort: 'product', name: '架构红线（Application 禁引 Infrastructure 等）', cmd: 'flow-kit hook check-architecture.mjs', folder: '.', type: 'shell' },
+  //    id 已入 verify-scope 的 CI_UNILATERAL_GATE_IDS——本地增量档单边化 CI。
+  //    （同族 code-notify-guard 已随 2026-11-24 product-gates 移出基础表，改项目配置。）
+  { id: 'code-architecture', cohort: 'product', name: t('架构红线（.agents/hooks/architecture-redlines.json，未配置跳过）', 'Architecture redlines (.agents/hooks/architecture-redlines.json, skipped when unconfigured)', ROOT), cmd: 'flow-kit hook check-architecture.mjs', folder: '.', type: 'shell' },
   // CI_PUSH_BEFORE 在场（azure-pipelines ci-push-before 步注入的 pipeline 变量）扫该区间新增行；
   // 缺省扫暂存区新增行——存量不拦（渐进收口语义与 pre-commit 一字不变）。
   { id: 'code-audit-fields', cohort: 'product',
-    name: '审计字段守卫（禁手工写 Operator 等）',
+    name: t('审计字段守卫（.agents/hooks/audit-fields.json，未配置跳过）', 'Audit field guard (.agents/hooks/audit-fields.json, skipped when unconfigured)', ROOT),
     cmd: process.env.CI_PUSH_BEFORE ? `flow-kit hook check-audit-fields.mjs --range ${process.env.CI_PUSH_BEFORE}..HEAD` : 'flow-kit hook check-audit-fields.mjs',
     folder: '.', type: 'shell' },
   // 删除守卫默认即全仓面（Application/API 全目录计数比对 allowlist，非暂存面）——静态 cmd 零改接入。
-  { id: 'code-delete-guard', cohort: 'product', name: '删除守卫（Remove/RemoveRange 须登记 allowlist）', cmd: 'flow-kit hook check-delete-guard.mjs', folder: '.', type: 'shell' },
-  { id: 'code-notify-guard', cohort: 'product', name: '通知守卫（frontend 禁直调 antd message）', cmd: 'flow-kit hook check-notify-guard.mjs', folder: '.', type: 'shell' },
-  { id: 'frontend-lint', cohort: 'product', name: '前端代码规范检查', cmd: 'npm run lint:check', folder: 'frontend', type: 'shell' },
-  // 前端单测硬门（2026-10-09）：Vitest 纯 node 面零外部依赖，CI 可执法——
-  // 补齐「后端 1426 用例 vs 前端 0」的验证面不对称（AI-Native 架构审查 P1-1）。
-  { id: 'frontend-unit-test', cohort: 'product', name: '前端单测 (Vitest)', cmd: 'npm run test:unit', folder: 'frontend', type: 'shell' },
-  { id: 'wiki-consistency', cohort: 'product', name: 'wiki 三方一致性', cmd: 'flow-kit run verify-wiki-consistency.mjs', folder: '.', type: 'shell' },
-  { id: 'backend-build', cohort: 'product', name: '后端编译', cmd: 'dotnet build Shipyard.Material.sln', folder: '.', type: 'shell' },
-  // --no-build（verify-diet 2026-10-21 ③）：测试直接消费 backend-build 产物，消「build → test 内部再
-  // 构建同一 sln」的双构建。deps 仍必需：--no-build 无产物即红，且保持依赖门序（依赖门红 → 本门不启动）。
-  // 入口收敛（gate-diet #1' 2026-10-23）：dotnet test sln --no-build 单库串行
-  // （TEST_DB_CONN=Deve_CSS_SuHao；2026-10-30 分区机制退役，owner 裁定「不要搞三分区」）。
-  { id: 'backend-test', cohort: 'product', name: '后端自动化测试', cmd: 'node scripts/verify/backend/run-backend-tests.mjs', folder: '.', type: 'shell', deps: ['backend-build'] },
-  // 前端关单门（verify-diet ④ 分离）：本地关单只执法类型检查——vite bundle 产物不进任何断言，
-  // 对验证语义无贡献，完整构建留在 deploy 与 CI（TF_BUILD 时仍 npm run build 全量）。
-  // 门 id/计数变更（--list 恒 22，2026-11-14 R3-8 增 sbom-license + devcontainer；2026-11-11 增代码四门；2026-10-25 local-gate-config 加入引擎段；2026-10-24 复核加三门）；s23 GATE_CMD 已同步收 vue-tsc。
-  { id: 'frontend-build', cohort: 'product',
-    name: process.env.TF_BUILD ? '前端构建 (含类型检查)' : '前端类型检查 (vue-tsc)',
-    cmd: process.env.TF_BUILD ? 'npm run build' : 'npm run type-check',
-    folder: 'frontend', type: 'shell' },
+  { id: 'code-delete-guard', cohort: 'product', name: t('删除守卫（删除调用点须登记 allowlist，未配置跳过）', 'Delete guard (delete call sites must be registered in the allowlist; skipped when unconfigured)', ROOT), cmd: 'flow-kit hook check-delete-guard.mjs', folder: '.', type: 'shell' },
+  // 母项目产品门（backend-build / backend-test / frontend-lint / frontend-unit-test / frontend-build /
+  // code-notify-guard）与 RUN_E2E 条件门 frontend-e2e 已移出基础表（2026-11-24 product-gates）：
+  // 技术栈产品门改由项目 .agents/config/product-gates[.<名称>].json 配置（下方加载段），dotnet profile
+  // 随附中性默认配置。留表的是不依赖具体技术栈的通用机制门：
+  { id: 'wiki-consistency', cohort: 'product', name: t('wiki 三方一致性', 'Wiki three-way consistency', ROOT), cmd: 'flow-kit run verify-wiki-consistency.mjs', folder: '.', type: 'shell' },
 ];
 
 // diff 面 lint 降范围（2026-11-05，--scope 档只 lint 变更面文件）随 2026-11-08 档 1-B 单边化退役：
 // frontend-lint 已整体移 CI，本地增量档不再出现该门（scopedLintCmd 与阈值常量一并移除）。
 
 // 产品门单边化 CI 跳过说明（档 1-B）：增量档门清单上方恒打印一行（--list 走 stderr，保持 stdout 纯 id）。
-const UNILATERAL_NOTE = `产品门单边化 CI（2026-11-08 档 1 减重；2026-11-11 增代码四门）：${[...CI_UNILATERAL_GATE_IDS].join('、')} 共 ${CI_UNILATERAL_GATE_IDS.size} 门本地增量档（缺省/--scope/--face）不执行——执法点移交 CI（--full/--mid/--product 档不变）`;
+const UNILATERAL_NOTE = t(`产品门单边化 CI（2026-11-08 档 1 减重；2026-11-11 增代码四门）：${[...CI_UNILATERAL_GATE_IDS].join('、')} 共 ${CI_UNILATERAL_GATE_IDS.size} 门本地增量档（缺省/--scope/--face）不执行——执法点移交 CI（--full/--mid/--product 档不变）`, `Product gates unilateral CI (2026-11-08 tier 1 diet; 2026-11-11 four code gates added): ${[...CI_UNILATERAL_GATE_IDS].join(', ')} — ${CI_UNILATERAL_GATE_IDS.size} gates not run in local incremental tiers (default / --scope / --face); enforcement moved to CI (--full / --mid / --product unchanged)`, ROOT);
 
 // fixture 夹具门（--test-cmd 注入时替换全部生产门——原 verify.test.mjs 1/2、2/2 断言依赖此口径，测试面已退役 2026-10-28）
 // check-loop 用绝对路径直调真实脚本——夹具根里没有脚本本体，root 归属仍由 CHECK_LOOP_ROOT 裁决。
 const fixtureGates = (cmd) => [
-  { id: 'test', name: '测试步（注入）', cmd, folder: '.', type: 'shell' },
-  { id: 'check-loop', name: '闭环门禁校验', cmd: `node "${path.join(SCRIPT_DIR, 'check-loop.mjs')}"`, folder: '.', type: 'shell' },
+  { id: 'test', name: t('测试步（注入）', 'Test step (injected)', ROOT), cmd, folder: '.', type: 'shell' },
+  { id: 'check-loop', name: t('闭环门禁校验', 'Closed-loop gate check', ROOT), cmd: `node "${path.join(SCRIPT_DIR, 'check-loop.mjs')}"`, folder: '.', type: 'shell' },
 ];
-
-// E2E 冒烟条件门（2026-10-09）：RUN_E2E=1 才执法——前置是全栈在线
-// （前端 5203 + API 8932 + SMOKE_ADMIN/SMOKE_ADMIN_PASSWORD 凭证），CI 未配全栈前不假装执法；
-// 未启用时开跑前显式打印 loud-skip（跳过可见，与 fail-loud 对称）。
-if (process.env.RUN_E2E === '1') {
-  GATES.push({ id: 'frontend-e2e', cohort: 'product', name: '前端 E2E 冒烟 (Playwright)', cmd: 'npm run test:e2e', folder: 'frontend', type: 'shell' });
-}
 
 // Stack profile（agentic-flow-kit 通用化）：基础门表里的 product 门是 dotnet/Vue 专用。
 // 其余栈只保留 engine + security + wiki 门，再按栈追加一条产品测试门。
@@ -226,6 +268,82 @@ const STACKS = (() => {
 if (!STACKS.includes('dotnet')) {
   for (let i = GATES.length - 1; i >= 0; i -= 1) {
     if (/^(backend-|frontend-|code-)/.test(GATES[i].id)) GATES.splice(i, 1);
+  }
+}
+
+// 项目产品门（product-gates 2026-11-24）：技术栈产品门出代码、进项目配置——.agents/config/ 下
+// product-gates.json / product-gates.<名称>.json（按文件名排序，门序 = 文件名序 × 数组序），插在
+// wiki-consistency 之后、各栈自动探测门之前。字段：id/name/cmd 必填，folder 默认 '.'，deps/when/env
+// 可选，type 默认 'shell'。配置失守（JSON 坏 / 缺必填字段 / id 与内置门或他门重复 / deps 指向不存在
+// 的门）= stderr 报错 exit 2——不能当没配置放过（漏跑该红的门比不跑更危险）。文件不存在 = 无项目
+// 产品门，不报错不打印。when 语义与 hooks/commit-check.cjs 头注一致：路径存在 / 尾部 * 一层通配 /
+// pkg:<点分路径>（读该门 folder 下的 package.json），任一满足才启用；不满足的门不进执行清单，在门
+// 清单处打 SKIP 行（--list 走 stderr 保 stdout 纯 id），不计失败、不落凭证。deps 合法域 = 基础表 ∪
+// 全部配置门（栈自动门是探测产物、非稳定 id，不在域内）。
+const whenItem = (w, folder) => {
+  if (typeof w === 'string' && w.startsWith('pkg:')) {
+    const keys = w.slice(4).split('.').filter(Boolean);
+    if (!keys.length) return false;
+    let pkg;
+    try { pkg = JSON.parse(fs.readFileSync(path.join(ROOT, folder, 'package.json'), 'utf8')); } catch { return false; }
+    let cur = pkg;
+    for (const k of keys) {
+      if (cur == null || typeof cur !== 'object' || !Object.prototype.hasOwnProperty.call(cur, k)) return false;
+      cur = cur[k];
+    }
+    return typeof cur === 'string' && cur.trim() !== '';
+  }
+  const s = String(w);
+  const star = s.indexOf('*');
+  if (star < 0) return fs.existsSync(path.join(ROOT, s));
+  const dir = path.join(ROOT, path.dirname(s.slice(0, star)) || '.');
+  try { return fs.readdirSync(dir).some((f) => f.endsWith(s.slice(star + 1))); } catch { return false; }
+};
+const whenSatisfied = (when, folder) => !when
+  || (Array.isArray(when) ? when : [when]).some((w) => whenItem(w, folder));
+const showWhen = (when) => (Array.isArray(when) ? when.join(' / ') : String(when));
+const whenSkippedGates = [];
+{
+  const cfgDir = path.join(ROOT, '.agents', 'config');
+  const files = fs.existsSync(cfgDir)
+    ? fs.readdirSync(cfgDir).filter((f) => f === 'product-gates.json' || /^product-gates\..+\.json$/.test(f)).sort()
+    : [];
+  const knownIds = new Set(GATES.map((g) => g.id));
+  const configured = [];
+  const die = (file, why) => {
+    console.error(t(`[verify] 配置错误：.agents/config/${file}——项目产品门配置失守：${why}（配置非法不能当没配置放过）`, `[verify] config error: .agents/config/${file} — product gate config is broken: ${why} (invalid config must not be treated as absent)`, ROOT));
+    process.exit(2);
+  };
+  for (const file of files) {
+    let raw;
+    try { raw = JSON.parse(fs.readFileSync(path.join(cfgDir, file), 'utf8')); } catch (e) { die(file, t(`JSON 解析失败（${e.message}）`, `JSON parse failed (${e.message})`, ROOT)); }
+    const list = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' && Array.isArray(raw.gates) ? raw.gates : null);
+    if (!list) die(file, t('顶层须为数组或 { "gates": [...] }', 'top level must be an array or { "gates": [...] }', ROOT));
+    for (const g of list) {
+      if (!g || typeof g !== 'object' || Array.isArray(g)) die(file, t('门元素须为对象', 'each gate entry must be an object', ROOT));
+      for (const key of ['id', 'name', 'cmd']) {
+        if (typeof g[key] !== 'string' || !g[key].trim()) die(file, t(`门缺必填字段 ${key}`, `gate is missing required field ${key}`, ROOT));
+      }
+      if (knownIds.has(g.id)) die(file, t(`门 id ${g.id} 与既有门重复`, `gate id ${g.id} duplicates an existing gate`, ROOT));
+      if (g.when !== undefined && typeof g.when !== 'string' && !Array.isArray(g.when)) die(file, t(`门 ${g.id} 的 when 须为字符串或字符串数组`, `gate ${g.id}: when must be a string or an array of strings`, ROOT));
+      if (g.deps !== undefined && (!Array.isArray(g.deps) || g.deps.some((d) => typeof d !== 'string'))) die(file, t(`门 ${g.id} 的 deps 须为 id 数组`, `gate ${g.id}: deps must be an array of ids`, ROOT));
+      knownIds.add(g.id);
+      configured.push({ file, gate: {
+        id: g.id, cohort: 'product', name: g.name, cmd: g.cmd,
+        folder: typeof g.folder === 'string' && g.folder.trim() ? g.folder : '.',
+        type: typeof g.type === 'string' && g.type.trim() ? g.type : 'shell',
+        ...(Array.isArray(g.deps) && g.deps.length ? { deps: [...g.deps] } : {}),
+        ...(g.env && typeof g.env === 'object' && !Array.isArray(g.env) ? { env: { ...g.env } } : {}),
+      }, when: g.when });
+    }
+  }
+  for (const { file, gate } of configured) {
+    const missing = (gate.deps || []).filter((d) => !knownIds.has(d));
+    if (missing.length) die(file, t(`门 ${gate.id} 的 deps 指向不存在的门（${missing.join('、')}）`, `gate ${gate.id}: deps point to non-existent gates (${missing.join(', ')})`, ROOT));
+  }
+  for (const { gate, when } of configured) {
+    if (whenSatisfied(when, gate.folder)) GATES.push(gate);
+    else whenSkippedGates.push({ id: gate.id, when: showWhen(when) });
   }
 }
 const pushProduct = (id, name, cmd) => {
@@ -305,9 +423,9 @@ const recordFailure = (step, exitInfo, note, attribution) => {
     if (process.env.PIPELINE_RUN_ID) entry.runId = process.env.PIPELINE_RUN_ID;
     fs.mkdirSync(path.join(ROOT, '.agents'), { recursive: true });
     fs.appendFileSync(path.join(ROOT, '.agents', 'verifications.jsonl'), `${JSON.stringify(entry)}\n`);
-    console.log(`[verify] 🧾 失败行已留痕 verifications.jsonl（suite=${step}${attribution ? `，归因 ${attribution}` : ''}）`);
+    console.log(t(`[verify] 🧾 失败行已留痕 verifications.jsonl（suite=${step}${attribution ? `，归因 ${attribution}` : ''}）`, `[verify] 🧾 failure row recorded in verifications.jsonl (suite=${step}${attribution ? `, attribution ${attribution}` : ''})`, ROOT));
   } catch (e) {
-    console.error(`[verify] ⚠️ 失败行落账失败（${e.code || e.message}）`);
+    console.error(t(`[verify] ⚠️ 失败行落账失败（${e.code || e.message}）`, `[verify] ⚠️ failed to record failure row (${e.code || e.message})`, ROOT));
   }
 };
 
@@ -329,32 +447,31 @@ const persistGateLog = (gate, r) => {
       '=== stderr ===', r.stderr || '(空)', '',
     ].join('\n'));
     const tail = `${r.stdout || ''}\n${r.stderr || ''}`.trimEnd().split(/\r?\n/).slice(-40).join('\n');
-    if (tail) console.error(`[verify] 🧾 门输出尾部 40 行（全文 ${path.relative(ROOT, p)}）：\n${tail}`);
+    if (tail) console.error(t(`[verify] 🧾 门输出尾部 40 行（全文 ${path.relative(ROOT, p)}）：\n${tail}`, `[verify] 🧾 last 40 lines of gate output (full text: ${path.relative(ROOT, p)}):\n${tail}`, ROOT));
     return p;
   } catch { return null; }
 };
 
 // --help 出口（2026-11-06）：只出用法——不读 git、不裁变更面、不落凭证、不跑门
 function usageText() {
-  return [
+  return t([
     '用法：flow-kit run verify.mjs [档位] [选项]',
     '',
     '档位（缺省 = diff 面增量；最近 24h 无全量绿行时自动回落 --full 并打印 ⏭️ 兜底行）：',
     '  --full      全量门（关单凭证；引擎段 + 业务面 + 安全段）',
     '  --scope     diff 面增量（基线 = 最近全量绿行 headShort，回退 origin/main merge-base；',
     '              无 origin / 零提交的本地仓 loud-skip exit 0 并给降级建议，不判红）',
-    '  --face <面> 显式面覆盖增量档（backend|frontend|docs，逗号多值；与 --full/--scope 互斥；跳过 24h 兜底）',
+    '  --face <面> 显式面覆盖增量档（backend|frontend|tests|data|docs，逗号多值；与 --full/--scope 互斥；跳过 24h 兜底）',
     '  --product   业务面（product + security）',
     '  --mid       CI 中档（PR→develop / develop 直推）：业务面 + 后端只跑单测',
     '  --engine    仅引擎段自检',
     '',
-    '增量档（缺省 / --scope / --face）产品门单边化 CI（2026-11-08 档 1 减重；2026-11-11 增代码四门）：',
-    '  产品 9 门（backend-build/backend-test/frontend-lint/frontend-unit-test/frontend-build + 代码四门',
-    '  code-architecture/code-audit-fields/code-delete-guard/code-notify-guard）由 CI 执法，本地不跑；',
-    '  secrets-scan + 引擎段 + wiki-consistency 照跑。',
+    '增量档（缺省 / --scope / --face）产品门单边化 CI（2026-11-08 档 1 减重；2026-11-11 增代码门；2026-11-24 技术栈产品门改项目配置）：',
+    '  id 属于 backend-build / backend-test / frontend-* / code-* 的产品门由 CI（--mid / --full）执法，本地增量档不跑；',
+    '  其余项目产品门（.agents/config/product-gates*.json）与栈自动门照跑；secrets-scan + 引擎段 + wiki-consistency 照跑。',
     '',
     '选项：',
-    '  --list            只列本轮门 id（配 --verbose 出「id<TAB>命令」），不执行门',
+    '  --list            只列本轮门 id（配 --verbose 出「id<TAB>名称<TAB>命令」），不执行门',
     '  --help, -h        本帮助，立即退出',
     '  --jobs N          并发档位（缺省 clamp(2..4, cpus/4)）；--serial 回退串行',
     '  --verbose         --list 时附带每门命令',
@@ -362,7 +479,32 @@ function usageText() {
     '  --stub-gate <cmd> 夹具：单门但走生产尾段（须配 CHECK_LOOP_ROOT）',
     '',
     '退出码：0 全绿 ｜ 1 有门失败（fail-fast，未跑门标「已中止」）｜ 2 参数或配置失守',
-  ].join('\n');
+  ].join('\n'), [
+    'Usage: flow-kit run verify.mjs [tier] [options]',
+    '',
+    'Tiers (default = diff-surface incremental; falls back to --full automatically when no full green run exists within 24h, printing a ⏭️ fallback line):',
+    '  --full      full gate table (closeout credential; engine + product + security)',
+    '  --scope     diff-surface incremental (baseline = last full green headShort, falling back to origin/main merge-base;',
+    '              local repo without origin / zero commits loud-skips with exit 0 and a degraded-mode hint, not red)',
+    '  --face <f>  explicit face override for the incremental tier (backend|frontend|tests|data|docs, comma-separated; mutually exclusive with --full/--scope; skips the 24h fallback)',
+    '  --product   product surface (product + security)',
+    '  --mid       CI mid tier (PR→develop / direct develop push): product surface + backend unit tests only',
+    '  --engine    engine section only',
+    '',
+    'Incremental tiers (default / --scope / --face) make product gates unilateral CI (2026-11-08 tier 1 diet; 2026-11-11 code gates added; 2026-11-24 stack product gates moved to project config):',
+    '  product gates whose id is backend-build / backend-test / frontend-* / code-* are enforced by CI (--mid / --full) and do not run in local incremental tiers;',
+    '  other project product gates (.agents/config/product-gates*.json) and stack auto gates still run; secrets-scan + engine section + wiki-consistency still run.',
+    '',
+    'Options:',
+    '  --list            list this run\'s gate ids only (with --verbose also print "id<TAB>name<TAB>command"), do not execute gates',
+    '  --help, -h        this help, exit immediately',
+    '  --jobs N          concurrency tier (default clamp(2..4, cpus/4)); --serial falls back to serial',
+    '  --verbose         attach each gate\'s command to --list',
+    '  --test-cmd <cmd>  fixture: replace the whole table with a single gate (test channel)',
+    '  --stub-gate <cmd> fixture: single gate but runs the production tail (requires CHECK_LOOP_ROOT)',
+    '',
+    'Exit codes: 0 all green | 1 a gate failed (fail-fast; unstarted gates marked "aborted") | 2 bad arguments or config',
+  ].join('\n'), ROOT);
 }
 
 async function run() {
@@ -385,7 +527,7 @@ async function run() {
       continue;
     }
     if (argv[i].startsWith('-') && argv[i].length > 1 && !KNOWN_FLAGS.has(argv[i])) {
-      console.error(`[verify] ⚠️ 未知参数 ${argv[i]}（flow-kit run verify.mjs --help 看用法）`);
+      console.error(t(`[verify] ⚠️ 未知参数 ${argv[i]}（flow-kit run verify.mjs --help 看用法）`, `[verify] ⚠️ unknown argument ${argv[i]} (see usage: flow-kit run verify.mjs --help)`, ROOT));
     }
   }
   const ti = argv.indexOf('--test-cmd');
@@ -395,15 +537,15 @@ async function run() {
   const si = argv.indexOf('--stub-gate');
   const stubCmd = si >= 0 ? argv[si + 1] : null;
   if (si >= 0 && !stubCmd) {
-    console.error('[verify] --stub-gate 需要一条命令');
+    console.error(t('[verify] --stub-gate 需要一条命令', '[verify] --stub-gate requires a command', ROOT));
     process.exit(2);
   }
   if (stubCmd && testCmd) {
-    console.error('[verify] --stub-gate 与 --test-cmd 互斥');
+    console.error(t('[verify] --stub-gate 与 --test-cmd 互斥', '[verify] --stub-gate and --test-cmd are mutually exclusive', ROOT));
     process.exit(2);
   }
   if (stubCmd && !process.env.CHECK_LOOP_ROOT) {
-    console.error('[verify] --stub-gate 只允许配合 CHECK_LOOP_ROOT 夹具根（禁止在真实仓库落无关单凭证）');
+    console.error(t('[verify] --stub-gate 只允许配合 CHECK_LOOP_ROOT 夹具根（禁止在真实仓库落无关单凭证）', '[verify] --stub-gate is only allowed with a CHECK_LOOP_ROOT fixture root (never write unrelated single-gate credentials into a real repo)', ROOT));
     process.exit(2);
   }
   // 引擎资产判定赋值（issue #73 单一定义点）：testCmd / stubCmd 已解析完毕——夹具旗标在位即不判定
@@ -416,10 +558,10 @@ async function run() {
   let faceArg = null;
   if (fi >= 0) {
     const faces = String(faceRaw || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
-    const legal = PRODUCT_FACES.map((pf) => pf.face);
+    const legal = [...new Set([...PRODUCT_FACES.map((pf) => pf.face), 'backend', 'frontend', 'docs'])];
     const illegal = faces.filter((f) => !legal.includes(f));
     if (!faceRaw || !faces.length || illegal.length) {
-      console.error(`[verify] --face 需要面清单（合法值：${legal.join('|')}；逗号多值）${illegal.length ? `；非法值：${illegal.join(',')}` : ''}`);
+      console.error(t(`[verify] --face 需要面清单（合法值：${legal.join('|')}；逗号多值）${illegal.length ? `；非法值：${illegal.join(',')}` : ''}`, `[verify] --face requires a face list (valid: ${legal.join('|')}; comma-separated)${illegal.length ? `; invalid: ${illegal.join(',')}` : ''}`, ROOT));
       process.exit(2);
     }
     faceArg = faces;
@@ -445,33 +587,33 @@ async function run() {
   let fullTier = explicitFull;
   const listOnly = argv.includes('--list');
   if (explicitScope && explicitFull) {
-    console.error('[verify] --scope 与 --full 互斥');
+    console.error(t('[verify] --scope 与 --full 互斥', '[verify] --scope and --full are mutually exclusive', ROOT));
     process.exit(2);
   }
   if (explicitScope && (testCmd || engineOnly)) {
-    console.error('[verify] --scope 与 --test-cmd / --engine 互斥');
+    console.error(t('[verify] --scope 与 --test-cmd / --engine 互斥', '[verify] --scope is mutually exclusive with --test-cmd / --engine', ROOT));
     process.exit(2);
   }
   if (productOnly && (engineOnly || explicitScope)) {
-    console.error('[verify] --product 与 --engine / --scope 互斥（业务面全量分档，CI main 用）');
+    console.error(t('[verify] --product 与 --engine / --scope 互斥（业务面全量分档，CI main 用）', '[verify] --product is mutually exclusive with --engine / --scope (full product-surface tier, used by CI main)', ROOT));
     process.exit(2);
   }
   if (midOnly && (engineOnly || productOnly || explicitScope)) {
-    console.error('[verify] --mid 与 --engine / --product / --scope 互斥（业务面分档，CI 中档用）');
+    console.error(t('[verify] --mid 与 --engine / --product / --scope 互斥（业务面分档，CI 中档用）', '[verify] --mid is mutually exclusive with --engine / --product / --scope (product-surface tier, used by CI mid tier)', ROOT));
     process.exit(2);
   }
   if (faceArg && explicitFull) {
-    console.error('[verify] --face 与 --full 互斥（显式面覆盖属增量档）');
+    console.error(t('[verify] --face 与 --full 互斥（显式面覆盖属增量档）', '[verify] --face and --full are mutually exclusive (explicit face override belongs to the incremental tier)', ROOT));
     process.exit(2);
   }
   if (faceArg && (explicitScope || engineOnly || productOnly || midOnly || testCmd || stubCmd)) {
-    console.error('[verify] --face 与 --scope / --engine / --product / --mid / 夹具旗标互斥（面来源与档位二选一）');
+    console.error(t('[verify] --face 与 --scope / --engine / --product / --mid / 夹具旗标互斥（面来源与档位二选一）', '[verify] --face is mutually exclusive with --scope / --engine / --product / --mid / fixture flags (choose one face source and one tier)', ROOT));
     process.exit(2);
   }
   // 默认档（verify-scope-default 2026-10-22，owner 拍板）：未显式 --full、且非夹具/非引擎段/非 --list →
   // 默认走 diff 面增量，`--full` 才全量。实测依据：一日 23 次全量、墙钟中位 234s ≈ 90 分钟纯等待，而
   // 绝大多数分支只动文档面；「默认便宜、全量显式」是把关单压到分钟级以下的唯一杠杆。
-  // --list 不参与：门表恒 22 是叙事锚与对外契约，裁剪只在执行期生效。
+  // --list 不参与：门表（基础门 + 项目产品门 + 栈自动门）是叙事锚与对外契约，裁剪只在执行期生效。
   let scopeMode = explicitScope ? 'diff'
     : faceArg ? 'face'
     : (!explicitFull && !testCmd && !stubCmd && !engineOnly && !productOnly && !midOnly && !listOnly) ? 'diff' : null;
@@ -531,8 +673,8 @@ async function run() {
       const age = lastFullTs ? Date.now() - Date.parse(lastFullTs) : null;
       const freshFull = age !== null && Number.isFinite(age) && age >= 0 && age < 24 * 3600 * 1000;
       if (!freshFull) {
-        const why = lastFullTs ? `最近绿行 ${lastFullTs.slice(0, 16)}（已 ${(age / 3600000).toFixed(1)}h）` : '本地台账与仓库凭证均无绿行';
-        console.log(`[verify] ⏭️ 24h 内无绿行（${why}）→ 本次全量执法（兜底）\n`);
+        const why = lastFullTs ? t(`最近绿行 ${lastFullTs.slice(0, 16)}（已 ${(age / 3600000).toFixed(1)}h）`, `last green ${lastFullTs.slice(0, 16)} (${(age / 3600000).toFixed(1)}h ago)`, ROOT) : t('本地台账与仓库凭证均无绿行', 'no green run in local ledger or repo evidence', ROOT);
+        console.log(t(`[verify] ⏭️ 24h 内无绿行（${why}）→ 本次全量执法（兜底）\n`, `[verify] ⏭️ no green run within 24h (${why}) → running the full gate table (fallback)\n`, ROOT));
         scopeMode = null; fullTier = true;
       }
     }
@@ -555,7 +697,7 @@ async function run() {
   } else if (scopeMode) {
     const git = (args) => spawnSync('git', args, { encoding: 'utf8', cwd: ROOT });
     try {
-      scope = computeDiffScope(git, ledgerBase, baseSourceHint);
+      scope = computeDiffScope(git, ledgerBase, baseSourceHint, PRODUCT_FACES);
     } catch (e) {
       // 显式 --scope 保持 fail-loud（拒增量）；默认档退回全量——默认档不该因基线缺失整体失败。
       if (explicitScope) {
@@ -563,14 +705,14 @@ async function run() {
         // 增量基线不可得不再 exit 2——输出原因与降级建议，exit 0 不判红。有 origin 的既有路径零变化
         // （diff 面为空等仍 fail-loud exit 2）；推送范围对账由 pre-push check-scope-range 硬门兜底。
         if (e.scopeSkip) {
-          console.log(`[verify] ⏭️ --scope loud-skip：${e.message}——本次增量档不执行（exit 0，不判红）`);
-          console.log('[verify]    降级建议：plan↔git 对账用 flow-kit run check-scope.mjs <plan> --base <sha>（或 --staged）；推送级对账由 pre-push check-scope-range 硬门兜底');
+          console.log(t(`[verify] ⏭️ --scope loud-skip：${e.message}——本次增量档不执行（exit 0，不判红）`, `[verify] ⏭️ --scope loud-skip: ${e.message} — incremental tier not executed (exit 0, not red)`, ROOT));
+          console.log(t('[verify]    降级建议：plan↔git 对账用 flow-kit run check-scope.mjs <plan> --base <sha>（或 --staged）；推送级对账由 pre-push check-scope-range 硬门兜底', '[verify]    degradation hint: reconcile plan↔git with flow-kit run check-scope.mjs <plan> --base <sha> (or --staged); push-range reconciliation is covered by the pre-push check-scope-range hard gate', ROOT));
           process.exit(0);
         }
         console.error(`[verify] --scope: ${e.message}`);
         process.exit(2);
       }
-      console.log(`[verify] ⏭️ diff 面解析失败（${e.message}）→ 本次全量执法（兜底）\n`);
+      console.log(t(`[verify] ⏭️ diff 面解析失败（${e.message}）→ 本次全量执法（兜底）\n`, `[verify] ⏭️ diff surface resolution failed (${e.message}) → running the full gate table (fallback)\n`, ROOT));
       scopeMode = null; fullTier = true;
     }
   }
@@ -582,13 +724,14 @@ async function run() {
   if (scopeMode && scope && !stubCmd) {
     effSkipped = [...new Set([...scope.skippedGateIds, ...CI_UNILATERAL_GATE_IDS])];
     if (scopeMode === 'face') {
-      console.log(`[verify] 🔀 face=${faceRaw}（显式指定，跳过变更面自动检测）：裁 ${effSkipped.length} 门（${effSkipped.join('、') || '无'}）\n`);
+      console.log(t(`[verify] 🔀 face=${faceRaw}（显式指定，跳过变更面自动检测）：裁 ${effSkipped.length} 门（${effSkipped.join('、') || '无'}）\n`, `[verify] 🔀 face=${faceRaw} (explicit, skipping automatic change-surface detection): ${effSkipped.length} gates skipped (${effSkipped.join(', ') || 'none'})\n`, ROOT));
     } else {
-      const faceNote = ['backend', 'frontend'].map((f) => `${f}:${scope.touched.has(f) ? '触' : '未触'}`).join(' ');
-      const skipNote = `跳过 ${effSkipped.length} 门（${effSkipped.join('、')}）`;
-      const baseWhy = scope.baseSource === 'ledger' ? '上次绿行'
-        : scope.baseSource === 'evidence' ? '仓库凭证' : 'origin/main';
-      console.log(`[verify] 🔀 scope=diff：基线 ${scope.baseShort}（${baseWhy}）｜变更面 ${scope.fileCount} 文件（${faceNote}）——${skipNote}\n`);
+      const faceNote = PRODUCT_FACES
+        .map((pf) => `${pf.face}:${scope.touched.has(pf.face) ? t('触', 'touched', ROOT) : t('未触', 'untouched', ROOT)}`).join(' ') || t('无产品面', 'no product faces', ROOT);
+      const skipNote = t(`跳过 ${effSkipped.length} 门（${effSkipped.join('、')}）`, `${effSkipped.length} gates skipped (${effSkipped.join(', ')})`, ROOT);
+      const baseWhy = scope.baseSource === 'ledger' ? t('上次绿行', 'last green run', ROOT)
+        : scope.baseSource === 'evidence' ? t('仓库凭证', 'repo evidence', ROOT) : 'origin/main';
+      console.log(t(`[verify] 🔀 scope=diff：基线 ${scope.baseShort}（${baseWhy}）｜变更面 ${scope.fileCount} 文件（${faceNote}）——${skipNote}\n`, `[verify] 🔀 scope=diff: baseline ${scope.baseShort} (${baseWhy}) | changed surface ${scope.fileCount} files (${faceNote}) — ${skipNote}\n`, ROOT));
     }
   }
   // --engine（2026-10-11 C7 方案②）：只跑 cohort=engine 的引擎段门——原设计供 develop 增量 CI
@@ -610,19 +753,19 @@ async function run() {
     envSkipIds.add('secrets-scan');
   }
   let gates = testCmd ? fixtureGates(testCmd)
-    : stubCmd ? [{ id: 'stub', cohort: 'engine', name: '夹具单门', cmd: stubCmd, folder: '.', type: 'shell' }]
+    : stubCmd ? [{ id: 'stub', cohort: 'engine', name: t('夹具单门', 'Fixture gate', ROOT), cmd: stubCmd, folder: '.', type: 'shell' }]
     : engineOnly ? GATES.filter((g) => g.cohort === 'engine')
     : productOnly ? GATES.filter((g) => g.cohort !== 'engine') // 业务面：product + security（CI main）
     // 中档（--mid）：业务面同 --product，唯一差异 = backend-test 只跑单元测试（不碰集成测试库）。
     // 门 id/名称不变，deps 边（backend-test ← backend-build）照旧成立。
     : midOnly ? GATES.filter((g) => g.cohort !== 'engine')
       .map((g) => (g.id === 'backend-test'
-        ? { ...g, cmd: `${g.cmd} --unit-only`, name: '后端单元测试（不含集成测试）' }
+        ? { ...g, cmd: `${g.cmd} --unit-only`, name: t('后端单元测试（不含集成测试）', 'Backend unit tests (excluding integration tests)', ROOT) }
         : g))
-    // 重档（--full / 默认档回落，2026-11-06 修复）：全量 22 门，backend-test 不附 --unit-only（含集成）——
+    // 重档（--full / 默认档回落，2026-11-06 修复）：全量门表（基础门 + 项目产品门 + 栈自动门），backend-test 不附 --unit-only（含集成）——
     // 直推 main 与 PR→main 的 CI 重档执法面（CI 已备 TEST_DB_ALLOW_DEV=1 逃生，见 azure-pipelines.yml）；
     // 本地默认档/中档仍单测档（集成在 pre-push --select-range / CI 重档）。
-    // !scopeMode 兜住裸 --list：门表叙事锚恒 22（裁剪只在增量档执行期与 --list --scope/--face 生效）。
+    // !scopeMode 兜住裸 --list：裸 --list 门表不裁剪（裁剪只在增量档执行期与 --list --scope/--face 生效）。
     : fullTier || !scopeMode ? GATES
     // 增量档（缺省 / --scope / --face；2026-11-08 档 1-B 产品门单边化 CI）：
     // ① 产品 cohort 5 门（backend-build / backend-test / frontend-lint / frontend-unit-test / frontend-build）
@@ -635,7 +778,7 @@ async function run() {
     : GATES.filter((g) => !skipSet.has(g.id) && !CI_UNILATERAL_GATE_IDS.has(g.id))
       .map((g) => {
         if (g.id === 'secrets-scan' && ledgerBase) {
-          return { ...g, env: { SECRETS_SCAN_BASE: ledgerBase }, name: '密钥扫描（gitleaks 增量+基线）' };
+          return { ...g, env: { SECRETS_SCAN_BASE: ledgerBase }, name: t('密钥扫描（gitleaks 增量+基线）', 'Secret scan (gitleaks incremental + baseline)', ROOT) };
         }
         return g;
       });
@@ -646,7 +789,7 @@ async function run() {
     for (const g of gates) {
       for (const d of g.deps || []) {
         if (!gateIds.has(d)) {
-          console.error(`[verify] 门 ${g.id} 依赖 ${d} 不在本轮门清单——裁剪/表形态错误，拒绝运行`);
+          console.error(t(`[verify] 门 ${g.id} 依赖 ${d} 不在本轮门清单——裁剪/表形态错误，拒绝运行`, `[verify] gate ${g.id} depends on ${d}, which is not in this run's gate list — pruning / table shape error, refusing to run`, ROOT));
           process.exit(2);
         }
       }
@@ -655,16 +798,20 @@ async function run() {
 
   if (argv.includes('--list')) {
     if (testCmd) {
-      console.error('[verify] --list 与 --test-cmd 互斥');
+      console.error(t('[verify] --list 与 --test-cmd 互斥', '[verify] --list and --test-cmd are mutually exclusive', ROOT));
       process.exit(1);
     }
     // 干跑展示裁剪（档 1-B）：跳过说明走 stderr——stdout 保持纯 id，管道消费方不受影响。
     if (scopeMode) console.error(`[verify] ⏭️ ${UNILATERAL_NOTE}`);
     // 引擎资产缺失（issue #73）：--list 不裁 stdout 的 id 清单（裸 --list 门表恒 22 叙事锚不动），
     // stderr 一行说明执行期将裁两门（secrets-scan 挂载 check-secrets.mjs，随门一并跳过）。
-    if (engineAssetsAbsent) console.error(`[verify] ⏭️ 未安装引擎资产（无 .agents/config/engine.json）——跳过 ${[...ASSET_GATE_IDS].join('、')} 门（check-secrets.mjs 密钥扫描随 secrets-scan 一并跳过；外部编排消费方；issue #73）`);
+    if (engineAssetsAbsent) console.error(t(`[verify] ⏭️ 未安装引擎资产（无 .agents/config/engine.json）——跳过 ${[...ASSET_GATE_IDS].join('、')} 门（check-secrets.mjs 密钥扫描随 secrets-scan 一并跳过；外部编排消费方；issue #73）`, `[verify] ⏭️ engine assets not installed (no .agents/config/engine.json) — skipping gates ${[...ASSET_GATE_IDS].join(', ')} (the check-secrets.mjs secret scan is skipped together with secrets-scan; external orchestration consumers; issue #73)`, ROOT));
+    // when 未满足的项目产品门：不进清单，SKIP 行走 stderr（stdout 保持纯 id 可管道）。
+    for (const s of whenSkippedGates) console.error(t(`SKIP: ${s.id}（未找到 ${s.when}，跳过——配置好后自动启用）`, `SKIP: ${s.id} (${s.when} not found; skipped — enabled automatically once configured)`, ROOT));
+    // 门禁配置汇总（2026-11-24）：一行报项目侧配置文件在场/缺席；stderr 保持 stdout 纯 id。
+    console.error(`[verify] ${GATE_CONFIG_SUMMARY}`);
     const verbose = argv.includes('--verbose');
-    for (const g of gates) console.log(verbose ? `${g.id}\t${g.cmd}` : g.id);
+    for (const g of gates) console.log(verbose ? `${g.id}\t${g.name}\t${g.cmd}` : g.id);
     process.exit(0);
   }
 
@@ -675,7 +822,7 @@ async function run() {
   // 不可达，门禁面零变化。
   if (engineAssetsAbsent) {
     gates = gates.filter((g) => !ASSET_GATE_IDS.has(g.id));
-    console.error(`[verify] ⏭️ 未安装引擎资产（无 .agents/config/engine.json）——跳过 ${[...ASSET_GATE_IDS].join('、')} 门（check-secrets.mjs 密钥扫描随 secrets-scan 一并跳过；外部编排消费方；issue #73）`);
+    console.error(t(`[verify] ⏭️ 未安装引擎资产（无 .agents/config/engine.json）——跳过 ${[...ASSET_GATE_IDS].join('、')} 门（check-secrets.mjs 密钥扫描随 secrets-scan 一并跳过；外部编排消费方；issue #73）`, `[verify] ⏭️ engine assets not installed (no .agents/config/engine.json) — skipping gates ${[...ASSET_GATE_IDS].join(', ')} (the check-secrets.mjs secret scan is skipped together with secrets-scan; external orchestration consumers; issue #73)`, ROOT));
   }
 
   // 并发档位（2026-10-16 并行编排）：门之间无共享状态（各自独立进程 + 独立工作目录），串行编排下
@@ -687,7 +834,7 @@ async function run() {
   const serial = argv.includes('--serial');
   const jobsRaw = argv.includes('--jobs') ? Number(argv[argv.indexOf('--jobs') + 1]) : null;
   if (jobsRaw !== null && (!Number.isInteger(jobsRaw) || jobsRaw < 1)) {
-    console.error(`[verify] --jobs 须为正整数（现 ${argv[argv.indexOf('--jobs') + 1]}）`);
+    console.error(t(`[verify] --jobs 须为正整数（现 ${argv[argv.indexOf('--jobs') + 1]}）`, `[verify] --jobs must be a positive integer (got ${argv[argv.indexOf('--jobs') + 1]})`, ROOT));
     process.exit(2);
   }
   const JOBS = serial ? 1 : Math.min(jobsRaw ?? Math.max(2, Math.min(4, Math.floor(os.cpus().length / 4))), gates.length);
@@ -706,9 +853,11 @@ async function run() {
   };
 
   if (scopeMode) console.log(`[verify] ⏭️ ${UNILATERAL_NOTE}\n`);
-  console.log(`[verify] 🚀 开始全量静态门验证 (共 ${gates.length} 项，并发 ${JOBS}${serial ? '·串行' : ''})${testCmd ? '【fixture 模式】' : ''}${stubCmd ? '【stub 尾段】' : ''}${engineOnly ? '【引擎段增量门】' : ''}${productOnly ? '【业务面分档】' : ''}${midOnly ? '【中档：业务面+单测】' : ''}\n`);
-  if (!testCmd && !stubCmd && process.env.RUN_E2E !== '1') {
-    console.log('[verify] ⏭️  E2E 冒烟门未启用（RUN_E2E≠1）——前置为全栈在线（前端 5203 + API 8932 + SMOKE_ADMIN/SMOKE_ADMIN_PASSWORD）；启用方式：RUN_E2E=1 flow-kit run verify.mjs\n');
+  const modeSuffix = `${serial ? t('·串行', ', serial', ROOT) : ''}${testCmd ? t('【fixture 模式】', ' [fixture mode]', ROOT) : ''}${stubCmd ? t('【stub 尾段】', ' [stub tail]', ROOT) : ''}${engineOnly ? t('【引擎段增量门】', ' [engine incremental gates]', ROOT) : ''}${productOnly ? t('【业务面分档】', ' [product-surface tier]', ROOT) : ''}${midOnly ? t('【中档：业务面+单测】', ' [mid tier: product surface + unit tests]', ROOT) : ''}`;
+  console.log(t(`[verify] 🚀 开始全量静态门验证 (共 ${gates.length} 项，并发 ${JOBS}${modeSuffix})\n`, `[verify] 🚀 starting full static gate verification (${gates.length} items, concurrency ${JOBS}${modeSuffix})\n`, ROOT));
+  // when 未满足的项目产品门：门清单处显式 SKIP（跳过可见，与 fail-loud 对称）；不计失败、不落凭证。
+  if (!testCmd && !stubCmd && !engineOnly) {
+    for (const s of whenSkippedGates) console.log(t(`SKIP: ${s.id}（未找到 ${s.when}，跳过——配置好后自动启用）`, `SKIP: ${s.id} (${s.when} not found; skipped — enabled automatically once configured)`, ROOT));
   }
 
   let passedCount = 0;
@@ -717,7 +866,7 @@ async function run() {
   // metrics.md「门禁成本/迭代」表消费——G10（影响面裁剪）的判据数据源。
   const durations = {};
   let cohortSeen = '';
-  const cohortLabel = { engine: '引擎段', security: '安全段', product: '产品段' };
+  const cohortLabel = { engine: t('引擎段', 'Engine section', ROOT), security: t('安全段', 'Security section', ROOT), product: t('产品段', 'Product section', ROOT) };
   const doneIdx = new Set();  // 已出裁决的门序（成功/失败/中止；未列入者 = fail-fast 后状态未知）
   const aborted = new Set();  // 因他门失败被树杀中止的门序
   const running = new Map();  // 门序 -> child（树杀目标）
@@ -733,7 +882,7 @@ async function run() {
     if (gate.cohort && gate.cohort !== cohortSeen) {
       cohortSeen = gate.cohort;
       const n = gates.filter((g) => g.cohort === cohortSeen).length;
-      console.log(`[verify] —— ${cohortLabel[cohortSeen] || cohortSeen}（${n}）——`);
+      console.log(t(`[verify] —— ${cohortLabel[cohortSeen] || cohortSeen}（${n}）——`, `[verify] —— ${cohortLabel[cohortSeen] || cohortSeen} (${n}) ——`, ROOT));
     }
     console.log(`[verify] ▶ ${i + 1}/${gates.length} ${gate.name}...`);
     const t0 = performance.now();
@@ -770,18 +919,18 @@ async function run() {
     const gate = gates[i];
     doneIdx.add(i);
     if (r.skip) {
-      console.log(`[verify] ⏭️ ${i + 1}/${gates.length} ${gate.name}：CI-only（TF_BUILD 外跳过——提交时刻 --staged 增量门已执法，全史扫描 CI 兜底）\n`);
+      console.log(t(`[verify] ⏭️ ${i + 1}/${gates.length} ${gate.name}：CI-only（TF_BUILD 外跳过——提交时刻 --staged 增量门已执法，全史扫描 CI 兜底）\n`, `[verify] ⏭️ ${i + 1}/${gates.length} ${gate.name}: CI-only (skipped outside TF_BUILD — the commit-time --staged incremental gate already enforced it; full-history scan covered by CI)\n`, ROOT));
       return false;
     }
     durations[gate.id] = r.durMs;
     if (r.stdout) process.stdout.write(r.stdout);
     if (r.stderr) process.stderr.write(r.stderr);
     if (aborted.has(i)) {
-      console.error(`[verify] ⏹ ${i + 1}/${gates.length} ${gate.name} 已中止（他门失败触发 fail-fast，状态未知）`);
+      console.error(t(`[verify] ⏹ ${i + 1}/${gates.length} ${gate.name} 已中止（他门失败触发 fail-fast，状态未知）`, `[verify] ⏹ ${i + 1}/${gates.length} ${gate.name} aborted (another gate failed and triggered fail-fast; status unknown)`, ROOT));
       return false;
     }
     if (r.overflow) {
-      console.error(`[verify] ❌ ${i + 1}/${gates.length} ${gate.name} 未通过（输出超 ${MAX_GATE_OUTPUT / 1024 / 1024}MB 上限，已中止）`);
+      console.error(t(`[verify] ❌ ${i + 1}/${gates.length} ${gate.name} 未通过（输出超 ${MAX_GATE_OUTPUT / 1024 / 1024}MB 上限，已中止）`, `[verify] ❌ ${i + 1}/${gates.length} ${gate.name} FAILED (output exceeded ${MAX_GATE_OUTPUT / 1024 / 1024}MB limit; aborted)`, ROOT));
       persistGateLog(gate, r);
       // 归因恒带（2026-11-10）：溢出前已捕获的输出仍可供 failure-attribution 启发式签名匹配，
       // 无签名则落保守默认 real（同 classifyFailure「否则 real」口径）——失败行不留无归因空洞。
@@ -793,14 +942,14 @@ async function run() {
       const note = `exit ${r.status ?? r.error?.code}${logPath ? `·log ${path.relative(ROOT, logPath)}` : ''}`;
       // 归因（gate-health 2026-10-22）：env / flaky / real——只标注不改裁决；假红可当场定性。
       const attribution = classifyFailure(`${r.stdout || ''}\n${r.stderr || ''}`);
-      console.error(`[verify] ❌ ${i + 1}/${gates.length} ${gate.name} 未通过 (${note})｜归因 ${attribution}`);
+      console.error(t(`[verify] ❌ ${i + 1}/${gates.length} ${gate.name} 未通过 (${note})｜归因 ${attribution}`, `[verify] ❌ ${i + 1}/${gates.length} ${gate.name} FAILED (${note}) | attribution ${attribution}`, ROOT));
       recordFailure(gate.id, r.status, note, attribution);
       return true;
     }
     // stdout+stderr 都留档（2026-10-29 secrets-incr）：loud-skip 类声明多走 stderr（check-secrets 用
     // console.error），只存 stdout 会让落账段的 envSkips 动态探测落空——锚点空洞堵不住。
     outputs[gate.id] = `${r.stdout || ''}\n${r.stderr || ''}`;
-    console.log(`[verify] ✅ ${i + 1}/${gates.length} ${gate.name} 通过 [${r.durMs} ms]\n`);
+    console.log(t(`[verify] ✅ ${i + 1}/${gates.length} ${gate.name} 通过 [${r.durMs} ms]\n`, `[verify] ✅ ${i + 1}/${gates.length} ${gate.name} passed [${r.durMs} ms]\n`, ROOT));
     passedCount++;
     return false;
   };
@@ -849,11 +998,14 @@ async function run() {
     await Promise.all(Array.from({ length: Math.min(JOBS, bodyIdx.length) }, worker));
   }
 
+  // 门禁配置汇总（2026-11-24）：运行结束恒打一行（绿/红都可见），说明哪些项目侧门配置缺席=SKIP。
+  console.log(`[verify] ${GATE_CONFIG_SUMMARY}`);
+
   if (failedIdx >= 0) {
     // 未执行门清单（2026-10-11 D2；2026-10-16 并发编排后按「已出裁决」算）：fail-fast 后状态未知≠通过——
     // 验证系统输出须完备，与 E2E loud-skip 对称（否则「没跑」在台账里与「过了」不可区分）。
     const remaining = gates.map((g, i) => i).filter((i) => !doneIdx.has(i)).map((i) => gates[i].id);
-    if (remaining.length) console.error(`[verify] ⏭️ 未执行门（fail-fast，状态未知）：${remaining.join('、')}`);
+    if (remaining.length) console.error(t(`[verify] ⏭️ 未执行门（fail-fast，状态未知）：${remaining.join('、')}`, `[verify] ⏭️ gates not executed (fail-fast; status unknown): ${remaining.join(', ')}`, ROOT));
     process.exit(1);
   }
 
@@ -874,14 +1026,16 @@ async function run() {
       const rev = spawnSync('git', ['rev-parse', '--short', 'HEAD'], { encoding: 'utf8', cwd: ROOT });
       if (rev.status === 0 && rev.stdout) entry.headShort = rev.stdout.trim();
       // 业务脏路径快照（closeout-skill-hardening 2026-11-08）：confirm-doc 关单时比对当前
-      // backend/ frontend/ 脏路径——绿行之后新出现的业务改动使凭证过期（HEAD 判不出未提交改动）。
+      // 业务路径的脏文件——绿行之后新出现的业务改动使凭证过期（HEAD 判不出未提交改动）。
+      // 判据单源 = faces.mjs（2026-11-24）：code + ui 前缀（与旧 backend//frontend/ 口径等价）；
+      // 未配置 faces → isProductPath 恒 true（保守：任何脏文件都算业务面）。
       // 只记路径列表（不记内容、不记哈希）：重跑 verify 即刷新；非 git 环境省略该键，
       // confirm-doc 对存量/缺字段绿行维持 fail-open（与 v1–v7 advisory 同口径）。
       const st = spawnSync('git', ['status', '--porcelain'], { encoding: 'utf8', cwd: ROOT });
       if (st.status === 0 && st.stdout) {
         entry.dirty = st.stdout.split(/\r?\n/)
           .map((l) => l.slice(3).split(' -> ').pop().trim().replace(/^"|"$/g, '').replace(/\\/g, '/'))
-          .filter((p) => /^(backend|frontend)\//.test(p)).sort();
+          .filter((p) => p && isProductPath(PROJECT_FACES, p, ['code', 'ui'])).sort();
       }
       // 脏树摘要（BACKLOG 34）：'' = 干净树 / 16 位 hex = 脏树 / 缺键 = 未知（git 不可用）——
       // 口径见 dirtyTreeDigest 头注；gen-verify-evidence 对非空摘要渲染「非干净树」标注。
@@ -923,10 +1077,10 @@ async function run() {
       } else {
         fs.mkdirSync(path.join(ROOT, '.agents'), { recursive: true });
         fs.appendFileSync(path.join(ROOT, '.agents', 'verifications.jsonl'), `${JSON.stringify(entry)}\n`);
-        console.log(`[verify] 🧾 全绿凭证已落账 verifications.jsonl`);
+        console.log(t('[verify] 🧾 全绿凭证已落账 verifications.jsonl', '[verify] 🧾 all-green credential recorded in verifications.jsonl', ROOT));
       }
     } catch (e) {
-      console.error(`[verify] ⚠️ 凭证落账失败: ${e.message}`);
+      console.error(t(`[verify] ⚠️ 凭证落账失败: ${e.message}`, `[verify] ⚠️ failed to record credential: ${e.message}`, ROOT));
     }
     // 摘要事件原子化（2026-10-11 C4）：全绿事实与仓内摘要（workflow/verify-evidence.md——检查 23 收敛
     // 硬门自 convergenceHardSince 2026-10-12 起的读源）同刻生成，消除「本地台账已绿、committed 摘要滞后」
@@ -945,10 +1099,10 @@ async function run() {
       const skippedGateIds = effSkipped;
       const budget = readGateBudget(ROOT, skippedGateIds.length ? 'scopeMs' : 'fullMs');
       const over = budget !== null && wallMs > budget;
-      const budgetNote = budget === null ? '' : `（预算 ${(budget / 1000).toFixed(0)}s${over ? `，超 ${((wallMs / budget - 1) * 100).toFixed(1)}%` : ''}）`;
-      console.log(`[verify] ⏱️ 门禁成本：墙钟 ${(wallMs / 1000).toFixed(1)}s${budgetNote}｜各门合计 ${(totalMs / 1000).toFixed(1)}s｜最慢三门 ${top3}`);
+      const budgetNote = budget === null ? '' : t(`（预算 ${(budget / 1000).toFixed(0)}s${over ? `，超 ${((wallMs / budget - 1) * 100).toFixed(1)}%` : ''}）`, ` (budget ${(budget / 1000).toFixed(0)}s${over ? `, over by ${((wallMs / budget - 1) * 100).toFixed(1)}%` : ''})`, ROOT);
+      console.log(t(`[verify] ⏱️ 门禁成本：墙钟 ${(wallMs / 1000).toFixed(1)}s${budgetNote}｜各门合计 ${(totalMs / 1000).toFixed(1)}s｜最慢三门 ${top3}`, `[verify] ⏱️ gate cost: wall clock ${(wallMs / 1000).toFixed(1)}s${budgetNote} | gate total ${(totalMs / 1000).toFixed(1)}s | slowest three ${top3}`, ROOT));
       if (over) {
-        console.log('[verify] ⚠️ 门禁成本超预算——下一批须退役一门（一进一出；候选 flow-kit run agg-judgments.mjs --retire-candidates）');
+        console.log(t('[verify] ⚠️ 门禁成本超预算——下一批须退役一门（一进一出；候选 flow-kit run agg-judgments.mjs --retire-candidates）', '[verify] ⚠️ gate cost over budget — retire one gate next batch (one in, one out; candidates: flow-kit run agg-judgments.mjs --retire-candidates)', ROOT));
       }
       // 引擎资产缺失（issue #73）：摘要生成（workflow/verify-evidence.md 落盘）同样不进宿主仓——
       // 注记已由更早到达的落账点打过（一轮一次），此处静默跳过。
@@ -957,23 +1111,23 @@ async function run() {
         if (gen.status === 0) {
           if (gen.stdout) process.stdout.write(String(gen.stdout).trimEnd() + '\n');
         } else {
-          console.error(`[verify] ⚠️ 绿凭证摘要生成失败（${String(gen.stderr || gen.stdout || '').trim().slice(0, 200)}）——绿裁决不变，手动补跑 flow-kit run gen-verify-evidence.mjs`);
+          console.error(t(`[verify] ⚠️ 绿凭证摘要生成失败（${String(gen.stderr || gen.stdout || '').trim().slice(0, 200)}）——绿裁决不变，手动补跑 flow-kit run gen-verify-evidence.mjs`, `[verify] ⚠️ failed to generate the green-credential summary (${String(gen.stderr || gen.stdout || '').trim().slice(0, 200)}) — the green verdict stands; rerun manually: flow-kit run gen-verify-evidence.mjs`, ROOT));
         }
       }
     }
   }
   if (engineOnly) {
-    console.log(`\n[verify] ✅ 引擎段 ${passedCount} 门全绿——增量门通过（非 22 门关单凭证，不落 all-gates 台账与摘要）`);
+    console.log(t(`\n[verify] ✅ 引擎段 ${passedCount} 门全绿——增量门通过（非 22 门关单凭证，不落 all-gates 台账与摘要）`, `\n[verify] ✅ all ${passedCount} engine-section gates green — incremental gates passed (not a 22-gate closeout credential; no all-gates ledger row or summary written)`, ROOT));
   } else if (productOnly) {
-    console.log(`\n[verify] ✅ 业务面 ${passedCount} 门全绿——分面凭证（非 22 门关单凭证，不落 all-gates 台账与摘要）`);
+    console.log(t(`\n[verify] ✅ 业务面 ${passedCount} 门全绿——分面凭证（非 22 门关单凭证，不落 all-gates 台账与摘要）`, `\n[verify] ✅ all ${passedCount} product-surface gates green — per-surface credential (not a 22-gate closeout credential; no all-gates ledger row or summary written)`, ROOT));
   } else if (midOnly) {
-    console.log(`\n[verify] ✅ 中档 ${passedCount} 门全绿——业务面 + 后端单测（集成测试未跑；非 22 门关单凭证，不落 all-gates 台账与摘要）`);
+    console.log(t(`\n[verify] ✅ 中档 ${passedCount} 门全绿——业务面 + 后端单测（集成测试未跑；非 22 门关单凭证，不落 all-gates 台账与摘要）`, `\n[verify] ✅ all ${passedCount} mid-tier gates green — product surface + backend unit tests (integration tests not run; not a 22-gate closeout credential; no all-gates ledger row or summary written)`, ROOT));
   } else {
-    console.log(`\n[verify] 🎉 全绿——可以关单（共 ${passedCount} 项通过）`);
+    console.log(t(`\n[verify] 🎉 全绿——可以关单（共 ${passedCount} 项通过）`, `\n[verify] 🎉 all green — ready to close (${passedCount} items passed)`, ROOT));
   }
 }
 
 run().catch(e => {
-  console.error(`[verify] 💥 运行时崩溃: ${e.stack}`);
+  console.error(t(`[verify] 💥 运行时崩溃: ${e.stack}`, `[verify] 💥 runtime crash: ${e.stack}`, ROOT));
   process.exit(1);
 });

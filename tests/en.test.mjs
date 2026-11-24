@@ -294,3 +294,30 @@ test('en gate init-ci reports the existing .gitlab-ci.yml conflict in English', 
   assert.match(r.stderr, /CI gate workflow config already exists: \.gitlab-ci\.yml; use --force to overwrite/);
   assert.doesNotMatch(r.stderr, /已存在/, 'en output must not fall back to the zh sentence');
 });
+
+// ---- doctor：PATH 上的 flow-kit 与安装清单版本不一致时，--lang en 输出英文 ----
+
+test('en doctor reports the flow-kit version mismatch in English', () => {
+  const dir = tmpRepo();
+  assert.equal(run(['install', '--agent', 'trae', '--stack', 'node', '--lang', 'en', '--target', '.'], dir).status, 0);
+
+  // 假 flow-kit 两种平台都要有：Windows 走 cmd 解析 .cmd；POSIX 走无扩展名 sh 脚本。
+  const binDir = makeTmp('flow-kit-en-fake-bin-');
+  fs.mkdirSync(binDir, { recursive: true });
+  if (process.platform === 'win32') {
+    fs.writeFileSync(path.join(binDir, 'flow-kit.cmd'), '@echo off\r\necho 2.0.0\r\n', 'utf8');
+  } else {
+    const fake = path.join(binDir, 'flow-kit');
+    fs.writeFileSync(fake, '#!/bin/sh\necho 2.0.0\n', 'utf8');
+    fs.chmodSync(fake, 0o755);
+  }
+  const r = spawnSync(process.execPath, [BIN, 'doctor', '--target', '.', '--lang', 'en'], {
+    cwd: dir,
+    encoding: 'utf8',
+    env: { ...process.env, FLOW_KIT_TEST: '1', PATH: `${binDir}${path.delimiter}${process.env.PATH}` },
+  });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(`${r.stdout}${r.stderr}`, /install manifest/);
+  assert.match(`${r.stdout}${r.stderr}`, /2\.0\.0/);
+  assert.doesNotMatch(`${r.stdout}${r.stderr}`, /版本不一致/, 'en output must not fall back to the zh sentence');
+});

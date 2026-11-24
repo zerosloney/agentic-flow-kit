@@ -1,8 +1,9 @@
 // 组合式 profile：stack 为单值基底（可多栈叠加），surface 是可叠加的闭集切面。
 // 闭集严格限制组合爆炸；未知 stack / surface 立即失败，不与旧行为静默兼容。
 export const SURFACES = ['frontend', 'api', 'data'];
-// 可选技术栈闭集单一来源：TUI 向导栈菜单由它生成（install.mjs 转出口）。
-export const STACKS = ['dotnet', 'node', 'typescript', 'rust', 'go', 'java', 'python', 'cpp', 'empty'];
+// 可选技术栈闭集单一来源在 stack-registry.mjs：TUI 向导栈菜单由它生成（install.mjs 转出口）。
+import { stackNames } from './stack-registry.mjs';
+export const STACKS = stackNames();
 
 export function surfaceDescription(surface, lang = 'zh-CN') {
   const zh = {

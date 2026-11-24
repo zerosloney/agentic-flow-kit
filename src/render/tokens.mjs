@@ -1,76 +1,15 @@
 import { HOSTS } from '../hosts/registry.mjs';
+import { stackDefaults, stackShell } from '../install/stack-registry.mjs';
 
-const STACK_DEFAULTS = {
-    dotnet: {
-      description: 'ASP.NET Core 后端 + Vue 3 前端 + SQL Server。',
-      descriptionEn: 'ASP.NET Core backend + Vue 3 frontend + SQL Server.',
-      apiPort: 8932,
-      webPort: 5203,
-    },
-    node: {
-      description: 'Node.js 项目。',
-      descriptionEn: 'A Node.js project.',
-      apiPort: 3000,
-      webPort: 5173,
-    },
-    typescript: {
-      description: 'TypeScript 项目。',
-      descriptionEn: 'A TypeScript project.',
-      apiPort: 3000,
-      webPort: 5173,
-    },
-    rust: {
-      description: 'Rust 项目（Cargo）。',
-      descriptionEn: 'A Rust project (Cargo).',
-      apiPort: 8080,
-      webPort: 5173,
-    },
-    go: {
-      description: 'Go 项目（Go modules）。',
-      descriptionEn: 'A Go project (Go modules).',
-      apiPort: 8080,
-      webPort: 5173,
-    },
-    java: {
-      description: 'Java 项目（Maven 或 Gradle）。',
-      descriptionEn: 'A Java project (Maven or Gradle).',
-      apiPort: 8080,
-      webPort: 5173,
-    },
-    python: {
-      description: 'Python 项目（pyproject.toml 或 requirements.txt）。',
-      descriptionEn: 'A Python project (pyproject.toml or requirements.txt).',
-      apiPort: 8000,
-      webPort: 5173,
-    },
-    cpp: {
-      description: 'C / C++ 项目（CMake 或 Makefile）。',
-      descriptionEn: 'A C / C++ project (CMake or Makefile).',
-      apiPort: 8080,
-      webPort: 5173,
-    },
-    empty: {
-      description: '项目技术栈按实际填写。',
-      descriptionEn: 'Fill in the project stack description.',
-      apiPort: 3000,
-      webPort: 5173,
-    },
-};
+const STACK_DEFAULTS = stackDefaults();
 
 export function stackDescription(stack, language) {
   const d = STACK_DEFAULTS[stack] || STACK_DEFAULTS.empty;
   return language === 'en' ? d.descriptionEn : d.description;
 }
 
-// 宿主权限白名单里随栈变化的命令。npm / node / git 是引擎运行时，留在各宿主模板的固定项里。
-export const STACK_SHELL = {
-  dotnet: ['dotnet build', 'dotnet run'],
-  rust: ['cargo build', 'cargo run', 'cargo test', 'cargo check'],
-  go: ['go build', 'go run', 'go test'],
-  java: ['mvn compile', 'mvn test', 'mvn -q test', 'gradle test', 'gradlew test', 'gradlew.bat test', './gradlew test'],
-  python: ['python -m pytest', 'pytest', 'python main.py', 'python -m', 'uv run', 'poetry run'],
-  cpp: ['cmake --build', 'cmake -B', 'ctest', 'make', 'make test', 'ninja', 'clang-tidy', 'clang-format'],
-};
+// 宿主权限白名单里随栈变化的命令（单源：stack-registry.mjs）。npm / node / git 是引擎运行时，留在各宿主模板的固定项里。
+export const STACK_SHELL = stackShell();
 
 function stackAllowFragment(stack, tool, sep) {
   const commands = STACK_SHELL[stack] || [];
@@ -80,10 +19,35 @@ function stackAllowFragment(stack, tool, sep) {
 
 // 模板变量：只替换已知 token，未知 {{...}} 原样保留（避免误伤代码模板字符串）。
 // stacks 为多栈声明序列（首个为主栈）；{{stack}}、端口与描述恒按主栈，权限片段按各栈声明顺序拼接。
-export function buildVars({ target, projectName, stack, language, hosts, kitVersion, installedAt, trackHosts = false, stacks = null }) {
+function buildProductNote(product, language, apiPort, webPort) {
+  const en = language === 'en';
+  if (product === 'api') {
+    return en
+      ? `API-only service (port ${apiPort}): no frontend dev server; the UI-verification stage does not apply.`
+      : `仅 API 服务（端口 ${apiPort}）：无前端 dev 服务，UI 实测阶段不适用。`;
+  }
+  if (product === 'library') {
+    return en
+      ? 'Library/package project: no frontend/API port topology; verify via unit tests, examples and public API contracts; the UI-verification stage does not apply.'
+      : '库/包项目：无前端/API 端口拓扑；验证以单测、示例与公共 API 契约为主，UI 实测阶段不适用。';
+  }
+  if (product === 'cli') {
+    return en
+      ? 'CLI tool project: no frontend/API port topology; verify via unit tests and end-to-end command snapshots; the UI-verification stage does not apply.'
+      : 'CLI 工具项目：无前端/API 端口拓扑；验证以单测与端到端命令快照为主，UI 实测阶段不适用。';
+  }
+  return en
+    ? `Frontend dev server ${webPort} → API http://localhost:${apiPort}; the API must listen on ${apiPort}.`
+    : `前端 dev ${webPort} 连 API http://localhost:${apiPort}；API 须监听 ${apiPort} 才联通。`;
+}
+
+export function buildVars({ target, projectName, stack, language, hosts, kitVersion, installedAt, trackHosts = false, stacks = null, ports = null, product = 'web' }) {
   const d = STACK_DEFAULTS[stack] || STACK_DEFAULTS.empty;
   const description = stackDescription(stack, language);
   const stackList = stacks?.length ? stacks : [stack];
+  const apiPort = Number(ports?.api) > 0 ? Number(ports.api) : d.apiPort;
+  const webPort = Number(ports?.web) > 0 ? Number(ports.web) : d.webPort;
+  const productNote = buildProductNote(product, language, apiPort, webPort);
   const hostIgnores = trackHosts
     ? ''
     : hosts
@@ -96,8 +60,10 @@ export function buildVars({ target, projectName, stack, language, hosts, kitVers
     stacksJson: JSON.stringify(stackList),
     stackDescription: description,
     language,
-    apiPort: String(d.apiPort),
-    webPort: String(d.webPort),
+    product,
+    productNote,
+    apiPort: String(apiPort),
+    webPort: String(webPort),
     boardPort: '8933',
     hosts: hosts.join(', '),
     hostsJson: JSON.stringify(hosts),

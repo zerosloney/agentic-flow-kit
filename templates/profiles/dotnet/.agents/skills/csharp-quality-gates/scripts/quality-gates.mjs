@@ -7,13 +7,13 @@
 //   mutator  → dotnet stryker（Stryker.NET，自带覆盖率引擎，不依赖 coverlet）
 //   dryer    → PMD CPD       （--language cs，注意是 cs 不是 csharp）
 //
-// 关键约束（全部来自本仓 2026-10-31 实测，详见 .agents/skills/csharp-quality-gates/SKILL.md）：
+// 关键约束（来自 .NET + coverlet/stryker 实践，详见 .agents/skills/csharp-quality-gates/SKILL.md）：
 //   1. coverlet 在本机默认 TEMP 下会静默产出 0% 覆盖率 → 跑覆盖率前必须把 TEMP/TMP 改道到
 //      工作区内目录；脚本已内置，并在采集结果为 0 时大声报错而不是继续往下走。
 //   2. cobertura 落在 <results>/<guid>/coverage.cobertura.xml 子目录 → 脚本递归找最新的那个。
 //   3. dotnet-crap --coverage 只吃绝对路径。
 //   4. PMD 的 C# 语言标识是 cs；--no-cache 不是合法选项。
-//   5. 只跑单测工程（集成测试要 DB，CI mid 档也不跑它）；Stryker 必须定点，全量 2 万+ 变异点不可接受。
+//   5. 只跑单测工程（集成测试要 DB，CI mid 档也不跑它）；Stryker 必须定点，全量变异点耗时不可接受。
 //
 // 命令：doctor | coverage | crap | dup | mutate <glob> | all
 // 退出：0 通过；1 门未达标（有方法超阈值 / 有重复块）；2 用法·配置·采集失败。
@@ -29,12 +29,47 @@ const REPO = path.resolve(HERE, '..', '..', '..', '..');
 const WORK = path.join(REPO, '.agents', 'tmp', 'quality-gates');
 const TMP = path.join(WORK, 'tmp');
 const COV_DIR = path.join(WORK, 'coverage');
-const SOLUTION = path.join(REPO, 'Shipyard.Material.sln');
-const UNIT_TEST_PROJ = path.join(REPO, 'tests', 'Shipyard.Material.Tests', 'Shipyard.Material.Tests.csproj');
-const BACKEND = path.join(REPO, 'backend');
-
 const argv = process.argv.slice(2);
 const cmd = argv[0] && !argv[0].startsWith('-') ? argv[0] : '';
+
+// 工程面发现（项目级、可覆盖）：默认取仓库根 *.sln、tests/ 下 *Tests.csproj；--solution/--unit-test/--code 可指定。
+const argOf = (key) => {
+  const i = argv.indexOf(key);
+  return i >= 0 && argv[i + 1] && !argv[i + 1].startsWith('--') ? argv[i + 1] : undefined;
+};
+const walkProject = (dir, re, depth, acc) => {
+  if (depth < 0) return;
+  let ents;
+  try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch { return; }
+  for (const e of ents) {
+    if (['bin', 'obj', 'node_modules', '.git'].includes(e.name)) continue;
+    const abs = path.join(dir, e.name);
+    if (e.isDirectory()) walkProject(abs, re, depth - 1, acc);
+    else if (e.isFile() && re.test(e.name)) acc.push(abs);
+  }
+};
+const firstMatch = (dir, re, depth) => {
+  const acc = [];
+  walkProject(dir, re, depth, acc);
+  acc.sort((a, b) => a.localeCompare(b));
+  return acc[0] || null;
+};
+const SOLUTION = (() => {
+  const explicit = argOf('--solution');
+  if (explicit) return path.resolve(REPO, explicit);
+  const rootSln = (() => { try { return fs.readdirSync(REPO).filter((f) => f.toLowerCase().endsWith('.sln')).sort()[0]; } catch { return null; } })();
+  return rootSln ? path.join(REPO, rootSln) : path.join(REPO, '<solution>.sln');
+})();
+const UNIT_TEST_PROJ = (() => {
+  const explicit = argOf('--unit-test');
+  if (explicit) return path.resolve(REPO, explicit);
+  const hit = firstMatch(path.join(REPO, 'tests'), /tests?\.csproj$/i, 4) || firstMatch(REPO, /tests?\.csproj$/i, 2);
+  return hit || path.join(REPO, 'tests', '<Project>.Tests', '<Project>.Tests.csproj');
+})();
+const CODE_ROOT = (() => {
+  const explicit = argOf('--code');
+  return explicit ? path.resolve(REPO, explicit) : REPO;
+})();
 
 class UsageError extends Error {}
 
@@ -320,7 +355,7 @@ function dup() {
   const java = resolveJava();
   const cp = [path.join(pmdHome, 'conf'), path.join(pmdHome, 'lib', '*')].join(path.delimiter);
   console.log(`跑 PMD CPD 重复检测（--language cs --minimum-tokens ${minTokens}）…`);
-  const r = run(java, ['-cp', cp, 'net.sourceforge.pmd.cli.PmdCli', 'cpd', '--language', 'cs', '--minimum-tokens', minTokens, BACKEND]);
+  const r = run(java, ['-cp', cp, 'net.sourceforge.pmd.cli.PmdCli', 'cpd', '--language', 'cs', '--minimum-tokens', minTokens, CODE_ROOT]);
   const text = r.stdout + r.stderr;
   const blocks = [];
   // 注意：PMD 输出里 "duplication in the following files:" 之后、行号之前都带尾随空格，
@@ -355,14 +390,26 @@ function mutate() {
   const globs = positional();
   if (!globs.length) {
     console.error('用法：mutate <glob> [glob...]  —— 必须定点，全量 2 万+ 变异点不可接受');
-    console.error('例：mutate "**/PurchaseOrderService.cs"');
+    console.error('例：mutate "**/MyService.cs"');
     return 2;
   }
   const dotnet = resolveDotnet();
+  const project = (() => {
+    const explicit = argOf('--project');
+    if (explicit) return explicit;
+    const acc = [];
+    walkProject(REPO, /\.csproj$/i, 3, acc);
+    const src = acc.filter((p) => !/[\\/]tests?[\\/]/i.test(p) && !/tests?\.csproj$/i.test(p));
+    return src.length === 1 ? path.basename(src[0]) : null;
+  })();
+  if (!project) {
+    console.error('mutate 需要目标工程：用 --project <工程文件.csproj> 指定（默认自动发现仓库内唯一的非测试工程）');
+    return 2;
+  }
   const args = [
     'stryker',
     '-p',
-    'Shipyard.Material.Application.csproj',
+    project,
     '--mutate',
     globs[0],
     '--skip-version-check',
@@ -371,7 +418,7 @@ function mutate() {
   ];
   for (const g of globs.slice(1)) args.push('--mutate', g);
   console.log(`跑变异测试：${globs.join(' , ')}（可能耗时数分钟）…`);
-  const r = run(dotnet, args, { cwd: path.join(REPO, 'tests', 'Shipyard.Material.Tests') });
+  const r = run(dotnet, args, { cwd: path.dirname(UNIT_TEST_PROJ) });
   const out = r.stdout + r.stderr;
   let willTest = null;
   for (const l of out.split(/\r?\n/)) {
@@ -385,7 +432,7 @@ function mutate() {
   if (willTest === 0) {
     console.error('');
     console.error('⚠ 0 个变异点待测 —— glob 没匹配到任何代码（Stryker 把全部变异点按 mutate 过滤掉了）。');
-    console.error('  禁把本次结果当作「变异测试通过」；请核对 glob（如 "**/PurchaseOrderService.cs"）与工程名。');
+    console.error('  禁把本次结果当作「变异测试通过」；请核对 glob（如 "**/MyService.cs"）与工程名。');
     return 2;
   }
   console.log('');

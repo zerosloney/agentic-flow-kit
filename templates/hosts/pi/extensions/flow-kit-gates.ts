@@ -38,7 +38,7 @@ export default function (pi: any) {
     if (state.ok) return;
     const msg = `PI 门禁接线不完整，缺失：${state.missing.join("、")}。写前门/命令门可能未生效，请检查 .pi/extensions 与 .agents/hooks。`;
     if (ctx.hasUI) ctx.ui.notify(msg, "error");
-    console.error(`[shipyard-gates] ${msg}`);
+    console.error(`[flow-kit-gates] ${msg}`);
   });
 
   pi.on("tool_call", async (event: any, ctx: any) => {

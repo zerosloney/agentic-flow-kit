@@ -3,7 +3,7 @@
 {{projectName}}. {{stackDescription}}
 
 ## 1. Runtime Connectivity
-The frontend dev server on port {{webPort}} connects to the API at `http://localhost:{{apiPort}}`; the API must listen on {{apiPort}} to be reachable. Environment facts live in `.agents/notes/runtime-env.md` §6; machine-specific absolute paths and versions are self-registered in `.agents/notes/runtime-env.local.md`.
+{{productNote}} Environment facts live in `.agents/notes/runtime-env.md` §6; machine-specific absolute paths and versions are self-registered in `.agents/notes/runtime-env.local.md`.
 
 ## 2. Local Setup (required after clone)
 > Missing these silently disables the gates. See `.agents/notes/runtime-env.md` §7.
@@ -43,8 +43,8 @@ Jump to the corresponding command file by task type:
 
 ## 5. Directory-level Rules
 **Do not backfill this document.** Implementation details live in each directory's `AGENTS.md`:
-- **Backend**: `backend/AGENTS.md`
-- **Frontend**: `frontend/AGENTS.md`
+- **Backend**: `backend/AGENTS.md` (read only if present)
+- **Frontend**: `frontend/AGENTS.md` (read only if present)
 - **Paired documents**: keep paired documents registered in `wiki/INDEX.md` in sync, and update `wiki/INDEX.md` and `wiki/知识沉淀总览.html` together.
 
 ## 6. Project Adaptations

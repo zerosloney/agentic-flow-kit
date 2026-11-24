@@ -1,0 +1,9 @@
+{
+  "_note": "项目产品门配置（verify 基础表之外的本项目技术栈门）：id/name/cmd 必填，folder 默认 '.'，when 任一满足才启用（路径存在 / 尾部 * 一层通配 / pkg:<package.json 点分路径>）。verify 会把这里的门追加到 wiki-consistency 之后；按项目实际的 sln 文件名、前端目录与 npm 脚本名调整，用不到的条目直接删除。",
+  "gates": [
+    { "id": "backend-build", "name": "后端编译", "cmd": "dotnet build", "folder": ".", "when": ["*.sln"] },
+    { "id": "frontend-lint", "name": "前端代码规范检查", "cmd": "npm run lint:check", "folder": "frontend", "when": ["pkg:scripts.lint:check"] },
+    { "id": "frontend-unit-test", "name": "前端单测", "cmd": "npm run test:unit", "folder": "frontend", "when": ["pkg:scripts.test:unit"] },
+    { "id": "frontend-build", "name": "前端类型检查", "cmd": "npm run type-check", "folder": "frontend", "when": ["pkg:scripts.type:check"] }
+  ]
+}

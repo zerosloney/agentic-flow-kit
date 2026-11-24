@@ -116,8 +116,8 @@ L1 的立档、实现、验证与关单都在 `.agents/commands/new-task.md` §L
 **Input**: 选定的级别 + 入口文档
 **必读输入（起草前完成，缺一即 HALT 回本节补读；对照结果落「约束遵守映射」与「假设与推断」）**:
 1. `wiki/INDEX.md` 检索本主题相关任务文档（产品需求 / 开发方案 / 项目规范 / 数据字典 / 用户功能）——命中即通读，依据以路径引用写进 spec 相关节（功能行为 / 数据流的口径来源）；无命中写明检索词与结论
-2. `backend/AGENTS.md` 全文（§6 硬约束 / §7 机器门清单）——**无论本次改动面是否触及后端**
-3. `frontend/AGENTS.md` 全文（门禁 G-2~G-3 / 契约规则 / 列表页状态规则）
+2. `backend/AGENTS.md` 全文（§6 硬约束 / §7 机器门清单；存在才读；没有则跳过）——**无论本次改动面是否触及后端**
+3. `frontend/AGENTS.md` 全文（门禁 G-2~G-3 / 契约规则 / 列表页状态规则；存在才读；没有则跳过）
 **Process**:
 0. **先查后建**: 同功能已有 spec（含归档）/ `verify-ui/features` $\rightarrow$ 原件修订不新建（单源 `workflow/README.md`「同功能续作」）
 1. **生成草稿**: 运行 `flow-kit run fill-spec.mjs --level <L2|L3> --topic <主题> --output workflow/specs/<date>-<主题>.md`
@@ -157,7 +157,7 @@ L2/L3 强制：委派 `independent-reviewer`；触发、形态、必填输入与
 | 前提不经质询进事实源 | `confirm-doc` 拒（前提质询缺节 / 空 / 占位 / 缺反问或缺依据，exit 2） | 无解读风险须写「无关键前提」行并给理由 |
 | 把可实验项问用户 | 多一轮确认税，且答案本就跑得出来 | 先查库 / 跑 eval / 原型，依据写实验结论 |
 | 「已定」不写依据 | `confirm-doc` 拒（等于没想过） | 依据须可指认（节号 / 代码路径 / 查库结果） |
-| 跳过必读输入 / 约束映射缺 backend/frontend AGENTS 条目 | → 独立复核驳回返工（映射缺源视同未做约束核对） | 两份目录规范是全仓契约基准，与本次改动面无关；wiki 无命中可豁免第 1 项（须写明检索词） |
+| 跳过必读输入 / 约束映射缺 backend/frontend AGENTS 条目 | → 独立复核驳回返工（映射缺源视同未做约束核对） | 两份目录规范是全仓契约基准（存在才读；没有则跳过），与本次改动面无关；wiki 无命中可豁免第 1 项（须写明检索词） |
 
 # Build · 起 plan + 写代码
 
@@ -237,7 +237,7 @@ L1 不在本章起草 plan，回 `.agents/commands/new-task.md` §L1 快速道�
 **Trigger**: 改了项目数据库连接配置或新增目标库
 **Process**:
 1. **Schema 比对**: 目标库实际 Schema $\leftrightarrow$ 代码期望（近期变更脚本 + 基础表）
-2. **接口探活**: 运行冒烟脚本 $\rightarrow$ 验证 6 个核心端点 $\text{HTTP 200}$
+2. **接口探活**: 运行冒烟脚本 $\rightarrow$ 按 runtime-env 登记的端点验证 $\text{HTTP 200}$
 **Output**: 探活通过证据
 **Fact**: 探活脚本路径见 `.agents/notes/runtime-env.md` §6.1
 **Fail**: 任一非 200 $\rightarrow$ **HARD-BLOCK** $\rightarrow$ 停在此步，禁部署。

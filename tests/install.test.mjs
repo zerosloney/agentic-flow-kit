@@ -639,3 +639,60 @@ test('upgrade of a legacy standard install adopts github CI from the origin remo
   assert.equal(exists(dir, 'azure-pipelines.yml'), false, 'github origin must not provision azure CI');
   assert.equal(JSON.parse(read(dir, '.agents/install-manifest.json')).ci, 'github');
 });
+
+// ---- prevHooksPath：安装前本地 core.hooksPath 的记录（升级/重装不得覆盖首次现场）----
+
+function setLocalConfig(dir, key, value) {
+  const r = spawnSync('git', ['-C', dir, 'config', '--local', key, value], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+}
+
+function localConfig(dir, key) {
+  const r = spawnSync('git', ['-C', dir, 'config', '--local', '--get', key], { encoding: 'utf8' });
+  return { status: r.status, value: r.stdout.trim() };
+}
+
+test('install records prevHooksPath once and upgrade/reinstall keep it', () => {
+  const dir = tmpRepo();
+  setLocalConfig(dir, 'core.hooksPath', '.husky');
+  const r = run(['install', '--agent', 'trae', '--lang', 'zh-CN', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(localConfig(dir, 'core.hooksPath').value, '.githooks');
+  assert.equal(JSON.parse(read(dir, '.agents/install-manifest.json')).prevHooksPath, '.husky');
+
+  const up = run(['upgrade', '--target', '.'], dir);
+  assert.equal(up.status, 0, up.stderr);
+  assert.equal(JSON.parse(read(dir, '.agents/install-manifest.json')).prevHooksPath, '.husky',
+    'upgrade must keep the first-install snapshot');
+
+  const again = run(['install', '--agent', 'trae', '--lang', 'zh-CN', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(again.status, 0, again.stderr);
+  assert.equal(JSON.parse(read(dir, '.agents/install-manifest.json')).prevHooksPath, '.husky',
+    'reinstall must not snapshot the kit-owned .githooks value');
+});
+
+// ---- 根规则文件身份锁定：新装树的 AGENTS.md / CLAUDE.md / GEMINI.md 只能描述目标项目本身 ----
+// 模板里一旦回流母项目身份串或漏渲染占位符，任何项目装上都会被写成别的项目。
+
+const ROOT_RULE_FILES = ['AGENTS.md', 'CLAUDE.md', 'GEMINI.md'];
+const FOREIGN_IDENTITY_MARKS = ['船厂', '物资', 'Shipyard'];
+
+for (const lang of ['zh-CN', 'en']) {
+  for (const stack of ['node', 'dotnet']) {
+    test(`fresh install root rule files carry only the target project identity (${lang}/${stack})`, () => {
+      const dir = tmpRepo();
+      const r = run(['install', '--agent', 'claude', '--agent', 'antigravity', '--lang', lang, '--stack', stack, '--target', dir], dir);
+      assert.equal(r.status, 0, r.stderr);
+      const project = path.basename(dir);
+      for (const rel of ROOT_RULE_FILES) {
+        const text = read(dir, rel);
+        assert.doesNotMatch(text, /\{\{[A-Za-z_]+\}\}/, `${rel} contains an unreplaced placeholder`);
+        for (const mark of FOREIGN_IDENTITY_MARKS) {
+          assert.equal(text.includes(mark), false, `${rel} must not contain foreign identity mark "${mark}"`);
+        }
+      }
+      assert.equal(read(dir, 'AGENTS.md').includes(project), true,
+        `AGENTS.md must mention the target project name "${project}"`);
+    });
+  }
+}

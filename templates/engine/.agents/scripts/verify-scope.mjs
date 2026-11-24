@@ -25,52 +25,113 @@
 // skipped, fileCount }——gen-verify-evidence 渲染进摘要行；hasFreshVerifyLine 认其为合法关单凭证
 // （面计算已担保「基线以来未触对应产品路径」，与 24h 窗同信任级；关单前新提交须重跑——先提交、后跑门）。
 
-// 产品重门 ←→ 变更面匹配（前缀大小写不敏感——case-only 改名 / Linux CI 检出下不逃逸）。
-// backend 面含 .sql 后缀兜底（防根级数据维护 SQL 绕过；存量 SQL 全在 backend/ 下已由前缀覆盖）；
-// 亦含 scripts/verify/backend/（backend-build/backend-test 门的执行器自身——2026-10-24 复核 P1 修复：
-// 该路径此前 face/scope/语法门/run-tests 四重守护全不触及，只改执行器的提交会静默跳过整个 backend 门）。
-// 收窄到 backend/ 子目录（2026-10-24 复核 m3）：business/（约 70 个 UI 实测脚本）与 e2e/ 改动不驱动
-// backend 重门；新增共享模块须放 scripts/verify/backend/ 或在此显式加前缀。
-export const PRODUCT_FACES = [
-  {
-    face: 'backend',
-    gates: ['backend-build', 'backend-test'],
-    match: (f) => /^(backend|tests|scripts\/verify\/backend)\//i.test(f) || /\.(cs|sln|csproj|props|targets|sql)$/i.test(f),
-  },
-  {
-    face: 'frontend',
-    gates: ['frontend-lint', 'frontend-unit-test', 'frontend-build'],
-    match: (f) => /^frontend\//i.test(f),
-  },
-  {
-    // docs 面（2026-11-08 档 1-B）：显式「无产品面」取值——--face docs 的合法值来源；不匹配任何
-    // 路径、无门映射（gates 空），classifyFace 语义不变（永不触达、skipped 不增）。
-    face: 'docs',
-    gates: [],
-    match: () => false,
-  },
+// 产品重门 ←→ 变更面匹配（2026-11-24 faces 单源收尾：面不再写死，派生自项目配置）。
+// 面清单单源 = `.agents/config/project-faces.json`（faces.mjs：ui/code/tests/data 前缀）；
+// 每面的 gates = `.agents/config/product-gates*.json` 里 folder 与该面路径同树的条目 id。
+// face 标签沿用 --face 既有取值（code→backend、ui→frontend；tests/data 同名），docs 是 verify
+// CLI 的「无产品面」伪值（只在 --face 合法值表里，不是配置面）；存量调用方
+// （--face backend|frontend|docs、审计凭证）零变化。未配置 faces = 空面清单（不裁单边门，保守全跑）；
+// 配置解析失败 throw（调用方 fail-closed exit 2，不得静默）。
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { loadFaces } from './faces.mjs';
+
+const ROOT = process.env.FLOW_KIT_PROJECT_ROOT
+  || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
+const FACE_ORDER = [
+  ['code', 'backend'],
+  ['ui', 'frontend'],
+  ['tests', 'tests'],
+  ['data', 'data'],
 ];
 
-// 产品门单边化 CI（2026-11-08 档 1-B，owner 拍板）：本地增量档不执行的产品门集合 = 各面门映射并集
-// （backend-build / backend-test / frontend-lint / frontend-unit-test / frontend-build；docs 面无门自然
-// 不入）＋代码四门（2026-11-11 owner 拍板接入，审计 P2「--no-verify 远端兜底缺口」：全仓扫描门，
-// 不映射任何面，故在此显式追加）。面内五门单源随 PRODUCT_FACES 演进；verify.mjs 门清单装配与跳过
-// 说明行消费。--full/--mid/--product 三档与 CI（azure-pipelines）不受影响。
-export const CI_UNILATERAL_GATE_IDS = new Set([
-  ...PRODUCT_FACES.flatMap((pf) => pf.gates),
+// 前缀命中（大小写不敏感——case-only 改名 / Linux CI 检出下不逃逸）。
+const hitPrefix = (prefix, p) => {
+  const a = String(prefix || '').replace(/\\/g, '/').toLowerCase();
+  const b = String(p || '').replace(/\\/g, '/').toLowerCase();
+  if (!a) return false;
+  return b === a || b.startsWith(a.endsWith('/') ? a : `${a}/`);
+};
+
+// 同树：folder 是该面前缀的祖先 / 后代 / 相等；folder '.'（仓库根）与所有面同树（根级门如
+// dotnet backend-build folder='.' 仍归属产品面，保持单边化口径）。
+const sameTree = (folder, facePath) => {
+  const f = String(folder || '.').replace(/\\/g, '/').replace(/\/+$/, '').replace(/^\.$/, '');
+  const p = String(facePath || '').replace(/\\/g, '/').replace(/\/+$/, '');
+  if (!f || !p) return true;
+  return f === p || p.startsWith(`${f}/`) || f.startsWith(`${p}/`);
+};
+
+// product-gates*.json 的 {id, folder} 清单；解析/形状失败 throw（fail-closed）。
+function readProductGateEntries(root) {
+  const dir = path.join(root, '.agents', 'config');
+  let files;
+  try {
+    files = fs.readdirSync(dir)
+      .filter((f) => f === 'product-gates.json' || /^product-gates\..+\.json$/.test(f)).sort();
+  } catch { return []; }
+  const out = [];
+  for (const file of files) {
+    const rel = path.posix.join('.agents', 'config', file);
+    let raw;
+    try { raw = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8')); } catch (e) {
+      throw new Error(`配置错误：${rel}（JSON 解析失败：${e.message}）`);
+    }
+    const list = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' && Array.isArray(raw.gates) ? raw.gates : null);
+    if (!list) throw new Error(`配置错误：${rel}（顶层须为数组或 { "gates": [...] }）`);
+    for (const g of list) {
+      if (!g || typeof g !== 'object' || typeof g.id !== 'string' || !g.id.trim()) {
+        throw new Error(`配置错误：${rel}（门元素须带字符串 id）`);
+      }
+      out.push({ id: g.id, folder: typeof g.folder === 'string' && g.folder.trim() ? g.folder : '.' });
+    }
+  }
+  return out;
+}
+
+/**
+ * 面清单：project-faces.json 非空的 ui/code/tests/data（未配置 / 四面全空 → 空数组）。
+ * 未配置 = 无面可裁（保守全跑），不是「无产品路径」；配置解析失败 → throw。
+ * preloaded = 调用方已 loadFaces 的同一份结果（verify 顶部载入一次，避免重复读盘）。
+ */
+export function loadProductFaces(root = ROOT, preloaded = null) {
+  const faces = preloaded || loadFaces(root);
+  if (!faces.configured) return [];
+  const gates = readProductGateEntries(root);
+  const out = [];
+  for (const [key, label] of FACE_ORDER) {
+    const prefixes = faces[key];
+    if (!prefixes.length) continue;
+    const ids = [...new Set(gates
+      .filter((g) => prefixes.some((p) => sameTree(g.folder, p)))
+      .map((g) => g.id))];
+    out.push({ face: label, key, gates: ids, match: (f) => prefixes.some((p) => hitPrefix(p, f)) });
+  }
+  return out;
+}
+
+// 代码四门（2026-11-11 owner 拍板接入，审计 P2「--no-verify 远端兜底缺口」：全仓扫描门，
+// 不映射任何面，故在此显式追加）。
+const CODE_UNILATERAL_GATE_IDS = [
   'code-architecture', 'code-audit-fields', 'code-delete-guard', 'code-notify-guard',
-]);
+];
+
+// 产品门单边化 CI（2026-11-08 档 1-B，owner 拍板）：本地增量档不执行的产品门集合 = 各面门映射
+// 并集（随项目 product-gates 配置演进；docs 面无门自然不入）＋代码四门。verify.mjs 门清单装配与
+// 跳过说明行消费。--full/--mid/--product 三档与 CI（azure-pipelines）不受影响。
+export function ciUnilateralGateIds(faces = loadProductFaces()) {
+  return new Set([...faces.flatMap((pf) => pf.gates), ...CODE_UNILATERAL_GATE_IDS]);
+}
 
 // 台账触及面（2026-10-24 复核 P1）：ledger-invariant 不再无条件退 CI-only——本地默认档（diff）在
 // commit/worktree/untracked 触及 confirmations 台账或其 manifest 时回列全史扫描（台账改动才付 ~90s），
-// 未触及仍 loud-skip。全量档（无 scope）与 CI 照跑。判据只加字段，不改 GATE_FACES/skipped 口径
+// 未触及仍 loud-skip。全量档（无 scope）与 CI 照跑。判据只加字段，不改面/skipped 口径
 // （避免与既有门表计数、--list 契约耦合）。
 export const LEDGER_TOUCH_RE = /^\.agents\/confirmations(?:\.jsonl|\.d\/)|^\.agents\/config\/ledger-.*manifest\.json$/i;
 
 // 引擎测试面退役（2026-10-28，owner 决策）：engine-tests 门与 ENGINE_TEST_FACE 一并删除——
 // 引擎改动不再按面触发测试门（.agents/ 全部不再映射到任何门）。产品面不受影响。
-
-const GATE_FACES = [...PRODUCT_FACES];
 
 // 仓库级绿凭证（verify-evidence-fallback 2026-10-22）：workflow/verify-evidence.md 是入库的追加保全
 // 摘要（gen-verify-evidence.mjs 生成），每行 = 某基线提交过全量门禁全绿。本地台账
@@ -100,18 +161,23 @@ export function parseEvidenceGreens(text) {
 
 /**
  * 纯分类：变更路径数组（POSIX 斜杠）→ { touched:Set<face>, skippedGateIds:string[], matched:string[] }。
- * 路径按「面序」归属——一条路径只归一个面（backend/tests 前缀优先于扩展名兜底的次序即数组序）。
+ * 路径按「面序」归属——一条路径只归一个面（faces 数组序即面序）。faces 缺省 = 项目配置派生
+ * （loadProductFaces；未配置 = 空面清单，skipped 为空——不裁单边门）。
  */
-export function classifyFace(files) {
+export function classifyFace(files, faces = loadProductFaces()) {
   const touched = new Set();
   const matched = [];
   for (const raw of files || []) {
     const f = String(raw).replace(/\\/g, '/');
-    for (const pf of GATE_FACES) {
+    for (const pf of faces) {
       if (pf.match(f)) { touched.add(pf.face); matched.push(f); break; }
     }
   }
-  const skippedGateIds = GATE_FACES.filter((pf) => !touched.has(pf.face)).flatMap((pf) => pf.gates);
+  // 门归属可能跨面（folder '.' 的根级门挂在所有面下）：只有「所属面全部未触及」才可跳过，
+  // 避免 backend 改动时根级 backend-build 因 untouched frontend 被误裁（旧口径逐门等价）。
+  const touchedGateIds = new Set(faces.filter((pf) => touched.has(pf.face)).flatMap((pf) => pf.gates));
+  const allGateIds = [...new Set(faces.flatMap((pf) => pf.gates))];
+  const skippedGateIds = allGateIds.filter((id) => !touchedGateIds.has(id));
   return { touched, skippedGateIds, matched };
 }
 
@@ -120,9 +186,9 @@ export function classifyFace(files) {
  * baseHint = 调用方选出的「最近全量绿行 headShort」（可为 null）；baseSourceHint = 该 hint 的来源
  * （'ledger' 本地台账 | 'evidence' 仓库凭证），原样写进凭证供审计对质。
  * 返回 { baseShort, baseSource:'ledger'|'evidence'|'origin/main', fileCount, touched, skippedGateIds, matched }；
- * 任何解析失败抛 Error（中文，直出 stderr）。
+ * 任何解析失败抛 Error（中文，直出 stderr）。faces 缺省 = 项目配置派生（见 classifyFace）。
  */
-export function computeDiffScope(git, baseHint = null, baseSourceHint = 'ledger') {
+export function computeDiffScope(git, baseHint = null, baseSourceHint = 'ledger', faces = loadProductFaces()) {
   const out = (args) => {
     const r = git(args);
     if (r.status !== 0) throw new Error(`git ${args.join(' ')} 失败——无法确定增量基线（先 git fetch origin，或跑全量 verify）`);
@@ -171,7 +237,7 @@ export function computeDiffScope(git, baseHint = null, baseSourceHint = 'ledger'
   if (!files.length) {
     throw new Error('diff 面为空（基线以来无任何变更）——无增量依据，跑全量 verify');
   }
-  const cls = classifyFace(files);
+  const cls = classifyFace(files, faces);
   return {
     baseShort,
     baseSource,

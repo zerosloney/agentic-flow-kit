@@ -9,7 +9,9 @@
 //      且要求值含数字/符号、熵达标、非代码表达式续写——实测本树 2811 文件命中 0 处。
 // 豁免口径（与 gitleaks 基线同源）：.gitleaks-baseline.json 出现过的 22 个文件按**文件级**豁免
 //   （owner 拍板的 1231 处存量，值在基线内已 redact，无法按值匹配）；另加 appsettings*.json 白名单
-//   （owner 2026-10-27 判定开发库凭据 / JWT Secret 非风险，gitleaks 亦不命中）。
+//   （owner 2026-10-27 判定开发库凭据 / JWT Secret 非风险，gitleaks 亦不命中）——该白名单仅
+//   engine.json stacks 含 dotnet 时生效：非 dotnet 项目不再豁免（安全收紧），engine.json 缺失/坏
+//   = 未声明栈，同样不豁免。
 //   代价（明示）：上述文件内**新增**的弱特征密钥会漏，由可装机环境的 gitleaks 全量补。
 // 基线缺失 = exit 2（无豁免清单则全树必爆红，与 gitleaks detect 同口径 fail-closed）。
 // 行内豁免：同行含 `gitleaks:allow` 或 `secrets-lite:allow` 即跳过（与 gitleaks 同形）。
@@ -51,8 +53,15 @@ const CRED_RULE = {
 
 const PLACEHOLDER = /^(?:x{4,}|0{4,}|your|my|example|sample|changeme|placeholder|dummy|fake|redacted|todo|none|null|undefined|test)/i;
 const ALLOW_MARK = /(?:gitleaks|secrets-lite):allow/;
-// appsettings*.json：owner 2026-10-27 判定开发库凭据 / JWT Secret 非风险（详见本文件头注）
+// appsettings*.json：owner 2026-10-27 判定开发库凭据 / JWT Secret 非风险（详见本文件头注）；
+// 仅 dotnet 栈生效——非 dotnet / 未声明栈按普通文件执法。
 const ACCEPTED_FILE = [/(?:^|\/)appsettings(?:\.[\w-]+)?\.json$/i];
+const readStacks = (root) => {
+  try {
+    const options = JSON.parse(fs.readFileSync(path.join(root, '.agents/config/engine.json'), 'utf8')).options || {};
+    return options.stacks?.length ? options.stacks : (options.stack ? [options.stack] : []);
+  } catch { return []; }
+};
 const SKIP_PATH = [
   /^\.git\//, /(?:^|\/)node_modules\//, /^tmp\//, /(?:^|\/)dist\//, /^\.agents\/tools\//, /(?:^|\/)bin\//, /(?:^|\/)obj\//,
   // pdf.js 发行版 worker（仅这两个具体文件）：内部把密码形参原样透传给 utf8StringToString()，
@@ -115,7 +124,7 @@ export const loadBaselineFiles = (file) => {
   return set;
 };
 
-const isExempt = (file, baselineFiles) => baselineFiles.has(file) || ACCEPTED_FILE.some((re) => re.test(file));
+const isExempt = (file, baselineFiles, accepted) => baselineFiles.has(file) || accepted.some((re) => re.test(file));
 const skipped = (p) => SKIP_PATH.some((re) => re.test(p));
 
 const readIfText = (abs) => {
@@ -128,8 +137,8 @@ const readIfText = (abs) => {
   } catch { return null; }
 };
 
-const scanText = (file, text, baselineFiles, hits) => {
-  const generic = !isExempt(file, baselineFiles);
+const scanText = (file, text, baselineFiles, accepted, hits) => {
+  const generic = !isExempt(file, baselineFiles, accepted);
   let ln = 0;
   for (const line of text.split(/\r?\n/)) {
     ln += 1;
@@ -138,7 +147,7 @@ const scanText = (file, text, baselineFiles, hits) => {
   }
 };
 
-const scanWorkingTree = (root, baselineFiles) => {
+const scanWorkingTree = (root, baselineFiles, accepted) => {
   // 根必须就是 git 顶层：CHECK_SECRETS_ROOT 指到子目录时 git 会回上层仓库，路径全 stat 失败 →
   // scanned=0 的假绿。此处 fail-loud（下面对 scanned=0 也再兜一层）。
   const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: root, encoding: 'utf8' });
@@ -157,13 +166,13 @@ const scanWorkingTree = (root, baselineFiles) => {
     const text = readIfText(path.join(root, f));
     if (text === null) continue;
     scanned += 1;
-    scanText(f, text, baselineFiles, hits);
+    scanText(f, text, baselineFiles, accepted, hits);
   }
   return { hits, scanned, unit: '文件' };
 };
 
 // 增量：只判 git diff 的新增行（-U0 下无上下文行，行号取新侧）
-const scanDiff = (root, range, baselineFiles) => {
+const scanDiff = (root, range, baselineFiles, accepted) => {
   const args = range === 'staged' ? ['diff', '--cached', '-U0', '--no-color'] : ['diff', '-U0', '--no-color', range];
   const r = spawnSync('git', args, { cwd: root, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
   if (r.status !== 0) throw new Error(`git ${args.join(' ')} 失败：${r.stderr || r.status}`);
@@ -183,7 +192,7 @@ const scanDiff = (root, range, baselineFiles) => {
     const line = raw.slice(1);
     if (!skipped(file)) {
       scanned += 1;
-      const hit = matchLine(line, { generic: !isExempt(file, baselineFiles) });
+      const hit = matchLine(line, { generic: !isExempt(file, baselineFiles, accepted) });
       if (hit) hits.push({ file, line: ln, rule: hit.rule, secret: hit.secret });
     }
     ln += 1;
@@ -199,9 +208,10 @@ export const scan = ({ root = DEFAULT_ROOT, mode = 'all', range = null, baseline
     throw err;
   }
   const baselineFiles = loadBaselineFiles(baselinePath);
-  const res = mode === 'staged' ? scanDiff(root, 'staged', baselineFiles)
-    : mode === 'range' ? scanDiff(root, range, baselineFiles)
-      : scanWorkingTree(root, baselineFiles);
+  const accepted = readStacks(root).includes('dotnet') ? ACCEPTED_FILE : [];
+  const res = mode === 'staged' ? scanDiff(root, 'staged', baselineFiles, accepted)
+    : mode === 'range' ? scanDiff(root, range, baselineFiles, accepted)
+      : scanWorkingTree(root, baselineFiles, accepted);
   return { ...res, baselineFiles: baselineFiles.size };
 };
 

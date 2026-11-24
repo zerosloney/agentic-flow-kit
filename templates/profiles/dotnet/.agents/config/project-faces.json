@@ -1,0 +1,7 @@
+{
+  "_note": "产品面单源：列出的仓库相对路径前缀算产品面（四键全空=未配置=保守全触发）。本画像默认与 .NET + 前端两段式布局一致：ui=界面代码、code=服务端代码、tests=测试、data=schema/数据维护。项目按实际布局改；改完用 flow-kit run faces.mjs --json 自查。",
+  "ui": ["frontend/src/"],
+  "code": ["backend/"],
+  "tests": ["tests/"],
+  "data": ["wiki/数据维护/"]
+}

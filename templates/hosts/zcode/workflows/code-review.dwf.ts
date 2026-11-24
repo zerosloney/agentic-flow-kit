@@ -19,7 +19,7 @@ args:
     default: ""
 */
 interface ReviewFinding {
-  /** 工作区相对路径，尽量带行号，如 "backend/src/A.cs:42"。 */
+  /** 工作区相对路径，尽量带行号，如 "src/A.ts:42"。 */
   where: string;
   /** 一句话：问题本身（不说怎么修）。 */
   what: string;
@@ -267,9 +267,9 @@ const failedPaths: string[] = [];
 const reviews: FileReview[] = await Promise.all(
   paths.map(async (path) => {
     const areaRule = path.startsWith("backend/")
-      ? "- backend/AGENTS.md（后端目录规则，必读）"
+      ? "- backend/AGENTS.md（后端目录规则，存在才读；没有则跳过）"
       : path.startsWith("frontend/")
-        ? "- frontend/AGENTS.md（前端目录规则，必读）"
+        ? "- frontend/AGENTS.md（前端目录规则，存在才读；没有则跳过）"
         : "";
     const ask = [
       `独立评审文件 ${path} 相对基线 ${baseLabel} 的改动。`,

@@ -24,6 +24,28 @@ export function setConfig(target, key, value) {
   execFileSync('git', ['-C', target, 'config', key, value], { stdio: 'ignore' });
 }
 
+// 只读本地配置：全局/系统层设的 hooksPath 不是本工具覆盖掉的现场，不在还原范围。
+export function readLocalHooksPath(target) {
+  try {
+    return execFileSync('git', ['-C', target, 'config', '--local', '--get', 'core.hooksPath'], { encoding: 'utf8' }).trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+export function setLocalHooksPath(target, value) {
+  execFileSync('git', ['-C', target, 'config', '--local', 'core.hooksPath', value], { stdio: 'ignore' });
+}
+
+// 键不存在时 git --unset 退出码非 0，属预期结果，视为已还原。
+export function unsetLocalHooksPath(target) {
+  try {
+    execFileSync('git', ['-C', target, 'config', '--local', '--unset', 'core.hooksPath'], { stdio: 'ignore' });
+  } catch {
+    // 键本来就不存在：无需还原
+  }
+}
+
 export function configureGit(target) {
   setConfig(target, 'core.hooksPath', HOOKS_PATH);
   setConfig(target, 'merge.ours.driver', 'true');

@@ -2,12 +2,12 @@
 // ensure-board.mjs — workflow 看板按需手动拉起（默认不自动开启；只起不关：OS 重启即天然回收，无需 stop/status）
 // 跨平台单入口（零依赖，Windows/Linux/macOS 同一脚本，取代旧 ensure-board.ps1）：
 //   端口语义（2026-10-22 board-slot-strict，与前端/端到端同式）：基端口 = --port 显式（绝对值，不吃槽位偏移）
-//   > 配置基线（init 询问值，存于 engine.json）> 8933，再按 SHIPYARD_SLOT 偏移 slot×10（缺省 0 = 8933）；
+//   > 配置基线（init 询问值，存于 engine.json）> 8933，再按 FLOW_KIT_BOARD_SLOT 偏移 slot×10（缺省 0 = 8933；旧名 SHIPYARD_SLOT 仍兼容）；
 //   strict——只绑槽位端口（不漂移）：活的本项目看板 → 复用（代码文件晚于服务端 startedAt = 旧代码自动 kill 重启）；
 //   他人进程（其他项目看板 / 非看板服务）不动手不 kill，直接失败退出并提示（旧上探窗口 10 会漂进相邻槽位服务口）。
-//   端口解析单源 board-port.mjs（本文件 import；槽位派生仍单源 scripts/verify/e2e/ports.mjs，端口字面量不落脚本）。
+//   端口与槽位偏移单源 board-port.mjs（本文件 import，自包含——不再依赖不随包分发的 scripts/verify/e2e/ports.mjs）。
 // 身份与陈旧判定全部来自 /api/board 自报（pid/startedAt）——不碰 OS 专属的端口属主 / 进程启动时间 API。
-// 用法：flow-kit run ensure-board.mjs [--port 8933] [--no-open]（多 worktree 并行设 SHIPYARD_SLOT=<n>）
+// 用法：flow-kit run ensure-board.mjs [--port 8933] [--no-open]（多 worktree 并行设 FLOW_KIT_BOARD_SLOT=<n>，旧名 SHIPYARD_SLOT 仍兼容）
 import net from 'node:net';
 import http from 'node:http';
 import fs from 'node:fs';
@@ -138,7 +138,7 @@ async function main() {
   const url = `http://127.0.0.1:${port}`;
 
   if (!action) {
-    console.log(`board: 槽位端口 ${BASE_PORT} 被他人进程占用（strict 不漂移不 kill）：${skipped.join('；')}；换 SHIPYARD_SLOT 槽位或 --port 显式指定`);
+    console.log(`board: 槽位端口 ${BASE_PORT} 被他人进程占用（strict 不漂移不 kill）：${skipped.join('；')}；换 FLOW_KIT_BOARD_SLOT 槽位（旧名 SHIPYARD_SLOT 仍兼容）或 --port 显式指定`);
     return 1;
   }
   if (action === 'legacy') {

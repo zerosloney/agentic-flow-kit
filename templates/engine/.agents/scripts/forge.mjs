@@ -1,10 +1,13 @@
 import { spawnSync } from 'node:child_process';
 
-// origin 远端 → 托管。只认 GitHub 与 Azure。认不出返回 null。
+// origin 远端 → 托管。认 GitHub / GitLab / Azure。认不出返回 null。
 export function forgeFromRemote(url) {
   const u = String(url || '').trim().toLowerCase();
   if (!u) return null;
   if (/(^|[@/])github\.com([/:]|$)/.test(u)) return 'github';
+  // 主机名含 gitlab：gitlab.com 或自建（gitlab.example.com）。只看 authority，避免路径里的 "gitlab" 误判。
+  const host = (/^(?:[a-z][a-z0-9+.-]*:\/\/)?(?:[^@/]+@)?([^/:]+)/.exec(u) || [])[1] || '';
+  if (host.includes('gitlab')) return 'gitlab';
   if (u.includes('dev.azure.com') || u.includes('visualstudio.com') || u.includes('/tfs/') || u.includes('/_git/')) return 'azure';
   return null;
 }

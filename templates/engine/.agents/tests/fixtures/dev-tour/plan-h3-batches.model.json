@@ -1,14 +1,14 @@
 {
   "schema": 2,
   "generatedAt": "2020-01-01T00:00:00.000Z",
-  "rootLabel": "Shipyard.Material",
+  "rootLabel": "example-project",
   "doc": {
     "path": ".agents/tests/fixtures/dev-tour/plan-h3-batches.md",
     "type": "DOC",
     "title": "批次小标题样例：部件库整理",
     "status": "起草中",
     "level": "L2",
-    "module": "物资",
+    "module": "示例",
     "date": "2099-12-31",
     "purpose": "",
     "links": [],

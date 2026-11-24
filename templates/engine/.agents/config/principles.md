@@ -18,7 +18,7 @@
 | 规则要执法 | 新增规则或回归条目时 | `workflow/regression-checklist.md` 规则 7 规则-执法者配对 |
 | 先升层再写文 | 想靠「写一句规范」防复发时 | `.agents/skills/papercut-fix/SKILL.md` §0 落点阶梯 |
 | 不弱化旅程 | UI 实测前置条件缺失时 | `.agents/skills/verify-ui/SKILL.md`「禁为通过而弱化验证路径」 |
-| 边界收口 | 校验、异常、解析要散落到各处时 | `backend/AGENTS.md` §6 项目硬约束（数据完整性 / API 契约）；`frontend/AGENTS.md` §8 规则与门禁 BC 组 |
+| 边界收口 | 校验、异常、解析要散落到各处时 | `backend/AGENTS.md` §6 项目硬约束（数据完整性 / API 契约）；`frontend/AGENTS.md` §8 规则与门禁 BC 组（两份均存在才读；没有则跳过） |
 | 可实验先跑 | 准备向用户提问前 | `.agents/commands/new-task.md` §1 提问分型 |
 | 模型按角色 | 委派实现或复核前 | `.agents/config/model-roles.json`；`.agents/commands/review.md` §执行流程 |
 | 爆炸半径 | 小改动但不确定还会碰坏什么时 | `.agents/skills/blast-radius/SKILL.md` |
@@ -29,7 +29,7 @@
 | 暂停留痕 | 长跑中断/离开前要可续时 | `.agents/skills/pause-safely/SKILL.md` |
 | 并行编排 | 设计选型或多切片覆盖时 | `.agents/skills/arena/SKILL.md` |
 | 门轻闭环 | 想新增门/机制、扩门耗时，或发现机制纸面零使用时（用户基线 2026-10-29：门禁不能重、要简化、流程要闭环） | `workflow/gate-cost.md`（当前态单源）；`.agents/config/mechanism-registry.md`（退役棘轮） |
-| 质量门兜底 | 后端改动要判断「有没有测试兜住 / 哪些方法该先补测试」时 | `.agents/skills/csharp-quality-gates/SKILL.md`（手动触发；CRAP／变异／重复三道门） |
+| 质量门兜底 | 后端改动要判断「有没有测试兜住 / 哪些方法该先补测试」时 | `.agents/skills/csharp-quality-gates/SKILL.md`（手动触发；CRAP／变异／重复三道门；仅 dotnet 栈随装） |
 | 类型面纪律 | 设计 DTO / 状态字段 / 外部输入解析，想让非法状态可表示时 | `.agents/commands/review.md` P1 走查表（API 入参边界 / 分页与状态语义 / 导入信任边界）；叠加 api 切面时另见 `.agents/notes/api-surface.md`「契约优先」 |
 | 幂等收敛 | 写命令 / 生命周期步骤 / 重试与续跑逻辑，担心中断后重放会重复落账时 | `.agents/commands/pipeline-run.md`「断点续跑 / 重试」「续跑幂等」；`.agents/skills/workflow-closeout/SKILL.md` §5.1 重跑同一命令 |
 | 单写者先分离 | 多个 agent / 分支要写同一文件或同一张共享表时 | `.agents/skills/wiki/SKILL.md`「单写者」；`.agents/skills/arena/SKILL.md`「单写者」（先分页分臂，共享页再 `flow-kit run path-lease.mjs acquire`） |

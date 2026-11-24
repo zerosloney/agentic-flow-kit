@@ -1,6 +1,7 @@
 // commit-check: git commit 前置验证（本仓自有维护——decouple-flow-kit 起，原 agentic-flow-kit 通用版）
 // 1) 条件构建验证（按 .agents/hooks/commit-check.config.json 的 builds 配置；--full 不做 ext/prefix 裁剪，仍尊重 when）
 // 2) 质量检测（config.checks：lint / 类型检查 / vet 等秒级确定性检查；--full 不做 ext/prefix 裁剪，仍尊重 when）
+// 3) 推送前测试（config.pushTests：仅 --range 推送范围模式执行——pre-push 专段，提交/合并路径不跑）
 // （敏感信息扫描段已退役——2026-10-21 owner 指令「密钥本地不扫」：本地双腿（本段正则 + pre-commit gitleaks
 //   protect 门）同批撤除，误报 papercut ×4 消债；执法收敛 verify 安全段 secrets-scan 关单/CI）
 // 旗标（2026-10-15 构建门后移 pre-push）：
@@ -8,6 +9,7 @@
 //               执法，合并提交仍走 --full 全量构建（合并结果是没人验证过的新状态）。
 //   --range <old> <new>：推送范围模式（pre-push 用）——文件面取 git diff --name-only old new；
 //               old 为全零 sha（新分支首推）= 全量匹配语义（等价 --full 的构建面）。默认（无旗标）暂存区模式行为不变。
+//               pushTests 仅在此模式下执行（推送前测试的执法点在 pre-push，提交内环不跑）。
 // config（.agents/hooks/commit-check.config.json）为本仓自有件（engine 面豁免三件套）；缺失或无 builds/checks 时跳过对应段。
 // 配置示例（.agents/hooks/commit-check.config.json）：
 //   {
@@ -22,17 +24,29 @@
 //     "checks": [
 //       { "name": "typecheck", "command": "npx tsc --noEmit", "ext": [".ts", ".tsx"], "when": ["tsconfig.json"] },
 //       { "name": "lint",      "command": "npx eslint .", "ext": [".ts", ".js"], "when": ["eslint.config.js", ".eslintrc.json"] }
+//     ],
+//     "pushTests": [                                                     // 推送前测试：仅 --range 模式（pre-push）执行
+//       { "name": "backend-tests", "command": "node scripts/run-backend-tests.mjs --range {old} {new}",
+//         "prefix": ["backend/", "tests/", "scripts/verify/backend/"],   // prefix 可为字符串或字符串数组（任一命中即触发）
+//         "when": ["scripts/run-backend-tests.mjs"],                     // 脚本存在才启用——没有对应脚本的项目自动 SKIP 不误拦
+//         "whenEnv": "RUN_PUSH_TESTS=1",                                 // 可选：环境开关，仅取值相等才启用（不满足不执行不打印）
+//         "timeoutMs": 600000 }                                          // 可选：单条墙钟上限（毫秒；缺省用全局上限）
 //     ]
 //   }
 // builds/checks 触发判定（对暂存文件；builds 不计 .agents/ 与 .githooks/ 自身变更，checks 不计 .githooks/——引擎脚本变更照跑秒级检查）：`ext 任一匹配 OR prefix 前缀命中`。
 //   - 只有 ext：按扩展名全局触发（跨目录，适合语言型触发——仓库里该扩展名基本只属于该构建）；
 //   - 只有 prefix：该前缀下任何文件触发（目录型触发——如 monorepo 子包，仓库其他位置的相同扩展名不触发）；
 //   - 两者同配为 OR 并集而非 AND 交集——要「前缀内的特定扩展名」请只配 prefix（目录内文档变更多跑一次构建，方向安全）。
-// when（builds 与 checks 共用）：数组任一满足才启用，无 when 字段 = 无条件启用。
+// when（builds、checks 与 pushTests 共用）：数组任一满足才启用，无 when 字段 = 无条件启用。
 //   - 路径或尾部 * 一层通配（如 "*.sln"）：相对仓库根做存在性判断；
 //   - pkg:<点分路径>（如 pkg:scripts.build）：读该项 cwd（缺省仓库根）的 package.json，
 //     沿路径取值，非空字符串才算满足。
 //   没有对应配置的项目自动跳过并提示，不 fail-closed 误拦。--full 同样尊重 when。
+// pushTests 触发与执行口径（仅 --range 模式）：文件面同 builds（不计 .agents/ 与 .githooks/ 自身变更），
+//   ext 任一命中或 prefix 任一前缀命中（prefix 支持字符串数组——真实触发面常跨多个目录，单字符串
+//   得配多条重复命令）。command 中的 {old} / {new} 替换为 --range 已校验的两个 sha。
+//   whenEnv 是环境开关门槛而非能力缺失——不满足不执行也不打印（与 when 的 SKIP 提示区分开）。
+//   失败即 BLOCK exit 1；范围无命中打一行 SKIP；未配置 pushTests 时本段完全不产生输出。
 // 条件构建执行器（2026-10-07 L31：execSync → spawnSync + 显式 timeout）
 // 症状：托管 Node 22 下 execSync('cd frontend && npm run build') **永不返回**——
 //   vite 8 / rolldown 在 Windows 泄漏 stdout 管道句柄，构建产物实际已写完，但父进程
@@ -42,6 +56,7 @@
 //   即超时信号。stdio 沿用 'pipe'（须收 stdout 供失败时打错误行），但 spawnSync 的
 //   pipe 不依赖子进程主动关闭——父进程按固定长度读，泄漏句柄不再导致挂死。
 // 契约不变：返回 { ok, out }，调用方（128/155 行）按字符串消费 out。
+// 可选第三参 timeoutMs：单条命令的墙钟上限覆盖（pushTests 单条慢测用；缺省仍取全局上限）。
 const { execSync, spawnSync } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -52,13 +67,13 @@ const BUILD_TIMEOUT_MS = 10 * 60 * 1000;
 
 process.chdir(process.env.FLOW_KIT_PROJECT_ROOT || path.resolve(__dirname, '../..'));
 
-function sh(cmd, cwd) {
+function sh(cmd, cwd, timeoutMs = BUILD_TIMEOUT_MS) {
   try {
     const r = spawnSync(cmd, {
       shell: true,                       // 命令串含 && 与路径空格，沿用原 shell 语义
       encoding: 'utf8',
       cwd: cwd || undefined,
-      timeout: BUILD_TIMEOUT_MS,         // 到点 kill，判失败（不再无限等待）
+      timeout: timeoutMs,                // 到点 kill，判失败（不再无限等待）
       stdio: ['ignore', 'pipe', 'pipe'],
       maxBuffer: 32 * 1024 * 1024,
     });
@@ -66,7 +81,7 @@ function sh(cmd, cwd) {
       const timedOut = r.error.code === 'ETIMEDOUT';
       return {
         ok: false,
-        out: (timedOut ? `[超时] 命令超过 ${BUILD_TIMEOUT_MS / 1000}s 未结束，已终止（kill 直接子进程，孙进程可能残留）：${cmd}\n` : `[spawn 失败] ${r.error.code || r.error.message}\n`)
+        out: (timedOut ? `[超时] 命令超过 ${timeoutMs / 1000}s 未结束，已终止（kill 直接子进程，孙进程可能残留）：${cmd}\n` : `[spawn 失败] ${r.error.code || r.error.message}\n`)
           + String((r.stdout || '') + (r.stderr || '')),
       };
     }
@@ -203,6 +218,42 @@ for (const c of (config.checks || [])) {
 }
 if (!ranCheck && config.checks && config.checks.length) {
   console.log('SKIP: 无匹配的源码变更，跳过质量检测');
+}
+
+// --- 3) 推送前测试（pushTests：仅 --range 模式执行——pre-push 专段，提交/合并路径不进这里）。
+// 前身是 pre-push 里写死的母项目后端测试段：路径面判据与脚本路径都硬编码，任何其他项目
+// 只要顶层有 tests/ 就会触发 `Cannot find module` 断推——退役后由项目按自身配置声明推送前测试。
+if (RANGE) {
+  const entries = Array.isArray(config.pushTests) ? config.pushTests.filter(t => t && t.command) : [];
+  const prefixesOf = (t) => (Array.isArray(t.prefix) ? t.prefix : (t.prefix ? [t.prefix] : []));
+  const matched = entries.filter((t) => {
+    const exts = Array.isArray(t.ext) ? t.ext : [];
+    return FULL || stagedForBuild.some(f => exts.some(e => f.endsWith(e)) || prefixesOf(t).some(p => f.startsWith(p)));
+  });
+  // whenEnv：环境开关门槛（"VAR=value"）——不满足属配置意图，不执行也不打印（区别于 when 的能力缺失 SKIP）
+  const whenEnvOk = (t) => {
+    if (t.whenEnv == null) return true;
+    const s = String(t.whenEnv);
+    const eq = s.indexOf('=');
+    if (eq <= 0) return false; // 配置写错（缺「=」或变量名为空）= 不启用——推送门宁可少跑不误拦
+    return process.env[s.slice(0, eq)] === s.slice(eq + 1);
+  };
+  let ranPushTest = false;
+  for (const t of matched) {
+    if (!whenEnvOk(t)) continue;
+    ranPushTest = true;
+    if (!whenSatisfied(t.when, t.cwd)) { skipWhen('推送前测试', t); continue; }
+    const cmd = String(t.command).replace('{old}', RANGE[0]).replace('{new}', RANGE[1]);
+    const r = sh(cmd, t.cwd, t.timeoutMs);
+    if (!r.ok) {
+      console.log(`BLOCK: ${t.name} 推送前测试未通过（${cmd}）\n` + r.out.slice(0, 1500));
+      process.exit(1);
+    }
+    console.log(`OK: ${t.name} 推送前测试通过（${cmd}）`);
+  }
+  if (!ranPushTest && matched.length === 0 && entries.length) {
+    console.log('SKIP: 无匹配的源码变更，跳过推送前测试');
+  }
 }
 
 console.log('COMMIT_CHECK_OK');

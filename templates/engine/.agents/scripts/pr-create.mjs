@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// pr-create — 按 origin 建 PR。GitHub → gh；Azure → tfs-pr。认不出即停。
+// pr-create — 按 origin 建 PR。GitHub → gh；GitLab → glab；Azure → tfs-pr。认不出即停。
 // 用法：
 //   flow-kit run pr-create.mjs create --source <branch> --target <branch> \
 //     --title "<Conventional Commits 中文>" --body-file <file>
 // 退出码：非 json 透传托管命令原生退出码（异常兜底 1），--json 统一 0/1；2 用法或远端不可识别。
-// 测试钩子：PR_CREATE_GH=<script.mjs> 时用 node 跑该脚本代替 gh。
+// 测试钩子：PR_CREATE_GH / PR_CREATE_GLAB=<script.mjs> 时用 node 跑该脚本代替 gh / glab。
 
 import fs from 'node:fs';
 import path from 'node:path';
@@ -31,6 +31,7 @@ if (!rawArgs.length || rawArgs.includes('--help') || rawArgs.includes('-h')) {
 
 分路：
   GitHub origin → gh pr create
+  GitLab origin → glab mr create
   Azure origin  → tfs-pr create
   其他或无 origin → 停止
 `);
@@ -46,7 +47,7 @@ function opt(name) {
 const remote = originUrl(ROOT);
 const forge = forgeFromRemote(remote);
 if (!forge) {
-  console.error(`pr-create: 远端不是 GitHub 或 Azure：${remote || '无 origin'}。停止。`);
+  console.error(`pr-create: 远端不是 GitHub / GitLab / Azure：${remote || '无 origin'}。停止。`);
   process.exit(2);
 }
 
@@ -87,6 +88,60 @@ if (forge === 'github') {
   if (created.stdout) process.stdout.write(created.stdout);
   if (created.stderr) process.stderr.write(created.stderr);
   // 审查遗漏补 2026-11-23：非 json 路径透传原生退出码
+  process.exit(typeof created.status === 'number' ? created.status : 1);
+}
+
+if (forge === 'gitlab') {
+  const glArgs = ['mr', 'create'];
+  const source = opt('--source');
+  const target = opt('--target');
+  const title = opt('--title');
+  const body = opt('--body-file');
+  if (source) glArgs.push('--source-branch', source);
+  if (target) glArgs.push('--target-branch', target);
+  if (title) glArgs.push('--title', title);
+  const dryRun = rawArgs.includes('--dry-run');
+  if (body) {
+    if (dryRun) {
+      // dry-run 不读正文，只示意 shell 展开，避免把整篇描述打到 stdout。
+      glArgs.push('--description', `"$(cat ${body})"`);
+    } else {
+      let description;
+      try {
+        description = fs.readFileSync(body, 'utf8');
+      } catch {
+        console.error(`pr-create: 读不到 --body-file：${body}`);
+        process.exit(2);
+      }
+      glArgs.push('--description', description);
+    }
+  }
+  if (dryRun) {
+    console.log(`glab ${glArgs.join(' ')}`);
+    process.exit(0);
+  }
+  const hook = process.env.PR_CREATE_GLAB;
+  const cmd = hook ? process.execPath : 'glab';
+  const argv = hook ? [hook, ...glArgs] : glArgs;
+  const created = spawnSync(cmd, argv, { cwd: ROOT, encoding: 'utf8' });
+  if (created.error) {
+    console.error('pr-create: 未找到 glab。');
+    process.exit(2);
+  }
+  if (rawArgs.includes('--json')) {
+    // glab mr create 不支持 --json；从 stdout 提取 MR URL/编号，stdout 只留最终单对象。
+    const match = /https?:\/\/\S+\/-\/merge_requests\/(\d+)/i.exec(created.stdout || '');
+    if (match) {
+      process.stdout.write(JSON.stringify({ ok: true, url: match[0], number: Number(match[1]) }) + '\n');
+    } else {
+      process.stdout.write(JSON.stringify({ ok: created.status === 0, url: null, number: null }) + '\n');
+      if (created.stdout) process.stderr.write(created.stdout);
+      if (created.stderr) process.stderr.write(created.stderr);
+    }
+    process.exit(created.status === 0 ? 0 : 1);
+  }
+  if (created.stdout) process.stdout.write(created.stdout);
+  if (created.stderr) process.stderr.write(created.stderr);
   process.exit(typeof created.status === 'number' ? created.status : 1);
 }
 

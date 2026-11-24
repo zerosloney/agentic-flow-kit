@@ -9,7 +9,11 @@ import { startFixTask, stopFixTask } from '../templates/engine/.agents/scripts/f
 const HOOK = path.resolve('templates/engine/.agents/hooks/pre-write-check.cjs');
 
 function tmp() {
-  return makeTmp('test-guard-');
+  const root = makeTmp('test-guard-');
+  // 写前门的内容判据按产品面触发（未配置 faces = 保守全跑），而各门在非 git 目录 fail-closed；
+  // 真实装户必是 git 仓库，这里同步建仓，避免测试根被门误判。
+  spawnSync('git', ['init', '-q'], { cwd: root });
+  return root;
 }
 
 function write(root, rel, text) {

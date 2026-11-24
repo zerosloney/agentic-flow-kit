@@ -14,8 +14,8 @@
  *     本门不复制任何判据）——把提议内容临时落盘 → 跑工作树扫描器 → finally 恢复原文件。
  *     2026-11-08 减重档 1-A：多门由串行 spawnSync 改异步 spawn + Promise.all 并行聚合
  *     （总耗时 ≈ 最慢单门，不再随门数线性叠加）；任一门非零退出仍整体 deny，输出/退出码格式不变。
- *     - backend/**.cs → check-architecture.mjs（+ check-delete-guard.mjs，其自扫 Application/API）
- *     - frontend/src/**.ts|.vue → check-notify-guard.mjs
+ *     - 产品面单源 `.agents/config/project-faces.json`：code → check-architecture.mjs + check-delete-guard.mjs；
+ *       ui → check-notify-guard.mjs；未配置（faces=full）→ 保守全跑（各门自身未配置即 SKIP）。
  *     check-audit-fields 为暂存区增量判据，不在此复用（pre-commit 兜底）。
  *
  * 引擎面提示（不拦）：改 .githooks/ 或 .agents/hooks/ 属合法引擎工作，但回喂 additionalContext
@@ -190,11 +190,34 @@ try {
 const gates = [];
 // 包内运行时执行时用包内门脚本；直接执行安装副本时回退项目 hooks 目录。
 const hookRoot = process.env.FLOW_KIT_RUNTIME_HOOKS || path.join(root, '.agents', 'hooks');
-if (/^backend\/.+\.(cs|csproj|sln)$/i.test(rel)) {
-  gates.push(['check-architecture', path.join(hookRoot, 'check-architecture.mjs')]);
-  gates.push(['check-delete-guard', path.join(hookRoot, 'check-delete-guard.mjs')]);
-} else if (/^frontend\/src\/.+\.(ts|vue)$/i.test(rel)) {
-  gates.push(['check-notify-guard', path.join(hookRoot, 'check-notify-guard.mjs')]);
+// 产品面单源（.agents/config/project-faces.json）：face=code/ui/tests/data/full/none。
+// 判定失败或配置错误 → 按 full 保守全跑（内容判据仍有 fail-open 兜底，git 钩子最终执法）。
+const FACE_GATES = {
+  code: ['check-architecture', 'check-delete-guard'],
+  ui: ['check-notify-guard'],
+  full: ['check-architecture', 'check-delete-guard', 'check-notify-guard'],
+};
+let face = 'full';
+try {
+  const facesScript = path.join(__dirname, '..', 'scripts', 'faces.mjs');
+  const r = spawnSync(process.execPath, [facesScript, '--face', rel], {
+    cwd: root,
+    encoding: 'utf8',
+    env: { ...process.env, FLOW_KIT_PROJECT_ROOT: root },
+    timeout: 5000,
+  });
+  if (r.status === 0) face = String(r.stdout || '').trim() || 'none';
+} catch { /* 判定异常 → 保持 full 保守 */ }
+for (const name of FACE_GATES[face] || []) {
+  // 门脚本解析顺序：宿主注入的运行时 hooks 目录 → 项目 hooks 目录 → 本文件所在包内 hooks 目录。
+  // 三者皆无则跳过该门（安装面不落 .agents/scripts，正常运行时由包内 __dirname 兜底）。
+  const candidates = [
+    process.env.FLOW_KIT_RUNTIME_HOOKS ? path.join(process.env.FLOW_KIT_RUNTIME_HOOKS, `${name}.mjs`) : '',
+    path.join(root, '.agents', 'hooks', `${name}.mjs`),
+    path.join(__dirname, `${name}.mjs`),
+  ].filter(Boolean);
+  const gatePath = candidates.find((p) => fs.existsSync(p));
+  if (gatePath) gates.push([name, gatePath]);
 }
 // runGateAsync：异步 spawn 单个门脚本（30 秒超时约束保持），聚合 stdout/stderr 后 resolve。
 // 并行化（2026-11-08 减重档 1-A）：多门经 Promise.all 同时起跑，任一门非零退出即整体 deny

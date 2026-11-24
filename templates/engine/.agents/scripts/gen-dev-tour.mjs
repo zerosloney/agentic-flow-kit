@@ -37,7 +37,7 @@ const USAGE = `用法：flow-kit run gen-dev-tour.mjs <workflow 文档.md> [选�
 
 示例：
   flow-kit run gen-dev-tour.mjs workflow/plans/2026-11-09-outbound-edit-preserve-line-no.md
-  flow-kit run gen-dev-tour.mjs workflow/plans/2026-11-05-material-guoyu-push.md --base HEAD~20
+  flow-kit run gen-dev-tour.mjs workflow/plans/2026-11-05-example-feature.md --base HEAD~20
   flow-kit run gen-dev-tour.mjs workflow/specs/2026-08-29-code-template-l3-readd-duplicate.md --json`;
 
 function parseArgs(argv) {

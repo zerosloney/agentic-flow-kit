@@ -1,14 +1,14 @@
 {
   "schema": 2,
   "generatedAt": "2020-01-01T00:00:00.000Z",
-  "rootLabel": "Shipyard.Material",
+  "rootLabel": "example-project",
   "doc": {
     "path": ".agents/tests/fixtures/dev-tour/plan-union-label.md",
     "type": "DOC",
     "title": "并集标签样例：代用行重排",
     "status": "起草中",
     "level": "L2",
-    "module": "物资",
+    "module": "示例",
     "date": "2099-12-31",
     "purpose": "",
     "links": [],
@@ -89,11 +89,11 @@
       "title": "收口：回归清单与文档",
       "summary": "收口完成",
       "detail": [
-        "`workflow/specs/2026-10-13-pml-quota-substitute-row-split.md`（**S4**）：注解",
+        "`workflow/specs/2026-10-13-widgets-quota-substitute-row-split.md`（**S4**）：注解",
         "`workflow/regression-checklist.d/2026-10.md`（**S5**）：清单"
       ],
       "files": [
-        "workflow/specs/2026-10-13-pml-quota-substitute-row-split.md",
+        "workflow/specs/2026-10-13-widgets-quota-substitute-row-split.md",
         "workflow/regression-checklist.d/2026-10.md"
       ],
       "status": "todo",
@@ -156,7 +156,7 @@
       "pathGuess": false
     },
     {
-      "path": "workflow/specs/2026-10-13-pml-quota-substitute-row-split.md",
+      "path": "workflow/specs/2026-10-13-widgets-quota-substitute-row-split.md",
       "status": "planned",
       "badge": "计划",
       "additions": 0,

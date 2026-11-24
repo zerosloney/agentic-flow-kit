@@ -59,8 +59,8 @@ test('multi-stack install stacks profiles in order and records stacks with the p
   assert.equal(engine.options.stack, 'dotnet');
   assert.deepEqual(engine.options.stacks, ['dotnet', 'typescript']);
 
-  // typescript profile 只有 AGENTS.md；dotnet 另有独有文件，多栈安装后应全部在位。
-  assert.deepEqual(fs.readdirSync(path.join(KIT, 'templates', 'profiles', 'typescript')), ['AGENTS.md']);
+  // typescript 画像现在与 node 同构（治理配置齐全），AGENTS.md 之外还有 .agents/。
+  assert.deepEqual(fs.readdirSync(path.join(KIT, 'templates', 'profiles', 'typescript')).sort(), ['.agents', 'AGENTS.md']);
   assert.ok(fs.existsSync(path.join(dir, '.agents/hooks/commit-check.config.json')));
   assert.ok(fs.existsSync(path.join(dir, '.agents/config/lane-surfaces.txt')));
   assert.ok(fs.existsSync(path.join(dir, '.agents/config/test-impact-map.json')));
@@ -151,6 +151,8 @@ test('verify gates follow the union of the declared stacks', () => {
   const multi = tmpRepo();
   writePackageFixture(multi);
   assert.equal(run(['install', '--agent', 'claude', '--stack', 'dotnet,node', '--target', '.'], multi).status, 0);
+  // dotnet 的默认产品门带 when 守卫（仓库根找到 *.sln 才启用）：放一个解决方案文件，断言的才是「dotnet 栈贡献了产品门」
+  fs.writeFileSync(path.join(multi, 'App.sln'), '\n');
   const gates = run(['run', 'verify', '--list'], multi);
   assert.equal(gates.status, 0, gates.stderr);
   assert.match(gates.stdout, /backend-build/);
@@ -280,4 +282,45 @@ test('cpp profile auto-detection and make-test fallback', () => {
   const gates = run(['run', 'verify', '--list'], dir);
   assert.equal(gates.status, 0, gates.stderr);
   assert.match(gates.stdout, /make-test/);
+});
+
+test('csharp-quality-gates ships only with the dotnet stack', () => {
+  const node = tmpRepo();
+  assert.equal(run(['install', '--agent', 'claude', '--lang', 'zh-CN', '--stack', 'node', '--target', '.'], node).status, 0);
+  assert.equal(fs.existsSync(path.join(node, '.agents/skills/csharp-quality-gates')), false);
+
+  const dotnet = tmpRepo();
+  assert.equal(run(['install', '--agent', 'claude', '--lang', 'zh-CN', '--stack', 'dotnet', '--target', '.'], dotnet).status, 0);
+  // 内容与模板一致：技能无占位符，渲染为恒等替换，可直接逐字节比较。
+  const template = fs.readFileSync(path.join(KIT, 'templates/profiles/dotnet/.agents/skills/csharp-quality-gates/SKILL.md'), 'utf8');
+  assert.equal(read(dotnet, '.agents/skills/csharp-quality-gates/SKILL.md'), template);
+});
+
+test('rust profile installs governance configs and activates cargo-test gate', () => {
+  const dir = tmpRepo();
+  fs.writeFileSync(path.join(dir, 'Cargo.toml'), '[package]\nname = "demo"\nversion = "0.1.0"\n');
+  assert.equal(run(['install', '--agent', 'claude', '--stack', 'rust', '--target', '.'], dir).status, 0);
+  assert.ok(fs.existsSync(path.join(dir, '.agents/config/lane-surfaces.txt')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/hooks/commit-check.config.json')));
+  assert.ok(fs.existsSync(path.join(dir, '.agents/notes/runtime-env.md')));
+  assert.match(read(dir, '.agents/notes/runtime-env.md'), /cargo/);
+  const gates = run(['run', 'verify', '--list'], dir);
+  assert.equal(gates.status, 0, gates.stderr);
+  assert.match(gates.stdout, /cargo-test/);
+});
+
+test('typescript profile ships the same governance configs as node', () => {
+  const dir = tmpRepo();
+  assert.equal(run(['install', '--agent', 'claude', '--stack', 'typescript', '--target', '.'], dir).status, 0);
+  for (const rel of [
+    '.agents/config/lane-surfaces.txt',
+    '.agents/config/rule-budgets.txt',
+    '.agents/config/test-impact-map.json',
+    '.agents/config/workflow-modules.txt',
+    '.agents/hooks/commit-check.config.json',
+    '.agents/hooks/delete-guard-allowlist.txt',
+    '.agents/notes/runtime-env.md',
+  ]) {
+    assert.ok(fs.existsSync(path.join(dir, rel)), rel);
+  }
 });

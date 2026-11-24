@@ -27,6 +27,7 @@ function tour(docName, git) {
     git,
   });
   model.generatedAt = FIXED_TS; // 快照唯一的时间源，归一后逐字节可比
+  model.rootLabel = 'example-project'; // 快照与仓库名解耦：夹具随包分发，不能绑定任何具体仓库
   return model;
 }
 
@@ -244,16 +245,16 @@ test('路径猜测：裸文件名多候选打分命中 → pathGuess 标志 + pa
 });
 
 test('裸中段路径采集：未反引号标题里的真实中段路径入模，杂型 token 拒收', () => {
-  // 裸写 token 仅当 含 / + 代码扩展名 + 消解到仓库真实文件 才收（pml/index.vue、contractTemplate/index.vue、
-  // pml/shared.ts 均为真实跟踪文件）；if/else、Success/Error 无扩展名 → 拒收
+  // 裸写 token 仅当 含 / + 代码扩展名 + 消解到仓库真实文件 才收（widgets/index.vue、contractTemplate/index.vue、
+  // widgets/shared.ts 均为真实跟踪文件）；if/else、Success/Error 无扩展名 → 拒收
   const m = tour('plan-bare-mid-path.md', GIT_EMPTY);
 
   assert.deepEqual(m.steps.map((s) => s.id), ['T1', 'T2']);
   const filesOf = (id) => m.steps.find((s) => s.id === id).files;
-  assert.deepEqual(filesOf('T1'), ['frontend/src/views/purchase/pml/index.vue', 'frontend/src/views/purchase/contractTemplate/index.vue']);
-  assert.deepEqual(filesOf('T2'), ['frontend/src/views/purchase/pml/shared.ts']);
+  assert.deepEqual(filesOf('T1'), ['frontend/src/views/purchase/widgets/index.vue', 'frontend/src/views/purchase/contractTemplate/index.vue']);
+  assert.deepEqual(filesOf('T2'), ['frontend/src/views/purchase/widgets/shared.ts']);
 
-  const rec = byPath(m, 'frontend/src/views/purchase/pml/index.vue');
+  const rec = byPath(m, 'frontend/src/views/purchase/widgets/index.vue');
   assert.ok(rec, '裸写中段路径应消解到真实文件入模');
   assert.deepEqual(rec.steps, ['T1']);
   assert.equal(rec.pathGuess, false); // 确定性后缀消解，不是猜测
@@ -304,8 +305,8 @@ test('伪路径防护：目录反推与锚点拼接必须落到真实文件，�
   const m = tour('plan-fake-path-guard.md', GIT_EMPTY);
 
   const filesOf = (id) => m.steps.find((s) => s.id === id).files;
-  assert.deepEqual(filesOf('T1'), ['frontend/src/views/purchase/pml/index.vue']);
-  const rec = byPath(m, 'frontend/src/views/purchase/pml/index.vue');
+  assert.deepEqual(filesOf('T1'), ['frontend/src/views/purchase/widgets/index.vue']);
+  const rec = byPath(m, 'frontend/src/views/purchase/widgets/index.vue');
   assert.ok(rec && rec.pathGuess === false);
 
   // tracked 文件 rp===raw 即已解析：不再被锚点二次拼接出 frontend/src/api/frontend/... 伪路径
@@ -332,7 +333,7 @@ test('并集标签：任务行 S1+S2 拆成员集，块标签按成员交集命�
   // 父文件行被 S1/S2 缩进锚继承 → 并集步骤 S1（成员 S1+S2）收该文件
   assert.deepEqual(filesOf('S1'), ['backend/Widgets/UnionService.cs']);
   assert.deepEqual(filesOf('S3'), ['backend/Widgets/UnionColumn.cs']);
-  assert.deepEqual(filesOf('S4'), ['workflow/specs/2026-10-13-pml-quota-substitute-row-split.md', 'workflow/regression-checklist.d/2026-10.md']);
+  assert.deepEqual(filesOf('S4'), ['workflow/specs/2026-10-13-widgets-quota-substitute-row-split.md', 'workflow/regression-checklist.d/2026-10.md']);
   // 无失约：S1-S5 锚全部对齐，无未分步
   assert.deepEqual(m.parseHealth.issues, []);
   assert.ok(!m.steps.some((s) => s.id === 'A' || s.id === 'U' || s.id === 'X'));

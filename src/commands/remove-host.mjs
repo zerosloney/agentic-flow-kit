@@ -13,6 +13,7 @@ import { stripMcpFromRoot } from '../install/mcp.mjs';
 import { stripHooksFromRoot } from '../install/hooks.mjs';
 import { stripManagedPermissions } from '../install/permissions.mjs';
 import { BASELINE_DIR } from '../install/baseline.mjs';
+import { HOOKS_PATH, readLocalHooksPath, setLocalHooksPath, unsetLocalHooksPath } from '../git/config.mjs';
 import { unwireUserHooks } from '../install/user-hooks.mjs';
 import { HOSTS, HOST_NAMES, canonicalHostName } from '../hosts/registry.mjs';
 import { readInjectedModels } from '../models/resolve.mjs';
@@ -552,6 +553,12 @@ function uninstallUnlocked({ args, t }) {
   let manifestRemoved = false;
   if (!dryRun) {
     if (skipped === 0) {
+      // 还原安装前被覆盖的 core.hooksPath：仅当当前本地值仍是本工具的 .githooks
+      // （用户后来自己改过就不动）；null 表示安装前未设置，取消该键即可。
+      if ('prevHooksPath' in manifest && readLocalHooksPath(target) === HOOKS_PATH) {
+        if (manifest.prevHooksPath === null) unsetLocalHooksPath(target);
+        else setLocalHooksPath(target, manifest.prevHooksPath);
+      }
       const manifestAbs = path.join(target, MANIFEST_REL);
       fs.rmSync(manifestAbs, { force: true });
       cleanEmptyDirs(target, manifestAbs);

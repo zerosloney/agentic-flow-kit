@@ -8,6 +8,7 @@
 //     运行时门（check-devcontainer.mjs）与 doctor 共读这一份，避免两处策略各说各话。
 import fs from 'node:fs';
 import path from 'node:path';
+import { devcontainerMaps } from './stack-registry.mjs';
 
 export const DEVCONTAINER_DIR = '.devcontainer';
 export const DEVCONTAINER_JSON_REL = '.devcontainer/devcontainer.json';
@@ -22,31 +23,14 @@ export const DEVCONTAINER_POLICY_REL = '.agents/config/devcontainer-policy.json'
 //     其余经 common-utils 建的是 `vscode`。写死 `USER vscode` 会让 node 系镜像构建时报
 //     「unable to find user vscode: no matching entries in passwd file」。
 //   - 镜像里**是否预装 node**也随栈而变（见 STACK_PROVISIONS_NODE）。
-export const STACK_IMAGES = {
-  dotnet: 'mcr.microsoft.com/devcontainers/dotnet:8.0',
-  node: 'mcr.microsoft.com/devcontainers/typescript-node:22',
-  typescript: 'mcr.microsoft.com/devcontainers/typescript-node:22',
-  rust: 'mcr.microsoft.com/devcontainers/rust:1',
-  go: 'mcr.microsoft.com/devcontainers/go:1.23',
-  java: 'mcr.microsoft.com/devcontainers/java:21',
-  python: 'mcr.microsoft.com/devcontainers/python:3.12',
-  // cpp:1 是 MCR 上真实存在的 tag（2026-11-23 核对 v2 tags/list；风格对齐 rust:1 的浮动 major tag）。
-  cpp: 'mcr.microsoft.com/devcontainers/cpp:1',
-  empty: 'mcr.microsoft.com/devcontainers/base:ubuntu-24.04',
-};
+// 四张映射的单源在 stack-registry.mjs（本文件只做渲染与校验）。
+const __maps = devcontainerMaps();
+export const STACK_IMAGES = __maps.images;
+export const STACK_CONTAINER_USER = __maps.users;
+export const STACK_PROVISIONS_NODE = __maps.provisionsNode;
+export const STACK_EXTENSIONS = __maps.extensions;
 
-// 容器内跑 flow-kit 的身份：与镜像自带的非 root 用户对齐，不新造用户。
-export const STACK_CONTAINER_USER = {
-  dotnet: 'vscode',
-  node: 'node',
-  typescript: 'node',
-  rust: 'vscode',
-  go: 'vscode',
-  java: 'vscode',
-  python: 'vscode',
-  cpp: 'vscode',
-  empty: 'vscode',
-};
+// 容器内跑 flow-kit 的身份：与镜像自带的非 root 用户对齐，不新造用户（单源：stack-registry.mjs）。
 
 // 镜像里**是否真有 node 可执行文件**（不是「有没有 nvm 目录」）。
 // 事实来源是镜像 config 的 `NODE_VERSION` 环境变量：只有 typescript-node:22 有
@@ -57,30 +41,9 @@ export const STACK_CONTAINER_USER = {
 // flow-kit 是 Node >= 22 的 CLI，所以除 node / typescript 外的栈都要在 Dockerfile 里补装。
 // 版本与官方镜像烘焙的 NODE_VERSION 对齐（同源事实，不是拍脑袋）。
 export const NODE_VERSION = '22.23.5';
+// STACK_PROVISIONS_NODE 的映射在 stack-registry.mjs（随栈声明，渲染时读取）。
 
-export const STACK_PROVISIONS_NODE = {
-  dotnet: true,
-  node: false,
-  typescript: false,
-  rust: true,
-  go: true,
-  java: true,
-  python: true,
-  cpp: true,
-  empty: true,
-};
-
-export const STACK_EXTENSIONS = {
-  dotnet: ['ms-dotnettools.csharp'],
-  node: ['dbaeumer.vscode-eslint'],
-  typescript: ['dbaeumer.vscode-eslint'],
-  rust: ['rust-lang.rust-analyzer'],
-  go: ['golang.go'],
-  java: ['redhat.java'],
-  python: ['ms-python.python'],
-  cpp: ['ms-vscode.cpptools'],
-  empty: [],
-};
+// STACK_EXTENSIONS 的映射在 stack-registry.mjs（随栈声明）。
 
 export const DEFAULT_POLICY = {
   version: 1,

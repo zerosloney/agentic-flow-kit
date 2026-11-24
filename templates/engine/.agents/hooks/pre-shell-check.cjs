@@ -16,7 +16,7 @@
  *
  * 宿主事实（跨宿主实测，非文档推断）：
  *   - Trae 终端工具规范化名 RunCommand；CodeBuddy 实测 **Bash**（主通道）+ **PowerShell**（Windows
- *     次通道，见 ~/.codebuddy/projects/e-Git-Shipyard.Material/*.jsonl 的 function_call.name）。
+ *     次通道，见 ~/.codebuddy/projects/<project-id>/*.jsonl 的 function_call.name）。
  *     matcher 与本文件工具名正则须同列全部通道，漏任一即形成绕过口（2026-10-22 修 PowerShell 缺列）。
  *   - matcher 是正则、区分大小写、子串包含；timeout 单位是**秒**（command 默认 60s）。
  *   - stdin 官方字段：{ session_id, transcript_path, cwd, permission_mode, hook_event_name, tool_name,

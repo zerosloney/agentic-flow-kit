@@ -1,9 +1,9 @@
 # Repository Guidelines
 
-船厂物资管理系统。ASP.NET Core 6 后端（Clean Architecture 双模块）+ Vue 3 + SQL Server。
+{{projectName}}。{{stackDescription}}
 
 ## 1. 运行时联通 (Runtime Connectivity)
-前端 dev 5203 连 API `http://localhost:8932`；API 须监听 8932 才联通。端口/工具缺陷/可执行文件解析机理等环境事实见 `.agents/notes/runtime-env.md` §6；各机绝对路径与版本自登记 `.agents/notes/runtime-env.local.md`。
+{{productNote}}端口/工具缺陷/可执行文件解析机理等环境事实见 `.agents/notes/runtime-env.md` §6；各机绝对路径与版本自登记 `.agents/notes/runtime-env.local.md`。
 
 ## 2. 本地 Clone 必做 (Local Setup)
 > 漏配则门禁静默失效，详见 `.agents/notes/runtime-env.md` §7。
@@ -43,9 +43,9 @@
 
 ## 5. 目录级规则 (Directory-level Rules)
 **禁止回填本文档**。具体实现细节请查阅对应目录的 `AGENTS.md`：
-- **后端**: `backend/AGENTS.md` (.NET 开发规范 / 数据完整性 / API 契约 / 数据库操作)
-- **前端**: `frontend/AGENTS.md` (前端开发规范 / 类型检查 / 契约与门禁 / UI 实测门)
-- **成对文档同步**：`wiki/用户功能/物资系统功能验证手册-一期.{html,md}` 与 `wiki/用户功能/全流程与数据主线.{html,md}` 必须成对维护；修改任一份须同步另一份，并同步更新 `wiki/INDEX.md` 与 `wiki/知识沉淀总览.html`。
+- **后端**: `backend/AGENTS.md` (.NET 开发规范 / 数据完整性 / API 契约 / 数据库操作)（存在才读；没有则跳过）
+- **前端**: `frontend/AGENTS.md` (前端开发规范 / 类型检查 / 契约与门禁 / UI 实测门)（存在才读；没有则跳过）
+- **成对文档同步**：按 `wiki/INDEX.md` 登记的成对文档，修改任一份须同步另一份，并同步更新 `wiki/INDEX.md` 与 `wiki/知识沉淀总览.html`。
 
 ## 6. 项目适配区 (Project Adaptations)
 - **构建/测试/类型检查**: 命令清单单源 `.agents/hooks/commit-check.config.json`。

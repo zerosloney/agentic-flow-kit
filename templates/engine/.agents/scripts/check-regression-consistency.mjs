@@ -23,6 +23,28 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { loadFaces } from './faces.mjs';
+
+// 产品面 pathspec（2026-11-24 faces 收尾）：符号/样式搜索只扫 code + ui 面前缀（与旧
+// backend//frontend/ 口径一致；tests/data 不参与）。未配置 faces → 空（不传路径面 = 全仓搜，保守）；
+// 配置错误 → 打印「配置错误」并退回全仓（本脚本是 advisory 面，保持 exit 0，但绝不静默沿用旧路径）。
+// 配置错误一轮一次注记（多个搜索面共用同一 config，重复打印无信息量）。
+let facesWarned = false;
+function productPathspecs(root) {
+  try {
+    const faces = loadFaces(root);
+    if (!faces.configured) return [];
+    return [...new Set(['code', 'ui'].flatMap((k) => faces[k])
+      .map((p) => String(p).replace(/\\/g, '/').replace(/\/+$/, ''))
+      .filter(Boolean))];
+  } catch (e) {
+    if (!facesWarned) {
+      facesWarned = true;
+      console.error(`配置错误：.agents/config/project-faces.json——${e.message}（跳过路径收窄，退回全仓搜索）`);
+    }
+    return [];
+  }
+}
 
 // 提取清单里引用的标识符（纯函数）。
 //   classes: `*Tests` 类名（门禁/单测/集成用例的标准命名）
@@ -45,7 +67,7 @@ export function extractRefs(text) {
 }
 
 // 收集测试项目里实际存在的测试类名（纯函数）。
-// 测试项目根：tests/ 下两个项目（Shipyard.Material.Tests / Shipyard.Material.IntegrationTests）。
+// 测试项目根：tests/ 下两个 *Tests 测试项目（具体目录名单源 test-impact-lib.mjs）。
 // 类名 = 文件名去 .cs（C# 一文件一类型约定）。fixture 目录可能不存在——返回空集，调用方按悬空判。
 function collectTestClasses(root) {
   const names = new Set();
@@ -118,24 +140,27 @@ function collectRouterRoutes(root) {
   return routes;
 }
 
-// 符号存在性：单点符号一次 git grep 扫 backend/ + frontend/；点号符号（Type.Member）先找同名
-// 类型文件（Type.cs/ts/js/vue）再查成员名——避免把 `Service.Method` 当字面量搜导致假悬空。
+// 符号存在性：单点符号一次 git grep 扫产品面（faces code+ui 前缀，未配置则全仓）；点号符号
+// （Type.Member）先找同名类型文件（Type.cs/ts/js/vue）再查成员名——避免把 `Service.Method` 当字面量搜导致假悬空。
 function missingSymbols(root, symbols) {
   if (!symbols.length) return [];
   const simple = symbols.filter((s) => !s.includes('.'));
   const qualified = symbols.filter((s) => s.includes('.'));
   const missing = [];
+  const pathspec = productPathspecs(root);
   if (simple.length) {
     const args = ['grep', '-h', '-F'];
     for (const s of simple) args.push('-e', s);
-    args.push('--', 'backend', 'frontend');
+    if (pathspec.length) args.push('--', ...pathspec);
     const r = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
     const hay = String(r.stdout || '');
     for (const s of simple) if (!hay.includes(s)) missing.push(s);
   }
   for (const s of qualified) {
     const member = s.split('.').pop();
-    const r = spawnSync('git', ['grep', '-l', '-F', '--', member, '--', 'backend', 'frontend'], { cwd: root, encoding: 'utf8' });
+    const args = ['grep', '-l', '-F', '--', member];
+    if (pathspec.length) args.push('--', ...pathspec);
+    const r = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
     const files = String(r.stdout || '').split(/\r?\n/).filter(Boolean);
     // 成员名在仓库任何位置存在即不判悬空（类型文件可能拆分/部分类/外部库）；成员完全不存在才是漂移信号。
     if (!files.length) missing.push(s);
@@ -200,9 +225,16 @@ export function scanVerifyScriptAnchors(root) {
   };
   walk(dir);
   const danglingRoutes = router ? [...routes].filter((r) => !router.has(r)).sort() : [];
+  // testid 只在产品面源码里找（faces code+ui 前缀；未配置/配置错误 → 全仓，保守）。
+  const productSpec = productPathspecs(root);
+  const grepTestId = (needle) => {
+    const args = ['grep', '-l', '-F', '--', needle];
+    if (productSpec.length) args.push('--', ...productSpec);
+    return spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+  };
   const danglingTestIds = [...testIds].filter((id) => {
-    const a = spawnSync('git', ['grep', '-l', '-F', '--', `data-testid="${id}"`, '--', 'frontend/src'], { cwd: root, encoding: 'utf8' });
-    const b = spawnSync('git', ['grep', '-l', '-F', '--', `data-testid='${id}'`, '--', 'frontend/src'], { cwd: root, encoding: 'utf8' });
+    const a = grepTestId(`data-testid="${id}"`);
+    const b = grepTestId(`data-testid='${id}'`);
     return a.status !== 0 && b.status !== 0;
   }).sort();
   return { danglingRoutes, danglingTestIds, files };
@@ -225,14 +257,14 @@ if (isMain) {
   }
   const fm = scanFeatureMapRefs(root);
   for (const s of fm.missingSymbols) {
-    console.log(`ℹ️  特性地图引用的符号未在 backend/frontend 找到（advisory，可能是生成物/外部库）：${s}`);
+    console.log(`ℹ️  特性地图引用的符号未在产品面（faces code/ui 前缀）找到（advisory，可能是生成物/外部库）：${s}`);
   }
   const sa = scanVerifyScriptAnchors(root);
   for (const r of sa.danglingRoutes) {
     console.log(`ℹ️  验证脚本引用的路由不在 router（advisory）：${r}`);
   }
   for (const t of sa.danglingTestIds) {
-    console.log(`ℹ️  验证脚本引用的 data-testid 不在 frontend/src（advisory）：${t}`);
+    console.log(`ℹ️  验证脚本引用的 data-testid 不在产品面（faces code/ui 前缀）（advisory）：${t}`);
   }
   const problems = [];
   for (const c of r.danglingClasses) problems.push(`悬空测试类：${c}`);

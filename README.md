@@ -26,7 +26,7 @@ AI-Native 工作流引擎：**工作流面**管任务怎么从需求跑到关单
 - **MCP 接线**：`servers.json` 声明，安装器编译到宿主配置。
 - **模型按角色**：code / judgment / review 三角色，安装时探测推荐或手填，按宿主注入或继承。
 - **门禁与体检**：`doctor`（含 `--attest` 安装证明链）、`check-local-gates` 墙钟预算门、`diff` 漂移比对。
-- **布局治理**：栈 profile（dotnet / node / typescript / rust / go / java / python / cpp / empty）、tier（lean / standard / enterprise）、devcontainer 校验 / 构建、CI 按远端择一（GitHub 或 Azure）、多仓 workspace 聚合。
+- **布局治理**：栈 profile（dotnet / node / typescript / rust / go / java / python / cpp / empty）、tier（lean / standard / enterprise）、项目形态 / 端口 / 脚手架档位（`--product` / `--api-port` / `--web-port` / `--scaffold`）、devcontainer 校验 / 构建、CI 按远端择一（GitHub 或 Azure；GitLab 可识别但不注入 CI 模板）、多仓 workspace 聚合。
 
 ## 引擎图表
 

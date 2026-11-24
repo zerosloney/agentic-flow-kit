@@ -22,10 +22,12 @@ frontend/AGENTS.md 9216
 # 增长属 R3-8 等合法特性内容，不瘦身模板；本轮改 7 行 / 增 1 行（review.md 专用行），各行数据见各自行上方注记。
 # 同轮（issue #44）：backend-scope en 渲染实测 270B，256→384B。
 .trae/rules/backend-scope.md 384
-.trae/rules/frontend-scope.md 256
+# 2026-11-24 悬空规则引用收口：scope 规则加「存在才读」条件表述，frontend-scope en 渲染实测 278B，256→320B。
+.trae/rules/frontend-scope.md 320
 # 2026-10-09 CodeBuddy 适配收口：rules 常驻面（project-workflow + 中文 + 提交）+ 主记忆 CODEBUDDY.md 首入预算（实测 rules 合计 2162B / CODEBUDDY.md 475B）
 # 2026-11-05 CodeBuddy 收敛（对齐 .trae/rules 先例）：三份通用规则退役，收敛为 backend/frontend 作用域两份（实测合计 449B：237B/212B，与 .trae 同字节），上限 2336→512B。
-.codebuddy/rules/ 512
+# 2026-11-24 悬空规则引用收口：scope 规则加「存在才读」条件表述，en 渲染实测合计 593B，512→640B（仓内惯例：确需增长才重定上限，理由随行登记）。
+.codebuddy/rules/ 640
 # 2026-11-15 同轮（issue #44）：CODEBUDDY.md en 渲染实测 599B，512→768B（口径见 backend-scope 行上方注记）。
 .codebuddy/CODEBUDDY.md 768
 .agents/commands/*.md 8704

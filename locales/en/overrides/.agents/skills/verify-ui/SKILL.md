@@ -34,7 +34,7 @@ description: UI change verification (read-only, no dirty data left). First choic
 - Reach the FE origin before injection; same-document hash switches do not reload the document, after seeding a full-page reload is required.
 - Default identity = JWT claims of the seeded token. When testing an identity different from the token, seed `auth_user` from this repo's login response.
 - Synthetic JWT only applies to pages calling zero-authorization APIs: `exp = Math.floor(Date.now()/1000) + 1800`, never write far-future; after injection go through about:blank and then hard-navigate.
-- If the page issues token-bearing APIs and 401 clears the session back to `/login`: for real data dependencies use account-pool login (account pool single source `.agents/notes/runtime-env.md` §6.1a).
+- If the page issues token-bearing APIs and 401 clears the session back to `/login`: for real data dependencies use account-pool login (account pool lives in `.agents/notes/runtime-env.local.md`: machine-local, never committed).
 - Exclude OPTIONS preflight from request counts; assertion counts use API responses, do not count DOM (virtual scrolling / virtual columns render only the visible window).
 - Before asserting "zero console errors", filter the application's own noise (AG Grid license banner, Network Error from API not started); filter by content features, do not use `^` line-start anchors.
 
@@ -48,7 +48,7 @@ description: UI change verification (read-only, no dirty data left). First choic
 
 ### 1. Environment preparation
 - Start API / frontend per `.agents/notes/runtime-env.md`; record all started processes.
-- Multiple worktrees in parallel: shift API / frontend / CDP together using this repo's port table. Port literals live in `scripts/verify/e2e/ports.mjs`.
+- Multiple worktrees in parallel: shift service ports together by slot. Board port offset is single-sourced in `board-port.mjs` (slot via `FLOW_KIT_BOARD_SLOT`); API / frontend / CDP port tables are registered by the project itself.
 - Only harness / fallback paths start their own browser: newer Chromium kernel headless (e.g., Edge `--headless=new`); on the MCP path the browser instance is managed by MCP, do not start another manually.
 - Start long-lived services as separate processes (e.g., PowerShell `Start-Process`); no pipe at the end of the start command.
 

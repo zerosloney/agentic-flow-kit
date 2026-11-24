@@ -25,23 +25,23 @@ function run(dir, args, env = {}) {
   });
 }
 
-test('forgeFromRemote classifies github, azure, and the rest', () => {
+test('forgeFromRemote classifies github, gitlab, azure, and the rest', () => {
   assert.equal(forgeFromRemote('https://github.com/a/b.git'), 'github');
   assert.equal(forgeFromRemote('git@github.com:a/b.git'), 'github');
   assert.equal(forgeFromRemote('https://dev.azure.com/org/project/_git/repo'), 'azure');
   assert.equal(forgeFromRemote('https://org.visualstudio.com/proj/_git/repo'), 'azure');
   assert.equal(forgeFromRemote('ssh://git@host/tfs/COLL/PROJ/_git/R'), 'azure');
-  assert.equal(forgeFromRemote('https://gitlab.com/a/b.git'), null);
+  assert.equal(forgeFromRemote('https://gitlab.com/a/b.git'), 'gitlab');
   assert.equal(forgeFromRemote(''), null);
 });
 
-test('pr-create stops when origin is missing or not github or azure', () => {
+test('pr-create stops when origin is missing or not github, gitlab, or azure', () => {
   const none = run(repo(), ['create', '--title', 't', '--body-file', 'b.md']);
   assert.equal(none.status, 2);
   assert.match(none.stderr, /无 origin/);
-  const other = run(repo('https://gitlab.com/a/b.git'), ['create', '--title', 't']);
+  const other = run(repo('https://example.com/a/b.git'), ['create', '--title', 't']);
   assert.equal(other.status, 2);
-  assert.match(other.stderr, /gitlab\.com/);
+  assert.match(other.stderr, /example\.com/);
 });
 
 test('pr-create dry-run on github prints gh and does not call it', () => {

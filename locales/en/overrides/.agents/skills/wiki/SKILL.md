@@ -14,7 +14,7 @@ Build and maintain a structured project knowledge base, ensuring three-way consi
 ## Scope and constraints
 - **Inclusion scope**:
     - **In**: master-data knowledge documents, project-wide data-maintenance SQL.
-    - **Out**: the `workflow/` directory, non-master-data knowledge documents such as MTO/procurement/inventory/UI, dependency lock files, IDE configuration.
+    - **Out**: the `workflow/` directory, non-master-data knowledge documents, dependency lock files, IDE configuration.
 - **Directory structure**: `wiki/<主题>/<关键词文件>`.
 - **Naming convention**: `<主题>-<关键词>[-范围/版本].ext`.
 - **Authority**: `.md` is the content source $\rightarrow$ `.html` is the display snapshot. On conflict, `.md` wins.

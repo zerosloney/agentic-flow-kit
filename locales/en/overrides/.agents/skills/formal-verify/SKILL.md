@@ -22,7 +22,7 @@ Idea source: pstack `create-formal-verification-skill` / `maintain-formal-verifi
 
 Check clue by clue; any hit makes it applicable; zero hits → loud-skip:
 
-- State-machine artifacts: explicit state enums plus transition logic (workflow stage tables, order lifecycles, protocol handshakes); clues: centralized state definition files, `state` / `stage` transition branches.
+- State-machine artifacts: explicit state enums plus transition logic (workflow stage tables, document state flows, protocol handshakes); clues: centralized state definition files, `state` / `stage` transition branches.
 - Lock / transaction / concurrency surfaces: mutexes, transaction boundaries, idempotency keys, lease renewal, single-writer constraints; clues: `lock` / `transaction` / `lease` / `acquire` / `idempotent` hits.
 - Distributed consistency surfaces: consensus, replica sync, compensation and rollback, retry delivery (`at-least-once` + idempotent consumption); clues: retry and compensation paths, cross-service event ordering.
 - Record the verdict: the hit clue plus evidence paths (`file:line`) go into the asset inventory header; that verdict is the only basis for SKIP or proceed.

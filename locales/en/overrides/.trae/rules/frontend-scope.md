@@ -1,5 +1,5 @@
 ---
-description: Read frontend/AGENTS.md before changing frontend files
+description: Read frontend/AGENTS.md before changing frontend files (read only if present)
 alwaysApply: true
 ---
-Before modifying or reviewing any file under `frontend/`, read and follow `frontend/AGENTS.md` (including the BC/G gates and Never rules).
+Before modifying or reviewing any file under `frontend/`, read and follow `frontend/AGENTS.md` (including the BC/G gates and Never rules; read only if present).

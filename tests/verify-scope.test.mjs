@@ -10,7 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { computeDiffScope } from '../templates/engine/.agents/scripts/verify-scope.mjs';
+import { computeDiffScope, loadProductFaces } from '../templates/engine/.agents/scripts/verify-scope.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const VERIFY = path.join(KIT, 'templates', 'engine', '.agents', 'scripts', 'verify.mjs');
@@ -96,12 +96,21 @@ test('computeDiffScope: 有 origin 但 diff 面为空 → 维持 fail-loud（无
 });
 
 test('computeDiffScope: 台账绿行作基线时不需要 origin（baseSource=ledger 路径不变）', () => {
+  // 面/门映射派生自项目配置（2026-11-24 faces 收单）：夹具写 project-faces + product-gates。
+  const facesRoot = makeTmp('fk-vscope-faces-');
+  fs.mkdirSync(path.join(facesRoot, '.agents', 'config'), { recursive: true });
+  fs.writeFileSync(path.join(facesRoot, '.agents', 'config', 'project-faces.json'),
+    JSON.stringify({ code: ['backend/'], ui: ['frontend/src/'] }));
+  fs.writeFileSync(path.join(facesRoot, '.agents', 'config', 'product-gates.json'), JSON.stringify({ gates: [
+    { id: 'backend-test', name: 'b', cmd: 'x', folder: 'backend' },
+    { id: 'frontend-lint', name: 'f', cmd: 'x', folder: 'frontend' },
+  ] }));
   const f = fakeGit({ committed: ['backend/a.cs'], worktree: [], untracked: [] });
-  const scope = computeDiffScope(f.git, 'abc1234', 'ledger');
+  const scope = computeDiffScope(f.git, 'abc1234', 'ledger', loadProductFaces(facesRoot));
   assert.equal(scope.baseSource, 'ledger');
   assert.equal(scope.baseShort, 'abc1234');
   assert.equal(scope.touched.has('backend'), true);
-  assert.deepEqual(scope.skippedGateIds, ['frontend-lint', 'frontend-unit-test', 'frontend-build']);
+  assert.deepEqual(scope.skippedGateIds, ['frontend-lint']);
   assert.ok(!f.calls.some((c) => c.startsWith('merge-base origin/main')), '有台账基线不得再问 origin/main');
 });
 

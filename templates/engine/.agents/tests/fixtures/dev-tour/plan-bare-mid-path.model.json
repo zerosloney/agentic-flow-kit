@@ -1,14 +1,14 @@
 {
   "schema": 2,
   "generatedAt": "2020-01-01T00:00:00.000Z",
-  "rootLabel": "Shipyard.Material",
+  "rootLabel": "example-project",
   "doc": {
     "path": ".agents/tests/fixtures/dev-tour/plan-bare-mid-path.md",
     "type": "DOC",
     "title": "裸中段路径样例：托盘查询联动",
     "status": "起草中",
     "level": "L1",
-    "module": "物资",
+    "module": "示例",
     "date": "2099-12-31",
     "purpose": "",
     "links": [],
@@ -58,12 +58,12 @@
       "id": "T1",
       "index": 1,
       "title": "前端查询栏联动",
-      "summary": "改造 pml/index.vue 查询栏，收敛 if/else 分支，Success/Error 提示对齐 contractTemplate/index.vue",
+      "summary": "改造 widgets/index.vue 查询栏，收敛 if/else 分支，Success/Error 提示对齐 contractTemplate/index.vue",
       "detail": [
         "- 判据：前端构建通过"
       ],
       "files": [
-        "frontend/src/views/purchase/pml/index.vue",
+        "frontend/src/views/purchase/widgets/index.vue",
         "frontend/src/views/purchase/contractTemplate/index.vue"
       ],
       "status": "todo",
@@ -73,12 +73,12 @@
       "id": "T2",
       "index": 2,
       "title": "列序常量调整",
-      "summary": "抽共享常量到 pml/shared.ts",
+      "summary": "抽共享常量到 widgets/shared.ts",
       "detail": [
         "- 判据：单测通过"
       ],
       "files": [
-        "frontend/src/views/purchase/pml/shared.ts"
+        "frontend/src/views/purchase/widgets/shared.ts"
       ],
       "status": "todo",
       "source": "steps"
@@ -104,7 +104,7 @@
       "pathGuess": false
     },
     {
-      "path": "frontend/src/views/purchase/pml/index.vue",
+      "path": "frontend/src/views/purchase/widgets/index.vue",
       "status": "planned",
       "badge": "计划",
       "additions": 0,
@@ -122,7 +122,7 @@
       "pathGuess": false
     },
     {
-      "path": "frontend/src/views/purchase/pml/shared.ts",
+      "path": "frontend/src/views/purchase/widgets/shared.ts",
       "status": "planned",
       "badge": "计划",
       "additions": 0,

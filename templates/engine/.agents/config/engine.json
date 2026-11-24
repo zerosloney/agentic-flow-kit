@@ -5,6 +5,8 @@
     "hosts": {{hostsJson}},
     "stack": "{{stack}}",
     "stacks": {{stacksJson}},
+    "product": "{{product}}",
+    "ports": { "api": {{apiPort}}, "web": {{webPort}} },
     "boardPort": "{{boardPort}}",
     "language": "{{language}}"
   },

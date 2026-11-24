@@ -116,8 +116,8 @@ Load `new-task.md` §1c Design row.
 **Input**: selected level + entry document
 **Required inputs (complete before drafting; missing any one means HALT and return to this section to read; comparison results go into "Constraint Compliance Mapping" and "Assumptions and Inferences")**:
 1. Search `wiki/INDEX.md` for task documents related to this topic (product requirements / development plans / project rules / data dictionary / user features) — on a hit, read fully and write the basis into the relevant spec sections as path references (the source of the policy for feature behavior / data flow); if no hit, state the search terms and conclusion
-2. The full text of `backend/AGENTS.md` (§6 hard constraints / §7 machine-gate checklist) — **regardless of whether this change touches the backend**
-3. The full text of `frontend/AGENTS.md` (gates G-2~G-3 / contract rules / list-page state rules)
+2. The full text of `backend/AGENTS.md` (§6 hard constraints / §7 machine-gate checklist; read only if present) — **regardless of whether this change touches the backend**
+3. The full text of `frontend/AGENTS.md` (gates G-2~G-3 / contract rules / list-page state rules; read only if present)
 **Process**:
 0. **Check before creating**: if a same-feature spec already exists (including archived) / `verify-ui/features` $\rightarrow$ revise the original, do not create new (single source `workflow/README.md` "same-feature continuation")
 1. **Generate draft**: run `flow-kit run fill-spec.mjs --level <L2|L3> --topic <topic> --output workflow/specs/<date>-<topic>.md`
@@ -157,7 +157,7 @@ L2/L3 mandatory: delegate `independent-reviewer`; trigger, form, required inputs
 | Premises entering fact source without interrogation | `confirm-doc` rejects (premise interrogation missing section / empty / placeholder / missing counter-question or basis, exit 2) | If no interpretation risk, write "no key premises" with reason |
 | Asking the user about experimentable items | Extra round of confirmation tax, and the answer is obtainable by running | Query DB / run eval / prototype first; write the experiment conclusion as the basis |
 | "Decided" without writing a basis | `confirm-doc` rejects (equivalent to not having thought) | The basis must be identifiable (section number / code path / DB query result) |
-| Skipping required inputs / constraint mapping missing backend/frontend AGENTS entries | → independent review rejects and reworks (a missing mapping source counts as not doing the constraint check) | The two directory specs are the repository-wide contract baseline, independent of this change's surface; wiki no-hit may exempt item 1 (must state the search terms) |
+| Skipping required inputs / constraint mapping missing backend/frontend AGENTS entries | → independent review rejects and reworks (a missing mapping source counts as not doing the constraint check) | The two directory specs are the repository-wide contract baseline (read only if present), independent of this change's surface; wiki no-hit may exempt item 1 (must state the search terms) |
 
 # Build · Draft Plan + Write Code
 
@@ -236,7 +236,7 @@ This chapter is for L2/L3, DB-switch smoke tests, flaky, and independent review.
 **Trigger**: changed the project DB connection config or added a target database
 **Process**:
 1. **Schema comparison**: actual target-DB schema $\leftrightarrow$ code expectation (recent change scripts + base tables)
-2. **Endpoint liveness**: run the smoke script $\rightarrow$ verify 6 core endpoints $\text{HTTP 200}$
+2. **Endpoint liveness**: run the smoke script $\rightarrow$ verify $\text{HTTP 200}$ against endpoints registered in runtime-env
 **Output**: liveness pass evidence
 **Fact**: smoke script path in `.agents/notes/runtime-env.md` §6.1
 **Fail**: any non-200 $\rightarrow$ **HARD-BLOCK** $\rightarrow$ stop at this step, no deployment.

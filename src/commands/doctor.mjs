@@ -26,6 +26,7 @@ import { checkSandboxHealth } from '../install/sandbox.mjs';
 import { checkSkillsEvalHealth } from '../skills/eval-harness.mjs';
 import { RUNTIME_SCRIPTS, RUNTIME_HOOKS, KIT_ROOT } from './runtime.mjs';
 import { buildDiff } from './diff.mjs';
+import { loadFaces, isProductPath } from '../../templates/engine/.agents/scripts/faces.mjs';
 
 const HOOK_FILES = ['pre-commit', 'commit-msg', 'post-commit', 'pre-merge-commit', 'pre-push'];
 
@@ -64,6 +65,16 @@ function listLegacyRuntime(target) {
   collect(RUNTIME_HOOKS, '.agents/hooks', (name) => /\.(mjs|cjs)$/i.test(name));
   collect(path.join(KIT_ROOT, 'templates/engine/.agents/tests'), '.agents/tests', (name) => /\.(mjs|cjs)$/i.test(name));
   return out.sort();
+}
+
+// PATH 上的 flow-kit 与安装清单各自演进，而钩子与 MCP 实际执行的是 PATH 上那个：
+// 两侧各取第一段 x.y.z 比对。任一侧解析不出（如旧版输出任意文本）就返回 null，维持旧的仅探测可运行行为。
+export function flowKitVersionDrift(cliOutput, manifestVersion) {
+  const pick = (text) => (String(text || '').match(/\d+\.\d+\.\d+/) || [])[0] || null;
+  const cli = pick(cliOutput);
+  const manifest = pick(manifestVersion);
+  if (!cli || !manifest || cli === manifest) return null;
+  return { cli, manifest };
 }
 
 export function doctorCommand({ args, t }) {
@@ -107,7 +118,13 @@ export function doctorCommand({ args, t }) {
     shell: winShell,
   });
   if (kitProbe.status === 0) {
-    add(true, 'flow-kit cli', String(kitProbe.stdout || '').trim() || 'flow-kit');
+    const drift = flowKitVersionDrift(String(kitProbe.stdout || ''), manifest?.version || '');
+    if (drift) {
+      // 版本不一致只提示不判红：旧版 CLI 仍可用，钩子与 MCP 的失效风险交给 hint 说明。
+      add(true, 'flow-kit cli', t('doctor.flowKitVersionMismatch', drift), t('doctor.flowKitVersionMismatchHint'), { warn: true });
+    } else {
+      add(true, 'flow-kit cli', String(kitProbe.stdout || '').trim() || 'flow-kit');
+    }
   } else {
     add(true, 'flow-kit cli', t('doctor.flowKitMissing'), t('doctor.flowKitMissingHint'), { warn: true });
   }
@@ -427,6 +444,119 @@ export function doctorCommand({ args, t }) {
     } else {
       add(true, 'policy-remote', t('doctor.policyRemoteOk', { url: localPolicy.remote.url, ref: check.ref }));
     }
+  }
+
+  // 项目级门禁配置覆盖率（gate coverage，advisory）：逐项报告已配置 / 未配置（SKIP）/ 配置错误。
+  // 只做「可解析 + 顶层形状」体检，语义级校验归各门脚本；未配置一律不升 fail，配置错误才红。
+  const gateFile = (rel) => {
+    const abs = path.join(target, rel);
+    if (!fs.existsSync(abs)) return { state: 'skip' };
+    try {
+      return { state: 'ok', data: JSON.parse(fs.readFileSync(abs, 'utf8')) };
+    } catch (e) {
+      return { state: 'error', error: e.message };
+    }
+  };
+  const isObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+  const reportGate = (name, state, detail) => {
+    if (state === 'error') add(false, `gate ${name}`, t('doctor.gateError', { error: detail }));
+    else if (state === 'skip') add(true, `gate ${name}`, detail || t('doctor.gateSkipped'));
+    else add(true, `gate ${name}`, detail || t('doctor.gateConfigured'));
+  };
+  const runGate = (name, rel, validate = () => ({})) => {
+    const r = gateFile(rel);
+    if (r.state !== 'ok') return reportGate(name, r.state, r.error);
+    let verdict = {};
+    try { verdict = validate(r.data) || {}; } catch (e) { verdict = { state: 'error', error: e.message }; }
+    return reportGate(name, verdict.state || 'ok', verdict.detail || verdict.error);
+  };
+  const shape = (data, fn) => (!isObj(data) ? { state: 'error', error: t('doctor.gateNotObject') } : fn(data));
+
+  runGate('architecture-redlines', '.agents/hooks/architecture-redlines.json', (d) => shape(d, () => {
+    const known = ['forbidden', 'noNavigationProperties', 'catchRequires'];
+    const unknown = Object.keys(d).filter((k) => !known.includes(k));
+    if (unknown.length) return { state: 'error', error: t('doctor.gateUnknownKeys', { keys: unknown.join(', ') }) };
+    const bad = known.find((k) => d[k] !== undefined && !Array.isArray(d[k]));
+    if (bad) return { state: 'error', error: t('doctor.gateArrayField', { field: bad }) };
+    return known.every((k) => (d[k] || []).length === 0) ? { state: 'skip' } : {};
+  }));
+
+  runGate('delete-guard', '.agents/hooks/delete-guard.json', (d) => shape(d, () => {
+    const unknown = Object.keys(d).filter((k) => k !== 'scan');
+    if (unknown.length) return { state: 'error', error: t('doctor.gateUnknownKeys', { keys: unknown.join(', ') }) };
+    if (!Array.isArray(d.scan)) return { state: 'error', error: t('doctor.gateArrayField', { field: 'scan' }) };
+    return d.scan.length ? {} : { state: 'error', error: t('doctor.gateEmptyField', { field: 'scan' }) };
+  }));
+
+  runGate('audit-fields', '.agents/hooks/audit-fields.json', (d) => shape(d, () => {
+    const known = ['fields', 'ext', 'allowFiles', 'allowLines'];
+    const unknown = Object.keys(d).filter((k) => !known.includes(k));
+    if (unknown.length) return { state: 'error', error: t('doctor.gateUnknownKeys', { keys: unknown.join(', ') }) };
+    if (!Array.isArray(d.fields)) return { state: 'error', error: t('doctor.gateArrayField', { field: 'fields' }) };
+    return d.fields.length ? {} : { state: 'error', error: t('doctor.gateEmptyField', { field: 'fields' }) };
+  }));
+
+  runGate('commit-check.config', '.agents/hooks/commit-check.config.json', (d) => shape(d, () => {
+    const keys = ['builds', 'checks', 'pushTests'];
+    const bad = keys.find((k) => d[k] !== undefined && !Array.isArray(d[k]));
+    if (bad) return { state: 'error', error: t('doctor.gateArrayField', { field: bad }) };
+    return keys.some((k) => (d[k] || []).length) ? {} : { detail: t('doctor.gateCommitEmpty') };
+  }));
+
+  // product-gates*.json 按 verify.mjs 口径枚举（product-gates.json / product-gates.<名称>.json）。
+  {
+    let files = [];
+    try {
+      files = fs.readdirSync(path.join(target, '.agents', 'config'))
+        .filter((f) => f === 'product-gates.json' || /^product-gates\..+\.json$/.test(f))
+        .sort();
+    } catch { /* 未配置 */ }
+    if (!files.length) {
+      reportGate('product-gates', 'skip');
+    } else {
+      let verdict = {};
+      for (const f of files) {
+        const r = gateFile(`.agents/config/${f}`);
+        if (r.state !== 'ok') { verdict = { state: 'error', error: `${f}: ${r.error || 'missing'}` }; break; }
+        if (!isObj(r.data)) { verdict = { state: 'error', error: `${f}: ${t('doctor.gateNotObject')}` }; break; }
+        if (!Array.isArray(r.data.gates)) { verdict = { state: 'error', error: `${f}: ${t('doctor.gateArrayField', { field: 'gates' })}` }; break; }
+        const idx = r.data.gates.findIndex((g) => !isObj(g) || typeof g.id !== 'string' || !g.id || typeof g.name !== 'string' || typeof g.cmd !== 'string');
+        if (idx >= 0) { verdict = { state: 'error', error: `${f}: ${t('doctor.gateBadGateEntry', { index: idx })}` }; break; }
+      }
+      reportGate('product-gates', verdict.state || 'ok', verdict.error);
+    }
+  }
+
+  runGate('test-impact-map', '.agents/config/test-impact-map.json', (d) => shape(d, () => {
+    // 骨架态口径与 check-test-impact-map.mjs 一致：namespace/areas/paths 均空 = 未启用选测。
+    const skeleton = !String(d.namespace || '').trim()
+      && (!d.areas || (isObj(d.areas) && Object.keys(d.areas).length === 0))
+      && (!d.paths || (Array.isArray(d.paths) && d.paths.length === 0));
+    return skeleton ? { detail: t('doctor.gateTestImpactSkeleton') } : {};
+  }));
+
+  runGate('local-gates', '.agents/config/local-gates.json', (d) => shape(d, () => (
+    isObj(d.testDb) ? {} : { state: 'skip' }
+  )));
+
+  // project-faces：用 faces.mjs 的单源加载器判定；已配置时顺带体检触发面是否命中跟踪文件。
+  try {
+    const faces = loadFaces(target);
+    reportGate('project-faces', faces.configured ? 'ok' : 'skip');
+    if (!faces.configured) {
+      add(true, 'faces coverage', t('doctor.gateFacesUnconfigured'));
+    } else {
+      const ls = spawnSync('git', ['-c', 'core.quotepath=off', 'ls-files'], { cwd: target, encoding: 'utf8' });
+      if (ls.status !== 0) {
+        add(true, 'faces coverage', t('doctor.gateFacesNoGit'), '', { warn: true });
+      } else {
+        const count = (ls.stdout || '').split('\n').filter(Boolean).filter((rel) => isProductPath(faces, rel)).length;
+        if (count === 0) add(true, 'faces coverage', t('doctor.gateFacesEmpty'), '', { warn: true });
+        else add(true, 'faces coverage', t('doctor.gateFacesCoverage', { count }));
+      }
+    }
+  } catch (e) {
+    reportGate('project-faces', 'error', e.message);
   }
 
   // 离线安装包溯源体检

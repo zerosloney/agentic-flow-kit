@@ -358,7 +358,7 @@ export function ciTemplateRels(mode) {
 // ci: 显式 CI 交付面选择（CI_MODES 之一），缺省按 tier 派生；写入 manifest 由 upgrade 重放。
 export function buildPlan({
   target, hosts, lang, stack, stacks = null, projectName, categories, models = null, tier = 'standard', hardened = false, mcp = true,
-  surfaces = [], managedPermissions = {}, devcontainer = true, ci = null,
+  surfaces = [], managedPermissions = {}, devcontainer = true, ci = null, scaffold = 'full',
   templatesRoot = TEMPLATES, localesRoot = LOCALES,
 }) {
   const t = makeT(lang);
@@ -433,8 +433,12 @@ export function buildPlan({
   if (mcp) addMcpEntries({ plan, target, hosts });
 
   // 4) 数据资产脚手架（空目录由 scaffold 中的 .gitkeep 保证）
-  for (const rel of listFiles(path.join(templatesRoot, 'scaffold'))) {
-    push(path.join(templatesRoot, 'scaffold', rel), rel, 'scaffold', 10);
+  //    --scaffold none：整个脚手架面不装；minimal：只留 wiki/INDEX.md（知识库子目录由项目自建）。
+  if (scaffold !== 'none') {
+    for (const rel of listFiles(path.join(templatesRoot, 'scaffold'))) {
+      if (scaffold === 'minimal' && rel.startsWith('wiki/') && rel !== 'wiki/INDEX.md') continue;
+      push(path.join(templatesRoot, 'scaffold', rel), rel, 'scaffold', 10);
+    }
   }
 
   // 5) git 门禁与合并策略

@@ -21,10 +21,11 @@ steps:
     displayName: 'Use Node 22'
 
   - script: |
-      if [ -f package.json ]; then
-        npm install
-      fi
-    displayName: 'Install (if package.json)'
+      if [ -f package.json ]; then (npm ci || npm install); fi
+      if [ -f requirements.txt ]; then python -m pip install -r requirements.txt; fi
+      if [ -f pyproject.toml ]; then python -m pip install -e . || echo "pyproject install skipped (not a package)"; fi
+      if [ -f go.mod ]; then go mod download; fi
+    displayName: 'Install project dependencies'
 
   - script: npx --yes agentic-flow-kit run verify --full
     displayName: 'Static gates (verify --full)'

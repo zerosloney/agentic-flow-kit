@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /* test-impact: 影响面选测 CLI
  *
- * 已接线 pre-push（2026-11-08）：集成档 --select-range、单测档 --unit-range 均经
- * scripts/verify/backend/run-backend-tests.mjs 执行；本 CLI 保留作手动探查。
+ * 已接线 pre-push（2026-11-08）：集成档 --select-range、单测档 --unit-range 由项目在
+ * .agents/hooks/commit-check.config.json 的 pushTests 里声明执行命令；本 CLI 保留作手动探查。
  *
  * 用法：
  *   flow-kit run test-impact.mjs --range <old> <new> [--json]
@@ -60,6 +60,7 @@ function usage(message) {
 }
 
 let decision;
+let map = null;
 try {
   let files = filesArg;
   let rangeFailure = null;
@@ -82,7 +83,7 @@ try {
     // 仍加载 manifest，尽早暴露配置错误
     loadMap();
   } else {
-    const map = loadMap();
+    map = loadMap();
     decision = selectForFiles(map, files);
   }
 } catch (e) {
@@ -96,9 +97,15 @@ if (json) {
   console.log('test-impact:');
   console.log(formatDecision(decision));
   if (decision.mode === 'filter') {
-    console.log('run: dotnet test tests/Shipyard.Material.IntegrationTests/Shipyard.Material.IntegrationTests.csproj --no-build --filter "<filter>"');
+    if (map && map.runner && map.runner.kind === 'generic') {
+      console.log(`run: <项目集成测试命令>（filter: ${decision.filter}；命令模板见 test-impact-map.json 的 runner.list）`);
+    } else {
+      const testDir = map && map.dirs && map.dirs.test ? String(map.dirs.test).replace(/\/?$/, '/') : '<dirs.test>/';
+      console.log(`run: dotnet test ${testDir}…csproj --no-build --filter "<filter>"`);
+      console.log('     （工程路径以 .agents/config/test-impact-map.json 的 dirs.test 为准）');
+    }
   } else if (decision.mode === 'full') {
-    console.log('run: node scripts/verify/backend/run-backend-tests.mjs --full');
+    console.log('run: <项目集成测试全量命令>（见 .agents/hooks/commit-check.config.json 的 pushTests）');
   } else {
     console.log('run: （跳过集成测试）');
   }
