@@ -1,9 +1,0 @@
-// 栈层规则包（dotnet）：kit 管理的默认规则层。
-// 层级顺序：legacy（旧配置投影）← stack（本文件）← project（.agents/rules/project.json）← local。
-// 项目要改规则请写 project.json（同 id 整条覆盖）；本文件随包升级，不建议手改。
-// 插件白名单写在 project.json 的 plugins 数组（不自动加载目录，见 project-configs.md）。
-{
-  "version": 1,
-  "rules": [],
-  "waivers": []
-}

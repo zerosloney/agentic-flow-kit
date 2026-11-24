@@ -1,32 +1,48 @@
 // rules — 规则包 CLI（v1，实验性）：validate / explain / check。
-// 旧配置由 adapters 投影；`.agents/rules/{stack,project,local}.json` 存在时按层覆盖（后者替换同 id）。
+// 旧配置由 adapters 投影；`.agents/rules/{stack.<栈名>,project,local}.json` 存在时按层覆盖（后者替换同 id）。
 import fs from 'node:fs';
 import path from 'node:path';
 import { flag } from '../cli/args.mjs';
-import { loadLayer, mergeLayers, splitWaivers, validateRule } from '../rules/model.mjs';
-import { adaptLegacy } from '../rules/adapters.mjs';
+import { splitWaivers } from '../rules/model.mjs';
+import { loadModel } from '../rules/load.mjs';
+import { recordPluginStatus } from '../rules/plugin-status.mjs';
 import { collectDiff, evaluateModel } from '../rules/evaluate.mjs';
-
-const RULE_FILES = [
-  ['.agents/rules/stack.json', 'stack'],
-  ['.agents/rules/project.json', 'project'],
-  ['.agents/rules/local.json', 'local'],
-];
-
-function loadModel(root) {
-  const legacy = adaptLegacy(root);
-  for (const rule of legacy.rules) validateRule(rule, `legacy:${rule.id}`);
-  const layers = [legacy];
-  for (const [rel, name] of RULE_FILES) {
-    const layer = loadLayer(root, rel, name);
-    if (layer) layers.push(layer);
-  }
-  const unsupported = layers.flatMap((layer) => layer.unsupported || []);
-  return { model: mergeLayers(layers), unsupported, layers: layers.map((l) => l.name) };
-}
 
 function pickMessage(message, lang) {
   return lang === 'en' ? message.en : message.zh;
+}
+
+/** validate 的引用 / 语义检查（schema 已由 loadModel 把关）：只报「配置可读但永远不成立或指向不存在」的问题。
+ *  同 id 跨层是合法覆盖机制，只有层内重复才算问题。 */
+function collectFindings(root, layers, model) {
+  const findings = [];
+  const ruleIds = new Set(model.rules.map((r) => r.id));
+  for (const layer of layers) {
+    const seen = new Set();
+    layer.rules.forEach((rule, i) => {
+      if (seen.has(rule.id)) findings.push(`${layer.name}: rules[${i}] id「${rule.id}」在本层重复`);
+      seen.add(rule.id);
+      for (const item of rule.when || []) {
+        // pkg: 空路径 / env: 缺「=」= 永不成立；pkg: 路径里的空段与旧脚本一样被忽略，不算问题。
+        const never = item.startsWith('pkg:')
+          ? !item.slice(4).trim()
+          : item.startsWith('env:') && item.slice(4).indexOf('=') <= 0;
+        if (never) findings.push(`${layer.name}: rules[${i}] when 谓词永不成立：「${item}」`);
+      }
+      if (typeof rule.whenEnv === 'string' && rule.whenEnv.indexOf('=') <= 0) {
+        findings.push(`${layer.name}: rules[${i}] whenEnv 写法有误（应为 KEY=VAL）：「${rule.whenEnv}」`);
+      }
+    });
+    layer.waivers.forEach((w, i) => {
+      if (!ruleIds.has(w.rule)) findings.push(`${layer.name}: waivers[${i}] 指向不存在的规则「${w.rule}」`);
+    });
+    (layer.plugins || []).forEach((p, i) => {
+      if (!fs.existsSync(path.join(root, '.agents', 'rules', 'plugins', `${p.module}.mjs`))) {
+        findings.push(`${layer.name}: plugins[${i}] 插件模块不存在：.agents/rules/plugins/${p.module}.mjs`);
+      }
+    });
+  }
+  return findings;
 }
 
 export function rulesCommand({ args, t, lang }) {
@@ -50,10 +66,9 @@ export function rulesCommand({ args, t, lang }) {
     const abs = path.join(root, rel);
     if (fs.existsSync(abs) && !flag(args, 'force')) {
       console.error(t('rules.initExists', { rel }));
-      return 1;
+      return 2;
     }
-    const legacy = adaptLegacy(root);
-    for (const rule of legacy.rules) validateRule(rule, `legacy:${rule.id}`);
+    const legacy = loaded.layers[0];
     const body = {
       version: 1,
       faces: legacy.faces,
@@ -64,7 +79,8 @@ export function rulesCommand({ args, t, lang }) {
     fs.writeFileSync(abs, `// 由 \`flow-kit rules init\` 从旧配置生成（${new Date().toISOString().slice(0, 10)}）。
 // 本文件是项目规则层：同 id 覆盖 legacy/stack 层；删除某条即回退到下层。手改后跑 \`flow-kit rules validate\`。
 ${JSON.stringify(body, null, 2)}\n`);
-    console.log(t('rules.initWritten', { count: body.rules.length, rel }));
+    if (flag(args, 'json')) process.stdout.write(`${JSON.stringify({ written: rel, count: body.rules.length })}\n`);
+    else console.log(t('rules.initWritten', { count: body.rules.length, rel }));
     return 0;
   }
 
@@ -76,20 +92,31 @@ ${JSON.stringify(body, null, 2)}\n`);
         console.error(t('rules.explainMissing', { id: id || '' }));
         return 2;
       }
-      console.log(JSON.stringify({ id: rule.id, source: rule.source, enabled: rule.enabled !== false, face: rule.face, phase: rule.phase, severity: rule.severity, scope: rule.scope || 'repo', when: rule.when || [], files: rule.files || null, assert: rule.assert, message: rule.message ? pickMessage(rule.message, lang) : null, waivers: active.filter((w) => w.rule === rule.id) }, null, 2));
+      // timeoutMs 原值输出：缺省（键不出现）= 原语默认上限，null = 不限时，数字 = 上限（毫秒）。
+      console.log(JSON.stringify({ id: rule.id, source: rule.source, enabled: rule.enabled !== false, face: rule.face, phase: rule.phase, severity: rule.severity, timeoutMs: rule.timeoutMs, scope: rule.scope || 'repo', when: rule.when || [], whenEnv: rule.whenEnv || null, files: rule.files || null, assert: rule.assert, message: rule.message ? pickMessage(rule.message, lang) : null, waivers: active.filter((w) => w.rule === rule.id) }, null, 2));
       return 0;
+    }
+    const findings = collectFindings(root, loaded.layers, model);
+    if (flag(args, 'json')) {
+      process.stdout.write(`${JSON.stringify({ ok: findings.length === 0, findings, rules: model.rules.length, layers: loaded.layers.map((l) => l.name), waivers: active.length, expired: expired.length, unsupported: loaded.unsupported }, null, 2)}\n`);
+      return findings.length ? 2 : 0;
     }
     console.log(t('rules.validated', {
       rules: model.rules.length,
-      layers: loaded.layers.join(' ← '),
+      layers: loaded.layers.map((l) => l.name).join(' ← '),
       waivers: active.length,
       expired: expired.length,
     }));
-    if (loaded.layers.includes('legacy')) console.log(t('rules.legacyHint'));
+    if (loaded.layers.some((l) => l.name === 'legacy')) console.log(t('rules.legacyHint'));
     if (loaded.unsupported.length) {
       console.log(t('rules.unsupported', { items: loaded.unsupported.map((u) => `${u.group}(${u.count})`).join(', ') }));
     }
     if (expired.length) console.log(t('rules.expiredWaivers', { count: expired.length }));
+    for (const finding of findings) console.log(t('rules.validateFinding', { finding }));
+    if (findings.length) {
+      console.log(t('rules.validateFailed', { count: findings.length }));
+      return 2;
+    }
     return 0;
   }
 
@@ -104,8 +131,9 @@ ${JSON.stringify(body, null, 2)}\n`);
   const faceArg = typeof args.face === 'string' ? args.face.split(',').map((s) => s.trim()).filter(Boolean) : null;
   const phaseArg = typeof args.phase === 'string' ? args.phase.split(',').map((s) => s.trim()).filter(Boolean) : null;
   const prefixArg = typeof args.prefix === 'string' ? args.prefix.split(',').map((s) => s.trim()).filter(Boolean) : null;
+  // --prefix 按 id 段边界匹配：`arch.` 选中 arch.*；`product.api` 只选中 product.api 本身，不吞 product.api-tests。
   const scoped = prefixArg
-    ? { ...model, rules: model.rules.filter((rule) => prefixArg.some((p) => rule.id.startsWith(p))) }
+    ? { ...model, rules: model.rules.filter((rule) => prefixArg.some((p) => rule.id === p || rule.id.startsWith(p.endsWith('.') ? p : `${p}.`))) }
     : model;
   const rangeParts = typeof args['range-old'] === 'string' && typeof args['range-new'] === 'string'
     ? { old: args['range-old'], new: args['range-new'] }
@@ -127,7 +155,15 @@ ${JSON.stringify(body, null, 2)}\n`);
       phases: phaseArg,
       waivers: active,
       range: rangeParts,
+      // 只有写前门 `--files` 把扫描收窄到待写文件；暂存 / 范围模式全仓扫描（旧门禁口径）。
+      restrict: staged || range ? null : filesArg,
     });
+    // 插件运行期异常留痕（.agents/cache/rules-plugins.json）→ doctor 告警；同一条插件再次正常求值即清除。
+    // 只读禁用条目（{ id, enabled: false }）没有 assert，与求值器同口径先判存在。
+    const pluginIds = new Set(scoped.rules.filter((rule) => rule.assert?.kind === 'plugin').map((rule) => rule.id));
+    recordPluginStatus(root, [...result.passed, ...result.violations, ...result.waived]
+      .filter((item) => pluginIds.has(item.ruleId))
+      .map(({ ruleId, anomaly, detail }) => ({ ruleId, anomaly: anomaly === true, detail })));
     const block = result.violations.filter((v) => v.severity === 'block');
     const warn = result.violations.filter((v) => v.severity === 'warn');
     if (flag(args, 'json')) {
@@ -147,6 +183,9 @@ ${JSON.stringify(body, null, 2)}\n`);
       if (v.detail) console.log(`   ${v.detail.split('\n').join('\n   ')}`);
     }
     if (result.waived.length) console.log(t('rules.waivedLine', { count: result.waived.length }));
+    // whenEnv 不满足 = 配置意图不提示；写法畸形 = 该规则永远不会启用，必须让人看见。
+    const badEnv = result.skipped.filter((s) => s.reason === 'whenEnv' && s.invalid);
+    if (badEnv.length) console.log(t('rules.whenEnvInvalid', { items: badEnv.map((s) => `${s.ruleId}（${s.whenEnv}）`).join('、') }));
     if (expired.length) console.log(t('rules.expiredWaivers', { count: expired.length }));
     if (loaded.unsupported.length) {
       console.log(t('rules.unsupported', { items: loaded.unsupported.map((u) => `${u.group}(${u.count})`).join(', ') }));
@@ -154,6 +193,6 @@ ${JSON.stringify(body, null, 2)}\n`);
     return block.length ? 1 : 0;
   } catch (e) {
     console.error(t('rules.configError', { message: e.message }));
-    return e.code === 'RULES_TARGET' ? 1 : 2;
+    return 2;
   }
 }

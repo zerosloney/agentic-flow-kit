@@ -17,6 +17,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { ENUMS } from './workflow-enums.mjs';
+import { loadWikiNames } from './wiki-names.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 // 运行时从包内执行时，配置与缓存仍必须落在目标项目（FLOW_KIT_PROJECT_ROOT/.agents）。
@@ -24,6 +25,7 @@ const AGENTS_DIR = process.env.FLOW_KIT_PROJECT_ROOT
   ? path.join(process.env.FLOW_KIT_PROJECT_ROOT, '.agents')
   : path.join(SCRIPT_DIR, '..');
 const MODULES_FILE = path.join(AGENTS_DIR, 'config', 'workflow-modules.txt');
+const NAMES = loadWikiNames(path.resolve(AGENTS_DIR, '..'));
 
 const USAGE = `用法: flow-kit run kb-search.mjs [选项] <词1> [词2 ...]（多词 AND）
 
@@ -34,7 +36,7 @@ const USAGE = `用法: flow-kit run kb-search.mjs [选项] <词1> [词2 ...]（�
   --type <intents,specs,plans,incidents>   workflow：限定文档类型（逗号分隔）
   --module <词表token>           workflow：按 frontmatter 模块过滤（词表见 .agents/config/workflow-modules.txt）
   --status <all|active|terminal> workflow：状态过滤，默认 all（active = draft/approved/open）
-  -t <主题>                      wiki：限定主题目录（如 数据维护）
+  -t <主题>                      wiki：限定主题目录（如 ${NAMES.maintenance}）
   -n <N>                         每语料展示文件数上限，默认 10；0 = 不限
   --include-generated            wiki：纳入默认跳过的 json/csv、*.visual-check.* 与 >180KB bulk 文件（走纯扫，不吃缓存）
   --no-cache                     禁用结构缓存，全量扫（与缓存热路径输出逐字节一致）
@@ -140,7 +142,7 @@ const WF_SECTIONS = [
   // plan 主体节
   '入口', '改动方案', '改动面', '任务拆解', '执行顺序', '验证计划', '验证方式', '约束与风险', '遗留项',
 ];
-const WIKI_EXCLUDE = new Set(['INDEX.md', '知识沉淀总览.html']);
+const WIKI_EXCLUDE = new Set(['INDEX.md', NAMES.board]);
 const WIKI_MAX_KB = 180;
 
 // ---- frontmatter（受限子集：每行 `键: 值`）+ H1 标题（去「INTENT — 」前缀）----

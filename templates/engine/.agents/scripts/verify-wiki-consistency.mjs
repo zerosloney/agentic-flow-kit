@@ -9,8 +9,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
 import { checkNarrativeClaims } from './gen-narrative-claims.mjs';
+import { loadWikiNames } from './wiki-names.mjs';
 
 const WIKI = 'wiki';
+const NAMES = loadWikiNames(process.cwd());
 const problems = [];
 const notes = [];
 
@@ -76,7 +78,7 @@ for (const dEnt of fs.readdirSync(WIKI, { withFileTypes: true })) {
   for (const fEnt of fs.readdirSync(p, { withFileTypes: true })) {
     if (isFileEntry(fEnt, p) && !fEnt.name.startsWith('.') && !isIgnored(fEnt.name)) diskFiles.add(`${d}/${fEnt.name}`);
   }
-  if (d !== '数据维护') {
+  if (d !== NAMES.maintenance) {
     for (const subEnt of fs.readdirSync(p, { withFileTypes: true })) {
       if (!isDirEntry(subEnt, p)) continue;
       const sp = path.join(p, subEnt.name);
@@ -98,10 +100,10 @@ if (fs.existsSync(ARCHIVE_DIR)) archiveCount = walkTree(ARCHIVE_DIR).files.filte
 else problems.push('wiki/drafts-archive/ 目录缺失（wiki 协议结构，模板自带）——归档一致性无从校验');
 
 // ---- 看板 DATA 解析 ----
-const html = fs.readFileSync(path.join(WIKI, '知识沉淀总览.html'), 'utf8');
+const html = fs.readFileSync(path.join(WIKI, NAMES.board), 'utf8');
 const m = html.match(/const DATA = (\{[\s\S]*?\n\});/);
 if (!m) {
-  console.error('❌ 看板 DATA 解析失败：知识沉淀总览.html 中找不到 `const DATA = {...}`');
+  console.error(`❌ 看板 DATA 解析失败：${NAMES.board} 中找不到 \`const DATA = {...}\``);
   process.exit(1);
 }
 // JSON.parse（p2-batch2）：DATA 由 gen-wiki-board 经 JSON.stringify 生成、必为合法 JSON——
@@ -194,18 +196,18 @@ for (const f of activeTree.files) {
 }
 if (badLinks.length) problems.push(`以下活跃文件含 file:/// 绝对路径链接: ${badLinks.join('、')}`);
 
-// ---- 7. 数据维护台账登记：子目录（含批次目录）须在 wiki/数据维护/README.md 有登记行 ----
+// ---- 7. 数据维护台账登记：子目录（含批次目录）须在 wiki/<maintenance>/README.md 有登记行（名随语言） ----
 // 「数据维护走 README 台账」是可选主题约定——目录不存在（新项目未建该主题）时整体跳过
-const maintLedger = path.join(WIKI, '数据维护', 'README.md');
+const maintLedger = path.join(WIKI, NAMES.maintenance, 'README.md');
 if (fs.existsSync(maintLedger)) {
 const maintReadme = fs.readFileSync(maintLedger, 'utf8');
 const maintReadmeFlat = maintReadme.replace(/\s+/g, ''); // README 标题写作「schema 变更」（带空格），故去空白再比对
-const maintDirs = activeTree.dirs.filter((d) => d.startsWith('数据维护/'));
+const maintDirs = activeTree.dirs.filter((d) => d.startsWith(`${NAMES.maintenance}/`));
 const unregistered = maintDirs
   .map((d) => d.split('/').pop())
   .filter((name) => !maintReadme.includes(name) && !maintReadmeFlat.includes(name.replace(/\s+/g, '')));
-if (unregistered.length) problems.push(`数据维护台账未登记（wiki/数据维护/README.md 无此行）：${unregistered.join('、')}`);
-else notes.push(`数据维护台账登记完整：${maintDirs.length} 个子目录（含批次目录）均有登记`);
+if (unregistered.length) problems.push(`${NAMES.maintenance}台账未登记（wiki/${NAMES.maintenance}/README.md 无此行）：${unregistered.join('、')}`);
+else notes.push(`${NAMES.maintenance}台账登记完整：${maintDirs.length} 个子目录（含批次目录）均有登记`);
 }
 
 // ---- 8. 看板链接可达性：DATA.dir（「打开目录」href）+ 静态相对 href 解析后须存在 ----

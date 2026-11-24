@@ -21,6 +21,7 @@ import { isBinaryPath, writeBaseline } from '../install/baseline.mjs';
 import { wireUserHooks } from '../install/user-hooks.mjs';
 import { explainPolicyDiff, renderPolicyDiff } from '../install/policy-diff.mjs';
 import { RUNTIME_SCRIPTS } from './runtime.mjs';
+import { readInstalledAt } from './replay.mjs';
 import {
   parseModelFlags, readInjectedModels, resolveModels, summarizeModels, writeLocalModelRoles,
 } from '../models/resolve.mjs';
@@ -31,6 +32,16 @@ import { readKitVersion } from '../install/version.mjs';
 export { readKitVersion };
 
 const KIT_VERSION = readKitVersion();
+
+// 项目形态 / 脚手架档位：CLI 校验与 TUI 向导共用的单一来源（顺序即合法值列表与菜单顺序）。
+export const PRODUCT_MODES = ['web', 'api', 'library', 'cli'];
+export const SCAFFOLD_MODES = ['full', 'minimal', 'none'];
+
+// 端口规则（1–65535 的整数）：CLI 的 --api-port/--web-port 与 TUI 输入共用；非法值返回 null。
+export function parsePortNumber(raw) {
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 && n <= 65535 ? n : null;
+}
 
 export function resolveTarget(args) {
   const target = path.resolve(args.target || process.cwd());
@@ -49,16 +60,7 @@ export function resolveTarget(args) {
   return target;
 }
 
-// engine.json 的 createdAt 即 {{installedAt}} 的渲染产物（与 diff.mjs readInstalledAt 同口径）；
-// 重装时复用既有值可实现重跑/崩溃续装的字节幂等。读不到（首装/损坏）返回 null。
-function readEngineCreatedAt(target) {
-  try {
-    const engine = JSON.parse(fs.readFileSync(path.join(target, '.agents/config/engine.json'), 'utf8'));
-    return engine.createdAt || null;
-  } catch {
-    return null;
-  }
-}
+// 安装时间戳沿用已装 engine.json 的 createdAt（重跑 / 崩溃续装字节幂等）；读取口径与重放共用：replay.mjs 的 readInstalledAt。读不到（首装 / 损坏）返回 null。
 
 export function resolveHosts(args, t, fallback = []) {
   const names = args.agents && args.agents.length ? args.agents : fallback;
@@ -333,7 +335,7 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
   const projectName = args.name || path.basename(target);
   // 渲染与 manifest 使用同一时间戳，避免 diff 把 {{installedAt}} 误判为模板更新。
   // 重跑/续装幂等：engine.json 已有 createdAt（{{installedAt}} 的渲染产物）时复用既有值。
-  const installedAt = readEngineCreatedAt(target) || new Date().toISOString();
+  const installedAt = readInstalledAt(target) || new Date().toISOString();
   let hostSet = [...new Set([...(previous?.hosts || []), ...hosts])];
   const trackHosts = flag(args, 'track-hosts');
   // 档位：CLI > --hardened（=enterprise）> 既有 manifest > standard。
@@ -393,8 +395,6 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
       : (tier === 'lean' ? null : (ciFromForge(forgeFromRemote(originUrl(target))) || (tier === 'enterprise' ? 'both' : 'none')));
 
   // 项目形态 / 端口 / 脚手架档位：显式参数 > manifest 重放 > 缺省（web / 栈默认端口 / full）。
-  const PRODUCT_MODES = ['web', 'api', 'library', 'cli'];
-  const SCAFFOLD_MODES = ['full', 'minimal', 'none'];
   const product = String(args.product || previous?.product || 'web').toLowerCase();
   if (!PRODUCT_MODES.includes(product)) {
     const err = new Error(t('error.badProduct', { value: args.product || '', modes: PRODUCT_MODES.join(', ') }));
@@ -403,8 +403,8 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
   }
   const parsePort = (raw, flagName) => {
     if (raw === undefined) return undefined;
-    const n = Number(raw);
-    if (!Number.isInteger(n) || n < 1 || n > 65535) {
+    const n = parsePortNumber(raw);
+    if (n === null) {
       const err = new Error(t('error.badPort', { flag: flagName, value: String(raw) }));
       err.code = 'BAD_PORT';
       throw err;

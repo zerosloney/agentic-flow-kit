@@ -20,10 +20,12 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { ENUMS } from './workflow-enums.mjs';
+import { loadWikiNames } from './wiki-names.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = process.env.FLOW_KIT_PROJECT_ROOT || process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
 const CACHE_DIR = path.join(ROOT, '.agents', 'cache');
+const NAMES = loadWikiNames(ROOT);
 const TELEMETRY_FILE = path.join(CACHE_DIR, 'kb-usage.jsonl');
 
 const ACTIVE_STATUS = new Set([...ENUMS['doc.status.active'], ...ENUMS['incident.status.active']]);
@@ -173,7 +175,7 @@ const walkWiki = (dir) => {
     const rel = path.relative(ROOT, abs).replace(/\\/g, '/');
     if (e.isDirectory()) { walkWiki(abs); continue; }
     if (!WIKI_EXTS.test(e.name)) continue;
-    if (e.name === 'INDEX.md' || e.name === '知识沉淀总览.html') continue;
+    if (e.name === 'INDEX.md' || e.name === NAMES.board) continue;
     if (/\.visual-check\./.test(e.name)) continue;
     try {
       if (fs.statSync(abs).size / 1024 > WIKI_MAX_KB) continue;

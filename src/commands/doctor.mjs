@@ -18,6 +18,9 @@ import { ROLE_NAMES, readInjectedModels, readLocalModelRoles } from '../models/r
 import { computeEnterprise, GIT_HOOKS, PROOF_CHAIN_FILES, resolveTarget } from './install.mjs';
 import { readLocalPolicy, checkPolicyDriftSync } from './policy.mjs';
 import { verifySbom } from './sbom.mjs';
+import { splitWaivers } from '../rules/model.mjs';
+import { loadModel } from '../rules/load.mjs';
+import { readPluginStatus } from '../rules/plugin-status.mjs';
 import { verifySignature, signPayload, readSignatureFile, writeSignatureFile, resolvePublicKeyPath } from '../install/notary.mjs';
 import { listHandoffFiles, verifyHandoffEnvelope } from '../install/handoff.mjs';
 import { checkMcpGatewayHealth } from '../install/mcp-gateway.mjs';
@@ -26,6 +29,7 @@ import { checkSandboxHealth } from '../install/sandbox.mjs';
 import { checkSkillsEvalHealth } from '../skills/eval-harness.mjs';
 import { RUNTIME_SCRIPTS, RUNTIME_HOOKS, KIT_ROOT } from './runtime.mjs';
 import { buildDiff } from './diff.mjs';
+import { WIKI_NAMES, WIKI_TOPIC_KEYS } from '../install/wiki-names.mjs';
 import { loadFaces, isProductPath } from '../../templates/engine/.agents/scripts/faces.mjs';
 
 const HOOK_FILES = ['pre-commit', 'commit-msg', 'post-commit', 'pre-merge-commit', 'pre-push'];
@@ -89,6 +93,7 @@ export function doctorCommand({ args, t }) {
   const permissionSpec = gates.permissions;
   const permissionDeclared = Boolean(permissionSpec
     && (permissionSpec.allow.length || permissionSpec.deny.length || permissionSpec.ask.length));
+  let diffResult = null;
   if (!manifest) {
     add(false, 'install-manifest', t('doctor.manifestMissing'));
   } else {
@@ -97,7 +102,7 @@ export function doctorCommand({ args, t }) {
       if (!fs.existsSync(path.join(target, rel))) add(false, `file ${rel}`, t('doctor.fileMissing'));
     }
     // 漂移是 advisory：用户改文件属正常，缺失已在上面按文件报错；明细交给 diff。
-    const drift = buildDiff({ target, manifest }).summary;
+    const drift = (diffResult = buildDiff({ target, manifest })).summary;
     const drifting = drift.userModified + drift.kitUpdated + drift.orphan;
     if (drifting > 0) {
       add(true, 'manifest drift', t('doctor.drift', drift), t('doctor.driftHint'), { warn: true });
@@ -557,6 +562,96 @@ export function doctorCommand({ args, t }) {
     }
   } catch (e) {
     reportGate('project-faces', 'error', e.message);
+  }
+
+  // rules 规则包汇总：启用数 / 严重级 / 层来源 / 插件 / 豁免（含过期）——旧配置迁移可见性。
+  try {
+    const { model, layers } = loadModel(target);
+    const { active, expired } = splitWaivers(model.waivers);
+    const enabledRules = model.rules.filter((r) => r.enabled !== false);
+    const plugins = model.rules.filter((r) => r.assert && r.assert.kind === 'plugin').length;
+    add(true, 'rules', t('doctor.rulesSummary', {
+      enabled: enabledRules.length,
+      total: model.rules.length,
+      block: enabledRules.filter((r) => r.severity === 'block').length,
+      warn: enabledRules.filter((r) => r.severity === 'warn').length,
+      layers: layers.map((l) => l.name).join(' ← '),
+      plugins,
+      waived: active.length,
+      expired: expired.length,
+    }));
+    if (layers.some((l) => l.name === 'legacy') && !layers.some((l) => l.name === 'project')) {
+      add(true, 'rules migration', t('doctor.rulesMigrationHint'), '', { warn: true });
+    }
+
+    // 门禁覆盖率（gate coverage，advisory）：按规则 id 前缀归族，只统计生效规则——配了才算覆盖。
+    const GATE_FAMILIES = [
+      ['architecture-redlines', 'arch.'],
+      ['delete-guard', 'delete.'],
+      ['audit-fields', 'audit.'],
+      ['notify-guard', 'notify.'],
+      ['commit-check', 'commit.'],
+      ['product-gates', 'product.'],
+      ['local-gates', 'local.'],
+    ];
+    if (!enabledRules.length) {
+      add(true, 'gate coverage', t('doctor.gateCoverageEmpty'), '', { warn: true });
+    } else {
+      const counts = GATE_FAMILIES.map(([name, prefix]) => ({
+        name,
+        count: enabledRules.filter((r) => String(r.id).startsWith(prefix)).length,
+      }));
+      const configured = counts.filter((c) => c.count > 0).map((c) => c.name);
+      const missing = counts.filter((c) => c.count === 0).map((c) => c.name);
+      const other = enabledRules.length - counts.reduce((sum, c) => sum + c.count, 0);
+      add(true, 'gate coverage', t('doctor.gateCoverage', {
+        configured: configured.length ? configured.join(', ') : '-',
+        missing: missing.length ? missing.join(', ') : '-',
+        other,
+      }));
+    }
+
+    // 规则插件：白名单条目对应的模块文件必须存在（静态检查，不加载、不执行）。
+    const pluginEntries = new Map();
+    for (const layer of layers) for (const p of layer.plugins || []) pluginEntries.set(p.id, p);
+    const missingPlugins = [...pluginEntries.values()]
+      .filter((p) => !fs.existsSync(path.join(target, '.agents/rules/plugins', `${p.module}.mjs`)))
+      .map((p) => p.id);
+    if (missingPlugins.length) {
+      add(true, 'rules plugins', t('doctor.rulesPluginsMissing', { plugins: missingPlugins.join(', ') }), '', { warn: true });
+    }
+  } catch (e) {
+    add(false, 'rules', t('doctor.rulesError', { message: e.message }));
+  }
+
+  // 插件运行期异常（advisory）：rules check 把没跑成的插件（崩溃 / 超时 / 输出非法）留痕在本机缓存——
+  // warn 档的异常不能只在提交那一刻闪过。只读留痕，不执行插件。
+  const pluginAnomalies = Object.entries(readPluginStatus(target));
+  if (pluginAnomalies.length) {
+    add(true, 'rules plugin runtime', t('doctor.rulesPluginRuntime', {
+      items: pluginAnomalies.map(([id, a]) => `${id}（${String(a?.at || '').slice(0, 19).replace('T', ' ')} ${String(a?.detail || '').split('\n')[0]}）`).join('、'),
+    }), '', { warn: true });
+  }
+
+  // 栈层漂移（advisory）：stack.*.json 由 kit 管理，本地改动会在升级时漂移（被跳过或合并出冲突）——自定义写 project.json。
+  const stackDrift = (diffResult?.items || [])
+    .filter((i) => i.kind === 'user-modified' && /^\.agents\/rules\/stack\.[^/]+\.json$/.test(i.targetRel))
+    .map((i) => i.targetRel);
+  if (stackDrift.length) {
+    add(true, 'rules stack drift', t('doctor.rulesStackDrift', { files: stackDrift.join(', ') }), '', { warn: true });
+  }
+
+  // wiki 目录名与安装语言不一致（advisory）：语言切换 / 旧版英文安装留下旧命名目录；kit 不搬用户内容，只提示残留。
+  if (manifest) {
+    const current = manifest.language === 'en' ? 'en' : 'zh-CN';
+    const other = current === 'en' ? 'zh-CN' : 'en';
+    const leftovers = WIKI_TOPIC_KEYS
+      .map((key) => WIKI_NAMES[key][other])
+      .filter((name) => fs.existsSync(path.join(target, 'wiki', name)))
+      .map((name) => `wiki/${name}/`);
+    if (leftovers.length) {
+      add(true, 'wiki dir names', t('doctor.wikiDirNames', { dirs: leftovers.join(', ') }), '', { warn: true });
+    }
   }
 
   // 离线安装包溯源体检

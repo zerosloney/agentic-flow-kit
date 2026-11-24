@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 // commit-check — Phase 5：条件构建 / 质量检查 / 推送前测试统一交给 rules 引擎执行
 // （规则由 .agents/hooks/commit-check.config.json 投影，判据单源；对拍见 tests/commit-check.test.mjs）。
-// 本脚本保留历史参数与输出格式（OK / SKIP / BLOCK 行），退出码语义不变：
-//   0 通过（含跳过）；1 构建/检查/推送前测试失败；2 配置错误（rules 引擎 fail-closed）。
+// 本脚本保留历史参数与输出格式（OK / SKIP / BLOCK 行）；退出码：
+//   0 通过（含跳过）；1 构建/检查/推送前测试失败；2 配置错误（配置 JSON 坏，或 rules 引擎 fail-closed——配置坏不得当未配置放过）。
 // 参数：--no-build（跳过构建段）；--full（不看 ext/prefix 裁剪，仍尊重 when）；
 //       --range <old> <new>（推送范围模式，执行 pushTests；全零 old = 全量匹配语义）。
 const { spawnSync } = require('node:child_process');
@@ -30,9 +30,9 @@ try {
     console.log('SKIP: 未配置 .agents/hooks/commit-check.config.json（builds/checks/pushTests 全跳过）');
     process.exit(0);
   }
-  // 与历史行为一致：配置读不了/JSON 坏按未配置跳过（git 钩子与独立复核兜底）。
-  console.log('SKIP: .agents/hooks/commit-check.config.json 解析失败——按未配置跳过');
-  process.exit(0);
+  // 配置读不了 / JSON 坏 = 配置失守，fail-closed（exit 2）：按未配置放过等于构建 / 质检 / 推送前测试全部静默失效。
+  console.log(`BLOCK: .agents/hooks/commit-check.config.json 解析失败（${e.message}）——配置坏不得当未配置放过`);
+  process.exit(2);
 }
 
 const cli = [process.env.FLOW_KIT_CLI, path.resolve(__dirname, '..', '..', '..', '..', 'bin', 'flow-kit.mjs')]
@@ -101,9 +101,14 @@ for (const group of groups) {
       matchedByFiles += 1;
       continue;
     }
+    if (skipped && skipped.reason === 'whenEnv') {
+      // whenEnv 门槛不满足 = 配置意图，不执行也不打印（历史语义）；写法畸形则提示——该项永远不会启用。
+      if (skipped.invalid) console.error(`WARN: ${entry.name || id} 的 whenEnv「${skipped.whenEnv}」写法有误（应为 KEY=VAL），该项未启用`);
+      continue;
+    }
     if (skipped && skipped.reason === 'when') {
       const when = Array.isArray(skipped.when) ? skipped.when : [];
-      // whenEnv 门槛（env: 谓词）不满足 = 配置意图，不执行也不打印（历史语义）。
+      // when 只含 env: 谓词且不满足 = 环境门槛（配置意图），同样不打印。
       if (when.length && when.every((w) => String(w).startsWith('env:'))) continue;
       console.log(`SKIP: ${entry.name || id}（未找到 ${when.join(', ')}，跳过${KIND[group]}——配置好后自动启用）`);
       printed += 1;

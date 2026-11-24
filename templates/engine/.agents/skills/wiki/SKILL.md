@@ -50,7 +50,7 @@ flow-kit run memory-wiki.mjs --check   # 记忆表示（wiki/_memory）是否最
 - 检查项涵盖：磁盘 $\leftrightarrow$ INDEX $\leftrightarrow$ 看板 DATA $\leftrightarrow$ 数据维护台账 $\leftrightarrow$ 链接可达性。
 
 ## 维护须知
-- **生成区**：`wiki/INDEX.md` 的计数/映射表及 `知识沉淀总览.html` 的 DATA 块为自动生成区，禁止手动修改。
-- **人工编辑位**：仅维护 `wiki/INDEX.md` 的「用途」列及 `wiki/数据维护/README.md` 台账。
+- **生成区**：`wiki/INDEX.md` 的计数/映射表及 `{{wikiBoardName}}` 的 DATA 块为自动生成区，禁止手动修改。
+- **人工编辑位**：仅维护 `wiki/INDEX.md` 的「用途」列及 `{{wikiMaintenance}}/README.md` 台账。
 - **冲突处理**：wiki 与 `AGENTS.md` 或 `workflow` 冲突时，以后者为准。
 - **提交规范**：调整 wiki 内容（知识文档新增/修改/删除/更名/归位、INDEX、看板、本技能文件）属 docs 级改动，**豁免工作流三件套**（不生成 intents/specs/plans、不走确认门），直接 commit (`docs(wiki): <动作>`)；规则单源 = 根 `AGENTS.md` §4「wiki 豁免」。删除文件仍须用户单独确认（见「操作限制」）。

@@ -46,10 +46,10 @@ function listFilesIn(root, prefixRel) {
 }
 
 /** 解析 targets：glob → 按静态前缀收文件；目录 → 递归并按 ext 过滤；文件 → 原样。optional 缺失返回 null。 */
-export function resolveTargets(root, targets, ext, optional = false, allFiles = null) {
+export function resolveTargets(root, targets, ext, optional = false) {
   const exts = Array.isArray(ext) ? ext : [];
   const files = new Set();
-  const universe = () => allFiles || listFilesIn(root, '');
+  const universe = () => listFilesIn(root, '');
   for (const target of targets) {
     const t = posix(target);
     if (hasGlobMeta(t)) {
@@ -63,10 +63,6 @@ export function resolveTargets(root, targets, ext, optional = false, allFiles = 
         if (re.test(f)) files.add(f);
       }
     } else if (fs.existsSync(path.join(root, t)) && fs.statSync(path.join(root, t)).isDirectory()) {
-      if (!fs.existsSync(path.join(root, t))) {
-        if (optional) return null;
-        throw new RulesTargetError(`目标目录不存在：${t}`);
-      }
       for (const f of listFilesIn(root, t)) {
         if (!exts.length || exts.some((e) => f.endsWith(e))) files.add(f);
       }
@@ -88,12 +84,14 @@ function readPkg(root) {
   }
 }
 
-const dotted = (obj, key) => key.split('.').reduce((acc, part) => (acc && typeof acc === 'object' ? acc[part] : undefined), obj);
+// 与旧脚本同口径：路径按「.」切分并忽略空段（pkg:scripts..build 等价 pkg:scripts.build）。
+const dotted = (obj, key) => key.split('.').filter(Boolean).reduce((acc, part) => (acc && typeof acc === 'object' ? acc[part] : undefined), obj);
 
-/** when 谓词：pkg:<dotted> / env:KEY=VAL / 路径或 glob 存在性。数组为 OR（与旧 commit-check / product-gates 的 some 语义一致）。 */
-export function whenSatisfied(items, root, allFiles = null) {
+/** when 谓词：pkg:<dotted> / env:KEY=VAL / 路径或 glob 存在性。数组为 OR（与旧 commit-check / product-gates 的 some 语义一致）。
+ *  pkg: 读 pkgDir 下的 package.json（规则 cwd/folder；缺省仓库根）——与旧 commit-check(entry.cwd) / verify(gate.folder) 同口径。 */
+export function whenSatisfied(items, root, pkgDir = null) {
   if (!Array.isArray(items) || items.length === 0) return true;
-  const pkg = readPkg(root);
+  const pkg = readPkg(pkgDir || root);
   return items.some((raw) => {
     const item = String(raw);
     if (item.startsWith('env:')) {
@@ -102,11 +100,15 @@ export function whenSatisfied(items, root, allFiles = null) {
       if (eq <= 0) return false;
       return process.env[body.slice(0, eq)] === body.slice(eq + 1);
     }
-    if (item.startsWith('pkg:')) return Boolean(dotted(pkg, item.slice(4)));
+    if (item.startsWith('pkg:')) {
+      // 旧语义：叶子必须是非空字符串（scripts.build 这类命令项）；对象 / 布尔 / 数字不算命中。
+      const leaf = dotted(pkg, item.slice(4));
+      return typeof leaf === 'string' && leaf.trim() !== '';
+    }
     const p = posix(item);
     if (hasGlobMeta(p)) {
       const re = globToRegExp(p);
-      const files = allFiles || listFilesIn(root, staticPrefix(p).replace(/\/$/, ''));
+      const files = listFilesIn(root, staticPrefix(p).replace(/\/$/, ''));
       return files.some((f) => re.test(f));
     }
     return fs.existsSync(path.join(root, p));
@@ -114,7 +116,9 @@ export function whenSatisfied(items, root, allFiles = null) {
 }
 
 function fileFilterMatch(filter, changed) {
-  if (!filter || !changed || changed.length === 0) return true;
+  // changed === null：本次没有「变更面」信息（--full），不做裁剪；changed 为空数组：没有任何变更文件，不触发。
+  if (!filter || changed === null) return true;
+  if (changed.length === 0) return false;
   const exts = Array.isArray(filter.ext) ? filter.ext : [];
   const prefixes = Array.isArray(filter.prefix) ? filter.prefix : [];
   const globs = Array.isArray(filter.glob) ? filter.glob.map(globToRegExp) : [];
@@ -163,7 +167,7 @@ function evalContentRepo(rule, ctx) {
   const a = rule.assert.args;
   const ext = a.ext === undefined ? ['.cs'] : a.ext;
   const targets = [...(a.targets || []), ...(a.files || [])].map(posix);
-  const files = resolveTargets(ctx.root, targets, ext, a.optional === true, ctx.allFiles);
+  const files = resolveTargets(ctx.root, targets, ext, a.optional === true);
   if (files === null) return { skipped: 'optional-target-missing' };
   const excludeRes = (a.exclude || []).map((g) => globToRegExp(g));
   const matchRes = [...(a.matches || []), ...(a.pattern ? [a.pattern] : [])].map((p) => new RegExp(p));
@@ -171,7 +175,7 @@ function evalContentRepo(rule, ctx) {
   const allow = (a.allow || []).map((x) => ({ re: globToRegExp(x.glob), lineRe: x.pattern ? new RegExp(x.pattern) : null }));
   const violations = [];
   for (const rel of files) {
-    if (ctx.changed && ctx.changed.length && !ctx.changed.some((c) => posix(c) === rel)) continue;
+    if (ctx.restrict && ctx.restrict.length && !ctx.restrict.some((c) => posix(c) === rel)) continue;
     if (excludeRes.some((re) => re.test(rel))) continue;
     const lines = readLines(path.join(ctx.root, rel));
     for (let i = 0; i < lines.length; i += 1) {
@@ -211,14 +215,15 @@ function evalContentDiff(rule, ctx) {
 
 function evalRequire(rule, ctx) {
   const a = rule.assert.args;
-  const files = resolveTargets(ctx.root, a.files, ['.cs'], a.optional === true, ctx.allFiles);
+  // 目录目标按 ext 过滤（缺省 .cs，与旧架构门同口径；显式文件与 glob 不过滤）——非 .NET 项目配目录时声明 ext。
+  const files = resolveTargets(ctx.root, a.files, a.ext === undefined ? ['.cs'] : a.ext, a.optional === true);
   if (files === null) return { skipped: 'optional-target-missing' };
   const excludeRes = (a.exclude || []).map((g) => globToRegExp(g));
   const trigger = String(a.trigger);
   const requireText = String(a.require);
   const violations = [];
   for (const rel of files) {
-    if (ctx.changed && ctx.changed.length && !ctx.changed.some((c) => posix(c) === rel)) continue;
+    if (ctx.restrict && ctx.restrict.length && !ctx.restrict.some((c) => posix(c) === rel)) continue;
     if (excludeRes.some((re) => re.test(rel))) continue;
     const lines = readLines(path.join(ctx.root, rel));
     let block = null;
@@ -245,7 +250,7 @@ function evalAbsence(rule, ctx) {
   const a = rule.assert.args;
   const re = globToRegExp(a.glob);
   const unless = (a.unless || []).map(globToRegExp);
-  const hits = (ctx.allFiles || listFilesIn(ctx.root, '')).filter((f) => re.test(f) && !unless.some((u) => u.test(f)));
+  const hits = listFilesIn(ctx.root, '').filter((f) => re.test(f) && !unless.some((u) => u.test(f)));
   return { violations: hits.map((file) => ({ ruleId: rule.id, severity: rule.severity, message: rule.message, file, detail: '禁止存在的路径' })) };
 }
 
@@ -302,7 +307,7 @@ function evalNavProperties(rule, ctx) {
   }
   const violations = [];
   for (const rel of files) {
-    if (ctx.changed && ctx.changed.length && !ctx.changed.some((c) => posix(c) === rel)) continue;
+    if (ctx.restrict && ctx.restrict.length && !ctx.restrict.some((c) => posix(c) === rel)) continue;
     const lines = readLines(path.join(ctx.root, rel));
     for (let i = 0; i < lines.length; i += 1) {
       const m = /^\s*public\s+(?:virtual\s+)?([\w<>,\s.?]+?)\s+(\w+)\s*\{/.exec(lines[i]);
@@ -321,14 +326,15 @@ function evalNavProperties(rule, ctx) {
 function evalPlugin(rule, ctx) {
   const a = rule.assert.args;
   const modulePath = path.join(ctx.root, '.agents', 'rules', 'plugins', `${a.module}.mjs`);
-  const fail = (detail) => ({ violations: [{ ruleId: rule.id, severity: rule.severity, message: rule.message, detail }] });
+  // anomaly = 插件自身没跑成（模块缺失 / 崩溃 / 超时 / 输出非法），区别于插件报出的违例——CLI 据此留痕给 doctor。
+  const fail = (detail) => ({ violations: [{ ruleId: rule.id, severity: rule.severity, message: rule.message, detail, anomaly: true }] });
   if (!fs.existsSync(modulePath)) return fail(`插件不存在：.agents/rules/plugins/${a.module}.mjs`);
-  const payload = JSON.stringify({ version: 1, root: ctx.root, files: ctx.changed || null, face: rule.face });
+  const payload = JSON.stringify({ version: 1, root: ctx.root, files: ctx.changed || null, face: rule.face, faces: ctx.faces || {}, config: a.config || {} });
   const r = spawnSync(process.execPath, [modulePath], {
     cwd: ctx.root,
     input: payload,
     encoding: 'utf8',
-    timeout: rule.timeoutMs || a.timeoutMs || 10000,
+    timeout: rule.timeoutMs ?? 10000,
   });
   if (r.error) return fail(`插件执行失败：${r.error.message}`);
   if (r.status !== 0) return fail(`插件退出码 ${r.status}：${String(r.stderr || '').trim().slice(-400)}`);
@@ -370,26 +376,32 @@ function evalCommand(rule, ctx) {
   const run = String(a.run)
     .replace(/\{old\}/g, ctx.range?.old ?? '')
     .replace(/\{new\}/g, ctx.range?.new ?? '');
-  const timeout = rule.timeoutMs || a.timeoutMs || 600000;
+  // 时限只认规则顶层的 timeoutMs：缺省 10 分钟（旧 commit-check 的 BUILD_TIMEOUT_MS 口径），null = 显式不限时（产品门缺省，旧 verify 同口径）。
+  const timeout = rule.timeoutMs === undefined ? 600000 : rule.timeoutMs;
+  // expectExit：声明的预期退出码（非负整数或其数组）；缺省只有 0 算通过。
+  const expected = a.expectExit === undefined ? [0] : (Array.isArray(a.expectExit) ? a.expectExit : [a.expectExit]);
   const meta = { name: a.name, command: run };
   const r = spawnSync(run, {
     cwd,
     shell: true,
     encoding: 'utf8',
-    timeout,
+    timeout: timeout ?? undefined,
     maxBuffer: 32 * 1024 * 1024,
     env: { ...process.env, ...(a.env || {}) },
   });
   if (r.error) {
     const timedOut = r.error.code === 'ETIMEDOUT';
     const detail = timedOut
-      ? `[超时] 命令超过 ${Math.round(timeout / 1000)}s 未结束，已终止：${run}\n${String((r.stdout || '') + (r.stderr || ''))}`
+      ? `[超时] 命令超过 ${timeout >= 1000 ? `${Math.round(timeout / 1000)}s` : `${timeout}ms`} 未结束，已终止：${run}\n${String((r.stdout || '') + (r.stderr || ''))}`
       : `[spawn 失败] ${r.error.code || r.error.message}\n${String((r.stdout || '') + (r.stderr || ''))}`;
     return { ...meta, violations: [{ ruleId: rule.id, severity: rule.severity, message: rule.message, detail }] };
   }
-  if (r.status === 0) return { ...meta, violations: [] };
+  if (r.status !== null && expected.includes(r.status)) return { ...meta, violations: [] };
   const raw = String((r.stdout || '') + (r.stderr || ''));
-  let detail = raw.slice(-1500);
+  // 缺省口径（未声明 expectExit）的失败详情保持原样（旧门禁输出对拍）；只要声明了 expectExit，不匹配就点明实际 / 期望退出码。
+  let detail = a.expectExit === undefined
+    ? raw.slice(-1500)
+    : `[退出码] 实际 ${r.status}，期望 ${expected.join(' / ')}\n${raw.slice(-1500)}`;
   if (a.lockPattern) {
     try {
       const re = new RegExp(a.lockPattern);
@@ -406,26 +418,75 @@ function waivedBy(waivers, violation) {
     && (!w.glob || (violation.file && globToRegExp(w.glob).test(posix(violation.file)))));
 }
 
-/** 求值入口。 */
-export function evaluateModel(model, { root, changed = null, diff = null, withCommands = false, faces = null, phases = null, waivers = [], today = null, range = null }) {
-  const allFiles = null;
-  const ctx = { root, changed, diff, withCommands, allFiles, range };
+/** 命令规则的 deps 拓扑排序（依赖先跑；未在集合内的依赖忽略）。 */
+function orderRules(rules) {
+  const byId = new Map(rules.map((r) => [r.id, r]));
+  const out = [];
+  const state = new Map();
+  const visit = (rule) => {
+    const st = state.get(rule.id);
+    if (st === 2) return;
+    if (st === 1) return; // 依赖环：保持原序，避免死循环
+    state.set(rule.id, 1);
+    const deps = rule.assert && rule.assert.kind === 'command' && Array.isArray(rule.assert.args.deps)
+      ? rule.assert.args.deps
+      : [];
+    for (const dep of deps) {
+      const target = byId.get(dep);
+      if (target) visit(target);
+    }
+    state.set(rule.id, 2);
+    out.push(rule);
+  };
+  for (const rule of rules) visit(rule);
+  return out;
+}
+
+/** whenEnv 门槛（"VAR=value"）：与 when 是两道独立的门（旧 commit-check 语义）——不满足 = 规则不启用（配置意图）；
+ *  畸形（缺「=」/变量名为空）同样不启用——推送门宁可少跑不误拦，但求值结果里记 invalid，让人看得见。 */
+function whenEnvOk(value) {
+  const eq = value.indexOf('=');
+  return eq > 0 && process.env[value.slice(0, eq)] === value.slice(eq + 1);
+}
+
+/** 求值入口。changed = 变更面（暂存 / 范围 / 待写文件），只驱动 files 过滤与插件输入；
+ *  restrict = 仓库面扫描收窄到的文件集——只有写前门 `--files` 传入；暂存 / 范围模式必须为 null（全仓扫描，与旧门禁一致）。 */
+export function evaluateModel(model, { root, changed = null, diff = null, withCommands = false, faces = null, phases = null, waivers = [], range = null, restrict = null }) {
+  const ctx = { root, changed, diff, withCommands, faces: model.faces || {}, range, restrict };
   const violations = [];
   const waived = [];
   const skipped = [];
   const passed = [];
+  const failedIds = new Set();
   const faceSet = faces && faces.length ? new Set(faces) : null;
   const phaseSet = phases && phases.length ? new Set(phases) : null;
-  for (const rule of model.rules) {
+  for (const rule of orderRules(model.rules)) {
     if (rule.enabled === false) continue;
     if (faceSet && rule.face !== 'any' && !faceSet.has(rule.face)) continue;
     if (phaseSet && rule.phase !== 'always' && !phaseSet.has(rule.phase)) continue;
-    if (!whenSatisfied(rule.when, root, allFiles)) {
-      skipped.push({ ruleId: rule.id, reason: 'when', when: rule.when || [] });
-      continue;
+    if (rule.assert.kind === 'command' && Array.isArray(rule.assert.args.deps)) {
+      const failedDep = rule.assert.args.deps.find((d) => failedIds.has(d));
+      if (failedDep) {
+        skipped.push({ ruleId: rule.id, reason: 'dep', deps: [failedDep] });
+        continue;
+      }
     }
+    // 门序与旧 commit-check 一致：文件面裁剪 → whenEnv → when（决定「没命中」与「未配置」各自打哪种 SKIP）。
     if (changed && rule.files && !fileFilterMatch(rule.files, changed)) {
       skipped.push({ ruleId: rule.id, reason: 'files' });
+      continue;
+    }
+    if (rule.whenEnv !== undefined) {
+      const value = String(rule.whenEnv);
+      if (!whenEnvOk(value)) {
+        skipped.push({ ruleId: rule.id, reason: 'whenEnv', whenEnv: value, invalid: value.indexOf('=') <= 0 });
+        continue;
+      }
+    }
+    // pkg: 谓词读规则 cwd 下的 package.json（与 evalCommand 同一解析；缺省仓库根）——旧 commit-check(entry.cwd) / verify(gate.folder) 口径。
+    const pkgDir = rule.assert.args && rule.assert.args.cwd ? path.join(root, rule.assert.args.cwd) : root;
+    if (!whenSatisfied(rule.when, root, pkgDir)) {
+      skipped.push({ ruleId: rule.id, reason: 'when', when: rule.when || [] });
       continue;
     }
     let outcome;
@@ -447,7 +508,10 @@ export function evaluateModel(model, { root, changed = null, diff = null, withCo
       const waiver = waivedBy(waivers, violation);
       const enriched = { ...violation, ...(outcome.name ? { name: outcome.name } : {}), ...(outcome.command ? { command: outcome.command } : {}) };
       if (waiver) waived.push({ ...enriched, waiver });
-      else violations.push(enriched);
+      else {
+        violations.push(enriched);
+        failedIds.add(rule.id);
+      }
     }
     if (outcome.violations.length === 0) {
       passed.push({ ruleId: rule.id, ...(outcome.name ? { name: outcome.name } : {}), ...(outcome.command ? { command: outcome.command } : {}) });

@@ -312,6 +312,9 @@ const whenSkippedGates = [];
     : [];
   const knownIds = new Set(GATES.map((g) => g.id));
   const configured = [];
+  // 执行路径单源（rules v1）：产品门委托 rules 引擎执行；规则 id = product.<slug(gate.id)>
+  // （与 src/rules/adapters.mjs 同口径）。env/deps/when 仍由 verify 侧元数据承载（SKIP 行、依赖排序与 --list）；folder 只在装载期参与 when 求值，不再作运行时 cwd——命令统一从仓库根解析。
+  const ruleSlug = (s) => String(s).toLowerCase().replace(/[^a-z0-9._-]+/g, '-');
   const die = (file, why) => {
     console.error(t(`[verify] 配置错误：.agents/config/${file}——项目产品门配置失守：${why}（配置非法不能当没配置放过）`, `[verify] config error: .agents/config/${file} — product gate config is broken: ${why} (invalid config must not be treated as absent)`, ROOT));
     process.exit(2);
@@ -327,24 +330,30 @@ const whenSkippedGates = [];
         if (typeof g[key] !== 'string' || !g[key].trim()) die(file, t(`门缺必填字段 ${key}`, `gate is missing required field ${key}`, ROOT));
       }
       if (knownIds.has(g.id)) die(file, t(`门 id ${g.id} 与既有门重复`, `gate id ${g.id} duplicates an existing gate`, ROOT));
-      if (g.when !== undefined && typeof g.when !== 'string' && !Array.isArray(g.when)) die(file, t(`门 ${g.id} 的 when 须为字符串或字符串数组`, `gate ${g.id}: when must be a string or an array of strings`, ROOT));
+      // when 空串 / 空数组 = 这道门永远不进清单（静默失效）：按配置失守处理，与规则引擎 schema（when 必须是非空字符串数组）同口径。
+      const whenList = g.when === undefined ? null : (Array.isArray(g.when) ? g.when : [g.when]);
+      if (whenList && (!whenList.length || whenList.some((w) => typeof w !== 'string' || !w.trim()))) {
+        die(file, t(`门 ${g.id} 的 when 须为非空字符串或非空字符串数组`, `gate ${g.id}: when must be a non-empty string or a non-empty array of strings`, ROOT));
+      }
       if (g.deps !== undefined && (!Array.isArray(g.deps) || g.deps.some((d) => typeof d !== 'string'))) die(file, t(`门 ${g.id} 的 deps 须为 id 数组`, `gate ${g.id}: deps must be an array of ids`, ROOT));
       knownIds.add(g.id);
+      const folder = typeof g.folder === 'string' && g.folder.trim() ? g.folder : '.';
       configured.push({ file, gate: {
-        id: g.id, cohort: 'product', name: g.name, cmd: g.cmd,
-        folder: typeof g.folder === 'string' && g.folder.trim() ? g.folder : '.',
+        id: g.id, cohort: 'product', name: g.name,
+        cmd: `flow-kit rules check --with-commands --prefix product.${ruleSlug(g.id)}`,
+        folder: '.',
         type: typeof g.type === 'string' && g.type.trim() ? g.type : 'shell',
         ...(Array.isArray(g.deps) && g.deps.length ? { deps: [...g.deps] } : {}),
         ...(g.env && typeof g.env === 'object' && !Array.isArray(g.env) ? { env: { ...g.env } } : {}),
-      }, when: g.when });
+      }, when: g.when, whenFolder: folder });
     }
   }
   for (const { file, gate } of configured) {
     const missing = (gate.deps || []).filter((d) => !knownIds.has(d));
     if (missing.length) die(file, t(`门 ${gate.id} 的 deps 指向不存在的门（${missing.join('、')}）`, `gate ${gate.id}: deps point to non-existent gates (${missing.join(', ')})`, ROOT));
   }
-  for (const { gate, when } of configured) {
-    if (whenSatisfied(when, gate.folder)) GATES.push(gate);
+  for (const { gate, when, whenFolder } of configured) {
+    if (whenSatisfied(when, whenFolder)) GATES.push(gate);
     else whenSkippedGates.push({ id: gate.id, when: showWhen(when) });
   }
 }

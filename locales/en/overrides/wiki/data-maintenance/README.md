@@ -4,8 +4,8 @@ This directory records all project data-maintenance SQL and execution status, gr
 
 | Directory | Purpose |
 |---|---|
-| `schema变更/` | Schema changes (DDL); one `date-topic/` subdirectory per batch |
-| `数据修复/` | Existing-data fixes (DML); state affected row counts and rollback |
+| `schema-changes/` | Schema changes (DDL); one `date-topic/` subdirectory per batch |
+| `data-fixes/` | Existing-data fixes (DML); state affected row counts and rollback |
 | `数据导入/` | External data import scripts and mapping notes |
 | `查询/` | Read-only diagnostic SQL |
 | `备份/` | Backup and restore scripts |

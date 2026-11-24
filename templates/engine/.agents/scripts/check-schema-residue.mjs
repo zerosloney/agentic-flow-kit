@@ -2,7 +2,8 @@
 /**
  * check-schema-residue.mjs — 「已删列/新增列 vs 实库」残留审计（只读，手动工具，不接门禁）
  *
- * 用途：批次（--base 目录，默认 wiki/数据维护/schema变更）登记的列变更与实库比对，
+ * 用途：批次（--base 目录，缺省由 wiki-names.mjs 提供——未配置 engine.json options.wiki 时为
+ *       wiki/数据维护/schema变更）登记的列变更与实库比对，
  *       找出「批次已删却仍在」（残留＝带外加列/批次语句静默失效）
  *       与「批次已加却不存在」（缺失＝带外删列）两类漂移。
  *
@@ -35,13 +36,15 @@ import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { t as tr } from './lang.mjs';
+import { loadWikiNames } from './wiki-names.mjs';
 
 const root = process.cwd();
+const NAMES = loadWikiNames(root);
 const opt = (name) => {
   const i = process.argv.indexOf(name);
   return i >= 0 ? process.argv[i + 1] : undefined;
 };
-const base = path.resolve(root, opt('--base') ?? path.join('wiki', '数据维护', 'schema变更'));
+const base = path.resolve(root, opt('--base') ?? path.join('wiki', NAMES.maintenance, NAMES.schemaBatch));
 const verbose = process.argv.includes('--verbose');
 const SKIP = new Set(['CONSTRAINT', 'PRIMARY', 'UNIQUE', 'INDEX', 'CHECK', 'FOREIGN', 'NONCLUSTERED', 'CLUSTERED', 'KEY', 'COLUMN', 'ADD', 'DROP']);
 
@@ -100,7 +103,7 @@ if (exemptFile) {
 
 // 批次目录缺失此前会直接抛未捕获异常；统一收敛为 stderr + exit 2 的前置缺失口径
 if (!fs.statSync(base, { throwIfNoEntry: false })?.isDirectory()) {
-  console.error(tr(`[schema-residue] ❌ 批次目录不存在：${base}（--base 可指定，默认 wiki/数据维护/schema变更）`, `[schema-residue] ❌ batch directory not found: ${base} (override with --base; default wiki/数据维护/schema变更)`));
+  console.error(tr(`[schema-residue] ❌ 批次目录不存在：${base}（--base 可指定，默认 wiki/${NAMES.maintenance}/${NAMES.schemaBatch}）`, `[schema-residue] ❌ batch directory not found: ${base} (override with --base; default wiki/${NAMES.maintenance}/${NAMES.schemaBatch})`));
   process.exit(2);
 }
 

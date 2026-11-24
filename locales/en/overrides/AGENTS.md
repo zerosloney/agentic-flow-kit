@@ -45,7 +45,7 @@ Jump to the corresponding command file by task type:
 **Do not backfill this document.** Implementation details live in each directory's `AGENTS.md`:
 - **Backend**: `backend/AGENTS.md` (read only if present)
 - **Frontend**: `frontend/AGENTS.md` (read only if present)
-- **Paired documents**: keep paired documents registered in `wiki/INDEX.md` in sync, and update `wiki/INDEX.md` and `wiki/知识沉淀总览.html` together.
+- **Paired documents**: keep paired documents registered in `wiki/INDEX.md` in sync, and update `wiki/INDEX.md` and `{{wikiBoard}}` together.
 
 ## 6. Project Adaptations
 - **Build/test/typecheck**: the command list is single-sourced in `.agents/hooks/commit-check.config.json`.

@@ -8,7 +8,7 @@
     "product": "{{product}}",
     "ports": { "api": {{apiPort}}, "web": {{webPort}} },
     "boardPort": "{{boardPort}}",
-    "language": "{{language}}"
+    "language": "{{language}}"{{wikiNamesMember}}
   },
   "modelBaseline": "GLM-4.x"
 }

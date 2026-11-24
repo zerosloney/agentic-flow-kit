@@ -45,7 +45,7 @@
 **禁止回填本文档**。具体实现细节请查阅对应目录的 `AGENTS.md`：
 - **后端**: `backend/AGENTS.md`（存在才读；没有则跳过）
 - **前端**: `frontend/AGENTS.md`（存在才读；没有则跳过）
-- **成对文档同步**：按 `wiki/INDEX.md` 登记的成对文档，修改任一份须同步另一份，并同步更新 `wiki/INDEX.md` 与 `wiki/知识沉淀总览.html`。
+- **成对文档同步**：按 `wiki/INDEX.md` 登记的成对文档，修改任一份须同步另一份，并同步更新 `wiki/INDEX.md` 与 `{{wikiBoard}}`。
 
 ## 6. 项目适配区 (Project Adaptations)
 - **构建/测试/类型检查**: 命令清单单源 `.agents/hooks/commit-check.config.json`。

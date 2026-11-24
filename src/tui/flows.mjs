@@ -7,7 +7,8 @@ import { detectHosts } from '../hosts/detect.mjs';
 import { probeModels } from '../models/probe.mjs';
 import { ROLE_NAMES, loadRoleConfig, recommendRoles, summarizeModels } from '../models/resolve.mjs';
 import { readManifest } from '../install/manifest.mjs';
-import { detectStackDetail, STACKS, stackMarkerLabel, formatInstallLog, installLogNotable, installCommand } from '../commands/install.mjs';
+import { detectStackDetail, STACKS, stackMarkerLabel, formatInstallLog, installLogNotable, installCommand, PRODUCT_MODES, SCAFFOLD_MODES, parsePortNumber } from '../commands/install.mjs';
+import { STACK_REGISTRY } from '../install/stack-registry.mjs';
 import { stackDescription } from '../render/tokens.mjs';
 import { SURFACES, surfaceDescription } from '../install/profiles.mjs';
 import { LANGUAGES } from '../i18n.mjs';
@@ -21,7 +22,10 @@ export const baseArgs = () => ({ _: [], agents: [], flags: new Set() });
 
 // 纯函数：向导选择 → runInstall 入参（argv 形状与 cli/args.mjs parseArgs 经 baseArgs 一致）。
 // git 配置 CLI 侧默认开，--no-git-config 关闭
-export function buildInstallArgs({ hosts, lang, stack, surfaces = [], gitConfig = true, dryRun = false, force = false, models = null }) {
+export function buildInstallArgs({
+  hosts, lang, stack, surfaces = [], gitConfig = true, dryRun = false, force = false, models = null,
+  product = null, ports = null, scaffold = null,
+}) {
   const args = {
     ...baseArgs(),
     _: ['install'],
@@ -37,7 +41,83 @@ export function buildInstallArgs({ hosts, lang, stack, surfaces = [], gitConfig 
   // 模型参数保持 opt-in：默认路径不新增 flag，避免破坏既有 argv 断言。
   if (models && Object.keys(models).length) args.tuiModels = models;
   if (surfaces.length) args.surfaces = surfaces;
+  // 项目形态 / 端口 / 脚手架只显式传入：缺省值不落 argv，manifest 端口继续跟随栈注册表。
+  if (product && product !== 'web') args.product = product;
+  if (ports?.api !== undefined) args['api-port'] = ports.api;
+  if (ports?.web !== undefined) args['web-port'] = ports.web;
+  if (scaffold && scaffold !== 'full') args.scaffold = scaffold;
   return args;
+}
+
+// 向导的「项目形态 → 端口 → 脚手架档位」三问。端口只在 web / api 形态下问，
+// 选栈默认（或留空）时不回传端口：manifest 不钉死默认值，升级继续跟随栈注册表。
+// 任一步 EOF / 退出返回 null。
+export async function projectShapeFlow(ctx, { stack }) {
+  const { t } = ctx;
+  const product = await pickOne(ctx, {
+    question: t('tui.shapeQuestion'),
+    hint: t('tui.hint.moveEnter'),
+    cursor: Math.max(0, PRODUCT_MODES.indexOf('web')),
+    items: PRODUCT_MODES.map((mode) => ({
+      value: mode,
+      label: t(`tui.shape.${mode}`),
+      hint: t(`tui.shape.${mode}.hint`),
+    })),
+  });
+  if (product === null) return null;
+
+  const defaults = STACK_REGISTRY[stack]?.ports || {};
+  const ports = {};
+  if (product === 'web' || product === 'api') {
+    const portMode = await pickOne(ctx, {
+      question: t('tui.portsQuestion'),
+      hint: t('tui.hint.moveEnter'),
+      items: [
+        {
+          value: 'default',
+          label: product === 'web'
+            ? t('tui.port.useDefaults', { api: defaults.api, web: defaults.web })
+            : t('tui.port.useDefaultsApi', { api: defaults.api }),
+        },
+        { value: 'custom', label: t('tui.port.custom') },
+      ],
+    });
+    if (portMode === null) return null;
+
+    if (portMode === 'custom') {
+      const askPort = async (key) => {
+        const raw = await askText(ctx, {
+          question: t(`tui.port.${key}Question`),
+          hint: t('tui.port.hint'),
+          validate: (s) => {
+            const value = String(s).trim();
+            if (value === '') return null; // 留空 = 沿用该端口栈默认
+            return parsePortNumber(value) === null ? t('tui.port.invalid') : null;
+          },
+        });
+        if (raw === null) return null;
+        const value = String(raw).trim();
+        if (value !== '') ports[key] = parsePortNumber(value);
+        return true;
+      };
+      if ((await askPort('api')) === null) return null;
+      if (product === 'web' && (await askPort('web')) === null) return null;
+    }
+  }
+
+  const scaffold = await pickOne(ctx, {
+    question: t('tui.scaffoldQuestion'),
+    hint: t('tui.hint.moveEnter'),
+    cursor: Math.max(0, SCAFFOLD_MODES.indexOf('full')),
+    items: SCAFFOLD_MODES.map((mode) => ({
+      value: mode,
+      label: t(`tui.scaffold.${mode}`),
+      hint: t(`tui.scaffold.${mode}.hint`),
+    })),
+  });
+  if (scaffold === null) return null;
+
+  return { product, ports, scaffold };
 }
 
 function fileOf(msg) {
@@ -194,7 +274,7 @@ async function modelFlow(ctx, hosts) {
   return { models };
 }
 
-// 安装流：宿主 → 语言 → 栈 → 模型 → 开关 → 计划确认 → 执行（进度行）→ 可选体检
+// 安装流：宿主 → 语言 → 栈 → 项目形态 / 端口 / 脚手架 → 切面 → 模型 → 开关 → 计划确认 → 执行（进度行）→ 可选体检
 async function installFlow(ctx) {
   const { screen, t, lang } = ctx;
   const cwd = process.cwd();
@@ -224,6 +304,10 @@ async function installFlow(ctx) {
     items: stackItems({ detected, lang, t }),
   });
   if (stack === null) return;
+
+  // 项目形态 / 端口 / 脚手架紧跟栈选择：端口默认值依赖所选栈。
+  const shape = await projectShapeFlow(ctx, { stack });
+  if (shape === null) return;
 
   // 组合式 profile：surface 可多选、可不选；闭集由 profiles.mjs 约束。
   const surfaces = await pickMany(ctx, {
@@ -263,6 +347,9 @@ async function installFlow(ctx) {
     dryRun,
     force: opts.includes('force'),
     models: modelResult.models,
+    product: shape.product,
+    ports: shape.ports,
+    scaffold: shape.scaffold,
   });
 
   const planLines = [
@@ -270,7 +357,19 @@ async function installFlow(ctx) {
     t('tui.plan.hosts', { hosts: hosts.join(', ') }),
     t('tui.plan.lang', { lang: selLang }),
     t('tui.plan.stack', { stack }),
+    t('tui.plan.shape', { shape: t(`tui.shape.${shape.product}`) }),
   ];
+  // 端口行只对 web / api 有意义；每项标明是栈默认还是自定义。
+  if (shape.product === 'web' || shape.product === 'api') {
+    const stackPorts = STACK_REGISTRY[stack]?.ports || {};
+    const portText = (key) => (shape.ports[key] !== undefined
+      ? t('tui.plan.portCustom', { port: shape.ports[key] })
+      : t('tui.plan.portDefault', { port: stackPorts[key] }));
+    planLines.push(shape.product === 'web'
+      ? t('tui.plan.ports', { api: portText('api'), web: portText('web') })
+      : t('tui.plan.portsApi', { api: portText('api') }));
+  }
+  if (shape.scaffold !== 'full') planLines.push(t('tui.plan.scaffold', { scaffold: t(`tui.scaffold.${shape.scaffold}`) }));
   if (surfaces.length) planLines.push(t('tui.plan.surfaces', { surfaces: surfaces.join(', ') }));
   if (modelResult.models && Object.keys(modelResult.models).length) {
     planLines.push(t('tui.plan.models', { models: summarizeModels({ hosts: modelResult.models }) }));

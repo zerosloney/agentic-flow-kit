@@ -53,6 +53,7 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { laneOfDoc } from './stage-gates.mjs';
 import { loadKitPolicy } from './policy.mjs';
+import { loadWikiNames } from './wiki-names.mjs';
 
 // 本次构建关联提交里时间最早的一笔。changes 为 Azure changes API 的 JSON（{value:[]}）或数组。
 // 缺 id、或任一笔没有 timestamp（无法判定谁更老）→ null，调用方退回 HEAD~1。
@@ -94,6 +95,7 @@ const gitOut = (cwd, gitArgs) => {
 const CI = argv.includes('--ci');
 const FORCE_MERGE = argv.includes('--merge');
 const ROOT = argOf('--root') || gitOut(process.cwd(), ['rev-parse', '--show-toplevel']).trim() || process.cwd();
+const WIKI_NAMES = loadWikiNames(ROOT);
 // detached HEAD 时 abbrev-ref 返回 'HEAD' → 不匹配 experiment/* → A strict
 const BRANCH = argOf('--branch') || gitOut(ROOT, ['rev-parse', '--abbrev-ref', 'HEAD']).trim();
 const stagedArg = argOf('--staged-file');
@@ -203,7 +205,9 @@ const collectActive = () => {
 };
 
 // 产品路径 p 被家族正文罩住：正文含仓库相对路径原文；schema / 数据修复 SQL 另认批次目录。
-const BATCH_DIR = /^(wiki\/数据维护\/(?:schema变更|数据修复)\/[^/]+)\//;
+// 批次目录名随安装语言（wiki-names.mjs 从 engine.json options.wiki 取），拼接前逐名转义正则元字符。
+const escRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const BATCH_DIR = new RegExp(`^(wiki/${escRe(WIKI_NAMES.maintenance)}/(?:${escRe(WIKI_NAMES.schemaBatch)}|${escRe(WIKI_NAMES.dataFixBatch)})/[^/]+)/`);
 const familyText = (entry) => {
   const rels = [entry.rel, `workflow/specs/${entry.base}.md`, `workflow/plans/${entry.base}.md`];
   let text = '';

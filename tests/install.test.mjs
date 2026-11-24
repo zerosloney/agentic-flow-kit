@@ -99,21 +99,36 @@ test('wiki board en override keeps the scaffold DATA registry', () => {
   };
 
   const scaffold = extractData(read(KIT, 'templates/scaffold/wiki/知识沉淀总览.html'));
-  const en = extractData(read(KIT, 'locales/en/overrides/wiki/知识沉淀总览.html'));
+  const en = extractData(read(KIT, 'locales/en/overrides/wiki/knowledge-overview.html'));
 
   assert.deepEqual(en.summary, scaffold.summary);
-  const namesOf = (data) => data.topics.map((t) => t.name).sort();
-  assert.deepEqual(namesOf(en), namesOf(scaffold));
-  for (const topic of scaffold.topics) {
-    const enTopic = en.topics.find((t) => t.name === topic.name);
-    const filesOf = (t) => t.files.map((f) => f.file).sort();
+  assert.equal(en.topics.length, scaffold.topics.length);
+  // 英文看板按位置与中文脚手架一一对应：主题名 / topic / dir 换成英文目录名，文件清单不变。
+  const EN_BY_ZH = {
+    '产品需求': 'requirements',
+    '开发方案': 'designs',
+    '数据维护': 'data-maintenance',
+    '项目规范': 'conventions',
+    '用户功能': 'features',
+    '测试报告': 'test-reports',
+  };
+  const filesOf = (t) => t.files.map((f) => f.file).sort();
+  scaffold.topics.forEach((topic, i) => {
+    const enTopic = en.topics[i];
+    const enName = EN_BY_ZH[topic.name];
+    assert.ok(enName, `missing English name for topic ${topic.name}`);
+    assert.equal(enTopic.name, enName);
     assert.deepEqual(filesOf(enTopic), filesOf(topic), `topic ${topic.name} file registry drifted`);
-  }
+    for (const file of enTopic.files) {
+      assert.equal(file.topic, enName);
+      assert.equal(file.dir, `./${enName}/`);
+    }
+  });
 
   const diskTopics = fs.readdirSync(path.join(KIT, 'templates/scaffold/wiki'), { withFileTypes: true })
     .filter((e) => e.isDirectory() && e.name !== 'drafts-archive')
     .map((e) => e.name);
-  const dataTopics = namesOf(scaffold);
+  const dataTopics = scaffold.topics.map((t) => t.name);
   for (const dir of diskTopics) {
     assert.ok(dataTopics.includes(dir), `board DATA missing scaffold topic dir ${dir}`);
   }

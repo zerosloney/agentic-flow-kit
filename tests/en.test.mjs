@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { allowProbeQuestion, stackItems } from '../src/tui/flows.mjs';
+import { allowProbeQuestion, projectShapeFlow, stackItems } from '../src/tui/flows.mjs';
 import { makeT } from '../src/i18n.mjs';
 import { BASELINE_DIR } from '../src/install/baseline.mjs';
 
@@ -25,6 +25,21 @@ function run(args, cwd) {
 function read(dir, rel) {
   return fs.readFileSync(path.join(dir, rel), 'utf8');
 }
+
+test('en shape / ports / scaffold questions render in English', async () => {
+  const chunks = [];
+  const screen = { interactive: false, output: { write: (s) => chunks.push(s) } };
+  const answers = ['1', '1', '1'];
+  const ctx = { screen, t: makeT('en'), lang: 'en', reader: async () => answers.shift() ?? null };
+  assert.deepEqual(await projectShapeFlow(ctx, { stack: 'node' }), {
+    product: 'web', ports: {}, scaffold: 'full',
+  });
+  const out = chunks.join('');
+  assert.ok(out.includes('Choose the project shape'), 'shape question label should be English');
+  assert.ok(out.includes('Terminal command; no runtime ports'), 'CLI option hint should be English');
+  assert.ok(out.includes('Use stack defaults (API 3000, Web 5173)'), 'stack defaults should be English and concrete');
+  assert.ok(out.includes('Choose the scaffold tier'), 'scaffold question label should be English');
+});
 
 test('en stack menu names the matched file in English', () => {
   const rust = stackItems({
@@ -155,6 +170,17 @@ test('en doctor suggests install --baseline-only when the baseline is missing', 
 
   const r = run(['doctor', '--target', '.', '--lang', 'en'], dir);
   assert.match(`${r.stdout}${r.stderr}`, /install --baseline-only/);
+});
+
+test('en doctor reports old-named wiki directories in English', () => {
+  const dir = tmpRepo();
+  assert.equal(run(['install', '--agent', 'trae', '--stack', 'node', '--lang', 'en', '--target', '.'], dir).status, 0);
+  fs.mkdirSync(path.join(dir, 'wiki/产品需求'), { recursive: true });
+
+  const r = run(['doctor', '--target', '.', '--lang', 'en'], dir);
+  const out = `${r.stdout}${r.stderr}`;
+  assert.match(out, /do not match the installed language/);
+  assert.doesNotMatch(out, /wiki 目录名与安装语言不一致/, 'en output must not fall back to the zh sentence');
 });
 
 // issue #69：ledger baseline advisory 两键的中英双侧断言（en 输出英文、zh 回退不串英文文案）。
@@ -320,4 +346,56 @@ test('en doctor reports the flow-kit version mismatch in English', () => {
   assert.match(`${r.stdout}${r.stderr}`, /install manifest/);
   assert.match(`${r.stdout}${r.stderr}`, /2\.0\.0/);
   assert.doesNotMatch(`${r.stdout}${r.stderr}`, /版本不一致/, 'en output must not fall back to the zh sentence');
+});
+
+// ---- rules / doctor：rules v1 的校验发现项、init 用法错误、畸形 whenEnv 点名与规则汇总在 --lang en 下输出英文 ----
+
+test('en rules validate, init and malformed whenEnv messages are English', () => {
+  const dir = tmpRepo();
+  const write = (rel, text) => {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), text);
+  };
+  const rules = (args) => run(['rules', ...args, '--lang', 'en'], dir);
+  const rule = (id, extra = {}) => ({
+    id, face: 'code', phase: 'pre-commit', severity: 'block',
+    assert: { kind: 'content', args: { targets: ['src/**'], contains: ['X'] } },
+    message: { zh: 'x', en: 'x' }, ...extra,
+  });
+
+  // validate：发现项沿用配置错误消息的既有约定（代码侧中文），汇总行必须是英文。
+  write('.agents/rules/project.json', JSON.stringify({
+    version: 1, rules: [rule('proj.never', { when: ['pkg:'] })], waivers: [{ rule: 'ghost', expires: '2099-01-01', reason: 'x' }],
+  }));
+  const validated = rules(['validate']);
+  assert.equal(validated.status, 2, validated.stderr);
+  assert.match(validated.stdout, /Rules validation failed: 2 issue\(s\)/);
+  assert.doesNotMatch(`${validated.stdout}${validated.stderr}`, /规则校验未通过/, 'en output must not fall back to the zh sentence');
+
+  // init：目标已存在 = 用法错误（exit 2），提示为英文。
+  const again = rules(['init']);
+  assert.equal(again.status, 2, again.stderr);
+  assert.match(again.stderr, /already exists \(use --force to overwrite\)/);
+  assert.doesNotMatch(again.stderr, /已存在/, 'en output must not fall back to the zh sentence');
+
+  // 畸形 whenEnv：规则永不启用（不执行命令），但 check 汇总必须点名，且为英文。
+  write('.agents/rules/project.json', JSON.stringify({ version: 1, rules: [] }));
+  write('src/a.js', 'console.log(1);\n');
+  write('.agents/hooks/commit-check.config.json', JSON.stringify({ pushTests: [{ name: 'unit', command: 'node -v', ext: ['.js'], whenEnv: 'RUN_PUSH' }] }));
+  const git = spawnSync('git', ['add', 'src/a.js'], { cwd: dir, encoding: 'utf8' });
+  assert.equal(git.status, 0, git.stderr);
+  const checked = rules(['check', '--staged']);
+  assert.equal(checked.status, 0, checked.stderr);
+  assert.match(checked.stdout, /Malformed whenEnv \(expected KEY=VALUE\)[\s\S]*commit\.push\.0/);
+  assert.doesNotMatch(`${checked.stdout}${checked.stderr}`, /写法有误/, 'en output must not fall back to the zh sentence');
+});
+
+test('en doctor prints the rules summary and gate coverage rows in English', () => {
+  const dir = tmpRepo();
+  assert.equal(run(['install', '--agent', 'trae', '--stack', 'dotnet', '--lang', 'en', '--target', '.'], dir).status, 0);
+  const r = run(['doctor', '--target', '.', '--lang', 'en'], dir);
+  const out = `${r.stdout}${r.stderr}`;
+  assert.match(out, /rules: \d+ active of \d+ \(block \d+ \/ warn \d+\)/);
+  assert.match(out, /gate families: configured [\s\S]*not configured \(SKIP\)/);
+  assert.doesNotMatch(out, /规则包：|门禁族：/, 'en output must not fall back to the zh sentence');
 });

@@ -3,5 +3,5 @@
   "ui": ["frontend/src/"],
   "code": ["backend/"],
   "tests": ["tests/"],
-  "data": ["wiki/数据维护/"]
+  "data": ["{{wikiMaintenance}}/"]
 }

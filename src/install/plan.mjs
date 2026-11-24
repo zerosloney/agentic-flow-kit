@@ -16,6 +16,7 @@ import { compilePermissions, mergePermissionsIntoRoot, parsePermissionSpec } fro
 import { readPlanEntry } from './apply.mjs';
 import { parseFrontmatter, yamlScalar } from './frontmatter.mjs';
 import { SKILL_NAME_RE } from '../skills/lint.mjs';
+import { localizePath } from './wiki-names.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const KIT_ROOT = path.resolve(HERE, '..', '..');
@@ -364,7 +365,8 @@ export function buildPlan({
   const t = makeT(lang);
   const plan = [];
   const push = (srcAbs, targetRel, category, priority = 10, kind = 'file', extra = {}) => {
-    const entry = { srcAbs, targetRel: targetRel.replace(/\\/g, '/'), category, priority, kind, ...extra };
+    // 脚手架模板用中文物理路径；按安装语言翻译目标路径（非中文 overrides 据此按目标路径命中）。
+    const entry = { srcAbs, targetRel: localizePath(targetRel.replace(/\\/g, '/'), lang), category, priority, kind, ...extra };
     plan.push(entry);
     return entry;
   };

@@ -2,14 +2,15 @@
 
 > The engine and gate mechanisms ship with the package; **rules and switches belong to the project**. This page is the single entry point for project-level configuration: locate the file in the summary table, then read its section.
 > General semantics: a missing config means that capability is not enabled (each gate SKIPs and blocks no one); a file that exists but is malformed is **fail-closed** — the consuming script reports an error and exits with its own code, and must not be treated as "not configured". Exact exit codes follow each script's header comment.
-> Self-check: the gate coverage section of `flow-kit doctor` reports each item as "configured / not configured (SKIP) / invalid config", and uses `git ls-files` to count tracked files matched by the faces trigger surface (0 matches raises a warning).
+> Typos are errors: rule packs and every gate config are validated against their field contract — an unknown field, a wrong type, a missing required field or an invalid regex is a config error (exit 2) that names the location; nothing is silently ignored. `_note` (a string) is accepted as a comment key at every level.
+> Self-check: the gate coverage section of `flow-kit doctor` reports each item as "configured / not configured (SKIP) / invalid config", counts the active rules of each gate family from the rule model, and uses `git ls-files` to count tracked files matched by the faces trigger surface (0 matches raises a warning).
 
 ## Summary
 
 | File | Purpose | When it runs | Unconfigured semantics | Invalid config |
 |---|---|---|---|---|
 | `.agents/config/project-faces.json` | Single source for product-face (ui/code/tests/data) path prefixes | check-confirm-order on commit; verify / verify-scope on closeout/CI | Conservative: every change counts as a product face | exit 2 |
-| `.agents/hooks/commit-check.config.json` | Conditional builds / fast checks / pre-push tests | pre-commit (builds/checks); pre-push `--range` (pushTests) | The corresponding segments are SKIP | Unreadable/bad JSON is treated as absent (this script does not fail closed) |
+| `.agents/hooks/commit-check.config.json` | Conditional builds / fast checks / pre-push tests | pre-commit (builds/checks); pre-push `--range` (pushTests) | The corresponding segments are SKIP | exit 2 (bad JSON / unknown field / incomplete entry all fail closed) |
 | `.agents/config/product-gates*.json` | Stack product gates beyond the base table | verify (local closeout / CI) | No project product gates | exit 2 |
 | `.agents/hooks/architecture-redlines.json` | Architecture redlines (forbidden / navigation properties / catch constraints) | pre-commit static gates; host pre-write interception | SKIP exit 0 | exit 2 |
 | `.agents/hooks/delete-guard.json` | Deletion-call scan and allowlist | pre-commit static gates; host pre-write interception | SKIP exit 0 | exit 2 |
@@ -44,7 +45,7 @@
 - **Purpose**: Three executors on the commit/push path — `builds` conditional builds, `checks` fast deterministic checks, `pushTests` pre-push tests.
 - **When it runs**: pre-commit runs `builds` (skipped for regular commits with `--no-build`; merge commits use `--full`) and `checks`; pre-push runs `builds` and `pushTests` with `--range <old> <new>`.
 - **Unconfigured semantics**: Missing file or an empty array → that segment is SKIP (`pushTests` produces no output at all) and blocks no one.
-- **Invalid config**: Unreadable / bad JSON is treated as "no config" and the segment is skipped (this script does not fail closed); `flow-kit doctor` flags such files in red as a reminder.
+- **Invalid config**: Unreadable / bad JSON / unknown top-level key / incomplete entry / wrong field type → exit 2 (fail-closed: treating it as absent would silently disable all three segments). Entries accept only `name` / `command` / `ext` / `prefix` / `cwd` / `when` / `whenEnv` / `timeoutMs` / `lockPattern` / `lockHint`; `ext` must be an array, `prefix` and `when` may be a string or an array.
 - **Minimal example**:
 
 ```json
@@ -82,30 +83,30 @@
 }
 ```
 
-- **Fields**: `id` / `name` / `cmd` required; `folder` defaults to `.`; optional `deps` (preceding gate ids), `when`, `env`; `type` defaults to `shell`. `when` has the same semantics as in `commit-check.config.json` (path exists / trailing `*` single-level wildcard / `pkg:<dotted.path>`); unmet gates stay out of the execution list, print a SKIP line, and do not count as failures.
+- **Fields**: `id` / `name` / `cmd` required; `folder` defaults to `.`; optional `deps` (preceding gate ids), `when`, `env` and `timeoutMs` (wall-clock limit in ms). No `timeoutMs` = no time limit (same as the historical behaviour). `when` has the same semantics as in `commit-check.config.json` (path exists / trailing `*` single-level wildcard / `pkg:<dotted.path>`) and may be a string or an array; unmet gates stay out of the execution list, print a SKIP line, and do not count as failures.
 
 ## .agents/hooks/architecture-redlines.json
 
 - **Purpose**: Architecture redlines with externalized rules — `forbidden` (forbidden content), `noNavigationProperties` (no navigation properties on entities), `catchRequires` (a catch block must contain given symbols). The script implements only the "read rules → scan targets → report violations" mechanism.
-- **When it runs**: pre-commit static gate (`check-architecture.mjs`); host pre-write interception (`pre-write-check.cjs` reuses the same script for target files).
+- **When it runs**: pre-commit and the host pre-write gate both go through `flow-kit rules check` (rules are projected from this file); `check-architecture.mjs` is kept for manual re-checks.
 - **Unconfigured semantics**: Missing file, or all three arrays empty = SKIP exit 0 (the project has no redline contract, so nobody should be blocked).
-- **Invalid config**: Unreadable / bad JSON / top level not an object / unknown top-level key / missing required field / invalid regex / duplicate or malformed `id` → exit 2.
+- **Invalid config**: Unreadable / bad JSON / top level not an object / unknown top-level key / unknown field in an entry / missing required field / invalid regex / duplicate or malformed `id` → exit 2.
 - **Minimal example**:
 
 ```json
 {
   "forbidden": [
-    { "id": "no-dbcontext-in-controller", "targets": ["backend/Controllers/"], "matches": "DbContext", "message": "Controllers must not hold a DbContext directly" }
+    { "id": "no-dbcontext-in-controller", "targets": ["backend/Controllers/"], "matches": ["DbContext"], "message": "Controllers must not hold a DbContext directly" }
   ]
 }
 ```
 
-- **Fields**: `forbidden[]` requires `id` / `targets` / `message`, with at least one of `contains` (literal substring) or `matches` (regex); `unless` exempts matching lines; `exclude` globs exempt whole files; `optional: true` allows a literal target to be absent; `once: true` reports only the first hit. `noNavigationProperties[]` requires `id` / `dir` / `message`, plus `extraTypeNames` for extra type names. `catchRequires[]` requires `id` / `files` / `catch` / `require` / `message`.
+- **Fields**: `forbidden[]` requires `id` / `targets` / `message`, with at least one of `contains` (literal substring) or `matches` (array of regexes); `unless` exempts matching lines; `exclude` globs exempt whole files; `optional: true` allows a literal target to be absent; `once: true` reports only the first hit. `noNavigationProperties[]` requires `id` / `dir` / `message`, plus `extraTypeNames` for extra type names. `catchRequires[]` requires `id` / `files` / `catch` / `require` / `message`.
 
 ## .agents/hooks/delete-guard.json
 
 - **Purpose**: Deletion calls inside declared directories must be registered in `delete-guard-allowlist.txt` and paired with a regression test; the script only performs the trigger review "new deletion paths must be explicitly registered".
-- **When it runs**: pre-commit static gate (`check-delete-guard.mjs`); host pre-write interception (`pre-write-check.cjs`).
+- **When it runs**: pre-commit and the host pre-write gate both go through `flow-kit rules check` (rules are projected from this file); `check-delete-guard.mjs` is kept for manual re-checks and `--update`.
 - **Unconfigured semantics**: Missing file = SKIP exit 0 (projects that do not declare it are skipped automatically and are never blocked by mistake).
 - **Invalid config**: Bad JSON / top level not an object / unknown key / missing or empty `scan` / missing `dir` / invalid regex → exit 2; a declared directory that does not exist is handled as a fail-closed violation.
 - **Minimal example**:
@@ -123,7 +124,7 @@
 ## .agents/hooks/audit-fields.json
 
 - **Purpose**: Protected audit fields (such as `CreatedBy` / `UpdatedBy`) must not be written by hand in business code; they must go through the project's unified write path.
-- **When it runs**: pre-commit static gate (`check-audit-fields.mjs`, scanning added lines in the staging area by default; `--range` scans a given range, so existing violations are not blocked).
+- **When it runs**: in pre-commit `flow-kit rules check` scans the lines added to the staging area (rules are projected from this file; only added lines count, existing violations are not blocked); `check-audit-fields.mjs --range` scans a given range manually.
 - **Unconfigured semantics**: Missing file = SKIP exit 0 (the project has no audit-field guard, so nobody should be blocked).
 - **Invalid config**: Unreadable / bad JSON / top level not an object / unknown top-level key / missing or empty `fields` / a field name that is not a valid identifier → exit 2.
 - **Minimal example**:
@@ -210,7 +211,32 @@
 
 ## .agents/rules/ and plugins (rules v1)
 
-- **Purpose**: Unified rule model — `stack.json` (kit-managed) ← `project.json` (project-owned) ← `local.json` (gitignored) merged as layers; later layers replace the whole rule with the same id; `{ "id": "...", "enabled": false }` disables a lower-layer rule.
-- **Execution**: `flow-kit rules validate | explain <id> | init [--force] | check [--staged|--range <old>..<new>|--files a,b] [--with-commands] [--prefix k,l] [--face k,l] [--phase p]`; pre-commit, the host write gate, and verify's code gates already use it; legacy config files are still projected by the legacy adapter (`rules validate` prints the migration hint).
-- **Plugins**: `.agents/rules/plugins/<module>.mjs` run as subprocesses (stdin JSON `{version,root,files,face}`, stdout JSON `{violations:[{file,line,message}]}`); register them explicitly in `project.json`'s `plugins` array (id/module/face/phase/severity/timeoutMs) — directories are never auto-loaded; timeouts/crashes are reported as violations with the registered severity.
+- **Purpose**: Unified rule model — legacy (projection of the legacy configs) ← `stack.<stack>.json` (kit-managed; each declared stack brings its own pack, stacked in file-name order) ← `project.json` (project-owned) ← `local.json` (machine-local, gitignored) merged layer by layer; later layers replace the whole rule with the same id; `{ "id": "...", "enabled": false }` disables a lower-layer rule. Closed primitive set: content / require / absence / inventory / env / command / navProperties / plugin. `command` takes `run/cwd/env/timeoutMs/expectExit`: by default only exit code 0 passes; `expectExit` (a non-negative integer or an array of them) declares other expected exit codes (for example a negative gate that must reject a bad sample).
+- **Execution**: `flow-kit rules validate | explain <id> | init [--force] | check [--staged|--range <old>..<new>|--files a,b] [--with-commands] [--prefix k,l] [--face k,l] [--phase p] [--json]`; pre-commit, the host write gate, verify's code gates and product gates, and commit-check (builds / checks / push tests) already use it; legacy config files are still projected by the legacy adapter (`rules validate` prints the migration hint). Exit codes: 0 pass, 1 block violation, 2 config or usage error.
+- **Scan surface and scoping**: `--staged`, `--range` and full mode all scan the whole repo (diff-scope rules only look at added lines); only the write gate's `--files` narrows the scan to the file about to be written; `--prefix` matches at id-segment boundaries (`arch.` selects `arch.*`, `product.api` does not swallow `product.api-tests`). `when` items are OR-ed, `pkg:` reads package.json under the rule's `cwd` (`folder` for product gates); `whenEnv` (`KEY=VAL`) is an independent gate next to `when` — unmet means not run and not printed, and a malformed value never enables the rule and is called out in the output.
+- **Validation**: besides the schema, `rules validate` checks references — duplicate ids within one layer, waivers pointing at missing rules, missing plugin modules, `when` / `whenEnv` that can never be satisfied — and exits 2 on any finding.
+- **Schema (typos are errors)**: every object in a rule pack is validated against its contract; errors are located by JSON path and list the allowed keys (e.g. `rules[0].assert.args 未知字段「unlesss」（允许：targets / files / …）`, `…matches[1] 正则非法（…）`). `{ "id": "...", "enabled": false }` alone disables a lower-layer rule; `when` must be a non-empty array of non-empty strings; `scope: "diff"` is only meaningful for `content`.
+- **Primitive reference** (`assert.args`, closed key set):
+  - `content`: repo scope (default) reads `targets` / `files`, `ext` (default `.cs`), `contains` (substring), `matches` / `pattern` (regex), `unless` (exempts matching lines), `exclude` (exempts whole files), `allow: [{glob, pattern?}]`, `optional`, `once`; diff scope (`"scope": "diff"`, added lines only) reads `ext`, `pattern` (required), `copyPattern`, `allowFiles`, `allowLines`. A key that only the other scope reads is an error.
+  - `require`: `files` (required), `ext` (extensions for directory targets, default `.cs`), `trigger` and `require` (both required), `exclude`, `optional`.
+  - `absence`: `glob` (required), `unless`. `inventory`: `scan: [{dir, ext?, call?, ignore?, optional?}]` and `baseline` (both required).
+  - `env`: `name` (required), `forbiddenValues`. `navProperties`: `dir` (required), `extraTypeNames`, `optional`.
+  - `command`: `run` (required), `cwd`, `env`, `lockPattern`, `lockHint`, `name`, `deps`, `expectExit` (a non-negative integer or an array of them; without it only exit code 0 passes).
+  - `plugin`: `module` (required), `config` (the plugin's own contract, any keys).
+- **Time limits**: top-level `timeoutMs` on the rule (ms). `command` defaults to 10 minutes (same as the legacy commit-check); `null` = no limit (the default for product gates, same as the legacy verify); `plugin` defaults to 10 seconds and only accepts a positive integer. `rules explain <id>` prints it as is (absent = default).
+- **Waivers**: `waivers: [{ rule, glob?, expires, reason }]` — the expiry date and the reason are required (a waiver carries an expiry and an audit trail); an expired waiver stops working and is reported.
+- **Plugins**: `.agents/rules/plugins/<module>.mjs` run as subprocesses (stdin JSON `{version,root,files,face,faces,config}`, stdout JSON `{violations:[{file,line,message}]}`); register them explicitly in `project.json`'s `plugins` array (id/module/face/phase/severity/timeoutMs/config) — directories are never auto-loaded; timeouts/crashes are reported as violations with the registered severity and recorded in `.agents/cache/rules-plugins.json` (doctor warns from it; the entry clears once the same plugin evaluates normally again).
+- **Legacy configs outside the rule model**: `lane-surfaces.txt`, `workflow-modules.txt` and `test-impact-map.json` are selectors / vocabularies rather than rules; their own scripts keep reading them and `rules validate` does not list them.
+- **Plugin example**:
+  ```js
+  // .agents/rules/plugins/no-console.mjs
+  import fs from 'node:fs';
+  const ctx = JSON.parse(fs.readFileSync(0, 'utf8'));
+  const hits = (ctx.files || []).filter((f) => fs.readFileSync(f, 'utf8').includes('console.log'));
+  process.stdout.write(JSON.stringify({ violations: hits.map((file) => ({ file, message: 'no console.log' })) }));
+  ```
+  ```json
+  // .agents/rules/project.json (excerpt)
+  { "version": 1, "plugins": [{ "id": "proj.no-console", "module": "no-console", "face": "ui", "phase": "pre-commit", "severity": "warn" }] }
+  ```
 - **Unconfigured semantics**: empty rules layers = no extra rules; legacy configs stay in effect.

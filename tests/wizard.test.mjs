@@ -3,12 +3,14 @@ import assert from 'node:assert/strict';
 import { spawn, spawnSync } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { buildInstallArgs } from '../src/tui/flows.mjs';
+import { buildInstallArgs, projectShapeFlow } from '../src/tui/flows.mjs';
 import { createScreen, runPrompt, createLineReader, QuitError } from '../src/tui/screen.mjs';
 import { createSelect, createMultiSelect } from '../src/tui/widgets.mjs';
 import { askText } from '../src/tui/prompts.mjs';
+import { makeT } from '../src/i18n.mjs';
 import { makeTmp } from './helpers/tmp.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -80,6 +82,128 @@ test('installFlow 产参锁定: opts → buildInstallArgs 映射 (mirrors flows.
     assert.equal(args.surfaces, undefined);
     assert.equal(args.tuiModels, undefined);
   }
+});
+
+test('buildInstallArgs: shape defaults add no argv keys (manifest stays unpinned)', () => {
+  const plain = buildInstallArgs({ hosts: ['trae'], lang: 'zh-CN', stack: 'node' });
+  const withDefaults = buildInstallArgs({
+    hosts: ['trae'], lang: 'zh-CN', stack: 'node', product: 'web', ports: {}, scaffold: 'full',
+  });
+  assert.deepEqual(withDefaults, plain);
+  assert.equal('product' in withDefaults, false);
+  assert.equal('api-port' in withDefaults, false);
+  assert.equal('web-port' in withDefaults, false);
+  assert.equal('scaffold' in withDefaults, false);
+});
+
+test('buildInstallArgs: custom shape choices map to argv-shaped keys and leave flags untouched', () => {
+  const api = buildInstallArgs({
+    hosts: ['trae'], lang: 'zh-CN', stack: 'node', product: 'api', ports: { api: 9999 }, scaffold: 'minimal',
+  });
+  assert.equal(api.product, 'api');
+  assert.equal(api['api-port'], 9999);
+  assert.equal(api['web-port'], undefined);
+  assert.equal(api.scaffold, 'minimal');
+  assert.equal(api.flags.size, 0);
+
+  const web = buildInstallArgs({
+    hosts: ['trae'], lang: 'zh-CN', stack: 'node', product: 'web', ports: { api: 18080, web: 15173 }, scaffold: 'full',
+  });
+  assert.equal('product' in web, false, 'web is the default product and must not be pinned');
+  assert.equal(web['api-port'], 18080);
+  assert.equal(web['web-port'], 15173);
+  assert.equal('scaffold' in web, false, 'full is the default scaffold and must not be pinned');
+  assert.equal(web.flags.size, 0);
+});
+
+// 降级路径假件：reader 依次吐出答案行；'' = 直接回车；undefined（队列走完）= EOF。
+function degradedCtx(answers, lang = 'zh-CN') {
+  const chunks = [];
+  const screen = { interactive: false, output: { write: (s) => chunks.push(s) } };
+  return {
+    ctx: { screen, t: makeT(lang), lang, reader: async () => answers.shift() ?? null },
+    output: () => chunks.join(''),
+  };
+}
+
+test('projectShapeFlow degraded: all defaults (web + stack ports + full scaffold)', async () => {
+  const { ctx, output } = degradedCtx(['1', '1', '1']);
+  assert.deepEqual(await projectShapeFlow(ctx, { stack: 'node' }), {
+    product: 'web', ports: {}, scaffold: 'full',
+  });
+  assert.ok(output().includes('API 3000'), 'default port label should show the stack API port');
+  assert.ok(output().includes('Web 5173'), 'default port label should show the stack Web port');
+});
+
+test('projectShapeFlow degraded: api + custom API port only (no Web question)', async () => {
+  const { ctx, output } = degradedCtx(['2', '2', '9999', '1']);
+  assert.deepEqual(await projectShapeFlow(ctx, { stack: 'node' }), {
+    product: 'api', ports: { api: 9999 }, scaffold: 'full',
+  });
+  assert.ok(!output().includes('Web 端口'), 'api shape must not ask for a Web port');
+});
+
+test('projectShapeFlow degraded: web + both ports custom', async () => {
+  const { ctx } = degradedCtx(['1', '2', '18080', '15173', '1']);
+  assert.deepEqual(await projectShapeFlow(ctx, { stack: 'node' }), {
+    product: 'web', ports: { api: 18080, web: 15173 }, scaffold: 'full',
+  });
+});
+
+test('projectShapeFlow degraded: blank port answers keep the stack defaults (ports absent)', async () => {
+  const { ctx } = degradedCtx(['1', '2', '', '', '1']);
+  assert.deepEqual(await projectShapeFlow(ctx, { stack: 'node' }), {
+    product: 'web', ports: {}, scaffold: 'full',
+  });
+});
+
+test('projectShapeFlow degraded: invalid port re-asks until valid', async () => {
+  const { ctx, output } = degradedCtx(['1', '2', '0', 'abc', '18080', '', '1']);
+  assert.deepEqual(await projectShapeFlow(ctx, { stack: 'node' }), {
+    product: 'web', ports: { api: 18080 }, scaffold: 'full',
+  });
+  assert.ok(output().includes('端口须为 1–65535 的整数'), 'invalid port should print the validation message');
+});
+
+test('projectShapeFlow degraded: library skips the ports question entirely', async () => {
+  const { ctx, output } = degradedCtx(['3', '1']);
+  assert.deepEqual(await projectShapeFlow(ctx, { stack: 'node' }), {
+    product: 'library', ports: {}, scaffold: 'full',
+  });
+  assert.ok(!output().includes('选择端口配置'), 'library shape must not ask about ports');
+});
+
+test('projectShapeFlow degraded: EOF / quit returns null', async () => {
+  assert.equal(await projectShapeFlow(degradedCtx([]).ctx, { stack: 'node' }), null);
+  // 形态已回答，端口问题处 EOF：整段流程放弃
+  assert.equal(await projectShapeFlow(degradedCtx(['1']).ctx, { stack: 'node' }), null);
+});
+
+const press = async (input, name, sequence) => {
+  await new Promise((r) => setImmediate(r));
+  input.emit('keypress', { name, sequence: sequence ?? name });
+};
+
+test('projectShapeFlow interactive: web + custom ports, invalid API port re-asks', async () => {
+  const { input, screen } = fakeInteractive();
+  screen.setup();
+  const ctx = { screen, t: makeT('zh-CN'), lang: 'zh-CN' };
+  const flow = projectShapeFlow(ctx, { stack: 'node' });
+
+  await press(input, 'return', '\r'); // shape: web（默认光标）
+  await press(input, 'down', '\x1b[B'); // ports: 默认 → 自定义
+  await press(input, 'return', '\r');
+  await press(input, '0', '0');
+  await press(input, 'return', '\r'); // 非法：0 触发红字重问
+  await press(input, 'backspace');
+  for (const ch of '19090') await press(input, ch, ch);
+  await press(input, 'return', '\r');
+  for (const ch of '15173') await press(input, ch, ch);
+  await press(input, 'return', '\r'); // web 端口
+  await press(input, 'return', '\r'); // scaffold: full（默认光标）
+
+  assert.deepEqual(await flow, { product: 'web', ports: { api: 19090, web: 15173 }, scaffold: 'full' });
+  screen.restore();
 });
 
 test('askText degraded path reads a line and retries on validation error', async () => {
@@ -183,6 +307,37 @@ test('degraded wizard e2e: menu 4 doctor normal check prints doctor output witho
   assert.ok(/doctor (失败|全过)/.test(result.stdout), 'doctor summary should print');
   assert.ok(!result.stdout.includes('Cannot read properties'), 'TypeError must not leak into the wizard doctor flow');
   assert.equal(result.stderr.trim(), '', 'no stack traces expected');
+});
+
+// 降级向导安装 e2e：按安装流完整答案序列（含新增的形态 / 端口 / 脚手架三问）跑到写盘，
+// 断言计划框落了选择结果，且 manifest 只记显式值（api 形态的 web 端口不被钉死）。
+test('degraded wizard e2e: install flow asks shape/ports/scaffold and installs with them', () => {
+  const dir = makeTmp('flow-kit-wizard-install-');
+  spawnSync('git', ['init', '-q'], { cwd: dir });
+  // 菜单 install → trae 勾选+确认 → 语言 zh-CN → 栈 node → 形态 api → 端口自定义 → 9999 →
+  // 脚手架 minimal → 无切面 → 默认开关 → 确认安装 → 不体检 → 返回菜单 n
+  const answers = ['1', '1', '', '1', '2', '2', '2', '9999', '2', '', '', 'y', 'n', 'n'].join('\n') + '\n';
+  const r = spawnSync(process.execPath, [FIXTURE], {
+    cwd: dir,
+    encoding: 'utf8',
+    timeout: 30000,
+    env: { ...process.env, FLOW_KIT_TEST: '1' },
+    input: answers,
+  });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr.trim(), '', 'no stack traces expected');
+  assert.ok(r.stdout.includes('选择项目形态'), 'shape question should be asked');
+  assert.ok(r.stdout.includes('选择端口配置'), 'ports question should be asked');
+  assert.ok(r.stdout.includes('选择脚手架档位'), 'scaffold question should be asked');
+  assert.ok(!r.stdout.includes('Web 端口'), 'api shape must not ask for a Web port');
+  assert.ok(r.stdout.includes('形态：仅 API 服务'), 'plan box should show the chosen shape');
+  assert.ok(r.stdout.includes('端口：API 9999（自定义）'), 'plan box should mark the custom port');
+  assert.ok(r.stdout.includes('脚手架：精简脚手架'), 'plan box should show the non-default scaffold');
+
+  const mf = JSON.parse(fs.readFileSync(path.join(dir, '.agents', 'install-manifest.json'), 'utf8'));
+  assert.equal(mf.product, 'api');
+  assert.deepEqual(mf.ports, { api: 9999 });
+  assert.equal(mf.scaffold, 'minimal');
 });
 
 test('screen.render: cursor bookkeeping across grow, shrink and equal redraws', async () => {

@@ -73,5 +73,5 @@ test('layer files support JSONC and validate structure', () => {
   assert.equal(layer.faces.code[0], 'src/');
 
   fs.writeFileSync(path.join(dir, 'bad.json'), '{"rules":[{"id":"x.y","face":"code"}]}');
-  assert.throws(() => loadLayer(root, '.agents/rules/bad.json', 'bad'), /phase 非法|severity 非法|assert/);
+  assert.throws(() => loadLayer(root, '.agents/rules/bad.json', 'bad'), /phase 非法|severity 非法|assert|缺少必填字段「phase」/);
 });

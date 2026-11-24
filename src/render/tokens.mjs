@@ -1,5 +1,6 @@
 import { HOSTS } from '../hosts/registry.mjs';
 import { stackDefaults, stackShell } from '../install/stack-registry.mjs';
+import { wikiProtocolNames, wikiTokens } from '../install/wiki-names.mjs';
 
 const STACK_DEFAULTS = stackDefaults();
 
@@ -54,6 +55,11 @@ export function buildVars({ target, projectName, stack, language, hosts, kitVers
         .filter((h) => HOSTS[h] && !HOSTS[h].tracked)
         .map((h) => `${HOSTS[h].dir}/`)
         .join('\n');
+  // engine.json 的 options.wiki：中文安装不写（保持逐字节不变，引擎缺省即中文）；其他语言追加 JSON 成员。
+  const wikiNames = wikiProtocolNames(language);
+  const wikiNamesMember = language === 'zh-CN'
+    ? ''
+    : `,\n    "wiki": {\n      "board": ${JSON.stringify(wikiNames.board)},\n      "maintenance": ${JSON.stringify(wikiNames.maintenance)},\n      "schemaBatch": ${JSON.stringify(wikiNames.schemaBatch)},\n      "dataFixBatch": ${JSON.stringify(wikiNames.dataFixBatch)}\n    }`;
   return {
     projectName: projectName || pathBase(target),
     stack,
@@ -74,6 +80,8 @@ export function buildVars({ target, projectName, stack, language, hosts, kitVers
     installedAt,
     nodeMinimum: '22',
     hostIgnores,
+    ...wikiTokens(language),
+    wikiNamesMember,
   };
 }
 

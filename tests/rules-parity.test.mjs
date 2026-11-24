@@ -257,10 +257,121 @@ test('rules init projects legacy configs into project.json (and refuses to overw
   assert.match(fs.readFileSync(file, 'utf8'), /arch\.no-foo/);
 
   const again = spawnSync(process.execPath, [BIN, 'rules', 'init', '--target', dir], { encoding: 'utf8' });
-  assert.equal(again.status, 1);
+  // 已存在且未带 --force = 用法错误（退出码契约：0 通过 / 1 违例 / 2 配置或用法错误）。
+  assert.equal(again.status, 2);
   const force = spawnSync(process.execPath, [BIN, 'rules', 'init', '--target', dir, '--force'], { encoding: 'utf8' });
   assert.equal(force.status, 0, force.stderr);
 
   const validate = spawnSync(process.execPath, [BIN, 'rules', 'validate', '--target', dir], { encoding: 'utf8' });
   assert.equal(validate.status, 0, validate.stdout + validate.stderr);
+});
+
+// 回归：product gate 的 pkg: 谓词读 gate.folder 下的 package.json（曾误读仓库根，产物门假绿）。
+test('product gate pkg: predicate reads package.json under folder', () => {
+  const dir = fixture();
+  write(dir, '.agents/config/product-gates.json', json([
+    { id: 'fe-lint', name: 'FE lint', cmd: 'node -e "process.exit(7)"', folder: 'frontend', when: ['pkg:scripts.lint'] },
+  ]));
+  write(dir, 'frontend/package.json', json({ scripts: { lint: 'x' } }));
+  const r = rules(dir, ['--with-commands', '--prefix', 'product.fe-lint', '--json']);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  const parsed = JSON.parse(r.stdout);
+  assert.equal(parsed.violations[0].ruleId, 'product.fe-lint');
+
+  // 只有仓库根有 scripts.lint：folder 下缺 package.json → 不命中，跳过
+  write(dir, 'package.json', json({ scripts: { lint: 'x' } }));
+  write(dir, 'frontend/package.json', json({}));
+  const miss = rules(dir, ['--with-commands', '--prefix', 'product.fe-lint', '--json']);
+  assert.equal(miss.status, 0, miss.stdout + miss.stderr);
+  const missParsed = JSON.parse(miss.stdout);
+  assert.equal(missParsed.violations.length, 0, miss.stdout);
+  assert.ok(missParsed.skipped.some((s) => s.ruleId === 'product.fe-lint' && s.reason === 'when'), miss.stdout);
+
+  // 叶子是对象而非非空字符串：同样不算命中
+  write(dir, 'frontend/package.json', json({ scripts: { lint: { nested: true } } }));
+  const obj = rules(dir, ['--with-commands', '--prefix', 'product.fe-lint', '--json']);
+  assert.equal(obj.status, 0, obj.stdout + obj.stderr);
+  const objParsed = JSON.parse(obj.stdout);
+  assert.equal(objParsed.violations.length, 0, obj.stdout);
+  assert.ok(objParsed.skipped.some((s) => s.ruleId === 'product.fe-lint' && s.reason === 'when'), obj.stdout);
+});
+
+// 回归：--prefix 按 id 段边界匹配（product.api 不得吞掉 product.api-tests）。
+test('CLI --prefix matches rule ids at segment boundary', () => {
+  const dir = fixture();
+  write(dir, '.agents/config/product-gates.json', json([
+    { id: 'api', name: 'API', cmd: 'node -e "process.exit(7)"' },
+    { id: 'api-tests', name: 'API tests', cmd: 'node -e "process.exit(0)"' },
+  ]));
+  const api = rules(dir, ['--with-commands', '--prefix', 'product.api', '--json']);
+  assert.equal(api.status, 1, api.stdout + api.stderr);
+  const apiParsed = JSON.parse(api.stdout);
+  assert.deepEqual(apiParsed.violations.map((v) => v.ruleId), ['product.api']);
+  assert.ok(!apiParsed.passed.some((p) => p.ruleId === 'product.api-tests'), api.stdout);
+
+  const tests = rules(dir, ['--with-commands', '--prefix', 'product.api-tests', '--json']);
+  assert.equal(tests.status, 0, tests.stdout + tests.stderr);
+  const testsParsed = JSON.parse(tests.stdout);
+  assert.deepEqual(testsParsed.passed.map((p) => p.ruleId), ['product.api-tests']);
+
+  // 无尾点前缀同样按段选择：commit.build 选中 commit.build.0
+  write(dir, '.agents/hooks/commit-check.config.json', json({ builds: [{ name: 'b', command: 'node -e "process.exit(0)"' }] }));
+  write(dir, 'src/a.js', 'a\n');
+  spawnSync('git', ['add', 'src/a.js'], { cwd: dir });
+  const build = rules(dir, ['--staged', '--with-commands', '--prefix', 'commit.build', '--json']);
+  assert.equal(build.status, 0, build.stdout + build.stderr);
+  const buildParsed = JSON.parse(build.stdout);
+  assert.ok(buildParsed.passed.some((p) => p.ruleId === 'commit.build.0'), build.stdout);
+  assert.ok(!buildParsed.skipped.some((s) => s.ruleId === 'commit.build.0'), build.stdout);
+});
+
+// 回归：pre-commit 全仓扫描（只看暂存区快照会漏掉未暂存的既存违例）。
+test('pre-commit scans the whole repo, not only staged files', () => {
+  const dir = fixture();
+  write(dir, '.agents/hooks/architecture-redlines.json', json({
+    forbidden: [{ id: 'no-foo', targets: ['src/**/*.cs'], contains: ['Foo'], message: 'no Foo' }],
+  }));
+  write(dir, 'src/a/B.cs', 'class B { /* Foo */ }\n'); // 违例文件留在工作区，不暂存
+  write(dir, 'src/clean.js', 'const ok = 1;\n');
+  spawnSync('git', ['add', 'src/clean.js'], { cwd: dir });
+
+  const r = rules(dir, ['--staged', '--phase', 'pre-commit', '--face', 'code,ui', '--json']);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  const violation = JSON.parse(r.stdout).violations.find((v) => v.ruleId === 'arch.no-foo');
+  assert.ok(violation, r.stdout);
+  assert.equal(violation.file, 'src/a/B.cs');
+
+  assert.equal(gate(dir, 'check-architecture.mjs').status, 1);
+
+  const hook = spawnSync(process.execPath, [path.join(HOOKS, 'local-pre-commit.mjs')], { cwd: dir, encoding: 'utf8' });
+  assert.equal(hook.status, 1, hook.stdout + hook.stderr);
+
+  // 对照：写前门 --files 仍只扫描待写文件
+  assert.equal(rules(dir, ['--files', 'src/clean.js', '--prefix', 'arch.']).status, 0);
+});
+
+// 回归：通知守卫坏配置 fail-closed（不得当「未配置」静默放过）。
+test('invalid notify-guard config fails closed for rules check, legacy gate and local-pre-commit', () => {
+  const bads = [
+    { targets: 'frontend/src' },
+    { pattern: '(' },
+    { foo: 1 },
+  ];
+  for (const bad of bads) {
+    const dir = fixture();
+    write(dir, '.agents/hooks/notify-guard.json', json(bad));
+    write(dir, 'src/clean.js', 'const ok = 1;\n');
+    spawnSync('git', ['add', 'src/clean.js'], { cwd: dir });
+
+    const r = rules(dir, ['--staged']);
+    assert.equal(r.status, 2, `${JSON.stringify(bad)}\n${r.stdout}${r.stderr}`);
+    assert.match(r.stderr, /notify-guard\.json/);
+    assert.match(r.stderr, /规则配置错误/);
+
+    const g = gate(dir, 'check-notify-guard.mjs');
+    assert.equal(g.status, 2, `${JSON.stringify(bad)}\n${g.stdout}${g.stderr}`);
+
+    const hook = spawnSync(process.execPath, [path.join(HOOKS, 'local-pre-commit.mjs')], { cwd: dir, encoding: 'utf8' });
+    assert.equal(hook.status, 2, `${JSON.stringify(bad)}\n${hook.stdout}${hook.stderr}`);
+  }
 });
