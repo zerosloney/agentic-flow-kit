@@ -38,7 +38,7 @@ const COMMANDS = [
   'doctor', 'diff', 'status', 'workspace', 'devcontainer', 'add-skill', 'remove-skill',
   'skills', 'new-host', 'explain', 'list-hosts', 'policy', 'bundle', 'sbom',
   'keygen', 'sign', 'verify-sig', 'handoff', 'mcp', 'metrics', 'arch', 'sandbox',
-  'gate', 'ci', 'hud', 'run', 'hook', 'help',
+  'gate', 'ci', 'hud', 'rules', 'run', 'hook', 'help',
 ];
 
 function normalizeLang(input) {
@@ -162,6 +162,10 @@ async function main(argv) {
       return ciCommand({ args, t, lang });
     case 'hud':
       return hudCommand({ args, t, lang });
+    case 'rules': {
+      const { rulesCommand } = await import('../commands/rules.mjs');
+      return rulesCommand({ args, t, lang });
+    }
     default:
       {
         const err = new Error(`unknown command: ${command} (available: ${COMMANDS.join(', ')})`);

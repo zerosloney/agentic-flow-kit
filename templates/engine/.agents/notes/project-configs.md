@@ -14,6 +14,7 @@
 | `.agents/hooks/architecture-redlines.json` | 架构红线（forbidden / 导航属性 / catch 约束） | pre-commit 静态门；宿主写前拦截 | SKIP exit 0 | exit 2 |
 | `.agents/hooks/delete-guard.json` | 删除调用扫描与 allowlist | pre-commit 静态门；宿主写前拦截 | SKIP exit 0 | exit 2 |
 | `.agents/hooks/audit-fields.json` | 审计字段禁止手工补写 | pre-commit 静态门（暂存新增行） | SKIP exit 0 | exit 2 |
+| `.agents/hooks/notify-guard.json` | 通知守卫：扫描目录 / 扩展名 / 命中正则 / 豁免文件 | pre-commit 静态门（目标目录全量） | 用内建默认（frontend/src + .vue/.ts + message.error/warning/info + utils/notify.ts 豁免） | exit 2 |
 | `.agents/config/test-impact-map.json` | 影响面选测映射 | pre-push 选测；CI 重档 `--full` | 骨架态 SKIP exit 0（文件缺失属前置缺失 exit 1） | 读取/校验失败 exit 1 |
 | `.agents/config/local-gates.json` | 本机必设环境变量（专用测试库） | `flow-kit run check-local-gates.mjs`、doctor `--deep` | SKIP（不拦） | 解析失败按缺项计 exit 1 |
 | `.agents/config/lane-surfaces.txt` | L2 触达面 ERE 清单 | verify `lane-surface-ci`（关单 / CI diff 面） | 缺失或空 = 不校验 | 非法 ERE → 拦截 |
@@ -190,3 +191,19 @@
 
 - **作用**：workflow 文档的模块词表单源（`模块:` frontmatter 取值），被建档、triage、索引与检索脚本共读。
 - **未配置语义**：空词表 = 项目尚未登记模块枚举，不校验 `模块:` 取值；填写后表外值会被 triage 拒绝。
+
+## .agents/hooks/notify-guard.json
+
+- **作用**：通知守卫的扫描面与命中规则——目录、扩展名、命中正则、豁免文件清单。
+- **何时触发**：pre-commit 静态门（`docs/events/` 之外的代码面提交）；规则模型里投影为 `notify.message-guard`（face=ui）。
+- **未配置语义**：用内建默认（`frontend/src`、`.vue|.ts`、`message.error|warning|warn|info(`、豁免 `frontend/src/utils/notify.ts`）——与历史行为一致；目标目录不存在时静默跳过。
+- **配置错误**：非对象 / 字段类型错 / 正则非法 → exit 2（错配不得当未配置放过）。
+- **最小示例**：
+  ```json
+  {
+    "targets": ["frontend/src"],
+    "ext": [".vue", ".ts"],
+    "pattern": "message\\.(error|warning|warn|info)\\s*\\(",
+    "allowFiles": ["frontend/src/utils/notify.ts"]
+  }
+  ```

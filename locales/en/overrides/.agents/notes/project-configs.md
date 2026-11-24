@@ -14,6 +14,7 @@
 | `.agents/hooks/architecture-redlines.json` | Architecture redlines (forbidden / navigation properties / catch constraints) | pre-commit static gates; host pre-write interception | SKIP exit 0 | exit 2 |
 | `.agents/hooks/delete-guard.json` | Deletion-call scan and allowlist | pre-commit static gates; host pre-write interception | SKIP exit 0 | exit 2 |
 | `.agents/hooks/audit-fields.json` | Audit fields must not be written by hand | pre-commit static gate (staged added lines) | SKIP exit 0 | exit 2 |
+| `.agents/hooks/notify-guard.json` | Notify guard: target dirs / extensions / hit pattern / allowlist files | pre-commit static gate (full scan of target dirs) | Built-in defaults (frontend/src + .vue/.ts + message.error/warning/info + utils/notify.ts exemption) | exit 2 |
 | `.agents/config/test-impact-map.json` | Impact-based test selection mapping | pre-push selection; CI heavy mode `--full` | Skeleton state SKIP exit 0 (a missing file is a precondition failure, exit 1) | Read/validation failure exits 1 |
 | `.agents/config/local-gates.json` | Required local environment variables (dedicated test DB) | `flow-kit run check-local-gates.mjs`, doctor `--deep` | SKIP (blocks nothing) | Parse failure counts as a missing item, exit 1 |
 | `.agents/config/lane-surfaces.txt` | L2 touch-surface ERE list | verify `lane-surface-ci` (closeout / CI diff surface) | Missing or empty = no check | Invalid ERE → blocked |
@@ -190,3 +191,19 @@
 
 - **Purpose**: Single source of the workflow document module vocabulary (the `模块:` frontmatter value), shared by task creation, triage, index generation, and search scripts.
 - **Unconfigured semantics**: An empty vocabulary means the project has not registered module enums and `模块:` values are not validated; once filled, values outside the vocabulary are rejected by triage.
+
+## .agents/hooks/notify-guard.json
+
+- **Purpose**: Scan surface and hit rules for the notify guard — target dirs, extensions, hit pattern, allowlisted files.
+- **When it runs**: pre-commit static gate on code-face commits; projected into the rule model as `notify.message-guard` (face=ui).
+- **Unconfigured semantics**: Built-in defaults (`frontend/src`, `.vue|.ts`, `message.error|warning|warn|info(`, `frontend/src/utils/notify.ts` exemption) — identical to historical behavior; a missing target dir is skipped silently.
+- **Invalid config**: Not an object / wrong field types / invalid regex → exit 2 (misconfiguration must never pass as absent).
+- **Minimal example**:
+  ```json
+  {
+    "targets": ["frontend/src"],
+    "ext": [".vue", ".ts"],
+    "pattern": "message\\.(error|warning|warn|info)\\s*\\(",
+    "allowFiles": ["frontend/src/utils/notify.ts"]
+  }
+  ```
