@@ -14,8 +14,8 @@
  *     本门不复制任何判据）——把提议内容临时落盘 → 跑工作树扫描器 → finally 恢复原文件。
  *     2026-11-08 减重档 1-A：多门由串行 spawnSync 改异步 spawn + Promise.all 并行聚合
  *     （总耗时 ≈ 最慢单门，不再随门数线性叠加）；任一门非零退出仍整体 deny，输出/退出码格式不变。
- *     - 产品面单源 `.agents/config/project-faces.json`：code → check-architecture.mjs + check-delete-guard.mjs；
- *       ui → check-notify-guard.mjs；未配置（faces=full）→ 保守全跑（各门自身未配置即 SKIP）。
+ *     - 产品面单源 `.agents/config/project-faces.json`：code → arch.* + delete.*；ui → notify.*；
+ *       full（未配置）→ 三者全跑；规则统一经 `flow-kit rules check --files <rel>` 求值（快照复用）。
  *     check-audit-fields 为暂存区增量判据，不在此复用（pre-commit 兜底）。
  *
  * 引擎面提示（不拦）：改 .githooks/ 或 .agents/hooks/ 属合法引擎工作，但回喂 additionalContext
@@ -35,7 +35,7 @@
 
 const fs = require('node:fs');
 const path = require('node:path');
-const { spawn, spawnSync } = require('node:child_process');
+const { spawnSync } = require('node:child_process');
 
 const UNLOCK_MARKER = path.join('.agents', 'tmp', 'write-gate-until');
 const OUT_MAX = 900; // 单门输出截断，deny reason 总量控制
@@ -186,16 +186,17 @@ try {
   }
 } catch { /* 标记读取失败 → 放行，git 钩子与独立复核兜底 */ }
 
-// ── 3) 红线内容判据（快照-换入-跑真实门-恢复）─────────
-const gates = [];
-// 包内运行时执行时用包内门脚本；直接执行安装副本时回退项目 hooks 目录。
-const hookRoot = process.env.FLOW_KIT_RUNTIME_HOOKS || path.join(root, '.agents', 'hooks');
-// 产品面单源（.agents/config/project-faces.json）：face=code/ui/tests/data/full/none。
-// 判定失败或配置错误 → 按 full 保守全跑（内容判据仍有 fail-open 兜底，git 钩子最终执法）。
-const FACE_GATES = {
-  code: ['check-architecture', 'check-delete-guard'],
-  ui: ['check-notify-guard'],
-  full: ['check-architecture', 'check-delete-guard', 'check-notify-guard'],
+// ── 3) 红线内容判据（快照-换入-跑 rules check-恢复）─────────
+// 单一执行路径（Phase 3）：四个 code 门统一由 `flow-kit rules check` 求值（规则来自旧配置投影，
+// 对拍见 tests/rules-parity）。本段只负责「快照-换入-恢复」与把违例翻译成宿主 deny。
+// 面 → 规则前缀：code=架构+删除；ui=通知；full（未配置面）=三者全跑；tests/data=无内容门。
+const FACE_PREFIXES = {
+  code: ['arch.', 'delete.'],
+  ui: ['notify.'],
+  tests: [],
+  data: [],
+  full: ['arch.', 'delete.', 'notify.'],
+  none: [],
 };
 let face = 'full';
 try {
@@ -208,47 +209,26 @@ try {
   });
   if (r.status === 0) face = String(r.stdout || '').trim() || 'none';
 } catch { /* 判定异常 → 保持 full 保守 */ }
-for (const name of FACE_GATES[face] || []) {
-  // 门脚本解析顺序：宿主注入的运行时 hooks 目录 → 项目 hooks 目录 → 本文件所在包内 hooks 目录。
-  // 三者皆无则跳过该门（安装面不落 .agents/scripts，正常运行时由包内 __dirname 兜底）。
-  const candidates = [
-    process.env.FLOW_KIT_RUNTIME_HOOKS ? path.join(process.env.FLOW_KIT_RUNTIME_HOOKS, `${name}.mjs`) : '',
-    path.join(root, '.agents', 'hooks', `${name}.mjs`),
-    path.join(__dirname, `${name}.mjs`),
-  ].filter(Boolean);
-  const gatePath = candidates.find((p) => fs.existsSync(p));
-  if (gatePath) gates.push([name, gatePath]);
-}
-// runGateAsync：异步 spawn 单个门脚本（30 秒超时约束保持），聚合 stdout/stderr 后 resolve。
-// 并行化（2026-11-08 减重档 1-A）：多门经 Promise.all 同时起跑，任一门非零退出即整体 deny
-// （fail-fast 语义不变）；输出拼接顺序（stderr+stdout）与截断口径与旧串行版一致。
-function runGateAsync(gatePath) {
-  return new Promise((resolve) => {
-    const child = spawn(process.execPath, [gatePath], { cwd: root, timeout: 30000 });
-    let stdout = '', stderr = '';
-    let settled = false;
-    const finish = (r) => { if (!settled) { settled = true; resolve(r); } };
-    child.stdout.on('data', (d) => { stdout += d; });
-    child.stderr.on('data', (d) => { stderr += d; });
-    child.on('error', (e) => finish({ status: 1, stdout: '', stderr: String(e) }));
-    child.on('close', (code) => finish({ status: code, stdout, stderr }));
-  });
-}
+const prefixes = FACE_PREFIXES[face] || FACE_PREFIXES.full;
+// CLI 解析：包内运行时（hooks 位于 <pkg>/templates/engine/.agents/hooks）→ 上溯四级到包根；允许 FLOW_KIT_CLI 覆盖。
+const cli = [process.env.FLOW_KIT_CLI, path.resolve(__dirname, '..', '..', '..', '..', 'bin', 'flow-kit.mjs')]
+  .filter(Boolean)
+  .find((p) => fs.existsSync(p)) || null;
 
 (async () => {
-  if (gates.length > 0 && proposed !== null) {
+  if (prefixes.length > 0 && proposed !== null && cli) {
     const existed = fs.existsSync(abs);
     const backup = existed ? fs.readFileSync(abs) : null;
-    const violations = [];
+    let verdict = null;
     try {
       fs.writeFileSync(abs, proposed);
-      const results = await Promise.all(gates.map(([label, gatePath]) => runGateAsync(gatePath)));
-      for (let i = 0; i < results.length; i++) {
-        if (results[i].status !== 0) {
-          const out = String((results[i].stderr || '') + (results[i].stdout || '')).trim();
-          violations.push(`【${gates[i][0]}】${out.slice(-OUT_MAX)}`);
-        }
-      }
+      const args = [cli, 'rules', 'check', '--files', rel, '--json', '--prefix', prefixes.join(',')];
+      verdict = spawnSync(process.execPath, args, {
+        cwd: root,
+        encoding: 'utf8',
+        timeout: 30000,
+        env: { ...process.env, FLOW_KIT_PROJECT_ROOT: root },
+      });
     } catch { /* 快照失败 → 内容判据放弃，git 钩子兜底 */ }
     finally {
       try {
@@ -258,8 +238,21 @@ function runGateAsync(gatePath) {
         console.error(`pre-write-check: ⚠️ 快照恢复失败（${rel}）——工作区可能残留提议内容，请人工核对 git diff：${e}`);
       }
     }
-    if (violations.length > 0) {
-      deny(`写前门拦下（判据单源 .agents/hooks/check-*.mjs，快照复用）：\n${violations.join('\n')}\n——按各门输出修复后重试；本拦截发生在写盘前，文件未被修改。`);
+    if (verdict && verdict.status !== 0) {
+      if (verdict.status === 1) {
+        let lines = [];
+        try {
+          const parsed = JSON.parse(verdict.stdout);
+          lines = (parsed.violations || [])
+            .filter((v) => v.severity === 'block')
+            .map((v) => `- [${v.ruleId}] ${v.file || ''}${v.line ? `:${v.line}` : ''} ${(v.message && v.message.zh) || ''}${v.detail ? ` —— ${v.detail}` : ''}`);
+        } catch {
+          lines = [String((verdict.stderr || '') + (verdict.stdout || '')).trim().slice(-OUT_MAX)];
+        }
+        deny(`写前门拦下（rules check，快照复用）：\n${lines.join('\n')}\n——按提示修复后重试；本拦截发生在写盘前，文件未被修改。`);
+      } else {
+        deny(`写前门：规则配置错误（rules check exit ${verdict.status}）——配置坏不得放行：\n${String(verdict.stderr || '').trim().slice(-OUT_MAX)}`);
+      }
     }
   }
 

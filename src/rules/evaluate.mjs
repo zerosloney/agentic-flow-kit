@@ -329,7 +329,10 @@ function evalCommand(rule, ctx) {
   if (!ctx.withCommands) return { skipped: 'commands-disabled' };
   const a = rule.assert.args;
   const cwd = a.cwd ? path.join(ctx.root, a.cwd) : ctx.root;
-  const r = spawnSync(a.run, {
+  const run = String(a.run)
+    .replace(/\{old\}/g, ctx.range?.old ?? '')
+    .replace(/\{new\}/g, ctx.range?.new ?? '');
+  const r = spawnSync(run, {
     cwd,
     shell: true,
     encoding: 'utf8',
@@ -347,9 +350,9 @@ function waivedBy(waivers, violation) {
 }
 
 /** 求值入口。 */
-export function evaluateModel(model, { root, changed = null, diff = null, withCommands = false, faces = null, phases = null, waivers = [], today = null }) {
+export function evaluateModel(model, { root, changed = null, diff = null, withCommands = false, faces = null, phases = null, waivers = [], today = null, range = null }) {
   const allFiles = null;
-  const ctx = { root, changed, diff, withCommands, allFiles };
+  const ctx = { root, changed, diff, withCommands, allFiles, range };
   const violations = [];
   const waived = [];
   const skipped = [];

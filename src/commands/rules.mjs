@@ -102,6 +102,13 @@ ${JSON.stringify(body, null, 2)}\n`);
   const filesArg = typeof args.files === 'string' ? args.files.split(',').map((s) => s.trim()).filter(Boolean) : null;
   const faceArg = typeof args.face === 'string' ? args.face.split(',').map((s) => s.trim()).filter(Boolean) : null;
   const phaseArg = typeof args.phase === 'string' ? args.phase.split(',').map((s) => s.trim()).filter(Boolean) : null;
+  const prefixArg = typeof args.prefix === 'string' ? args.prefix.split(',').map((s) => s.trim()).filter(Boolean) : null;
+  const scoped = prefixArg
+    ? { ...model, rules: model.rules.filter((rule) => prefixArg.some((p) => rule.id.startsWith(p))) }
+    : model;
+  const rangeParts = range && range.includes('..')
+    ? { old: range.split('..')[0], new: range.split('..')[1] }
+    : null;
 
   let diff = null;
   let changed = filesArg;
@@ -110,7 +117,7 @@ ${JSON.stringify(body, null, 2)}\n`);
       diff = collectDiff(root, { staged, range });
       changed = diff.files;
     }
-    const result = evaluateModel(model, {
+    const result = evaluateModel(scoped, {
       root,
       changed,
       diff,
@@ -118,6 +125,7 @@ ${JSON.stringify(body, null, 2)}\n`);
       faces: faceArg,
       phases: phaseArg,
       waivers: active,
+      range: rangeParts,
     });
     const block = result.violations.filter((v) => v.severity === 'block');
     const warn = result.violations.filter((v) => v.severity === 'warn');

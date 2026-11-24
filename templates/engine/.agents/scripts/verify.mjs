@@ -227,15 +227,15 @@ const GATES = [
   //    随本表进 CI --mid/--full 执法；本地 pre-commit 保留为最早拦截点（.githooks/pre-commit 口径已同步）。
   //    id 已入 verify-scope 的 CI_UNILATERAL_GATE_IDS——本地增量档单边化 CI。
   //    （同族 code-notify-guard 已随 2026-11-24 product-gates 移出基础表，改项目配置。）
-  { id: 'code-architecture', cohort: 'product', name: t('架构红线（.agents/hooks/architecture-redlines.json，未配置跳过）', 'Architecture redlines (.agents/hooks/architecture-redlines.json, skipped when unconfigured)', ROOT), cmd: 'flow-kit hook check-architecture.mjs', folder: '.', type: 'shell' },
+  { id: 'code-architecture', cohort: 'product', name: t('架构红线（.agents/hooks/architecture-redlines.json，未配置跳过）', 'Architecture redlines (.agents/hooks/architecture-redlines.json, skipped when unconfigured)', ROOT), cmd: 'flow-kit rules check --full --prefix arch.', folder: '.', type: 'shell' },
   // CI_PUSH_BEFORE 在场（azure-pipelines ci-push-before 步注入的 pipeline 变量）扫该区间新增行；
   // 缺省扫暂存区新增行——存量不拦（渐进收口语义与 pre-commit 一字不变）。
   { id: 'code-audit-fields', cohort: 'product',
     name: t('审计字段守卫（.agents/hooks/audit-fields.json，未配置跳过）', 'Audit field guard (.agents/hooks/audit-fields.json, skipped when unconfigured)', ROOT),
-    cmd: process.env.CI_PUSH_BEFORE ? `flow-kit hook check-audit-fields.mjs --range ${process.env.CI_PUSH_BEFORE}..HEAD` : 'flow-kit hook check-audit-fields.mjs',
+    cmd: process.env.CI_PUSH_BEFORE ? `flow-kit rules check --range ${process.env.CI_PUSH_BEFORE}..HEAD --prefix audit.` : 'flow-kit rules check --staged --prefix audit.',
     folder: '.', type: 'shell' },
   // 删除守卫默认即全仓面（Application/API 全目录计数比对 allowlist，非暂存面）——静态 cmd 零改接入。
-  { id: 'code-delete-guard', cohort: 'product', name: t('删除守卫（删除调用点须登记 allowlist，未配置跳过）', 'Delete guard (delete call sites must be registered in the allowlist; skipped when unconfigured)', ROOT), cmd: 'flow-kit hook check-delete-guard.mjs', folder: '.', type: 'shell' },
+  { id: 'code-delete-guard', cohort: 'product', name: t('删除守卫（删除调用点须登记 allowlist，未配置跳过）', 'Delete guard (delete call sites must be registered in the allowlist; skipped when unconfigured)', ROOT), cmd: 'flow-kit rules check --full --prefix delete.', folder: '.', type: 'shell' },
   // 母项目产品门（backend-build / backend-test / frontend-lint / frontend-unit-test / frontend-build /
   // code-notify-guard）与 RUN_E2E 条件门 frontend-e2e 已移出基础表（2026-11-24 product-gates）：
   // 技术栈产品门改由项目 .agents/config/product-gates[.<名称>].json 配置（下方加载段），dotnet profile
@@ -266,8 +266,10 @@ const STACKS = (() => {
   } catch { return ['dotnet']; }
 })();
 if (!STACKS.includes('dotnet')) {
+  // backend-/frontend- 是 dotnet+Vue 两段式布局的专用产品门；code- 四门是配置驱动的通用门
+  // （未配置即 SKIP），所有技术栈都保留在门表里。
   for (let i = GATES.length - 1; i >= 0; i -= 1) {
-    if (/^(backend-|frontend-|code-)/.test(GATES[i].id)) GATES.splice(i, 1);
+    if (/^(backend-|frontend-)/.test(GATES[i].id)) GATES.splice(i, 1);
   }
 }
 

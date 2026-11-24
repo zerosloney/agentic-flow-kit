@@ -219,6 +219,31 @@ test('local-pre-commit runs the four gates through rules check (single path, env
   assert.equal(r.status, 0, 'env rule is phase=local and must not gate commits');
 });
 
+test('CLI --prefix scopes evaluation to one rule group', () => {
+  const dir = fixture();
+  write(dir, '.agents/hooks/architecture-redlines.json', json({
+    forbidden: [{ id: 'no-foo', targets: ['src/**/*.cs'], contains: ['Foo'], message: 'no Foo' }],
+  }));
+  write(dir, 'src/a/B.cs', 'class B { /* Foo */ }\n');
+  write(dir, 'frontend/src/a.vue', "message.error('x');\n");
+  const runPrefix = (p) => spawnSync(process.execPath, [BIN, 'rules', 'check', '--full', '--prefix', p, '--target', dir], { encoding: 'utf8' });
+  assert.equal(runPrefix('arch.').status, 1);
+  assert.equal(runPrefix('notify.').status, 1);
+  assert.equal(runPrefix('delete.').status, 0);
+});
+
+test('verify code rows run through rules check with group prefixes', () => {
+  const dir = fixture();
+  write(dir, 'package.json', '{"name":"verify-rules","scripts":{"test":"node -e 0"}}\n');
+  const install = spawnSync(process.execPath, [BIN, 'install', '--agent', 'claude', '--stack', 'node', '--target', dir], { encoding: 'utf8', env: { ...process.env, FLOW_KIT_TEST: '1' } });
+  assert.equal(install.status, 0, install.stderr);
+  const list = spawnSync(process.execPath, [BIN, 'run', 'verify', '--list', '--verbose'], { cwd: dir, encoding: 'utf8' });
+  assert.equal(list.status, 0, list.stderr);
+  assert.match(list.stdout, /rules check --full --prefix arch\./);
+  assert.match(list.stdout, /rules check --staged --prefix audit\./);
+  assert.match(list.stdout, /rules check --full --prefix delete\./);
+});
+
 test('rules init projects legacy configs into project.json (and refuses to overwrite)', () => {
   const dir = fixture();
   write(dir, '.agents/hooks/architecture-redlines.json', json({
