@@ -107,9 +107,9 @@ ${JSON.stringify(body, null, 2)}\n`);
   const scoped = prefixArg
     ? { ...model, rules: model.rules.filter((rule) => prefixArg.some((p) => rule.id.startsWith(p))) }
     : model;
-  const rangeParts = range && range.includes('..')
-    ? { old: range.split('..')[0], new: range.split('..')[1] }
-    : null;
+  const rangeParts = typeof args['range-old'] === 'string' && typeof args['range-new'] === 'string'
+    ? { old: args['range-old'], new: args['range-new'] }
+    : (range && range.includes('..') ? { old: range.split('..')[0], new: range.split('..')[1] } : null);
 
   let diff = null;
   let changed = filesArg;
@@ -131,7 +131,7 @@ ${JSON.stringify(body, null, 2)}\n`);
     const block = result.violations.filter((v) => v.severity === 'block');
     const warn = result.violations.filter((v) => v.severity === 'warn');
     if (flag(args, 'json')) {
-      process.stdout.write(`${JSON.stringify({ ok: block.length === 0, violations: result.violations, waived: result.waived, skipped: result.skipped, expired, unsupported: loaded.unsupported }, null, 2)}\n`);
+      process.stdout.write(`${JSON.stringify({ ok: block.length === 0, violations: result.violations, waived: result.waived, passed: result.passed, skipped: result.skipped, expired, unsupported: loaded.unsupported }, null, 2)}\n`);
       return block.length ? 1 : 0;
     }
     console.log(t('rules.checkSummary', {

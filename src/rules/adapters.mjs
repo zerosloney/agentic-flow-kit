@@ -184,14 +184,14 @@ const whenOf = (entry) => {
   return when.length ? when : undefined;
 };
 
-/** 提交/推送门 + 产品门 → command 规则（命令与触发面原样保留）。 */
+/** 提交/推送门 + 产品门 → command 规则（命令与触发面原样保留；builds/checks/pushTests 排除引擎面）。 */
 function adaptCommandGroups(root, rules) {
   const cc = readRulesFile(root, '.agents/hooks/commit-check.config.json');
   if (cc) {
     const groups = [
-      { list: arr(cc.builds), phase: 'pre-commit', prefix: 'commit.build' },
-      { list: arr(cc.checks), phase: 'pre-commit', prefix: 'commit.check' },
-      { list: arr(cc.pushTests), phase: 'pre-push', prefix: 'commit.push' },
+      { list: arr(cc.builds), phase: 'pre-commit', prefix: 'commit.build', exclude: ['.agents/', '.githooks/'] },
+      { list: arr(cc.checks), phase: 'pre-commit', prefix: 'commit.check', exclude: ['.githooks/'] },
+      { list: arr(cc.pushTests), phase: 'pre-push', prefix: 'commit.push', exclude: ['.agents/', '.githooks/'] },
     ];
     for (const group of groups) {
       group.list.forEach((entry, i) => {
@@ -200,20 +200,24 @@ function adaptCommandGroups(root, rules) {
         if (arr(entry.ext).length) files.ext = arr(entry.ext);
         const prefixes = typeof entry.prefix === 'string' ? [entry.prefix] : arr(entry.prefix);
         if (prefixes.length) files.prefix = prefixes;
+        files.exclude = group.exclude;
         rules.push({
-          id: `${group.prefix}.${name}`.toLowerCase().replace(/[^a-z0-9._-]+/g, '-'),
+          id: `${group.prefix}.${i}`,
           face: 'any',
           phase: group.phase,
           severity: 'block',
           scope: 'repo',
           when: whenOf(entry),
-          files: Object.keys(files).length ? files : undefined,
+          files,
           assert: {
             kind: 'command',
             args: {
               run: String(entry.command || ''),
               cwd: entry.cwd,
               timeoutMs: entry.timeoutMs,
+              lockPattern: entry.lockPattern,
+              lockHint: entry.lockHint,
+              name,
             },
           },
           message: msg(`${name} 未通过`),

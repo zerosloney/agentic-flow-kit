@@ -199,3 +199,51 @@ test('timeoutMs 到点截断命令并 BLOCK', () => {
   assert.ok(r.stdout.includes('推送前测试未通过'), r.stdout);
   assert.equal(fs.existsSync(log), false);
 });
+
+test('条件构建：命中 ext 才跑，.agents/ 下变更被排除', () => {
+  const dir = tmpRepo();
+  const { log, command } = probeCommand(dir);
+  writeConfig(dir, { builds: [{ name: 'backend', command, ext: ['.cs'] }], checks: [] });
+
+  const src = path.join(dir, 'src', 'a.cs');
+  fs.mkdirSync(path.dirname(src), { recursive: true });
+  fs.writeFileSync(src, 'class A {}\n');
+  git(dir, ['add', 'src/a.cs']);
+  const hit = run(dir, []);
+  assert.equal(hit.status, 0, hit.stdout + hit.stderr);
+  assert.ok(hit.stdout.includes('OK: backend 构建通过'), hit.stdout);
+  assert.equal(fs.existsSync(log), true);
+
+  fs.rmSync(log, { force: true });
+  git(dir, ['commit', '-q', '--no-verify', '-m', 'src']);
+  const agentFile = path.join(dir, '.agents', 'notes', 'x.cs');
+  fs.mkdirSync(path.dirname(agentFile), { recursive: true });
+  fs.writeFileSync(agentFile, 'class X {}\n');
+  git(dir, ['add', '.agents/notes/x.cs']);
+  const miss = run(dir, []);
+  assert.equal(miss.status, 0, miss.stdout + miss.stderr);
+  assert.ok(miss.stdout.includes('SKIP: 无匹配的源码变更，跳过构建验证'), miss.stdout);
+  assert.equal(fs.existsSync(log), false);
+});
+
+test('构建被文件锁拦下时输出 lockHint 与冲突行', () => {
+  const dir = tmpRepo();
+  writeConfig(dir, {
+    builds: [{
+      name: 'backend',
+      command: 'node -e "console.log(\'MSB3027: locked\'); process.exit(1)"',
+      ext: ['.cs'],
+      lockPattern: 'MSB3027',
+      lockHint: '停掉占用进程后重试',
+    }],
+    checks: [],
+  });
+  const file = path.join(dir, 'src', 'a.cs');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, 'class A {}\n');
+  git(dir, ['add', 'src/a.cs']);
+  const r = run(dir, []);
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.ok(r.stdout.includes('停掉占用进程后重试'), r.stdout);
+  assert.ok(r.stdout.includes('MSB3027'), r.stdout);
+});

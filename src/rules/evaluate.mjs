@@ -90,11 +90,11 @@ function readPkg(root) {
 
 const dotted = (obj, key) => key.split('.').reduce((acc, part) => (acc && typeof acc === 'object' ? acc[part] : undefined), obj);
 
-/** when 谓词：pkg:<dotted> / env:KEY=VAL / 路径或 glob 存在性。数组为 AND。 */
+/** when 谓词：pkg:<dotted> / env:KEY=VAL / 路径或 glob 存在性。数组为 OR（与旧 commit-check / product-gates 的 some 语义一致）。 */
 export function whenSatisfied(items, root, allFiles = null) {
   if (!Array.isArray(items) || items.length === 0) return true;
   const pkg = readPkg(root);
-  return items.every((raw) => {
+  return items.some((raw) => {
     const item = String(raw);
     if (item.startsWith('env:')) {
       const body = item.slice(4);
@@ -118,8 +118,13 @@ function fileFilterMatch(filter, changed) {
   const exts = Array.isArray(filter.ext) ? filter.ext : [];
   const prefixes = Array.isArray(filter.prefix) ? filter.prefix : [];
   const globs = Array.isArray(filter.glob) ? filter.glob.map(globToRegExp) : [];
+  const excludes = Array.isArray(filter.exclude) ? filter.exclude : [];
+  const considered = excludes.length
+    ? changed.filter((f) => !excludes.some((p) => posix(f).startsWith(posix(p))))
+    : changed;
+  if (considered.length === 0) return false;
   if (!exts.length && !prefixes.length && !globs.length) return true;
-  return changed.some((f) => {
+  return considered.some((f) => {
     const p = posix(f);
     return (exts.length && exts.some((e) => p.endsWith(e)))
       || (prefixes.length && prefixes.some((pre) => p.startsWith(posix(pre))))
@@ -365,16 +370,35 @@ function evalCommand(rule, ctx) {
   const run = String(a.run)
     .replace(/\{old\}/g, ctx.range?.old ?? '')
     .replace(/\{new\}/g, ctx.range?.new ?? '');
+  const timeout = rule.timeoutMs || a.timeoutMs || 600000;
+  const meta = { name: a.name, command: run };
   const r = spawnSync(run, {
     cwd,
     shell: true,
     encoding: 'utf8',
-    timeout: rule.timeoutMs || a.timeoutMs || 30000,
+    timeout,
+    maxBuffer: 32 * 1024 * 1024,
     env: { ...process.env, ...(a.env || {}) },
   });
-  if (r.status === 0) return { violations: [] };
-  const out = `${r.stdout || ''}${r.stderr || ''}`.trim().split(/\r?\n/).slice(-8).join('\n');
-  return { violations: [{ ruleId: rule.id, severity: rule.severity, message: rule.message, detail: out || `exit ${r.status}` }] };
+  if (r.error) {
+    const timedOut = r.error.code === 'ETIMEDOUT';
+    const detail = timedOut
+      ? `[超时] 命令超过 ${Math.round(timeout / 1000)}s 未结束，已终止：${run}\n${String((r.stdout || '') + (r.stderr || ''))}`
+      : `[spawn 失败] ${r.error.code || r.error.message}\n${String((r.stdout || '') + (r.stderr || ''))}`;
+    return { ...meta, violations: [{ ruleId: rule.id, severity: rule.severity, message: rule.message, detail }] };
+  }
+  if (r.status === 0) return { ...meta, violations: [] };
+  const raw = String((r.stdout || '') + (r.stderr || ''));
+  let detail = raw.slice(-1500);
+  if (a.lockPattern) {
+    try {
+      const re = new RegExp(a.lockPattern);
+      if (re.test(raw)) {
+        detail = `${a.lockHint || '停掉占用进程后原路重试'}\n锁冲突行：\n${raw.split(/\r?\n/).filter((l) => re.test(l)).slice(0, 3).join('\n')}`;
+      }
+    } catch { /* 非法 lockPattern 按普通失败处理 */ }
+  }
+  return { ...meta, violations: [{ ruleId: rule.id, severity: rule.severity, message: rule.message, detail }] };
 }
 
 function waivedBy(waivers, violation) {
@@ -389,6 +413,7 @@ export function evaluateModel(model, { root, changed = null, diff = null, withCo
   const violations = [];
   const waived = [];
   const skipped = [];
+  const passed = [];
   const faceSet = faces && faces.length ? new Set(faces) : null;
   const phaseSet = phases && phases.length ? new Set(phases) : null;
   for (const rule of model.rules) {
@@ -396,7 +421,7 @@ export function evaluateModel(model, { root, changed = null, diff = null, withCo
     if (faceSet && rule.face !== 'any' && !faceSet.has(rule.face)) continue;
     if (phaseSet && rule.phase !== 'always' && !phaseSet.has(rule.phase)) continue;
     if (!whenSatisfied(rule.when, root, allFiles)) {
-      skipped.push({ ruleId: rule.id, reason: 'when' });
+      skipped.push({ ruleId: rule.id, reason: 'when', when: rule.when || [] });
       continue;
     }
     if (changed && rule.files && !fileFilterMatch(rule.files, changed)) {
@@ -420,10 +445,14 @@ export function evaluateModel(model, { root, changed = null, diff = null, withCo
     }
     for (const violation of outcome.violations) {
       const waiver = waivedBy(waivers, violation);
-      if (waiver) waived.push({ ...violation, waiver });
-      else violations.push(violation);
+      const enriched = { ...violation, ...(outcome.name ? { name: outcome.name } : {}), ...(outcome.command ? { command: outcome.command } : {}) };
+      if (waiver) waived.push({ ...enriched, waiver });
+      else violations.push(enriched);
+    }
+    if (outcome.violations.length === 0) {
+      passed.push({ ruleId: rule.id, ...(outcome.name ? { name: outcome.name } : {}), ...(outcome.command ? { command: outcome.command } : {}) });
     }
   }
   const expired = [];
-  return { violations, waived, skipped, expired };
+  return { violations, waived, skipped, passed, expired };
 }
