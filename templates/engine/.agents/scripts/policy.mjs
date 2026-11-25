@@ -483,8 +483,15 @@ function checkBudgets(root, cfg, problems, summary, runBudgets) {
     const script = process.env.FLOW_KIT_RUNTIME_SCRIPTS
       ? path.join(process.env.FLOW_KIT_RUNTIME_SCRIPTS, 'rule-budget.mjs')
       : path.join(root, '.agents', 'scripts', 'rule-budget.mjs');
+    const safeRealpath = (p) => {
+      try {
+        return fs.realpathSync.native ? fs.realpathSync.native(p) : fs.realpathSync(p);
+      } catch {
+        return path.resolve(p);
+      }
+    };
     const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: root, encoding: 'utf8', windowsHide: true });
-    const atGitRoot = top.status === 0 && path.resolve(top.stdout.trim()) === path.resolve(root);
+    const atGitRoot = top.status === 0 && safeRealpath(top.stdout.trim()).toLowerCase() === safeRealpath(root).toLowerCase();
     if (fs.existsSync(script) && atGitRoot) {
       const run = spawnSync(process.execPath, [script, '--all'], {
         cwd: root, encoding: 'utf8', timeout: 120000, windowsHide: true,

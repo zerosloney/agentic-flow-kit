@@ -147,13 +147,22 @@ const scanText = (file, text, baselineFiles, accepted, hits) => {
   }
 };
 
+const safeRealpath = (p) => {
+  try {
+    return fs.realpathSync.native ? fs.realpathSync.native(p) : fs.realpathSync(p);
+  } catch {
+    return path.resolve(p);
+  }
+};
+
 const scanWorkingTree = (root, baselineFiles, accepted) => {
   // 根必须就是 git 顶层：CHECK_SECRETS_ROOT 指到子目录时 git 会回上层仓库，路径全 stat 失败 →
   // scanned=0 的假绿。此处 fail-loud（下面对 scanned=0 也再兜一层）。
   const top = spawnSync('git', ['rev-parse', '--show-toplevel'], { cwd: root, encoding: 'utf8' });
   if (top.status !== 0) throw new Error(`git rev-parse --show-toplevel 失败（${root} 不是 git 工作区？）：${top.stderr || top.status}`);
-  const topPath = path.resolve(String(top.stdout || '').trim());
-  if (topPath !== path.resolve(root)) throw new Error(`扫描根 ${root} 不是 git 顶层（顶层为 ${topPath}）——拒跑，避免扫空目录假绿`);
+  const topPath = safeRealpath(String(top.stdout || '').trim());
+  const rootPath = safeRealpath(root);
+  if (topPath.toLowerCase() !== rootPath.toLowerCase()) throw new Error(`扫描根 ${root} 不是 git 顶层（顶层为 ${topPath}）——拒跑，避免扫空目录假绿`);
   // 工作树全量 = 已跟踪 + 未跟踪但未被 .gitignore 排除的文件。fresh install 尚未提交基线时
   // `git ls-files` 为空，会把真实扫描面算成 0 并 fail-closed 拒跑（新装户第一次 verify 必红）。
   const r = spawnSync('git', ['ls-files', '-z', '--cached', '--others', '--exclude-standard'], { cwd: root, encoding: 'utf8', maxBuffer: 256 * 1024 * 1024 });
