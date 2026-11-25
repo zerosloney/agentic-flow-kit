@@ -511,6 +511,30 @@
   `dirtyTreeDigest` 抽至无副作用单源 `git-tree-digest.mjs`，因 verify.mjs 顶层 import 即跑主流程）。
   全量 630 pass / 0 fail；lint:templates 与 check:i18n 均绿。
 
+## 落地记录（2026-11-26，v2.13.0 演进套件与顶层 CLI 接入）
+
+- **全套演进机制落地**：完成了 8 大前沿演进方向全套机制落地与端到端联合演练：
+  1. 处方自愈飞轮（`self-healing-prescriptions.mjs` + `healing-recipes.json`）；
+  2. 动态测试影响图与增量选测（`dynamic-test-impact.mjs`）；
+  3. 语义沙箱与符号级授权（`checkAuthorized` + `sandbox-capabilities.json`）；
+  4. 异构独立复核与双模型背书（`independent-review.mjs` + `model-roles.json`）；
+  5. 多任务并发防洪与队列熔断（`concurrency-control.mjs` + `checkQueueBrake`）；
+  6. 流水线时序追踪复盘（`timeline-trace.mjs`）；
+  7. 受控无头驱动与隔离影子试跑（`headless-driver.mjs`）；
+  8. 技能自优化进化飞轮与 5 维效能评估（`skill-optimizer.mjs` + `agent-evaluator.mjs`）。
+- **顶层 CLI 一等公民接入**：
+  - 新增 `timeline`、`shadow-run`、`eval`、`optimize-skill`、`rules` 顶层 CLI 命令；
+  - `src/cli/main.mjs` 统一分派与错误码映射，支持 `--json`、`--help`；
+  - `locales/zh-CN/installer.json` 与 `locales/en/installer.json` 同步补齐 5 大命令的 usage 与帮助说明。
+- **规则预算与机制台账对账**：
+  - `rule-budgets.txt`：校准 `pipeline-run.md` 至 13312B（13KB）、`commands/` 目录至 86016B（84KB）、`mechanism-registry.md` 至 34816B（34KB）；
+  - `mechanism-registry.md` 完整登记演进机制，现役机制总计 46 项，严格遵循一进一出纪律。
+- **全流程联合演练与门禁闭环**：
+  - 联合演练覆盖：处方自愈修复、TIA 拓扑选测、双模型交叉复核、队列熔断告警、影子沙箱零污染试跑、时序包导出；
+  - 全量测试 `npm test` 1501/1501 全绿通过；
+  - 模板合规检查 `npm run lint:templates`、策略一致性检查 `npm run policy:check`、文档无漂移检查全绿；
+  - 发版归档：升级版本至 `2.13.0`，生成 `CHANGELOG.md`，打发布标签 `v2.13.0`。
+
 ## 能力扩展
 
 新增能力的规划与验收见 `ROADMAP.md`；执行项以 GitHub issue 跟踪。

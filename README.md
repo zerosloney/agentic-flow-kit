@@ -1,9 +1,11 @@
 # agentic-flow-kit
 
-AI-Native 工作流引擎：**工作流面**管任务怎么从需求跑到关单，**工程治理面**管多宿主接线、门禁、权限、观测怎么落地。以零依赖安装器分发——一条 `npx` 命令把整套引擎装进任意项目，只依赖 Node.js ≥ 22 内置模块。
+AI-Native 工作流引擎：**工作流面**管任务怎么从需求跑到关单与自愈演进，**工程治理面**管多宿主接线、规则引擎、门禁、权限、观测怎么落地。以零依赖安装器分发——一条 `npx` 命令把整套引擎装进任意项目，只依赖 Node.js ≥ 22 内置模块。
 
 - **零依赖**：引擎与安装器全部 Node 内置模块，无 Python、无框架。
 - **14 宿主一次铺开**：trae / codebuddy / codex / codeartsdoer / claude / opencode / qwen / pi / cline / commandcode / cursor / qoder / zcode / antigravity；能力单源在 `src/hosts/registry.mjs`，新宿主可作插件接入。
+- **前沿自演进与闭环（v2.13.0）**：集成处方自愈飞轮、动态测试影响图（TIA）、语义沙箱符号授权、双模型独立背书、防洪熔断、时序复盘、影子试跑与技能自优化 8 大演进机制。
+- **多层声明式规则引擎**：统一项目、租户与企业级规范，单源预算与健康审计。
 - **幂等安装与升级**：`install-manifest.json` 记文件哈希，冲突默认跳过、`--force` 覆盖；`upgrade` / `adopt` / `prune` / `diff` 全生命周期可回查。
 - **双语**：`--lang zh-CN`（默认）或 `en`，语言包覆盖文档、提示词、脚手架与安装器输出。
 - **交互向导**：交互终端裸跑进 TUI；非交互自动降级编号问答。
@@ -15,14 +17,24 @@ AI-Native 工作流引擎：**工作流面**管任务怎么从需求跑到关单
 - **风险定级路由**（`new-task`）：L1 / L2 / L3 判级 + 触达面闭集，判低有机器硬拦；L0 / L1 走快速道。会话入口由 `SessionStart` 腿注入指针式路由令（仅 claude 有官方实证，`session-context.local.json` 可关）。
 - **手动阶段流**（`stages`）：Plan 立 intent → Design 起 spec → Build 起 plan + 实现 → Test 静态门 + 独立复核 + 关单；L2 / L3 强制独立复核（新会话、固定 git range）。
 - **全自动执行器**（`pipeline-run`）：单命令驱动状态机，`PIPELINE-STOP` 停机点分流（工单 / 人件门原话代录 / 门失败 / 完成）；`onFail` 失败路由 + 重试预算 + 断点续跑；产物落 `workflow/tasks/<task>/`，与手动路径隔离。**实战已验证（2026-11-18）**：首个端到端真实 run 通过（22 门 / 3 确认 / 3 提交，台账配对成立）；启用前建议先跑 `check-pipeline-state.mjs` 静态闭包检查。
+- **自愈与进化飞轮**：
+  - **知识处方自愈**（`healing-recipes.json`）：门禁失败自动匹配历史处方并退火执行，修复成功沉淀为资产，消除人工打断。
+  - **动态测试影响图**（TIA，`dynamic-test-impact.mjs`）：基于 git diff 逆向拓扑解析受影响用例，核心基础设施变动安全兜底回退全量。
+  - **异构独立复核与双模型背书**（`model-roles.json` / `independent-review.mjs`）：重大路径（L2/L3）独立复核代码 diff，强制异构模型家族交叉背书。
+  - **受控无头驱动与隔离影子试跑**（`shadow-run` / `headless-driver.mjs`）：在隔离临时沙箱试跑变更，步数预算与状态指纹掐断死循环。
+  - **全生命周期时序复盘**（`timeline` / `timeline-trace.mjs`）：归一化重放任务事件、commits 与台账，控制台 ASCII 表与 Mermaid 序列图一键导出。
+  - **技能自优化**（`optimize-skill` / `skill-optimizer.mjs` / `eval`）：从会话经验与失败中挖掘优化点，5 维效能评分卡双臂对比与零回归防退化。
 - **任务投影与看板**：`projectTasks` 单源聚合 INDEX.md 任务表 + 本地 SSE 看板（`workflow-board-server.mjs`）。
 - **证据链**：确认台账（原话代录 + 对质）、独立复核落盘、verify 证据绑定 runId、Spec / Tasks / Verify 三件套（`check-spec-packages` 可入 CI）。
 - **观测**：usage 凭证采集（`PostToolUse(Agent)` 观测腿，缺字段零写入）、observability 聚合、门禁墙钟预算（advisory，数据驱动退役）。
 
 ### 工程治理：怎么管住
 
+- **声明式规则引擎**（`rules`）：多层规则继承与覆盖，单源审计常驻面体积与条目数预算，防止上下文与规范膨胀。
 - **Hook 中性规格编译**：`gates.json` 单一事实源，按 14 宿主 schema 编译接线（含 Codex 用户级 hooks、CodeArtsDoer `.github/hooks`），托管条目幂等合并、用户条目保留；宿主不支持的规格降级为 doctor guarantee advisory。
-- **权限编译**：allow / deny / ask 同源编译到各宿主；企业档按宿主能力分级加固。
+- **权限与沙箱编译**：allow / deny / ask 同源编译到各宿主；企业档按宿主能力分级加固。
+- **语义沙箱与符号级授权**（`sandbox-capabilities.json`）：plan 内细粒度声明 `symbols:` / `freeze:` 白名单，写前拦截越权改写与公共接口破坏。
+- **并发防洪与队列熔断**（`concurrency-control.mjs`）：令牌桶流控与滑动窗口熔断器，防多 Agent 刷爆 API Token 或死循环。
 - **MCP 接线**：`servers.json` 声明，安装器编译到宿主配置。
 - **模型按角色**：code / judgment / review 三角色，安装时探测推荐或手填，按宿主注入或继承。
 - **门禁与体检**：`doctor`（含 `--attest` 安装证明链）、`check-local-gates` 墙钟预算门、`diff` 漂移比对。
@@ -48,11 +60,12 @@ AI-Native 工作流引擎：**工作流面**管任务怎么从需求跑到关单
             每阶段：人件门确认（原话代录入台账）/ 独立复核（L2/L3 强制）/ 产物落盘
 
 全自动执行器（pipeline-run，与手动路由二选一，禁混用）：
-  triage → intent → spec → plan → implement → verify → review → closeout → done
-    │         │        │       │         │         │         │
-    └─────────┴────────┴───────┴─────────┴─────────┴─────────┘
-      停机点：work-order 工单 ｜ await-confirm 人件门 ｜ gate-fail → onFail 退回
-      产物：workflow/tasks/<task>/（与手动路径隔离）｜ 恢复：inFlight 断点续跑
+  triage → intent → spec → plan → implement → verify ──(TIA选测)──> review → closeout → done
+    │         │        │       │         │        │ (失败自愈处方)      │ (双模型背书)
+    └─────────┴────────┴───────┴─────────┴────────┴─────────────────────┴─────────────┘
+      停机点：work-order 工单 ｜ await-confirm 人件门 ｜ gate-fail → 处方自愈 / onFail 退回
+      防护面：语义沙箱（符号授权）｜ 并发防洪熔断 ｜ 影子试跑（shadow-run）
+      可观测：时序追踪（timeline）｜ 技能自优化（optimize-skill）｜ 效能评分卡（eval）
 ```
 
 ### 治理面：引擎如何落到项目
@@ -61,7 +74,7 @@ AI-Native 工作流引擎：**工作流面**管任务怎么从需求跑到关单
 目标项目
 ├─ .agents/            引擎声明面
 │  ├─ skills/  roles/  commands/     技能 · 角色契约 · 命令手册
-│  ├─ config/                         机器可读策略（pipeline · gates · model-roles）
+│  ├─ config/                         机器可读策略（pipeline · gates · model-roles · rules）
 │  └─ scripts/  hooks/                运行时实现（随包分发，由 flow-kit 调度）
 ├─ workflow/           数据资产（任务文档 · 台账 · 证据 · 看板）
 └─ 宿主目录/            .claude/  .codebuddy/  …   各宿主原生声明面（命令 / agent / 技能）
@@ -76,7 +89,7 @@ agentic-flow-kit
 │  ├─→ MCP 编译        servers.json → 宿主 MCP 配置
 │  └─→ 模型注入        code / judgment / review → 宿主 agent 模型
 ├─ doctor · check-local-gates    体检 · 安装证明链 · 墙钟预算门
-└─ bin/flow-kit.mjs              命令入口（install · upgrade · run · hook · TUI）
+└─ bin/flow-kit.mjs              命令入口（install · upgrade · run · hook · TUI · 演进命令）
 ```
 
 ## 快速开始
@@ -105,6 +118,11 @@ npx agentic-flow-kit                      # 交互终端裸跑 = TUI 向导
 | `uninstall` | 删除全部托管文件（用户改过的默认保留，`--force` 覆盖） |
 | `diff` / `status` | 只读对比 manifest / 磁盘 / 模板；或摘要输出安装状态 |
 | `doctor` | 体检 manifest、在位文件、git 配置、钩子、宿主接线；`--deep` 跑本地门禁，`--attest` 出安装证明链 |
+| `rules` | 规则引擎：查看、审计与验证项目声明式规则与体积预算 |
+| `timeline` | 时序追踪：分析 run 事件与 git 提交，生成时序回放与 Mermaid 序列图 |
+| `shadow-run` | 影子试跑：在隔离无头沙盒中试运行流水线或任务验证，防爆防污染 |
+| `eval` | 行为评测：运行黄金用例集与 5 维效能评分卡，评估模型质量与技能触发准确度 |
+| `optimize-skill` | 技能自优化：分析会话日志并提出技能正文调优建议，双臂比对防退化 |
 | `run <script>` | 执行包内引擎脚本（`--list` 列出可用；评测记录用 `run agent-eval.mjs record`） |
 | `hook <hook>` | 执行包内宿主 hook 适配器（stdin 与参数透传） |
 | `skills` | `skills lint` 准入检查；`add-skill` / `remove-skill` 管理外部技能与 lockfile |
