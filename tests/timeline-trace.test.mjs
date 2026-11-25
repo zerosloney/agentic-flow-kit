@@ -157,6 +157,29 @@ describe('Unit 2: 关键帧回放与时间旅行状态投影', () => {
     assert.equal(snapshot35s.gatesEvaluated.length, 1);
     assert.equal(snapshot35s.gatesEvaluated[0].passed, false);
   });
+
+  test('createTimelineEvent 保证同毫秒快速追加时的时间戳单调递增', () => {
+    const e1 = createTimelineEvent({ seq: 1 });
+    const e2 = createTimelineEvent({ seq: 2 });
+    assert.ok(new Date(e2.timestamp).getTime() > new Date(e1.timestamp).getTime(), '无显式时间戳时应严格单调递增');
+  });
+
+  test('projectStateAtTimestamp 支持事件对象或 opts.maxSeq 消除同刻裁决歧义', () => {
+    const sameTime = '2026-11-25T12:00:00.000Z';
+    const evts = [
+      createTimelineEvent({ seq: 1, timestamp: sameTime, eventType: 'RUN_STARTED' }),
+      createTimelineEvent({ seq: 2, timestamp: sameTime, eventType: 'STATUS_ROLLBACK' }),
+      createTimelineEvent({ seq: 3, timestamp: sameTime, eventType: 'STEP_EXECUTED' }),
+    ];
+    // 传入目标事件对象
+    const projByEvent = projectStateAtTimestamp(evts, evts[1]);
+    assert.equal(projByEvent.totalStepsExecuted, 2);
+    assert.equal(projByEvent.rollbacksCount, 1);
+
+    // 传入 timestamp + maxSeq
+    const projByMaxSeq = projectStateAtTimestamp(evts, sameTime, { maxSeq: 2 });
+    assert.equal(projByMaxSeq.totalStepsExecuted, 2);
+  });
 });
 
 describe('Unit 3: 快照差异对质与离线复盘包导出', () => {

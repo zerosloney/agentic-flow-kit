@@ -419,7 +419,7 @@ describe('全套机制联合演练（8 大演进方向完整闭环验证）', ()
     // 针对第 2 步回滚点的时间切片回放
     const rollbackEvent = allEvents.find((e) => e.eventType === 'STATUS_ROLLBACK');
     assert.ok(rollbackEvent, '应记录有回滚事件');
-    const pastProjection = projectStateAtTimestamp(allEvents, rollbackEvent.timestamp);
+    const pastProjection = projectStateAtTimestamp(allEvents, rollbackEvent.timestamp, { maxSeq: rollbackEvent.seq });
 
     assert.equal(pastProjection.rollbacksCount, 1, '历史切片应精准反映当时发生了 1 次回滚');
     assert.equal(pastProjection.totalStepsExecuted, 2, '当时仅执行了 2 步');

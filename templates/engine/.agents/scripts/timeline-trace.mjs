@@ -43,26 +43,38 @@ export const TIMELINE_STATUS = {
   HALTED: 'halted',
 };
 
+let lastAllocatedEpoch = 0;
+
 /**
  * 创建标准时序事件记录
  * @param {object} opts
  * @returns {object} 标准化事件对象
  */
 export function createTimelineEvent(opts = {}) {
-  const now = new Date().toISOString();
+  let nowIso;
+  if (opts.timestamp) {
+    nowIso = typeof opts.timestamp === 'string' ? opts.timestamp : new Date(opts.timestamp).toISOString();
+  } else {
+    let now = Date.now();
+    if (now <= lastAllocatedEpoch) {
+      now = lastAllocatedEpoch + 1;
+    }
+    lastAllocatedEpoch = now;
+    nowIso = new Date(now).toISOString();
+  }
   const runId = String(opts.runId || 'default-run').trim();
   const seq = Number(opts.seq) || 1;
   const rawType = String(opts.eventType || 'STEP_EXECUTED').trim().toUpperCase();
   const eventType = TIMELINE_EVENT_TYPES.includes(rawType) ? rawType : 'STEP_EXECUTED';
 
-  const raw = `${runId}:${seq}:${now}:${eventType}`;
+  const raw = `${runId}:${seq}:${nowIso}:${eventType}`;
   const eventId = opts.eventId || `evt-${crypto.createHash('sha256').update(raw, 'utf8').digest('hex').slice(0, 8)}`;
 
   return {
     eventId,
     runId,
     seq,
-    timestamp: opts.timestamp || now,
+    timestamp: nowIso,
     eventType,
     stage: String(opts.stage || 'unknown').trim(),
     actor: String(opts.actor || 'system').trim(),
@@ -162,16 +174,32 @@ export function queryTimelineEvents(events = [], filter = {}) {
 /**
  * 时间旅行投影器：还原流水线在任意历史时间点的状态
  * @param {Array<object>} events - 全量事件
- * @param {string|number|Date} targetTime - 目标时间切片
+ * @param {string|number|Date|object} targetTime - 目标时间切片或目标事件对象
+ * @param {object} [opts] - 投影选项 (e.g. maxSeq)
  * @returns {object} 历史时刻的状态切片投影
  */
-export function projectStateAtTimestamp(events = [], targetTime) {
-  const targetDate = new Date(targetTime);
-  const targetEpoch = targetDate.getTime();
+export function projectStateAtTimestamp(events = [], targetTime, opts = {}) {
+  let targetEpoch;
+  let maxSeq = opts.maxSeq != null ? Number(opts.maxSeq) : null;
+
+  if (typeof targetTime === 'object' && targetTime !== null && !(targetTime instanceof Date)) {
+    targetEpoch = new Date(targetTime.timestamp).getTime();
+    if (maxSeq === null && targetTime.seq != null) {
+      maxSeq = Number(targetTime.seq);
+    }
+  } else {
+    targetEpoch = new Date(targetTime).getTime();
+  }
+  const targetDate = new Date(targetEpoch);
 
   // 截取目标时间点之前发生的所有事件
   const historicalEvents = events
-    .filter((e) => new Date(e.timestamp).getTime() <= targetEpoch)
+    .filter((e) => {
+      const eEpoch = new Date(e.timestamp).getTime();
+      if (eEpoch > targetEpoch) return false;
+      if (eEpoch === targetEpoch && maxSeq !== null && e.seq > maxSeq) return false;
+      return true;
+    })
     .sort((a, b) => a.seq - b.seq);
 
   if (historicalEvents.length === 0) {
