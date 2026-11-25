@@ -139,7 +139,11 @@ function checkNotaryProofGuard(target, t) {
         publicKeyPem: pubKey,
       });
       if (!verifyRes.ok) {
-        violations.push(t('gate.handoffTampered', { id: hItem.envelope?.id || hItem.file, error: verifyRes.reason }));
+        // verifyHandoffEnvelope 以 problems 数组回报原因（无 reason 字段）；直接取 reason 会渲染成 undefined。
+        violations.push(t('gate.handoffTampered', {
+          id: hItem.envelope?.id || hItem.file,
+          error: (verifyRes.problems || []).join('; '),
+        }));
       }
     }
   }
@@ -220,7 +224,8 @@ function checkPolicyGuard(target, t) {
       name: 'policy',
       title: t('gate.guardPolicyTitle') || 'Central Enterprise Policy Alignment',
       status: 'failed',
-      reason: err.message,
+      // 与「格式非法」分支同口径：本地化结论 + 原始解析错误，避免同一失败类出现两种文案。
+      reason: `${t('gate.policyInvalid') || 'Invalid policy.json format'}: ${err.message}`,
     };
   }
 }
