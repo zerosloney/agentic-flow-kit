@@ -115,12 +115,14 @@ test('env rule: unset fails, valid passes, forbidden database fails', () => {
 
 test('command rules only run with --with-commands and report failures', () => {
   const dir = fixture();
-  write(dir, '.agents/hooks/commit-check.config.json', json({ builds: [{ name: 'ok', command: 'node -e "process.exit(0)"' }] }));
-  assert.equal(rules(dir).status, 0);
-  assert.equal(rules(dir, ['--with-commands']).status, 0);
-
+  // 失败命令在不带 --with-commands 时不执行（退出 0），带 --with-commands 时执行并拦截（退出 1）
   write(dir, '.agents/hooks/commit-check.config.json', json({ builds: [{ name: 'bad', command: 'node -e "process.exit(3)"' }] }));
+  assert.equal(rules(dir).status, 0);
   assert.equal(rules(dir, ['--with-commands']).status, 1);
+
+  // 成功命令在带 --with-commands 时正常通过
+  write(dir, '.agents/hooks/commit-check.config.json', json({ builds: [{ name: 'ok', command: 'node -e "process.exit(0)"' }] }));
+  assert.equal(rules(dir, ['--with-commands']).status, 0);
 });
 
 test('project layer can disable a legacy rule (rules check only; legacy gate unchanged)', () => {

@@ -58,14 +58,12 @@ test('scanGateConfigs classifies configured / missing / invalid', () => {
   assert.deepEqual(broken.invalid, ['delete-guard']);
 });
 
-test('fresh install reports unconfigured gates (node stack ships faces/product-gates/commit-check/test-impact)', () => {
+test('fresh install reports unconfigured gates (node stack ships commit-check + test-impact)', () => {
   const dir = tmpRepo();
   const r = run(['install', '--agent', 'claude', '--stack', 'node', '--lang', 'zh-CN', '--target', '.'], dir);
   assert.equal(r.status, 0, r.stderr);
   const out = `${r.stdout}${r.stderr}`;
-  assert.match(out, /门禁配置：未配置 4 项/);
-  assert.doesNotMatch(out, /未配置 4 项[^\n]*project-faces/);
-  assert.doesNotMatch(out, /未配置 4 项[^\n]*product-gates/);
+  assert.match(out, /门禁配置：未配置 6 项/);
   assert.match(out, /architecture-redlines/);
   assert.match(out, /配置指引：\.agents\/notes\/project-configs\.md/);
 });

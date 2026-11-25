@@ -399,3 +399,28 @@ test('en doctor prints the rules summary and gate coverage rows in English', () 
   assert.match(out, /gate families: configured [\s\S]*not configured \(SKIP\)/);
   assert.doesNotMatch(out, /规则包：|门禁族：/, 'en output must not fall back to the zh sentence');
 });
+
+test('en rules export messages are English', () => {
+  const dir = tmpRepo();
+  const write = (rel, text) => {
+    fs.mkdirSync(path.dirname(path.join(dir, rel)), { recursive: true });
+    fs.writeFileSync(path.join(dir, rel), text);
+  };
+  const rules = (args) => run(['rules', ...args, '--lang', 'en'], dir);
+
+  // 写入碎片配置以供 export 合拢
+  write('.agents/config/project-faces.json', JSON.stringify({ ui: ['src/ui'] }));
+  write('package.json', JSON.stringify({ name: 'my-app' }));
+
+  // export 成功输出：必须是英文
+  const exported = rules(['export']);
+  assert.equal(exported.status, 0, exported.stderr);
+  assert.match(exported.stdout, /Successfully exported and consolidated into flow-rules\.yml/);
+  assert.doesNotMatch(exported.stdout, /已成功导出并合拢/, 'en output must not fall back to the zh sentence');
+
+  // export 目标已存在（未给 --force）：报错必须是英文
+  const again = rules(['export']);
+  assert.equal(again.status, 2, again.stderr);
+  assert.match(again.stderr, /flow-rules\.yml already exists \(use --force to overwrite\)/);
+  assert.doesNotMatch(again.stderr, /已存在/, 'en output must not fall back to the zh sentence');
+});

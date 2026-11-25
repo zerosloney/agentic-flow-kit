@@ -18,6 +18,7 @@ import { ROLE_NAMES, readInjectedModels, readLocalModelRoles } from '../models/r
 import { computeEnterprise, GIT_HOOKS, PROOF_CHAIN_FILES, resolveTarget } from './install.mjs';
 import { readLocalPolicy, checkPolicyDriftSync } from './policy.mjs';
 import { verifySbom } from './sbom.mjs';
+import { parseJsonc } from '../rules/jsonc.mjs';
 import { splitWaivers } from '../rules/model.mjs';
 import { loadModel } from '../rules/load.mjs';
 import { readPluginStatus } from '../rules/plugin-status.mjs';
@@ -457,7 +458,7 @@ export function doctorCommand({ args, t }) {
     const abs = path.join(target, rel);
     if (!fs.existsSync(abs)) return { state: 'skip' };
     try {
-      return { state: 'ok', data: JSON.parse(fs.readFileSync(abs, 'utf8')) };
+      return { state: 'ok', data: parseJsonc(fs.readFileSync(abs, 'utf8'), rel) };
     } catch (e) {
       return { state: 'error', error: e.message };
     }

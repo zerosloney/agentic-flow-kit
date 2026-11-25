@@ -1,7 +1,0 @@
-{
-  "_note": "项目产品门配置（verify 基础表之外的本项目技术栈门）：id/name/cmd 必填，folder 默认 '.'，when 任一满足才启用（路径存在 / 尾部 * 一层通配 / pkg:<package.json 点分路径>）。verify 会把这里的门追加到 wiki-consistency 之后；按项目实际调整，用不到的条目直接删除。",
-  "gates": [
-    { "id": "maven-test", "name": "Maven 测试", "cmd": "mvn test", "folder": ".", "when": ["pom.xml"] },
-    { "id": "gradle-test", "name": "Gradle 测试", "cmd": "./gradlew test", "folder": ".", "when": ["build.gradle", "build.gradle.kts"] }
-  ]
-}

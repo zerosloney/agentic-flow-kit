@@ -35,7 +35,18 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { touchProblems, externalReviewId, parseReviewMetadata, filesOutsidePlan } from './touch-set.mjs';
+import {
+  touchProblems,
+  externalReviewId,
+  parseReviewMetadata,
+  filesOutsidePlan,
+  buildHandoffSheet,
+  validateHandoffSheet,
+  parseHandoffSheet,
+  normalizeModelFamily,
+  isHeterogeneousModel,
+  planPaths,
+} from './touch-set.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const KINDS = ['require', 'fix', 'verify', 'review', 'deploy']; // kind 词表单源（§25 预判执法段已于 2026-10-28 随 hygiene 退役，故仅本文件与工单 --hint/--triage 消费）
@@ -63,8 +74,10 @@ function ctxEnv(overrideRoot) {
     bin,
     gitPrefix,
     runsDir: path.join(root, '.agents', 'cache', 'pipeline-runs'),
+    prescriptionsFile: path.join(root, '.agents', 'notes', 'prescriptions.json'),
     pipeline: loadPipelineConfig(root),
     dispatch: loadDispatchConfig(root),
+    modelRoles: loadModelRolesConfig(root),
   };
 }
 
@@ -82,6 +95,72 @@ function loadDispatchConfig(root) {
     const cfg = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'config', 'dispatch.json'), 'utf8'));
     return cfg && typeof cfg === 'object' ? cfg : {};
   } catch { return {}; }
+}
+
+// 模型角色映射配置（可选，优先 .agents/config/model-roles.local.json，回退 model-roles.json）
+export function loadModelRolesConfig(root) {
+  try {
+    const localFile = path.join(root, '.agents', 'config', 'model-roles.local.json');
+    if (fs.existsSync(localFile)) {
+      const cfg = JSON.parse(fs.readFileSync(localFile, 'utf8'));
+      if (cfg && typeof cfg === 'object') return cfg;
+    }
+  } catch {}
+  try {
+    const defaultFile = path.join(root, '.agents', 'config', 'model-roles.json');
+    if (fs.existsSync(defaultFile)) {
+      const cfg = JSON.parse(fs.readFileSync(defaultFile, 'utf8'));
+      if (cfg && typeof cfg === 'object') return cfg;
+    }
+  } catch {}
+  return {};
+}
+
+// 模型角色与执行代理绑定解析（Wave 1 调度机制）
+export function resolveWorkOrderRole(ctx, order, run) {
+  const kind = order?.kind || 'implement';
+  const dispatchRoles = ctx?.dispatch?.roles || {};
+  const roleDef = dispatchRoles[kind] || {
+    role: 'judgment',
+    tier: 'standard',
+    agent: 'general-agent',
+  };
+
+  const roleName = roleDef.role || 'judgment';
+  const tier = roleDef.tier || 'standard';
+  const agent = roleDef.agent || 'general-agent';
+  const heterogeneous = !!roleDef.heterogeneous;
+
+  let recommendedModel = null;
+  const modelRoles = ctx?.modelRoles?.roles || {};
+  const configuredRole = modelRoles[roleName] || modelRoles[agent];
+  if (typeof configuredRole === 'string') {
+    recommendedModel = configuredRole;
+  } else if (configuredRole && typeof configuredRole === 'object') {
+    recommendedModel = configuredRole.model || configuredRole.id || null;
+  }
+
+  return {
+    role: roleName,
+    modelTier: tier,
+    agent,
+    recommendedModel,
+    heterogeneous,
+  };
+}
+
+export function getGitBaseSha(ctx, run) {
+  try {
+    const p = spawnSync(ctx.gitPrefix[0], [...ctx.gitPrefix.slice(1), 'rev-parse', 'HEAD'], {
+      cwd: ctx.root,
+      encoding: 'utf8',
+      windowsHide: true,
+    });
+    if (p.status === 0 && p.stdout) {
+      return p.stdout.trim();
+    }
+  } catch {}
+  return null;
 }
 
 // {entry}|{spec}|{plan}|{apiDocs} 从 run.docs 解析；未指定的产物跳过校验（如 fix 流程无 plan）。
@@ -426,6 +505,45 @@ export function pruneWorkOrderContext(context, budgetChars = 1200) {
     }
   }
 
+  // 4. 智能裁剪交接单（Handoff Sheet）
+  if (prunedContext.handoff && typeof prunedContext.handoff === 'object') {
+    const h = { ...prunedContext.handoff };
+    if (Array.isArray(h.touchSetAllowed) && h.touchSetAllowed.length > 10) {
+      h.touchSetAllowed = h.touchSetAllowed.slice(0, 10);
+    }
+    if (Array.isArray(h.touchSetForbidden) && h.touchSetForbidden.length > 10) {
+      h.touchSetForbidden = h.touchSetForbidden.slice(0, 10);
+    }
+    if (typeof h.notes === 'string' && h.notes.length > 200) {
+      h.notes = h.notes.slice(0, 197) + '...';
+    }
+    prunedContext.handoff = h;
+  }
+
+  // 5. 智能裁剪角色上下文切片（Slices）
+  if (prunedContext.slices && typeof prunedContext.slices === 'object') {
+    const sl = { ...prunedContext.slices };
+    if (typeof sl.planSlice === 'string' && sl.planSlice.length > 400) {
+      sl.planSlice = sl.planSlice.slice(0, 397) + '...';
+    }
+    if (typeof sl.acceptanceCriteria === 'string' && sl.acceptanceCriteria.length > 400) {
+      sl.acceptanceCriteria = sl.acceptanceCriteria.slice(0, 397) + '...';
+    }
+    if (typeof sl.changePlan === 'string' && sl.changePlan.length > 400) {
+      sl.changePlan = sl.changePlan.slice(0, 397) + '...';
+    }
+    if (Array.isArray(sl.allowedFiles) && sl.allowedFiles.length > 10) {
+      sl.allowedFiles = sl.allowedFiles.slice(0, 10);
+    }
+    if (Array.isArray(sl.prescriptions)) {
+      sl.prescriptions = sl.prescriptions.slice(0, 5).map((p) => {
+        const s = String(p || '');
+        return s.length > 120 ? s.slice(0, 117) + '...' : s;
+      });
+    }
+    prunedContext.slices = sl;
+  }
+
   const prunedChars = JSON.stringify(prunedContext).length;
   const pruned = prunedChars < originalChars;
   const savingsPercent = originalChars > 0 ? Math.max(0, Math.round(((originalChars - prunedChars) / originalChars) * 100)) : 0;
@@ -439,6 +557,372 @@ export function pruneWorkOrderContext(context, budgetChars = 1200) {
   };
 
   return prunedContext;
+}
+
+// ── 动态上下文装配器（Context Assembler） ─────────────────────────────
+export function extractDocSection(content, sectionHeading) {
+  if (!content) return '';
+  const lines = String(content).split(/\r?\n/);
+  let capturing = false;
+  const out = [];
+  for (const line of lines) {
+    if (line.startsWith('#')) {
+      const heading = line.replace(/^#+\s*/, '').trim();
+      if (heading.includes(sectionHeading)) {
+        capturing = true;
+        continue;
+      } else if (capturing) {
+        break;
+      }
+    }
+    if (capturing) {
+      out.push(line);
+    }
+  }
+  return out.join('\n').trim();
+}
+
+export function assembleWorkOrderContext(ctx, run, order) {
+  const context = { ...(order?.context || {}) };
+  const kind = order?.kind || 'implement';
+  const role = order?.role || 'code';
+  const slices = {
+    role,
+    kind,
+  };
+
+  if (kind === 'implement') {
+    const planText = run?.docs?.plan ? (readDoc(ctx, run.docs.plan) || '') : '';
+    const planChanges = extractDocSection(planText, '改动方案') || extractDocSection(planText, '任务拆解');
+    if (planChanges) {
+      slices.planSlice = planChanges.slice(0, 800);
+    }
+    if (context.handoff?.touchSetAllowed?.length) {
+      slices.allowedFiles = [...context.handoff.touchSetAllowed];
+    }
+    if (context.handoff?.gitBaseSha) {
+      slices.gitBaseSha = context.handoff.gitBaseSha;
+    }
+  } else if (kind === 'fix') {
+    if (run?.gateFail) {
+      slices.gateFailure = {
+        stage: run.gateFail.stage,
+        category: run.gateFail.analysis?.category || 'uncategorized',
+        action: run.gateFail.analysis?.action || '',
+        problems: (run.gateFail.problems || []).slice(0, 3),
+      };
+    }
+    slices.verifyCmd = 'node .agents/scripts/pipeline-run.mjs next';
+  } else if (kind === 'review') {
+    const targetDoc = run?.docs?.spec || run?.docs?.entry || '';
+    const specText = targetDoc ? (readDoc(ctx, targetDoc) || '') : '';
+    const acceptance = extractDocSection(specText, '验收标准');
+    if (acceptance) {
+      slices.acceptanceCriteria = acceptance.slice(0, 600);
+    }
+    const planText = run?.docs?.plan ? (readDoc(ctx, run.docs.plan) || '') : '';
+    const planChanges = extractDocSection(planText, '改动方案');
+    if (planChanges) {
+      slices.changePlan = planChanges.slice(0, 600);
+    }
+    slices.reviewChecklist = [
+      '遵循项目架构分层与契约边界',
+      '改动严格局限在授权范围，无扩散',
+      '非平凡逻辑含可运行验证',
+      '记录真实复核模型与上下文 ID',
+    ];
+  } else if (kind === 'closeout') {
+    const entryDoc = run?.docs?.entry || '';
+    const entryText = entryDoc ? (readDoc(ctx, entryDoc) || '') : '';
+    const acceptance = extractDocSection(entryText, '验收标准');
+    if (acceptance) {
+      slices.acceptanceCriteria = acceptance.slice(0, 800);
+    }
+  }
+
+  // 注入历史避坑处方 (Self-Healing Prescriptions Backflow)
+  const targetFiles = context.handoff?.touchSetAllowed || context.files || run?.lastFiles || (slices.allowedFiles || []);
+  const targetModule = run?.triage?.module;
+  const matchedRx = findMatchingPrescriptions(ctx, { module: targetModule, files: targetFiles });
+  if (matchedRx.length > 0) {
+    slices.prescriptions = matchedRx.flatMap((rx) =>
+      (rx.prescriptions || []).map((p) => `[${rx.module || '经验'}] ${p}`)
+    ).slice(0, 5);
+  }
+
+  context.slices = slices;
+  return context;
+}
+
+// ── 异构模型评审与多重背书校验门（Dual-Review & Heterogeneous Gate） ─────────
+export function verifyReviewEndorsement(ctx, run, stage, meta, opt = {}) {
+  const problems = [];
+  if (!meta || !meta.id) {
+    problems.push('写 - 独立复核：<结论> 复核上下文：<外部会话或子代理 id>。禁止占位符。');
+    return { ok: false, problems };
+  }
+
+  const isDowngraded = Boolean(meta.isDowngraded || opt.reviewDowngrade);
+  const downgradeReason = opt.reviewDowngrade || meta.downgradeReason || '跨模型评审自适应降级';
+
+  // 1. 异构模型复核校验 (Heterogeneous Check)
+  const requireHetero = Boolean(
+    opt.heterogeneous ||
+    ctx?.dispatch?.roles?.[stage === 'spec-review' ? 'draft' : 'review']?.heterogeneous ||
+    ctx?.dispatch?.roles?.review?.heterogeneous ||
+    ctx?.dispatch?.reviewPolicy?.enforceHeterogeneous
+  );
+
+  if (requireHetero && !isDowngraded) {
+    const authorModel =
+      run?.events?.findLast?.((e) => e.type === 'work-order' && (e.kind === 'implement' || e.kind === 'draft'))?.recommendedModel ||
+      ctx?.modelRoles?.roles?.code ||
+      ctx?.modelRoles?.roles?.judgment ||
+      '';
+
+    if (meta.reviewerModel && authorModel) {
+      if (!isHeterogeneousModel(meta.reviewerModel, authorModel)) {
+        problems.push(
+          `异构模型复核未通过：复核模型 (${meta.reviewerModel}) 与起草/实现模型 (${authorModel}) 同构。根据异构复核策略，需采用异构模型（如 Claude vs GPT/o3 vs Gemini/DeepSeek）独立复核，或声明评审降级理由（如：跨模型降级: <原因>）。`
+        );
+      }
+    }
+  }
+
+  // 2. 双模型背书校验 (Dual Review Gate)
+  const level = run?.triage?.level || 'L1';
+  const requireDual = Boolean(
+    opt.dualReview ||
+    ctx?.dispatch?.reviewPolicy?.requireDualReview === true ||
+    (ctx?.dispatch?.reviewPolicy?.requireDualReviewLevels || []).includes(level)
+  );
+
+  if (requireDual && !isDowngraded) {
+    const revs = meta.reviewers || [];
+    if (revs.length < 2) {
+      problems.push(
+        `双模型独立复核未通过：当前策略要求至少 2 位独立复核人（已配置双重背书要求），当前仅检测到 ${revs.length} 位复核记录。请追加二次复核记录，或声明评审降级理由。`
+      );
+    } else {
+      const notApproved = revs.filter((r) => !/通过|approved|lgtm|ok/i.test(r.conclusion || '通过'));
+      if (notApproved.length > 0) {
+        problems.push(`双模型独立复核未通过：存在未通过的复核结论。`);
+      }
+      if (revs[0].reviewerModel && revs[1].reviewerModel && !isHeterogeneousModel(revs[0].reviewerModel, revs[1].reviewerModel)) {
+        problems.push(
+          `双模型独立复核未通过：两位复核人的模型 (${revs[0].reviewerModel} 与 ${revs[1].reviewerModel}) 属于同构模型族，未达到异构双检要求。`
+        );
+      }
+    }
+  }
+
+  return {
+    ok: problems.length === 0,
+    problems,
+    isDowngraded,
+    downgradeReason,
+    dualEndorsed: Boolean(meta.dualEndorsed),
+  };
+}
+
+// ── 运行后复盘处方与自愈沉淀（Post-Mortem Prescriptions & Self-Healing） ─────────
+export function loadPrescriptions(ctx) {
+  const f = ctx?.prescriptionsFile || path.join(ctx?.root || process.cwd(), '.agents', 'notes', 'prescriptions.json');
+  if (!fs.existsSync(f)) return [];
+  try {
+    const data = JSON.parse(fs.readFileSync(f, 'utf8'));
+    return Array.isArray(data) ? data : [];
+  } catch {
+    return [];
+  }
+}
+
+export function savePrescriptions(ctx, list) {
+  const f = ctx?.prescriptionsFile || path.join(ctx?.root || process.cwd(), '.agents', 'notes', 'prescriptions.json');
+  try {
+    fs.mkdirSync(path.dirname(f), { recursive: true });
+    fs.writeFileSync(f, JSON.stringify(list, null, 2) + '\n', 'utf8');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export function findMatchingPrescriptions(ctx, { module, files = [] } = {}) {
+  const list = loadPrescriptions(ctx);
+  if (!list.length) return [];
+
+  const matched = [];
+  const fileSet = new Set((files || []).map((f) => String(f).replace(/\\/g, '/')));
+
+  for (const item of list) {
+    if (item.cleanPass) continue;
+    let hit = false;
+    // 1. 模块精确匹配
+    if (module && item.module && item.module !== 'general' && item.module === module) {
+      hit = true;
+    }
+    // 2. 文件或路径匹配
+    if (!hit && item.affectedFiles?.length && fileSet.size > 0) {
+      for (const af of item.affectedFiles) {
+        const normAf = String(af).replace(/\\/g, '/');
+        if (fileSet.has(normAf)) {
+          hit = true;
+          break;
+        }
+        for (const f of fileSet) {
+          if (normAf.startsWith(f) || f.startsWith(normAf)) {
+            hit = true;
+            break;
+          }
+        }
+        if (hit) break;
+      }
+    }
+
+    if (hit) {
+      matched.push(item);
+    }
+  }
+
+  return matched.slice(0, 3);
+}
+
+export function generatePostMortem(ctx, run, opts = {}) {
+  if (!run) return null;
+  const events = run.events || [];
+  const retries = run.retries || {};
+  const retrySum = Object.values(retries).reduce((a, b) => a + (Number(b) || 0), 0);
+  const failEvents = events.filter((e) => e.type === 'route' || e.type === 'gate-fail' || (e.type === 'gate' && e.exit !== 0));
+  const hasFailures = retrySum > 0 || failEvents.length > 0 || Boolean(run.gateFail);
+
+  if (!hasFailures && !opts.force) {
+    return {
+      id: `rx-${run.runId}`,
+      runId: run.runId,
+      createdAt: nowIso(),
+      cleanPass: true,
+      summary: '全流程单次通过，未触发门禁失败或重试退回',
+      prescriptions: [],
+    };
+  }
+
+  // 1. 发生失败的阶段/门禁
+  const occurredGates = new Set();
+  for (const e of failEvents) {
+    if (e.from) occurredGates.add(e.from);
+    if (e.stage) occurredGates.add(e.stage);
+    if (e.gate) occurredGates.add(e.gate);
+  }
+  for (const [k, v] of Object.entries(retries)) {
+    if (Number(v) > 0) occurredGates.add(k);
+  }
+  if (run.gateFail?.stage) occurredGates.add(run.gateFail.stage);
+
+  // 2. 归因分类 (Smart Fix categories)
+  const categories = new Set();
+  if (run.gateFail?.analysis?.category) categories.add(run.gateFail.analysis.category);
+  for (const e of events) {
+    if (e.analysis?.category) categories.add(e.analysis.category);
+  }
+
+  // 3. 问题条目汇总
+  const rawProblems = [];
+  if (run.gateFail?.problems) rawProblems.push(...run.gateFail.problems);
+  for (const e of events) {
+    if (Array.isArray(e.problems)) rawProblems.push(...e.problems);
+    if (typeof e.problem === 'string') rawProblems.push(e.problem);
+  }
+  const problems = [...new Set(rawProblems)].slice(0, 5);
+
+  // 4. 涉及文件
+  const affectedFiles = [...new Set([
+    ...(run.lastFiles || []),
+    ...(run.workOrder?.context?.handoff?.touchSetAllowed || []),
+    ...(run.workOrder?.context?.slices?.allowedFiles || []),
+  ])].slice(0, 10);
+
+  // 5. 提炼避坑处方 (Prescriptions)
+  const prescriptions = [];
+  const probStr = problems.join(' ');
+  const catList = [...categories];
+
+  if (catList.includes('touch-set') || /touch-set|未授权|unauthorized/i.test(probStr)) {
+    prescriptions.push('变动涉及计划外文件触点，规划阶段必须预先将修改路径纳入 plan.md 白名单');
+  }
+  if (catList.includes('arch') || /arch|架构|分层|层级/i.test(probStr)) {
+    prescriptions.push('触发架构防线或层级依赖阻断，必须遵循单一依赖方向，杜绝跨层直连或反向依赖');
+  }
+  if (catList.includes('test-failure') || /test|FAIL|assert|用例|测试/i.test(probStr)) {
+    prescriptions.push('单测或集成验证失败，在提交 review 阶段前须在本地定向运行对应 test 命令');
+  }
+  if (catList.includes('typecheck') || catList.includes('template-lint') || /type|lint|format|syntax|格式/i.test(probStr)) {
+    prescriptions.push('静态语法或格式不合规，进入验证前必须先跑本地代码类型与格式检查');
+  }
+  if (catList.includes('missing-artifact') || /missing-artifact|产物缺失/i.test(probStr)) {
+    prescriptions.push('阶段移交前产物未完全落盘，交接时须检查对应工件文件已真实存在并写入完毕');
+  }
+
+  if (prescriptions.length === 0) {
+    prescriptions.push('阶段门禁曾触发重试，交接前须严格按照 Checklist 对齐工件契约');
+  }
+
+  const moduleName = run.triage?.module || 'general';
+  const postMortem = {
+    id: `rx-${run.runId}`,
+    runId: run.runId,
+    createdAt: nowIso(),
+    module: moduleName,
+    occurredGates: [...occurredGates],
+    categories: catList,
+    affectedFiles,
+    problems,
+    prescriptions,
+    retriesCount: retrySum || failEvents.length,
+    summary: `Run ${run.runId} 经 ${retrySum || failEvents.length} 次重试收敛，提炼 ${prescriptions.length} 条工程避坑处方`,
+  };
+
+  run.postMortem = postMortem;
+
+  if (opts.persist !== false) {
+    const list = loadPrescriptions(ctx);
+    const existingIdx = list.findIndex((p) => p.runId === run.runId || p.id === postMortem.id);
+    if (existingIdx >= 0) {
+      list[existingIdx] = postMortem;
+    } else {
+      list.unshift(postMortem);
+    }
+    savePrescriptions(ctx, list.slice(0, 50));
+  }
+
+  return postMortem;
+}
+
+// ── 防洪队列熔断治理（Anti-Flooding Queue Brake） ──────────────────────────
+export function checkQueueBrake(ctx, opts = {}) {
+  const policy = ctx?.dispatch?.queuePolicy || {};
+  const maxActiveRuns = Number(opts.maxActiveRuns || policy.maxActiveRuns) || 3;
+  const enforce = Boolean(opts.queueBrake || opts['queue-brake'] || policy.enforceQueueBrake);
+
+  const activeRuns = listAllRuns(ctx, 'active');
+  const activeCount = activeRuns.length;
+  const activeRunIds = activeRuns.map((r) => r.runId);
+
+  if (opts.forceQueue || opts['force-queue']) {
+    return { tripped: false, forced: true, activeCount, maxActiveRuns, activeRunIds };
+  }
+
+  if (enforce && activeCount >= maxActiveRuns) {
+    return {
+      tripped: true,
+      activeCount,
+      maxActiveRuns,
+      activeRunIds,
+      message: `[queue-brake] 活跃 Run 数量已达上限 (${activeCount}/${maxActiveRuns})，防洪熔断已触发。`,
+    };
+  }
+
+  return { tripped: false, activeCount, maxActiveRuns, activeRunIds };
 }
 
 // ── 智能门禁失败归因分析（Smart Fix Attribution） ────────────────────────
@@ -573,14 +1057,44 @@ function wo(ctxOrRun, runOrO, oOrNothing) {
   return order;
 }
 function issueWO(ctx, run, order, nextStage) {
-  if (order.context && (!order.context.budget || order.context.budget.budgetChars !== (ctx?.dispatch?.workOrderContextBudgetChars || 1200))) {
+  if (!order.role || !order.modelTier) {
+    const resolved = resolveWorkOrderRole(ctx, order, run);
+    order.role = order.role || resolved.role;
+    order.modelTier = order.modelTier || resolved.modelTier;
+    order.agent = order.agent || resolved.agent;
+    order.recommendedModel = order.recommendedModel || resolved.recommendedModel;
+    if (resolved.heterogeneous) order.heterogeneous = true;
+  }
+  if (order.context) {
+    order.context.role = {
+      role: order.role,
+      tier: order.modelTier,
+      agent: order.agent,
+      recommendedModel: order.recommendedModel,
+      heterogeneous: !!order.heterogeneous,
+    };
+    order.context = assembleWorkOrderContext(ctx, run, order);
     order.context = pruneWorkOrderContext(order.context, ctx?.dispatch?.workOrderContextBudgetChars || 1200);
   }
   run.workOrder = order;
   run.stopType = 'work-order';
   run.stage = nextStage;
-  emit(run, { type: 'work-order', id: order.id, kind: order.kind });
-  emit(run, { type: 'stop', stopType: 'work-order', workOrderId: order.id });
+  emit(run, {
+    type: 'work-order',
+    id: order.id,
+    kind: order.kind,
+    role: order.role,
+    modelTier: order.modelTier,
+    agent: order.agent,
+    recommendedModel: order.recommendedModel,
+  });
+  emit(run, {
+    type: 'stop',
+    stopType: 'work-order',
+    workOrderId: order.id,
+    role: order.role,
+    modelTier: order.modelTier,
+  });
   saveRun(ctx, run);
   printRun(ctx, run);
   process.exit(0);
@@ -619,6 +1133,12 @@ function stopDone(ctx, run) {
   run.workOrder = null;
   run.stopType = 'done';
   run.stage = 'done';
+  try {
+    const rx = generatePostMortem(ctx, run);
+    if (rx && !rx.cleanPass) {
+      run.postMortem = rx;
+    }
+  } catch {}
   emit(run, { type: 'done' });
   emit(run, { type: 'stop', stopType: 'done' });
   saveRun(ctx, run);
@@ -668,6 +1188,19 @@ function printRun(ctx, run, problems) {
   if (run.stopType === 'work-order' && run.workOrder) {
     const w = run.workOrder;
     console.log(`\n== 工单 #${w.id}（${w.kind}）${w.title} ==`);
+    if (w.role || w.modelTier || w.recommendedModel) {
+      const parts = [];
+      if (w.role) parts.push(`角色: ${w.role}`);
+      if (w.modelTier) parts.push(`模型层级: ${w.modelTier}`);
+      if (w.recommendedModel) parts.push(`推荐模型: ${w.recommendedModel}`);
+      if (w.agent) parts.push(`执行代理: ${w.agent}`);
+      if (w.heterogeneous) parts.push(`[异构评审要求]`);
+      console.log(`🤖 [模型指派建议] ${parts.join(' | ')}`);
+    }
+    if (w.context?.handoff) {
+      const h = w.context.handoff;
+      console.log(`📋 [阶段交接契约] 来自: ${h.from} → 目标: ${h.to} | 基准 SHA: ${h.gitBaseSha || 'HEAD'} | 授权文件: ${h.touchSetAllowed?.length || 0} 个`);
+    }
     console.log(`目标：${w.goal}`);
     for (const s of w.instructions) console.log(`  ${s}`);
     if (w.fixAnalysis && w.fixAnalysis.category !== 'unknown') {
@@ -719,7 +1252,8 @@ function printRun(ctx, run, problems) {
   } else if (run.stopType === 'aborted') {
     console.log(`\n== 已放弃（${run.abort?.to || ''}）== ${run.abort?.note || ''}`);
   }
-  const stopLine = run.stopType === 'work-order' ? `PIPELINE-STOP work-order ${run.runId} ${run.workOrder?.id}`
+  const stopLine = run.stopType === 'work-order'
+    ? `PIPELINE-STOP work-order ${run.runId} ${run.workOrder?.id}${run.workOrder?.role ? ` ${run.workOrder.role}` : ''}${run.workOrder?.modelTier ? ` ${run.workOrder.modelTier}` : ''}${run.workOrder?.recommendedModel ? ` ${run.workOrder.recommendedModel}` : ''}`
     : run.stopType === 'await-confirm' ? `PIPELINE-STOP await-confirm ${run.runId} ${run.awaitConfirm?.doc || ''}`
       : run.stopType === 'gate-fail' ? `PIPELINE-STOP gate-fail ${run.runId} ${run.stage}`
         : run.stopType === 'step' ? `PIPELINE-STOP step ${run.runId} ${run.stage}`
@@ -1294,6 +1828,145 @@ export function inspectArtifact(ctx, run, target) {
     return { ok: true, type: 'diff', title: 'Git 工作区差异 (git diff HEAD)', content: '```diff\n' + diff + '\n```' };
   }
 
+  if (lower === 'handoff' || lower === 'handoff-sheet' || lower === 'handoff.json' || lower === 'handoff.md') {
+    let sheet = run.workOrder?.context?.handoff;
+    let source = 'workOrder.context.handoff';
+    if (!sheet) {
+      const candidates = [
+        path.join(taskDirRel(run), 'handoff.json'),
+        path.join(taskDirRel(run), 'handoff.md'),
+      ];
+      for (const c of candidates) {
+        const text = readDoc(ctx, c);
+        if (text !== null) {
+          sheet = parseHandoffSheet(text);
+          source = c;
+          break;
+        }
+      }
+    }
+    if (!sheet) {
+      const handoffEvent = (run.events || []).slice().reverse().find((e) => e.type === 'handoff' && e.sheet);
+      if (handoffEvent) {
+        sheet = handoffEvent.sheet;
+        source = 'events.handoff';
+      }
+    }
+
+    if (!sheet) {
+      return { ok: false, type: 'handoff', error: '未发现当前阶段或工单的交接契约（Handoff Sheet）' };
+    }
+
+    const lines = [
+      `# 阶段交接契约 (Handoff Sheet)`,
+      `> 来源: \`${source}\``,
+      '',
+      `- **交接发起方 (From)**: ${sheet.from || '无'}`,
+      `- **交接目标方 (To)**: ${sheet.to || '无'}`,
+      `- **交接任务 (Task)**: ${sheet.task || '无'}`,
+      `- **基准 SHA (Git Base SHA)**: \`${sheet.gitBaseSha || 'HEAD'}\``,
+      sheet.specDoc ? `- **规格文档 (Spec Doc)**: \`${sheet.specDoc}\`` : null,
+      '',
+      `## 授权改动文件 (Touch Set Allowed)`,
+      ...(sheet.touchSetAllowed?.length
+        ? sheet.touchSetAllowed.map((f) => `- \`${f}\``)
+        : ['- (无显式限制或由计划全集授权)']),
+      '',
+      `## 禁止改动文件 (Touch Set Forbidden)`,
+      ...(sheet.touchSetForbidden?.length
+        ? sheet.touchSetForbidden.map((f) => `- \`${f}\``)
+        : ['- (无额外禁止)']),
+      '',
+      sheet.notes ? `## 附注说明\n\n${sheet.notes}` : null,
+    ].filter(Boolean);
+
+    return {
+      ok: true,
+      type: 'handoff',
+      title: `交接契约: ${sheet.from} → ${sheet.to}`,
+      sheet,
+      content: lines.join('\n'),
+    };
+  }
+
+  if (lower === 'context' || lower === 'context-slices' || lower === 'slices') {
+    const ctxData = run.workOrder?.context;
+    if (!ctxData) {
+      return { ok: false, type: 'context', error: '当前 run 无活跃工单或工单上下文为空' };
+    }
+    const role = ctxData.role || {};
+    const budget = ctxData.budget || {};
+    const slices = ctxData.slices || {};
+    let content = `# 工单动态装配上下文 (Work Order Context)\n`;
+    content += `- **工单类型 (Kind)**: ${run.workOrder?.kind || '-'}\n`;
+    content += `- **指派角色 (Role)**: ${role.role || run.workOrder?.role || '-'} (${role.tier || run.workOrder?.modelTier || '-'})\n`;
+    content += `- **执行 Agent**: ${role.agent || run.workOrder?.agent || '-'}\n`;
+    content += `- **推荐模型**: ${role.recommendedModel || run.workOrder?.recommendedModel || '-'}\n`;
+    content += `- **异构复核要求**: ${role.heterogeneous ? '是' : '否'}\n`;
+    content += `\n## Token 预算分析\n`;
+    content += `- 原始字符数: ${budget.originalChars || 0} / 预算上限: ${budget.budgetChars || 1200}\n`;
+    content += `- 精简后字符数: ${budget.prunedChars || 0} (节约 ${budget.savingsPercent || 0}%)\n`;
+    content += `\n## 角色专属上下文切片 (Slices)\n`;
+    content += '```json\n' + JSON.stringify(slices, null, 2) + '\n```';
+    return { ok: true, type: 'context', title: '工单动态上下文与切片', content };
+  }
+
+  if (lower === 'endorsement' || lower === 'dual-review' || lower === 'review-policy') {
+    const targetDoc = run.docs?.spec || run.docs?.entry;
+    const body = targetDoc ? (sectionBody(readDoc(ctx, targetDoc) || '', '确认与复核') || '') : '';
+    const meta = parseReviewMetadata(body);
+    let content = `# 独立复核与多模型背书检视 (Review Endorsement)\n`;
+    content += `- **目标文档**: ${targetDoc || '(未就绪)'}\n`;
+    content += `- **首要复核 ID**: ${meta.id || '(未检测到)'}\n`;
+    content += `- **复核模型**: ${meta.reviewerModel || '(未注明)'} (模型族: ${normalizeModelFamily(meta.reviewerModel)})\n`;
+    content += `- **双重背书状态**: ${meta.dualEndorsed ? '✅ 已达成双模型通过' : '未达成/单复核'}\n`;
+    content += `- **降级状态**: ${meta.isDowngraded ? `⚠️ 声明降级 (${meta.downgradeReason})` : '未降级'}\n`;
+    content += `\n## 复核人记录清单 (Reviewers)\n`;
+    if (meta.reviewers?.length) {
+      for (let i = 0; i < meta.reviewers.length; i++) {
+        const r = meta.reviewers[i];
+        content += `${i + 1}. **${r.id}** [${r.reviewerModel || '未注明模型'}] - 结论: \`${r.conclusion}\`\n`;
+      }
+    } else {
+      content += `- (暂无复核记录)\n`;
+    }
+    return { ok: true, type: 'endorsement', title: '独立复核与双重背书检视', content };
+  }
+
+  if (lower === 'prescription' || lower === 'postmortem' || lower === 'post-mortem' || lower === 'rx') {
+    const rx = run.postMortem || (loadPrescriptions(ctx).find((p) => p.runId === run.runId) || null);
+    if (!rx) {
+      const matched = findMatchingPrescriptions(ctx, { module: run.triage?.module, files: run.lastFiles });
+      if (!matched.length) {
+        return {
+          ok: true,
+          type: 'prescription',
+          title: '运行复盘处方 (Post-Mortem Prescriptions)',
+          content: '# 运行复盘处方\n\n当前 Run 尚未产生处方（一次通过或尚未收尾），且当前模块暂无历史踩坑记录。',
+        };
+      }
+      let content = `# 模块历史沉淀处方 (${run.triage?.module || 'general'})\n\n`;
+      for (const item of matched) {
+        content += `### 来源: ${item.runId} (${item.summary || '历史经验'})\n`;
+        for (const p of item.prescriptions || []) {
+          content += `- 💡 ${p}\n`;
+        }
+      }
+      return { ok: true, type: 'prescription', title: '模块历史沉淀处方', content };
+    }
+    let content = `# 运行复盘处方 (${rx.runId})\n`;
+    content += `- **工单模块**: ${rx.module || 'general'}\n`;
+    content += `- **重试次数**: ${rx.retriesCount || 0} 次\n`;
+    content += `- **经历阶段**: ${(rx.occurredGates || []).join(', ') || '-'}\n`;
+    content += `- **归因分类**: ${(rx.categories || []).join(', ') || '-'}\n`;
+    content += `- **涉及路径**: ${(rx.affectedFiles || []).join(', ') || '-'}\n`;
+    content += `\n## 避坑处方与反思提炼\n`;
+    for (const p of (rx.prescriptions || [])) {
+      content += `- 💡 ${p}\n`;
+    }
+    return { ok: true, type: 'prescription', title: `运行复盘处方: ${rx.runId}`, content };
+  }
+
   // 3. Fallback / 自动目标
   if (!norm || lower === 'auto') {
     if (run.stopType === 'work-order' && run.workOrder) return inspectArtifact(ctx, run, 'work-order');
@@ -1305,7 +1978,7 @@ export function inspectArtifact(ctx, run, target) {
     return inspectArtifact(ctx, run, 'work-order');
   }
 
-  return { ok: false, type: 'unknown', error: `未知产物目标：${norm}（支持: entry | spec | plan | api | work-order | problems | risk | diff 或直接文件相对路径）` };
+  return { ok: false, type: 'unknown', error: `未知产物目标：${norm}（支持: entry | spec | plan | api | work-order | handoff | context | endorsement | prescription | problems | risk | diff 或直接文件相对路径）` };
 }
 
 export function getAvailableTargets(ctx, run) {
@@ -1315,6 +1988,18 @@ export function getAvailableTargets(ctx, run) {
   if (run.docs?.plan && readDoc(ctx, run.docs.plan) !== null) targets.push('plan');
   if (run.docs?.apiDocs && readDoc(ctx, run.docs.apiDocs) !== null) targets.push('api');
   if (run.workOrder) targets.push('work-order');
+  if (run.workOrder?.context?.handoff || (run.events || []).some((e) => e.type === 'handoff')) targets.push('handoff');
+  if (run.workOrder?.context?.slices) targets.push('context');
+  const reviewDoc = run.docs?.spec || run.docs?.entry;
+  if (reviewDoc) {
+    const text = readDoc(ctx, reviewDoc) || '';
+    if (text.includes('确认与复核') || text.includes('独立复核')) {
+      targets.push('endorsement');
+    }
+  }
+  if (run.postMortem || loadPrescriptions(ctx).some((p) => p.runId === run.runId)) {
+    targets.push('prescription');
+  }
   if ((run.gateFail?.problems || []).length || (run.events || []).some((e) => e.type === 'gate' && e.exit !== 0)) targets.push('problems');
   return targets.length ? targets : ['work-order'];
 }
@@ -1873,6 +2558,18 @@ async function advance(ctx, run, opt) {
       if (problems.length) stopGateFail(ctx, run, s, problems);
       if (L() === 'L2' || L() === 'L3') {
         run.stage = 'spec-review';
+        const baseSha = getGitBaseSha(ctx, run);
+        const reviewHandoff = buildHandoffSheet({
+          from: 'test-designer',
+          to: 'independent-reviewer',
+          task: `独立复核规格：${run.docs.spec}`,
+          gitBaseSha: baseSha,
+          touchSetAllowed: [run.docs.spec],
+          touchSetForbidden: ['src/', 'templates/', 'tests/'],
+          specDoc: run.docs.spec,
+          notes: '只写「确认与复核」一节，禁止修改功能行为正文',
+        });
+        emit(run, { type: 'handoff', stage: s, toStage: 'spec-review', sheet: reviewHandoff });
         issueWO(ctx, run, wo(run, {
           kind: 'review', title: `独立复核 spec：${run.docs.spec}`, goal: '另开外部会话或子代理。只读。写入复核行。',
           instructions: [
@@ -1880,7 +2577,7 @@ async function advance(ctx, run, opt) {
             '写入一行：- 独立复核：<结论> 复核上下文：<id>',
             'id 取该会话或子代理标识。禁止占位符。',
           ],
-          context: { docPath: run.docs.spec, kbHits: [], stderrTail: '', relatedDocs: [] },
+          context: { docPath: run.docs.spec, kbHits: [], stderrTail: '', relatedDocs: [], handoff: reviewHandoff },
           constraints: ['只写「确认与复核」一节。'],
           acceptance: ['复核上下文是外部会话或子代理 id'],
         }), 'spec-review');
@@ -1892,12 +2589,13 @@ async function advance(ctx, run, opt) {
     if (s === 'spec-review') {
       const body = sectionBody(readDoc(ctx, run.docs.spec) || '', '确认与复核') || '';
       const meta = parseReviewMetadata(body);
-      if (!meta.id) stopGateFail(ctx, run, s, ['写 - 独立复核：<结论> 复核上下文：<外部会话或子代理 id>。禁止占位符。']);
-      if (meta.isDowngraded || opt.reviewDowngrade) {
+      const v = verifyReviewEndorsement(ctx, run, s, meta, opt);
+      if (!v.ok) stopGateFail(ctx, run, s, v.problems);
+      if (v.isDowngraded) {
         emit(run, {
           type: 'review-downgrade',
           stage: s,
-          reason: opt.reviewDowngrade || meta.downgradeReason || '跨模型评审自适应降级',
+          reason: v.downgradeReason,
           reviewer: meta.reviewerModel || 'default',
         });
       }
@@ -1963,7 +2661,22 @@ async function advance(ctx, run, opt) {
       if (!opt.delegated) stopConfirm(ctx, run, run.awaitConfirm?.doc || '', run.awaitConfirm?.points || '', false);
       emit(run, { type: 'confirm', doc: '改动清单', to: 'ok', source: 'conversation', quote: opt.delegated });
       run.stage = 'implement';
-      const planFiles = (readDoc(ctx, run.docs.plan).match(/[\w./-]+\.(?:mjs|md|json|txt|cjs|sh|yml|yaml)/g) || []);
+      const planDocText = readDoc(ctx, run.docs.plan) || '';
+      const planFiles = (planDocText.match(/[\w./-]+\.(?:mjs|md|json|txt|cjs|sh|yml|yaml)/g) || []);
+      const planSection = sectionBody(planDocText, '改动方案') || '';
+      const allowedPaths = planPaths(planSection);
+      const baseSha = getGitBaseSha(ctx, run);
+      const implementHandoff = buildHandoffSheet({
+        from: 'planner',
+        to: 'implementer',
+        task: `实现需求：${briefReq(run)}`,
+        gitBaseSha: baseSha,
+        touchSetAllowed: allowedPaths.length ? allowedPaths : planFiles.slice(0, 8),
+        touchSetForbidden: ['workflow/tasks/', '.agents/config/product-gates.json'],
+        specDoc: run.docs?.spec || null,
+        notes: '按 plan 改动方案逐文件实现，偏离即停',
+      });
+      emit(run, { type: 'handoff', stage: s, toStage: 'implement', sheet: implementHandoff });
       issueWO(ctx, run, wo(run, {
         kind: 'implement', title: `实现：${briefReq(run)}`, goal: '按 plan 改动方案实现 + 自验',
         instructions: [
@@ -1972,7 +2685,7 @@ async function advance(ctx, run, opt) {
           '3. 偏离即停：改公共接口/计划外文件/新依赖 → 不做，停机向用户上报',
           '4. 完成后回填改动文件清单：next --files "a.mjs,b.md"',
         ],
-        context: { docPath: run.docs.plan, kbHits: [], stderrTail: '', relatedDocs: planFiles.slice(0, 8) },
+        context: { docPath: run.docs.plan, kbHits: [], stderrTail: '', relatedDocs: planFiles.slice(0, 8), handoff: implementHandoff },
         constraints: ['只改「改动方案」列出的路径。--files 与 git status 一致。计划外路径停等确认。'],
         acceptance: ['git 改动 ⊆ --files', '--files ⊆ 改动方案，或已 --delegated'],
       }), 'implement');
@@ -2067,10 +2780,21 @@ async function advance(ctx, run, opt) {
         '2. 修复（授权面仍以 plan 为准，偏离即停）',
         '3. 完成后回填：next --files "…"（脚本重核对改动面并重跑 verify）',
       ];
+      const baseSha = getGitBaseSha(ctx, run);
+      const fixHandoff = buildHandoffSheet({
+        from: 'verifier',
+        to: 'implementer',
+        task: `修复门禁失败：${analysis.title || 'verify 未过'}`,
+        gitBaseSha: baseSha,
+        touchSetAllowed: analysis.impactedFiles.length ? analysis.impactedFiles : (run.lastFiles || []),
+        specDoc: run.docs?.spec || null,
+        notes: `门禁失败原因：${analysis.summary || '参见 stderrTail'}`,
+      });
+      emit(run, { type: 'handoff', stage: s, toStage: to, sheet: fixHandoff });
       issueWO(ctx, run, wo(run, {
         kind: 'fix', title: `修复环 ${attempt}/${retry}：verify 未过`, goal: '按失败输出修复后回跑',
         instructions: fixInstructions,
-        context: { docPath: run.docs.plan, kbHits: [], stderrTail: tail, relatedDocs: fixRelatedDocs },
+        context: { docPath: run.docs.plan, kbHits: [], stderrTail: tail, relatedDocs: fixRelatedDocs, handoff: fixHandoff },
         constraints: ['不绕门不改门；不 --no-verify'],
         acceptance: ['git 改动 ⊆ 回填清单', 'verify.mjs 重跑全绿'],
         fixAnalysis: analysis,
@@ -2081,14 +2805,15 @@ async function advance(ctx, run, opt) {
       const target = run.docs.spec || entry();
       const body = sectionBody(readDoc(ctx, target) || '', '确认与复核') || '';
       const meta = parseReviewMetadata(body);
-      if (!meta.id) {
-        stopGateFail(ctx, run, s, ['写 - 独立复核：<结论> 复核上下文：<外部会话或子代理 id>。禁止占位符。']);
+      const v = verifyReviewEndorsement(ctx, run, s, meta, opt);
+      if (!v.ok) {
+        stopGateFail(ctx, run, s, v.problems);
       }
-      if (meta.isDowngraded || opt.reviewDowngrade) {
+      if (v.isDowngraded) {
         emit(run, {
           type: 'review-downgrade',
           stage: s,
-          reason: opt.reviewDowngrade || meta.downgradeReason || '跨模型评审自适应降级',
+          reason: v.downgradeReason,
           reviewer: meta.reviewerModel || 'default',
         });
       }
@@ -2159,10 +2884,21 @@ async function advance(ctx, run, opt) {
     }
     if (s === 'review-only') {
       if (opt.done) stopDone(ctx, run); // 评审清单交付即收（宿主向用户汇报后回填 --done）
+      const baseSha = getGitBaseSha(ctx, run);
+      const reviewHandoff = buildHandoffSheet({
+        from: 'coordinator',
+        to: 'independent-reviewer',
+        task: '横切架构与安全评审',
+        gitBaseSha: baseSha,
+        touchSetAllowed: [],
+        touchSetForbidden: ['*'],
+        notes: '按 review.md 产出 P0/P1/P2 清单，只读不写代码',
+      });
+      emit(run, { type: 'handoff', stage: s, toStage: 'review-only', sheet: reviewHandoff });
       issueWO(ctx, run, wo(run, {
         kind: 'review', title: '横切评审', goal: '按 .agents/commands/review.md 产出 P0/P1/P2 分级清单交用户定性',
         instructions: ['1. 读 review.md 与评审对象', '2. 机器兜底项先跑门，AI 自查项列清单', '3. 结论交用户定性与合入时机'],
-        context: { docPath: '.agents/commands/review.md', kbHits: [], stderrTail: '', relatedDocs: [] },
+        context: { docPath: '.agents/commands/review.md', kbHits: [], stderrTail: '', relatedDocs: [], handoff: reviewHandoff },
         constraints: ['只读评审；定性归用户'],
         acceptance: ['清单产出（P0/P1/P2 分级）'],
       }), 'review-only');
@@ -2217,7 +2953,7 @@ async function advance(ctx, run, opt) {
 }
 
 // ── 子命令 ─────────────────────────────────────────────────────────────
-const BOOL_FLAGS = new Set(['adopt', 'json', 'done', 'once', 'step', 'interactive-gate', 'inspect']); // 复核 P2-5：布尔旗标不吞下一参
+const BOOL_FLAGS = new Set(['adopt', 'json', 'done', 'once', 'step', 'interactive-gate', 'inspect', 'dual-review', 'heterogeneous', 'queue-brake', 'force-queue']); // 复核 P2-5：布尔旗标不吞下一参
 function parseArgs(argv) {
   const out = { cmd: argv[0], positional: [] };
   for (let i = 1; i < argv.length; i++) {
@@ -2257,6 +2993,13 @@ if (isMain) {
   if (cmd === 'start') {
     const req = a.positional[0];
     if (!req) fail('start 必填需求原文：start "<需求>" [--hint "kind=… level=… module=…"]');
+    const brake = checkQueueBrake(ctx, a);
+    if (brake.tripped) {
+      console.error(`\n🚫 ${brake.message}`);
+      console.error(`当前活跃 Runs (${brake.activeCount}): ${brake.activeRunIds.join(', ')}`);
+      console.error(`请先推进完成既有任务，或添加 --force-queue 旗标绕过熔断。\n`);
+      process.exit(2);
+    }
     const runId = newRunId(req);
     const run = {
       runId, requirement: req, hint: a.hint || '', createdAt: nowIso(), updatedAt: nowIso(),
@@ -2295,6 +3038,8 @@ if (isMain) {
       reviewDowngrade: typeof a['review-downgrade'] === 'string'
         ? a['review-downgrade']
         : (a['review-downgrade'] === true ? '跨模型评审自适应降级' : undefined),
+      dualReview: a['dual-review'] === true,
+      heterogeneous: a.heterogeneous === true,
     });
   } else if (cmd === 'status') {
     if (a.adopt) { adoptRun(ctx, a); process.exit(0); }
@@ -2575,8 +3320,28 @@ if (isMain) {
       console.error(`\n❌ 门 ${gateName} 验证未通过 (exit ${r.exit})`);
       process.exit(2);
     }
+  } else if (cmd === 'post-mortem' || cmd === 'prescription') {
+    const run = resolveRun(ctx, a);
+    const rx = generatePostMortem(ctx, run, { force: true });
+    if (a.json) {
+      console.log(JSON.stringify(rx, null, 2));
+      process.exit(0);
+    }
+    console.log(`\n📋 运行复盘处方: ${rx.runId}`);
+    console.log(`- 模块: ${rx.module || 'general'}`);
+    console.log(`- 重试次数: ${rx.retriesCount || 0}`);
+    console.log(`- 经历阶段: ${(rx.occurredGates || []).join(', ') || '(无)'}`);
+    console.log(`- 归因分类: ${(rx.categories || []).join(', ') || '(无)'}`);
+    console.log(`- 涉及文件: ${(rx.affectedFiles || []).join(', ') || '(无)'}`);
+    console.log(`\n💡 避坑处方:`);
+    if (rx.prescriptions?.length) {
+      for (const p of rx.prescriptions) console.log(`  • ${p}`);
+    } else {
+      console.log(`  (未产生需提炼处方: ${rx.summary || '全流程单次通过'})`);
+    }
+    process.exit(0);
   } else {
-    fail(`未知命令：${cmd ?? ''}（start | next | status | watch | dashboard | inspect | abort | gate，用法见文件头注释）`);
+    fail(`未知命令：${cmd ?? ''}（start | next | status | watch | dashboard | inspect | abort | gate | post-mortem，用法见文件头注释）`);
   }
 }
 
@@ -2608,4 +3373,4 @@ function adoptRun(ctx, a) {
   console.log('  提示：adopt 不推断断点位置——按文档现状人工续走（next 会按 stage 拒绝，请对照事件缺失情况手动接续或另起 run）');
 }
 
-export default { parseKV, validateDraftContent, closeoutComplete, placeholdersIn, stageBar, renderDashboard, stripAnsi, visualWidth, truncate, truncateAnsi, parseGateName, pruneWorkOrderContext, listAllRuns, renderMarkdown, inspectArtifact, getAvailableTargets, renderInspect, analyzeGateFailure, manifestPristine, isRuntimeOrManaged, checkAuthorized };
+export default { parseKV, validateDraftContent, closeoutComplete, placeholdersIn, stageBar, renderDashboard, stripAnsi, visualWidth, truncate, truncateAnsi, parseGateName, pruneWorkOrderContext, listAllRuns, renderMarkdown, inspectArtifact, getAvailableTargets, renderInspect, analyzeGateFailure, manifestPristine, isRuntimeOrManaged, checkAuthorized, loadModelRolesConfig, resolveWorkOrderRole, getGitBaseSha, buildHandoffSheet, validateHandoffSheet, parseHandoffSheet, extractDocSection, assembleWorkOrderContext, verifyReviewEndorsement, normalizeModelFamily, isHeterogeneousModel, loadPrescriptions, savePrescriptions, findMatchingPrescriptions, generatePostMortem, checkQueueBrake };

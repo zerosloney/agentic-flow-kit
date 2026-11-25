@@ -11,9 +11,9 @@ export const PROJECT_RULE_FILES = [
   'flow-rules.yaml',
   '.agents/rules.yml',
   '.agents/rules.yaml',
-  '.agents/rules/project.json',
   '.agents/rules/project.yml',
   '.agents/rules/project.yaml',
+  '.agents/rules/project.json',
 ];
 
 /** 寻找项目规则文件相对路径（若无返回 null） */
@@ -363,11 +363,17 @@ export function extractVerifyCommandGates(projectRules, root) {
     if (assertKind !== 'command') continue;
 
     const rawId = String(rule.id || '').trim();
-    if (!rawId) continue;
+    if (!rawId) {
+      console.warn('rules-loader: 规则缺少必填 id，已跳过命令门映射');
+      continue;
+    }
 
     // 门 id 映射：如果是 product.<name>，短 id 映射为 <name>；否则取 rawId
     const gateId = rawId.startsWith('product.') ? rawId.slice(8) : rawId;
-    if (seenIds.has(gateId)) continue;
+    if (seenIds.has(gateId)) {
+      console.warn(`rules-loader: 命令门 id「${gateId}」重复，已忽略后续同名规则`);
+      continue;
+    }
     seenIds.add(gateId);
 
     const name = rule.name
@@ -381,8 +387,8 @@ export function extractVerifyCommandGates(projectRules, root) {
     const when = rule.when !== undefined ? rule.when : (rule.check?.when !== undefined ? rule.check.when : undefined);
     const timeoutMs = rule.timeoutMs !== undefined ? rule.timeoutMs : (rule.check?.timeoutMs !== undefined ? rule.check.timeoutMs : undefined);
 
-    // 契约：产品门委托 rules 引擎执行
-    const fullRuleId = rawId.startsWith('product.') ? rawId : `product.${slug(gateId)}`;
+    // 契约：命令门委托 rules 引擎执行，按原始规则 ID 匹配
+    const fullRuleId = rawId;
     const execCmd = `flow-kit rules check --with-commands --prefix ${fullRuleId}`;
 
     gates.push({

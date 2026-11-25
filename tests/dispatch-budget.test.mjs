@@ -60,6 +60,44 @@ test('dispatch.json parses with valid budget fields and advisory note', () => {
   assert.match(cfg.note, /2026-11-16/); // 与 gate-budgets.json 同风格：note 写明依据与日期
 });
 
+test('dispatch.json defines model role mappings and tier taxonomy', () => {
+  const cfg = JSON.parse(read('templates/engine/.agents/config/dispatch.json'));
+  assert.equal(typeof cfg.roles, 'object');
+  assert.equal(typeof cfg.tiers, 'object');
+
+  // 必须覆盖所有工单类型
+  const expectedKinds = ['triage', 'draft', 'implement', 'fix', 'review', 'closeout', 'deploy-prep'];
+  for (const k of expectedKinds) {
+    const r = cfg.roles[k];
+    assert.ok(r, `roles 必须包含 ${k}`);
+    assert.equal(typeof r.role, 'string');
+    assert.equal(typeof r.tier, 'string');
+    assert.equal(typeof r.agent, 'string');
+  }
+
+  // review 必须标记异构模型约束
+  assert.equal(cfg.roles.review.heterogeneous, true);
+  assert.equal(cfg.roles.implement.role, 'code');
+  assert.equal(cfg.roles.fix.role, 'code');
+
+  // tiers 层级定义覆盖
+  assert.ok(cfg.tiers.pro && cfg.tiers.pro.description);
+  assert.ok(cfg.tiers.standard && cfg.tiers.standard.description);
+  assert.ok(cfg.tiers.fast && cfg.tiers.fast.description);
+  assert.ok(cfg.tiers.local && cfg.tiers.local.description);
+
+  // reviewPolicy 策略定义覆盖
+  assert.equal(typeof cfg.reviewPolicy, 'object');
+  assert.equal(typeof cfg.reviewPolicy.enforceHeterogeneous, 'boolean');
+  assert.ok(Array.isArray(cfg.reviewPolicy.requireDualReviewLevels));
+  assert.ok(cfg.reviewPolicy.requireDualReviewLevels.includes('L3'));
+
+  // queuePolicy 防洪与队列熔断策略
+  assert.equal(typeof cfg.queuePolicy, 'object');
+  assert.equal(typeof cfg.queuePolicy.maxActiveRuns, 'number');
+  assert.equal(typeof cfg.queuePolicy.enforceQueueBrake, 'boolean');
+});
+
 test('all 8 role files (zh + en overrides) carry the report budget line', () => {
   for (const role of ROLES) {
     const zh = read(`templates/engine/.agents/roles/${role}.md`);

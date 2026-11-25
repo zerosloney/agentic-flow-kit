@@ -5,7 +5,8 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { globToRegExp, hasGlobMeta, staticPrefix } from './glob.mjs';
 
-const SKIP_DIRS = new Set(['.git', 'node_modules', 'bin', 'obj', 'dist', 'coverage', 'tmp', '.agents/tmp', '.agents/cache']);
+const SKIP_DIR_NAMES = new Set(['.git', 'node_modules', 'bin', 'obj', 'dist', 'coverage', 'tmp']);
+const SKIP_REL_PATHS = new Set(['.agents/tmp', '.agents/cache', 'tmp']);
 
 const posix = (p) => String(p).replace(/\\/g, '/');
 const readLines = (abs) => fs.readFileSync(abs, 'utf8').split(/\r?\n/);
@@ -27,9 +28,10 @@ function listFilesIn(root, prefixRel) {
       return;
     }
     for (const ent of ents) {
-      if (SKIP_DIRS.has(ent.name)) continue;
+      if (SKIP_DIR_NAMES.has(ent.name)) continue;
       const absChild = path.join(abs, ent.name);
       const relChild = rel ? `${rel}/${ent.name}` : ent.name;
+      if (SKIP_REL_PATHS.has(posix(relChild))) continue;
       if (ent.isDirectory()) walk(absChild, relChild);
       else out.push(relChild);
     }
@@ -155,7 +157,11 @@ export function collectDiff(root, { staged = false, range = null } = {}) {
       file = line.slice(6);
       continue;
     }
-    if (!/^\+[^+]/.test(line)) continue;
+    if (line.startsWith('+++ /dev/null') || line.startsWith('--- ') || line.startsWith('@@ ')) {
+      continue;
+    }
+    if (!line.startsWith('+')) continue;
+    if (!file) continue;
     const posixFile = posix(file);
     if (!added.has(posixFile)) added.set(posixFile, []);
     added.get(posixFile).push(line.slice(1));
@@ -165,7 +171,7 @@ export function collectDiff(root, { staged = false, range = null } = {}) {
 
 function evalContentRepo(rule, ctx) {
   const a = rule.assert.args;
-  const ext = a.ext === undefined ? ['.cs'] : a.ext;
+  const ext = a.ext === undefined ? [] : a.ext;
   const targets = [...(a.targets || []), ...(a.files || [])].map(posix);
   const files = resolveTargets(ctx.root, targets, ext, a.optional === true);
   if (files === null) return { skipped: 'optional-target-missing' };

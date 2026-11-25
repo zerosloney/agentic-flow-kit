@@ -142,7 +142,7 @@ export function getVerifyCommandGates(model) {
     const deps = rule.assert?.args?.deps;
     const when = rule.when;
     const timeoutMs = rule.timeoutMs;
-    const fullRuleId = rawId.startsWith('product.') ? rawId : `product.${gateId}`;
+    const fullRuleId = rawId;
     gates.push({
       id: gateId,
       cohort: 'product',

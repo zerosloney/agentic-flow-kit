@@ -242,9 +242,6 @@ export function normalizeRule(raw) {
       delete rule.assert.args.command;
     }
   }
-  if (!rule.face) rule.face = 'any';
-  if (!rule.phase) rule.phase = 'verify';
-  if (!rule.severity) rule.severity = 'block';
   if (rule.name !== undefined) delete rule.name;
   if (rule.check !== undefined) delete rule.check;
   return rule;

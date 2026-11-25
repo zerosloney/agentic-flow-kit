@@ -3,5 +3,28 @@
   "maxParallel": 2,
   "reportBudgetChars": 500,
   "workOrderContextBudgetChars": 1200,
+  "roles": {
+    "triage": { "role": "judgment", "tier": "pro", "agent": "pr-adjudicator" },
+    "draft": { "role": "judgment", "tier": "pro", "agent": "test-designer" },
+    "implement": { "role": "code", "tier": "standard", "agent": "implementer" },
+    "fix": { "role": "code", "tier": "standard", "agent": "implementer" },
+    "review": { "role": "review", "tier": "pro", "agent": "independent-reviewer", "heterogeneous": true },
+    "closeout": { "role": "judgment", "tier": "fast", "agent": "pr-verifier" },
+    "deploy-prep": { "role": "judgment", "tier": "fast", "agent": "pr-verifier" }
+  },
+  "tiers": {
+    "pro": { "description": "强推理/长上下文模型，适合定级、架构设计、深度复核" },
+    "standard": { "description": "标准编程模型，平衡吞吐与代码质量，适合功能实现与定向修复" },
+    "fast": { "description": "轻量敏捷模型，低延迟低成本，适合表单勾验与产物校验" },
+    "local": { "description": "本地部署或受限离线模型" }
+  },
+  "reviewPolicy": {
+    "enforceHeterogeneous": false,
+    "requireDualReviewLevels": ["L3"]
+  },
+  "queuePolicy": {
+    "maxActiveRuns": 3,
+    "enforceQueueBrake": false
+  },
   "note": "派发报告预算（advisory）：单份报告 ≤ reportBudgetChars 字符、并发派发 ≤ maxParallel，工单上下文预算 ≤ workOrderContextBudgetChars 字符，超限只计量不阻断，由主智能体按内容自行取舍。500 字符依据结构化报告模板（结论 2-3 句 + 证据路径 2-3 条 + 风险 1 句）估算取整；计量口径见 agg-delegations.mjs（delegations.d/ 分片去空白正文字符，月合计，非逐报告全文——台账无报告原文数据源，不造数）。2026-11-16 定档。"
 }

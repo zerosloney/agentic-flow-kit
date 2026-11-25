@@ -18,22 +18,60 @@ function run(args, cwd) {
   });
 }
 
-test('every stack profile in templates has product-gates, project-faces, and stack rule layer', () => {
+test('profile single source of truth: dotnet ships faces/gates, other stacks leave empty, all have stack rule layer', () => {
   for (const stack of STACK_ORDER) {
     const profileDir = path.join(KIT, 'templates', 'profiles', stack);
     assert.ok(fs.existsSync(profileDir), `Profile dir missing for stack: ${stack}`);
 
     const productGates = path.join(profileDir, '.agents', 'config', 'product-gates.json');
-    assert.ok(fs.existsSync(productGates), `product-gates.json missing for stack: ${stack}`);
-    assert.doesNotThrow(() => JSON.parse(fs.readFileSync(productGates, 'utf8')), `Invalid JSON in ${productGates}`);
-
     const projectFaces = path.join(profileDir, '.agents', 'config', 'project-faces.json');
-    assert.ok(fs.existsSync(projectFaces), `project-faces.json missing for stack: ${stack}`);
-    assert.doesNotThrow(() => JSON.parse(fs.readFileSync(projectFaces, 'utf8')), `Invalid JSON in ${projectFaces}`);
+
+    if (stack === 'dotnet') {
+      assert.ok(fs.existsSync(productGates), 'dotnet profile must provide product-gates.json');
+      assert.ok(fs.existsSync(projectFaces), 'dotnet profile must provide project-faces.json');
+      assert.doesNotThrow(() => JSON.parse(fs.readFileSync(productGates, 'utf8')));
+      assert.doesNotThrow(() => JSON.parse(fs.readFileSync(projectFaces, 'utf8')));
+    } else {
+      // CLAUDE.md:253: dotnet 画像带默认面，其余画像留空（未配置 = 保守全触发；单源归 stack.<stack>.json 规则层）
+      assert.ok(!fs.existsSync(productGates), `${stack} profile should not ship product-gates.json (single source in stack.${stack}.json)`);
+      assert.ok(!fs.existsSync(projectFaces), `${stack} profile should not ship project-faces.json (unconfigured = conservative trigger)`);
+    }
 
     const stackRule = path.join(profileDir, '.agents', 'rules', `stack.${stack}.json`);
     assert.ok(fs.existsSync(stackRule), `stack.${stack}.json missing for stack: ${stack}`);
     assert.doesNotThrow(() => JSON.parse(fs.readFileSync(stackRule, 'utf8')), `Invalid JSON in ${stackRule}`);
+  }
+});
+
+test('no profile has duplicate gate command definitions (D20 single source guard)', () => {
+  for (const stack of STACK_ORDER) {
+    const profileDir = path.join(KIT, 'templates', 'profiles', stack);
+    const seenCommands = new Set();
+
+    const productGates = path.join(profileDir, '.agents', 'config', 'product-gates.json');
+    if (fs.existsSync(productGates)) {
+      const data = JSON.parse(fs.readFileSync(productGates, 'utf8'));
+      for (const g of data.gates || []) {
+        if (g.cmd) {
+          const normCmd = g.cmd.trim();
+          assert.ok(!seenCommands.has(normCmd), `${stack}: duplicate gate command '${normCmd}' in product-gates.json`);
+          seenCommands.add(normCmd);
+        }
+      }
+    }
+
+    const stackRule = path.join(profileDir, '.agents', 'rules', `stack.${stack}.json`);
+    if (fs.existsSync(stackRule)) {
+      const data = JSON.parse(fs.readFileSync(stackRule, 'utf8'));
+      for (const r of data.rules || []) {
+        const cmd = r.assert?.args?.run || r.check?.run || r.command || r.run;
+        if (cmd) {
+          const normCmd = cmd.trim();
+          assert.ok(!seenCommands.has(normCmd), `${stack}: duplicate gate command '${normCmd}' between stack.${stack}.json and product-gates`);
+          seenCommands.add(normCmd);
+        }
+      }
+    }
   }
 });
 

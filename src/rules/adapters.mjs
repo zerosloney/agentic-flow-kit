@@ -55,7 +55,7 @@ const ARCH_SECTIONS = [
   { key: 'catchRequires', prefix: 'arch.catch', kind: 'require', keys: ['id', 'files', 'catch', 'require', 'message', 'exclude', 'optional'], required: ['catch', 'require', 'message'], requiredArrays: ['files'] },
 ];
 const ARCH_ARGS = {
-  content: (e) => ({ targets: e.targets, ext: e.ext, contains: e.contains, matches: e.matches, unless: e.unless, exclude: e.exclude, optional: e.optional, once: e.once }),
+  content: (e) => ({ targets: e.targets, ext: e.ext || ['.cs'], contains: e.contains, matches: e.matches, unless: e.unless, exclude: e.exclude, optional: e.optional, once: e.once }),
   navProperties: (e) => ({ dir: e.dir, extraTypeNames: e.extraTypeNames, optional: e.optional }),
   require: (e) => ({ files: e.files, trigger: e.catch, require: e.require, exclude: e.exclude, optional: e.optional }),
 };

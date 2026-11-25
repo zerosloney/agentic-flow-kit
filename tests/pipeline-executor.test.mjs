@@ -12,8 +12,14 @@ import {
   stageArtifactProblems, failRoute, renderDashboard, stripAnsi, visualWidth, truncate, truncateAnsi, parseGateName,
   pruneWorkOrderContext, listAllRuns, renderMarkdown, inspectArtifact, getAvailableTargets, renderInspect,
   analyzeGateFailure, manifestPristine, isRuntimeOrManaged, checkAuthorized, validateDraftContent, closeoutComplete,
+  loadModelRolesConfig, resolveWorkOrderRole, extractDocSection, assembleWorkOrderContext, verifyReviewEndorsement,
+  loadPrescriptions, savePrescriptions, findMatchingPrescriptions, generatePostMortem, checkQueueBrake,
 } from '../templates/engine/.agents/scripts/pipeline-run.mjs';
-import { touchProblems, externalReviewId, parseReviewMetadata, filesOutsidePlan, planPaths } from '../templates/engine/.agents/scripts/touch-set.mjs';
+import {
+  touchProblems, externalReviewId, parseReviewMetadata, filesOutsidePlan, planPaths,
+  buildHandoffSheet, validateHandoffSheet, parseHandoffSheet,
+  normalizeModelFamily, isHeterogeneousModel,
+} from '../templates/engine/.agents/scripts/touch-set.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..');
@@ -1772,4 +1778,652 @@ test('L0 fast-track: pipeline triage routes L0 directly to plan-fill with --lite
   assert.equal(run.workOrder.kind, 'draft');
   assert.match(run.docs.plan, /plan\.md$/);
   assert.equal(run.docs.entry, run.docs.plan); // L0 plan is self-entry
+});
+
+test('resolveWorkOrderRole maps work order kinds to model roles, tiers and recommended models', () => {
+  const root = fixture();
+  fs.writeFileSync(
+    path.join(root, '.agents', 'config', 'model-roles.local.json'),
+    JSON.stringify({
+      roles: {
+        code: 'claude-3-5-sonnet',
+        judgment: 'gemini-2.5-pro',
+        review: 'o3-mini',
+      },
+    })
+  );
+
+  const ctx = {
+    root,
+    dispatch: {
+      roles: {
+        implement: { role: 'code', tier: 'standard', agent: 'implementer' },
+        review: { role: 'review', tier: 'pro', agent: 'independent-reviewer', heterogeneous: true },
+        triage: { role: 'judgment', tier: 'pro', agent: 'pr-adjudicator' },
+      },
+    },
+    modelRoles: loadModelRolesConfig(root),
+  };
+
+  const imp = resolveWorkOrderRole(ctx, { kind: 'implement' });
+  assert.equal(imp.role, 'code');
+  assert.equal(imp.modelTier, 'standard');
+  assert.equal(imp.agent, 'implementer');
+  assert.equal(imp.recommendedModel, 'claude-3-5-sonnet');
+  assert.equal(imp.heterogeneous, false);
+
+  const rev = resolveWorkOrderRole(ctx, { kind: 'review' });
+  assert.equal(rev.role, 'review');
+  assert.equal(rev.modelTier, 'pro');
+  assert.equal(rev.agent, 'independent-reviewer');
+  assert.equal(rev.recommendedModel, 'o3-mini');
+  assert.equal(rev.heterogeneous, true);
+
+  const tri = resolveWorkOrderRole(ctx, { kind: 'triage' });
+  assert.equal(tri.role, 'judgment');
+  assert.equal(tri.modelTier, 'pro');
+  assert.equal(tri.recommendedModel, 'gemini-2.5-pro');
+});
+
+test('handoff sheet contract building, parsing, and context pruning', () => {
+  const sheet = buildHandoffSheet({
+    from: 'planner',
+    to: 'implementer',
+    task: '实现特定功能',
+    gitBaseSha: 'abc1234',
+    touchSetAllowed: ['src/a.mjs', 'src/b.mjs'],
+    touchSetForbidden: ['tests/'],
+    notes: '注意保持纯函数',
+  });
+  const val = validateHandoffSheet(sheet);
+  assert.equal(val.ok, true);
+  assert.equal(sheet.touchSetAllowed.length, 2);
+
+  // Markdown 解析验证
+  const md = `---
+from: test-designer
+to: independent-reviewer
+task: 复核契约
+---
+- 允许改动: src/foo.mjs
+- 禁止改动: tests/
+`;
+  const parsed = parseHandoffSheet(md);
+  assert.ok(parsed);
+  assert.equal(parsed.from, 'test-designer');
+  assert.equal(parsed.to, 'independent-reviewer');
+  assert.deepEqual(parsed.touchSetAllowed, ['src/foo.mjs']);
+
+  // pruneWorkOrderContext 裁剪防撑爆
+  const oversizedList = Array.from({ length: 30 }, (_, i) => `src/file-${i}.mjs`);
+  const longNote = 'A'.repeat(500);
+  const pruned = pruneWorkOrderContext({
+    handoff: {
+      from: 'planner',
+      to: 'implementer',
+      task: 'task',
+      touchSetAllowed: oversizedList,
+      touchSetForbidden: oversizedList,
+      notes: longNote,
+    },
+  }, 1000);
+  assert.ok(pruned.handoff.touchSetAllowed.length <= 10);
+  assert.ok(pruned.handoff.touchSetForbidden.length <= 10);
+  assert.ok(pruned.handoff.notes.length <= 200);
+});
+
+test('inspectArtifact supports handoff target and surfaces sheet details', () => {
+  const root = fixture();
+  const run = {
+    runId: 'test-run',
+    stage: 'implement',
+    stopType: 'work-order',
+    workOrder: {
+      id: 1,
+      kind: 'implement',
+      context: {
+        handoff: buildHandoffSheet({
+          from: 'planner',
+          to: 'implementer',
+          task: '功能实现',
+          gitBaseSha: 'deadbeef',
+          touchSetAllowed: ['src/core.mjs'],
+        }),
+      },
+    },
+    events: [],
+    docs: {},
+  };
+
+  const targets = getAvailableTargets({ root }, run);
+  assert.ok(targets.includes('handoff'));
+
+  const art = inspectArtifact({ root }, run, 'handoff');
+  assert.equal(art.ok, true);
+  assert.equal(art.type, 'handoff');
+  assert.match(art.content, /交接发起方 \(From\)\*\*:\s*planner/);
+  assert.match(art.content, /交接目标方 \(To\)\*\*:\s*implementer/);
+  assert.match(art.content, /deadbeef/);
+  assert.match(art.content, /src\/core\.mjs/);
+});
+
+test('work order dispatch injects role and recommendedModel and prints in stopLine', () => {
+  const root = fixture();
+  // 注入真实 dispatch.json 和 model-roles.local.json
+  const dispatchPath = path.join(REPO, 'templates', 'engine', '.agents', 'config', 'dispatch.json');
+  fs.copyFileSync(dispatchPath, path.join(root, '.agents', 'config', 'dispatch.json'));
+  fs.writeFileSync(
+    path.join(root, '.agents', 'config', 'model-roles.local.json'),
+    JSON.stringify({
+      roles: {
+        judgment: 'gemini-2.5-pro',
+        code: 'claude-3-5-sonnet',
+        review: 'gpt-4o',
+      },
+    })
+  );
+
+  const r = runPipeline(root, ['start', '用户需求：测试模型角色与交接注入']);
+  assert.equal(r.status, 0);
+  // 首停机点为 triage
+  assert.match(r.stdout, /PIPELINE-STOP work-order/);
+  assert.match(r.stdout, /judgment/);
+  assert.match(r.stdout, /pro/);
+  assert.match(r.stdout, /gemini-2\.5-pro/);
+  assert.match(r.stdout, /模型指派建议/);
+
+  const runFile = fs.readdirSync(path.join(root, '.agents', 'cache', 'pipeline-runs')).find((f) => f.endsWith('.json'));
+  assert.ok(runFile, 'run file must exist');
+  const run = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'cache', 'pipeline-runs', runFile), 'utf8'));
+  assert.equal(run.workOrder.role, 'judgment');
+  assert.equal(run.workOrder.modelTier, 'pro');
+  assert.equal(run.workOrder.recommendedModel, 'gemini-2.5-pro');
+  assert.equal(run.workOrder.context.role.role, 'judgment');
+});
+
+test('assembleWorkOrderContext extracts role-specific slices and budgets context', () => {
+  const root = fixture();
+  const planDoc = path.join(root, 'workflow', 'plans', 'demo.md');
+  fs.mkdirSync(path.dirname(planDoc), { recursive: true });
+  fs.writeFileSync(
+    planDoc,
+    `# 计划文档
+## 改动方案
+- 修改 \`src/engine.mjs\` 实现动态上下文装配
+- 修改 \`src/review.mjs\` 实现多模型背书
+## 任务拆解
+- 批次 1: 契约测试
+`
+  );
+
+  const specDoc = path.join(root, 'workflow', 'specs', 'demo.md');
+  fs.mkdirSync(path.dirname(specDoc), { recursive: true });
+  fs.writeFileSync(
+    specDoc,
+    `# 规格文档
+## 验收标准
+- [ ] 规则 1: 必须包含单元测试
+- [ ] 规则 2: 必须零额外依赖
+`
+  );
+
+  const run = {
+    runId: 'ctx-run',
+    stage: 'implement',
+    docs: { plan: 'workflow/plans/demo.md', spec: 'workflow/specs/demo.md', entry: 'workflow/specs/demo.md' },
+    gateFail: {
+      stage: 'verify',
+      problems: ['门禁 verify.mjs 失败 (exit 1)'],
+      analysis: { category: 'test-failure', action: '修复测试用例' },
+    },
+  };
+
+  // 1. implement 工单上下文切片
+  const orderImp = {
+    kind: 'implement',
+    role: 'code',
+    context: {
+      handoff: {
+        touchSetAllowed: ['src/engine.mjs'],
+        gitBaseSha: '1234567',
+      },
+    },
+  };
+  const impCtx = assembleWorkOrderContext({ root }, run, orderImp);
+  assert.equal(impCtx.slices.role, 'code');
+  assert.equal(impCtx.slices.kind, 'implement');
+  assert.match(impCtx.slices.planSlice, /修改 `src\/engine\.mjs`/);
+  assert.deepEqual(impCtx.slices.allowedFiles, ['src/engine.mjs']);
+  assert.equal(impCtx.slices.gitBaseSha, '1234567');
+
+  // 2. fix 工单上下文切片
+  const orderFix = { kind: 'fix', role: 'code', context: {} };
+  const fixCtx = assembleWorkOrderContext({ root }, run, orderFix);
+  assert.equal(fixCtx.slices.gateFailure.stage, 'verify');
+  assert.equal(fixCtx.slices.gateFailure.category, 'test-failure');
+  assert.ok(fixCtx.slices.verifyCmd.includes('pipeline-run.mjs next'));
+
+  // 3. review 工单上下文切片
+  const orderRev = { kind: 'review', role: 'review', context: {} };
+  const revCtx = assembleWorkOrderContext({ root }, run, orderRev);
+  assert.match(revCtx.slices.acceptanceCriteria, /规则 1/);
+  assert.match(revCtx.slices.changePlan, /修改 `src\/engine\.mjs`/);
+  assert.ok(revCtx.slices.reviewChecklist.length >= 3);
+
+  // 4. closeout 工单上下文切片
+  const orderClose = { kind: 'closeout', role: 'judgment', context: {} };
+  const closeCtx = assembleWorkOrderContext({ root }, run, orderClose);
+  assert.match(closeCtx.slices.acceptanceCriteria, /规则 1/);
+
+  // 5. pruneWorkOrderContext 裁剪超限切片
+  const oversizedSlices = {
+    planSlice: 'P'.repeat(600),
+    acceptanceCriteria: 'A'.repeat(600),
+    changePlan: 'C'.repeat(600),
+    allowedFiles: Array.from({ length: 20 }, (_, i) => `src/f${i}.mjs`),
+  };
+  const pruned = pruneWorkOrderContext({ slices: oversizedSlices }, 500);
+  assert.ok(pruned.slices.planSlice.length <= 400);
+  assert.ok(pruned.slices.acceptanceCriteria.length <= 400);
+  assert.ok(pruned.slices.changePlan.length <= 400);
+  assert.ok(pruned.slices.allowedFiles.length <= 10);
+});
+
+test('normalizeModelFamily and isHeterogeneousModel model family taxonomy', () => {
+  assert.equal(normalizeModelFamily('claude-3-5-sonnet'), 'claude');
+  assert.equal(normalizeModelFamily('Claude-3-7-Sonnet-20250219'), 'claude');
+  assert.equal(normalizeModelFamily('anthropic/claude-3-opus'), 'claude');
+
+  assert.equal(normalizeModelFamily('gpt-4o'), 'openai');
+  assert.equal(normalizeModelFamily('o3-mini'), 'openai');
+  assert.equal(normalizeModelFamily('o1-preview'), 'openai');
+
+  assert.equal(normalizeModelFamily('gemini-2.5-pro'), 'gemini');
+  assert.equal(normalizeModelFamily('google/gemini-2.0-flash'), 'gemini');
+
+  assert.equal(normalizeModelFamily('deepseek-r1'), 'deepseek');
+  assert.equal(normalizeModelFamily('deepseek-ai/DeepSeek-V3'), 'deepseek');
+
+  assert.equal(normalizeModelFamily('qwen-max'), 'qwen');
+
+  // 同构与异构判断
+  assert.equal(isHeterogeneousModel('claude-3-5-sonnet', 'claude-3-7-sonnet'), false);
+  assert.equal(isHeterogeneousModel('gpt-4o', 'o3-mini'), false);
+  assert.equal(isHeterogeneousModel('claude-3-5-sonnet', 'gpt-4o'), true);
+  assert.equal(isHeterogeneousModel('gemini-2.5-pro', 'deepseek-r1'), true);
+
+  // 缺省容错（未指明模型时不强卡）
+  assert.equal(isHeterogeneousModel('claude-3-5-sonnet', ''), true);
+  assert.equal(isHeterogeneousModel('', 'gpt-4o'), true);
+});
+
+test('parseReviewMetadata extracts multiple reviewers and detects dual-review endorsement', () => {
+  // 1. 单复核人
+  const single = `- 独立复核：通过 复核上下文：chat-123456 模型：o3-mini`;
+  const m1 = parseReviewMetadata(single);
+  assert.equal(m1.id, 'chat-123456');
+  assert.equal(m1.reviewerModel, 'o3-mini');
+  assert.equal(m1.reviewers.length, 1);
+  assert.equal(m1.dualEndorsed, false);
+
+  // 2. 双复核人通过
+  const dualPass = `
+- 独立复核 1：通过 复核上下文：subagent-rev-1 模型：gpt-4o
+- 独立复核 2：通过 复核上下文：subagent-rev-2 模型：claude-3-5-sonnet
+`;
+  const m2 = parseReviewMetadata(dualPass);
+  assert.equal(m2.id, 'subagent-rev-1');
+  assert.equal(m2.reviewers.length, 2);
+  assert.equal(m2.reviewers[0].id, 'subagent-rev-1');
+  assert.equal(m2.reviewers[0].reviewerModel, 'gpt-4o');
+  assert.equal(m2.reviewers[1].id, 'subagent-rev-2');
+  assert.equal(m2.reviewers[1].reviewerModel, 'claude-3-5-sonnet');
+  assert.equal(m2.dualEndorsed, true);
+
+  // 3. 双复核人含不通过
+  const dualFail = `
+- 独立复核 1：通过 复核上下文：subagent-rev-1 模型：gpt-4o
+- 独立复核 2：需返工 复核上下文：subagent-rev-2 模型：claude-3-5-sonnet
+`;
+  const m3 = parseReviewMetadata(dualFail);
+  assert.equal(m3.dualEndorsed, false);
+});
+
+test('verifyReviewEndorsement enforces heterogeneity and dual-review endorsement with downgrade escape hatch', () => {
+  const ctx = {
+    dispatch: {
+      roles: {
+        implement: { role: 'code', tier: 'standard', agent: 'implementer' },
+        review: { role: 'review', tier: 'pro', agent: 'independent-reviewer', heterogeneous: true },
+      },
+      reviewPolicy: {
+        enforceHeterogeneous: true,
+        requireDualReviewLevels: ['L3'],
+      },
+    },
+    modelRoles: {
+      roles: {
+        code: 'claude-3-5-sonnet',
+        review: 'gpt-4o',
+      },
+    },
+  };
+
+  const runL1 = {
+    triage: { level: 'L1' },
+    events: [
+      { type: 'work-order', kind: 'implement', recommendedModel: 'claude-3-5-sonnet' },
+    ],
+  };
+
+  // 1. 无有效 ID 拦截
+  const resNoId = verifyReviewEndorsement(ctx, runL1, 'review', { id: '' });
+  assert.equal(resNoId.ok, false);
+  assert.match(resNoId.problems[0], /禁止占位符/);
+
+  // 2. 同构模型复核拦截（作者 Claude，评审 Claude，未降级）
+  const resHomo = verifyReviewEndorsement(ctx, runL1, 'review', {
+    id: 'chat-homo-1',
+    reviewerModel: 'claude-3-7-sonnet',
+    reviewers: [{ id: 'chat-homo-1', reviewerModel: 'claude-3-7-sonnet', conclusion: '通过' }],
+  });
+  assert.equal(resHomo.ok, false);
+  assert.match(resHomo.problems[0], /同构/);
+
+  // 3. 声明降级放行（即使同构）
+  const resDowngrade = verifyReviewEndorsement(ctx, runL1, 'review', {
+    id: 'chat-homo-1',
+    reviewerModel: 'claude-3-7-sonnet',
+    isDowngraded: true,
+    downgradeReason: '单模型离线测试环境',
+    reviewers: [{ id: 'chat-homo-1', reviewerModel: 'claude-3-7-sonnet', conclusion: '通过' }],
+  });
+  assert.equal(resDowngrade.ok, true);
+  assert.equal(resDowngrade.isDowngraded, true);
+
+  // 4. 异构模型通过（作者 Claude，评审 GPT-4o）
+  const resHetero = verifyReviewEndorsement(ctx, runL1, 'review', {
+    id: 'chat-hetero-1',
+    reviewerModel: 'gpt-4o',
+    reviewers: [{ id: 'chat-hetero-1', reviewerModel: 'gpt-4o', conclusion: '通过' }],
+  });
+  assert.equal(resHetero.ok, true);
+
+  // 5. L3 触发双重背书要求：单人复核被拦截
+  const runL3 = {
+    triage: { level: 'L3' },
+    events: [{ type: 'work-order', kind: 'implement', recommendedModel: 'claude-3-5-sonnet' }],
+  };
+  const resL3Single = verifyReviewEndorsement(ctx, runL3, 'review', {
+    id: 'chat-hetero-1',
+    reviewerModel: 'gpt-4o',
+    reviewers: [{ id: 'chat-hetero-1', reviewerModel: 'gpt-4o', conclusion: '通过' }],
+  });
+  assert.equal(resL3Single.ok, false);
+  assert.match(resL3Single.problems[0], /双模型独立复核未通过/);
+
+  // 6. L3 双异构模型复核通过
+  const resL3Dual = verifyReviewEndorsement(ctx, runL3, 'review', {
+    id: 'chat-rev-1',
+    reviewerModel: 'gpt-4o',
+    dualEndorsed: true,
+    reviewers: [
+      { id: 'chat-rev-1', reviewerModel: 'gpt-4o', conclusion: '通过' },
+      { id: 'chat-rev-2', reviewerModel: 'gemini-2.5-pro', conclusion: '通过' },
+    ],
+  });
+  assert.equal(resL3Dual.ok, true);
+  assert.equal(resL3Dual.dualEndorsed, true);
+});
+
+test('inspectArtifact supports context and endorsement targets', () => {
+  const root = fixture();
+  const run = {
+    runId: 'inspect-run',
+    stage: 'implement',
+    stopType: 'work-order',
+    docs: {
+      spec: 'workflow/specs/test.md',
+    },
+    workOrder: {
+      id: 2,
+      kind: 'implement',
+      role: 'code',
+      modelTier: 'standard',
+      agent: 'implementer',
+      recommendedModel: 'claude-3-5-sonnet',
+      heterogeneous: false,
+      context: {
+        role: { role: 'code', tier: 'standard', agent: 'implementer', recommendedModel: 'claude-3-5-sonnet' },
+        budget: { originalChars: 300, prunedChars: 250, budgetChars: 1200, savingsPercent: 17 },
+        slices: {
+          role: 'code',
+          kind: 'implement',
+          planSlice: '- 修改核心文件',
+        },
+      },
+    },
+    events: [],
+  };
+
+  const specPath = path.join(root, 'workflow', 'specs', 'test.md');
+  fs.mkdirSync(path.dirname(specPath), { recursive: true });
+  fs.writeFileSync(
+    specPath,
+    `# 规格说明
+## 确认与复核
+- 独立复核 1：通过 复核上下文：rev-101 模型：gpt-4o
+- 独立复核 2：通过 复核上下文：rev-102 模型：gemini-2.5-pro
+`
+  );
+
+  const targets = getAvailableTargets({ root }, run);
+  assert.ok(targets.includes('context'));
+  assert.ok(targets.includes('endorsement'));
+
+  const artCtx = inspectArtifact({ root }, run, 'context');
+  assert.equal(artCtx.ok, true);
+  assert.equal(artCtx.type, 'context');
+  assert.match(artCtx.content, /claude-3-5-sonnet/);
+  assert.match(artCtx.content, /修改核心文件/);
+
+  const artEndorse = inspectArtifact({ root }, run, 'endorsement');
+  assert.equal(artEndorse.ok, true);
+  assert.equal(artEndorse.type, 'endorsement');
+  assert.match(artEndorse.content, /rev-101/);
+  assert.match(artEndorse.content, /rev-102/);
+  assert.match(artEndorse.content, /已达成双模型通过/);
+});
+
+test('checkQueueBrake enforces active run limits and honors --force-queue', () => {
+  const root = fixture();
+  const runsDir = path.join(root, '.agents', 'cache', 'pipeline-runs');
+  fs.mkdirSync(runsDir, { recursive: true });
+
+  // 写入 3 个处于活跃状态的 runs
+  for (let i = 1; i <= 3; i++) {
+    const id = `run-active-${i}`;
+    fs.writeFileSync(
+      path.join(runsDir, `${id}.json`),
+      JSON.stringify({ runId: id, stopType: 'work-order', stage: 'implement', events: [] })
+    );
+  }
+  // 写入 1 个已结束的 run
+  fs.writeFileSync(
+    path.join(runsDir, 'run-done.json'),
+    JSON.stringify({ runId: 'run-done', stopType: 'done', stage: 'done', events: [] })
+  );
+
+  const ctx = {
+    root,
+    runsDir,
+    dispatch: {
+      queuePolicy: {
+        maxActiveRuns: 3,
+        enforceQueueBrake: true,
+      },
+    },
+  };
+
+  // 1. 默认触发熔断
+  const b1 = checkQueueBrake(ctx);
+  assert.equal(b1.tripped, true);
+  assert.equal(b1.activeCount, 3);
+  assert.equal(b1.maxActiveRuns, 3);
+  assert.match(b1.message, /活跃 Run 数量已达上限/);
+
+  // 2. 传 force-queue 绕过
+  const b2 = checkQueueBrake(ctx, { 'force-queue': true });
+  assert.equal(b2.tripped, false);
+  assert.equal(b2.forced, true);
+
+  // 3. 配置关闭熔断时，即使满员也不触发
+  const ctxDisabled = {
+    ...ctx,
+    dispatch: { queuePolicy: { maxActiveRuns: 3, enforceQueueBrake: false } },
+  };
+  const b3 = checkQueueBrake(ctxDisabled);
+  assert.equal(b3.tripped, false);
+
+  // 4. CLI 旗标显式开启熔断
+  const b4 = checkQueueBrake(ctxDisabled, { 'queue-brake': true });
+  assert.equal(b4.tripped, true);
+});
+
+test('generatePostMortem extracts failure gates, smart-fix categories and derives actionable prescriptions', () => {
+  const root = fixture();
+  const ctx = {
+    root,
+    prescriptionsFile: path.join(root, '.agents', 'notes', 'prescriptions.json'),
+  };
+
+  const runWithFailures = {
+    runId: '20261125-auth-fix',
+    triage: { module: 'auth', level: 'L2', topic: 'auth-fix' },
+    retries: { verify: 2 },
+    events: [
+      { t: '2026-11-25T12:00:00Z', type: 'route', from: 'verify', to: 'fix', attempt: 1, cap: 2 },
+      { t: '2026-11-25T12:05:00Z', type: 'gate-fail', stage: 'verify' },
+    ],
+    gateFail: {
+      stage: 'verify',
+      problems: ['触点未授权: src/auth/token.mjs 不在 plan.md 白名单内'],
+      analysis: { category: 'touch-set', title: '未授权文件修改' },
+    },
+    lastFiles: ['src/auth/token.mjs'],
+  };
+
+  const rx = generatePostMortem(ctx, runWithFailures, { persist: true });
+  assert.equal(rx.runId, '20261125-auth-fix');
+  assert.equal(rx.cleanPass, undefined);
+  assert.ok(rx.occurredGates.includes('verify'));
+  assert.ok(rx.categories.includes('touch-set'));
+  assert.ok(rx.prescriptions.some((p) => p.includes('plan.md 白名单')));
+  assert.equal(runWithFailures.postMortem.id, rx.id);
+
+  // 验证持久化落盘
+  const stored = loadPrescriptions(ctx);
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0].id, rx.id);
+
+  // 测试 clean pass
+  const cleanRun = {
+    runId: '20261125-clean',
+    triage: { module: 'auth', level: 'L1' },
+    retries: {},
+    events: [],
+  };
+  const cleanRx = generatePostMortem(ctx, cleanRun);
+  assert.equal(cleanRx.cleanPass, true);
+});
+
+test('findMatchingPrescriptions matches by module or affected file paths and backflows into assembleWorkOrderContext', () => {
+  const root = fixture();
+  const ctx = {
+    root,
+    prescriptionsFile: path.join(root, '.agents', 'notes', 'prescriptions.json'),
+  };
+
+  const historyRx = [
+    {
+      id: 'rx-old-1',
+      runId: 'run-old-1',
+      module: 'billing',
+      affectedFiles: ['src/billing/calc.mjs'],
+      prescriptions: ['计费必须包含阶梯折扣防溢出检查'],
+    },
+  ];
+  savePrescriptions(ctx, historyRx);
+
+  // 1. 模块匹配
+  const hitByModule = findMatchingPrescriptions(ctx, { module: 'billing' });
+  assert.equal(hitByModule.length, 1);
+  assert.equal(hitByModule[0].id, 'rx-old-1');
+
+  // 2. 文件重合匹配
+  const hitByFile = findMatchingPrescriptions(ctx, { module: 'other', files: ['src/billing/calc.mjs'] });
+  assert.equal(hitByFile.length, 1);
+  assert.equal(hitByFile[0].id, 'rx-old-1');
+
+  // 3. 回流注入工单上下文
+  const run = {
+    runId: 'run-new-bill',
+    triage: { module: 'billing', level: 'L1' },
+    docs: {},
+    lastFiles: ['src/billing/calc.mjs'],
+  };
+  const assembled = assembleWorkOrderContext(ctx, run, {
+    kind: 'implement',
+    role: 'code',
+    context: { files: ['src/billing/calc.mjs'] },
+  });
+  assert.ok(Array.isArray(assembled.slices.prescriptions));
+  assert.ok(assembled.slices.prescriptions.some((p) => p.includes('计费必须包含阶梯折扣防溢出检查')));
+
+  // 4. 经过 pruneWorkOrderContext 裁剪预算
+  const pruned = pruneWorkOrderContext(assembled, 1200);
+  assert.ok(pruned.budget);
+  assert.ok(Array.isArray(pruned.slices.prescriptions));
+});
+
+test('inspectArtifact supports prescription and postmortem targets', () => {
+  const root = fixture();
+  const ctx = {
+    root,
+    prescriptionsFile: path.join(root, '.agents', 'notes', 'prescriptions.json'),
+  };
+
+  const run = {
+    runId: 'run-rx-test',
+    triage: { module: 'engine' },
+    postMortem: {
+      id: 'rx-test',
+      runId: 'run-rx-test',
+      module: 'engine',
+      retriesCount: 2,
+      occurredGates: ['verify'],
+      categories: ['arch'],
+      affectedFiles: ['src/core/router.mjs'],
+      prescriptions: ['触发架构防线阻断，杜绝跨层直接调用'],
+    },
+    docs: {},
+    events: [],
+  };
+
+  // 目标包含 prescription
+  const targets = getAvailableTargets(ctx, run);
+  assert.ok(targets.includes('prescription'));
+
+  // inspect prescription
+  const art1 = inspectArtifact(ctx, run, 'prescription');
+  assert.equal(art1.ok, true);
+  assert.equal(art1.type, 'prescription');
+  assert.match(art1.content, /run-rx-test/);
+  assert.match(art1.content, /杜绝跨层直接调用/);
+
+  // 别名 postmortem
+  const art2 = inspectArtifact(ctx, run, 'postmortem');
+  assert.equal(art2.ok, true);
+  assert.equal(art2.type, 'prescription');
+  assert.match(art2.content, /杜绝跨层直接调用/);
 });

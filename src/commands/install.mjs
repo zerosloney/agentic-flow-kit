@@ -40,6 +40,7 @@ export const SCAFFOLD_MODES = ['full', 'minimal', 'none'];
 
 // 端口规则（1–65535 的整数）：CLI 的 --api-port/--web-port 与 TUI 输入共用；非法值返回 null。
 export function parsePortNumber(raw) {
+  if (typeof raw === 'string' && !/^\d+$/.test(raw.trim())) return null;
   const n = Number(raw);
   return Number.isInteger(n) && n >= 1 && n <= 65535 ? n : null;
 }
@@ -413,10 +414,14 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
     }
     return n;
   };
-  const ports = {
-    api: parsePort(args['api-port'], '--api-port') ?? previous?.ports?.api,
-    web: parsePort(args['web-port'], '--web-port') ?? previous?.ports?.web,
-  };
+  const api = parsePort(args['api-port'], '--api-port') ?? previous?.ports?.api;
+  const web = parsePort(args['web-port'], '--web-port') ?? previous?.ports?.web;
+  if (api !== undefined && web !== undefined && api === web) {
+    const err = new Error(t('error.badPort', { flag: '--api-port/--web-port', value: `${api}` }));
+    err.code = 'BAD_PORT';
+    throw err;
+  }
+  const ports = { api, web };
   const scaffoldMode = String(args.scaffold || previous?.scaffold || 'full').toLowerCase();
   if (!SCAFFOLD_MODES.includes(scaffoldMode)) {
     const err = new Error(t('error.badScaffold', { value: args.scaffold || '', modes: SCAFFOLD_MODES.join(', ') }));

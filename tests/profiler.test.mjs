@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { makeTmp } from './helpers/tmp.mjs';
 import { detectProductMode } from '../src/install/profiler.mjs';
 
 function tmpDir() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'profiler-test-'));
-  return dir;
+  return makeTmp('profiler-test-');
 }
 
 test('profiler: handles invalid or non-existent directories gracefully', () => {

@@ -4,6 +4,7 @@
 // 完整字段/校验口径见 doctor 的 `gate` 段与 .agents/notes/project-configs.md。
 import fs from 'node:fs';
 import path from 'node:path';
+import { parseJsonc } from '../rules/jsonc.mjs';
 
 export const GATE_CONFIGS = [
   ['.agents/hooks/architecture-redlines.json', 'architecture-redlines'],
@@ -30,7 +31,7 @@ export function scanGateConfigs(target) {
       continue;
     }
     try {
-      JSON.parse(text);
+      parseJsonc(text, rel);
       configured.push(id);
     } catch {
       invalid.push(id);

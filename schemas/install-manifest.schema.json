@@ -16,7 +16,7 @@
       "uniqueItems": true
     },
     "stack": { "enum": ["dotnet", "node", "typescript", "rust", "go", "java", "python", "cpp", "empty"] },
-    "product": { "enum": ["web", "api", "library", "cli"], "description": "项目形态（--product）：web=带界面的服务、api=纯 API、library=库/包、cli=命令行工具。缺省 web。" },
+    "product": { "enum": ["web", "api", "library", "cli", "monorepo"], "description": "项目形态（--product）：web=带界面的服务、api=纯 API、library=库/包、cli=命令行工具、monorepo=多包/多应用工作区。缺省 web。" },
     "ports": {
       "type": "object",
       "description": "--api-port / --web-port 显式指定的端口；未显式指定不写该字段（跟随栈默认值）。",

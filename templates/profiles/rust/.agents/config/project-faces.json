@@ -1,7 +1,0 @@
-{
-  "_note": "产品面单源：列出的仓库相对路径前缀算产品面（四键全空=未配置=保守全触发）。ui=界面代码、code=核心源码、tests=测试、data=数据/Schema。项目按实际布局调整；改完用 flow-kit run faces.mjs --json 自查。",
-  "ui": [],
-  "code": ["src/"],
-  "tests": ["tests/"],
-  "data": ["{{wikiMaintenance}}/"]
-}

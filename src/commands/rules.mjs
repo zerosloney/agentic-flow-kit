@@ -4,18 +4,18 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { flag } from '../cli/args.mjs';
 import { splitWaivers } from '../rules/model.mjs';
-import { loadModel } from '../rules/load.mjs';
+import { loadModel, PROJECT_CANDIDATES } from '../rules/load.mjs';
 import { recordPluginStatus } from '../rules/plugin-status.mjs';
 import { collectDiff, evaluateModel } from '../rules/evaluate.mjs';
 import { stringifyYaml } from '../rules/yaml.mjs';
 
 const LEGACY_FILES = [
   '.agents/hooks/architecture-redlines.json',
-  '.agents/hooks/delete-guard.config.json',
+  '.agents/hooks/delete-guard.json',
   '.agents/hooks/audit-fields.json',
   '.agents/hooks/commit-check.config.json',
   '.agents/config/product-gates.json',
-  '.agents/config/notify-guard.json',
+  '.agents/hooks/notify-guard.json',
   '.agents/config/project-faces.json',
   '.agents/config/local-gates.json',
   '.agents/config/rule-budgets.json',
@@ -46,7 +46,7 @@ function detectProjectMeta(root) {
     if (pkg.name) name = pkg.name;
   } catch {}
   try {
-    const manifest = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'manifest.json'), 'utf8'));
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'install-manifest.json'), 'utf8'));
     if (manifest.stack) stack = manifest.stack;
   } catch {}
   return { name, stack };
@@ -60,6 +60,10 @@ function pickMessage(message, lang) {
  *  同 id 跨层是合法覆盖机制，只有层内重复才算问题。 */
 function collectFindings(root, layers, model) {
   const findings = [];
+  const foundProjectCandidates = PROJECT_CANDIDATES.filter((rel) => fs.existsSync(path.join(root, rel)));
+  if (foundProjectCandidates.length > 1) {
+    findings.push(`检测到多个项目级规则文件同时存在（${foundProjectCandidates.join('、')}），当前仅首选「${foundProjectCandidates[0]}」生效，其余规则文件被完全忽略。建议合拢到单一文件并删除其余候选。`);
+  }
   const ruleIds = new Set(model.rules.map((r) => r.id));
   for (const layer of layers) {
     const seen = new Set();

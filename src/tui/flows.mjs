@@ -281,6 +281,7 @@ async function modelFlow(ctx, hosts) {
 async function installFlow(ctx) {
   const { screen, t, lang } = ctx;
   const cwd = process.cwd();
+  ctx.target = cwd;
   const prev = readManifest(cwd);
   const prevHosts = Array.isArray(prev && prev.hosts) ? prev.hosts : [];
 
@@ -383,7 +384,7 @@ async function installFlow(ctx) {
   screen.print(t('tui.running') + '\n');
   // 进度回调契约 (action, msg, done, total)：进度条带当前文件；冲突与非常规跳过单独留行。
   await installCommand({
-    args,
+    args: { ...args, ...(shape.product ? { product: shape.product } : {}) },
     t,
     lang: selLang,
     onLog: (action, msg, done, total) => {

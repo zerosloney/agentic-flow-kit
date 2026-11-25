@@ -1,21 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { makeTmp } from './helpers/tmp.mjs';
 import { rulesCommand } from '../src/commands/rules.mjs';
 import { main } from '../src/cli/main.mjs';
 import { loadModel } from '../src/rules/load.mjs';
 import { parseYaml } from '../src/rules/yaml.mjs';
 import { makeT } from '../src/i18n.mjs';
 
-async function withTempDir(fn) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rules-export-test-'));
-  try {
-    return await fn(dir);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+function withTempDir(fn) {
+  const dir = makeTmp('rules-export-test-');
+  return fn(dir);
 }
 
 test('rules export - consolidates legacy configs into flow-rules.yml', () => {

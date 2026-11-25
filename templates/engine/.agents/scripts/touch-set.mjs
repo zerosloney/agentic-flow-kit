@@ -57,6 +57,27 @@ export function externalReviewId(text) {
   return id;
 }
 
+export function normalizeModelFamily(model) {
+  const m = String(model || '').toLowerCase().trim();
+  if (!m) return 'unknown';
+  if (/claude|anthropic/.test(m)) return 'claude';
+  if (/gpt|o1|o3|o4|openai/.test(m)) return 'openai';
+  if (/gemini|google/.test(m)) return 'gemini';
+  if (/deepseek/.test(m)) return 'deepseek';
+  if (/qwen|alibaba/.test(m)) return 'qwen';
+  if (/llama|meta/.test(m)) return 'llama';
+  if (/mistral|codestral/.test(m)) return 'mistral';
+  return m.replace(/[-_.:0-9].*$/, '') || m;
+}
+
+export function isHeterogeneousModel(modelA, modelB) {
+  if (!modelA || !modelB) return true; // 未标注或无法识别时放行（降级宽容准则）
+  const famA = normalizeModelFamily(modelA);
+  const famB = normalizeModelFamily(modelB);
+  if (famA === 'unknown' || famB === 'unknown') return true;
+  return famA !== famB;
+}
+
 export function parseReviewMetadata(text) {
   const str = String(text || '');
   const id = externalReviewId(str);
@@ -83,11 +104,43 @@ export function parseReviewMetadata(text) {
     downgradeReason = '跨模型评审自适应降级';
   }
 
+  // 多复核人与双重背书提取（Dual-Review 支持）
+  const reviewers = [];
+  const lines = str.split(/\r?\n/);
+  for (const line of lines) {
+    const lineId = externalReviewId(line);
+    if (lineId) {
+      const lineModelMatch = line.match(/(?:reviewed\s+by|复核模型|评审模型|模型|reviewer)[:：\s]+([A-Za-z0-9_.-]+)/i);
+      const lineModel = lineModelMatch ? lineModelMatch[1].trim() : (reviewers.length === 0 ? reviewerModel : '');
+      const conclusionMatch = line.match(/(?:结论|独立复核|二次复核|复核\s*[12一二]|评审\s*[12一二])[:：\s]+([^\s,，;；)）]+)/);
+      const conclusion = conclusionMatch ? conclusionMatch[1].trim() : '通过';
+      reviewers.push({
+        id: lineId,
+        reviewerModel: lineModel,
+        conclusion,
+      });
+    }
+  }
+
+  if (reviewers.length === 0 && id) {
+    reviewers.push({
+      id,
+      reviewerModel,
+      conclusion: '通过',
+    });
+  }
+
+  const dualEndorsed =
+    reviewers.length >= 2 &&
+    reviewers.every((r) => /通过|approved|lgtm|ok/i.test(r.conclusion || '通过'));
+
   return {
     id,
     reviewerModel,
     isDowngraded,
     downgradeReason,
+    reviewers,
+    dualEndorsed,
   };
 }
 
@@ -111,4 +164,148 @@ export function filesOutsidePlan(files, section) {
     const n = String(f).replace(/\\/g, '/');
     return !allowed.some((a) => n === a || n.startsWith(`${a}/`));
   });
+}
+
+// ── 结构化交接工件契约 (Handoff Sheet) ──────────────────────────────────
+export function buildHandoffSheet({
+  from,
+  to,
+  task,
+  gitBaseSha = null,
+  touchSetAllowed = [],
+  touchSetForbidden = [],
+  specDoc = null,
+  notes = '',
+} = {}) {
+  return {
+    from: String(from || '').trim(),
+    to: String(to || '').trim(),
+    task: String(task || '').trim(),
+    gitBaseSha: gitBaseSha ? String(gitBaseSha).trim() : null,
+    touchSetAllowed: Array.isArray(touchSetAllowed)
+      ? [...new Set(touchSetAllowed.filter(Boolean).map((p) => String(p).trim()))]
+      : typeof touchSetAllowed === 'string' && touchSetAllowed.trim()
+        ? touchSetAllowed.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean)
+        : [],
+    touchSetForbidden: Array.isArray(touchSetForbidden)
+      ? [...new Set(touchSetForbidden.filter(Boolean).map((p) => String(p).trim()))]
+      : typeof touchSetForbidden === 'string' && touchSetForbidden.trim()
+        ? touchSetForbidden.split(/[,\s]+/).map((s) => s.trim()).filter(Boolean)
+        : [],
+    specDoc: specDoc ? String(specDoc).trim() : null,
+    notes: notes ? String(notes).trim() : '',
+  };
+}
+
+export function validateHandoffSheet(sheet) {
+  const problems = [];
+  if (!sheet || typeof sheet !== 'object') {
+    return { ok: false, problems: ['交接单必须为对象'] };
+  }
+  if (!sheet.from || typeof sheet.from !== 'string' || !sheet.from.trim()) {
+    problems.push('交接单缺少来源 (from)');
+  }
+  if (!sheet.to || typeof sheet.to !== 'string' || !sheet.to.trim()) {
+    problems.push('交接单缺少去向 (to)');
+  }
+  if (!sheet.task || typeof sheet.task !== 'string' || !sheet.task.trim()) {
+    problems.push('交接单缺少任务主题 (task)');
+  }
+  if (sheet.gitBaseSha != null && typeof sheet.gitBaseSha !== 'string') {
+    problems.push('交接单 gitBaseSha 类型非法');
+  }
+  if (!Array.isArray(sheet.touchSetAllowed)) {
+    problems.push('交接单 touchSetAllowed 必须为数组');
+  }
+  if (!Array.isArray(sheet.touchSetForbidden)) {
+    problems.push('交接单 touchSetForbidden 必须为数组');
+  }
+  return { ok: problems.length === 0, problems };
+}
+
+export function parseHandoffSheet(text) {
+  const raw = String(text || '').trim();
+  if (!raw) return null;
+
+  // 1. JSON 解析尝试（含 Markdown 代码块提取）
+  try {
+    const jsonBlock = raw.match(/```json\s*([\s\S]*?)\s*```/i);
+    const candidate = jsonBlock ? jsonBlock[1].trim() : raw;
+    const obj = JSON.parse(candidate);
+    if (obj && typeof obj === 'object') {
+      return buildHandoffSheet(obj);
+    }
+  } catch {}
+
+  // 2. Markdown / YAML 键值解析
+  const out = {
+    from: '',
+    to: '',
+    task: '',
+    gitBaseSha: null,
+    touchSetAllowed: [],
+    touchSetForbidden: [],
+    specDoc: null,
+    notes: '',
+  };
+
+  const lines = raw.split(/\r?\n/);
+  let currentListKey = null;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed === '---' || trimmed.startsWith('<!--')) continue;
+
+    // 列表项匹配
+    const listItemMatch = trimmed.match(/^[-*+]\s+(.*)$/);
+    if (listItemMatch && currentListKey) {
+      const item = listItemMatch[1].trim();
+      if (item && !item.includes(':')) {
+        out[currentListKey].push(item);
+        continue;
+      }
+    }
+
+    // 键值匹配
+    const kvMatch = trimmed.match(/^[-*+]?\s*([^:：]+)[:：]\s*(.*)$/);
+    if (kvMatch) {
+      const k = kvMatch[1].trim().toLowerCase();
+      const v = kvMatch[2].trim();
+
+      if (k === 'from' || k.includes('来源')) {
+        out.from = v;
+        currentListKey = null;
+      } else if (k === 'to' || k.includes('去向') || k.includes('目标')) {
+        out.to = v;
+        currentListKey = null;
+      } else if (k === 'task' || k.includes('任务') || k.includes('主题')) {
+        out.task = v;
+        currentListKey = null;
+      } else if (k === 'gitbasesha' || k === 'sha' || k.includes('基准')) {
+        out.gitBaseSha = v || null;
+        currentListKey = null;
+      } else if (k === 'touchsetallowed' || k.includes('允许改动') || k.includes('允许文件')) {
+        currentListKey = 'touchSetAllowed';
+        if (v) {
+          out.touchSetAllowed.push(...v.split(/[,\s]+/).filter(Boolean));
+        }
+      } else if (k === 'touchsetforbidden' || k.includes('禁止改动') || k.includes('禁止文件')) {
+        currentListKey = 'touchSetForbidden';
+        if (v) {
+          out.touchSetForbidden.push(...v.split(/[,\s]+/).filter(Boolean));
+        }
+      } else if (k === 'specdoc' || k.includes('规格文档')) {
+        out.specDoc = v || null;
+        currentListKey = null;
+      } else if (k === 'notes' || k.includes('备注')) {
+        out.notes = v;
+        currentListKey = null;
+      } else {
+        currentListKey = null;
+      }
+    }
+  }
+
+  if (!out.from && !out.to && !out.task) return null;
+  return buildHandoffSheet(out);
 }

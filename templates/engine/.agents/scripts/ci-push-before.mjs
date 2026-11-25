@@ -17,8 +17,9 @@ const argOf = (k) => {
   return i >= 0 && i + 1 < process.argv.length ? process.argv[i + 1] : '';
 };
 
-const parentOf = (id) => {
-  const r = spawnSync('git', ['rev-parse', `${id}^`], { encoding: 'utf8' });
+const parentOf = (id, resolveSelf = false) => {
+  const rev = resolveSelf ? id : `${id}^`;
+  const r = spawnSync('git', ['rev-parse', rev], { encoding: 'utf8' });
   return r.status === 0 ? String(r.stdout || '').trim() : '';
 };
 
@@ -64,8 +65,12 @@ if (changesFile || (provider && provider.id === 'azure')) {
     if (!before) {
       advisory(reason);
     } else {
-      writeCiEnv('CI_PUSH_BEFORE', before, process.env);
-      console.log(`ci-push-before: CI_PUSH_BEFORE=${before}（Azure Pipelines）`);
+      const ok = writeCiEnv('CI_PUSH_BEFORE', before, process.env);
+      if (ok) {
+        console.log(`ci-push-before: CI_PUSH_BEFORE=${before}（Azure Pipelines）`);
+      } else {
+        advisory('写入 CI 环境变量失败（未检测到可写环境变量文件）');
+      }
     }
   }
 } else if (provider && (provider.id === 'github' || provider.id === 'gitlab')) {
@@ -73,8 +78,12 @@ if (changesFile || (provider && provider.id === 'azure')) {
   if (!before) {
     advisory(reason);
   } else {
-    writeCiEnv('CI_PUSH_BEFORE', before, process.env);
-    console.log(`ci-push-before: CI_PUSH_BEFORE=${before}（${provider.name}）`);
+    const ok = writeCiEnv('CI_PUSH_BEFORE', before, process.env);
+    if (ok) {
+      console.log(`ci-push-before: CI_PUSH_BEFORE=${before}（${provider.name}）`);
+    } else {
+      advisory(`写入 CI 环境变量失败（${provider.name} 未提供环境变量文件）`);
+    }
   }
 } else if (process.env.CI_PUSH_BEFORE) {
   console.log(`ci-push-before: CI_PUSH_BEFORE=${process.env.CI_PUSH_BEFORE}（已存在于环境变量）`);

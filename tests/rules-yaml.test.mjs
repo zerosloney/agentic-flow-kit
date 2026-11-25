@@ -1,18 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
+import { makeTmp } from './helpers/tmp.mjs';
 import { loadModel } from '../src/rules/load.mjs';
 import { evaluateModel } from '../src/rules/evaluate.mjs';
+import { parseYaml } from '../src/rules/yaml.mjs';
 
 function withTempDir(fn) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rules-yaml-test-'));
-  try {
-    return fn(dir);
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
-  }
+  const dir = makeTmp('rules-yaml-test-');
+  return fn(dir);
 }
 
 test('rules yaml - loadModel loads flow-rules.yml', () => {
@@ -116,5 +113,86 @@ rules:
     assert.equal(result.violations.length, 1);
     assert.equal(result.violations[0].ruleId, 'test.ban-eval');
     assert.equal(result.violations[0].severity, 'block');
+  });
+});
+
+test('rules yaml - rejects uncoloned lines and malformed items (D6)', () => {
+  // 顶层多一行无冒号文本
+  assert.throws(() => {
+    parseYaml('invalid text\nrules:\n  - id: r1\n', 'bad.yml');
+  }, /无法解析的未识别内容或语法错误/);
+
+  // 映射内部出现无冒号行
+  assert.throws(() => {
+    parseYaml('key1: val1\ninvalid_middle_line\nkey2: val2\n', 'bad.yml');
+  }, /键值对格式错误，缺少冒号分隔符/);
+
+  // 列表内部非 `-` 行
+  assert.throws(() => {
+    parseYaml('items:\n  - item1\n  invalid item\n  - item2\n', 'bad.yml');
+  }, /列表项格式错误，必须以 '-' 开头/);
+});
+
+test('rules model - requires face, phase, and severity (S2/P1)', () => {
+  withTempDir((root) => {
+    // 缺少 face
+    fs.writeFileSync(path.join(root, 'flow-rules.yml'), `
+version: 1
+name: missing-face
+rules:
+  - id: rule.missing-face
+    phase: verify
+    severity: block
+    assert:
+      kind: command
+      args:
+        run: echo 1
+    message:
+      zh: 测试
+      en: Test
+`, 'utf8');
+    assert.throws(() => {
+      loadModel(root);
+    }, /face/);
+
+    // 缺少 phase
+    fs.writeFileSync(path.join(root, 'flow-rules.yml'), `
+version: 1
+name: missing-phase
+rules:
+  - id: rule.missing-phase
+    face: any
+    severity: block
+    assert:
+      kind: command
+      args:
+        run: echo 1
+    message:
+      zh: 测试
+      en: Test
+`, 'utf8');
+    assert.throws(() => {
+      loadModel(root);
+    }, /phase/);
+
+    // 缺少 severity
+    fs.writeFileSync(path.join(root, 'flow-rules.yml'), `
+version: 1
+name: missing-severity
+rules:
+  - id: rule.missing-severity
+    face: any
+    phase: verify
+    assert:
+      kind: command
+      args:
+        run: echo 1
+    message:
+      zh: 测试
+      en: Test
+`, 'utf8');
+    assert.throws(() => {
+      loadModel(root);
+    }, /severity/);
   });
 });

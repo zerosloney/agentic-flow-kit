@@ -291,7 +291,7 @@ function parseList(reader, listIndent) {
       failYaml(reader.rel, line.lineNum, `意外的缩进: ${line.text}`);
     }
     if (!line.text.startsWith('- ') && line.text !== '-') {
-      break;
+      failYaml(reader.rel, line.lineNum, `列表项格式错误，必须以 '-' 开头: ${line.text}`);
     }
 
     reader.next();
@@ -334,7 +334,9 @@ function parseList(reader, listIndent) {
         if (next.indent === childIndent && (next.text.startsWith('- ') || next.text === '-')) break;
 
         const nextColon = findColon(next.text);
-        if (nextColon < 0) break;
+        if (nextColon < 0) {
+          failYaml(reader.rel, next.lineNum, `对象属性格式错误，缺少冒号分隔符: ${next.text}`);
+        }
         reader.next();
 
         const propKey = next.text.slice(0, nextColon).trim();
@@ -374,7 +376,9 @@ function parseMapping(reader, mappingIndent) {
     }
 
     const colonIdx = findColon(line.text);
-    if (colonIdx < 0) break;
+    if (colonIdx < 0) {
+      failYaml(reader.rel, line.lineNum, `键值对格式错误，缺少冒号分隔符: ${line.text}`);
+    }
 
     reader.next();
     const key = parseYamlScalar(line.text.slice(0, colonIdx).trim(), reader.rel, line.lineNum);
@@ -406,6 +410,10 @@ export function parseYaml(text, rel = '') {
     failYaml(rel, first.lineNum, '顶层元素缩进错误（顶层不得包含前置空格）');
   }
   const res = parseNode(reader, 0);
+  if (reader.peek()) {
+    const remaining = reader.peek();
+    failYaml(rel, remaining.lineNum, `无法解析的未识别内容或语法错误: ${remaining.text}`);
+  }
   return res ?? {};
 }
 
