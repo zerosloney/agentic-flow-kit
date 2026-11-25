@@ -1,13 +1,16 @@
 # GitLab CI/CD — AI-native 门禁流水线
 # 生成的默认档：main/develop push 与 MR 时触发。tier=lean 时安装器不写本文件。
+# 镜像必须自带 Node（CLI 走 npx）与本项目的技术栈工具链；go / dotnet / java / rust / cpp 项目
+# 请在项目 CI/CD 变量里把 FLOW_KIT_IMAGE 覆盖成带对应工具链的镜像。
 stages:
   - verify
 
 variables:
-  NODE_VERSION: "22"
+  # 镜像可覆盖：默认 node:22；其他技术栈在项目 CI/CD 变量里覆盖本变量。
+  FLOW_KIT_IMAGE: "node:22"
 
 default:
-  image: node:22
+  image: ${FLOW_KIT_IMAGE}
 
 ai-native-gates:
   stage: verify
@@ -15,10 +18,26 @@ ai-native-gates:
     - if: $CI_PIPELINE_SOURCE == "merge_request_event"
     - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"
   before_script:
+    # 依赖安装前先确认工具链存在：缺少时点名提示，避免只看到 command not found。
+    # 注意：verify --full 的产品门在缺工具链时仍会失败（预期），提示只负责让失败原因可读。
     - if [ -f package.json ]; then (npm ci || npm install); fi
-    - if [ -f requirements.txt ]; then python3 -m pip install -r requirements.txt; fi
-    - if [ -f pyproject.toml ]; then python3 -m pip install -e . || echo "pyproject install skipped (not a package)"; fi
-    - if [ -f go.mod ]; then go mod download; fi
+    - |
+      if [ -f requirements.txt ] || [ -f pyproject.toml ]; then
+        if command -v python3 >/dev/null 2>&1; then
+          if [ -f requirements.txt ]; then python3 -m pip install -r requirements.txt; fi
+          if [ -f pyproject.toml ]; then python3 -m pip install -e . || echo "pyproject install skipped (not a package)"; fi
+        else
+          echo "缺少 python3：无法安装 Python 依赖；请覆盖 FLOW_KIT_IMAGE 为带 Python 的镜像" >&2
+        fi
+      fi
+    - |
+      if [ -f go.mod ]; then
+        if command -v go >/dev/null 2>&1; then
+          go mod download
+        else
+          echo "缺少 go：无法下载 Go 模块；请覆盖 FLOW_KIT_IMAGE 为带 Go 的镜像" >&2
+        fi
+      fi
   script:
     - npx --yes agentic-flow-kit run verify --full
     - npx --yes agentic-flow-kit run check-local-gates || true

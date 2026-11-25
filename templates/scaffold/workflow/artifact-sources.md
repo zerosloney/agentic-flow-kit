@@ -12,6 +12,7 @@
 | plan（怎么做） | `workflow/plans/` markdown | PR 描述引用路径；不另写一份 | 实现者 | 合并 diff 与 plan 文件清单不一致 |
 | 代码与测试 | git 仓库 | 任何外部系统只读镜像 | 工程 | 镜像落后一个提交 |
 | 评审结论 | PR / `workflow/reviews.d/` | 评审工具存链接或事件 id | 复核者 | 意见无采纳/拒绝结论 |
+| 代码复核背书 | `workflow/tasks/<task>/code-review.md`（复核基准 SHA 与复核范围由 pipeline 机器写入，背书行由独立复核者交付、主智能体写入） | PR 描述引用路径；不另写一份 | 独立复核者 + 主智能体 | 缺复核基准绑定或缺独立背书行 |
 | 事故与复盘 | `workflow/incidents/` | 事故平台存链接 + 影响面摘要 | on-call + owner | 复盘三件套缺一 |
 | 领域知识 | `wiki/` markdown | `wiki/` HTML 只是展示快照 | wiki owner | HTML 与 md 不一致 |
 | 领域术语 | `workflow/glossary.md` | spec / 代码注释 / wiki 只引用术语行，不复制定义 | 技术 lead（写法见 `.agents/skills/domain-modeling/SKILL.md`） | 代码里的名字与术语行不一致 |

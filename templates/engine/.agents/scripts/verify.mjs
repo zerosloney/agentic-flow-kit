@@ -62,7 +62,7 @@
 //   **分层跑（2026-10-23，P0-1 改口径）**：engine-code 触面 → 引擎套件全量；业务/文档面 →
 //     `npm test -- --fast`（跳过最慢 9 套件，不再整门跳过）。全量 / --engine / CI / 零裁剪仍全量。
 //     绿行 `fastTests` 标记可审计。
-  //   --list：按执行序打印门 id 后退出（含项目产品门；when 未满足的门不进清单，stderr 打 SKIP 行），不执行；
+//   --list：按执行序打印门 id 后退出（含项目产品门；when 未满足的门不进清单，stderr 打 SKIP 行），不执行；
 //     裸 --list 不参与裁剪（门表 = 基础门 + 项目产品门 + 栈自动门），配 --scope / --face 干跑展示增量档
 //     裁剪结果（跳过说明行走 stderr，stdout 保持纯 id 可管道）。
 //   --jobs / --serial：并发档位与串行回退（见上「编排」）。
@@ -89,16 +89,19 @@ import { loadFaces, isProductPath } from './faces.mjs';
 import { classifyFailure } from './failure-attribution.mjs';
 import { dirtyTreeDigest } from './git-tree-digest.mjs';
 import { t } from './lang.mjs';
+import { isCi } from './ci-provider.mjs';
 let findProjectRulesFile = () => null;
 let loadProjectRules = () => null;
 let extractVerifyCommandGates = () => [];
 let detectStackFromRules = () => [];
+let stripJsonc = (text) => text;
 try {
   const mod = await import('./rules-loader.mjs');
   if (typeof mod?.findProjectRulesFile === 'function') findProjectRulesFile = mod.findProjectRulesFile;
   if (typeof mod?.loadProjectRules === 'function') loadProjectRules = mod.loadProjectRules;
   if (typeof mod?.extractVerifyCommandGates === 'function') extractVerifyCommandGates = mod.extractVerifyCommandGates;
   if (typeof mod?.detectStackFromRules === 'function') detectStackFromRules = mod.detectStackFromRules;
+  if (typeof mod?.stripJsonc === 'function') stripJsonc = mod.stripJsonc;
 } catch {
   // 当脚本在最小隔离测试夹具中独立运行且未复制 rules-loader.mjs 时平滑降级
 }
@@ -186,9 +189,13 @@ const noteEngineAssetSkip = () => {
   engineAssetSkipNoted = true;
   console.error(t('[verify] ⏭️ 未安装引擎资产——凭证落账/摘要生成跳过（外部编排消费方自管交付状态；issue #73）', '[verify] ⏭️ engine assets not installed — skipping credential ledger / summary generation (external orchestration consumers manage their own delivery state; issue #73)', ROOT));
 };
-// verify 从包内运行时执行时，门命令里的 flow-kit run|hook 改为包内绝对路径：
+// verify 从包内运行时执行时，门命令里的 flow-kit run|hook|rules check 改为包内绝对路径：
 // 不依赖 flow-kit 是否在当前进程 PATH（本地 node bin/flow-kit.mjs、直接 node 执行均可用）。
+// rules check（D15）：<kit> 由 SCRIPT_DIR 上溯四级（scripts→.agents→engine→templates→<kit>）；
+// 仅当包内存在 bin/flow-kit.mjs 时改写，装到目标项目 .agents/scripts 的形态原样保留。
+const KIT_BIN = path.resolve(SCRIPT_DIR, '..', '..', '..', '..', 'bin', 'flow-kit.mjs');
 const localizeRuntimeCmd = (cmd) => String(cmd)
+  .replace(/flow-kit\s+rules\s+check\b/g, () => (fs.existsSync(KIT_BIN) ? `node "${KIT_BIN}" rules check` : 'flow-kit rules check'))
   .replace(/flow-kit\s+run\s+([A-Za-z0-9][A-Za-z0-9._-]*)/g, (m, name) => {
     const file = name.endsWith('.mjs') ? name : `${name}.mjs`;
     return `node "${path.join(AGENTS_RUNTIME, 'scripts', file)}"`;
@@ -379,7 +386,7 @@ let totalConfiguredProductGates = 0;
   };
   for (const file of files) {
     let raw;
-    try { raw = JSON.parse(fs.readFileSync(path.join(cfgDir, file), 'utf8')); } catch (e) { die(file, t(`JSON 解析失败（${e.message}）`, `JSON parse failed (${e.message})`, ROOT)); }
+    try { raw = JSON.parse(stripJsonc(fs.readFileSync(path.join(cfgDir, file), 'utf8'))); } catch (e) { die(file, t(`JSON 解析失败（${e.message}）`, `JSON parse failed (${e.message})`, ROOT)); }
     const list = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' && Array.isArray(raw.gates) ? raw.gates : null);
     if (!list) die(file, t('顶层须为数组或 { "gates": [...] }', 'top level must be an array or { "gates": [...] }', ROOT));
     for (const g of list) {
@@ -447,31 +454,45 @@ const pushProduct = (id, name, cmd) => {
 if (STACKS.includes('node') || STACKS.includes('typescript')) {
   try {
     const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8'));
-    if (pkg.scripts && pkg.scripts.test && !GATES.some((g) => g.id === 'node-test')) {
+    const hasTest = GATES.some((g) => g.id === 'node-test' || g.id === 'ts-test' || g.cmd === 'npm test');
+    if (pkg.scripts && pkg.scripts.test && !hasTest) {
       pushProduct('node-test', 'Node tests', 'npm test');
     }
   } catch { /* not a node project root */ }
 }
-if (STACKS.includes('rust') && fs.existsSync('Cargo.toml')) pushProduct('cargo-test', 'Cargo tests', 'cargo test');
-if (STACKS.includes('go') && fs.existsSync('go.mod')) pushProduct('go-test', 'Go tests', 'go test ./...');
+if (STACKS.includes('rust') && fs.existsSync('Cargo.toml')) {
+  const hasRustTest = GATES.some((g) => g.id === 'cargo-test' || g.id === 'rust-test' || g.cmd === 'cargo test');
+  if (!hasRustTest) pushProduct('cargo-test', 'Cargo tests', 'cargo test');
+}
+if (STACKS.includes('go') && fs.existsSync('go.mod')) {
+  const hasGoTest = GATES.some((g) => g.id === 'go-test' || g.cmd === 'go test ./...');
+  if (!hasGoTest) pushProduct('go-test', 'Go tests', 'go test ./...');
+}
 if (STACKS.includes('java')) {
-  if (fs.existsSync('pom.xml')) pushProduct('maven-test', 'Maven tests', 'mvn -q test');
-  else if (fs.existsSync('gradlew') || fs.existsSync('gradlew.bat')) {
-    pushProduct('gradle-test', 'Gradle tests', process.platform === 'win32' ? 'gradlew.bat test' : './gradlew test');
-  } else if (fs.existsSync('build.gradle') || fs.existsSync('build.gradle.kts')) {
-    pushProduct('gradle-test', 'Gradle tests', 'gradle test');
+  const hasJavaTest = GATES.some((g) => g.id === 'maven-test' || g.id === 'gradle-test' || g.id === 'java-test' || g.cmd.includes('mvn') || g.cmd.includes('gradle'));
+  if (!hasJavaTest) {
+    if (fs.existsSync('pom.xml')) pushProduct('maven-test', 'Maven tests', 'mvn -q test');
+    else if (fs.existsSync('gradlew') || fs.existsSync('gradlew.bat')) {
+      pushProduct('gradle-test', 'Gradle tests', process.platform === 'win32' ? 'gradlew.bat test' : './gradlew test');
+    } else if (fs.existsSync('build.gradle') || fs.existsSync('build.gradle.kts')) {
+      pushProduct('gradle-test', 'Gradle tests', 'gradle test');
+    }
   }
 }
 if (STACKS.includes('python')) {
-  if (fs.existsSync('pyproject.toml') || fs.existsSync('requirements.txt') || fs.existsSync('pytest.ini') || fs.existsSync('setup.py') || fs.existsSync('setup.cfg')) {
+  const hasPytest = GATES.some((g) => g.id === 'pytest' || g.id === 'python-test' || g.cmd.includes('pytest'));
+  if (!hasPytest && (fs.existsSync('pyproject.toml') || fs.existsSync('requirements.txt') || fs.existsSync('pytest.ini') || fs.existsSync('setup.py') || fs.existsSync('setup.cfg'))) {
     pushProduct('pytest', 'Python tests', 'python -m pytest');
   }
 }
 if (STACKS.includes('cpp')) {
-  if (fs.existsSync('CMakeLists.txt')) {
-    pushProduct('ctest', 'CTest tests', 'ctest --output-on-failure');
-  } else if (fs.existsSync('Makefile')) {
-    pushProduct('make-test', 'Make test', 'make test');
+  const hasCppTest = GATES.some((g) => g.id === 'ctest' || g.id === 'cpp-test' || g.id === 'make-test' || g.cmd.includes('ctest'));
+  if (!hasCppTest) {
+    if (fs.existsSync('CMakeLists.txt')) {
+      pushProduct('ctest', 'CTest tests', 'ctest --output-on-failure');
+    } else if (fs.existsSync('Makefile')) {
+      pushProduct('make-test', 'Make test', 'make test');
+    }
   }
 }
 
@@ -838,8 +859,8 @@ async function run() {
   // 在 TF_BUILD 外默认 loud-skip，但 diff 面触及台账/修剪 manifest 时回列（verify-scope.ledgerTouched）
   // ——台账变更才付 ~90s，未触及仍跳过；全量档（无 scope）与 CI 照跑。绿行 envSkips 记录跳过事实。
   const CI_ONLY_GATE_IDS = new Set(['ledger-invariant']);
-  const isCi = !!(process.env.CI || process.env.TF_BUILD || process.env.GITHUB_ACTIONS || process.env.GITLAB_CI || process.env.CONTINUOUS_INTEGRATION);
-  const localLedgerSkip = !testCmd && !stubCmd && !isCi
+  const isCiEnv = isCi();
+  const localLedgerSkip = !testCmd && !stubCmd && !isCiEnv
     && !!scope && !scope.ledgerTouched;
   const envSkipIds = localLedgerSkip ? CI_ONLY_GATE_IDS : new Set();
   // 引擎资产缺失（issue #73）：两门 loud-skip 记入 envSkips——绿行记录跳过事实（带 envSkips 的行
@@ -1067,6 +1088,7 @@ async function run() {
   // engine-tests 的影子里，不增墙钟。依赖门红/未跑 → 本门不启动（状态未知，由尾段清单兜底）。
   const idxOf = new Map(gates.map((g, i) => [g.id, i]));
   const gatePromise = new Map(); // 门序 -> 该门结果 Promise（依赖方 await 用）
+  const skippedByDep = new Set(); // 因依赖未过而未启动的门（主循环后 fail-loud）
 
   // 守卫段（guardian）：串行先跑、未过即止——后序门一并不启动
   for (let i = 0; i < gates.length && failedIdx < 0; i++) {
@@ -1078,7 +1100,38 @@ async function run() {
 
   if (failedIdx < 0) {
     // 主体段：工作池并发（完成一个补一个）；任一门红 → 停排新门 + 树杀在跑门（fail-fast 语义保留）
-    const bodyIdx = gates.map((_, i) => i).filter((i) => !gates[i].guardian);
+    // 门序按 deps 稳定拓扑排序（只认本轮门表内的边；同层保持原相对顺序）：worker 按 bodyIdx 顺序取门，
+    // 被依赖门若排在依赖方之后且尚未被取走，依赖方会读到 null 而被静默跳过——排序消掉该窗口。
+    const bodyIdx = (() => {
+      const original = gates.map((_, i) => i).filter((i) => !gates[i].guardian);
+      const inBody = new Set(original);
+      const pending = new Map(original.map((i) => [
+        i,
+        new Set((gates[i].deps || [])
+          .map((d) => idxOf.get(d))
+          .filter((j) => j !== undefined && j !== i && inBody.has(j))),
+      ]));
+      const ordered = [];
+      const done = new Set();
+      while (ordered.length < original.length) {
+        const ready = original.filter((i) => !done.has(i) && [...pending.get(i)].every((j) => done.has(j)));
+        if (!ready.length) {
+          // 依赖环：按原顺序补齐（尾段 skippedByDep 兜底 fail-loud，不会静默绿）
+          for (const i of original) {
+            if (!done.has(i)) {
+              ordered.push(i);
+              done.add(i);
+            }
+          }
+          break;
+        }
+        for (const i of ready) {
+          ordered.push(i);
+          done.add(i);
+        }
+      }
+      return ordered;
+    })();
     let cursor = 0;
     const worker = async () => {
       while (failedIdx < 0 && cursor < bodyIdx.length) {
@@ -1087,7 +1140,11 @@ async function run() {
         if (deps.length) {
           const depResults = await Promise.all(deps.map((d) => gatePromise.get(idxOf.get(d)) ?? Promise.resolve(null)));
           if (failedIdx >= 0) return;
-          if (depResults.some((r) => !r || r.status !== 0)) continue; // 依赖未过 → 本门不启动
+          if (depResults.some((r) => !r || r.status !== 0)) {
+            // 依赖未过（含尚未出结果的 null）→ 本门不启动；主循环后 fail-loud，绝不静默绿。
+            skippedByDep.add(gates[i].id);
+            continue;
+          }
         }
         const p = runGate(i);
         gatePromise.set(i, p);
@@ -1102,6 +1159,13 @@ async function run() {
 
   // 门禁配置汇总（2026-11-24）：运行结束恒打一行（绿/红都可见），说明哪些项目侧门配置缺席=SKIP。
   console.log(`[verify] ${GATE_CONFIG_SUMMARY}`);
+
+  // 依赖未过导致门未启动：无失败门也绝不静默绿（旧行为：该门既不执行也不进任何清单）。
+  if (failedIdx < 0 && skippedByDep.size > 0) {
+    const ids = gates.filter((g) => skippedByDep.has(g.id)).map((g) => g.id);
+    console.error(t(`[verify] ⏭️ 门未启动（依赖未通过）：${ids.join('、')}`, `[verify] ⏭️ gate not started (dependency failed): ${ids.join(', ')}`, ROOT));
+    process.exit(1);
+  }
 
   if (failedIdx >= 0) {
     // 未执行门清单（2026-10-11 D2；2026-10-16 并发编排后按「已出裁决」算）：fail-fast 后状态未知≠通过——

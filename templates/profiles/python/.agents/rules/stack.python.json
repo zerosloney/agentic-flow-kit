@@ -3,12 +3,12 @@
   "version": 1,
   "rules": [
     {
-      "id": "product.python-test",
+      "id": "product.pytest",
       "name": "Python 单元测试",
       "phase": "verify",
       "face": "tests",
       "severity": "block",
-      "when": ["pytest.ini"],
+      "when": ["pyproject.toml", "requirements.txt", "pytest.ini"],
       "assert": { "kind": "command", "args": { "run": "pytest" } },
       "message": { "zh": "pytest 单元测试未通过", "en": "pytest failed" }
     },
@@ -18,7 +18,7 @@
       "phase": "verify",
       "face": "code",
       "severity": "block",
-      "when": ["pyproject.toml"],
+      "when": ["pyproject.toml", "ruff.toml", ".ruff.toml"],
       "assert": { "kind": "command", "args": { "run": "ruff check ." } },
       "message": { "zh": "ruff 代码规范检查未通过", "en": "ruff check failed" }
     }

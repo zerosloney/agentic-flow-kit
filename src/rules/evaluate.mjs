@@ -3,6 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { globToRegExp, hasGlobMeta, staticPrefix } from './glob.mjs';
 
 const SKIP_DIR_NAMES = new Set(['.git', 'node_modules', 'bin', 'obj', 'dist', 'coverage', 'tmp']);
@@ -224,6 +225,13 @@ function evalRequire(rule, ctx) {
   // 目录目标按 ext 过滤（缺省 .cs，与旧架构门同口径；显式文件与 glob 不过滤）——非 .NET 项目配目录时声明 ext。
   const files = resolveTargets(ctx.root, a.files, a.ext === undefined ? ['.cs'] : a.ext, a.optional === true);
   if (files === null) return { skipped: 'optional-target-missing' };
+  // 缺省 .cs 把目录目标滤空时不得静默通过：目标内有其它类型文件，说明是非 .NET 项目漏声明 ext。
+  if (a.ext === undefined && files.length === 0) {
+    const unfiltered = resolveTargets(ctx.root, a.files, [], true);
+    if (unfiltered && unfiltered.length) {
+      return { violations: [{ ruleId: rule.id, severity: rule.severity, message: rule.message, detail: `require 目标在缺省 .cs 过滤下未匹配到任何文件（目标内有 ${unfiltered.length} 个其它类型文件）；非 .NET 项目请显式声明 ext` }] };
+    }
+  }
   const excludeRes = (a.exclude || []).map((g) => globToRegExp(g));
   const trigger = String(a.trigger);
   const requireText = String(a.require);
@@ -381,22 +389,28 @@ function evalCommand(rule, ctx) {
   const cwd = a.cwd ? path.join(ctx.root, a.cwd) : ctx.root;
   const run = String(a.run)
     .replace(/\{old\}/g, ctx.range?.old ?? '')
-    .replace(/\{new\}/g, ctx.range?.new ?? '');
+    .replace(/\{new\}/g, ctx.range?.new ?? '')
+    // {gradlew}：Gradle 启动器——有 wrapper 用 wrapper（Windows 为 gradlew.bat，其它平台为 ./gradlew），否则退回 gradle。
+    .replace(/\{gradlew\}/g, process.platform === 'win32'
+      ? (fs.existsSync(path.join(cwd, 'gradlew.bat')) ? 'gradlew.bat' : 'gradle')
+      : (fs.existsSync(path.join(cwd, 'gradlew')) ? './gradlew' : 'gradle'));
   // 时限只认规则顶层的 timeoutMs：缺省 10 分钟（旧 commit-check 的 BUILD_TIMEOUT_MS 口径），null = 显式不限时（产品门缺省，旧 verify 同口径）。
   const timeout = rule.timeoutMs === undefined ? 600000 : rule.timeoutMs;
   // expectExit：声明的预期退出码（非负整数或其数组）；缺省只有 0 算通过。
   const expected = a.expectExit === undefined ? [0] : (Array.isArray(a.expectExit) ? a.expectExit : [a.expectExit]);
   const meta = { name: a.name, command: run };
-  const r = spawnSync(run, {
+  // 经进程树执行器运行：spawnSync 自带的 timeout 只杀 shell，命令自己起的子进程会漏网。
+  const runnerPath = fileURLToPath(new URL('./run-tree.mjs', import.meta.url));
+  const r = spawnSync(process.execPath, [runnerPath, String(timeout ?? 0), run], {
     cwd,
-    shell: true,
     encoding: 'utf8',
-    timeout: timeout ?? undefined,
     maxBuffer: 32 * 1024 * 1024,
     env: { ...process.env, ...(a.env || {}) },
+    stdio: ['ignore', 'pipe', 'pipe', 'pipe'],
+    timeout: timeout == null ? undefined : timeout + 15000, // 执行器自身卡死时的兜底
   });
-  if (r.error) {
-    const timedOut = r.error.code === 'ETIMEDOUT';
+  const timedOut = String(r.output?.[3] || '').includes('ETIMEDOUT') || r.error?.code === 'ETIMEDOUT';
+  if (r.error || timedOut) {
     const detail = timedOut
       ? `[超时] 命令超过 ${timeout >= 1000 ? `${Math.round(timeout / 1000)}s` : `${timeout}ms`} 未结束，已终止：${run}\n${String((r.stdout || '') + (r.stderr || ''))}`
       : `[spawn 失败] ${r.error.code || r.error.message}\n${String((r.stdout || '') + (r.stderr || ''))}`;
@@ -523,6 +537,5 @@ export function evaluateModel(model, { root, changed = null, diff = null, withCo
       passed.push({ ruleId: rule.id, ...(outcome.name ? { name: outcome.name } : {}), ...(outcome.command ? { command: outcome.command } : {}) });
     }
   }
-  const expired = [];
-  return { violations, waived, skipped, passed, expired };
+  return { violations, waived, skipped, passed };
 }

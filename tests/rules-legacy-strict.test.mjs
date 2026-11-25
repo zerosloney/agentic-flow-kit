@@ -324,7 +324,7 @@ test('commit-check: absent timeoutMs keeps the primitive default', () => {
   assert.ok(!Object.hasOwn(rule, 'timeoutMs'), r.stdout);
 });
 
-// require 的目录目标按 ext 过滤（缺省 .cs）：.ts 只在显式 ext 下被扫描。
+// require 的目录目标按 ext 过滤（缺省 .cs）：缺省 .cs 下 .ts 不被扫描；目录里只有其它类型文件而零匹配时判违例，不静默通过。
 test('require: ext filters directory targets', () => {
   const dir = fixture();
   write(dir, 'src/a.ts', 'try {\n  doWork();\n}\n');
@@ -347,6 +347,15 @@ test('require: ext filters directory targets', () => {
 
   writeJson(dir, '.agents/rules/project.json', rule({}));
   const miss = check(dir);
-  assert.equal(miss.status, 0, miss.stdout + miss.stderr);
-  assert.deepEqual(JSON.parse(miss.stdout).violations, []);
+  assert.equal(miss.status, 1, miss.stdout + miss.stderr);
+  const missViolations = JSON.parse(miss.stdout).violations;
+  assert.equal(missViolations.length, 1);
+  assert.equal(missViolations[0].ruleId, 'req.ext');
+  assert.match(missViolations[0].detail, /请显式声明 ext/);
+
+  // 补一个 .cs 后缺省过滤有命中，原逻辑照常求值：.ts 仍不被扫描，keep.cs 无 trigger 故零违例。
+  write(dir, 'src/keep.cs', 'class Keep {}\n');
+  const kept = check(dir);
+  assert.equal(kept.status, 0, kept.stdout + kept.stderr);
+  assert.deepEqual(JSON.parse(kept.stdout).violations, []);
 });

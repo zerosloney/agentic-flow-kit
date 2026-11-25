@@ -39,6 +39,7 @@ import {
   touchProblems,
   externalReviewId,
   parseReviewMetadata,
+  isApprovedConclusion,
   filesOutsidePlan,
   buildHandoffSheet,
   validateHandoffSheet,
@@ -47,6 +48,46 @@ import {
   isHeterogeneousModel,
   planPaths,
 } from './touch-set.mjs';
+import {
+  resolveReviewEndorsement,
+  loadAllEndorsements,
+} from './endorsement-protocol.mjs';
+import {
+  parsePlanSymbolRules,
+  hasSymbolRules,
+  verifySemanticSandbox,
+  extractSymbols,
+  diffSymbols,
+} from './semantic-sandbox.mjs';
+import {
+  createPrescription,
+  normalizePrescription,
+  normalizePrescriptionsList,
+  calculateDecayedConfidence,
+  prunePrescriptions,
+  distillPrescriptionsFromRun,
+  matchPrescriptions,
+  recordFeedback,
+  loadPrescriptions as loadPrescriptionsFile,
+  savePrescriptions as savePrescriptionsFile,
+} from './self-healing-prescriptions.mjs';
+import {
+  selectDynamicTestImpact,
+  computeTestImpact,
+} from './dynamic-test-impact.mjs';
+import { commitmentFingerprint, readLedger } from './stage-gates.mjs';
+
+export {
+  resolveReviewEndorsement,
+  loadAllEndorsements,
+  parsePlanSymbolRules,
+  hasSymbolRules,
+  verifySemanticSandbox,
+  extractSymbols,
+  diffSymbols,
+  selectDynamicTestImpact,
+  computeTestImpact,
+};
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const KINDS = ['require', 'fix', 'verify', 'review', 'deploy']; // kind 词表单源（§25 预判执法段已于 2026-10-28 随 hygiene 退役，故仅本文件与工单 --hint/--triage 消费）
@@ -163,10 +204,10 @@ export function getGitBaseSha(ctx, run) {
   return null;
 }
 
-// {entry}|{spec}|{plan}|{apiDocs} 从 run.docs 解析；未指定的产物跳过校验（如 fix 流程无 plan）。
+// {entry}|{spec}|{plan}|{apiDocs}|{codeReview} 从 run.docs 解析；未指定的产物跳过校验（如 fix 流程无 plan）。
 export function resolveArtifact(template, docs) {
   return String(template)
-    .replace(/\{(entry|spec|plan|apiDocs)\}/g, (_, k) => (docs && docs[k]) || '')
+    .replace(/\{(entry|spec|plan|apiDocs|codeReview)\}/g, (_, k) => (docs && docs[k]) || '')
     .trim();
 }
 
@@ -238,6 +279,17 @@ function latestRunId(ctx) {
   return ids[ids.length - 1] || null;
 }
 
+// 陈旧阈值：14 天未更新的 active run 不再从列表静默消失——标 stale 让操作者可见可处置；
+// 防洪熔断只统计未陈旧者，避免历史遗留把新单永久熔断。
+export const STALE_RUN_DAYS = 14;
+export function isStaleRun(run) {
+  const ts = run && (run.updatedAt || run.createdAt);
+  if (!ts) return false;
+  const t = new Date(ts).getTime();
+  if (!Number.isFinite(t)) return false;
+  return Date.now() - t > STALE_RUN_DAYS * 24 * 3600 * 1000;
+}
+
 export function listAllRuns(ctx, filter = 'all') {
   if (!fs.existsSync(ctx.runsDir)) return [];
   const ids = fs.readdirSync(ctx.runsDir).filter((f) => f.endsWith('.json')).map((f) => f.slice(0, -5)).sort().reverse();
@@ -247,6 +299,10 @@ export function listAllRuns(ctx, filter = 'all') {
     if (!r) continue;
     if (filter === 'active') {
       if (['done', 'aborted'].includes(r.stopType)) continue;
+      if (isStaleRun(r)) {
+        r.stale = true;
+        r.staleDays = Math.floor((Date.now() - new Date(r.updatedAt || r.createdAt).getTime()) / (24 * 3600 * 1000));
+      }
     } else if (filter === 'attention') {
       if (!['work-order', 'await-confirm', 'gate-fail', 'step'].includes(r.stopType)) continue;
     }
@@ -631,6 +687,16 @@ export function assembleWorkOrderContext(ctx, run, order) {
       '非平凡逻辑含可运行验证',
       '记录真实复核模型与上下文 ID',
     ];
+    // 代码 diff 复核包（2026-11-25）：spec 复核无 codeReview 上下文，此处不产出；
+    // 代码复核工单据此拿到「基准..头」范围与触及文件——复核者据此定点读 diff，不必全仓重建。
+    if (run?.codeReview?.baseSha) {
+      slices.codeDiff = {
+        base: run.codeReview.baseSha,
+        head: run.codeReview.headSha || '',
+        range: `${run.codeReview.baseSha}..${run.codeReview.headSha || ''}`,
+        files: (run.codeReview.files || []).slice(0, 20),
+      };
+    }
   } else if (kind === 'closeout') {
     const entryDoc = run?.docs?.entry || '';
     const entryText = entryDoc ? (readDoc(ctx, entryDoc) || '') : '';
@@ -641,13 +707,32 @@ export function assembleWorkOrderContext(ctx, run, order) {
   }
 
   // 注入历史避坑处方 (Self-Healing Prescriptions Backflow)
-  const targetFiles = context.handoff?.touchSetAllowed || context.files || run?.lastFiles || (slices.allowedFiles || []);
+  const rawTargetFiles = context.handoff?.touchSetAllowed || context.files || run?.lastFiles || (slices.allowedFiles || []);
+  const targetFiles = Array.isArray(rawTargetFiles) ? rawTargetFiles : [rawTargetFiles].filter(Boolean);
   const targetModule = run?.triage?.module;
-  const matchedRx = findMatchingPrescriptions(ctx, { module: targetModule, files: targetFiles });
+  const matchedRx = findMatchingPrescriptions(ctx, { module: targetModule, files: targetFiles, limit: 5 });
   if (matchedRx.length > 0) {
     slices.prescriptions = matchedRx.flatMap((rx) =>
-      (rx.prescriptions || []).map((p) => `[${rx.module || '经验'}] ${p}`)
+      (rx?.prescriptions || []).map((p) => `[${rx.module || '经验'}] ${p}`)
     ).slice(0, 5);
+    slices.appliedRxIds = matchedRx.map((rx) => rx.id).filter(Boolean);
+  }
+
+  // 注入动态测试影响建议 (Dynamic Test Impact Slices)
+  if (targetFiles.length > 0) {
+    try {
+      const impactDecision = selectDynamicTestImpact(ROOT, targetFiles, { fallbackOnUntested: false });
+      if (impactDecision && impactDecision.impactedTests?.length > 0) {
+        slices.dynamicTestImpact = {
+          mode: impactDecision.mode,
+          impactedTests: impactDecision.impactedTests.slice(0, 5),
+          totalImpactedTests: impactDecision.impactedTests.length,
+          accelerationRatio: impactDecision.accelerationRatio,
+        };
+      }
+    } catch {
+      // 优雅降级，不阻断上下文装配
+    }
   }
 
   context.slices = slices;
@@ -665,31 +750,47 @@ export function verifyReviewEndorsement(ctx, run, stage, meta, opt = {}) {
   const isDowngraded = Boolean(meta.isDowngraded || opt.reviewDowngrade);
   const downgradeReason = opt.reviewDowngrade || meta.downgradeReason || '跨模型评审自适应降级';
 
-  // 1. 异构模型复核校验 (Heterogeneous Check)
-  const requireHetero = Boolean(
-    opt.heterogeneous ||
-    ctx?.dispatch?.roles?.[stage === 'spec-review' ? 'draft' : 'review']?.heterogeneous ||
-    ctx?.dispatch?.roles?.review?.heterogeneous ||
-    ctx?.dispatch?.reviewPolicy?.enforceHeterogeneous
-  );
+  // 1. 结论有效性校验（无论单/双复核，存在未通过/驳回结论均阻断）
+  const revs = meta.reviewers || [];
+  const notApproved = revs.filter((r) => !isApprovedConclusion(r.conclusion));
+  if (notApproved.length > 0) {
+    problems.push('独立复核未通过：存在未通过或驳回的复核结论。');
+  }
+
+  // 2. 异构模型复核校验 (Heterogeneous Check，单源策略开关优先)
+  let requireHetero = false;
+  if (ctx?.dispatch?.reviewPolicy?.enforceHeterogeneous === false) {
+    requireHetero = false;
+  } else {
+    requireHetero = Boolean(
+      opt.heterogeneous ||
+      ctx?.dispatch?.reviewPolicy?.enforceHeterogeneous ||
+      ctx?.dispatch?.roles?.[stage === 'spec-review' ? 'draft' : 'review']?.heterogeneous ||
+      ctx?.dispatch?.roles?.review?.heterogeneous
+    );
+  }
 
   if (requireHetero && !isDowngraded) {
+    // 回退读 model-roles 的角色定义：可能是模型名字符串，也可能是 {model, …} 对象
+    const roleModel = (role) => (typeof role === 'string' ? role : String(role?.model || role?.id || ''));
     const authorModel =
       run?.events?.findLast?.((e) => e.type === 'work-order' && (e.kind === 'implement' || e.kind === 'draft'))?.recommendedModel ||
-      ctx?.modelRoles?.roles?.code ||
-      ctx?.modelRoles?.roles?.judgment ||
+      roleModel(ctx?.modelRoles?.roles?.code) ||
+      roleModel(ctx?.modelRoles?.roles?.judgment) ||
       '';
 
-    if (meta.reviewerModel && authorModel) {
-      if (!isHeterogeneousModel(meta.reviewerModel, authorModel)) {
-        problems.push(
-          `异构模型复核未通过：复核模型 (${meta.reviewerModel}) 与起草/实现模型 (${authorModel}) 同构。根据异构复核策略，需采用异构模型（如 Claude vs GPT/o3 vs Gemini/DeepSeek）独立复核，或声明评审降级理由（如：跨模型降级: <原因>）。`
-        );
-      }
+    if (!meta.reviewerModel) {
+      problems.push(
+        '异构模型复核未通过：当前策略要求异构模型复核，但未检测到复核模型（reviewerModel）。请在复核记录中声明模型（如 模型: gpt-4o），或声明评审降级理由（如：- 跨模型降级: <原因>）。'
+      );
+    } else if (authorModel && !isHeterogeneousModel(meta.reviewerModel, authorModel)) {
+      problems.push(
+        `异构模型复核未通过：复核模型 (${meta.reviewerModel}) 与起草/实现模型 (${authorModel}) 同构。根据异构复核策略，需采用异构模型（如 Claude vs GPT/o3 vs Gemini/DeepSeek）独立复核，或声明评审降级理由（如：跨模型降级: <原因>）。`
+      );
     }
   }
 
-  // 2. 双模型背书校验 (Dual Review Gate)
+  // 3. 双模型背书校验 (Dual Review Gate)
   const level = run?.triage?.level || 'L1';
   const requireDual = Boolean(
     opt.dualReview ||
@@ -698,21 +799,48 @@ export function verifyReviewEndorsement(ctx, run, stage, meta, opt = {}) {
   );
 
   if (requireDual && !isDowngraded) {
-    const revs = meta.reviewers || [];
     if (revs.length < 2) {
       problems.push(
         `双模型独立复核未通过：当前策略要求至少 2 位独立复核人（已配置双重背书要求），当前仅检测到 ${revs.length} 位复核记录。请追加二次复核记录，或声明评审降级理由。`
       );
+    } else if (revs[0].id === revs[1].id) {
+      problems.push(
+        `双模型独立复核未通过：两位复核人会话 ID 相同 (${revs[0].id})，禁止伪造同一会话的双重背书。`
+      );
     } else {
-      const notApproved = revs.filter((r) => !/通过|approved|lgtm|ok/i.test(r.conclusion || '通过'));
-      if (notApproved.length > 0) {
-        problems.push(`双模型独立复核未通过：存在未通过的复核结论。`);
-      }
-      if (revs[0].reviewerModel && revs[1].reviewerModel && !isHeterogeneousModel(revs[0].reviewerModel, revs[1].reviewerModel)) {
+      if (!revs[0].reviewerModel || !revs[1].reviewerModel) {
+        problems.push(
+          '双模型独立复核未通过：双重复核记录中存在未声明模型的复核人。请标明各自模型或声明降级理由。'
+        );
+      } else if (!isHeterogeneousModel(revs[0].reviewerModel, revs[1].reviewerModel)) {
         problems.push(
           `双模型独立复核未通过：两位复核人的模型 (${revs[0].reviewerModel} 与 ${revs[1].reviewerModel}) 属于同构模型族，未达到异构双检要求。`
         );
       }
+    }
+  }
+
+  // 4. 对抗挑战向量核验 (Adversarial Challenge Verification)
+  if (Array.isArray(meta.challenges) && meta.challenges.length > 0) {
+    const breached = meta.challenges.filter((c) => c.status === 'breached');
+    if (breached.length > 0) {
+      problems.push(
+        `对抗审查未通过：检测到 ${breached.length} 个被攻破的对抗挑战向量 (${breached.map((b) => b.id || b.dimension).join(', ')})。代码必须通过红方攻击防御测试。`
+      );
+    }
+  }
+
+  const requireChallenge = Boolean(
+    opt.requireChallenge ||
+    (level === 'L3' && ctx?.dispatch?.reviewPolicy?.requireAdversarialChallenge === true)
+  );
+
+  if (requireChallenge && !isDowngraded) {
+    const survived = (meta.challenges || []).filter((c) => c.status === 'survived');
+    if (survived.length === 0) {
+      problems.push(
+        '对抗审查未通过：根据策略要求，L3 架构修改必须包含至少 1 项防御成功的对抗挑战向量 (status: survived)。'
+      );
     }
   }
 
@@ -722,70 +850,28 @@ export function verifyReviewEndorsement(ctx, run, stage, meta, opt = {}) {
     isDowngraded,
     downgradeReason,
     dualEndorsed: Boolean(meta.dualEndorsed),
+    challenges: meta.challenges || [],
+    tokenDigest: meta.tokenDigest || '',
+    fromToken: Boolean(meta.fromToken),
   };
 }
 
 // ── 运行后复盘处方与自愈沉淀（Post-Mortem Prescriptions & Self-Healing） ─────────
+// 处方读写单源在 self-healing-prescriptions.mjs；这里只做 ctx → 文件路径的薄包装。
 export function loadPrescriptions(ctx) {
   const f = ctx?.prescriptionsFile || path.join(ctx?.root || process.cwd(), '.agents', 'notes', 'prescriptions.json');
-  if (!fs.existsSync(f)) return [];
-  try {
-    const data = JSON.parse(fs.readFileSync(f, 'utf8'));
-    return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
-  }
+  return loadPrescriptionsFile(f);
 }
 
 export function savePrescriptions(ctx, list) {
   const f = ctx?.prescriptionsFile || path.join(ctx?.root || process.cwd(), '.agents', 'notes', 'prescriptions.json');
-  try {
-    fs.mkdirSync(path.dirname(f), { recursive: true });
-    fs.writeFileSync(f, JSON.stringify(list, null, 2) + '\n', 'utf8');
-    return true;
-  } catch {
-    return false;
-  }
+  return savePrescriptionsFile(f, list);
 }
 
-export function findMatchingPrescriptions(ctx, { module, files = [] } = {}) {
+export function findMatchingPrescriptions(ctx, { module, files = [], category, limit = 3 } = {}) {
   const list = loadPrescriptions(ctx);
-  if (!list.length) return [];
-
-  const matched = [];
-  const fileSet = new Set((files || []).map((f) => String(f).replace(/\\/g, '/')));
-
-  for (const item of list) {
-    if (item.cleanPass) continue;
-    let hit = false;
-    // 1. 模块精确匹配
-    if (module && item.module && item.module !== 'general' && item.module === module) {
-      hit = true;
-    }
-    // 2. 文件或路径匹配
-    if (!hit && item.affectedFiles?.length && fileSet.size > 0) {
-      for (const af of item.affectedFiles) {
-        const normAf = String(af).replace(/\\/g, '/');
-        if (fileSet.has(normAf)) {
-          hit = true;
-          break;
-        }
-        for (const f of fileSet) {
-          if (normAf.startsWith(f) || f.startsWith(normAf)) {
-            hit = true;
-            break;
-          }
-        }
-        if (hit) break;
-      }
-    }
-
-    if (hit) {
-      matched.push(item);
-    }
-  }
-
-  return matched.slice(0, 3);
+  if (!Array.isArray(list) || !list.length) return [];
+  return matchPrescriptions(list, { module, files, category, limit });
 }
 
 export function generatePostMortem(ctx, run, opts = {}) {
@@ -843,24 +929,13 @@ export function generatePostMortem(ctx, run, opts = {}) {
   ])].slice(0, 10);
 
   // 5. 提炼避坑处方 (Prescriptions)
-  const prescriptions = [];
-  const probStr = problems.join(' ');
+  const distilled = distillPrescriptionsFromRun(run, opts);
+  const prescriptions = distilled.map((d) => d.actionableFix || d.failurePattern);
   const catList = [...categories];
-
-  if (catList.includes('touch-set') || /touch-set|未授权|unauthorized/i.test(probStr)) {
-    prescriptions.push('变动涉及计划外文件触点，规划阶段必须预先将修改路径纳入 plan.md 白名单');
-  }
-  if (catList.includes('arch') || /arch|架构|分层|层级/i.test(probStr)) {
-    prescriptions.push('触发架构防线或层级依赖阻断，必须遵循单一依赖方向，杜绝跨层直连或反向依赖');
-  }
-  if (catList.includes('test-failure') || /test|FAIL|assert|用例|测试/i.test(probStr)) {
-    prescriptions.push('单测或集成验证失败，在提交 review 阶段前须在本地定向运行对应 test 命令');
-  }
-  if (catList.includes('typecheck') || catList.includes('template-lint') || /type|lint|format|syntax|格式/i.test(probStr)) {
-    prescriptions.push('静态语法或格式不合规，进入验证前必须先跑本地代码类型与格式检查');
-  }
-  if (catList.includes('missing-artifact') || /missing-artifact|产物缺失/i.test(probStr)) {
-    prescriptions.push('阶段移交前产物未完全落盘，交接时须检查对应工件文件已真实存在并写入完毕');
+  for (const d of distilled) {
+    if (d.category && !catList.includes(d.category)) {
+      catList.push(d.category);
+    }
   }
 
   if (prescriptions.length === 0) {
@@ -878,6 +953,7 @@ export function generatePostMortem(ctx, run, opts = {}) {
     affectedFiles,
     problems,
     prescriptions,
+    structuredPrescriptions: distilled,
     retriesCount: retrySum || failEvents.length,
     summary: `Run ${run.runId} 经 ${retrySum || failEvents.length} 次重试收敛，提炼 ${prescriptions.length} 条工程避坑处方`,
   };
@@ -885,14 +961,12 @@ export function generatePostMortem(ctx, run, opts = {}) {
   run.postMortem = postMortem;
 
   if (opts.persist !== false) {
+    // 逐条入库：类别 / 置信度 / 定向修复各自保留（整条复盘对象入库会在归一时丢掉 structuredPrescriptions）。
+    // 同 id（同类别同失败签名）已存在的记录保留其命中 / 成功 / 失败计数，不重复入库；复盘摘要留在 run.postMortem。
     const list = loadPrescriptions(ctx);
-    const existingIdx = list.findIndex((p) => p.runId === run.runId || p.id === postMortem.id);
-    if (existingIdx >= 0) {
-      list[existingIdx] = postMortem;
-    } else {
-      list.unshift(postMortem);
-    }
-    savePrescriptions(ctx, list.slice(0, 50));
+    const known = new Set(list.map((p) => p.id));
+    const fresh = distilled.filter((d) => !known.has(d.id)).map((d) => ({ ...d, runId: run.runId }));
+    if (fresh.length) savePrescriptions(ctx, [...fresh, ...list]);
   }
 
   return postMortem;
@@ -904,7 +978,7 @@ export function checkQueueBrake(ctx, opts = {}) {
   const maxActiveRuns = Number(opts.maxActiveRuns || policy.maxActiveRuns) || 3;
   const enforce = Boolean(opts.queueBrake || opts['queue-brake'] || policy.enforceQueueBrake);
 
-  const activeRuns = listAllRuns(ctx, 'active');
+  const activeRuns = listAllRuns(ctx, 'active').filter((r) => !r.stale);
   const activeCount = activeRuns.length;
   const activeRunIds = activeRuns.map((r) => r.runId);
 
@@ -1056,6 +1130,15 @@ function wo(ctxOrRun, runOrO, oOrNothing) {
   }
   return order;
 }
+// 本 run 实际注入过的处方 id 累积并集（去重保序）：后续工单未命中处方时不得丢掉先前注入的事实。
+export function mergeAppliedRxIds(prev, next) {
+  const out = [];
+  for (const id of [...(Array.isArray(prev) ? prev : []), ...(Array.isArray(next) ? next : [])]) {
+    if (!out.includes(id)) out.push(id);
+  }
+  return out;
+}
+
 function issueWO(ctx, run, order, nextStage) {
   if (!order.role || !order.modelTier) {
     const resolved = resolveWorkOrderRole(ctx, order, run);
@@ -1075,6 +1158,10 @@ function issueWO(ctx, run, order, nextStage) {
     };
     order.context = assembleWorkOrderContext(ctx, run, order);
     order.context = pruneWorkOrderContext(order.context, ctx?.dispatch?.workOrderContextBudgetChars || 1200);
+    if (order.context.slices?.appliedRxIds) {
+      // 门失败与关单时的反馈都以本 run 实际注入过的处方为准
+      run.appliedRxIds = mergeAppliedRxIds(run.appliedRxIds, order.context.slices.appliedRxIds);
+    }
   }
   run.workOrder = order;
   run.stopType = 'work-order';
@@ -1109,7 +1196,16 @@ function stopConfirm(ctx, run, docRel, points, ledger) {
   process.exit(0);
 }
 function stopGateFail(ctx, run, stage, problems, exitHint, opts = {}) {
+  const appliedIds = run.workOrder?.context?.slices?.appliedRxIds || run.appliedRxIds || [];
   const analysis = analyzeGateFailure(problems, { stage, problems });
+  if (appliedIds.length > 0) {
+    try {
+      const list = loadPrescriptions(ctx);
+      const failedCategories = analysis?.category ? [analysis.category] : [];
+      const updated = recordFeedback(list, { appliedIds, succeeded: false, failedCategories });
+      savePrescriptions(ctx, updated);
+    } catch {}
+  }
   run.workOrder = null;
   run.stopType = 'gate-fail';
   run.stage = stage;
@@ -1130,6 +1226,7 @@ function stopGateFail(ctx, run, stage, problems, exitHint, opts = {}) {
   process.exit(2);
 }
 function stopDone(ctx, run) {
+  const appliedIds = run.workOrder?.context?.slices?.appliedRxIds || run.appliedRxIds || [];
   run.workOrder = null;
   run.stopType = 'done';
   run.stage = 'done';
@@ -1137,6 +1234,11 @@ function stopDone(ctx, run) {
     const rx = generatePostMortem(ctx, run);
     if (rx && !rx.cleanPass) {
       run.postMortem = rx;
+    }
+    if (appliedIds.length > 0) {
+      const list = loadPrescriptions(ctx);
+      const updated = recordFeedback(list, { appliedIds, succeeded: true });
+      savePrescriptions(ctx, updated);
     }
   } catch {}
   emit(run, { type: 'done' });
@@ -1170,7 +1272,7 @@ export function stageBar(run) {
           ['Build', ((run.triage?.level === 'L0' || run.triage?.level === 'L1') && run.triage?.kind !== 'fix'
             ? ['changes-confirm', 'implement', 'fix', 'changes-verify']
             : ['plan-fill', 'plan-draft', 'plan-confirm', 'changes-confirm', 'implement', 'fix', 'changes-verify']).includes(s)],
-          ['Test', ['verify', 'review', 'closeout', 'done-confirm', 'incident-fixed-confirm', 'incident-closed-confirm', 'direct-commit'].includes(s) || s === 'done']];
+          ['Test', ['verify', 'review', 'code-review', 'closeout', 'done-confirm', 'incident-fixed-confirm', 'incident-closed-confirm', 'direct-commit'].includes(s) || s === 'done']];
   const curIdx = seq.findIndex(([, cur]) => cur);
   return seq.map(([name], i) => mk(name, i < curIdx ? 'past' : i === curIdx ? 'cur' : 'future')).join(' ');
 }
@@ -1379,10 +1481,11 @@ export function renderDashboard(ctx, run, options = {}) {
 
   // 1. 顶部基础信息与阶段流向图
   const sel = options.selector;
-  let title = `Pipeline 看板: ${run.runId}`;
+  const staleTag = run.stale ? `（${run.staleDays} 天未更新）` : '';
+  let title = `Pipeline 看板: ${run.runId}${staleTag}`;
   if (sel && sel.total > 0) {
     const filterText = sel.filter === 'active' ? '活跃' : sel.filter === 'attention' ? '需关注' : '全部';
-    title = `Pipeline 看板 [${sel.current}/${sel.total} · ${filterText}]: ${run.runId}`;
+    title = `Pipeline 看板 [${sel.current}/${sel.total} · ${filterText}]: ${run.runId}${staleTag}`;
   }
   lines.push(topBorder(title));
 
@@ -1402,7 +1505,7 @@ export function renderDashboard(ctx, run, options = {}) {
           ['Build', ((run.triage?.level === 'L0' || run.triage?.level === 'L1') && run.triage?.kind !== 'fix'
             ? ['changes-confirm', 'implement', 'fix', 'changes-verify']
             : ['plan-fill', 'plan-draft', 'plan-confirm', 'changes-confirm', 'implement', 'fix', 'changes-verify']).includes(s)],
-          ['Test', ['verify', 'review', 'closeout', 'done-confirm', 'incident-fixed-confirm', 'incident-closed-confirm', 'direct-commit'].includes(s) || s === 'done']];
+          ['Test', ['verify', 'review', 'code-review', 'closeout', 'done-confirm', 'incident-fixed-confirm', 'incident-closed-confirm', 'direct-commit'].includes(s) || s === 'done']];
   const curIdx = seq.findIndex(([, cur]) => cur);
 
   const stageItems = seq.map(([name], i) => {
@@ -1529,6 +1632,7 @@ export function renderDashboard(ctx, run, options = {}) {
       if (e.type === 'retry') bits.push(`attempt ${e.attempt}/${e.cap}`);
       if (e.type === 'resume') bits.push(`from ${e.stage}`);
       if (e.type === 'review-downgrade') bits.push(`[降级] ${e.reason || ''}`);
+      if (e.type === 'code-review') bits.push(`代码复核 ${String(e.baseSha || '').slice(0, 7)}..${String(e.headSha || '').slice(0, 7)}`);
       if (e.id) bits.push(`#${e.id}`);
       const detail = bits.join(' │ ') || '-';
       lines.push(row(`  ${clr.dim(time)} │ ${clr.cyan(type)} │ ${truncate(detail, Math.max(10, W - 26))}`));
@@ -1880,11 +1984,18 @@ export function inspectArtifact(ctx, run, target) {
       sheet.notes ? `## 附注说明\n\n${sheet.notes}` : null,
     ].filter(Boolean);
 
+    const val = validateHandoffSheet(sheet);
+    if (!val.ok) {
+      lines.push('', '## ⚠ 契约合规校验异常 (Validation Problems)');
+      val.problems.forEach((p) => lines.push(`- ✖ ${p}`));
+    }
+
     return {
       ok: true,
       type: 'handoff',
       title: `交接契约: ${sheet.from} → ${sheet.to}`,
       sheet,
+      validation: val,
       content: lines.join('\n'),
     };
   }
@@ -1914,9 +2025,16 @@ export function inspectArtifact(ctx, run, target) {
   if (lower === 'endorsement' || lower === 'dual-review' || lower === 'review-policy') {
     const targetDoc = run.docs?.spec || run.docs?.entry;
     const body = targetDoc ? (sectionBody(readDoc(ctx, targetDoc) || '', '确认与复核') || '') : '';
-    const meta = parseReviewMetadata(body);
+    const meta = resolveReviewEndorsement({ text: body, docRel: targetDoc, root: ctx.root });
     let content = `# 独立复核与多模型背书检视 (Review Endorsement)\n`;
     content += `- **目标文档**: ${targetDoc || '(未就绪)'}\n`;
+    if (meta.fromToken) {
+      content += `- **背书凭证来源**: 分片台账 (\`.agents/endorsements.d/\`)\n`;
+      content += `- **凭证哈希 (Digest)**: \`${meta.tokenDigest}\`\n`;
+      if (meta.challenges?.length) {
+        content += `- **对抗挑战向量**: 共 ${meta.challenges.length} 项 (通过: ${meta.challenges.filter(c => c.status === 'survived').length}, 击穿: ${meta.challenges.filter(c => c.status === 'breached').length})\n`;
+      }
+    }
     content += `- **首要复核 ID**: ${meta.id || '(未检测到)'}\n`;
     content += `- **复核模型**: ${meta.reviewerModel || '(未注明)'} (模型族: ${normalizeModelFamily(meta.reviewerModel)})\n`;
     content += `- **双重背书状态**: ${meta.dualEndorsed ? '✅ 已达成双模型通过' : '未达成/单复核'}\n`;
@@ -2028,10 +2146,11 @@ export function renderInspect(ctx, run, options = {}) {
 
   // 1. Header
   const sel = options.selector;
-  let title = `Pipeline 产物检视: ${run.runId}`;
+  const staleTag = run.stale ? `（${run.staleDays} 天未更新）` : '';
+  let title = `Pipeline 产物检视: ${run.runId}${staleTag}`;
   if (sel && sel.total > 0) {
     const filterText = sel.filter === 'active' ? '活跃' : sel.filter === 'attention' ? '需关注' : '全部';
-    title = `Pipeline 产物检视 [${sel.current}/${sel.total} · ${filterText}]: ${run.runId}`;
+    title = `Pipeline 产物检视 [${sel.current}/${sel.total} · ${filterText}]: ${run.runId}${staleTag}`;
   }
   lines.push(topBorder(title));
 
@@ -2249,12 +2368,14 @@ function changedFiles(ctx, run) {
 
 // 脚本自身管理的运行态路径——confirm/gate/gen-index 副产物，不属宿主越权面（沙箱演练实证，2026-10-02）
 // 运行期产物豁免（2026-11-18 条目 36 实测定位，与 manifestPristine 同纪律）：零提交基线装户首跑误报
-// 「偏离即停」的三来源——① `.agents/notes/engine-map.md`：GENERATED_ONLY，装期生成、从不进 manifest；
-// ② `tmp/`：verify 门自产日志目录（verify.mjs 落 `tmp/verify-*.log`，已随 .gitignore.engine 忽略）；
-// ③ `workflow/effective-policy.md`：自愈生成物（engine-artifacts 门漂移即重生成，渲染含当日日期、逐日
-// 合法漂移，rehash 无意义）。安全性同既有注释：三者真值源（policy.json / mechanism-registry /
-// engine.json / 引擎模板）均在 manifest 内受 pristine 保护，机器改动会被自愈覆盖或本就是机器输出。
+// 「偏离即停」的三来源——① `workflow/INDEX.md` / `workflow/effective-policy.md` / `.agents/notes/engine-map.md`：
+// 装期由生成器现场取数重写的派生工件，随装进 manifest 并登记为 derived（静态模板不作比对，见
+// src/commands/install.mjs 的 DERIVED_ARTIFACTS 与 rehashDerivedArtifacts）；② `tmp/`：verify 门自产日志目录
+// （verify.mjs 落 `tmp/verify-*.log`，已随 .gitignore.engine 忽略）。安全性同既有注释：三者真值源
+// （policy.json / mechanism-registry / engine.json / 引擎模板）均在 manifest 内受 pristine 保护，
+// 机器改动会被自愈覆盖或本就是机器输出。
 // 冷启动与运行期白名单（完整覆盖安装期本地配置、基线快照与凭证产物）：
+// 凭证（endorsements.d/ 与 endorsements.jsonl）是运行态签署产物，出现在 git status 里时不计入回填清单。
 const RUNTIME_OWNED = [
   '.agents/cache/',
   '.agents/confirmations.jsonl',
@@ -2267,9 +2388,14 @@ const RUNTIME_OWNED = [
   '.agents/config/model-roles.local.json',
   '.agents/config/session-context.local.json',
   '.agents/notes/runtime-env.local.md',
+  '.agents/notes/prescriptions.json',
   '.agents/verifications.jsonl',
   '.agents/judgments.jsonl',
   '.agents/install-manifest.json',
+  '.agents/endorsements.d/',
+  '.agents/endorsements.jsonl',
+  '.agents/traces/',
+  '.agents/prescriptions.jsonl',
 ];
 
 export function isRuntimeOrManaged(ctx, file) {
@@ -2308,8 +2434,15 @@ export function checkAuthorized(ctx, run, filesCsv) {
   if (!listed.length) return { ok: false, problems: ['须以 --files 回填本工单实际改动的文件清单（逗号分隔）'] };
   const changed = changedFiles(ctx, run);
   if (changed === null) return { ok: false, problems: ['git status 失败，无法核对改动面'] };
+  // run 登记的文档（entry/spec/plan/api/代码复核产物）由机器生成或复核者写入，不属实现者的
+  // --files 回填面；不豁免则「代码复核 → 修复环」必然自锁（复核产物是未跟踪新文件，回填清单里没有它）。
+  // 豁免只覆盖登记过的具体文档，不放大到整个任务目录（计划外代码仍必须申报）。
+  const ownedDocs = (run?.docs ? Object.values(run.docs) : [])
+    .filter((p) => typeof p === 'string' && p.trim())
+    .map((p) => p.replace(/\\/g, '/'));
+  const isOwnedDoc = (f) => ownedDocs.includes(f);
   const beyond = changed.filter((c) =>
-    !listed.includes(c) && !isRuntimeOrManaged(ctx, c));
+    !listed.includes(c) && !isRuntimeOrManaged(ctx, c) && !isOwnedDoc(c));
   if (beyond.length) {
     return {
       ok: false,
@@ -2318,11 +2451,48 @@ export function checkAuthorized(ctx, run, filesCsv) {
       ],
     };
   }
+  // plan 的「改动方案」就是授权白名单本身：它虽在回填清单豁免内，但不等于允许实现者静默改写。
+  // 确认时落了承诺面指纹（confirm-doc 台账 commit 字段）的 plan，改写即拒；无该字段（存量/对话级确认）不校验。
+  const planDoc = typeof run?.docs?.plan === 'string' ? run.docs.plan.replace(/\\/g, '/') : '';
+  const planText = planDoc ? readDoc(ctx, planDoc) : null;
+  if (planText != null) {
+    const approvedRows = readLedger(ctx.root).filter((e) =>
+      e && typeof e.doc === 'string' && e.doc.replace(/\\/g, '/') === planDoc &&
+      e.stage === 'approved' && typeof e.commit === 'string');
+    const lastApproved = approvedRows[approvedRows.length - 1];
+    if (lastApproved && commitmentFingerprint(planText) !== lastApproved.commit) {
+      return {
+        ok: false,
+        problems: ['plan 的授权面在确认后被改写（承诺面指纹与确认台账不符）——请重新确认 plan：flow-kit run confirm-doc.mjs <plan> --reconfirm --delegated "<用户原话>"'],
+      };
+    }
+  }
   const section = sectionBody(readDoc(ctx, run.docs?.plan) || '', '改动方案') || '';
+  // extra 面（--files 里不在 plan 改动方案内的路径）：run 自身文档与任务目录不判「计划外」
   const owned = runOwnedPaths(run);
   const isOwned = (f) => owned.some((o) => f === o || f.startsWith(`${o}/`));
   const extra = filesOutsidePlan(listed, section).filter((c) => !isRuntimeOrManaged(ctx, c) && !isOwned(c));
   run.lastFiles = listed;
+
+  // 语义沙箱：plan 的「改动方案」若定义了符号规则，进行符号级细粒度核验
+  const planSymbolRules = parsePlanSymbolRules(section);
+  if (hasSymbolRules(planSymbolRules)) {
+    const targetCodeFiles = listed.filter((f) => !isRuntimeOrManaged(ctx, f) && !isOwned(f));
+    const sandboxRes = verifySemanticSandbox({
+      root: ctx.root,
+      gitBaseSha: run.gitBaseSha || run.baseSha || 'HEAD',
+      changedFiles: targetCodeFiles,
+      rules: planSymbolRules,
+    });
+
+    if (!sandboxRes.ok) {
+      return {
+        ok: false,
+        problems: sandboxRes.violations.map((v) => `语义沙箱阻断: ${v.message}`),
+      };
+    }
+  }
+
   return { ok: true, extra };
 }
 
@@ -2375,6 +2545,134 @@ function locateDeployTarget(ctx, run) {
   };
 }
 
+// ── 代码 diff 独立复核（2026-11-25） ─────────────────────────────────────
+// 缺陷背景：review 阶段此前只读 spec 的「确认与复核」并复用其背书行——那行是 spec-review 阶段
+// （实现开始之前）由审阅者写入的，代码提交本身从未被新会话独立复核过；L2/L3 的「双机交叉背书」
+// 实际校验的是规格复核行。修法：对代码 diff 另签复核工单，背书行写入代码复核产物；复核范围
+// （基准 SHA..头 SHA）由机器写入并回读比对——「拿 spec 复核行冒充」与「复核旧代码」两类冒充都不成立。
+
+// 解析机器写入的复核基准与范围（供写回幂等比对与 code-review 阶段校验）。
+export function parseCodeReviewRange(text) {
+  const str = String(text || '');
+  const base = (str.match(/复核基准\s*SHA\s*[:：]\s*`?([0-9a-fA-F]{7,64})`?/) || [])[1] || '';
+  const m = str.match(/复核范围\s*[:：]\s*`?([0-9a-fA-F]{7,64})\.\.([0-9a-fA-F]{7,64})`?/);
+  return { base, head: m ? m[2] : '' };
+}
+
+// 生成/刷新代码复核产物骨架。复核者与主智能体只追加「确认与复核」一节的背书行，
+// 基准与范围两行由机器写入——范围变了（代码又改了）即重写骨架，旧背书随之失效。
+export function ensureCodeReviewDoc(ctx, run, cr) {
+  const rel = run?.docs?.codeReview;
+  if (!rel || !cr?.baseSha) return null;
+  const abs = path.join(ctx.root, rel);
+  const head = cr.headSha || '';
+  try {
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    const prev = fs.existsSync(abs) ? fs.readFileSync(abs, 'utf8') : '';
+    const bound = parseCodeReviewRange(prev);
+    // 基准与范围都一致 → 保留复核者已写的背书行（幂等：重入不擦行）
+    if (bound.base === cr.baseSha && bound.head === head) return rel;
+    fs.writeFileSync(abs, [
+      `# ${run.triage?.topic || 'task'} 代码复核`,
+      '',
+      '> 本文件由 pipeline 生成骨架，绑定本 run 代码改动的复核基准与范围。',
+      '> 「确认与复核」一节的背书行由独立复核者交付、主智能体写入——复核对象是**代码 diff**，不是 spec。',
+      '',
+      `- 复核基准 SHA: \`${cr.baseSha}\``,
+      `- 复核范围: \`${cr.baseSha}..${head}\``,
+      `- 触及文件: ${(cr.files || []).length} 个`,
+      '',
+      '## 确认与复核',
+      '',
+    ].join('\n'), 'utf8');
+    return rel;
+  } catch {
+    return null;
+  }
+}
+
+// 签发代码 diff 独立复核工单（review 阶段）。复核范围绑定本次代码改动，背书行落代码复核产物。
+function issueCodeReviewOrder(ctx, run, opt = {}) {
+  const cr = run.codeReview || {};
+  const short = (v) => String(v || '').slice(0, 7);
+  const rel = ensureCodeReviewDoc(ctx, run, cr);
+  if (!rel) {
+    stopGateFail(ctx, run, 'review', [`代码复核产物写入失败：${run.docs?.codeReview || '(未登记路径)'}`], undefined, { route: false });
+  }
+  const level = run.triage?.level || 'L1';
+  const requireDual = Boolean(
+    opt.dualReview ||
+    ctx?.dispatch?.reviewPolicy?.requireDualReview === true ||
+    (ctx?.dispatch?.reviewPolicy?.requireDualReviewLevels || []).includes(level)
+  );
+  const scope = `代码 diff ${short(cr.baseSha)}..${short(cr.headSha)}（触及 ${(cr.files || []).length} 个文件）`;
+  const instructions = requireDual
+    ? [
+        `1. 复核对象：${scope}`,
+        '2. 采用双模型独立复核（Dual Review）。另开外部会话或子代理。只读。',
+        '3. 写入两行独立复核记录（或声明降级）到代码复核产物的「确认与复核」一节：',
+        '  - 独立复核：通过 模型：<模型A> 复核上下文：<id1>',
+        '  - 二次复核：通过 模型：<模型B> 复核上下文：<id2>',
+        '若环境受限无法使用双模型，请显式声明：- 跨模型降级: <原因>',
+        '禁止使用占位符，禁止伪造同一会话 ID。',
+        `（可选）机器可验证的签署方式：flow-kit run endorsement-protocol.mjs sign --doc ${rel} --commitment "${cr.baseSha}..${cr.headSha}" --session <id> --model <模型> --conclusion approved`,
+      ]
+    : [
+        `1. 复核对象：${scope}`,
+        '2. 另开外部会话或子代理（独立上下文）。只读。',
+        '3. 复核者交付结论行，主智能体写入代码复核产物的「确认与复核」一节：',
+        '  - 独立复核：<结论> 模型：<模型> 复核上下文：<id>',
+        'id 取该会话或子代理标识。禁止占位符。若降级写：- 跨模型降级: <原因>',
+        `（可选）机器可验证的签署方式：flow-kit run endorsement-protocol.mjs sign --doc ${rel} --commitment "${cr.baseSha}..${cr.headSha}" --session <id> --model <模型> --conclusion approved`,
+      ];
+  const reviewHandoff = buildHandoffSheet({
+    from: 'implementer',
+    to: 'independent-reviewer',
+    task: `独立复核代码 diff：${short(cr.baseSha)}..${short(cr.headSha)}`,
+    gitBaseSha: cr.baseSha,
+    touchSetAllowed: [],
+    touchSetForbidden: ['*'],
+    specDoc: run.docs?.spec || null,
+    notes: '只读复核代码 diff；背书行写入代码复核产物「确认与复核」一节，不写 spec',
+  });
+  emit(run, { type: 'handoff', stage: 'review', toStage: 'code-review', sheet: reviewHandoff });
+  issueWO(ctx, run, wo(run, {
+    kind: 'review',
+    title: `独立复核代码 diff：${short(cr.baseSha)}..${short(cr.headSha)}`,
+    goal: '另开外部会话或子代理。只读代码 diff。写入复核行到代码复核产物。',
+    instructions,
+    context: { docPath: rel, kbHits: [], stderrTail: '', relatedDocs: [], handoff: reviewHandoff },
+    constraints: ['只读代码；禁止修改仓库文件', '背书行写入代码复核产物，不写 spec'],
+    acceptance: ['复核上下文是外部会话或子代理 id'],
+  }), 'code-review');
+}
+
+// 复核否决 → 签发修复工单（镜像 verify 失败分支）：修完回填 --files → verify → 重新走代码复核。
+function issueCodeReviewFixOrder(ctx, run, problems) {
+  const cr = run.codeReview || {};
+  const fixHandoff = buildHandoffSheet({
+    from: 'independent-reviewer',
+    to: 'implementer',
+    task: `修复代码复核未通过：${briefReq(run)}`,
+    gitBaseSha: cr.baseSha || null,
+    touchSetAllowed: (cr.files || []).length ? cr.files : (run.lastFiles || []),
+    specDoc: run.docs?.spec || null,
+    notes: `代码复核未通过：${(problems || []).join('；')}`,
+  });
+  emit(run, { type: 'handoff', stage: 'code-review', toStage: 'fix', sheet: fixHandoff });
+  issueWO(ctx, run, wo(run, {
+    kind: 'fix', title: '修复环：代码复核未通过', goal: '按复核意见修复后回跑',
+    instructions: [
+      '1. 读下方「代码复核未通过」原因',
+      '2. 修复（授权面仍以 plan 为准，偏离即停）',
+      '3. 完成后回填：next --files "…"（脚本重核对改动面并重跑 verify）',
+    ],
+    context: { docPath: run.docs?.plan, kbHits: [], stderrTail: (problems || []).join('\n'), relatedDocs: [], handoff: fixHandoff },
+    constraints: ['不绕门不改门；不改复核结论'],
+    acceptance: ['git 改动 ⊆ 回填清单', 'verify.mjs 重跑全绿', '代码复核重新通过'],
+  }), 'fix');
+}
+
 function briefReq(run) { return run.requirement.replace(/\s+/g, ' ').slice(0, 40); }
 
 function kbGate(ctx, run, types) {
@@ -2395,6 +2693,9 @@ async function advance(ctx, run, opt) {
   // {apiDocs} 兜底派生：triage 分支已派生；此处覆盖「引擎升级前创建的旧 run」（triage 不重入），
   // 保证声明即校验契约对存量 run 同样生效（幂等 ||，不覆盖既有值/自定义值）。
   if (run.triage && run.docs) run.docs.apiDocs = run.docs.apiDocs || `${taskDirRel(run)}/api.md`;
+  // 代码复核产物（2026-11-25）：与 intent/spec/plan 同目录族。登记进 run.docs 即进 runOwnedPaths，
+  // 复核者写入的背书行不属实现者的 --files 回填面（不豁免则「代码复核 → 修复环」自锁）。
+  if (run.triage && run.docs) run.docs.codeReview = run.docs.codeReview || `${taskDirRel(run)}/code-review.md`;
 
   // 断点续跑（R3-5）：上次进程在门执行中被杀 → 记 resume 事件后从同一阶段重入。
   // 产物完整性（R6-2）：resume 事件带 artifacts/missing；缺失由下方产物契约门拦住，不会跳过重跑。
@@ -2570,13 +2871,25 @@ async function advance(ctx, run, opt) {
           notes: '只写「确认与复核」一节，禁止修改功能行为正文',
         });
         emit(run, { type: 'handoff', stage: s, toStage: 'spec-review', sheet: reviewHandoff });
+        const isL3 = L() === 'L3';
+        const requireDual = isL3 || ctx?.dispatch?.reviewPolicy?.requireDualReview === true;
+        const reviewInstructions = requireDual
+          ? [
+              '采用双模型独立复核（Dual Review）。另开外部会话或子代理。只读。',
+              '写入两行独立复核记录（或声明降级）：',
+              '  - 独立复核：通过 模型：<模型A> 复核上下文：<id1>',
+              '  - 二次复核：通过 模型：<模型B> 复核上下文：<id2>',
+              '若环境受限无法使用双模型，请显式声明：- 跨模型降级: <原因>',
+              '禁止使用占位符，禁止伪造同一会话 ID。',
+            ]
+          : [
+              '另开外部会话或子代理。只读。',
+              '写入一行：- 独立复核：<结论> 复核模型：<模型> 复核上下文：<id>',
+              'id 取该会话或子代理标识。禁止占位符。若降级写：- 跨模型降级: <原因>',
+            ];
         issueWO(ctx, run, wo(run, {
           kind: 'review', title: `独立复核 spec：${run.docs.spec}`, goal: '另开外部会话或子代理。只读。写入复核行。',
-          instructions: [
-            '另开外部会话或子代理。只读。',
-            '写入一行：- 独立复核：<结论> 复核上下文：<id>',
-            'id 取该会话或子代理标识。禁止占位符。',
-          ],
+          instructions: reviewInstructions,
           context: { docPath: run.docs.spec, kbHits: [], stderrTail: '', relatedDocs: [], handoff: reviewHandoff },
           constraints: ['只写「确认与复核」一节。'],
           acceptance: ['复核上下文是外部会话或子代理 id'],
@@ -2588,7 +2901,7 @@ async function advance(ctx, run, opt) {
 
     if (s === 'spec-review') {
       const body = sectionBody(readDoc(ctx, run.docs.spec) || '', '确认与复核') || '';
-      const meta = parseReviewMetadata(body);
+      const meta = resolveReviewEndorsement({ text: body, docRel: run.docs.spec, root: ctx.root });
       const v = verifyReviewEndorsement(ctx, run, s, meta, opt);
       if (!v.ok) stopGateFail(ctx, run, s, v.problems);
       if (v.isDowngraded) {
@@ -2666,6 +2979,9 @@ async function advance(ctx, run, opt) {
       const planSection = sectionBody(planDocText, '改动方案') || '';
       const allowedPaths = planPaths(planSection);
       const baseSha = getGitBaseSha(ctx, run);
+      // 代码复核基准（2026-11-25）：实现开始前的 HEAD = 本 run 全部代码改动的复核基准。
+      // 只取首次（修复环重入不覆盖）——固定环的多次代码提交都落在同一基准之后，复核范围覆盖全部代码改动。
+      if (!run.codeBaseSha) run.codeBaseSha = baseSha;
       const implementHandoff = buildHandoffSheet({
         from: 'planner',
         to: 'implementer',
@@ -2744,10 +3060,20 @@ async function advance(ctx, run, opt) {
         // 文件集 = 当前非运行态、非 workflow 文档的改动（均已过 --files 授权核对）
         const codeFiles = (changedFiles(ctx, run) || []).filter((c) =>
           !RUNTIME_OWNED.some((ro) => (ro.endsWith('/') ? c.startsWith(ro) : c === ro)) && !c.startsWith('workflow/'));
+        // 代码复核范围（2026-11-25）：基准 = 本 run 全部代码改动的起点，头 = 代码提交后的 HEAD。
+        // 提交前先取一次 HEAD——未经 changes-confirm 的存量 run 无 codeBaseSha 时用它兜底。
+        const preCommitSha = getGitBaseSha(ctx, run);
         if (codeFiles.length) {
           const verb = K() === 'fix' ? 'fix' : 'feat';
           const c = docsCommit(ctx, run, codeFiles, `${verb}(${run.triage.module}): ${briefReq(run)}（pipeline-run ${run.runId}）`);
           if (!c.ok) stopGateFail(ctx, run, s, [c.msg]);
+        }
+        if (L() === 'L2' || L() === 'L3') {
+          run.codeReview = {
+            baseSha: run.codeBaseSha || preCommitSha,
+            headSha: getGitBaseSha(ctx, run) || preCommitSha,
+            files: codeFiles,
+          };
         }
         run.stage = (L() === 'L2' || L() === 'L3') ? 'review' : 'closeout';
         if (stepMode) stopStep(ctx, run, run.stage);
@@ -2802,12 +3128,70 @@ async function advance(ctx, run, opt) {
     }
 
     if (s === 'review') {
-      const target = run.docs.spec || entry();
-      const body = sectionBody(readDoc(ctx, target) || '', '确认与复核') || '';
-      const meta = parseReviewMetadata(body);
+      // 代码 diff 独立复核（2026-11-25 修复）：此前本阶段只读 spec 的「确认与复核」并复用其背书行——
+      // 那行是 spec-review 阶段（实现开始之前）写的，代码提交本身从未被独立复核过，
+      // L2/L3 的「双机交叉背书」实际校验的是规格复核行。现改为对代码 diff 另签复核工单。
+      const cr = run.codeReview;
+      if (!cr || !cr.baseSha) {
+        // 按上一提交即代码提交推定范围，仅作兜底：引擎升级前创建、已提交代码停在 review 的 run
+        // 没有 run.codeReview，route:false 又原地重入——不兜底即永久卡死。
+        const headSha = getGitBaseSha(ctx, run) || '';
+        const parent = headSha ? runGit(ctx, run, ['rev-parse', 'HEAD^'], { optional: true }) : { exit: 1, stdout: '' };
+        const baseSha = parent.exit === 0 ? String(parent.stdout || '').trim() : '';
+        const diff = baseSha && headSha
+          ? runGit(ctx, run, ['diff', '--name-only', `${baseSha}..${headSha}`], { optional: true })
+          : { exit: 1, stdout: '' };
+        const files = diff.exit === 0
+          ? String(diff.stdout || '').split(/\r?\n/).map((f) => f.trim()).filter(Boolean)
+            .filter((f) => !RUNTIME_OWNED.some((ro) => (ro.endsWith('/') ? f.startsWith(ro) : f === ro)) && !f.startsWith('workflow/'))
+          : [];
+        if (headSha && baseSha && files.length) {
+          run.codeReview = { baseSha, headSha, files };
+          emit(run, { type: 'code-review', baseSha, headSha, fallback: true });
+        } else {
+          stopGateFail(ctx, run, s, ['代码复核基准缺失——verify 绿后未记录代码改动基准，无法界定复核范围'], undefined, { route: false });
+        }
+      }
+      issueCodeReviewOrder(ctx, run, opt);
+    }
+
+    if (s === 'code-review') {
+      const rel = run.docs.codeReview;
+      const cr = run.codeReview || {};
+      const body = rel ? (readDoc(ctx, rel) || '') : '';
+      if (!body.trim()) {
+        stopGateFail(ctx, run, s, [`代码复核产物缺失或为空：${rel || '(未登记路径)'}——代码 diff 未经独立复核，不得进关单`], undefined, { route: false });
+      }
+      // 基准绑定：产物里的复核基准必须等于本 run 记录的代码基准——「拿 spec 复核行冒充代码复核」不成立
+      const bound = parseCodeReviewRange(body);
+      if (!bound.base || bound.base !== cr.baseSha) {
+        stopGateFail(ctx, run, s, [`代码复核产物的复核基准与本 run 的代码基准不符（产物 ${bound.base || '未写'} ≠ 记录 ${cr.baseSha || '无'}）——复核的不是本次代码改动`], undefined, { route: false });
+      }
+      // 范围绑定：代码在复核工单签发后又被改动 → 旧复核失效，范围随代码前移并重签工单
+      const currentHead = getGitBaseSha(ctx, run) || '';
+      if (bound.head && currentHead && bound.head !== currentHead) {
+        run.codeReview = { ...cr, headSha: currentHead };
+        issueCodeReviewOrder(ctx, run, opt);
+      }
+      const reviewBody = sectionBody(body, '确认与复核') || '';
+      const meta = resolveReviewEndorsement({
+        text: reviewBody,
+        docRel: rel,
+        root: ctx.root,
+        // 凭证与复核范围绑定：台账里旧范围（<base>..<head>）的凭证不得为新范围放行
+        commitment: `${cr.baseSha}..${bound.head || cr.headSha}`,
+      });
       const v = verifyReviewEndorsement(ctx, run, s, meta, opt);
       if (!v.ok) {
-        stopGateFail(ctx, run, s, v.problems);
+        // 路由分两路（别把「背书还没交」当成「代码有缺陷」）：
+        // ① 背书未交付（无复核上下文 id）→ 重签复核工单等交付；
+        // ② 背书已交付但结论否决/被攻破 → 转修复环。
+        const delivered = Boolean(meta && meta.id);
+        const rejected = delivered && v.problems.some((p) =>
+          p.includes('存在未通过或驳回的复核结论') || p.includes('被攻破的对抗挑战向量'));
+        if (rejected) issueCodeReviewFixOrder(ctx, run, v.problems);
+        else issueCodeReviewOrder(ctx, run, opt);
+        continue;
       }
       if (v.isDowngraded) {
         emit(run, {
@@ -2817,7 +3201,14 @@ async function advance(ctx, run, opt) {
           reviewer: meta.reviewerModel || 'default',
         });
       }
-      run.stage = K() === 'fix' ? 'closeout' : 'closeout';
+      emit(run, {
+        type: 'code-review',
+        baseSha: cr.baseSha,
+        headSha: bound.head || cr.headSha,
+        reviewers: (meta.reviewers || []).length,
+        dual: Boolean(v.dualEndorsed),
+      });
+      run.stage = 'closeout';
       if (stepMode) stopStep(ctx, run, run.stage);
       continue;
     }
@@ -2846,7 +3237,9 @@ async function advance(ctx, run, opt) {
     if (s === 'done-confirm' || s === 'incident-fixed-confirm' || s === 'incident-closed-confirm') {
       const finalize = () => {
         runNode(ctx, run, 'gen-workflow-index.mjs', []);
-        const files = [...new Set([entry(), run.docs.spec, run.docs.plan].filter(Boolean))]
+        // 代码复核产物（2026-11-25）：代码复核的背书是证据链的一环，与 spec/plan 一并随关单提交入库
+        const codeReview = run.docs.codeReview && readDoc(ctx, run.docs.codeReview) !== null ? [run.docs.codeReview] : [];
+        const files = [...new Set([entry(), run.docs.spec, run.docs.plan, ...codeReview].filter(Boolean))]
           .map((f) => resolveDocRel(ctx, f));
         const c = docsCommit(ctx, run, [...files, 'workflow/INDEX.md'], `docs(workflow): ${topic()} 关单——终态落定（pipeline-run ${run.runId}）`);
         if (!c.ok) stopGateFail(ctx, run, s, [c.msg]);
@@ -3008,6 +3401,9 @@ if (isMain) {
       lastKbHits: [], lastFiles: [], events: [],
     };
     emit(run, { type: 'run-created', requirement: req });
+    if (brake.forced) {
+      emit(run, { type: 'queue-brake-bypassed', activeCount: brake.activeCount, maxActiveRuns: brake.maxActiveRuns, activeRunIds: brake.activeRunIds });
+    }
     saveRun(ctx, run);
     await advance(ctx, run, { step: a.step === true }); // 首停机点 = triage 工单
   } else if (cmd === 'next' || cmd === 'resume') {
@@ -3059,6 +3455,7 @@ if (isMain) {
       if (e.type === 'step-resume') bits.push(`resumed at ${e.stage}`);
       if (e.type === 'gate-tested') bits.push(`tested ${e.script} exit ${e.exit}`);
       if (e.type === 'review-downgrade') bits.push(`[评审降级] ${e.reason || ''}${e.reviewer ? ` (${e.reviewer})` : ''}`);
+      if (e.type === 'code-review') bits.push(`代码复核 ${String(e.baseSha || '').slice(0, 7)}..${String(e.headSha || '').slice(0, 7)}`);
       if (e.parallel) bits.push(e.parallel);
       if (e.id) bits.push(`#${e.id}`);
       console.log('  ' + bits.join(' | '));
@@ -3373,4 +3770,15 @@ function adoptRun(ctx, a) {
   console.log('  提示：adopt 不推断断点位置——按文档现状人工续走（next 会按 stage 拒绝，请对照事件缺失情况手动接续或另起 run）');
 }
 
-export default { parseKV, validateDraftContent, closeoutComplete, placeholdersIn, stageBar, renderDashboard, stripAnsi, visualWidth, truncate, truncateAnsi, parseGateName, pruneWorkOrderContext, listAllRuns, renderMarkdown, inspectArtifact, getAvailableTargets, renderInspect, analyzeGateFailure, manifestPristine, isRuntimeOrManaged, checkAuthorized, loadModelRolesConfig, resolveWorkOrderRole, getGitBaseSha, buildHandoffSheet, validateHandoffSheet, parseHandoffSheet, extractDocSection, assembleWorkOrderContext, verifyReviewEndorsement, normalizeModelFamily, isHeterogeneousModel, loadPrescriptions, savePrescriptions, findMatchingPrescriptions, generatePostMortem, checkQueueBrake };
+export {
+  createPrescription,
+  normalizePrescription,
+  normalizePrescriptionsList,
+  calculateDecayedConfidence,
+  prunePrescriptions,
+  distillPrescriptionsFromRun,
+  matchPrescriptions,
+  recordFeedback,
+};
+
+export default { parseKV, validateDraftContent, closeoutComplete, placeholdersIn, stageBar, renderDashboard, stripAnsi, visualWidth, truncate, truncateAnsi, parseGateName, pruneWorkOrderContext, listAllRuns, renderMarkdown, inspectArtifact, getAvailableTargets, renderInspect, analyzeGateFailure, manifestPristine, isRuntimeOrManaged, checkAuthorized, loadModelRolesConfig, resolveWorkOrderRole, getGitBaseSha, buildHandoffSheet, validateHandoffSheet, parseHandoffSheet, extractDocSection, assembleWorkOrderContext, verifyReviewEndorsement, normalizeModelFamily, isHeterogeneousModel, isApprovedConclusion, loadPrescriptions, savePrescriptions, findMatchingPrescriptions, generatePostMortem, checkQueueBrake, mergeAppliedRxIds, isStaleRun, verifySemanticSandbox, parsePlanSymbolRules, hasSymbolRules, extractSymbols, diffSymbols, createPrescription, normalizePrescription, normalizePrescriptionsList, calculateDecayedConfidence, prunePrescriptions, distillPrescriptionsFromRun, matchPrescriptions, recordFeedback, selectDynamicTestImpact, computeTestImpact };

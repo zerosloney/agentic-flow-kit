@@ -39,6 +39,23 @@ function writeGates(dir, name, obj) {
   fs.writeFileSync(path.join(dir, '.agents', 'config', name), JSON.stringify(obj));
 }
 
+// 产品门命令已委托 `flow-kit rules check` 执行；把本地 bin 放进 PATH，避免依赖测试机全局 flow-kit 版本。
+function makeFlowKitShim(dir) {
+  const shim = path.join(dir, '.shim-bin');
+  fs.mkdirSync(shim, { recursive: true });
+  if (process.platform === 'win32') {
+    fs.writeFileSync(
+      path.join(shim, 'flow-kit.cmd'),
+      `@echo off\r\n"${process.execPath}" "${BIN}" %*\r\n`
+    );
+  } else {
+    const file = path.join(shim, 'flow-kit');
+    fs.writeFileSync(file, `#!/bin/sh\nexec "${process.execPath}" "${BIN}" "$@"\n`, { mode: 0o755 });
+    fs.chmodSync(file, 0o755);
+  }
+  return shim;
+}
+
 // 夹具：仓库根 *.sln + frontend/package.json 三脚本，恰好满足 dotnet profile 默认门的全部 when。
 function dotnetFixture(dir) {
   fs.writeFileSync(path.join(dir, 'Sample.sln'), '');
@@ -170,4 +187,64 @@ test('非法配置：deps 指向不存在的门 → exit 2', () => {
   assert.equal(r.status, 2, r.stderr);
   assert.match(r.stderr, /deps 指向不存在的门/, r.stderr);
   assert.match(r.stderr, /no-such-gate/, r.stderr);
+});
+
+test('deps 顺序倒置：被依赖门排在依赖方之后仍先执行，依赖方不被静默跳过', () => {
+  const dir = tmpRepo();
+  const shim = makeFlowKitShim(dir);
+  fs.mkdirSync(path.join(dir, '.agents', 'config'), { recursive: true });
+  // 依赖方写在被依赖门之前：修复前 worker 读到 null 会 continue，该门既不执行也不进任何清单。
+  writeGates(dir, 'product-gates.json', {
+    gates: [
+      { id: 'zz-dependent', name: '依赖方', cmd: 'node -e "require(\'fs\').writeFileSync(\'dep-b.ran\',\'1\')"', deps: ['zz-dependency'] },
+      { id: 'zz-dependency', name: '被依赖门', cmd: 'node -e "require(\'fs\').writeFileSync(\'dep-a.ran\',\'1\')"' },
+    ],
+  });
+  const r = spawnSync(process.execPath, [BIN, 'run', 'verify.mjs', '--face', 'backend', '--root', dir], {
+    cwd: dir,
+    encoding: 'utf8',
+    env: { ...process.env, FLOW_KIT_TEST: '1', PATH: `${shim}${path.delimiter}${process.env.PATH}` },
+  });
+  assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+  assert.ok(fs.existsSync(path.join(dir, 'dep-a.ran')), '被依赖门必须先执行');
+  assert.ok(fs.existsSync(path.join(dir, 'dep-b.ran')), '依赖方不得被静默跳过');
+});
+
+// D15：kit 内运行 verify.mjs 时，门命令里的 flow-kit rules check 须本地化为包内 bin 绝对路径。
+// PATH 首位放伪 flow-kit（调用即 exit 9）——未改写则门必红，改写则走 `<kit>/bin/flow-kit.mjs`。
+const KIT_VERIFY = path.join(KIT, 'templates', 'engine', '.agents', 'scripts', 'verify.mjs');
+function poisonFlowKit(dir) {
+  const shim = path.join(dir, '.poison-bin');
+  fs.mkdirSync(shim, { recursive: true });
+  if (process.platform === 'win32') {
+    fs.writeFileSync(path.join(shim, 'flow-kit.cmd'), '@echo off\r\nexit /b 9\r\n');
+  } else {
+    fs.writeFileSync(path.join(shim, 'flow-kit'), '#!/bin/sh\nexit 9\n', { mode: 0o755 });
+  }
+  return shim;
+}
+function runKitVerify(dir, args, pathPrefix) {
+  return spawnSync(process.execPath, [KIT_VERIFY, ...args], {
+    cwd: dir,
+    encoding: 'utf8',
+    env: {
+      ...process.env,
+      FLOW_KIT_PROJECT_ROOT: dir,
+      CHECK_LOOP_ROOT: dir,
+      FLOW_KIT_TEST: '1',
+      PATH: `${pathPrefix}${path.delimiter}${process.env.PATH || ''}`,
+    },
+  });
+}
+
+test('kit 内运行：flow-kit rules check 门命令本地化为包内 bin（不依赖 PATH）', () => {
+  const dir = tmpRepo();
+  const r = runKitVerify(dir, ['--test-cmd', 'flow-kit rules check --full --prefix arch.'], poisonFlowKit(dir));
+  assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
+});
+
+test('kit 内运行：flow-kit run 门命令的既有本地化不变', () => {
+  const dir = tmpRepo();
+  const r = runKitVerify(dir, ['--test-cmd', 'flow-kit run check-local-gate-config.mjs'], poisonFlowKit(dir));
+  assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
 });

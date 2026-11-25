@@ -28,7 +28,7 @@ export const HOST_META = path.join(TEMPLATES, 'host-meta');
 // 模板目录可能被本机运行过脚本（评测凭证、缓存、本地模型角色）。这些是运行态，
 // 既不该进包，也不该被安装到目标项目——尤其 evals/results.jsonl 是行为评测凭证，
 // 若随模板出厂，会让每个新装项目“凭空”获得一张当前内容的合格凭证。
-export const RUNTIME_DIRS = new Set(['.agents/cache', '.agents/tmp', '.agents/tools']);
+export const RUNTIME_DIRS = new Set(['.agents/cache', '.agents/tmp', '.agents/tools', '.agents/endorsements.d']);
 // R5-1b：运行时实现随包分发，不再写入目标项目；只保留声明式配置（gates.json 等）。
 export const RUNTIME_ENGINE_PREFIXES = ['.agents/scripts/', '.agents/tests/'];
 
@@ -56,6 +56,8 @@ export const RUNTIME_FILES = new Set([
   // 会话入口注入腿的用户开关（hooks/session-context.cjs 读）：用户所有，不进 manifest、升级不覆盖。
   '.agents/config/session-context.local.json',
   '.agents/notes/runtime-env.local.md',
+  // 背书凭证台账（endorsement-protocol.mjs sign 写入）：运行态，不进 manifest、不入库。
+  '.agents/endorsements.jsonl',
 ]);
 
 export function listFiles(dir) {
@@ -396,7 +398,8 @@ export function buildPlan({
     const seenFaces = { ui: new Set(), code: new Set(), tests: new Set(), data: new Set() };
 
     for (const s of stackList) {
-      const pgPath = path.join(templatesRoot, 'profiles', s, '.agents/config/product-gates.json');
+      const pgRel = path.join('profiles', s, '.agents/config/product-gates.json');
+      const pgPath = path.join(templatesRoot, pgRel);
       if (fs.existsSync(pgPath)) {
         try {
           const raw = JSON.parse(fs.readFileSync(pgPath, 'utf8'));
@@ -407,10 +410,13 @@ export function buildPlan({
               allGates.push(g);
             }
           }
-        } catch {}
+        } catch (e) {
+          throw new Error(`画像配置损坏：${pgRel}（${e.message}）`);
+        }
       }
 
-      const pfPath = path.join(templatesRoot, 'profiles', s, '.agents/config/project-faces.json');
+      const pfRel = path.join('profiles', s, '.agents/config/project-faces.json');
+      const pfPath = path.join(templatesRoot, pfRel);
       if (fs.existsSync(pfPath)) {
         try {
           const raw = JSON.parse(fs.readFileSync(pfPath, 'utf8'));
@@ -424,7 +430,9 @@ export function buildPlan({
               }
             }
           }
-        } catch {}
+        } catch (e) {
+          throw new Error(`画像配置损坏：${pfRel}（${e.message}）`);
+        }
       }
     }
 

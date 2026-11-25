@@ -3,7 +3,7 @@
   "version": 1,
   "rules": [
     {
-      "id": "product.rust-test",
+      "id": "product.cargo-test",
       "name": "Rust 测试",
       "phase": "verify",
       "face": "tests",
@@ -13,7 +13,7 @@
       "message": { "zh": "cargo test 测试未通过", "en": "cargo test failed" }
     },
     {
-      "id": "product.rust-check",
+      "id": "product.cargo-check",
       "name": "Rust 编译检查",
       "phase": "verify",
       "face": "code",
@@ -21,6 +21,16 @@
       "when": ["Cargo.toml"],
       "assert": { "kind": "command", "args": { "run": "cargo check" } },
       "message": { "zh": "cargo check 检查未通过", "en": "cargo check failed" }
+    },
+    {
+      "id": "product.cargo-clippy",
+      "name": "Rust Clippy 代码检查",
+      "phase": "verify",
+      "face": "code",
+      "severity": "warn",
+      "when": ["Cargo.toml"],
+      "assert": { "kind": "command", "args": { "run": "cargo clippy -- -D warnings" } },
+      "message": { "zh": "cargo clippy 检查未通过", "en": "cargo clippy failed" }
     }
   ],
   "waivers": []

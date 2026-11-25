@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadLayer, mergeLayers, validateRule } from './model.mjs';
+import { loadLayer, mergeLayers, validateRule, RulesConfigError } from './model.mjs';
 import { adaptLegacy } from './adapters.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -83,7 +83,12 @@ export function loadModel(root) {
   // 1. 本地存在的 stack.* 层
   for (const [rel, layerName] of stackLayerFiles(root)) {
     const layer = loadLayer(root, rel, layerName);
-    if (layer) layers.push(layer);
+    if (layer) {
+      if (layer.plugins.length > 0) {
+        throw new RulesConfigError(`${rel}: plugins 只能在项目层声明（flow-rules.yml / project.json），当前层为 ${layerName}`);
+      }
+      layers.push(layer);
+    }
   }
 
   // 2. 项目层（优先 flow-rules.yml，其次 project.json 等）
@@ -109,7 +114,12 @@ export function loadModel(root) {
   const localRel = findLocalRulesFile(root);
   if (localRel) {
     const localLayer = loadLayer(root, localRel, 'local');
-    if (localLayer) layers.push(localLayer);
+    if (localLayer) {
+      if (localLayer.plugins.length > 0) {
+        throw new RulesConfigError(`${localRel}: plugins 只能在项目层声明（flow-rules.yml / project.json），当前层为 local`);
+      }
+      layers.push(localLayer);
+    }
   }
 
   return { model: mergeLayers(layers), unsupported, layers };

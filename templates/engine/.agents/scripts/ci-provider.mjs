@@ -102,6 +102,8 @@ export const CI_PROVIDERS = {
       return { before: null, reason: '无法从 GitLab CI 环境变量中解析 base sha' };
     },
     writeEnv(name, value, env = process.env) {
+      // GitLab 无预置环境变量文件：需项目自行定义 GITLAB_ENV 指向一个文件，并用
+      // artifacts:reports:dotenv 传给后续作业；未定义时返回 false，ci-push-before 只输出 advisory。
       if (env.GITLAB_ENV) {
         try {
           fs.appendFileSync(env.GITLAB_ENV, `${name}=${value}\n`, 'utf8');

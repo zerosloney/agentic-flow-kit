@@ -216,6 +216,9 @@ const cli = [process.env.FLOW_KIT_CLI, path.resolve(__dirname, '..', '..', '..',
   .find((p) => fs.existsSync(p)) || null;
 
 (async () => {
+  // 恢复失败的兜底（D16）：文件可能停在提议内容——deny 文案改述，放行路径强制非零退出。
+  let restoreFailed = false;
+  const restoreNotice = `⚠️ 快照恢复失败（${rel}）：文件可能仍为提议内容、无法自动恢复——请立即 git diff ${rel} 人工核对，并按需 git checkout -- ${rel} 恢复。`;
   if (prefixes.length > 0 && proposed !== null && cli) {
     const existed = fs.existsSync(abs);
     const backup = existed ? fs.readFileSync(abs) : null;
@@ -234,8 +237,8 @@ const cli = [process.env.FLOW_KIT_CLI, path.resolve(__dirname, '..', '..', '..',
       try {
         if (backup !== null) fs.writeFileSync(abs, backup);
         else if (fs.existsSync(abs)) fs.rmSync(abs, { force: true });
-      } catch (e) {
-        console.error(`pre-write-check: ⚠️ 快照恢复失败（${rel}）——工作区可能残留提议内容，请人工核对 git diff：${e}`);
+      } catch {
+        restoreFailed = true; // 提示延迟到裁决/放行路径统一输出：deny 时替换「文件未被修改」，放行时 exit 2
       }
     }
     if (verdict && verdict.status !== 0) {
@@ -249,11 +252,15 @@ const cli = [process.env.FLOW_KIT_CLI, path.resolve(__dirname, '..', '..', '..',
         } catch {
           lines = [String((verdict.stderr || '') + (verdict.stdout || '')).trim().slice(-OUT_MAX)];
         }
-        deny(`写前门拦下（rules check，快照复用）：\n${lines.join('\n')}\n——按提示修复后重试；本拦截发生在写盘前，文件未被修改。`);
+        deny(`写前门拦下（rules check，快照复用）：\n${lines.join('\n')}\n——按提示修复后重试；${restoreFailed ? restoreNotice : '本拦截发生在写盘前，文件未被修改。'}`);
       } else {
-        deny(`写前门：规则配置错误（rules check exit ${verdict.status}）——配置坏不得放行：\n${String(verdict.stderr || '').trim().slice(-OUT_MAX)}`);
+        deny(`写前门：规则配置错误（rules check exit ${verdict.status}）——配置坏不得放行：\n${String(verdict.stderr || '').trim().slice(-OUT_MAX)}${restoreFailed ? `\n${restoreNotice}` : ''}`);
       }
     }
+  }
+  if (restoreFailed) {
+    console.error(`pre-write-check: ${restoreNotice}`);
+    process.exit(2);
   }
 
   // ── 引擎面提示（不拦）─────────────────────────────────

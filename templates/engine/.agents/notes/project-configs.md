@@ -209,6 +209,11 @@
   }
   ```
 
+## dispatch.json 策略开关
+
+- `reviewPolicy.enforceHeterogeneous`：异构评审开关。出厂 `false`（不强制，复核记录只需一行带上下文 id 的背书）；`true` 时复核须声明模型，且与起草 / 实现模型不同族；显式 `false` 时 CLI `--heterogeneous` 不生效；该键不写（缺省）才回退看 `--heterogeneous` 与 `roles.<角色>.heterogeneous`。L3 恒要求两位不同会话、不同模型族的复核人（`requireDualReviewLevels`）。
+- `queuePolicy.enforceQueueBrake`：防洪队列熔断开关。出厂 `false`（不启用）；`true` 时 `start` 阶段活跃 run 数达到 `queuePolicy.maxActiveRuns`（缺省 3）即硬拦新单；CLI `--queue-brake` 可单次临时开启，`--force-queue` 可穿透并记录 `queue-brake-bypassed` 留痕事件；超过 14 天未更新的 run 视为陈旧，不计入活跃数。
+
 ## .agents/rules/ 与插件（rules v1）
 
 - **作用**：统一规则模型——legacy（旧配置投影）← `stack.<栈名>.json`（kit 管理；多栈各带各的规则包，按文件名序叠加）← `project.json`（项目所有）← `local.json`（本机，git 忽略）逐层合并，同 id 后者整条替换；`{ "id": "...", "enabled": false }` 即可禁用下层同名规则。原语闭集：content / require / absence / inventory / env / command / navProperties / plugin。`command` 参数为 `run/cwd/env/timeoutMs/expectExit`：缺省退出码 0 才通过，`expectExit`（非负整数或其数组）声明其它预期退出码（如「反例必须被拦下」的负向门）。
@@ -218,14 +223,14 @@
 - **写错必报错（schema）**：规则包里每个对象都按契约校验，报错用 JSON 路径定位并列出允许的键（如 `rules[0].assert.args 未知字段「unlesss」（允许：targets / files / …）`、`…matches[1] 正则非法（…）`）。只写 `{ "id": "...", "enabled": false }` 即可禁用下层规则；`when` 必须是非空字符串数组；`scope: "diff"` 只对 `content` 有意义。
 - **原语参考**（`assert.args`，键闭集）：
   - `content`：仓库作用域（缺省）读 `targets` / `files`、`ext`（缺省 `.cs`）、`contains`（子串）、`matches` / `pattern`（正则）、`unless`（豁免命中行）、`exclude`（豁免整文件）、`allow: [{glob, pattern?}]`、`optional`、`once`；diff 作用域（`"scope": "diff"`，只看新增行）读 `ext`、`pattern`（必填）、`copyPattern`、`allowFiles`、`allowLines`。写了另一作用域才读的键会报错。
-  - `require`：`files`（必填）、`ext`（目录目标的扩展名，缺省 `.cs`）、`trigger` 与 `require`（均必填）、`exclude`、`optional`。
+  - `require`：`files`（必填）、`ext`（目录目标的扩展名，缺省 `.cs`，缺省过滤下零匹配而目标内有其它类型文件时判违例，不静默通过）、`trigger` 与 `require`（均必填）、`exclude`、`optional`。
   - `absence`：`glob`（必填）、`unless`。`inventory`：`scan: [{dir, ext?, call?, ignore?, optional?}]` 与 `baseline`（均必填）。
   - `env`：`name`（必填）、`forbiddenValues`。`navProperties`：`dir`（必填）、`extraTypeNames`、`optional`。
-  - `command`：`run`（必填）、`cwd`、`env`、`lockPattern`、`lockHint`、`name`、`deps`、`expectExit`（非负整数或其数组；不声明时只有退出码 0 通过）。
+  - `command`：`run`（必填；支持 `{old}` / `{new}`（range 的两个 sha）与 `{gradlew}`（Gradle 启动器：有 wrapper 用 wrapper，否则用 gradle）占位符）、`cwd`、`env`、`lockPattern`、`lockHint`、`name`、`deps`、`expectExit`（非负整数或其数组；不声明时只有退出码 0 通过）。
   - `plugin`：`module`（必填）、`config`（插件自己的契约，键不限）。
 - **时限**：规则顶层 `timeoutMs`（毫秒）。`command` 缺省 10 分钟（与旧 commit-check 一致），`null` = 不限时（产品门的缺省值，与旧 verify 一致）；`plugin` 缺省 10 秒，只能是正整数。`rules explain <id>` 原样输出（不出现 = 用缺省值）。
 - **豁免**：`waivers: [{ rule, glob?, expires, reason }]`——到期日与理由必填（豁免带到期与审计），到期自动失效并提示。
-- **插件**：`.agents/rules/plugins/<module>.mjs` 子进程执行（stdin JSON `{version,root,files,face,faces,config}`，stdout JSON `{violations:[{file,line,message}]}`）；在 `project.json` 的 `plugins` 数组显式登记（id/module/face/phase/severity/timeoutMs/config），不自动加载目录；超时/崩溃按登记的 severity 记为违例，并留痕到 `.agents/cache/rules-plugins.json`（doctor 据此告警，同一条插件再次正常求值即清除）。
+- **插件**：`.agents/rules/plugins/<module>.mjs` 子进程执行（stdin JSON `{version,root,files,face,faces,config}`，stdout JSON `{violations:[{file,line,message}]}`）；在 `project.json` 的 `plugins` 数组显式登记（id/module/face/phase/severity/timeoutMs/config），不自动加载目录，只能在项目层声明，栈层 / 本机层声明即报错；超时/崩溃按登记的 severity 记为违例，并留痕到 `.agents/cache/rules-plugins.json`（doctor 据此告警，同一条插件再次正常求值即清除）。
 - **不进规则模型的旧配置**：`lane-surfaces.txt`、`workflow-modules.txt`、`test-impact-map.json` 是选择器 / 词表而不是规则，仍由各自脚本读取，`rules validate` 不列它们。
 - **插件示例**：
   ```js

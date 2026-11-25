@@ -196,3 +196,64 @@ rules:
     }, /severity/);
   });
 });
+
+const requireExtYaml = (argsExtra = '') => `
+version: 1
+name: require-ext
+rules:
+  - id: test.require-ext
+    face: code
+    phase: pre-commit
+    severity: block
+    assert:
+      kind: require
+      args:
+        files:
+          - src/
+        trigger: "catch ("
+        require: logger
+${argsExtra}    message:
+      zh: catch 必须记录日志
+      en: catch must log
+`;
+
+test('rules require - default .cs filter with zero matches is a violation, not a silent pass', () => {
+  withTempDir((root) => {
+    fs.writeFileSync(path.join(root, 'flow-rules.yml'), requireExtYaml(), 'utf8');
+    fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'src', 'app.py'), 'try:\n    pass\nexcept Exception:\n    pass\n', 'utf8');
+
+    const result = evaluateModel(loadModel(root).model, { root, phases: ['pre-commit'], faces: ['code'] });
+
+    assert.equal(result.violations.length, 1);
+    assert.equal(result.violations[0].ruleId, 'test.require-ext');
+    assert.match(result.violations[0].detail, /1 个其它类型文件/);
+    assert.match(result.violations[0].detail, /请显式声明 ext/);
+  });
+});
+
+test('rules require - explicit ext evaluates normally (no default-filter detail)', () => {
+  withTempDir((root) => {
+    fs.writeFileSync(path.join(root, 'flow-rules.yml'), requireExtYaml('        ext:\n          - .py\n'), 'utf8');
+    fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'src', 'app.py'), 'try:\n    pass\nexcept Exception:\n    pass\n', 'utf8');
+
+    const result = evaluateModel(loadModel(root).model, { root, phases: ['pre-commit'], faces: ['code'] });
+
+    assert.equal(result.violations.length, 0);
+  });
+});
+
+test('rules require - default .cs filter matching files keeps the original logic', () => {
+  withTempDir((root) => {
+    fs.writeFileSync(path.join(root, 'flow-rules.yml'), requireExtYaml(), 'utf8');
+    fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'src', 'app.cs'), 'try {\n} catch (Exception) {\n}\n', 'utf8');
+
+    const result = evaluateModel(loadModel(root).model, { root, phases: ['pre-commit'], faces: ['code'] });
+
+    assert.equal(result.violations.length, 1);
+    assert.equal(result.violations[0].detail, '缺少 logger');
+    assert.doesNotMatch(result.violations[0].detail, /请显式声明 ext/);
+  });
+});

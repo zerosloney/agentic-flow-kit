@@ -26,6 +26,7 @@ test('isCi correctly identifies CI vs non-CI environments', () => {
   assert.equal(isCi({ GITLAB_CI: 'true' }), true);
   assert.equal(isCi({ CI: 'true' }), true);
   assert.equal(isCi({ CI: '1' }), true);
+  assert.equal(isCi({ CI: 'false' }), false);
   assert.equal(isCi({ CONTINUOUS_INTEGRATION: 'true' }), true);
 });
 

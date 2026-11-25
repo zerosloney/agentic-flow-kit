@@ -3,7 +3,7 @@
   "version": 1,
   "rules": [
     {
-      "id": "product.cpp-test",
+      "id": "product.ctest",
       "name": "C++ 测试",
       "phase": "verify",
       "face": "tests",
@@ -11,6 +11,16 @@
       "when": ["CMakeLists.txt"],
       "assert": { "kind": "command", "args": { "run": "ctest --output-on-failure" } },
       "message": { "zh": "ctest 测试未通过", "en": "ctest failed" }
+    },
+    {
+      "id": "product.cpp-build",
+      "name": "C++ 编译构建",
+      "phase": "verify",
+      "face": "code",
+      "severity": "block",
+      "when": ["CMakeLists.txt"],
+      "assert": { "kind": "command", "args": { "run": "cmake --build build" } },
+      "message": { "zh": "cmake 编译构建未通过", "en": "cmake build failed" }
     }
   ],
   "waivers": []

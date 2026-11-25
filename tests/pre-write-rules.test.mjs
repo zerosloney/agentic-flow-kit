@@ -76,3 +76,20 @@ test('ui face routes to notify rules (and a clean write passes)', () => {
   const ok = runHook(dir, 'frontend/src/a.vue', 'const ok = 2;\n');
   assert.equal(denied(ok), false, ok.stdout + ok.stderr);
 });
+
+// D16：快照恢复失败 = 文件状态不确定，不得静默放行（放行路径 exit 2 + 醒目提示）。
+test('restore failure is loud and exits non-zero even when the verdict passes', () => {
+  const dir = fixture();
+  write(dir, 'src/a/ro.txt', 'original\n');
+  const abs = path.join(dir, 'src/a/ro.txt');
+  fs.chmodSync(abs, 0o444); // 只读：换入与恢复两次写入均失败，模拟恢复失败
+  let r;
+  try {
+    r = runHook(dir, 'src/a/ro.txt', 'proposed\n');
+  } finally {
+    fs.chmodSync(abs, 0o644);
+  }
+  assert.notEqual(r.status, 0, r.stdout + r.stderr);
+  assert.match(r.stderr, /可能仍为提议内容/);
+  assert.match(r.stderr, /git diff src\/a\/ro\.txt/);
+});

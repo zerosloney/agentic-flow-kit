@@ -130,7 +130,7 @@ export function stripMergeBlock(text, begin, end) {
   return text.slice(0, start) + text.slice(stop);
 }
 
-export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline = false, benignUnchanged = false }) {
+export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline = false, benignUnchanged = false, derivedRels = new Set() }) {
   const stats = { create: 0, update: 0, skip: 0, conflict: 0, conflictKeep: 0, merge: 0 };
   const target = plan.target;
   const nextFiles = { ...(manifest.files || {}) };
@@ -263,6 +263,15 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
       writes.push({ abs, text, targetRel: entry.targetRel, kind: entry.kind });
       stats.create += 1;
       log('create', `${entry.targetRel}（已存在且内容与本工具产物一致，纳入跟踪）`);
+      continue;
+    }
+
+    // 派生工件在旧版 Kit 里由装期生成、不进 manifest：不认领则恒被当成非本工具安装跳过，
+    // 随后仍被生成器改写，diff 拿静态模板比对会永久报漂移。
+    if (derivedRels?.has(entry.targetRel)) {
+      writes.push({ abs, text, targetRel: entry.targetRel, kind: entry.kind });
+      stats.create += 1;
+      log('create', `${entry.targetRel}（已存在且为本工具派生产物，纳入跟踪）`);
       continue;
     }
 

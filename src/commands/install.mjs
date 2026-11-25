@@ -29,7 +29,7 @@ import {
 // 审查遗留批 2026-11-23：实现迁往 src/install/version.mjs 单源；此处 import + 再导出，
 // 既有外部导入方（tools/lint-templates、tui/hud、workspace、bundle）零变化，模块内 KIT_VERSION 照常可用。
 import { readKitVersion } from '../install/version.mjs';
-import { detectProductMode } from '../install/profiler.mjs';
+import { detectProductMode, detectProductModeDetailed } from '../install/product-detect.mjs';
 export { readKitVersion, detectProductMode };
 
 const KIT_VERSION = readKitVersion();
@@ -215,10 +215,18 @@ function normalizeModelMode(value) {
   return ['recommend', 'detect', 'inherit'].includes(v) ? v : 'recommend';
 }
 
-// 派生工件（索引/引擎地图）从单源现场取数生成，不能静态随模板漂移。
+// 派生工件（索引/生效策略/引擎地图）从单源现场取数生成，不能静态随模板漂移。
 // 运行时实现已随包分发，因此从包内脚本执行，只把 cwd/根指向目标项目。
+// 只重生成「本次已装进目标」的产物：--scaffold none 时目标没有 workflow/ 面，
+// 生成器若照跑会凭空造出 workflow/ 目录（破坏「无脚手架即无 workflow」契约）。
+const DERIVED_ARTIFACTS = [
+  { script: 'gen-workflow-index.mjs', rel: 'workflow/INDEX.md' },
+  { script: 'gen-effective-policy.mjs', rel: 'workflow/effective-policy.md' },
+  { script: 'gen-engine-map.mjs', rel: '.agents/notes/engine-map.md' },
+];
 function generateDerivedArtifacts(target) {
-  for (const script of ['gen-workflow-index.mjs', 'gen-engine-map.mjs']) {
+  for (const { script, rel } of DERIVED_ARTIFACTS) {
+    if (!fs.existsSync(path.join(target, rel))) continue; // 未装该产物 → 不生成（保持脚手架档语义）
     const abs = path.join(RUNTIME_SCRIPTS, script);
     if (!fs.existsSync(abs)) continue;
     try {
@@ -398,7 +406,8 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
 
   // 项目形态 / 端口 / 脚手架档位：显式参数 > manifest 重放 > 智能探测 > 缺省（web / 栈默认端口 / full）。
   const explicitProduct = args.product || previous?.product;
-  const product = String(explicitProduct || detectProductMode(target) || 'web').toLowerCase();
+  const detected = explicitProduct ? null : detectProductModeDetailed(target);
+  const product = String(explicitProduct || detected?.mode || 'web').toLowerCase();
   if (!PRODUCT_MODES.includes(product)) {
     const err = new Error(t('error.badProduct', { value: args.product || '', modes: PRODUCT_MODES.join(', ') }));
     err.code = 'BAD_PRODUCT';
@@ -416,8 +425,8 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
   };
   const api = parsePort(args['api-port'], '--api-port') ?? previous?.ports?.api;
   const web = parsePort(args['web-port'], '--web-port') ?? previous?.ports?.web;
-  if (api !== undefined && web !== undefined && api === web) {
-    const err = new Error(t('error.badPort', { flag: '--api-port/--web-port', value: `${api}` }));
+  if (product === 'web' && api !== undefined && web !== undefined && api === web) {
+    const err = new Error(t('error.samePort', { port: `${api}` }));
     err.code = 'BAD_PORT';
     throw err;
   }
@@ -597,6 +606,9 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
 
   emit(t('install.start', { command: commandLabel, target }));
   emit(t('install.plan', { hosts: hostSet.join(', '), stack: stacks.join(', '), lang, count: plan.entries.length }));
+  // 探测有结果 → 说明依据；无结果 → 也要出声（静默回退缺省会让误判无从发现）。
+  if (detected?.mode) emit(t('install.productDetected', { product, reason: detected.reason }));
+  else if (detected) emit(t('install.productUndetected', { product }));
   emit(t('install.tier', { tier, hardened: t(hardened ? 'tui.yes' : 'tui.no') }));
   emit(t('install.ci', { mode: ciModeFor({ tier, ci: ciChoice }) }));
   if (migration?.changed) {
@@ -630,6 +642,7 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
     baseline: baselineEnabled,
     // upgrade 时模板侧未变（base === theirs）视为无冲突；install/add-host 保持旧冲突语义。
     benignUnchanged: commandLabel === 'upgrade',
+    derivedRels: new Set(DERIVED_ARTIFACTS.map((d) => d.rel)),
     log: (action, msg) => logger(action, msg, (done += 1), total),
   });
 

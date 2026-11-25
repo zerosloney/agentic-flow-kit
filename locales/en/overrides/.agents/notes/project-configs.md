@@ -209,6 +209,11 @@
   }
   ```
 
+## dispatch.json Policy Switches
+
+- `reviewPolicy.enforceHeterogeneous`: heterogeneous review switch. Shipped `false` (off; one endorsement line with context id is enough); `true` requires the reviewer to declare a model from another family than the drafter/implementer; explicit `false` beats CLI `--heterogeneous`; only when the key is absent does it fall back to `--heterogeneous` and `roles.<role>.heterogeneous`. L3 always needs two reviewers from distinct sessions and model families (`requireDualReviewLevels`).
+- `queuePolicy.enforceQueueBrake`: anti-flooding queue brake. Shipped `false` (disabled); `true` makes `start` hard-block new runs once active runs reach `queuePolicy.maxActiveRuns` (default 3); CLI `--queue-brake` enables it for one invocation, `--force-queue` bypasses and records a `queue-brake-bypassed` event; runs not updated for over 14 days are stale and excluded from the active count.
+
 ## .agents/rules/ and plugins (rules v1)
 
 - **Purpose**: Unified rule model — legacy (projection of the legacy configs) ← `stack.<stack>.json` (kit-managed; each declared stack brings its own pack, stacked in file-name order) ← `project.json` (project-owned) ← `local.json` (machine-local, gitignored) merged layer by layer; later layers replace the whole rule with the same id; `{ "id": "...", "enabled": false }` disables a lower-layer rule. Closed primitive set: content / require / absence / inventory / env / command / navProperties / plugin. `command` takes `run/cwd/env/timeoutMs/expectExit`: by default only exit code 0 passes; `expectExit` (a non-negative integer or an array of them) declares other expected exit codes (for example a negative gate that must reject a bad sample).
@@ -218,14 +223,14 @@
 - **Schema (typos are errors)**: every object in a rule pack is validated against its contract; errors are located by JSON path and list the allowed keys (e.g. `rules[0].assert.args 未知字段「unlesss」（允许：targets / files / …）`, `…matches[1] 正则非法（…）`). `{ "id": "...", "enabled": false }` alone disables a lower-layer rule; `when` must be a non-empty array of non-empty strings; `scope: "diff"` is only meaningful for `content`.
 - **Primitive reference** (`assert.args`, closed key set):
   - `content`: repo scope (default) reads `targets` / `files`, `ext` (default `.cs`), `contains` (substring), `matches` / `pattern` (regex), `unless` (exempts matching lines), `exclude` (exempts whole files), `allow: [{glob, pattern?}]`, `optional`, `once`; diff scope (`"scope": "diff"`, added lines only) reads `ext`, `pattern` (required), `copyPattern`, `allowFiles`, `allowLines`. A key that only the other scope reads is an error.
-  - `require`: `files` (required), `ext` (extensions for directory targets, default `.cs`), `trigger` and `require` (both required), `exclude`, `optional`.
+  - `require`: `files` (required), `ext` (extensions for directory targets, default `.cs`; zero matches under the default filter while the target holds files of other types is a violation, not a silent pass), `trigger` and `require` (both required), `exclude`, `optional`.
   - `absence`: `glob` (required), `unless`. `inventory`: `scan: [{dir, ext?, call?, ignore?, optional?}]` and `baseline` (both required).
   - `env`: `name` (required), `forbiddenValues`. `navProperties`: `dir` (required), `extraTypeNames`, `optional`.
-  - `command`: `run` (required), `cwd`, `env`, `lockPattern`, `lockHint`, `name`, `deps`, `expectExit` (a non-negative integer or an array of them; without it only exit code 0 passes).
+  - `command`: `run` (required; supports the `{old}` / `{new}` placeholders (the two range SHAs) and `{gradlew}` (the Gradle launcher: the wrapper when present, otherwise `gradle`)), `cwd`, `env`, `lockPattern`, `lockHint`, `name`, `deps`, `expectExit` (a non-negative integer or an array of them; without it only exit code 0 passes).
   - `plugin`: `module` (required), `config` (the plugin's own contract, any keys).
 - **Time limits**: top-level `timeoutMs` on the rule (ms). `command` defaults to 10 minutes (same as the legacy commit-check); `null` = no limit (the default for product gates, same as the legacy verify); `plugin` defaults to 10 seconds and only accepts a positive integer. `rules explain <id>` prints it as is (absent = default).
 - **Waivers**: `waivers: [{ rule, glob?, expires, reason }]` — the expiry date and the reason are required (a waiver carries an expiry and an audit trail); an expired waiver stops working and is reported.
-- **Plugins**: `.agents/rules/plugins/<module>.mjs` run as subprocesses (stdin JSON `{version,root,files,face,faces,config}`, stdout JSON `{violations:[{file,line,message}]}`); register them explicitly in `project.json`'s `plugins` array (id/module/face/phase/severity/timeoutMs/config) — directories are never auto-loaded; timeouts/crashes are reported as violations with the registered severity and recorded in `.agents/cache/rules-plugins.json` (doctor warns from it; the entry clears once the same plugin evaluates normally again).
+- **Plugins**: `.agents/rules/plugins/<module>.mjs` run as subprocesses (stdin JSON `{version,root,files,face,faces,config}`, stdout JSON `{violations:[{file,line,message}]}`); register them explicitly in `project.json`'s `plugins` array (id/module/face/phase/severity/timeoutMs/config) — directories are never auto-loaded, and they may only be declared in the project layer (declaring them in a stack or machine-local layer is a config error); timeouts/crashes are reported as violations with the registered severity and recorded in `.agents/cache/rules-plugins.json` (doctor warns from it; the entry clears once the same plugin evaluates normally again).
 - **Legacy configs outside the rule model**: `lane-surfaces.txt`, `workflow-modules.txt` and `test-impact-map.json` are selectors / vocabularies rather than rules; their own scripts keep reading them and `rules validate` does not list them.
 - **Plugin example**:
   ```js

@@ -138,7 +138,9 @@ function parseFlowMapping(text, rel, lineNum) {
     if (colonIdx < 0) failYaml(rel, lineNum, `flow mapping 语法错误: ${pair}`);
     const k = parseYamlScalar(pair.slice(0, colonIdx).trim(), rel, lineNum);
     const v = parseYamlScalar(pair.slice(colonIdx + 1).trim(), rel, lineNum);
-    obj[String(k)] = v;
+    const key = String(k);
+    if (Object.prototype.hasOwnProperty.call(obj, key)) failYaml(rel, lineNum, `重复键「${key}」`);
+    obj[key] = v;
   }
   return obj;
 }
@@ -218,6 +220,7 @@ class YamlLineReader {
   constructor(text, rel) {
     this.rel = rel;
     const rawLines = String(text || '').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+    this.rawLines = rawLines;
     this.lines = [];
     for (let i = 0; i < rawLines.length; i++) {
       const lineNum = i + 1;
@@ -240,24 +243,48 @@ class YamlLineReader {
   }
 }
 
-/** 收集多行字面块（| 或 >） */
-function collectBlockScalar(reader, baseIndent, kind) {
-  const resultLines = [];
+/** 收集多行字面块（| 或 >）：按原始行收集，保留空行与 # 行 */
+function collectBlockScalar(reader, keyLineNum, baseIndent, kind) {
+  const rawLines = reader.rawLines;
+  const content = [];
   let blockIndent = -1;
-  while (reader.peek()) {
-    const next = reader.peek();
-    if (next.indent <= baseIndent) break;
-    if (blockIndent < 0) blockIndent = next.indent;
-    reader.next();
-    // 截取缩进
-    const rawContent = next.raw.slice(blockIndent);
-    resultLines.push(rawContent);
+  let end = keyLineNum; // 已收集原始行的下一个下标（0 基）
+  for (let i = keyLineNum; i < rawLines.length; i++) {
+    const raw = rawLines[i];
+    const blank = raw.trim() === '';
+    if (!blank && !raw.trimStart().startsWith('#') && getIndent(raw) <= baseIndent) break;
+    end = i + 1;
+    if (blank) {
+      content.push('');
+      continue;
+    }
+    const indent = getIndent(raw);
+    if (blockIndent < 0) blockIndent = indent;
+    content.push(raw.slice(Math.min(indent, blockIndent)));
   }
+  // clip：块内容以最后一个非空行结束
+  while (content.length > 0 && content[content.length - 1] === '') content.pop();
+  // 读取器停在块后的第一条逻辑行
+  while (reader.peek() && reader.peek().lineNum - 1 < end) reader.next();
   if (kind === '|') {
-    return resultLines.join('\n');
+    return content.join('\n');
   }
-  // '>' 折叠块标量
-  return resultLines.join(' ');
+  // '>' 折叠块标量：连续非空行折成空格，空行折成换行
+  let folded = '';
+  let pendingBreaks = 0;
+  let started = false;
+  for (const line of content) {
+    if (line === '') {
+      pendingBreaks += 1;
+      continue;
+    }
+    if (started) folded += pendingBreaks > 0 ? '\n'.repeat(pendingBreaks) : ' ';
+    else folded += '\n'.repeat(pendingBreaks);
+    folded += line;
+    started = true;
+    pendingBreaks = 0;
+  }
+  return folded;
 }
 
 /** 解析 YAML 节点（递归块） */
@@ -281,8 +308,8 @@ function parseNode(reader, minIndent) {
   return parseYamlScalar(current.text, reader.rel, current.lineNum);
 }
 
-/** 解析列表 */
-function parseList(reader, listIndent) {
+/** 解析列表；allowSameIndentSibling 用于与父键同缩进的不缩进序列 */
+function parseList(reader, listIndent, allowSameIndentSibling = false) {
   const list = [];
   while (reader.peek()) {
     const line = reader.peek();
@@ -291,6 +318,7 @@ function parseList(reader, listIndent) {
       failYaml(reader.rel, line.lineNum, `意外的缩进: ${line.text}`);
     }
     if (!line.text.startsWith('- ') && line.text !== '-') {
+      if (allowSameIndentSibling) break;
       failYaml(reader.rel, line.lineNum, `列表项格式错误，必须以 '-' 开头: ${line.text}`);
     }
 
@@ -312,18 +340,26 @@ function parseList(reader, listIndent) {
 
       const itemObj = {};
       const childIndent = line.indent + 2;
+      const itemKey = String(key);
+      if (Object.prototype.hasOwnProperty.call(itemObj, itemKey)) {
+        failYaml(reader.rel, line.lineNum, `重复键「${itemKey}」`);
+      }
 
       if (valStr === '|' || valStr === '>') {
-        itemObj[key] = collectBlockScalar(reader, childIndent, valStr);
+        itemObj[itemKey] = collectBlockScalar(reader, line.lineNum, childIndent, valStr);
       } else if (valStr !== '') {
-        itemObj[key] = parseYamlScalar(valStr, reader.rel, line.lineNum);
+        itemObj[itemKey] = parseYamlScalar(valStr, reader.rel, line.lineNum);
       } else {
-        // 紧接着更深缩进的子项
+        // 紧接着更深缩进的子项；与键同缩进的序列视作该键的列表
         const next = reader.peek();
         if (next && next.indent > line.indent) {
-          itemObj[key] = parseNode(reader, next.indent);
+          if (next.indent === childIndent && (next.text.startsWith('- ') || next.text === '-')) {
+            itemObj[itemKey] = parseList(reader, next.indent, true);
+          } else {
+            itemObj[itemKey] = parseNode(reader, next.indent);
+          }
         } else {
-          itemObj[key] = null;
+          itemObj[itemKey] = null;
         }
       }
 
@@ -341,14 +377,19 @@ function parseList(reader, listIndent) {
 
         const propKey = next.text.slice(0, nextColon).trim();
         const propValStr = next.text.slice(nextColon + 1).trim();
+        if (Object.prototype.hasOwnProperty.call(itemObj, propKey)) {
+          failYaml(reader.rel, next.lineNum, `重复键「${propKey}」`);
+        }
 
         if (propValStr === '|' || propValStr === '>') {
-          itemObj[propKey] = collectBlockScalar(reader, next.indent, propValStr);
+          itemObj[propKey] = collectBlockScalar(reader, next.lineNum, next.indent, propValStr);
         } else if (propValStr !== '') {
           itemObj[propKey] = parseYamlScalar(propValStr, reader.rel, next.lineNum);
         } else {
           const sub = reader.peek();
-          if (sub && sub.indent > next.indent) {
+          if (sub && sub.indent === next.indent && (sub.text.startsWith('- ') || sub.text === '-')) {
+            itemObj[propKey] = parseList(reader, sub.indent, true);
+          } else if (sub && sub.indent > next.indent) {
             itemObj[propKey] = parseNode(reader, sub.indent);
           } else {
             itemObj[propKey] = null;
@@ -382,19 +423,25 @@ function parseMapping(reader, mappingIndent) {
 
     reader.next();
     const key = parseYamlScalar(line.text.slice(0, colonIdx).trim(), reader.rel, line.lineNum);
+    const keyStr = String(key);
+    if (Object.prototype.hasOwnProperty.call(map, keyStr)) {
+      failYaml(reader.rel, line.lineNum, `重复键「${keyStr}」`);
+    }
     const valStr = line.text.slice(colonIdx + 1).trim();
 
     if (valStr === '|' || valStr === '>') {
-      map[String(key)] = collectBlockScalar(reader, line.indent, valStr);
+      map[keyStr] = collectBlockScalar(reader, line.lineNum, line.indent, valStr);
     } else if (valStr !== '') {
-      map[String(key)] = parseYamlScalar(valStr, reader.rel, line.lineNum);
+      map[keyStr] = parseYamlScalar(valStr, reader.rel, line.lineNum);
     } else {
-      // 值的缩进在下一行
+      // 值的缩进在下一行；与键同缩进的序列项视作该键的列表
       const next = reader.peek();
-      if (next && next.indent > line.indent) {
-        map[String(key)] = parseNode(reader, next.indent);
+      if (next && next.indent === line.indent && (next.text.startsWith('- ') || next.text === '-')) {
+        map[keyStr] = parseList(reader, line.indent, true);
+      } else if (next && next.indent > line.indent) {
+        map[keyStr] = parseNode(reader, next.indent);
       } else {
-        map[String(key)] = null;
+        map[keyStr] = null;
       }
     }
   }
@@ -429,6 +476,7 @@ function formatScalar(val) {
   // 判断是否需要双引号：
   // 包含特殊符号，或以特定字符开头，或与 true/false/null/数字冲突
   const needsQuotes = /[:#\[\]{},*&?!|>'"%@`\\]/.test(s)
+    || /[\n\r\t]/.test(s)
     || /^\s|\s$/.test(s)
     || /^(true|false|null|~|yes|no|on|off)$/i.test(s)
     || /^-?\d+(\.\d+)?$/.test(s);

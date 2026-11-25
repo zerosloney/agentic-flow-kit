@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseJsonc } from '../rules/jsonc.mjs';
+import { loadModel } from '../rules/load.mjs';
 
 export const GATE_CONFIGS = [
   ['.agents/hooks/architecture-redlines.json', 'architecture-redlines'],
@@ -17,25 +18,48 @@ export const GATE_CONFIGS = [
   ['.agents/config/project-faces.json', 'project-faces'],
 ];
 
+// 规则族门：与 doctor 的 `gate coverage` 完全同口径——只看合并后的规则模型里有没有启用的该前缀规则，
+// 不看物理配置文件（随装带的空清单 commit-check.config.json 不算「已配置」）。
+// 其余两项（test-impact-map / project-faces）是选择器 / 面配置，不是规则族，仍按文件存在性判定。
+export const RULE_FAMILIES = {
+  'architecture-redlines': 'arch.',
+  'delete-guard': 'delete.',
+  'audit-fields': 'audit.',
+  'notify-guard': 'notify.',
+  'commit-check': 'commit.',
+  'product-gates': 'product.',
+  'local-gates': 'local.',
+};
+
 /** 返回 { configured: [id], missing: [id], invalid: [id] }；读取/解析失败按各自类归档。 */
 export function scanGateConfigs(target) {
-  const configured = [];
-  const missing = [];
-  const invalid = [];
+  const states = new Map();
   for (const [rel, id] of GATE_CONFIGS) {
     let text;
     try {
       text = fs.readFileSync(path.join(target, rel), 'utf8');
     } catch {
-      missing.push(id);
+      states.set(id, 'missing');
       continue;
     }
     try {
       parseJsonc(text, rel);
-      configured.push(id);
+      states.set(id, 'configured');
     } catch {
-      invalid.push(id);
+      states.set(id, 'invalid');
     }
   }
-  return { configured, missing, invalid };
+  // 规则族门按规则层重算；解析失败的文件保持 invalid（优先级最高），不参与重算。
+  try {
+    const { model } = loadModel(target);
+    const enabled = model.rules.filter((r) => r.enabled !== false);
+    for (const [id, prefix] of Object.entries(RULE_FAMILIES)) {
+      if (states.get(id) === 'invalid') continue;
+      states.set(id, enabled.some((r) => String(r.id).startsWith(prefix)) ? 'configured' : 'missing');
+    }
+  } catch { /* 规则层自身读不了：保持文件存在性的结果，由 doctor 的 rules 行报告 */ }
+
+  const result = { configured: [], missing: [], invalid: [] };
+  for (const [, id] of GATE_CONFIGS) result[states.get(id)].push(id);
+  return result;
 }

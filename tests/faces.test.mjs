@@ -93,6 +93,7 @@ test('CLI: --check / --check-staged / --face 的退出码与输出', () => {
 
 test('CLI: unconfigured project reports full and exits 0', () => {
   const root = makeTmp('fk-faces-');
+  spawnSync('git', ['init', '-q'], { cwd: root });
   const r = runCli(root, ['--check-staged']);
   assert.equal(r.status, 0);
   assert.match(r.stdout, /^full/);
@@ -101,4 +102,12 @@ test('CLI: unconfigured project reports full and exits 0', () => {
   const err = runCli(bad, ['--check', 'src/a.ts']);
   assert.equal(err.status, 2);
   assert.match(err.stderr, /JSON 解析失败/);
+});
+
+// D17：git 失败不是「未命中」——--check-staged 必须 exit 2，否则 pre-commit 会把配置错误当跳过。
+test('CLI: --check-staged outside a git repo exits 2 with a loud error', () => {
+  const root = makeTmp('fk-faces-nogit-');
+  const r = runCli(root, ['--check-staged']);
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /git diff --cached 失败/);
 });

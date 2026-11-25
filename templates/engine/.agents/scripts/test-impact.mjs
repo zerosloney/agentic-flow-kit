@@ -19,21 +19,25 @@
 
 import {
   MAP_PATH,
+  ROOT,
   changedFilesFromRange,
   formatDecision,
   loadMap,
   normalizePath,
   selectForFiles,
+  selectDynamicTestImpact,
+  formatDynamicDecision,
 } from './test-impact-lib.mjs';
 
 const argv = process.argv.slice(2);
 const json = argv.includes('--json');
+const dynamic = argv.includes('--dynamic');
 const filesArg = [];
 let range = null;
 
 for (let i = 0; i < argv.length; i += 1) {
   const arg = argv[i];
-  if (arg === '--json') continue;
+  if (arg === '--json' || arg === '--dynamic') continue;
   if (arg === '--files') {
     const value = argv[i + 1];
     if (!value) usage('--files 缺少参数');
@@ -54,8 +58,8 @@ for (let i = 0; i < argv.length; i += 1) {
 
 function usage(message) {
   if (message) console.error(`test-impact: ${message}`);
-  console.error('用法：flow-kit run test-impact.mjs --range <old> <new> [--json]');
-  console.error('      flow-kit run test-impact.mjs --files <a,b,c> [--json]');
+  console.error('用法：flow-kit run test-impact.mjs --range <old> <new> [--dynamic] [--json]');
+  console.error('      flow-kit run test-impact.mjs --files <a,b,c> [--dynamic] [--json]');
   process.exit(2);
 }
 
@@ -69,7 +73,26 @@ try {
     files = result.files;
     rangeFailure = result.reason;
   }
-  if (rangeFailure) {
+  if (dynamic) {
+    if (rangeFailure) {
+      decision = {
+        mode: 'full',
+        reason: rangeFailure,
+        impactedTests: [],
+        directImpactedTests: [],
+        transitiveImpactedTests: [],
+        changedFiles: [],
+        unmappedFiles: [],
+        totalKnownTests: 0,
+        skippedTestsCount: 0,
+        accelerationRatio: 0,
+        warnings: [rangeFailure],
+        graphStats: { nodeCount: 0, edgeCount: 0, testCount: 0 },
+      };
+    } else {
+      decision = selectDynamicTestImpact(ROOT, files);
+    }
+  } else if (rangeFailure) {
     decision = {
       mode: 'full',
       reason: rangeFailure,
@@ -92,7 +115,10 @@ try {
 }
 
 if (json) {
-  process.stdout.write(`${JSON.stringify({ map: MAP_PATH, ...decision }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ ...(dynamic ? {} : { map: MAP_PATH }), ...decision }, null, 2)}\n`);
+} else if (dynamic) {
+  console.log('dynamic-test-impact:');
+  console.log(formatDynamicDecision(decision));
 } else {
   console.log('test-impact:');
   console.log(formatDecision(decision));

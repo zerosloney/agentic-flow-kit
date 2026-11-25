@@ -133,7 +133,7 @@ function stagedFiles() {
     encoding: 'utf8',
     shell: false,
   });
-  if (r.status !== 0) return [];
+  if (r.status !== 0) throw new Error(`git diff --cached 失败：${String(r.stderr || '').trim()}`);
   return r.stdout.split('\0').map(norm).filter(Boolean);
 }
 
@@ -165,9 +165,12 @@ if (isCli) {
     console.error('用法：flow-kit run faces.mjs --json | --check <path...> | --check-staged [--keys k,l] | --face <path>');
     process.exit(2);
   }
-  const files = argv.includes('--check-staged')
-    ? stagedFiles()
-    : argv.slice((checkIdx >= 0 ? checkIdx : faceIdx) + 1).map(norm).filter(Boolean);
+  let files;
+  if (argv.includes('--check-staged')) {
+    try { files = stagedFiles(); } catch (e) { console.error(`faces: ${e.message}`); process.exit(2); }
+  } else {
+    files = argv.slice((checkIdx >= 0 ? checkIdx : faceIdx) + 1).map(norm).filter(Boolean);
+  }
   if (faceIdx >= 0) {
     const target = norm(argv[faceIdx + 1]);
     if (!target) {

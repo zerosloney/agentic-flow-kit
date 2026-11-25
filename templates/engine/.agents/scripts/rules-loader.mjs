@@ -5,6 +5,16 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+// 运行时双语助手
+let t = (zh, en) => zh;
+try {
+  const langMod = await import('./lang.mjs');
+  if (typeof langMod?.t === 'function') t = langMod.t;
+} catch {
+  // lang.mjs 缺失时平滑降级为 zh
+}
 
 export const PROJECT_RULE_FILES = [
   'flow-rules.yml',
@@ -92,7 +102,7 @@ function findColon(str) {
   return -1;
 }
 
-function parseFlowSeq(text) {
+function parseFlowSeq(text, lineNum) {
   const content = text.slice(1, -1).trim();
   if (!content) return [];
   const items = [];
@@ -120,23 +130,73 @@ function parseFlowSeq(text) {
     if (ch === '"') { inDouble = true; current += ch; continue; }
     if (ch === "'") { inSingle = true; current += ch; continue; }
     if (ch === ',') {
-      items.push(parseScalar(current.trim()));
+      items.push(parseScalar(current.trim(), lineNum));
       current = '';
       continue;
     }
     current += ch;
   }
-  if (current.trim()) items.push(parseScalar(current.trim()));
+  if (current.trim()) items.push(parseScalar(current.trim(), lineNum));
   return items;
 }
 
-function parseScalar(val) {
+function parseFlowMapping(text, lineNum) {
+  const content = text.slice(1, -1).trim();
+  if (!content) return {};
+  const obj = {};
+  let current = '';
+  let inDouble = false;
+  let inSingle = false;
+  let escape = false;
+  const pairs = [];
+  for (let i = 0; i < content.length; i++) {
+    const ch = content[i];
+    if (inDouble) {
+      current += ch;
+      if (escape) escape = false;
+      else if (ch === '\\') escape = true;
+      else if (ch === '"') inDouble = false;
+      continue;
+    }
+    if (inSingle) {
+      current += ch;
+      if (ch === "'") {
+        if (content[i + 1] === "'") { current += "'"; i += 1; }
+        else inSingle = false;
+      }
+      continue;
+    }
+    if (ch === '"') { inDouble = true; current += ch; continue; }
+    if (ch === "'") { inSingle = true; current += ch; continue; }
+    if (ch === ',') {
+      pairs.push(current.trim());
+      current = '';
+      continue;
+    }
+    current += ch;
+  }
+  if (current.trim()) pairs.push(current.trim());
+
+  for (const pair of pairs) {
+    const colonIdx = findColon(pair);
+    if (colonIdx < 0) throw new Error(`第 ${lineNum} 行 flow mapping 语法错误：${pair}`);
+    const k = parseScalar(pair.slice(0, colonIdx).trim(), lineNum);
+    const v = parseScalar(pair.slice(colonIdx + 1).trim(), lineNum);
+    const key = String(k);
+    if (Object.prototype.hasOwnProperty.call(obj, key)) throw new Error(`第 ${lineNum} 行重复键「${key}」`);
+    obj[key] = v;
+  }
+  return obj;
+}
+
+function parseScalar(val, lineNum) {
   if (val === '' || val === undefined) return null;
   const s = val.trim();
   if (s === '~' || s === 'null' || s === 'Null' || s === 'NULL') return null;
-  if (s === 'true' || s === 'True' || s === 'TRUE' || s === 'yes' || s === 'Yes' || s === 'on') return true;
-  if (s === 'false' || s === 'False' || s === 'FALSE' || s === 'no' || s === 'No' || s === 'off') return false;
-  if (s.startsWith('[') && s.endsWith(']')) return parseFlowSeq(s);
+  if (s === 'true' || s === 'True' || s === 'TRUE' || s === 'yes' || s === 'Yes' || s === 'YES' || s === 'on' || s === 'On') return true;
+  if (s === 'false' || s === 'False' || s === 'FALSE' || s === 'no' || s === 'No' || s === 'NO' || s === 'off' || s === 'Off') return false;
+  if (s.startsWith('[') && s.endsWith(']')) return parseFlowSeq(s, lineNum);
+  if (s.startsWith('{') && s.endsWith('}')) return parseFlowMapping(s, lineNum);
   if (s.startsWith('"') && s.endsWith('"') && s.length >= 2) {
     try { return JSON.parse(s); } catch { return s.slice(1, -1).replace(/\\"/g, '"'); }
   }
@@ -151,6 +211,7 @@ function parseScalar(val) {
 class FastYamlReader {
   constructor(text) {
     const rawLines = String(text || '').replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+    this.rawLines = rawLines;
     this.lines = [];
     for (let i = 0; i < rawLines.length; i++) {
       const raw = rawLines[i];
@@ -163,6 +224,48 @@ class FastYamlReader {
   }
   peek() { return this.lines[this.pos] || null; }
   next() { return this.lines[this.pos++] || null; }
+}
+
+/** 收集多行块（| 或 >）：按原始行收集，保留空行与 # 行 */
+function collectBlockScalarSimple(reader, keyLineNum, baseIndent, kind) {
+  const rawLines = reader.rawLines;
+  const content = [];
+  let blockIndent = -1;
+  let end = keyLineNum;
+  for (let i = keyLineNum; i < rawLines.length; i++) {
+    const raw = rawLines[i];
+    const blank = raw.trim() === '';
+    if (!blank && !raw.trimStart().startsWith('#') && getIndent(raw) <= baseIndent) break;
+    end = i + 1;
+    if (blank) {
+      content.push('');
+      continue;
+    }
+    const indent = getIndent(raw);
+    if (blockIndent < 0) blockIndent = indent;
+    content.push(raw.slice(Math.min(indent, blockIndent)));
+  }
+  // clip：块内容以最后一个非空行结束
+  while (content.length > 0 && content[content.length - 1] === '') content.pop();
+  // 读取器停在块后的第一条逻辑行
+  while (reader.peek() && reader.peek().lineNum - 1 < end) reader.next();
+  if (kind === '|') return content.join('\n');
+  // '>' 折叠块标量：连续非空行折成空格，空行折成换行
+  let folded = '';
+  let pendingBreaks = 0;
+  let started = false;
+  for (const line of content) {
+    if (line === '') {
+      pendingBreaks += 1;
+      continue;
+    }
+    if (started) folded += pendingBreaks > 0 ? '\n'.repeat(pendingBreaks) : ' ';
+    else folded += '\n'.repeat(pendingBreaks);
+    folded += line;
+    started = true;
+    pendingBreaks = 0;
+  }
+  return folded;
 }
 
 function parseBlock(reader, expectedIndent) {
@@ -188,29 +291,48 @@ function parseBlock(reader, expectedIndent) {
       } else {
         const colonIdx = findColon(rest);
         if (colonIdx > 0) {
-          const k = parseScalar(rest.slice(0, colonIdx).trim());
+          const k = parseScalar(rest.slice(0, colonIdx).trim(), cur.lineNum);
           const vStr = rest.slice(colonIdx + 1).trim();
           const itemObj = {};
-          if (vStr) {
-            itemObj[String(k)] = parseScalar(vStr);
+          const itemKey = String(k);
+          if (vStr === '|' || vStr === '>') {
+            itemObj[itemKey] = collectBlockScalarSimple(reader, cur.lineNum, cur.indent + 2, vStr);
+          } else if (vStr) {
+            itemObj[itemKey] = parseScalar(vStr, cur.lineNum);
           } else {
             const nested = parseBlock(reader, cur.indent + 2);
-            itemObj[String(k)] = nested;
+            itemObj[itemKey] = nested;
           }
           while (reader.peek() && reader.peek().indent > actualIndent && !reader.peek().text.startsWith('-')) {
             const sibling = reader.peek();
             const sColon = findColon(sibling.text);
             if (sColon > 0) {
               reader.next();
-              const sk = parseScalar(sibling.text.slice(0, sColon).trim());
+              const sk = parseScalar(sibling.text.slice(0, sColon).trim(), sibling.lineNum);
+              const skey = String(sk);
+              if (Object.prototype.hasOwnProperty.call(itemObj, skey)) {
+                throw new Error(`第 ${sibling.lineNum} 行重复键「${skey}」`);
+              }
               const sv = sibling.text.slice(sColon + 1).trim();
-              if (sv) itemObj[String(sk)] = parseScalar(sv);
-              else itemObj[String(sk)] = parseBlock(reader, sibling.indent + 1);
-            } else break;
+              if (sv === '|' || sv === '>') {
+                itemObj[skey] = collectBlockScalarSimple(reader, sibling.lineNum, sibling.indent, sv);
+              } else if (sv) itemObj[skey] = parseScalar(sv, sibling.lineNum);
+              else {
+                // 与键同缩进的序列项视作该键的列表
+                const subNext = reader.peek();
+                if (subNext && subNext.indent === sibling.indent && (subNext.text.startsWith('- ') || subNext.text === '-')) {
+                  itemObj[skey] = parseBlock(reader, sibling.indent);
+                } else {
+                  itemObj[skey] = parseBlock(reader, sibling.indent + 1);
+                }
+              }
+            } else {
+              throw new Error(`第 ${sibling.lineNum} 行语法错误：缺少键值分隔冒号 "${sibling.text}"`);
+            }
           }
           list.push(itemObj);
         } else {
-          list.push(parseScalar(rest));
+          list.push(parseScalar(rest, cur.lineNum));
         }
       }
     }
@@ -225,26 +347,30 @@ function parseBlock(reader, expectedIndent) {
       throw new Error(`第 ${cur.lineNum} 行缩进错误`);
     }
     const colonIdx = findColon(cur.text);
-    if (colonIdx <= 0) break;
+    if (colonIdx <= 0) {
+      throw new Error(`第 ${cur.lineNum} 行语法错误：缺少键值分隔冒号 "${cur.text}"`);
+    }
     reader.next();
-    const key = parseScalar(cur.text.slice(0, colonIdx).trim());
+    const key = parseScalar(cur.text.slice(0, colonIdx).trim(), cur.lineNum);
+    const keyStr = String(key);
+    if (Object.prototype.hasOwnProperty.call(obj, keyStr)) {
+      throw new Error(`第 ${cur.lineNum} 行重复键「${keyStr}」`);
+    }
     const valStr = cur.text.slice(colonIdx + 1).trim();
     if (valStr === '|' || valStr === '>') {
-      const blockLines = [];
-      let bIndent = -1;
-      while (reader.peek()) {
-        const nextL = reader.peek();
-        if (nextL.indent <= cur.indent) break;
-        if (bIndent < 0) bIndent = nextL.indent;
-        reader.next();
-        blockLines.push(nextL.raw.slice(bIndent));
-      }
-      obj[String(key)] = valStr === '|' ? blockLines.join('\n') : blockLines.join(' ');
+      obj[keyStr] = collectBlockScalarSimple(reader, cur.lineNum, cur.indent, valStr);
     } else if (valStr) {
-      obj[String(key)] = parseScalar(valStr);
+      obj[keyStr] = parseScalar(valStr, cur.lineNum);
     } else {
-      const child = parseBlock(reader, cur.indent + 1);
-      obj[String(key)] = child;
+      // 与键同缩进的序列项视作该键的列表
+      const nextL = reader.peek();
+      let child;
+      if (nextL && nextL.indent === cur.indent && (nextL.text.startsWith('- ') || nextL.text === '-')) {
+        child = parseBlock(reader, cur.indent);
+      } else {
+        child = parseBlock(reader, cur.indent + 1);
+      }
+      obj[keyStr] = child;
     }
   }
   return obj;
@@ -275,10 +401,60 @@ export function findStackRulesFiles(root) {
   }
 }
 
+// ── 轻量 JSONC 注释剥离 ──────────────────────────────────────────────────
+export function stripJsonc(text) {
+  const src = String(text || '').replace(/^\uFEFF/, '');
+  let out = '';
+  let i = 0;
+  let inString = false;
+  let escape = false;
+  while (i < src.length) {
+    const ch = src[i];
+    if (inString) {
+      out += ch;
+      if (escape) escape = false;
+      else if (ch === '\\') escape = true;
+      else if (ch === '"') inString = false;
+      i += 1;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      out += ch;
+      i += 1;
+      continue;
+    }
+    if (ch === '/' && src[i + 1] === '/') {
+      while (i < src.length && src[i] !== '\n') i += 1;
+      continue;
+    }
+    if (ch === '/' && src[i + 1] === '*') {
+      i += 2;
+      while (i < src.length && !(src[i] === '*' && src[i + 1] === '/')) i += 1;
+      i += 2;
+      continue;
+    }
+    if (ch === ',') {
+      let j = i + 1;
+      while (j < src.length && /\s/.test(src[j])) j += 1;
+      if (src[j] === '}' || src[j] === ']') {
+        i += 1;
+        continue;
+      }
+      out += ch;
+      i += 1;
+      continue;
+    }
+    out += ch;
+    i += 1;
+  }
+  return out;
+}
+
 function parseRulesFileData(abs) {
   const text = fs.readFileSync(abs, 'utf8');
   if (abs.endsWith('.json')) {
-    return JSON.parse(text);
+    return JSON.parse(stripJsonc(text));
   }
   return parseYamlSimple(text);
 }
@@ -307,8 +483,8 @@ export function loadProjectRules(root) {
       if (data && Array.isArray(data.rules)) {
         stackRules.push(...data.rules);
       }
-    } catch {
-      // 容错异常的栈规则文件
+    } catch (err) {
+      console.error(`[rules-loader] ${t('警告：无法加载栈规则文件', 'warning: failed to load stack rule file')} ${sRel} (${err.message})`);
     }
   }
 
@@ -364,14 +540,14 @@ export function extractVerifyCommandGates(projectRules, root) {
 
     const rawId = String(rule.id || '').trim();
     if (!rawId) {
-      console.warn('rules-loader: 规则缺少必填 id，已跳过命令门映射');
+      console.warn(`rules-loader: ${t('规则缺少必填 id，已跳过命令门映射', 'rule missing required id, skipping command gate mapping', root)}`);
       continue;
     }
 
     // 门 id 映射：如果是 product.<name>，短 id 映射为 <name>；否则取 rawId
     const gateId = rawId.startsWith('product.') ? rawId.slice(8) : rawId;
     if (seenIds.has(gateId)) {
-      console.warn(`rules-loader: 命令门 id「${gateId}」重复，已忽略后续同名规则`);
+      console.warn(`rules-loader: ${t(`命令门 id「${gateId}」重复，已忽略后续同名规则`, `duplicate command gate id "${gateId}", ignoring subsequent duplicate`, root)}`);
       continue;
     }
     seenIds.add(gateId);

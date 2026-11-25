@@ -371,3 +371,66 @@ rules:
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
+
+test('rules-loader: supports JSONC in project.json without crashing faces.mjs', async () => {
+  const { loadProjectRules } = await import(scriptUrl('rules-loader.mjs'));
+  const { loadFaces } = await import(scriptUrl('faces.mjs'));
+
+  const tmp = makeTmpDir('rules-jsonc-');
+  try {
+    const rulesDir = path.join(tmp, '.agents', 'rules');
+    fs.mkdirSync(rulesDir, { recursive: true });
+
+    // 模拟 rules init 生成的带 // 注释的 project.json
+    const jsoncContent = `// 由 flow-kit rules init 生成
+// 第二行注释
+{
+  /* 块级注释 */
+  "version": 1,
+  "faces": {
+    "code": ["src/**"],
+    "ui": ["web/**"]
+  },
+  "rules": [
+    {
+      "id": "product.custom-test",
+      "name": "Custom Test",
+      "phase": "verify",
+      "assert": { "kind": "command", "args": { "run": "npm test" } }
+    }
+  ],
+  "waivers": []
+}
+`;
+    fs.writeFileSync(path.join(rulesDir, 'project.json'), jsoncContent, 'utf8');
+
+    const loaded = loadProjectRules(tmp);
+    assert.ok(loaded);
+    assert.equal(loaded.version, 1);
+    assert.equal(loaded.rules.length, 1);
+    assert.equal(loaded.rules[0].id, 'product.custom-test');
+
+    const faces = loadFaces(tmp);
+    assert.equal(faces.configured, true);
+    assert.deepEqual(faces.code, ['src/**']);
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+test('rules-loader: parseYamlSimple fails fast on lines missing colon instead of silent truncation', async () => {
+  const { parseYamlSimple } = await import(scriptUrl('rules-loader.mjs'));
+
+  const badYaml = `
+version: 1
+rules:
+  - id: product.rule-one
+    name: First
+  corrupted_line_without_colon
+  - id: product.rule-two
+    name: Second
+`;
+  assert.throws(() => {
+    parseYamlSimple(badYaml);
+  }, /(?:语法错误|缩进错误)/);
+});

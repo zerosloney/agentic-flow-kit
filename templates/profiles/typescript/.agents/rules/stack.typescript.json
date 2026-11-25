@@ -23,7 +23,7 @@
       "message": { "zh": "代码规范检查未通过", "en": "Lint checks failed" }
     },
     {
-      "id": "product.ts-test",
+      "id": "product.node-test",
       "name": "单元测试",
       "phase": "verify",
       "face": "tests",

@@ -20,6 +20,19 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import {
+  selectDynamicTestImpact,
+  computeTestImpact,
+  buildDependencyGraph,
+  formatDynamicDecision,
+} from './dynamic-test-impact.mjs';
+
+export {
+  selectDynamicTestImpact,
+  computeTestImpact,
+  buildDependencyGraph,
+  formatDynamicDecision,
+};
 
 export const ROOT = process.env.FLOW_KIT_PROJECT_ROOT
   || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -600,3 +613,4 @@ export function formatDecision(decision) {
   for (const w of decision.warnings) lines.push(`warn: ${w}`);
   return lines.join('\n');
 }
+

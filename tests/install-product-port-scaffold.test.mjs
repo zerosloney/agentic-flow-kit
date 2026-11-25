@@ -145,7 +145,7 @@ test('monorepo product renders into AGENTS.md and is recorded in manifest + engi
   assert.equal(manifest(zh).product, 'monorepo');
 });
 
-test('profiler automatically detects product mode on install when --product omitted', () => {
+test('product-detect automatically detects product mode on install when --product omitted', () => {
   const monoDir = tmpRepo();
   fs.writeFileSync(path.join(monoDir, 'pnpm-workspace.yaml'), 'packages:\n  - "packages/*"\n');
   assert.equal(run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.'], monoDir).status, 0);
@@ -155,5 +155,31 @@ test('profiler automatically detects product mode on install when --product omit
   fs.writeFileSync(path.join(cliDir, 'package.json'), JSON.stringify({ name: 'my-cli', bin: './cli.mjs' }));
   assert.equal(run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.'], cliDir).status, 0);
   assert.equal(manifest(cliDir).product, 'cli');
+});
+
+test('auto-detected product mode is announced unless --product is explicit', () => {
+  const detectDir = tmpRepo();
+  fs.writeFileSync(path.join(detectDir, 'package.json'), JSON.stringify({ name: 'web-app', dependencies: { react: '^18.0.0' } }));
+  const auto = run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.'], detectDir);
+  assert.equal(auto.status, 0, auto.stderr);
+  assert.match(auto.stdout, /产品形态：web（自动探测，依据：/);
+  assert.equal(manifest(detectDir).product, 'web');
+
+  const explicitDir = tmpRepo();
+  fs.writeFileSync(path.join(explicitDir, 'package.json'), JSON.stringify({ name: 'web-app', dependencies: { react: '^18.0.0' } }));
+  const forced = run(['install', '--agent', 'claude', '--stack', 'node', '--product', 'api', '--target', '.'], explicitDir);
+  assert.equal(forced.status, 0, forced.stderr);
+  assert.doesNotMatch(forced.stdout, /自动探测/);
+  assert.equal(manifest(explicitDir).product, 'api');
+
+  // 空项目探测不到任何特征：回退缺省 web 也必须出声；之后升级走清单重放，不再探测。
+  const emptyDir = tmpRepo();
+  const fallback = run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.'], emptyDir);
+  assert.equal(fallback.status, 0, fallback.stderr);
+  assert.match(fallback.stdout, /产品形态：web（自动探测无结果，回退缺省/);
+  assert.equal(manifest(emptyDir).product, 'web');
+  const upgrade = run(['upgrade', '--target', '.'], emptyDir);
+  assert.equal(upgrade.status, 0, upgrade.stderr);
+  assert.doesNotMatch(upgrade.stdout, /自动探测/);
 });
 

@@ -12,6 +12,7 @@ import { checkDevcontainer } from '../install/devcontainer.mjs';
 import { findHookDrift, inapplicableForUserHooks, inapplicableSpecs } from '../install/hooks.mjs';
 import { inspectUserHookEntry } from '../install/user-hooks.mjs';
 import { listBaselines } from '../install/baseline.mjs';
+import { RULE_FAMILIES } from '../install/gate-summary.mjs';
 import { buildAttestation, writeAttestation } from '../install/attest.mjs';
 import { compilePermissions, permissionDrift } from '../install/permissions.mjs';
 import { ROLE_NAMES, readInjectedModels, readLocalModelRoles } from '../models/resolve.mjs';
@@ -518,7 +519,17 @@ export function doctorCommand({ args, t }) {
         .sort();
     } catch { /* 未配置 */ }
     if (!files.length) {
-      reportGate('product-gates', 'skip');
+      // 规则中心单源感知：物理配置不存在时，若规则层（stack 或 project）已配置生效的 product.* 命令规则，则视作已配置
+      let hasProductRule = false;
+      try {
+        const { model } = loadModel(target);
+        hasProductRule = model.rules.some((r) => r.enabled !== false && String(r.id).startsWith('product.'));
+      } catch {}
+      if (hasProductRule) {
+        reportGate('product-gates', 'ok');
+      } else {
+        reportGate('product-gates', 'skip');
+      }
     } else {
       let verdict = {};
       for (const f of files) {
@@ -586,19 +597,10 @@ export function doctorCommand({ args, t }) {
     }
 
     // 门禁覆盖率（gate coverage，advisory）：按规则 id 前缀归族，只统计生效规则——配了才算覆盖。
-    const GATE_FAMILIES = [
-      ['architecture-redlines', 'arch.'],
-      ['delete-guard', 'delete.'],
-      ['audit-fields', 'audit.'],
-      ['notify-guard', 'notify.'],
-      ['commit-check', 'commit.'],
-      ['product-gates', 'product.'],
-      ['local-gates', 'local.'],
-    ];
     if (!enabledRules.length) {
       add(true, 'gate coverage', t('doctor.gateCoverageEmpty'), '', { warn: true });
     } else {
-      const counts = GATE_FAMILIES.map(([name, prefix]) => ({
+      const counts = Object.entries(RULE_FAMILIES).map(([name, prefix]) => ({
         name,
         count: enabledRules.filter((r) => String(r.id).startsWith(prefix)).length,
       }));

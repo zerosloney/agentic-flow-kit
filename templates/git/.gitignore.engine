@@ -5,9 +5,14 @@ tmp/
 .agents/tools/
 .agents/verifications.jsonl
 .agents/judgments.jsonl
+.agents/endorsements.d/
+.agents/endorsements.jsonl
 .agents/usage.jsonl
 .agents/arena/
+.agents/traces/
+.agents/prescriptions.jsonl
 .agents/notes/runtime-env.local.md
+.agents/notes/prescriptions.json
 .agents/config/model-roles.local.json
 .agents/rules/local.json
 .agents/rules/local.yml

@@ -150,3 +150,36 @@ test('rules export - cli main end-to-end', async () => {
     assert.deepEqual(loaded.model.faces.code, ['src']);
   });
 });
+
+test('rules export - multiline message survives YAML round-trip', () => {
+  withTempDir((root) => {
+    fs.mkdirSync(path.join(root, '.agents', 'rules'), { recursive: true });
+    fs.writeFileSync(path.join(root, '.agents', 'rules', 'project.json'), JSON.stringify({
+      version: 1,
+      rules: [{
+        id: 'msg.multiline',
+        face: 'code',
+        phase: 'pre-commit',
+        severity: 'block',
+        assert: { kind: 'content', args: { targets: ['src/**'], contains: ['X'] } },
+        message: { zh: '第一行\n第二行', en: 'first line\nsecond line' },
+      }],
+    }), 'utf8');
+
+    const code = rulesCommand({
+      args: { _: ['rules', 'export'], target: root, flags: new Set() },
+      t: makeT('zh-CN'),
+      lang: 'zh-CN',
+    });
+    assert.equal(code, 0);
+
+    const content = fs.readFileSync(path.join(root, 'flow-rules.yml'), 'utf8');
+    assert.match(content, /zh: "第一行\\n第二行"/, 'message 标量须以双引号转义换行写出');
+
+    const loaded = loadModel(root);
+    const rule = loaded.model.rules.find((r) => r.id === 'msg.multiline');
+    assert.ok(rule, '导出的规则应能被 loadModel 读回');
+    assert.equal(rule.message.zh, '第一行\n第二行');
+    assert.equal(rule.message.en, 'first line\nsecond line');
+  });
+});

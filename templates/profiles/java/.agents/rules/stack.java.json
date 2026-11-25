@@ -3,7 +3,7 @@
   "version": 1,
   "rules": [
     {
-      "id": "product.java-test",
+      "id": "product.maven-test",
       "name": "Java 测试",
       "phase": "verify",
       "face": "tests",
@@ -11,6 +11,16 @@
       "when": ["pom.xml"],
       "assert": { "kind": "command", "args": { "run": "mvn test" } },
       "message": { "zh": "mvn test 测试未通过", "en": "mvn test failed" }
+    },
+    {
+      "id": "product.gradle-test",
+      "name": "Gradle 测试",
+      "phase": "verify",
+      "face": "tests",
+      "severity": "block",
+      "when": ["build.gradle", "build.gradle.kts"],
+      "assert": { "kind": "command", "args": { "run": "{gradlew} test" } },
+      "message": { "zh": "gradle test 测试未通过", "en": "gradle test failed" }
     }
   ],
   "waivers": []

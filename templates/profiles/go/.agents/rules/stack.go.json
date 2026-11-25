@@ -21,6 +21,16 @@
       "when": ["go.mod"],
       "assert": { "kind": "command", "args": { "run": "go vet ./..." } },
       "message": { "zh": "go vet 检查未通过", "en": "go vet failed" }
+    },
+    {
+      "id": "product.go-build",
+      "name": "Go 编译构建",
+      "phase": "verify",
+      "face": "code",
+      "severity": "block",
+      "when": ["go.mod"],
+      "assert": { "kind": "command", "args": { "run": "go build ./..." } },
+      "message": { "zh": "go build 构建未通过", "en": "go build failed" }
     }
   ],
   "waivers": []

@@ -173,3 +173,104 @@ test('plugin config is folded into assert.args.config of the explain output', ()
   assert.equal(parsed.assert.args.module, 'cfg-mod');
   assert.deepEqual(parsed.assert.args.config, { threshold: 3, tags: ['a'] });
 });
+
+test('plugins in a stack layer is a config error naming the layer (exit 2)', () => {
+  const dir = fixture();
+  write(dir, '.agents/rules/stack.node.json', json({
+    version: 1,
+    plugins: [{ id: 'stack.no-todo', module: 'no-todo', face: 'code', phase: 'pre-commit' }],
+  }));
+
+  const r = rules(dir, 'validate');
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /plugins 只能在项目层声明/);
+  assert.match(r.stderr, /stack\.node/);
+});
+
+test('plugins in the local layer is a config error naming the layer (exit 2)', () => {
+  const dir = fixture();
+  write(dir, '.agents/rules/local.json', json({
+    version: 1,
+    plugins: [{ id: 'local.no-todo', module: 'no-todo', face: 'code', phase: 'pre-commit' }],
+  }));
+
+  const r = rules(dir, 'validate');
+  assert.equal(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stderr, /plugins 只能在项目层声明/);
+  assert.match(r.stderr, /当前层为 local/);
+});
+
+test('explain lists the merge chain in stacking order (two layers)', () => {
+  const dir = fixture();
+  write(dir, '.agents/rules/stack.node.json', json({ version: 1, rules: [rule('chain.same', { severity: 'warn' })] }));
+  write(dir, '.agents/rules/project.json', json({ version: 1, rules: [rule('chain.same')] }));
+
+  const r = rules(dir, 'explain', 'chain.same');
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const parsed = JSON.parse(r.stdout);
+  assert.deepEqual(parsed.layers, [
+    { layer: 'stack.node', face: 'any', phase: 'pre-commit', severity: 'warn', enabled: true },
+    { layer: 'project', face: 'any', phase: 'pre-commit', severity: 'block', enabled: true },
+  ]);
+  assert.equal(parsed.source, 'project');
+});
+
+test('explain lists a disabled-only entry with null face/phase/severity', () => {
+  const dir = fixture();
+  write(dir, '.agents/rules/project.json', json({ version: 1, rules: [rule('chain.off')] }));
+  write(dir, '.agents/rules/local.json', json({ version: 1, rules: [{ id: 'chain.off', enabled: false }] }));
+
+  const r = rules(dir, 'explain', 'chain.off');
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const parsed = JSON.parse(r.stdout);
+  assert.deepEqual(parsed.layers, [
+    { layer: 'project', face: 'any', phase: 'pre-commit', severity: 'block', enabled: true },
+    { layer: 'local', face: null, phase: null, severity: null, enabled: false },
+  ]);
+  assert.equal(parsed.reason.enabled, false);
+});
+
+test('explain reports per-predicate when satisfaction', () => {
+  const dir = fixture();
+  write(dir, 'package.json', json({ name: 'when-fixture', scripts: { test: 'node --test' } }));
+  write(dir, '.agents/rules/project.json', json({
+    version: 1,
+    rules: [rule('why.when', { when: ['pkg:scripts.test', 'env:FLOW_KIT_EXPLAIN_TEST_XYZ=1'] })],
+  }));
+
+  const r = rules(dir, 'explain', 'why.when');
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const parsed = JSON.parse(r.stdout);
+  assert.deepEqual(parsed.reason.when, [
+    { predicate: 'pkg:scripts.test', satisfied: true },
+    { predicate: 'env:FLOW_KIT_EXPLAIN_TEST_XYZ=1', satisfied: false },
+  ]);
+});
+
+test('explain reports whenEnv satisfied / unsatisfied / invalid', () => {
+  const dir = fixture();
+  write(dir, '.agents/rules/project.json', json({
+    version: 1,
+    rules: [
+      rule('env.ok', { whenEnv: 'FLOW_KIT_EXPLAIN_ENV=on' }),
+      rule('env.miss', { whenEnv: 'FLOW_KIT_EXPLAIN_ENV=off' }),
+      rule('env.bad', { whenEnv: 'NOEQUALS' }),
+    ],
+  }));
+  const explainEnv = (id) => spawnSync(process.execPath, [BIN, 'rules', 'explain', id, '--lang', 'zh-CN', '--target', dir], {
+    encoding: 'utf8',
+    env: { ...process.env, FLOW_KIT_EXPLAIN_ENV: 'on' },
+  });
+
+  const ok = explainEnv('env.ok');
+  assert.equal(ok.status, 0, ok.stdout + ok.stderr);
+  assert.deepEqual(JSON.parse(ok.stdout).reason.whenEnv, { value: 'FLOW_KIT_EXPLAIN_ENV=on', satisfied: true, invalid: false });
+
+  const miss = explainEnv('env.miss');
+  assert.equal(miss.status, 0, miss.stdout + miss.stderr);
+  assert.deepEqual(JSON.parse(miss.stdout).reason.whenEnv, { value: 'FLOW_KIT_EXPLAIN_ENV=off', satisfied: false, invalid: false });
+
+  const bad = explainEnv('env.bad');
+  assert.equal(bad.status, 0, bad.stdout + bad.stderr);
+  assert.deepEqual(JSON.parse(bad.stdout).reason.whenEnv, { value: 'NOEQUALS', satisfied: false, invalid: true });
+});

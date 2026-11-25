@@ -11,11 +11,9 @@ import { buildState } from './diff.mjs';
 import { readKitVersion, resolveHosts, resolveStack, resolveTarget, validateStacks } from './install.mjs';
 
 const MERGE_KINDS = new Set(['merge-gitattributes', 'merge-gitignore']);
-// 生成脚本会按磁盘现状重写 workflow/INDEX.md，静态模板不可作为预期值；
-// 接管时按现状收录并登记为 derived（与 install 的 manifest.derived 语义一致）。
-const DERIVED_RELS = new Set(['workflow/INDEX.md']);
-// 纯生成产物（不在静态计划里，也不进 manifest）在未识别报告中静默跳过。
-const GENERATED_ONLY = new Set(['.agents/notes/engine-map.md']);
+// 生成脚本会按磁盘现状重写这三份派生工件（索引/生效策略/引擎地图），
+// 静态模板不可作为预期值；接管时按现状收录并登记为 derived（与 install 的 manifest.derived 语义一致）。
+const DERIVED_RELS = new Set(['workflow/INDEX.md', 'workflow/effective-policy.md', '.agents/notes/engine-map.md']);
 const norm = (text) => text.replace(/\r\n/g, '\n');
 
 function readEngineInfo(target) {
@@ -150,7 +148,6 @@ function scan({ target, plan, vars, hosts, existing }) {
     for (const rel of listFiles(path.join(target, root))) {
       const targetRel = `${root}/${rel}`;
       if (targetRel === MANIFEST_REL || planned.has(targetRel) || rel.endsWith('.gitkeep')) continue;
-      if (GENERATED_ONLY.has(targetRel)) continue;
       if (RUNTIME_FILES.has(targetRel)) continue;
       if (targetRel.startsWith('.agents/.kit/')) continue; // 升级基线不属于安装面
       if ([...RUNTIME_DIRS].some((dir) => targetRel.startsWith(`${dir}/`))) continue;

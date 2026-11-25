@@ -22,6 +22,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { isCi } from './ci-provider.mjs';
 let detectStackFromRules = () => [];
 try {
   const mod = await import('./rules-loader.mjs');
@@ -37,8 +38,7 @@ let root = process.cwd();
   if (i >= 0 && process.argv[i + 1]) root = path.resolve(process.argv[i + 1]);
 }
 
-const isCi = !!(process.env.CI || process.env.TF_BUILD || process.env.GITHUB_ACTIONS || process.env.GITLAB_CI || process.env.CONTINUOUS_INTEGRATION);
-if (isCi) {
+if (isCi()) {
   console.log('[local-gate-config] ⏭️ CI 环境——CI checkout 不挂本地钩子属常态，跳过（本地缺配由各机 verify 跑出）');
   process.exit(0);
 }

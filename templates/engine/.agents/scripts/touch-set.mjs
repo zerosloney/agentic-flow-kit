@@ -78,6 +78,17 @@ export function isHeterogeneousModel(modelA, modelB) {
   return famA !== famB;
 }
 
+export const NEGATIVE_CONCLUSION_RE = /(?:未|不|未能|不予|无法|暂不|尚不)通过|驳回|未批准|拒绝|不认可|否决|退回|不同意|disapproved?|fail(?:ed)?|reject(?:ed)?|nack|not\s+(?:approved?|ok|lgtm|pass(?:ed)?)/i;
+
+export function isApprovedConclusion(conclusion) {
+  const c = String(conclusion || '').trim();
+  if (!c) return false;
+  if (NEGATIVE_CONCLUSION_RE.test(c)) {
+    return false;
+  }
+  return /(?:通过|已通过|approved?|lgtm|ok|pass(?:ed)?)/i.test(c);
+}
+
 export function parseReviewMetadata(text) {
   const str = String(text || '');
   const id = externalReviewId(str);
@@ -90,30 +101,30 @@ export function parseReviewMetadata(text) {
 
   let isDowngraded = false;
   let downgradeReason = '';
-  // 审查遗留批 2026-11-23：降级判定收窄——复合标记（跨模型降级/跨模型不可得/自适应降级）仍按子串识别
-  //（可出现在结论文行内）；裸词（评审降级/降级/downgrade/fallback）仅认行首键值式显式声明行。
-  // 此前正文 prose 提及裸词即误判，spec-review/review 每次通过都重发 review-downgrade 事件，看板恒挂黄标。
+  // 审查严格收窄：降级判定仅认行首或括号内的键值式显式声明，严禁正文全文子串无冒号误命中
   const dgMatch =
-    str.match(/(?:跨模型降级|跨模型不可得|自适应降级)[:：\s]+([^\r\n；;。]+)/i) ||
-    str.match(/(?:^|\r?\n)[ \t]*(?:[-*+]\s+|>)?\s*(?:评审降级|降级|downgrade|fallback)[ \t]*[:：=][ \t]*([^\r\n；;。]+)/i);
+    str.match(/(?:^|\r?\n)[ \t]*(?:[-*+]\s+|>)?\s*(?:跨模型降级|跨模型不可得|自适应降级|评审降级|降级|downgrade|fallback)[ \t]*[:：=][ \t]*([^\r\n；;。]+)/i) ||
+    str.match(/[（(]\s*(?:跨模型降级|跨模型不可得|自适应降级|评审降级|降级|downgrade|fallback)[ \t]*[:：=][ \t]*([^)）\r\n]+)[)）]/i);
   if (dgMatch) {
     isDowngraded = true;
     downgradeReason = dgMatch[1].trim();
-  } else if (/跨模型降级|跨模型不可得|自适应降级|评审降级/.test(str)) {
-    isDowngraded = true;
-    downgradeReason = '跨模型评审自适应降级';
   }
 
-  // 多复核人与双重背书提取（Dual-Review 支持）
+  // 多复核人与双重背书提取（Dual-Review 支持，按 ID 去重防止重复计数）
   const reviewers = [];
+  const seenIds = new Set();
   const lines = str.split(/\r?\n/);
   for (const line of lines) {
     const lineId = externalReviewId(line);
-    if (lineId) {
+    if (lineId && !seenIds.has(lineId)) {
+      seenIds.add(lineId);
       const lineModelMatch = line.match(/(?:reviewed\s+by|复核模型|评审模型|模型|reviewer)[:：\s]+([A-Za-z0-9_.-]+)/i);
       const lineModel = lineModelMatch ? lineModelMatch[1].trim() : (reviewers.length === 0 ? reviewerModel : '');
-      const conclusionMatch = line.match(/(?:结论|独立复核|二次复核|复核\s*[12一二]|评审\s*[12一二])[:：\s]+([^\s,，;；)）]+)/);
-      const conclusion = conclusionMatch ? conclusionMatch[1].trim() : '通过';
+      const conclusionMatch = line.match(/(?:结论|独立复核|二次复核|复核\s*[12一二]|复核|评审\s*[12一二]|评审|审阅|review|verdict|conclusion)[:：\s]+([^\s,，;；)）(（]+)/i);
+      // 有结论关键字取其后的结论；没有则整行出现否定词取否定短语；都没有 = 没写结论，不算通过
+      const conclusion = conclusionMatch
+        ? conclusionMatch[1].trim()
+        : (NEGATIVE_CONCLUSION_RE.exec(line)?.[0] || '');
       reviewers.push({
         id: lineId,
         reviewerModel: lineModel,
@@ -132,7 +143,7 @@ export function parseReviewMetadata(text) {
 
   const dualEndorsed =
     reviewers.length >= 2 &&
-    reviewers.every((r) => /通过|approved|lgtm|ok/i.test(r.conclusion || '通过'));
+    reviewers.every((r) => isApprovedConclusion(r.conclusion));
 
   return {
     id,
@@ -216,9 +227,25 @@ export function validateHandoffSheet(sheet) {
   }
   if (!Array.isArray(sheet.touchSetAllowed)) {
     problems.push('交接单 touchSetAllowed 必须为数组');
+  } else {
+    for (const p of sheet.touchSetAllowed) {
+      if (typeof p !== 'string' || !p.trim()) {
+        problems.push('交接单 touchSetAllowed 包含非字符串或空元素');
+      } else if (p === '.' || p === '..' || /(?:^|[\\/])\.\.(?:[\\/]|$)/.test(p)) {
+        problems.push(`交接单 touchSetAllowed 包含非法路径穿越: ${p}`);
+      }
+    }
   }
   if (!Array.isArray(sheet.touchSetForbidden)) {
     problems.push('交接单 touchSetForbidden 必须为数组');
+  } else {
+    for (const p of sheet.touchSetForbidden) {
+      if (typeof p !== 'string' || !p.trim()) {
+        problems.push('交接单 touchSetForbidden 包含非字符串或空元素');
+      } else if (p === '.' || p === '..' || /(?:^|[\\/])\.\.(?:[\\/]|$)/.test(p)) {
+        problems.push(`交接单 touchSetForbidden 包含非法路径穿越: ${p}`);
+      }
+    }
   }
   return { ok: problems.length === 0, problems };
 }
@@ -256,11 +283,12 @@ export function parseHandoffSheet(text) {
     const trimmed = line.trim();
     if (!trimmed || trimmed === '---' || trimmed.startsWith('<!--')) continue;
 
-    // 列表项匹配
+    // 列表项匹配（支持 Windows 盘符路径如 C:\... 或 c:/...）
     const listItemMatch = trimmed.match(/^[-*+]\s+(.*)$/);
     if (listItemMatch && currentListKey) {
       const item = listItemMatch[1].trim();
-      if (item && !item.includes(':')) {
+      const isWindowsPath = /^[a-zA-Z]:[\\/]/.test(item);
+      if (item && (!item.includes(':') || isWindowsPath)) {
         out[currentListKey].push(item);
         continue;
       }

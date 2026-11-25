@@ -6,7 +6,7 @@ import { flag } from '../cli/args.mjs';
 import { splitWaivers } from '../rules/model.mjs';
 import { loadModel, PROJECT_CANDIDATES } from '../rules/load.mjs';
 import { recordPluginStatus } from '../rules/plugin-status.mjs';
-import { collectDiff, evaluateModel } from '../rules/evaluate.mjs';
+import { collectDiff, evaluateModel, whenSatisfied } from '../rules/evaluate.mjs';
 import { stringifyYaml } from '../rules/yaml.mjs';
 
 const LEGACY_FILES = [
@@ -56,37 +56,91 @@ function pickMessage(message, lang) {
   return lang === 'en' ? message.en : message.zh;
 }
 
+/** 合并覆盖链：按叠加顺序列出所有定义了该 id 的层（禁用条目只带 id/enabled，其余字段为 null）。 */
+function layerChain(layers, id) {
+  const chain = [];
+  for (const layer of layers) {
+    const rule = (layer.rules || []).find((r) => r.id === id);
+    if (!rule) continue;
+    chain.push({
+      layer: layer.name,
+      face: rule.face ?? null,
+      phase: rule.phase ?? null,
+      severity: rule.severity ?? null,
+      enabled: rule.enabled !== false,
+    });
+  }
+  return chain;
+}
+
+/** 触发原因：逐条 when 谓词判定 + whenEnv 门槛 + files 裁剪面（pkgDir 与求值器同口径）。 */
+function explainReason(root, rule) {
+  const cwd = rule.assert && rule.assert.args ? rule.assert.args.cwd : null;
+  const pkgDir = cwd ? path.join(root, cwd) : root;
+  const when = (rule.when || []).map((predicate) => ({
+    predicate,
+    satisfied: whenSatisfied([predicate], root, pkgDir),
+  }));
+  let whenEnv = null;
+  if (rule.whenEnv !== undefined) {
+    const value = String(rule.whenEnv);
+    const eq = value.indexOf('=');
+    whenEnv = eq <= 0
+      ? { value, satisfied: false, invalid: true }
+      : { value, satisfied: process.env[value.slice(0, eq)] === value.slice(eq + 1), invalid: false };
+  }
+  return {
+    enabled: rule.enabled !== false,
+    phase: rule.phase ?? null,
+    face: rule.face ?? null,
+    scope: rule.scope || 'repo',
+    when,
+    whenEnv,
+    files: rule.files || null,
+  };
+}
+
 /** validate 的引用 / 语义检查（schema 已由 loadModel 把关）：只报「配置可读但永远不成立或指向不存在」的问题。
  *  同 id 跨层是合法覆盖机制，只有层内重复才算问题。 */
-function collectFindings(root, layers, model) {
+function collectFindings(root, layers, model, t) {
   const findings = [];
   const foundProjectCandidates = PROJECT_CANDIDATES.filter((rel) => fs.existsSync(path.join(root, rel)));
   if (foundProjectCandidates.length > 1) {
-    findings.push(`检测到多个项目级规则文件同时存在（${foundProjectCandidates.join('、')}），当前仅首选「${foundProjectCandidates[0]}」生效，其余规则文件被完全忽略。建议合拢到单一文件并删除其余候选。`);
+    findings.push(t('rules.finding.multipleProjectFiles', {
+      files: foundProjectCandidates.join('、'),
+      filesComma: foundProjectCandidates.join(', '),
+      active: foundProjectCandidates[0],
+    }));
   }
   const ruleIds = new Set(model.rules.map((r) => r.id));
   for (const layer of layers) {
     const seen = new Set();
     layer.rules.forEach((rule, i) => {
-      if (seen.has(rule.id)) findings.push(`${layer.name}: rules[${i}] id「${rule.id}」在本层重复`);
+      if (seen.has(rule.id)) {
+        findings.push(t('rules.finding.duplicateId', { layer: layer.name, index: i, id: rule.id }));
+      }
       seen.add(rule.id);
       for (const item of rule.when || []) {
         // pkg: 空路径 / env: 缺「=」= 永不成立；pkg: 路径里的空段与旧脚本一样被忽略，不算问题。
         const never = item.startsWith('pkg:')
           ? !item.slice(4).trim()
           : item.startsWith('env:') && item.slice(4).indexOf('=') <= 0;
-        if (never) findings.push(`${layer.name}: rules[${i}] when 谓词永不成立：「${item}」`);
+        if (never) {
+          findings.push(t('rules.finding.whenNever', { layer: layer.name, index: i, item }));
+        }
       }
       if (typeof rule.whenEnv === 'string' && rule.whenEnv.indexOf('=') <= 0) {
-        findings.push(`${layer.name}: rules[${i}] whenEnv 写法有误（应为 KEY=VAL）：「${rule.whenEnv}」`);
+        findings.push(t('rules.finding.whenEnvInvalid', { layer: layer.name, index: i, whenEnv: rule.whenEnv }));
       }
     });
     layer.waivers.forEach((w, i) => {
-      if (!ruleIds.has(w.rule)) findings.push(`${layer.name}: waivers[${i}] 指向不存在的规则「${w.rule}」`);
+      if (!ruleIds.has(w.rule)) {
+        findings.push(t('rules.finding.waiverMissingRule', { layer: layer.name, index: i, rule: w.rule }));
+      }
     });
     (layer.plugins || []).forEach((p, i) => {
       if (!fs.existsSync(path.join(root, '.agents', 'rules', 'plugins', `${p.module}.mjs`))) {
-        findings.push(`${layer.name}: plugins[${i}] 插件模块不存在：.agents/rules/plugins/${p.module}.mjs`);
+        findings.push(t('rules.finding.pluginMissing', { layer: layer.name, index: i, module: p.module }));
       }
     });
   }
@@ -109,139 +163,153 @@ export function rulesCommand({ args, t, lang }) {
     return 2;
   }
 
-  if (sub === 'init') {
-    const rel = '.agents/rules/project.json';
-    const abs = path.join(root, rel);
-    if (fs.existsSync(abs) && !flag(args, 'force')) {
-      console.error(t('rules.initExists', { rel }));
-      return 2;
-    }
-    const legacy = loaded.layers[0];
-    const body = {
-      version: 1,
-      faces: legacy.faces,
-      rules: legacy.rules.map(({ source, ...rest }) => rest),
-      waivers: [],
-    };
-    fs.mkdirSync(path.dirname(abs), { recursive: true });
-    fs.writeFileSync(abs, `// 由 \`flow-kit rules init\` 从旧配置生成（${new Date().toISOString().slice(0, 10)}）。
-// 本文件是项目规则层：同 id 覆盖 legacy/stack 层；删除某条即回退到下层。手改后跑 \`flow-kit rules validate\`。
-${JSON.stringify(body, null, 2)}\n`);
-    if (flag(args, 'json')) process.stdout.write(`${JSON.stringify({ written: rel, count: body.rules.length })}\n`);
-    else console.log(t('rules.initWritten', { count: body.rules.length, rel }));
-    return 0;
-  }
-
-  if (sub === 'export') {
-    const outRel = typeof args.out === 'string' ? args.out : 'flow-rules.yml';
-    const outAbs = path.resolve(root, outRel);
-    if (fs.existsSync(outAbs) && !flag(args, 'force')) {
-      console.error(t('rules.exportExists', { rel: outRel }));
-      return 2;
-    }
-    const legacyFiles = findLegacyFiles(root);
-    const { name, stack } = detectProjectMeta(root);
-
-    const legacy = loaded.layers.find((l) => l.name === 'legacy') || { rules: [], waivers: [], faces: {} };
-    const projectLayer = loaded.layers.find((l) => l.name === 'project');
-
-    const faces = {
-      ...(legacy.faces || {}),
-      ...(projectLayer?.faces || {}),
-    };
-
-    const rulesMap = new Map();
-    for (const r of legacy.rules || []) {
-      const { source, ...rest } = r;
-      rulesMap.set(rest.id, rest);
-    }
-    if (projectLayer) {
-      for (const r of projectLayer.rules || []) {
-        const { source, ...rest } = r;
-        rulesMap.set(rest.id, rest);
-      }
-    }
-
-    const waivers = [
-      ...(legacy.waivers || []),
-      ...(projectLayer?.waivers || []),
-    ];
-
-    const body = {
-      version: 1,
-      name,
-      ...(stack ? { extends: [`preset:stack/${stack}`] } : {}),
-      faces,
-      rules: [...rulesMap.values()],
-      waivers,
-    };
-
-    const header = `# 由 \`flow-kit rules export\` 自动合拢生成（${new Date().toISOString().slice(0, 10)}）。\n` +
-      `# 本文件为统一声明式规则中心（已合拢 ${legacyFiles.length} 个碎片配置文件）。\n` +
-      `# 规则校验：flow-kit rules validate\n` +
-      `# 门禁执行：flow-kit rules check\n`;
-
-    fs.mkdirSync(path.dirname(outAbs), { recursive: true });
-    fs.writeFileSync(outAbs, header + stringifyYaml(body), 'utf8');
-
-    if (flag(args, 'json')) {
-      process.stdout.write(`${JSON.stringify({
-        written: outRel,
-        rulesCount: body.rules.length,
-        waiversCount: body.waivers.length,
-        legacyFiles,
-      }, null, 2)}\n`);
-    } else {
-      console.log(t('rules.exportWritten', {
-        rel: outRel,
-        rulesCount: body.rules.length,
-        filesCount: legacyFiles.length,
-      }));
-    }
-    return 0;
-  }
-
-  if (sub === 'validate' || sub === 'explain') {
-    if (sub === 'explain') {
-      const id = args._[2];
-      const rule = model.rules.find((r) => r.id === id);
-      if (!rule) {
-        console.error(t('rules.explainMissing', { id: id || '' }));
-        return 2;
-      }
-      // timeoutMs 原值输出：缺省（键不出现）= 原语默认上限，null = 不限时，数字 = 上限（毫秒）。
-      console.log(JSON.stringify({ id: rule.id, source: rule.source, enabled: rule.enabled !== false, face: rule.face, phase: rule.phase, severity: rule.severity, timeoutMs: rule.timeoutMs, scope: rule.scope || 'repo', when: rule.when || [], whenEnv: rule.whenEnv || null, files: rule.files || null, assert: rule.assert, message: rule.message ? pickMessage(rule.message, lang) : null, waivers: active.filter((w) => w.rule === rule.id) }, null, 2));
-      return 0;
-    }
-    const findings = collectFindings(root, loaded.layers, model);
-    if (flag(args, 'json')) {
-      process.stdout.write(`${JSON.stringify({ ok: findings.length === 0, findings, rules: model.rules.length, layers: loaded.layers.map((l) => l.name), waivers: active.length, expired: expired.length, unsupported: loaded.unsupported }, null, 2)}\n`);
-      return findings.length ? 2 : 0;
-    }
-    console.log(t('rules.validated', {
-      rules: model.rules.length,
-      layers: loaded.layers.map((l) => l.name).join(' ← '),
-      waivers: active.length,
-      expired: expired.length,
-    }));
-    if (loaded.layers.some((l) => l.name === 'legacy')) console.log(t('rules.legacyHint'));
-    if (loaded.unsupported.length) {
-      console.log(t('rules.unsupported', { items: loaded.unsupported.map((u) => `${u.group}(${u.count})`).join(', ') }));
-    }
-    if (expired.length) console.log(t('rules.expiredWaivers', { count: expired.length }));
-    for (const finding of findings) console.log(t('rules.validateFinding', { finding }));
-    if (findings.length) {
-      console.log(t('rules.validateFailed', { count: findings.length }));
-      return 2;
-    }
-    return 0;
-  }
-
+  const ctx = { args, t, lang, root, loaded, model, active, expired };
+  if (sub === 'init') return runInit(ctx);
+  if (sub === 'export') return runExport(ctx);
+  if (sub === 'validate') return runValidate(ctx);
+  if (sub === 'explain') return runExplain(ctx);
   if (sub !== 'check') {
     console.error(t('rules.usage'));
     return 2;
   }
+  return runCheck(ctx);
+}
 
+/** init：把 legacy 层规则落成项目层 project.json。 */
+function runInit({ args, t, root, loaded }) {
+  const rel = '.agents/rules/project.json';
+  const abs = path.join(root, rel);
+  if (fs.existsSync(abs) && !flag(args, 'force')) {
+    console.error(t('rules.initExists', { rel }));
+    return 2;
+  }
+  const legacy = loaded.layers[0];
+  const body = {
+    version: 1,
+    faces: legacy.faces,
+    rules: legacy.rules.map(({ source, ...rest }) => rest),
+    waivers: [],
+  };
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  fs.writeFileSync(abs, `// 由 \`flow-kit rules init\` 从旧配置生成（${new Date().toISOString().slice(0, 10)}）。
+// 本文件是项目规则层：同 id 覆盖 legacy/stack 层；删除某条即回退到下层。手改后跑 \`flow-kit rules validate\`。
+${JSON.stringify(body, null, 2)}\n`);
+  if (flag(args, 'json')) process.stdout.write(`${JSON.stringify({ written: rel, count: body.rules.length })}\n`);
+  else console.log(t('rules.initWritten', { count: body.rules.length, rel }));
+  return 0;
+}
+
+/** export：把 legacy + 项目层合拢成 flow-rules.yml。 */
+function runExport({ args, t, root, loaded }) {
+  const outRel = typeof args.out === 'string' ? args.out : 'flow-rules.yml';
+  const outAbs = path.resolve(root, outRel);
+  if (fs.existsSync(outAbs) && !flag(args, 'force')) {
+    console.error(t('rules.exportExists', { rel: outRel }));
+    return 2;
+  }
+  const legacyFiles = findLegacyFiles(root);
+  const { name, stack } = detectProjectMeta(root);
+
+  const legacy = loaded.layers.find((l) => l.name === 'legacy') || { rules: [], waivers: [], faces: {} };
+  const projectLayer = loaded.layers.find((l) => l.name === 'project');
+
+  const faces = {
+    ...(legacy.faces || {}),
+    ...(projectLayer?.faces || {}),
+  };
+
+  const rulesMap = new Map();
+  for (const r of legacy.rules || []) {
+    const { source, ...rest } = r;
+    rulesMap.set(rest.id, rest);
+  }
+  if (projectLayer) {
+    for (const r of projectLayer.rules || []) {
+      const { source, ...rest } = r;
+      rulesMap.set(rest.id, rest);
+    }
+  }
+
+  const waivers = [
+    ...(legacy.waivers || []),
+    ...(projectLayer?.waivers || []),
+  ];
+
+  const body = {
+    version: 1,
+    name,
+    ...(stack ? { extends: [`preset:stack/${stack}`] } : {}),
+    faces,
+    rules: [...rulesMap.values()],
+    waivers,
+  };
+
+  const header = `# 由 \`flow-kit rules export\` 自动合拢生成（${new Date().toISOString().slice(0, 10)}）。\n` +
+    `# 本文件为统一声明式规则中心（已合拢 ${legacyFiles.length} 个碎片配置文件）。\n` +
+    `# 规则校验：flow-kit rules validate\n` +
+    `# 门禁执行：flow-kit rules check\n`;
+
+  fs.mkdirSync(path.dirname(outAbs), { recursive: true });
+  fs.writeFileSync(outAbs, header + stringifyYaml(body), 'utf8');
+
+  if (flag(args, 'json')) {
+    process.stdout.write(`${JSON.stringify({
+      written: outRel,
+      rulesCount: body.rules.length,
+      waiversCount: body.waivers.length,
+      legacyFiles,
+    }, null, 2)}\n`);
+  } else {
+    console.log(t('rules.exportWritten', {
+      rel: outRel,
+      rulesCount: body.rules.length,
+      filesCount: legacyFiles.length,
+    }));
+  }
+  return 0;
+}
+
+/** validate：引用 / 语义检查 + 汇总输出。 */
+function runValidate({ args, t, root, loaded, model, active, expired }) {
+  const findings = collectFindings(root, loaded.layers, model, t);
+  if (flag(args, 'json')) {
+    process.stdout.write(`${JSON.stringify({ ok: findings.length === 0, findings, rules: model.rules.length, layers: loaded.layers.map((l) => l.name), waivers: active.length, expired: expired.length, unsupported: loaded.unsupported }, null, 2)}\n`);
+    return findings.length ? 2 : 0;
+  }
+  console.log(t('rules.validated', {
+    rules: model.rules.length,
+    layers: loaded.layers.map((l) => l.name).join(' ← '),
+    waivers: active.length,
+    expired: expired.length,
+  }));
+  if (loaded.layers.some((l) => l.name === 'legacy')) console.log(t('rules.legacyHint'));
+  if (loaded.unsupported.length) {
+    console.log(t('rules.unsupported', { items: loaded.unsupported.map((u) => `${u.group}(${u.count})`).join(', ') }));
+  }
+  if (expired.length) console.log(t('rules.expiredWaivers', { count: expired.length }));
+  for (const finding of findings) console.log(t('rules.validateFinding', { finding }));
+  if (findings.length) {
+    console.log(t('rules.validateFailed', { count: findings.length }));
+    return 2;
+  }
+  return 0;
+}
+
+/** explain：生效规则、来源层、合并覆盖链、触发原因、命中豁免。 */
+function runExplain({ args, t, lang, root, loaded, model, active }) {
+  const id = args._[2];
+  const rule = model.rules.find((r) => r.id === id);
+  if (!rule) {
+    console.error(t('rules.explainMissing', { id: id || '' }));
+    return 2;
+  }
+  // timeoutMs 原值输出：缺省（键不出现）= 原语默认上限，null = 不限时，数字 = 上限（毫秒）。
+  console.log(JSON.stringify({ id: rule.id, source: rule.source, enabled: rule.enabled !== false, face: rule.face, phase: rule.phase, severity: rule.severity, timeoutMs: rule.timeoutMs, scope: rule.scope || 'repo', when: rule.when || [], whenEnv: rule.whenEnv || null, files: rule.files || null, assert: rule.assert, message: rule.message ? pickMessage(rule.message, lang) : null, waivers: active.filter((w) => w.rule === rule.id), layers: layerChain(loaded.layers, rule.id), reason: explainReason(root, rule) }, null, 2));
+  return 0;
+}
+
+/** check：求值 + 输出 / JSON + 退出码（0 通过、1 block 违例、2 配置 / 用法错误）。 */
+function runCheck({ args, t, lang, root, loaded, model, active, expired }) {
   const staged = flag(args, 'staged');
   const range = typeof args.range === 'string' ? args.range : null;
   const filesArg = typeof args.files === 'string' ? args.files.split(',').map((s) => s.trim()).filter(Boolean) : null;
