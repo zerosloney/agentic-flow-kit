@@ -550,10 +550,12 @@ const EVENT_DESC = {
   route: '退回', 'route-enter': '重入', resume: '恢复',
   'step-pause': '单步暂停', 'step-resume': '单步恢复',
   'review-downgrade': '评审降级',
+  'code-review': '代码复核',
 };
 const ART_LABEL = {
   entry: '入口', spec: 'SPEC', plan: 'PLAN', tasks: '任务',
   verifyReport: '验收', apiDocs: 'API', changes: '改动',
+  codeReview: '代码复核',
 };
 
 function getStageSequence(run) {
@@ -580,7 +582,7 @@ function getStageSequence(run) {
       ['Build', (level === 'L1' && kind !== 'fix'
         ? ['changes-confirm', 'implement', 'fix', 'changes-verify']
         : ['plan-fill', 'plan-draft', 'plan-confirm', 'changes-confirm', 'implement', 'fix', 'changes-verify']).includes(s)],
-      ['Test', ['verify', 'review', 'closeout', 'done-confirm', 'incident-fixed-confirm', 'incident-closed-confirm', 'direct-commit'].includes(s)],
+      ['Test', ['verify', 'review', 'code-review', 'closeout', 'done-confirm', 'incident-fixed-confirm', 'incident-closed-confirm', 'direct-commit'].includes(s)],
     ];
   }
   base.push(['Done', isDone]);

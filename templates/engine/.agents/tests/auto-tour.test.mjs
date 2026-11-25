@@ -5,7 +5,7 @@
 //   1. 参数校验：缺文档 / 文档不存在 → exit 1 且给出可操作的提示；
 //   2. 失败降级：ensure-board 起不来时脚本 exit 0 且打印告警——全景图是可选观察面，不是门禁，
 //      不得因看板不可用阻断 Build 流程；
-//   3. 端口语义：显式 --port 是绝对值、不吃 SHIPYARD_SLOT 槽位偏移（与 ensure-board 同口径）。
+//   3. 端口语义：显式 --port 是绝对值、不吃 FLOW_KIT_BOARD_SLOT 槽位偏移（与 ensure-board 同口径）。
 //
 // 确定性口径：第 2/3 条用一个「快速响应非 200」的桩 HTTP 服务器占住端口——ensure-board 的
 //   httpProbe 立即拿到非 200 → 判「他人进程占用槽位口」→ exit 1，走与真实占用同一条分支，
@@ -21,7 +21,7 @@ import { fileURLToPath } from 'node:url';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, '../..');
 const AUTO_TOUR = path.join(ROOT, '.agents', 'scripts', 'auto-tour.mjs');
-const PLAN = 'workflow/plans/2026-11-09-document-attachment.md';
+const PLAN = '.agents/tests/fixtures/dev-tour/plan-l1-single-file.md';
 
 function run(args, env = {}) {
   return new Promise((resolve) => {
@@ -69,10 +69,10 @@ describe('auto-tour', () => {
     }
   });
 
-  test('显式 --port 是绝对值，不吃 SHIPYARD_SLOT 槽位偏移', async () => {
+  test('显式 --port 是绝对值，不吃 FLOW_KIT_BOARD_SLOT 槽位偏移', async () => {
     const s = await occupy(18778);
     try {
-      const r = await run([PLAN, '--port', '18778'], { SHIPYARD_SLOT: '2' });
+      const r = await run([PLAN, '--port', '18778'], { FLOW_KIT_BOARD_SLOT: '2' });
       // 槽位 2 的偏移是 +20；端口若被偏移到 18798，桩服务器（18778）就拦不住它——失败分支不触发
       assert.match(r.err + r.out, /未就绪|不影响/, '端口应按绝对值使用，未被槽位偏移');
     } finally {

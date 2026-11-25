@@ -1,14 +1,14 @@
 {
   "schema": 2,
   "generatedAt": "2020-01-01T00:00:00.000Z",
-  "rootLabel": "Shipyard.Material",
+  "rootLabel": "example-project",
   "doc": {
     "path": ".agents/tests/fixtures/dev-tour/plan-l1-single-file.md",
     "type": "DOC",
-    "title": "L1 单文件样例：修复物资推送重试",
+    "title": "L1 单文件样例：修复示例推送重试",
     "status": "起草中",
     "level": "L1",
-    "module": "物资",
+    "module": "示例",
     "date": "2099-12-31",
     "purpose": "",
     "links": [],

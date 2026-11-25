@@ -2,10 +2,15 @@
 /* test-impact-lib: 影响面选测的唯一实现（config + 匹配 + 选类 + 滤器）
  *
  * 口径单源：.agents/config/test-impact-map.json
+ *   namespace = 测试命名空间（生成 vstest filter）
+ *   dirs   = 目录面：test / unit / fullchain（项目自填；未声明 = 无法裁定，回退全量）
+ *   faces  = 代码面：code / sql（项目自填；未声明 = 未知路径回退全量）
  *   areas  = 测试类 → 业务域（同一测试类可跨域）
  *   always = 任何集成子集都必跑的基建/冒烟类
  *   paths  = 生产文件 → 业务域，按序首命中；未命中或 area 含 "*" = 回退全量
  *
+ *   runner = 测试执行器（可选）：kind=vstest|generic（缺省 vstest，保持 dotnet 口径）；
+ *            project/list/listNamePattern/filter 覆盖集成工程定位、列名命令、用例行正则与 filter 模板。
  * 失败语义（故意保守）：任何无法判定的输入都返回 full，绝不静默跳过。
  * 新增测试类未登记时：selector 回退全量；check-test-impact-map.mjs 在 CI 重档硬红。
  */
@@ -15,23 +20,26 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import {
+  selectDynamicTestImpact,
+  computeTestImpact,
+  buildDependencyGraph,
+  formatDynamicDecision,
+} from './dynamic-test-impact.mjs';
+
+export {
+  selectDynamicTestImpact,
+  computeTestImpact,
+  buildDependencyGraph,
+  formatDynamicDecision,
+};
 
 export const ROOT = process.env.FLOW_KIT_PROJECT_ROOT
   || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const MAP_PATH = path.join(ROOT, '.agents', 'config', 'test-impact-map.json');
 
-const TEST_DIR = 'tests/Shipyard.Material.IntegrationTests/';
-const UNIT_DIR = 'tests/Shipyard.Material.Tests/';
-const FULLCHAIN_DIR = `${TEST_DIR}FullChain/`;
-// 选测匹配统一小写键（P1 修复 2026-11-06）——startswith 判据须用小写常量。
-const TEST_DIR_LC = TEST_DIR.toLowerCase();
-const UNIT_DIR_LC = UNIT_DIR.toLowerCase();
-const FULLCHAIN_DIR_LC = FULLCHAIN_DIR.toLowerCase();
 const BUILD_FILE_RE = /\.(sln|csproj|props|targets)$/i;
 const SQL_RE = /\.sql$/i;
-const BACKEND_TEST_FACE_RE = /^(backend|tests|scripts)\//i;
-const SCHEMA_CHANGE_SQL_RE = /^wiki\/数据维护\/schema变更\//i;
-const DATA_REPAIR_SQL_RE = /^wiki\/数据维护\/数据修复\//i;
 const AREA_RE = /^[a-z][a-z0-9-]*$/;
 const CLASS_RE = /^[A-Za-z_][A-Za-z0-9_]*$/;
 
@@ -42,6 +50,44 @@ export const normalizePath = (p) =>
     .trim();
 
 const escapeRe = (s) => s.replace(/[.+^${}()|[\]\\]/g, '\\$&');
+
+const normDir = (value) => {
+  const s = normalizePath(String(value || '')).toLowerCase();
+  if (!s) return '';
+  return s.endsWith('/') ? s : `${s}/`;
+};
+
+/** 目录/面口径（dirs / faces）：项目级唯一来源，缺省即未声明（选测回退全量）。 */
+export function mapDirs(map) {
+  const d = (map && typeof map.dirs === 'object' && map.dirs) || {};
+  return { test: normDir(d.test), unit: normDir(d.unit), fullchain: normDir(d.fullchain) };
+}
+
+export function mapFaces(map) {
+  const f = (map && typeof map.faces === 'object' && map.faces) || {};
+  const arr = (v) => (Array.isArray(v) ? v.map(normDir).filter(Boolean) : []);
+  return { code: arr(f.code), sql: arr(f.sql) };
+}
+
+/** 执行器口径：缺省 vstest（dotnet 行为不变）；generic 需项目提供 filter 模板。 */
+export function mapRunner(map) {
+  const r = (map && typeof map.runner === 'object' && !Array.isArray(map.runner) && map.runner) || {};
+  return {
+    kind: r.kind === 'generic' ? 'generic' : 'vstest',
+    project: typeof r.project === 'string' ? normalizePath(r.project) : '',
+    list: Array.isArray(r.list) ? r.list.map((x) => String(x)) : null,
+    listNamePattern: typeof r.listNamePattern === 'string' ? r.listNamePattern : '',
+    filter: typeof r.filter === 'string' ? r.filter : '',
+  };
+}
+
+const DEFAULT_LIST_NAME_PATTERN = '^\\s+[A-Za-z_][A-Za-z0-9_.]*\\.';
+
+/** dirs.test 派生集成工程路径（旧口径：<testDir>/<basename>.csproj）。 */
+const projectFromDirs = (dirs) => {
+  const rel = dirs.test.endsWith('/') ? dirs.test.slice(0, -1) : dirs.test;
+  return `${rel}/${path.posix.basename(rel)}.csproj`;
+};
 
 /** 受控 glob：支持 **、*、?、{a,b}；只用于本仓 manifest，不追求通用语义。 */
 export function globToRegExp(glob) {
@@ -91,6 +137,66 @@ export function validateMap(map) {
   }
   if (typeof map.namespace !== 'string' || !map.namespace.trim()) {
     errors.push('namespace 缺失');
+  }
+  if (map.dirs !== undefined) {
+    if (!map.dirs || typeof map.dirs !== 'object' || Array.isArray(map.dirs)) {
+      errors.push('dirs 必须是对象');
+    } else {
+      for (const key of ['test', 'unit', 'fullchain']) {
+        const v = map.dirs[key];
+        if (v !== undefined && typeof v !== 'string') errors.push(`dirs.${key} 必须是字符串`);
+      }
+    }
+  }
+  if (map.faces !== undefined) {
+    if (!map.faces || typeof map.faces !== 'object' || Array.isArray(map.faces)) {
+      errors.push('faces 必须是对象');
+    } else {
+      for (const key of ['code', 'sql']) {
+        const v = map.faces[key];
+        if (v !== undefined && !Array.isArray(v)) errors.push(`faces.${key} 必须是数组`);
+        else if (Array.isArray(v) && v.some((x) => typeof x !== 'string' || !x.trim())) {
+          errors.push(`faces.${key} 只能是非空字符串`);
+        }
+      }
+    }
+  }
+  if (map.runner !== undefined) {
+    const r = map.runner;
+    if (!r || typeof r !== 'object' || Array.isArray(r)) {
+      errors.push('runner 必须是对象');
+    } else {
+      const allowed = ['kind', 'project', 'list', 'filter', 'listNamePattern'];
+      for (const key of Object.keys(r)) {
+        if (!allowed.includes(key)) errors.push(`runner 未知键：${key}`);
+      }
+      if (r.kind !== undefined && r.kind !== 'vstest' && r.kind !== 'generic') {
+        errors.push('runner.kind 只能是 vstest 或 generic');
+      }
+      if (r.project !== undefined && (typeof r.project !== 'string' || !r.project.trim())) {
+        errors.push('runner.project 必须是非空字符串');
+      }
+      if (r.list !== undefined) {
+        if (!Array.isArray(r.list) || r.list.length === 0
+          || r.list.some((x) => typeof x !== 'string' || !x.trim())) {
+          errors.push('runner.list 必须是非空字符串数组');
+        }
+      }
+      if (r.filter !== undefined && (typeof r.filter !== 'string' || !r.filter.trim())) {
+        errors.push('runner.filter 必须是非空字符串');
+      }
+      if (r.listNamePattern !== undefined) {
+        if (typeof r.listNamePattern !== 'string' || !r.listNamePattern.trim()) {
+          errors.push('runner.listNamePattern 必须是非空字符串');
+        } else {
+          try {
+            new RegExp(r.listNamePattern);
+          } catch {
+            errors.push('runner.listNamePattern 不是合法正则');
+          }
+        }
+      }
+    }
   }
   if (!map.areas || typeof map.areas !== 'object' || Array.isArray(map.areas)) {
     errors.push('areas 缺失或不是对象');
@@ -226,19 +332,54 @@ export function changedFilesFromRange(oldSha, newSha) {
 }
 
 /**
- * Count integration tests matched by a vstest filter. `dotnet test --list-tests`
- * exits 0 even when nothing matches, so the caller must use this count to
- * fail closed instead of trusting the exit code.
+ * Count integration tests matched by the runner's list command.
+ * `dotnet test --list-tests` exits 0 even when nothing matches, so the caller
+ * must use this count to fail closed instead of trusting the exit code.
+ * runner.list 给定时按模板执行（args 数组，不经 shell；{project}/{filter} 替换）；
+ * 缺省保持 dotnet --list-tests 旧口径。runner.listNamePattern 覆盖用例行正则。
  */
-export function countListedIntegrationTests(
-  filter,
-  { cwd = ROOT, cspoj = 'tests/Shipyard.Material.IntegrationTests/Shipyard.Material.IntegrationTests.csproj' } = {},
-) {
+export function countListedIntegrationTests(filter, opts = {}) {
+  const { cwd = ROOT } = opts;
+  // 显式 cspoj 的老调用不依赖映射文件：映射不可读时保持旧 dotnet 路径，不新增失败面。
+  let map = opts.map;
+  if (!map) {
+    try {
+      map = loadMap();
+    } catch (e) {
+      if (!opts.cspoj) throw e;
+      map = null;
+    }
+  }
+  const runner = mapRunner(map);
+  let project = opts.cspoj || runner.project;
+  if (!project) {
+    const dirs = mapDirs(map);
+    if (!dirs.test) {
+      throw new Error('test-impact-map 缺 dirs.test（无法定位集成测试工程；在 .agents/config/test-impact-map.json 的 dirs.test 登记）');
+    }
+    project = projectFromDirs(dirs);
+  }
+  if (runner.list) {
+    const [bin, ...args] = runner.list.map((a) => a
+      .replaceAll('{project}', project)
+      .replaceAll('{filter}', String(filter ?? '')));
+    const r = spawnSync(bin, args, { cwd, encoding: 'utf8', shell: false, maxBuffer: 8 * 1024 * 1024 });
+    if (r.status !== 0) {
+      throw new Error(`集成用例预检失败（${bin} exit ${r.status}）：${(r.stderr || '').trim()}`);
+    }
+    let countRe;
+    try {
+      countRe = new RegExp(runner.listNamePattern || DEFAULT_LIST_NAME_PATTERN, 'gm');
+    } catch (e) {
+      throw new Error(`runner.listNamePattern 不是合法正则：${runner.listNamePattern}（${e.message}）`);
+    }
+    return ((r.stdout || '').match(countRe) || []).length;
+  }
   const r = spawnSync(
     'dotnet',
     [
       'test',
-      cspoj,
+      project,
       '--list-tests',
       '--no-build',
       '--nologo',
@@ -254,7 +395,7 @@ export function countListedIntegrationTests(
       `集成用例预检失败（dotnet test --list-tests exit ${r.status}）：${(r.stderr || '').trim()}`,
     );
   }
-  return (r.stdout.match(/^\s+Shipyard\.Material\.IntegrationTests\./gm) || []).length;
+  return (r.stdout.match(new RegExp(DEFAULT_LIST_NAME_PATTERN, 'gm')) || []).length;
 }
 
 export function assertFilterHasTests(filter, opts) {
@@ -301,7 +442,10 @@ const buildClassIndex = (map) => {
  */
 export function selectForFiles(map, files) {
   const { allClasses, classAreas } = buildClassIndex(map);
-  // glob 与变更路径统一小写后匹配：map 里 glob 含大写（MTO*/Shipyard.Material…），
+  const dirs = mapDirs(map);
+  const faces = mapFaces(map);
+  const runner = mapRunner(map);
+  // glob 与变更路径统一小写后匹配：map 里 glob 可能含大写，
   // 与入口判据（pre-push 带 /i）对齐，任何大小写 casing 都不漏判。
   const rules = map.paths.map((rule) => ({ ...rule, re: globToRegExp(rule.glob.toLowerCase()) }));
   const changedFiles = (files || []).map(normalizePath).filter(Boolean);
@@ -321,24 +465,21 @@ export function selectForFiles(map, files) {
       warnings.push(`${file} → 工程文件，回退全量`);
       continue;
     }
-    // SQL：后端/测试/脚本面、schema 变更与数据修复会影响集成；其余 wiki 数据维护不触发
+    // SQL：faces.sql 声明的面（schema 变更/数据修复）会影响集成 → 全量；
+    // 未声明 faces.sql 时无法判定，仍回退全量（保守）；声明面之外的 SQL 不触发。
     if (SQL_RE.test(file)) {
-      if (
-        BACKEND_TEST_FACE_RE.test(f) ||
-        SCHEMA_CHANGE_SQL_RE.test(f) ||
-        DATA_REPAIR_SQL_RE.test(f)
-      ) {
+      if (faces.sql.length === 0 || faces.sql.some((p) => f.startsWith(p))) {
         forceFull = true;
         warnings.push(`${file} → schema/数据修复 SQL，回退全量`);
       }
       continue;
     }
     // 单测面：集成无需重跑
-    if (f.startsWith(UNIT_DIR_LC)) continue;
-    // FullChain 默认不编译（#if FCLocal），不参与默认档
-    if (f.startsWith(FULLCHAIN_DIR_LC)) continue;
+    if (dirs.unit && f.startsWith(dirs.unit)) continue;
+    // 全链路目录默认不编译，不参与默认档
+    if (dirs.fullchain && f.startsWith(dirs.fullchain)) continue;
     // 集成测试自身：只跑该文件里的测试类；测试基建无法判定则全量
-    if (f.startsWith(TEST_DIR_LC)) {
+    if (dirs.test && f.startsWith(dirs.test)) {
       const classes = classesInTestFile(path.join(ROOT, file));
       if (classes.length === 0) {
         forceFull = true;
@@ -357,8 +498,8 @@ export function selectForFiles(map, files) {
       }
       continue;
     }
-    // 后端生产面：按序首命中
-    if (f.startsWith('backend/')) {
+    // 生产代码面（faces.code）：按序首命中
+    if (faces.code.some((p) => f.startsWith(p))) {
       const rule = rules.find((r) => r.re.test(f));
       if (!rule) {
         forceFull = true;
@@ -373,7 +514,12 @@ export function selectForFiles(map, files) {
       for (const area of rule.areas) areas.add(area);
       continue;
     }
-    // 前端 / workflow / .agents / docs / scripts：不触发后端集成
+    // 未声明代码面：任何未知路径都可能影响集成 → 回退全量（fail-safe，不静默跳过）
+    if (faces.code.length === 0) {
+      forceFull = true;
+      warnings.push(`${file} → 未声明 faces.code，回退全量`);
+    }
+    // 其余（声明面之外的文档/workflow/.agents/前端等）：不触发集成
   }
 
   if (forceFull) {
@@ -407,6 +553,19 @@ export function selectForFiles(map, files) {
     for (const cls of map.areas[area]) classes.add(cls);
   }
   const sorted = [...classes].sort();
+  // generic 执行器没有内建 vstest 表达式：未给 filter 模板时无法安全裁剪 → 全量。
+  if (runner.kind === 'generic' && !runner.filter) {
+    return {
+      mode: 'full',
+      reason: 'generic runner 未配置 filter 模板，回退全量',
+      areas: [...areas].sort(),
+      classes: [...allClasses].sort(),
+      filter: null,
+      warnings,
+      changedFiles,
+      totalClasses: allClasses.size,
+    };
+  }
   if (sorted.length >= allClasses.size) {
     return {
       mode: 'full',
@@ -420,9 +579,13 @@ export function selectForFiles(map, files) {
     };
   }
 
-  const filter = sorted
+  const vstestFilter = sorted
     .map((cls) => `FullyQualifiedName~${map.namespace}.${cls}.`)
     .join('|');
+  // generic：项目 filter 模板；{classes} = 已拼好的 FQN（| 连接）。vstest 走旧表达式逐字节不变。
+  const filter = runner.kind === 'generic'
+    ? runner.filter.replaceAll('{classes}', sorted.map((cls) => `${map.namespace}.${cls}`).join('|'))
+    : vstestFilter;
   return {
     mode: 'filter',
     reason: `按影响面选中 ${sorted.length}/${allClasses.size} 个测试类`,
@@ -450,3 +613,4 @@ export function formatDecision(decision) {
   for (const w of decision.warnings) lines.push(`warn: ${w}`);
   return lines.join('\n');
 }
+

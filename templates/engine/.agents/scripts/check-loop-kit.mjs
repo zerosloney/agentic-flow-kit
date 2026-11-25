@@ -397,7 +397,7 @@ function verifyEvidenceTruth(evidenceStr, planBase, root, ctx) {
 // 单 SHA 核验（verifyEvidenceTruth 的核验主体；多 SHA 版逐 token 调用）。
 function verifyOneSha(shaRaw, evidenceStr, planBase) {
   let sha = shaRaw;
-  // 大写 A-F 预筛（perf-evidence-git-memoize）：含大写 A-F 的 token（船厂单据号
+  // 大写 A-F 预筛（perf-evidence-git-memoize）：含大写 A-F 的 token（业务单号
   // BCCAC121100001 类）占证据 hex token 相当比例且 rev-parse 必失败（对象名的规范输出恒小写），
   // 逐个 spawn 纯耗——带上下文残余的（单据号典型形态）直接按 external 豁免，不再实证。
   // 纯数字 token 不预筛：全数字短 SHA 真实存在（2026-10-05-check8-digit-sha-misfire 锚），必须实证。

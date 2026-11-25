@@ -41,12 +41,23 @@ const flowKitRun = (name, args) => spawnSync('flow-kit', ['hook', name, ...args]
   stdio: 'inherit',
   shell: process.platform === 'win32',
 });
-const staged = spawnSync('git', ['-c', 'core.quotepath=off', 'diff', '--cached', '--name-only'], { encoding: 'utf8' });
-const touchesProduct = String(staged.stdout || '').split(/\r?\n/).some((f) => {
-  const rel = f.trim().replace(/\\/g, '/');
-  return rel.startsWith('backend/') || rel.startsWith('frontend/src/') || rel.startsWith('tests/')
-    || rel.startsWith('wiki/数据维护/');
+// 产品面单源 = .agents/config/project-faces.json（faces.mjs，四面默认全部）：命中或未配置（保守
+// 全触发）→ exit 0 视为含产品文件；配置后未命中 → exit 1；配置错误 → exit 2。faces.mjs 属
+// .agents/scripts/，走 `run`（hook 实现才走 `hook`）。
+const facesCheck = spawnSync('flow-kit', ['run', 'faces.mjs', '--check-staged'], {
+  encoding: 'utf8',
+  shell: process.platform === 'win32',
 });
+if (facesCheck.error) {
+  console.error(`commit-msg: 产品面判定无法执行（${facesCheck.error.message}），fail-closed 拒绝提交`);
+  process.exit(1);
+}
+if (facesCheck.status !== 0 && facesCheck.status !== 1) {
+  console.error(`commit-msg: 产品面配置错误或判定失败（faces.mjs exit ${facesCheck.status}）：${String(facesCheck.stderr || '').trim()}`);
+  console.error('commit-msg: .agents/config/project-faces.json 配置坏不得放行，提交已阻止');
+  process.exit(1);
+}
+const touchesProduct = facesCheck.status === 0;
 if (touchesProduct) {
   const gate = flowKitRun('check-confirm-order', [msgFile]);
   if (gate.error || gate.status !== 0) {

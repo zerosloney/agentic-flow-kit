@@ -16,6 +16,7 @@ import { compilePermissions, mergePermissionsIntoRoot, parsePermissionSpec } fro
 import { readPlanEntry } from './apply.mjs';
 import { parseFrontmatter, yamlScalar } from './frontmatter.mjs';
 import { SKILL_NAME_RE } from '../skills/lint.mjs';
+import { localizePath } from './wiki-names.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 export const KIT_ROOT = path.resolve(HERE, '..', '..');
@@ -27,7 +28,7 @@ export const HOST_META = path.join(TEMPLATES, 'host-meta');
 // 模板目录可能被本机运行过脚本（评测凭证、缓存、本地模型角色）。这些是运行态，
 // 既不该进包，也不该被安装到目标项目——尤其 evals/results.jsonl 是行为评测凭证，
 // 若随模板出厂，会让每个新装项目“凭空”获得一张当前内容的合格凭证。
-export const RUNTIME_DIRS = new Set(['.agents/cache', '.agents/tmp', '.agents/tools']);
+export const RUNTIME_DIRS = new Set(['.agents/cache', '.agents/tmp', '.agents/tools', '.agents/endorsements.d']);
 // R5-1b：运行时实现随包分发，不再写入目标项目；只保留声明式配置（gates.json 等）。
 export const RUNTIME_ENGINE_PREFIXES = ['.agents/scripts/', '.agents/tests/'];
 
@@ -55,6 +56,8 @@ export const RUNTIME_FILES = new Set([
   // 会话入口注入腿的用户开关（hooks/session-context.cjs 读）：用户所有，不进 manifest、升级不覆盖。
   '.agents/config/session-context.local.json',
   '.agents/notes/runtime-env.local.md',
+  // 背书凭证台账（endorsement-protocol.mjs sign 写入）：运行态，不进 manifest、不入库。
+  '.agents/endorsements.jsonl',
 ]);
 
 export function listFiles(dir) {
@@ -338,8 +341,8 @@ function addMcpEntries({ plan, target, hosts }) {
 }
 
 // CI 交付面：一个仓一套。显式 ci 优先。未记录时 lean 不发；旧 manifest 无 ci 字段视为 both。
-// 新安装由 install 按 origin 写成 github / azure / none，不再缺省双发。
-export const CI_MODES = ['azure', 'github', 'none', 'both'];
+// 新安装由 install 按 origin 写成 github / azure / gitlab / none，不再缺省双发。
+export const CI_MODES = ['azure', 'github', 'gitlab', 'none', 'both'];
 export function ciModeFor({ tier, ci }) {
   if (ci && CI_MODES.includes(ci)) return ci;
   return tier === 'lean' ? 'none' : 'both';
@@ -348,6 +351,7 @@ export function ciTemplateRels(mode) {
   const rels = [];
   if (mode === 'azure' || mode === 'both') rels.push('azure-pipelines.yml');
   if (mode === 'github' || mode === 'both') rels.push('.github/workflows/ci.yml');
+  if (mode === 'gitlab' || mode === 'both') rels.push('.gitlab-ci.yml');
   return rels;
 }
 
@@ -358,13 +362,14 @@ export function ciTemplateRels(mode) {
 // ci: 显式 CI 交付面选择（CI_MODES 之一），缺省按 tier 派生；写入 manifest 由 upgrade 重放。
 export function buildPlan({
   target, hosts, lang, stack, stacks = null, projectName, categories, models = null, tier = 'standard', hardened = false, mcp = true,
-  surfaces = [], managedPermissions = {}, devcontainer = true, ci = null,
+  surfaces = [], managedPermissions = {}, devcontainer = true, ci = null, scaffold = 'full',
   templatesRoot = TEMPLATES, localesRoot = LOCALES,
 }) {
   const t = makeT(lang);
   const plan = [];
   const push = (srcAbs, targetRel, category, priority = 10, kind = 'file', extra = {}) => {
-    const entry = { srcAbs, targetRel: targetRel.replace(/\\/g, '/'), category, priority, kind, ...extra };
+    // 脚手架模板用中文物理路径；按安装语言翻译目标路径（非中文 overrides 据此按目标路径命中）。
+    const entry = { srcAbs, targetRel: localizePath(targetRel.replace(/\\/g, '/'), lang), category, priority, kind, ...extra };
     plan.push(entry);
     return entry;
   };
@@ -384,6 +389,74 @@ export function buildPlan({
       push(path.join(templatesRoot, 'profiles', s, rel), rel, 'profile', 20 + index);
     }
   });
+
+  // 多栈联合：product-gates.json 与 project-faces.json 自动求并集（优先级 24，高于单栈覆盖，低于 profile.json 25）
+  if (stackList.length > 1) {
+    const allGates = [];
+    const seenGateIds = new Set();
+    const facesMerged = { ui: [], code: [], tests: [], data: [] };
+    const seenFaces = { ui: new Set(), code: new Set(), tests: new Set(), data: new Set() };
+
+    for (const s of stackList) {
+      const pgRel = path.join('profiles', s, '.agents/config/product-gates.json');
+      const pgPath = path.join(templatesRoot, pgRel);
+      if (fs.existsSync(pgPath)) {
+        try {
+          const raw = JSON.parse(fs.readFileSync(pgPath, 'utf8'));
+          const list = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.gates) ? raw.gates : []);
+          for (const g of list) {
+            if (g && g.id && !seenGateIds.has(g.id)) {
+              seenGateIds.add(g.id);
+              allGates.push(g);
+            }
+          }
+        } catch (e) {
+          throw new Error(`画像配置损坏：${pgRel}（${e.message}）`);
+        }
+      }
+
+      const pfRel = path.join('profiles', s, '.agents/config/project-faces.json');
+      const pfPath = path.join(templatesRoot, pfRel);
+      if (fs.existsSync(pfPath)) {
+        try {
+          const raw = JSON.parse(fs.readFileSync(pfPath, 'utf8'));
+          for (const k of ['ui', 'code', 'tests', 'data']) {
+            if (Array.isArray(raw[k])) {
+              for (const item of raw[k]) {
+                if (item && !seenFaces[k].has(item)) {
+                  seenFaces[k].add(item);
+                  facesMerged[k].push(item);
+                }
+              }
+            }
+          }
+        } catch (e) {
+          throw new Error(`画像配置损坏：${pfRel}（${e.message}）`);
+        }
+      }
+    }
+
+    if (allGates.length) {
+      push(null, '.agents/config/product-gates.json', 'profile', 24, 'generated', {
+        getText: () => `${JSON.stringify({
+          _note: '项目产品门配置（verify 基础表之外的本项目技术栈门）：多栈合并；id/name/cmd 必填，when 任一满足才启用。',
+          gates: allGates,
+        }, null, 2)}\n`,
+      });
+    }
+
+    if (Object.values(facesMerged).some((list) => list.length > 0)) {
+      push(null, '.agents/config/project-faces.json', 'profile', 24, 'generated', {
+        getText: (vars) => {
+          const str = JSON.stringify({
+            _note: '产品面单源：列出的仓库相对路径前缀算产品面（多栈合并）。',
+            ...facesMerged,
+          }, null, 2);
+          return `${fillTemplate(str, vars)}\n`;
+        },
+      });
+    }
+  }
 
   // 2.5) surface 叠加：同一 targetRel 由后声明的 surface 覆盖（21 + index > 20）。
   // 单 stack 安装不产生任何额外文件，保持行为不变。
@@ -433,16 +506,21 @@ export function buildPlan({
   if (mcp) addMcpEntries({ plan, target, hosts });
 
   // 4) 数据资产脚手架（空目录由 scaffold 中的 .gitkeep 保证）
-  for (const rel of listFiles(path.join(templatesRoot, 'scaffold'))) {
-    push(path.join(templatesRoot, 'scaffold', rel), rel, 'scaffold', 10);
+  //    --scaffold none：整个脚手架面不装；minimal：只留 wiki/INDEX.md（知识库子目录由项目自建）。
+  if (scaffold !== 'none') {
+    for (const rel of listFiles(path.join(templatesRoot, 'scaffold'))) {
+      if (scaffold === 'minimal' && rel.startsWith('wiki/') && rel !== 'wiki/INDEX.md') continue;
+      push(path.join(templatesRoot, 'scaffold', rel), rel, 'scaffold', 10);
+    }
   }
 
   // 5) git 门禁与合并策略
   const ciMode = ciModeFor({ tier, ci });
   for (const rel of listFiles(path.join(templatesRoot, 'git'))) {
     // CI 交付面按选择裁剪：lean 档缺省不生成（小项目先跑本地钩子）；显式 --ci 优先于 tier 派生。
-    if (rel === 'azure-pipelines.yml' && (ciMode === 'github' || ciMode === 'none')) continue;
-    if (rel.startsWith('.github/') && (ciMode === 'azure' || ciMode === 'none')) continue;
+    if (rel === 'azure-pipelines.yml' && (ciMode === 'github' || ciMode === 'gitlab' || ciMode === 'none')) continue;
+    if (rel.startsWith('.github/') && (ciMode === 'azure' || ciMode === 'gitlab' || ciMode === 'none')) continue;
+    if (rel === '.gitlab-ci.yml' && (ciMode === 'azure' || ciMode === 'github' || ciMode === 'none')) continue;
     if (rel === '.gitattributes') push(path.join(templatesRoot, 'git', rel), '.gitattributes', 'git', 40, 'merge-gitattributes');
     else if (rel === '.gitignore.engine') push(path.join(templatesRoot, 'git', rel), '.gitignore', 'git', 40, 'merge-gitignore');
     else push(path.join(templatesRoot, 'git', rel), rel, 'git', 40);

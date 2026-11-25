@@ -38,7 +38,7 @@ const COMMANDS = [
   'doctor', 'diff', 'status', 'workspace', 'devcontainer', 'add-skill', 'remove-skill',
   'skills', 'new-host', 'explain', 'list-hosts', 'policy', 'bundle', 'sbom',
   'keygen', 'sign', 'verify-sig', 'handoff', 'mcp', 'metrics', 'arch', 'sandbox',
-  'gate', 'ci', 'hud', 'run', 'hook', 'help',
+  'gate', 'ci', 'hud', 'rules', 'timeline', 'shadow-run', 'eval', 'optimize-skill', 'run', 'hook', 'help',
 ];
 
 function normalizeLang(input) {
@@ -68,12 +68,13 @@ async function main(argv) {
     && process.stdin.isTTY && process.stdout.isTTY;
 
   // --version / help 类请求（--help / -h / help）不读宿主注册表（help 是静态目录文案），
-  // 先于外部宿主加载短路，避免项目层坏 manifest 挡住版本与帮助输出；向导路径让路保持原语义。
+  // 先于外部宿主加载短路，避免项目层坏 manifest 挡住版本与帮助输出；演进命令（timeline 等）自行处理专属帮助
   if (flag(args, 'version') || flag(args, 'v')) {
     console.log(readVersion());
     return 0;
   }
-  if (!wizardPath && (flag(args, 'help') || flag(args, 'h') || command === 'help' || command === '-h')) {
+  const EVOLUTION_COMMANDS = new Set(['timeline', 'shadow-run', 'eval', 'optimize-skill']);
+  if (!wizardPath && !EVOLUTION_COMMANDS.has(command) && (flag(args, 'help') || flag(args, 'h') || command === 'help' || command === '-h')) {
     console.log(t('help', { version: readVersion(), stacks: STACKS.join('|') }));
     return 0;
   }
@@ -162,6 +163,26 @@ async function main(argv) {
       return ciCommand({ args, t, lang });
     case 'hud':
       return hudCommand({ args, t, lang });
+    case 'rules': {
+      const { rulesCommand } = await import('../commands/rules.mjs');
+      return rulesCommand({ args, t, lang });
+    }
+    case 'timeline': {
+      const { timelineCommand } = await import('../commands/evolution.mjs');
+      return timelineCommand({ args, t, lang });
+    }
+    case 'shadow-run': {
+      const { shadowRunCommand } = await import('../commands/evolution.mjs');
+      return shadowRunCommand({ args, t, lang });
+    }
+    case 'eval': {
+      const { evalCommand } = await import('../commands/evolution.mjs');
+      return evalCommand({ args, t, lang });
+    }
+    case 'optimize-skill': {
+      const { optimizeSkillCommand } = await import('../commands/evolution.mjs');
+      return optimizeSkillCommand({ args, t, lang });
+    }
     default:
       {
         const err = new Error(`unknown command: ${command} (available: ${COMMANDS.join(', ')})`);

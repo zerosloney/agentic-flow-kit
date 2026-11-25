@@ -13,8 +13,8 @@
 //   3. 失败不阻断：看板拉不起来（端口被他人占 / 冷启动超时）时打印告警并 exit 0——
 //      全景图是可选的观察面，不是门禁，Build 流程不应因它停摆。
 //
-// 端口单源：board-port.mjs（显式 --port > 配置基线 > BASE_BOARD_PORT，再按 SHIPYARD_SLOT 偏移；
-//   与 ensure-board.mjs 同口径，共用同一函数，端口字面量不落本文件）。
+// 端口单源：board-port.mjs（显式 --port > 配置基线 > BASE_BOARD_PORT，再按 FLOW_KIT_BOARD_SLOT 偏移，旧名 SHIPYARD_SLOT 仍兼容；
+//   与 ensure-board.mjs 同口径，共用同一函数（自包含，不再依赖不随包分发的 ports.mjs），端口字面量不落本文件）。
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';

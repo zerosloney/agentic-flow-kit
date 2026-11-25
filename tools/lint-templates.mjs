@@ -63,7 +63,7 @@ function checkFrontmatter(root, result) {
   const sec = section('frontmatter');
   result.sections.push(sec);
   const skillDirs = [
-    path.join(root, 'templates/engine/.agents/skills'),
+    ...skillRoots(root),
     path.join(root, 'locales/en/overrides/.agents/skills'),
   ];
   for (const dir of skillDirs) {
@@ -131,6 +131,20 @@ function safeDirs(dir) {
   } catch {
     return [];
   }
+}
+
+// 栈专用技能住在 profile 层（templates/profiles/<stack>/.agents/skills），engine 只放全栈通用技能，
+// 因此技能存在性判定要看 engine 与任一 profile（roles 仍只在 engine）。
+function skillRoots(root) {
+  return [
+    path.join(root, 'templates/engine/.agents/skills'),
+    ...safeDirs(path.join(root, 'templates/profiles'))
+      .map((stack) => path.join(root, 'templates/profiles', stack, '.agents/skills')),
+  ];
+}
+
+function skillDistributed(root, name) {
+  return skillRoots(root).some((dir) => fs.existsSync(path.join(dir, name, 'SKILL.md')));
 }
 
 function safeFiles(dir, ext) {
@@ -258,9 +272,8 @@ function checkStageSkills(root, result) {
       continue;
     }
     for (const token of tokens) {
-      const skill = path.join(root, 'templates/engine/.agents/skills', token, 'SKILL.md');
       const role = path.join(root, 'templates/engine/.agents/roles', `${token}.md`);
-      if (fs.existsSync(skill) || fs.existsSync(role)) continue;
+      if (skillDistributed(root, token) || fs.existsSync(role)) continue;
       sec.errors.push(`${rel}: stage table loads "${token}" but neither .agents/skills/${token}/SKILL.md nor .agents/roles/${token}.md is distributed`);
     }
   }
@@ -354,7 +367,7 @@ function checkRender(root, result) {
           for (const name of collectRefs(text, /\.agents\/roles\/([a-z0-9][a-z0-9-]*)\.md/g)) state.roles.add(name);
         }
         for (const name of state.skills) {
-          if (!fs.existsSync(path.join(root, 'templates/engine/.agents/skills', name, 'SKILL.md'))) {
+          if (!skillDistributed(root, name)) {
             sec.errors.push(`[${lang}/${tier}] reference to missing skill .agents/skills/${name}`);
           }
         }

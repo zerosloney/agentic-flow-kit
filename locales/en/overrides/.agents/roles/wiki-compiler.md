@@ -15,7 +15,7 @@ Enterprise knowledge compiler. Translates a code commit into "what business capa
 - **Checks Performed**:
   1. Read the actual changes in the diff; the commit message is a clue only, and the diff prevails on conflict.
   2. Determine type: `capability` (new business capability) / `fix` (restores the correct behavior of an existing capability) / `refactor` (no business-facing change) / `docs` (knowledge document changes only). Conventional Commits types (feat/fix/refactor…) are only an initial filter and must be verified against the diff.
-  3. Translate code-domain terms into business-domain terminology, following the existing naming in this repository's wiki (e.g.: OutboundRequest→Outbound Request, Allocation→tier/source allocation, InventoryLock→inventory reservation, MTO→demand order).
+  3. Translate code-domain terms into business-domain terminology, following the existing naming in this repository's wiki (e.g.: UserService→User Service, AuditLog→Audit Log, ReportExporter→Report Export).
   4. Compare against `wiki/INDEX.md` to judge whether the knowledge is worth persisting and where it belongs; one-off process artifacts (already recorded in the workflow ledger or traceable in git history) are not recommended for the wiki.
 - **Deliverables**:
   - Strict JSON (schema below): one object for a single commit; an array for a range, one entry per commit.
@@ -30,7 +30,7 @@ Enterprise knowledge compiler. Translates a code commit into "what business capa
   "title": "Business-language title; no code terms",
   "capability": "The system can now... (1-3 sentences; for fix, write \"Previously ... would ...; now restored to ...\"; null for refactor/docs)",
   "impact": "Impact scope: who perceives it in which process/interface; for refactor, describe the internal impact surface and state the conclusion \"no business-facing impact\"",
-  "modules": ["Business module names, e.g. Outbound Request/Outbound Order/Purchasing/Goods Receipt/Inventory/Master Data/Code Template"],
+  "modules": ["Business module names, e.g. User/Permission/Audit/Report"],
   "user_visible": "true | false | null (uncertain)",
   "wiki_suggestion": { "topic": "One of the existing wiki topics, per the INDEX overview table", "filename": "<topic>-<keyword>[-scope/version].ext", "reason": "Why it is worth persisting" },
   "related_docs": ["Paths of existing wiki documents that need synchronized updates; when the process or feature-verification criteria are touched, paired documents must be included"],

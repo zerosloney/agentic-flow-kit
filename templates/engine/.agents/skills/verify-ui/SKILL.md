@@ -34,7 +34,7 @@ description: UI 改动实测（只读验证、不留脏数据）。第一选择 
 - 注入前先到达 FE origin；同文档 hash 切换不重载文档，播种后必须整页 reload。
 - 缺省身份 = 所播 token 的 JWT claims。仅测「与 token 不同身份」时，按本仓登录响应播种 `auth_user`。
 - 合成 JWT 只适用于零授权 API 调用的页面：`exp = Math.floor(Date.now()/1000) + 1800`，禁写远期；注入后经 about:blank 中转再硬导航。
-- 页面发出带 token 的 API 且 401 即被清会话弹回 `/login`：有真实数据依赖走账号池登录（账号池单源 `.agents/notes/runtime-env.md` §6.1a）。
+- 页面发出带 token 的 API 且 401 即被清会话弹回 `/login`：有真实数据依赖走账号池登录（账号池登记在 `.agents/notes/runtime-env.local.md`：本机私有、不入库）。
 - 请求计数剔除 OPTIONS 预检；断言取数以接口响应为准，禁数 DOM（虚拟滚动 / 虚拟列只渲染可视窗口）。
 - 断「控制台零错误」前先滤应用自身噪声（AG Grid license banner、API 未起的 Network Error）；过滤按内容特征，禁用 `^` 行首锚。
 
@@ -48,7 +48,7 @@ description: UI 改动实测（只读验证、不留脏数据）。第一选择 
 
 ### 1. 环境准备
 - 按 `.agents/notes/runtime-env.md` 启动 API / 前端；记录所有启动进程。
-- 多 worktree 并行：按本仓端口表整体偏移 API / 前端 / CDP。端口字面量单源 `scripts/verify/e2e/ports.mjs`。
+- 多 worktree 并行：按槽位整体偏移端口。看板端口偏移单源 `board-port.mjs`（槽位号 `FLOW_KIT_BOARD_SLOT`）；API / 前端 / CDP 的端口表由项目自己登记。
 - 仅 harness / 降级路径自建浏览器：较新 Chromium 内核 headless（如 Edge `--headless=new`）；MCP 路径浏览器实例由 MCP 自管，禁手动另起。
 - 长命服务以独立进程启动（如 PowerShell `Start-Process`）；启动命令末尾禁接管道。
 

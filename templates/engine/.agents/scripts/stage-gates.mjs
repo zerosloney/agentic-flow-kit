@@ -6,10 +6,10 @@
 //   incident 入口 = 文件存在 + 「时间线」小节内、行首列表条目含「用户确认」（原 maintain.md §3 约定；
 //     2026-09-30 复核 P2-1 收窄为小节内行首条目；第三轮复核 P1-1 起接受日期前缀形态，与模板样例一致）；
 //     状态 ∈ {open, fixed, closed}（spec/plan 须先于 fixed 起草，故 open 即为有效态）。
-//   入口「级别」须 ∈ L1-L3；缺失即拒（fail-closed）——**但库存量形态短路**（`流程: legacy` 或 日期早于
+//   入口「级别」须 ∈ L1-L3；缺失即拒（fail-closed）——**但存量形态短路**（`流程: legacy` 或 日期早于
 //     确认门生效日）：跳过级别校验与 spec 档（2026-09-30 增量复核 N1——存量最可能缺级别，硬拒会锁死
 //     spec 起草与确认）。
-//   注意：**库存量信号本身即等于「入口已确认」**（judgeDoc：`台账行 || 存量口径`，与检查 15 / 检查 1 /
+//   注意：**存量形态信号本身即等于「入口已确认」**（judgeDoc：`台账行 || 存量口径`，与检查 15 / 检查 1 /
 //     配对门的既有口径一致——早于确认门生效日的自报日期即存量豁免，不要求另有台账行）；此处「短路」
 //     只额外豁免**级别前置与 spec 档**，不是对台账要求的二次豁免（P2-1：原注释把二者写反，已订正）。
 //   plan 门追加：入口级别（取入口 frontmatter 级别，不取工具 --level）为 L2/L3 时，同名 spec 须已确认（同口径）。
@@ -160,7 +160,7 @@ export function readLedger(root) {
 }
 
 // judgeDoc：状态枚举 + 机器事实源判定（供入口 / spec 复用）
-// legacy：库存量信号（`流程: legacy` 标记 或 日期 < confirmDocsEffective）——所有调用方与门禁其余部分
+// legacy：存量形态信号（`流程: legacy` 标记 或 日期 < confirmDocsEffective）——所有调用方与门禁其余部分
 // 同口径（配对门 / 检查 1 / 检查 15 / 检查 19）；2026-09-30 复核 N1：存量入口须先短路，不得被
 // 「缺级别」fail-closed 硬拒（存量最可能缺级别，硬拒会锁死 spec 起草/确认，违反「存量零新增」契约）。
 function judgeDoc(root, abs, rel, statuses) {
@@ -179,7 +179,7 @@ function judgeDoc(root, abs, rel, statuses) {
   return { ok: false, status: st, legacy: false, reason: `无确认台账行（门禁后的入口须经 confirm-doc，且台账无 ${rel} 的 approved / done 行）` };
 }
 
-// entryStorageLegacy：入口是否属「库存量」形态（`流程: legacy` 标记 或 日期早于确认门生效日）——
+// entryStorageLegacy：入口是否属「存量」形态（`流程: legacy` 标记 或 日期早于确认门生效日）——
 // 与 judgeDoc 的存量信号同口径，供门在**级别校验**处短路（2026-09-30 增量复核 N1）。注意：本短路
 // **只豁免 level 前置**（存量多为门禁前建档、无级别字段），**不豁免台账要求**——`judgeDoc` 的
 // hasRow||legacy 仍照常判定（门禁后无台账行即拒，不因日期早于生效日而放行）。
@@ -394,7 +394,7 @@ export function clarifyGate(root, docRel) {
 
 // ---- 前提质询门（premise-interrogation 2026-10-29）----
 // 与 clarifyGate 互补：歧义清单拦「列出的维度没想清」，本门拦「自信的错误解读」。根因实证
-// 2026-10-23 pml-quota-substitute-identity-overwrite（L3，user 发现）：spec 把「代用后显示成谁」的展示
+// 2026-10-23 一次 L3 事件（user 发现）：spec 把「代用后显示成谁」的展示
 // 诉求写成存储身份改写——20 个测试按错误前提固化期望、独立复核只核实现自洽不质疑前提、静态门不读语义，
 // 三层吃同一前提同时失守。前提不是歧义（有清单可扫），是未被反问的立论；唯一可拦点在它进事实源（approved）之前。
 export function parsePremiseTable(text) {
@@ -573,9 +573,9 @@ export function draftGateFor(kind, root, base, opts = {}) {
       hint: '先走 stages.md Plan 章完成入口确认（修复类走 maintain.md，incident 草稿过目后在时间线留「用户确认」条目）',
     };
   }
-  // 库存量形态短路（2026-09-30 增量复核 N1）：**只额外豁免「级别前置」与「spec 档」**——
-  // 库存量入口（`流程: legacy` / 日期早于确认门生效日）多为门禁前建档、常缺「级别」字段，硬拒会锁死
-  // spec 起草与确认。注意：库存量信号**本身即等于入口已确认**（judgeDoc 的 `台账行 || 存量口径`，
+  // 存量形态短路（2026-09-30 增量复核 N1）：**只额外豁免「级别前置」与「spec 档」**——
+  // 存量入口（`流程: legacy` / 日期早于确认门生效日）多为门禁前建档、常缺「级别」字段，硬拒会锁死
+  // spec 起草与确认。注意：存量形态信号**本身即等于入口已确认**（judgeDoc 的 `台账行 || 存量口径`，
   // 与检查 1 / 15 / 配对门同口径）——台账豁免发生在 judgeDoc，不在本处；本处不做二次豁免
   // （第三轮复核 P2-1：原句「台账要求不豁免」把两件事写反，已订正）。
   if (!entry.storageLegacy && !/^L[0-3]$/.test(entry.level)) {
@@ -651,7 +651,7 @@ export function gitReady(root) {
 // 入库，git log -G 默认不生成合并提交 diff → 痕迹不可见 → done 前置门误拦）。加
 // --diff-merges=first-parent：合并提交按第一父生成 diff，痕迹在合并面即可见（git ≥2.31；更老 git
 // 该旗标报错 → gitRun null → 沿既有 fail-open 边界：检查 14 不报、done 门跳过）。
-// 2026-10-12 工作树分支合并盲视修复（pml-three-ui-tweaks 关单实证：2026-10-10 两个 plan 的
+// 2026-10-12 工作树分支合并盲视修复（一次前端微调关单实证：2026-10-10 两个 plan 的
 // approved 痕在 JihWs6 工作树分支提交 37126b5f/83a4b7d4c，merge-base --is-ancestor 验证非当前
 // 分支第一父链可达 → --diff-merges=first-parent 的 diff 不含分支侧痕 → s14 误报"确认态缺失"）。
 // 加 --all：让所有分支可达，分支提交（非合并提交）的 approved 痕也能被 -G 命中。性能影响可接受

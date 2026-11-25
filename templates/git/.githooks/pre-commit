@@ -157,18 +157,31 @@ if (touchesWorkflowDocFace) {
 // 项目门禁挂载点：.agents/hooks/local-pre-commit.mjs（项目自建门禁/门禁模块接线处，存在即优先执行；
 // 缺失时回退包内默认实现 flow-kit hook local-pre-commit，两者皆缺失才 advisory）。
 // 2026-10-29 条件化（AI 写路径拦截已前移宿主写前门 flow-kit hook pre-write-check——
-// 快照复用同一批 check-*.mjs，判据单源不变）：四门改**触及代码面才跑**（backend/**/*.cs|csproj|sln
-// 或 frontend/src/**），纯文档/台账提交零成本。四门仍保留于此——2026-11-11 起已接入 verify product
-// cohort（CI --mid/--full 执法；本地增量档单边化 CI，口径单源 verify-scope.CI_UNILATERAL_GATE_IDS），
-// 本地 pre-commit 仍是最早拦截点：手工编辑（不经宿主）提交时刻即拦，不得再撤（mechanism-registry 口径）。
-const touchesCodeFace = stagedFiles.some((f) =>
-  (/^backend\/.+\.(cs|csproj|sln)$/i.test(f)) || f.startsWith('frontend/src/'));
+// 快照复用同一批 check-*.mjs，判据单源不变）：四门改**触及代码面才跑**，纯文档/台账提交零成本。
+// 四门仍保留于此——2026-11-11 起已接入 verify product cohort（CI --mid/--full 执法；本地增量档
+// 单边化 CI，口径单源 verify-scope.CI_UNILATERAL_GATE_IDS），本地 pre-commit 仍是最早拦截点：
+// 手工编辑（不经宿主）提交时刻即拦，不得再撤（mechanism-registry 口径）。
+// 触发面单源 = .agents/config/project-faces.json（faces.mjs，与 verify/宿主门同源）：
+// `--check-staged --keys code,ui`——命中 code/ui 面或未配置（保守全触发）→ 跑四门；
+// 配置后未命中 → SKIP；配置错误（exit 2）→ fail-closed 阻断（配置坏不得放行）。
+const facesCheck = runScript('faces', ['--check-staged', '--keys', 'code,ui'], { encoding: 'utf8' });
+let touchesCodeFace = false;
+if (facesCheck.error) {
+  console.error(`pre-commit: 产品面判定无法执行（${facesCheck.error.message}）——提交已阻止`);
+  process.exit(1);
+} else if (facesCheck.status === 0) {
+  touchesCodeFace = true;
+} else if (facesCheck.status !== 1) {
+  console.error(`pre-commit: 产品面配置错误或判定失败（faces.mjs exit ${facesCheck.status}）：${String(facesCheck.stderr || '').trim()}`);
+  console.error('pre-commit: .agents/config/project-faces.json 配置坏不得放行——提交已阻止');
+  process.exit(1);
+}
 // 项目自建门禁优先：.agents/hooks/local-pre-commit.{mjs,cjs} 存在即直接执行（项目所有，不随包分发）；
 // 否则回退包内默认实现 `flow-kit hook local-pre-commit`。
 const projectGate = ['.agents/hooks/local-pre-commit.mjs', '.agents/hooks/local-pre-commit.cjs']
   .find((f) => fs.existsSync(f));
 if (!touchesCodeFace) {
-  console.log('SKIP: 未触及代码面（backend 源码 / frontend/src），四门跳过——AI 写路径已由宿主写前门拦截');
+  console.log('SKIP: 未触及代码面（faces 判定：--keys code,ui 未命中），四门跳过——AI 写路径已由宿主写前门拦截');
 } else if (projectGate) {
   const r = spawnSync(process.execPath, [projectGate, ...(process.argv.slice(2))], { stdio: 'inherit' });
   if (r.error || r.status !== 0) {

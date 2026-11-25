@@ -92,7 +92,7 @@ Write this behavior change into the corresponding living doc, and leave a pointe
 | User-visible interaction / path | `.agents/skills/verify-ui/features/<feature>.md` |
 | Contract / rule / data criteria | Amend the original spec in place (`workflow/README.md` spec lifecycle) |
 | Anti-recurrence assertion | Corresponding module section of `workflow/regression-checklist.md` |
-| Architecture / approach | `wiki/开发方案/` |
+| Architecture / approach | `{{wikiDesigns}}/` |
 
 Append only change facts and evidence pointers, do not copy the whole doc; backfill goes with the close-out commit. If no corresponding doc exists, create one with the feature key in the topic.
 

@@ -1,6 +1,6 @@
 # Ordering Red Line: Classify First → Three-Piece Set → Confirm → Then Act
 
-Source: the 2026-11-03 process-inversion incident (incident `workflow/incidents/2026-11-03-po-pml-outbound-guards.md`; same-day entry in `workflow/papercuts.md`). `new-task.md` keeps only a one-line pointer on its first screen; the body details live here.
+Source: the 2026-11-03 process-inversion incident (recorded in the same-day `workflow/incidents/` entry and `workflow/papercuts.md`). `new-task.md` keeps only a one-line pointer on its first screen; the body details live here.
 
 ## Rules
 

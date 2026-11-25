@@ -69,6 +69,7 @@
 | 31 | 发布控制面（merge queue 合并前重检、feature flag 内部灰度、分阶段通道、开关快速回滚）缺位——超出「开发工作流引擎」现定位，先过定位决策再决定是否开工【能力扩展·定位待决策】 | 定位决策先落 ADR（v2.6.0 已装 `workflow/adr/`）；若决策进入，合 main 触发条件已存在（pr-review 触发规则），补排队重检与回滚开关语义后按 ROADMAP 流程补 R 条目 | 先产出 ADR：进/不进 + 理由；不进则关闭本条并记录依据；进则回填 ROADMAP 再执行；不默认开工、不预先设计 | DONE |
 | 34 | 验证证据不绑定未提交修改：`verify.mjs` 落账的全绿行只记基线 `headShort`，`gen-verify-evidence.mjs` 自认「短 SHA 只是基线提交，不等于被测内容」；「verify 绿→commit 之间改码」的残余窗口目前只靠「先提交后跑门」+ L1 单笔关单的流程约定封住，无技术性绑定（来源④） | `engine/.agents/scripts/verify.mjs` 落账处（全绿行与失败行）增记脏树摘要（`git status --porcelain` + `git diff HEAD` 内容的 sha256）；`gen-verify-evidence.mjs` 渲染时对脏树凭证标注「非干净树」 | 全绿/失败行带脏树摘要；干净树与脏树凭证在 `workflow/verify-evidence.md` 可区分；存量无字段行向前兼容；测试覆盖干净/脏树两态 | DONE |
 | 37 | pipeline-run 观测口径与实现漂移（条目 32 实战发现）：①`pipeline-run.md` 声称「退回途中记 route 事件（from/to/attempt/cap）」「每次失败记 retry 事件」，实测 events 只有 run-created/work-order/stop/triage/gate/confirm/commit/done——`retries` 计数器有而 route/retry 事件无；②done 摘要列出 `api.md（?）`——未声明 `{apiDocs}` 时 `docs.apiDocs` 仍被默认派生并打印 | `engine/.agents/scripts/pipeline-run.mjs`：route/retry 事件补落或文档改口径（二选一）；`apiDocs` 仅在 stageArtifacts 声明时派生/打印 | 实测 run 的 events 含 route/retry（或文档口径删除）；未声明 `{apiDocs}` 的 run 其 done 摘要不含 api.md 行；`tests/pipeline-executor.test.mjs` 补两态断言 | DONE |
+| 39 | 新一波引擎工具（`agent-evaluator.mjs` / `dynamic-test-impact.mjs` / `headless-driver.mjs` / `skill-optimizer.mjs` / `timeline-trace.mjs`）的用户可见输出只有中文：CLI 用法、命令说明、失败原因都没接运行时双语（`lang.mjs` 的 `runtimeLang` / `t()`）——`--lang en` 装户跑 `flow-kit run` 拿到的是中文说明（2026-11-25 续作复核发现） | `templates/engine/.agents/scripts/` 五个脚本的 CLI 帮助与错误文案经 `lang.mjs` 取文案（zh 默认输出逐字节不变）；不新增机制行 | en 装户跑 `flow-kit run headless-driver.mjs --help` 输出英文；zh 装户输出逐字节不变；`tests/en.test.mjs` 覆盖两条命令 | TODO |
 
 ## 落地记录（2026-11-12）
 
@@ -509,6 +510,30 @@
   （done 摘要 apiDocs 条件断言改强）；补覆盖缺口三处（reconfirm 落点、digest 三态、零提交仓分支——
   `dirtyTreeDigest` 抽至无副作用单源 `git-tree-digest.mjs`，因 verify.mjs 顶层 import 即跑主流程）。
   全量 630 pass / 0 fail；lint:templates 与 check:i18n 均绿。
+
+## 落地记录（2026-11-26，v2.13.0 演进套件与顶层 CLI 接入）
+
+- **全套演进机制落地**：完成了 8 大前沿演进方向全套机制落地与端到端联合演练：
+  1. 处方自愈飞轮（`self-healing-prescriptions.mjs` + `healing-recipes.json`）；
+  2. 动态测试影响图与增量选测（`dynamic-test-impact.mjs`）；
+  3. 语义沙箱与符号级授权（`checkAuthorized` + `sandbox-capabilities.json`）；
+  4. 异构独立复核与双模型背书（`independent-review.mjs` + `model-roles.json`）；
+  5. 多任务并发防洪与队列熔断（`concurrency-control.mjs` + `checkQueueBrake`）；
+  6. 流水线时序追踪复盘（`timeline-trace.mjs`）；
+  7. 受控无头驱动与隔离影子试跑（`headless-driver.mjs`）；
+  8. 技能自优化进化飞轮与 5 维效能评估（`skill-optimizer.mjs` + `agent-evaluator.mjs`）。
+- **顶层 CLI 一等公民接入**：
+  - 新增 `timeline`、`shadow-run`、`eval`、`optimize-skill`、`rules` 顶层 CLI 命令；
+  - `src/cli/main.mjs` 统一分派与错误码映射，支持 `--json`、`--help`；
+  - `locales/zh-CN/installer.json` 与 `locales/en/installer.json` 同步补齐 5 大命令的 usage 与帮助说明。
+- **规则预算与机制台账对账**：
+  - `rule-budgets.txt`：校准 `pipeline-run.md` 至 13312B（13KB）、`commands/` 目录至 86016B（84KB）、`mechanism-registry.md` 至 34816B（34KB）；
+  - `mechanism-registry.md` 完整登记演进机制，现役机制总计 46 项，严格遵循一进一出纪律。
+- **全流程联合演练与门禁闭环**：
+  - 联合演练覆盖：处方自愈修复、TIA 拓扑选测、双模型交叉复核、队列熔断告警、影子沙箱零污染试跑、时序包导出；
+  - 全量测试 `npm test` 1501/1501 全绿通过；
+  - 模板合规检查 `npm run lint:templates`、策略一致性检查 `npm run policy:check`、文档无漂移检查全绿；
+  - 发版归档：升级版本至 `2.13.0`，生成 `CHANGELOG.md`，打发布标签 `v2.13.0`。
 
 ## 能力扩展
 

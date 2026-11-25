@@ -1,1 +1,1 @@
-export { forgeFromRemote, originUrl } from '../../templates/engine/.agents/scripts/forge.mjs';
+export { forgeFromRemote, originUrl, FORGE_PROVIDERS, getForgeProvider } from '../../templates/engine/.agents/scripts/forge.mjs';

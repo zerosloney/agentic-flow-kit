@@ -1,9 +1,9 @@
 # Repository Guidelines
 
-船厂物资管理系统。ASP.NET Core 6 后端（Clean Architecture 双模块）+ Vue 3 + SQL Server。
+{{projectName}}。{{stackDescription}}
 
 ## 1. 运行时联通 (Runtime Connectivity)
-前端 dev 5203 连 API `http://localhost:8932`；API 须监听 8932 才联通。端口/工具缺陷/可执行文件解析机理等环境事实见 `.agents/notes/runtime-env.md` §6；各机绝对路径与版本自登记 `.agents/notes/runtime-env.local.md`。
+{{productNote}}端口/工具缺陷/可执行文件解析机理等环境事实见 `.agents/notes/runtime-env.md` §6；各机绝对路径与版本自登记 `.agents/notes/runtime-env.local.md`。
 
 ## 2. 本地 Clone 必做 (Local Setup)
 > 漏配则门禁静默失效，详见 `.agents/notes/runtime-env.md` §7。
@@ -39,14 +39,14 @@
 
 > **纠偏短名**：任务中途报短名即可，索引 `.agents/config/principles.md`。
 
-> **引擎面豁免**：改 AI-Native 治理引擎自身，**豁免工作流三件套**——不生成 intents/specs/plans、不走确认门，Conventional Commits 直接变更。引擎面 = `.agents/` 全部、`.zcode/`、`.githooks/`、`azure-pipelines.yml`、workflow/ 模板与台账、根 `package.json`、宿主适配目录 `.opencode/`、`.trae/`、`.codebuddy/`、`.qwen/`、`.pi/`、`.cline/`、`.commandcode/`、`.claude/`；其中 `.pi/`、`.cline/`、`.commandcode/`、`.claude/` 等本机私有目录不入库、不随 clone 传播，其门禁接线完整性由 `check-local-gates.mjs` advisory 对账（机理 `.agents/notes/runtime-env.md` §6.4）。**wiki 豁免**：调整 `wiki/` 知识文档内容（含 INDEX 与看板）同享上述豁免，`docs(wiki)` 直接变更。**边界**：git 钩子与静态门照常执行；删除 wiki 文件仍须用户单独指令；数据维护 SQL 的**执行**不豁免，仍按数据维护台账与 DB 验证口径走；触及 `backend/`、`frontend/`、数据维护 SQL 等**业务面**不豁免，按下表级别走闭环；混合改动只对业务部分立档。
+> **引擎面豁免**：改 AI-Native 治理引擎自身，**豁免工作流三件套**——不生成 intents/specs/plans、不走确认门，Conventional Commits 直接变更。引擎面 = `.agents/` 全部、`.zcode/`、`.githooks/`、CI 配置文件（如 `azure-pipelines.yml`、`.github/workflows/ci.yml` 等）、workflow/ 模板与台账、根 `package.json`、宿主适配目录 `.opencode/`、`.trae/`、`.codebuddy/`、`.qwen/`、`.pi/`、`.cline/`、`.commandcode/`、`.claude/`；其中 `.pi/`、`.cline/`、`.commandcode/`、`.claude/` 等本机私有目录不入库、不随 clone 传播，其门禁接线完整性由 `check-local-gates.mjs` advisory 对账（机理 `.agents/notes/runtime-env.md` §6.4）。**wiki 豁免**：调整 `wiki/` 知识文档内容（含 INDEX 与看板）同享上述豁免，`docs(wiki)` 直接变更。**边界**：git 钩子与静态门照常执行；删除 wiki 文件仍须用户单独指令；数据维护 SQL 的**执行**不豁免，仍按数据维护台账与 DB 验证口径走；触及 `backend/`、`frontend/`、数据维护 SQL 等**业务面**不豁免，按下表级别走闭环；混合改动只对业务部分立档。
 
 ## 5. 目录级规则 (Directory-level Rules)
 **禁止回填本文档**。具体实现细节请查阅对应目录的 `AGENTS.md`：
-- **后端**: `backend/AGENTS.md` (.NET 开发规范 / 数据完整性 / API 契约 / 数据库操作)
-- **前端**: `frontend/AGENTS.md` (前端开发规范 / 类型检查 / 契约与门禁 / UI 实测门)
-- **成对文档同步**：`wiki/用户功能/物资系统功能验证手册-一期.{html,md}` 与 `wiki/用户功能/全流程与数据主线.{html,md}` 必须成对维护；修改任一份须同步另一份，并同步更新 `wiki/INDEX.md` 与 `wiki/知识沉淀总览.html`。
+- **后端/模块**: 涉及后端或独立模块时遵守对应目录下的 `AGENTS.md`（如 `backend/AGENTS.md`，含 .NET 开发规范 / 数据完整性 / API 契约 / 数据库操作；存在才读；没有则跳过）
+- **前端**: 涉及前端模块时遵守对应目录下的 `AGENTS.md`（如 `frontend/AGENTS.md`，含前端开发规范 / 类型检查 / 契约与门禁 / UI 实测门；存在才读；没有则跳过）
+- **成对文档同步**：按 `wiki/INDEX.md` 登记的成对文档，修改任一份须同步另一份，并同步更新 `wiki/INDEX.md` 与 `{{wikiBoard}}`。
 
 ## 6. 项目适配区 (Project Adaptations)
 - **构建/测试/类型检查**: 命令清单单源 `.agents/hooks/commit-check.config.json`。
-- **冒烟探活**: 脚本路径与 6 端点判定事实见 `.agents/notes/runtime-env.md` §6.1。
+- **冒烟探活**: 脚本路径与端点判定事实见 `.agents/notes/runtime-env.md` §6.1。

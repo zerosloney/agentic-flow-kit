@@ -4,6 +4,7 @@ import { render } from '../render/tokens.mjs';
 import { setField } from './frontmatter.mjs';
 import { sha256Text } from './manifest.mjs';
 import { isBinaryPath, mergeThreeWay, readBaseline, writeBaseline } from './baseline.mjs';
+import { writeAtomicSync } from './atomic.mjs';
 
 export const GITATTR_BEGIN = '# >>> agentic-flow-kit gitattributes';
 export const GITATTR_END = '# <<< agentic-flow-kit gitattributes';
@@ -129,8 +130,8 @@ export function stripMergeBlock(text, begin, end) {
   return text.slice(0, start) + text.slice(stop);
 }
 
-export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline = false, benignUnchanged = false }) {
-  const stats = { create: 0, update: 0, skip: 0, conflict: 0, merge: 0 };
+export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline = false, benignUnchanged = false, derivedRels = new Set() }) {
+  const stats = { create: 0, update: 0, skip: 0, conflict: 0, conflictKeep: 0, merge: 0 };
   const target = plan.target;
   const nextFiles = { ...(manifest.files || {}) };
   const nextMcp = { ...(manifest.mcp || {}) };
@@ -251,6 +252,7 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
         }
       }
       stats.conflict += 1;
+      stats.conflictKeep += 1;
       conflicts.push(rel);
       log('conflict', `${rel}（已安装后被修改，跳过；--force 可覆盖）`);
       continue;
@@ -264,14 +266,30 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
       continue;
     }
 
+    // 派生工件在旧版 Kit 里由装期生成、不进 manifest：不认领则恒被当成非本工具安装跳过，
+    // 随后仍被生成器改写，diff 拿静态模板比对会永久报漂移。
+    if (derivedRels?.has(entry.targetRel)) {
+      writes.push({ abs, text, targetRel: entry.targetRel, kind: entry.kind });
+      stats.create += 1;
+      log('create', `${entry.targetRel}（已存在且为本工具派生产物，纳入跟踪）`);
+      continue;
+    }
+
     stats.skip += 1;
     log('skip', `${entry.targetRel}（已存在且非本工具安装，跳过；--force 可覆盖）`);
   }
 
   if (!dryRun) {
     for (const w of writes) {
-      fs.mkdirSync(path.dirname(w.abs), { recursive: true });
-      fs.writeFileSync(w.abs, w.text, 'utf8');
+      let current = null;
+      try {
+        current = fs.readFileSync(w.abs, 'utf8');
+      } catch {
+        // 读取失败（文件不存在等）视为内容不同，照常落盘
+      }
+      // 内容未变不重写：避免空跑 upgrade 刷新全部托管文件的 mtime（计数与日志口径不变）。
+      // 哈希登记保持原样：认领纳入跟踪等分支依赖它，即使本次未落盘。
+      if (current !== w.text) writeAtomicSync(w.abs, w.text);
       if (!w.conflict) nextFiles[w.targetRel] = sha256Text(w.templateText ?? w.text);
     }
     // 基线只保存文本直写结果：合并块 / MCP / hooks 配置有各自的合并语义，
@@ -300,11 +318,13 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
 }
 
 export function summaryLine(stats, t) {
-  return t('install.summary', {
+  const vars = {
     create: stats.create,
     update: stats.update,
     merge: stats.merge,
     skip: stats.skip,
     conflict: stats.conflict,
-  });
+    keep: stats.conflictKeep || 0,
+  };
+  return t(stats.conflictKeep ? 'install.summaryKeep' : 'install.summary', vars);
 }

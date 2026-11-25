@@ -53,6 +53,7 @@ import { spawnSync } from 'node:child_process';
 import { pathToFileURL } from 'node:url';
 import { laneOfDoc } from './stage-gates.mjs';
 import { loadKitPolicy } from './policy.mjs';
+import { loadWikiNames } from './wiki-names.mjs';
 
 // 本次构建关联提交里时间最早的一笔。changes 为 Azure changes API 的 JSON（{value:[]}）或数组。
 // 缺 id、或任一笔没有 timestamp（无法判定谁更老）→ null，调用方退回 HEAD~1。
@@ -94,6 +95,7 @@ const gitOut = (cwd, gitArgs) => {
 const CI = argv.includes('--ci');
 const FORCE_MERGE = argv.includes('--merge');
 const ROOT = argOf('--root') || gitOut(process.cwd(), ['rev-parse', '--show-toplevel']).trim() || process.cwd();
+const WIKI_NAMES = loadWikiNames(ROOT);
 // detached HEAD 时 abbrev-ref 返回 'HEAD' → 不匹配 experiment/* → A strict
 const BRANCH = argOf('--branch') || gitOut(ROOT, ['rev-parse', '--abbrev-ref', 'HEAD']).trim();
 const stagedArg = argOf('--staged-file');
@@ -203,7 +205,9 @@ const collectActive = () => {
 };
 
 // 产品路径 p 被家族正文罩住：正文含仓库相对路径原文；schema / 数据修复 SQL 另认批次目录。
-const BATCH_DIR = /^(wiki\/数据维护\/(?:schema变更|数据修复)\/[^/]+)\//;
+// 批次目录名随安装语言（wiki-names.mjs 从 engine.json options.wiki 取），拼接前逐名转义正则元字符。
+const escRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const BATCH_DIR = new RegExp(`^(wiki/${escRe(WIKI_NAMES.maintenance)}/(?:${escRe(WIKI_NAMES.schemaBatch)}|${escRe(WIKI_NAMES.dataFixBatch)})/[^/]+)/`);
 const familyText = (entry) => {
   const rels = [entry.rel, `workflow/specs/${entry.base}.md`, `workflow/plans/${entry.base}.md`];
   let text = '';
@@ -252,23 +256,28 @@ if (CI) {
       const parents = rl.out.trim().split(/\s+/).filter(Boolean);
       if (parents.length >= 3) {
         base = 'HEAD^1';
-        baseWhy = 'HEAD 为合并提交 → 对第一父基准（Azure PR 检出 / PR 完成推送形态）';
-      } else if (process.env.TF_BUILD && /main$/.test(process.env.BUILD_SOURCEBRANCH || '')) {
+        baseWhy = 'HEAD 为合并提交 → 对第一父基准（PR 检出 / PR 完成推送形态）';
+      } else if (
+        process.env.CI_PUSH_BEFORE ||
+        (process.env.TF_BUILD && /main$/.test(process.env.BUILD_SOURCEBRANCH || '')) ||
+        (process.env.GITHUB_ACTIONS && /(^|\/)main$/.test(process.env.GITHUB_REF || process.env.GITHUB_REF_NAME || '')) ||
+        (process.env.GITLAB_CI && /(^|\/)main$/.test(process.env.CI_COMMIT_REF_NAME || ''))
+      ) {
         const before = (process.env.CI_PUSH_BEFORE || '').trim();
         const beforeOk = /^[0-9a-f]{40}$/i.test(before)
           && gitRun(ROOT, ['diff', '--name-only', `${before}..HEAD`]).ok;
         if (beforeOk) {
           base = before;
-          baseWhy = 'TF_BUILD main 单亲推送 → CI_PUSH_BEFORE（本次构建最老一笔的第一父，同一次 push 的多笔都在 diff 内）';
+          baseWhy = 'CI main 单亲推送 → CI_PUSH_BEFORE（本次构建最老一笔的第一父/推送前基准，同一次 push 的多笔都在 diff 内）';
         } else {
           if (before) advisories.push(`[CI]（advisory）CI_PUSH_BEFORE=${before} 不能作为 diff 基准，退回 HEAD~1（多提交直推仅核末笔）`);
           base = 'HEAD~1';
-          baseWhy = 'TF_BUILD main 单亲推送 → HEAD~1（未得到可用的 CI_PUSH_BEFORE；多提交直推仅核末笔）';
+          baseWhy = 'CI main 单亲推送 → HEAD~1（未得到可用的 CI_PUSH_BEFORE；多提交直推仅核末笔）';
         }
       }
     }
     if (!base) {
-      console.error(`泳道完整性（CI）— advisory:\n  [跳过] 无 diff 基准事实（非合并提交、非 TF main 推送）——本地手跑请传 --base <rev>\n`);
+      console.error(`泳道完整性（CI）— advisory:\n  [跳过] 无 diff 基准事实（非合并提交、非 CI main 推送）——本地手跑请传 --base <rev>\n`);
       process.exit(0);
     }
     const d = gitRun(ROOT, ['diff', '--name-only', `${base}..HEAD`]);

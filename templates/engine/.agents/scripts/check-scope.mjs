@@ -22,9 +22,9 @@ import { fileURLToPath } from 'node:url';
 // （过滤 v1.2.2 之类版本号伪 token：无目录且扩展名不在清单内则弃）
 // 2026-11-09 抽为导出函数：推送级对账 check-scope-range.mjs 复用，正则单源不复制第三份。
 // 2026-11-10 修：①原先每行只取首个路径（`line.match`），一行并列两三个文件时后续文件全成「未声明」——
-//   推送实证（2026-11-10-outbound-request-line-material-check-stamp：`…OutboundRequestDetail.cs`；
-//   `…MaterialDbContext.cs` 同行）被判越界；②补扫「验证计划」节——新增测试文件常只在该节点名
-//   （推送实证：outbound-request-check-satisfaction-display 的 `…OutboundRequestCheckSatisfactionTests.cs`），
+//   推送实证（2026-11-10 incident：同行并列 `…Detail.cs` / `…DbContext.cs`，仅首个被声明）被判越界；
+//   ②补扫「验证计划」节——新增测试文件常只在该节点名
+//   （推送实证：某 incident 只在验证计划点名 `…Tests.cs`），
 //   计划点名即算声明，产品面判据本身不放宽。
 // 2026-11-16 修：③补扫「验证方式」节——节名双名并存（_TEMPLATE.md 存量「验证方式」/ fill-plan 生成「验证计划」），新测试文件也有只在该节点名的面。
 // 2026-11-16 修：④节标题容忍编号前缀（issue #56 装户实证：「## 2. 改动面」解析静默失效，声明 0 → --strict 拦推）——

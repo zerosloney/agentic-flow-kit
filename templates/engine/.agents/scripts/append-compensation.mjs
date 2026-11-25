@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // append-compensation.mjs — 关单后裁定回填补偿行生成器（maintain.md §4.4，2026-10-24）
-// 背景：2026-10-24 采购合同合入评审整改批踩坑——补偿行指纹按「直接哈希当前内容」手搓，被 check-loop 15
+// 背景：2026-10-24 一次合入评审整改批踩坑——补偿行指纹按「直接哈希当前内容」手搓，被 check-loop 15
 //   「确认内容漂移」HARD-BLOCK（正确口径 = bindingSha256：状态行回填 prev 后再哈希）。本工具把口径收口为单源。
 // 判据单源（三处全部复用既有权威实现，禁手搓）：
 //   - 指纹 = check-loop-kit.mjs 的 bindingSha256（与 s15 校验端同一函数）

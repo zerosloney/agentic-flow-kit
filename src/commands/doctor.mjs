@@ -12,12 +12,17 @@ import { checkDevcontainer } from '../install/devcontainer.mjs';
 import { findHookDrift, inapplicableForUserHooks, inapplicableSpecs } from '../install/hooks.mjs';
 import { inspectUserHookEntry } from '../install/user-hooks.mjs';
 import { listBaselines } from '../install/baseline.mjs';
+import { RULE_FAMILIES } from '../install/gate-summary.mjs';
 import { buildAttestation, writeAttestation } from '../install/attest.mjs';
 import { compilePermissions, permissionDrift } from '../install/permissions.mjs';
 import { ROLE_NAMES, readInjectedModels, readLocalModelRoles } from '../models/resolve.mjs';
 import { computeEnterprise, GIT_HOOKS, PROOF_CHAIN_FILES, resolveTarget } from './install.mjs';
 import { readLocalPolicy, checkPolicyDriftSync } from './policy.mjs';
 import { verifySbom } from './sbom.mjs';
+import { parseJsonc } from '../rules/jsonc.mjs';
+import { splitWaivers } from '../rules/model.mjs';
+import { loadModel } from '../rules/load.mjs';
+import { readPluginStatus } from '../rules/plugin-status.mjs';
 import { verifySignature, signPayload, readSignatureFile, writeSignatureFile, resolvePublicKeyPath } from '../install/notary.mjs';
 import { listHandoffFiles, verifyHandoffEnvelope } from '../install/handoff.mjs';
 import { checkMcpGatewayHealth } from '../install/mcp-gateway.mjs';
@@ -26,6 +31,8 @@ import { checkSandboxHealth } from '../install/sandbox.mjs';
 import { checkSkillsEvalHealth } from '../skills/eval-harness.mjs';
 import { RUNTIME_SCRIPTS, RUNTIME_HOOKS, KIT_ROOT } from './runtime.mjs';
 import { buildDiff } from './diff.mjs';
+import { WIKI_NAMES, WIKI_TOPIC_KEYS } from '../install/wiki-names.mjs';
+import { loadFaces, isProductPath } from '../../templates/engine/.agents/scripts/faces.mjs';
 
 const HOOK_FILES = ['pre-commit', 'commit-msg', 'post-commit', 'pre-merge-commit', 'pre-push'];
 
@@ -66,6 +73,16 @@ function listLegacyRuntime(target) {
   return out.sort();
 }
 
+// PATH 上的 flow-kit 与安装清单各自演进，而钩子与 MCP 实际执行的是 PATH 上那个：
+// 两侧各取第一段 x.y.z 比对。任一侧解析不出（如旧版输出任意文本）就返回 null，维持旧的仅探测可运行行为。
+export function flowKitVersionDrift(cliOutput, manifestVersion) {
+  const pick = (text) => (String(text || '').match(/\d+\.\d+\.\d+/) || [])[0] || null;
+  const cli = pick(cliOutput);
+  const manifest = pick(manifestVersion);
+  if (!cli || !manifest || cli === manifest) return null;
+  return { cli, manifest };
+}
+
 export function doctorCommand({ args, t }) {
   const target = resolveTarget(args);
   const asJson = flag(args, 'json');
@@ -78,6 +95,7 @@ export function doctorCommand({ args, t }) {
   const permissionSpec = gates.permissions;
   const permissionDeclared = Boolean(permissionSpec
     && (permissionSpec.allow.length || permissionSpec.deny.length || permissionSpec.ask.length));
+  let diffResult = null;
   if (!manifest) {
     add(false, 'install-manifest', t('doctor.manifestMissing'));
   } else {
@@ -86,7 +104,7 @@ export function doctorCommand({ args, t }) {
       if (!fs.existsSync(path.join(target, rel))) add(false, `file ${rel}`, t('doctor.fileMissing'));
     }
     // 漂移是 advisory：用户改文件属正常，缺失已在上面按文件报错；明细交给 diff。
-    const drift = buildDiff({ target, manifest }).summary;
+    const drift = (diffResult = buildDiff({ target, manifest })).summary;
     const drifting = drift.userModified + drift.kitUpdated + drift.orphan;
     if (drifting > 0) {
       add(true, 'manifest drift', t('doctor.drift', drift), t('doctor.driftHint'), { warn: true });
@@ -107,7 +125,13 @@ export function doctorCommand({ args, t }) {
     shell: winShell,
   });
   if (kitProbe.status === 0) {
-    add(true, 'flow-kit cli', String(kitProbe.stdout || '').trim() || 'flow-kit');
+    const drift = flowKitVersionDrift(String(kitProbe.stdout || ''), manifest?.version || '');
+    if (drift) {
+      // 版本不一致只提示不判红：旧版 CLI 仍可用，钩子与 MCP 的失效风险交给 hint 说明。
+      add(true, 'flow-kit cli', t('doctor.flowKitVersionMismatch', drift), t('doctor.flowKitVersionMismatchHint'), { warn: true });
+    } else {
+      add(true, 'flow-kit cli', String(kitProbe.stdout || '').trim() || 'flow-kit');
+    }
   } else {
     add(true, 'flow-kit cli', t('doctor.flowKitMissing'), t('doctor.flowKitMissingHint'), { warn: true });
   }
@@ -426,6 +450,210 @@ export function doctorCommand({ args, t }) {
       add(true, 'policy-remote drift', t('doctor.policyRemoteDrift', { count: check.changes.length, url: localPolicy.remote.url }), t('doctor.policyRemoteHint'), { warn: true });
     } else {
       add(true, 'policy-remote', t('doctor.policyRemoteOk', { url: localPolicy.remote.url, ref: check.ref }));
+    }
+  }
+
+  // 项目级门禁配置覆盖率（gate coverage，advisory）：逐项报告已配置 / 未配置（SKIP）/ 配置错误。
+  // 只做「可解析 + 顶层形状」体检，语义级校验归各门脚本；未配置一律不升 fail，配置错误才红。
+  const gateFile = (rel) => {
+    const abs = path.join(target, rel);
+    if (!fs.existsSync(abs)) return { state: 'skip' };
+    try {
+      return { state: 'ok', data: parseJsonc(fs.readFileSync(abs, 'utf8'), rel) };
+    } catch (e) {
+      return { state: 'error', error: e.message };
+    }
+  };
+  const isObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);
+  const reportGate = (name, state, detail) => {
+    if (state === 'error') add(false, `gate ${name}`, t('doctor.gateError', { error: detail }));
+    else if (state === 'skip') add(true, `gate ${name}`, detail || t('doctor.gateSkipped'));
+    else add(true, `gate ${name}`, detail || t('doctor.gateConfigured'));
+  };
+  const runGate = (name, rel, validate = () => ({})) => {
+    const r = gateFile(rel);
+    if (r.state !== 'ok') return reportGate(name, r.state, r.error);
+    let verdict = {};
+    try { verdict = validate(r.data) || {}; } catch (e) { verdict = { state: 'error', error: e.message }; }
+    return reportGate(name, verdict.state || 'ok', verdict.detail || verdict.error);
+  };
+  const shape = (data, fn) => (!isObj(data) ? { state: 'error', error: t('doctor.gateNotObject') } : fn(data));
+
+  runGate('architecture-redlines', '.agents/hooks/architecture-redlines.json', (d) => shape(d, () => {
+    const known = ['forbidden', 'noNavigationProperties', 'catchRequires'];
+    const unknown = Object.keys(d).filter((k) => !known.includes(k));
+    if (unknown.length) return { state: 'error', error: t('doctor.gateUnknownKeys', { keys: unknown.join(', ') }) };
+    const bad = known.find((k) => d[k] !== undefined && !Array.isArray(d[k]));
+    if (bad) return { state: 'error', error: t('doctor.gateArrayField', { field: bad }) };
+    return known.every((k) => (d[k] || []).length === 0) ? { state: 'skip' } : {};
+  }));
+
+  runGate('delete-guard', '.agents/hooks/delete-guard.json', (d) => shape(d, () => {
+    const unknown = Object.keys(d).filter((k) => k !== 'scan');
+    if (unknown.length) return { state: 'error', error: t('doctor.gateUnknownKeys', { keys: unknown.join(', ') }) };
+    if (!Array.isArray(d.scan)) return { state: 'error', error: t('doctor.gateArrayField', { field: 'scan' }) };
+    return d.scan.length ? {} : { state: 'error', error: t('doctor.gateEmptyField', { field: 'scan' }) };
+  }));
+
+  runGate('audit-fields', '.agents/hooks/audit-fields.json', (d) => shape(d, () => {
+    const known = ['fields', 'ext', 'allowFiles', 'allowLines'];
+    const unknown = Object.keys(d).filter((k) => !known.includes(k));
+    if (unknown.length) return { state: 'error', error: t('doctor.gateUnknownKeys', { keys: unknown.join(', ') }) };
+    if (!Array.isArray(d.fields)) return { state: 'error', error: t('doctor.gateArrayField', { field: 'fields' }) };
+    return d.fields.length ? {} : { state: 'error', error: t('doctor.gateEmptyField', { field: 'fields' }) };
+  }));
+
+  runGate('commit-check.config', '.agents/hooks/commit-check.config.json', (d) => shape(d, () => {
+    const keys = ['builds', 'checks', 'pushTests'];
+    const bad = keys.find((k) => d[k] !== undefined && !Array.isArray(d[k]));
+    if (bad) return { state: 'error', error: t('doctor.gateArrayField', { field: bad }) };
+    return keys.some((k) => (d[k] || []).length) ? {} : { detail: t('doctor.gateCommitEmpty') };
+  }));
+
+  // product-gates*.json 按 verify.mjs 口径枚举（product-gates.json / product-gates.<名称>.json）。
+  {
+    let files = [];
+    try {
+      files = fs.readdirSync(path.join(target, '.agents', 'config'))
+        .filter((f) => f === 'product-gates.json' || /^product-gates\..+\.json$/.test(f))
+        .sort();
+    } catch { /* 未配置 */ }
+    if (!files.length) {
+      // 规则中心单源感知：物理配置不存在时，若规则层（stack 或 project）已配置生效的 product.* 命令规则，则视作已配置
+      let hasProductRule = false;
+      try {
+        const { model } = loadModel(target);
+        hasProductRule = model.rules.some((r) => r.enabled !== false && String(r.id).startsWith('product.'));
+      } catch {}
+      if (hasProductRule) {
+        reportGate('product-gates', 'ok');
+      } else {
+        reportGate('product-gates', 'skip');
+      }
+    } else {
+      let verdict = {};
+      for (const f of files) {
+        const r = gateFile(`.agents/config/${f}`);
+        if (r.state !== 'ok') { verdict = { state: 'error', error: `${f}: ${r.error || 'missing'}` }; break; }
+        if (!isObj(r.data)) { verdict = { state: 'error', error: `${f}: ${t('doctor.gateNotObject')}` }; break; }
+        if (!Array.isArray(r.data.gates)) { verdict = { state: 'error', error: `${f}: ${t('doctor.gateArrayField', { field: 'gates' })}` }; break; }
+        const idx = r.data.gates.findIndex((g) => !isObj(g) || typeof g.id !== 'string' || !g.id || typeof g.name !== 'string' || typeof g.cmd !== 'string');
+        if (idx >= 0) { verdict = { state: 'error', error: `${f}: ${t('doctor.gateBadGateEntry', { index: idx })}` }; break; }
+      }
+      reportGate('product-gates', verdict.state || 'ok', verdict.error);
+    }
+  }
+
+  runGate('test-impact-map', '.agents/config/test-impact-map.json', (d) => shape(d, () => {
+    // 骨架态口径与 check-test-impact-map.mjs 一致：namespace/areas/paths 均空 = 未启用选测。
+    const skeleton = !String(d.namespace || '').trim()
+      && (!d.areas || (isObj(d.areas) && Object.keys(d.areas).length === 0))
+      && (!d.paths || (Array.isArray(d.paths) && d.paths.length === 0));
+    return skeleton ? { detail: t('doctor.gateTestImpactSkeleton') } : {};
+  }));
+
+  runGate('local-gates', '.agents/config/local-gates.json', (d) => shape(d, () => (
+    isObj(d.testDb) ? {} : { state: 'skip' }
+  )));
+
+  // project-faces：用 faces.mjs 的单源加载器判定；已配置时顺带体检触发面是否命中跟踪文件。
+  try {
+    const faces = loadFaces(target);
+    reportGate('project-faces', faces.configured ? 'ok' : 'skip');
+    if (!faces.configured) {
+      add(true, 'faces coverage', t('doctor.gateFacesUnconfigured'));
+    } else {
+      const ls = spawnSync('git', ['-c', 'core.quotepath=off', 'ls-files'], { cwd: target, encoding: 'utf8' });
+      if (ls.status !== 0) {
+        add(true, 'faces coverage', t('doctor.gateFacesNoGit'), '', { warn: true });
+      } else {
+        const count = (ls.stdout || '').split('\n').filter(Boolean).filter((rel) => isProductPath(faces, rel)).length;
+        if (count === 0) add(true, 'faces coverage', t('doctor.gateFacesEmpty'), '', { warn: true });
+        else add(true, 'faces coverage', t('doctor.gateFacesCoverage', { count }));
+      }
+    }
+  } catch (e) {
+    reportGate('project-faces', 'error', e.message);
+  }
+
+  // rules 规则包汇总：启用数 / 严重级 / 层来源 / 插件 / 豁免（含过期）——旧配置迁移可见性。
+  try {
+    const { model, layers } = loadModel(target);
+    const { active, expired } = splitWaivers(model.waivers);
+    const enabledRules = model.rules.filter((r) => r.enabled !== false);
+    const plugins = model.rules.filter((r) => r.assert && r.assert.kind === 'plugin').length;
+    add(true, 'rules', t('doctor.rulesSummary', {
+      enabled: enabledRules.length,
+      total: model.rules.length,
+      block: enabledRules.filter((r) => r.severity === 'block').length,
+      warn: enabledRules.filter((r) => r.severity === 'warn').length,
+      layers: layers.map((l) => l.name).join(' ← '),
+      plugins,
+      waived: active.length,
+      expired: expired.length,
+    }));
+    if (layers.some((l) => l.name === 'legacy') && !layers.some((l) => l.name === 'project')) {
+      add(true, 'rules migration', t('doctor.rulesMigrationHint'), '', { warn: true });
+    }
+
+    // 门禁覆盖率（gate coverage，advisory）：按规则 id 前缀归族，只统计生效规则——配了才算覆盖。
+    if (!enabledRules.length) {
+      add(true, 'gate coverage', t('doctor.gateCoverageEmpty'), '', { warn: true });
+    } else {
+      const counts = Object.entries(RULE_FAMILIES).map(([name, prefix]) => ({
+        name,
+        count: enabledRules.filter((r) => String(r.id).startsWith(prefix)).length,
+      }));
+      const configured = counts.filter((c) => c.count > 0).map((c) => c.name);
+      const missing = counts.filter((c) => c.count === 0).map((c) => c.name);
+      const other = enabledRules.length - counts.reduce((sum, c) => sum + c.count, 0);
+      add(true, 'gate coverage', t('doctor.gateCoverage', {
+        configured: configured.length ? configured.join(', ') : '-',
+        missing: missing.length ? missing.join(', ') : '-',
+        other,
+      }));
+    }
+
+    // 规则插件：白名单条目对应的模块文件必须存在（静态检查，不加载、不执行）。
+    const pluginEntries = new Map();
+    for (const layer of layers) for (const p of layer.plugins || []) pluginEntries.set(p.id, p);
+    const missingPlugins = [...pluginEntries.values()]
+      .filter((p) => !fs.existsSync(path.join(target, '.agents/rules/plugins', `${p.module}.mjs`)))
+      .map((p) => p.id);
+    if (missingPlugins.length) {
+      add(true, 'rules plugins', t('doctor.rulesPluginsMissing', { plugins: missingPlugins.join(', ') }), '', { warn: true });
+    }
+  } catch (e) {
+    add(false, 'rules', t('doctor.rulesError', { message: e.message }));
+  }
+
+  // 插件运行期异常（advisory）：rules check 把没跑成的插件（崩溃 / 超时 / 输出非法）留痕在本机缓存——
+  // warn 档的异常不能只在提交那一刻闪过。只读留痕，不执行插件。
+  const pluginAnomalies = Object.entries(readPluginStatus(target));
+  if (pluginAnomalies.length) {
+    add(true, 'rules plugin runtime', t('doctor.rulesPluginRuntime', {
+      items: pluginAnomalies.map(([id, a]) => `${id}（${String(a?.at || '').slice(0, 19).replace('T', ' ')} ${String(a?.detail || '').split('\n')[0]}）`).join('、'),
+    }), '', { warn: true });
+  }
+
+  // 栈层漂移（advisory）：stack.*.json 由 kit 管理，本地改动会在升级时漂移（被跳过或合并出冲突）——自定义写 project.json。
+  const stackDrift = (diffResult?.items || [])
+    .filter((i) => i.kind === 'user-modified' && /^\.agents\/rules\/stack\.[^/]+\.json$/.test(i.targetRel))
+    .map((i) => i.targetRel);
+  if (stackDrift.length) {
+    add(true, 'rules stack drift', t('doctor.rulesStackDrift', { files: stackDrift.join(', ') }), '', { warn: true });
+  }
+
+  // wiki 目录名与安装语言不一致（advisory）：语言切换 / 旧版英文安装留下旧命名目录；kit 不搬用户内容，只提示残留。
+  if (manifest) {
+    const current = manifest.language === 'en' ? 'en' : 'zh-CN';
+    const other = current === 'en' ? 'zh-CN' : 'en';
+    const leftovers = WIKI_TOPIC_KEYS
+      .map((key) => WIKI_NAMES[key][other])
+      .filter((name) => fs.existsSync(path.join(target, 'wiki', name)))
+      .map((name) => `wiki/${name}/`);
+    if (leftovers.length) {
+      add(true, 'wiki dir names', t('doctor.wikiDirNames', { dirs: leftovers.join(', ') }), '', { warn: true });
     }
   }
 

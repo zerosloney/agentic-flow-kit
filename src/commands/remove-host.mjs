@@ -13,11 +13,13 @@ import { stripMcpFromRoot } from '../install/mcp.mjs';
 import { stripHooksFromRoot } from '../install/hooks.mjs';
 import { stripManagedPermissions } from '../install/permissions.mjs';
 import { BASELINE_DIR } from '../install/baseline.mjs';
+import { HOOKS_PATH, readLocalHooksPath, setLocalHooksPath, unsetLocalHooksPath } from '../git/config.mjs';
 import { unwireUserHooks } from '../install/user-hooks.mjs';
 import { HOSTS, HOST_NAMES, canonicalHostName } from '../hosts/registry.mjs';
 import { readInjectedModels } from '../models/resolve.mjs';
 import { makeT } from '../i18n.mjs';
 import { computeEnterprise, readKitVersion, resolveTarget } from './install.mjs';
+import { planInputsFromManifest, varsInputsFromManifest } from './replay.mjs';
 import { cleanEmptyDirs } from './prune.mjs';
 
 const MERGE_KINDS = new Set(['merge-gitattributes', 'merge-gitignore']);
@@ -41,21 +43,15 @@ function resolveState(args, t) {
 }
 
 function planFor({ target, manifest, hosts, categories, lang }) {
-  return buildPlan({
+  return buildPlan(planInputsFromManifest({
     target,
+    manifest,
     hosts,
     lang,
-    stack: manifest.stack || 'empty',
-    projectName: manifest.projectName || path.basename(target),
     categories,
     // 保持模型注入与已安装文本一致，避免收敛时误改剩余宿主的子代理。
     models: readInjectedModels({ target, hosts }),
-    tier: manifest.tier || 'standard',
-    hardened: Boolean(manifest.hardened),
-    mcp: manifest.mcp !== false,
-    surfaces: manifest.surfaces || [],
-    managedPermissions: manifest.managedPermissions || {},
-  });
+  }));
 }
 
 // rel -> { names, format }：合并型 MCP 配置不能整文件删除，卸载时只摘掉本工具声明的 server。
@@ -126,15 +122,14 @@ function stripConfigFile(abs, info, previousPermissions) {
   return { text: `${JSON.stringify(root, null, 2)}\n`, changed };
 }
 
-function varsFor({ target, manifest, hosts, lang }) {  return buildVars({    target,
-    projectName: manifest.projectName || path.basename(target),
-    stack: manifest.stack || 'empty',
-    language: lang,
+function varsFor({ target, manifest, hosts, lang }) {
+  return buildVars(varsInputsFromManifest({
+    target,
+    manifest,
     hosts,
+    lang,
     kitVersion: manifest.version || readKitVersion(),
-    installedAt: manifest.installedAt || new Date().toISOString(),
-    trackHosts: Boolean(manifest.trackHosts),
-  });
+  }));
 }
 
 function hashOf(abs) {
@@ -552,6 +547,12 @@ function uninstallUnlocked({ args, t }) {
   let manifestRemoved = false;
   if (!dryRun) {
     if (skipped === 0) {
+      // 还原安装前被覆盖的 core.hooksPath：仅当当前本地值仍是本工具的 .githooks
+      // （用户后来自己改过就不动）；null 表示安装前未设置，取消该键即可。
+      if ('prevHooksPath' in manifest && readLocalHooksPath(target) === HOOKS_PATH) {
+        if (manifest.prevHooksPath === null) unsetLocalHooksPath(target);
+        else setLocalHooksPath(target, manifest.prevHooksPath);
+      }
       const manifestAbs = path.join(target, MANIFEST_REL);
       fs.rmSync(manifestAbs, { force: true });
       cleanEmptyDirs(target, manifestAbs);

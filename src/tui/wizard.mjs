@@ -9,7 +9,7 @@ import { FLOWS } from './flows.mjs';
 export async function wizardCommand({ t, lang }) {
   const screen = createScreen({ input: process.stdin, output: process.stdout });
   screen.setup();
-  const ctx = { screen, t, lang };
+  const ctx = { screen, t, lang, target: process.cwd() };
   // 降级模式：会话级读行器（交互模式禁用，避免与 keypress 抢输入）
   if (!screen.interactive) ctx.reader = createLineReader(screen.input, screen.output);
   try {

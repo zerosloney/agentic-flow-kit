@@ -1,6 +1,6 @@
 # 顺序红线：先定级 → 三件套 → 确认 → 才动手
 
-来源：2026-11-03 流程倒置事件（incident `workflow/incidents/2026-11-03-po-pml-outbound-guards.md`、`workflow/papercuts.md` 同日条目）。`new-task.md` 首屏只留一句指针，正文细节在此。
+来源：2026-11-03 流程倒置事件（记录见 `workflow/incidents/` 当日条目与 `workflow/papercuts.md`）。`new-task.md` 首屏只留一句指针，正文细节在此。
 
 ## 规则
 

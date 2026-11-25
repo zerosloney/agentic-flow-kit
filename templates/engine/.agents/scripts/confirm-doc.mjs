@@ -59,6 +59,7 @@ import { fileURLToPath } from 'node:url';
 import { confirmGateFor, doneGateFor, acceptanceEvidenceGate, incidentTrioGate, laneOfDoc, specConfirmed, planConfirmedFor, reviewLineFor, commitmentFingerprint } from './stage-gates.mjs';
 import { loadKitPolicy, latestFreshVerifyLine } from './policy.mjs';
 import { groundQuote, resolveFamilyTexts, GROUND_ANCHOR_MIN } from './quote-grounding.mjs';
+import { loadFaces, isProductPath } from './faces.mjs';
 
 // freshVerify(root)：返回 24h 窗口内最新绿行对象（判定单源 policy.latestFreshVerifyLine）。只读，
 // 台账缺失/不可读一律 null（=无凭证，advisory 层 fail-open）。返回对象而非布尔是为了比对绿行的
@@ -73,14 +74,15 @@ function freshVerify(root) {
   }
 }
 
-// businessDirty(root)：当前 git status 的业务路径（backend/ frontend/）。关单期 workflow/.agents
-// 文档改动合法，不纳入；绿行之后新出现的业务脏路径 = 凭证过期（closeout-skill-hardening 2026-11-08）。
-function businessDirty(root) {
+// businessDirty(root, faces)：当前 git status 的业务路径（faces code + ui 前缀）。关单期
+// workflow/.agents 文档改动合法，不纳入；绿行之后新出现的业务脏路径 = 凭证过期（closeout-skill-hardening
+// 2026-11-08）。未配置 faces → isProductPath 恒 true（保守全算业务面）。
+function businessDirty(root, faces) {
   try {
     return String(execFileSync('git', ['status', '--porcelain'], { cwd: root, encoding: 'utf8' }))
       .split(/\r?\n/)
       .map((l) => l.slice(3).split(' -> ').pop().trim().replace(/^"|"$/g, '').replace(/\\/g, '/'))
-      .filter((p) => /^(backend|frontend)\//.test(p));
+      .filter((p) => p && isProductPath(faces, p, ['code', 'ui']));
   } catch {
     return [];
   }
@@ -279,6 +281,15 @@ if (isMain) {
   if (!docs.length) {
     console.error('用法：flow-kit run confirm-doc.mjs <workflow/intents|specs|plans/x.md | workflow/tasks/<task>/x.md> [...]  [--root <仓库根>] [--delegated "<用户原话>" [--batch]]');
     process.exit(1);
+  }
+  // 产品面单源（2026-11-24 faces 收尾）：业务脏路径只认 code/ui 前缀（配置面之外不算业务面）；
+  // 未配置 → isProductPath 恒 true（保守）。配置错误 fail-closed exit 2，不得静默放行。
+  let projectFaces;
+  try {
+    projectFaces = loadFaces(root);
+  } catch (e) {
+    console.error(`配置错误：.agents/config/project-faces.json——${e.message}（fail-closed，拒绝确认）`);
+    process.exit(2);
   }
   if (delegated) {
     console.error('⚠️  委托代录模式：确认语义 = 用户已在对话中明确放行；台账行将如实记 source=chat-delegated 与原话，不伪装 TTY 确认');
@@ -526,7 +537,7 @@ if (isMain) {
       if (typeof pol.verifySince === 'string' && /^##\s*[^#]*验收标准/m.test(text)) {
         const row = freshVerify(root);
         const stale = row && Array.isArray(row.dirty)
-          ? businessDirty(root).filter((p) => !row.dirty.includes(p))
+          ? businessDirty(root, projectFaces).filter((p) => !row.dirty.includes(p))
           : [];
         if (!row || stale.length) {
           const today = (process.env.CONFIRM_DOC_TEST_NOW || new Date().toISOString()).slice(0, 10);

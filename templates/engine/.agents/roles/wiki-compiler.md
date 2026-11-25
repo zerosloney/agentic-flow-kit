@@ -15,7 +15,7 @@
 - **Checks Performed**:
   1. 通读 diff 实际改动；提交信息仅作线索，两者冲突以 diff 为准。
   2. 判定 type：`capability`（新增业务能力）/ `fix`（恢复既有能力的正确行为）/ `refactor`（无业务面变化）/ `docs`（仅知识文档变更）。Conventional Commits 类型（feat/fix/refactor…）只作初筛，须用 diff 复核。
-  3. 代码域 → 业务域术语翻译，以本仓 wiki 既有叫法为准（例：OutboundRequest→出库申请、Allocation→档级/来源分配、InventoryLock→库存占用、MTO→需求单）。
+  3. 代码域 → 业务域术语翻译，以本仓 wiki 既有叫法为准（例：UserService→用户服务、AuditLog→审计日志、ReportExporter→报表导出）。
   4. 对照 `wiki/INDEX.md` 判断知识是否值得沉淀及落位；一次性过程产物（workflow 台账已记、git 历史可溯）不劝入 wiki。
 - **Deliverables**:
   - 严格 JSON（schema 见下）：单笔提交输出一个对象，一段范围输出数组、逐笔一条。
@@ -30,7 +30,7 @@
   "title": "业务语言标题，不出现代码词",
   "capability": "系统现在能……（1-3 句；fix 写成「此前……会……，现在恢复为……」；refactor/docs 为 null）",
   "impact": "影响范围：谁在哪个流程/界面感知到；refactor 说明内部影响面并给出「业务无感知」结论",
-  "modules": ["业务模块名，如 出库申请/出库单/采购/到货入库/库存/主数据/编码模板"],
+  "modules": ["业务模块名，如 用户/权限/审计/报表"],
   "user_visible": "true | false | null（不确定）",
   "wiki_suggestion": { "topic": "wiki 现存主题之一，以 INDEX 速览表为准", "filename": "<主题>-<关键词>[-范围/版本].ext", "reason": "值得沉淀的理由" },
   "related_docs": ["需同步更新的既有 wiki 文档路径；触及全流程或功能验证口径时须含成对文档"],

@@ -1,14 +1,14 @@
 {
   "schema": 2,
   "generatedAt": "2020-01-01T00:00:00.000Z",
-  "rootLabel": "Shipyard.Material",
+  "rootLabel": "example-project",
   "doc": {
     "path": ".agents/tests/fixtures/dev-tour/plan-path-guess.md",
     "type": "DOC",
-    "title": "路径猜测样例：采购编辑器对齐",
+    "title": "路径猜测样例：列表编辑器对齐",
     "status": "起草中",
     "level": "L1",
-    "module": "物资",
+    "module": "示例",
     "date": "2099-12-31",
     "purpose": "",
     "links": [],
@@ -51,7 +51,7 @@
       "total": 1,
       "items": [
         {
-          "path": "frontend/src/views/purchase/contractTemplate/editor.vue",
+          "path": "frontend/src/views/orders/orderTemplate/editor.vue",
           "step": "T1",
           "candidates": 2
         }
@@ -63,13 +63,13 @@
     {
       "id": "T1",
       "index": 1,
-      "title": "编辑器对齐：contractTemplate 弹窗字段微调",
-      "summary": "contractTemplate 页面构建通过",
+      "title": "编辑器对齐：orderTemplate 弹窗字段微调",
+      "summary": "orderTemplate 页面构建通过",
       "detail": [
-        "`editor.vue`：补 contractTemplate 字段"
+        "`editor.vue`：补 orderTemplate 字段"
       ],
       "files": [
-        "frontend/src/views/purchase/contractTemplate/editor.vue"
+        "frontend/src/views/orders/orderTemplate/editor.vue"
       ],
       "status": "todo",
       "source": "tasks"
@@ -77,7 +77,7 @@
   ],
   "files": [
     {
-      "path": "frontend/src/views/purchase/contractTemplate/editor.vue",
+      "path": "frontend/src/views/orders/orderTemplate/editor.vue",
       "status": "planned",
       "badge": "计划",
       "additions": 0,
@@ -111,7 +111,7 @@
         "stepId": "T1",
         "from": "frontend",
         "to": "frontend",
-        "label": "编辑器对齐：contractTemplate 弹窗…",
+        "label": "编辑器对齐：orderTemplate 弹窗字段微调",
         "self": true
       }
     ]

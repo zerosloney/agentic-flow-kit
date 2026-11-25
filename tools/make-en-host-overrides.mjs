@@ -176,10 +176,10 @@ This file is a pointer shell. Read the authoritative source at execution time; d
         : 'including the BC/G gates and Never rules';
       const globsLine = rel.endsWith('.mdc') ? `globs: ${scope}/**\nalwaysApply: false` : 'alwaysApply: true';
       overrides.set(outRel, `---
-description: Read ${name} before changing ${scope} files
+description: Read ${name} before changing ${scope} files (read only if present)
 ${globsLine}
 ---
-Before modifying or reviewing any file under \`${scope}/\`, read and follow \`${name}\` (${detail}).
+Before modifying or reviewing any file under \`${scope}/\`, read and follow \`${name}\` (${detail}; read only if present).
 `);
       continue;
     }

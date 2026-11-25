@@ -22,16 +22,14 @@
 - <What to reuse; what must not be touched>
 
 ## 影响面
-- 模块：shared / material (Domain / Application / Infrastructure / API)
+- 模块：<one of the vocabulary entries; see .agents/config/workflow-modules.txt>
 - 数据库：none / <table name> (schema changes → L3; runtime / pipeline structural surfaces without schema are also L3; for criteria see `.agents/commands/new-task.md` §level determination)
 - 前端页面：<route or component; delete this line if none>
 
 ## 触达红线（对照 AGENTS.md，勾选仅标记触及范围；具体如何满足在同名 spec 中说明）
-- [ ] Application must not reference Infrastructure / DbContext (exemption only for native LINQ in the category tree)
-- [ ] Code-generation logic (FormulaEngine / CategoryPrefix) → level at least L2
-- [ ] Cross-caller contract changes (shared-layer base classes / DTO shape / interface signatures / existing parameter semantics / global response and pagination validation semantics) → level at least L2
+- [ ] Cross-caller contract changes (shared contracts / interface signatures / existing parameter semantics / global cross-cutting semantics) → level at least L2
 - [ ] schema / migration SQL / DI chain → level L3
-- [ ] Frontend: always Drawer / no a-select for large datasets / unified styles in style.css
+- [ ] <Project-owned red lines come from the root AGENTS.md and .agents/hooks/architecture-redlines.json; fill in only when they exist, delete this section when there are none>
 
 > Touching any red line makes it L2 / L3. You must create ../specs/YYYY-MM-DD-<topic>.md explaining how it is satisfied before drafting a plan.
 

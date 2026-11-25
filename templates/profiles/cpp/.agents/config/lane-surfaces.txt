@@ -6,7 +6,6 @@
 #   engine  = 引擎/门禁自身面：无活跃入口时仅 advisory；
 #   product = 产品契约/schema 面：按路径归因，执法点 = verify.mjs lane-surface-ci 关单/CI 硬拦。
 ## engine
-^templates/
 ^\.agents/(scripts|hooks)/
 ^\.githooks/
 ## product

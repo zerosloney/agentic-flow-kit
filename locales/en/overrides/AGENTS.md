@@ -3,7 +3,7 @@
 {{projectName}}. {{stackDescription}}
 
 ## 1. Runtime Connectivity
-The frontend dev server on port {{webPort}} connects to the API at `http://localhost:{{apiPort}}`; the API must listen on {{apiPort}} to be reachable. Environment facts live in `.agents/notes/runtime-env.md` §6; machine-specific absolute paths and versions are self-registered in `.agents/notes/runtime-env.local.md`.
+{{productNote}} Environment facts live in `.agents/notes/runtime-env.md` §6; machine-specific absolute paths and versions are self-registered in `.agents/notes/runtime-env.local.md`.
 
 ## 2. Local Setup (required after clone)
 > Missing these silently disables the gates. See `.agents/notes/runtime-env.md` §7.
@@ -39,13 +39,12 @@ Jump to the corresponding command file by task type:
 
 > **Short-name corrections**: report the short name mid-task; the index is `.agents/config/principles.md`.
 
-> **Engine-face exemption**: changes to the AI-Native governance engine itself are **exempt from the workflow trio** — no intents/specs/plans and no confirmation doors; use Conventional Commits directly. Engine face = all of `.agents/`, `.githooks/`, `azure-pipelines.yml`, workflow templates and ledgers, root `package.json`, and host adapter directories; machine-local host directories are not committed. **Wiki exemption**: content edits under `wiki/` (including INDEX and boards) share the same exemption. **Boundary**: git hooks and static gates still run; deleting wiki files still requires a separate user instruction; executing data-maintenance SQL is not exempt.
+> **Engine-face exemption**: changes to the AI-Native governance engine itself are **exempt from the workflow trio** — no intents/specs/plans and no confirmation doors; use Conventional Commits directly. Engine face = all of `.agents/`, `.githooks/`, CI configuration files (e.g. `azure-pipelines.yml`, `.github/workflows/ci.yml`, etc.), workflow templates and ledgers, root `package.json`, and host adapter directories; machine-local host directories are not committed. **Wiki exemption**: content edits under `wiki/` (including INDEX and boards) share the same exemption. **Boundary**: git hooks and static gates still run; deleting wiki files still requires a separate user instruction; executing data-maintenance SQL is not exempt.
 
 ## 5. Directory-level Rules
 **Do not backfill this document.** Implementation details live in each directory's `AGENTS.md`:
-- **Backend**: `backend/AGENTS.md`
-- **Frontend**: `frontend/AGENTS.md`
-- **Paired documents**: keep paired documents registered in `wiki/INDEX.md` in sync, and update `wiki/INDEX.md` and `wiki/知识沉淀总览.html` together.
+- **Submodules / Subdirectories**: when modifying independent modules or subdirectories (e.g. `backend/`, `frontend/`, `packages/*`), follow the `AGENTS.md` in that directory (read only if present)
+- **Paired documents**: keep paired documents registered in `wiki/INDEX.md` in sync, and update `wiki/INDEX.md` and `{{wikiBoard}}` together.
 
 ## 6. Project Adaptations
 - **Build/test/typecheck**: the command list is single-sourced in `.agents/hooks/commit-check.config.json`.

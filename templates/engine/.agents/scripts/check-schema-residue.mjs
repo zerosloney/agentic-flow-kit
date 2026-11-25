@@ -1,67 +1,123 @@
 #!/usr/bin/env node
 /**
- * check-schema-residue.mjs — 「已删列/新增列 vs 实库」残留审计（只读）
+ * check-schema-residue.mjs — 「已删列/新增列 vs 实库」残留审计（只读，手动工具，不接门禁）
  *
- * 用途：批次（wiki/数据维护/schema变更/*）登记的列变更与 dev 实库比对，
+ * 用途：批次（--base 目录，缺省由 wiki-names.mjs 提供——未配置 engine.json options.wiki 时为
+ *       wiki/数据维护/schema变更）登记的列变更与实库比对，
  *       找出「批次已删却仍在」（残留＝带外加列/批次语句静默失效）
  *       与「批次已加却不存在」（缺失＝带外删列）两类漂移。
- *
- * 起源：2026-10-12 dev 库带外加列反复回加（incident 2026-10-12-outband-column-readd-recurring）；
- *       同日发现 `LINENO` 为 T-SQL 关键字致 `DROP COLUMN LineNo` 静默不生效 —— 本脚本可一次扫出该类。
  *
  * 口径：
  *   - 取各批次 `0N-*.sql` 中**动作类**脚本：排除 `99-*`（回滚）、`*rollback*`（语义反转）、`*verify*`（核验脚本非动作）；
  *   - 逐条 `ALTER TABLE` 语句内扫描 `ADD [COLUMN]` / `DROP [COLUMN]` 的**多列清单**（顶层逗号切分；跳过 CONSTRAINT/PRIMARY/UNIQUE/… 等约束子句）；
  *   - 同（表,列）以批次目录名排序取**最后一次**动作；
- *   - `ADD` 后缺失 → 缺失；`DROP` 后仍存在 → 残留。
+ *   - `ADD` 后缺失 → 缺失；`DROP` 后仍存在 → 残留；
+ *   - `LINENO` 一类 T-SQL 关键字与列名同名会让 `DROP COLUMN` 静默不生效——本脚本可一次扫出该类。
  *
  * 已知盲区（人工兜底，勿当全量证明）：
- *   - 动态 SQL（`EXEC(N'ALTER TABLE … DROP COLUMN …')`）解析不可见（如 2026-09-29-consignment-vmi-rollback）；
+ *   - 动态 SQL（`EXEC(N'ALTER TABLE … DROP COLUMN …')`）解析不可见；
+ *   - `sp_rename` 改列名解析不可见（只见旧 ADD，按缺失报）；
  *   - 同目录内名为 `0N-rollback-*.sql` 的回滚脚本按文件名排除（其语义为撤销 01，判定会反转）。
  *
- * 豁免（EXEMPT）：**带方向**的已判定项——只在登记的该方向上豁免，反方向仍照常报警：
- *   - `direction: 'missing'`：批次已加但实库不存在，且已人工核实为「更晚批次删除」等台账侧过时；
- *   - `direction: 'residue'`：批次已删但实库仍在，且已人工核实为「实体确实声明该列」（台账注释过时）。
+ * 豁免（--exempt <JSON>）：数组，每项 { "table", "column", "direction": "missing"|"residue", "reason" }，
+ *   **带方向**的已判定项——只在登记的该方向上豁免，反方向仍照常报警：
+ *   - direction 'missing'：批次已加但实库不存在，且已人工核实为台账侧过时（如更晚批次已删）；
+ *   - direction 'residue'：批次已删但实库仍在，且已人工核实为实体确实声明该列（台账注释过时）。
+ *   豁免清单与连接配置同属被扫项目自己的数据，不随本脚本分发。
  *
- * 依赖：sqlcmd（PATH 可达）与 backend/material/Shipyard.Material.API/appsettings.json 的 DBConnParameter。
- * 用法：flow-kit run check-schema-residue.mjs [--verbose]
- * 退出码：0 = 无未解释残留/缺失；1 = 有；2 = 前置缺失（appsettings/sqlcmd）。
+ * 依赖：sqlcmd（未设 SQLCMD_BIN 时取 PATH 上的；测试注缝：SQLCMD_BIN 指定替身——.mjs/.js 结尾经本进程
+ *   node 直跑、其余按可执行文件直跑，与 check-secrets.mjs 的 GITLEAKS_BIN 约定一致）。
+ * 连接（优先级从高到低）：--conn <ADO.NET 连接串> → 环境变量 SCHEMA_RESIDUE_CONN
+ *   → --appsettings <JSON 文件路径> [--key <键名>]（默认 DBConnParameter）。
+ * 用法：flow-kit run check-schema-residue.mjs [--base <批次目录>] [--conn <连接串> | SCHEMA_RESIDUE_CONN | --appsettings <json> [--key <键>]] [--exempt <json>] [--verbose] [--dump <正则>]
+ * 退出码：0 = 无未解释残留/缺失；1 = 有；2 = 前置缺失（连接来源 / 批次目录 / 豁免文件）。
  */
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import { t as tr } from './lang.mjs';
+import { loadWikiNames } from './wiki-names.mjs';
 
 const root = process.cwd();
-const base = path.join(root, 'wiki', '数据维护', 'schema变更');
+const NAMES = loadWikiNames(root);
+const opt = (name) => {
+  const i = process.argv.indexOf(name);
+  return i >= 0 ? process.argv[i + 1] : undefined;
+};
+const base = path.resolve(root, opt('--base') ?? path.join('wiki', NAMES.maintenance, NAMES.schemaBatch));
 const verbose = process.argv.includes('--verbose');
 const SKIP = new Set(['CONSTRAINT', 'PRIMARY', 'UNIQUE', 'INDEX', 'CHECK', 'FOREIGN', 'NONCLUSTERED', 'CLUSTERED', 'KEY', 'COLUMN', 'ADD', 'DROP']);
 
-// 已判定豁免（带方向；人工核过，不计入对应方向的残留/缺失信号）
-const EXEMPT = new Map([
-  ['MM_PML_ProductionPMLMaterial.MTOMaterialID', { direction: 'residue', reason: '实体（本仓 ProductionPMLMaterial.cs:18 与并行分支）均声明该属性 → 2026-09-28 批次「实体中无此字段」注释已过期，列合法保留；台账/核验脚本待更新' }],
-  ['MM_INV_InventoryRecord.OwnershipType', { direction: 'missing', reason: '2026-09-29-consignment-vmi-rollback 已用动态 SQL 删除（VMI 货权回滚），旧批次断言过时' }],
-  ['MM_INV_InventoryRecord.OwnerSupplierID', { direction: 'missing', reason: '同上（VMI 货权回滚删除）' }],
-  ['MM_INV_InventoryRecord.OwnerSupplierName', { direction: 'missing', reason: '同上（VMI 货权回滚删除）' }],
-  ['MM_INV_InventoryTransaction.OwnershipType', { direction: 'missing', reason: '同上（VMI 货权回滚删除）' }],
-  ['MM_INV_InventoryTransaction.OwnerSupplierID', { direction: 'missing', reason: '同上（VMI 货权回滚删除）' }],
-  ['MM_ISS_OutboundRequestDetail.OwnershipType', { direction: 'missing', reason: '同上（VMI 货权回滚删除）' }],
-  ['MM_ISS_OutboundRequestDetail.OwnerSupplierID', { direction: 'missing', reason: '同上（VMI 货权回滚删除）' }],
-  ['MM_ISS_OutboundRequestDetail.OwnerSupplierName', { direction: 'missing', reason: '同上（VMI 货权回滚删除）' }],
-  ['MM_ISS_OutboundOrderDetail.OwnershipType', { direction: 'missing', reason: '同上（VMI 货权回滚删除）' }],
-  ['MM_ISS_OutboundOrderDetail.OwnerSupplierID', { direction: 'missing', reason: '同上（VMI 货权回滚删除）' }],
-  ['MM_ISS_OutboundOrderDetail.OwnerSupplierName', { direction: 'missing', reason: '同上（VMI 货权回滚删除）' }],
-  ['MM_PML_ProductionPMLQuota.SourceMaterialCode', { direction: 'missing', reason: '2026-10-23-pml-quota-substitute-columns 批次已 sp_rename 为 SubstituteMaterialCode（本脚本只解析 ADD/DROP，sp_rename 不可见）→ 2026-09-28-pml-source-material-fields 的 ADD 期望过时' }],
-  ['MM_PML_ProductionPMLQuota.SourceMaterialName', { direction: 'missing', reason: '同上（2026-10-23 批次已 sp_rename 为 SubstituteMaterialName）' }],
-]);
+// 连接串三来源按优先级取一个；三者皆缺 → stderr 说明用法后前置缺失退出
+const appsettingsArg = opt('--appsettings');
+let conn = opt('--conn') ?? process.env.SCHEMA_RESIDUE_CONN;
+if (!conn && appsettingsArg) {
+  const file = path.resolve(root, appsettingsArg);
+  let json;
+  try {
+    json = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    console.error(tr(`[schema-residue] ❌ appsettings 读不了或非合法 JSON：${file}`, `[schema-residue] ❌ appsettings unreadable or not valid JSON: ${file}`));
+    process.exit(2);
+  }
+  const key = opt('--key') ?? 'DBConnParameter';
+  conn = json[key];
+  if (!conn) {
+    console.error(tr(`[schema-residue] ❌ ${file} 缺键 ${key}（--key 可指定，默认 DBConnParameter）`, `[schema-residue] ❌ ${file} is missing key ${key} (override with --key; default DBConnParameter)`));
+    process.exit(2);
+  }
+}
+if (!conn) {
+  console.error(tr('[schema-residue] ❌ 未提供数据库连接。三种方式（优先级从高到低）：', '[schema-residue] ❌ no database connection provided. Three ways (highest priority first):'));
+  console.error(tr('  1) --conn <ADO.NET 连接串>', '  1) --conn <ADO.NET connection string>'));
+  console.error(tr('  2) 环境变量 SCHEMA_RESIDUE_CONN', '  2) environment variable SCHEMA_RESIDUE_CONN'));
+  console.error(tr('  3) --appsettings <JSON 文件路径> [--key <键名>]（默认 DBConnParameter）', '  3) --appsettings <JSON file path> [--key <key name>] (default DBConnParameter)'));
+  process.exit(2);
+}
 
-const appsettings = path.join(root, 'backend', 'material', 'Shipyard.Material.API', 'appsettings.json');
-if (!fs.existsSync(appsettings)) { console.error(`未找到 ${appsettings}`); process.exit(2); }
-const conn = JSON.parse(fs.readFileSync(appsettings, 'utf8')).DBConnParameter;
-if (!conn) { console.error('appsettings.json 缺 DBConnParameter'); process.exit(2); }
+// 豁免清单：带方向的已判定项（人工核过，只在登记方向上豁免）；不传则没有豁免
+const exemptFile = opt('--exempt');
+const EXEMPT = new Map();
+if (exemptFile) {
+  const file = path.resolve(root, exemptFile);
+  let list;
+  try {
+    list = JSON.parse(fs.readFileSync(file, 'utf8'));
+  } catch {
+    console.error(tr(`[schema-residue] ❌ 豁免文件读不了或非合法 JSON：${file}`, `[schema-residue] ❌ exempt file unreadable or not valid JSON: ${file}`));
+    process.exit(2);
+  }
+  if (!Array.isArray(list)) {
+    console.error(tr(`[schema-residue] ❌ 豁免文件须为 JSON 数组：${file}`, `[schema-residue] ❌ exempt file must be a JSON array: ${file}`));
+    process.exit(2);
+  }
+  for (const [i, e] of list.entries()) {
+    const ok = e && typeof e === 'object' && e.table && e.column && e.reason && ['missing', 'residue'].includes(e.direction);
+    if (!ok) {
+      console.error(tr(`[schema-residue] ❌ 豁免清单第 ${i + 1} 项非法（需 { "table", "column", "direction": "missing"|"residue", "reason" }）：${JSON.stringify(e)}`, `[schema-residue] ❌ exemption entry ${i + 1} is invalid (expected { "table", "column", "direction": "missing"|"residue", "reason" }): ${JSON.stringify(e)}`));
+      process.exit(2);
+    }
+    EXEMPT.set(`${e.table}.${e.column}`, { direction: e.direction, reason: e.reason });
+  }
+}
+
+// 批次目录缺失此前会直接抛未捕获异常；统一收敛为 stderr + exit 2 的前置缺失口径
+if (!fs.statSync(base, { throwIfNoEntry: false })?.isDirectory()) {
+  console.error(tr(`[schema-residue] ❌ 批次目录不存在：${base}（--base 可指定，默认 wiki/${NAMES.maintenance}/${NAMES.schemaBatch}）`, `[schema-residue] ❌ batch directory not found: ${base} (override with --base; default wiki/${NAMES.maintenance}/${NAMES.schemaBatch})`));
+  process.exit(2);
+}
+
 const pick = (k) => (conn.match(new RegExp(`(?:^|;)\\s*${k}\\s*=\\s*([^;]+)`, 'i')) || [])[1];
 const sqlcmdArgs = ['-S', pick('Server'), '-d', pick('Database'), '-U', pick('User Id'), '-P', pick('Password'), '-h', '-1', '-W', '-f', '65001'];
 
-const sqlcmd = (query) => execFileSync('sqlcmd', [...sqlcmdArgs, '-Q', query], { encoding: 'utf8' });
+// sqlcmd 替身注缝（测试）：SQLCMD_BIN 以 .mjs/.js 结尾经本进程 node 直跑，否则按可执行文件直跑；未设置用 PATH 上的 sqlcmd
+const seam = process.env.SQLCMD_BIN;
+const seamIsNodeScript = !!seam && /\.(mjs|js)$/i.test(seam);
+const sqlcmd = (query) => execFileSync(
+  seamIsNodeScript ? process.execPath : (seam || 'sqlcmd'),
+  [...(seamIsNodeScript ? [seam] : []), ...sqlcmdArgs, '-Q', query],
+  { encoding: 'utf8' },
+);
 
 /** 顶层逗号切分（忽略括号内逗号） */
 function splitTopLevel(text) {
@@ -127,18 +183,18 @@ for (const [key, v] of acts) {
   else (dir === 'missing' ? missing : residue).push([t, c, v.src]);
 }
 
-console.log(`[schema-residue] 扫描批次动作 ${acts.size} 项（wiki/数据维护/schema变更；排除 99-rollback / *rollback* / *verify*）`);
-console.log(`[schema-residue] 残留（批次已删仍存在）${residue.length} 项 / 缺失（批次已加不存在）${missing.length} 项 / 已豁免 ${exempted.length} 项（按方向）`);
-for (const [t, c, s] of residue) console.log(`  ⚠ 残留 ${t}.${c}  ← ${s}`);
-for (const [t, c, s] of missing) console.log(`  ⚠ 缺失 ${t}.${c}  ← ${s}`);
+console.log(tr(`[schema-residue] 扫描批次动作 ${acts.size} 项（${base}；排除 99-rollback / *rollback* / *verify*）`, `[schema-residue] scanned ${acts.size} batch actions (${base}; excluding 99-rollback / *rollback* / *verify*)`));
+console.log(tr(`[schema-residue] 残留（批次已删仍存在）${residue.length} 项 / 缺失（批次已加不存在）${missing.length} 项 / 已豁免 ${exempted.length} 项（按方向）`, `[schema-residue] residue (dropped by batch, still present) ${residue.length} / missing (added by batch, absent) ${missing.length} / exempted ${exempted.length} (per direction)`));
+for (const [t, c, s] of residue) console.log(tr(`  ⚠ 残留 ${t}.${c}  ← ${s}`, `  ⚠ residue ${t}.${c}  ← ${s}`));
+for (const [t, c, s] of missing) console.log(tr(`  ⚠ 缺失 ${t}.${c}  ← ${s}`, `  ⚠ missing ${t}.${c}  ← ${s}`));
 if (process.argv.includes('--dump')) {
   const filter = process.argv[process.argv.indexOf('--dump') + 1];
   const re = new RegExp(filter ?? '.', 'i');
-  console.log(`[schema-residue] --dump ${filter ?? '.'} 命中：`);
+  console.log(tr(`[schema-residue] --dump ${filter ?? '.'} 命中：`, `[schema-residue] --dump ${filter ?? '.'} matches:`));
   for (const [k, v] of acts) if (re.test(k)) console.log(`  · ${k} ${v.action} ← ${v.src}`);
 }
 if (verbose) {
-  console.log('[schema-residue] 豁免明细（带方向；反方向仍会报警）：');
+  console.log(tr('[schema-residue] 豁免明细（带方向；反方向仍会报警）：', '[schema-residue] exemption details (directional; the opposite direction still reports):'));
   for (const [k, dir, reason] of exempted) console.log(`  · [${dir}] ${k} — ${reason}`);
 }
 process.exit(residue.length || missing.length ? 1 : 0);

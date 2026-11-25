@@ -15,11 +15,22 @@
       "description": "内置宿主或通过 --host-manifest / .flow-kit/hosts 加载的外部宿主。",
       "uniqueItems": true
     },
-    "stack": { "enum": ["dotnet", "node", "typescript", "rust", "go", "java", "empty"] },
+    "stack": { "enum": ["dotnet", "node", "typescript", "rust", "go", "java", "python", "cpp", "empty"] },
+    "product": { "enum": ["web", "api", "library", "cli", "monorepo"], "description": "项目形态（--product）：web=带界面的服务、api=纯 API、library=库/包、cli=命令行工具、monorepo=多包/多应用工作区。缺省 web。" },
+    "ports": {
+      "type": "object",
+      "description": "--api-port / --web-port 显式指定的端口；未显式指定不写该字段（跟随栈默认值）。",
+      "properties": {
+        "api": { "type": "integer", "minimum": 1, "maximum": 65535 },
+        "web": { "type": "integer", "minimum": 1, "maximum": 65535 }
+      },
+      "additionalProperties": false
+    },
+    "scaffold": { "enum": ["full", "minimal", "none"], "description": "--scaffold 脚手架档位：full=完整（缺省不写字段）、minimal=只留 wiki/INDEX.md、none=不装脚手架。" },
     "stacks": {
       "type": "array",
       "minItems": 2,
-      "items": { "enum": ["dotnet", "node", "typescript", "rust", "go", "java", "empty"] },
+      "items": { "enum": ["dotnet", "node", "typescript", "rust", "go", "java", "python", "cpp", "empty"] },
       "description": "多栈安装（--stack 可重复/逗号分隔）时声明的全部技术栈，按声明顺序、首个为主栈（即 stack）；单栈安装不写该字段。"
     },
     "surfaces": {
@@ -45,6 +56,10 @@
     "baselineVersion": {
       "type": ["string", "null"],
       "description": "写入基线时的安装器版本；基线内容不参与 manifest 哈希。"
+    },
+    "prevHooksPath": {
+      "type": ["string", "null"],
+      "description": "安装前本地 core.hooksPath 的值；null 表示安装前未设置（读到本工具自己的 .githooks 也按 null 记）。只在首次写入时记录，升级/重装原样保留；完整卸载且当前值仍为 .githooks 时据此还原。"
     },
     "enterprise": {
       "type": "object",

@@ -5,7 +5,9 @@
 //   runtime-env.md §7）。check-local-gates.mjs 是上岗自检的显著入口，但「靠人记得跑」是整座
 //   防御纵深唯一的地基软肋——本门把同一 git 面（① core.hooksPath ② merge.ours ②b merge.jsonl-union
 //   ③ .gitattributes 两行 ④ 五钩子文件在位）挂进 verify 门表，每次关单/CI 自动对质。
-//   判据与 check-local-gates.mjs ①-④ 逐条对齐（单源：一边改另一边须跟）；node/dotnet/浏览器
+//   判据与 check-local-gates.mjs ①-④ 逐条对齐（单源：一边改另一边须跟）；栈条件化同源：
+//   ② merge.ours.driver 与 ③ 的 appsettings merge=ours 行仅 engine.json stacks 含 dotnet 时判定，
+//   非 dotnet 打 info 跳过（不进结果集、不影响退出码）；jsonl-union 判定通用。node/dotnet/浏览器
 //   工具链项不进本门——其余 verify 门自身即依赖 node，dotnet 由 backend-build 门执法。
 //
 // 档位：默认 WARN——缺配只告警不阻断（打出修复命令，exit 0）；--strict 缺配即 exit 1（升格
@@ -20,6 +22,14 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+import { isCi } from './ci-provider.mjs';
+let detectStackFromRules = () => [];
+try {
+  const mod = await import('./rules-loader.mjs');
+  if (typeof mod?.detectStackFromRules === 'function') detectStackFromRules = mod.detectStackFromRules;
+} catch {
+  // 当脚本在最小隔离测试夹具中独立运行且未复制 rules-loader.mjs 时平滑降级
+}
 
 const strict = process.argv.includes('--strict');
 let root = process.cwd();
@@ -28,8 +38,8 @@ let root = process.cwd();
   if (i >= 0 && process.argv[i + 1]) root = path.resolve(process.argv[i + 1]);
 }
 
-if (process.env.TF_BUILD) {
-  console.log('[local-gate-config] ⏭️ CI 环境（TF_BUILD）——CI checkout 不挂本地钩子属常态，跳过（本地缺配由各机 verify 跑出）');
+if (isCi()) {
+  console.log('[local-gate-config] ⏭️ CI 环境——CI checkout 不挂本地钩子属常态，跳过（本地缺配由各机 verify 跑出）');
   process.exit(0);
 }
 
@@ -53,26 +63,42 @@ const gaText = (() => {
 const hooks = ['pre-commit', 'pre-merge-commit', 'commit-msg', 'pre-push', 'post-commit'];
 const missingHooks = hooks.filter((h) => !fs.existsSync(path.join(root, '.githooks', h)));
 
+// 栈条件化（与 check-local-gates.mjs 同口径）：engine.json 缺失/坏 → 未声明栈，不按 dotnet 执法。
+const STACKS = (() => {
+  try {
+    const options = JSON.parse(fs.readFileSync(path.join(root, '.agents/config/engine.json'), 'utf8')).options || {};
+    const list = options.stacks?.length ? options.stacks : (options.stack ? [options.stack] : []);
+    if (list.length) return list;
+  } catch { /* 忽略 engine.json 缺省 */ }
+  return detectStackFromRules(root);
+})();
+const isDotnet = STACKS.includes('dotnet');
+if (!isDotnet) console.log('[local-gate-config] ⏭️ 非 dotnet 栈：appsettings 合并保护不适用（跳过）');
+
+const gaOursOk = /^(?:.*\/)?appsettings\.json\s+merge=ours$/m.test(gaText);
+const gaJsonlOk = /^\.agents\/\*\.jsonl\s+merge=jsonl-union$/m.test(gaText);
+
 const results = [
   {
     ok: hooksPath === '.githooks',
     name: 'core.hooksPath → .githooks（漏配 = 五钩子全部静默失效）',
     fix: 'git config core.hooksPath .githooks',
   },
-  {
+  ...(isDotnet ? [{
     ok: git(['config', 'merge.ours.driver']) === 'true',
     name: 'merge.ours.driver（appsettings.json 连接串合并保护）',
     fix: 'git config merge.ours.driver true',
-  },
+  }] : []),
   {
     ok: git(['config', 'merge.jsonl-union.driver']) === JSONL_DRIVER,
     name: 'merge.jsonl-union.driver（台账 jsonl 并发并集合并）',
     fix: `git config merge.jsonl-union.driver "${JSONL_DRIVER}"`,
   },
   {
-    ok: /^backend\/material\/Shipyard\.Material\.API\/appsettings\.json\s+merge=ours$/m.test(gaText)
-      && /^\.agents\/\*\.jsonl\s+merge=jsonl-union$/m.test(gaText),
-    name: '.gitattributes 含 merge=ours 与 merge=jsonl-union 两行',
+    // 与 check-local-gates.mjs 同一口径：接受任意目录下的 appsettings.json（随包模板写的是 **/appsettings.json）
+    // appsettings merge=ours 行仅 dotnet 栈判定；jsonl 行通用
+    ok: isDotnet ? gaOursOk && gaJsonlOk : gaJsonlOk,
+    name: isDotnet ? '.gitattributes 含 merge=ours 与 merge=jsonl-union 两行' : '.gitattributes 含 merge=jsonl-union 行',
     fix: null, // 仓库侧文件：git checkout -- .gitattributes 恢复
   },
   {
@@ -88,7 +114,9 @@ for (const r of results) {
   else console.log(`[local-gate-config]   ${strict ? '[缺失]' : '⚠️ WARN'} ${r.name}${r.fix ? ` —— 修复: ${r.fix}` : ' —— git checkout 恢复文件'}`);
 }
 if (!bad.length) {
-  console.log('[local-gate-config] 本地门禁挂载面全配（hooksPath + 两条 merge driver + .gitattributes + 五钩子在位）');
+  console.log(isDotnet
+    ? '[local-gate-config] 本地门禁挂载面全配（hooksPath + 两条 merge driver + .gitattributes + 五钩子在位）'
+    : '[local-gate-config] 本地门禁挂载面全配（hooksPath + jsonl 并集合并驱动 + .gitattributes + 五钩子在位；appsettings 合并保护不适用）');
   process.exit(0);
 }
 console.log(`[local-gate-config] ${strict ? '❌' : '⚠️'} ${bad.length} 项缺配——一键修复: flow-kit run check-local-gates.mjs --fix（机理见 .agents/notes/runtime-env.md §7）`);

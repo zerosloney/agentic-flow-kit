@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // workflow 实时看板服务：本地只读 http + SSE 文件监听，可视化 AI 执行流程（intents/incidents/plans/specs）。
-// 用法：flow-kit run workflow-board-server.mjs [--port 8933]；多 worktree 并行请用 ensure-board.mjs 拉起（按 SHIPYARD_SLOT 槽位派生端口，strict 不漂移——2026-10-22 board-slot-strict）
+// 用法：flow-kit run workflow-board-server.mjs [--port 8933]；多 worktree 并行请用 ensure-board.mjs 拉起（按 FLOW_KIT_BOARD_SLOT（旧名 SHIPYARD_SLOT 兼容）槽位派生端口，strict 不漂移——2026-10-22 board-slot-strict）
 // 零依赖（node:http/node:fs/node:path/node:url/node:child_process）；只读 workflow/ 与 git，仅绑 127.0.0.1。
 // API：GET /（看板页） /marked.min.js（vendor） /api/board /api/doc?file=<相对路径> /api/history?file=<相对路径> /api/events（SSE）
 //       /api/runs（pipeline-run 执行器 run 卡片列表） /api/run?file=<runId>.json（单 run 事件流）

@@ -8,6 +8,7 @@ import { readPlanEntry, renderMergeBlock, extractMergeBlock, dedupeMergeBlock } 
 import { readInjectedModels } from '../models/resolve.mjs';
 import { makeT } from '../i18n.mjs';
 import { readKitVersion, resolveTarget } from './install.mjs';
+import { planInputsFromManifest, varsInputsFromManifest } from './replay.mjs';
 
 const KIND_ORDER = { missing: 0, 'user-modified': 1, 'kit-updated': 2, orphan: 3, unchanged: 4 };
 export const KIND_META = {
@@ -32,17 +33,6 @@ function normalizeEol(text) {
   return String(text).replace(/\r\n/g, '\n');
 }
 
-// engine.json 的 createdAt 是安装时唯一使用 {{installedAt}} 的 token；
-// 从已安装文件回读它，避免 diff 把该文件误判为模板更新（manifest.installedAt 是写盘时间）。
-function readInstalledAt(target) {
-  try {
-    const engine = JSON.parse(fs.readFileSync(path.join(target, '.agents/config/engine.json'), 'utf8'));
-    return engine.createdAt || null;
-  } catch {
-    return null;
-  }
-}
-
 function expectedEntry(entry, vars) {
   if (MERGE_KINDS.has(entry.kind)) {
     const { begin, end, block } = renderMergeBlock(entry, vars);
@@ -56,32 +46,12 @@ function expectedEntry(entry, vars) {
 export function buildState({ target, manifest }) {
   const hosts = manifest.hosts || [];
   const language = manifest.language || 'zh-CN';
-  const stack = manifest.stack || 'empty';
-  const stacks = manifest.stacks || null;
-  const projectName = manifest.projectName || path.basename(target);
-  const tier = manifest.tier || 'standard';
-  const hardened = Boolean(manifest.hardened);
   const kitVersion = readKitVersion();
   // 模型值从已安装子代理回读，使“模板未变”的文件不会被模型注入差异误判。
   const models = readInjectedModels({ target, hosts });
-  const plan = buildPlan({
-    target, hosts, lang: language, stack, stacks, projectName, models, tier, hardened,
-    mcp: manifest.mcp === true,
-    surfaces: manifest.surfaces || [],
-    managedPermissions: manifest.managedPermissions || {},
-    ci: manifest.ci || null,
-  });
-  const vars = buildVars({
-    target,
-    projectName,
-    stack,
-    stacks,
-    language,
-    hosts,
-    kitVersion,
-    installedAt: readInstalledAt(target) || manifest.installedAt || '',
-    trackHosts: manifest.trackHosts === true,
-  });
+  // 清单重放统一走 replay：漏掉的选项会在这里一次性补齐，而不是各命令各写一份。
+  const plan = buildPlan(planInputsFromManifest({ target, manifest, hosts, lang: language, models }));
+  const vars = buildVars(varsInputsFromManifest({ target, manifest, hosts, lang: language, kitVersion }));
   return { plan, vars, kitVersion };
 }
 

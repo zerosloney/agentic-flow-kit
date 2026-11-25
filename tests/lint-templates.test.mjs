@@ -91,3 +91,12 @@ test('lint fails when the stage loading table is missing', () => {
   assert.equal(result.ok, false);
   assert.match(result.sections[0].errors.join('\n'), /stage loading table not found/);
 });
+
+test('frontmatter lint covers skills that live only in a stack profile', () => {
+  const root = fixture();
+  // 栈专用技能住在 profile 层：只放 profile 的技能也必须被 frontmatter 检查覆盖。
+  write(root, 'templates/profiles/dotnet/.agents/skills/broken/SKILL.md', '---\nname: broken\n---\n\n# Broken\n');
+  const result = runLint({ root, checks: ['frontmatter'] });
+  assert.equal(result.ok, false);
+  assert.match(result.sections[0].errors.join('\n'), /broken\/SKILL\.md: frontmatter description is required/);
+});

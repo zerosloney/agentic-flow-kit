@@ -73,6 +73,75 @@ test('fresh install has no drift', () => {
   }
 });
 
+// 回归：buildState 曾漏传 scaffold / devcontainer（没装的文件被误报「缺失」）与 product / ports
+// （渲染差异被误报「模板更新」）——非默认安装一跑 diff / doctor 就出现假漂移。
+test('fresh install with non-default options has no drift (manifest options are replayed)', () => {
+  const cases = [
+    ['--product', 'api'],
+    ['--api-port', '9000', '--web-port', '5100'],
+    ['--scaffold', 'minimal'],
+    ['--scaffold', 'none'],
+    ['--no-devcontainer'],
+  ];
+  for (const extra of cases) {
+    const label = extra.join(' ');
+    const dir = tmpRepo();
+    install(dir, extra);
+    const result = diffJson(dir);
+    assert.equal(result.summary.missing, 0, `${label}: ${JSON.stringify(result.summary)}`);
+    assert.equal(result.summary.kitUpdated, 0, `${label}: ${JSON.stringify(result.summary)}`);
+    assert.equal(result.summary.userModified, 0, label);
+    const doc = run(['doctor', '--target', '.'], dir);
+    assert.equal(doc.status, 0, doc.stderr);
+    assert.doesNotMatch(`${doc.stdout}${doc.stderr}`, /manifest drift/, `${label}: doctor must not report drift`);
+  }
+});
+
+// 回归：remove-host 收敛剩余宿主时曾用不完整的重放变量（漏 product / ports / stacks /
+// scaffold / devcontainer），非默认安装被静默退回默认渲染。
+test('remove-host replays manifest options when converging the remaining hosts', () => {
+  const cases = [
+    ['--product', 'api', '--api-port', '9000', '--web-port', '5100'],
+    ['--scaffold', 'minimal'],
+    ['--stack', 'dotnet', '--stack', 'node'],
+    ['--no-devcontainer'],
+  ];
+  for (const extra of cases) {
+    const label = extra.join(' ');
+    const dir = tmpRepo();
+    if (extra.filter((arg) => arg === '--stack').length > 1) {
+      // 多栈：install 助手固定传 --stack node，这里直接调用以保留两个 --stack。
+      const r = run(['install', '--agent', 'trae', '--agent', 'claude', '--lang', 'zh-CN', '--target', '.', ...extra], dir);
+      assert.equal(r.status, 0, r.stderr);
+    } else {
+      install(dir, ['--agent', 'claude', ...extra]);
+    }
+    const agentsBefore = read(dir, 'AGENTS.md');
+    // engine.json 的 hosts 会随宿主移除变化，这里只比对受重放影响的选项。
+    const optionsOf = () => {
+      const { product, ports, stacks } = JSON.parse(read(dir, '.agents/config/engine.json')).options;
+      return { product, ports, stacks };
+    };
+    const optionsBefore = optionsOf();
+    const removed = run(['remove-host', 'claude', '--target', '.'], dir);
+    assert.equal(removed.status, 0, `${label}: ${removed.stderr}`);
+    assert.deepEqual(optionsOf(), optionsBefore, label);
+    assert.equal(read(dir, 'AGENTS.md'), agentsBefore, label);
+    if (optionsBefore.product === 'api') {
+      assert.match(
+        read(dir, 'AGENTS.md'),
+        /仅 API 服务（端口 9000）：无前端 dev 服务，UI 实测阶段不适用。/,
+        label,
+      );
+    }
+    const result = diffJson(dir);
+    assert.equal(result.summary.missing, 0, `${label}: ${JSON.stringify(result.summary)}`);
+    assert.equal(result.summary.kitUpdated, 0, `${label}: ${JSON.stringify(result.summary)}`);
+    assert.equal(result.summary.userModified, 0, `${label}: ${JSON.stringify(result.summary)}`);
+    assert.equal(result.summary.orphan, 0, `${label}: ${JSON.stringify(result.summary)}`);
+  }
+});
+
 test('diff reports user-modified, missing and orphan entries', () => {
   const dir = tmpRepo();
   install(dir);

@@ -65,6 +65,74 @@ test('check-spec-packages passes with no packages and enforces conclusion values
   assert.match(JSON.parse(bad.stdout).packages[0].problems.join(';'), /结论/);
 });
 
+test('check-spec-packages validates handoff contract and supports --require-handoff', async () => {
+  const root = tmp();
+  // 1. 完整且带合法 handoff.json
+  pkg(root, 'with-handoff-json');
+  fs.writeFileSync(
+    path.join(root, 'workflow', 'specs', 'with-handoff-json', 'handoff.json'),
+    JSON.stringify({
+      from: 'planner',
+      to: 'implementer',
+      task: '实现特性',
+      touchSetAllowed: ['src/index.mjs'],
+      touchSetForbidden: ['tests/'],
+    })
+  );
+
+  // 2. 带合法 handoff.md
+  pkg(root, 'with-handoff-md');
+  fs.writeFileSync(
+    path.join(root, 'workflow', 'specs', 'with-handoff-md', 'handoff.md'),
+    `---
+from: test-designer
+to: independent-reviewer
+task: 复核规格
+---
+- 允许改动: workflow/specs/foo/spec.md
+- 禁止改动: src/
+`
+  );
+
+  // 3. 非法 handoff.json (缺少 from 和 to)
+  pkg(root, 'bad-handoff');
+  fs.writeFileSync(
+    path.join(root, 'workflow', 'specs', 'bad-handoff', 'handoff.json'),
+    JSON.stringify({ task: '缺少来源去向' })
+  );
+
+  // 4. 普通 package (无 handoff)
+  pkg(root, 'plain');
+
+  const mod = await import(pathToFileURL(CHECK_SPEC).href);
+  const resJson = mod.checkPackage(root, 'with-handoff-json');
+  assert.equal(resJson.ok, true);
+
+  const resMd = mod.checkPackage(root, 'with-handoff-md');
+  assert.equal(resMd.ok, true);
+
+  const resBad = mod.checkPackage(root, 'bad-handoff');
+  assert.equal(resBad.ok, false);
+  assert.match(resBad.problems.join(';'), /handoff\.json 契约不满足/);
+
+  // 默认不强制要求 handoff，plain 包通过
+  const resPlain = mod.checkPackage(root, 'plain');
+  assert.equal(resPlain.ok, true);
+
+  // 传 requireHandoff 时，plain 包应报 missing handoff sheet
+  const resPlainRequired = mod.checkPackage(root, 'plain', { requireHandoff: true });
+  assert.equal(resPlainRequired.ok, false);
+  assert.match(resPlainRequired.problems.join(';'), /missing handoff sheet/);
+
+  // CLI 旗标 --require-handoff 测试
+  const cliRes = spawnSync(process.execPath, [CHECK_SPEC, '--root', root, '--require-handoff', '--json'], { encoding: 'utf8' });
+  assert.equal(cliRes.status, 1);
+  const cliOut = JSON.parse(cliRes.stdout);
+  assert.equal(cliOut.ok, false);
+  assert.equal(cliOut.packages.find((p) => p.package === 'with-handoff-json').ok, true);
+  assert.equal(cliOut.packages.find((p) => p.package === 'plain').ok, false);
+});
+
 test('agent-eval writes a versioned eval-log and supports opt-out / custom path', async () => {
   const mod = await import(pathToFileURL(AGENT_EVAL).href);
   const root = tmp();

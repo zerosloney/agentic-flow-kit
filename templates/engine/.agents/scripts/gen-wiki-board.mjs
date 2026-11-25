@@ -10,13 +10,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { execSync } from 'node:child_process';
+import { loadWikiNames } from './wiki-names.mjs';
+
+const NAMES = loadWikiNames(process.cwd());
 
 const USAGE = `用法：flow-kit run gen-wiki-board.mjs [--dry-run] [--help]
 
 事实源：磁盘 wiki/<主题>/ 一层文件 + INDEX.md 速览表「用途」列（人工列）。重生成：
   - wiki/INDEX.md：速览表数据行与文件计数、「合计」行数字、映射表节
     （「## 文件 → 主题 → 归属目录 映射表」到「## 命名规则」之间整段）
-  - wiki/知识沉淀总览.html：const DATA = {...} 整块（summary 统计 + topics 文件清单 + dir 链接）
+  - wiki/${NAMES.board}：const DATA = {...} 整块（summary 统计 + topics 文件清单 + dir 链接）
 两处生成区手改会被覆盖；锚点外内容原样保留。人工只维护磁盘文件 + 速览表「用途」列。
 
 选项：
@@ -37,7 +40,7 @@ const DRY = args.includes('--dry-run');
 
 const WIKI = 'wiki';
 const INDEX_P = path.join(WIKI, 'INDEX.md');
-const BOARD_P = path.join(WIKI, '知识沉淀总览.html');
+const BOARD_P = path.join(WIKI, NAMES.board);
 
 // ---- 磁盘枚举（事实源：文件在哪个主题目录就属于哪个主题）----
 // 登记口径（2026-09-17 起，与 verify-wiki-consistency.mjs 保持一致）：
@@ -72,7 +75,7 @@ for (const d of fs.readdirSync(WIKI)) {
   const entries = fs.readdirSync(p)
     .filter((f) => fs.statSync(path.join(p, f)).isFile() && !f.startsWith('.') && !isIgnored(f))
     .map((f) => ({ name: f, dir: `wiki/${d}/` }));
-  if (d !== '数据维护') {
+  if (d !== NAMES.maintenance) {
     for (const sub of fs.readdirSync(p)) {
       const sp = path.join(p, sub);
       if (!fs.statSync(sp).isDirectory() || isIgnored(`${sub}/`)) continue;
@@ -189,7 +192,7 @@ if (boardOut === boardText && !/const DATA = \{[\s\S]*?\n\};/.test(boardText)) {
 if (DRY) {
   console.log('🔎 --dry-run：未写盘，差异预览如下');
   previewDiff('wiki/INDEX.md', indexText, out);
-  previewDiff('wiki/知识沉淀总览.html', boardText, boardOut);
+  previewDiff(`wiki/${NAMES.board}`, boardText, boardOut);
 } else {
   fs.writeFileSync(INDEX_P, out, 'utf8');
   fs.writeFileSync(BOARD_P, boardOut, 'utf8');

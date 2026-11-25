@@ -81,6 +81,78 @@ test('adopt reconstructs the manifest and leaves no drift', () => {
   assert.equal(after.summary.kitUpdated, 0);
 });
 
+test('派生工件随装：引擎地图/生效策略/索引落盘即派生件，adopt 不漂移；--scaffold none 不造 workflow 面', () => {
+  const full = tmpRepo();
+  install(full, ['claude']);
+  const mf = manifestOf(full);
+  // 三份派生工件随装落盘，并按磁盘现状登记为 derived（静态模板不作预期值）
+  for (const rel of ['.agents/notes/engine-map.md', 'workflow/INDEX.md', 'workflow/effective-policy.md']) {
+    assert.ok(fs.existsSync(path.join(full, rel)), `${rel} 应随装落盘`);
+    assert.ok(mf.derived.includes(rel), `${rel} 应登记为 derived`);
+    assert.ok(rel in mf.files, `${rel} 应进 manifest 账本`);
+  }
+  // 生效策略随装即目标现场的生成视图（不是占位桩）
+  assert.match(read(full, 'workflow/effective-policy.md'), /\| 锚键 \|/);
+
+  // adopt：派生件按现状收录，不拿静态模板比对 → 不报漂移
+  fs.rmSync(path.join(full, '.agents/install-manifest.json'));
+  const out = json(run(['adopt', '--target', '.', '--json'], full));
+  assert.deepEqual(out.modified, []);
+  assert.ok(out.derived.includes('.agents/notes/engine-map.md'));
+  assert.ok(out.derived.includes('workflow/effective-policy.md'));
+
+  // --scaffold none：无脚手架即无 workflow 面，但引擎地图属声明面仍随装
+  const none = tmpRepo();
+  install(none, ['claude'], ['--scaffold', 'none']);
+  assert.equal(fs.existsSync(path.join(none, 'workflow')), false, 'scaffold none 不应造出 workflow/ 目录');
+  assert.ok(fs.existsSync(path.join(none, '.agents/notes/engine-map.md')), '引擎地图仍随装');
+  const noneMf = manifestOf(none);
+  assert.ok(noneMf.derived.includes('.agents/notes/engine-map.md'));
+  assert.equal('workflow/effective-policy.md' in noneMf.files, false, 'scaffold none 不装 workflow 面产物');
+});
+
+test('旧版装户升级：装期生成的引擎地图被认领，不再永久假漂移', () => {
+  const dir = tmpRepo();
+  install(dir, ['claude']);
+  const rel = '.agents/notes/engine-map.md';
+  // 模拟旧版 Kit 装户：该文件由旧版装期生成，不进 manifest（files/derived 均无记录），内容与当前静态模板不同。
+  const mf = manifestOf(dir);
+  delete mf.files[rel];
+  mf.derived = mf.derived.filter((entry) => entry !== rel);
+  fs.writeFileSync(path.join(dir, '.agents/install-manifest.json'), `${JSON.stringify(mf, null, 2)}\n`, 'utf8');
+  fs.writeFileSync(path.join(dir, rel), '# 旧版生成的引擎地图\n\n- 与静态模板不同的旧版内容\n', 'utf8');
+
+  const up = run(['upgrade', '--target', '.'], dir);
+  assert.equal(up.status, 0, up.stderr);
+  assert.match(up.stdout, /engine-map\.md（已存在且为本工具派生产物，纳入跟踪）/);
+  assert.doesNotMatch(up.stdout, /engine-map\.md（已存在且非本工具安装/);
+  const after = manifestOf(dir);
+  assert.ok(rel in after.files, '认领后应进 manifest 账本');
+  assert.ok(after.derived.includes(rel), '认领后应登记为 derived');
+
+  const diff = json(run(['diff', '--target', '.', '--json'], dir));
+  const item = diff.items.find((entry) => entry.targetRel === rel);
+  assert.ok(item, `missing diff item for ${rel}`);
+  assert.equal(item.kind, 'unchanged');
+  assert.equal(diff.summary.kitUpdated, 0);
+
+  // 幂等：第二次升级文件已在账本里，不再走认领分支
+  const again = run(['upgrade', '--target', '.'], dir);
+  assert.equal(again.status, 0, again.stderr);
+  assert.doesNotMatch(again.stdout, /纳入跟踪/);
+});
+
+test('非派生集合的未跟踪既有文件仍按原样跳过', () => {
+  const dir = tmpRepo();
+  fs.mkdirSync(path.join(dir, '.agents/commands'), { recursive: true });
+  const rel = '.agents/commands/new-task.md';
+  fs.writeFileSync(path.join(dir, rel), '# 我自己的命令\n', 'utf8');
+
+  const r = install(dir, ['claude']);
+  assert.match(r.stdout, /new-task\.md（已存在且非本工具安装，跳过/);
+  assert.equal(read(dir, rel), '# 我自己的命令\n', '外来源文件不得被覆盖');
+});
+
 test('adopt is idempotent', () => {
   const dir = tmpRepo();
   install(dir, ['trae']);

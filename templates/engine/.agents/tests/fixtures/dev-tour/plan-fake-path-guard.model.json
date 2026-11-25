@@ -1,14 +1,14 @@
 {
   "schema": 2,
   "generatedAt": "2020-01-01T00:00:00.000Z",
-  "rootLabel": "Shipyard.Material",
+  "rootLabel": "example-project",
   "doc": {
     "path": ".agents/tests/fixtures/dev-tour/plan-fake-path-guard.md",
     "type": "DOC",
     "title": "伪路径防护样例：消解不伪造",
     "status": "起草中",
     "level": "L1",
-    "module": "物资",
+    "module": "示例",
     "date": "2099-12-31",
     "purpose": "",
     "links": [],
@@ -58,13 +58,13 @@
       "id": "T1",
       "index": 1,
       "title": "查询栏联动",
-      "summary": "改造 `frontend/src/views/purchase/pml/index.vue`，`frontend/src/api` 仅作目录锚提示",
+      "summary": "改造 `frontend/src/views/purchase/widgets/index.vue`，`frontend/src/api` 仅作目录锚提示",
       "detail": [
         "- 判据：构建通过",
-        "`frontend/src/views/purchase/pml/index.vue`：联动"
+        "`frontend/src/views/purchase/widgets/index.vue`：联动"
       ],
       "files": [
-        "frontend/src/views/purchase/pml/index.vue"
+        "frontend/src/views/purchase/widgets/index.vue"
       ],
       "status": "todo",
       "source": "steps"
@@ -107,7 +107,7 @@
       "pathGuess": false
     },
     {
-      "path": "frontend/src/views/purchase/pml/index.vue",
+      "path": "frontend/src/views/purchase/widgets/index.vue",
       "status": "planned",
       "badge": "计划",
       "additions": 0,

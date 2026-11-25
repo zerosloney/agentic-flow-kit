@@ -1,0 +1,7 @@
+{
+  "_note": "通知守卫配置（可选）：apply 到 .agents/hooks/notify-guard.json。缺省值与历史内建行为一致；项目按实际前端目录/框架改。",
+  "targets": ["frontend/src"],
+  "ext": [".vue", ".ts"],
+  "pattern": "message\\.(error|warning|warn|info)\\s*\\(",
+  "allowFiles": ["frontend/src/utils/notify.ts"]
+}

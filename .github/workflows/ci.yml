@@ -8,14 +8,21 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
+    # OS × Node 矩阵：Windows 是开发机平台，此前 CI 从不执行 win32 分支；
+    # 26 是最新 LTS，钩子路径在该版本会打 DEP0190 弃用警告，需要持续可见。
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node-version: [22, 26]
     steps:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0 # changelog --check 需要 tag 区间（默认浅克隆拉不到 tag）
       - uses: actions/setup-node@v5
         with:
-          node-version: 22
+          node-version: ${{ matrix.node-version }}
       - run: npm install
       - run: npm test
       - run: npm run check:i18n

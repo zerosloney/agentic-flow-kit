@@ -263,3 +263,61 @@ test('successful remove-host and uninstall leave no lock file behind', () => {
   assert.equal(uninstalled.status, 0, uninstalled.stderr);
   assert.equal(exists(dir, '.agents/install.lock'), false);
 });
+
+// —— prevHooksPath：完整卸载时还原安装前被覆盖的本地 core.hooksPath ——
+
+function setLocalConfig(dir, key, value) {
+  const r = spawnSync('git', ['-C', dir, 'config', '--local', key, value], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+}
+
+function localConfig(dir, key) {
+  const r = spawnSync('git', ['-C', dir, 'config', '--local', '--get', key], { encoding: 'utf8' });
+  return { status: r.status, value: r.stdout.trim() };
+}
+
+test('uninstall restores the pre-install core.hooksPath', () => {
+  const dir = tmpRepo();
+  setLocalConfig(dir, 'core.hooksPath', '.husky');
+  install(dir, ['claude']);
+  assert.equal(localConfig(dir, 'core.hooksPath').value, '.githooks');
+  assert.equal(manifestOf(dir).prevHooksPath, '.husky');
+
+  const r = run(['uninstall', '--target', '.', '--json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(json(r).manifestRemoved, true);
+  assert.equal(localConfig(dir, 'core.hooksPath').value, '.husky');
+});
+
+test('uninstall unsets core.hooksPath when none was set before install', () => {
+  const dir = tmpRepo();
+  install(dir, ['trae']);
+  const manifest = manifestOf(dir);
+  assert.equal('prevHooksPath' in manifest, true);
+  assert.equal(manifest.prevHooksPath, null);
+  assert.equal(localConfig(dir, 'core.hooksPath').value, '.githooks');
+
+  const r = run(['uninstall', '--target', '.', '--json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  const after = localConfig(dir, 'core.hooksPath');
+  assert.notEqual(after.status, 0, 'the kit-set key must be unset after uninstall');
+});
+
+test('uninstall keeps core.hooksPath the user changed after install', () => {
+  const dir = tmpRepo();
+  install(dir, ['trae']);
+  setLocalConfig(dir, 'core.hooksPath', '.custom-hooks');
+
+  const r = run(['uninstall', '--target', '.', '--json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(localConfig(dir, 'core.hooksPath').value, '.custom-hooks');
+});
+
+test('remove-host leaves core.hooksPath untouched', () => {
+  const dir = tmpRepo();
+  install(dir, ['claude']);
+
+  const r = run(['remove-host', 'claude', '--target', '.', '--json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(localConfig(dir, 'core.hooksPath').value, '.githooks');
+});

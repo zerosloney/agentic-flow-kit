@@ -97,7 +97,7 @@ function runGate(scriptName, payload, cwd) {
 // 接线完整性基线：两个接线文件 + 包内 CLI；缺一即告警。
 // （门实现随包分发，不再要求项目内存在 .agents/hooks 脚本。）
 const REQUIRED_FILES = [
-  '.pi/extensions/shipyard-gates.ts',
+  '.pi/extensions/flow-kit-gates.ts',
   '.pi/extensions/lib/gates-core.cjs',
 ];
 
@@ -182,7 +182,7 @@ if (require.main === module) {
   const writeAllowed = runGate('pre-write-check.cjs', toHookPayload('write', { path: '.pi/x.txt', content: 'x' }, cwd), cwd);
   check('pre-write-check 对非受保护文件放行', !writeAllowed.failed && writeAllowed.output === null);
 
-  check('受保护路径：.pi/ 内文件', isProtectedPiPath('.pi/settings.json', cwd) && isProtectedPiPath('.pi/extensions/shipyard-gates.ts', cwd));
+  check('受保护路径：.pi/ 内文件', isProtectedPiPath('.pi/settings.json', cwd) && isProtectedPiPath('.pi/extensions/flow-kit-gates.ts', cwd));
   check('受保护路径：绝对路径同样命中', isProtectedPiPath(path.join(cwd, '.pi', 'x'), cwd));
   check('非受保护路径：业务文件 / .pi-other', !isProtectedPiPath('backend/A.cs', cwd) && !isProtectedPiPath('.pi-other/x', cwd));
   check('bash：删除 .pi/ 判为写入', isPiWriteCommand('rm -rf .pi/extensions'));

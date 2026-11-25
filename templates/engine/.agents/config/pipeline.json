@@ -18,6 +18,7 @@
     "changes-confirm",
     "fix",
     "review",
+    "code-review",
     "review-only",
     "verify-only",
     "deploy-prep",
@@ -37,6 +38,7 @@
     "spec-confirm": ["{spec}"],
     "plan-confirm": ["{plan}"],
     "verify": ["{plan}"],
+    "code-review": ["{codeReview}"],
     "closeout": ["{entry}"]
   },
   "onFail": {

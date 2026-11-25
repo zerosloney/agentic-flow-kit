@@ -54,6 +54,15 @@
 | R6-5 | PR 协作面易审化 + CI 红定位 | 6 | S | `skills/tfs-pr/` guide/checks + `commands/pr-review.md` 衔接 + `pipeline-run` 停机点 | DONE · BACKLOG #22 |
 | R6-6 | owner 视角摘要出口 | 6 | S | `owner-digest.mjs`（已完成 / 等我拍板 / 风险 三段，只读幂等，`--json`）+ `non-engineer-intent.md` 出口节（zh + en） | DONE · BACKLOG #23 |
 | R6-7 | 形式化验证资产（enterprise 可选技能） | 6 | S | `skills/formal-verify/`（zh + en）+ `plan.mjs` enterprise-only 裁剪（tier-only 门控，advisory 不进门） | DONE · BACKLOG #25 |
+| R7-1 | 知识处方自愈飞轮 | 7 | M | `self-healing-prescriptions.mjs`、`pipeline-run.mjs`、`healing-recipes.json` | DONE |
+| R7-2 | 动态测试影响图（TIA）与增量选测 | 7 | M | `dynamic-test-impact.mjs`、`pipeline-run.mjs` verify 选测联动 | DONE |
+| R7-3 | 语义沙箱与符号级授权门 | 7 | M | `pipeline-run.mjs` checkAuthorized、`sandbox-capabilities.json` | DONE |
+| R7-4 | 异构代码复核与双模型背书 | 7 | M | `model-roles.json`、`independent-review.mjs`、`code-review.md` | DONE |
+| R7-5 | 多任务并发防洪与队列熔断 | 7 | S | `pipeline-run.mjs` checkQueueBrake、`concurrency-control.mjs` | DONE |
+| R7-6 | 时序追踪复盘与全生命周期轨迹导出 | 7 | M | `timeline-trace.mjs`、`src/commands/timeline.mjs`（`flow-kit timeline`） | DONE |
+| R7-7 | 受控无头驱动与隔离影子试跑 | 7 | M | `headless-driver.mjs`、`src/commands/shadow-run.mjs`（`flow-kit shadow-run`） | DONE |
+| R7-8 | 技能自优化飞轮与多维效能评估 | 7 | M | `skill-optimizer.mjs`、`agent-evaluator.mjs`（`optimize-skill` / `eval`） | DONE |
+| R7-9 | 多层声明式规则引擎与演进命令顶层化 | 7 | M | `src/commands/rules.mjs`、`src/cli/main.mjs`、中英文 CLI 契约 | DONE |
 
 ## 3. Wave 1 — 生命周期闭环
 
@@ -392,7 +401,65 @@
 - **验收**：仅 `--tier enterprise`（含 `--hardened` 等价路径）安装，默认档（lean/standard）安装体积零增长（技能目录 / manifest 前缀键 / 宿主指针壳三重不存在，默认档 zh/en 新装树签名实测逐字不变）；技能内自含「高危面判定」——按栈 profile 既有载体（`templates/profiles/<stack>/`）只承载 AGENTS.md、无按栈装技能机制，按既定取舍退化为 tier-only 门控，不新建机制；不做探测脚本（YAGNI，判定指令单源在技能正文）。
 - **测试**：`tests/formal-verify.test.mjs` 新增 6 例（standard/lean 两档三重不存在 + tier 记录 / enterprise zh 落盘 + manifest 纳管 + claude 指针壳 / enterprise en 整文件覆盖不回退中文 / enterprise zh 树 `skills lint` exit 0 / enterprise en 树无 formal-verify 新增错误）；`npm test` 516/516 全绿（基线 510 + 新增 6）；`lint:templates` 5 面全绿、`policy:check` 机制 36 行不变、`check:i18n` 143 文件不变。
 
-## 9. 依赖关系
+## 9. Wave 7 — 自动化进化与前沿闭环（v2.13.0）
+
+目标：将静态门禁与人件确认升级为**自适应进化引擎**，建立从执行态诊断、增量分析、安全受控、异构背书到知识自愈的完整闭环，并将高频演进能力提升为顶层 CLI 一等公民。
+
+### R7-1 知识处方自愈飞轮（self-healing）
+
+- **目标**：解决验证失败时人工介入成本高的问题。门禁或构建失败时，根据失败特征与归因模式自动匹配自愈处方（healing recipe），通过指数退火算法评估置信度并执行自愈动作，自愈成功沉淀为项目资产，失败退回人工停机。
+- **落地（2026-11-25）**：实现 `self-healing-prescriptions.mjs` 与 `pipeline-run.mjs` 联动；定义 `healing-recipes.json` 标准 schema；自愈事件记录至 `workflow/tasks/<task>/run.json` 的事件流；在 `mechanism-registry.md` 登记「知识处方自愈飞轮」。
+- **验收**：已知失败模式自动命中处方并自愈成功；置信度低于阈值时 loud-skip 并转人工停机点；无已知处方时不误动作；测试覆盖处方匹配、执行与退火逻辑。规模 `M`。
+
+### R7-2 动态测试影响图（TIA）与增量选测
+
+- **目标**：突破传统全量测试耗时瓶颈。基于 Git 变更 diff，结合源码 import/export 依赖拓扑反推受影响的最小测试用例集，同时保留对核心基础设施变更的全量兜底保障。
+- **落地（2026-11-25）**：实现 `dynamic-test-impact.mjs`，支持 JS/TS、Python、Go、C# 多语言模块依赖解析与 BFS 拓扑遍历；与 `pipeline-run.mjs` 的 verify 阶段联动；触及核心配置与共享根目录时自动回退全量。
+- **验收**：局部改动精准选测且测试时间大幅压缩；基础设施文件变动安全回退全量；拓扑环路与孤岛节点鲁棒处理；`tests/dynamic-test-impact.test.mjs` 覆盖。规模 `M`。
+
+### R7-3 语义沙箱与符号级授权门
+
+- **目标**：防范 Agent 在大范围重构中越权修改未授权文件或破坏公共导出接口。实现细粒度符号级与文件级修改白名单。
+- **落地（2026-11-25）**：在 `pipeline-run.mjs` 接入 `checkAuthorized`，解析 plan 中声明的 `(symbols: ...)` 与 `(freeze: ...)`；配合 `sandbox-capabilities.json` 规则在 PreToolUse 钩子与静态门中拦截越权写入。
+- **验收**：超出符号白名单的修改被严格拒接并记录违例；冻结符号与公共 export 变动即刻拦阻；支持逃生声明；测试覆盖 JS/TS/Python 多语言解析。规模 `M`。
+
+### R7-4 异构代码复核与双模型背书
+
+- **目标**：消除单模型自说自话、自我合规的偏见。将 review 拆分为规格复核（spec-review）与代码 diff 复核（code-review），关键路径（L2/L3）必须由不同模型族（如 Claude + DeepSeek / GPT）交叉背书。
+- **落地（2026-11-25）**：`model-roles.json` 支持跨模型族配置；`pipeline-run.mjs` 在 verify 与 review 间增加独立代码复核工单，复核结果落盘 `workflow/tasks/<task>/code-review.md` 并校验复核模型与实现模型家族异构性；支持去中心化背书协议。
+- **验收**：同模型复核在强制异构模式下硬拦；独立复核范围严格绑定 `base..head` diff；双重复核缺失时禁止流转至 closeout；测试覆盖异构断言与背书流程。规模 `M`。
+
+### R7-5 多任务并发防洪与队列熔断
+
+- **目标**：防止多 Agent 或脚本在并发场景下陷入自旋重试、刷爆 API Token 或占用过多系统资源。
+- **落地（2026-11-25）**：实现 `concurrency-control.mjs`，采用令牌桶流控与滑动窗口熔断算法；`pipeline-run.mjs` 增加 `checkQueueBrake` 门禁，当活动任务超过限制或失败率超标时即刻熔断。
+- **验收**：并发任务超额时平滑排队或安全拒绝；连续失败触发熔断器并记录审计事件；提供 `--force-queue` 紧急穿透机制；测试覆盖流控与熔断状态转换。规模 `S`。
+
+### R7-6 时序追踪复盘与全生命周期轨迹导出
+
+- **目标**：解决 Agent 复杂多步执行过程中「发生什么、耗时在哪、决策依据为何」不可追溯的问题。
+- **落地（2026-11-25）**：实现 `timeline-trace.mjs`；注册顶层命令 `flow-kit timeline`；支持对任务的 `run.json`、git commit 记录与确认台账进行全生命周期事件时序归一化重放；支持渲染控制台 ASCII 时序表与一键导出 Mermaid 序列图。
+- **验收**：准确重构从需求立项到验证关单全链路事件时序；支持按阶段与耗时过滤；Mermaid 语法合规可直接渲染；测试覆盖空数据、复杂并发与异常退出场景。规模 `M`。
+
+### R7-7 受控无头驱动与隔离影子试跑
+
+- **目标**：在不污染主工作区、不产生外部副作用的前提下，安全评估 Agent 生成的方案、补丁或流水线执行效果。
+- **落地（2026-11-25）**：实现 `headless-driver.mjs`；注册顶层命令 `flow-kit shadow-run`；创建隔离临时 Git worktree / 目录，注入无头执行配置与步数预算；支持状态指纹（state fingerprint）比对检测空转死循环并主动掐断。
+- **验收**：影子试跑零污染主工作区；步数或超时耗尽强制中断并清理临时资产；准确汇报试跑前后状态 diff 与门禁结论；测试覆盖沙箱隔离与防死循环逻辑。规模 `M`。
+
+### R7-8 技能自优化飞轮与多维效能评估
+
+- **目标**：打破技能提示词写定后难以持续演进的瓶颈，实现技能的“经验感知 - 候选提炼 - 双臂盲评 - 零回归采纳”。
+- **落地（2026-11-25）**：实现 `skill-optimizer.mjs` 与 `agent-evaluator.mjs`；注册顶层命令 `flow-kit optimize-skill` 与 `flow-kit eval`；从历史会话与失败日志挖掘优化点，生成候选补丁；通过 5 维效能评分卡（质量/效率/安全性/依从性/成本）对比双臂评估，一票否决降低指标的候选。
+- **验收**：自优化建议均带证据指针与修改建议；评估输出雷达图与加权效能评分；回归用例集强约束防退化；测试覆盖评分卡计算与优化流水线。规模 `M`。
+
+### R7-9 多层声明式规则引擎与演进命令顶层化
+
+- **目标**：统一常驻规则、各级规范与演进新特性的治理界面，消除跨宿主差异并提升开箱体验。
+- **落地（2026-11-25）**：实现 `src/commands/rules.mjs`（`flow-kit rules`），支持规则多层继承、单源预算对账与规则健康审计；将 `timeline`、`shadow-run`、`eval`、`optimize-skill`、`rules` 统一注册为顶层 CLI 命令；补齐中英文 CLI 帮助文档与错误码映射。
+- **验收**：5 个演进命令支持 `--help`、`--json` 与规范退出码；`tests/cli-contract.test.mjs` 合约检查全绿；双语安装文案 100% 对应；`rule-budgets.txt` 严格控制常驻面体积。规模 `M`。
+
+## 10. 依赖关系
 
 ```text
 R1-1 diff ──┬─> R1-2 prune ──> R1-3 remove-host
@@ -404,9 +471,14 @@ R2-4 hook 编译器 ──> R2-6 权限编译 ──> R2-9 企业档矩阵
 
 R3-1 policy-as-code ──> R3-2 策略 diff ──> R3-3 证明链
 R3-4 技能包 ──> R3-10 模板/技能 lint（共享校验骨架）
+
+R7-1 自愈处方 ──┬─> R7-8 技能自优化
+R7-2 影响图 (TIA) ──> R7-7 影子试跑
+R7-3 语义沙箱 ──> R7-5 并发防洪
+R7-4 双模型背书 ──> R7-6 时序追踪 ──> R7-9 顶层 CLI 接入
 ```
 
-## 10. 完成定义（DoD）
+## 11. 完成定义（DoD）
 
 任何路线图条目完成，须同时满足：
 
@@ -417,7 +489,7 @@ R3-4 技能包 ──> R3-10 模板/技能 lint（共享校验骨架）
 - 文档更新：`README.md`、`CLAUDE.md`、本文件状态；涉及缺口时同步 `BACKLOG.md`；
 - 若进入门禁面：登记 `mechanism-registry.md` 并守住 `rule-budgets` 预算。
 
-## 11. 风险与不做清单
+## 12. 风险与不做清单
 
 **风险**
 

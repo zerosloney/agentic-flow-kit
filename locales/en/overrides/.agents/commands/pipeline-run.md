@@ -17,7 +17,7 @@ The stage machine is aligned with the commands manual. Mutually exclusive with m
 > **Battle-tested 2026-11-18**; cold-start self-healing: fresh installs without commits have engine-generated files under controlled exemption; clean zero-commit workspaces can run directly.
 
 > **Division of labor**: deterministic parts are driven by the `pipeline-run.mjs` state machine (fill-* $\rightarrow$ confirm-doc $\rightarrow$ verify.mjs $\rightarrow$ git, all exit codes recorded); the AI slot executes per the work-order protocol; human gates stop on arrival and their words are recorded verbatim; the host must not change state on its own.
-> **Artifact directory**: pipeline artifacts are collected into `workflow/tasks/<date>-<topic>/` (`intent.md`/`incident.md`/`spec.md`/`plan.md`), isolated from the manual path (`intents/`, `plans/`, `specs/`) — manual scanners do not scan `tasks/`; the two document families never interfere.
+> **Artifact directory**: pipeline artifacts are collected into `workflow/tasks/<date>-<topic>/` (`intent.md`/`incident.md`/`spec.md`/`plan.md`/`code-review.md`), isolated from the manual path (`intents/`, `plans/`, `specs/`) — manual scanners do not scan `tasks/`; the two document families never interfere.
 
 ## 1. Protocol
 
@@ -80,9 +80,21 @@ The stage machine is aligned with the commands manual. Mutually exclusive with m
 - **Task state**: the run file records `retries` and `nextTarget`. While stopped, `stage` stays at the failure point; `next` re-enters from `nextTarget`. Routing emits a `route` event and resume emits a `resume` event (with artifact checklist).
 - **Smart Fix Attribution**: On gate failure or routing to `fix`, the executor automatically attributes errors into six categories (tests, rule budget, scope deviation, missing artifacts, policy drift, lint format), attaching targeted fix advice, impacted files, and debug commands (e.g. `next --gate <gate.mjs>`).
 
+### Independent Code-Diff Review (review → code-review)
+
+- **Independent code-diff review**: spec review endorses the spec; the code commit itself was never independently reviewed. The `review` stage now issues a separate review work order, and the endorsement line is written into the "Confirmation and Review" section of `workflow/tasks/<date>-<topic>/code-review.md` — the spec's endorsement line no longer stands in for a code review.
+- **Range binding**: the executor machine-writes "Review baseline SHA" and "Review range `base..head`"; the `code-review` stage reads them back for comparison — a mismatched baseline is red, and an expired range (code changed again) re-issues the order with the new range, voiding the old endorsement.
+- **Rejection routes to fix**: a "not approved" conclusion issues a `fix` work order into the fix loop; after the fix, verify re-runs and a fresh code review happens.
+- **Artifact contract**: `stageArtifacts` declares `code-review: ["{codeReview}"]` — a missing or empty artifact is red before the gate runs; the artifact is committed at closeout.
+
+### Semantic sandbox (optional)
+
+- **Declaration**: add a parenthesized clause to a plan path, e.g. `- src/a.mjs (symbols: x; freeze: y; freeze-exports)`. `symbols` allows only listed symbols to change; the rest (imports, top-level statements, unrecognized declarations) stays unchanged; `freeze` = absolute; `freeze-exports` = exports frozen; `next --files` stops violations. Only JS/TS/Python/Go; others violate.
+
 ### Review Downgrade and Work-Order Context Budget
 
-- **Review Downgrade**: In `spec-review` and `review` stages, the executor parses review metadata (reviewer ID, model, and downgrade declaration). If an external model is unavailable or exhausted, declare a downgrade in the document (e.g. `跨模型降级: <reason>`) or run CLI `next --review-downgrade "<reason>"`. The executor records a `review-downgrade` event and highlights the warning on the dashboard without blocking the pipeline.
+- **Review Downgrade**: In `spec-review` and `code-review` stages, the executor parses review metadata (reviewer ID, model, and downgrade declaration). If an external model is unavailable or exhausted, declare a downgrade in the document (e.g. `跨模型降级: <reason>`) or run CLI `next --review-downgrade "<reason>"`. The executor records a `review-downgrade` event and highlights the warning on the dashboard without blocking the pipeline.
+- **dispatch.json policy switches**: heterogeneous review (`reviewPolicy.enforceHeterogeneous`) and queue brake (`queuePolicy.enforceQueueBrake`) are single-sourced from `.agents/config/dispatch.json`, both off by default; keys, defaults and CLI flags are in `.agents/notes/project-configs.md` ("dispatch.json policy switches"). L3 always needs two reviewers from distinct sessions/families.
 - **Context Budgeting**: Work-order dispatch automatically prunes context against `workOrderContextBudgetChars` (default 1200) from `.agents/config/dispatch.json`: dedupes `relatedDocs` (top 4), trims `kbHits` (top 3, max 120 chars each), collapses `stderrTail` (top 3 and bottom 5 lines, max 400 chars), and attaches a `budget` metrics section.
 
 ## 🚫 Hard Discipline (violation breaks the protocol)

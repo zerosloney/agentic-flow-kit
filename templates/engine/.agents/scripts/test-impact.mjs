@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /* test-impact: 影响面选测 CLI
  *
- * 已接线 pre-push（2026-11-08）：集成档 --select-range、单测档 --unit-range 均经
- * scripts/verify/backend/run-backend-tests.mjs 执行；本 CLI 保留作手动探查。
+ * 已接线 pre-push（2026-11-08）：集成档 --select-range、单测档 --unit-range 由项目在
+ * .agents/hooks/commit-check.config.json 的 pushTests 里声明执行命令；本 CLI 保留作手动探查。
  *
  * 用法：
  *   flow-kit run test-impact.mjs --range <old> <new> [--json]
@@ -19,21 +19,25 @@
 
 import {
   MAP_PATH,
+  ROOT,
   changedFilesFromRange,
   formatDecision,
   loadMap,
   normalizePath,
   selectForFiles,
+  selectDynamicTestImpact,
+  formatDynamicDecision,
 } from './test-impact-lib.mjs';
 
 const argv = process.argv.slice(2);
 const json = argv.includes('--json');
+const dynamic = argv.includes('--dynamic');
 const filesArg = [];
 let range = null;
 
 for (let i = 0; i < argv.length; i += 1) {
   const arg = argv[i];
-  if (arg === '--json') continue;
+  if (arg === '--json' || arg === '--dynamic') continue;
   if (arg === '--files') {
     const value = argv[i + 1];
     if (!value) usage('--files 缺少参数');
@@ -54,12 +58,13 @@ for (let i = 0; i < argv.length; i += 1) {
 
 function usage(message) {
   if (message) console.error(`test-impact: ${message}`);
-  console.error('用法：flow-kit run test-impact.mjs --range <old> <new> [--json]');
-  console.error('      flow-kit run test-impact.mjs --files <a,b,c> [--json]');
+  console.error('用法：flow-kit run test-impact.mjs --range <old> <new> [--dynamic] [--json]');
+  console.error('      flow-kit run test-impact.mjs --files <a,b,c> [--dynamic] [--json]');
   process.exit(2);
 }
 
 let decision;
+let map = null;
 try {
   let files = filesArg;
   let rangeFailure = null;
@@ -68,7 +73,26 @@ try {
     files = result.files;
     rangeFailure = result.reason;
   }
-  if (rangeFailure) {
+  if (dynamic) {
+    if (rangeFailure) {
+      decision = {
+        mode: 'full',
+        reason: rangeFailure,
+        impactedTests: [],
+        directImpactedTests: [],
+        transitiveImpactedTests: [],
+        changedFiles: [],
+        unmappedFiles: [],
+        totalKnownTests: 0,
+        skippedTestsCount: 0,
+        accelerationRatio: 0,
+        warnings: [rangeFailure],
+        graphStats: { nodeCount: 0, edgeCount: 0, testCount: 0 },
+      };
+    } else {
+      decision = selectDynamicTestImpact(ROOT, files);
+    }
+  } else if (rangeFailure) {
     decision = {
       mode: 'full',
       reason: rangeFailure,
@@ -82,7 +106,7 @@ try {
     // 仍加载 manifest，尽早暴露配置错误
     loadMap();
   } else {
-    const map = loadMap();
+    map = loadMap();
     decision = selectForFiles(map, files);
   }
 } catch (e) {
@@ -91,14 +115,23 @@ try {
 }
 
 if (json) {
-  process.stdout.write(`${JSON.stringify({ map: MAP_PATH, ...decision }, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify({ ...(dynamic ? {} : { map: MAP_PATH }), ...decision }, null, 2)}\n`);
+} else if (dynamic) {
+  console.log('dynamic-test-impact:');
+  console.log(formatDynamicDecision(decision));
 } else {
   console.log('test-impact:');
   console.log(formatDecision(decision));
   if (decision.mode === 'filter') {
-    console.log('run: dotnet test tests/Shipyard.Material.IntegrationTests/Shipyard.Material.IntegrationTests.csproj --no-build --filter "<filter>"');
+    if (map && map.runner && map.runner.kind === 'generic') {
+      console.log(`run: <项目集成测试命令>（filter: ${decision.filter}；命令模板见 test-impact-map.json 的 runner.list）`);
+    } else {
+      const testDir = map && map.dirs && map.dirs.test ? String(map.dirs.test).replace(/\/?$/, '/') : '<dirs.test>/';
+      console.log(`run: dotnet test ${testDir}…csproj --no-build --filter "<filter>"`);
+      console.log('     （工程路径以 .agents/config/test-impact-map.json 的 dirs.test 为准）');
+    }
   } else if (decision.mode === 'full') {
-    console.log('run: node scripts/verify/backend/run-backend-tests.mjs --full');
+    console.log('run: <项目集成测试全量命令>（见 .agents/hooks/commit-check.config.json 的 pushTests）');
   } else {
     console.log('run: （跳过集成测试）');
   }

@@ -12,8 +12,21 @@ import {
   stageArtifactProblems, failRoute, renderDashboard, stripAnsi, visualWidth, truncate, truncateAnsi, parseGateName,
   pruneWorkOrderContext, listAllRuns, renderMarkdown, inspectArtifact, getAvailableTargets, renderInspect,
   analyzeGateFailure, manifestPristine, isRuntimeOrManaged, checkAuthorized, validateDraftContent, closeoutComplete,
+  loadModelRolesConfig, resolveWorkOrderRole, extractDocSection, assembleWorkOrderContext, verifyReviewEndorsement,
+  loadPrescriptions, savePrescriptions, findMatchingPrescriptions, generatePostMortem, checkQueueBrake,
+  mergeAppliedRxIds,
+  parseCodeReviewRange, ensureCodeReviewDoc,
 } from '../templates/engine/.agents/scripts/pipeline-run.mjs';
-import { touchProblems, externalReviewId, parseReviewMetadata, filesOutsidePlan, planPaths } from '../templates/engine/.agents/scripts/touch-set.mjs';
+import {
+  touchProblems, externalReviewId, parseReviewMetadata, filesOutsidePlan, planPaths,
+  buildHandoffSheet, validateHandoffSheet, parseHandoffSheet,
+  normalizeModelFamily, isHeterogeneousModel, isApprovedConclusion,
+} from '../templates/engine/.agents/scripts/touch-set.mjs';
+import { commitmentFingerprint } from '../templates/engine/.agents/scripts/stage-gates.mjs';
+import {
+  buildEndorsementToken, writeEndorsementToken,
+} from '../templates/engine/.agents/scripts/endorsement-protocol.mjs';
+import { generatePrescriptionId } from '../templates/engine/.agents/scripts/self-healing-prescriptions.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const REPO = path.resolve(HERE, '..');
@@ -67,7 +80,11 @@ if ((process.env.PIPELINE_FAKE_MODE || 'ok') === 'barrier') {
 }
 `;
 
-const FAKE_GIT = `process.exit(0);
+// 假 git：默认无输出（rev-parse 取不到 SHA，与真实空仓库同形）；
+// 设 FAKE_GIT_SHA 时按 SHA 回给 rev-parse —— 代码复核的基准/范围绑定需要可预期的 SHA。
+const FAKE_GIT = `const a = process.argv.slice(2);
+if (a.includes('rev-parse') && process.env.FAKE_GIT_SHA) console.log(process.env.FAKE_GIT_SHA);
+process.exit(0);
 `;
 
 // 假 fill-* 脚本（pipeline 任务目录测试用）：按 --output 写一份带 frontmatter 的骨架文档，
@@ -1696,6 +1713,42 @@ test('checkAuthorized: run-owned workflow docs are exempt from extra but unplann
   assert.deepEqual(extraRes.extra, ['src/rogue.mjs']);
 });
 
+test('checkAuthorized: 代码复核产物未跟踪时不再自锁（run 登记文档豁免 beyond）', () => {
+  const root = fixture();
+  assert.equal(spawnSync('git', ['init', '-q'], { cwd: root }).status, 0);
+  assert.equal(spawnSync('git', ['add', '-A'], { cwd: root }).status, 0);
+  assert.equal(spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'baseline'], { cwd: root }).status, 0);
+
+  // 代码复核产物由机器生成、复核者写入背书，落盘即未跟踪；实现者的 --files 回填面里没有它
+  const taskDir = 'workflow/tasks/2026-11-13-test';
+  const write = (rel, text) => {
+    fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    fs.writeFileSync(path.join(root, rel), text);
+  };
+  write(`${taskDir}/spec.md`, '---\n状态: draft\n---\n\n## 验收标准\n\n- [ ] ok\n');
+  write(`${taskDir}/plan.md`, '---\n状态: draft\n---\n\n## 改动方案\n\n- src/planned.mjs：改文案\n');
+  write(`${taskDir}/code-review.md`, '# 代码复核\n\n## 确认与复核\n\n- 独立复核：通过 复核上下文：code-sess-abc123\n');
+  write('src/planned.mjs', 'export const x = 1;\n');
+
+  const ctx = { root, gitPrefix: ['git'], runsDir: path.join(root, '.agents', 'cache', 'pipeline-runs') };
+  const run = {
+    runId: 'test-cr', stage: 'fix', events: [],
+    createdAt: NOW, triage: { topic: 'test' },
+    docs: { entry: `${taskDir}/intent.md`, spec: `${taskDir}/spec.md`, plan: `${taskDir}/plan.md`, codeReview: `${taskDir}/code-review.md` },
+  };
+
+  // 复核产物不在 --files 回填面里——不判「改动超出回填清单」（否则代码复核后的修复环必然自锁）
+  const res = checkAuthorized(ctx, run, 'src/planned.mjs');
+  assert.equal(res.ok, true, JSON.stringify(res.problems));
+  assert.deepEqual(res.extra, []);
+
+  // 对照：任务目录里未登记的文档仍须申报——豁免只覆盖登记过的具体文档，不放大到整个目录
+  write(`${taskDir}/notes.md`, '# 未登记文档\n');
+  const blocked = checkAuthorized(ctx, run, 'src/planned.mjs');
+  assert.equal(blocked.ok, false, '未登记的文档不在豁免面内');
+  assert.match(blocked.problems[0], /notes\.md/);
+});
+
 test('checkAuthorized: eval evidence changes stop unless declared in --files', () => {
   const root = fixture();
   assert.equal(spawnSync('git', ['init', '-q'], { cwd: root }).status, 0);
@@ -1716,6 +1769,97 @@ test('checkAuthorized: eval evidence changes stop unless declared in --files', (
 
   const allowed = checkAuthorized(ctx, run, 'workflow/plans/t.md, .agents/evals/results.jsonl');
   assert.equal(allowed.ok, true);
+});
+
+// ── plan 授权面不可静默改写（承诺面指纹） ─────────────────────────────────
+// plan 的「改动方案」是授权白名单本身；run 登记文档虽豁免「改动超出回填清单」，
+// 但确认后改写白名单须被承诺面指纹（confirm-doc 台账 commit 字段）拦下。
+const FP_TASK_DIR = 'workflow/tasks/2026-11-13-fp';
+const FP_PLAN_REL = `${FP_TASK_DIR}/plan.md`;
+
+function setupPlanFingerprintCase() {
+  const root = fixture();
+  assert.equal(spawnSync('git', ['init', '-q'], { cwd: root }).status, 0);
+  assert.equal(spawnSync('git', ['add', '-A'], { cwd: root }).status, 0);
+  assert.equal(spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '-m', 'baseline'], { cwd: root }).status, 0);
+
+  const write = (rel, text) => {
+    fs.mkdirSync(path.dirname(path.join(root, rel)), { recursive: true });
+    fs.writeFileSync(path.join(root, rel), text);
+  };
+  const planText = (extra = '') => [
+    '---', '状态: draft', '级别: L1', '---', '',
+    '## 改动方案', '',
+    '- src/planned.mjs：改文案',
+    ...(extra ? [extra] : []),
+    '',
+  ].join('\n');
+  const appendLedger = (row) => {
+    fs.mkdirSync(path.join(root, '.agents'), { recursive: true });
+    fs.appendFileSync(path.join(root, '.agents', 'confirmations.jsonl'), `${JSON.stringify(row)}\n`);
+  };
+
+  write('src/planned.mjs', 'export const x = 1;\n');
+  write(FP_PLAN_REL, planText());
+  const ctx = { root, gitPrefix: ['git'], runsDir: path.join(root, '.agents', 'cache', 'pipeline-runs') };
+  const run = {
+    runId: 'test-fp', stage: 'implement', events: [],
+    createdAt: NOW, triage: { topic: 'fp' },
+    docs: { plan: FP_PLAN_REL },
+  };
+  return { root, write, planText, appendLedger, ctx, run };
+}
+
+test('checkAuthorized: plan 确认后被改写（承诺面指纹不符）即拒', () => {
+  const { write, planText, appendLedger, ctx, run } = setupPlanFingerprintCase();
+  appendLedger({
+    ts: '2026-11-13T00:00:00.000Z', doc: FP_PLAN_REL, stage: 'approved',
+    fingerprint: 'fp-original', commit: commitmentFingerprint(planText()),
+  });
+
+  // 确认后实现者往「改动方案」里加了一条（授权面被扩大）
+  write(FP_PLAN_REL, planText('- src/extra.mjs：新增'));
+  const res = checkAuthorized(ctx, run, 'src/planned.mjs');
+  assert.equal(res.ok, false);
+  assert.match(res.problems.join('\n'), /承诺面指纹/);
+});
+
+test('checkAuthorized: approved 台账行无 commit 字段时不校验 plan 指纹（存量兼容）', () => {
+  const { write, planText, appendLedger, ctx, run } = setupPlanFingerprintCase();
+  appendLedger({ ts: '2026-11-13T00:00:00.000Z', doc: FP_PLAN_REL, stage: 'approved', fingerprint: 'fp-legacy' });
+
+  write(FP_PLAN_REL, planText('- src/extra.mjs：新增'));
+  const res = checkAuthorized(ctx, run, 'src/planned.mjs');
+  assert.equal(res.ok, true, JSON.stringify(res.problems));
+});
+
+test('checkAuthorized: 追加与当前指纹一致的 approved 行（--reconfirm）后放行', () => {
+  const { write, planText, appendLedger, ctx, run } = setupPlanFingerprintCase();
+  appendLedger({
+    ts: '2026-11-13T00:00:00.000Z', doc: FP_PLAN_REL, stage: 'approved',
+    fingerprint: 'fp-original', commit: commitmentFingerprint(planText()),
+  });
+  const rewritten = planText('- src/extra.mjs：新增');
+  write(FP_PLAN_REL, rewritten);
+  appendLedger({
+    ts: '2026-11-13T01:00:00.000Z', doc: FP_PLAN_REL, stage: 'approved',
+    fingerprint: 'fp-reconfirmed', commit: commitmentFingerprint(rewritten),
+  });
+
+  const res = checkAuthorized(ctx, run, 'src/planned.mjs');
+  assert.equal(res.ok, true, JSON.stringify(res.problems));
+});
+
+test('checkAuthorized: plan 未改写且台账 commit 一致时放行', () => {
+  const { planText, appendLedger, ctx, run } = setupPlanFingerprintCase();
+  appendLedger({
+    ts: '2026-11-13T00:00:00.000Z', doc: FP_PLAN_REL, stage: 'approved',
+    fingerprint: 'fp-original', commit: commitmentFingerprint(planText()),
+  });
+
+  const res = checkAuthorized(ctx, run, 'src/planned.mjs');
+  assert.equal(res.ok, true, JSON.stringify(res.problems));
+  assert.deepEqual(res.extra, []);
 });
 
 test('L0 fast-track: validateDraftContent and closeoutComplete accept lite sections', () => {
@@ -1772,4 +1916,1309 @@ test('L0 fast-track: pipeline triage routes L0 directly to plan-fill with --lite
   assert.equal(run.workOrder.kind, 'draft');
   assert.match(run.docs.plan, /plan\.md$/);
   assert.equal(run.docs.entry, run.docs.plan); // L0 plan is self-entry
+});
+
+test('resolveWorkOrderRole maps work order kinds to model roles, tiers and recommended models', () => {
+  const root = fixture();
+  fs.writeFileSync(
+    path.join(root, '.agents', 'config', 'model-roles.local.json'),
+    JSON.stringify({
+      roles: {
+        code: 'claude-3-5-sonnet',
+        judgment: 'gemini-2.5-pro',
+        review: 'o3-mini',
+      },
+    })
+  );
+
+  const ctx = {
+    root,
+    dispatch: {
+      roles: {
+        implement: { role: 'code', tier: 'standard', agent: 'implementer' },
+        review: { role: 'review', tier: 'pro', agent: 'independent-reviewer', heterogeneous: true },
+        triage: { role: 'judgment', tier: 'pro', agent: 'pr-adjudicator' },
+      },
+    },
+    modelRoles: loadModelRolesConfig(root),
+  };
+
+  const imp = resolveWorkOrderRole(ctx, { kind: 'implement' });
+  assert.equal(imp.role, 'code');
+  assert.equal(imp.modelTier, 'standard');
+  assert.equal(imp.agent, 'implementer');
+  assert.equal(imp.recommendedModel, 'claude-3-5-sonnet');
+  assert.equal(imp.heterogeneous, false);
+
+  const rev = resolveWorkOrderRole(ctx, { kind: 'review' });
+  assert.equal(rev.role, 'review');
+  assert.equal(rev.modelTier, 'pro');
+  assert.equal(rev.agent, 'independent-reviewer');
+  assert.equal(rev.recommendedModel, 'o3-mini');
+  assert.equal(rev.heterogeneous, true);
+
+  const tri = resolveWorkOrderRole(ctx, { kind: 'triage' });
+  assert.equal(tri.role, 'judgment');
+  assert.equal(tri.modelTier, 'pro');
+  assert.equal(tri.recommendedModel, 'gemini-2.5-pro');
+});
+
+test('handoff sheet contract building, parsing, and context pruning', () => {
+  const sheet = buildHandoffSheet({
+    from: 'planner',
+    to: 'implementer',
+    task: '实现特定功能',
+    gitBaseSha: 'abc1234',
+    touchSetAllowed: ['src/a.mjs', 'src/b.mjs'],
+    touchSetForbidden: ['tests/'],
+    notes: '注意保持纯函数',
+  });
+  const val = validateHandoffSheet(sheet);
+  assert.equal(val.ok, true);
+  assert.equal(sheet.touchSetAllowed.length, 2);
+
+  // Markdown 解析验证
+  const md = `---
+from: test-designer
+to: independent-reviewer
+task: 复核契约
+---
+- 允许改动: src/foo.mjs
+- 禁止改动: tests/
+`;
+  const parsed = parseHandoffSheet(md);
+  assert.ok(parsed);
+  assert.equal(parsed.from, 'test-designer');
+  assert.equal(parsed.to, 'independent-reviewer');
+  assert.deepEqual(parsed.touchSetAllowed, ['src/foo.mjs']);
+
+  // pruneWorkOrderContext 裁剪防撑爆
+  const oversizedList = Array.from({ length: 30 }, (_, i) => `src/file-${i}.mjs`);
+  const longNote = 'A'.repeat(500);
+  const pruned = pruneWorkOrderContext({
+    handoff: {
+      from: 'planner',
+      to: 'implementer',
+      task: 'task',
+      touchSetAllowed: oversizedList,
+      touchSetForbidden: oversizedList,
+      notes: longNote,
+    },
+  }, 1000);
+  assert.ok(pruned.handoff.touchSetAllowed.length <= 10);
+  assert.ok(pruned.handoff.touchSetForbidden.length <= 10);
+  assert.ok(pruned.handoff.notes.length <= 200);
+});
+
+test('inspectArtifact supports handoff target and surfaces sheet details', () => {
+  const root = fixture();
+  const run = {
+    runId: 'test-run',
+    stage: 'implement',
+    stopType: 'work-order',
+    workOrder: {
+      id: 1,
+      kind: 'implement',
+      context: {
+        handoff: buildHandoffSheet({
+          from: 'planner',
+          to: 'implementer',
+          task: '功能实现',
+          gitBaseSha: 'deadbeef',
+          touchSetAllowed: ['src/core.mjs'],
+        }),
+      },
+    },
+    events: [],
+    docs: {},
+  };
+
+  const targets = getAvailableTargets({ root }, run);
+  assert.ok(targets.includes('handoff'));
+
+  const art = inspectArtifact({ root }, run, 'handoff');
+  assert.equal(art.ok, true);
+  assert.equal(art.type, 'handoff');
+  assert.match(art.content, /交接发起方 \(From\)\*\*:\s*planner/);
+  assert.match(art.content, /交接目标方 \(To\)\*\*:\s*implementer/);
+  assert.match(art.content, /deadbeef/);
+  assert.match(art.content, /src\/core\.mjs/);
+});
+
+test('work order dispatch injects role and recommendedModel and prints in stopLine', () => {
+  const root = fixture();
+  // 注入真实 dispatch.json 和 model-roles.local.json
+  const dispatchPath = path.join(REPO, 'templates', 'engine', '.agents', 'config', 'dispatch.json');
+  fs.copyFileSync(dispatchPath, path.join(root, '.agents', 'config', 'dispatch.json'));
+  fs.writeFileSync(
+    path.join(root, '.agents', 'config', 'model-roles.local.json'),
+    JSON.stringify({
+      roles: {
+        judgment: 'gemini-2.5-pro',
+        code: 'claude-3-5-sonnet',
+        review: 'gpt-4o',
+      },
+    })
+  );
+
+  const r = runPipeline(root, ['start', '用户需求：测试模型角色与交接注入']);
+  assert.equal(r.status, 0);
+  // 首停机点为 triage
+  assert.match(r.stdout, /PIPELINE-STOP work-order/);
+  assert.match(r.stdout, /judgment/);
+  assert.match(r.stdout, /pro/);
+  assert.match(r.stdout, /gemini-2\.5-pro/);
+  assert.match(r.stdout, /模型指派建议/);
+
+  const runFile = fs.readdirSync(path.join(root, '.agents', 'cache', 'pipeline-runs')).find((f) => f.endsWith('.json'));
+  assert.ok(runFile, 'run file must exist');
+  const run = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'cache', 'pipeline-runs', runFile), 'utf8'));
+  assert.equal(run.workOrder.role, 'judgment');
+  assert.equal(run.workOrder.modelTier, 'pro');
+  assert.equal(run.workOrder.recommendedModel, 'gemini-2.5-pro');
+  assert.equal(run.workOrder.context.role.role, 'judgment');
+});
+
+test('assembleWorkOrderContext extracts role-specific slices and budgets context', () => {
+  const root = fixture();
+  const planDoc = path.join(root, 'workflow', 'plans', 'demo.md');
+  fs.mkdirSync(path.dirname(planDoc), { recursive: true });
+  fs.writeFileSync(
+    planDoc,
+    `# 计划文档
+## 改动方案
+- 修改 \`src/engine.mjs\` 实现动态上下文装配
+- 修改 \`src/review.mjs\` 实现多模型背书
+## 任务拆解
+- 批次 1: 契约测试
+`
+  );
+
+  const specDoc = path.join(root, 'workflow', 'specs', 'demo.md');
+  fs.mkdirSync(path.dirname(specDoc), { recursive: true });
+  fs.writeFileSync(
+    specDoc,
+    `# 规格文档
+## 验收标准
+- [ ] 规则 1: 必须包含单元测试
+- [ ] 规则 2: 必须零额外依赖
+`
+  );
+
+  const run = {
+    runId: 'ctx-run',
+    stage: 'implement',
+    docs: { plan: 'workflow/plans/demo.md', spec: 'workflow/specs/demo.md', entry: 'workflow/specs/demo.md' },
+    gateFail: {
+      stage: 'verify',
+      problems: ['门禁 verify.mjs 失败 (exit 1)'],
+      analysis: { category: 'test-failure', action: '修复测试用例' },
+    },
+  };
+
+  // 1. implement 工单上下文切片
+  const orderImp = {
+    kind: 'implement',
+    role: 'code',
+    context: {
+      handoff: {
+        touchSetAllowed: ['src/engine.mjs'],
+        gitBaseSha: '1234567',
+      },
+    },
+  };
+  const impCtx = assembleWorkOrderContext({ root }, run, orderImp);
+  assert.equal(impCtx.slices.role, 'code');
+  assert.equal(impCtx.slices.kind, 'implement');
+  assert.match(impCtx.slices.planSlice, /修改 `src\/engine\.mjs`/);
+  assert.deepEqual(impCtx.slices.allowedFiles, ['src/engine.mjs']);
+  assert.equal(impCtx.slices.gitBaseSha, '1234567');
+
+  // 2. fix 工单上下文切片
+  const orderFix = { kind: 'fix', role: 'code', context: {} };
+  const fixCtx = assembleWorkOrderContext({ root }, run, orderFix);
+  assert.equal(fixCtx.slices.gateFailure.stage, 'verify');
+  assert.equal(fixCtx.slices.gateFailure.category, 'test-failure');
+  assert.ok(fixCtx.slices.verifyCmd.includes('pipeline-run.mjs next'));
+
+  // 3. review 工单上下文切片
+  const orderRev = { kind: 'review', role: 'review', context: {} };
+  const revCtx = assembleWorkOrderContext({ root }, run, orderRev);
+  assert.match(revCtx.slices.acceptanceCriteria, /规则 1/);
+  assert.match(revCtx.slices.changePlan, /修改 `src\/engine\.mjs`/);
+  assert.ok(revCtx.slices.reviewChecklist.length >= 3);
+
+  // 4. closeout 工单上下文切片
+  const orderClose = { kind: 'closeout', role: 'judgment', context: {} };
+  const closeCtx = assembleWorkOrderContext({ root }, run, orderClose);
+  assert.match(closeCtx.slices.acceptanceCriteria, /规则 1/);
+
+  // 5. pruneWorkOrderContext 裁剪超限切片
+  const oversizedSlices = {
+    planSlice: 'P'.repeat(600),
+    acceptanceCriteria: 'A'.repeat(600),
+    changePlan: 'C'.repeat(600),
+    allowedFiles: Array.from({ length: 20 }, (_, i) => `src/f${i}.mjs`),
+  };
+  const pruned = pruneWorkOrderContext({ slices: oversizedSlices }, 500);
+  assert.ok(pruned.slices.planSlice.length <= 400);
+  assert.ok(pruned.slices.acceptanceCriteria.length <= 400);
+  assert.ok(pruned.slices.changePlan.length <= 400);
+  assert.ok(pruned.slices.allowedFiles.length <= 10);
+});
+
+test('normalizeModelFamily and isHeterogeneousModel model family taxonomy', () => {
+  assert.equal(normalizeModelFamily('claude-3-5-sonnet'), 'claude');
+  assert.equal(normalizeModelFamily('Claude-3-7-Sonnet-20250219'), 'claude');
+  assert.equal(normalizeModelFamily('anthropic/claude-3-opus'), 'claude');
+
+  assert.equal(normalizeModelFamily('gpt-4o'), 'openai');
+  assert.equal(normalizeModelFamily('o3-mini'), 'openai');
+  assert.equal(normalizeModelFamily('o1-preview'), 'openai');
+
+  assert.equal(normalizeModelFamily('gemini-2.5-pro'), 'gemini');
+  assert.equal(normalizeModelFamily('google/gemini-2.0-flash'), 'gemini');
+
+  assert.equal(normalizeModelFamily('deepseek-r1'), 'deepseek');
+  assert.equal(normalizeModelFamily('deepseek-ai/DeepSeek-V3'), 'deepseek');
+
+  assert.equal(normalizeModelFamily('qwen-max'), 'qwen');
+
+  // 同构与异构判断
+  assert.equal(isHeterogeneousModel('claude-3-5-sonnet', 'claude-3-7-sonnet'), false);
+  assert.equal(isHeterogeneousModel('gpt-4o', 'o3-mini'), false);
+  assert.equal(isHeterogeneousModel('claude-3-5-sonnet', 'gpt-4o'), true);
+  assert.equal(isHeterogeneousModel('gemini-2.5-pro', 'deepseek-r1'), true);
+
+  // 缺省容错（未指明模型时不强卡）
+  assert.equal(isHeterogeneousModel('claude-3-5-sonnet', ''), true);
+  assert.equal(isHeterogeneousModel('', 'gpt-4o'), true);
+});
+
+test('parseReviewMetadata extracts multiple reviewers and detects dual-review endorsement', () => {
+  // 1. 单复核人
+  const single = `- 独立复核：通过 复核上下文：chat-123456 模型：o3-mini`;
+  const m1 = parseReviewMetadata(single);
+  assert.equal(m1.id, 'chat-123456');
+  assert.equal(m1.reviewerModel, 'o3-mini');
+  assert.equal(m1.reviewers.length, 1);
+  assert.equal(m1.dualEndorsed, false);
+
+  // 2. 双复核人通过
+  const dualPass = `
+- 独立复核 1：通过 复核上下文：subagent-rev-1 模型：gpt-4o
+- 独立复核 2：通过 复核上下文：subagent-rev-2 模型：claude-3-5-sonnet
+`;
+  const m2 = parseReviewMetadata(dualPass);
+  assert.equal(m2.id, 'subagent-rev-1');
+  assert.equal(m2.reviewers.length, 2);
+  assert.equal(m2.reviewers[0].id, 'subagent-rev-1');
+  assert.equal(m2.reviewers[0].reviewerModel, 'gpt-4o');
+  assert.equal(m2.reviewers[1].id, 'subagent-rev-2');
+  assert.equal(m2.reviewers[1].reviewerModel, 'claude-3-5-sonnet');
+  assert.equal(m2.dualEndorsed, true);
+
+  // 3. 双复核人含不通过
+  const dualFail = `
+- 独立复核 1：通过 复核上下文：subagent-rev-1 模型：gpt-4o
+- 独立复核 2：需返工 复核上下文：subagent-rev-2 模型：claude-3-5-sonnet
+`;
+  const m3 = parseReviewMetadata(dualFail);
+  assert.equal(m3.dualEndorsed, false);
+});
+
+test('verifyReviewEndorsement enforces heterogeneity and dual-review endorsement with downgrade escape hatch', () => {
+  const ctx = {
+    dispatch: {
+      roles: {
+        implement: { role: 'code', tier: 'standard', agent: 'implementer' },
+        review: { role: 'review', tier: 'pro', agent: 'independent-reviewer', heterogeneous: true },
+      },
+      reviewPolicy: {
+        enforceHeterogeneous: true,
+        requireDualReviewLevels: ['L3'],
+      },
+    },
+    modelRoles: {
+      roles: {
+        code: 'claude-3-5-sonnet',
+        review: 'gpt-4o',
+      },
+    },
+  };
+
+  const runL1 = {
+    triage: { level: 'L1' },
+    events: [
+      { type: 'work-order', kind: 'implement', recommendedModel: 'claude-3-5-sonnet' },
+    ],
+  };
+
+  // 1. 无有效 ID 拦截
+  const resNoId = verifyReviewEndorsement(ctx, runL1, 'review', { id: '' });
+  assert.equal(resNoId.ok, false);
+  assert.match(resNoId.problems[0], /禁止占位符/);
+
+  // 2. 同构模型复核拦截（作者 Claude，评审 Claude，未降级）
+  const resHomo = verifyReviewEndorsement(ctx, runL1, 'review', {
+    id: 'chat-homo-1',
+    reviewerModel: 'claude-3-7-sonnet',
+    reviewers: [{ id: 'chat-homo-1', reviewerModel: 'claude-3-7-sonnet', conclusion: '通过' }],
+  });
+  assert.equal(resHomo.ok, false);
+  assert.match(resHomo.problems[0], /同构/);
+
+  // 3. 声明降级放行（即使同构）
+  const resDowngrade = verifyReviewEndorsement(ctx, runL1, 'review', {
+    id: 'chat-homo-1',
+    reviewerModel: 'claude-3-7-sonnet',
+    isDowngraded: true,
+    downgradeReason: '单模型离线测试环境',
+    reviewers: [{ id: 'chat-homo-1', reviewerModel: 'claude-3-7-sonnet', conclusion: '通过' }],
+  });
+  assert.equal(resDowngrade.ok, true);
+  assert.equal(resDowngrade.isDowngraded, true);
+
+  // 4. 异构模型通过（作者 Claude，评审 GPT-4o）
+  const resHetero = verifyReviewEndorsement(ctx, runL1, 'review', {
+    id: 'chat-hetero-1',
+    reviewerModel: 'gpt-4o',
+    reviewers: [{ id: 'chat-hetero-1', reviewerModel: 'gpt-4o', conclusion: '通过' }],
+  });
+  assert.equal(resHetero.ok, true);
+
+  // 5. L3 触发双重背书要求：单人复核被拦截
+  const runL3 = {
+    triage: { level: 'L3' },
+    events: [{ type: 'work-order', kind: 'implement', recommendedModel: 'claude-3-5-sonnet' }],
+  };
+  const resL3Single = verifyReviewEndorsement(ctx, runL3, 'review', {
+    id: 'chat-hetero-1',
+    reviewerModel: 'gpt-4o',
+    reviewers: [{ id: 'chat-hetero-1', reviewerModel: 'gpt-4o', conclusion: '通过' }],
+  });
+  assert.equal(resL3Single.ok, false);
+  assert.match(resL3Single.problems[0], /双模型独立复核未通过/);
+
+  // 6. L3 双异构模型复核通过
+  const resL3Dual = verifyReviewEndorsement(ctx, runL3, 'review', {
+    id: 'chat-rev-1',
+    reviewerModel: 'gpt-4o',
+    dualEndorsed: true,
+    reviewers: [
+      { id: 'chat-rev-1', reviewerModel: 'gpt-4o', conclusion: '通过' },
+      { id: 'chat-rev-2', reviewerModel: 'gemini-2.5-pro', conclusion: '通过' },
+    ],
+  });
+  assert.equal(resL3Dual.ok, true);
+  assert.equal(resL3Dual.dualEndorsed, true);
+});
+
+test('inspectArtifact supports context and endorsement targets', () => {
+  const root = fixture();
+  const run = {
+    runId: 'inspect-run',
+    stage: 'implement',
+    stopType: 'work-order',
+    docs: {
+      spec: 'workflow/specs/test.md',
+    },
+    workOrder: {
+      id: 2,
+      kind: 'implement',
+      role: 'code',
+      modelTier: 'standard',
+      agent: 'implementer',
+      recommendedModel: 'claude-3-5-sonnet',
+      heterogeneous: false,
+      context: {
+        role: { role: 'code', tier: 'standard', agent: 'implementer', recommendedModel: 'claude-3-5-sonnet' },
+        budget: { originalChars: 300, prunedChars: 250, budgetChars: 1200, savingsPercent: 17 },
+        slices: {
+          role: 'code',
+          kind: 'implement',
+          planSlice: '- 修改核心文件',
+        },
+      },
+    },
+    events: [],
+  };
+
+  const specPath = path.join(root, 'workflow', 'specs', 'test.md');
+  fs.mkdirSync(path.dirname(specPath), { recursive: true });
+  fs.writeFileSync(
+    specPath,
+    `# 规格说明
+## 确认与复核
+- 独立复核 1：通过 复核上下文：rev-101 模型：gpt-4o
+- 独立复核 2：通过 复核上下文：rev-102 模型：gemini-2.5-pro
+`
+  );
+
+  const targets = getAvailableTargets({ root }, run);
+  assert.ok(targets.includes('context'));
+  assert.ok(targets.includes('endorsement'));
+
+  const artCtx = inspectArtifact({ root }, run, 'context');
+  assert.equal(artCtx.ok, true);
+  assert.equal(artCtx.type, 'context');
+  assert.match(artCtx.content, /claude-3-5-sonnet/);
+  assert.match(artCtx.content, /修改核心文件/);
+
+  const artEndorse = inspectArtifact({ root }, run, 'endorsement');
+  assert.equal(artEndorse.ok, true);
+  assert.equal(artEndorse.type, 'endorsement');
+  assert.match(artEndorse.content, /rev-101/);
+  assert.match(artEndorse.content, /rev-102/);
+  assert.match(artEndorse.content, /已达成双模型通过/);
+});
+
+test('checkQueueBrake enforces active run limits and honors --force-queue', () => {
+  const root = fixture();
+  const runsDir = path.join(root, '.agents', 'cache', 'pipeline-runs');
+  fs.mkdirSync(runsDir, { recursive: true });
+
+  // 写入 3 个处于活跃状态的 runs
+  for (let i = 1; i <= 3; i++) {
+    const id = `run-active-${i}`;
+    fs.writeFileSync(
+      path.join(runsDir, `${id}.json`),
+      JSON.stringify({ runId: id, stopType: 'work-order', stage: 'implement', events: [] })
+    );
+  }
+  // 写入 1 个已结束的 run
+  fs.writeFileSync(
+    path.join(runsDir, 'run-done.json'),
+    JSON.stringify({ runId: 'run-done', stopType: 'done', stage: 'done', events: [] })
+  );
+
+  const ctx = {
+    root,
+    runsDir,
+    dispatch: {
+      queuePolicy: {
+        maxActiveRuns: 3,
+        enforceQueueBrake: true,
+      },
+    },
+  };
+
+  // 1. 默认触发熔断
+  const b1 = checkQueueBrake(ctx);
+  assert.equal(b1.tripped, true);
+  assert.equal(b1.activeCount, 3);
+  assert.equal(b1.maxActiveRuns, 3);
+  assert.match(b1.message, /活跃 Run 数量已达上限/);
+
+  // 2. 传 force-queue 绕过
+  const b2 = checkQueueBrake(ctx, { 'force-queue': true });
+  assert.equal(b2.tripped, false);
+  assert.equal(b2.forced, true);
+
+  // 3. 配置关闭熔断时，即使满员也不触发
+  const ctxDisabled = {
+    ...ctx,
+    dispatch: { queuePolicy: { maxActiveRuns: 3, enforceQueueBrake: false } },
+  };
+  const b3 = checkQueueBrake(ctxDisabled);
+  assert.equal(b3.tripped, false);
+
+  // 4. CLI 旗标显式开启熔断
+  const b4 = checkQueueBrake(ctxDisabled, { 'queue-brake': true });
+  assert.equal(b4.tripped, true);
+});
+
+test('mergeAppliedRxIds 累积去重并保持先后顺序', () => {
+  assert.deepEqual(mergeAppliedRxIds(undefined, undefined), []);
+  assert.deepEqual(mergeAppliedRxIds([], []), []);
+  assert.deepEqual(mergeAppliedRxIds('bad', ['rx-2']), ['rx-2'], '非数组入参按空数组处理');
+  assert.deepEqual(mergeAppliedRxIds(['rx-1'], ['rx-2', 'rx-1', 'rx-3']), ['rx-1', 'rx-2', 'rx-3']);
+});
+
+test('listAllRuns 保留陈旧 run 并标记 stale，队列熔断不计入', () => {
+  const root = fixture();
+  const runsDir = path.join(root, '.agents', 'cache', 'pipeline-runs');
+  fs.mkdirSync(runsDir, { recursive: true });
+  const staleAt = new Date(Date.now() - 20 * 24 * 3600 * 1000).toISOString();
+  fs.writeFileSync(path.join(runsDir, 'run-stale.json'), JSON.stringify({
+    runId: 'run-stale', stopType: 'work-order', stage: 'implement', updatedAt: staleAt, createdAt: staleAt, events: [],
+  }));
+  fs.writeFileSync(path.join(runsDir, 'run-fresh.json'), JSON.stringify({
+    runId: 'run-fresh', stopType: 'work-order', stage: 'implement', updatedAt: new Date().toISOString(), events: [],
+  }));
+
+  const ctx = { root, runsDir };
+  const active = listAllRuns(ctx, 'active');
+  const stale = active.find((r) => r.runId === 'run-stale');
+  assert.ok(stale, '陈旧 run 不得从 active 列表消失');
+  assert.equal(stale.stale, true);
+  assert.equal(stale.staleDays, 20);
+  assert.equal(active.find((r) => r.runId === 'run-fresh').stale, undefined);
+
+  const brake = checkQueueBrake({ ...ctx, dispatch: { queuePolicy: { maxActiveRuns: 2, enforceQueueBrake: true } } });
+  assert.equal(brake.activeCount, 1);
+  assert.deepEqual(brake.activeRunIds, ['run-fresh']);
+  assert.equal(brake.tripped, false);
+
+  assert.match(renderDashboard(ctx, stale, { width: 80, noColor: true }).join('\n'), /20 天未更新/);
+});
+
+test('generatePostMortem extracts failure gates, smart-fix categories and derives actionable prescriptions', () => {
+  const root = fixture();
+  const ctx = {
+    root,
+    prescriptionsFile: path.join(root, '.agents', 'notes', 'prescriptions.json'),
+  };
+
+  const runWithFailures = {
+    runId: '20261125-auth-fix',
+    triage: { module: 'auth', level: 'L2', topic: 'auth-fix' },
+    retries: { verify: 2 },
+    events: [
+      { t: '2026-11-25T12:00:00Z', type: 'route', from: 'verify', to: 'fix', attempt: 1, cap: 2 },
+      { t: '2026-11-25T12:05:00Z', type: 'gate-fail', stage: 'verify' },
+    ],
+    gateFail: {
+      stage: 'verify',
+      problems: ['触点未授权: src/auth/token.mjs 不在 plan.md 白名单内'],
+      analysis: { category: 'touch-set', title: '未授权文件修改' },
+    },
+    lastFiles: ['src/auth/token.mjs'],
+  };
+
+  const rx = generatePostMortem(ctx, runWithFailures, { persist: true });
+  assert.equal(rx.runId, '20261125-auth-fix');
+  assert.equal(rx.cleanPass, undefined);
+  assert.ok(rx.occurredGates.includes('verify'));
+  assert.ok(rx.categories.includes('touch-set'));
+  assert.ok(rx.prescriptions.some((p) => p.includes('plan.md 白名单')));
+  assert.equal(runWithFailures.postMortem.id, rx.id);
+
+  // 验证持久化落盘：结构化处方逐条入库，类别/置信度不丢
+  const stored = loadPrescriptions(ctx);
+  assert.equal(stored.length, 1);
+  assert.equal(stored[0].category, 'touch-set');
+  assert.equal(stored[0].confidence, 0.85);
+  assert.equal(stored[0].runId, '20261125-auth-fix');
+  assert.ok(stored[0].prescriptions.some((p) => p.includes('plan.md 白名单')));
+
+  // 测试 clean pass
+  const cleanRun = {
+    runId: '20261125-clean',
+    triage: { module: 'auth', level: 'L1' },
+    retries: {},
+    events: [],
+  };
+  const cleanRx = generatePostMortem(ctx, cleanRun);
+  assert.equal(cleanRx.cleanPass, true);
+});
+
+test('generatePostMortem persists each structured prescription and keeps existing hit counts', () => {
+  const run = {
+    runId: '20261125-multi-rx',
+    triage: { module: 'auth', level: 'L2' },
+    retries: {},
+    events: [],
+    gateFail: {
+      stage: 'verify',
+      problems: ['触点未授权: src/a.mjs 不在 plan.md 白名单内', '测试失败 FAIL tests/a.test.mjs'],
+    },
+    lastFiles: ['src/a.mjs'],
+  };
+
+  // (a) 同时触发 touch-set 与 test-failure → 两条各自入库，类别与置信度不丢
+  const root = fixture();
+  const ctx = { root, prescriptionsFile: path.join(root, '.agents', 'notes', 'prescriptions.json') };
+  generatePostMortem(ctx, run, { persist: true });
+  const stored = loadPrescriptions(ctx);
+  assert.equal(stored.length, 2);
+  const touchRx = stored.find((p) => p.category === 'touch-set');
+  const testRx = stored.find((p) => p.category === 'test-failure');
+  assert.ok(touchRx, 'touch-set 处方须落盘');
+  assert.ok(testRx, 'test-failure 处方须落盘');
+  assert.equal(touchRx.confidence, 0.85);
+  assert.equal(testRx.confidence, 0.8);
+
+  // (b) 同一 run 再次提炼 → 同 id 不重复入库
+  generatePostMortem(ctx, run, { persist: true });
+  assert.equal(loadPrescriptions(ctx).length, 2);
+
+  // (c) 库里已有同 id 记录 → 保留其命中计数，不覆盖也不重复
+  const root2 = fixture();
+  const ctx2 = { root: root2, prescriptionsFile: path.join(root2, '.agents', 'notes', 'prescriptions.json') };
+  const pinnedId = generatePrescriptionId('touch-set', '计划外文件修改触点阻断');
+  savePrescriptions(ctx2, [{
+    id: pinnedId,
+    category: 'touch-set',
+    failurePattern: '计划外文件修改触点阻断',
+    confidence: 0.5,
+    hitCount: 3,
+    actionableFix: '历史沉淀的触点修复处方',
+    module: 'auth',
+  }]);
+  generatePostMortem(ctx2, run, { persist: true });
+  const merged = loadPrescriptions(ctx2);
+  const pinned = merged.filter((p) => p.id === pinnedId);
+  assert.equal(pinned.length, 1, '同 id 不得重复入库');
+  assert.equal(pinned[0].confidence, 0.5);
+  assert.equal(pinned[0].hitCount, 3);
+  assert.equal(merged.length, 2);
+});
+
+test('findMatchingPrescriptions matches by module or affected file paths and backflows into assembleWorkOrderContext', () => {
+  const root = fixture();
+  const ctx = {
+    root,
+    prescriptionsFile: path.join(root, '.agents', 'notes', 'prescriptions.json'),
+  };
+
+  const historyRx = [
+    {
+      id: 'rx-old-1',
+      runId: 'run-old-1',
+      module: 'billing',
+      affectedFiles: ['src/billing/calc.mjs'],
+      prescriptions: ['计费必须包含阶梯折扣防溢出检查'],
+    },
+  ];
+  savePrescriptions(ctx, historyRx);
+
+  // 1. 模块匹配
+  const hitByModule = findMatchingPrescriptions(ctx, { module: 'billing' });
+  assert.equal(hitByModule.length, 1);
+  assert.equal(hitByModule[0].id, 'rx-old-1');
+
+  // 2. 文件重合匹配
+  const hitByFile = findMatchingPrescriptions(ctx, { module: 'other', files: ['src/billing/calc.mjs'] });
+  assert.equal(hitByFile.length, 1);
+  assert.equal(hitByFile[0].id, 'rx-old-1');
+
+  // 3. 回流注入工单上下文
+  const run = {
+    runId: 'run-new-bill',
+    triage: { module: 'billing', level: 'L1' },
+    docs: {},
+    lastFiles: ['src/billing/calc.mjs'],
+  };
+  const assembled = assembleWorkOrderContext(ctx, run, {
+    kind: 'implement',
+    role: 'code',
+    context: { files: ['src/billing/calc.mjs'] },
+  });
+  assert.ok(Array.isArray(assembled.slices.prescriptions));
+  assert.ok(assembled.slices.prescriptions.some((p) => p.includes('计费必须包含阶梯折扣防溢出检查')));
+
+  // 4. 经过 pruneWorkOrderContext 裁剪预算
+  const pruned = pruneWorkOrderContext(assembled, 1200);
+  assert.ok(pruned.budget);
+  assert.ok(Array.isArray(pruned.slices.prescriptions));
+});
+
+test('inspectArtifact supports prescription and postmortem targets', () => {
+  const root = fixture();
+  const ctx = {
+    root,
+    prescriptionsFile: path.join(root, '.agents', 'notes', 'prescriptions.json'),
+  };
+
+  const run = {
+    runId: 'run-rx-test',
+    triage: { module: 'engine' },
+    postMortem: {
+      id: 'rx-test',
+      runId: 'run-rx-test',
+      module: 'engine',
+      retriesCount: 2,
+      occurredGates: ['verify'],
+      categories: ['arch'],
+      affectedFiles: ['src/core/router.mjs'],
+      prescriptions: ['触发架构防线阻断，杜绝跨层直接调用'],
+    },
+    docs: {},
+    events: [],
+  };
+
+  // 目标包含 prescription
+  const targets = getAvailableTargets(ctx, run);
+  assert.ok(targets.includes('prescription'));
+
+  // inspect prescription
+  const art1 = inspectArtifact(ctx, run, 'prescription');
+  assert.equal(art1.ok, true);
+  assert.equal(art1.type, 'prescription');
+  assert.match(art1.content, /run-rx-test/);
+  assert.match(art1.content, /杜绝跨层直接调用/);
+
+  // 别名 postmortem
+  const art2 = inspectArtifact(ctx, run, 'postmortem');
+  assert.equal(art2.ok, true);
+  assert.equal(art2.type, 'prescription');
+  assert.match(art2.content, /杜绝跨层直接调用/);
+});
+
+test('isApprovedConclusion recognizes approved conclusions and rejects negated ones', () => {
+  assert.equal(isApprovedConclusion('通过'), true);
+  assert.equal(isApprovedConclusion('已通过'), true);
+  assert.equal(isApprovedConclusion('approved'), true);
+  assert.equal(isApprovedConclusion('Approved'), true);
+  assert.equal(isApprovedConclusion('LGTM'), true);
+  assert.equal(isApprovedConclusion('pass'), true);
+
+  assert.equal(isApprovedConclusion('未通过'), false);
+  assert.equal(isApprovedConclusion('不通过'), false);
+  assert.equal(isApprovedConclusion('未能通过'), false);
+  assert.equal(isApprovedConclusion('不予通过'), false);
+  assert.equal(isApprovedConclusion('无法通过'), false);
+  assert.equal(isApprovedConclusion('暂不通过'), false);
+  assert.equal(isApprovedConclusion('驳回'), false);
+  assert.equal(isApprovedConclusion('拒绝'), false);
+  assert.equal(isApprovedConclusion('disapproved'), false);
+  assert.equal(isApprovedConclusion('failed'), false);
+  assert.equal(isApprovedConclusion('rejected'), false);
+  assert.equal(isApprovedConclusion('not approved'), false);
+  assert.equal(isApprovedConclusion('not ok'), false);
+  assert.equal(isApprovedConclusion('NACK'), false);
+  assert.equal(isApprovedConclusion(''), false);
+  assert.equal(isApprovedConclusion(null), false);
+});
+
+test('parseReviewMetadata treats missing or negated conclusions as not approved', () => {
+  const negated = [
+    '- 复核：不通过，复核上下文：rev-aaaa11',
+    '- 独立复核：不予通过 复核上下文：rev-aaaa11',
+    '- 独立复核：无法通过 复核上下文：rev-aaaa11',
+    '- 复核人：gpt-4o，复核上下文：rev-aaaa11，发现 3 个 P1 问题',
+    '- 评审 2：未通过 复核上下文：reviewer-000006',
+  ];
+  for (const line of negated) {
+    const meta = parseReviewMetadata(line);
+    assert.equal(meta.reviewers.length, 1, line);
+    assert.equal(isApprovedConclusion(meta.reviewers[0].conclusion), false, line);
+  }
+
+  const approved = [
+    '- 独立复核：通过 复核上下文：code-sess-abc123 模型：gpt-4o',
+    '- 独立复核：通过（复核上下文：<rev-aaaa11>；reviewed by gpt-4o）',
+    '- 二次复核：通过 模型：gpt-4o 复核上下文：reviewer-000002',
+    '- 独立复核：通过（上一轮未通过的问题已修复） 复核上下文：reviewer-000003',
+    '- 复核：通过，复核上下文：rev-aaaa11',
+    // 带序号的写法（旧版即支持）仍是可识别的结论行
+    '- 复核 1：通过 复核上下文：reviewer-000004',
+    '- 评审二：通过 复核上下文：reviewer-000005',
+  ];
+  for (const line of approved) {
+    const meta = parseReviewMetadata(line);
+    assert.equal(meta.reviewers.length, 1, line);
+    assert.equal(isApprovedConclusion(meta.reviewers[0].conclusion), true, line);
+  }
+});
+
+test('parseHandoffSheet supports Windows drive letter paths and validateHandoffSheet rejects directory traversal', () => {
+  const md = [
+    '# Handoff Sheet',
+    '- from: code',
+    '- to: test',
+    '- task: 2026-11-25-test',
+    '- touchSetAllowed:',
+    '  - C:\\Users\\Administrator\\project\\src\\main.mjs',
+    '  - D:/data/test.json',
+    '- notes: Windows drive letter paths support',
+  ].join('\n');
+
+  const sheet = parseHandoffSheet(md);
+  assert.ok(sheet != null);
+  assert.equal(sheet.from, 'code');
+  assert.equal(sheet.to, 'test');
+  assert.equal(sheet.task, '2026-11-25-test');
+  assert.ok(sheet.touchSetAllowed.length >= 2);
+  assert.ok(sheet.touchSetAllowed.some((f) => f.includes('main.mjs')));
+
+  // validateHandoffSheet rejects path traversal
+  const badSheet = {
+    ...sheet,
+    touchSetAllowed: ['../../etc/passwd'],
+  };
+  const valRes = validateHandoffSheet(badSheet);
+  assert.equal(valRes.ok, false);
+  assert.ok(valRes.problems.some((e) => e.includes('非法路径穿越')));
+});
+
+test('parseReviewMetadata deduplicates reviewers by ID and honors explicit downgrade in brackets or line-starts', () => {
+  const text = [
+    '- 独立复核：通过 复核上下文：reviewer-dup 模型：claude-3-7-sonnet',
+    '- 独立复核：通过 复核上下文：reviewer-dup 模型：claude-3-7-sonnet',
+    '- 独立复核：通过 复核上下文：reviewer-unique 模型：gpt-4o',
+    '(跨模型降级：网络受限转单模型)',
+  ].join('\n');
+
+  const meta = parseReviewMetadata(text);
+  assert.equal(meta.reviewers.length, 2, '相同 ID 必须去重');
+  assert.equal(meta.isDowngraded, true);
+  assert.match(meta.downgradeReason, /网络受限转单模型/);
+
+  // 正文提及无冒号键值不判定为降级
+  const prose = '- 独立复核：通过 复核上下文：rev-1 结论：通过 本次未发生跨模型降级，模型配额充足';
+  const metaProse = parseReviewMetadata(prose);
+  assert.equal(metaProse.isDowngraded, false);
+});
+
+test('verifyReviewEndorsement enforces approval, heterogeneous models, disallows same reviewer, and honors enforceHeterogeneous: false', () => {
+  const metaRejected = {
+    id: 'rev-1',
+    reviewerModel: 'claude-3-7-sonnet',
+    reviewers: [{ id: 'rev-1', reviewerModel: 'claude-3-7-sonnet', conclusion: '未通过' }],
+    dualEndorsed: false,
+    isDowngraded: false,
+  };
+  const resRej = verifyReviewEndorsement(null, null, 'review', metaRejected, { authorModel: 'gpt-4o' });
+  assert.equal(resRej.ok, false);
+  assert.ok(resRej.problems.some((p) => p.includes('未通过或驳回')));
+
+  // 双复核人 ID 相同
+  const metaSameId = {
+    id: 'rev-1',
+    reviewerModel: 'claude-3-7-sonnet',
+    reviewers: [
+      { id: 'rev-1', reviewerModel: 'claude-3-7-sonnet', conclusion: '通过' },
+      { id: 'rev-1', reviewerModel: 'gpt-4o', conclusion: '通过' },
+    ],
+    dualEndorsed: true,
+    isDowngraded: false,
+  };
+  const resSame = verifyReviewEndorsement(null, null, 'review', metaSameId, { dualReview: true, authorModel: 'gemini-2.0-flash' });
+  assert.equal(resSame.ok, false);
+  assert.ok(resSame.problems.some((p) => p.includes('相同') || p.includes('同一会话')));
+
+  // 异构要求未声明 reviewerModel
+  const metaNoModel = {
+    id: 'rev-1',
+    reviewerModel: '',
+    reviewers: [{ id: 'rev-1', reviewerModel: '', conclusion: '通过' }],
+    dualEndorsed: false,
+    isDowngraded: false,
+  };
+  const resNoModel = verifyReviewEndorsement(null, null, 'review', metaNoModel, { heterogeneous: true, authorModel: 'gpt-4o' });
+  assert.equal(resNoModel.ok, false);
+  assert.ok(resNoModel.problems.some((p) => p.includes('未检测到复核模型')));
+
+  // 单源开关关闭：enforceHeterogeneous === false 时不硬阻断同构模型
+  const metaHomogeneous = {
+    id: 'rev-1',
+    reviewerModel: 'gpt-4o',
+    reviewers: [{ id: 'rev-1', reviewerModel: 'gpt-4o', conclusion: '通过' }],
+    dualEndorsed: false,
+    isDowngraded: false,
+  };
+  const ctxWithPolicy = {
+    dispatch: {
+      reviewPolicy: { enforceHeterogeneous: false },
+    },
+  };
+  const resPolicyBypass = verifyReviewEndorsement(ctxWithPolicy, null, 'review', metaHomogeneous, {
+    heterogeneous: true,
+    authorModel: 'gpt-4o',
+  });
+  assert.equal(resPolicyBypass.ok, true);
+});
+
+test('verifyReviewEndorsement reads object-shaped model-roles as author model fallback', () => {
+  const run = { triage: { level: 'L2' }, events: [] };
+  const reviewMeta = (model) => parseReviewMetadata(`- 独立复核：通过 模型：${model} 复核上下文：rev-aaaa11`);
+
+  // 对象形状的 roles.code / roles.judgment：作者模型取 model 字段，同族复核判同构
+  const ctxObjectRoles = {
+    dispatch: { reviewPolicy: { enforceHeterogeneous: true } },
+    modelRoles: { roles: { code: { model: 'claude-3-5-sonnet' }, judgment: { model: 'claude-3-5-sonnet' } } },
+  };
+  const objSame = verifyReviewEndorsement(ctxObjectRoles, run, 'code-review', reviewMeta('claude-3-7-sonnet'));
+  assert.equal(objSame.ok, false);
+  assert.ok(objSame.problems.some((p) => p.includes('同构')));
+
+  const objHetero = verifyReviewEndorsement(ctxObjectRoles, run, 'code-review', reviewMeta('gpt-4o'));
+  assert.equal(objHetero.ok, true, objHetero.problems.join('；'));
+
+  // 字符串形状：结论与对象形状一致
+  const ctxStringRoles = {
+    dispatch: { reviewPolicy: { enforceHeterogeneous: true } },
+    modelRoles: { roles: { code: 'claude-3-5-sonnet', judgment: 'claude-3-5-sonnet' } },
+  };
+  const strSame = verifyReviewEndorsement(ctxStringRoles, run, 'code-review', reviewMeta('claude-3-7-sonnet'));
+  assert.equal(strSame.ok, false);
+  assert.ok(strSame.problems.some((p) => p.includes('同构')));
+
+  const strHetero = verifyReviewEndorsement(ctxStringRoles, run, 'code-review', reviewMeta('gpt-4o'));
+  assert.equal(strHetero.ok, true, strHetero.problems.join('；'));
+});
+
+test('loadPrescriptions backs up corrupt JSON file, savePrescriptions writes atomically, and findMatchingPrescriptions respects slash boundaries', () => {
+  const root = fixture();
+  const notesDir = path.join(root, '.agents', 'notes');
+  fs.mkdirSync(notesDir, { recursive: true });
+  const rxFile = path.join(notesDir, 'prescriptions.json');
+  fs.writeFileSync(rxFile, 'MALFORMED JSON {{{');
+
+  const ctx = { root, prescriptionsFile: rxFile };
+  // 读取损坏文件，不应抛出异常，应生成 corrupt 备份并返回空数组
+  const list = loadPrescriptions(ctx);
+  assert.deepEqual(list, []);
+  const entries = fs.readdirSync(notesDir);
+  assert.ok(entries.some((e) => e.startsWith('prescriptions.json.corrupt-')));
+
+  // 原子保存
+  savePrescriptions(ctx, [
+    {
+      id: 'rx-bill-1',
+      module: 'billing',
+      affectedFiles: ['src/billing/calc.mjs'],
+      prescriptions: ['防溢出检查'],
+    },
+  ]);
+  const loaded = loadPrescriptions(ctx);
+  assert.equal(loaded.length, 1);
+  assert.equal(loaded[0].id, 'rx-bill-1');
+
+  // 斜杠边界防假阳性：src/bi 不应命中 src/billing/calc.mjs
+  const noMatch = findMatchingPrescriptions(ctx, { module: 'other', files: ['src/bi'] });
+  assert.equal(noMatch.length, 0);
+
+  // 前缀目录匹配：src/billing 应命中 src/billing/calc.mjs
+  const matchDir = findMatchingPrescriptions(ctx, { module: 'other', files: ['src/billing'] });
+  assert.equal(matchDir.length, 1);
+});
+
+// ── 代码 diff 独立复核（2026-11-25 修复） ─────────────────────────────────
+// 缺陷：review 阶段只读 spec 的「确认与复核」并复用其背书行——那行是 spec-review 阶段
+// （实现开始之前）写的，代码提交本身从未被独立复核过；L2/L3 的「双机交叉背书」实际校验的是
+// 规格复核行。修法：对代码 diff 另签复核工单，背书行写入代码复核产物并绑定复核范围。
+
+const CR_BASE = 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0';
+const CR_HEAD = '0f1e2d3c4b5a69788796a5b4c3d2e1f009182736';
+const CR_TASK_DIR = 'workflow/tasks/2026-11-13-test';
+const CR_REL = `${CR_TASK_DIR}/code-review.md`;
+
+// 造一个停在指定阶段的 run：带代码复核基准/范围，spec 可选带合法复核行。
+function setupCodeReviewRun(root, {
+  stage = 'code-review', level = 'L2', baseSha = CR_BASE, headSha = CR_HEAD,
+  files = ['src/a.mjs'], withSpecEndorsement = false,
+} = {}) {
+  fs.mkdirSync(path.join(root, CR_TASK_DIR), { recursive: true });
+  fs.writeFileSync(path.join(root, CR_TASK_DIR, 'spec.md'), [
+    '# Spec', '', '## 验收标准', '', '- [ ] 功能可用', '', '## 确认与复核', '',
+    withSpecEndorsement ? '- 独立复核：通过 复核上下文：spec-sess-777 模型：gpt-4o' : '',
+    '',
+  ].join('\n'));
+  return writeRun(root, {
+    stage,
+    stopType: 'work-order',
+    triage: { kind: 'require', level, module: 'wiki', topic: 'test' },
+    docs: { entry: `${CR_TASK_DIR}/intent.md`, spec: `${CR_TASK_DIR}/spec.md`, plan: 'workflow/plans/t.md', codeReview: CR_REL },
+    codeBaseSha: baseSha,
+    codeReview: { baseSha, headSha, files },
+  });
+}
+
+function writeCodeReviewDoc(root, { base = CR_BASE, head = CR_HEAD, endorsement = '- 独立复核：通过 复核上下文：code-sess-abc123 模型：gpt-4o', withBase = true } = {}) {
+  fs.mkdirSync(path.join(root, CR_TASK_DIR), { recursive: true });
+  fs.writeFileSync(path.join(root, CR_REL), [
+    '# 代码复核', '',
+    ...(withBase ? [`- 复核基准 SHA: \`${base}\``, `- 复核范围: \`${base}..${head}\``] : []),
+    '', '## 确认与复核', '', endorsement, '',
+  ].join('\n'));
+}
+
+test('review 阶段签发代码 diff 独立复核工单，不复用 spec 的背书行', () => {
+  const root = fixture();
+  // spec 里已有合法复核行——旧行为会直接读它放行；新行为必须仍签发代码复核工单
+  setupCodeReviewRun(root, { stage: 'review', withSpecEndorsement: true });
+  const r = runPipeline(root, ['next', '--run', 'test-run']);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const run = readRun(root);
+  assert.equal(run.stopType, 'work-order', 'review 阶段签发复核工单后停在 work-order');
+  assert.equal(run.stage, 'code-review', '工单指向代码复核阶段（等独立背书）');
+  assert.equal(run.workOrder.kind, 'review');
+  assert.match(run.workOrder.title, /独立复核代码 diff/);
+  // 工单落点是代码复核产物，不是 spec
+  assert.equal(run.workOrder.context.docPath, CR_REL);
+  assert.notEqual(run.workOrder.context.docPath, `${CR_TASK_DIR}/spec.md`);
+  // 工单上下文带复核范围与触及文件——复核者据此定点读 diff
+  assert.equal(run.workOrder.context.slices.codeDiff.base, CR_BASE);
+  assert.equal(run.workOrder.context.slices.codeDiff.head, CR_HEAD);
+  assert.deepEqual(run.workOrder.context.slices.codeDiff.files, ['src/a.mjs']);
+  // 复核产物已生成并绑定基准与范围
+  const doc = fs.readFileSync(path.join(root, CR_REL), 'utf8');
+  assert.match(doc, /复核基准 SHA: `a1b2c3d4/);
+  assert.match(doc, /复核范围: `a1b2c3d4/);
+  assert.match(doc, /## 确认与复核/);
+  assert.ok(run.events.some((e) => e.type === 'handoff' && e.toStage === 'code-review'));
+});
+
+test('代码复核门拒绝「只有 spec 背书」——代码 diff 未经独立复核不得进关单', () => {
+  const root = fixture();
+  setupCodeReviewRun(root, { stage: 'code-review', withSpecEndorsement: true });
+  const r = runPipeline(root, ['next', '--run', 'test-run']);
+  assert.equal(r.status, 2, r.stderr || r.stdout);
+  assert.match(r.stdout + r.stderr, /代码复核/);
+  const run = readRun(root);
+  assert.equal(run.stopType, 'gate-fail');
+  assert.notEqual(run.stage, 'closeout', '未经代码复核不得进关单');
+});
+
+test('代码复核产物未绑定复核基准 → 判红（拿 spec 复核行冒充不成立）', () => {
+  const root = fixture();
+  setupCodeReviewRun(root, { stage: 'code-review' });
+  // 把一条合法背书行抄进代码复核产物，但没有机器写入的基准绑定——不认
+  writeCodeReviewDoc(root, { withBase: false });
+  const r = runPipeline(root, ['next', '--run', 'test-run']);
+  assert.equal(r.status, 2, r.stderr || r.stdout);
+  assert.match(r.stdout + r.stderr, /复核基准/);
+  assert.equal(readRun(root).stopType, 'gate-fail');
+});
+
+test('代码复核产物绑定基准且有独立背书 → 通过到 closeout 并记 code-review 事件', () => {
+  const root = fixture();
+  setupCodeReviewRun(root, { stage: 'code-review' });
+  writeCodeReviewDoc(root);
+  const r = runPipeline(root, ['next', '--run', 'test-run']);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const run = readRun(root);
+  assert.equal(run.stage, 'closeout');
+  const ev = run.events.find((e) => e.type === 'code-review');
+  assert.ok(ev, '须记 code-review 事件');
+  assert.equal(ev.baseSha, CR_BASE);
+  assert.equal(ev.reviewers, 1);
+});
+
+test('代码复核结论「未通过」→ 签发修复工单，不静默放过', () => {
+  const root = fixture();
+  setupCodeReviewRun(root, { stage: 'code-review' });
+  writeCodeReviewDoc(root, { endorsement: '- 独立复核：未通过 复核上下文：code-sess-abc123 模型：gpt-4o' });
+  const r = runPipeline(root, ['next', '--run', 'test-run']);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const run = readRun(root);
+  assert.equal(run.stopType, 'work-order');
+  assert.equal(run.workOrder.kind, 'fix', '复核否决应转入修复环');
+  assert.equal(run.stage, 'fix');
+});
+
+test('代码复核背书未交付 → 重签复核工单（不误判成代码缺陷）', () => {
+  const root = fixture();
+  setupCodeReviewRun(root, { stage: 'code-review' });
+  // 骨架在位但复核者还没写背书行——这是「还没交」，不是「代码有缺陷」
+  writeCodeReviewDoc(root, { endorsement: '' });
+  const r = runPipeline(root, ['next', '--run', 'test-run']);
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const run = readRun(root);
+  assert.equal(run.stopType, 'work-order');
+  assert.equal(run.workOrder.kind, 'review', '背书未交付应重签复核工单等交付');
+  assert.notEqual(run.workOrder.kind, 'fix', '不得把「还没交背书」当成代码缺陷派修复单');
+  assert.equal(run.stage, 'code-review');
+});
+
+test('代码在复核工单签发后变更 → 旧复核失效，重签复核工单（新范围）', () => {
+  const root = fixture();
+  setupCodeReviewRun(root, { stage: 'code-review' });
+  writeCodeReviewDoc(root);
+  const newHead = '1111222233334444555566667777888899990000';
+  const r = runPipeline(root, ['next', '--run', 'test-run'], { FAKE_GIT_SHA: newHead });
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const run = readRun(root);
+  assert.equal(run.stopType, 'work-order');
+  assert.equal(run.workOrder.kind, 'review', '范围变了须重签复核工单');
+  assert.equal(run.stage, 'code-review');
+  const doc = fs.readFileSync(path.join(root, CR_REL), 'utf8');
+  assert.match(doc, new RegExp(newHead), '复核范围随代码前移');
+});
+
+test('代码范围前移后，台账里旧范围的合法凭证不得代替新复核放行', () => {
+  const root = fixture();
+  setupCodeReviewRun(root, { stage: 'code-review' });
+  // 产物绑定旧范围，背书行由台账凭证提供（复核者尚未在产物里写背书行）
+  writeCodeReviewDoc(root, { endorsement: '' });
+  writeEndorsementToken(root, buildEndorsementToken({
+    doc: CR_REL,
+    commitmentFingerprint: `${CR_BASE}..${CR_HEAD}`,
+    endorsements: [
+      { role: 'auditor', model: 'gpt-4o', sessionId: 'sess-oldreview1', conclusion: 'approved' },
+    ],
+  }));
+
+  // 代码在复核之后又被改动：HEAD 前移，旧范围的凭证不得放行
+  const newHead = '1111222233334444555566667777888899990000';
+  const r1 = runPipeline(root, ['next', '--run', 'test-run'], { FAKE_GIT_SHA: newHead });
+  assert.equal(r1.status, 0, r1.stderr || r1.stdout);
+  const run1 = readRun(root);
+  assert.equal(run1.stopType, 'work-order', '范围前移须重签复核工单');
+  assert.equal(run1.stage, 'code-review');
+  assert.equal(run1.workOrder.kind, 'review');
+
+  // 同一新范围再跑一次：台账里只剩旧范围凭证，仍须等新复核，不得进 closeout
+  const r2 = runPipeline(root, ['next', '--run', 'test-run'], { FAKE_GIT_SHA: newHead });
+  assert.equal(r2.status, 0, r2.stderr || r2.stdout);
+  const run2 = readRun(root);
+  assert.equal(run2.stopType, 'work-order');
+  assert.equal(run2.stage, 'code-review');
+  assert.equal(run2.workOrder.kind, 'review', '旧范围凭证不得为新范围放行');
+});
+
+test('端到端：verify 绿并提交代码后停在代码复核，不再直接进关单', () => {
+  const root = fixture();
+  // 真 git 仓库——代码提交与复核基准/范围都要真实 SHA
+  assert.equal(spawnSync('git', ['init', '-q'], { cwd: root }).status, 0);
+  assert.equal(spawnSync('git', ['config', 'user.email', 't@t'], { cwd: root }).status, 0);
+  assert.equal(spawnSync('git', ['config', 'user.name', 't'], { cwd: root }).status, 0);
+  assert.equal(spawnSync('git', ['add', '-A'], { cwd: root }).status, 0);
+  assert.equal(spawnSync('git', ['commit', '-q', '-m', 'baseline'], { cwd: root }).status, 0);
+  const baseSha = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim();
+
+  // 实现阶段留下的代码改动（未提交）
+  fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'src', 'a.mjs'), 'export const a = 1;\n');
+
+  writeRun(root, {
+    stage: 'verify',
+    stopType: 'work-order',
+    triage: { kind: 'require', level: 'L2', module: 'wiki', topic: 'test' },
+    docs: { entry: 'workflow/intents/t.md', spec: null, plan: 'workflow/plans/t.md', codeReview: CR_REL },
+  });
+
+  const r = runPipeline(root, ['next', '--run', 'test-run'], { PIPELINE_RUN_GIT_BIN: 'git' });
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const run = readRun(root);
+
+  // 代码已提交
+  const headSha = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim();
+  assert.notEqual(headSha, baseSha, 'verify 绿后应落一笔代码提交');
+  assert.ok(run.events.some((e) => e.type === 'commit' && e.sha));
+
+  // 复核范围 = 实现前基准..代码提交头
+  assert.equal(run.codeReview.baseSha, baseSha);
+  assert.equal(run.codeReview.headSha, headSha);
+  assert.deepEqual(run.codeReview.files, ['src/a.mjs']);
+
+  // 关键：停在代码复核工单上，不直接进关单
+  assert.equal(run.stopType, 'work-order');
+  assert.equal(run.stage, 'code-review');
+  assert.equal(run.workOrder.kind, 'review');
+  assert.match(run.workOrder.title, /独立复核代码 diff/);
+
+  // 复核产物绑定真实基准
+  const doc = fs.readFileSync(path.join(root, CR_REL), 'utf8');
+  assert.match(doc, new RegExp(`复核基准 SHA: \`${baseSha}\``));
+  assert.match(doc, new RegExp(`复核范围: \`${baseSha}\\.\\.${headSha}\``));
+});
+
+test('parseCodeReviewRange 解析机器写入的基准与范围', () => {
+  const r = parseCodeReviewRange('- 复核基准 SHA: `abc1234`\n- 复核范围: `abc1234..def5678`');
+  assert.equal(r.base, 'abc1234');
+  assert.equal(r.head, 'def5678');
+  assert.deepEqual(parseCodeReviewRange('没有基准行'), { base: '', head: '' });
+});
+
+test('ensureCodeReviewDoc 幂等：范围不变保留既有背书行，范围变了重写骨架', () => {
+  const root = fixture();
+  setupCodeReviewRun(root, { stage: 'review' });
+  const ctx = { root };
+  const run = readRun(root);
+  assert.equal(ensureCodeReviewDoc(ctx, run, { baseSha: CR_BASE, headSha: CR_HEAD, files: ['src/a.mjs'] }), CR_REL);
+  const first = fs.readFileSync(path.join(root, CR_REL), 'utf8');
+  fs.appendFileSync(path.join(root, CR_REL), '\n- 独立复核：通过 复核上下文：code-sess-abc123\n');
+
+  // 范围不变 → 背书行保留
+  ensureCodeReviewDoc(ctx, run, { baseSha: CR_BASE, headSha: CR_HEAD, files: ['src/a.mjs'] });
+  const kept = fs.readFileSync(path.join(root, CR_REL), 'utf8');
+  assert.match(kept, /code-sess-abc123/, '范围不变时不得擦掉已写的背书行');
+  assert.equal(kept, first + '\n- 独立复核：通过 复核上下文：code-sess-abc123\n');
+
+  // 范围变了 → 重写骨架（旧背书随旧范围失效）
+  ensureCodeReviewDoc(ctx, run, { baseSha: CR_BASE, headSha: CR_HEAD + '1', files: ['src/a.mjs'] });
+  const rewritten = fs.readFileSync(path.join(root, CR_REL), 'utf8');
+  assert.doesNotMatch(rewritten, /code-sess-abc123/, '范围变了旧背书失效');
+  assert.match(rewritten, /复核范围: `a1b2c3d4/);
+});
+
+
+test('存量 run 停 review 且无 codeReview：按 HEAD^..HEAD 兜底并签发复核工单', () => {
+  const root = fixture();
+  // 真 git 仓库——HEAD 与父提交都取真实 SHA
+  assert.equal(spawnSync('git', ['init', '-q'], { cwd: root }).status, 0);
+  assert.equal(spawnSync('git', ['config', 'user.email', 't@t'], { cwd: root }).status, 0);
+  assert.equal(spawnSync('git', ['config', 'user.name', 't'], { cwd: root }).status, 0);
+  assert.equal(spawnSync('git', ['add', '-A'], { cwd: root }).status, 0);
+  assert.equal(spawnSync('git', ['commit', '-q', '-m', 'baseline'], { cwd: root }).status, 0);
+  const baseSha = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim();
+
+  // 引擎升级前已提交的代码改动（单独一笔提交）
+  fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'src', 'a.mjs'), 'export const a = 1;\n');
+  assert.equal(spawnSync('git', ['add', '-A'], { cwd: root }).status, 0);
+  assert.equal(spawnSync('git', ['commit', '-q', '-m', 'code'], { cwd: root }).status, 0);
+  const headSha = spawnSync('git', ['rev-parse', 'HEAD'], { cwd: root, encoding: 'utf8' }).stdout.trim();
+
+  // 存量 run：停在 review，没有 run.codeReview
+  writeRun(root, {
+    stage: 'review',
+    stopType: 'work-order',
+    triage: { kind: 'require', level: 'L2', module: 'wiki', topic: 'test' },
+    docs: { entry: 'workflow/intents/t.md', spec: null, plan: 'workflow/plans/t.md', codeReview: CR_REL },
+  });
+
+  const r = runPipeline(root, ['next', '--run', 'test-run'], { PIPELINE_RUN_GIT_BIN: 'git' });
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const run = readRun(root);
+  assert.equal(run.stopType, 'work-order');
+  assert.equal(run.stage, 'code-review');
+  assert.equal(run.codeReview.baseSha, baseSha, '兜底基准 = HEAD 的父提交');
+  assert.equal(run.codeReview.headSha, headSha);
+  assert.deepEqual(run.codeReview.files, ['src/a.mjs'], '只收录代码文件，不含 workflow/ 与运行态路径');
+  assert.ok(run.events.some((e) => e.type === 'code-review' && e.fallback === true), '兜底须留 code-review/fallback 事件');
+});
+
+test('review 阶段无 codeReview 且 git 基准不可得时仍按原文案 gate-fail', () => {
+  const root = fixture();
+  writeRun(root, {
+    stage: 'review',
+    stopType: 'work-order',
+    triage: { kind: 'require', level: 'L2', module: 'wiki', topic: 'test' },
+    docs: { entry: 'workflow/intents/t.md', spec: null, plan: 'workflow/plans/t.md', codeReview: CR_REL },
+  });
+
+  // 夹具默认假 git：rev-parse 无输出 → 兜底不可得
+  const r = runPipeline(root, ['next', '--run', 'test-run']);
+  assert.equal(r.status, 2, r.stderr || r.stdout);
+  const run = readRun(root);
+  assert.equal(run.stopType, 'gate-fail');
+  assert.match(run.gateFail.problems.join('\n'), /代码复核基准缺失——verify 绿后未记录代码改动基准，无法界定复核范围/);
+});
+
+test('端到端：凭证签署代码复核正确范围后放行；范围写错仍停在复核工单', () => {
+  const root = fixture();
+  setupCodeReviewRun(root, { stage: 'code-review' });
+  // 产物只有骨架（无背书行）：台账凭证是唯一交付通道
+  writeCodeReviewDoc(root, { endorsement: '' });
+  const endorsementCli = path.join(REPO, 'templates', 'engine', '.agents', 'scripts', 'endorsement-protocol.mjs');
+  const sign = (commitment, session) => spawnSync(process.execPath, [
+    endorsementCli, 'sign', '--doc', CR_REL, '--commitment', commitment,
+    '--session', session, '--model', 'gpt-4o', '--conclusion', 'approved', '--root', root, '--json',
+  ], { cwd: root, encoding: 'utf8', timeout: 60000 });
+
+  // 范围写错：台账里的凭证不得为本次复核放行
+  const wrongHead = '1111222233334444555566667777888899990000';
+  const wrong = sign(`${CR_BASE}..${wrongHead}`, 'sess-code-wrong1');
+  assert.equal(wrong.status, 0, wrong.stderr || wrong.stdout);
+  const r1 = runPipeline(root, ['next', '--run', 'test-run'], { FAKE_GIT_SHA: CR_HEAD });
+  assert.equal(r1.status, 0, r1.stderr || r1.stdout);
+  const run1 = readRun(root);
+  assert.equal(run1.stage, 'code-review');
+  assert.equal(run1.workOrder.kind, 'review', '签署范围写错不得放行');
+
+  // 按机器写入的复核范围签署 → 放行到关单
+  const good = sign(`${CR_BASE}..${CR_HEAD}`, 'sess-code-good1');
+  assert.equal(good.status, 0, good.stderr || good.stdout);
+  const r2 = runPipeline(root, ['next', '--run', 'test-run'], { FAKE_GIT_SHA: CR_HEAD });
+  assert.equal(r2.status, 0, r2.stderr || r2.stdout);
+  const run2 = readRun(root);
+  assert.equal(run2.stage, 'closeout');
+  const ev = run2.events.find((e) => e.type === 'code-review');
+  assert.ok(ev, '须记 code-review 事件');
+  assert.equal(ev.reviewers, 1);
 });

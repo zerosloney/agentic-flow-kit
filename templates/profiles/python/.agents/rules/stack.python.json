@@ -1,0 +1,27 @@
+{
+  "_note": "栈层规则包（python）：kit 管理的默认规则层。层级顺序：legacy ← stack.<栈名>.json ← project ← local。项目要改规则请写 project.json（同 id 整条覆盖）。",
+  "version": 1,
+  "rules": [
+    {
+      "id": "product.pytest",
+      "name": "Python 单元测试",
+      "phase": "verify",
+      "face": "tests",
+      "severity": "block",
+      "when": ["pyproject.toml", "requirements.txt", "pytest.ini"],
+      "assert": { "kind": "command", "args": { "run": "pytest" } },
+      "message": { "zh": "pytest 单元测试未通过", "en": "pytest failed" }
+    },
+    {
+      "id": "product.python-lint",
+      "name": "Python 规范检查",
+      "phase": "verify",
+      "face": "code",
+      "severity": "block",
+      "when": ["pyproject.toml", "ruff.toml", ".ruff.toml"],
+      "assert": { "kind": "command", "args": { "run": "ruff check ." } },
+      "message": { "zh": "ruff 代码规范检查未通过", "en": "ruff check failed" }
+    }
+  ],
+  "waivers": []
+}

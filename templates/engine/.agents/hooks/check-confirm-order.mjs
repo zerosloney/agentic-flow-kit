@@ -12,26 +12,31 @@
 //   且暂存产品文件 ≤5（2026-11-10 档二：3→5）→ 放行，judgments 落账记 L0 计数；无消息文件参数时豁免不生效（fail-closed）。
 // 合并 / squash / rebase / cherry-pick 跳过：那是在收已经写过的树，不在这里重判顺序。
 //   合并的识别优先看 `--merge`，再看状态文件。
-// 产品路径：backend 源码、frontend/src、tests 下的 cs、数据维护 SQL。精确过滤在本文件。
+// 产品路径单源 = .agents/config/project-faces.json（faces.mjs，四面 ui/code/tests/data）：
+// 未配置 → 全触发（任何暂存文件都算产品面）；配置后只认列出的前缀；配置错误 → fail-closed（exit 2）。
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { LEDGER_REL } from '../scripts/judgment-ledger.mjs';
+import { isProductPath as faceIsProductPath, loadFaces } from '../scripts/faces.mjs';
 
-const PRODUCT_RES = [
-  /^backend\/.+\.(cs|csproj|sln)$/i,
-  /^frontend\/src\/.+\.(vue|ts|tsx)$/i,
-  /^tests\/.+\.cs$/i,
-  /^wiki\/数据维护\/(?:schema变更|数据修复)\/.+\.sql$/i,
-];
+let FACES = null;
+let FACES_ERROR = null;
+try {
+  FACES = loadFaces();
+} catch (e) {
+  FACES_ERROR = e.message;
+}
 
 // L0 极简道产品文件上限（2026-11-10 档二放宽：3→5；口径单源 new-task.md §L0）
 // 2026-11-11 export：check-scope-range 复用同一上限做推送范围豁免（判据不复制）。
 export const L0_MAX = 5;
 
 export function isProductPath(rel) {
-  return PRODUCT_RES.some((re) => re.test(rel));
+  // 配置错误由 main 以 exit 2 阻断；此处保守返回 true，避免调用方（collectStagedCoverage）误放行。
+  if (!FACES) return true;
+  return faceIsProductPath(FACES, rel);
 }
 
 export function statusOf(text) {
@@ -229,6 +234,11 @@ export function collectStagedCoverage() {
 }
 
 function main() {
+  // 产品面配置坏 = fail-closed：不判定顺序直接阻断（exit 2，与 faces CLI 配置错误口径一致）。
+  if (FACES_ERROR) {
+    console.error(`check-confirm-order: 产品面配置错误（${FACES_ERROR}），提交已阻止`);
+    process.exit(2);
+  }
   // 2026-11-06（P1-1）：见 isMergeLike 头注。
   if (isMergeLike()) {
     console.log('SKIP: 先确认后改代码——合并(--merge)/squash/rebase/cherry-pick，不重判顺序');

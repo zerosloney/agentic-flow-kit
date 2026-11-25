@@ -25,10 +25,10 @@
 <!-- Since 2026-10-29: the mapping must cover the machine-gate / red-line items in the AGENTS.md files of project directories (regardless of this change's surface — it is the repository-wide contract baseline, required reading before drafting, see stages.md Design §2 "required inputs"); cite wiki evidence by path in the relevant section -->
 | Red line | How this spec satisfies it |
 |------|------------------|
-| Application must not reference Infrastructure / DbContext | <Via XXX, without introducing YYY> |
-| Rules / contracts (coding authority / shared contracts / existing API semantics / global cross-cutting semantics) | <Whether touched (touching it is the basis for L2); coding authority remains in the backend> |
-| schema / migration SQL (no dotnet ef) | <SQL paths involved; the historical EF Migrations directory (including ModelSnapshot) has been removed entirely and must not be recreated> |
-| Frontend: Drawer / no a-select / unified style.css | <Which frontend conventions this spec involves> |
+| Project architecture red lines (see root AGENTS.md / .agents/hooks/architecture-redlines.json; fill in only if present, delete this row if none) | <How this spec satisfies them> |
+| Rules / contracts (coding authority / shared contracts / existing API semantics / global cross-cutting semantics) | <Whether touched (touching it is the basis for L2)> |
+| schema / migration SQL | <SQL paths involved and the migration approach> |
+| Frontend project conventions (delete this row if none) | <Which frontend conventions this spec involves> |
 
 ## 验收判据
 <!-- Machine input for criterion-level convergence reconciliation (check-loop check 23): one criterion per line; "evidence" must be machine-parseable.
@@ -51,8 +51,7 @@
 - <Risk 2> | Mitigation: …
 
 ## 前提质询
-<!-- Blocks "confidently wrong interpretations" (premise-interrogation 2026-10-29; root cause incidents/2026-10-23-pml-quota-substitute-identity-overwrite:
-     a presentation requirement was written as a stored-identity rewrite; tests locked in expectations based on the wrong premise, and review only checked internal consistency — three layers failed from the same source, and the only possible interception point is before the premise enters the source of truth).
+<!-- Blocks "confidently wrong interpretations" (premise-interrogation 2026-10-29): once a premise carries a wrong interpretation into the source of truth, tests and review can both drift consistently along it — the only possible interception point is before the premise enters.
      One asserted premise per line: challenge the opposite interpretation and state why the conclusion was chosen; for small items with no interpretation risk, write one line "no key premises" + reason.
      confirm-doc hard-blocks this (premiseSince 2026-10-30 anchor): missing section / empty table / unfilled placeholder / missing challenge or missing basis → reject. -->
 | 前提 | 反问（对立解读会怎样） | 结论与依据 |

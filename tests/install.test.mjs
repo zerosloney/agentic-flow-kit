@@ -99,21 +99,36 @@ test('wiki board en override keeps the scaffold DATA registry', () => {
   };
 
   const scaffold = extractData(read(KIT, 'templates/scaffold/wiki/知识沉淀总览.html'));
-  const en = extractData(read(KIT, 'locales/en/overrides/wiki/知识沉淀总览.html'));
+  const en = extractData(read(KIT, 'locales/en/overrides/wiki/knowledge-overview.html'));
 
   assert.deepEqual(en.summary, scaffold.summary);
-  const namesOf = (data) => data.topics.map((t) => t.name).sort();
-  assert.deepEqual(namesOf(en), namesOf(scaffold));
-  for (const topic of scaffold.topics) {
-    const enTopic = en.topics.find((t) => t.name === topic.name);
-    const filesOf = (t) => t.files.map((f) => f.file).sort();
+  assert.equal(en.topics.length, scaffold.topics.length);
+  // 英文看板按位置与中文脚手架一一对应：主题名 / topic / dir 换成英文目录名，文件清单不变。
+  const EN_BY_ZH = {
+    '产品需求': 'requirements',
+    '开发方案': 'designs',
+    '数据维护': 'data-maintenance',
+    '项目规范': 'conventions',
+    '用户功能': 'features',
+    '测试报告': 'test-reports',
+  };
+  const filesOf = (t) => t.files.map((f) => f.file).sort();
+  scaffold.topics.forEach((topic, i) => {
+    const enTopic = en.topics[i];
+    const enName = EN_BY_ZH[topic.name];
+    assert.ok(enName, `missing English name for topic ${topic.name}`);
+    assert.equal(enTopic.name, enName);
     assert.deepEqual(filesOf(enTopic), filesOf(topic), `topic ${topic.name} file registry drifted`);
-  }
+    for (const file of enTopic.files) {
+      assert.equal(file.topic, enName);
+      assert.equal(file.dir, `./${enName}/`);
+    }
+  });
 
   const diskTopics = fs.readdirSync(path.join(KIT, 'templates/scaffold/wiki'), { withFileTypes: true })
     .filter((e) => e.isDirectory() && e.name !== 'drafts-archive')
     .map((e) => e.name);
-  const dataTopics = namesOf(scaffold);
+  const dataTopics = scaffold.topics.map((t) => t.name);
   for (const dir of diskTopics) {
     assert.ok(dataTopics.includes(dir), `board DATA missing scaffold topic dir ${dir}`);
   }
@@ -639,3 +654,60 @@ test('upgrade of a legacy standard install adopts github CI from the origin remo
   assert.equal(exists(dir, 'azure-pipelines.yml'), false, 'github origin must not provision azure CI');
   assert.equal(JSON.parse(read(dir, '.agents/install-manifest.json')).ci, 'github');
 });
+
+// ---- prevHooksPath：安装前本地 core.hooksPath 的记录（升级/重装不得覆盖首次现场）----
+
+function setLocalConfig(dir, key, value) {
+  const r = spawnSync('git', ['-C', dir, 'config', '--local', key, value], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+}
+
+function localConfig(dir, key) {
+  const r = spawnSync('git', ['-C', dir, 'config', '--local', '--get', key], { encoding: 'utf8' });
+  return { status: r.status, value: r.stdout.trim() };
+}
+
+test('install records prevHooksPath once and upgrade/reinstall keep it', () => {
+  const dir = tmpRepo();
+  setLocalConfig(dir, 'core.hooksPath', '.husky');
+  const r = run(['install', '--agent', 'trae', '--lang', 'zh-CN', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(localConfig(dir, 'core.hooksPath').value, '.githooks');
+  assert.equal(JSON.parse(read(dir, '.agents/install-manifest.json')).prevHooksPath, '.husky');
+
+  const up = run(['upgrade', '--target', '.'], dir);
+  assert.equal(up.status, 0, up.stderr);
+  assert.equal(JSON.parse(read(dir, '.agents/install-manifest.json')).prevHooksPath, '.husky',
+    'upgrade must keep the first-install snapshot');
+
+  const again = run(['install', '--agent', 'trae', '--lang', 'zh-CN', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(again.status, 0, again.stderr);
+  assert.equal(JSON.parse(read(dir, '.agents/install-manifest.json')).prevHooksPath, '.husky',
+    'reinstall must not snapshot the kit-owned .githooks value');
+});
+
+// ---- 根规则文件身份锁定：新装树的 AGENTS.md / CLAUDE.md / GEMINI.md 只能描述目标项目本身 ----
+// 模板里一旦回流母项目身份串或漏渲染占位符，任何项目装上都会被写成别的项目。
+
+const ROOT_RULE_FILES = ['AGENTS.md', 'CLAUDE.md', 'GEMINI.md'];
+const FOREIGN_IDENTITY_MARKS = ['船厂', '物资', 'Shipyard'];
+
+for (const lang of ['zh-CN', 'en']) {
+  for (const stack of ['node', 'dotnet']) {
+    test(`fresh install root rule files carry only the target project identity (${lang}/${stack})`, () => {
+      const dir = tmpRepo();
+      const r = run(['install', '--agent', 'claude', '--agent', 'antigravity', '--lang', lang, '--stack', stack, '--target', dir], dir);
+      assert.equal(r.status, 0, r.stderr);
+      const project = path.basename(dir);
+      for (const rel of ROOT_RULE_FILES) {
+        const text = read(dir, rel);
+        assert.doesNotMatch(text, /\{\{[A-Za-z_]+\}\}/, `${rel} contains an unreplaced placeholder`);
+        for (const mark of FOREIGN_IDENTITY_MARKS) {
+          assert.equal(text.includes(mark), false, `${rel} must not contain foreign identity mark "${mark}"`);
+        }
+      }
+      assert.equal(read(dir, 'AGENTS.md').includes(project), true,
+        `AGENTS.md must mention the target project name "${project}"`);
+    });
+  }
+}

@@ -1,0 +1,37 @@
+{
+  "_note": "栈层规则包（rust）：kit 管理的默认规则层。层级顺序：legacy ← stack.<栈名>.json ← project ← local。项目要改规则请写 project.json（同 id 整条覆盖）。",
+  "version": 1,
+  "rules": [
+    {
+      "id": "product.cargo-test",
+      "name": "Rust 测试",
+      "phase": "verify",
+      "face": "tests",
+      "severity": "block",
+      "when": ["Cargo.toml"],
+      "assert": { "kind": "command", "args": { "run": "cargo test" } },
+      "message": { "zh": "cargo test 测试未通过", "en": "cargo test failed" }
+    },
+    {
+      "id": "product.cargo-check",
+      "name": "Rust 编译检查",
+      "phase": "verify",
+      "face": "code",
+      "severity": "block",
+      "when": ["Cargo.toml"],
+      "assert": { "kind": "command", "args": { "run": "cargo check" } },
+      "message": { "zh": "cargo check 检查未通过", "en": "cargo check failed" }
+    },
+    {
+      "id": "product.cargo-clippy",
+      "name": "Rust Clippy 代码检查",
+      "phase": "verify",
+      "face": "code",
+      "severity": "warn",
+      "when": ["Cargo.toml"],
+      "assert": { "kind": "command", "args": { "run": "cargo clippy -- -D warnings" } },
+      "message": { "zh": "cargo clippy 检查未通过", "en": "cargo clippy failed" }
+    }
+  ],
+  "waivers": []
+}

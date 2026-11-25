@@ -21,7 +21,8 @@ function cleanup() {
 }
 
 export function makeTmp(prefix = 'flow-kit-test-') {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const rawDir = fs.mkdtempSync(path.join(os.tmpdir(), prefix));
+  const dir = fs.realpathSync?.native ? fs.realpathSync.native(rawDir) : fs.realpathSync(rawDir);
   created.add(dir);
   if (!registered) {
     registered = true;

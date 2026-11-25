@@ -14,7 +14,7 @@ Source: the 2026-11-07/08 outbound header attachment delivery (four panel rounds
    "change one → re-review → change another" is not allowed (3 lenses per round, reduced under the 2026-11-08 tier 3).
 3. **Check the dispose verdict before deciding whether to change anything**: items marked `waived` / `deferred` / `rejected` produce no code changes;
    do not change head for them (doing so wastes a whole round).
-4. **Concurrent sessions must use separate slots**: when multiple sessions/agents run in parallel on the same machine, each sets its own `SHIPYARD_SLOT`
+4. **Concurrent sessions must use separate slots**: when multiple sessions/agents run in parallel on the same machine, each sets its own `FLOW_KIT_BOARD_SLOT`
    (single source for port slots and derivation rules: `runtime-env.md` §6.1b). Sharing one slot collides on both "workspace files" and "branch HEAD";
    head drift during a review = ledger invalidation (in this run, another session appended `a4b347a02` / `02d269a79` / `c77f50b44` on the same branch).
 5. **Engine-surface commits do not run the panel**: when the scope lands only in `.agents/` `.githooks/` `.codebuddy/` `.trae/` `workflow/` `wiki/` `docs/`
@@ -25,7 +25,7 @@ Source: the 2026-11-07/08 outbound header attachment delivery (four panel rounds
 
 - [ ] Are all changes for this round **already committed**? Does the working tree contain only files from other tasks unrelated to this batch?
 - [ ] Are there **no** confirmed findings still pending changes? (If yes → fix first, do not start the panel)
-- [ ] Does this session exclusively own the port slot / branch? (If not → set `SHIPYARD_SLOT` first or switch branches)
+- [ ] Does this session exclusively own the port slot / branch? (If not → set `FLOW_KIT_BOARD_SLOT` first or switch branches)
 - [ ] Does the change scope really include the business surface? (Purely engine/docs → not worth running the panel)
 
 If any item is "no", starting the panel is a waste.

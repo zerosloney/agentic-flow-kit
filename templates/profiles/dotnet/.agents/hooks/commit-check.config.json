@@ -1,14 +1,15 @@
 {
-  "_note": "checks 段曾空置（2026-10-29 本地减重）：前端 typecheck/lint 在本机实测 13.4s/7.4s，执法面下沉 CI 中档 verify --mid 与 pre-push 的 npm run build（内含 vue-tsc）。R5-1b 起引擎脚本与测试随包分发，项目内不再有 .agents/scripts|tests，checks 段保持为空；如需项目自建检查，按 prefix 加本地命令。",
+  "_note": "commit-check 条件构建配置：builds 按暂存文件的 ext/prefix 触发，when 任一满足才启用，没有对应配置（无 .sln / package.json 缺脚本）的项目自动跳过、不误拦。本文件是 dotnet 技术栈的通用默认值——按项目实际的 sln 文件名、前端目录与 npm 脚本名调整，不需要的条目直接删除。",
   "builds": [
     {
       "name": "backend",
-      "command": "dotnet build Shipyard.Material.sln",
+      "command": "dotnet build",
       "ext": [".cs", ".sln", ".csproj"],
+      "when": ["*.sln"],
       "lockPattern": "MSB3026|MSB3027",
-      "lockHint": "后端编译被文件锁拦下——8932 上的本地 API 正占用 bin 下 DLL（与代码无关）。处理：Stop-Process -Name Shipyard.Material.API -Force 后原路重试"
+      "lockHint": "后端编译被文件锁拦下——本地运行中的进程正占用构建产物（与代码无关）。停掉占用进程后原路重试"
     },
-    { "name": "frontend", "command": "npm run build", "cwd": "frontend", "prefix": "frontend/" }
+    { "name": "frontend", "command": "npm run build", "cwd": "frontend", "prefix": "frontend/", "when": ["pkg:scripts.build"] }
   ],
   "checks": []
 }

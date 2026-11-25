@@ -18,7 +18,7 @@ next: 按 run 停机点循环推进至 done
 > **冷启动自愈**：全新装户与零提交基线已通过安装清单与运行态白名单实现自适应放行，首跑不再误报「偏离即停」。
 
 > **分工**：确定性部分由 `pipeline-run.mjs` 状态机驱动（fill-* $\rightarrow$ confirm-doc $\rightarrow$ verify.mjs $\rightarrow$ git，退出码全记录）；AI 槽位按工单协议执行；人件门到点即停、原话代录；宿主禁自行改状态。
-> **产物目录**：pipeline 产物收进 `workflow/tasks/<date>-<topic>/`（`intent.md`/`incident.md`/`spec.md`/`plan.md`），与手动路径（`intents/`、`plans/`、`specs/`）隔离——手动扫描器不扫 `tasks/`，两类文档互不干扰。
+> **产物目录**：pipeline 产物收进 `workflow/tasks/<date>-<topic>/`（`intent.md`/`incident.md`/`spec.md`/`plan.md`/`code-review.md`），与手动路径（`intents/`、`plans/`、`specs/`）隔离——手动扫描器不扫 `tasks/`，两类文档互不干扰。
 > **fix 工单**：动手前 `flow-kit run fix-task.mjs start`，签收后 `stop`——窗口内既有测试只读。
 
 ## 1. 驱动协议 (Protocol)
@@ -84,9 +84,26 @@ next: 按 run 停机点循环推进至 done
 - **任务状态**：run 文件用 `retries` 与 `nextTarget` 记录现场。停机时 `stage` 留在失败处，`next` 从 `nextTarget` 重入；退回记 `route` 事件，恢复记 `resume` 事件（带产物清单）。
 - **智能归因（Smart Fix）**：门禁拦截或退回 `fix` 时自动提取特征归因（测试/预算/偏离/契约/策略/格式），挂载针对性建议、涉及文件与定向命令（如 `next --gate <门>`）。
 
+### 代码 diff 独立复核（review → code-review）
+
+- **独立复核代码 diff**：spec 复核背书的是规格，代码提交本身此前从未被独立复核。现由 `review` 阶段另签复核工单，背书行写入 `workflow/tasks/<date>-<topic>/code-review.md` 的「确认与复核」一节——spec 的背书行不顶替代码复核。
+- **范围绑定**：执行器机器写入「复核基准 SHA」与「复核范围 `基准..头`」，`code-review` 阶段回读比对——基准不符判红；范围过期（代码又变）按新范围重签工单，旧背书失效。
+- **否决即修复**：结论「未通过」→ 签发 `fix` 工单转修复环；修完重跑 verify，再走一轮代码复核。
+- **产物契约**：`stageArtifacts` 声明 `code-review: ["{codeReview}"]`，产物缺失/为空在门执行前判红；产物随关单提交入库。
+
+### 语义沙箱（可选）
+
+- **声明方式**：plan「改动方案」里在路径后加括号，如 `- src/auth.mjs (symbols: issueToken, verifyToken; freeze: getKey; freeze-exports)`。`symbols` 只允许改列出的符号，文件其余部分（导入、顶层语句、未识别的声明）必须不变；`freeze` 为绝对冻结；`freeze-exports` 冻结该文件导出面。`next --files` 时核对，违反即停。仅支持 JS/TS/Python/Go，其它语言声明了即判违例。
+
+### 演进增强协议（Evolution）
+
+- **处方自愈与增量测试**：门禁失败自动匹配 `.agents/prescriptions.json` 注入自愈建议；verify 支持 AST 拓扑增量选测。
+- **去中心化背书与演进套件**：L3 背书存 `.agents/endorsements.d/`；配套 `timeline`、`shadow-run`、`eval`、`optimize-skill` 等命令，架构详见 `.agents/notes/evolution-architecture.md`。
+
 ### 跨模型评审自适应降级与工单上下文预算
 
-- **跨模型评审自适应降级（Review Downgrade）**：在 `spec-review` 与 `review` 阶段，执行器自动解析「确认与复核」中的复核元数据（评审 ID、模型及降级声明）。若外部模型受限或配额耗尽，文档内声明降级（如 `跨模型降级：高阶配额耗尽，降级至 host-default`），或 CLI 调用 `next --review-downgrade "<原因>"`，执行器记录 `review-downgrade` 事件，并在状态与 Dashboard 中高亮标出降级提示，平滑进入确认门而不阻断流水线。
+- **跨模型评审自适应降级（Review Downgrade）**：在 `spec-review` 与 `code-review` 阶段，执行器自动解析「确认与复核」中的复核元数据（评审 ID、模型及降级声明）。若外部模型受限或配额耗尽，文档内声明降级（如 `跨模型降级：高阶配额耗尽，降级至 host-default`），或 CLI 调用 `next --review-downgrade "<原因>"`，执行器记录 `review-downgrade` 事件，并在状态与 Dashboard 中高亮标出降级提示，平滑进入确认门而不阻断流水线。
+- **dispatch.json 策略开关（单源）**：异构校验（`reviewPolicy.enforceHeterogeneous`）与队列熔断（`queuePolicy.enforceQueueBrake`）均以 `.agents/config/dispatch.json` 为单源，出厂不强制 / 不启用；键名、取值、缺省与对应 CLI 旗标（`--heterogeneous`、`--queue-brake`、`--force-queue`）见 `.agents/notes/project-configs.md`「dispatch.json 策略开关」。L3 恒要求两位不同会话、不同模型族的复核人（`requireDualReviewLevels`）。
 - **工单上下文精简与 Token 预算（Context Pruning & Budgeting）**：工单派发时按 `.agents/config/dispatch.json` 中的 `workOrderContextBudgetChars`（默认 1200 字符）自动精简工单上下文：
   - `relatedDocs` 自动去重并保留最多 4 条；
   - `kbHits` 知识库命中最多保留 3 条，单条超 120 字符截断；

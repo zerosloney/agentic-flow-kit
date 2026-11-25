@@ -6,6 +6,9 @@
 // 退出码：0 通过；1 存在缺件/缺节；2 用法错误。
 import fs from 'node:fs';
 import path from 'node:path';
+import { parseHandoffSheet, validateHandoffSheet } from './touch-set.mjs';
+
+export { parseHandoffSheet, validateHandoffSheet };
 
 function argOf(argv, name, fallback = null) {
   const i = argv.indexOf(`--${name}`);
@@ -22,7 +25,7 @@ function read(file) {
   }
 }
 
-export function checkPackage(root, name) {
+export function checkPackage(root, name, options = {}) {
   const dir = path.join(root, 'workflow', 'specs', name);
   const problems = [];
   const spec = read(path.join(dir, 'spec.md'));
@@ -40,10 +43,26 @@ export function checkPackage(root, name) {
       problems.push('verify-report.md missing "结论: pass|fail|partial"');
     }
   }
+
+  // 交接契约校验（Handoff Sheet）
+  const handoffJson = read(path.join(dir, 'handoff.json'));
+  const handoffMd = read(path.join(dir, 'handoff.md'));
+  if (handoffJson != null) {
+    const sheet = parseHandoffSheet(handoffJson);
+    const v = validateHandoffSheet(sheet);
+    if (!v.ok) problems.push(`handoff.json 契约不满足: ${v.problems.join('; ')}`);
+  } else if (handoffMd != null) {
+    const sheet = parseHandoffSheet(handoffMd);
+    const v = validateHandoffSheet(sheet);
+    if (!v.ok) problems.push(`handoff.md 契约不满足: ${v.problems.join('; ')}`);
+  } else if (options.requireHandoff) {
+    problems.push('missing handoff sheet (handoff.json or handoff.md)');
+  }
+
   return { package: name, ok: problems.length === 0, problems };
 }
 
-export function checkAll(root) {
+export function checkAll(root, options = {}) {
   const base = path.join(root, 'workflow', 'specs');
   let entries = [];
   try {
@@ -54,7 +73,7 @@ export function checkAll(root) {
   const packages = entries
     .filter((entry) => entry.isDirectory() && !entry.name.startsWith('_'))
     .sort((a, b) => a.name.localeCompare(b.name))
-    .map((entry) => checkPackage(root, entry.name));
+    .map((entry) => checkPackage(root, entry.name, options));
   return { root, packages, ok: packages.every((pkg) => pkg.ok) };
 }
 
@@ -62,7 +81,8 @@ function main() {
   const argv = process.argv.slice(2);
   const root = path.resolve(argOf(argv, 'root', process.cwd()));
   const asJson = argv.includes('--json');
-  const result = checkAll(root);
+  const requireHandoff = argv.includes('--require-handoff');
+  const result = checkAll(root, { requireHandoff });
   if (asJson) {
     console.log(JSON.stringify({ root: result.root, ok: result.ok, packages: result.packages }, null, 2));
     return result.ok ? 0 : 1;

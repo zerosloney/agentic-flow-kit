@@ -1,9 +1,9 @@
 # Repository Guidelines
 
-{{projectName}}。{{stackDescription}}。
+{{projectName}}。{{stackDescription}}
 
 ## 1. 运行时联通 (Runtime Connectivity)
-前端 dev {{webPort}} 连 API `http://localhost:{{apiPort}}`；API 须监听 {{apiPort}} 才联通。端口/工具缺陷/可执行文件解析机理等环境事实见 `.agents/notes/runtime-env.md` §6；各机绝对路径与版本自登记 `.agents/notes/runtime-env.local.md`。
+{{productNote}}端口/工具缺陷/可执行文件解析机理等环境事实见 `.agents/notes/runtime-env.md` §6；各机绝对路径与版本自登记 `.agents/notes/runtime-env.local.md`。
 
 ## 2. 本地 Clone 必做 (Local Setup)
 > 漏配则门禁静默失效，详见 `.agents/notes/runtime-env.md` §7。
@@ -39,13 +39,12 @@
 
 > **纠偏短名**：任务中途报短名即可，索引 `.agents/config/principles.md`。
 
-> **引擎面豁免**：改 AI-Native 治理引擎自身，**豁免工作流三件套**——不生成 intents/specs/plans、不走确认门，Conventional Commits 直接变更。引擎面 = `.agents/` 全部、`.githooks/`、`azure-pipelines.yml`、workflow/ 模板与台账、根 `package.json`、宿主适配目录；其中本机私有宿主目录不入库。**wiki 豁免**：调整 `wiki/` 知识文档内容（含 INDEX 与看板）同享上述豁免。**边界**：git 钩子与静态门照常执行；删除 wiki 文件仍须用户单独指令；数据维护 SQL 的**执行**不豁免。
+> **引擎面豁免**：改 AI-Native 治理引擎自身，**豁免工作流三件套**——不生成 intents/specs/plans、不走确认门，Conventional Commits 直接变更。引擎面 = `.agents/` 全部、`.githooks/`、CI 配置文件（如 `azure-pipelines.yml`、`.github/workflows/ci.yml` 等）、workflow/ 模板与台账、根 `package.json`、宿主适配目录；其中本机私有宿主目录不入库。**wiki 豁免**：调整 `wiki/` 知识文档内容（含 INDEX 与看板）同享上述豁免。**边界**：git 钩子与静态门照常执行；删除 wiki 文件仍须用户单独指令；数据维护 SQL 的**执行**不豁免。
 
 ## 5. 目录级规则 (Directory-level Rules)
 **禁止回填本文档**。具体实现细节请查阅对应目录的 `AGENTS.md`：
-- **后端**: `backend/AGENTS.md`
-- **前端**: `frontend/AGENTS.md`
-- **成对文档同步**：按 `wiki/INDEX.md` 登记的成对文档，修改任一份须同步另一份，并同步更新 `wiki/INDEX.md` 与 `wiki/知识沉淀总览.html`。
+- **子模块/子目录**: 涉及独立模块或子目录（如 `backend/`、`frontend/`、`packages/*` 等）变更时，遵守其目录下的 `AGENTS.md`（存在才读；没有则跳过）
+- **成对文档同步**：按 `wiki/INDEX.md` 登记的成对文档，修改任一份须同步另一份，并同步更新 `wiki/INDEX.md` 与 `{{wikiBoard}}`。
 
 ## 6. 项目适配区 (Project Adaptations)
 - **构建/测试/类型检查**: 命令清单单源 `.agents/hooks/commit-check.config.json`。

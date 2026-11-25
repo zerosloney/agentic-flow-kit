@@ -92,7 +92,7 @@ incident 从 `fixed` 到 `closed` 再跑一次。spec 标 `done` 时，第 1 步
 | 用户可见交互 / 路径 | `.agents/skills/verify-ui/features/<feature>.md` |
 | 契约 / 规则 / 数据口径 | 原 spec 原地修订（`workflow/README.md` spec 生命周期） |
 | 防复发断言 | `workflow/regression-checklist.md` 对应模块节 |
-| 架构 / 方案 | `wiki/开发方案/` |
+| 架构 / 方案 | `{{wikiDesigns}}/` |
 
 只追加变化事实与证据指针，不复制整篇；回填随关单提交。没有对应文档时新建一个，topic 带特性键。
 

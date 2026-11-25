@@ -1,0 +1,27 @@
+{
+  "_note": "栈层规则包（java）：kit 管理的默认规则层。层级顺序：legacy ← stack.<栈名>.json ← project ← local。项目要改规则请写 project.json（同 id 整条覆盖）。",
+  "version": 1,
+  "rules": [
+    {
+      "id": "product.maven-test",
+      "name": "Java 测试",
+      "phase": "verify",
+      "face": "tests",
+      "severity": "block",
+      "when": ["pom.xml"],
+      "assert": { "kind": "command", "args": { "run": "mvn test" } },
+      "message": { "zh": "mvn test 测试未通过", "en": "mvn test failed" }
+    },
+    {
+      "id": "product.gradle-test",
+      "name": "Gradle 测试",
+      "phase": "verify",
+      "face": "tests",
+      "severity": "block",
+      "when": ["build.gradle", "build.gradle.kts"],
+      "assert": { "kind": "command", "args": { "run": "{gradlew} test" } },
+      "message": { "zh": "gradle test 测试未通过", "en": "gradle test failed" }
+    }
+  ],
+  "waivers": []
+}

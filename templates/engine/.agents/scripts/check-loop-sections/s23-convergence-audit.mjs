@@ -18,14 +18,82 @@ import {
   addedDateOf, warnEvidenceExempt, VERIFY_GREEN_RE, verifyEvidenceTruth,
   versionGreater, fmStatus, bindingSha256, readdirOrNull, isDirectoryOrNull,
 } from '../check-loop-kit.mjs';
+import { STACK_TEST_COMMANDS } from './regr-evidence-vocab.mjs';
 
 // 与 s21 命令面同源的声明白名单（advisory 档：文本命中即认）。hard 档不再凭命中放行。
 // 边界修复（2026-11-03）：词首加 (?<![\w.@\-\\/]) 负向断言——证据路径 `.agents/skills/verify-ui/features/*.md`
 // 中 `verify-ui` 为路径片段，无断言时被误判为命令引用 → hard 档走全量门白名单（verify-ui 不在）恒判
 // 证据无效（po-contract-required-tax-default 推送实证：4 条指向真实存在 UI 报告的人工判据全灭）。
-const CMD_RE = /(?<![\w.@\-\\/])(?:npm\s+(run\s+)?test|dotnet\s+test|run-tests|regression-smoke|verify\.mjs|check-scope|verify-ui|ui-verifier|vue-tsc|dotnet\s+build|npm\s+run\s+build)/;
-// 引用切分：长选项在前，避免 npm run build 被更短的模式截断。verify-ui 先于不会与 verify.mjs 重叠的独立词。
-const CITE_RE = /(?<![\w.@\-\\/])(?:npm\s+run\s+build|npm\s+(?:run\s+)?test|dotnet\s+build|dotnet\s+test|verify\.mjs|verify-ui|ui-verifier|regression-smoke|run-tests|check-scope|vue-tsc)/g;
+// 2026-11-24 配置驱动：识别命令白名单 = 内置集 + engine.json stacks 测试命令（与 regr-evidence-vocab
+// 同一映射）+ product-gates*.json 命令 + commit-check pushTests/builds 命令首段。
+// 生成时转义、长命令优先（避免 npm run build 被更短前缀截断）；读取失败回退内置集。
+const BUILTIN_CMD_WORDS = [
+  'npm run build', 'npm run test', 'npm test', 'dotnet build', 'dotnet test',
+  'verify.mjs', 'check-scope', 'verify-ui', 'ui-verifier', 'vue-tsc',
+  'regression-smoke', 'run-tests',
+];
+// hard 档只认全量门实跑命令：内置 7 条；动态配置追加的测试/产品门命令视同全量门跑过的命令。
+const BUILTIN_GATE_CMDS = ['npm run build', 'npm test', 'npm run test', 'dotnet build', 'dotnet test', 'verify.mjs', 'vue-tsc'];
+
+const escapeCmdRe = (s) => String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const cmdToRe = (cmd) => cmd.trim().split(/\s+/).map(escapeCmdRe).join('\\s+');
+const firstCmdToken = (cmd) => String(cmd || '').trim().split(/\s+/)[0] || '';
+const readJsonOrNull = (abs) => {
+  try { return JSON.parse(fs.readFileSync(abs, 'utf8')); } catch { return null; }
+};
+
+function dynamicGateCommands(root) {
+  const out = new Set();
+  const cfg = readJsonOrNull(path.join(root, '.agents', 'config', 'engine.json'));
+  const stacks = cfg && cfg.options && Array.isArray(cfg.options.stacks) ? cfg.options.stacks : [];
+  for (const stack of stacks) {
+    const mapping = STACK_TEST_COMMANDS[String(stack || '').trim().toLowerCase()];
+    for (const cmd of (mapping ? mapping.cmds : [])) out.add(cmd);
+  }
+  const cfgDir = path.join(root, '.agents', 'config');
+  let names = [];
+  try { names = fs.readdirSync(cfgDir); } catch { names = []; }
+  for (const name of names) {
+    if (name !== 'product-gates.json' && !/^product-gates\..+\.json$/.test(name)) continue;
+    const gates = readJsonOrNull(path.join(cfgDir, name));
+    for (const entry of (gates && Array.isArray(gates.gates) ? gates.gates : [])) {
+      if (entry && typeof entry.cmd === 'string' && entry.cmd.trim()) out.add(entry.cmd.trim());
+    }
+  }
+  const commit = readJsonOrNull(path.join(root, '.agents', 'hooks', 'commit-check.config.json'));
+  if (commit) {
+    for (const key of ['pushTests', 'builds']) {
+      for (const entry of (Array.isArray(commit[key]) ? commit[key] : [])) {
+        const cmd = typeof entry === 'string' ? entry : (entry && typeof entry.command === 'string' ? entry.command : '');
+        const token = firstCmdToken(cmd);
+        if (token) out.add(token);
+      }
+    }
+  }
+  return out;
+}
+
+/** 供测试：按项目配置生成命令识别面与 hard 档全量门命令集。 */
+export function buildGateCmds(root = ROOT) {
+  const all = new Set(BUILTIN_CMD_WORDS);
+  const gate = new Set(BUILTIN_GATE_CMDS);
+  for (const cmd of dynamicGateCommands(root)) {
+    all.add(cmd);
+    gate.add(cmd);
+  }
+  const alternation = [...all]
+    .map(cmdToRe)
+    .sort((a, b) => b.length - a.length || a.localeCompare(b))
+    .join('|');
+  const lookbehind = '(?<![\\w.@\\-\\\\/])';
+  return {
+    CMD_RE: new RegExp(`${lookbehind}(?:${alternation})`),
+    CITE_RE: new RegExp(`${lookbehind}(?:${alternation})`, 'g'),
+    GATE_CMD: gate,
+  };
+}
+
+const { CMD_RE, CITE_RE, GATE_CMD } = buildGateCmds();
 // verify.mjs 全绿行（suite=all-gates）实际覆盖的命令。不在此集的白名单命令没有对应绿记录。
 // vue-tsc（2026-10-21 verify-diet ④）：本地关单前端门 = npm run type-check（vue-tsc -b），
 // vite bundle 分离到 deploy/CI（TF_BUILD 下 frontend-build 门仍 npm run build）——两形态都是门实跑命令。
@@ -35,7 +103,7 @@ const CITE_RE = /(?<![\w.@\-\\/])(?:npm\s+run\s+build|npm\s+(?:run\s+)?test|dotn
 // 兼容**：2026-10-18 前的 done spec 证据引 `npm run test:unit` 等（CITE_RE 前缀提取为 npm run test），
 // 移除会使存量档在 FULL 对账下判「收敛未覆盖」（2026-10-28 实证 po-concurrent-overorder-lost-update）。
 // 新 spec 勿再引用 npm 面命令；存量迁移（改证/解锁序）待 owner 裁决后另行清理。
-const GATE_CMD = new Set(['npm run build', 'npm test', 'npm run test', 'dotnet build', 'dotnet test', 'verify.mjs', 'vue-tsc']);
+// GATE_CMD（全量门实跑命令集）由上方 buildGateCmds 生成：内置 7 条 + 项目配置追加。
 // 扩展名交替**最长优先**（2026-10-20 修复：原 `mjs|js|ts|tsx|...|json` 中 js/ts 是 mjs/json/tsx 的
 // 前缀且交替无尾锚，`.json`/`.tsx` 路径被截断成 `.js`/`.ts` → existsSync 恒 false → 证据永不可验，
 // po-close-replace-mark-completed 关单实证）
