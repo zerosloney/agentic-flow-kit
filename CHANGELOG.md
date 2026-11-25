@@ -2,6 +2,20 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.13.0]
+
+### 新增
+
+- feat(evolution): 落地 8 大演进机制、顶层 CLI 接入与全流程联合演练
+- feat(engine): 演化多角色感知调度、异构交叉背书审阅、防洪熔断与复盘自愈闭环
+- feat(engine): 声明式规则驱动泛化、多技术栈预设与 GitLab CI 交付面闭环
+- feat: 规则包收尾、安装向导三问、wiki 名字随语言与清单回放修复
+- feat(rules): Phase 5——commit-check 委托 rules 引擎执行
+- feat(rules): Phase 4——插件子进程 API、栈层规则包与迁移提示
+- feat(rules): Phase 3——verify 四门与宿主写前门切到 rules check
+- feat(rules): 规则包 v1 与 pre-commit 四门单入口
+- feat(engine): 通用泛化——项目面单源、门禁配置化与多栈支持
+
 ## [2.12.3]
 
 ### 修复
