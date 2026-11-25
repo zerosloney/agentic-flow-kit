@@ -9,6 +9,11 @@ test('yaml - stripYamlComment', () => {
   assert.equal(stripYamlComment("pattern: 'foo # bar' # trailing"), "pattern: 'foo # bar'");
 });
 
+test('yaml - # without preceding whitespace is not a comment (URL fragment)', () => {
+  assert.equal(stripYamlComment('url: http://example.com/#frag'), 'url: http://example.com/#frag');
+  assert.deepEqual(parseYaml('url: http://example.com/#frag\n'), { url: 'http://example.com/#frag' });
+});
+
 test('yaml - parseYamlScalar', () => {
   assert.equal(parseYamlScalar('123'), 123);
   assert.equal(parseYamlScalar('true'), true);

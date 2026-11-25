@@ -244,6 +244,53 @@ test('rules require - explicit ext evaluates normally (no default-filter detail)
   });
 });
 
+test('rules content - target globs: **/ matches zero dirs, * does not cross /', () => {
+  withTempDir((root) => {
+    fs.writeFileSync(path.join(root, 'flow-rules.yml'), `
+version: 1
+name: glob-targets
+rules:
+  - id: test.deep-glob
+    face: code
+    phase: pre-commit
+    severity: block
+    assert:
+      kind: content
+      args:
+        targets:
+          - src/**/*.js
+        contains:
+          - TODO
+    message:
+      zh: 深层匹配
+      en: Deep match
+  - id: test.shallow-glob
+    face: code
+    phase: pre-commit
+    severity: block
+    assert:
+      kind: content
+      args:
+        targets:
+          - src/*.js
+        contains:
+          - TODO
+    message:
+      zh: 单层匹配
+      en: Shallow match
+`, 'utf8');
+    fs.mkdirSync(path.join(root, 'src', 'x'), { recursive: true });
+    fs.writeFileSync(path.join(root, 'src', 'a.js'), '// TODO top\n', 'utf8');
+    fs.writeFileSync(path.join(root, 'src', 'x', 'b.js'), '// TODO nested\n', 'utf8');
+
+    const result = evaluateModel(loadModel(root).model, { root, phases: ['pre-commit'], faces: ['code'] });
+    const filesOf = (id) => result.violations.filter((v) => v.ruleId === id).map((v) => v.file).sort();
+
+    assert.deepEqual(filesOf('test.deep-glob'), ['src/a.js', 'src/x/b.js']);
+    assert.deepEqual(filesOf('test.shallow-glob'), ['src/a.js']);
+  });
+});
+
 test('rules require - default .cs filter matching files keeps the original logic', () => {
   withTempDir((root) => {
     fs.writeFileSync(path.join(root, 'flow-rules.yml'), requireExtYaml(), 'utf8');
