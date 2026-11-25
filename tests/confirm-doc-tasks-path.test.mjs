@@ -1,10 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { makeTmp } from './helpers/tmp.mjs';
 
 // tasks-path（2026-11-18）：pipeline-run 自动化产物落 workflow/tasks/<task>/，
 // 执行器人件门（intent-confirm / plan-confirm）以 --delegated 过 confirm-doc。
@@ -16,7 +16,7 @@ const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
 
 function tmpRoot() {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-confirm-tasks-'));
+  const dir = makeTmp('fk-confirm-tasks-');
   spawnSync('git', ['init', '-q'], { cwd: dir });
   return dir;
 }
