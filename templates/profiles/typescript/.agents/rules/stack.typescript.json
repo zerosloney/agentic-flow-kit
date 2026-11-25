@@ -1,0 +1,47 @@
+{
+  "_note": "栈层规则包（typescript）：kit 管理的默认规则层。层级顺序：legacy ← stack.<栈名>.json ← project ← local。项目要改规则请写 project.json（同 id 整条覆盖）。",
+  "version": 1,
+  "rules": [
+    {
+      "id": "product.ts-typecheck",
+      "name": "TypeScript 类型检查",
+      "phase": "verify",
+      "face": "code",
+      "severity": "block",
+      "when": ["tsconfig.json"],
+      "assert": { "kind": "command", "args": { "run": "npx tsc --noEmit" } },
+      "message": { "zh": "TypeScript 类型检查未通过", "en": "TypeScript typecheck failed" }
+    },
+    {
+      "id": "product.ts-lint",
+      "name": "代码规范检查",
+      "phase": "verify",
+      "face": "code",
+      "severity": "block",
+      "when": ["pkg:scripts.lint"],
+      "assert": { "kind": "command", "args": { "run": "npm run lint" } },
+      "message": { "zh": "代码规范检查未通过", "en": "Lint checks failed" }
+    },
+    {
+      "id": "product.ts-test",
+      "name": "单元测试",
+      "phase": "verify",
+      "face": "tests",
+      "severity": "block",
+      "when": ["pkg:scripts.test"],
+      "assert": { "kind": "command", "args": { "run": "npm test" } },
+      "message": { "zh": "单元测试未通过", "en": "Tests failed" }
+    },
+    {
+      "id": "product.ts-build",
+      "name": "项目构建",
+      "phase": "verify",
+      "face": "code",
+      "severity": "block",
+      "when": ["pkg:scripts.build"],
+      "assert": { "kind": "command", "args": { "run": "npm run build" } },
+      "message": { "zh": "项目构建未通过", "en": "Build failed" }
+    }
+  ],
+  "waivers": []
+}

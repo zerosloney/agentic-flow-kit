@@ -1,0 +1,7 @@
+{
+  "_note": "项目产品门配置（verify 基础表之外的本项目技术栈门）：id/name/cmd 必填，folder 默认 '.'，when 任一满足才启用（路径存在 / 尾部 * 一层通配 / pkg:<package.json 点分路径>）。verify 会把这里的门追加到 wiki-consistency 之后；按项目实际调整，用不到的条目直接删除。",
+  "gates": [
+    { "id": "pytest", "name": "Pytest 单元测试", "cmd": "python -m pytest", "folder": ".", "when": ["pyproject.toml", "requirements.txt", "pytest.ini"] },
+    { "id": "flake8", "name": "Flake8 代码检查", "cmd": "flake8 .", "folder": ".", "when": [".flake8", "setup.cfg"] }
+  ]
+}

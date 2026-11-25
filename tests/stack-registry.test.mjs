@@ -37,8 +37,8 @@ test('schema enums track the registry (manifest stack/stacks and project profile
 
 test('defaults and shell allowlists are derived from the registry', () => {
   const defaults = stackDefaults();
-  assert.equal(defaults.dotnet.apiPort, 8932);
-  assert.equal(defaults.dotnet.webPort, 5203);
+  assert.equal(defaults.dotnet.apiPort, 5000);
+  assert.equal(defaults.dotnet.webPort, 5173);
   assert.equal(defaults.python.apiPort, 8000);
   assert.deepEqual(Object.keys(defaults), STACK_ORDER);
   assert.deepEqual(STACK_SHELL, stackShell());

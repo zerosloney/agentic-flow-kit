@@ -5,10 +5,10 @@
 模块: 示例
 日期: 2099-12-31
 ---
-# PLAN — 裸中段路径样例：托盘查询联动
+# PLAN — 裸中段路径样例：列表查询联动
 
 ## 任务拆解
-1. **T1 前端查询栏联动**：改造 widgets/index.vue 查询栏，收敛 if/else 分支，Success/Error 提示对齐 contractTemplate/index.vue
+1. **T1 前端查询栏联动**：改造 lines/index.vue 查询栏，收敛 if/else 分支，Success/Error 提示对齐 orderTemplate/index.vue
    - 判据：前端构建通过
-2. **T2 列序常量调整**：抽共享常量到 widgets/shared.ts
+2. **T2 列序常量调整**：抽共享常量到 lines/shared.ts
    - 判据：单测通过

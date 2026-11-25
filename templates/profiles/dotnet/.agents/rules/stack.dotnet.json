@@ -1,9 +1,27 @@
-// 栈层规则包（dotnet，文件名 stack.<栈名>.json；多栈各带各的，按文件名序叠加）：kit 管理的默认规则层。
-// 层级顺序：legacy（旧配置投影）← stack.<栈名>.json（本文件）← project（.agents/rules/project.json）← local（.agents/rules/local.json）。
-// 项目要改规则请写 project.json（同 id 整条覆盖）；本文件随包升级，不建议手改。
-// 插件白名单写在 project.json 的 plugins 数组（不自动加载目录，见 project-configs.md）。
 {
+  "_note": "栈层规则包（dotnet）：kit 管理的默认规则层。层级顺序：legacy ← stack.<栈名>.json ← project ← local。项目要改规则请写 project.json（同 id 整条覆盖）。",
   "version": 1,
-  "rules": [],
+  "rules": [
+    {
+      "id": "product.dotnet-build",
+      "name": "后端编译",
+      "phase": "verify",
+      "face": "code",
+      "severity": "block",
+      "when": ["*.sln"],
+      "assert": { "kind": "command", "args": { "run": "dotnet build" } },
+      "message": { "zh": "dotnet build 编译未通过", "en": "dotnet build failed" }
+    },
+    {
+      "id": "product.dotnet-test",
+      "name": "单元测试",
+      "phase": "verify",
+      "face": "tests",
+      "severity": "block",
+      "when": ["*.sln"],
+      "assert": { "kind": "command", "args": { "run": "dotnet test --no-build" } },
+      "message": { "zh": "dotnet test 测试未通过", "en": "dotnet test failed" }
+    }
+  ],
   "waivers": []
 }

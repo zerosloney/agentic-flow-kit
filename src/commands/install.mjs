@@ -29,12 +29,13 @@ import {
 // 审查遗留批 2026-11-23：实现迁往 src/install/version.mjs 单源；此处 import + 再导出，
 // 既有外部导入方（tools/lint-templates、tui/hud、workspace、bundle）零变化，模块内 KIT_VERSION 照常可用。
 import { readKitVersion } from '../install/version.mjs';
-export { readKitVersion };
+import { detectProductMode } from '../install/profiler.mjs';
+export { readKitVersion, detectProductMode };
 
 const KIT_VERSION = readKitVersion();
 
 // 项目形态 / 脚手架档位：CLI 校验与 TUI 向导共用的单一来源（顺序即合法值列表与菜单顺序）。
-export const PRODUCT_MODES = ['web', 'api', 'library', 'cli'];
+export const PRODUCT_MODES = ['web', 'api', 'library', 'cli', 'monorepo'];
 export const SCAFFOLD_MODES = ['full', 'minimal', 'none'];
 
 // 端口规则（1–65535 的整数）：CLI 的 --api-port/--web-port 与 TUI 输入共用；非法值返回 null。
@@ -371,16 +372,16 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
     if (!m?.files) return null;
     const hasGithub = '.github/workflows/ci.yml' in m.files;
     const hasAzure = 'azure-pipelines.yml' in m.files;
+    const hasGitlab = '.gitlab-ci.yml' in m.files;
     if (hasGithub && hasAzure) return 'both';
     if (hasGithub) return 'github';
     if (hasAzure) return 'azure';
-    return null; // 两个都没有：无 CI（如 lean）
+    if (hasGitlab) return 'gitlab';
+    return null; // 都没有：无 CI（如 lean）
   };
-  // 远端托管平台 → CI 交付面：只有 GitHub / Azure 有内置模板；GitLab 等已知平台不出 CI
-  // （否则会回退成 both，凭空注入两个错平台的 CI 文件）。
+  // 远端托管平台 → CI 交付面：GitHub / Azure / GitLab。
   const ciFromForge = (forge) => {
-    if (forge === 'github' || forge === 'azure') return forge;
-    if (forge === 'gitlab') return 'none';
+    if (forge === 'github' || forge === 'azure' || forge === 'gitlab') return forge;
     return null;
   };
   const ciChoice = args.ci !== undefined
@@ -394,8 +395,9 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
           || (tier === 'lean' ? null : (ciFromForge(forgeFromRemote(originUrl(target))) || (tier === 'enterprise' ? 'both' : 'none')))))
       : (tier === 'lean' ? null : (ciFromForge(forgeFromRemote(originUrl(target))) || (tier === 'enterprise' ? 'both' : 'none')));
 
-  // 项目形态 / 端口 / 脚手架档位：显式参数 > manifest 重放 > 缺省（web / 栈默认端口 / full）。
-  const product = String(args.product || previous?.product || 'web').toLowerCase();
+  // 项目形态 / 端口 / 脚手架档位：显式参数 > manifest 重放 > 智能探测 > 缺省（web / 栈默认端口 / full）。
+  const explicitProduct = args.product || previous?.product;
+  const product = String(explicitProduct || detectProductMode(target) || 'web').toLowerCase();
   if (!PRODUCT_MODES.includes(product)) {
     const err = new Error(t('error.badProduct', { value: args.product || '', modes: PRODUCT_MODES.join(', ') }));
     err.code = 'BAD_PRODUCT';

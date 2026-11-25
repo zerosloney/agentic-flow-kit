@@ -197,7 +197,7 @@ function makeOrderRepo() {
   git(repo, ['config', 'user.name', 'kit']);
   write(repo, path.join('.agents', 'hooks', 'check-confirm-order.mjs'),
     fs.readFileSync(path.join(KIT, 'templates', 'engine', '.agents', 'hooks', 'check-confirm-order.mjs')));
-  for (const name of ['faces.mjs', 'judgment-ledger.mjs']) {
+  for (const name of ['faces.mjs', 'judgment-ledger.mjs', 'rules-loader.mjs']) {
     write(repo, path.join('.agents', 'scripts', name),
       fs.readFileSync(path.join(KIT, 'templates', 'engine', '.agents', 'scripts', name)));
   }

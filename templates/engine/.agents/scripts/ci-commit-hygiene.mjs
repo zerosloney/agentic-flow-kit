@@ -56,7 +56,24 @@ if (!base) {
 }
 if (!base) {
   base = (process.env.CI_PUSH_BEFORE || '').trim();
-  baseSource = 'CI_PUSH_BEFORE';
+  if (base) baseSource = 'CI_PUSH_BEFORE';
+}
+if (!base) {
+  const ghRef = process.env.GITHUB_BASE_REF;
+  const glRef = process.env.CI_MERGE_REQUEST_TARGET_BRANCH_NAME;
+  if (ghRef) {
+    const probe = spawnSync('git', ['rev-parse', `origin/${ghRef}`], { encoding: 'utf8' });
+    if (probe.status === 0) {
+      base = `origin/${ghRef}`;
+      baseSource = 'GITHUB_BASE_REF';
+    }
+  } else if (glRef) {
+    const probe = spawnSync('git', ['rev-parse', `origin/${glRef}`], { encoding: 'utf8' });
+    if (probe.status === 0) {
+      base = `origin/${glRef}`;
+      baseSource = 'CI_MERGE_REQUEST_TARGET_BRANCH_NAME';
+    }
+  }
 }
 if (!base) {
   base = 'HEAD~1';

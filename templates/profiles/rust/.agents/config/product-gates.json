@@ -1,0 +1,8 @@
+{
+  "_note": "项目产品门配置（verify 基础表之外的本项目技术栈门）：id/name/cmd 必填，folder 默认 '.'，when 任一满足才启用（路径存在 / 尾部 * 一层通配 / pkg:<package.json 点分路径>）。verify 会把这里的门追加到 wiki-consistency 之后；按项目实际调整，用不到的条目直接删除。",
+  "gates": [
+    { "id": "cargo-check", "name": "Cargo Check 检查", "cmd": "cargo check", "folder": ".", "when": ["Cargo.toml"] },
+    { "id": "cargo-clippy", "name": "Cargo Clippy 静态检查", "cmd": "cargo clippy -- -D warnings", "folder": ".", "when": ["Cargo.toml"] },
+    { "id": "cargo-test", "name": "Cargo 单元测试", "cmd": "cargo test", "folder": ".", "when": ["Cargo.toml"] }
+  ]
+}

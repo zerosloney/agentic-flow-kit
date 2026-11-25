@@ -36,6 +36,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { loadFaces } from './faces.mjs';
+let loadProjectRules = () => null;
+let extractVerifyCommandGates = () => [];
+try {
+  const mod = await import('./rules-loader.mjs');
+  if (typeof mod?.loadProjectRules === 'function') loadProjectRules = mod.loadProjectRules;
+  if (typeof mod?.extractVerifyCommandGates === 'function') extractVerifyCommandGates = mod.extractVerifyCommandGates;
+} catch {
+  // 当脚本在最小隔离测试夹具中独立运行且未复制 rules-loader.mjs 时平滑降级
+}
 
 const ROOT = process.env.FLOW_KIT_PROJECT_ROOT
   || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -64,27 +73,37 @@ const sameTree = (folder, facePath) => {
 };
 
 // product-gates*.json 的 {id, folder} 清单；解析/形状失败 throw（fail-closed）。
-function readProductGateEntries(root) {
+export function readProductGateEntries(root) {
   const dir = path.join(root, '.agents', 'config');
   let files;
   try {
     files = fs.readdirSync(dir)
       .filter((f) => f === 'product-gates.json' || /^product-gates\..+\.json$/.test(f)).sort();
-  } catch { return []; }
+  } catch { files = []; }
   const out = [];
   for (const file of files) {
     const rel = path.posix.join('.agents', 'config', file);
     let raw;
     try { raw = JSON.parse(fs.readFileSync(path.join(dir, file), 'utf8')); } catch (e) {
-      throw new Error(`配置错误：${rel}（JSON 解析失败：${e.message}）`);
+      throw new Error(`配置错误：${rel}——项目产品门配置失守（JSON 解析失败：${e.message}）`);
     }
     const list = Array.isArray(raw) ? raw : (raw && typeof raw === 'object' && Array.isArray(raw.gates) ? raw.gates : null);
-    if (!list) throw new Error(`配置错误：${rel}（顶层须为数组或 { "gates": [...] }）`);
+    if (!list) throw new Error(`配置错误：${rel}——项目产品门配置失守（顶层须为数组或 { "gates": [...] }）`);
     for (const g of list) {
       if (!g || typeof g !== 'object' || typeof g.id !== 'string' || !g.id.trim()) {
-        throw new Error(`配置错误：${rel}（门元素须带字符串 id）`);
+        throw new Error(`配置错误：${rel}——项目产品门配置失守（门元素须带字符串 id）`);
       }
       out.push({ id: g.id, folder: typeof g.folder === 'string' && g.folder.trim() ? g.folder : '.' });
+    }
+  }
+  // 规则驱动：若声明式规则定义了 verify command 门，并入产品门清单
+  const pr = loadProjectRules(root);
+  if (pr) {
+    const ruleGates = extractVerifyCommandGates(pr, root);
+    for (const rg of ruleGates) {
+      if (!out.some((g) => g.id === rg.id)) {
+        out.push({ id: rg.id, folder: rg.folder || '.' });
+      }
     }
   }
   return out;

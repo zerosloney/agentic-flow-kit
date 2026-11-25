@@ -9,7 +9,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { forgeFromRemote, originUrl } from './forge.mjs';
+import { getForgeProvider, forgeFromRemote, originUrl } from './forge.mjs';
 
 const ROOT = (() => {
   const r = spawnSync('git', ['rev-parse', '--show-toplevel'], { encoding: 'utf8' });
@@ -46,93 +46,48 @@ function opt(name) {
 
 const remote = originUrl(ROOT);
 const forge = forgeFromRemote(remote);
-if (!forge) {
+const provider = getForgeProvider(forge);
+if (!provider) {
   console.error(`pr-create: 远端不是 GitHub / GitLab / Azure：${remote || '无 origin'}。停止。`);
   process.exit(2);
 }
 
-if (forge === 'github') {
-  const ghArgs = ['pr', 'create'];
+if (provider.id === 'github' || provider.id === 'gitlab') {
   const source = opt('--source');
   const target = opt('--target');
   const title = opt('--title');
   const body = opt('--body-file');
-  if (source) ghArgs.push('--head', source);
-  if (target) ghArgs.push('--base', target);
-  if (title) ghArgs.push('--title', title);
-  if (body) ghArgs.push('--body-file', body);
-  if (rawArgs.includes('--dry-run')) {
-    console.log(`gh ${ghArgs.join(' ')}`);
-    process.exit(0);
-  }
-  const hook = process.env.PR_CREATE_GH;
-  const cmd = hook ? process.execPath : 'gh';
-  const argv = hook ? [hook, ...ghArgs] : ghArgs;
-  const created = spawnSync(cmd, argv, { cwd: ROOT, encoding: 'utf8' });
-  if (created.error) {
-    console.error('pr-create: 未找到 gh。');
-    process.exit(2);
-  }
-  if (rawArgs.includes('--json')) {
-    // gh pr create 不支持 --json；从 stdout 提取 PR URL/编号，stdout 只留最终单对象。
-    const match = /https?:\/\/\S+\/pull\/(\d+)/.exec(created.stdout || '');
-    if (match) {
-      process.stdout.write(JSON.stringify({ ok: true, url: match[0], number: Number(match[1]) }) + '\n');
-    } else {
-      process.stdout.write(JSON.stringify({ ok: created.status === 0, url: null, number: null }) + '\n');
-      if (created.stdout) process.stderr.write(created.stdout);
-      if (created.stderr) process.stderr.write(created.stderr);
-    }
-    process.exit(created.status === 0 ? 0 : 1);
-  }
-  if (created.stdout) process.stdout.write(created.stdout);
-  if (created.stderr) process.stderr.write(created.stderr);
-  // 审查遗漏补 2026-11-23：非 json 路径透传原生退出码
-  process.exit(typeof created.status === 'number' ? created.status : 1);
-}
-
-if (forge === 'gitlab') {
-  const glArgs = ['mr', 'create'];
-  const source = opt('--source');
-  const target = opt('--target');
-  const title = opt('--title');
-  const body = opt('--body-file');
-  if (source) glArgs.push('--source-branch', source);
-  if (target) glArgs.push('--target-branch', target);
-  if (title) glArgs.push('--title', title);
   const dryRun = rawArgs.includes('--dry-run');
-  if (body) {
-    if (dryRun) {
-      // dry-run 不读正文，只示意 shell 展开，避免把整篇描述打到 stdout。
-      glArgs.push('--description', `"$(cat ${body})"`);
-    } else {
-      let description;
-      try {
-        description = fs.readFileSync(body, 'utf8');
-      } catch {
-        console.error(`pr-create: 读不到 --body-file：${body}`);
-        process.exit(2);
-      }
-      glArgs.push('--description', description);
+
+  let cliArgs;
+  try {
+    cliArgs = provider.buildPrArgs({ source, target, title, bodyFile: body, dryRun });
+  } catch (err) {
+    if (err.code === 'BODY_FILE_NOT_FOUND') {
+      console.error(`pr-create: 读不到 --body-file：${body}`);
+      process.exit(2);
     }
+    throw err;
   }
+
   if (dryRun) {
-    console.log(`glab ${glArgs.join(' ')}`);
+    console.log(`${provider.cli} ${cliArgs.join(' ')}`);
     process.exit(0);
   }
-  const hook = process.env.PR_CREATE_GLAB;
-  const cmd = hook ? process.execPath : 'glab';
-  const argv = hook ? [hook, ...glArgs] : glArgs;
+
+  const hook = provider.envHook ? process.env[provider.envHook] : null;
+  const cmd = hook ? process.execPath : provider.cli;
+  const argv = hook ? [hook, ...cliArgs] : cliArgs;
   const created = spawnSync(cmd, argv, { cwd: ROOT, encoding: 'utf8' });
   if (created.error) {
-    console.error('pr-create: 未找到 glab。');
+    console.error(`pr-create: 未找到 ${provider.cli}。`);
     process.exit(2);
   }
+
   if (rawArgs.includes('--json')) {
-    // glab mr create 不支持 --json；从 stdout 提取 MR URL/编号，stdout 只留最终单对象。
-    const match = /https?:\/\/\S+\/-\/merge_requests\/(\d+)/i.exec(created.stdout || '');
-    if (match) {
-      process.stdout.write(JSON.stringify({ ok: true, url: match[0], number: Number(match[1]) }) + '\n');
+    const parsed = provider.parsePrResponse(created.stdout);
+    if (parsed.ok) {
+      process.stdout.write(JSON.stringify({ ok: true, url: parsed.url, number: parsed.number }) + '\n');
     } else {
       process.stdout.write(JSON.stringify({ ok: created.status === 0, url: null, number: null }) + '\n');
       if (created.stdout) process.stderr.write(created.stdout);
@@ -140,31 +95,33 @@ if (forge === 'gitlab') {
     }
     process.exit(created.status === 0 ? 0 : 1);
   }
+
   if (created.stdout) process.stdout.write(created.stdout);
   if (created.stderr) process.stderr.write(created.stderr);
   process.exit(typeof created.status === 'number' ? created.status : 1);
 }
 
-const tfsPr = path.join(ROOT, '.agents/skills/tfs-pr/scripts/tfs-pr.mjs');
-if (!fs.existsSync(tfsPr)) {
-  console.error(`pr-create: 找不到 tfs-pr 脚本：${tfsPr}`);
-  process.exit(2);
-}
-const hasCreate = rawArgs[0] === 'create';
-const tfsArgs = hasCreate ? rawArgs : ['create', ...rawArgs];
-if (rawArgs.includes('--json')) {
-  // tfs-pr 认识 --json（create 成功输出含 url 的 JSON），原样转发；捕获输出提取 PR URL/编号，stdout 只留最终单对象。
-  const created = spawnSync(process.execPath, [tfsPr, ...tfsArgs], { cwd: ROOT, encoding: 'utf8' });
-  const match = /https?:\/\/\S+\/pullrequest\/(\d+)/i.exec(created.stdout || '');
-  if (match) {
-    process.stdout.write(JSON.stringify({ ok: true, url: match[0], number: Number(match[1]) }) + '\n');
-  } else {
-    process.stdout.write(JSON.stringify({ ok: created.status === 0, url: null, number: null }) + '\n');
-    if (created.stdout) process.stderr.write(created.stdout);
-    if (created.stderr) process.stderr.write(created.stderr);
+if (provider.id === 'azure') {
+  const tfsPr = path.join(ROOT, '.agents/skills/tfs-pr/scripts/tfs-pr.mjs');
+  if (!fs.existsSync(tfsPr)) {
+    console.error(`pr-create: 找不到 tfs-pr 脚本：${tfsPr}`);
+    process.exit(2);
   }
-  process.exit(created.status === 0 ? 0 : 1);
+
+  const tfsArgs = provider.buildPrArgs({ rawArgs });
+  if (rawArgs.includes('--json')) {
+    const created = spawnSync(process.execPath, [tfsPr, ...tfsArgs], { cwd: ROOT, encoding: 'utf8' });
+    const parsed = provider.parsePrResponse(created.stdout);
+    if (parsed.ok) {
+      process.stdout.write(JSON.stringify({ ok: true, url: parsed.url, number: parsed.number }) + '\n');
+    } else {
+      process.stdout.write(JSON.stringify({ ok: created.status === 0, url: null, number: null }) + '\n');
+      if (created.stdout) process.stderr.write(created.stdout);
+      if (created.stderr) process.stderr.write(created.stderr);
+    }
+    process.exit(created.status === 0 ? 0 : 1);
+  }
+
+  const created = spawnSync(process.execPath, [tfsPr, ...tfsArgs], { cwd: ROOT, stdio: 'inherit' });
+  process.exit(typeof created.status === 'number' ? created.status : 1);
 }
-const created = spawnSync(process.execPath, [tfsPr, ...tfsArgs], { cwd: ROOT, stdio: 'inherit' });
-// 审查遗漏补 2026-11-23：非 json 路径透传原生退出码
-process.exit(typeof created.status === 'number' ? created.status : 1);

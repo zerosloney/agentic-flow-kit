@@ -379,12 +379,9 @@ function fileRecord(p, o = {}) {
   };
 }
 
-const REPO_CACHE = new Map();
-function trackedIndex(root) {
-  const hit = REPO_CACHE.get(root);
-  if (hit && Date.now() - hit.at < 30000) return hit.index;
-  const out = git(['ls-files'], root);
-  const files = out ? out.split(/\r?\n/).map((x) => normPath(x.trim())).filter(Boolean) : [];
+// 纯构建：跟踪文件清单 → 索引（files / set / byBase / dirs）。trackedIndex 与测试缝共用同一归一逻辑。
+function indexFromPaths(paths) {
+  const files = (Array.isArray(paths) ? paths : []).map((x) => normPath(String(x).trim())).filter(Boolean);
   const set = new Set(files);
   const byBase = new Map();
   const dirs = new Set();
@@ -395,7 +392,15 @@ function trackedIndex(root) {
     const parts = p.split('/');
     for (let i = 1; i < parts.length; i++) dirs.add(parts.slice(0, i).join('/'));
   }
-  const index = { files, set, byBase, dirs: [...dirs] };
+  return { files, set, byBase, dirs: [...dirs] };
+}
+
+const REPO_CACHE = new Map();
+function trackedIndex(root) {
+  const hit = REPO_CACHE.get(root);
+  if (hit && Date.now() - hit.at < 30000) return hit.index;
+  const out = git(['ls-files'], root);
+  const index = indexFromPaths(out ? out.split(/\r?\n/) : []);
   REPO_CACHE.set(root, { at: Date.now(), index });
   return index;
 }
@@ -887,7 +892,11 @@ export function buildTour(opts = {}) {
   const type = TYPE_LABEL[typeKey] || 'DOC';
 
   // 仓库跟踪索引提前建好（30s 缓存）：步骤标题/正文/表格行的未反引号中段路径需按真实文件消解采集
-  const repo = trackedIndex(root);
+  // 测试缝：opts.git.basePaths 是 base 提交处的跟踪文件全集（与 collectGit 的 basePaths 同义）；
+  // 仅当注入该数组时用它建索引（模型级测试不依赖真实仓库），生产路径仍走 trackedIndex。
+  const repo = opts.git && Array.isArray(opts.git.basePaths)
+    ? indexFromPaths(opts.git.basePaths)
+    : trackedIndex(root);
 
   // 1) 步骤：步骤 → 任务拆解 → h3 子标题 → 改动块 → 文件分组
   let steps = [];

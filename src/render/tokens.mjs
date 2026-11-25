@@ -37,6 +37,11 @@ function buildProductNote(product, language, apiPort, webPort) {
       ? 'CLI tool project: no frontend/API port topology; verify via unit tests and end-to-end command snapshots; the UI-verification stage does not apply.'
       : 'CLI 工具项目：无前端/API 端口拓扑；验证以单测与端到端命令快照为主，UI 实测阶段不适用。';
   }
+  if (product === 'monorepo') {
+    return en
+      ? 'Monorepo workspace: multi-package/multi-app project; verify packages and services according to their respective scopes; the UI-verification stage applies to frontend packages only.'
+      : 'Monorepo 工作区：多包/多应用项目；按各自 scope 运行单测与检查，UI 实测阶段仅适用于前端子包。';
+  }
   return en
     ? `Frontend dev server ${webPort} → API http://localhost:${apiPort}; the API must listen on ${apiPort}.`
     : `前端 dev ${webPort} 连 API http://localhost:${apiPort}；API 须监听 ${apiPort} 才联通。`;

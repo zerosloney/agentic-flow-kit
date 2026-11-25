@@ -10,7 +10,7 @@ export const STACK_REGISTRY = {
   dotnet: {
     description: 'ASP.NET Core 后端服务。',
     descriptionEn: 'ASP.NET Core backend service.',
-    ports: { api: 8932, web: 5203 },
+    ports: { api: 5000, web: 5173 },
     shell: ['dotnet build', 'dotnet run'],
     marker: { label: '.sln / .csproj', anyExt: ['.sln', '.csproj'] },
     devcontainer: {

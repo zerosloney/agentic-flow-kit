@@ -1,12 +1,12 @@
 // dev-tour-model.test.mjs — 开发全景图解析模型测试（node:test + node:assert，零新依赖）
 // 被测：.agents/scripts/dev-tour-model.mjs（buildTour + renderModelJson）与 gen-dev-tour.mjs CLI 壳。
-// 确定性口径：模型级测试统一经 buildTour({ git }) 注入 git 实际面（collectGit 同形状 payload），
-// 不依赖真实 git 工作树状态；CLI 级测试只断言退出码 / stderr 文案 / stdout 可解析等文档面结论。
+// 确定性口径：模型级测试统一经 buildTour({ git }) 注入 git 实际面（collectGit 同形状 payload，
+// 含 basePaths 合成跟踪全集），不依赖真实 git 工作树 / 跟踪面；CLI 级测试只断言退出码 / stderr 文案 / stdout 可解析等文档面结论。
 // fixtures 契约：.agents/skills/dev-tour/SKILL.md「数据契约」节；期望快照同目录 <fixture>.model.json，
 // 由 renderModelJson 产出（仅 generatedAt 归一为固定值）。再生成：UPDATE_SNAPSHOTS=1 node --test .agents/tests/
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
+import { spawn, execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -24,7 +24,8 @@ function tour(docName, git) {
     root: ROOT,
     docPath: `.agents/tests/fixtures/dev-tour/${docName}`,
     base: 'HEAD',
-    git,
+    // 跟踪全集一律注入合成清单：模型级用例不读本仓 git 跟踪面，任何检出（含无 .git 拷贝）结果一致
+    git: { ...git, basePaths: TRACKED },
   });
   model.generatedAt = FIXED_TS; // 快照唯一的时间源，归一后逐字节可比
   model.rootLabel = 'example-project'; // 快照与仓库名解耦：夹具随包分发，不能绑定任何具体仓库
@@ -47,9 +48,9 @@ function assertSnapshot(model, docName) {
 const byPath = (model, p) => model.files.find((f) => f.path === p) || null;
 
 // CLI 用例走子进程（gen-dev-tour 真跑 collectGit）——异步 spawn + 并发起跑压总时长（<3s 门）
-function runNode(args) {
+function runNode(args, cwd = ROOT) {
   return new Promise((resolve) => {
-    const child = spawn(process.execPath, args, { cwd: ROOT });
+    const child = spawn(process.execPath, args, { cwd });
     let stdout = '';
     let stderr = '';
     child.stdout.on('data', (d) => { stdout += d; });
@@ -59,7 +60,40 @@ function runNode(args) {
   });
 }
 
+// 自包含 CLI 夹具仓库：候选文件与 plan 真实提交，collectGit 看到的就是这份合成跟踪集；
+// 脚本副本让 gen-dev-tour 的 DEFAULT_ROOT 指向该临时仓库（不依赖本仓 .git，也不读原项目文件）。
+function makeTourRepo() {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'dev-tour-repo-'));
+  const write = (rel, text) => {
+    const abs = path.join(dir, rel);
+    fs.mkdirSync(path.dirname(abs), { recursive: true });
+    fs.writeFileSync(abs, text, 'utf8');
+  };
+  for (const rel of ['.agents/scripts/gen-dev-tour.mjs', '.agents/scripts/dev-tour-model.mjs', '.agents/board/dev-tour.html']) {
+    write(rel, fs.readFileSync(path.join(ROOT, rel), 'utf8'));
+  }
+  write('frontend/src/views/orders/orderPrint/editor.vue', '<template><div /></template>\n');
+  write('frontend/src/views/orders/orderTemplate/editor.vue', '<template><div /></template>\n');
+  write('workflow/plans/2026-01-01-order-editor-align.md', fs.readFileSync(path.join(FIXTURES, 'plan-path-guess.md'), 'utf8'));
+  const git = (...args) => execFileSync('git', args, { cwd: dir, stdio: 'ignore' });
+  git('init');
+  git('add', '-A');
+  git('-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-m', 'init');
+  return dir;
+}
+
 // ---- 注入 git 面（collectGit 返回同形状；路径均与本仓真实跟踪文件无碰撞，见 fixtures 同名 .md）----
+// 合成跟踪全集：以 fixtures 的消解目标为准（裸文件名多候选 / 中段路径后缀消解 / 改动块文档落库），
+// 模型级用例只认这份清单，不读本仓 git 跟踪面。
+const TRACKED = [
+  'frontend/src/views/orders/orderPrint/editor.vue',
+  'frontend/src/views/orders/orderTemplate/editor.vue',
+  'frontend/src/views/orders/orderTemplate/index.vue',
+  'frontend/src/views/orders/lines/index.vue',
+  'frontend/src/views/orders/lines/shared.ts',
+  'workflow/specs/2026-10-13-order-lines-row-split.md',
+  'workflow/regression-checklist.d/2026-10.md',
+];
 const GIT_BASE = { available: true, base: 'HEAD', baseSha: 'a1b2c3d4e5f6', note: '', basePaths: [] };
 const GIT_NUMBERED = {
   ...GIT_BASE,
@@ -226,36 +260,36 @@ test('L1 单文件：改动方案顶层路径条目每条自动成一站', () =>
 });
 
 test('路径猜测：裸文件名多候选打分命中 → pathGuess 标志 + pathGuesses 计量', () => {
-  // 候选来自真实仓库跟踪文件：frontend/src/views/purchase/{contractPrint,contractTemplate}/editor.vue
-  // 同名 2 候选、文档只写裸名 —— 稳定依赖 HEAD 跟踪集，与工作树状态无关
+  // 候选来自注入的跟踪全集：frontend/src/views/orders/{orderPrint,orderTemplate}/editor.vue
+  // 同名 2 候选、文档只写裸名 —— 固定依赖合成清单，与任何真实仓库状态无关
   const m = tour('plan-path-guess.md', GIT_EMPTY);
 
-  const rec = byPath(m, 'frontend/src/views/purchase/contractTemplate/editor.vue');
-  assert.ok(rec, '应解析到 contractTemplate 目录的 editor.vue');
+  const rec = byPath(m, 'frontend/src/views/orders/orderTemplate/editor.vue');
+  assert.ok(rec, '应解析到 orderTemplate 目录的 editor.vue');
   assert.equal(rec.pathGuess, true);
-  assert.ok(!byPath(m, 'frontend/src/views/purchase/contractPrint/editor.vue'), '打分应唯一命中 contractTemplate');
-  assert.deepEqual(m.steps.find((s) => s.id === 'T1').files, ['frontend/src/views/purchase/contractTemplate/editor.vue']);
+  assert.ok(!byPath(m, 'frontend/src/views/orders/orderPrint/editor.vue'), '打分应唯一命中 orderTemplate');
+  assert.deepEqual(m.steps.find((s) => s.id === 'T1').files, ['frontend/src/views/orders/orderTemplate/editor.vue']);
   assert.deepEqual(m.parseHealth.pathGuesses, {
     total: 1,
-    items: [{ path: 'frontend/src/views/purchase/contractTemplate/editor.vue', step: 'T1', candidates: 2 }],
+    items: [{ path: 'frontend/src/views/orders/orderTemplate/editor.vue', step: 'T1', candidates: 2 }],
   });
   assert.deepEqual(m.parseHealth.issues, []);
 
   assertSnapshot(m, 'plan-path-guess.md');
 });
 
-test('裸中段路径采集：未反引号标题里的真实中段路径入模，杂型 token 拒收', () => {
-  // 裸写 token 仅当 含 / + 代码扩展名 + 消解到仓库真实文件 才收（widgets/index.vue、contractTemplate/index.vue、
-  // widgets/shared.ts 均为真实跟踪文件）；if/else、Success/Error 无扩展名 → 拒收
+test('裸中段路径采集：未反引号标题里的跟踪中段路径入模，杂型 token 拒收', () => {
+  // 裸写 token 仅当 含 / + 代码扩展名 + 消解到注入追踪全集 才收（lines/index.vue、orderTemplate/index.vue、
+  // lines/shared.ts 均在合成清单里）；if/else、Success/Error 无扩展名 → 拒收
   const m = tour('plan-bare-mid-path.md', GIT_EMPTY);
 
   assert.deepEqual(m.steps.map((s) => s.id), ['T1', 'T2']);
   const filesOf = (id) => m.steps.find((s) => s.id === id).files;
-  assert.deepEqual(filesOf('T1'), ['frontend/src/views/purchase/widgets/index.vue', 'frontend/src/views/purchase/contractTemplate/index.vue']);
-  assert.deepEqual(filesOf('T2'), ['frontend/src/views/purchase/widgets/shared.ts']);
+  assert.deepEqual(filesOf('T1'), ['frontend/src/views/orders/lines/index.vue', 'frontend/src/views/orders/orderTemplate/index.vue']);
+  assert.deepEqual(filesOf('T2'), ['frontend/src/views/orders/lines/shared.ts']);
 
-  const rec = byPath(m, 'frontend/src/views/purchase/widgets/index.vue');
-  assert.ok(rec, '裸写中段路径应消解到真实文件入模');
+  const rec = byPath(m, 'frontend/src/views/orders/lines/index.vue');
+  assert.ok(rec, '裸写中段路径应消解到跟踪文件入模');
   assert.deepEqual(rec.steps, ['T1']);
   assert.equal(rec.pathGuess, false); // 确定性后缀消解，不是猜测
   assert.equal(rec.badge, '计划');
@@ -333,7 +367,7 @@ test('并集标签：任务行 S1+S2 拆成员集，块标签按成员交集命�
   // 父文件行被 S1/S2 缩进锚继承 → 并集步骤 S1（成员 S1+S2）收该文件
   assert.deepEqual(filesOf('S1'), ['backend/Widgets/UnionService.cs']);
   assert.deepEqual(filesOf('S3'), ['backend/Widgets/UnionColumn.cs']);
-  assert.deepEqual(filesOf('S4'), ['workflow/specs/2026-10-13-widgets-quota-substitute-row-split.md', 'workflow/regression-checklist.d/2026-10.md']);
+  assert.deepEqual(filesOf('S4'), ['workflow/specs/2026-10-13-order-lines-row-split.md', 'workflow/regression-checklist.d/2026-10.md']);
   // 无失约：S1-S5 锚全部对齐，无未分步
   assert.deepEqual(m.parseHealth.issues, []);
   assert.ok(!m.steps.some((s) => s.id === 'A' || s.id === 'U' || s.id === 'X'));
@@ -424,9 +458,14 @@ describe('CLI（gen-dev-tour 子进程，并发起跑压总时长）', { concurr
 
   test('CLI --strict + 路径猜测：advisory 放行（exit 0），命中行计「路径猜测 1 处」并产出 HTML', async () => {
     const outDir = fs.mkdtempSync(path.join(os.tmpdir(), 'dev-tour-test-'));
+    const repoDir = makeTourRepo();
     try {
       const out = path.join(outDir, 'snapshot.html');
-      const r = await runNode([GEN, path.join(FIXTURES, 'plan-path-guess.md'), '--no-diff', '--strict', '--out', out]);
+      const r = await runNode([
+        path.join(repoDir, '.agents', 'scripts', 'gen-dev-tour.mjs'),
+        'workflow/plans/2026-01-01-order-editor-align.md',
+        '--no-diff', '--strict', '--out', out,
+      ], repoDir);
       assert.equal(r.status, 0, `stderr: ${r.stderr.slice(0, 300)}`);
       assert.ok(r.stdout.includes('解析命中：直认 1/1 步'), r.stdout.slice(0, 300));
       assert.ok(r.stdout.includes('路径猜测 1 处'), r.stdout.slice(0, 300));
@@ -434,6 +473,7 @@ describe('CLI（gen-dev-tour 子进程，并发起跑压总时长）', { concurr
       assert.ok(fs.readFileSync(out, 'utf8').includes('__TOUR_DATA__') === false);
     } finally {
       fs.rmSync(outDir, { recursive: true, force: true });
+      fs.rmSync(repoDir, { recursive: true, force: true });
     }
   });
 

@@ -1,0 +1,31 @@
+# GitLab CI/CD — AI-native 门禁流水线
+# 生成的默认档：main/develop push 与 MR 时触发。tier=lean 时安装器不写本文件。
+stages:
+  - verify
+
+variables:
+  NODE_VERSION: "22"
+
+default:
+  image: node:22
+
+ai-native-gates:
+  stage: verify
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main" || $CI_COMMIT_BRANCH == "develop"
+  before_script:
+    - if [ -f package.json ]; then (npm ci || npm install); fi
+    - if [ -f requirements.txt ]; then python3 -m pip install -r requirements.txt; fi
+    - if [ -f pyproject.toml ]; then python3 -m pip install -e . || echo "pyproject install skipped (not a package)"; fi
+    - if [ -f go.mod ]; then go mod download; fi
+  script:
+    - npx --yes agentic-flow-kit run verify --full
+    - npx --yes agentic-flow-kit run check-local-gates || true
+    - npx --yes agentic-flow-kit run agent-eval check --advisory || true
+    - npx --yes agentic-flow-kit run check-secrets.mjs || true
+    - npx --yes agentic-flow-kit run sbom-license.mjs --check || true
+    - npx --yes agentic-flow-kit run check-devcontainer.mjs || true
+    - npx --yes agentic-flow-kit run check-pipeline-state || true
+    - npx --yes agentic-flow-kit run memory-tier audit || true
+    - npx --yes agentic-flow-kit run memory-lifecycle.mjs report --check || true

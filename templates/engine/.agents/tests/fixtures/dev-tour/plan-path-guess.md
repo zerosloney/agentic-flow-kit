@@ -8,9 +8,9 @@
 # PLAN — 路径猜测样例：列表编辑器对齐
 
 ## 任务拆解
-- [ ] 1. T1 编辑器对齐：contractTemplate 弹窗字段微调
-  - 判据：contractTemplate 页面构建通过
+- [ ] 1. T1 编辑器对齐：orderTemplate 弹窗字段微调
+  - 判据：orderTemplate 页面构建通过
 
 ## 改动方案
 - **T1**：编辑器
-  - `editor.vue`：补 contractTemplate 字段
+  - `editor.vue`：补 orderTemplate 字段

@@ -57,6 +57,22 @@ test('--ci github installs only the github workflow and upgrade replays the choi
   assert.equal(manifest(dir).ci, 'github');
 });
 
+test('--ci gitlab installs only the gitlab-ci pipeline and upgrade replays the choice', () => {
+  const dir = tmpRepo();
+  const r = run(['install', '--agent', 'claude', '--stack', 'node', '--ci', 'gitlab', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(fs.existsSync(path.join(dir, '.gitlab-ci.yml')));
+  assert.equal(fs.existsSync(path.join(dir, 'azure-pipelines.yml')), false);
+  assert.equal(fs.existsSync(path.join(dir, '.github/workflows/ci.yml')), false);
+  assert.equal(manifest(dir).ci, 'gitlab');
+  const up = run(['upgrade', '--target', '.'], dir);
+  assert.equal(up.status, 0, up.stderr);
+  assert.equal(fs.existsSync(path.join(dir, 'azure-pipelines.yml')), false);
+  assert.equal(fs.existsSync(path.join(dir, '.github/workflows/ci.yml')), false);
+  assert.ok(fs.existsSync(path.join(dir, '.gitlab-ci.yml')));
+  assert.equal(manifest(dir).ci, 'gitlab');
+});
+
 test('--ci none installs no CI and doctor reports it as disabled', () => {
   const dir = tmpRepo();
   const r = run(['install', '--agent', 'claude', '--stack', 'node', '--ci', 'none', '--target', '.'], dir);
@@ -110,13 +126,25 @@ test('azure origin installs only the azure pipeline', () => {
   assert.equal(manifest(dir).ci, 'azure');
 });
 
-test('unrecognized origin installs no CI', () => {
+test('gitlab origin installs only the gitlab pipeline', () => {
   const dir = tmpRepo();
   addOrigin(dir, 'https://gitlab.com/example/repo.git');
   const r = run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.'], dir);
   assert.equal(r.status, 0, r.stderr);
+  assert.ok(fs.existsSync(path.join(dir, '.gitlab-ci.yml')));
   assert.equal(fs.existsSync(path.join(dir, 'azure-pipelines.yml')), false);
   assert.equal(fs.existsSync(path.join(dir, '.github/workflows/ci.yml')), false);
+  assert.equal(manifest(dir).ci, 'gitlab');
+});
+
+test('unrecognized origin installs no CI', () => {
+  const dir = tmpRepo();
+  addOrigin(dir, 'https://git.internal-corp.local/example/repo.git');
+  const r = run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.existsSync(path.join(dir, 'azure-pipelines.yml')), false);
+  assert.equal(fs.existsSync(path.join(dir, '.github/workflows/ci.yml')), false);
+  assert.equal(fs.existsSync(path.join(dir, '.gitlab-ci.yml')), false);
   assert.equal(manifest(dir).ci, 'none');
 });
 

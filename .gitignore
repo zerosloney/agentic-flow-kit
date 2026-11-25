@@ -39,6 +39,7 @@ Thumbs.db
 .cache/
 .tmp/
 tmp/
+issues/
 
 # Installed-engine runtime state (never ship eval credentials or caches)
 templates/engine/.agents/cache/

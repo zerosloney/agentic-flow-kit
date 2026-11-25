@@ -121,3 +121,39 @@ test('invalid product / port / scaffold fail with usage errors and write nothing
   assert.match(badScaffold.stderr, /--scaffold/);
   assert.equal(fs.existsSync(path.join(dir, '.agents/install-manifest.json')), false);
 });
+
+test('monorepo product renders into AGENTS.md and is recorded in manifest + engine.json (zh + en)', () => {
+  const zh = tmpRepo();
+  assert.equal(run(['install', '--agent', 'claude', '--stack', 'node', '--product', 'monorepo', '--target', '.'], zh).status, 0);
+  const zhAgents = read(zh, 'AGENTS.md');
+  assert.match(zhAgents, /Monorepo 工作区：多包\/多应用项目/);
+  assert.doesNotMatch(zhAgents, /前端 dev/);
+  const zhMf = manifest(zh);
+  assert.equal(zhMf.product, 'monorepo');
+  const zhEngine = JSON.parse(read(zh, '.agents/config/engine.json'));
+  assert.equal(zhEngine.options.product, 'monorepo');
+
+  const en = tmpRepo();
+  assert.equal(run(['install', '--agent', 'claude', '--stack', 'node', '--product', 'monorepo', '--lang', 'en', '--target', '.'], en).status, 0);
+  const enAgents = read(en, 'AGENTS.md');
+  assert.match(enAgents, /Monorepo workspace: multi-package\/multi-app project/);
+  assert.doesNotMatch(enAgents, /Frontend dev server/);
+
+  // upgrade replays monorepo
+  const up = run(['upgrade', '--target', '.'], zh);
+  assert.equal(up.status, 0, up.stderr);
+  assert.equal(manifest(zh).product, 'monorepo');
+});
+
+test('profiler automatically detects product mode on install when --product omitted', () => {
+  const monoDir = tmpRepo();
+  fs.writeFileSync(path.join(monoDir, 'pnpm-workspace.yaml'), 'packages:\n  - "packages/*"\n');
+  assert.equal(run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.'], monoDir).status, 0);
+  assert.equal(manifest(monoDir).product, 'monorepo');
+
+  const cliDir = tmpRepo();
+  fs.writeFileSync(path.join(cliDir, 'package.json'), JSON.stringify({ name: 'my-cli', bin: './cli.mjs' }));
+  assert.equal(run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.'], cliDir).status, 0);
+  assert.equal(manifest(cliDir).product, 'cli');
+});
+

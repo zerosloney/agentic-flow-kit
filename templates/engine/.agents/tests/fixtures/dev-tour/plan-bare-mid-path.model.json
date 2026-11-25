@@ -5,7 +5,7 @@
   "doc": {
     "path": ".agents/tests/fixtures/dev-tour/plan-bare-mid-path.md",
     "type": "DOC",
-    "title": "裸中段路径样例：托盘查询联动",
+    "title": "裸中段路径样例：列表查询联动",
     "status": "起草中",
     "level": "L1",
     "module": "示例",
@@ -58,13 +58,13 @@
       "id": "T1",
       "index": 1,
       "title": "前端查询栏联动",
-      "summary": "改造 widgets/index.vue 查询栏，收敛 if/else 分支，Success/Error 提示对齐 contractTemplate/index.vue",
+      "summary": "改造 lines/index.vue 查询栏，收敛 if/else 分支，Success/Error 提示对齐 orderTemplate/index.vue",
       "detail": [
         "- 判据：前端构建通过"
       ],
       "files": [
-        "frontend/src/views/purchase/widgets/index.vue",
-        "frontend/src/views/purchase/contractTemplate/index.vue"
+        "frontend/src/views/orders/lines/index.vue",
+        "frontend/src/views/orders/orderTemplate/index.vue"
       ],
       "status": "todo",
       "source": "steps"
@@ -73,12 +73,12 @@
       "id": "T2",
       "index": 2,
       "title": "列序常量调整",
-      "summary": "抽共享常量到 widgets/shared.ts",
+      "summary": "抽共享常量到 lines/shared.ts",
       "detail": [
         "- 判据：单测通过"
       ],
       "files": [
-        "frontend/src/views/purchase/widgets/shared.ts"
+        "frontend/src/views/orders/lines/shared.ts"
       ],
       "status": "todo",
       "source": "steps"
@@ -86,7 +86,7 @@
   ],
   "files": [
     {
-      "path": "frontend/src/views/purchase/contractTemplate/index.vue",
+      "path": "frontend/src/views/orders/lines/index.vue",
       "status": "planned",
       "badge": "计划",
       "additions": 0,
@@ -104,25 +104,7 @@
       "pathGuess": false
     },
     {
-      "path": "frontend/src/views/purchase/widgets/index.vue",
-      "status": "planned",
-      "badge": "计划",
-      "additions": 0,
-      "deletions": 0,
-      "binary": false,
-      "test": false,
-      "layer": "frontend",
-      "planned": true,
-      "actual": false,
-      "steps": [
-        "T1"
-      ],
-      "diff": "",
-      "oldPath": "",
-      "pathGuess": false
-    },
-    {
-      "path": "frontend/src/views/purchase/widgets/shared.ts",
+      "path": "frontend/src/views/orders/lines/shared.ts",
       "status": "planned",
       "badge": "计划",
       "additions": 0,
@@ -134,6 +116,24 @@
       "actual": false,
       "steps": [
         "T2"
+      ],
+      "diff": "",
+      "oldPath": "",
+      "pathGuess": false
+    },
+    {
+      "path": "frontend/src/views/orders/orderTemplate/index.vue",
+      "status": "planned",
+      "badge": "计划",
+      "additions": 0,
+      "deletions": 0,
+      "binary": false,
+      "test": false,
+      "layer": "frontend",
+      "planned": true,
+      "actual": false,
+      "steps": [
+        "T1"
       ],
       "diff": "",
       "oldPath": "",

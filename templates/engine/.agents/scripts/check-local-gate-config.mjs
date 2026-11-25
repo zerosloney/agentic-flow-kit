@@ -22,6 +22,13 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
+let detectStackFromRules = () => [];
+try {
+  const mod = await import('./rules-loader.mjs');
+  if (typeof mod?.detectStackFromRules === 'function') detectStackFromRules = mod.detectStackFromRules;
+} catch {
+  // 当脚本在最小隔离测试夹具中独立运行且未复制 rules-loader.mjs 时平滑降级
+}
 
 const strict = process.argv.includes('--strict');
 let root = process.cwd();
@@ -30,8 +37,9 @@ let root = process.cwd();
   if (i >= 0 && process.argv[i + 1]) root = path.resolve(process.argv[i + 1]);
 }
 
-if (process.env.TF_BUILD) {
-  console.log('[local-gate-config] ⏭️ CI 环境（TF_BUILD）——CI checkout 不挂本地钩子属常态，跳过（本地缺配由各机 verify 跑出）');
+const isCi = !!(process.env.CI || process.env.TF_BUILD || process.env.GITHUB_ACTIONS || process.env.GITLAB_CI || process.env.CONTINUOUS_INTEGRATION);
+if (isCi) {
+  console.log('[local-gate-config] ⏭️ CI 环境——CI checkout 不挂本地钩子属常态，跳过（本地缺配由各机 verify 跑出）');
   process.exit(0);
 }
 
@@ -59,8 +67,10 @@ const missingHooks = hooks.filter((h) => !fs.existsSync(path.join(root, '.githoo
 const STACKS = (() => {
   try {
     const options = JSON.parse(fs.readFileSync(path.join(root, '.agents/config/engine.json'), 'utf8')).options || {};
-    return options.stacks?.length ? options.stacks : (options.stack ? [options.stack] : []);
-  } catch { return []; }
+    const list = options.stacks?.length ? options.stacks : (options.stack ? [options.stack] : []);
+    if (list.length) return list;
+  } catch { /* 忽略 engine.json 缺省 */ }
+  return detectStackFromRules(root);
 })();
 const isDotnet = STACKS.includes('dotnet');
 if (!isDotnet) console.log('[local-gate-config] ⏭️ 非 dotnet 栈：appsettings 合并保护不适用（跳过）');

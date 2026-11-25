@@ -7,7 +7,7 @@ import { detectHosts } from '../hosts/detect.mjs';
 import { probeModels } from '../models/probe.mjs';
 import { ROLE_NAMES, loadRoleConfig, recommendRoles, summarizeModels } from '../models/resolve.mjs';
 import { readManifest } from '../install/manifest.mjs';
-import { detectStackDetail, STACKS, stackMarkerLabel, formatInstallLog, installLogNotable, installCommand, PRODUCT_MODES, SCAFFOLD_MODES, parsePortNumber } from '../commands/install.mjs';
+import { detectStackDetail, STACKS, stackMarkerLabel, formatInstallLog, installLogNotable, installCommand, PRODUCT_MODES, SCAFFOLD_MODES, parsePortNumber, detectProductMode } from '../commands/install.mjs';
 import { STACK_REGISTRY } from '../install/stack-registry.mjs';
 import { stackDescription } from '../render/tokens.mjs';
 import { SURFACES, surfaceDescription } from '../install/profiles.mjs';
@@ -54,10 +54,13 @@ export function buildInstallArgs({
 // 任一步 EOF / 退出返回 null。
 export async function projectShapeFlow(ctx, { stack }) {
   const { t } = ctx;
+  const detected = ctx.target ? detectProductMode(ctx.target) : null;
+  const initialIndex = detected ? PRODUCT_MODES.indexOf(detected) : -1;
+  const cursor = initialIndex >= 0 ? initialIndex : Math.max(0, PRODUCT_MODES.indexOf('web'));
   const product = await pickOne(ctx, {
     question: t('tui.shapeQuestion'),
     hint: t('tui.hint.moveEnter'),
-    cursor: Math.max(0, PRODUCT_MODES.indexOf('web')),
+    cursor,
     items: PRODUCT_MODES.map((mode) => ({
       value: mode,
       label: t(`tui.shape.${mode}`),

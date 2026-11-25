@@ -339,8 +339,8 @@ function addMcpEntries({ plan, target, hosts }) {
 }
 
 // CI 交付面：一个仓一套。显式 ci 优先。未记录时 lean 不发；旧 manifest 无 ci 字段视为 both。
-// 新安装由 install 按 origin 写成 github / azure / none，不再缺省双发。
-export const CI_MODES = ['azure', 'github', 'none', 'both'];
+// 新安装由 install 按 origin 写成 github / azure / gitlab / none，不再缺省双发。
+export const CI_MODES = ['azure', 'github', 'gitlab', 'none', 'both'];
 export function ciModeFor({ tier, ci }) {
   if (ci && CI_MODES.includes(ci)) return ci;
   return tier === 'lean' ? 'none' : 'both';
@@ -349,6 +349,7 @@ export function ciTemplateRels(mode) {
   const rels = [];
   if (mode === 'azure' || mode === 'both') rels.push('azure-pipelines.yml');
   if (mode === 'github' || mode === 'both') rels.push('.github/workflows/ci.yml');
+  if (mode === 'gitlab' || mode === 'both') rels.push('.gitlab-ci.yml');
   return rels;
 }
 
@@ -386,6 +387,68 @@ export function buildPlan({
       push(path.join(templatesRoot, 'profiles', s, rel), rel, 'profile', 20 + index);
     }
   });
+
+  // 多栈联合：product-gates.json 与 project-faces.json 自动求并集（优先级 24，高于单栈覆盖，低于 profile.json 25）
+  if (stackList.length > 1) {
+    const allGates = [];
+    const seenGateIds = new Set();
+    const facesMerged = { ui: [], code: [], tests: [], data: [] };
+    const seenFaces = { ui: new Set(), code: new Set(), tests: new Set(), data: new Set() };
+
+    for (const s of stackList) {
+      const pgPath = path.join(templatesRoot, 'profiles', s, '.agents/config/product-gates.json');
+      if (fs.existsSync(pgPath)) {
+        try {
+          const raw = JSON.parse(fs.readFileSync(pgPath, 'utf8'));
+          const list = Array.isArray(raw) ? raw : (raw && Array.isArray(raw.gates) ? raw.gates : []);
+          for (const g of list) {
+            if (g && g.id && !seenGateIds.has(g.id)) {
+              seenGateIds.add(g.id);
+              allGates.push(g);
+            }
+          }
+        } catch {}
+      }
+
+      const pfPath = path.join(templatesRoot, 'profiles', s, '.agents/config/project-faces.json');
+      if (fs.existsSync(pfPath)) {
+        try {
+          const raw = JSON.parse(fs.readFileSync(pfPath, 'utf8'));
+          for (const k of ['ui', 'code', 'tests', 'data']) {
+            if (Array.isArray(raw[k])) {
+              for (const item of raw[k]) {
+                if (item && !seenFaces[k].has(item)) {
+                  seenFaces[k].add(item);
+                  facesMerged[k].push(item);
+                }
+              }
+            }
+          }
+        } catch {}
+      }
+    }
+
+    if (allGates.length) {
+      push(null, '.agents/config/product-gates.json', 'profile', 24, 'generated', {
+        getText: () => `${JSON.stringify({
+          _note: '项目产品门配置（verify 基础表之外的本项目技术栈门）：多栈合并；id/name/cmd 必填，when 任一满足才启用。',
+          gates: allGates,
+        }, null, 2)}\n`,
+      });
+    }
+
+    if (Object.values(facesMerged).some((list) => list.length > 0)) {
+      push(null, '.agents/config/project-faces.json', 'profile', 24, 'generated', {
+        getText: (vars) => {
+          const str = JSON.stringify({
+            _note: '产品面单源：列出的仓库相对路径前缀算产品面（多栈合并）。',
+            ...facesMerged,
+          }, null, 2);
+          return `${fillTemplate(str, vars)}\n`;
+        },
+      });
+    }
+  }
 
   // 2.5) surface 叠加：同一 targetRel 由后声明的 surface 覆盖（21 + index > 20）。
   // 单 stack 安装不产生任何额外文件，保持行为不变。
@@ -447,8 +510,9 @@ export function buildPlan({
   const ciMode = ciModeFor({ tier, ci });
   for (const rel of listFiles(path.join(templatesRoot, 'git'))) {
     // CI 交付面按选择裁剪：lean 档缺省不生成（小项目先跑本地钩子）；显式 --ci 优先于 tier 派生。
-    if (rel === 'azure-pipelines.yml' && (ciMode === 'github' || ciMode === 'none')) continue;
-    if (rel.startsWith('.github/') && (ciMode === 'azure' || ciMode === 'none')) continue;
+    if (rel === 'azure-pipelines.yml' && (ciMode === 'github' || ciMode === 'gitlab' || ciMode === 'none')) continue;
+    if (rel.startsWith('.github/') && (ciMode === 'azure' || ciMode === 'gitlab' || ciMode === 'none')) continue;
+    if (rel === '.gitlab-ci.yml' && (ciMode === 'azure' || ciMode === 'github' || ciMode === 'none')) continue;
     if (rel === '.gitattributes') push(path.join(templatesRoot, 'git', rel), '.gitattributes', 'git', 40, 'merge-gitattributes');
     else if (rel === '.gitignore.engine') push(path.join(templatesRoot, 'git', rel), '.gitignore', 'git', 40, 'merge-gitignore');
     else push(path.join(templatesRoot, 'git', rel), rel, 'git', 40);

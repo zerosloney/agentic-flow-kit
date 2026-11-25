@@ -20,6 +20,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+let loadProjectRules = () => null;
+try {
+  const mod = await import('./rules-loader.mjs');
+  if (typeof mod?.loadProjectRules === 'function') loadProjectRules = mod.loadProjectRules;
+} catch {
+  // 当脚本在最小隔离测试夹具中独立运行且未复制 rules-loader.mjs 时平滑降级
+}
 
 export const ROOT = process.env.FLOW_KIT_PROJECT_ROOT
   || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -27,11 +34,14 @@ export const FACES_REL = path.join('.agents', 'config', 'project-faces.json');
 export const PRODUCT_KEYS = ['ui', 'code', 'tests', 'data'];
 
 const norm = (p) => String(p || '').replace(/\\/g, '/').replace(/^\.\//, '').trim();
+const cleanPrefix = (p) => norm(p).replace(/\/?\*{1,2}$/, '');
 
 const hit = (prefix, p) => {
   if (!prefix) return false;
-  if (p === prefix) return true;
-  return p.startsWith(prefix.endsWith('/') ? prefix : `${prefix}/`);
+  const clean = cleanPrefix(prefix);
+  if (!clean) return true;
+  if (p === clean) return true;
+  return p.startsWith(clean.endsWith('/') ? clean : `${clean}/`);
 };
 
 /** 读取并校验项目面；文件缺失 = 未配置（configured:false），其余错误一律 throw。 */
@@ -41,7 +51,35 @@ export function loadFaces(root = ROOT) {
   try {
     raw = fs.readFileSync(file, 'utf8');
   } catch (e) {
-    if (e.code === 'ENOENT') return { configured: false, ui: [], code: [], tests: [], data: [] };
+    if (e.code === 'ENOENT') {
+      const pr = loadProjectRules(root);
+      if (pr && pr.faces && typeof pr.faces === 'object' && !Array.isArray(pr.faces)) {
+        const out = { configured: false, ui: [], code: [], tests: [], data: [] };
+        const KEY_ALIASES = {
+          ui: ['ui', 'frontend', 'web'],
+          code: ['code', 'backend', 'server', 'api'],
+          tests: ['tests', 'test'],
+          data: ['data', 'db', 'sql'],
+        };
+        for (const [targetKey, aliases] of Object.entries(KEY_ALIASES)) {
+          for (const alias of aliases) {
+            const raw = pr.faces[alias];
+            if (!raw) continue;
+            const list = Array.isArray(raw) ? raw : (Array.isArray(raw.paths) ? raw.paths : null);
+            if (Array.isArray(list)) {
+              for (const item of list) {
+                if (typeof item === 'string' && item.trim()) {
+                  out[targetKey].push(norm(item));
+                  out.configured = true;
+                }
+              }
+            }
+          }
+        }
+        if (out.configured) return out;
+      }
+      return { configured: false, ui: [], code: [], tests: [], data: [] };
+    }
     throw new Error(`project-faces 读取失败：${file}（${e.message}）`);
   }
   let parsed;

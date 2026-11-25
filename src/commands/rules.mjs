@@ -7,6 +7,50 @@ import { splitWaivers } from '../rules/model.mjs';
 import { loadModel } from '../rules/load.mjs';
 import { recordPluginStatus } from '../rules/plugin-status.mjs';
 import { collectDiff, evaluateModel } from '../rules/evaluate.mjs';
+import { stringifyYaml } from '../rules/yaml.mjs';
+
+const LEGACY_FILES = [
+  '.agents/hooks/architecture-redlines.json',
+  '.agents/hooks/delete-guard.config.json',
+  '.agents/hooks/audit-fields.json',
+  '.agents/hooks/commit-check.config.json',
+  '.agents/config/product-gates.json',
+  '.agents/config/notify-guard.json',
+  '.agents/config/project-faces.json',
+  '.agents/config/local-gates.json',
+  '.agents/config/rule-budgets.json',
+];
+
+function findLegacyFiles(root) {
+  const found = [];
+  for (const rel of LEGACY_FILES) {
+    if (fs.existsSync(path.join(root, rel))) found.push(rel);
+  }
+  const cfgDir = path.join(root, '.agents', 'config');
+  try {
+    if (fs.existsSync(cfgDir)) {
+      const extraGates = fs.readdirSync(cfgDir).filter((f) => /^product-gates\..+\.json$/.test(f));
+      for (const g of extraGates) {
+        found.push(`.agents/config/${g}`);
+      }
+    }
+  } catch {}
+  return found;
+}
+
+function detectProjectMeta(root) {
+  let name = path.basename(root);
+  let stack = null;
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+    if (pkg.name) name = pkg.name;
+  } catch {}
+  try {
+    const manifest = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'manifest.json'), 'utf8'));
+    if (manifest.stack) stack = manifest.stack;
+  } catch {}
+  return { name, stack };
+}
 
 function pickMessage(message, lang) {
   return lang === 'en' ? message.en : message.zh;
@@ -81,6 +125,75 @@ export function rulesCommand({ args, t, lang }) {
 ${JSON.stringify(body, null, 2)}\n`);
     if (flag(args, 'json')) process.stdout.write(`${JSON.stringify({ written: rel, count: body.rules.length })}\n`);
     else console.log(t('rules.initWritten', { count: body.rules.length, rel }));
+    return 0;
+  }
+
+  if (sub === 'export') {
+    const outRel = typeof args.out === 'string' ? args.out : 'flow-rules.yml';
+    const outAbs = path.resolve(root, outRel);
+    if (fs.existsSync(outAbs) && !flag(args, 'force')) {
+      console.error(t('rules.exportExists', { rel: outRel }));
+      return 2;
+    }
+    const legacyFiles = findLegacyFiles(root);
+    const { name, stack } = detectProjectMeta(root);
+
+    const legacy = loaded.layers.find((l) => l.name === 'legacy') || { rules: [], waivers: [], faces: {} };
+    const projectLayer = loaded.layers.find((l) => l.name === 'project');
+
+    const faces = {
+      ...(legacy.faces || {}),
+      ...(projectLayer?.faces || {}),
+    };
+
+    const rulesMap = new Map();
+    for (const r of legacy.rules || []) {
+      const { source, ...rest } = r;
+      rulesMap.set(rest.id, rest);
+    }
+    if (projectLayer) {
+      for (const r of projectLayer.rules || []) {
+        const { source, ...rest } = r;
+        rulesMap.set(rest.id, rest);
+      }
+    }
+
+    const waivers = [
+      ...(legacy.waivers || []),
+      ...(projectLayer?.waivers || []),
+    ];
+
+    const body = {
+      version: 1,
+      name,
+      ...(stack ? { extends: [`preset:stack/${stack}`] } : {}),
+      faces,
+      rules: [...rulesMap.values()],
+      waivers,
+    };
+
+    const header = `# 由 \`flow-kit rules export\` 自动合拢生成（${new Date().toISOString().slice(0, 10)}）。\n` +
+      `# 本文件为统一声明式规则中心（已合拢 ${legacyFiles.length} 个碎片配置文件）。\n` +
+      `# 规则校验：flow-kit rules validate\n` +
+      `# 门禁执行：flow-kit rules check\n`;
+
+    fs.mkdirSync(path.dirname(outAbs), { recursive: true });
+    fs.writeFileSync(outAbs, header + stringifyYaml(body), 'utf8');
+
+    if (flag(args, 'json')) {
+      process.stdout.write(`${JSON.stringify({
+        written: outRel,
+        rulesCount: body.rules.length,
+        waiversCount: body.waivers.length,
+        legacyFiles,
+      }, null, 2)}\n`);
+    } else {
+      console.log(t('rules.exportWritten', {
+        rel: outRel,
+        rulesCount: body.rules.length,
+        filesCount: legacyFiles.length,
+      }));
+    }
     return 0;
   }
 

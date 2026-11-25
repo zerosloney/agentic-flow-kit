@@ -89,6 +89,19 @@ import { loadFaces, isProductPath } from './faces.mjs';
 import { classifyFailure } from './failure-attribution.mjs';
 import { dirtyTreeDigest } from './git-tree-digest.mjs';
 import { t } from './lang.mjs';
+let findProjectRulesFile = () => null;
+let loadProjectRules = () => null;
+let extractVerifyCommandGates = () => [];
+let detectStackFromRules = () => [];
+try {
+  const mod = await import('./rules-loader.mjs');
+  if (typeof mod?.findProjectRulesFile === 'function') findProjectRulesFile = mod.findProjectRulesFile;
+  if (typeof mod?.loadProjectRules === 'function') loadProjectRules = mod.loadProjectRules;
+  if (typeof mod?.extractVerifyCommandGates === 'function') extractVerifyCommandGates = mod.extractVerifyCommandGates;
+  if (typeof mod?.detectStackFromRules === 'function') detectStackFromRules = mod.detectStackFromRules;
+} catch {
+  // 当脚本在最小隔离测试夹具中独立运行且未复制 rules-loader.mjs 时平滑降级
+}
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = process.env.FLOW_KIT_PROJECT_ROOT || process.env.CHECK_LOOP_ROOT || path.resolve(SCRIPT_DIR, '..', '..');
@@ -125,6 +138,18 @@ const GATE_CONFIG_ITEMS = [
   ['project-faces.json', '.agents/config/project-faces.json'],
 ];
 const GATE_CONFIG_SUMMARY = (() => {
+  const projectRulesRel = findProjectRulesFile(ROOT);
+  if (projectRulesRel) {
+    let pr;
+    try {
+      pr = loadProjectRules(ROOT);
+    } catch (e) {
+      console.error(t(`[verify] 配置错误：${projectRulesRel}——规则中心配置失守（${e.message}）——拒绝运行`, `[verify] config error: ${projectRulesRel} — rules config is broken (${e.message}) — refusing to run`, ROOT));
+      process.exit(2);
+    }
+    const ruleCount = (pr && Array.isArray(pr.rules)) ? pr.rules.length : 0;
+    return t(`门禁配置：已加载 ${projectRulesRel}（声明式规则中心：${ruleCount} 条规则）`, `Gate config: loaded ${projectRulesRel} (declarative rules center: ${ruleCount} rules)`, ROOT);
+  }
   const configured = [];
   const missing = [];
   for (const [name, rel] of GATE_CONFIG_ITEMS) {
@@ -262,8 +287,25 @@ const fixtureGates = (cmd) => [
 const STACKS = (() => {
   try {
     const options = JSON.parse(fs.readFileSync('.agents/config/engine.json', 'utf8')).options || {};
-    return options.stacks?.length ? options.stacks : [options.stack || 'dotnet'];
-  } catch { return ['dotnet']; }
+    if (options.stacks?.length) return options.stacks;
+    if (options.stack) return [options.stack];
+  } catch {}
+  try {
+    const fromRules = detectStackFromRules(ROOT);
+    if (fromRules.length) return fromRules;
+  } catch {}
+  const detected = [];
+  if (fs.existsSync('package.json')) detected.push('node');
+  if (fs.existsSync('Cargo.toml')) detected.push('rust');
+  if (fs.existsSync('go.mod')) detected.push('go');
+  if (fs.existsSync('pom.xml') || fs.existsSync('build.gradle')) detected.push('java');
+  if (fs.existsSync('requirements.txt') || fs.existsSync('pyproject.toml')) detected.push('python');
+  if (fs.existsSync('CMakeLists.txt')) detected.push('cpp');
+  try {
+    const files = fs.readdirSync(ROOT);
+    if (files.some((f) => f.endsWith('.sln') || f.endsWith('.csproj'))) detected.push('dotnet');
+  } catch {}
+  return detected.length ? detected : ['dotnet'];
 })();
 if (!STACKS.includes('dotnet')) {
   // backend-/frontend- 是 dotnet+Vue 两段式布局的专用产品门；code- 四门是配置驱动的通用门
@@ -279,10 +321,16 @@ if (!STACKS.includes('dotnet')) {
 // 可选，type 默认 'shell'。配置失守（JSON 坏 / 缺必填字段 / id 与内置门或他门重复 / deps 指向不存在
 // 的门）= stderr 报错 exit 2——不能当没配置放过（漏跑该红的门比不跑更危险）。文件不存在 = 无项目
 // 产品门，不报错不打印。when 语义与 hooks/commit-check.cjs 头注一致：路径存在 / 尾部 * 一层通配 /
-// pkg:<点分路径>（读该门 folder 下的 package.json），任一满足才启用；不满足的门不进执行清单，在门
+// pkg:<点分路径>（读该门 folder 下的 package.json），或对象 { exists } / { file } / { pkg }，任一满足才启用；不满足的门不进执行清单，在门
 // 清单处打 SKIP 行（--list 走 stderr 保 stdout 纯 id），不计失败、不落凭证。deps 合法域 = 基础表 ∪
 // 全部配置门（栈自动门是探测产物、非稳定 id，不在域内）。
 const whenItem = (w, folder) => {
+  if (w && typeof w === 'object') {
+    if (w.exists) return whenItem(w.exists, folder);
+    if (w.file) return whenItem(w.file, folder);
+    if (w.pkg) return whenItem(`pkg:${w.pkg}`, folder);
+    return false;
+  }
   if (typeof w === 'string' && w.startsWith('pkg:')) {
     const keys = w.slice(4).split('.').filter(Boolean);
     if (!keys.length) return false;
@@ -303,8 +351,18 @@ const whenItem = (w, folder) => {
 };
 const whenSatisfied = (when, folder) => !when
   || (Array.isArray(when) ? when : [when]).some((w) => whenItem(w, folder));
-const showWhen = (when) => (Array.isArray(when) ? when.join(' / ') : String(when));
+const showWhen = (when) => {
+  if (Array.isArray(when)) return when.map(showWhen).join(' / ');
+  if (when && typeof when === 'object') {
+    if (when.exists) return when.exists;
+    if (when.file) return when.file;
+    if (when.pkg) return `pkg:${when.pkg}`;
+    return JSON.stringify(when);
+  }
+  return String(when || '');
+};
 const whenSkippedGates = [];
+let totalConfiguredProductGates = 0;
 {
   const cfgDir = path.join(ROOT, '.agents', 'config');
   const files = fs.existsSync(cfgDir)
@@ -348,16 +406,42 @@ const whenSkippedGates = [];
       }, when: g.when, whenFolder: folder });
     }
   }
+  // 规则驱动：从 flow-rules.yml 或项目规则文件装配 phase: verify 的命令门
+  const projectRules = loadProjectRules(ROOT);
+  if (projectRules) {
+    const ruleGates = extractVerifyCommandGates(projectRules, ROOT);
+    for (const rg of ruleGates) {
+      if (knownIds.has(rg.id)) continue;
+      knownIds.add(rg.id);
+      configured.push({
+        file: projectRules._file || 'flow-rules.yml',
+        gate: {
+          id: rg.id,
+          cohort: 'product',
+          name: rg.name,
+          cmd: rg.cmd,
+          folder: rg.folder,
+          type: rg.type,
+          ...(Array.isArray(rg.deps) && rg.deps.length ? { deps: [...rg.deps] } : {}),
+          ...(rg.env ? { env: { ...rg.env } } : {}),
+        },
+        when: rg.when,
+        whenFolder: rg.folder || '.',
+      });
+    }
+  }
   for (const { file, gate } of configured) {
     const missing = (gate.deps || []).filter((d) => !knownIds.has(d));
     if (missing.length) die(file, t(`门 ${gate.id} 的 deps 指向不存在的门（${missing.join('、')}）`, `gate ${gate.id}: deps point to non-existent gates (${missing.join(', ')})`, ROOT));
   }
+  totalConfiguredProductGates = configured.length;
   for (const { gate, when, whenFolder } of configured) {
     if (whenSatisfied(when, whenFolder)) GATES.push(gate);
     else whenSkippedGates.push({ id: gate.id, when: showWhen(when) });
   }
 }
 const pushProduct = (id, name, cmd) => {
+  if (GATES.some((g) => g.id === id)) return;
   GATES.push({ id, cohort: 'product', name, cmd, folder: '.', type: 'shell' });
 };
 if (STACKS.includes('node') || STACKS.includes('typescript')) {
@@ -754,7 +838,8 @@ async function run() {
   // 在 TF_BUILD 外默认 loud-skip，但 diff 面触及台账/修剪 manifest 时回列（verify-scope.ledgerTouched）
   // ——台账变更才付 ~90s，未触及仍跳过；全量档（无 scope）与 CI 照跑。绿行 envSkips 记录跳过事实。
   const CI_ONLY_GATE_IDS = new Set(['ledger-invariant']);
-  const localLedgerSkip = !testCmd && !stubCmd && !process.env.TF_BUILD
+  const isCi = !!(process.env.CI || process.env.TF_BUILD || process.env.GITHUB_ACTIONS || process.env.GITLAB_CI || process.env.CONTINUOUS_INTEGRATION);
+  const localLedgerSkip = !testCmd && !stubCmd && !isCi
     && !!scope && !scope.ledgerTouched;
   const envSkipIds = localLedgerSkip ? CI_ONLY_GATE_IDS : new Set();
   // 引擎资产缺失（issue #73）：两门 loud-skip 记入 envSkips——绿行记录跳过事实（带 envSkips 的行
@@ -819,6 +904,9 @@ async function run() {
     if (engineAssetsAbsent) console.error(t(`[verify] ⏭️ 未安装引擎资产（无 .agents/config/engine.json）——跳过 ${[...ASSET_GATE_IDS].join('、')} 门（check-secrets.mjs 密钥扫描随 secrets-scan 一并跳过；外部编排消费方；issue #73）`, `[verify] ⏭️ engine assets not installed (no .agents/config/engine.json) — skipping gates ${[...ASSET_GATE_IDS].join(', ')} (the check-secrets.mjs secret scan is skipped together with secrets-scan; external orchestration consumers; issue #73)`, ROOT));
     // when 未满足的项目产品门：不进清单，SKIP 行走 stderr（stdout 保持纯 id 可管道）。
     for (const s of whenSkippedGates) console.error(t(`SKIP: ${s.id}（未找到 ${s.when}，跳过——配置好后自动启用）`, `SKIP: ${s.id} (${s.when} not found; skipped — enabled automatically once configured)`, ROOT));
+    if (totalConfiguredProductGates > 0 && whenSkippedGates.length >= totalConfiguredProductGates) {
+      console.error(t('[verify] 💡 提示：所有已配置的项目产品门因 when 条件未满足已全部跳过（当前无业务代码检查执行）。', '[verify] 💡 Advisory: all configured project product gates were skipped due to unmet "when" conditions (no business checks ran).', ROOT));
+    }
     // 门禁配置汇总（2026-11-24）：一行报项目侧配置文件在场/缺席；stderr 保持 stdout 纯 id。
     console.error(`[verify] ${GATE_CONFIG_SUMMARY}`);
     const verbose = argv.includes('--verbose');
@@ -869,6 +957,9 @@ async function run() {
   // when 未满足的项目产品门：门清单处显式 SKIP（跳过可见，与 fail-loud 对称）；不计失败、不落凭证。
   if (!testCmd && !stubCmd && !engineOnly) {
     for (const s of whenSkippedGates) console.log(t(`SKIP: ${s.id}（未找到 ${s.when}，跳过——配置好后自动启用）`, `SKIP: ${s.id} (${s.when} not found; skipped — enabled automatically once configured)`, ROOT));
+    if (totalConfiguredProductGates > 0 && whenSkippedGates.length >= totalConfiguredProductGates) {
+      console.log(t('[verify] 💡 提示：所有已配置的项目产品门因 when 条件未满足已全部跳过（当前无业务代码检查执行）。', '[verify] 💡 Advisory: all configured project product gates were skipped due to unmet "when" conditions (no business checks ran).', ROOT));
+    }
   }
 
   let passedCount = 0;
@@ -930,7 +1021,7 @@ async function run() {
     const gate = gates[i];
     doneIdx.add(i);
     if (r.skip) {
-      console.log(t(`[verify] ⏭️ ${i + 1}/${gates.length} ${gate.name}：CI-only（TF_BUILD 外跳过——提交时刻 --staged 增量门已执法，全史扫描 CI 兜底）\n`, `[verify] ⏭️ ${i + 1}/${gates.length} ${gate.name}: CI-only (skipped outside TF_BUILD — the commit-time --staged incremental gate already enforced it; full-history scan covered by CI)\n`, ROOT));
+      console.log(t(`[verify] ⏭️ ${i + 1}/${gates.length} ${gate.name}：CI-only（非 CI 环境跳过——提交时刻 --staged 增量门已执法，全史扫描 CI 兜底）\n`, `[verify] ⏭️ ${i + 1}/${gates.length} ${gate.name}: CI-only (skipped outside CI — the commit-time --staged incremental gate already enforced it; full-history scan covered by CI)\n`, ROOT));
       return false;
     }
     durations[gate.id] = r.durMs;

@@ -6,6 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseJsonc } from './jsonc.mjs';
+import { parseYaml } from './yaml.mjs';
 
 export const FACES = ['ui', 'code', 'tests', 'data', 'any'];
 export const PHASES = ['pre-commit', 'pre-write', 'pre-push', 'verify', 'local', 'always'];
@@ -118,6 +119,9 @@ const PLUGIN_SPEC = {
 };
 const LAYER_SPEC = {
   version: type('1', (v) => v === 1, { why: (v) => `不支持的 version ${v}（v1 只认 1）` }),
+  name: T.str,
+  extends: T.strs,
+  stages: plainObj,
   faces: shape({ ui: T.strs, code: T.strs, tests: T.strs, data: T.strs }),
   // 三个数组的元素随后逐条校验（rules / waivers / plugins），这里只验形状。
   rules: listOf(plainObj, '对象数组'),
@@ -214,6 +218,38 @@ function validateArgs(kind, args, at, rule) {
   }
 }
 
+/** 规则语法温和归一化：支持 name 简写、单语 message、check 语法糖与缺省字段补全 */
+export function normalizeRule(raw) {
+  if (!raw || typeof raw !== 'object' || raw.enabled === false) return raw;
+  const rule = { ...raw };
+  if (typeof rule.name === 'string' && !rule.message) {
+    rule.message = { zh: rule.name, en: rule.name };
+  } else if (typeof rule.message === 'string') {
+    rule.message = { zh: rule.message, en: rule.message };
+  } else if (rule.message && typeof rule.message === 'object') {
+    if (rule.message.zh && !rule.message.en) rule.message.en = rule.message.zh;
+    if (rule.message.en && !rule.message.zh) rule.message.zh = rule.message.en;
+  }
+  if (rule.check && typeof rule.check === 'object' && !rule.assert) {
+    const { primitive, ...cArgs } = rule.check;
+    if (primitive) {
+      rule.assert = { kind: primitive, args: cArgs };
+    }
+  }
+  if (rule.assert && rule.assert.kind === 'command' && rule.assert.args) {
+    if (rule.assert.args.command && !rule.assert.args.run) {
+      rule.assert.args.run = rule.assert.args.command;
+      delete rule.assert.args.command;
+    }
+  }
+  if (!rule.face) rule.face = 'any';
+  if (!rule.phase) rule.phase = 'verify';
+  if (!rule.severity) rule.severity = 'block';
+  if (rule.name !== undefined) delete rule.name;
+  if (rule.check !== undefined) delete rule.check;
+  return rule;
+}
+
 export function validateRule(rule, at) {
   if (!isObj(rule)) fail(at, '规则必须是对象');
   // 只读禁用条目：{ id, enabled: false } 即可，无需复制整条规则（覆盖层最常见的用法）。
@@ -243,23 +279,32 @@ export function readRulesFile(root, rel) {
     if (e.code === 'ENOENT') return null;
     throw new RulesConfigError(`${rel}: 读取失败（${e.message}）`);
   }
-  const data = parseJsonc(text, rel);
+  const isYaml = /\.ya?ml$/i.test(rel);
+  const data = isYaml ? parseYaml(text, rel) : parseJsonc(text, rel);
   if (!isObj(data)) throw new RulesConfigError(`${rel}: 顶层必须是对象`);
   return data;
 }
 
-/** 读取一层规则文件：{version, faces?, rules?, waivers?, plugins?}。 */
+/** 读取一层规则文件：{version, name?, extends?, stages?, faces?, rules?, waivers?, plugins?}。 */
 export function loadLayer(root, rel, name) {
   const data = readRulesFile(root, rel);
   if (!data) return null;
   checkObject(data, LAYER_SPEC, rel);
-  const rules = data.rules || [];
+  const rules = (data.rules || []).map(normalizeRule);
   const waivers = data.waivers || [];
   const plugins = data.plugins || [];
   rules.forEach((rule, i) => validateRule(rule, `${rel}: rules[${i}]`));
   waivers.forEach((w, i) => checkObject(w, WAIVER_SPEC, `${rel}: waivers[${i}]`));
   plugins.forEach((p, i) => checkObject(p, PLUGIN_SPEC, `${rel}: plugins[${i}]`));
-  return { name, rules, waivers, faces: isObj(data.faces) ? data.faces : {}, plugins };
+  return {
+    name: data.name || name,
+    extends: data.extends || [],
+    stages: data.stages || null,
+    rules,
+    waivers,
+    faces: isObj(data.faces) ? data.faces : {},
+    plugins,
+  };
 }
 
 /** 分层合并：同 id 后者整条替换；faces 按键替换；waivers 追加（同 rule+glob 后者覆盖）。 */
@@ -268,8 +313,14 @@ export function mergeLayers(layers) {
   const faces = {};
   const waivers = new Map();
   const provenance = new Map();
+  const stages = {};
   for (const layer of layers || []) {
     if (!layer) continue;
+    if (layer.stages && typeof layer.stages === 'object') {
+      for (const [stName, stDef] of Object.entries(layer.stages)) {
+        stages[stName] = { ...(stages[stName] || {}), ...stDef };
+      }
+    }
     for (const [key, list] of Object.entries(layer.faces || {})) faces[key] = [...list];
     for (const rule of layer.rules) {
       byId.set(rule.id, rule);
@@ -294,7 +345,7 @@ export function mergeLayers(layers) {
     }
   }
   const rules = [...byId.values()].map((rule) => ({ ...rule, source: provenance.get(rule.id) }));
-  return { faces, rules, waivers: [...waivers.values()] };
+  return { faces, rules, waivers: [...waivers.values()], stages };
 }
 
 /** 过滤过期豁免；返回 { active, expired }。 */
