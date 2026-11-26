@@ -6,7 +6,7 @@ import { buildVars } from '../render/tokens.mjs';
 import { readManifest, sha256Text } from '../install/manifest.mjs';
 import { readPlanEntry, renderMergeBlock, extractMergeBlock, dedupeMergeBlock } from '../install/apply.mjs';
 import { readInjectedModels } from '../models/resolve.mjs';
-import { detectPlaceholderDrift } from '../install/derived-placeholder.mjs';
+import { derivedModeOf, detectAnchorTextOverwritten } from '../install/derived.mjs';
 import { makeT } from '../i18n.mjs';
 import { readKitVersion, resolveTarget } from './install.mjs';
 import { planInputsFromManifest, varsInputsFromManifest } from './replay.mjs';
@@ -67,15 +67,26 @@ export function classifyEntry({ target, entry, vars, managedHash, derived = fals
     if (!exists) kind = 'missing';
     else if (managedHash && managedHash !== actualHash) kind = 'user-modified';
     else kind = 'unchanged';
-    // issue #86：占位头 + 生成区已有数据 = 手工区曾被覆盖；即使哈希一致也要提示。
-    const placeholderDrift = exists ? detectPlaceholderDrift(fs.readFileSync(abs, 'utf8')) : null;
+    // issue #86：锚点外原文疑似被旧版安装覆盖——须有 git 证据才报（健康新装户不误报）。
+    let overwritten = null;
+    if (exists && derivedModeOf(entry.targetRel) === 'anchor') {
+      const templateText = readPlanEntry(entry, vars);
+      if (templateText != null) {
+        overwritten = detectAnchorTextOverwritten({
+          target,
+          rel: entry.targetRel,
+          diskText: fs.readFileSync(abs, 'utf8'),
+          templateText,
+        });
+      }
+    }
     return {
       kind,
       actualHash,
       expectedHash: null,
       kitChanged: false,
       derived: true,
-      ...(placeholderDrift ? { placeholderDrift } : {}),
+      ...(overwritten ? { overwritten } : {}),
     };
   }
   const expected = expectedEntry(entry, vars);
@@ -211,7 +222,7 @@ export function diffCommand({ args, t }) {
   console.log(tt('diff.title', { target }));
   const shown = flag(args, 'all')
     ? result.items
-    : result.items.filter((item) => item.kind !== 'unchanged' || item.placeholderDrift);
+    : result.items.filter((item) => item.kind !== 'unchanged' || item.overwritten);
   if (!shown.length) console.log(tt('diff.clean'));
   for (const item of shown) {
     const meta = KIND_META[item.kind];
@@ -219,7 +230,7 @@ export function diffCommand({ args, t }) {
     console.log(item.kind === 'user-modified' && item.kitChanged
       ? `${line} ${tt('diff.alsoKitChanged')}`
       : line);
-    if (item.placeholderDrift) console.log(`  ${tt('diff.placeholderDrift')}`);
+    if (item.overwritten) console.log(`  ${tt('diff.anchorOverwritten')}`);
   }
   console.log(tt('diff.summary', result.summary));
   return strictExit(args, result);

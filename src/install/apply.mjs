@@ -5,7 +5,7 @@ import { setField } from './frontmatter.mjs';
 import { sha256Text } from './manifest.mjs';
 import { isBinaryPath, mergeThreeWay, readBaseline, writeBaseline } from './baseline.mjs';
 import { writeAtomicSync } from './atomic.mjs';
-import { countOutsideAnchorLines } from './derived-placeholder.mjs';
+import { countDiscardableLines, derivedModeOf, detectAnchorTextOverwritten } from './derived.mjs';
 
 export const GITATTR_BEGIN = '# >>> agentic-flow-kit gitattributes';
 export const GITATTR_END = '# <<< agentic-flow-kit gitattributes';
@@ -141,6 +141,7 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
   const writes = [];
   const conflicts = [];
   const claimedDerived = [];
+  const protectedDerived = [];
 
   for (const entry of plan.entries) {
     const abs = path.join(plan.target, entry.targetRel);
@@ -208,10 +209,12 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
       continue;
     }
 
-    // 派生工件（INDEX.md / effective-policy.md / engine-map.md）永远不写静态模板：
-    // 模板只是新装户占位，INDEX.md 的锚点外是用户可写区（issue #86）。
-    // 保留磁盘原文并纳入跟踪；锚点内由紧随其后的生成器（gen-*.mjs 只重写锚点段）刷新。
-    if (derivedRels?.has(entry.targetRel)) {
+    // 派生工件（issue #86）分两种语义，绝不盲写静态模板——静态模板只是新装户占位：
+    // - anchor：生成器只重写 GENERATED 锚点区，锚点外是用户可写区 → 保留磁盘原文是安全的。
+    // - whole ：生成器整文件重写，文件里没有用户区；上次安装后被改过的文件不覆盖，
+    //            交回用户并跳过该产物的重生成，避免静默吃掉手工内容。
+    const derivedMode = derivedRels?.has(entry.targetRel) ? derivedModeOf(entry.targetRel) : null;
+    if (derivedMode) {
       let existing;
       try {
         existing = readText(abs);
@@ -223,28 +226,52 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
         continue;
       }
       if (force) {
-        // --force 是显式重置：写回模板，但必须把丢弃的用户文本说清楚（issue #86）。
-        const discarded = countOutsideAnchorLines(existing);
+        // --force 是显式重置：写回模板，但必须把丢弃的非生成内容说清楚（issue #86）。
+        const discarded = countDiscardableLines(existing, derivedMode);
         writes.push({ abs, text, targetRel: entry.targetRel, kind: entry.kind });
         stats.update += 1;
         claimedDerived.push(entry.targetRel);
         log(
           'conflict',
           discarded > 0
-            ? `${entry.targetRel}（--force 覆盖派生工件：已丢弃锚点外 ${discarded} 行用户文本）`
+            ? `${entry.targetRel}（--force 覆盖派生工件：已丢弃${derivedMode === 'whole' ? '整文件' : '锚点外'} ${discarded} 行非生成内容）`
             : `${entry.targetRel}（--force 覆盖派生工件）`,
         );
         continue;
       }
+      if (derivedMode === 'whole' && managedHash && managedHash !== currentHash) {
+        // 整文件生成 + 上次安装后被改过：可能含用户手工内容 → 保留现状，并跳过该产物的重生成。
+        stats.conflict += 1;
+        stats.conflictKeep += 1;
+        conflicts.push(entry.targetRel);
+        protectedDerived.push(entry.targetRel);
+        log('conflict', `${entry.targetRel}（整文件生成：上次安装后有改动，已保留现状并跳过重生成；--force 可覆盖）`);
+        continue;
+      }
+      if (derivedMode === 'anchor') {
+        // 锚点外是用户可写区，生成器只重写锚点内：保留磁盘原文是安全的。
+        // 若 git HEAD 里还留着被覆盖掉的手工说明，说明旧版安装已吃过一次（issue #86）——报出来让用户找回。
+        const overwritten = detectAnchorTextOverwritten({
+          target,
+          rel: entry.targetRel,
+          diskText: existing,
+          templateText: text,
+        });
+        if (overwritten) {
+          log('conflict', `${entry.targetRel}（锚点外原文疑似被旧版安装覆盖：git HEAD 里还有你原来的手工说明，可用 git show HEAD:${entry.targetRel} 找回）`);
+        }
+      }
       writes.push({ abs, text: existing, targetRel: entry.targetRel, kind: entry.kind });
       stats.update += 1;
       claimedDerived.push(entry.targetRel);
-      log(
-        'update',
-        managedHash
-          ? `${entry.targetRel}（派生工件：保留锚点外原文，生成区由生成器刷新）`
-          : `${entry.targetRel}（已存在且为本工具派生产物，保留原文并纳入跟踪；生成区由生成器刷新）`,
-      );
+      const label = derivedMode === 'anchor'
+        ? (managedHash
+          ? '派生工件·锚区生成：保留锚点外原文，锚点内由生成器刷新'
+          : '派生工件·锚区生成·首次认领：保留锚点外原文，锚点内由生成器刷新')
+        : (managedHash
+          ? '派生工件·整文件生成：无改动，由生成器整文件重写'
+          : '派生工件·整文件生成·首次认领：纳入跟踪，由生成器整文件重写');
+      log('update', `${entry.targetRel}（${label}）`);
       continue;
     }
 
@@ -348,6 +375,8 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
     skipRehash: writes.filter((w) => w.conflict || w.templateText != null).map((w) => w.targetRel),
     // 本次认领的派生工件：即使生成器未改动字节，也必须登记 derived（否则 diff 拿静态模板比对永久漂移）。
     derivedClaimed: claimedDerived,
+    // 整文件生成且用户改过的派生工件：本次不重生成（保留用户内容），安装器据此跳过生成器。
+    protectedDerived,
     conflicts,
   };
 }

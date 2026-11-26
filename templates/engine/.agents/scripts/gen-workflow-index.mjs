@@ -38,32 +38,6 @@ const ACTIVE_STATUS = [...ENUMS['doc.status.active'], ...ENUMS['incident.status.
 
 const BEGIN = '<!-- GENERATED:BEGIN — gen-workflow-index.mjs 整段重写，手工说明写在本行之前 -->';
 const END = '<!-- GENERATED:END -->';
-// issue #86：新装户占位头混进存量仓（生成区已有真实数据）时判漂移。
-// 与 src/install/derived-placeholder.mjs 同口径；本脚本随目标仓分发，不能 import src。
-export const PLACEHOLDER_SENTINELS = [/本文件为新装户占位/, /^## 活跃（0）$/m];
-export function detectPlaceholderDrift(text) {
-  const src = String(text || '');
-  const beginIdx = src.indexOf(BEGIN);
-  if (beginIdx < 0) return null;
-  const endIdx = src.indexOf(END, beginIdx + BEGIN.length);
-  if (endIdx < 0) return null;
-  const pre = src.slice(0, beginIdx);
-  const sentinel = PLACEHOLDER_SENTINELS.find((re) => re.test(pre));
-  if (!sentinel) return null;
-  const inner = src.slice(beginIdx + BEGIN.length, endIdx);
-  const pick = (re) => {
-    const m = inner.match(re);
-    return m ? Number(m[1]) : 0;
-  };
-  const counts = {
-    active: pick(/## 活跃（(\d+)）/),
-    tasks: pick(/## 任务投影（(\d+)）/),
-    archive: pick(/## 档案计数（(\d+)/),
-    rows: (inner.match(/^\|\s*(?:INTENT|SPEC|PLAN|INCIDENT)\s*\|/gm) || []).length,
-  };
-  const hasData = counts.active > 0 || counts.tasks > 0 || counts.archive > 0 || counts.rows > 0;
-  return hasData ? { sentinel: String(sentinel), counts } : null;
-}
 
 const HEADER = `# workflow 索引 — 活跃层与档案（生成物，勿手改）
 
@@ -356,16 +330,8 @@ function main() {
   const nActive = docs.filter((d) => ACTIVE_STATUS.includes(d.status)).length;
   const nArch = docs.length - nActive;
   const summary = `活跃 ${nActive} 行 / 任务 ${tasks.length} / 档案 ${nArch} 篇 / ${Buffer.byteLength(out, 'utf8')} B`;
-  const placeholder = detectPlaceholderDrift(existing);
-  const placeholderMsg = placeholder
-    ? `workflow/INDEX.md 锚点外仍是新装户占位（生成区已有 活跃 ${placeholder.counts.active} / 任务 ${placeholder.counts.tasks} / 档案 ${placeholder.counts.archive}）——疑似升级覆盖了手工区（issue #86）；请恢复锚点外原文后重跑`
-    : null;
 
   if (CHECK) {
-    if (placeholderMsg) {
-      console.error(`❌ ${placeholderMsg}`);
-      process.exit(1);
-    }
     if (normEol(out) === normEol(existing)) {
       console.log(`✅ workflow/INDEX.md 与磁盘一致（${summary}）`);
       process.exit(0);
@@ -374,8 +340,6 @@ function main() {
     previewDiff(existing, out);
     process.exit(1);
   }
-
-  if (placeholderMsg) console.error(`⚠️ ${placeholderMsg}`);
 
   if (DRY) {
     console.log(`🔎 --dry-run：未写盘（${summary}）`);

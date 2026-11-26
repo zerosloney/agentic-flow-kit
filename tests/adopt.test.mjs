@@ -124,7 +124,7 @@ test('旧版装户升级：装期生成的引擎地图被认领，不再永久�
 
   const up = run(['upgrade', '--target', '.'], dir);
   assert.equal(up.status, 0, up.stderr);
-  assert.match(up.stdout, /engine-map\.md（已存在且为本工具派生产物，保留原文并纳入跟踪/);
+  assert.match(up.stdout, /engine-map\.md（派生工件·整文件生成·首次认领：纳入跟踪，由生成器整文件重写/);
   assert.doesNotMatch(up.stdout, /engine-map\.md（已存在且非本工具安装/);
   const after = manifestOf(dir);
   assert.ok(rel in after.files, '认领后应进 manifest 账本');
@@ -181,16 +181,14 @@ test('旧版装户升级：workflow/INDEX.md 锚点外用户文本不得被占�
   assert.ok(read(dir, rel).startsWith(header), '二次升级仍须保留手工区');
 });
 
-test('混合态占位头：diff 与 doctor 必须给出 issue #86 提示（哈希一致也不隐身）', () => {
+test('健康新装户（生成区已有真实数据）：不得误报「锚点外原文被覆盖」', () => {
   const dir = tmpRepo();
   install(dir, ['claude']);
   const rel = 'workflow/INDEX.md';
-  const full = read(dir, rel);
-  const anchor = full.indexOf('<!-- GENERATED:BEGIN');
-  const template = fs.readFileSync(path.join(KIT, 'templates/scaffold/workflow/INDEX.md'), 'utf8');
-  const placeholderHead = template.slice(0, template.indexOf('<!-- GENERATED:BEGIN'));
-  fs.writeFileSync(path.join(dir, rel), placeholderHead + full.slice(anchor), 'utf8');
-  // 造一篇活跃文档：生成区必须有真实数据，混合态才成立（新装空仓的生成区全 0）。
+  // 提交一次：git HEAD 里就是新装户样板（健康态的典型现场）。
+  spawnSync('git', ['add', '-A'], { cwd: dir });
+  spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--no-verify', '-m', 'init'], { cwd: dir });
+  // 造一篇活跃文档：生成区有真实数据，锚点外仍是样板（与受损仓逐字节同形）。
   fs.mkdirSync(path.join(dir, 'workflow/intents'), { recursive: true });
   fs.writeFileSync(
     path.join(dir, 'workflow/intents/2026-11-26-demo.md'),
@@ -204,17 +202,54 @@ test('混合态占位头：diff 与 doctor 必须给出 issue #86 提示（哈�
   const item = diffJson.items.find((entry) => entry.targetRel === rel);
   assert.ok(item, `missing diff item for ${rel}`);
   assert.equal(item.kind, 'unchanged');
-  assert.ok(item.placeholderDrift, 'diff JSON 必须携带 placeholderDrift');
-  assert.equal(item.placeholderDrift.counts.active > 0, true);
+  assert.equal(item.overwritten, undefined, '健康新装户不得被判成受损仓');
+
+  const human = run(['diff', '--target', '.'], dir);
+  assert.equal(human.status, 0, human.stderr);
+  assert.doesNotMatch(human.stdout, /issue #86/);
+
+  const doctor = run(['doctor', '--target', '.'], dir);
+  assert.equal(doctor.status, 0, doctor.stdout + doctor.stderr);
+  assert.doesNotMatch(doctor.stdout, /派生工件锚点外原文疑似被覆盖/);
+});
+
+test('锚点外原文被旧版安装覆盖：有 git 证据时 diff 与 doctor 必须点名（issue #86）', () => {
+  const dir = tmpRepo();
+  install(dir, ['claude']);
+  const rel = 'workflow/INDEX.md';
+  const full = read(dir, rel);
+  const anchor = full.indexOf('<!-- GENERATED:BEGIN');
+  const header = '# 我的索引\n\n> 手工说明，升级前写在这里。\n\n';
+  fs.writeFileSync(path.join(dir, rel), header + full.slice(anchor), 'utf8');
+  // 提交手工版：git HEAD 里留着用户原文（受损前的现场）。
+  spawnSync('git', ['add', '-A'], { cwd: dir });
+  spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--no-verify', '-m', 'manual header'], { cwd: dir });
+  // 模拟旧版安装把锚点外覆盖成模板样板（#86 的现场：锚点外只剩样板，生成区有真实数据）。
+  const template = fs.readFileSync(path.join(KIT, 'templates/scaffold/workflow/INDEX.md'), 'utf8');
+  fs.writeFileSync(path.join(dir, rel), template.slice(0, template.indexOf('<!-- GENERATED:BEGIN')) + full.slice(anchor), 'utf8');
+  fs.mkdirSync(path.join(dir, 'workflow/intents'), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'workflow/intents/2026-11-26-demo.md'),
+    '---\n状态: draft\n级别: L2\n日期: 2026-11-26\n模块: engine\n---\n\n# INTENT — demo\n',
+    'utf8',
+  );
+
+  const up = run(['upgrade', '--target', '.'], dir);
+  assert.equal(up.status, 0, up.stderr);
+  assert.match(up.stdout, /锚点外原文疑似被旧版安装覆盖/);
+
+  const diffJson = json(run(['diff', '--target', '.', '--json'], dir));
+  const item = diffJson.items.find((entry) => entry.targetRel === rel);
+  assert.ok(item, `missing diff item for ${rel}`);
+  assert.ok(item.overwritten, 'diff JSON 必须携带 overwritten');
 
   const human = run(['diff', '--target', '.'], dir);
   assert.equal(human.status, 0, human.stderr);
   assert.match(human.stdout, /issue #86/);
-  assert.match(human.stdout, /新装户占位/);
 
   const doctor = run(['doctor', '--target', '.'], dir);
   assert.equal(doctor.status, 0, doctor.stdout + doctor.stderr);
-  assert.match(doctor.stdout, /派生工件占位头残留/);
+  assert.match(doctor.stdout, /派生工件锚点外原文疑似被覆盖/);
   assert.match(doctor.stdout, /workflow\/INDEX\.md/);
 });
 
@@ -228,10 +263,35 @@ test('--force 覆盖派生工件：显式丢弃锚点外用户文本并报出行
 
   const up = run(['upgrade', '--target', '.', '--force'], dir);
   assert.equal(up.status, 0, up.stderr);
-  assert.match(up.stdout, /--force 覆盖派生工件：已丢弃锚点外 2 行用户文本/);
+  assert.match(up.stdout, /--force 覆盖派生工件：已丢弃锚点外 2 行非生成内容/);
   const after = read(dir, rel);
   assert.doesNotMatch(after, /我的索引/);
   assert.match(after, /^# workflow 索引/);
+});
+
+test('整文件生成的派生工件：用户改过就保留原文并跳过重生成（不静默吃数据）', () => {
+  const dir = tmpRepo();
+  install(dir, ['claude']);
+  const rel = 'workflow/effective-policy.md';
+  assert.ok(fs.existsSync(path.join(dir, rel)), '派生工件必须已装进目标');
+  fs.appendFileSync(path.join(dir, rel), '\n<!-- MANUAL: 手工策略说明，勿删 -->\n', 'utf8');
+
+  const up = run(['upgrade', '--target', '.'], dir);
+  assert.equal(up.status, 0, up.stderr);
+  assert.match(up.stdout, /整文件生成：上次安装后有改动，已保留现状并跳过重生成/);
+  assert.match(read(dir, rel), /MANUAL: 手工策略说明/, '用户手写内容必须存活');
+});
+
+test('--force 覆盖整文件生成的派生工件：报出整文件行数（不得谎报 0 行）', () => {
+  const dir = tmpRepo();
+  install(dir, ['claude']);
+  const rel = 'workflow/effective-policy.md';
+  fs.appendFileSync(path.join(dir, rel), '\n<!-- MANUAL: 手工策略说明，勿删 -->\n', 'utf8');
+  const lines = read(dir, rel).split(/\r?\n/).filter((line) => line.trim()).length;
+
+  const up = run(['upgrade', '--target', '.', '--force'], dir);
+  assert.equal(up.status, 0, up.stderr);
+  assert.match(up.stdout, new RegExp(`--force 覆盖派生工件：已丢弃整文件 ${lines} 行非生成内容`));
 });
 
 test('非派生集合的未跟踪既有文件仍按原样跳过', () => {

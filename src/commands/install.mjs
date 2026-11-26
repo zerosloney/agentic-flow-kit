@@ -9,6 +9,7 @@ import { forgeFromRemote, originUrl } from '../install/forge.mjs';
 import { parseProfileArgs, STACKS } from '../install/profiles.mjs';
 import { stackMarkers } from '../install/stack-registry.mjs';
 import { applyPlan, readPlanEntry, summaryLine } from '../install/apply.mjs';
+import { DERIVED_ARTIFACTS, DERIVED_RELS } from '../install/derived.mjs';
 import { emptyManifest, readManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
 import { acquireInstallLock } from '../install/lock.mjs';
 import { cleanupMigratedFiles } from '../install/migrations.mjs';
@@ -222,14 +223,12 @@ function normalizeModelMode(value) {
 // 运行时实现已随包分发，因此从包内脚本执行，只把 cwd/根指向目标项目。
 // 只重生成「本次已装进目标」的产物：--scaffold none 时目标没有 workflow/ 面，
 // 生成器若照跑会凭空造出 workflow/ 目录（破坏「无脚手架即无 workflow」契约）。
-const DERIVED_ARTIFACTS = [
-  { script: 'gen-workflow-index.mjs', rel: 'workflow/INDEX.md' },
-  { script: 'gen-effective-policy.mjs', rel: 'workflow/effective-policy.md' },
-  { script: 'gen-engine-map.mjs', rel: '.agents/notes/engine-map.md' },
-];
-function generateDerivedArtifacts(target) {
+// skip：安装器判定「用户改过、保留现状」的产物——整文件生成的产物被跳过时，
+// 生成器不得再覆盖用户的改动（issue #86 静默吃数据）。
+function generateDerivedArtifacts(target, { skip = new Set() } = {}) {
   for (const { script, rel } of DERIVED_ARTIFACTS) {
     if (!fs.existsSync(path.join(target, rel))) continue; // 未装该产物 → 不生成（保持脚手架档语义）
+    if (skip.has(rel)) continue; // 用户改过且已保留现状 → 不重生成
     const abs = path.join(RUNTIME_SCRIPTS, script);
     if (!fs.existsSync(abs)) continue;
     try {
@@ -645,7 +644,7 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
     baseline: baselineEnabled,
     // upgrade 时模板侧未变（base === theirs）视为无冲突；install/add-host 保持旧冲突语义。
     benignUnchanged: commandLabel === 'upgrade',
-    derivedRels: new Set(DERIVED_ARTIFACTS.map((d) => d.rel)),
+    derivedRels: DERIVED_RELS,
     log: (action, msg) => logger(action, msg, (done += 1), total),
   });
 
@@ -657,7 +656,7 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
   if (!dryRun) {
     const beforeDerived = { ...result.files };
     const derived = new Set(previous?.derived || []);
-    generateDerivedArtifacts(target);
+    generateDerivedArtifacts(target, { skip: new Set(result.protectedDerived || []) });
     // 生成器运行后重算派生工件的哈希并登记 derived（细节见 rehashDerivedArtifacts）
     rehashDerivedArtifacts({
       target,

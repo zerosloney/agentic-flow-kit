@@ -109,10 +109,10 @@ export function doctorCommand({ args, t }) {
     if (drifting > 0) {
       add(true, 'manifest drift', t('doctor.drift', drift), t('doctor.driftHint'), { warn: true });
     }
-    // issue #86：占位头混进存量仓（哈希可能一致，diff 默认不显示）——单独 advisory。
-    const placeholder = (diffResult.items || []).filter((item) => item.placeholderDrift).map((item) => item.targetRel);
-    if (placeholder.length) {
-      add(true, 'derived placeholder', t('doctor.derivedPlaceholder', { files: placeholder.join(', ') }), t('doctor.derivedPlaceholderHint'), { warn: true });
+    // issue #86：锚点外原文疑似被旧版安装覆盖（哈希可能一致，diff 默认不显示）——单独 advisory。
+    const overwritten = (diffResult.items || []).filter((item) => item.overwritten).map((item) => item.targetRel);
+    if (overwritten.length) {
+      add(true, 'derived overwritten', t('doctor.derivedOverwritten', { files: overwritten.join(', ') }), t('doctor.derivedOverwrittenHint'), { warn: true });
     }
   }
 

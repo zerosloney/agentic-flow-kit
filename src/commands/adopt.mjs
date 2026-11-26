@@ -5,6 +5,7 @@ import { listFiles, RUNTIME_DIRS, RUNTIME_FILES } from '../install/plan.mjs';
 import { CURRENT_SCHEMA_VERSION, MANIFEST_REL, readManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
 import { acquireInstallLock } from '../install/lock.mjs';
 import { dedupeMergeBlock, extractMergeBlock, readPlanEntry, renderMergeBlock } from '../install/apply.mjs';
+import { DERIVED_RELS } from '../install/derived.mjs';
 import { HOSTS } from '../hosts/registry.mjs';
 import { detectHosts } from '../hosts/detect.mjs';
 import { buildState } from './diff.mjs';
@@ -13,7 +14,6 @@ import { readKitVersion, resolveHosts, resolveStack, resolveTarget, validateStac
 const MERGE_KINDS = new Set(['merge-gitattributes', 'merge-gitignore']);
 // 生成脚本会按磁盘现状重写这三份派生工件（索引/生效策略/引擎地图），
 // 静态模板不可作为预期值；接管时按现状收录并登记为 derived（与 install 的 manifest.derived 语义一致）。
-const DERIVED_RELS = new Set(['workflow/INDEX.md', 'workflow/effective-policy.md', '.agents/notes/engine-map.md']);
 const norm = (text) => text.replace(/\r\n/g, '\n');
 
 function readEngineInfo(target) {
