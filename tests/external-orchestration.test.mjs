@@ -15,7 +15,9 @@ import { fileURLToPath } from 'node:url';
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
 
-// 裸宿主仓：仅 README + 一笔提交（无 .agents/、无 wiki/、无 workflow/）
+// 裸宿主仓：仅 README + 两笔提交（无 .agents/、无 wiki/、无 workflow/）。
+// 两笔是 CI 形态的硬要求：verify 的「泳道完整性（CI diff 面）」在 GITHUB_ACTIONS/main 下
+// 以 HEAD~1 为基准且 fail-closed；单笔仓会让该门 BLOCK，掩盖本用例真正要验的 loud-skip。
 function bareRepo() {
   const dir = makeTmp('flow-kit-host-');
   fs.writeFileSync(path.join(dir, 'README.md'), '# host repo (external orchestrator)\n');
@@ -23,6 +25,10 @@ function bareRepo() {
   spawnSync('git', ['add', '.'], { cwd: dir });
   const c = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-qm', 'init'], { cwd: dir });
   assert.equal(c.status, 0, c.stderr);
+  fs.writeFileSync(path.join(dir, 'CHANGELOG.md'), '# history\n');
+  spawnSync('git', ['add', '.'], { cwd: dir });
+  const c2 = spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@example.com', 'commit', '-qm', 'second'], { cwd: dir });
+  assert.equal(c2.status, 0, c2.stderr);
   return dir;
 }
 
