@@ -2,6 +2,36 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.13.1]
+
+### 新增
+
+- feat(detect): 补齐 issue #86 三条检测面（生成器 --check / diff+doctor / 覆盖丢弃 warn）
+- feat(ci): 变更文件覆盖率门（coverage-gate + CI 作业）
+- feat(tools): 变异抽样器 mutate-sample（11 条策展变异体 + 漂移守卫）
+
+### 修复
+
+- fix(derived): 整文件工件只在「未提交且非生成内容」时不覆盖，自愈门同规则；修 en 覆盖检测漏报
+- fix(ci): coverage-gate 识别 Node 22 的 `# ` 覆盖表前缀
+- fix(ci): coverage-gate 兼容无 ℹ 前缀的覆盖表，并在零行时打印日志头
+- fix(install): 派生工件认领不再盲写模板，保留 INDEX.md 锚点外用户文本 (#86)
+- fix(gate): 交接信封违规取 problems，策略解析失败统一本地化文案
+- fix(ci): 解决 Windows 运行器 8.3 短路径导致的 git 顶层比对与规则预算跳过
+- fix(timeline): 修复同毫秒时钟下时序事件单调性与时间切片投影边界
+
+### 文档
+
+- docs(backlog): 登记测试质量门 #40/#41（变异抽样 + 变更文件覆盖率）
+- docs: 更新本仓路线图与全景说明（ROADMAP / BACKLOG / README）
+
+### 其他
+
+- refactor(derived): 派生工件语义单源（anchor/whole 双模式）+ 证据化覆盖检测
+- test(orchestration): 裸宿主仓补第二笔提交，修 CI 泳道门 fail-closed 假红
+- test: confirm-doc tasks 用例改用 makeTmp，回收一次性目录
+- test(rules): 补齐 glob 目标与 YAML # 注释守卫的行为断言
+
 ## [2.13.0]
 
 ### 新增
