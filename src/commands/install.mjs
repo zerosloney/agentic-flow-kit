@@ -169,7 +169,10 @@ export function formatInstallLog(action, msg) {
 // 「已是最新」在升级时会占绝大多数，进度条已能表达。冲突和其余跳过必须留下原文。
 export function installLogNotable(action, msg) {
   if (action === 'conflict') return true;
-  if (action === 'skip') return !String(msg).includes('已是最新');
+  if (action === 'skip') {
+    const s = String(msg || '');
+    return !s.includes('已是最新') && !/up to date|already latest/i.test(s);
+  }
   return false;
 }
 

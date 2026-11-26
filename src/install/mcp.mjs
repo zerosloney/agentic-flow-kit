@@ -39,7 +39,7 @@ export function readMcpServers(target) {
   return parsed.servers;
 }
 
-function containerKey(format) {
+export function containerKey(format) {
   if (format === 'opencode') return 'mcp';
   if (format === 'claude') return 'mcpServers';
   fail(`unknown host MCP format: ${format}`);
@@ -143,38 +143,3 @@ export function mergeMcpFile(abs, servers, format, baseText = null) {
   return { text: `${JSON.stringify(root, null, 2)}\n`, names };
 }
 
-// 卸载/移除宿主时只摘掉本工具声明过的 server 名，保留用户 server 与其它配置。
-export function stripMcpFile(abs, names, format) {
-  let key;
-  try {
-    key = containerKey(format);
-  } catch {
-    return { text: null, removed: [] };
-  }
-  const exists = fs.existsSync(abs);
-  if (!exists) return { text: null, removed: [] };
-  const existing = fs.readFileSync(abs, 'utf8');
-  let root;
-  try {
-    root = JSON.parse(existing);
-  } catch {
-    return { text: existing, removed: [], invalid: true };
-  }
-  const container = isObject(root?.[key]) ? root[key] : {};
-  const removed = [];
-  for (const name of names || []) {
-    if (name in container) {
-      delete container[name];
-      removed.push(name);
-    }
-  }
-  if (!removed.length) return { text: existing, removed };
-  if (Object.keys(container).length) {
-    root[key] = container;
-    return { text: `${JSON.stringify(root, null, 2)}\n`, removed };
-  }
-  delete root[key];
-  // 文件只剩空壳（安装器创建、无用户内容）时删除；否则保留其它键。
-  const text = Object.keys(root).length ? `${JSON.stringify(root, null, 2)}\n` : null;
-  return { text, removed };
-}

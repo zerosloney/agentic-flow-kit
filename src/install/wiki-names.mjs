@@ -22,10 +22,6 @@ function resolveLang(lang) {
   return Object.prototype.hasOwnProperty.call(WIKI_NAMES.board, lang) ? lang : 'zh-CN';
 }
 
-export function wikiName(key, lang) {
-  const names = WIKI_NAMES[key];
-  return names ? names[resolveLang(lang)] : undefined;
-}
 
 export function localizePath(rel, lang) {
   const target = resolveLang(lang);

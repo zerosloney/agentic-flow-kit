@@ -7,7 +7,7 @@ import { listHandoffFiles, verifyHandoffEnvelope } from '../install/handoff.mjs'
 import { resolvePublicKeyPath } from '../install/notary.mjs';
 import { findSkillDatasets } from '../skills/eval-harness.mjs';
 import { computeAiDoraMetrics } from '../install/metrics.mjs';
-import { box, cyan, green, red, yellow, bold, dim, magenta } from './ansi.mjs';
+import { box, cyan, green, red, yellow, bold, dim } from './ansi.mjs';
 
 /**
  * 汇总当前项目的全景运行时状态数据（用于终端实时多智能体看板）

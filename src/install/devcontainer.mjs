@@ -10,7 +10,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { devcontainerMaps } from './stack-registry.mjs';
 
-export const DEVCONTAINER_DIR = '.devcontainer';
 export const DEVCONTAINER_JSON_REL = '.devcontainer/devcontainer.json';
 export const DEVCONTAINER_DOCKERFILE_REL = '.devcontainer/Dockerfile';
 export const DEVCONTAINER_POLICY_REL = '.agents/config/devcontainer-policy.json';

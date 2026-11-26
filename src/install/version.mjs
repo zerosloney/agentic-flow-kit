@@ -10,3 +10,13 @@ export function readKitVersion() {
     return '0.0.0';
   }
 }
+
+export function readNodeMinimum() {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(new URL('../../package.json', import.meta.url), 'utf8'));
+    const match = pkg.engines?.node?.match(/\d+/);
+    return match ? match[0] : '22';
+  } catch {
+    return '22';
+  }
+}

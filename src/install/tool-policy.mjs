@@ -2,8 +2,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { MCP_PROJECT_REL, MCP_TEMPLATE, isObject, mcpPolicyFail } from './mcp.mjs';
 
-export const POLICY_MODES = ['allow'];
-
 function fail(detail) {
   mcpPolicyFail(detail);
 }

@@ -1,6 +1,8 @@
 import { HOSTS } from '../hosts/registry.mjs';
 import { stackDefaults, stackShell } from '../install/stack-registry.mjs';
 import { wikiProtocolNames, wikiTokens } from '../install/wiki-names.mjs';
+import { BASE_BOARD_PORT } from '../../templates/engine/.agents/scripts/board-port.mjs';
+import { readNodeMinimum } from '../install/version.mjs';
 
 const STACK_DEFAULTS = stackDefaults();
 
@@ -75,7 +77,7 @@ export function buildVars({ target, projectName, stack, language, hosts, kitVers
     productNote,
     apiPort: String(apiPort),
     webPort: String(webPort),
-    boardPort: '8933',
+    boardPort: String(BASE_BOARD_PORT),
     hosts: hosts.join(', '),
     hostsJson: JSON.stringify(hosts),
     stackAllowBashColon: stackList.map((s) => stackAllowFragment(s, 'Bash', ':')).join(''),
@@ -83,7 +85,7 @@ export function buildVars({ target, projectName, stack, language, hosts, kitVers
     stackAllowShellSpace: stackList.map((s) => stackAllowFragment(s, 'Shell', ' ')).join(''),
     kitVersion,
     installedAt,
-    nodeMinimum: '22',
+    nodeMinimum: readNodeMinimum(),
     hostIgnores,
     ...wikiTokens(language),
     wikiNamesMember,

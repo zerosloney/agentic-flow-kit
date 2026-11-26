@@ -1,11 +1,9 @@
-import path from 'node:path';
 import { flag } from '../cli/args.mjs';
 import { resolveTarget } from './install.mjs';
 import {
   evaluateMcpCall,
   recordMcpAudit,
   queryMcpAudit,
-  MCP_AUDIT_LOG_REL,
 } from '../install/mcp-gateway.mjs';
 
 function fail(detail, code = 'MCP_ERROR') {

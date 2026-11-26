@@ -6,7 +6,7 @@ import { readManifest } from '../install/manifest.mjs';
 import { doctorGit } from '../git/config.mjs';
 import { HOSTS, hostTargetRel, hostSource } from '../hosts/registry.mjs';
 import { ciModeFor, ciTemplateRels, listFiles, readGatesSpecs, TEMPLATES } from '../install/plan.mjs';
-import { readMcpServers } from '../install/mcp.mjs';
+import { readMcpServers, containerKey } from '../install/mcp.mjs';
 import { readToolPolicy } from '../install/tool-policy.mjs';
 import { checkDevcontainer } from '../install/devcontainer.mjs';
 import { findHookDrift, inapplicableForUserHooks, inapplicableSpecs } from '../install/hooks.mjs';
@@ -237,7 +237,13 @@ export function doctorCommand({ args, t }) {
         add(false, `mcp ${host}`, t('doctor.mcpInvalid', { path: h.mcp.file }));
         continue;
       }
-      const container = h.mcp.format === 'opencode' ? root?.mcp : root?.mcpServers;
+      let key;
+      try {
+        key = containerKey(h.mcp.format);
+      } catch {
+        key = null;
+      }
+      const container = key ? root?.[key] : null;
       if (!container || typeof container !== 'object') {
         add(false, `mcp ${host}`, t('doctor.mcpContainer', { path: h.mcp.file }));
         continue;

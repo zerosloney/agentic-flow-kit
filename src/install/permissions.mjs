@@ -49,13 +49,6 @@ export function parsePermissionSpec(text) {
   };
 }
 
-export function readPermissionSpec(target) {
-  try {
-    return parsePermissionSpec(fs.readFileSync(path.join(target, HOOKS_SPEC_REL), 'utf8'));
-  } catch {
-    return null;
-  }
-}
 
 function shellPattern(cfg, pat) {
   if (pat.includes('*')) return pat;

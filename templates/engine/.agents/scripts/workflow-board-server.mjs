@@ -17,8 +17,9 @@ import { ENUMS } from './workflow-enums.mjs';
 import { stageBar } from './pipeline-run.mjs';
 import { loadAllConfirmations } from './ledger-loader.mjs';
 import { projectTasks } from './gen-workflow-index.mjs'; // 任务投影单源（2026-11-16 P3）：/api/board tasks 与 INDEX 同口径
-import { funnelFromLedger, loadFirstAdded, scanReviews, fmtMedianDays, calendarMonthsBetween } from './metrics-core.mjs';
+import { funnelFromLedger, loadFirstAdded, scanReviews, calendarMonthsBetween } from './metrics-core.mjs';
 import { buildTour } from './dev-tour-model.mjs';
+import { resolveBoardPort } from './board-port.mjs';
 
 const ROOT = process.env.FLOW_KIT_PROJECT_ROOT
   || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -32,7 +33,8 @@ const JUDGMENTS = path.join(ROOT, '.agents', 'judgments.jsonl');
 const VERIFICATIONS = path.join(ROOT, '.agents', 'verifications.jsonl');
 
 const portArg = process.argv.indexOf('--port');
-const PORT = portArg > 0 ? Number(process.argv[portArg + 1]) || 8933 : 8933;
+const explicitPort = portArg > 0 ? process.argv[portArg + 1] : '';
+const PORT = resolveBoardPort({ explicit: explicitPort, root: ROOT });
 const STARTED_AT = Date.now(); // 随 /api/board 自报（startedAt），供 ensure-board.mjs 判定旧代码重启，不碰进程启动时间 API
 
 // ---- front matter + 标题解析（对照 _TEMPLATE.md 受限子集：每行 `键: 值`）----

@@ -55,13 +55,6 @@ export function parseHookSpec(text) {
   return spec;
 }
 
-export function readHookSpec(target) {
-  try {
-    return parseHookSpec(fs.readFileSync(path.join(target, HOOKS_SPEC_REL), 'utf8'));
-  } catch {
-    return null;
-  }
-}
 
 // cfg.event 支持字符串或数组（如 claude 同时声明 PreToolUse 门与 PostToolUse 观测腿）；
 // matcher / timeout 仍按 tool 类别单源映射（cfg.matchers / cfg.timeouts）。
