@@ -6,6 +6,7 @@ import { buildVars } from '../render/tokens.mjs';
 import { readManifest, sha256Text } from '../install/manifest.mjs';
 import { readPlanEntry, renderMergeBlock, extractMergeBlock, dedupeMergeBlock } from '../install/apply.mjs';
 import { readInjectedModels } from '../models/resolve.mjs';
+import { detectPlaceholderDrift } from '../install/derived-placeholder.mjs';
 import { makeT } from '../i18n.mjs';
 import { readKitVersion, resolveTarget } from './install.mjs';
 import { planInputsFromManifest, varsInputsFromManifest } from './replay.mjs';
@@ -66,7 +67,16 @@ export function classifyEntry({ target, entry, vars, managedHash, derived = fals
     if (!exists) kind = 'missing';
     else if (managedHash && managedHash !== actualHash) kind = 'user-modified';
     else kind = 'unchanged';
-    return { kind, actualHash, expectedHash: null, kitChanged: false, derived: true };
+    // issue #86：占位头 + 生成区已有数据 = 手工区曾被覆盖；即使哈希一致也要提示。
+    const placeholderDrift = exists ? detectPlaceholderDrift(fs.readFileSync(abs, 'utf8')) : null;
+    return {
+      kind,
+      actualHash,
+      expectedHash: null,
+      kitChanged: false,
+      derived: true,
+      ...(placeholderDrift ? { placeholderDrift } : {}),
+    };
   }
   const expected = expectedEntry(entry, vars);
   const isConfigMerge = entry.kind === 'merge-mcp' || entry.kind === 'merge-host';
@@ -201,7 +211,7 @@ export function diffCommand({ args, t }) {
   console.log(tt('diff.title', { target }));
   const shown = flag(args, 'all')
     ? result.items
-    : result.items.filter((item) => item.kind !== 'unchanged');
+    : result.items.filter((item) => item.kind !== 'unchanged' || item.placeholderDrift);
   if (!shown.length) console.log(tt('diff.clean'));
   for (const item of shown) {
     const meta = KIND_META[item.kind];
@@ -209,6 +219,7 @@ export function diffCommand({ args, t }) {
     console.log(item.kind === 'user-modified' && item.kitChanged
       ? `${line} ${tt('diff.alsoKitChanged')}`
       : line);
+    if (item.placeholderDrift) console.log(`  ${tt('diff.placeholderDrift')}`);
   }
   console.log(tt('diff.summary', result.summary));
   return strictExit(args, result);

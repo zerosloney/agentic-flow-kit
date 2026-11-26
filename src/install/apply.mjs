@@ -5,6 +5,7 @@ import { setField } from './frontmatter.mjs';
 import { sha256Text } from './manifest.mjs';
 import { isBinaryPath, mergeThreeWay, readBaseline, writeBaseline } from './baseline.mjs';
 import { writeAtomicSync } from './atomic.mjs';
+import { countOutsideAnchorLines } from './derived-placeholder.mjs';
 
 export const GITATTR_BEGIN = '# >>> agentic-flow-kit gitattributes';
 export const GITATTR_END = '# <<< agentic-flow-kit gitattributes';
@@ -219,6 +220,20 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
         stats.conflictKeep += 1;
         conflicts.push(entry.targetRel);
         log('conflict', `${entry.targetRel}（读取失败 ${err?.code || err}，保留现状）`);
+        continue;
+      }
+      if (force) {
+        // --force 是显式重置：写回模板，但必须把丢弃的用户文本说清楚（issue #86）。
+        const discarded = countOutsideAnchorLines(existing);
+        writes.push({ abs, text, targetRel: entry.targetRel, kind: entry.kind });
+        stats.update += 1;
+        claimedDerived.push(entry.targetRel);
+        log(
+          'conflict',
+          discarded > 0
+            ? `${entry.targetRel}（--force 覆盖派生工件：已丢弃锚点外 ${discarded} 行用户文本）`
+            : `${entry.targetRel}（--force 覆盖派生工件）`,
+        );
         continue;
       }
       writes.push({ abs, text: existing, targetRel: entry.targetRel, kind: entry.kind });

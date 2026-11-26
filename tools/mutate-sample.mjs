@@ -110,6 +110,30 @@ export const MUTANTS = [
     tests: ["tests/adopt.test.mjs"],
     why: "认领派生工件不得盲写模板（issue #86：INDEX.md 锚点外手工区被覆盖）",
   },
+  {
+    id: "gen-placeholder-check",
+    file: "templates/engine/.agents/scripts/gen-workflow-index.mjs",
+    find: "    if (placeholderMsg) {\n      console.error",
+    replace: "    if (false) {\n      console.error",
+    tests: ["tests/derived-placeholder.test.mjs"],
+    why: "--check 必须对「占位头 + 生成区有数据」判漂移（issue #86 检测面 A）",
+  },
+  {
+    id: "diff-placeholder-hint",
+    file: "src/commands/diff.mjs",
+    find: "      ...(placeholderDrift ? { placeholderDrift } : {}),",
+    replace: "      ...(false ? { placeholderDrift } : {}),",
+    tests: ["tests/adopt.test.mjs"],
+    why: "diff 必须携带 placeholderDrift 提示（issue #86 检测面 B）",
+  },
+  {
+    id: "force-discard-warn",
+    file: "src/install/apply.mjs",
+    find: "        const discarded = countOutsideAnchorLines(existing);",
+    replace: "        const discarded = 0;",
+    tests: ["tests/adopt.test.mjs"],
+    why: "--force 覆盖派生工件必须报出丢弃的锚点外行数（issue #86 检测面 C）",
+  },
 ];
 
 /** 在原文里找唯一匹配并替换；同时兼容 LF 与 CRLF 目标文件。返回新文本或 null（缺失/不唯一）。 */

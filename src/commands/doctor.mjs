@@ -109,6 +109,11 @@ export function doctorCommand({ args, t }) {
     if (drifting > 0) {
       add(true, 'manifest drift', t('doctor.drift', drift), t('doctor.driftHint'), { warn: true });
     }
+    // issue #86：占位头混进存量仓（哈希可能一致，diff 默认不显示）——单独 advisory。
+    const placeholder = (diffResult.items || []).filter((item) => item.placeholderDrift).map((item) => item.targetRel);
+    if (placeholder.length) {
+      add(true, 'derived placeholder', t('doctor.derivedPlaceholder', { files: placeholder.join(', ') }), t('doctor.derivedPlaceholderHint'), { warn: true });
+    }
   }
 
   // R5-1b：运行时能力随包分发，目标项目不再需要脚本/hook 实现。

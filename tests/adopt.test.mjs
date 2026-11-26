@@ -181,6 +181,59 @@ test('旧版装户升级：workflow/INDEX.md 锚点外用户文本不得被占�
   assert.ok(read(dir, rel).startsWith(header), '二次升级仍须保留手工区');
 });
 
+test('混合态占位头：diff 与 doctor 必须给出 issue #86 提示（哈希一致也不隐身）', () => {
+  const dir = tmpRepo();
+  install(dir, ['claude']);
+  const rel = 'workflow/INDEX.md';
+  const full = read(dir, rel);
+  const anchor = full.indexOf('<!-- GENERATED:BEGIN');
+  const template = fs.readFileSync(path.join(KIT, 'templates/scaffold/workflow/INDEX.md'), 'utf8');
+  const placeholderHead = template.slice(0, template.indexOf('<!-- GENERATED:BEGIN'));
+  fs.writeFileSync(path.join(dir, rel), placeholderHead + full.slice(anchor), 'utf8');
+  // 造一篇活跃文档：生成区必须有真实数据，混合态才成立（新装空仓的生成区全 0）。
+  fs.mkdirSync(path.join(dir, 'workflow/intents'), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'workflow/intents/2026-11-26-demo.md'),
+    '---\n状态: draft\n级别: L2\n日期: 2026-11-26\n模块: engine\n---\n\n# INTENT — demo\n',
+    'utf8',
+  );
+
+  // 升级后哈希与磁盘一致（kind=unchanged），提示不能依赖漂移计数。
+  assert.equal(run(['upgrade', '--target', '.'], dir).status, 0);
+  const diffJson = json(run(['diff', '--target', '.', '--json'], dir));
+  const item = diffJson.items.find((entry) => entry.targetRel === rel);
+  assert.ok(item, `missing diff item for ${rel}`);
+  assert.equal(item.kind, 'unchanged');
+  assert.ok(item.placeholderDrift, 'diff JSON 必须携带 placeholderDrift');
+  assert.equal(item.placeholderDrift.counts.active > 0, true);
+
+  const human = run(['diff', '--target', '.'], dir);
+  assert.equal(human.status, 0, human.stderr);
+  assert.match(human.stdout, /issue #86/);
+  assert.match(human.stdout, /新装户占位/);
+
+  const doctor = run(['doctor', '--target', '.'], dir);
+  assert.equal(doctor.status, 0, doctor.stdout + doctor.stderr);
+  assert.match(doctor.stdout, /派生工件占位头残留/);
+  assert.match(doctor.stdout, /workflow\/INDEX\.md/);
+});
+
+test('--force 覆盖派生工件：显式丢弃锚点外用户文本并报出行数', () => {
+  const dir = tmpRepo();
+  install(dir, ['claude']);
+  const rel = 'workflow/INDEX.md';
+  const full = read(dir, rel);
+  const anchor = full.indexOf('<!-- GENERATED:BEGIN');
+  fs.writeFileSync(path.join(dir, rel), '# 我的索引\n\n> 手工说明\n\n' + full.slice(anchor), 'utf8');
+
+  const up = run(['upgrade', '--target', '.', '--force'], dir);
+  assert.equal(up.status, 0, up.stderr);
+  assert.match(up.stdout, /--force 覆盖派生工件：已丢弃锚点外 2 行用户文本/);
+  const after = read(dir, rel);
+  assert.doesNotMatch(after, /我的索引/);
+  assert.match(after, /^# workflow 索引/);
+});
+
 test('非派生集合的未跟踪既有文件仍按原样跳过', () => {
   const dir = tmpRepo();
   fs.mkdirSync(path.join(dir, '.agents/commands'), { recursive: true });
