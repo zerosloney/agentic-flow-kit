@@ -47,6 +47,19 @@ test("parseCoverageTable：嵌套目录还原为相对路径，汇总行不入�
   assert.equal(rows.has("all files"), false);
 });
 
+test("parseCoverageTable：兼容无 ℹ 前缀的新格式（Node 22.23 CI 实测）", () => {
+  const log = [
+    "start of coverage report",
+    "-------------------------------------------------------------------------------",
+    "file | line % | branch % | funcs % | uncovered lines",
+    "-------------------------------------------------------------------------------",
+    "src",
+    "  a.mjs | 70.00 | 50.00 | 100.00 |",
+    "end of coverage report",
+  ].join("\n");
+  assert.deepEqual(parseCoverageTable(log).get("src/a.mjs"), { lines: 70, branches: 50, funcs: 100 });
+});
+
 test("parseAllowlist：支持 entries 包裹与扁平映射；缺原因即报错", () => {
   assert.deepEqual(parseAllowlist('{"entries":{"src/a.mjs":"spawn-only"}}'), { "src/a.mjs": "spawn-only" });
   assert.deepEqual(parseAllowlist('{"src/a.mjs":"spawn-only"}'), { "src/a.mjs": "spawn-only" });

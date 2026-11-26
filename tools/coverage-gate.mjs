@@ -15,7 +15,8 @@ const HERE = path.dirname(fileURLToPath(import.meta.url));
 const DEFAULT_ROOT = path.resolve(HERE, "..");
 const DEFAULT_ALLOWLIST = path.join(HERE, "coverage-allowlist.json");
 
-/** 解析 node --experimental-test-coverage 的嵌套表格；返回 Map<相对路径, {lines,branches,funcs}>。 */
+/** 解析 node --experimental-test-coverage 的嵌套表格；返回 Map<相对路径, {lines,branches,funcs}>。
+ *  兼容两种前缀：带 `ℹ ` 的旧格式与不带前缀的新格式（Node 22.23 起 CI 实测无前缀）。 */
 export function parseCoverageTable(text) {
   const rows = new Map();
   const stack = [];
@@ -26,19 +27,19 @@ export function parseCoverageTable(text) {
       continue;
     }
     if (raw.includes("end of coverage report")) break;
-    if (!inReport || !raw.startsWith("ℹ")) continue;
-    const body = raw.slice(1);
+    if (!inReport) continue;
+    const body = raw.startsWith("ℹ") ? raw.slice(1) : raw;
     const indent = body.match(/^ */)[0].length;
     const rest = body.trim();
-    if (!rest || rest.startsWith("all files")) continue;
-    const level = indent - 1;
+    if (!rest || rest.startsWith("all files") || /^-+$/.test(rest)) continue;
+    const level = Math.max(0, indent - 1);
     const m = rest.match(/^(.+?)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|\s*([\d.]+)\s*\|/);
     if (!m) {
-      stack.length = Math.max(0, level);
+      stack.length = level;
       stack[level] = rest.split("|")[0].trim();
       continue;
     }
-    const dir = stack.slice(0, Math.max(0, level)).filter(Boolean).join("/");
+    const dir = stack.slice(0, level).filter(Boolean).join("/");
     rows.set(`${dir ? `${dir}/` : ""}${m[1].trim()}`, { lines: +m[2], branches: +m[3], funcs: +m[4] });
   }
   return rows;
@@ -115,8 +116,12 @@ export function runGate({
   files = null,
 } = {}) {
   if (!logPath || !fs.existsSync(logPath)) throw new Error(`覆盖日志不存在：${logPath || "(未提供 --log)"}`);
-  const rows = parseCoverageTable(fs.readFileSync(logPath, "utf8"));
-  if (rows.size === 0) throw new Error("覆盖日志里没有解析到任何文件（报告格式变了？）");
+  const logText = fs.readFileSync(logPath, "utf8");
+  const rows = parseCoverageTable(logText);
+  if (rows.size === 0) {
+    const head = logText.split(/\r?\n/).filter((line) => line.trim()).slice(0, 8).join("\n");
+    throw new Error(`覆盖日志里没有解析到任何文件（${Buffer.byteLength(logText, "utf8")} 字节；报告格式变了？）\n--- 日志前 8 行 ---\n${head}`);
+  }
   const changed = files ? files : changedFiles({ root, since });
   let allowlist = {};
   const allowFile = allowlistPath || (fs.existsSync(DEFAULT_ALLOWLIST) ? DEFAULT_ALLOWLIST : null);
