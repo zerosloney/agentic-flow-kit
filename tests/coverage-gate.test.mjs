@@ -47,17 +47,31 @@ test("parseCoverageTable：嵌套目录还原为相对路径，汇总行不入�
   assert.equal(rows.has("all files"), false);
 });
 
-test("parseCoverageTable：兼容无 ℹ 前缀的新格式（Node 22.23 CI 实测）", () => {
-  const log = [
+test("parseCoverageTable：兼容 Node 22 的 # 前缀与无标记格式", () => {
+  const hashLog = [
+    "# start of coverage report",
+    "# ------------------------------------------------------------",
+    "# file        | line % | branch % | funcs % | uncovered lines",
+    "# ------------------------------------------------------------",
+    "# .tmp-cov    |        |          |         | ",
+    "#  m.mjs      | 100.00 |    75.00 |  100.00 | ",
+    "#  m.test.mjs | 100.00 |   100.00 |  100.00 | ",
+    "# ------------------------------------------------------------",
+    "# all files   | 100.00 |    83.33 |  100.00 | ",
+    "# end of coverage report",
+  ].join("\n");
+  const hashRows = parseCoverageTable(hashLog);
+  assert.deepEqual(hashRows.get(".tmp-cov/m.mjs"), { lines: 100, branches: 75, funcs: 100 });
+  assert.deepEqual(hashRows.get(".tmp-cov/m.test.mjs"), { lines: 100, branches: 100, funcs: 100 });
+
+  const flatLog = [
     "start of coverage report",
-    "-------------------------------------------------------------------------------",
     "file | line % | branch % | funcs % | uncovered lines",
-    "-------------------------------------------------------------------------------",
     "src",
     "  a.mjs | 70.00 | 50.00 | 100.00 |",
     "end of coverage report",
   ].join("\n");
-  assert.deepEqual(parseCoverageTable(log).get("src/a.mjs"), { lines: 70, branches: 50, funcs: 100 });
+  assert.deepEqual(parseCoverageTable(flatLog).get("src/a.mjs"), { lines: 70, branches: 50, funcs: 100 });
 });
 
 test("parseAllowlist：支持 entries 包裹与扁平映射；缺原因即报错", () => {

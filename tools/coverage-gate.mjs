@@ -28,7 +28,9 @@ export function parseCoverageTable(text) {
     }
     if (raw.includes("end of coverage report")) break;
     if (!inReport) continue;
-    const body = raw.startsWith("ℹ") ? raw.slice(1) : raw;
+    // 行前缀：Node 26 用 `ℹ `，Node 22 用 `# `——只剥标记字符、保留其后的缩进空格，
+    // 两种格式的层级才能统一按 indent-1 还原。
+    const body = raw.replace(/^[ℹ#]/, "");
     const indent = body.match(/^ */)[0].length;
     const rest = body.trim();
     if (!rest || rest.startsWith("all files") || /^-+$/.test(rest)) continue;
