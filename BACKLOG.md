@@ -71,6 +71,9 @@
 | 37 | pipeline-run 观测口径与实现漂移（条目 32 实战发现）：①`pipeline-run.md` 声称「退回途中记 route 事件（from/to/attempt/cap）」「每次失败记 retry 事件」，实测 events 只有 run-created/work-order/stop/triage/gate/confirm/commit/done——`retries` 计数器有而 route/retry 事件无；②done 摘要列出 `api.md（?）`——未声明 `{apiDocs}` 时 `docs.apiDocs` 仍被默认派生并打印 | `engine/.agents/scripts/pipeline-run.mjs`：route/retry 事件补落或文档改口径（二选一）；`apiDocs` 仅在 stageArtifacts 声明时派生/打印 | 实测 run 的 events 含 route/retry（或文档口径删除）；未声明 `{apiDocs}` 的 run 其 done 摘要不含 api.md 行；`tests/pipeline-executor.test.mjs` 补两态断言 | DONE |
 | 39 | 新一波引擎工具（`agent-evaluator.mjs` / `dynamic-test-impact.mjs` / `headless-driver.mjs` / `skill-optimizer.mjs` / `timeline-trace.mjs`）的用户可见输出只有中文：CLI 用法、命令说明、失败原因都没接运行时双语（`lang.mjs` 的 `runtimeLang` / `t()`）——`--lang en` 装户跑 `flow-kit run` 拿到的是中文说明（2026-11-25 续作复核发现） | `templates/engine/.agents/scripts/` 五个脚本的 CLI 帮助与错误文案经 `lang.mjs` 取文案（zh 默认输出逐字节不变）；不新增机制行 | en 装户跑 `flow-kit run headless-driver.mjs --help` 输出英文；zh 装户输出逐字节不变；`tests/en.test.mjs` 覆盖两条命令 | TODO |
 
+| 40 | 断言盲区只能靠一次性脚本发现：本周两处语义（glob `*` 跨 `/`、YAML `#` 守卫）在 32 个规则/影响面测试下无断言 | `tools/mutate-sample.mjs` + `tests/mutate-sample.test.mjs` | 11 条策展变异体全杀；find 串漂移/不唯一即判红；目标文件脏时拒跑；实跑 ≤ 60s | DONE |
+| 41 | 新代码可被 spawn 测试「覆盖」但进程内覆盖统计为 0：变更文件无覆盖下限 | `tools/coverage-gate.mjs` + `tools/coverage-allowlist.json` + CI `coverage-gate` 作业 | 变更的 `src/*.mjs` 必须被测试加载且行覆盖 ≥ 60%；未加载/低覆盖退出 1；豁免必须写原因；日志缺失退出 2 | DONE |
+
 ## 落地记录（2026-11-12）
 
 - `npm test`：106 个用例全绿（新增 `agent-eval` / `engine-memory` / `test-guard` / `install-tier` / `outcome-metrics`）。
@@ -534,6 +537,12 @@
   - 全量测试 `npm test` 1501/1501 全绿通过；
   - 模板合规检查 `npm run lint:templates`、策略一致性检查 `npm run policy:check`、文档无漂移检查全绿；
   - 发版归档：升级版本至 `2.13.0`，生成 `CHANGELOG.md`，打发布标签 `v2.13.0`。
+
+## 落地记录（2026-11-26，测试质量门 #40/#41）
+
+- **变异抽样器**（#40，`57e2158`）：`tools/mutate-sample.mjs` 固化 11 条策展变异体（glob 语义、JSONC 转义/尾逗号、YAML 注释守卫、kernel CRLF 归一、门禁状态/阈值/公证/策略/交接），支持 `--list/--json/--filter/--timeout`；find 串唯一性校验 + 目标文件脏时拒跑 + finally/exit 双保险还原。实跑 killed=11、survived=0（15s）。
+- **变更文件覆盖率门**（#41，`a52bc0b`）：`tools/coverage-gate.mjs` 解析 node 覆盖表，变更集 = `since...HEAD` ∪ 工作树 ∪ 未跟踪；scope 内逐条要求「被测试加载 + 行覆盖 ≥ 60%」，豁免清单 `tools/coverage-allowlist.json` 每条必须写原因；CI 新增 `coverage-gate` 作业（PR 基 `origin/main`，push 基 `event.before`，零 sha 回退 `HEAD~1`）。
+- **验证**：工具自身 7+7 用例；全量 `npm test` 1529 用例、1528 通过、1 条件跳过；实跑 gate 通过（`src/ci/gate.mjs` 86.39%），阈值 95 时按预期退出 1；`policy:check` / `lint:templates` / `check:i18n` 全绿。
 
 ## 能力扩展
 
