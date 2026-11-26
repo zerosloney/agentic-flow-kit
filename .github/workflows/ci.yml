@@ -32,6 +32,26 @@ jobs:
       - run: npm run devcontainer:check
       - run: npm pack --dry-run
 
+  # 变更文件覆盖率门（BACKLOG #41）：只对本次变更的 src 文件要求「被测试加载 + 行覆盖 >= 60」，
+  # 防新代码靠 spawn 测试绕过覆盖统计。PR 以 origin/main 为基；push 以本次推送前 sha 为基
+  # （新分支的零 sha 由工具回退 HEAD~1）。阈值/豁免见 tools/coverage-gate.mjs 与 allowlist。
+  coverage-gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+      - run: npm install
+      - name: Collect coverage
+        run: node --test --experimental-test-coverage tests/*.test.mjs > coverage.log 2>&1
+      - name: Changed-file coverage gate
+        run: >-
+          node tools/coverage-gate.mjs --log coverage.log
+          --since ${{ github.event_name == 'pull_request' && 'origin/main' || github.event.before }}
+
   # R3-8 验收证据：生成的容器**真能构建**（不只是声明校验）。
   # 静态层（npm run devcontainer:check）已在 test 作业覆盖全部 8 栈；这里做真 docker build + 冒烟 run。
   # 矩阵选代表性栈（node / dotnet 覆盖两类工具链），其余栈本地用 --stacks 扩展。
