@@ -124,7 +124,7 @@ test('旧版装户升级：装期生成的引擎地图被认领，不再永久�
 
   const up = run(['upgrade', '--target', '.'], dir);
   assert.equal(up.status, 0, up.stderr);
-  assert.match(up.stdout, /engine-map\.md（已存在且为本工具派生产物，纳入跟踪）/);
+  assert.match(up.stdout, /engine-map\.md（已存在且为本工具派生产物，保留原文并纳入跟踪/);
   assert.doesNotMatch(up.stdout, /engine-map\.md（已存在且非本工具安装/);
   const after = manifestOf(dir);
   assert.ok(rel in after.files, '认领后应进 manifest 账本');
@@ -140,6 +140,45 @@ test('旧版装户升级：装期生成的引擎地图被认领，不再永久�
   const again = run(['upgrade', '--target', '.'], dir);
   assert.equal(again.status, 0, again.stderr);
   assert.doesNotMatch(again.stdout, /纳入跟踪/);
+});
+
+test('旧版装户升级：workflow/INDEX.md 锚点外用户文本不得被占位模板覆盖', () => {
+  const dir = tmpRepo();
+  install(dir, ['claude']);
+  const rel = 'workflow/INDEX.md';
+  // 模拟旧版装户：该 rel 不在 manifest（files/derived 均无），磁盘上是生成器写过的真实数据。
+  const mf = manifestOf(dir);
+  delete mf.files[rel];
+  mf.derived = mf.derived.filter((entry) => entry !== rel);
+  fs.writeFileSync(path.join(dir, '.agents/install-manifest.json'), `${JSON.stringify(mf, null, 2)}\n`, 'utf8');
+
+  const full = read(dir, rel);
+  const anchor = full.indexOf('<!-- GENERATED:BEGIN');
+  assert.ok(anchor > 0, 'INDEX.md 必须含 GENERATED 锚点');
+  const header = '# 我的工作流索引\n\n> 这一行是手工说明，升级必须保留。\n\n';
+  fs.writeFileSync(path.join(dir, rel), header + full.slice(anchor), 'utf8');
+
+  const up = run(['upgrade', '--target', '.'], dir);
+  assert.equal(up.status, 0, up.stderr);
+  const after = read(dir, rel);
+  assert.ok(after.startsWith(header), '锚点外用户文本必须原样保留');
+  assert.doesNotMatch(after, /本文件为新装户占位/, '占位哨兵不得进入存量仓');
+  assert.match(after, /GENERATED:BEGIN/);
+  const mfAfter = manifestOf(dir);
+  assert.ok(rel in mfAfter.files, '认领后应进 manifest 账本');
+  assert.ok(mfAfter.derived.includes(rel), '认领后应登记为 derived');
+
+  // 不再拿静态模板比对：diff 不得把「保留手工区」报成 kitUpdated 漂移。
+  const diff = json(run(['diff', '--target', '.', '--json'], dir));
+  const item = diff.items.find((entry) => entry.targetRel === rel);
+  assert.ok(item, `missing diff item for ${rel}`);
+  assert.equal(item.kind, 'unchanged');
+  assert.equal(diff.summary.kitUpdated, 0);
+
+  // 幂等：第二次升级不再改动手工区
+  const again = run(['upgrade', '--target', '.'], dir);
+  assert.equal(again.status, 0, again.stderr);
+  assert.ok(read(dir, rel).startsWith(header), '二次升级仍须保留手工区');
 });
 
 test('非派生集合的未跟踪既有文件仍按原样跳过', () => {

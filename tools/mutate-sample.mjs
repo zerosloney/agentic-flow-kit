@@ -102,6 +102,14 @@ export const MUTANTS = [
     tests: ["tests/gate-guards.test.mjs"],
     why: "交接信封违规原因必须取 problems，不得渲染 undefined",
   },
+  {
+    id: "derived-claim-blind-write",
+    file: "src/install/apply.mjs",
+    find: "        existing = readText(abs);",
+    replace: "        existing = text;",
+    tests: ["tests/adopt.test.mjs"],
+    why: "认领派生工件不得盲写模板（issue #86：INDEX.md 锚点外手工区被覆盖）",
+  },
 ];
 
 /** 在原文里找唯一匹配并替换；同时兼容 LF 与 CRLF 目标文件。返回新文本或 null（缺失/不唯一）。 */

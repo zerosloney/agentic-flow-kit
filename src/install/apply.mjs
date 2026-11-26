@@ -139,6 +139,7 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
   const nextMergeOrigins = { ...(manifest.mergeOrigins || {}) };
   const writes = [];
   const conflicts = [];
+  const claimedDerived = [];
 
   for (const entry of plan.entries) {
     const abs = path.join(plan.target, entry.targetRel);
@@ -206,6 +207,32 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
       continue;
     }
 
+    // 派生工件（INDEX.md / effective-policy.md / engine-map.md）永远不写静态模板：
+    // 模板只是新装户占位，INDEX.md 的锚点外是用户可写区（issue #86）。
+    // 保留磁盘原文并纳入跟踪；锚点内由紧随其后的生成器（gen-*.mjs 只重写锚点段）刷新。
+    if (derivedRels?.has(entry.targetRel)) {
+      let existing;
+      try {
+        existing = readText(abs);
+      } catch (err) {
+        stats.conflict += 1;
+        stats.conflictKeep += 1;
+        conflicts.push(entry.targetRel);
+        log('conflict', `${entry.targetRel}（读取失败 ${err?.code || err}，保留现状）`);
+        continue;
+      }
+      writes.push({ abs, text: existing, targetRel: entry.targetRel, kind: entry.kind });
+      stats.update += 1;
+      claimedDerived.push(entry.targetRel);
+      log(
+        'update',
+        managedHash
+          ? `${entry.targetRel}（派生工件：保留锚点外原文，生成区由生成器刷新）`
+          : `${entry.targetRel}（已存在且为本工具派生产物，保留原文并纳入跟踪；生成区由生成器刷新）`,
+      );
+      continue;
+    }
+
     if (force || (managedHash && managedHash === currentHash)) {
       writes.push({ abs, text, targetRel: entry.targetRel, kind: entry.kind });
       stats.update += 1;
@@ -266,15 +293,6 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
       continue;
     }
 
-    // 派生工件在旧版 Kit 里由装期生成、不进 manifest：不认领则恒被当成非本工具安装跳过，
-    // 随后仍被生成器改写，diff 拿静态模板比对会永久报漂移。
-    if (derivedRels?.has(entry.targetRel)) {
-      writes.push({ abs, text, targetRel: entry.targetRel, kind: entry.kind });
-      stats.create += 1;
-      log('create', `${entry.targetRel}（已存在且为本工具派生产物，纳入跟踪）`);
-      continue;
-    }
-
     stats.skip += 1;
     log('skip', `${entry.targetRel}（已存在且非本工具安装，跳过；--force 可覆盖）`);
   }
@@ -313,6 +331,8 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
     conflictPaths: writes.filter((w) => w.conflict).map((w) => w.targetRel),
     // 合并/冲突文件的磁盘文本不等于 manifest 记录的模板哈希，安装器派生扫描不得重算。
     skipRehash: writes.filter((w) => w.conflict || w.templateText != null).map((w) => w.targetRel),
+    // 本次认领的派生工件：即使生成器未改动字节，也必须登记 derived（否则 diff 拿静态模板比对永久漂移）。
+    derivedClaimed: claimedDerived,
     conflicts,
   };
 }

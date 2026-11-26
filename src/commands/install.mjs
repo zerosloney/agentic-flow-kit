@@ -175,7 +175,8 @@ export function installLogNotable(action, msg) {
 // 派生工件会改写已写入的托管文件（如 workflow/INDEX.md）；重算这些文件的哈希，
 // 否则 manifest 记录的是生成前的文本，fresh install 会立刻显示为漂移。
 // 被生成器改写的文件登记到 derived，diff 不对其做静态模板比对。
-export function rehashDerivedArtifacts({ target, result, derived, beforeDerived, baselineEnabled, warn }) {
+export function rehashDerivedArtifacts({ target, result, derived, beforeDerived, baselineEnabled, warn, claimed = [] }) {
+  const claimedSet = new Set(claimed);
   for (const rel of result.written || []) {
     // 三方合并冲突/合并文件保留旧哈希，供 diff / doctor 继续提示未解决。
     if ((result.skipRehash || []).includes(rel)) continue;
@@ -197,7 +198,9 @@ export function rehashDerivedArtifacts({ target, result, derived, beforeDerived,
     }
     const nextHash = sha256Text(text);
     result.files[rel] = nextHash;
-    if (beforeDerived[rel] !== nextHash) {
+    // 认领的派生工件即使本次生成器未改字节，也必须留在 derived 集合（issue #86：
+    // 否则 diff 拿静态模板比对，存量仓永久假漂移）。
+    if (beforeDerived[rel] !== nextHash || claimedSet.has(rel)) {
       derived.add(rel);
       // 派生工件在安装期重写，基线同步为最终文本，避免下次升级误判。
       if (baselineEnabled) writeBaseline(target, rel, text);
@@ -662,6 +665,7 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
       derived,
       beforeDerived,
       baselineEnabled,
+      claimed: result.derivedClaimed || [],
       // 读失败告警走冲突通道：CLI 缺省 `! msg` 留行，TUI conflict 不被进度条吞掉
       warn: (msg) => logger('conflict', msg, done, total),
     });
