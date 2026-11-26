@@ -221,6 +221,7 @@ const GATES = [
   // 生成物漂移单门（2026-10-28 引擎减重第三刀；2026-11-08 档 2-E 改自愈）：effective-policy / engine-map /
   // workflow-index 三门机制相同（跑生成器 --check 比对磁盘），合并为一次调用；漂移 → 原地重生成自愈后按
   // 通过计，重生成/复检失败才红（判据与自愈单源在 check-engine-artifacts.mjs，各档含 --full 同语义）。
+  // 例外：整文件生成的产物含未提交的非生成内容时不重生成（覆盖后找不回），点名判红。
   { id: 'engine-artifacts', cohort: 'engine', name: t('生成物漂移检查（3 份）', 'Generated artifact drift check (3 files)', ROOT), cmd: 'flow-kit run check-engine-artifacts.mjs', folder: '.', type: 'shell' },
   // 默认硬门。hygiene 段已于 2026-10-28 全部退役（只跑 hard 5 段）。
   { id: 'check-loop', cohort: 'engine', name: t('闭环门禁校验', 'Closed-loop gate check', ROOT), cmd: 'flow-kit run check-loop.mjs', folder: '.', type: 'shell' },

@@ -5,7 +5,7 @@ import { setField } from './frontmatter.mjs';
 import { sha256Text } from './manifest.mjs';
 import { isBinaryPath, mergeThreeWay, readBaseline, writeBaseline } from './baseline.mjs';
 import { writeAtomicSync } from './atomic.mjs';
-import { countDiscardableLines, derivedModeOf, detectAnchorTextOverwritten } from './derived.mjs';
+import { countDiscardableLines, derivedModeOf, detectAnchorTextOverwritten, inspectWholeDerived } from './derived.mjs';
 
 export const GITATTR_BEGIN = '# >>> agentic-flow-kit gitattributes';
 export const GITATTR_END = '# <<< agentic-flow-kit gitattributes';
@@ -211,11 +211,13 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
 
     // 派生工件（issue #86）分两种语义，绝不盲写静态模板——静态模板只是新装户占位：
     // - anchor：生成器只重写 GENERATED 锚点区，锚点外是用户可写区 → 保留磁盘原文是安全的。
-    // - whole ：生成器整文件重写，文件里没有用户区；上次安装后被改过的文件不覆盖，
-    //            交回用户并跳过该产物的重生成，避免静默吃掉手工内容。
+    // - whole ：生成器整文件重写，文件里没有用户区；哈希与上次安装不同不等于手工内容
+    //            （生成器合法重生成、行尾转换同样会变）——只有「不是生成器输出，且未提交 git」
+    //            才保留现状并跳过重生成；已提交的手工内容照常重写并提示可用 git 找回。
     const derivedMode = derivedRels?.has(entry.targetRel) ? derivedModeOf(entry.targetRel) : null;
     if (derivedMode) {
       let existing;
+      let recoveryHint = false;
       try {
         existing = readText(abs);
       } catch (err) {
@@ -240,13 +242,18 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
         continue;
       }
       if (derivedMode === 'whole' && managedHash && managedHash !== currentHash) {
-        // 整文件生成 + 上次安装后被改过：可能含用户手工内容 → 保留现状，并跳过该产物的重生成。
-        stats.conflict += 1;
-        stats.conflictKeep += 1;
-        conflicts.push(entry.targetRel);
-        protectedDerived.push(entry.targetRel);
-        log('conflict', `${entry.targetRel}（整文件生成：上次安装后有改动，已保留现状并跳过重生成；--force 可覆盖）`);
-        continue;
+        // 哈希变了不等于手工内容：generated（--check 通过）或 recoverable（已提交，可 git show 找回）
+        // 都照常重生成；只有「既非生成器输出、又未提交」才覆盖后找不回，保留现状并跳过重生成。
+        const state = inspectWholeDerived(target, entry.targetRel);
+        if (!state.generated && !state.recoverable) {
+          stats.conflict += 1;
+          stats.conflictKeep += 1;
+          conflicts.push(entry.targetRel);
+          protectedDerived.push(entry.targetRel);
+          log('conflict', `${entry.targetRel}（整文件生成：含未提交的非生成内容，已保留现状并跳过重生成；手工说明请迁到别处，或提交后重跑；--force 可覆盖）`);
+          continue;
+        }
+        recoveryHint = !state.generated && state.recoverable;
       }
       if (derivedMode === 'anchor') {
         // 锚点外是用户可写区，生成器只重写锚点内：保留磁盘原文是安全的。
@@ -268,9 +275,11 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
         ? (managedHash
           ? '派生工件·锚区生成：保留锚点外原文，锚点内由生成器刷新'
           : '派生工件·锚区生成·首次认领：保留锚点外原文，锚点内由生成器刷新')
-        : (managedHash
-          ? '派生工件·整文件生成：无改动，由生成器整文件重写'
-          : '派生工件·整文件生成·首次认领：纳入跟踪，由生成器整文件重写');
+        : recoveryHint
+          ? `派生工件·整文件生成：含已提交的非生成内容，交给生成器整文件重写（原内容可用 git show HEAD:${entry.targetRel} 找回）`
+          : (managedHash
+            ? '派生工件·整文件生成：无改动，由生成器整文件重写'
+            : '派生工件·整文件生成·首次认领：纳入跟踪，由生成器整文件重写');
       log('update', `${entry.targetRel}（${label}）`);
       continue;
     }

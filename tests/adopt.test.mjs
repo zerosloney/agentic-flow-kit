@@ -181,6 +181,39 @@ test('旧版装户升级：workflow/INDEX.md 锚点外用户文本不得被占�
   assert.ok(read(dir, rel).startsWith(header), '二次升级仍须保留手工区');
 });
 
+test('已入账的 workflow/INDEX.md 改过锚点外说明后升级：不报冲突、锚点内刷新、手改保留', () => {
+  const dir = tmpRepo();
+  install(dir, ['claude']);
+  const rel = 'workflow/INDEX.md';
+  assert.ok(rel in manifestOf(dir).files, '前提：INDEX.md 已入账，不是首次认领');
+
+  const full = read(dir, rel);
+  const anchor = full.indexOf('<!-- GENERATED:BEGIN');
+  assert.ok(anchor > 0, 'INDEX.md 必须含 GENERATED 锚点');
+  const header = '# 我的索引\n\n> 手工说明，上次安装后写的。\n\n';
+  fs.writeFileSync(path.join(dir, rel), header + full.slice(anchor), 'utf8');
+
+  // 造一篇活跃文档：锚点内的索引过期，升级时须由生成器刷新。
+  fs.mkdirSync(path.join(dir, 'workflow/intents'), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, 'workflow/intents/2026-11-26-demo.md'),
+    '---\n状态: draft\n级别: L2\n日期: 2026-11-26\n模块: engine\n---\n\n# INTENT — demo\n',
+    'utf8',
+  );
+
+  const up = run(['upgrade', '--target', '.'], dir);
+  assert.equal(up.status, 0, up.stderr);
+  assert.match(up.stdout, /workflow\/INDEX\.md（派生工件·锚区生成：保留锚点外原文，锚点内由生成器刷新）/);
+  assert.doesNotMatch(up.stdout, /workflow\/INDEX\.md（整文件生成/);
+
+  const after = read(dir, rel);
+  assert.ok(after.startsWith(header), '锚点外手改必须保留');
+  assert.match(after, /活跃（1）/, '锚点内必须由生成器刷新');
+
+  const diff = json(run(['diff', '--target', '.', '--json'], dir));
+  assert.equal(diff.summary.userModified, 0);
+});
+
 test('健康新装户（生成区已有真实数据）：不得误报「锚点外原文被覆盖」', () => {
   const dir = tmpRepo();
   install(dir, ['claude']);
@@ -197,7 +230,9 @@ test('健康新装户（生成区已有真实数据）：不得误报「锚点�
   );
 
   // 升级后哈希与磁盘一致（kind=unchanged），提示不能依赖漂移计数。
-  assert.equal(run(['upgrade', '--target', '.'], dir).status, 0);
+  const up = run(['upgrade', '--target', '.'], dir);
+  assert.equal(up.status, 0, up.stderr);
+  assert.doesNotMatch(up.stdout, /疑似被旧版安装覆盖/, '健康新装户升级时不得误报');
   const diffJson = json(run(['diff', '--target', '.', '--json'], dir));
   const item = diffJson.items.find((entry) => entry.targetRel === rel);
   assert.ok(item, `missing diff item for ${rel}`);
@@ -274,11 +309,12 @@ test('整文件生成的派生工件：用户改过就保留原文并跳过重�
   install(dir, ['claude']);
   const rel = 'workflow/effective-policy.md';
   assert.ok(fs.existsSync(path.join(dir, rel)), '派生工件必须已装进目标');
+  // 现场是「未提交」：install 产出的文件在 git init 的临时仓里全是未跟踪 → 覆盖后找不回。
   fs.appendFileSync(path.join(dir, rel), '\n<!-- MANUAL: 手工策略说明，勿删 -->\n', 'utf8');
 
   const up = run(['upgrade', '--target', '.'], dir);
   assert.equal(up.status, 0, up.stderr);
-  assert.match(up.stdout, /整文件生成：上次安装后有改动，已保留现状并跳过重生成/);
+  assert.match(up.stdout, /整文件生成：含未提交的非生成内容，已保留现状并跳过重生成/);
   assert.match(read(dir, rel), /MANUAL: 手工策略说明/, '用户手写内容必须存活');
 });
 
@@ -383,4 +419,61 @@ test('fresh install lock blocks adopt and leaves the manifest untouched', () => 
   assert.equal(r.status, EXIT.LOCK, `lock conflict must exit ${EXIT.LOCK}: ${r.stdout} ${r.stderr}`);
   assert.deepEqual(manifestOf(dir), before);
   assert.equal(fs.existsSync(path.join(dir, '.agents/install.lock')), true, 'fresh lock must not be removed by the blocked run');
+});
+
+// —— 整文件派生工件的升级守卫（issue：哈希变化 ≠ 手工内容）——
+// 判据：generated（--check 通过）或 recoverable（已提交，可 git show HEAD:<rel> 找回）时照常重生成，
+// 只有「既非生成器输出、又未提交」才保留现状并跳过重生成。
+
+test('整文件派生工件被生成器合法重生成后升级：正常重生成、不报冲突', () => {
+  const dir = tmpRepo();
+  install(dir, ['claude']);
+  fs.mkdirSync(path.join(dir, '.agents/commands'), { recursive: true });
+  fs.mkdirSync(path.join(dir, '.agents/roles'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.agents/commands/zz-demo.md'), '---\ndescription: demo\n---\n\n# zz-demo\n', 'utf8');
+  fs.writeFileSync(path.join(dir, '.agents/roles/zz-demo.md'), '# zz-demo-role\n', 'utf8');
+  const rel = '.agents/notes/engine-map.md';
+  const gen = run(['run', 'gen-engine-map.mjs', '--root', '.'], dir);
+  assert.equal(gen.status, 0, gen.stderr);
+  assert.match(read(dir, rel), /zz-demo/, '生成器重生成后地图应含新增命令/角色');
+
+  // 磁盘 == 生成器输出，但 manifest 哈希已过期：不得判成手改。
+  const up = run(['upgrade', '--target', '.'], dir);
+  assert.equal(up.status, 0, up.stderr);
+  assert.doesNotMatch(up.stdout, /整文件生成：含未提交的非生成内容/);
+  assert.doesNotMatch(up.stdout, /整文件生成：上次安装后有改动/);
+  const diff = json(run(['diff', '--target', '.', '--json'], dir));
+  assert.equal(diff.summary.userModified, 0);
+});
+
+test('整文件派生工件只因行尾转换而变化：升级不报冲突', () => {
+  const dir = tmpRepo();
+  install(dir, ['claude']);
+  for (const rel of ['workflow/effective-policy.md', '.agents/notes/engine-map.md']) {
+    const abs = path.join(dir, rel);
+    fs.writeFileSync(abs, fs.readFileSync(abs, 'utf8').replace(/\r?\n/g, '\r\n'), 'utf8');
+  }
+
+  const up = run(['upgrade', '--target', '.'], dir);
+  assert.equal(up.status, 0, up.stderr);
+  assert.doesNotMatch(up.stdout, /整文件生成：含未提交的非生成内容/);
+  assert.doesNotMatch(up.stdout, /整文件生成：上次安装后有改动/);
+  const diff = json(run(['diff', '--target', '.', '--json'], dir));
+  assert.equal(diff.summary.userModified, 0);
+});
+
+test('整文件派生工件含已提交的手工内容：升级照常重生成并提示可用 git 找回', () => {
+  const dir = tmpRepo();
+  install(dir, ['claude']);
+  const rel = 'workflow/effective-policy.md';
+  fs.appendFileSync(path.join(dir, rel), '\n<!-- MANUAL: 手工策略说明 -->\n', 'utf8');
+  spawnSync('git', ['add', '-A'], { cwd: dir });
+  spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--no-verify', '-m', 'manual note'], { cwd: dir });
+
+  const up = run(['upgrade', '--target', '.'], dir);
+  assert.equal(up.status, 0, up.stderr);
+  assert.match(up.stdout, /git show HEAD:workflow\/effective-policy\.md/);
+  assert.doesNotMatch(read(dir, rel), /MANUAL/, '已提交的手工内容照常被生成器重写');
+  const diff = json(run(['diff', '--target', '.', '--json'], dir));
+  assert.equal(diff.summary.userModified, 0);
 });

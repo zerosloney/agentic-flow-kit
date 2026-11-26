@@ -19,6 +19,7 @@ import {
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const TEMPLATE = fs.readFileSync(path.join(KIT, 'templates/scaffold/workflow/INDEX.md'), 'utf8');
+const EN_TEMPLATE = fs.readFileSync(path.join(KIT, 'locales/en/overrides/workflow/INDEX.md'), 'utf8');
 
 const HEAD = '# workflow 索引（生成物，勿手改）\n\n> 样板说明。\n\n';
 const INNER = '<!-- GENERATED:BEGIN — x -->\n\n## 活跃（1）\n\n<!-- GENERATED:END -->\n';
@@ -93,4 +94,42 @@ test('detectAnchorTextOverwritten：磁盘仍带手工说明 → 不报（用户
     templateText: TEMPLATE,
   });
   assert.equal(hit, null);
+});
+
+test('detectAnchorTextOverwritten：模板自身没有锚点时，整份模板就是锚点外样板', () => {
+  assert.equal(splitAnchorRegion(EN_TEMPLATE), null, '前提：en 覆盖模板没有锚点');
+  const rel = 'workflow/INDEX.md';
+  const damaged = `${EN_TEMPLATE.trimEnd()}\n\n${INNER}`;
+
+  const damagedDir = gitRepo({ [rel]: '# My index\n\n> hand-written header.\n\n' + INNER });
+  const hit = detectAnchorTextOverwritten({ target: damagedDir, rel, diskText: damaged, templateText: EN_TEMPLATE });
+  assert.ok(hit, 'en 模板没有锚点时也必须能报出锚点外原文被覆盖');
+  assert.equal(hit.rel, rel);
+  assert.ok(hit.headBefore.includes('hand-written header'));
+
+  const healthyDir = gitRepo({ [rel]: damaged });
+  assert.equal(detectAnchorTextOverwritten({ target: healthyDir, rel, diskText: damaged, templateText: EN_TEMPLATE }), null);
+
+  const manual = '# My index\n\n> hand-written header, keep me.\n\n';
+  const manualDir = gitRepo({ [rel]: manual + INNER });
+  assert.equal(detectAnchorTextOverwritten({ target: manualDir, rel, diskText: manual + INNER, templateText: EN_TEMPLATE }), null);
+});
+
+test('detectAnchorTextOverwritten：行尾不同不误报也不漏报', () => {
+  const lf = TEMPLATE.replace(/\r\n/g, '\n');
+  const crlf = lf.replace(/\n/g, '\r\n');
+
+  // 健康仓：git 里是 LF（等价于 autocrlf 入库归一），检出后磁盘和模板是 CRLF → 不报。
+  const healthyDir = gitRepo({ 'workflow/INDEX.md': lf });
+  assert.equal(
+    detectAnchorTextOverwritten({ target: healthyDir, rel: 'workflow/INDEX.md', diskText: crlf, templateText: crlf }),
+    null,
+    '行尾不同不得把健康仓误报成受损',
+  );
+
+  // 受损仓：HEAD 里是手写头，磁盘只剩 CRLF 样板 → 必须报。
+  const damagedDir = gitRepo({ 'workflow/INDEX.md': '# 我的索引\n\n> 手工说明。\n\n' + lf.slice(lf.indexOf('<!-- GENERATED:BEGIN')) });
+  const hit = detectAnchorTextOverwritten({ target: damagedDir, rel: 'workflow/INDEX.md', diskText: crlf, templateText: crlf });
+  assert.ok(hit, '行尾不同不得漏报');
+  assert.ok(hit.headBefore.includes('我的索引'));
 });

@@ -183,6 +183,36 @@ test('en doctor reports old-named wiki directories in English', () => {
   assert.doesNotMatch(out, /wiki 目录名与安装语言不一致/, 'en output must not fall back to the zh sentence');
 });
 
+// issue #86：英文覆盖模板自身没有锚点（生成器首次运行时才在整份模板后追加生成区），检测不得漏报。
+test('en diff and doctor name an overwritten hand-written header outside the anchor', () => {
+  const dir = tmpRepo();
+  const r = run(['install', '--agent', 'claude', '--stack', 'node', '--lang', 'en', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  const rel = 'workflow/INDEX.md';
+  const full = read(dir, rel);
+  const anchor = full.indexOf('<!-- GENERATED:BEGIN');
+  assert.ok(anchor > 0, '安装必须把生成区追加在无锚点的 en 模板之后');
+  fs.writeFileSync(path.join(dir, rel), '# My index\n\n> hand-written header, keep me.\n\n' + full.slice(anchor), 'utf8');
+  spawnSync('git', ['add', '-A'], { cwd: dir });
+  spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--no-verify', '-m', 'manual header'], { cwd: dir });
+  // 模拟旧版安装：锚点外被覆盖回样板（整份 en 模板 + 生成器追加的生成区）。
+  fs.writeFileSync(path.join(dir, rel), full, 'utf8');
+
+  const diff = run(['diff', '--target', '.'], dir);
+  assert.equal(diff.status, 0, diff.stderr);
+  assert.match(diff.stdout, /likely overwritten by an older install/);
+  assert.doesNotMatch(diff.stdout, /疑似被旧版安装覆盖/);
+
+  const diffJson = JSON.parse(run(['diff', '--target', '.', '--json'], dir).stdout);
+  const item = diffJson.items.find((entry) => entry.targetRel === rel);
+  assert.ok(item, `missing diff item for ${rel}`);
+  assert.ok(item.overwritten, 'diff --json 必须把该文件标成 overwritten');
+
+  const doctor = run(['doctor', '--target', '.', '--lang', 'en'], dir);
+  assert.match(doctor.stdout, /Hand-written area outside the anchor looks overwritten/);
+  assert.match(doctor.stdout, /workflow\/INDEX\.md/);
+});
+
 // issue #69：ledger baseline advisory 两键的中英双侧断言（en 输出英文、zh 回退不串英文文案）。
 test('en doctor reports the missing ledger baseline declaration in English', () => {
   const dir = tmpRepo();
