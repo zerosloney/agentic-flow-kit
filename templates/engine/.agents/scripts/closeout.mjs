@@ -130,5 +130,12 @@ if (!staged.length) {
 }
 console.log(`[closeout] 待提交：${staged.join('、')}`);
 const subject = msg || `docs(workflow): ${base} 关单`;
-run('④ git commit', ['commit', '-m', subject], { cmd: 'git' });
+// ④ 会真实 commit：CI/容器等无身份环境里 git 构不出 author 会 exit 128，序列在此卡死；
+// 用 git 自带的身份探针判定，仅在确实构不出时注入回退身份，不覆盖任何已有身份来源。
+let identArgs = [];
+if (git(['var', 'GIT_AUTHOR_IDENT']).status !== 0 || git(['var', 'GIT_COMMITTER_IDENT']).status !== 0) {
+  console.log('[closeout] ⚠️ 环境缺 git 身份（CI/容器常见），本次关单提交以回退身份 flow-kit <flow-kit@localhost> 落账');
+  identArgs = ['-c', 'user.email=flow-kit@localhost', '-c', 'user.name=flow-kit'];
+}
+run('④ git commit', [...identArgs, 'commit', '-m', subject], { cmd: 'git' });
 console.log(`[closeout] ✅ 关单提交完成：${subject}`);
