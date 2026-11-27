@@ -152,6 +152,13 @@ function spawnGit(args) {
 function gitOut(args, { ok = () => true } = {}) {
   return coreGitOut(args, ROOT, { ok });
 }
+// 输出路径清单的 git 调用一律关掉 core.quotepath：git 默认把非 ASCII 路径 C 引号化
+// （"workflow/intents/2026-11-20-\344\270\255..."），与真实 UTF-8 路径比对必失配 →
+// isTracked/changedDocSet/addedDateOf 全部漏掉中文名文档，硬门静默跳过、exit 0。
+// 默认安装语言是 zh-CN、脚手架本身就用中文目录名，故路径面调用统一经此包装（-c 须在子命令前）。
+function gitPathOut(args, opts) {
+  return gitOut(['-c', 'core.quotepath=off', ...args], opts);
+}
 
 // 测试绿凭证只在本机。--rev 把 ROOT 换成临时 worktree，gitignore 的 verifications.jsonl
 // 不会出现在那棵树上。文件不在树上时回退主工作区；树上已有文件仍以树为准。
@@ -218,7 +225,7 @@ if (!auditEnabled(kitPolicy)) {
 // ---- 已提交(HEAD)过滤：仓库模式只扫 tracked（fixture 模式恒真；ls-tree 失败退化全扫）----
 let trackedSet = null; // null = 不过滤
 if (!process.env.CHECK_LOOP_ROOT) {
-  const out = gitOut(['ls-tree', '-r', '--name-only', 'HEAD', '--', 'workflow']);
+  const out = gitPathOut(['ls-tree', '-r', '--name-only', 'HEAD', '--', 'workflow']);
   if (out !== null) trackedSet = new Set(out.split('\n').map((l) => l.trim()).filter(Boolean));
 }
 const isTracked = (abs) => trackedSet === null || trackedSet.has(path.relative(ROOT, abs).split(path.sep).join('/'));
@@ -244,17 +251,17 @@ const changedDocSet = () => {
   if (REV) {
     if (RANGE_OLD) {
       // C3（2026-10-28）：--range old new（pre-push 推送范围）——两端树差覆盖中间全部提交（含合并，无 -m 盲区）。
-      add(gitOut(['diff', '--name-only', '--no-renames', RANGE_OLD, REV]));
+      add(gitPathOut(['diff', '--name-only', '--no-renames', RANGE_OLD, REV]));
     } else {
       // P0-A（2026-10-28 复核实证）：合并提交的 git show 默认无文件面 → 增量面空集 → hard 段空扫报绿。
       // first-parent diff 统一两种提交形态：普通提交等价 git show；合并提交 = 该合并引入本分支的文件面。
       // ^1 不存在（root commit）时回退 git show（沿 gitOut null fail-open 口径）。
-      const fp = gitOut(['diff', '--name-only', '--no-renames', `${REV}^1`, REV]);
-      add(fp !== null ? fp : gitOut(['show', '--name-only', '--format=', '--no-renames', REV]));
+      const fp = gitPathOut(['diff', '--name-only', '--no-renames', `${REV}^1`, REV]);
+      add(fp !== null ? fp : gitPathOut(['show', '--name-only', '--format=', '--no-renames', REV]));
     }
   } else {
-    add(gitOut(['diff', '--name-only', '--no-renames', 'HEAD'])); // HEAD..工作区（含暂存）
-    add(gitOut(['ls-files', '--others', '--exclude-standard']));  // untracked 新档
+    add(gitPathOut(['diff', '--name-only', '--no-renames', 'HEAD'])); // HEAD..工作区（含暂存）
+    add(gitPathOut(['ls-files', '--others', '--exclude-standard']));  // untracked 新档
   }
   CHANGED_DOCS = set;
   return set;
@@ -307,9 +314,9 @@ const addedDates = (() => {
   if (cached && cached.head === head) {
     // 命中：HEAD 未动，历史不变
   } else if (cached && spawnSync(GIT, ['merge-base', '--is-ancestor', cached.head, head], { cwd: ROOT, encoding: 'utf8' }).status === 0) {
-    log = gitOut(['log', `${cached.head}..${head}`, '--diff-filter=A', '--format=@%aI', '--name-only', '--', 'workflow']);
+    log = gitPathOut(['log', `${cached.head}..${head}`, '--diff-filter=A', '--format=@%aI', '--name-only', '--', 'workflow']);
   } else {
-    log = gitOut(['log', '--diff-filter=A', '--format=@%aI', '--name-only', '--', 'workflow']);
+    log = gitPathOut(['log', '--diff-filter=A', '--format=@%aI', '--name-only', '--', 'workflow']);
   }
   if (log === null) return cached ? m : null;
   let cur = null;
@@ -463,7 +470,7 @@ function verifyOneSha(shaRaw, evidenceStr, planBase) {
     }
   }
 
-  const show = spawnGit(['show', '--name-only', sha]);
+  const show = spawnGit(['-c', 'core.quotepath=off', 'show', '--name-only', sha]);
   if (show.status !== 0) return { ok: false, type: 'error', msg: `无法读取提交 ${sha} 的文件列表` };
   
   const changedFiles = show.stdout.split(/\r?\n/).filter(Boolean);

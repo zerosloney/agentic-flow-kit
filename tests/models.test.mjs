@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseModelFlags } from '../src/models/resolve.mjs';
 import { probeModels, parseCliModels, stripJsonComments } from '../src/models/probe.mjs';
+import { registerHost } from '../src/hosts/registry.mjs';
 import {
   LOCAL_REL,
   readInjectedModels,
@@ -76,6 +77,44 @@ test('probeModels CLI is opt-in and parses model lists', () => {
   const ids = found.map((m) => m.id);
   assert.ok(ids.includes('provider/model-a'));
   assert.ok(ids.includes('provider/model-b'));
+});
+
+test('probeModels runs CLI commands for builtin, user-level and explicit manifests, not project ones', () => {
+  const probe = { configs: [], env: [], cli: [{ command: 'probe-cmd', args: ['--list'] }] };
+  const def = (name) => ({
+    dir: `.${name}`,
+    label: name,
+    commands: null,
+    agents: { dir: 'agents', ext: '.md', modelField: null, inheritValue: null },
+    skills: { mode: 'index' },
+    modelProbe: probe,
+  });
+  registerHost('probe-project', def('probe-project'), 'project');
+  registerHost('probe-user', def('probe-user'), 'user');
+  registerHost('probe-explicit', def('probe-explicit'), 'cli');
+
+  const calls = [];
+  const exec = (command, args) => {
+    calls.push([command, ...args]);
+    return { status: 0, stdout: 'probe/model-x\n', error: null };
+  };
+  const warnings = [];
+  const warn = (message) => warnings.push(message);
+
+  assert.deepEqual(probeModels({ host: 'probe-project', allowCli: true, exec, warn }), []);
+  assert.deepEqual(calls, []);
+  assert.equal(warnings.length, 1);
+  assert.match(warnings[0], /probe-project.*--host-manifest/);
+
+  const fromUser = probeModels({ host: 'probe-user', allowCli: true, exec, warn });
+  assert.deepEqual(calls, [['probe-cmd', '--list']]);
+  assert.equal(fromUser[0].id, 'probe/model-x');
+  assert.equal(warnings.length, 1);
+
+  const explicit = probeModels({ host: 'probe-explicit', allowCli: true, exec, warn });
+  assert.deepEqual(calls, [['probe-cmd', '--list'], ['probe-cmd', '--list']]);
+  assert.equal(explicit[0].id, 'probe/model-x');
+  assert.equal(warnings.length, 1);
 });
 
 test('parseCliModels drops headers and ANSI, stripJsonComments tolerates JSONC', () => {

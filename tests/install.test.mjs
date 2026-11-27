@@ -711,3 +711,74 @@ for (const lang of ['zh-CN', 'en']) {
     });
   }
 }
+
+// ---- 2026-11 审查回归：重跑 install 不带 --lang 必须沿用 manifest 语言（显式 --lang 仍可切换）----
+test('re-install without --lang replays the manifest language instead of the CLI default', () => {
+  const dir = tmpRepo();
+  const r1 = run(['install', '--agent', 'trae', '--lang', 'en', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r1.status, 0, r1.stderr);
+  assert.match(read(dir, 'AGENTS.md'), /## 1\. Runtime Connectivity/);
+
+  // 修复前：CLI lang 缺省 zh-CN 覆盖 manifest 语言，整盘英文内容被改写回中文。
+  const r2 = run(['install', '--agent', 'trae', '--stack', 'node', '--json', '--target', '.'], dir);
+  assert.equal(r2.status, 0, r2.stderr);
+  assert.equal(JSON.parse(r2.stdout).language, 'en');
+  assert.equal(JSON.parse(read(dir, '.agents/install-manifest.json')).language, 'en');
+  const kept = read(dir, 'AGENTS.md');
+  assert.doesNotMatch(kept, /运行时联通/, 're-install without --lang must not refill zh-CN text over English files');
+  assert.match(kept, /## 1\. Runtime Connectivity/);
+
+  // 显式 --lang 仍然切换并写回 manifest。
+  const r3 = run(['install', '--agent', 'trae', '--lang', 'zh-CN', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r3.status, 0, r3.stderr);
+  assert.match(read(dir, 'AGENTS.md'), /运行时联通/);
+  assert.equal(JSON.parse(read(dir, '.agents/install-manifest.json')).language, 'zh-CN');
+});
+
+// ---- 2026-11 审查回归：写盘成功但 manifest 未刷新（崩溃窗口）时，磁盘文本等于本次渲染产物即视为最新 ----
+test('install treats on-disk text equal to the rendered text as up to date, not user-modified', () => {
+  const dir = tmpRepo();
+  const manifestRel = '.agents/install-manifest.json';
+  const r1 = run(['install', '--agent', 'trae', '--lang', 'zh-CN', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r1.status, 0, r1.stderr);
+  const staleManifest = read(dir, manifestRel);
+
+  // 模拟“文件已按 en 重写、manifest 落盘前中断”：磁盘是 en 文本，manifest 还是 zh 哈希。
+  const r2 = run(['install', '--agent', 'trae', '--lang', 'en', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r2.status, 0, r2.stderr);
+  fs.writeFileSync(path.join(dir, manifestRel), staleManifest, 'utf8');
+
+  const r3 = run(['install', '--agent', 'trae', '--lang', 'en', '--stack', 'node', '--json', '--target', '.'], dir);
+  assert.equal(r3.status, 0, r3.stderr);
+  const out = JSON.parse(r3.stdout);
+  // 修复前：AGENTS.md（磁盘已是最新文本、哈希滞后）被打成“已安装后被修改”永久冲突。
+  assert.equal(out.conflicts.includes('AGENTS.md'), false, `false conflict: ${out.conflicts.join(', ')}`);
+  const manifest = JSON.parse(read(dir, manifestRel));
+  assert.equal(manifest.files['AGENTS.md'], sha256Text(read(dir, 'AGENTS.md')), 'stale hash must be refreshed to the on-disk text');
+});
+
+// ---- 2026-11 审查回归：POSIX 上 .githooks 必须可执行（git 只执行带 x 位的 hook），doctor 能检出丢失 ----
+test('install makes .githooks executable on POSIX and doctor reports a lost execute bit', {
+  skip: process.platform === 'win32' ? 'POSIX-only permission semantics' : false,
+}, () => {
+  const dir = tmpRepo();
+  const r = run(['install', '--agent', 'trae', '--lang', 'zh-CN', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  const hooks = ['pre-commit', 'commit-msg', 'post-commit', 'pre-merge-commit', 'pre-push'];
+  for (const hook of hooks) {
+    assert.equal(fs.statSync(path.join(dir, '.githooks', hook)).mode & 0o777, 0o755, `${hook} must be executable after install`);
+  }
+
+  // 内容未变的重装/升级同样要保住 x 位（apply 的未变分支不落盘）。
+  fs.chmodSync(path.join(dir, '.githooks', 'pre-commit'), 0o644);
+  const up = run(['upgrade', '--target', '.'], dir);
+  assert.equal(up.status, 0, up.stderr);
+  assert.equal(fs.statSync(path.join(dir, '.githooks', 'pre-commit')).mode & 0o777, 0o755);
+
+  // doctor 对丢失 x 位的 hook 报红。
+  fs.chmodSync(path.join(dir, '.githooks', 'pre-push'), 0o644);
+  const doc = run(['doctor', '--target', '.'], dir);
+  assert.notEqual(doc.status, 0);
+  assert.match(doc.stdout, /hook pre-push exec/);
+  assert.match(doc.stdout, /not executable|缺少可执行位/);
+});

@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { readManifest, writeManifest } from '../src/install/manifest.mjs';
-import { writeAtomicSync } from '../src/install/atomic.mjs';
+import { ensureModeSync, writeAtomicSync } from '../src/install/atomic.mjs';
 import { baselinePath, writeBaseline } from '../src/install/baseline.mjs';
 import { writeUserHooksConfig } from '../src/install/user-hooks.mjs';
 
@@ -87,6 +87,21 @@ test('writeAtomicSync：父目录不存在时递归创建、无 .tmp 残留', ()
 
   assert.equal(fs.readFileSync(file, 'utf8'), 'new');
   assert.equal(fs.existsSync(`${file}.tmp`), false);
+});
+
+// .githooks 必须带 x 位（POSIX 上 git 不执行非可执行 hook）；Windows 无权限位语义，只校验落盘内容。
+test('writeAtomicSync：mode 参数在 POSIX 落盘后生效（含覆盖已有文件的旧权限）', () => {
+  const dir = makeTmp('flow-kit-manifest-atomic-');
+  const file = path.join(dir, '.githooks', 'pre-commit');
+  writeAtomicSync(file, '#!/bin/sh\n', 0o755);
+  assert.equal(fs.readFileSync(file, 'utf8'), '#!/bin/sh\n');
+
+  if (process.platform !== 'win32') {
+    assert.equal(fs.statSync(file).mode & 0o777, 0o755);
+    fs.chmodSync(file, 0o644);
+    ensureModeSync(file, 0o755);
+    assert.equal(fs.statSync(file).mode & 0o777, 0o755);
+  }
 });
 
 test('writeBaseline：tmp 被目录占位时抛错且旧基线字节不动', () => {

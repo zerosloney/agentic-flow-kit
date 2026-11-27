@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
+import { createScreen, runPrompt } from '../src/tui/screen.mjs';
 import {
   stripAnsi,
   visualWidth,
@@ -248,4 +250,68 @@ test('box: alignment with CJK and ANSI codes', () => {
 test('SPINNER_FRAMES: every frame is a single char', () => {
   assert.ok(SPINNER_FRAMES.length > 1);
   for (const f of SPINNER_FRAMES) assert.equal(f.length, 1);
+});
+
+test('screen.restore leaves raw mode before writing the cursor-show sequence', () => {
+  const input = new EventEmitter();
+  input.isTTY = true;
+  input.setRawMode = (value) => {
+    input.raw = value;
+  };
+  input.resume = () => {};
+  input.pause = () => {};
+  let writes = 0;
+  const output = {
+    isTTY: true,
+    columns: 100,
+    rows: 40,
+    write() {
+      writes += 1;
+      if (writes > 1) throw new Error('write failed');
+      return true;
+    },
+  };
+  const screen = createScreen({ input, output });
+  screen.setup();
+  assert.throws(() => screen.restore(), /write failed/);
+  assert.equal(input.raw, false, 'raw mode must be off even when the cursor restore write throws');
+});
+
+test('a synchronous throw in the key handler rejects the prompt and restores raw mode', async () => {
+  const input = new EventEmitter();
+  input.isTTY = true;
+  input.setRawMode = (value) => {
+    input.raw = value;
+  };
+  input.resume = () => {};
+  input.pause = () => {};
+  const output = {
+    writes: [],
+    isTTY: true,
+    columns: 100,
+    rows: 40,
+    write(chunk) {
+      this.writes.push(chunk);
+      return true;
+    },
+  };
+  const screen = createScreen({ input, output });
+  screen.setup();
+  const widget = {
+    view: () => ['option'],
+    onKey: () => {
+      throw new Error('widget boom');
+    },
+  };
+  const pending = runPrompt(screen, { title: 't', question: 'q', hint: 'h', widget });
+  let escaped = null;
+  try {
+    input.emit('keypress', { name: 'x', sequence: 'x' });
+  } catch (err) {
+    escaped = err;
+  }
+  assert.equal(escaped, null, 'the key handler throw must not escape the event emitter');
+  await assert.rejects(pending, /widget boom/);
+  assert.equal(input.raw, false);
+  assert.equal(input.listenerCount('keypress'), 0);
 });

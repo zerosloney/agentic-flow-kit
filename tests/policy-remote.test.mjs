@@ -6,6 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import crypto from 'node:crypto';
+import { EXIT } from '../src/cli/exit.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
@@ -285,4 +286,63 @@ test('doctor and attestation verify remote policy status and chain binding', () 
   const driftCheck = docOut2.checks.find((c) => c.name === 'policy-remote drift');
   assert.ok(driftCheck, 'expected policy-remote drift warning in doctor');
   assert.equal(driftCheck.warn, true);
+});
+
+// remote.url 以 - 开头会被 git 当成选项（--upload-pack 可执行本地命令）；必须在任何 git 调用前拒绝。
+test('policy check rejects option-like remote urls before invoking git', () => {
+  const dir = makeTmp('flow-kit-policy-inject-');
+  const marker = path.join(dir, 'pwned.txt');
+  const url = `--upload-pack=touch ${marker.split(path.sep).join('/')} github.com/a/b.git`;
+  fs.mkdirSync(path.join(dir, '.agents', 'config'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.agents', 'config', 'policy.json'), `${JSON.stringify({
+    $schema: 'policy/config@1',
+    version: 1,
+    surfaces: {},
+    remote: { url, ref: 'main', enforce: [] },
+  }, null, 2)}\n`, 'utf8');
+
+  const r = runCli(dir, ['policy', 'check', '--target', '.']);
+  assert.equal(r.status, EXIT.USAGE, r.stderr);
+  assert.ok(r.stderr.includes('--upload-pack'), `error must name the rejected value: ${r.stderr}`);
+  assert.equal(fs.existsSync(marker), false, 'git must never parse the url as an option');
+  fs.rmSync(marker, { force: true });
+});
+
+test('policy sync rejects option-like remote refs', () => {
+  const dir = makeTmp('flow-kit-policy-ref-');
+  const r = runCli(dir, ['policy', 'sync', '--remote', 'missing.git', '--ref=--upload-pack=x', '--target', '.']);
+  assert.equal(r.status, EXIT.USAGE, r.stderr);
+  assert.ok(r.stderr.includes('--upload-pack=x'), `error must name the rejected value: ${r.stderr}`);
+});
+
+// 远程基线可带任意 surfaces 值；解析到 target 之外的路径不得读取或写入。
+test('policy sync refuses surface paths that resolve outside the target', () => {
+  const remoteParent = makeTmp('flow-kit-policy-sync-remote-');
+  const remote = path.join(remoteParent, 'remote');
+  fs.mkdirSync(remote);
+  const target = installTarget('flow-kit-policy-sync-target-');
+  const rel = `../${path.basename(target)}-escape.txt`;
+  const victim = path.resolve(target, rel);
+  try {
+    fs.writeFileSync(victim, 'KEEP\n', 'utf8');
+    fs.writeFileSync(path.resolve(remote, rel), 'PWNED\n', 'utf8');
+    fs.writeFileSync(path.join(remote, 'policy.json'), JSON.stringify({ version: 1, surfaces: { escape: rel } }, null, 2));
+
+    const localPolicyPath = path.join(target, '.agents', 'config', 'policy.json');
+    const localPolicy = JSON.parse(fs.readFileSync(localPolicyPath, 'utf8'));
+    localPolicy.remote = { url: remote, ref: 'main', enforce: [] };
+    fs.writeFileSync(localPolicyPath, `${JSON.stringify(localPolicy, null, 2)}\n`, 'utf8');
+
+    const sync = runCli(target, ['policy', 'sync', '--target', '.']);
+    assert.notEqual(sync.status, 0, 'sync must refuse a surface outside the target');
+    assert.ok(sync.stderr.includes(rel), `sync must name the rejected path: ${sync.stderr}`);
+    assert.equal(fs.readFileSync(victim, 'utf8'), 'KEEP\n', 'nothing outside the target may be written');
+
+    const check = runCli(target, ['policy', 'check', '--target', '.']);
+    assert.notEqual(check.status, 0, 'check must refuse a surface outside the target');
+    assert.ok(check.stderr.includes(rel), `check must name the rejected path: ${check.stderr}`);
+    assert.equal(fs.readFileSync(victim, 'utf8'), 'KEEP\n', 'nothing outside the target may be read into the diff');
+  } finally {
+    fs.rmSync(victim, { force: true });
+  }
 });

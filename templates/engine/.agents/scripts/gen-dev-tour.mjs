@@ -168,7 +168,8 @@ function main() {
     process.exit(1);
   }
   const html = tpl
-    .replace('__TOUR_DATA__', escJsonForScript(model))
+    // 函数替换：文档文本里的 $&、$'、$` 必须按字面进入 JSON，不能被 replace 解释
+    .replace('__TOUR_DATA__', () => escJsonForScript(model))
     .replace('__TOUR_FILE__', 'null')
     .replace('__TOUR_MODE__', '"snapshot"');
 

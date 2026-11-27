@@ -64,8 +64,10 @@ export function parseAllowlist(text) {
 export function changedFiles({ root = DEFAULT_ROOT, since = "origin/main" } = {}) {
   const base = /^0+$/.test(String(since)) ? "HEAD~1" : since;
   const out = new Set();
+  // 审计修复 2026-11-27：过滤集原为 AM，重命名（R）/复制（C）的文件会被 git 改名而不进变更集，
+  // 等于「换个路径就免覆盖」。R/C 一并计入（--name-only 对 R/C 输出新路径）。
   for (const range of [`${base}...HEAD`, "HEAD"]) {
-    const r = spawnSync("git", ["diff", "--name-only", "--diff-filter=AM", range], {
+    const r = spawnSync("git", ["diff", "--name-only", "--diff-filter=AMRC", range], {
       cwd: root,
       encoding: "utf8",
     });

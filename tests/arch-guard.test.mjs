@@ -5,11 +5,13 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { makeTmp } from './helpers/tmp.mjs';
+import { makeT } from '../src/i18n.mjs';
 import {
   matchGlob,
   stripComments,
   extractImports,
   resolveImportPath,
+  buildDependencyGraph,
   detectCircularDependencies,
   checkLayerBoundaries,
   checkPrivateImports,
@@ -286,6 +288,84 @@ test('initArchConfig accepts a known preset', () => {
   const preset = initArchConfig(tmp, { preset: 'ddd' });
   assert.deepEqual(preset, ARCH_PRESETS.ddd);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(tmp, ARCH_CONFIG_REL), 'utf8')), ARCH_PRESETS.ddd);
+});
+
+test('architecture guard scans cjs/mts/cts, template-literal imports, and reports unresolved dynamic imports', () => {
+  const root = makeTmp();
+  for (const dir of ['src/domain', 'src/infra', 'src/web']) {
+    fs.mkdirSync(path.join(root, dir), { recursive: true });
+  }
+  initArchConfig(root, { preset: 'clean' });
+
+  fs.writeFileSync(path.join(root, 'src/infra/db.mjs'), 'export const db = 1;\n', 'utf8');
+  fs.writeFileSync(path.join(root, 'src/domain/legacy.cjs'),
+    "const db = require('../infra/db');\nmodule.exports = db;\n", 'utf8');
+  fs.writeFileSync(path.join(root, 'src/domain/typed.mts'),
+    "import { db } from '../infra/db.mjs';\nexport const value = db;\n", 'utf8');
+  fs.writeFileSync(path.join(root, 'src/domain/compiled.cts'),
+    "const db = require('../infra/db');\nexport = db;\n", 'utf8');
+  fs.writeFileSync(path.join(root, 'src/domain/lazy.mjs'),
+    'export async function load() {\n  return import(`../infra/db.mjs`);\n}\n', 'utf8');
+  fs.writeFileSync(path.join(root, 'src/web/dynamic.mjs'),
+    'export async function load(name) {\n  return import(name);\n}\n', 'utf8');
+
+  const graph = buildDependencyGraph(root, { exclude: ['**/node_modules/**'] });
+  assert.ok(graph.get('src/domain/legacy.cjs')?.has('src/infra/db.mjs'), 'cjs require edge');
+  assert.ok(graph.get('src/domain/typed.mts')?.has('src/infra/db.mjs'), 'mts import edge');
+  assert.ok(graph.get('src/domain/compiled.cts')?.has('src/infra/db.mjs'), 'cts require edge');
+  assert.ok(graph.get('src/domain/lazy.mjs')?.has('src/infra/db.mjs'), 'template-literal import edge');
+
+  const res = evaluateArchitecture(root);
+  assert.ok(res.boundaryViolations.some(
+    (v) => v.fromFile === 'src/domain/legacy.cjs' && v.targetFile === 'src/infra/db.mjs',
+  ));
+  assert.ok(res.boundaryViolations.some(
+    (v) => v.fromFile === 'src/domain/lazy.mjs' && v.targetFile === 'src/infra/db.mjs',
+  ));
+  assert.equal(res.unresolvedImports.length, 1);
+  assert.equal(res.unresolvedImports[0].fromFile, 'src/web/dynamic.mjs');
+  assert.equal(res.ok, false);
+
+  // An unresolved dynamic import is an advisory: counted, listed, and not a failed check.
+  const cleanRoot = makeTmp();
+  fs.mkdirSync(path.join(cleanRoot, 'src/web'), { recursive: true });
+  initArchConfig(cleanRoot, { preset: 'clean' });
+  fs.writeFileSync(path.join(cleanRoot, 'src/web/dynamic.mjs'),
+    'export const load = (p) => import(p);\n', 'utf8');
+  const pure = evaluateArchitecture(cleanRoot);
+  assert.equal(pure.cycles.length + pure.boundaryViolations.length + pure.privateViolations.length, 0);
+  assert.equal(pure.unresolvedImports.length, 1);
+  assert.equal(pure.unresolvedImports[0].specifier, 'p');
+  assert.equal(pure.ok, true);
+
+  const health = checkArchHealth(cleanRoot, makeT('en'));
+  assert.equal(health.ok, true);
+  assert.equal(health.warn, true);
+  assert.match(health.detail, /could not statically resolve 1 dynamic import/);
+  assert.match(health.detail, /src\/web\/dynamic\.mjs -> p/);
+
+  const healthZh = checkArchHealth(cleanRoot, makeT('zh-CN'));
+  assert.match(healthZh.detail, /无法静态解析/);
+  assert.match(healthZh.detail, /src\/web\/dynamic\.mjs -> p/);
+});
+
+test('CLI arch check lists unresolved dynamic imports as advisory in text and JSON', () => {
+  const tmp = makeTmp();
+  fs.mkdirSync(path.join(tmp, 'src', 'web'), { recursive: true });
+  initArchConfig(tmp, { preset: 'clean' });
+  fs.writeFileSync(path.join(tmp, 'src', 'web', 'dynamic.mjs'),
+    'export const load = (p) => import(p);\n', 'utf8');
+
+  const text = run(['arch', 'check', '--target', tmp], KIT);
+  assert.equal(text.status, 0, text.stderr);
+  assert.match(text.stdout, /src\/web\/dynamic\.mjs -> p/);
+
+  const json = run(['arch', 'check', '--json', '--target', tmp], KIT);
+  assert.equal(json.status, 0, json.stderr);
+  const data = JSON.parse(json.stdout);
+  assert.equal(data.ok, true);
+  assert.deepEqual(data.unresolvedImports?.length, 1);
+  assert.deepEqual(data.unresolvedImports[0], { fromFile: 'src/web/dynamic.mjs', specifier: 'p' });
 });
 
 test('CLI arch init exits 2 on unknown preset', () => {

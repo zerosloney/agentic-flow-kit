@@ -8,6 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { EXIT, exitCodeForError, REGISTERED_ERROR_CODES, IO_ERROR_CODES } from '../src/cli/exit.mjs';
 import { COMMANDS } from '../src/cli/main.mjs';
+import { parseArgs } from '../src/cli/args.mjs';
 import { STACKS } from '../src/install/profiles.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -332,4 +333,42 @@ test('list-hosts --json lists the registry surface', () => {
   assert.equal(claude.dir, '.claude');
   assert.equal(claude.modelField, 'model');
   assert.ok(hosts.every((h) => h.skills === null || typeof h.skills === 'string'));
+});
+
+test('a value-taking flag without a value is a usage error naming the flag', () => {
+  assert.throws(
+    () => parseArgs(['install', '--target', '--agent', 'trae']),
+    (err) => err.code === 'MISSING_ARG' && /--target/.test(err.message),
+  );
+  assert.throws(
+    () => parseArgs(['install', '--lang=']),
+    (err) => err.code === 'MISSING_ARG' && /--lang/.test(err.message),
+  );
+  for (const flag of ['--preset', '--remote', '--args']) {
+    assert.throws(
+      () => parseArgs([flag, '--json']),
+      (err) => err.code === 'MISSING_ARG' && err.message.includes(flag),
+      flag,
+    );
+  }
+  assert.ok(parseArgs(['status', '--keep']).flags.has('keep'));
+  const ok = parseArgs(['install', '--target', '.', '--agent', 'trae']);
+  assert.equal(ok.target, '.');
+  assert.deepEqual(ok.agents, ['trae']);
+});
+
+test('a value flag with no value exits 2 instead of falling back to cwd', () => {
+  const dir = tmpRepo();
+  const r = run(['status', '--target', '--json'], dir);
+  assert.equal(r.status, EXIT.USAGE, r.stderr);
+  assert.match(r.stderr, /--target/);
+});
+
+test('parsed keys cannot overwrite parser state', () => {
+  const dir = tmpRepo();
+  for (const flag of ['--flags=x', '--models=y']) {
+    const r = run(['status', flag], dir);
+    assert.equal(r.status, EXIT.USAGE, `${flag}: ${r.stderr}`);
+    assert.ok(r.stderr.includes(flag.split('=')[0]), `${flag} must be named`);
+  }
 });

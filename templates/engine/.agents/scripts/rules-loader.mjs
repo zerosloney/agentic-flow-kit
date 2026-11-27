@@ -459,6 +459,17 @@ function parseRulesFileData(abs) {
   return parseYamlSimple(text);
 }
 
+// 形状校验（审计 D35）：顶层须为映射，声明了 rules 时须为数组（null 视同未声明）。
+// 空文件解析为 {} = 有意留空，合法；列表形 / 标量顶层 = 配置失守，fail-closed。
+function assertRulesShape(data, rel) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    throw new Error(t(`规则文件 ${rel} 顶层必须是映射（对象）`, `rules file ${rel}: top level must be a mapping`));
+  }
+  if (data.rules != null && !Array.isArray(data.rules)) {
+    throw new Error(t(`规则文件 ${rel} 的 rules 必须是数组`, `rules file ${rel}: "rules" must be an array`));
+  }
+}
+
 /** 加载项目规则（级联项目层与栈规则层），返回解析后的对象；无规则文件返回 null；解析失败抛错 */
 export function loadProjectRules(root) {
   const rel = findProjectRulesFile(root);
@@ -469,23 +480,23 @@ export function loadProjectRules(root) {
   if (rel) {
     const abs = path.join(root, rel);
     projectData = parseRulesFileData(abs);
-    if (projectData && typeof projectData === 'object') {
-      projectData._file = rel;
-    }
+    assertRulesShape(projectData, rel);
+    projectData._file = rel;
   }
 
-  // 装载栈规则层
+  // 装载栈规则层：解析失败 / 形状错误一律 fail-closed（审计 D35——此前只警告并丢门，
+  // verify 会静默少跑栈层门；与项目层解析错误同口径）
   const stackRules = [];
   for (const sRel of stackRels) {
     const abs = path.join(root, sRel);
+    let data;
     try {
-      const data = parseRulesFileData(abs);
-      if (data && Array.isArray(data.rules)) {
-        stackRules.push(...data.rules);
-      }
+      data = parseRulesFileData(abs);
     } catch (err) {
-      console.error(`[rules-loader] ${t('警告：无法加载栈规则文件', 'warning: failed to load stack rule file')} ${sRel} (${err.message})`);
+      throw new Error(`${sRel}: ${err.message}`);
     }
+    assertRulesShape(data, sRel);
+    if (data.rules) stackRules.push(...data.rules);
   }
 
   if (!projectData) {

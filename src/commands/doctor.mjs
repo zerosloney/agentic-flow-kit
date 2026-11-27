@@ -104,15 +104,21 @@ export function doctorCommand({ args, t }) {
       if (!fs.existsSync(path.join(target, rel))) add(false, `file ${rel}`, t('doctor.fileMissing'));
     }
     // 漂移是 advisory：用户改文件属正常，缺失已在上面按文件报错；明细交给 diff。
-    const drift = (diffResult = buildDiff({ target, manifest })).summary;
-    const drifting = drift.userModified + drift.kitUpdated + drift.orphan;
-    if (drifting > 0) {
-      add(true, 'manifest drift', t('doctor.drift', drift), t('doctor.driftHint'), { warn: true });
-    }
-    // issue #86：锚点外原文疑似被旧版安装覆盖（哈希可能一致，diff 默认不显示）——单独 advisory。
-    const overwritten = (diffResult.items || []).filter((item) => item.overwritten).map((item) => item.targetRel);
-    if (overwritten.length) {
-      add(true, 'derived overwritten', t('doctor.derivedOverwritten', { files: overwritten.join(', ') }), t('doctor.derivedOverwrittenHint'), { warn: true });
+    // 敌意/损坏的 manifest 条目会让 buildDiff 抛 BAD_MANIFEST：落成一条失败检查，其余检查继续。
+    try {
+      const drift = (diffResult = buildDiff({ target, manifest })).summary;
+      const drifting = drift.userModified + drift.kitUpdated + drift.orphan;
+      if (drifting > 0) {
+        add(true, 'manifest drift', t('doctor.drift', drift), t('doctor.driftHint'), { warn: true });
+      }
+      // issue #86：锚点外原文疑似被旧版安装覆盖——哈希可能一致，diff 默认不显示——单独 advisory。
+      const overwritten = (diffResult.items || []).filter((item) => item.overwritten).map((item) => item.targetRel);
+      if (overwritten.length) {
+        add(true, 'derived overwritten', t('doctor.derivedOverwritten', { files: overwritten.join(', ') }), t('doctor.derivedOverwrittenHint'), { warn: true });
+      }
+    } catch (err) {
+      if (err.code !== 'BAD_MANIFEST') throw err;
+      add(false, 'manifest entries', err.message);
     }
   }
 
@@ -179,7 +185,21 @@ export function doctorCommand({ args, t }) {
   }
 
   for (const hook of HOOK_FILES) {
-    add(fs.existsSync(path.join(target, '.githooks', hook)), `hook ${hook}`, '');
+    const hookPath = path.join(target, '.githooks', hook);
+    const hookExists = fs.existsSync(hookPath);
+    add(hookExists, `hook ${hook}`, '');
+    // POSIX 上 git 只执行带 x 位的 hook（无声静默跳过）；Windows 不看权限位，不做这项检查。
+    if (hookExists && process.platform !== 'win32') {
+      let executable = false;
+      try {
+        executable = (fs.statSync(hookPath).mode & 0o111) !== 0;
+      } catch {
+        executable = false;
+      }
+      add(executable, `hook ${hook} exec`,
+        executable ? '' : t('doctor.hookNotExecutable', { hook }),
+        executable ? '' : t('doctor.hookNotExecutableHint', { hook }));
+    }
   }
 
   for (const host of manifest?.hosts || []) {

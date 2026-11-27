@@ -6,6 +6,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 import {
   TIMELINE_EVENT_TYPES,
@@ -301,5 +303,133 @@ describe('Unit 3: 快照差异对质与离线复盘包导出', () => {
       false,
       '回退路径不得写回 canonical 处方库',
     );
+  });
+});
+
+const SCRIPT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'templates',
+  'engine',
+  '.agents',
+  'scripts',
+  'timeline-trace.mjs',
+);
+
+function timelineEvent(seq, runId) {
+  return {
+    eventId: `evt-${seq}`,
+    runId,
+    seq,
+    timestamp: `2026-11-01T00:00:0${seq}.000Z`,
+    eventType: 'STAGE_ENTER',
+    stage: 'plan',
+    actor: 'planner',
+    status: 'success',
+    summary: `step ${seq}`,
+    payload: {},
+    snapshotHash: null,
+  };
+}
+
+describe('Unit 5: 损坏 JSONL 行的局部跳过与丢失告警', () => {
+  let tmpRoot = null;
+  const runId = 'run-corrupt';
+
+  beforeEach(() => {
+    tmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'timeline-corrupt-'));
+  });
+
+  afterEach(() => {
+    if (tmpRoot && fs.existsSync(tmpRoot)) {
+      fs.rmSync(tmpRoot, { recursive: true, force: true });
+    }
+  });
+
+  function writeTrace(lines) {
+    const dir = path.join(tmpRoot, '.agents', 'traces');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(path.join(dir, `${runId}.timeline.jsonl`), `${lines.join('\n')}\n`, 'utf8');
+  }
+
+  function cli(args) {
+    return spawnSync(process.execPath, [SCRIPT, ...args], { cwd: tmpRoot, encoding: 'utf8' });
+  }
+
+  test('loadTimelineTrace 跳过损坏行并保留其余事件', () => {
+    writeTrace([
+      JSON.stringify(timelineEvent(1, runId)),
+      '<<<corrupted partial line',
+      JSON.stringify(timelineEvent(2, runId)),
+    ]);
+
+    const events = loadTimelineTrace(tmpRoot, runId);
+
+    assert.deepEqual(events.map((e) => e.seq), [1, 2]);
+  });
+
+  test('query 跳过损坏行并在输出中报告跳过条数', () => {
+    writeTrace([
+      JSON.stringify(timelineEvent(1, runId)),
+      '<<<corrupted partial line',
+      JSON.stringify(timelineEvent(2, runId)),
+    ]);
+
+    const res = cli(['query', '--run', runId]);
+
+    assert.equal(res.status, 0, res.stderr);
+    assert.deepEqual(JSON.parse(res.stdout).map((e) => e.seq), [1, 2]);
+    assert.match(res.stderr, /跳过 1\/3 行损坏记录/);
+  });
+
+  test('export 的复盘包记录跳过条数并标注不完整', () => {
+    writeTrace([
+      JSON.stringify(timelineEvent(1, runId)),
+      '<<<corrupted partial line',
+      JSON.stringify(timelineEvent(2, runId)),
+    ]);
+
+    const bundle = exportPostMortemBundle(tmpRoot, runId, { saveToFile: false });
+
+    assert.equal(bundle.metrics.totalEvents, 2);
+    assert.equal(bundle.metrics.skippedLines, 1);
+    assert.ok(
+      bundle.warnings.some((w) => /跳过 1\/3 行损坏记录/.test(w)),
+      `复盘包应标注丢失行：${JSON.stringify(bundle.warnings)}`,
+    );
+  });
+
+  test('CLI export 在复盘包丢失行时提示不完整', () => {
+    writeTrace([
+      JSON.stringify(timelineEvent(1, runId)),
+      '<<<corrupted partial line',
+    ]);
+
+    const res = cli(['export', '--run', runId]);
+
+    assert.equal(res.status, 0, res.stderr);
+    assert.match(res.stderr, /跳过 1\/2 行损坏记录/);
+  });
+
+  test('所有行都损坏时 query 非零退出', () => {
+    writeTrace(['<<<corrupted partial line']);
+
+    const res = cli(['query', '--run', runId]);
+
+    assert.equal(res.status, 1, res.stdout + res.stderr);
+    assert.match(res.stderr, /跳过 1\/1 行损坏记录/);
+  });
+
+  test('所有行都损坏时 export 非零退出且包内计数可见', () => {
+    writeTrace(['<<<corrupted partial line']);
+
+    const res = cli(['export', '--run', runId]);
+
+    assert.equal(res.status, 1, res.stdout + res.stderr);
+    const bundle = JSON.parse(
+      fs.readFileSync(path.join(tmpRoot, '.agents', 'traces', `${runId}.post-mortem.json`), 'utf8'),
+    );
+    assert.equal(bundle.metrics.totalEvents, 0);
+    assert.equal(bundle.metrics.skippedLines, 1);
   });
 });

@@ -101,7 +101,13 @@ export function extractSymbols(source, ext = '.js', filePath = '') {
 
 function extractJsTsSymbols(source) {
   const symbols = [];
+  // 同名声明按出现顺序全部保留（函数重声明、TS interface/class 合并），不按名去重
   const symbolMap = new Map();
+  const addSymbol = (name, sym) => {
+    const list = symbolMap.get(name);
+    if (list) list.push(sym);
+    else symbolMap.set(name, [sym]);
+  };
 
   // 1. 常规函数声明: export [async] function name(...) { ... }
   const funcDeclRe = /(?:^|\n)[ \t]*(export\s+(?:default\s+)?)?(async\s+)?function\s*([A-Za-z0-9_$]+)\s*(\([^)]*\))/g;
@@ -131,7 +137,7 @@ function extractJsTsSymbols(source) {
       start: m.index + (m[0].length - m[0].trimStart().length),
       end: endIdx,
     };
-    symbolMap.set(name, sym);
+    addSymbol(name, sym);
   }
 
   // 2. 变量赋值函数: export const name = [async] (...) => { ... }
@@ -172,7 +178,7 @@ function extractJsTsSymbols(source) {
       start: m.index + (m[0].length - m[0].trimStart().length),
       end: endIdx,
     };
-    symbolMap.set(name, sym);
+    addSymbol(name, sym);
   }
 
   // 3. 类声明: export class Name [extends Base] { ... }
@@ -201,7 +207,7 @@ function extractJsTsSymbols(source) {
       start: m.index + (m[0].length - m[0].trimStart().length),
       end: endIdx,
     };
-    symbolMap.set(name, sym);
+    addSymbol(name, sym);
   }
 
   // 4. TS 接口与类型: export interface Name / export type Name
@@ -230,7 +236,7 @@ function extractJsTsSymbols(source) {
       start: m.index + (m[0].length - m[0].trimStart().length),
       end: endIdx,
     };
-    symbolMap.set(name, sym);
+    addSymbol(name, sym);
   }
 
   const typeRe = /(?:^|\n)[ \t]*(export\s+)?type\s+([A-Za-z0-9_$]+)(?:<[^>]+>)?\s*=\s*([^;\n]+)/g;
@@ -252,7 +258,7 @@ function extractJsTsSymbols(source) {
       start: m.index + (m[0].length - m[0].trimStart().length),
       end: endIdx,
     };
-    symbolMap.set(name, sym);
+    addSymbol(name, sym);
   }
 
   // 5. 命名导出捕获: export { a, b as c }
@@ -263,12 +269,12 @@ function extractJsTsSymbols(source) {
       const parts = item.trim().split(/\s+as\s+/);
       const original = parts[0].trim();
       if (symbolMap.has(original)) {
-        symbolMap.get(original).isExported = true;
+        for (const s of symbolMap.get(original)) s.isExported = true;
       } else if (original) {
         let exportEnd = m.index + m[0].length;
         while (exportEnd < source.length && source[exportEnd] !== ';' && source[exportEnd] !== '\n') exportEnd++;
         if (source[exportEnd] === ';') exportEnd += 1;
-        symbolMap.set(original, {
+        addSymbol(original, {
           name: original,
           kind: 'export',
           isExported: true,
@@ -282,8 +288,8 @@ function extractJsTsSymbols(source) {
     }
   }
 
-  for (const s of symbolMap.values()) {
-    symbols.push(s);
+  for (const list of symbolMap.values()) {
+    for (const s of list) symbols.push(s);
   }
   symbols.sort((a, b) => a.line - b.line);
   return symbols;
@@ -425,26 +431,46 @@ function extractGoSymbols(source) {
 // ── 符号差异比对器 (Symbol Diff Analyzer) ───────────────────────────────────
 
 export function diffSymbols(baseSymbols = [], targetSymbols = []) {
-  const baseMap = new Map();
-  for (const s of baseSymbols) {
-    if (s && s.name) baseMap.set(s.name, s);
-  }
-  const targetMap = new Map();
-  for (const s of targetSymbols) {
-    if (s && s.name) targetMap.set(s.name, s);
-  }
+  const groupByName = (symbols) => {
+    const map = new Map();
+    for (const s of symbols) {
+      if (!s || !s.name) continue;
+      const list = map.get(s.name);
+      if (list) list.push(s);
+      else map.set(s.name, [s]);
+    }
+    return map;
+  };
+  const baseMap = groupByName(baseSymbols);
+  const targetMap = groupByName(targetSymbols);
 
   const added = [];
   const removed = [];
   const signatureChanged = [];
   const bodyChanged = [];
   const unchanged = [];
+  const declarationCountChanged = [];
 
-  for (const [name, target] of targetMap.entries()) {
-    if (!baseMap.has(name)) {
-      added.push(target);
-    } else {
-      const base = baseMap.get(name);
+  // 同名声明仅在数量一致时按出现顺序配对；数量变化单独报告，避免错位配对
+  for (const [name, targets] of targetMap.entries()) {
+    const bases = baseMap.get(name) || [];
+    if (bases.length !== targets.length) {
+      if (bases.length === 0) {
+        added.push(...targets);
+      } else {
+        declarationCountChanged.push({
+          name,
+          kind: targets[0].kind,
+          isExported: targets.some((s) => s.isExported) || bases.some((s) => s.isExported),
+          baseCount: bases.length,
+          targetCount: targets.length,
+        });
+      }
+      continue;
+    }
+    for (let i = 0; i < targets.length; i++) {
+      const base = bases[i];
+      const target = targets[i];
       const sigSame = normalizeSignature(base.signature) === normalizeSignature(target.signature);
       const bodySame = base.bodyDigest === target.bodyDigest;
 
@@ -475,10 +501,9 @@ export function diffSymbols(baseSymbols = [], targetSymbols = []) {
     }
   }
 
-  for (const [name, base] of baseMap.entries()) {
-    if (!targetMap.has(name)) {
-      removed.push(base);
-    }
+  for (const [name, bases] of baseMap.entries()) {
+    if (targetMap.has(name)) continue;
+    removed.push(...bases);
   }
 
   return {
@@ -487,10 +512,37 @@ export function diffSymbols(baseSymbols = [], targetSymbols = []) {
     signatureChanged,
     bodyChanged,
     unchanged,
+    declarationCountChanged,
   };
 }
 
 // ── 规则解析器 (Plan & Config Parser) ───────────────────────────────────────
+
+const PLAN_RULE_PATH_CHAR = /[A-Za-z0-9_./\\-]/;
+
+// 线性扫描规则行：路径字符段 + "." + 扩展名 + 空白 + 括号声明。
+// 回溯型正则会在长点链、缺右括号的行上退化为二次复杂度。
+function matchPlanRuleLine(t) {
+  const n = t.length;
+  let i = 0;
+  while (i < n) {
+    while (i < n && !PLAN_RULE_PATH_CHAR.test(t[i])) i++;
+    const start = i;
+    while (i < n && PLAN_RULE_PATH_CHAR.test(t[i])) i++;
+    if (i === start) continue;
+    const token = t.slice(start, i);
+    let j = i;
+    while (j < n && /\s/.test(t[j])) j++;
+    if (t[j] !== '(') continue;
+    const dot = token.lastIndexOf('.');
+    if (dot <= 0 || !/^[A-Za-z0-9]+$/.test(token.slice(dot + 1))) continue;
+    const close = t.indexOf(')', j + 1);
+    if (close === -1) return null;
+    if (close === j + 1) continue;
+    return { filePath: token, decl: t.slice(j + 1, close) };
+  }
+  return null;
+}
 
 export function parsePlanSymbolRules(planText) {
   const str = String(planText || '');
@@ -503,10 +555,10 @@ export function parsePlanSymbolRules(planText) {
     const t = line.trim();
     if (!t) continue;
     // 匹配行首路径并解析括号内的沙箱声明: - [x] src/foo.mjs (symbols: a, b; freeze: c; freeze-exports)
-    const m = t.match(/([A-Za-z0-9_./\\-]+\.[A-Za-z0-9]+)\s*\(([^)]+)\)/);
+    const m = matchPlanRuleLine(t);
     if (m) {
-      const filePath = normalizeRuleKey(m[1]);
-      const decl = m[2];
+      const filePath = normalizeRuleKey(m.filePath);
+      const decl = m.decl;
 
       const symMatch = decl.match(/symbols[:：\s]+([^;)]+)/i);
       if (symMatch) {
@@ -742,6 +794,14 @@ export function verifySemanticSandbox({
       }
     };
 
+    let fileFrozen = [];
+    if (Array.isArray(rules?.frozenSymbols)) {
+      fileFrozen = rules.frozenSymbols;
+    } else {
+      const scopedFrozen = lookupFileRule(rules?.frozenSymbols, filePath);
+      if (Array.isArray(scopedFrozen)) fileFrozen = scopedFrozen;
+    }
+
     // 规则 1: 符号修改白名单限制 (allowedSymbols)
     const allowed = lookupFileRule(rules?.allowedSymbols, filePath);
     if (Array.isArray(allowed) && allowed.length > 0) {
@@ -751,6 +811,7 @@ export function verifySemanticSandbox({
         ...diff.bodyChanged,
         ...diff.removed,
         ...diff.added,
+        ...diff.declarationCountChanged,
       ];
       for (const s of mutatedSymbols) {
         if (!allowedSet.has(s.name)) {
@@ -762,10 +823,24 @@ export function verifySemanticSandbox({
           });
         }
       }
+      for (const s of diff.declarationCountChanged) {
+        if (allowedSet.has(s.name)) {
+          violations.push({
+            code: 'SYMBOL_DECLARATION_COUNT_CHANGED',
+            filePath,
+            symbol: s.name,
+            message: `符号 ${s.name} 的同名声明数量从 ${s.baseCount} 变为 ${s.targetCount}（文件 ${filePath}），不能按授权修改处理`,
+          });
+        }
+      }
 
       flagUnresolved(allowed);
+    }
 
-      // 授权符号之外必须保持原样；新增文件只允许 import / export … from 作为脚手架
+    // 授权/冻结符号之外必须保持原样；新增文件只允许 import / export … from 作为脚手架
+    const hasSymbolScope =
+      (Array.isArray(allowed) && allowed.length > 0) || fileFrozen.length > 0;
+    if (hasSymbolScope) {
       const hasBase = baseSource.trim().length > 0;
       const baseRemainder = remainderOf(baseSource, baseSymbols);
       const targetRemainder = remainderOf(targetSource, targetSymbols);
@@ -782,13 +857,6 @@ export function verifySemanticSandbox({
     }
 
     // 规则 2: 冻结符号绝对保护 (frozenSymbols)
-    let fileFrozen = [];
-    if (Array.isArray(rules?.frozenSymbols)) {
-      fileFrozen = rules.frozenSymbols;
-    } else {
-      const scopedFrozen = lookupFileRule(rules?.frozenSymbols, filePath);
-      if (Array.isArray(scopedFrozen)) fileFrozen = scopedFrozen;
-    }
     if (Array.isArray(fileFrozen) && fileFrozen.length > 0) {
       flagUnresolved(fileFrozen);
       const frozenSet = new Set(fileFrozen);
@@ -804,6 +872,16 @@ export function verifySemanticSandbox({
             filePath,
             symbol: s.name,
             message: `违反冻结保护：符号 ${s.name} 已被标记冻结，禁止任何修改或删除（在文件 ${filePath} 中）`,
+          });
+        }
+      }
+      for (const s of diff.declarationCountChanged) {
+        if (frozenSet.has(s.name)) {
+          violations.push({
+            code: 'FROZEN_SYMBOL_BREACH',
+            filePath,
+            symbol: s.name,
+            message: `违反冻结保护：符号 ${s.name} 的同名声明集合发生变化（${s.baseCount} → ${s.targetCount}），冻结符号禁止增删或修改（在文件 ${filePath} 中）`,
           });
         }
       }
@@ -831,6 +909,16 @@ export function verifySemanticSandbox({
             filePath,
             symbol: s.name,
             message: `违反公共接口冻结契约：导出符号 ${s.name} 被删除（在文件 ${filePath} 中）`,
+          });
+        }
+      }
+      for (const s of diff.declarationCountChanged) {
+        if (s.isExported) {
+          violations.push({
+            code: 'EXPORT_CONTRACT_BREACH',
+            filePath,
+            symbol: s.name,
+            message: `违反公共接口冻结契约：导出符号 ${s.name} 的声明集合发生变化（在文件 ${filePath} 中）`,
           });
         }
       }
@@ -862,6 +950,16 @@ export function verifySemanticSandbox({
             filePath,
             symbol: s.name,
             message: `未授权新增公共导出：符号 ${s.name}（在文件 ${filePath} 中）`,
+          });
+        }
+      }
+      for (const s of diff.declarationCountChanged) {
+        if (s.targetCount > s.baseCount && s.isExported) {
+          violations.push({
+            code: 'UNAUTHORIZED_NEW_EXPORT',
+            filePath,
+            symbol: s.name,
+            message: `未授权新增公共导出：符号 ${s.name} 的同名声明数量增加（在文件 ${filePath} 中）`,
           });
         }
       }

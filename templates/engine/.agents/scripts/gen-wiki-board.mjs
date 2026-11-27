@@ -182,7 +182,8 @@ const topicsJs = ordered.map((o) => {
   return `    { "name": ${JSON.stringify(o.name)}, "files": [\n${files.join(',\n')}\n    ]}`;
 }).join(',\n');
 const dataJs = `const DATA = {\n  "summary": { "total": ${totalFiles}, "topics": ${diskTopics.size}, "files": ${totalFiles}, "archive": ${archiveCount} },\n  "topics": [\n${topicsJs}\n  ]\n};`;
-const boardOut = boardText.replace(/const DATA = \{[\s\S]*?\n\};/, dataJs);
+// 函数替换：wiki 名/文件名里的 $&、$'、$` 必须按字面进入 DATA，不能被 replace 解释
+const boardOut = boardText.replace(/const DATA = \{[\s\S]*?\n\};/, () => dataJs);
 if (boardOut === boardText && !/const DATA = \{[\s\S]*?\n\};/.test(boardText)) {
   console.error('❌ 看板中未找到 const DATA = {...} 块，未写盘');
   process.exit(1);

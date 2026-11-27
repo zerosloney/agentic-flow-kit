@@ -104,3 +104,36 @@ test('doctor skips the version comparison when the flow-kit on PATH prints no ve
   assert.equal(item.ok, true);
   assert.equal(item.warn, false);
 });
+
+// 敌意 manifest 条目必须落成一条失败的 doctor 检查；doctor 不能因 buildDiff 抛错而整体中止。
+test('doctor reports a manifest entry outside the target as a failed check', () => {
+  const dir = tmpRepo();
+  const installed = install(dir);
+  assert.equal(installed.status, 0, installed.stderr);
+  const rel = `../${path.basename(dir)}-victim.txt`;
+  const victim = path.resolve(dir, rel);
+  try {
+    fs.writeFileSync(victim, 'outside\n', 'utf8');
+    const manifestPath = path.join(dir, '.agents/install-manifest.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+    manifest.files[rel] = '0'.repeat(64);
+    fs.writeFileSync(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+
+    const r = runIn(['doctor', '--target', '.', '--json'], dir);
+    assert.equal(r.status, 1, r.stderr);
+    const out = JSON.parse(r.stdout);
+    assert.equal(out.ok, false);
+    const failed = out.checks.find((check) => !check.ok && check.detail?.includes(rel));
+    assert.ok(failed, `checks: ${JSON.stringify(out.checks.filter((check) => !check.ok))}`);
+    assert.ok(out.checks.some((check) => check.ok && check.name !== 'install-manifest'), 'remaining checks must still run');
+
+    const human = runIn(['doctor', '--target', '.'], dir);
+    assert.equal(human.status, 1, human.stderr);
+    assert.ok(human.stdout.includes(`✗ ${failed.name}`), human.stdout);
+    assert.ok(human.stdout.includes(rel), human.stdout);
+    assert.match(human.stdout, /doctor 失败/);
+    assert.doesNotMatch(`${human.stdout}${human.stderr}`, /^\s+at .+:\d+:\d+/m);
+  } finally {
+    fs.rmSync(victim, { force: true });
+  }
+});

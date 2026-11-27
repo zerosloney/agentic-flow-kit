@@ -214,13 +214,27 @@ export const MARK_RE = /^\s*[-*]\s*(?:\d{4}-\d{2}-\d{2}|<日期>)?\s*\**用户�
 
 // entryConfirmed：同主题入口判定（intent 优先；否则 incidents）——返回 {ok, kind, rel, level, status, reason?}
 export function entryConfirmed(root, base) {
-  const intentRel = `workflow/intents/${base}.md`;
+  return entryConfirmedAt(root,
+    `workflow/intents/${base}.md`,
+    `workflow/incidents/${base}.md`,
+    `未找到同名入口（workflow/intents 与 workflow/incidents 均无 ${base}.md）`);
+}
+
+// taskEntryConfirmed：pipeline 任务目录入口判定。tasks 路径的文件名固定为 intent.md / incident.md，
+// 不能拿 fill-spec / fill-plan 的输出名（恒为 spec / plan）当入口名。
+function taskEntryConfirmed(root, taskDir) {
+  return entryConfirmedAt(root,
+    `${taskDir}/intent.md`,
+    `${taskDir}/incident.md`,
+    `未找到任务目录入口（${taskDir} 下无 intent.md / incident.md）`);
+}
+
+function entryConfirmedAt(root, intentRel, incRel, missingReason) {
   const intentAbs = path.join(root, intentRel);
   if (fs.existsSync(intentAbs)) {
     const r = judgeDoc(root, intentAbs, intentRel, ENTRY_STATUSES);
     return { ...r, kind: 'intent', rel: intentRel, level: readFm(intentAbs, '级别'), date: readFm(intentAbs, '日期'), storageLegacy: entryStorageLegacy(root, intentAbs) };
   }
-  const incRel = `workflow/incidents/${base}.md`;
   const incAbs = path.join(root, incRel);
   if (fs.existsSync(incAbs)) {
     const st = readFm(incAbs, '状态');
@@ -231,12 +245,15 @@ export function entryConfirmed(root, base) {
     const why = !INCIDENT_STATUSES.includes(st) ? `状态「${st || '缺失'}」非法` : '「时间线」小节缺「用户确认」条目（maintain.md §3）';
     return { ok: false, kind: 'incident', rel: incRel, level, status: st, legacy: false, reason: `同名 incident 未过目确认——${why}` };
   }
-  return { ok: false, kind: null, rel: null, level: '', status: '', reason: `未找到同名入口（workflow/intents 与 workflow/incidents 均无 ${base}.md）` };
+  return { ok: false, kind: null, rel: null, level: '', status: '', reason: missingReason };
 }
 
 // specConfirmed：plan 门的 L2/L3 追加要求
 export function specConfirmed(root, base) {
-  const rel = `workflow/specs/${base}.md`;
+  return specConfirmedAt(root, `workflow/specs/${base}.md`);
+}
+
+function specConfirmedAt(root, rel) {
   const abs = path.join(root, rel);
   if (!fs.existsSync(abs)) return { ok: false, reason: `缺同名 spec（${rel}）` };
   return judgeDoc(root, abs, rel, ENTRY_STATUSES);
@@ -541,7 +558,8 @@ export function coverageGate(root, docRel) {
 
 // draftGateFor：起草门总判（kind = 'spec' | 'plan'，fill 工具与 confirm-doc 逐阶段门共用）
 export function draftGateFor(kind, root, base, opts = {}) {
-  const entry = entryConfirmed(root, base);
+  // tasks 路径出口：入口取任务目录自身的 intent.md / incident.md，不取输出文件名
+  const entry = opts.taskDir ? taskEntryConfirmed(root, opts.taskDir) : entryConfirmed(root, base);
   if (!entry.ok) {
     // 探索泳道豁免（hybrid-governance-explore-hardening）：L1 draft intent 放行起草
     // ——「先动手后确认」；泳道单源 laneOfDoc（2026-10-10 起级别单字段；suspect 不豁免——级别缺失/
@@ -553,13 +571,14 @@ export function draftGateFor(kind, root, base, opts = {}) {
     // L0/L1 plan 即入口：没有 intent/incident 时，这份 plan 自己就是入口。
     // 文件已在则级别以文件为准（禁止用 --level L0/L1 把已有 L2 plan 放行）；尚未落盘才认 opts.level。
     if (kind === 'plan' && entry.kind === null) {
-      const planAbs = path.join(root, 'workflow', 'plans', `${base}.md`);
+      const planRel = opts.taskDir ? `${opts.taskDir}/${base}.md` : `workflow/plans/${base}.md`;
+      const planAbs = path.join(root, planRel);
       const declared = fs.existsSync(planAbs) ? readFm(planAbs, '级别') : (opts.level || '');
       if (declared === 'L0' || declared === 'L1') {
         return {
           ok: true,
           entry: {
-            ok: true, kind: 'plan', rel: `workflow/plans/${base}.md`, level: declared,
+            ok: true, kind: 'plan', rel: planRel, level: declared,
             status: fs.existsSync(planAbs) ? (readFm(planAbs, '状态') || 'draft') : 'draft',
             selfEntry: true, legacy: false,
           },
@@ -586,7 +605,7 @@ export function draftGateFor(kind, root, base, opts = {}) {
     };
   }
   if (kind === 'plan' && !entry.storageLegacy && (entry.level === 'L2' || entry.level === 'L3')) {
-    const sp = specConfirmed(root, base);
+    const sp = opts.taskDir ? specConfirmedAt(root, `${opts.taskDir}/spec.md`) : specConfirmed(root, base);
     if (!sp.ok) {
       return { ok: false, reason: `入口级别 ${entry.level}，前置 spec 未确认——${sp.reason}`, hint: '先走 stages.md Design 章完成 spec 确认' };
     }
@@ -829,16 +848,43 @@ export function incidentTrioGate(root, abs, rel) {
   return { ok: true };
 }
 
+// writeDraftDoc：fill-* 起草写盘单源。已有文档仅 draft 可重生成（pipeline 重试依赖）；其余状态
+// （approved / done / 缺失 / 无 frontmatter）拒绝覆写，避免把已确认内容打回草稿。同目录临时文件 +
+// rename 原子落地，中途失败不留半写文档。
+export function writeDraftDoc(abs, text) {
+  if (fs.existsSync(abs)) {
+    const st = readFm(abs, '状态');
+    if (st !== 'draft') {
+      return { ok: false, status: st, reason: `已存在同名文档且状态为「${st || '缺失'}」——只有 draft 可重生成，已确认文档拒绝覆写` };
+    }
+  }
+  fs.mkdirSync(path.dirname(abs), { recursive: true });
+  const tmp = path.join(path.dirname(abs), `.${path.basename(abs)}.${process.pid}.tmp`);
+  try {
+    fs.writeFileSync(tmp, text);
+    fs.renameSync(tmp, abs);
+  } catch (err) {
+    try { fs.unlinkSync(tmp); } catch { /* 临时文件可能尚未创建 */ }
+    throw err;
+  }
+  return { ok: true };
+}
+
 // resolveWorkspace：从输出路径推导工作区根与主题名；output 路径不含 workflow 段 → null（仓外草稿，不校验）
+// taskDir：路径为 workflow/tasks/<task>/<doc>.md 时带出任务目录（相对路径，'/' 分隔）——起草门据此取
+// 任务目录自身的入口文档。
 export function resolveWorkspace(outputPath, rootOverride) {
   const abs = path.resolve(outputPath);
   const base = path.basename(abs).replace(/\.md$/, '');
-  if (rootOverride) return { root: path.resolve(rootOverride), base };
   const parts = abs.split(path.sep);
+  let root = rootOverride ? path.resolve(rootOverride) : null;
   for (let i = parts.length - 2; i >= 0; i--) {
-    if (parts[i].toLowerCase() === 'workflow') return { root: parts.slice(0, i).join(path.sep) || path.sep, base };
+    if (parts[i].toLowerCase() !== 'workflow') continue;
+    if (!root) root = parts.slice(0, i).join(path.sep) || path.sep;
+    const isTasks = parts[i + 1]?.toLowerCase() === 'tasks' && parts[i + 2];
+    return isTasks ? { root, base, taskDir: parts.slice(i, i + 3).join('/') } : { root, base };
   }
-  return null;
+  return root ? { root, base } : null;
 }
 
-export default { entryConfirmed, specConfirmed, draftGateFor, confirmGateFor, doneGateFor, acceptanceEvidenceGate, incidentTrioGate, gitReady, approvedTraceHit, resolveWorkspace, readFm, readLedger };
+export default { entryConfirmed, specConfirmed, draftGateFor, confirmGateFor, doneGateFor, acceptanceEvidenceGate, incidentTrioGate, gitReady, approvedTraceHit, resolveWorkspace, writeDraftDoc, readFm, readLedger };

@@ -18,6 +18,11 @@ export async function hudCommand({ args, t, lang = 'zh-CN' }) {
   // 2. 实时监听看板循环模式 (--watch)
   if (flag(args, 'watch') || flag(args, 'w')) {
     const interval = args.interval ? Number(args.interval) : 2;
+    if (!Number.isFinite(interval) || interval <= 0) {
+      const err = new Error(t('error.badInterval', { value: String(args.interval) }));
+      err.code = 'BAD_ARGS';
+      throw err;
+    }
     return hudWatchLoop({ target, t, lang, interval });
   }
 

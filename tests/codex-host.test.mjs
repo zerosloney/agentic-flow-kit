@@ -161,6 +161,16 @@ test('codex-gate adapter: deny, allow and no-op states', () => {
   assert.equal(patch.out, '');
 });
 
+test('codex-gate adapter: model-chosen workdir cannot ungate the project', () => {
+  const repo = tmpRepo();
+  const home = makeTmp('fk-codex-home-');
+  assert.equal(installCodex(repo, home).status, 0);
+  const outside = makeTmp('fk-codex-outside-');
+  const r = runGate({ tool_name: 'exec_command', tool_input: { cmd: 'git push --force origin main', workdir: outside }, cwd: repo }, repo, home);
+  assert.equal(r.status, 0, r.out);
+  assert.match(r.out, /permissionDecision"\s*:\s*"deny/);
+});
+
 test('uninstall removes only the flow-kit entry and keeps other entries', () => {
   const repo = tmpRepo();
   const home = makeTmp('fk-codex-home-');

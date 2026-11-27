@@ -8,6 +8,7 @@ import { checkSandboxHealth } from '../install/sandbox.mjs';
 import { verifySignature, readSignatureFile, resolvePublicKeyPath } from '../install/notary.mjs';
 import { listHandoffFiles, verifyHandoffEnvelope } from '../install/handoff.mjs';
 import { computeAiDoraMetrics, checkMetricsThresholds } from '../install/metrics.mjs';
+import { readKitVersion } from '../install/version.mjs';
 
 /**
  * 解析 Git 差异变更集文件列表（用于增量卡口 / PR 范围收敛）
@@ -799,6 +800,9 @@ export function renderGateMarkdown(result, t) {
  */
 export function generateCiWorkflow({ provider = 'github', target, t, force = false }) {
   const normProvider = String(provider).toLowerCase();
+  // 审计修复 2026-11-27：生成的工作流与安装模板同标准——kit 固定到生成本文件的 CLI 版本
+  // （readKitVersion 是 src 侧唯一版本源），不跑 registry 浮动 latest。
+  const kitVersion = readKitVersion();
   if (normProvider === 'gitlab') {
     const gitlabPath = path.join(target, '.gitlab-ci.yml');
     // 审查遗留批 2026-11-23：已存在的 .gitlab-ci.yml 不再无条件覆盖（fail-closed）——
@@ -813,7 +817,7 @@ ai-gate:
   stage: test
   image: node:22-alpine
   script:
-    - npx --yes agentic-flow-kit gate --strict --markdown --out gate-summary.md
+    - npx --yes agentic-flow-kit@${kitVersion} gate --strict --markdown --out gate-summary.md
   artifacts:
     paths:
       - gate-summary.md
@@ -828,8 +832,31 @@ ai-gate:
 
   // GitHub Actions (默认)
   const ghDir = path.join(target, '.github', 'workflows');
-  fs.mkdirSync(ghDir, { recursive: true });
   const ghPath = path.join(ghDir, 'ai-gate.yml');
+  // 审计修复 2026-11-27：GitHub 分支此前无条件覆盖 ai-gate.yml；与 GitLab 分支同一 fail-closed 契约，
+  // 已有用户手改的工作流默认拒绝写入，--force 才允许覆盖。
+  if (fs.existsSync(ghPath) && !force) {
+    const err = new Error(t('gate.ciExists', { path: '.github/workflows/ai-gate.yml' }));
+    err.code = 'CONFIG_EXISTS';
+    throw err;
+  }
+  // D25 补全：安装器写入的 ci.yml 已跑完整本地门禁；再生成 ai-gate.yml 会让同一 push 跑两条
+  // 口径不同的流水线。只按 kit 标记识别（用户自己的同名文件不拦），--force 仍允许覆盖。
+  const installedCi = path.join(ghDir, 'ci.yml');
+  let installedText = '';
+  try {
+    installedText = fs.readFileSync(installedCi, 'utf8');
+  } catch {
+    /* 不存在/不可读：不按本 kit 流水线处理 */
+  }
+  if (!force && /^name:\s*ai-native-gates\s*$/m.test(installedText)) {
+    const err = new Error(
+      `${t('gate.ciExists', { path: '.github/workflows/ci.yml' })}\n${t('gate.ciInstalledHint')}`
+    );
+    err.code = 'CONFIG_EXISTS';
+    throw err;
+  }
+  fs.mkdirSync(ghDir, { recursive: true });
   const content = `name: AI-Native Zero-Trust Quality Gate
 
 on:
@@ -838,22 +865,27 @@ on:
   push:
     branches: [main, master]
 
+# 最小令牌权限：门禁只读仓库内容（审计修复 2026-11-27：此前未声明，继承默认 scope）。
+permissions:
+  contents: read
+
 jobs:
   ai-gate:
     name: Agentic Flow Quality Gate
     runs-on: ubuntu-latest
     steps:
+      # 审计修复 2026-11-27：第三方 action 按完整 commit SHA 固定（tag 注释仅供参考），防 tag 被移动。
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Node.js (>=22)
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '>=22'
 
       - name: Run AI-Native Quality Gatekeeper
         run: |
-          npx --yes agentic-flow-kit gate --strict --markdown --out gate-summary.md
+          npx --yes agentic-flow-kit@${kitVersion} gate --strict --markdown --out gate-summary.md
 
       - name: Attach Gate Summary to GitHub Step Summary
         if: always()

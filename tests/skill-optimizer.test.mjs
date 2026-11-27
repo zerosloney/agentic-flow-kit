@@ -194,15 +194,37 @@ describe('Unit 3: 对抗评估验证与胜出判定引擎', () => {
       armA,
       armB,
       testCases,
+      runner: (task, arm) => {
+        const passed = arm === armA ? task.baselinePass : task.candidatePass;
+        return { passed, score: passed ? 1.0 : 0.0 };
+      },
       minDelta: 0.10,
     });
 
     assert.equal(evalResult.evaluated, true);
+    assert.equal(evalResult.verified, true);
     assert.equal(evalResult.approved, true);
     assert.equal(evalResult.verdict, 'winner_candidate');
     assert.equal(evalResult.regressions.length, 0);
     assert.equal(evalResult.flips.length, 1);
     assert.equal(evalResult.metrics.deltaPassRate, 0.5);
+  });
+
+  test('evaluateCandidateArmPair 无 runner 时只给未验证结论，不宣布候选胜出', () => {
+    const armA = { content: '普通基线技能说明' };
+    const armB = { content: '增强技能说明，含触点白名单' };
+    const testCases = [
+      { id: 'case-1', expectedKeywords: [] },
+      { id: 'case-2', expectedKeywords: ['触点白名单'] },
+    ];
+
+    const evalResult = evaluateCandidateArmPair({ armA, armB, testCases, minDelta: 0.10 });
+
+    assert.equal(evalResult.evaluated, true);
+    assert.equal(evalResult.verified, false);
+    assert.equal(evalResult.approved, false);
+    assert.equal(evalResult.verdict, 'unverified');
+    assert.match(evalResult.reason, /未验证/);
   });
 
   test('evaluateCandidateArmPair 在候选臂存在哪怕 1 个回归时严格一票否决', () => {
@@ -228,6 +250,10 @@ describe('Unit 3: 对抗评估验证与胜出判定引擎', () => {
       armA,
       armB,
       testCases,
+      runner: (task, arm) => {
+        const passed = arm === armA ? task.baselinePass : task.candidatePass;
+        return { passed, score: passed ? 1.0 : 0.0 };
+      },
       minDelta: 0.10,
     });
 
@@ -251,6 +277,10 @@ describe('Unit 3: 对抗评估验证与胜出判定引擎', () => {
       armA,
       armB,
       testCases,
+      runner: (task, arm) => {
+        const passed = arm === armA ? task.baselinePass : task.candidatePass;
+        return { passed, score: passed ? 1.0 : 0.0 };
+      },
       minDelta: 0.10,
     });
 
@@ -315,6 +345,33 @@ describe('Unit 4: 安全应用、一键回滚与端到端工作流', () => {
     assert.equal(fs.existsSync(applyRes.backupPath), false, '回滚后备份文件应被自动清理');
   });
 
+  test('applySkillOptimization 原子替换并轮转旧备份，保留上一版', () => {
+    const skillDir = path.join(tmpRoot, '.agents', 'skills', 'rotate-skill');
+    fs.mkdirSync(skillDir, { recursive: true });
+    const targetFile = path.join(skillDir, 'SKILL.md');
+    fs.writeFileSync(targetFile, '# v1\n', 'utf8');
+
+    const first = applySkillOptimization(tmpRoot, {
+      skillName: 'rotate-skill',
+      candidateContent: '# v2\n',
+      proposal: { verdict: 'winner_candidate' },
+    });
+    assert.equal(first.applied, true);
+
+    const second = applySkillOptimization(tmpRoot, {
+      skillName: 'rotate-skill',
+      candidateContent: '# v3\n',
+      proposal: { verdict: 'winner_candidate' },
+    });
+    assert.equal(second.applied, true);
+    assert.equal(fs.readFileSync(targetFile, 'utf8'), '# v3\n');
+    assert.equal(fs.readFileSync(second.backupPath, 'utf8'), '# v2\n');
+    const backups = fs.readdirSync(skillDir).filter((f) => f.startsWith('SKILL.md.bak'));
+    assert.equal(backups.length, 2, '旧备份应轮转保留而不是被覆盖');
+    assert.ok(backups.some((f) => fs.readFileSync(path.join(skillDir, f), 'utf8') === '# v1\n'));
+    assert.equal(fs.readdirSync(skillDir).some((f) => f.includes('.tmp-')), false, '原子写入不得遗留临时文件');
+  });
+
   test('optimizeSkillWorkflow 能够端到端完成模式提取、补丁生成、对抗评估并自动应用', () => {
     const skillDir = path.join(tmpRoot, '.agents', 'skills', 'auto-opt-skill');
     fs.mkdirSync(skillDir, { recursive: true });
@@ -345,11 +402,14 @@ description: 自优化测试技能
       skillName: 'auto-opt-skill',
       prescriptions,
       apply: true,
+      allowUnverifiedApply: true,
       minDelta: 0.10,
     });
 
     assert.equal(workflowRes.success, true);
-    assert.equal(workflowRes.applied, true);
+    assert.equal(workflowRes.verified, false, '未接 runner 的评估不得标记为已验证');
+    assert.equal(workflowRes.evalResult.verdict, 'unverified');
+    assert.equal(workflowRes.applied, true, '显式 --allow-unverified-apply 后才允许未验证落盘');
     assert.ok(workflowRes.diff.includes('+++ b/'));
     assert.ok(workflowRes.diff.includes('触点白名单'));
 
@@ -357,6 +417,34 @@ description: 自优化测试技能
     const updatedContent = fs.readFileSync(skillFile, 'utf8');
     assert.ok(updatedContent.includes('name: auto-opt-skill'));
     assert.ok(updatedContent.includes('## 针对性防御检查单 (Self-Optimized Checklist)'));
+  });
+
+  test('optimizeSkillWorkflow 未验证且未显式放行时拒绝 --apply 落盘', () => {
+    const skillDir = path.join(tmpRoot, '.agents', 'skills', 'guard-skill');
+    fs.mkdirSync(skillDir, { recursive: true });
+    const skillFile = path.join(skillDir, 'SKILL.md');
+    const original = `---
+name: guard-skill
+description: 未验证应用闸门测试
+---
+
+# 原始执行指引
+请按步骤修改代码。
+`;
+    fs.writeFileSync(skillFile, original, 'utf8');
+
+    const workflowRes = optimizeSkillWorkflow({
+      root: tmpRoot,
+      skillName: 'guard-skill',
+      prescriptions: [{ category: 'touch-set', failurePattern: 'Modified file outside touch-set' }],
+      apply: true,
+      minDelta: 0.10,
+    });
+
+    assert.equal(workflowRes.verified, false);
+    assert.equal(workflowRes.applied, false);
+    assert.match(workflowRes.applySkipped, /未验证|allow-unverified-apply/);
+    assert.equal(fs.readFileSync(skillFile, 'utf8'), original, '未验证时不得改写用户的 SKILL.md');
   });
 
   test('parseArgs 正确解析 CLI 命令行选项', () => {

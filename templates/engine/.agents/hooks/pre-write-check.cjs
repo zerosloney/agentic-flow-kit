@@ -6,7 +6,7 @@
  *  1) 执法面自保护（deny）：宿主 hook 接线与权限基线（.zcode/config.json / .trae/hooks.json /
  *     .codebuddy/settings.json / .qoder/settings.json / .qwen/settings.json / .commandcode/settings.json /
  *     .agents/hooks/gates.json / .agents/settings.json）——AI 不得自行
- *     解掉自己的拴绳。临时放行走 `--unlock <分钟>`（TTL 标记 .agents/tmp/write-gate-until，
+ *     解掉自己的拴绳。临时放行须用户在自己的终端执行 `--unlock <分钟>`（TTL 标记 .agents/tmp/write-gate-until，
  *     仅应对话内用户明示而设，用毕即删）。
  *  2) 确认台账 append-only（deny）：.agents/confirmations.jsonl 与 confirmations.d/* 的写入必须是
  *     HEAD 版本的逐字节前缀扩展——口径镜像 check-ledger-invariant --staged（提交时刻仍兜底）。
@@ -42,6 +42,11 @@ const OUT_MAX = 900; // 单门输出截断，deny reason 总量控制
 
 // ── CLI: --unlock <分钟> ───────────────────────────────
 if (process.argv[2] === '--unlock') {
+  // 标记只能由用户在终端亲手创建：AI 会话内 shell / node 直调都没有 TTY，不能自行解绳。
+  if (!process.stdin.isTTY || !process.stdout.isTTY) {
+    console.error('pre-write-check: --unlock 只能由用户在终端亲手执行（AI 会话不得自行解锁写前门）');
+    process.exit(1);
+  }
   const mins = Math.max(1, Number(process.argv[3]) || 10);
   fs.mkdirSync(path.dirname(path.join(process.cwd(), UNLOCK_MARKER)), { recursive: true });
   fs.writeFileSync(path.join(process.cwd(), UNLOCK_MARKER), new Date(Date.now() + mins * 60_000).toISOString());
@@ -75,6 +80,16 @@ if (!rawPath) process.exit(0);
 const abs = path.resolve(root, rawPath);
 const rel = path.relative(root, abs).replace(/\\/g, '/');
 if (rel.startsWith('..')) process.exit(0); // 仓外文件不管
+// 受保护路径 / 解锁标记判据 case-fold：NTFS 大小写不敏感（.AGENTS/settings.json 落到
+// .agents/settings.json），这些匹配必须同判。
+const relKey = rel.toLowerCase();
+// 测试文件与内容判据按磁盘真实名字判定（不按路径拼写）：NTFS 上 footests.java 就是 FooTests.java；
+// realpath 不可用 = 新文件，按请求拼写；解析到仓外则保留请求拼写。
+let realRel = rel;
+try {
+  const real = path.relative(root, fs.realpathSync.native(abs)).replace(/\\/g, '/');
+  if (real && !real.startsWith('..')) realRel = real;
+} catch { /* 目标尚不存在 */ }
 
 const deny = (reason) => {
   console.log(JSON.stringify({
@@ -93,6 +108,12 @@ const notify = (text) => {
   process.exit(0);
 };
 
+// ── 解锁标记自保护（不享 unlocked 豁免）────────────────
+// 标记是拴绳本身：写工具能创建/改写它 = AI 自解拴绳；只能由用户在自己的终端执行 --unlock 创建。
+if (/^\.agents\/tmp\/write-gate-until$/.test(relKey)) {
+  deny(`执法面自保护：${rel} 是写前门解锁标记，AI 不得自行创建或改写。如系用户明示：请用户在自己的终端执行 flow-kit hook pre-write-check.cjs --unlock <分钟>，完成后删除该文件。`);
+}
+
 // ── 解锁标记（TTL）────────────────────────────────────
 let unlocked = false;
 try {
@@ -110,7 +131,7 @@ try {
 
 // ── 1) 执法面自保护 ───────────────────────────────────
 const WIRING_RE = /^(\.zcode\/config\.json|\.trae\/hooks\.json|\.codebuddy\/settings\.json|\.qoder\/settings\.json|\.qwen\/settings\.json|\.commandcode\/settings\.json|\.claude\/settings(\.local)?\.json|\.grok\/hooks\/.+\.json|\.github\/hooks\/.+\.json|\.agents\/hooks\/gates\.json|\.agents\/settings\.json)$/;
-if (!unlocked && WIRING_RE.test(rel)) {
+if (!unlocked && WIRING_RE.test(relKey)) {
   deny(`执法面自保护：${rel} 是门禁接线/权限基线，AI 不得自行改写。如系用户明示的引擎变更：请用户执行 flow-kit hook pre-write-check.cjs --unlock <分钟> 临时放行（或用户手动改本文件），完成后删除解锁标记。`);
 }
 
@@ -152,8 +173,8 @@ const proposed = synthesize(data.tool_input, abs);
 
 // ── 2) 确认台账 append-only ───────────────────────────
 const LEDGER_RE = /^\.agents\/(confirmations\.jsonl|confirmations\.d\/.+)$/;
-if (proposed !== null && LEDGER_RE.test(rel)) {
-  const head = spawnSync('git', ['-c', 'core.quotepath=off', 'show', `HEAD:${rel}`], { encoding: 'utf8', cwd: root });
+if (proposed !== null && LEDGER_RE.test(relKey)) {
+  const head = spawnSync('git', ['-c', 'core.quotepath=off', 'show', `HEAD:${realRel}`], { encoding: 'utf8', cwd: root });
   if (head.status === 0 && !proposed.startsWith(String(head.stdout))) {
     deny(`确认台账只允许追加（append-only）：${rel} 的本次写入非 HEAD 版本的前缀扩展。重写/改写台账请走 confirm-doc / ledger-shards 工具，不直接编辑。`);
   }
@@ -168,12 +189,13 @@ if (proposed !== null && LEDGER_RE.test(rel)) {
 const TEST_PATH_RE = /(^|\/)(tests?|__tests__)\/|\.(test|spec)\.[cm]?[jt]sx?$|Tests?\.(cs|java|kt)$|_test\.(go|py)$|^test_.*\.py$|\.feature$/;
 try {
   const marker = path.join(root, '.agents', 'cache', 'fix-task.json');
-  if (!unlocked && TEST_PATH_RE.test(rel) && fs.existsSync(marker)) {
+  if (!unlocked && (TEST_PATH_RE.test(rel) || TEST_PATH_RE.test(realRel)) && fs.existsSync(marker)) {
     let task = null;
     try { task = JSON.parse(fs.readFileSync(marker, 'utf8')); } catch { task = null; }
     if (task && task.active !== false) {
       const existed = fs.existsSync(abs);
-      const allowed = Array.isArray(task.allowedTests) && task.allowedTests.some((p) => String(p).replace(/\\/g, '/') === rel);
+      const spellings = new Set([rel, realRel]);
+      const allowed = Array.isArray(task.allowedTests) && task.allowedTests.some((p) => spellings.has(String(p).replace(/\\/g, '/')));
       const escape = typeof proposed === 'string' && /TEST-GUARD-ALLOW:\s*\S+/.test(proposed);
       // 新建测试 = 失败的复现用例，允许；修改/删除既有测试一律拦。
       if (existed && !allowed && !escape) {
@@ -201,7 +223,7 @@ const FACE_PREFIXES = {
 let face = 'full';
 try {
   const facesScript = path.join(__dirname, '..', 'scripts', 'faces.mjs');
-  const r = spawnSync(process.execPath, [facesScript, '--face', rel], {
+  const r = spawnSync(process.execPath, [facesScript, '--face', realRel], {
     cwd: root,
     encoding: 'utf8',
     env: { ...process.env, FLOW_KIT_PROJECT_ROOT: root },
@@ -225,7 +247,9 @@ const cli = [process.env.FLOW_KIT_CLI, path.resolve(__dirname, '..', '..', '..',
     let verdict = null;
     try {
       fs.writeFileSync(abs, proposed);
-      const args = [cli, 'rules', 'check', '--files', rel, '--json', '--prefix', prefixes.join(',')];
+      // 规则同时看请求拼写与真实文件名（NTFS 上两者是同一文件，规则按真实名字才拦得住变体拼写）。
+      const ruleFiles = rel === realRel ? rel : `${rel},${realRel}`;
+      const args = [cli, 'rules', 'check', '--files', ruleFiles, '--json', '--prefix', prefixes.join(',')];
       verdict = spawnSync(process.execPath, args, {
         cwd: root,
         encoding: 'utf8',

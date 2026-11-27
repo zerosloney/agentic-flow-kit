@@ -128,6 +128,25 @@ test("changedFiles：since...HEAD 的提交变更 ∪ 工作树变更", () => {
   assert.deepEqual(files, ["b.mjs", "c.mjs"]);
 });
 
+// 审计修复 2026-11-27：--diff-filter=AM 漏掉 R/C，重命名/复制的 src 文件不进变更集 = 换个路径就免覆盖。
+test("changedFiles：重命名/复制的文件也算变更", () => {
+  const root = makeTmp("fk-covgate-git-move-");
+  git(root, "init", "-q", "-b", "main");
+  fs.mkdirSync(path.join(root, "src"));
+  fs.writeFileSync(path.join(root, "src", "old.mjs"), "export const a = 1;\n");
+  git(root, "add", "-A");
+  git(root, "commit", "-q", "-m", "c0");
+
+  git(root, "mv", "src/old.mjs", "src/new.mjs");
+  let files = changedFiles({ root, since: "HEAD" });
+  assert.ok(files.includes("src/new.mjs"), `重命名文件必须进变更集，实际：${JSON.stringify(files)}`);
+
+  fs.copyFileSync(path.join(root, "src", "new.mjs"), path.join(root, "src", "copied.mjs"));
+  git(root, "add", "-A");
+  files = changedFiles({ root, since: "HEAD" });
+  assert.ok(files.includes("src/copied.mjs"), `复制文件必须进变更集，实际：${JSON.stringify(files)}`);
+});
+
 test("runGate：日志缺失/空表 → 抛错（不静默放行）", () => {
   assert.throws(() => runGate({ logPath: path.join(makeTmp("fk-covgate-none-"), "nope.log") }), /覆盖日志不存在/);
   const empty = path.join(makeTmp("fk-covgate-empty-"), "empty.log");

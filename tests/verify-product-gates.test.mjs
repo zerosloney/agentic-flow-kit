@@ -248,3 +248,52 @@ test('kit 内运行：flow-kit run 门命令的既有本地化不变', () => {
   const r = runKitVerify(dir, ['--test-cmd', 'flow-kit run check-local-gate-config.mjs'], poisonFlowKit(dir));
   assert.equal(r.status, 0, `${r.stdout}\n${r.stderr}`);
 });
+
+// 审计 D35：栈规则文件坏掉（解析失败 / rules 非数组）不得静默丢门——verify 与项目文件同口径 fail-closed exit 2。
+test('规则中心：坏栈规则文件 fail-closed（exit 2），空项目规则文件仍合法', () => {
+  const dir = tmpRepo();
+  fs.mkdirSync(path.join(dir, '.agents', 'rules'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.agents', 'rules', 'stack.node.json'), '{"rules":"not-an-array"}');
+  const bad = runKitVerify(dir, ['--list']);
+  assert.equal(bad.status, 2, `${bad.stdout}\n${bad.stderr}`);
+  assert.match(bad.stderr, /stack\.node\.json/, bad.stderr);
+  assert.match(bad.stderr, /配置错误/, bad.stderr);
+
+  // 有意留空的项目规则文件仍是合法配置
+  fs.rmSync(path.join(dir, '.agents', 'rules'), { recursive: true, force: true });
+  fs.writeFileSync(path.join(dir, 'flow-rules.yml'), '');
+  const ok = runKitVerify(dir, ['--list']);
+  assert.equal(ok.status, 0, `${ok.stdout}\n${ok.stderr}`);
+});
+
+// 审计 D39：--stub-gate 是注入的假命令，绿行必须带 stub 标记，且不得充当锚点/增量基线
+//（ledgerBase 同一变量喂 diff 面基线与下次运行的 SECRETS_SCAN_BASE）。
+test('--stub-gate 绿行带 stub 标记，且不被当作增量锚点', () => {
+  const dir = tmpRepo();
+  const git = (...args) => spawnSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { cwd: dir, encoding: 'utf8' });
+  fs.writeFileSync(path.join(dir, '.gitignore'), 'tmp/\n.agents/\n');
+  fs.writeFileSync(path.join(dir, 'README.md'), 'x\n');
+  assert.equal(git('add', '-A').status, 0);
+  assert.equal(git('commit', '-qm', 'c0').status, 0);
+
+  const stub = runKitVerify(dir, ['--stub-gate', 'node -e "process.exit(0)"']);
+  assert.equal(stub.status, 0, `${stub.stdout}\n${stub.stderr}`);
+  const rows = fs.readFileSync(path.join(dir, '.agents', 'verifications.jsonl'), 'utf8')
+    .trim().split(/\r?\n/).map((l) => JSON.parse(l));
+  const green = rows.find((e) => e.exitCode === 0 && e.suite === 'all-gates');
+  assert.ok(green, '应有 all-gates 绿行');
+  assert.equal(green.stub, true, 'stub 绿行须带 stub 标记');
+
+  // 只留台账 stub 行：删掉其渲染的仓库凭证（否则跨机凭证通道仍给出候选），再做一次提交
+  fs.rmSync(path.join(dir, 'workflow'), { recursive: true, force: true });
+  fs.writeFileSync(path.join(dir, 'README.md'), 'y\n');
+  assert.equal(git('add', '-A').status, 0);
+  assert.equal(git('commit', '-qm', 'c1').status, 0);
+
+  // 无合法绿行可用 → 显式 --scope loud-skip（无 origin），不得拿 stub SHA 当增量基线
+  const scoped = runKitVerify(dir, ['--scope']);
+  const out = `${scoped.stdout}${scoped.stderr}`;
+  assert.equal(scoped.status, 0, out);
+  assert.doesNotMatch(out, /scope=diff/, out);
+  assert.match(out, /无 origin 远端/, out);
+});

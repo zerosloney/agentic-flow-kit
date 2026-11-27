@@ -11,12 +11,12 @@
 // 原子写：同目录临时文件 + rename——中途崩溃不留半写文件（沿 git-merge-jsonl.mjs / compact-ledgers.mjs 惯例）。
 // 用法：flow-kit run rewrite-file.mjs <文件> --find <字面串> --replace <字面串>
 //         [--expect N] [--allow-multi] [--dry-run] [--root <仓库根>]
-//   ⚠ 仅支持行内等行数替换（2026-11-06 配方回收：增/删行的多行改写本工具行数校验必拦，
+//   ⚠ 仅支持行内等行数替换（2026-11-06 配方回收：增/删行的多行改写含换行，写盘前即拒绝；
 //     直接改用宿主 Edit 工具，勿反复重试）
 //   --expect N    期望命中数（默认 1）；实际 ≠ N → 非零退出且不写盘
 //   --allow-multi 显式声明允许多命中（等价 --expect 的宽松形态：N ≥ 1 即过，用于批量同串替换）
 //   --dry-run     只打印将发生的替换与校验预览，不写盘
-// 测试面已随引擎减重退役（2026-10-28，owner 决策），本脚本现无测试兜底
+// 测试兜底：tests/rewrite-file.test.mjs（2026-11-27 补入；2026-10-28 曾随引擎减重退役）
 // 沿革：2026-10-12 立档（优先级 3：把「静默无操作」改成响亮失败）
 import fs from 'node:fs';
 import path from 'node:path';
@@ -49,6 +49,7 @@ if (!file) die('缺目标文件');
 if (find === null || replace === null) die('--find 与 --replace 必须成对给出');
 if (find === '') die('--find 不能为空串（空串会命中每一行，属误用）');
 if (find === replace) die(`--find 与 --replace 相同（「${find.slice(0, 40)}」）——无操作却会报成功，正是本工具要堵的形态`);
+if (/[\r\n]/.test(find) || /[\r\n]/.test(replace)) die('--find / --replace 含换行——本工具只做行内等行数替换，含换行会先写盘再被行数校验拦下（增删行请用宿主 Edit 工具）');
 let expect = 1;
 if (expectRaw !== '') {
   if (!/^\d+$/.test(expectRaw)) die(`--expect 须为非负整数（现 ${expectRaw}）`);

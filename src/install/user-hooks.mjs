@@ -59,11 +59,18 @@ export function writeUserHooksConfig(file, config) {
   writeAtomicSync(file, `${JSON.stringify(config, null, 2)}\n`);
 }
 
-// 本工具接线条目的识别判据：command 全等，或 command 含 'flow-kit'（接管旧版/漂移接线）。
+// 本工具接线条目的识别判据：command 全等，或为 `flow-kit hook <id>` 形态（接管旧版/漂移的 id）。
+// 仅含 'flow-kit' 子串的用户命令（如 npm run flow-kit-check）不算接线，原样保留。
+const MANAGED_COMMAND = /^flow-kit hook [\w.-]+$/;
+
+function isManagedCommand(command, spec) {
+  return command === spec.command
+    || (typeof command === 'string' && MANAGED_COMMAND.test(command));
+}
+
 function isManagedEntry(item, spec) {
   return isObject(item) && Array.isArray(item.hooks)
-    && item.hooks.some((hook) => isObject(hook)
-      && (hook.command === spec.command || String(hook.command || '').includes('flow-kit')));
+    && item.hooks.some((hook) => isObject(hook) && isManagedCommand(hook.command, spec));
 }
 
 export function findUserHookEntry(config, spec) {
@@ -101,8 +108,7 @@ export function mergeUserHookEntry(config, spec) {
   const next = {
     ...existing,
     matcher: spec.matcher,
-    hooks: existing.hooks.map((hook) => (isObject(hook)
-      && (hook.command === spec.command || String(hook.command || '').includes('flow-kit'))
+    hooks: existing.hooks.map((hook) => (isObject(hook) && isManagedCommand(hook.command, spec)
       ? { ...hook, type: 'command', command: spec.command, timeout: spec.timeout }
       : hook)),
   };
@@ -179,6 +185,20 @@ export function unwireUserHooks({ host, t }) {
   } finally {
     releaseLock();
   }
+}
+
+// 只读预检（remove-host / uninstall 用）：在删除托管文件前确认用户级 hooks 配置可解析。
+// 配置损坏时抛本地化 USER_HOOKS_CONFIG，调用方须在改动任何文件之前中止（不留半卸载现场）。
+export function checkUserHooksConfig({ host, t }) {
+  const spec = userHookSpec(host);
+  if (!spec) return null;
+  const file = userHooksFile(spec);
+  try {
+    readUserHooksConfig(file);
+  } catch (err) {
+    reraiseLocalized(err, file, t);
+  }
+  return file;
 }
 
 // 只读校验（doctor 用）：条目在位且 matcher 与 registry 一致 → ok；

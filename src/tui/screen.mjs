@@ -132,16 +132,17 @@ export function createScreen({ input, output }) {
       output.write(str);
     },
     restore() {
-      if (state.interactive) output.write('\x1b[?25h');
-      if (state.detachKeyDecoder !== null) {
-        state.detachKeyDecoder(); // 摘 data 监听并清孤立 ESC 计时
-        state.detachKeyDecoder = null;
-      }
+      // 先退 raw：恢复显示的写入若失败，不能把终端留在 raw 模式
       try {
         input.setRawMode(false);
       } catch {
         /* 非 TTY 无 raw mode */
       }
+      if (state.detachKeyDecoder !== null) {
+        state.detachKeyDecoder(); // 摘 data 监听并清孤立 ESC 计时
+        state.detachKeyDecoder = null;
+      }
+      if (state.interactive) output.write('\x1b[?25h');
     },
   };
   return screen;
@@ -179,19 +180,25 @@ export function runPrompt(screen, { title, question, hint, widget }) {
     const onKey = (key) => {
       // readline 对不完整/分片到达的转义序列会 emit ('keypress', undefined)，静默忽略
       if (!key) return;
-      if (key.ctrl && key.name === 'c') {
+      try {
+        if (key.ctrl && key.name === 'c') {
+          cleanup();
+          reject(new QuitError());
+          return;
+        }
+        const done = widget.onKey(key);
+        if (done) {
+          cleanup();
+          screen.clear();
+          resolve(done.value);
+          return;
+        }
+        draw();
+      } catch (err) {
+        // 同步异常必须清监听与 raw，并让调用方收到 rejection；否则提问永久 pending
         cleanup();
-        reject(new QuitError());
-        return;
+        reject(err);
       }
-      const done = widget.onKey(key);
-      if (done) {
-        cleanup();
-        screen.clear();
-        resolve(done.value);
-        return;
-      }
-      draw();
     };
     // stdin 关闭（EOF）：与降级路径同语义，按 Ctrl+C 干净退出
     const onClose = () => {

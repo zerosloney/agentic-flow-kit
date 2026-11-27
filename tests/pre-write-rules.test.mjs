@@ -77,6 +77,82 @@ test('ui face routes to notify rules (and a clean write passes)', () => {
   assert.equal(denied(ok), false, ok.stdout + ok.stderr);
 });
 
+// D8a：NTFS 大小写不敏感——保护路径的大小写变体必须得到同一裁决。
+test('protected wiring paths match case variants', () => {
+  const dir = fixture();
+  write(dir, '.agents/settings.json', '{}\n');
+  const r = runHook(dir, '.AGENTS/settings.json', '{"permissions":{}}\n');
+  assert.equal(denied(r), true, r.stdout + r.stderr);
+  assert.equal(fs.readFileSync(path.join(dir, '.agents/settings.json'), 'utf8'), '{}\n');
+});
+
+test('confirmation ledger append-only applies to case variants', () => {
+  const dir = fixture();
+  write(dir, '.agents/confirmations.jsonl', '{"seq":1}\n');
+  spawnSync('git', ['add', '-A'], { cwd: dir });
+  spawnSync('git', ['-c', 'user.email=kit@example.com', '-c', 'user.name=kit', 'commit', '-qm', 'init'], { cwd: dir });
+  const r = runHook(dir, '.AGENTS/confirmations.jsonl', '{"seq":2}\n');
+  assert.equal(denied(r), true, r.stdout + r.stderr);
+});
+
+// D8b：解锁标记只能由用户在终端创建；写工具不得自解拴绳。
+test('write gate refuses to create or change its own unlock marker', () => {
+  const dir = fixture();
+  const until = new Date(Date.now() + 60_000).toISOString();
+  const r = runHook(dir, '.agents/tmp/write-gate-until', until);
+  assert.equal(denied(r), true, r.stdout + r.stderr);
+  assert.equal(fs.existsSync(path.join(dir, '.agents/tmp/write-gate-until')), false);
+});
+
+test('unlock marker protection matches case variants', () => {
+  const dir = fixture();
+  const r = runHook(dir, '.AGENTS/TMP/WRITE-GATE-UNTIL', new Date(Date.now() + 60_000).toISOString());
+  assert.equal(denied(r), true, r.stdout + r.stderr);
+});
+
+test('--unlock refuses to run without a terminal', () => {
+  const dir = fixture();
+  const r = spawnSync(process.execPath, [HOOK, '--unlock', '5'], { cwd: dir, encoding: 'utf8' });
+  assert.equal(r.status, 1, r.stdout + r.stderr);
+  assert.equal(fs.existsSync(path.join(dir, '.agents/tmp/write-gate-until')), false);
+});
+
+// 复核回归：case-fold 只用于受保护路径/marker；测试文件判据保持原始大小写（规则按大小写设计）。
+test('test-weakening rule keeps its case-sensitive suffix', () => {
+  const dir = fixture();
+  write(dir, '.agents/cache/fix-task.json', json({ id: 'fix-case', active: true }));
+  write(dir, 'src/FooTests.java', 'class FooTests { void t() { assertTrue(true); } }\n');
+  const r = runHook(dir, 'src/FooTests.java', 'class FooTests { void t() { } }\n');
+  assert.equal(denied(r), true, r.stdout + r.stderr);
+});
+
+// 复核回归：判据认文件不认路径拼写——NTFS 上 footests.java 就是 FooTests.java。
+test('the lower-case spelling of an existing test file is judged as that file', (t) => {
+  if (process.platform !== 'win32') return t.skip('NTFS-only: 大小写不敏感查找');
+  const dir = fixture();
+  write(dir, '.agents/cache/fix-task.json', json({ id: 'fix-case', active: true }));
+  write(dir, 'src/FooTests.java', 'class FooTests { void t() { assertTrue(true); } }\n');
+  const r = runHook(dir, 'src/footests.java', 'class footests { void t() { } }\n');
+  assert.equal(denied(r), true, r.stdout + r.stderr);
+});
+
+test('case-variant write is a different file on POSIX', (t) => {
+  if (process.platform === 'win32') return t.skip('POSIX-only: 大小写敏感查找');
+  const dir = fixture();
+  write(dir, '.agents/cache/fix-task.json', json({ id: 'fix-case', active: true }));
+  write(dir, 'src/FooTests.java', 'class FooTests { void t() { assertTrue(true); } }\n');
+  const r = runHook(dir, 'src/footests.java', 'class footests { void t() { } }\n');
+  assert.equal(denied(r), false, r.stdout + r.stderr);
+});
+
+test('a genuinely lowercase name is not a test path', () => {
+  const dir = fixture();
+  write(dir, '.agents/cache/fix-task.json', json({ id: 'fix-case', active: true }));
+  write(dir, 'src/footests.java', 'class footests { void t() { } }\n');
+  const r = runHook(dir, 'src/footests.java', 'class footests { void t() { assertTrue(true); } }\n');
+  assert.equal(denied(r), false, r.stdout + r.stderr);
+});
+
 // D16：快照恢复失败 = 文件状态不确定，不得静默放行（放行路径 exit 2 + 醒目提示）。
 test('restore failure is loud and exits non-zero even when the verdict passes', () => {
   const dir = fixture();

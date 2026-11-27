@@ -5,7 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { spawn, spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { analyze } from '../templates/engine/.agents/scripts/check-pipeline-state.mjs';
 import {
   parseParallelList as parseParallel, parseRetryCap as parseRetry, resolveArtifact, resolveDocRel,
@@ -3221,4 +3221,108 @@ test('端到端：凭证签署代码复核正确范围后放行；范围写错�
   const ev = run2.events.find((e) => e.type === 'code-review');
   assert.ok(ev, '须记 code-review 事件');
   assert.equal(ev.reviewers, 1);
+});
+
+// D53a：子进程超时（默认 10 分钟，PIPELINE_RUN_TIMEOUT_MS 可配）——挂死门须被杀并记为失败。
+const HANG_MJS = `setTimeout(() => process.exit(0), 8000);
+setInterval(() => {}, 1000);
+`;
+
+test('D53a: 异步门子进程超时被杀并记为失败', () => {
+  const root = fixture();
+  fs.writeFileSync(path.join(root, '.agents/scripts/hang.mjs'), HANG_MJS);
+  writeRun(root);
+  const t0 = Date.now();
+  const r = runPipeline(root, ['gate', 'hang.mjs', '--run', 'test-run'], { PIPELINE_RUN_TIMEOUT_MS: '300' });
+  const elapsed = Date.now() - t0;
+  assert.ok(elapsed < 5000, `超时后应立即返回，实际 ${elapsed}ms`);
+  assert.equal(r.status, 2, r.stderr || r.stdout);
+  const ev = readRun(root).events.filter((e) => e.type === 'gate' && e.cmd.includes('hang.mjs')).pop();
+  assert.ok(ev, '须记 gate 事件');
+  assert.notEqual(ev.exit, 0, '超时须记失败退出码');
+  assert.equal(ev.timeout, true, 'gate 事件须标 timeout');
+  assert.match(r.stdout + r.stderr, /超时/);
+});
+
+test('D53a: 同步门子进程超时被杀并阻止推进', () => {
+  const root = fixture();
+  fs.writeFileSync(path.join(root, '.agents/scripts/confirm-doc.mjs'), HANG_MJS);
+  writeRun(root, {
+    stage: 'done-confirm',
+    stopType: 'await-confirm',
+    awaitConfirm: { doc: 'workflow/intents/t.md', points: 'done 关单', ledger: true },
+  });
+  const t0 = Date.now();
+  const r = runPipeline(root, ['next', '--run', 'test-run', '--delegated', '确认'], { PIPELINE_RUN_TIMEOUT_MS: '300' });
+  const elapsed = Date.now() - t0;
+  assert.ok(elapsed < 5000, `超时后应立即返回，实际 ${elapsed}ms`);
+  assert.equal(r.status, 2, r.stderr || r.stdout);
+  const run = readRun(root);
+  assert.equal(run.stopType, 'gate-fail');
+  const ev = run.events.filter((e) => e.type === 'gate' && e.cmd.includes('confirm-doc.mjs')).pop();
+  assert.ok(ev, '须记 gate 事件');
+  assert.notEqual(ev.exit, 0);
+  assert.equal(ev.timeout, true);
+});
+
+test('D53a: git 子进程超时被杀并记为失败', () => {
+  const root = fixture();
+  fs.writeFileSync(path.join(root, 'workflow/intents/t.md'), '---\n状态: done\n级别: L1\n---\n\n## 验收标准\n\n- [x] 完成（证据：abc）\n');
+  fs.writeFileSync(path.join(root, '.agents/scripts/gen-workflow-index.mjs'), 'process.exit(0);\n');
+  const hangGit = path.join(root, '.agents/scripts/hang-git.mjs');
+  fs.writeFileSync(hangGit, HANG_MJS);
+  writeRun(root, {
+    stage: 'done-confirm',
+    stopType: 'await-confirm',
+    awaitConfirm: { doc: 'workflow/intents/t.md', points: 'done 关单', ledger: true },
+    docs: { entry: 'workflow/intents/t.md', spec: null, plan: null },
+  });
+  const t0 = Date.now();
+  const r = runPipeline(root, ['next', '--run', 'test-run'], {
+    PIPELINE_RUN_TIMEOUT_MS: '300',
+    PIPELINE_RUN_GIT_BIN: `"${process.execPath}" "${hangGit}"`,
+  });
+  const elapsed = Date.now() - t0;
+  assert.ok(elapsed < 5000, `超时后应立即返回，实际 ${elapsed}ms`);
+  assert.equal(r.status, 2, r.stderr || r.stdout);
+  const run = readRun(root);
+  assert.equal(run.stopType, 'gate-fail');
+  const ev = run.events.filter((e) => e.type === 'gate' && e.cmd.startsWith('git ')).pop();
+  assert.ok(ev, '须记 git gate 事件');
+  assert.notEqual(ev.exit, 0);
+  assert.equal(ev.timeout, true);
+});
+
+test('D53b: saveRun 的临时文件名按进程唯一', () => {
+  const root = fixture();
+  writeRun(root);
+  const patch = path.join(root, '.agents/scripts/patch-rename.mjs');
+  const log = path.join(root, 'rename.log');
+  fs.writeFileSync(patch, `import fs from 'node:fs';
+const log = process.env.SAVE_TMP_LOG;
+const orig = fs.renameSync;
+fs.renameSync = function (from, to) {
+  try { fs.appendFileSync(log, String(from) + '|'); } catch {}
+  return orig.apply(fs, arguments);
+};
+`);
+  fs.writeFileSync(path.join(root, '.agents/scripts/ok.mjs'), 'process.exit(0);\n');
+  const r = spawnSync(process.execPath, ['--import', pathToFileURL(patch).href, PIPELINE, 'gate', 'ok.mjs', '--run', 'test-run'], {
+    cwd: root, encoding: 'utf8', env: { ...envFor(root), SAVE_TMP_LOG: log }, timeout: 60000,
+  });
+  assert.equal(r.status, 0, r.stderr || r.stdout);
+  const sources = fs.readFileSync(log, 'utf8').split('|').filter(Boolean);
+  assert.ok(sources.length >= 2, `saveRun 至少落盘两次：${sources.join(',')}`);
+  const runFile = path.join(root, '.agents', 'cache', 'pipeline-runs', 'test-run.json');
+  for (const src of sources) {
+    assert.equal(path.dirname(src), path.dirname(runFile));
+    assert.match(path.basename(src), /^test-run\.json\.\d+\.tmp$/, `临时名须含进程 id：${src}`);
+  }
+});
+
+test('D53c: closeoutComplete 把大写 - [X] 当作已勾验收', () => {
+  const noEvidence = closeoutComplete('## 验收标准\n- [X] item one');
+  assert.equal(noEvidence.ok, false);
+  assert.match(noEvidence.problems.join(' '), /已勾缺证据 1 条/);
+  assert.equal(closeoutComplete('## 验收标准\n- [X] item one（证据：abc123）').ok, true);
 });

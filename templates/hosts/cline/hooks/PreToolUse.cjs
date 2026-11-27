@@ -13,7 +13,9 @@
  *   - 仓库 hook stdin：{ tool_name, llm_tool_name, tool_input, cwd, workspace_roots,
  *     hook_event_name:"PreToolUse" }（见 pre-shell-check.cjs:22-24 / pre-write-check.cjs:30）
  *   - 仓库 hook stdout：{ hookSpecificOutput:{ permissionDecision:"deny"/"ask"/"allow",
- *     permissionDecisionReason } }；无输出 = 放行
+ *     permissionDecisionReason } }；正常退出且无输出 = 放行
+ *   - 异常语义（对齐 PI 适配层）：hook 无法执行 / 超时 / 非零退出 / 输出不可解析 → 阻止（cancel），
+ *     门禁失效不得退化成静默放行
  *   - Cline 控制输出：stdout JSON { cancel:true, cancelReason } 或 { review:true, context }，
  *     推荐加 "HOOK_CONTROL\t" 前缀行（E3() 只取该前缀行并 JSON.parse，K3() 消费）
  *
@@ -82,6 +84,93 @@ function extractCommand(input) {
     .join(' ');
 }
 
+// 从写工具入参还原「拟写入内容」。Cline 现行 schema 是 write_to_file {path, content} 与
+// replace_in_file {path, diff}；editor 家族才是 new_text / old_text / insert_line。
+// 还原不了返回 null，由调用方 fail-closed——空内容会让内容判据静默失效。
+const WRITE_CONTENT_KEYS = ['content', 'new_content', 'file_text'];
+const WRITE_NEW_KEYS = ['new_text', 'new_string', 'newString'];
+const WRITE_OLD_KEYS = ['old_text', 'old_string', 'oldString'];
+
+function pickString(obj, keys) {
+  for (const key of keys) {
+    if (typeof obj[key] === 'string') return obj[key];
+  }
+  return undefined;
+}
+
+// Cline replace_in_file 的 diff 语法：------- SEARCH / ======= / +++++++ REPLACE，可含多块
+function parseClineDiff(diff) {
+  // 按 \n 切分、保留行尾 \r：CRLF 文件里的锚点文本必须原样保留，否则找不到匹配
+  const lines = String(diff).split('\n');
+  const hunks = [];
+  let i = 0;
+  while (i < lines.length) {
+    if (lines[i].trim() === '') { i++; continue; }
+    if (lines[i].trim() !== '------- SEARCH') return null;
+    i++;
+    const search = [];
+    while (i < lines.length && lines[i].trim() !== '=======') search.push(lines[i++]);
+    if (i >= lines.length) return null;
+    i++;
+    const replace = [];
+    while (i < lines.length && lines[i].trim() !== '+++++++ REPLACE') replace.push(lines[i++]);
+    if (i >= lines.length) return null;
+    i++;
+    hunks.push({ search: search.join('\n'), replace: replace.join('\n') });
+  }
+  return hunks.length ? hunks : null;
+}
+
+// 逐块按首次出现替换，与 Cline 自身应用 diff 的顺序一致；任一块找不到锚点即视为还原失败
+function applyClineDiff(text, hunks) {
+  let out = text;
+  for (const hunk of hunks) {
+    const at = out.indexOf(hunk.search);
+    if (at === -1) return null;
+    out = out.slice(0, at) + hunk.replace + out.slice(at + hunk.search.length);
+  }
+  return out;
+}
+
+function buildWriteInput(input, cwd) {
+  const i = input && typeof input === 'object' ? input : {};
+  const filePath = typeof i.path === 'string' ? i.path
+    : typeof i.file_path === 'string' ? i.file_path : '';
+  if (!filePath) return null;
+
+  const content = pickString(i, WRITE_CONTENT_KEYS);
+  if (content !== undefined) return { file_path: filePath, content };
+
+  if (typeof i.diff === 'string') {
+    const hunks = parseClineDiff(i.diff);
+    if (!hunks) return null;
+    let before;
+    try {
+      before = fs.readFileSync(path.resolve(cwd, filePath), 'utf8');
+    } catch {
+      return null;
+    }
+    const after = applyClineDiff(before, hunks);
+    return after === null ? null : { file_path: filePath, content: after };
+  }
+
+  const newText = pickString(i, WRITE_NEW_KEYS);
+  if (newText !== undefined) {
+    const writeInput = {
+      file_path: filePath,
+      content: newText,
+      old_string: pickString(i, WRITE_OLD_KEYS) || undefined,
+      new_string: newText,
+    };
+    if (typeof i.insert_line === 'number' && Number.isInteger(i.insert_line)) {
+      writeInput.edits = [{ insert_line: i.insert_line, new_string: newText }];
+    }
+    return writeInput;
+  }
+
+  return null;
+}
+
 // 构造仓库 hook 需要的 stdin payload
 function toRepoPayload(gateTool, input, cwd) {
   const i = input && typeof input === 'object' ? input : {};
@@ -97,7 +186,8 @@ function toRepoPayload(gateTool, input, cwd) {
     tool_input: i,
   };
 }
-// 调用包内 hook，返回 { decision, reason, context }（无输出 = allow）
+// 调用包内 hook，返回 { decision, reason, context }
+// decision: allow / ask / deny / error；error = 门禁没跑成或答案不可用，调用方按阻止处理
 function callRepoHook(hook, payload) {
   const r = spawnSync('flow-kit', ['hook', hook], {
     input: JSON.stringify(payload),
@@ -107,23 +197,35 @@ function callRepoHook(hook, payload) {
     shell: process.platform === 'win32',
   });
   if (r.error) {
-    return { decision: 'allow', reason: `仓库 hook 调用失败（${r.error.message}），放行` };
+    return { decision: 'error', reason: `仓库 hook 调用失败（${hook}）：${r.error.message}。为避免静默绕过，本次调用已阻止。` };
+  }
+  if (r.status !== 0) {
+    const detail = String(r.stderr || '').trim() || `exit ${r.status}`;
+    return { decision: 'error', reason: `仓库 hook 未成功执行（${hook}）：${detail}。为避免静默绕过，本次调用已阻止。` };
   }
   const out = (r.stdout || '').trim();
-  if (!out) return { decision: 'allow', reason: '' };
+  if (!out) return { decision: 'allow', reason: '' }; // 仓库 hook 契约：正常退出且无输出 = 放行
   try {
     const parsed = JSON.parse(out);
     const hso = parsed && typeof parsed === 'object' && parsed.hookSpecificOutput
+      && typeof parsed.hookSpecificOutput === 'object'
       ? parsed.hookSpecificOutput
       : parsed;
-    const decision = hso.permissionDecision || 'allow';
+    if (!hso || typeof hso !== 'object') throw new Error('unusable gate answer');
+    const hasDecision = typeof hso.permissionDecision === 'string' && hso.permissionDecision;
+    if (!hasDecision) {
+      // 只带 additionalContext 的回复是合法放行 + 提示（如引擎面通知）
+      const context = typeof hso.additionalContext === 'string' ? hso.additionalContext : '';
+      if (!context) throw new Error('no decision and no context');
+      return { decision: 'allow', reason: '', context };
+    }
     return {
-      decision,
+      decision: hso.permissionDecision,
       reason: hso.permissionDecisionReason || hso.reason || '',
       context: hso.additionalContext || '',
     };
   } catch {
-    return { decision: 'allow', reason: '' };
+    return { decision: 'error', reason: `仓库 hook 输出无法解析（${hook}）。为避免静默绕过，本次调用已阻止。` };
   }
 }
 
@@ -153,7 +255,7 @@ function main() {
     if (!command) return; // 无命令文本，放行
     const shellPayload = toRepoPayload('bash', { command }, cwd);
     const { decision, reason } = callRepoHook('pre-shell-check', shellPayload);
-    if (decision === 'deny') {
+    if (decision === 'deny' || decision === 'error') {
       emitControl({ cancel: true, cancelReason: reason || '命令被仓库门禁拒绝' });
     } else if (decision === 'ask') {
       emitControl({ review: true, context: reason || '命令需要用户确认' });
@@ -163,20 +265,14 @@ function main() {
 
   // 写前门：只认编辑器家族工具名（Cline editor/apply_patch → write）
   if (WRITE_TOOLS.has(name)) {
-    const filePath = typeof input.path === 'string' ? input.path : '';
-    if (!filePath) return; // 无文件路径，放行
-    const writeInput = {
-      file_path: filePath,
-      content: input.new_text || '',
-      old_string: input.old_text || undefined,
-      new_string: input.new_text || undefined,
-    };
-    if (typeof input.insert_line === 'number' && Number.isInteger(input.insert_line)) {
-      writeInput.edits = [{ insert_line: input.insert_line, new_string: input.new_text || '' }];
+    const writeInput = buildWriteInput(input, cwd);
+    if (!writeInput) {
+      emitControl({ cancel: true, cancelReason: '无法从工具入参还原拟写入内容，写前门禁无法校验，本次写入已阻止。' });
+      return;
     }
     const writePayload = toRepoPayload('write', writeInput, cwd);
     const { decision, reason, context } = callRepoHook('pre-write-check', writePayload);
-    if (decision === 'deny') {
+    if (decision === 'deny' || decision === 'error') {
       emitControl({ cancel: true, cancelReason: reason || '写入被仓库门禁拒绝' });
     } else if (decision === 'ask') {
       emitControl({ review: true, context: reason || '写入需要用户确认' });

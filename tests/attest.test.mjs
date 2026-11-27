@@ -86,3 +86,40 @@ test('attestation detects a tampered managed file and still archives the proof',
   assert.equal(fs.existsSync(proof), true);
   assert.equal(JSON.parse(fs.readFileSync(proof, 'utf8')).ok, false);
 });
+
+test('attestation from a bundle install satisfies the closed published schema', () => {
+  const tmp = makeTmp('flow-kit-attest-bundle-');
+  const bundlePath = path.join(tmp, 'dist.bundle.json.gz');
+  const pack = spawnSync(process.execPath, [BIN, 'bundle', 'pack', '--out', bundlePath, '--gzip', '--json'], {
+    cwd: tmp,
+    encoding: 'utf8',
+    env: { ...process.env, FLOW_KIT_TEST: '1' },
+  });
+  assert.equal(pack.status, 0, pack.stderr);
+
+  const target = path.join(tmp, 'target');
+  fs.mkdirSync(target, { recursive: true });
+  assert.equal(spawnSync('git', ['init', '-q'], { cwd: target }).status, 0);
+  const install = spawnSync(process.execPath,
+    [BIN, 'install', '--agent', 'claude', '--stack', 'node', '--bundle', bundlePath, '--target', '.', '--json'], {
+      cwd: target,
+      encoding: 'utf8',
+      env: { ...process.env, FLOW_KIT_TEST: '1' },
+    });
+  assert.equal(install.status, 0, install.stderr);
+
+  const proof = path.join(target, 'proof.json');
+  const r = doctor(target, ['--attest', '--out', proof, '--json']);
+  assert.equal(r.status, 0, r.stderr);
+  const attestation = JSON.parse(fs.readFileSync(proof, 'utf8'));
+  assert.ok(attestation.bundle);
+
+  const schema = JSON.parse(fs.readFileSync(path.join(KIT, 'schemas', 'attestation.schema.json'), 'utf8'));
+  const undeclared = Object.keys(attestation).filter((key) => !(key in schema.properties));
+  assert.deepEqual(undeclared, [], 'closed schema must declare every attestation key');
+  assert.deepEqual(schema.properties.bundle.required, ['file', 'digest', 'version']);
+  assert.equal(schema.properties.bundle.additionalProperties, false);
+  for (const key of ['file', 'digest', 'version']) {
+    assert.equal(typeof attestation.bundle[key], 'string');
+  }
+});

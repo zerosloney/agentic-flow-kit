@@ -222,6 +222,8 @@ export function auditEnabled(policy) {
 // 隔夜 → 次日关单」节奏（spec 2026-10-07-verify-evidence 论证）。
 // testCmd 行剔除（2026-10-09 AI-Native 架构审查修复）：verify.mjs --test-cmd 是引擎自测的夹具通道，
 // 其绿行记的是注入的假命令（exitCode 0 ≠ 真门全绿），不得充当关单凭证——正常生产跑不写此键。
+// stub 行剔除（2026-11-27 审计 D39）：--stub-gate 同属夹具注入命令（单门替换门表却走生产尾段），
+// suite=all-gates 的绿行同样不是真门全绿。
 // scope 行放行（verify-diet 2026-10-21 ②）：verify --scope diff 的绿行带 scope 标记（变更面未触产品
 // 重门的增量关单）——算合法关单凭证：面计算已担保分支未触对应产品路径（口径单源 verify-scope.mjs），
 // 信任级同 24h 窗；关单前新提交须重跑（先提交、后跑门）。
@@ -238,6 +240,9 @@ export function latestFreshVerifyLine(lines, now = Date.now()) {
       // 引擎段增量门绿行（verify --engine，2026-10-11 C7）不构成关单凭证——纵深防御：verify.mjs
       // 本就不为其落绿行，此处再拦一道，防未来回归把 7 门绿写成 all-gates 凭证。
       if (e && e.engineOnly === true) continue;
+      // 桩门绿行（审计 D39）：--stub-gate 用注入的假命令整表替换门表却走生产尾段，suite=all-gates
+      // 但不代表门表全绿——与 testCmd 同处置，不得充当 confirm-doc 的 24h 新鲜度凭证。
+      if (e && e.stub) continue;
       if (e && e.exitCode === 0 && typeof e.ts === 'string') {
         const t = Date.parse(e.ts);
         if (Number.isFinite(t) && now - t <= 24 * 60 * 60 * 1000

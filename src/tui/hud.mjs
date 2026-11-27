@@ -262,6 +262,7 @@ export async function hudWatchLoop({
   gateTtlMs = 30000,
   inputStream = process.stdin,
   outputStream = process.stdout,
+  proc = process,
 }) {
   // 非 TTY 或重定向输出时降级为快照输出（审查遗留批 2026-11-23：
   // 退出码对齐快照口径，按聚合 gate 结果返回而非恒 0）
@@ -286,7 +287,39 @@ export async function hudWatchLoop({
       } catch {}
     }
     outputStream.write('\x1b[?25h\n'); // 恢复显示终端光标
+    detachProcessHandlers();
   };
+
+  // 信号终止不经过 Promise 退出路径：注册恢复，避免 raw mode 与隐藏光标留在终端
+  const TERMINATION_SIGNALS = ['SIGINT', 'SIGTERM', 'SIGHUP'];
+  const SIGNAL_EXIT_CODES = { SIGHUP: 129, SIGINT: 130, SIGTERM: 143 };
+  const onExit = () => {
+    try {
+      cleanup();
+    } catch {}
+  };
+  const detachProcessHandlers = () => {
+    proc.removeListener('exit', onExit);
+    for (const signal of TERMINATION_SIGNALS) proc.removeListener(signal, onSignal);
+  };
+  const onSignal = (signal) => {
+    try {
+      cleanup();
+    } catch {}
+    const exitCode = SIGNAL_EXIT_CODES[signal] ?? 1;
+    // win32 没有可重发的 POSIX 信号：kill(pid, 'SIGHUP') 会抛 ENOSYS，改按惯例 128+signum 退出
+    if (proc.platform === 'win32') {
+      proc.exit(exitCode);
+      return;
+    }
+    try {
+      proc.kill(proc.pid, signal);
+    } catch {
+      proc.exit(exitCode);
+    }
+  };
+  proc.on('exit', onExit);
+  for (const signal of TERMINATION_SIGNALS) proc.on(signal, onSignal);
 
   const redraw = () => {
     if (!running) return;
@@ -302,7 +335,7 @@ export async function hudWatchLoop({
 
   // 首帧立即渲染
   redraw();
-  timer = setInterval(redraw, Math.max(1, interval) * 1000);
+  timer = setInterval(redraw, interval * 1000);
 
   // 监听按键退出：q / Q / ESC / Ctrl+C
   return new Promise((resolve) => {

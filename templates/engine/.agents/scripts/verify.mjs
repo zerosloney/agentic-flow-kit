@@ -415,7 +415,15 @@ let totalConfiguredProductGates = 0;
     }
   }
   // 规则驱动：从 flow-rules.yml 或项目规则文件装配 phase: verify 的命令门
-  const projectRules = loadProjectRules(ROOT);
+  // 规则中心解析/形状失守 → fail-closed exit 2（审计 D35：栈规则层坏文件此前只警告并静默丢门，
+  // 与项目层解析错误同口径在此拦截）
+  let projectRules;
+  try {
+    projectRules = loadProjectRules(ROOT);
+  } catch (e) {
+    console.error(t(`[verify] 配置错误：规则文件——规则中心配置失守（${e.message}）——拒绝运行`, `[verify] config error: rules files — rules config is broken (${e.message}) — refusing to run`, ROOT));
+    process.exit(2);
+  }
   if (projectRules) {
     const ruleGates = extractVerifyCommandGates(projectRules, ROOT);
     for (const rg of ruleGates) {
@@ -756,7 +764,9 @@ async function run() {
         // 该行实跑门数 < 门表（实测 12 条 gates=14/15 + envSkips=ledger-invariant），
         // 一旦当锚，后续增量担保会建立在「没跑 ledger-invariant」的树上；
         // 2026-10-29 起密钥门恒执法（gitleaks 缺装机则降级 lite），故 secrets 不再产生 envSkips；
-        if (e.exitCode === 0 && e.suite === 'all-gates' && e.headShort && !e.fastTests && !e.testCmd && !e.engineOnly
+        // stub 行（审计 D39）：--stub-gate 是注入的假命令，suite=all-gates 但不代表门表全绿——
+        // 必须同样禁作锚（否则伪造的新鲜度/增量基线/密钥扫描基线三处同时失守）。
+        if (e.exitCode === 0 && e.suite === 'all-gates' && e.headShort && !e.fastTests && !e.testCmd && !e.engineOnly && !e.stub
           && !(Array.isArray(e.envSkips) && e.envSkips.length)) {
           candidates.push({ sha: e.headShort, ts: e.ts, source: 'ledger' });
           break;
@@ -1183,6 +1193,9 @@ async function run() {
     let entry = null;
     try {
       entry = { ts: new Date().toISOString(), exitCode: 0, suite: 'all-gates', gates: passedCount };
+      // stub 标记（审计 D39）：--stub-gate 绿行只是夹具命令的成功，加标记供锚点过滤
+      // 与消费方审计——落盘形态不冒充门表全绿。
+      if (stubCmd) entry.stub = true;
       // 档位标记（2026-11-06 P0-1 续测）：显式 `--full` / 默认 diff / 默认回落全量 / 夹具——
       // 使「关单是否按默认档走」可直接对质（此前只能靠 unitOnly 有无间接推断，且与「未裁门」不可分）。
       entry.mode = testCmd ? 'fixture' : (explicitFull ? 'full' : (scopeMode === 'face' ? 'face' : (scopeMode ? 'diff' : 'fallback')));

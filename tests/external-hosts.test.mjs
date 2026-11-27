@@ -380,3 +380,70 @@ test('oversized host manifest is rejected before parsing', () => {
   assert.equal(r.status, 2, r.stderr);
   assert.match(r.stderr, /too large/);
 });
+
+test('--probe-models refuses CLI commands from an auto-loaded project manifest', () => {
+  const dir = tmpRepo();
+  const marker = path.join(dir, 'probe-ran.txt');
+  writeHost(dir, 'probe-project', {
+    name: 'probe-project',
+    dir: '.probe-project',
+    agents: null,
+    commands: null,
+    skills: { mode: 'index' },
+    modelProbe: {
+      configs: [],
+      env: [],
+      cli: [{ command: process.execPath, args: ['-e', `require('fs').writeFileSync(${JSON.stringify(marker)}, 'x')`] }],
+    },
+  });
+
+  const r = run(['install', '--agent', 'probe-project', '--stack', 'node', '--target', '.', '--probe-models', '--json'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.existsSync(marker), false, 'project-level probe command must not run');
+  assert.doesNotMatch(r.stderr, /将执行宿主 probe-project/, 'refused probe must not be announced as running');
+  assert.match(r.stderr, /refused to run model probe commands.*probe-project/);
+  assert.match(r.stderr, /--host-manifest/);
+});
+
+test('install text mode announces only probes it will run and names the refusal', () => {
+  const dir = tmpRepo();
+  writeHost(dir, 'probe-text', {
+    name: 'probe-text',
+    dir: '.probe-text',
+    agents: null,
+    commands: null,
+    skills: { mode: 'index' },
+    modelProbe: { configs: [], env: [], cli: [{ command: 'probe-text-cli', args: ['--list'] }] },
+  });
+
+  const r = run(['install', '--agent', 'probe-text', '--stack', 'node', '--target', '.', '--probe-models'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.doesNotMatch(r.stdout, /将执行宿主 probe-text/, 'refused probe must not be announced as running');
+  assert.match(r.stderr, /refused to run model probe commands.*probe-text/);
+  assert.match(r.stderr, /--host-manifest/);
+});
+
+test('--probe-models runs CLI commands from a user-level host manifest', () => {
+  const dir = tmpRepo();
+  const home = makeTmp('flow-kit-home-');
+  const hostsDir = path.join(home, '.flow-kit', 'hosts');
+  fs.mkdirSync(hostsDir, { recursive: true });
+  const marker = path.join(dir, 'user-probe-ran.txt');
+  fs.writeFileSync(path.join(hostsDir, 'user-probe.json'), JSON.stringify({
+    name: 'user-probe',
+    dir: '.user-probe',
+    agents: null,
+    commands: null,
+    skills: { mode: 'index' },
+    modelProbe: {
+      configs: [],
+      env: [],
+      cli: [{ command: process.execPath, args: ['-e', `require('fs').writeFileSync(${JSON.stringify(marker)}, 'x')`] }],
+    },
+  }), 'utf8');
+
+  const r = run(['install', '--agent', 'user-probe', '--stack', 'node', '--target', '.', '--probe-models', '--json'],
+    dir, { HOME: home, USERPROFILE: home });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(fs.existsSync(marker), true, 'user-level probe command should run');
+});

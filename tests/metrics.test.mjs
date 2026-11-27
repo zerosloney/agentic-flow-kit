@@ -293,3 +293,55 @@ test('CLI flow-kit metrics report, export, and check integration', () => {
   assert.equal(parsedCheckFail.ok, false);
   assert.ok(parsedCheckFail.violations.length > 0);
 });
+
+const METRICS_SCRIPT = path.join(KIT, 'templates', 'engine', '.agents', 'scripts', 'gen-workflow-metrics.mjs');
+
+function makeMetricsProject(snapshotIso) {
+  const tmp = makeTmp();
+  for (const type of ['intents', 'specs', 'plans', 'incidents']) {
+    fs.mkdirSync(path.join(tmp, 'workflow', type), { recursive: true });
+  }
+  fs.mkdirSync(path.join(tmp, '.agents', 'config'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, '.agents', 'config', 'rule-budgets.txt'), '# rule budgets\n', 'utf8');
+  fs.writeFileSync(path.join(tmp, 'workflow', 'metrics.md'), `<!-- 快照生成：${snapshotIso} -->\n`, 'utf8');
+  return tmp;
+}
+
+function runMetricsCheck(tmp, env = {}) {
+  return spawnSync(process.execPath, [METRICS_SCRIPT, '--check'], {
+    cwd: tmp,
+    encoding: 'utf8',
+    env: { ...process.env, ...env },
+  });
+}
+
+test('gen-workflow-metrics --check rejects a non-numeric METRICS_MAX_AGE_DAYS', () => {
+  const old = new Date(Date.now() - 300 * 86400000).toISOString();
+  const tmp = makeMetricsProject(old);
+
+  const res = runMetricsCheck(tmp, { METRICS_MAX_AGE_DAYS: 'abc' });
+
+  assert.equal(res.status, 1, `${res.stdout}\n${res.stderr}`);
+  assert.match(res.stderr, /METRICS_MAX_AGE_DAYS 须为正数天数/);
+  assert.doesNotMatch(res.stdout, /快照新鲜/);
+});
+
+test('gen-workflow-metrics --check rejects a non-positive METRICS_MAX_AGE_DAYS', () => {
+  const old = new Date(Date.now() - 300 * 86400000).toISOString();
+  const tmp = makeMetricsProject(old);
+
+  const res = runMetricsCheck(tmp, { METRICS_MAX_AGE_DAYS: '0' });
+
+  assert.equal(res.status, 1, `${res.stdout}\n${res.stderr}`);
+  assert.match(res.stderr, /METRICS_MAX_AGE_DAYS 须为正数天数/);
+});
+
+test('gen-workflow-metrics --check still accepts a valid METRICS_MAX_AGE_DAYS', () => {
+  const recent = new Date(Date.now() - 10 * 86400000).toISOString();
+  const tmp = makeMetricsProject(recent);
+
+  const res = runMetricsCheck(tmp, { METRICS_MAX_AGE_DAYS: '60' });
+
+  assert.equal(res.status, 0, `${res.stdout}\n${res.stderr}`);
+  assert.match(res.stdout, /快照新鲜/);
+});

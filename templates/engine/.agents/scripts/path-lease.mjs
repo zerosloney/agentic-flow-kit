@@ -62,19 +62,43 @@ export function acquire(root, { rel, owner = defaultOwner(), ttlMinutes = 30, no
     ttlMinutes: ttl,
   };
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  try {
-    fs.writeFileSync(file, JSON.stringify(row, null, 2), { flag: 'wx' });
-    return { ok: true, lease: row };
-  } catch (err) {
-    if (err.code !== 'EEXIST') throw err;
+  const body = JSON.stringify(row, null, 2);
+  // 新鲜租约一律 wx 独占创建；过期租约的接管是 CAS——先把观测到的那份原子改名到本进程私有路径
+  // （rename 成功者才拿到接管权），再 wx 写入。并发接管者要么 rename 落空、要么 wx 输掉，重读后
+  // 如实返回 ok:false——租约「同一路径同一时间只允许一个 owner」靠这一条保证。
+  let takeover = null;
+  for (let attempt = 0; attempt < 8; attempt++) {
+    try {
+      fs.writeFileSync(file, body, { flag: 'wx' });
+      return takeover ? { ok: true, lease: row, takeover } : { ok: true, lease: row };
+    } catch (err) {
+      if (err.code !== 'EEXIST') throw err;
+    }
+    const held = readLease(file);
+    if (held && !expired(held, now.getTime())) {
+      if (held.owner === String(owner)) return { ok: true, lease: held, renewed: false };
+      return { ok: false, holder: held, lease: row };
+    }
+    const grave = `${file}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.stale`;
+    try {
+      fs.renameSync(file, grave);
+    } catch (err) {
+      if (err.code === 'ENOENT' || err.code === 'EPERM' || err.code === 'EACCES') continue;
+      throw err;
+    }
+    const stolen = readLease(grave);
+    if (held && !(stolen && stolen.owner === held.owner && stolen.expiresAt === held.expiresAt)) {
+      // 读后到 rename 之间租约已被换新：放回（wx 不覆盖现持有者），本轮认输重读
+      if (stolen) {
+        try { fs.writeFileSync(file, JSON.stringify(stolen, null, 2), { flag: 'wx' }); } catch { /* 已有新持有者 */ }
+      }
+      fs.rmSync(grave, { force: true });
+      continue;
+    }
+    fs.rmSync(grave, { force: true });
+    takeover = held;
   }
-  const held = readLease(file);
-  if (expired(held, now.getTime())) {
-    fs.writeFileSync(file, JSON.stringify(row, null, 2));
-    return { ok: true, lease: row, takeover: held };
-  }
-  if (held && held.owner === String(owner)) return { ok: true, lease: held, renewed: false };
-  return { ok: false, holder: held, lease: row };
+  return { ok: false, holder: readLease(file), lease: row };
 }
 
 export function release(root, { rel, owner = defaultOwner(), force = false } = {}) {

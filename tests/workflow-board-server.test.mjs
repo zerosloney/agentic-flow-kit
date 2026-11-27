@@ -790,3 +790,53 @@ test('arena 与 eval 端点: topics/status/report/eval/adopt/cleanup/benchmarks 
     server.close();
   }
 });
+
+// D47（2026-11-27）：/tour 的文件名内联进 <script> 时转义；/api/tour/usage 写入补 Origin 校验。
+// 用量落盘在 ROOT=templates/engine 下，断言前备份、结束后还原，避免测试污染工作树。
+test('tour 路由: 文件名不得闭合 script 块，用量写入拒绝不受信任 Origin', async () => {
+  const server = http.createServer(handleBoardRequest);
+  await new Promise((resolve) => server.listen(0, '127.0.0.1', resolve));
+  const socketPort = server.address().port;
+  const srvHost = '127.0.0.1:8933'; // Host 校验与 checkCsrf 白名单都按模块常量 PORT=8933 判定
+  const usageFile = path.join(REPO, 'templates', 'engine', '.agents', 'cache', 'tour-usage.jsonl');
+  const usageBefore = fs.existsSync(usageFile) ? fs.readFileSync(usageFile, 'utf8') : null;
+
+  const request = (method, pathname, body, headers = {}) =>
+    new Promise((resolve, reject) => {
+      const req = http.request(
+        { host: '127.0.0.1', port: socketPort, method, path: pathname, headers: { Host: srvHost, ...headers } },
+        (res) => {
+          let raw = '';
+          res.on('data', (d) => { raw += d; });
+          res.on('end', () => resolve({ status: res.statusCode, raw }));
+        },
+      );
+      req.on('error', reject);
+      if (body !== undefined) req.write(body);
+      req.end();
+    });
+
+  try {
+    const payload = 'intents/</script><script>globalThis.__PWNED__=1</script>.md';
+    const tour = await request('GET', '/tour?file=' + encodeURIComponent(payload));
+    assert.equal(tour.status, 200);
+    assert.ok(!tour.raw.includes('<script>globalThis.__PWNED__=1</script>'), '/tour 不得回显可闭合 script 的文件名');
+    assert.ok(tour.raw.includes('\\u003c/script'), '文件名应在脚本字符串内转义为 \\u003c 形式');
+
+    const usage = await request(
+      'POST',
+      '/api/tour/usage',
+      JSON.stringify({ doc: 'evil-cross-origin', view: 'x' }),
+      { Origin: 'http://evil.example', 'Content-Type': 'text/plain' },
+    );
+    assert.equal(usage.status, 403, '不受信任 Origin 的用量写入应 403');
+  } finally {
+    if (usageBefore === null) {
+      fs.rmSync(usageFile, { force: true });
+      try { fs.rmdirSync(path.dirname(usageFile)); } catch { /* 目录非空或不存在 */ }
+    } else {
+      fs.writeFileSync(usageFile, usageBefore, 'utf8');
+    }
+    server.close();
+  }
+});

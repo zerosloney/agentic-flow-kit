@@ -7,6 +7,7 @@ import { makeT } from '../i18n.mjs';
 import { resolveTarget } from './install.mjs';
 import { buildDiff } from './diff.mjs';
 import { pruneBaselines } from '../install/baseline.mjs';
+import { resolveInside } from '../install/path-guard.mjs';
 
 // 删除空目录，向上冒泡到 target 根为止；遇到非空目录或根目录即停止。
 export function cleanEmptyDirs(target, absFile) {
@@ -55,6 +56,13 @@ function pruneUnlocked({ args, t }) {
   const print = asJson ? () => {} : (...line) => console.log(...line);
   // 未显式 --lang 时跟随已安装语言，避免英文项目输出中文。
   const tt = args.lang ? t : makeT(manifest.language || 'zh-CN');
+  // manifest 可被篡改：解析到 target 之外的 key 绝不能进入删除流程。
+  const unsafeRel = Object.keys(manifest.files || {}).find((rel) => !resolveInside(target, rel));
+  if (unsafeRel) {
+    const err = new Error(tt('error.prunePathOutside', { path: unsafeRel }));
+    err.code = 'BAD_MANIFEST';
+    throw err;
+  }
   const result = buildDiff({ target, manifest });
   const orphans = result.items.filter((item) => item.kind === 'orphan');
   const items = [];

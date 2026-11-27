@@ -5,12 +5,17 @@ on:
     branches: [main, develop]
   pull_request:
 
+# 最小令牌权限：CI 只读仓库内容（审计修复 2026-11-27：此前未声明，继承默认 scope）。
+permissions:
+  contents: read
+
 jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # 审计修复 2026-11-27：第三方 action 按完整 commit SHA 固定（tag 注释仅供参考），防 tag 被移动。
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
       - name: Install project dependencies
@@ -20,30 +25,30 @@ jobs:
           if [ -f pyproject.toml ]; then python -m pip install -e . || echo "pyproject install skipped (not a package)"; fi
           if [ -f go.mod ]; then go mod download; fi
       - name: Static gates
-        run: npx --yes agentic-flow-kit run verify --full
+        run: npx --yes agentic-flow-kit@{{kitVersion}} run verify --full
       - name: Local gate wiring audit
-        run: npx --yes agentic-flow-kit run check-local-gates
+        run: npx --yes agentic-flow-kit@{{kitVersion}} run check-local-gates
         continue-on-error: true
       - name: Behavior eval (advisory)
-        run: npx --yes agentic-flow-kit run agent-eval check --advisory
+        run: npx --yes agentic-flow-kit@{{kitVersion}} run agent-eval check --advisory
         continue-on-error: true
       - name: Secrets scan (gitleaks / lite fallback)
-        run: npx --yes agentic-flow-kit run check-secrets.mjs
+        run: npx --yes agentic-flow-kit@{{kitVersion}} run check-secrets.mjs
         continue-on-error: true
       - name: SBOM & license policy (advisory)
-        run: npx --yes agentic-flow-kit run sbom-license.mjs --check
+        run: npx --yes agentic-flow-kit@{{kitVersion}} run sbom-license.mjs --check
         continue-on-error: true
       - name: Devcontainer declaration (advisory)
-        run: npx --yes agentic-flow-kit run check-devcontainer.mjs
+        run: npx --yes agentic-flow-kit@{{kitVersion}} run check-devcontainer.mjs
         continue-on-error: true
       - name: Pipeline state closure
-        run: npx --yes agentic-flow-kit run check-pipeline-state
+        run: npx --yes agentic-flow-kit@{{kitVersion}} run check-pipeline-state
         continue-on-error: true
       - name: Injected memory budget
-        run: npx --yes agentic-flow-kit run memory-tier audit
+        run: npx --yes agentic-flow-kit@{{kitVersion}} run memory-tier audit
         continue-on-error: true
       - name: Memory lifecycle audit
-        run: npx --yes agentic-flow-kit run memory-lifecycle.mjs report --check
+        run: npx --yes agentic-flow-kit@{{kitVersion}} run memory-lifecycle.mjs report --check
         continue-on-error: true
 
   # 可选证据作业（R3-8 验收：生成的容器可构建）——默认关闭：拉基础镜像较重。
@@ -52,9 +57,9 @@ jobs:
     if: ${{ vars.FLOW_KIT_DEVCONTAINER_BUILD == 'true' }}
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
       - name: Build the generated devcontainer
-        run: npx --yes agentic-flow-kit devcontainer build --target .
+        run: npx --yes agentic-flow-kit@{{kitVersion}} devcontainer build --target .

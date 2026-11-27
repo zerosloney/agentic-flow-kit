@@ -6,10 +6,8 @@
 // 起草门（stage-gate-machine）：output 落于工作区（路径含 workflow 段）时，须同主题入口已确认，
 // 且入口级别（取入口 frontmatter，非 --level）为 L2/L3 时同名 spec 已确认；未过 → 拒绝生成（exit 2）。
 // L1 例外（2026-10-10）：无同名 intent/incident 时 plan 自己就是入口，--level L1 直接生成。
-import fs from 'node:fs';
-import path from 'node:path';
 import { ENUMS } from './workflow-enums.mjs';
-import { draftGateFor, resolveWorkspace } from './stage-gates.mjs';
+import { draftGateFor, resolveWorkspace, writeDraftDoc } from './stage-gates.mjs';
 
 const TODAY = new Date().toISOString().slice(0, 10);
 const LEVELS = ENUMS['level.all']; // 级别词表单源（.agents/config/workflow-enums.txt）
@@ -89,7 +87,7 @@ if (isMain) {
   if (a.lite && a.level !== 'L1' && a.level !== 'L0') fail('--lite 仅支持 --level L0 或 L1');
   const ws = resolveWorkspace(a.output, a.root);
   if (ws) {
-    const gate = draftGateFor('plan', ws.root, ws.base, { level: a.level });
+    const gate = draftGateFor('plan', ws.root, ws.base, { level: a.level, taskDir: ws.taskDir });
     if (!gate.ok) {
       console.error('❌ 起草门未过（stage-gates）：' + gate.reason);
       console.error('   ' + gate.hint + '——本份未生成（确认前置后重跑本命令）');
@@ -99,8 +97,8 @@ if (isMain) {
     console.error('ℹ️  未定位到工作区（output 路径不含 workflow/ 段）——按仓外草稿处理，跳过起草门前置校验');
   }
   const { body } = renderPlan(a);
-  fs.mkdirSync(path.dirname(a.output), { recursive: true });
-  fs.writeFileSync(a.output, body);
+  const w = writeDraftDoc(a.output, body);
+  if (!w.ok) fail(w.reason);
   console.log('✅ 已生成 plan 草稿：' + a.output + '（状态 draft / 级别 ' + a.level + ' / ' + ((a.level === 'L0' || a.level === 'L1') ? ((a.lite || a.level === 'L0') ? (a.level + '-lite 三节（plan 即入口）') : 'L1 五节（plan 即入口）') : '完整 4 节') + '）');
 }
 export default renderPlan;

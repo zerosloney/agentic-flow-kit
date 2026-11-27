@@ -171,6 +171,23 @@ test('promote respects the use threshold, only edits the managed block, and refu
   assert.equal(readStore(tight, tightCfg).records[0].state, 'candidate', 'state must not change when the budget is exceeded');
 });
 
+test('promote without an explicit min-uses applies promotion.minUses from config, not 0', () => {
+  const now = at('2026-06-01T00:00:00.000Z');
+  const root = fixture();
+  const cfg = loadConfig(root);
+  const tierCfg = loadTierConfig(root);
+  seed(root, '零命中的记忆不应上浮', { now });
+  assert.equal(readStore(root, cfg).records[0].hits, 0);
+
+  const res = promote(root, { now, cfg, tierCfg });
+  assert.equal(res.ok, true, JSON.stringify(res));
+  assert.equal(res.promoted.length, 0, 'hits 0 < cfg.promotion.minUses 2 must not promote');
+  assert.equal(readStore(root, cfg).records[0].state, 'candidate');
+
+  const forced = promote(root, { now, cfg, tierCfg, minUses: 0 });
+  assert.equal(forced.promoted.length, 1, 'explicit --min-uses 0 still overrides the config threshold');
+});
+
 test('query unifies store, claims, incidents and papercuts, and logs hits', () => {
   const root = fixture();
   const cfg = loadConfig(root);

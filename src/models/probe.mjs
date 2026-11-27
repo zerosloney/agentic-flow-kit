@@ -2,10 +2,18 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { HOSTS } from '../hosts/registry.mjs';
+import { HOSTS, hostSource } from '../hosts/registry.mjs';
 
 // 只读探测：宿主配置 / 环境变量为默认来源；CLI 列表命令必须显式允许。
 // 任何失败都静默降级，安装不能被探测拖死或卡在认证提示上。
+// CLI 命令只对内置宿主、用户本机层（~/.flow-kit/hosts）与显式 --host-manifest 的定义放行：
+// 项目层 JSON 随仓库分发，执行其中任意命令等于把信任边界交给仓库写入方。
+const CLI_PROBE_SOURCES = new Set(['builtin', 'user', 'cli']);
+
+export function cliProbeAllowed(host) {
+  return CLI_PROBE_SOURCES.has(hostSource(host));
+}
+
 export function probeModels({
   host,
   target = process.cwd(),
@@ -13,6 +21,7 @@ export function probeModels({
   env = process.env,
   allowCli = false,
   exec = spawnSync,
+  warn = (message) => console.error(message),
 } = {}) {
   const h = HOSTS[host];
   if (!h) return [];
@@ -36,18 +45,23 @@ export function probeModels({
   }
 
   if (allowCli) {
-    for (const cli of h.modelProbe?.cli || []) {
-      if (!cli?.command) continue;
-      // Windows 的 `cmd` 往往是系统 cmd.exe，误执行会变成 shell 探测
-      if (process.platform === 'win32' && /^cmd(\.exe)?$/i.test(cli.command)) continue;
-      const r = exec(cli.command, cli.args || [], {
-        encoding: 'utf8',
-        timeout: 1500,
-        windowsHide: true,
-        stdio: ['ignore', 'pipe', 'ignore'],
-      });
-      if (!r || r.error || r.status !== 0 || !r.stdout) continue;
-      for (const id of parseCliModels(r.stdout)) add(id, 'cli');
+    const probeClis = (h.modelProbe?.cli || []).filter((cli) => cli?.command);
+    const source = hostSource(host);
+    if (probeClis.length && !cliProbeAllowed(host)) {
+      warn(`[flow-kit] Warning: refused to run model probe commands declared by host "${host}": its manifest was loaded automatically (${source} layer). Pass the manifest explicitly with --host-manifest <file> to allow it.`);
+    } else {
+      for (const cli of probeClis) {
+        // Windows 的 `cmd` 往往是系统 cmd.exe，误执行会变成 shell 探测
+        if (process.platform === 'win32' && /^cmd(\.exe)?$/i.test(cli.command)) continue;
+        const r = exec(cli.command, cli.args || [], {
+          encoding: 'utf8',
+          timeout: 1500,
+          windowsHide: true,
+          stdio: ['ignore', 'pipe', 'ignore'],
+        });
+        if (!r || r.error || r.status !== 0 || !r.stdout) continue;
+        for (const id of parseCliModels(r.stdout)) add(id, 'cli');
+      }
     }
   }
 

@@ -15,13 +15,34 @@ export function emptyLock() {
   return { version: LOCK_VERSION, skills: {} };
 }
 
+// 只有文件不存在才视为空锁；读不出或结构不对一律 fail-loud——损坏的锁若当空锁重置，
+// 下一次写入会把其他技能的哈希整片抹掉。修复指引：从 git 恢复，或确认废弃后删除该文件。
+function invalidLock(file, detail) {
+  const err = new Error(`skills.lock.json 已损坏：${file}（${detail}）——请从 git 恢复，或确认废弃后删除该文件并重装技能`);
+  err.code = 'BAD_MANIFEST';
+  return err;
+}
+
 export function readLock(target) {
+  const file = path.join(target, LOCK_REL);
+  let text;
   try {
-    const lock = JSON.parse(fs.readFileSync(path.join(target, LOCK_REL), 'utf8'));
-    return lock && typeof lock === 'object' && lock.skills ? lock : emptyLock();
-  } catch {
-    return emptyLock();
+    text = fs.readFileSync(file, 'utf8');
+  } catch (err) {
+    if (err.code === 'ENOENT') return emptyLock();
+    throw err;
   }
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (err) {
+    throw invalidLock(file, err.message);
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)
+    || !parsed.skills || typeof parsed.skills !== 'object' || Array.isArray(parsed.skills)) {
+    throw invalidLock(file, '应为含 skills 映射的对象');
+  }
+  return parsed;
 }
 
 export function writeLock(target, lock) {

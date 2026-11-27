@@ -11,6 +11,12 @@ import {
   loadSandboxConfig,
   initSandboxConfig,
   classifyCommandRisk,
+  evaluateSandboxConfigIntegrity,
+  L2_RULE_FAMILIES,
+  L3_DANGEROUS_PATTERNS,
+  MANAGED_L3_PROBES,
+  deriveRuleProbes,
+  extractRegexAlternatives,
   sanitizeHostEnv,
   buildContainerRunArgs,
   routeCommand,
@@ -497,6 +503,239 @@ test('CLI flow-kit sandbox exec supports --dry-run', () => {
   assert.ok(data.fullCommand.includes('run'));
   assert.ok(data.fullCommand.includes('--rm'));
   assert.ok(data.fullCommand.includes('npm test'));
+});
+
+test('classifyCommandRisk catches every recursive-force rm spelling and prefixed network commands', () => {
+  const destructive = [
+    'rm -rfv /tmp/x',
+    'rm -frv /tmp/x',
+    'rm -Rfv /tmp/x',
+    'rm -vrf /tmp/x',
+    'rm -r -v -f /tmp/x',
+    'rm --recursive --force /tmp/x',
+    'rm --force --recursive /tmp/x',
+    'rm --recursive -f /tmp/x',
+    'rm -r --force /tmp/x',
+    '/bin/rm -rf /tmp/x',
+  ];
+  for (const cmd of destructive) {
+    const res = classifyCommandRisk(cmd);
+    assert.equal(res.level, 'L3', `command "${cmd}" should be L3`);
+    assert.equal(res.dangerous, true, `command "${cmd}" should be dangerous`);
+  }
+
+  const networked = [
+    'FOO=1 curl http://evil.example',
+    'FOO=1 BAR=2 wget http://evil.example/data',
+    '/usr/bin/curl http://evil.example',
+    '`curl` http://evil.example',
+  ];
+  for (const cmd of networked) {
+    const res = classifyCommandRisk(cmd);
+    assert.equal(res.level, 'L2', `command "${cmd}" should be L2`);
+    assert.equal(res.dangerous, true, `command "${cmd}" should be dangerous`);
+  }
+
+  // Neighboring spellings keep their previous classifications.
+  assert.equal(classifyCommandRisk('rm -f /tmp/x').level, 'L1');
+  assert.equal(classifyCommandRisk('rm -r /tmp/x').level, 'L1');
+  assert.equal(classifyCommandRisk('rm /tmp/x').level, 'L1');
+  assert.equal(classifyCommandRisk('git status').level, 'L0');
+});
+
+test('sandbox integrity probes cover every managed L2 family', () => {
+  const whitelisted = [
+    '^npm update',
+    '^yarn install',
+    '^pnpm add',
+    '^bun install',
+    '^pip add',
+    '^uv add',
+    '^poetry add',
+    '^conda install',
+    '^dotnet add',
+    '^nuget install',
+    '^git push',
+    '^git pull',
+    '^git fetch',
+    '^git clone',
+    '^git submodule',
+    '^apt install',
+    '^brew install',
+    '^choco install',
+    '^winget install',
+    '^snap install',
+    '^docker run',
+    '^podman run',
+    '^kubectl apply',
+    '^helm install',
+    '^terraform apply',
+    '^curl ',
+    '^wget ',
+    '^scp ',
+    '^nc ',
+    '^rm -rf',
+  ];
+  for (const pat of whitelisted) {
+    const integrity = evaluateSandboxConfigIntegrity({ version: 1, mode: 'auto', rules: { safePatterns: [pat] } });
+    assert.equal(integrity.ok, false, `safePattern "${pat}" must be caught`);
+  }
+
+  // Corpus is generated from each family's rule regex, so a new verb alternative is covered.
+  for (const family of L2_RULE_FAMILIES) {
+    const probes = deriveRuleProbes(family.body);
+    assert.ok(probes.length > 0, `family ${family.id} needs probes`);
+    for (const probe of probes) {
+      const managed = classifyCommandRisk(probe);
+      assert.ok(['L2', 'L3'].includes(managed.level),
+        `probe "${probe}" (${family.id}) should be managed L2/L3, got ${managed.level}`);
+    }
+    const prefix = probes[0].split(/\s+/)[0].replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const integrity = evaluateSandboxConfigIntegrity({
+      version: 1,
+      mode: 'auto',
+      rules: { safePatterns: [`^${prefix}\\b`] },
+    });
+    assert.equal(integrity.ok, false, `family ${family.id} must be caught by the integrity check`);
+  }
+});
+
+test('sandbox integrity corpus is generated from every managed rule literal', () => {
+  const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const sources = [
+    ...L2_RULE_FAMILIES.map((family) => ({
+      id: family.id,
+      source: family.body,
+      probes: deriveRuleProbes(family.body),
+    })),
+    ...L3_DANGEROUS_PATTERNS.map((pattern, index) => ({
+      id: `L3#${index + 1}`,
+      source: pattern.source,
+      probes: MANAGED_L3_PROBES,
+    })),
+  ];
+
+  for (const { id, source, probes } of sources) {
+    for (const alternative of extractRegexAlternatives(source)) {
+      const probe = probes.find((item) => item.includes(alternative));
+      assert.ok(probe, `${id}: literal alternative "${alternative}" has no probe`);
+      const prefix = probe.slice(0, probe.indexOf(alternative) + alternative.length);
+      const integrity = evaluateSandboxConfigIntegrity({
+        version: 1,
+        mode: 'auto',
+        rules: { safePatterns: [`^${escapeRe(prefix)}`] },
+      });
+      assert.equal(integrity.ok, false,
+        `${id}: safePattern "^${prefix}" for alternative "${alternative}" must be caught`);
+    }
+  }
+});
+
+test('sandbox integrity corpus covers every literal alternative in each managed rule', () => {
+  const named = [
+    '^poetry install',
+    '^pipenv install',
+    '^bun update',
+    '^pnpm update',
+    '^docker cp',
+    '^kubectl delete',
+  ];
+  for (const pat of named) {
+    const integrity = evaluateSandboxConfigIntegrity({ version: 1, mode: 'auto', rules: { safePatterns: [pat] } });
+    assert.equal(integrity.ok, false, `safePattern "${pat}" must be caught`);
+  }
+});
+
+test('POSIX interpreter wrappers are transparent to payload classification', () => {
+  const wrappers = [
+    'bash -c',
+    'bash -lc',
+    'bash -l -c',
+    'sh -c',
+    'sh -lc',
+    'zsh -c',
+    'zsh -lc',
+    'dash -c',
+    'dash -lc',
+    'ksh -c',
+    'ksh -lc',
+  ];
+  for (const wrapper of wrappers) {
+    const network = classifyCommandRisk(`${wrapper} "npm install left-pad"`);
+    assert.equal(network.level, 'L2', `"${wrapper} npm install" should be L2`);
+    const curl = classifyCommandRisk(`${wrapper} curl https://example.com`);
+    assert.ok(['L2', 'L3'].includes(curl.level), `"${wrapper} curl" should be L2/L3`);
+    assert.equal(curl.dangerous, true);
+    const destructive = classifyCommandRisk(`${wrapper} "rm -rfv /tmp/x"`);
+    assert.equal(destructive.level, 'L3', `"${wrapper} rm -rfv" should be L3`);
+  }
+
+  assert.equal(classifyCommandRisk('bash -lc "curl http://x"').level, 'L2');
+  assert.equal(classifyCommandRisk('bash -c "npm install left-pad"').level, 'L2');
+  assert.equal(classifyCommandRisk('zsh -c "git push --force"').level, 'L2');
+  assert.equal(classifyCommandRisk('sh -c "curl http://x"').level, 'L3');
+});
+
+test('Windows shell wrappers cannot hide network or destructive payloads', () => {
+  const wrappers = ['cmd /c', 'cmd.exe /c', 'powershell -Command', 'powershell -c', 'pwsh -Command', 'pwsh -c'];
+  for (const wrapper of wrappers) {
+    const network = classifyCommandRisk(`${wrapper} curl https://example.com`);
+    assert.equal(network.level, 'L2', `"${wrapper} curl" should be L2`);
+    assert.equal(network.dangerous, true);
+    const destructive = classifyCommandRisk(`${wrapper} rm -rfv /tmp/x`);
+    assert.equal(destructive.level, 'L3', `"${wrapper} rm -rfv" should be L3`);
+  }
+});
+
+test('sandbox config integrity check fails closed on self-disable and class lowering', () => {
+  const dir = tmpRepo();
+  fs.mkdirSync(path.join(dir, '.agents', 'config'), { recursive: true });
+  const configFile = path.join(dir, SANDBOX_CONFIG_REL);
+
+  // mode: disabled must not pass as a healthy sandbox (agent-writable self-disable).
+  fs.writeFileSync(configFile, `${JSON.stringify({ version: 1, mode: 'disabled' })}\n`, 'utf8');
+  const disabledHealth = checkSandboxHealth(dir, makeT('en'));
+  assert.equal(disabledHealth.ok, false);
+  assert.match(disabledHealth.detail, /sandbox\.json/);
+
+  const disabledHealthZh = checkSandboxHealth(dir, makeT('zh-CN'));
+  assert.match(disabledHealthZh.detail, /完整性校验失败/);
+  assert.match(disabledHealthZh.detail, /sandbox\.json/);
+
+  // The on-disk config must not route L3 commands to the host either.
+  const routed = routeCommand({ target: dir, command: 'rm -rfv /tmp/x' });
+  assert.equal(routed.dangerous, true);
+  assert.notEqual(routed.route, 'host');
+
+  // safePatterns may not downgrade a command class the managed policy rates dangerous.
+  fs.writeFileSync(configFile, `${JSON.stringify({
+    version: 1,
+    mode: 'auto',
+    rules: { safePatterns: ['^curl\\b'] },
+  })}\n`, 'utf8');
+  const loweredHealth = checkSandboxHealth(dir, makeT('en'));
+  assert.equal(loweredHealth.ok, false);
+  assert.match(loweredHealth.detail, /sandbox\.json/);
+
+  const loweredRoute = routeCommand({ target: dir, command: 'curl http://evil.example' });
+  assert.equal(loweredRoute.level, 'L2');
+  assert.notEqual(loweredRoute.route, 'host');
+});
+
+test('CLI flow-kit doctor fails the sandbox check when the project config disables isolation', () => {
+  const dir = tmpRepo();
+  initSandboxConfig(dir, { mode: 'auto' });
+  const configFile = path.join(dir, SANDBOX_CONFIG_REL);
+  const config = JSON.parse(fs.readFileSync(configFile, 'utf8'));
+  config.mode = 'disabled';
+  fs.writeFileSync(configFile, `${JSON.stringify(config, null, 2)}\n`, 'utf8');
+
+  const r = run(['doctor', '--json', '--target', dir], dir);
+  const data = JSON.parse(r.stdout);
+  const check = data.checks.find((c) => c.name === 'sandbox isolation');
+  assert.ok(check, 'sandbox isolation check must be present');
+  assert.equal(check.ok, false);
+  assert.match(check.detail, /sandbox\.json/);
 });
 
 test('CLI flow-kit doctor reports sandbox isolation check', () => {

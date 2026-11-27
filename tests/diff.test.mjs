@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { EXIT } from '../src/cli/exit.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
@@ -294,5 +295,24 @@ test('diff readback recovers injected model: inherit (commandcode shells stay un
   const item = itemOf(result, '.commandcode/agents/independent-reviewer.md');
   assert.equal(item.kind, 'unchanged', 'injected inherit must not be reported as kit-updated');
   assert.equal(result.summary.kitUpdated, 0);
+});
+
+// manifest 可被篡改：指向 target 之外的 key 不得被读取，按损坏 manifest 处理。
+test('diff rejects a manifest entry that resolves outside the target', () => {
+  const dir = tmpRepo();
+  install(dir);
+  const rel = `../${path.basename(dir)}-victim.txt`;
+  const victim = path.resolve(dir, rel);
+  try {
+    fs.writeFileSync(victim, 'outside\n', 'utf8');
+    writeManifest(dir, { ...readManifest(dir), files: { ...readManifest(dir).files, [rel]: '0'.repeat(64) } });
+
+    const r = run(['diff', '--target', '.', '--json'], dir);
+    assert.equal(r.status, EXIT.TARGET, r.stderr);
+    assert.ok(r.stderr.includes(rel), `error must name the rejected entry: ${r.stderr}`);
+    assert.equal(fs.readFileSync(victim, 'utf8'), 'outside\n');
+  } finally {
+    fs.rmSync(victim, { force: true });
+  }
 });
 

@@ -17,6 +17,11 @@ tmp/
 .agents/rules/local.json
 .agents/rules/local.yml
 .agents/rules/local.yaml
+# 信任模式及其审计台账（本机运行态，不入库；trust-mode --verify 以台账对质当前配置）
+.agents/trust-mode.json
+.agents/trust-mode-audit.jsonl
+# 公证签名密钥（默认含私钥，不入库；--out 可改落盘位置）
+.agents/keys/
 # 升级用基线（含上次安装内容，默认不入库；--no-baseline 可关闭）
 .agents/.kit/
 

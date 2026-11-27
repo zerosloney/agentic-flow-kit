@@ -591,7 +591,13 @@ const existing = fs.existsSync(METRICS_P) ? fs.readFileSync(METRICS_P, 'utf8') :
 // 治的正是实测缺口：published 表停在 2026-10-25（92 全量绿行 / 165.7s / 最慢门首位 backend-test），
 // 而台账已到 137 绿行 / 193.3s / 首位 ledger-invariant——差 18 次验证且成本画像头名换人，无人发现。
 if (CHECK) {
-  const maxAgeDays = Number(process.env.METRICS_MAX_AGE_DAYS || 31);
+  const rawMaxAge = process.env.METRICS_MAX_AGE_DAYS ?? '';
+  const maxAgeDays = rawMaxAge === '' ? 31 : Number(rawMaxAge);
+  // 非法上限（NaN / 非正）不得当作阈值：ageDays > NaN 恒 false，会让任意陈旧的快照通过时效门。
+  if (!Number.isFinite(maxAgeDays) || maxAgeDays <= 0) {
+    console.error(`❌ METRICS_MAX_AGE_DAYS 须为正数天数（当前值：${JSON.stringify(rawMaxAge)}）——时效门拒绝以非法上限放行`);
+    process.exit(1);
+  }
   const snapM = existing.match(/<!-- 快照生成：([0-9T:.+-]+Z?)/);
   if (!snapM) {
     console.error('❌ workflow/metrics.md 无「快照生成」时刻标记——本门判的是自述时效（快照按设计是历史记录，逐字比会常红）');

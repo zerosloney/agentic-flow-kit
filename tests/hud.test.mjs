@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -217,4 +218,106 @@ test('gatherHudState surfaces suspicious-directive warnings instead of dropping 
   assert.equal(state.handoffs.warned, 1);
   assert.match(state.handoffs.warnings[0], /SUSPICIOUS_DIRECTIVE/);
   assert.match(renderHudView(state, t), /suspicious directives/);
+});
+
+test('CLI hud --watch rejects a non-numeric or non-positive --interval', () => {
+  const dir = makeTmp('flow-kit-hud-interval-');
+  for (const value of ['nope', '0']) {
+    const r = run(['hud', '--watch', '--interval', value, '--target', dir], dir);
+    assert.equal(r.status, 2, `${value}: ${r.stderr}`);
+    assert.match(r.stderr, /--interval/);
+  }
+});
+
+test('hudWatchLoop restores the terminal on termination signals and exit', () => {
+  const dir = makeTmp('flow-kit-hud-signal-');
+  const input = new EventEmitter();
+  input.isTTY = true;
+  input.setRawMode = (value) => {
+    input.raw = value;
+  };
+  input.resume = () => {};
+  input.pause = () => {};
+  const writes = [];
+  const output = {
+    isTTY: true,
+    columns: 100,
+    rows: 40,
+    write(chunk) {
+      writes.push(chunk);
+      return true;
+    },
+  };
+  const handlers = new Map();
+  const proc = {
+    pid: 4242,
+    on(event, handler) {
+      handlers.set(event, handler);
+    },
+    removeListener(event, handler) {
+      if (handlers.get(event) === handler) handlers.delete(event);
+    },
+    kill(pid, signal) {
+      proc.killed = { pid, signal };
+    },
+  };
+
+  hudWatchLoop({ target: dir, t, interval: 60, inputStream: input, outputStream: output, proc });
+  const onSignal = handlers.get('SIGTERM');
+  assert.equal(typeof onSignal, 'function', 'SIGTERM must restore the terminal');
+  assert.equal(typeof handlers.get('exit'), 'function', 'exit must restore the terminal');
+  assert.equal(input.raw, true);
+
+  onSignal('SIGTERM');
+  assert.equal(input.raw, false);
+  assert.ok(writes.join('').includes('\x1b[?25h'), 'cursor must be shown again');
+  assert.deepEqual(proc.killed, { pid: 4242, signal: 'SIGTERM' });
+});
+
+test('hudWatchLoop restores the terminal when the win32 re-raise cannot kill', () => {
+  const dir = makeTmp('flow-kit-hud-signal-win-');
+  const input = new EventEmitter();
+  input.isTTY = true;
+  input.setRawMode = (value) => {
+    input.raw = value;
+  };
+  input.resume = () => {};
+  input.pause = () => {};
+  const writes = [];
+  const output = {
+    isTTY: true,
+    columns: 100,
+    rows: 40,
+    write(chunk) {
+      writes.push(chunk);
+      return true;
+    },
+  };
+  const handlers = new Map();
+  const proc = {
+    pid: 4242,
+    platform: 'win32',
+    on(event, handler) {
+      handlers.set(event, handler);
+    },
+    removeListener(event, handler) {
+      if (handlers.get(event) === handler) handlers.delete(event);
+    },
+    kill() {
+      const err = new Error('kill ENOSYS');
+      err.code = 'ENOSYS';
+      throw err;
+    },
+    exit(code) {
+      proc.exitCode = code;
+    },
+  };
+
+  hudWatchLoop({ target: dir, t, interval: 60, inputStream: input, outputStream: output, proc });
+  const onSignal = handlers.get('SIGHUP');
+  assert.equal(typeof onSignal, 'function');
+  assert.doesNotThrow(() => onSignal('SIGHUP'));
+  assert.equal(input.raw, false);
+  assert.ok(writes.join('').includes('\x1b[?25h'), 'cursor must be shown again before exiting');
+  assert.equal(proc.exitCode, 129);
 });

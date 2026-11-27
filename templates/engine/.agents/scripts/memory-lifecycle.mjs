@@ -389,7 +389,7 @@ export function promote(root, { now = new Date(), cfg = loadConfig(root), tierCf
     }
   }
 
-  const threshold = Number.isFinite(Number(minUses)) && minUses !== true ? Number(minUses) : cfg.promotion.minUses;
+  const threshold = minUses != null && typeof minUses !== 'boolean' && Number.isFinite(Number(minUses)) ? Number(minUses) : cfg.promotion.minUses;
   const promoted = [];
   for (const record of records) {
     if (record.state !== 'candidate' || record.hits < threshold) continue;

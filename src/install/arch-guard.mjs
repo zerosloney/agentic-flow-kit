@@ -131,9 +131,10 @@ export function stripComments(source, ext) {
     .replace(/\/\/.*$/gm, '');
 }
 
-export function extractImports(source, ext) {
+export function extractImportsDetailed(source, ext) {
   const clean = stripComments(source, ext);
   const specifiers = new Set();
+  const unresolved = new Set();
 
   if (['.js', '.mjs', '.cjs', '.ts', '.mts', '.cts', '.jsx', '.tsx'].includes(ext)) {
     const importExportFrom = /(?:import|export)\s+(?:[\w*\s{},$]+from\s+)?['"]([^'"]+)['"]/g;
@@ -144,6 +145,22 @@ export function extractImports(source, ext) {
     const dynamicOrRequire = /(?:import|require)\s*\(\s*['"]([^'"]+)['"]\s*\)/g;
     while ((match = dynamicOrRequire.exec(clean)) !== null) {
       specifiers.add(match[1]);
+    }
+    // 静态模板字面量动态导入：import(`../infra/db.mjs`)
+    const staticTemplate = /(?:import|require)\s*\(\s*`([^`$]*)`\s*\)/g;
+    while ((match = staticTemplate.exec(clean)) !== null) {
+      if (match[1].trim()) specifiers.add(match[1]);
+    }
+    // 其余动态导入的目标无法静态确定：计数上报，不能静默丢弃。
+    const dynamicAny = /(?:import|require)\s*\(\s*([^)]*?)\s*\)/g;
+    while ((match = dynamicAny.exec(clean)) !== null) {
+      const arg = match[1].trim();
+      // 静态字符串（可带 import attributes 的第二参数）与无插值模板已在上方收集。
+      const isStaticString = /^(['"])[^'"]*\1(?:\s*,[\s\S]*)?$/.test(arg);
+      const isStaticTemplate = /^`[^`$]*`$/.test(arg);
+      if (!isStaticString && !isStaticTemplate) {
+        unresolved.add(arg || 'expression');
+      }
     }
   } else if (ext === '.py') {
     const fromImport = /^\s*from\s+([.\w]+)\s+import/gm;
@@ -173,10 +190,14 @@ export function extractImports(source, ext) {
     }
   }
 
-  return [...specifiers];
+  return { specifiers: [...specifiers], unresolved: [...unresolved] };
 }
 
-const CANDIDATE_EXTS = ['.mjs', '.js', '.ts', '.jsx', '.tsx', '.py', '.go'];
+export function extractImports(source, ext) {
+  return extractImportsDetailed(source, ext).specifiers;
+}
+
+const CANDIDATE_EXTS = ['.mjs', '.js', '.cjs', '.ts', '.mts', '.cts', '.jsx', '.tsx', '.py', '.go'];
 
 export function resolveImportPath(fromFileRel, specifier, root) {
   // 过滤内置模块与网络路径
@@ -266,6 +287,8 @@ export function buildDependencyGraph(root, config = {}) {
   const exclude = config.exclude || [];
   const files = listProjectSourceFiles(root, exclude);
   const graph = new Map();
+  // D17：无法静态解析的动态导入按文件记录，随图一起上报（Map 附加属性，保持既有调用方兼容）。
+  const unresolvedImports = new Map();
 
   for (const fileRel of files) {
     const ext = path.extname(fileRel);
@@ -277,7 +300,7 @@ export function buildDependencyGraph(root, config = {}) {
       continue;
     }
 
-    const rawImports = extractImports(content, ext);
+    const { specifiers: rawImports, unresolved } = extractImportsDetailed(content, ext);
     const resolvedDeps = new Set();
 
     for (const spec of rawImports) {
@@ -287,9 +310,12 @@ export function buildDependencyGraph(root, config = {}) {
       }
     }
 
+    if (unresolved.length > 0) unresolvedImports.set(fileRel, unresolved);
+
     graph.set(fileRel, resolvedDeps);
   }
 
+  graph.unresolvedImports = unresolvedImports;
   return graph;
 }
 
@@ -437,6 +463,8 @@ export function evaluateArchitecture(root, customConfig = null) {
       cycles: [],
       boundaryViolations: [],
       privateViolations: [],
+      unresolvedImports: [],
+      unresolvedCount: 0,
       graph: new Map(),
     };
   }
@@ -447,7 +475,10 @@ export function evaluateArchitecture(root, customConfig = null) {
     : [];
   const boundaryViolations = checkLayerBoundaries(graph, config);
   const privateViolations = checkPrivateImports(graph, config);
+  const unresolvedImports = [...(graph.unresolvedImports || new Map())]
+    .flatMap(([fromFile, specifiers]) => specifiers.map((specifier) => ({ fromFile, specifier })));
 
+  // 无法静态确定的动态导入是提示项（unresolvedImports），不参与 ok 判定，也不阻断检查。
   const ok = cycles.length === 0 && boundaryViolations.length === 0 && privateViolations.length === 0;
 
   return {
@@ -458,6 +489,8 @@ export function evaluateArchitecture(root, customConfig = null) {
     cycles,
     boundaryViolations,
     privateViolations,
+    unresolvedImports,
+    unresolvedCount: unresolvedImports.length,
     graph,
   };
 }
@@ -546,7 +579,22 @@ export function checkArchHealth(target, t) {
 
   try {
     const res = evaluateArchitecture(target);
+    const unresolved = res.unresolvedImports.length;
     if (res.ok) {
+      if (unresolved > 0) {
+        return {
+          ok: true,
+          name: 'architecture guard',
+          detail: t('doctor.archUnresolved', {
+            count: unresolved,
+            targets: res.unresolvedImports
+              .slice(0, 3)
+              .map((u) => `${u.fromFile} -> ${u.specifier}`)
+              .join(', '),
+          }),
+          warn: true,
+        };
+      }
       return {
         ok: true,
         name: 'architecture guard',

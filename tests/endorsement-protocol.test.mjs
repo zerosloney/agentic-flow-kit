@@ -387,6 +387,85 @@ test('CLI sign 非 --json 输出一行；--no-shard 落主台账并接受合法�
   assert.equal(tokens[0].challenges[0].id, 'ch-cli-01');
 });
 
+test('两次 CLI sign 的独立背书跨凭证汇总，dualEndorsed 才能成立', () => {
+  const root = makeTmp('endorsement-dual-');
+  const docRel = 'workflow/tasks/dual/code-review.md';
+  const commitment = 'aa11bb22cc33dd44..ee55ff6677889900';
+  const common = ['--doc', docRel, '--commitment', commitment, '--root', root, '--json'];
+  const first = signCli([...common, '--session', 'sess-dual-primary01', '--model', 'claude-3-7-sonnet', '--conclusion', 'approved']);
+  assert.equal(first.status, 0, first.stderr || first.stdout);
+  const second = signCli([...common, '--session', 'sess-dual-gemini02', '--model', 'gemini-2.5-pro', '--conclusion', 'approved']);
+  assert.equal(second.status, 0, second.stderr || second.stdout);
+
+  const resolved = resolveReviewEndorsement({ docRel, root, commitment });
+  assert.equal(resolved.reviewers.length, 2);
+  assert.equal(resolved.dualEndorsed, true);
+  assert.deepEqual(resolved.reviewers.map((r) => r.id), ['sess-dual-primary01', 'sess-dual-gemini02']);
+});
+
+test('同一会话重复签署只算一位复核人，不能凑出双背书', () => {
+  const root = makeTmp('endorsement-dual-same-session-');
+  const docRel = 'workflow/tasks/dual-same/code-review.md';
+  const commitment = 'ff00ee11dd22cc33..bb44aa5566778899';
+  const common = ['--doc', docRel, '--commitment', commitment, '--root', root, '--json'];
+  const first = signCli([...common, '--session', 'sess-dual-reused01', '--model', 'claude-3-7-sonnet', '--conclusion', 'approved']);
+  assert.equal(first.status, 0, first.stderr || first.stdout);
+  const second = signCli([...common, '--session', 'sess-dual-reused01', '--model', 'gemini-2.5-pro', '--conclusion', 'approved']);
+  assert.equal(second.status, 0, second.stderr || second.stdout);
+
+  const resolved = resolveReviewEndorsement({ docRel, root, commitment });
+  assert.equal(resolved.reviewers.length, 1);
+  assert.equal(resolved.dualEndorsed, false);
+});
+
+test('手改凭证中的背书人字段后摘要失配，凭证被拒绝', () => {
+  const token = buildEndorsementToken({
+    doc: 'workflow/specs/edited.md',
+    commitmentFingerprint: 'fp-edited-123456',
+    challenges: [],
+    endorsements: [{ role: 'auditor', model: 'claude-3-7-sonnet', sessionId: 'sess-edit-01', conclusion: 'approved' }],
+  });
+  const edited = structuredClone(token);
+  edited.endorsements[0].model = 'gemini-2.5-pro';
+  const val = validateEndorsementToken(edited);
+  assert.equal(val.ok, false);
+  assert.match(val.problems.join('；'), /失配/);
+
+  const editedConclusion = structuredClone(token);
+  editedConclusion.endorsements[0].conclusion = 'approved-forged';
+  assert.equal(validateEndorsementToken(editedConclusion).ok, false, '改结论但保留旧摘要必须失配');
+});
+
+test('重算摘要也不能让同一会话在一次凭证中冒充两位独立背书人', () => {
+  const token = buildEndorsementToken({
+    doc: 'workflow/specs/dup-session.md',
+    commitmentFingerprint: 'fp-dupsess-123456',
+    challenges: [],
+    endorsements: [
+      { role: 'primary', model: 'claude-3-7-sonnet', sessionId: 'sess-forged-dup01', conclusion: 'approved' },
+      { role: 'second', model: 'gemini-2.5-pro', sessionId: 'sess-forged-dup01', conclusion: 'approved' },
+    ],
+  });
+  const val = validateEndorsementToken(token);
+  assert.equal(val.ok, false);
+  assert.match(val.problems.join('；'), /会话 ID/);
+});
+
+test('模型族与模型不符（伪造异构背书）在摘要重算后仍被拒绝', () => {
+  const token = buildEndorsementToken({
+    doc: 'workflow/specs/fake-family.md',
+    commitmentFingerprint: 'fp-family-123456',
+    challenges: [],
+    endorsements: [
+      { role: 'primary', model: 'claude-3-7-sonnet', sessionId: 'sess-family-01', conclusion: 'approved' },
+      { role: 'second', model: 'claude-3-5-sonnet', sessionId: 'sess-family-02', conclusion: 'approved', family: 'gemini' },
+    ],
+  });
+  const val = validateEndorsementToken(token);
+  assert.equal(val.ok, false);
+  assert.match(val.problems.join('；'), /模型族/);
+});
+
 test('CLI sign 非法入参逐条报错、exit 2 且不写台账', () => {
   const root = makeTmp('endorsement-cli-bad-');
   const base = ['--doc', 'workflow/tasks/t/code-review.md', '--commitment', 'a1b2c3d4e5', '--session', 'sess-cli-bad01', '--model', 'gpt-4o', '--conclusion', 'approved', '--root', root];

@@ -11,10 +11,10 @@ import { EXIT } from '../src/cli/exit.mjs';
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const BIN = path.join(HERE, '..', 'bin', 'flow-kit.mjs');
 
-function cli(cwd, args, input) {
+function cli(cwd, args, input, env = {}) {
   return spawnSync(process.execPath, [BIN, ...args], {
     cwd, encoding: 'utf8', input,
-    env: { ...process.env, FLOW_KIT_TEST: '1' },
+    env: { ...process.env, FLOW_KIT_TEST: '1', ...env },
   });
 }
 
@@ -286,4 +286,126 @@ test('fresh install lock blocks remove-skill and leaves the manifest untouched',
   assert.equal(r.status, EXIT.LOCK, `lock conflict must exit ${EXIT.LOCK}: ${r.stdout} ${r.stderr}`);
   assert.deepEqual(JSON.parse(fs.readFileSync(path.join(t5, '.agents', 'install-manifest.json'), 'utf8')), before);
   assert.equal(fs.existsSync(path.join(t5, '.agents', 'skills', 'locked-remove-skill', 'SKILL.md')), true, 'blocked run must not delete skill files');
+});
+
+// ---- 供应链：来源字符白名单 / 损坏 lockfile / --update 回滚 ----
+
+function envWithPath(dir) {
+  const env = { ...process.env };
+  const key = Object.keys(env).find((k) => /^path$/i.test(k)) || 'PATH';
+  env[key] = `${dir}${path.delimiter}${env[key] || ''}`;
+  return env;
+}
+
+function fakeNpmInstaller() {
+  const dir = makeTmp('flow-kit-fake-npm-');
+  const script = path.join(dir, 'fake-npm.mjs');
+  fs.writeFileSync(script, [
+    "import fs from 'node:fs';",
+    "import path from 'node:path';",
+    'const args = process.argv.slice(2);',
+    'const spec = args[args.length - 1];',
+    "const at = spec.lastIndexOf('@');",
+    "const pkg = at > 0 ? spec.slice(0, at) : spec;",
+    "const skill = pkg.split('/').pop();",
+    "const prefix = args[args.indexOf('--prefix') + 1];",
+    "const pkgDir = path.join(prefix, 'node_modules', ...pkg.split('/'));",
+    'fs.mkdirSync(pkgDir, { recursive: true });',
+    'fs.writeFileSync(path.join(pkgDir, \'package.json\'), \'{"version":"9.9.9"}\');',
+    "fs.writeFileSync(path.join(pkgDir, 'SKILL.md'), '---\\nname: ' + skill + '\\ndescription: 假 npm 包\\n---\\n\\n# ' + skill + '\\n\\n正文。\\n');",
+    "fs.writeFileSync(new URL('./received.json', import.meta.url), JSON.stringify(args));",
+  ].join('\n'));
+  if (process.platform === 'win32') {
+    fs.writeFileSync(path.join(dir, 'npm.cmd'), `@echo off\r\n"${process.execPath}" "${script}" %*\r\n`);
+  } else {
+    fs.writeFileSync(path.join(dir, 'npm'), `#!/bin/sh\nexec "${process.execPath}" "${script}" "$@"\n`, { mode: 0o755 });
+  }
+  return dir;
+}
+
+test('add-skill rejects shell metacharacters in git and npm specs before spawning', () => {
+  const marker = path.join(work, 'injected.txt');
+  const payload = `& echo pwn > "${marker}"`;
+  const cases = [
+    [`https://127.0.0.1:9/x.git ${payload}`, []],
+    ['https://127.0.0.1:9/x.git', ['--ref', `main ${payload}`]],
+    [`pwn-pkg ${payload}`, []],
+  ];
+  const offlineEnv = { GIT_TERMINAL_PROMPT: '0', npm_config_offline: 'true' };
+  for (const [spec, extra] of cases) {
+    const r = cli(target, ['add-skill', spec, ...extra, '--target', target, '--allow-network'], null, offlineEnv);
+    assert.equal(r.status, EXIT.USAGE, `${spec}: ${r.stderr || r.stdout}`);
+    assert.equal(fs.existsSync(marker), false, `注入载荷被执行：${spec}`);
+    assert.match(r.stderr, /不安全字符|格式不受支持/, spec);
+  }
+
+  const ok = cli(target, ['add-skill', 'https://127.0.0.1:9/x.git', '--target', target, '--allow-network'], null, offlineEnv);
+  assert.match(ok.stderr, /git clone 失败/, '合法 git URL 仍须通过字符校验并进入 clone');
+});
+
+test('npm ranges keep their literal ^ and ~ through the Windows shell', () => {
+  const bin = fakeNpmInstaller();
+  const t6 = installedTarget();
+  for (const spec of ['caret-skill@^1.2.3', 'tilde-skill@~9.9.9']) {
+    const r = cli(t6, ['add-skill', spec, '--target', t6, '--allow-network', '--json'], null, envWithPath(bin));
+    assert.equal(r.status, 0, `${spec}: ${r.stderr || r.stdout}`);
+    const received = JSON.parse(fs.readFileSync(path.join(bin, 'received.json'), 'utf8'));
+    assert.equal(received[received.length - 1], spec, `npm 收到的参数须原样保留：${spec}`);
+    assert.equal(fs.existsSync(path.join(t6, '.agents', 'skills', spec.split('@')[0], 'SKILL.md')), true);
+  }
+
+  const rejected = cli(t6, ['add-skill', 'range-skill@>=1.2.3', '--target', t6, '--allow-network'], null, envWithPath(bin));
+  assert.equal(rejected.status, EXIT.USAGE, rejected.stderr || rejected.stdout);
+  assert.match(rejected.stderr, />= 版本范围.*\^ 或 ~/);
+});
+
+test('an existing Windows path ending in .git is copied, a missing one fails clearly', () => {
+  const localDir = path.join(work, 'win-local.git');
+  fs.mkdirSync(localDir, { recursive: true });
+  fs.writeFileSync(path.join(localDir, 'SKILL.md'), '---\nname: win-local\ndescription: 本地 .git 目录\n---\n\n# win-local\n\n正文。\n');
+  const ok = cli(target, ['add-skill', localDir, '--target', target, '--json']);
+  assert.equal(ok.status, 0, ok.stderr || ok.stdout);
+  assert.equal(JSON.parse(ok.stdout).source.type, 'local');
+
+  const missing = path.join(work, 'missing-skill.git');
+  const bad = cli(target, ['add-skill', missing, '--target', target]);
+  assert.equal(bad.status, EXIT.USAGE, bad.stderr || bad.stdout);
+  assert.match(bad.stderr, /本地技能目录不存在/);
+});
+
+test('--update and --force keep the installed skill when the replacement fails lint', () => {
+  const src = makeSkill(work, 'keep-skill', { description: '第一版' });
+  assert.equal(cli(target, ['add-skill', src, '--target', target]).status, 0);
+  const dest = path.join(target, '.agents', 'skills', 'keep-skill');
+  const before = hashSkillDir(dest);
+  const lockBefore = readLock(target).skills['keep-skill'];
+
+  fs.writeFileSync(path.join(src, 'SKILL.md'), '---\nname: keep-skill\n---\n\n# keep-skill\n\n第二版缺 description。\n');
+  for (const action of ['--update', '--force']) {
+    const r = cli(target, ['add-skill', src, '--target', target, action]);
+    assert.equal(r.status, EXIT.CONFLICT, `${action}: ${r.stderr || r.stdout}`);
+    assert.match(r.stderr, /description/, action);
+    assert.deepEqual(hashSkillDir(dest), before, `${action} 失败后旧版本须保持字节一致`);
+    assert.deepEqual(readLock(target).skills['keep-skill'], lockBefore, `${action} 失败后 lockfile 不得记录未准入版本`);
+  }
+  const stray = fs.readdirSync(path.join(target, '.agents', 'skills')).filter((n) => n.includes('.incoming-'));
+  assert.deepEqual(stray, [], '暂存目录须清理');
+});
+
+test('a corrupt skills.lock.json fails loudly and is left untouched', () => {
+  const t7 = installedTarget();
+  const lockFile = path.join(t7, '.agents', 'skills.lock.json');
+  const src = makeSkill(work, 'lock-skill', { description: '锁损坏夹具' });
+
+  fs.writeFileSync(lockFile, '{ corrupt', 'utf8');
+  const broken = cli(t7, ['add-skill', src, '--target', t7]);
+  assert.equal(broken.status, EXIT.TARGET, broken.stderr || broken.stdout);
+  assert.match(broken.stderr, /skills\.lock\.json/);
+  assert.equal(fs.readFileSync(lockFile, 'utf8'), '{ corrupt', '损坏的 lockfile 不得被改写');
+  assert.equal(fs.existsSync(path.join(t7, '.agents', 'skills', 'lock-skill')), false, '不得安装');
+
+  fs.writeFileSync(lockFile, '{"version":1}', 'utf8');
+  const lint = cli(t7, ['skills', 'lint', '--target', t7]);
+  assert.equal(lint.status, EXIT.TARGET, lint.stderr || lint.stdout);
+  assert.equal(fs.readFileSync(lockFile, 'utf8'), '{"version":1}', '结构不合法的 lockfile 不得被改写');
 });

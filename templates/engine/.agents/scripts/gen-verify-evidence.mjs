@@ -21,6 +21,9 @@
 // 用法：flow-kit run gen-verify-evidence.mjs [--root <dir>] [--check]
 // 测试面已随引擎减重退役（2026-10-28，owner 决策）；2026-11-18 BACKLOG 34 补 spawn 级渲染测试
 //   （tests/verify-dirty-tree.test.mjs，含存量无字段行向前兼容）
+// 夹具行剔除（2026-11-27 审计 D39）：testCmd / engineOnly / stub 标记行不收录——三者 exitCode 0 都不是
+//   真门全绿，渲染成无标记行会经 verify-scope.parseEvidenceGreens 变成跨机全量锚（与 verify.mjs 锚点
+//   过滤、policy.latestFreshVerifyLine 同口径）。fastTests 行收录但带 `fast=` 标记，同样不被当全量锚。
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -82,7 +85,11 @@ function render() {
       if (!line.trim()) continue;
       try {
         const e = JSON.parse(line);
-        if (e.exitCode === 0 && e.suite === 'all-gates' && e.headShort) rows.push(e);
+        // 夹具/桩门行不收录（2026-11-27 审计 D39，与 verify.mjs 锚点过滤、policy.latestFreshVerifyLine 同口径）：
+        // testCmd（注入假命令）/ engineOnly（引擎段增量门）/ stub（--stub-gate 整表替换）的 exitCode 0
+        // 都不代表门表全绿——渲染进入库摘要就成了无标记全绿行，verify-scope.parseEvidenceGreens 会当
+        // 跨机基线。fastTests 行仍收录，但 renderRow 标 `fast=engine-tests`（parseEvidenceGreens 拒作全量锚）。
+        if (e.exitCode === 0 && e.suite === 'all-gates' && e.headShort && !e.testCmd && !e.engineOnly && !e.stub) rows.push(e);
       } catch { /* 坏行跳过——台账是 append-only 事实流，不因单行格式失败中断 */ }
     }
   } catch { /* 无台账 = 空表（新装户/新 clone 首跑前） */ }
@@ -100,7 +107,7 @@ function render() {
   lines.push('');
   lines.push('> 生成器 `flow-kit run gen-verify-evidence.mjs`（verify.mjs 全绿尾部自动重生成，2026-10-11 C4 起；源 .agents/verifications.jsonl 为本地台账）。');
   lines.push('> 一行 = 验证时刻**工作树**过全量门禁全绿（短 SHA 为该时刻的**基线提交**，工作树可能含未提交改动——关单宜「先提交、后跑门」）；`计数` 为断言 PASS/FAIL（无汇总行时缺省）。末列 `scope=diff(base=…,skip=N)` 行为增量关单凭证（verify --scope：未触产品重门，实跑门数见门数列，口径见 verify-scope.mjs）；`src=evidence` 表示基线取自本文件（仓库凭证）而非本地台账；`flaky=<门>` 表示该门首跑红、隔离重跑绿（gate-health 2026-10-22）；`fast=engine-tests` 表示 diff 档 engine-tests 用了 --fast（2026-10-23 分层跑）；`skip-env=<门>` 表示本地 loud-skip 了 CI-only 门（2026-10-27 anchor-envskip）——带此前缀的行**不作全量锚**，与 scope/fast 同属裁剪凭证；`非干净树` 表示落账时工作树有未提交改动（dirtyTree 脏树摘要随绿行入本地台账，短 SHA 不覆盖这些改动——关单宜「先提交、后跑门」，2026-11-18 BACKLOG 34）。非签名链——诚实边界同 check-loop 检查 15。');
-  lines.push('> 行来源 = 本地台账绿行 ∪ 本文件既有行（**追加保全**：跨机 / 换 worktree 不失历史；代价：错行不会被重生成自动纠正，须人工改正后重跑）。');
+  lines.push('> 行来源 = 本地台账真门全绿行（testCmd / engineOnly / stub 夹具行不收录，2026-11-27 审计 D39）∪ 本文件既有行（**追加保全**：跨机 / 换 worktree 不失历史；代价：错行不会被重生成自动纠正，须人工改正后重跑）。');
   lines.push('');
   lines.push('| 提交(短SHA) | 时间(UTC) | 门数 | 断言计数 | runId |');
   lines.push('|---|---|---|---|---|');

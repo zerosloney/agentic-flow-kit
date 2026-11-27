@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { planCompaction } from '../templates/engine/.agents/scripts/compact-ledgers.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -226,3 +226,71 @@ test('集成：reviews.d 含 review-fix: 申报 → 全扫与 --staged 判红；
   assert.match(r4.stderr, /\[复核红线申报\]/);
   assert.match(r4.stderr, /review-fix/);
 });
+
+// ---- 快照后并发追加 / 删除失败（2026-11 审计 D44）：分片不能静默丢失或静默留存 ----
+
+const HOOK = `
+import fs from 'node:fs';
+const mode = process.env.COMPACT_TEST_MODE;
+if (mode === 'append') {
+  const realRename = fs.renameSync.bind(fs);
+  let injected = false;
+  fs.renameSync = (from, to) => {
+    const r = realRename(from, to);
+    if (!injected && String(to).endsWith('confirmations.jsonl')) {
+      injected = true;
+      fs.appendFileSync(process.env.COMPACT_TEST_SHARD, process.env.COMPACT_TEST_ROW + '\\n');
+    }
+    return r;
+  };
+} else if (mode === 'unlink-fail') {
+  const realUnlink = fs.unlinkSync.bind(fs);
+  fs.unlinkSync = (p) => {
+    if (String(p).endsWith('.jsonl')) throw Object.assign(new Error('EACCES: simulated unlink failure'), { code: 'EACCES' });
+    return realUnlink(p);
+  };
+}
+`;
+
+function shardFixture() {
+  const dir = makeTmp('flow-kit-compact-race-');
+  const shardDir = path.join(dir, '.agents', 'confirmations.d');
+  fs.mkdirSync(shardDir, { recursive: true });
+  const mainRow = mkRow(T(1), 'm1');
+  const shardRow = mkRow(T(2), 's1');
+  fs.writeFileSync(path.join(dir, '.agents', 'confirmations.jsonl'), mainRow + '\n');
+  const shard = path.join(shardDir, 'x.jsonl');
+  fs.writeFileSync(shard, shardRow + '\n');
+  return { dir, shard, mainPath: path.join(dir, '.agents', 'confirmations.jsonl'), mainRow, shardRow };
+}
+
+function runWithHook(dir, mode, extraEnv = {}) {
+  const hook = path.join(dir, 'hook.mjs');
+  fs.writeFileSync(hook, HOOK);
+  return spawnSync(process.execPath, ['--import', pathToFileURL(hook).href, COMPACT], {
+    cwd: dir, encoding: 'utf8', env: { ...process.env, FLOW_KIT_TEST: '1', COMPACT_TEST_MODE: mode, ...extraEnv },
+  });
+}
+
+test('集成：快照后被并发追加的分片保留（新行不随片销毁），compaction 出账并非零退出', () => {
+  const { dir, shard, mainPath, shardRow } = shardFixture();
+  const appended = mkRow(T(3), 's2');
+  const r = runWithHook(dir, 'append', { COMPACT_TEST_SHARD: shard, COMPACT_TEST_ROW: appended });
+  assert.notEqual(r.status, 0, `未清理分片应非零退出: ${r.stdout}\n${r.stderr}`);
+  assert.ok(fs.existsSync(shard), '并发追加的分片必须保留，不能被删除');
+  assert.ok(fs.readFileSync(shard, 'utf8').includes(appended), '追加行必须仍在分片中');
+  assert.ok(fs.readFileSync(mainPath, 'utf8').includes(shardRow), '快照内的分片行仍应已归并进主台账');
+  assert.match(r.stderr, /未清理/);
+  assert.match(r.stderr, /x\.jsonl/);
+});
+
+test('集成：分片删除失败时出账并非零退出，分片与已归并行均保留', () => {
+  const { dir, shard, mainPath, shardRow } = shardFixture();
+  const r = runWithHook(dir, 'unlink-fail');
+  assert.notEqual(r.status, 0, `删除失败应非零退出: ${r.stdout}\n${r.stderr}`);
+  assert.match(r.stderr, /删除失败/);
+  assert.match(r.stderr, /x\.jsonl/);
+  assert.ok(fs.existsSync(shard), '删除失败时分片保持原样');
+  assert.ok(fs.existsSync(mainPath) && fs.readFileSync(mainPath, 'utf8').includes(shardRow), '主台账已归并行不受影响');
+});
+

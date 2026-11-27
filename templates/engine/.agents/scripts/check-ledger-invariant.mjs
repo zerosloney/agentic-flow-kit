@@ -150,11 +150,25 @@ const BUILTIN_BASELINE = (() => {
 // LEDGER_HISTORY_BASELINE=<sha> 自行声明历史基线——内置基线只对 kit 本仓有效，env 是测试覆盖口，
 // 仓内声明是装户仓的常规来源。文件缺失/读失败/无匹配即视为未声明（''）。
 const REPO_BASELINE = (() => {
+  let sha;
   try {
     const m = fs.readFileSync(path.join(ROOT, '.agents', 'notes', 'ledger-history-baseline.md'), 'utf8')
       .match(/LEDGER_HISTORY_BASELINE=([0-9a-f]{7,40})/);
-    return m ? m[1] : '';
+    sha = m ? m[1] : '';
   } catch { return ''; }
+  if (!sha) return '';
+  // 声明可信性（2026-11 审计 D45）：声明文件本身在版本库内、PR 可写。若它在声明区间（<sha>..HEAD）
+  // 内仍被提交改动，声明即可自我豁免本次 PR 的篡改提交（两提交 PR：先改台账，再把篡改提交声明为
+  // 基线）——不采用并 loud 回落内置基线。未提交的本地声明、与基线同提交或声明后未再改动的声明不受影响。
+  try {
+    const touched = execFileSync('git', ['rev-list', `${sha}..HEAD`, '--', '.agents/notes/ledger-history-baseline.md'],
+      { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
+    if (touched) {
+      console.error(`[warn] 仓库声明基线 ${sha.slice(0, 10)} 在声明区间内仍被提交改动（${touched.split(/\s+/).length} 个提交）——声明可自我豁免本 PR 的篡改，不采用；回落内置基线/全史扫描。owner 声明请把含声明的提交本身作为基线，或走 env 覆盖口`);
+      return '';
+    }
+  } catch { /* 非 git / 无 HEAD / 声明不可达：交给下方 HISTORY_BASELINE 的 cat-file 校验 */ }
+  return sha;
 })();
 // 2026-11-05 定点豁免（owner 声明，缘由见头注「2026-11-05 定点豁免」）：main 线两次回滚提交。
 // 只跳过这两笔自身的前缀/并集比对，其后提交仍以其 blob 为基线续扫——不缩小 develop 侧扫描面。
@@ -178,10 +192,27 @@ const HISTORY_BASELINE = (() => {
 //   ③ 缓存缺失/损坏、HEAD 回退或无关、基线或脚本变更 → 全量（基线后）扫描。
 // 红跑不写缓存（下轮重扫）；写用 tmp+rename 原子替换，并发跑不产半份。
 const LI_CACHE = path.join(ROOT, '.agents', 'cache', 'ledger-invariant.json');
+// 缓存目录本应在 .gitignore 内；缓存文件一旦被 git 跟踪（PR 里 force-add 进来），其内容即随 PR
+// 可伪造的输入，不能当作「本机加速事实」。读取前用 git ls-files 判定：跟踪即忽略（按 git 事实重建），
+// 也不回写（不改动受控文件）。
+const cacheTracked = (rel) => {
+  try {
+    return execFileSync('git', ['ls-files', '--', rel], { cwd: ROOT, encoding: 'utf8' }).trim() !== '';
+  } catch { return false; }
+};
 const _liScriptHash = (() => {
   try { return createHash('sha256').update(fs.readFileSync(process.argv[1] || '', 'utf8')).digest('hex').slice(0, 16); } catch { return ''; }
 })();
+let _liCacheTrusted;
+const liCacheTrusted = () => {
+  if (_liCacheTrusted === undefined) {
+    _liCacheTrusted = !cacheTracked('.agents/cache/ledger-invariant.json');
+    if (!_liCacheTrusted) console.error('[warn] .agents/cache/ledger-invariant.json 已被 git 跟踪（内容随 PR 可伪造）——忽略增量验证缓存，按全史复核');
+  }
+  return _liCacheTrusted;
+};
 const liCacheHead = () => {
+  if (!liCacheTrusted()) return null;
   try {
     const c = JSON.parse(fs.readFileSync(LI_CACHE, 'utf8'));
     if (c && c.v === 1 && c.root === ROOT && c.baseline === HISTORY_BASELINE && c.scriptHash === _liScriptHash && typeof c.head === 'string' && c.head) return c.head;
@@ -189,6 +220,7 @@ const liCacheHead = () => {
   return null;
 };
 const liCacheWrite = (head) => {
+  if (!liCacheTrusted()) return;
   try {
     fs.mkdirSync(path.dirname(LI_CACHE), { recursive: true });
     const tmp = `${LI_CACHE}.tmp`;
@@ -427,10 +459,12 @@ const LI_IDX_CACHE = path.join(ROOT, '.agents', 'cache', 'ledger-history-index.j
 const historyIndex = () => {
   if (_historyIndex !== undefined) return _historyIndex;
   _historyIndex = new Map();
+  const idxTrusted = !cacheTracked('.agents/cache/ledger-history-index.json');
+  if (!idxTrusted) console.error('[warn] .agents/cache/ledger-history-index.json 已被 git 跟踪（内容随 PR 可伪造）——忽略该历史索引缓存，按 git 事实重建');
   try {
     const head = (gitText(['rev-parse', '--short', 'HEAD']) || '').trim();
     let cached = null;
-    if (head) {
+    if (idxTrusted && head) {
       try {
         const c = JSON.parse(fs.readFileSync(LI_IDX_CACHE, 'utf8'));
         if (c && c.v === 1 && c.root === ROOT && c.scriptHash === _liScriptHash && typeof c.head === 'string' && c.head && c.index && typeof c.index === 'object') cached = c;
@@ -463,12 +497,14 @@ const historyIndex = () => {
       }
       _historyIndex = new Map(Object.entries(cached.index));
     }
-    try {
-      fs.mkdirSync(path.dirname(LI_IDX_CACHE), { recursive: true });
-      const tmp = `${LI_IDX_CACHE}.tmp`;
-      fs.writeFileSync(tmp, JSON.stringify({ v: 1, root: ROOT, scriptHash: _liScriptHash, head, index: Object.fromEntries(_historyIndex) }));
-      fs.renameSync(tmp, LI_IDX_CACHE);
-    } catch { /* 写失败不影响裁决 */ }
+    if (idxTrusted) {
+      try {
+        fs.mkdirSync(path.dirname(LI_IDX_CACHE), { recursive: true });
+        const tmp = `${LI_IDX_CACHE}.tmp`;
+        fs.writeFileSync(tmp, JSON.stringify({ v: 1, root: ROOT, scriptHash: _liScriptHash, head, index: Object.fromEntries(_historyIndex) }));
+        fs.renameSync(tmp, LI_IDX_CACHE);
+      } catch { /* 写失败不影响裁决 */ }
+    }
   } catch { /* 非 git / 无历史：空索引 → 各路径零史即静默（与原契约一致） */ }
   return _historyIndex;
 };

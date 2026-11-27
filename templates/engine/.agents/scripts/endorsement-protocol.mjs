@@ -2,9 +2,11 @@
 // endorsement-protocol.mjs — 异构对抗审计与去中心化背书协议核心（2026-11-25）
 // 核心目标：
 //   1. 结构化对抗挑战向量（ChallengeVector）：记录红方构造的对抗攻击、证伪断言与防御结果；
-//   2. 去中心化背书凭证（EndorsementToken）：将承诺面指纹、跨模型独立背书人与对抗挑战通过规范化哈希（digest）强绑定；
+//   2. 去中心化背书凭证（EndorsementToken）：将承诺面指纹、跨模型独立背书人与对抗挑战通过规范化哈希（digest）绑定；
+//      摘要无密钥且算法公开，只能做到「手改可检测」，做不到抗伪造——有写盘权限者可重算摘要。校验端只拒绝它能核实的内容
+//      （摘要失配、同一会话重复背书、模型族与模型不符）；不可抵赖性需要外部锚点，本模块不声称具备。
 //   3. 分片台账存储（.agents/endorsements.d/<doc-base>.<doc-路径哈希>.jsonl）：单文档独占写，彻底消除多智能体并发审查冲突；
-//   4. 透明平滑适配（resolveReviewEndorsement）：优先加载分片凭证，无凭证时平滑回落至存量正则提取。
+//   4. 透明平滑适配（resolveReviewEndorsement）：优先加载分片凭证，跨凭证按会话汇总多位背书人，无凭证时平滑回落至存量正则提取。
 //   契约：代码复核凭证的 commitmentFingerprint 取值为复核范围 <base>..<head>，与代码复核产物里机器写入的「复核范围」一行一致。
 //   用法（CLI 签署入口）：
 //     flow-kit run endorsement-protocol.mjs sign --doc <相对路径> --commitment <承诺指纹> --session <会话或子代理 id>
@@ -32,6 +34,10 @@ export const CHALLENGE_DIMENSIONS = [
 
 export const CHALLENGE_STATUSES = ['survived', 'breached'];
 export const VERDICT_STATUSES = ['approved', 'rejected', 'downgraded'];
+
+const SESSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{5,}$/;
+// 与 touch-set.mjs 的 externalReviewId 同口径：占位符不算有效会话。
+const SESSION_PLACEHOLDERS = /^(todo|xxx|tbd|placeholder|session|subagent|id)$/i;
 
 export function validateChallengeVector(vector) {
   const problems = [];
@@ -117,12 +123,24 @@ export function validateEndorsementToken(token) {
   if (!Array.isArray(token.endorsements) || token.endorsements.length === 0) {
     problems.push('背书凭证必须包含至少一位独立背书人记录 (endorsements)');
   } else {
+    const seenSessions = new Set();
     for (const [idx, end] of token.endorsements.entries()) {
       if (!end.sessionId || typeof end.sessionId !== 'string') {
         problems.push(`背书人 [${idx}] 缺少外部会话或子代理会话 ID (sessionId)`);
+      } else {
+        const sid = end.sessionId.trim();
+        if (SESSION_PLACEHOLDERS.test(sid)) {
+          problems.push(`背书人 [${idx}] 的会话 ID 为占位符「${sid}」，不足以证明一次独立复核`);
+        }
+        if (seenSessions.has(sid)) {
+          problems.push(`背书人 [${idx}] 与前面的背书人共用会话 ID「${sid}」，同一会话不得冒充多位独立背书人`);
+        }
+        seenSessions.add(sid);
       }
       if (!end.model || typeof end.model !== 'string') {
         problems.push(`背书人 [${idx}] 缺少背书模型标识 (model)`);
+      } else if (end.family && end.family !== normalizeModelFamily(end.model)) {
+        problems.push(`背书人 [${idx}] 的模型族 (${end.family}) 与模型 (${end.model}) 不符，疑似伪造异构背书`);
       }
       if (!end.conclusion || typeof end.conclusion !== 'string') {
         problems.push(`背书人 [${idx}] 缺少背书结论 (conclusion)`);
@@ -230,8 +248,17 @@ export function resolveReviewEndorsement({ text, docRel, root = process.cwd(), c
     // 复核范围绑定：传 commitment 时只采纳指纹相等的凭证，避免旧范围的凭证为新范围放行
     if (commitment) tokens = tokens.filter((t) => t.commitmentFingerprint === commitment);
     if (tokens.length > 0) {
-      const token = tokens[tokens.length - 1];
-      const reviewers = (token.endorsements || []).map((e) => ({
+      // 每次 sign 只写一位背书人，双人背书必须跨分片凭证汇总；同一会话的重复签署只取最后一次，不能凑数
+      const bySession = new Map();
+      for (const t of tokens) {
+        for (const e of t.endorsements || []) {
+          const sid = String(e.sessionId || '');
+          if (!sid) continue;
+          bySession.delete(sid);
+          bySession.set(sid, e);
+        }
+      }
+      const reviewers = [...bySession.values()].map((e) => ({
         id: e.sessionId,
         reviewerModel: e.model,
         family: e.family || normalizeModelFamily(e.model),
@@ -241,6 +268,13 @@ export function resolveReviewEndorsement({ text, docRel, root = process.cwd(), c
       const dualEndorsed =
         reviewers.length >= 2 &&
         reviewers.every((r) => isApprovedConclusion(r.conclusion));
+      const challengesById = new Map();
+      for (const t of tokens) {
+        for (const c of t.challenges || []) {
+          challengesById.set(String(c.id || ''), c);
+        }
+      }
+      const lastToken = tokens[tokens.length - 1];
 
       return {
         id: reviewers[0]?.id || '',
@@ -249,9 +283,9 @@ export function resolveReviewEndorsement({ text, docRel, root = process.cwd(), c
         downgradeReason: '',
         reviewers,
         dualEndorsed,
-        challenges: token.challenges || [],
-        tokenDigest: token.digest || '',
-        commitmentFingerprint: token.commitmentFingerprint || '',
+        challenges: [...challengesById.values()],
+        tokenDigest: lastToken.digest || '',
+        commitmentFingerprint: lastToken.commitmentFingerprint || '',
         fromToken: true,
       };
     }
@@ -261,10 +295,6 @@ export function resolveReviewEndorsement({ text, docRel, root = process.cwd(), c
 }
 
 // ── CLI：签署背书凭证（台账的唯一写入入口） ─────────────────────────────
-const SESSION_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._:-]{5,}$/;
-// 与 touch-set.mjs 的 externalReviewId 同口径：占位符不算有效会话。
-const SESSION_PLACEHOLDERS = /^(todo|xxx|tbd|placeholder|session|subagent|id)$/i;
-
 function parseSignArgs(argv) {
   const opts = { challenges: [], unknown: [] };
   for (let i = 0; i < argv.length; i += 1) {

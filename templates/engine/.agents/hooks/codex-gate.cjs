@@ -10,8 +10,9 @@
 //     hooks.state.trusted_hash 信任，编辑即失效——接线变更后须在交互式 Codex 会话重新信任一次，
 //     非交互模式会静默跳过未信任条目
 // 契约：
-//   1) root 解析优先 payload.cwd / tool_input.workdir（hook 进程 cwd 不可依赖），向上找
-//      .agents/install-manifest.json；找不到 = 非 flow-kit 仓 → exit 0 no-op
+//   1) root 解析只用宿主 payload.cwd / hook 进程 cwd（hook 进程 cwd 不可依赖），向上找
+//      .agents/install-manifest.json；tool_input.workdir 由模型逐次指定，不得作为门禁锚点；
+//      找不到 = 非 flow-kit 仓 → exit 0 no-op
 //   2) exec_command → 归一 {tool_name:'Bash', tool_input:{command: cmd}} 后转 pre-shell-check
 //      apply_patch → 转 pre-write-check；已知边界：补丁形态无法合成提议内容（内容判据 fail-open），
 //      tool_input 无可识别路径字段时整体放行，git 钩子兜底
@@ -39,7 +40,7 @@ function gate() {
   let data;
   try { data = JSON.parse(input.toString('utf8')); } catch { process.exit(0); }
   const tool = String(data.tool_name || '');
-  const startDir = data.tool_input?.workdir || data.cwd || process.cwd();
+  const startDir = data.cwd || process.cwd();
   const root = findRoot(startDir);
   if (!root) process.exit(0);
   let hook = null;

@@ -11,7 +11,8 @@
 // 存储：.agents/cache/pipeline-runs/<runId>.json（gitignored 缓存态，非权威——workflow/ 文档 + confirmations.jsonl 是唯一真相源）。
 // 注入（测试钩子）：PIPELINE_RUN_ROOT（仓库根，默认 cwd）/
 //       PIPELINE_RUN_BIN（门脚本目录，默认 <root>/.agents/scripts）/ PIPELINE_RUN_GIT_BIN（git 命令前缀，空格分隔，默认 "git"）/
-//       PIPELINE_RUN_TODAY（文档日期锚定，默认当天——测试固定日期消除时钟依赖，2026-10-03 实证：测试硬编码日期跨日即红）。
+//       PIPELINE_RUN_TODAY（文档日期锚定，默认当天——测试固定日期消除时钟依赖，2026-10-03 实证：测试硬编码日期跨日即红）/
+//       PIPELINE_RUN_TIMEOUT_MS（门子进程超时毫秒，默认 600000 = 10 分钟；超时即杀并以失败记 gate 事件）。
 //       npm 不直接调用——测试门统一走 verify.mjs。
 // 用法：
 //   flow-kit run pipeline-run.mjs start "<需求原文>" [--hint "kind=require level=L1 module=wiki"] [--step]
@@ -97,6 +98,8 @@ const GIT_NEVER_FLAGS = ['--no-verify', '-n']; // 不变量：任何 git 调用�
 
 function fail(msg, code = 1) { console.error('❌ ' + msg); process.exit(code); }
 const nowIso = () => new Date().toISOString();
+const GATE_TIMEOUT_MS = 10 * 60 * 1000; // 门子进程默认超时：挂死门不得永久阻塞 next
+const gateTimeout = (ctx) => (Number(ctx?.timeoutMs) > 0 ? Number(ctx.timeoutMs) : GATE_TIMEOUT_MS);
 const today = () => process.env.PIPELINE_RUN_TODAY || nowIso().slice(0, 10);
 // pipeline 任务目录（2026-11-16，仅自动化路径）：产物收进 workflow/tasks/<date>-<topic>/，
 // 与手动路径（intents/plans/specs）隔离——手动扫描器不扫 tasks/，两类文档互不干扰。
@@ -115,6 +118,7 @@ function ctxEnv(overrideRoot) {
     bin,
     gitPrefix,
     runsDir: path.join(root, '.agents', 'cache', 'pipeline-runs'),
+    timeoutMs: gateTimeout({ timeoutMs: Number(process.env.PIPELINE_RUN_TIMEOUT_MS) }),
     prescriptionsFile: path.join(root, '.agents', 'notes', 'prescriptions.json'),
     pipeline: loadPipelineConfig(root),
     dispatch: loadDispatchConfig(root),
@@ -262,7 +266,7 @@ function saveRun(ctx, run) {
   fs.mkdirSync(ctx.runsDir, { recursive: true });
   run.updatedAt = nowIso();
   const f = runFileOf(ctx, run.runId);
-  const tmp = f + '.tmp';
+  const tmp = `${f}.${process.pid}.tmp`; // 进程唯一：并发写同一 run 文件时不得共用临时名
   fs.writeFileSync(tmp, JSON.stringify(run, null, 2) + '\n');
   fs.renameSync(tmp, f);
 }
@@ -345,11 +349,23 @@ function runNode(ctx, run, script, args) {
   beginGate(ctx, run);
   // PIPELINE_RUN_ID 注入（verify-evidence 复核 P2-1）：verify.mjs 绿行据此绑定 runId
   //（对质链与 run 事件流同源，docsCommit 格式已含同一 runId）
-  const p = spawnSync(process.execPath, [scriptPath, ...args], { cwd: ctx.root, encoding: 'utf8', windowsHide: true, env: { ...process.env, PIPELINE_RUN_ID: run.runId } });
+  const p = spawnSync(process.execPath, [scriptPath, ...args], { cwd: ctx.root, encoding: 'utf8', windowsHide: true, timeout: gateTimeout(ctx), env: { ...process.env, PIPELINE_RUN_ID: run.runId } });
   const ms = Date.now() - t0;
-  const exit = p.status ?? 1;
-  endGate(ctx, run, { type: 'gate', cmd, exit, ms });
-  return { exit, stdout: p.stdout || '', stderr: p.stderr || '' };
+  const timedOut = p.error?.code === 'ETIMEDOUT';
+  const exit = timedOut ? 1 : (p.status ?? 1);
+  endGate(ctx, run, { type: 'gate', cmd, exit, ms, ...(timedOut ? { timeout: true } : {}) });
+  const note = timedOut ? `⏱ 子进程超时（>${gateTimeout(ctx)}ms），已终止：${cmd}\n` : '';
+  return { exit, stdout: p.stdout || '', stderr: `${note}${p.stderr || ''}` };
+}
+
+// 超时杀进程树：Windows 下 child.kill 只终止直接子进程，门脚本再派生的孙进程会成孤儿。
+function killChildTree(child) {
+  if (!child || child.exitCode !== null || child.signalCode !== null) return;
+  if (process.platform === 'win32' && child.pid) {
+    const r = spawnSync('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true });
+    if (!r.error && r.status === 0) return;
+  }
+  try { child.kill('SIGKILL'); } catch { /* 已退出 */ }
 }
 
 // 并行门分支（R3-5）：spawn 并发，全部结束后聚合；事件带 parallel 组号。
@@ -363,13 +379,21 @@ function runNodeAsync(ctx, run, script, args, group) {
     });
     let stdout = '';
     let stderr = '';
+    let timedOut = false;
+    const timeoutMs = gateTimeout(ctx);
+    const timer = setTimeout(() => {
+      timedOut = true;
+      killChildTree(child);
+    }, timeoutMs);
     child.stdout.on('data', (d) => { stdout += d; });
     child.stderr.on('data', (d) => { stderr += d; });
     child.on('close', (code) => {
-      const exit = code ?? 1;
-      emit(run, { type: 'gate', cmd, exit, ms: Date.now() - t0, ...(group ? { parallel: group } : {}) });
+      clearTimeout(timer);
+      const exit = timedOut ? 1 : (code ?? 1);
+      emit(run, { type: 'gate', cmd, exit, ms: Date.now() - t0, ...(timedOut ? { timeout: true } : {}), ...(group ? { parallel: group } : {}) });
       saveRun(ctx, run); // inFlight 由 runGateGroup 在所有分支结束后清除
-      resolve({ exit, stdout, stderr, script });
+      const note = timedOut ? `⏱ 子进程超时（>${timeoutMs}ms），已终止：${cmd}\n` : '';
+      resolve({ exit, stdout, stderr: `${note}${stderr}`, script });
     });
   });
 }
@@ -405,15 +429,17 @@ function runGit(ctx, run, args, { optional = false } = {}) {
   if (args.some((a) => GIT_NEVER_FLAGS.includes(a))) fail('不变量破坏：git 调用携带禁用旗标', 1);
   const cmd = `git ${args.join(' ')}`;
   const t0 = Date.now();
-  const p = spawnSync(ctx.gitPrefix[0], [...ctx.gitPrefix.slice(1), ...args], { cwd: ctx.root, encoding: 'utf8', windowsHide: true });
+  const p = spawnSync(ctx.gitPrefix[0], [...ctx.gitPrefix.slice(1), ...args], { cwd: ctx.root, encoding: 'utf8', windowsHide: true, timeout: gateTimeout(ctx) });
   const ms = Date.now() - t0;
-  const exit = p.status ?? 1;
+  const timedOut = p.error?.code === 'ETIMEDOUT';
+  const exit = timedOut ? 1 : (p.status ?? 1);
   // optional：探测类调用（如空仓库的 git log）失败不记 gate 事件，避免污染门失败计数。
   if (!optional || exit === 0) {
-    emit(run, { type: 'gate', cmd, exit, ms });
+    emit(run, { type: 'gate', cmd, exit, ms, ...(timedOut ? { timeout: true } : {}) });
     saveRun(ctx, run); // 事件落盘：断点续跑时 git 侧已发生的事实不丢
   }
-  return { exit, stdout: p.stdout || '', stderr: p.stderr || '' };
+  const note = timedOut ? `⏱ 子进程超时（>${gateTimeout(ctx)}ms），已终止：${cmd}\n` : '';
+  return { exit, stdout: p.stdout || '', stderr: `${note}${p.stderr || ''}` };
 }
 
 // ── 文档读取/校验 ──────────────────────────────────────────────────────
@@ -507,7 +533,7 @@ export function closeoutComplete(text) {
   const lines = body.split(/\r?\n/);
   const open = lines.filter((l) => /^\s*-\s\[\s\]\s/.test(l));
   // 复核 P2-6：证据冒号后须直接跟内容（非空白、非收括号）——「（证据：）」空值不算过
-  const checkedNoEv = lines.filter((l) => /^\s*-\s\[x\]\s/.test(l) && !/证据[:：][^）\s]/.test(l));
+  const checkedNoEv = lines.filter((l) => /^\s*-\s\[[xX]\]\s/.test(l) && !/证据[:：][^）\s]/.test(l));
   const problems = [];
   if (open.length) problems.push(`未勾验收 ${open.length} 条`);
   if (checkedNoEv.length) problems.push(`已勾缺证据 ${checkedNoEv.length} 条`);

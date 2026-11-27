@@ -4,7 +4,7 @@ import { render } from '../render/tokens.mjs';
 import { setField } from './frontmatter.mjs';
 import { sha256Text } from './manifest.mjs';
 import { isBinaryPath, mergeThreeWay, readBaseline, writeBaseline } from './baseline.mjs';
-import { writeAtomicSync } from './atomic.mjs';
+import { ensureModeSync, writeAtomicSync } from './atomic.mjs';
 import { countDiscardableLines, derivedModeOf, detectAnchorTextOverwritten, inspectWholeDerived } from './derived.mjs';
 
 export const GITATTR_BEGIN = '# >>> agentic-flow-kit gitattributes';
@@ -13,6 +13,9 @@ export const GITIGNORE_BEGIN = '# >>> agentic-flow-kit ignores';
 export const GITIGNORE_END = '# <<< agentic-flow-kit ignores';
 
 const BINARY_EXT = new Set(['.exe', '.png', '.jpg', '.jpeg', '.gif', '.ico', '.ttf', '.woff', '.woff2', '.zip', '.gz', '.pdf']);
+// git 在 POSIX 上只执行带 x 位的 hook：.githooks 下的文件落盘后统一补 0o755。
+const HOOK_REL = /^\.githooks\//;
+const HOOK_MODE = 0o755;
 
 function isBinary(file) {
   return BINARY_EXT.has(path.extname(file).toLowerCase());
@@ -293,6 +296,14 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
 
     if (managedHash && managedHash !== currentHash) {
       const rel = entry.targetRel;
+      // 崩溃续装：文件已按当前模板落盘、manifest 尚未刷新（写盘后、写 manifest 前中断）。
+      // 磁盘与本次渲染逐字节一致 → 视为最新并登记新哈希，不能报“已安装后被修改”的永久假冲突。
+      if (currentHash === sha256Text(text)) {
+        writes.push({ abs, text, targetRel: rel, kind: entry.kind });
+        stats.update += 1;
+        log('update', `${rel}（磁盘已是当前版本，刷新 manifest）`);
+        continue;
+      }
       // 三方合并：baseline 为 base、磁盘为 ours、新模板为 theirs。
       // 仅文本文件、且模板相对基线确有变化时尝试；git 不可用或二进制回退旧语义。
       if (baseline && !isBinaryPath(rel)) {
@@ -358,7 +369,10 @@ export function applyPlan({ plan, vars, manifest, dryRun, force, log, baseline =
       }
       // 内容未变不重写：避免空跑 upgrade 刷新全部托管文件的 mtime（计数与日志口径不变）。
       // 哈希登记保持原样：认领纳入跟踪等分支依赖它，即使本次未落盘。
-      if (current !== w.text) writeAtomicSync(w.abs, w.text);
+      // .githooks 的 x 位在两条路径上都要保证：重装时内容未变、writeAtomicSync 不落盘。
+      const hookMode = HOOK_REL.test(w.targetRel) ? HOOK_MODE : null;
+      if (current !== w.text) writeAtomicSync(w.abs, w.text, hookMode);
+      else if (hookMode != null) ensureModeSync(w.abs, hookMode);
       if (!w.conflict) nextFiles[w.targetRel] = sha256Text(w.templateText ?? w.text);
     }
     // 基线只保存文本直写结果：合并块 / MCP / hooks 配置有各自的合并语义，

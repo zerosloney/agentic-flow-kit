@@ -16,17 +16,17 @@ function tmpRepo() {
   return dir;
 }
 
-function run(args, cwd) {
+function run(args, cwd, env = {}) {
   return spawnSync(process.execPath, [BIN, ...args], {
     cwd,
     encoding: 'utf8',
-    env: { ...process.env, FLOW_KIT_TEST: '1' },
+    env: { ...process.env, FLOW_KIT_TEST: '1', ...env },
   });
 }
 
-function install(dir, hosts, extra = []) {
+function install(dir, hosts, extra = [], env = {}) {
   const agentArgs = hosts.flatMap((host) => ['--agent', host]);
-  const r = run(['install', ...agentArgs, '--lang', 'zh-CN', '--stack', 'node', '--target', '.', ...extra], dir);
+  const r = run(['install', ...agentArgs, '--lang', 'zh-CN', '--stack', 'node', '--target', '.', ...extra], dir, env);
   assert.equal(r.status, 0, r.stderr);
   return r;
 }
@@ -320,4 +320,114 @@ test('remove-host leaves core.hooksPath untouched', () => {
   const r = run(['remove-host', 'claude', '--target', '.', '--json'], dir);
   assert.equal(r.status, 0, r.stderr);
   assert.equal(localConfig(dir, 'core.hooksPath').value, '.githooks');
+});
+
+// 宿主配置被用户改过后 remove-host 只摘托管条目：存活下来的配置必须解除托管，
+// 否则后续 uninstall 把它当普通托管文件整文件删除（连用户内容一起）。
+test('remove-host stops tracking a host config that survives with user content', () => {
+  for (const [host, rel] of [['qwen', '.qwen/settings.json'], ['claude', '.mcp.json']]) {
+    const dir = tmpRepo();
+    install(dir, [host]);
+    const settings = JSON.parse(read(dir, rel));
+    settings.userCustom = 'MY-OWN-KEY';
+    fs.writeFileSync(path.join(dir, rel), `${JSON.stringify(settings, null, 2)}\n`, 'utf8');
+
+    const removed = run(['remove-host', host, '--target', '.', '--json'], dir);
+    assert.equal(removed.status, 0, removed.stderr);
+    assert.equal(rel in manifestOf(dir).files, false, `${rel}: surviving config must leave the managed file set`);
+    assert.equal(JSON.parse(read(dir, rel)).userCustom, 'MY-OWN-KEY', `${rel}: remove-host must keep user content`);
+
+    const uninstalled = run(['uninstall', '--target', '.', '--json'], dir);
+    assert.equal(uninstalled.status, 0, uninstalled.stderr);
+    assert.ok(exists(dir, rel), `${rel}: uninstall must not delete a config it no longer manages`);
+    assert.equal(JSON.parse(read(dir, rel)).userCustom, 'MY-OWN-KEY', `${rel}: user content must survive uninstall`);
+  }
+});
+
+// 用户级 hooks 配置损坏时须在删除任何文件之前中止；假 HOME 保证绝不碰真实家目录。
+test('remove-host aborts before any write when the user hooks config is corrupt', () => {
+  const dir = tmpRepo();
+  const home = makeTmp('flow-kit-remove-home-');
+  const env = { HOME: home, USERPROFILE: home };
+  install(dir, ['codex', 'claude'], [], env);
+  const hooksFile = path.join(home, '.codex', 'hooks.json');
+  const corrupt = '{ BROKEN JSON !!!\n';
+  fs.writeFileSync(hooksFile, corrupt, 'utf8');
+  const manifestBefore = read(dir, '.agents/install-manifest.json');
+  const gitignoreBefore = read(dir, '.gitignore');
+
+  const r = run(['remove-host', 'codex', '--target', '.', '--json'], dir, env);
+  assert.equal(r.status, EXIT.USAGE, `corrupt user hooks config must abort: ${r.stderr}`);
+  assert.match(r.stderr, /hooks/);
+  assert.equal(read(dir, '.agents/install-manifest.json'), manifestBefore);
+  assert.equal(read(dir, '.gitignore'), gitignoreBefore, 'no file may be rewritten before the abort');
+  assert.equal(fs.readFileSync(hooksFile, 'utf8'), corrupt, 'the corrupt file must not be overwritten');
+  assert.ok(exists(dir, '.claude/commands/wf-new-task.md'), 'remaining host files must stay intact');
+});
+
+test('uninstall aborts before deleting anything when the user hooks config is corrupt', () => {
+  const dir = tmpRepo();
+  const home = makeTmp('flow-kit-uninstall-home-');
+  const env = { HOME: home, USERPROFILE: home };
+  install(dir, ['codex'], [], env);
+  const hooksFile = path.join(home, '.codex', 'hooks.json');
+  const corrupt = '{ BROKEN JSON !!!\n';
+  fs.writeFileSync(hooksFile, corrupt, 'utf8');
+  const manifestBefore = read(dir, '.agents/install-manifest.json');
+
+  const r = run(['uninstall', '--target', '.', '--json'], dir, env);
+  assert.equal(r.status, EXIT.USAGE, `corrupt user hooks config must abort: ${r.stderr}`);
+  assert.match(r.stderr, /hooks/);
+  assert.equal(read(dir, '.agents/install-manifest.json'), manifestBefore);
+  assert.ok(exists(dir, 'AGENTS.md'), 'managed files must not be deleted before the abort');
+  assert.ok(exists(dir, '.githooks'), 'git hooks must not be deleted before the abort');
+  assert.equal(localConfig(dir, 'core.hooksPath').value, '.githooks');
+  assert.equal(fs.readFileSync(hooksFile, 'utf8'), corrupt, 'the corrupt file must not be overwritten');
+});
+
+// manifest 可被篡改：uninstall 的删除面必须以 target 为界，--force 也不例外。
+test('uninstall never deletes manifest entries outside the target, even with --force', () => {
+  const dir = tmpRepo();
+  install(dir, ['trae']);
+  const rel = `../${path.basename(dir)}-victim.txt`;
+  const victim = path.resolve(dir, rel);
+  try {
+    fs.writeFileSync(victim, 'keep\n', 'utf8');
+    const manifest = manifestOf(dir);
+    manifest.files[rel] = '0'.repeat(64);
+    fs.writeFileSync(path.join(dir, '.agents/install-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+
+    const r = run(['uninstall', '--target', '.', '--force', '--json'], dir);
+    assert.equal(r.status, EXIT.TARGET, r.stderr);
+    assert.equal(fs.readFileSync(victim, 'utf8'), 'keep\n');
+    const out = json(r);
+    assert.equal(out.invalid, 1);
+    assert.equal(out.items.find((item) => item.path === rel)?.action, 'invalid');
+    assert.equal(exists(dir, '.agents/install-manifest.json'), true, 'hostile manifest must be kept for inspection');
+  } finally {
+    fs.rmSync(victim, { force: true });
+  }
+});
+
+// 宿主归属只看前缀，恶意 key 可借 ../ 逃逸；删除前必须再按 target 边界解析。
+test('remove-host never deletes owned entries outside the target, even with --force', () => {
+  const dir = tmpRepo();
+  install(dir, ['claude']);
+  const rel = `.claude/../../${path.basename(dir)}-victim.txt`;
+  const victim = path.resolve(dir, rel);
+  try {
+    fs.writeFileSync(victim, 'keep\n', 'utf8');
+    const manifest = manifestOf(dir);
+    manifest.files[rel] = '0'.repeat(64);
+    fs.writeFileSync(path.join(dir, '.agents/install-manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`, 'utf8');
+
+    const r = run(['remove-host', 'claude', '--target', '.', '--force', '--json'], dir);
+    assert.equal(r.status, EXIT.TARGET, r.stderr);
+    assert.equal(fs.readFileSync(victim, 'utf8'), 'keep\n');
+    const out = json(r);
+    assert.equal(out.invalid, 1);
+    assert.equal(out.items.find((item) => item.path === rel)?.action, 'invalid');
+  } finally {
+    fs.rmSync(victim, { force: true });
+  }
 });

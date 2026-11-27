@@ -16,7 +16,8 @@
 // 用法：
 // flow-kit run archive-sweep.mjs # dry-run（缺省），--window 21
 // flow-kit run archive-sweep.mjs --window 21 --execute # git mv 执行
-// 测试面已随引擎减重退役（2026-10-28，owner 决策），本脚本现无测试兜底
+// 测试面已随引擎减重退役（2026-10-28，owner 决策）；2026-11 审计 D46 起 tests/archive-sweep.test.mjs
+// 锁定「ts 格式校验」与「归档目标不出 workflow/archive/」。
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -25,6 +26,13 @@ import { loadAllConfirmations } from './ledger-loader.mjs';
 const DIRS = ['intents', 'specs', 'plans', 'incidents'];
 export const TERMINAL = new Set(['done', 'superseded', 'cancelled', 'closed']);
 export const ACTIVE = new Set(['draft', 'approved', 'open', 'fixed']);
+
+// 台账 ts 合法性判据：能截出 YYYY-MM-DD 且可解析；不合法即拒绝——NaN 会让冷却窗失效（立即归档），
+// 原串前缀（如 `..`）还会被当作归档月份把 git mv 带出 workflow/archive/。
+const isoDay = (ts) => {
+  const s = typeof ts === 'string' ? ts.slice(0, 10) : '';
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) && !Number.isNaN(Date.parse(s)) ? s : '';
+};
 
 export function parseStatus(text) {
  const lines = text.split(/\r?\n/);
@@ -69,8 +77,13 @@ export function analyze({ docs, ledgerTs = {}, lastTouch = {}, activeTexts = [],
   for (const [, members] of fams) {
     const enriched = members.map((d) => {
       const st = parseStatus(d.text);
-      const tTime = ledgerTs[d.rel] || lastTouch[d.rel] || /^(\d{4}-\d{2}-\d{2})/.exec(d.file)?.[1] || '';
-      const src = ledgerTs[d.rel] ? 'ledger' : lastTouch[d.rel] ? 'git' : 'name';
+      const hasLedger = Object.prototype.hasOwnProperty.call(ledgerTs, d.rel);
+      // 台账有终态行但 ts 不合法（loadLedgerTs 置 null）→ 无日期，禁止回退 git/文件名日期：
+      // 坏账不得被别的日期源洗白成「可归档」。
+      const tTime = hasLedger
+        ? isoDay(ledgerTs[d.rel])
+        : isoDay(lastTouch[d.rel] || /^(\d{4}-\d{2}-\d{2})/.exec(d.file)?.[1]);
+      const src = hasLedger ? 'ledger' : lastTouch[d.rel] ? 'git' : 'name';
       return { ...d, st, tTime, src };
     });
     const allTerminal = enriched.every((x) => TERMINAL.has(x.st));
@@ -115,8 +128,11 @@ export function loadLedgerTs(root) {
   // 台账统一视图（主台账+分片透明合并，坏行跳过、同 doc|stage|fingerprint 键去重取末次）
   for (const e of loadAllConfirmations(root)) {
     if (TERMINAL.has(e.stage) && e.doc) {
-      const d = (e.ts || '').slice(0, 10);
-      if (d && (!out[e.doc] || d > out[e.doc])) out[e.doc] = d;
+      const d = isoDay(e.ts);
+      // 非法 ts：占位 null（「有台账记录但不可用」），仅当该文档无任何合法终态行时生效——
+      // analyze 见 null 即判无日期，不回退其它日期源。
+      if (!d) { if (!(e.doc in out)) out[e.doc] = null; continue; }
+      if (!out[e.doc] || d > out[e.doc]) out[e.doc] = d;
     }
   }
   return out;
@@ -217,10 +233,19 @@ function main() {
     return;
   }
   let moved = 0;
+  const archiveRoot = path.join(root, 'workflow', 'archive');
   for (const x of r.candidates) {
-    const destDir = path.join(root, 'workflow', 'archive', x.month, x.dir);
+    const destDir = path.join(archiveRoot, x.month, x.dir);
+    const dest = path.join(destDir, x.file);
+    // 终树守卫：月份/文件名已在上游校验，此处再验一次目标包含性——越界即拒绝，绝不让 git mv 出 archive。
+    const inside = path.relative(archiveRoot, dest);
+    if (!inside || inside.startsWith('..') || path.isAbsolute(inside)) {
+      console.error(`archive-sweep: 拒绝归档 ${x.rel}——目标 ${dest} 不在 workflow/archive/ 内`);
+      process.exitCode = 1;
+      continue;
+    }
     fs.mkdirSync(destDir, { recursive: true });
-    execFileSync('git', ['mv', x.rel, path.join('workflow', 'archive', x.month, x.dir, x.file)], { cwd: root });
+    execFileSync('git', ['mv', x.rel, path.relative(root, dest)], { cwd: root });
     moved++;
   }
   console.log(`execute 完成：git mv ${moved} 篇 → workflow/archive/<家族最晚终态月>/`);

@@ -134,10 +134,27 @@ function main() {
   }
 
   // 删除只作用于可归并片；保留片原样留在 .agents/confirmations.d/
+  // 删除前复核分片内容与快照逐字节一致：快照（:97-106）与删除之间的并发追加不能随片销毁，
+  // 内容已变即保留待下轮（合并按行去重，重跑安全）。复核/删除失败一律出账并非零退出。
+  const uncleared = [];
   for (const s of plan.mergedShards) {
+    const abs = path.join(shardDir, s.file);
+    let current;
     try {
-      fs.unlinkSync(path.join(shardDir, s.file));
-    } catch { /* 忽略删除异常 */ }
+      current = fs.readFileSync(abs, 'utf8');
+    } catch (err) {
+      uncleared.push(`${s.file}（复核读取失败：${err.message}）`);
+      continue;
+    }
+    if (current !== shardTexts.get(s.file)) {
+      uncleared.push(`${s.file}（归并期间内容有追加，已保留）`);
+      continue;
+    }
+    try {
+      fs.unlinkSync(abs);
+    } catch (err) {
+      uncleared.push(`${s.file}（删除失败：${err.message}）`);
+    }
   }
 
   // 若目录为空，尝试删除空目录（有保留片时目录非空，不删）
@@ -146,6 +163,13 @@ function main() {
       fs.rmdirSync(shardDir);
     }
   } catch { /* 忽略 */ }
+
+  if (uncleared.length) {
+    console.error(`[compact-ledgers] ✗ ${uncleared.length} 片未清理：${uncleared.join('、')}`);
+    console.error('[compact-ledgers] 主台账已写入；保留分片待重跑（合并按行去重，重跑安全）。');
+    reportKept();
+    process.exit(1);
+  }
 
   console.log(`[compact-ledgers] ✅ 归并 ${plan.mergedShards.length} 片 / ${plan.appended.length} 行（按 ts 升序追加），全量确认行已整合至 .agents/confirmations.jsonl，已归并分片清理完毕。`);
   reportKept();

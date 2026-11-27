@@ -7,6 +7,7 @@ import { parseFrontmatter } from '../install/frontmatter.mjs';
 import { readLocalModelRoles, readInjectedModels, ROLE_NAMES } from '../models/resolve.mjs';
 import { readMcpServers } from '../install/mcp.mjs';
 import { readToolPolicy } from '../install/tool-policy.mjs';
+import { resolveInside } from '../install/path-guard.mjs';
 import { HOSTS } from '../hosts/registry.mjs';
 import { resolveTarget } from './install.mjs';
 import { signPayload, verifySignature, readSignatureFile, writeSignatureFile } from '../install/notary.mjs';
@@ -413,65 +414,174 @@ export function exportSbom({ target, out, format = 'native', days = 30, t }) {
   };
 }
 
+function isPlainObject(value) {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function detectSbomFormat(sbomData) {
+  if (!isPlainObject(sbomData)) return null;
+  if (sbomData.bomFormat === 'FlowKit-A-SBOM' || sbomData.$schema === SBOM_SCHEMA) return 'native';
+  if (sbomData.bomFormat === 'CycloneDX') return 'cyclonedx';
+  if (typeof sbomData.spdxVersion === 'string' && sbomData.spdxVersion.startsWith('SPDX-')) return 'spdx';
+  return null;
+}
+
+function checkSkillHash({ target, skillName, expectedHash, problems, t }) {
+  const skillPath = resolveInside(target, path.join('.agents', 'skills', skillName, 'SKILL.md'));
+  if (!skillPath) {
+    problems.push(t('error.sbomInvalid', { detail: `Skill path escapes project: ${skillName}` }));
+    return;
+  }
+  if (!fs.existsSync(skillPath)) {
+    problems.push(t('error.sbomTampered', { detail: `Missing skill ${skillName}` }));
+    return;
+  }
+  const raw = fs.readFileSync(skillPath, 'utf8').replace(/\r\n/g, '\n');
+  const hash = sha256(Buffer.from(raw, 'utf8'));
+  if (hash !== expectedHash) {
+    problems.push(t('error.sbomTampered', { detail: `Skill modified: ${skillName}` }));
+  }
+}
+
 export function verifySbom({ target, sbomData, t }) {
   const problems = [];
+  const format = detectSbomFormat(sbomData);
 
-  // Determine if it is native or CycloneDX/SPDX
-  const isNative = sbomData.bomFormat === 'FlowKit-A-SBOM' || sbomData.$schema === SBOM_SCHEMA;
+  if (!format) {
+    problems.push(t('error.sbomInvalid', {
+      detail: 'Unrecognized SBOM format (expected FlowKit-A-SBOM, CycloneDX, or SPDX)',
+    }));
+    return {
+      ok: false,
+      problems,
+      summary: {
+        verifiedAt: new Date().toISOString(),
+        issuesCount: problems.length,
+      },
+    };
+  }
 
-  if (isNative) {
+  if (format === 'native') {
     // 1. Check proof chain (Attestation)
+    let expectedRoot = null;
+    if (!isPlainObject(sbomData.proofChain)) {
+      problems.push(t('error.sbomInvalid', { detail: 'Missing proof chain section' }));
+    } else if (typeof sbomData.proofChain.root !== 'string' || !sbomData.proofChain.root) {
+      problems.push(t('error.sbomInvalid', { detail: 'Missing proof chain root' }));
+    } else {
+      expectedRoot = sbomData.proofChain.root;
+    }
+
     const currentAttest = buildAttestation(target);
     if (!currentAttest.ok) {
       problems.push(t('error.sbomTampered', { detail: currentAttest.problems.join('; ') }));
-    } else if (sbomData.proofChain?.root && currentAttest.chain?.root !== sbomData.proofChain.root) {
+    } else if (expectedRoot && currentAttest.chain?.root !== expectedRoot) {
       problems.push(t('error.sbomTampered', {
-        detail: `Attestation root mismatch (expected ${sbomData.proofChain.root}, got ${currentAttest.chain?.root})`,
+        detail: `Attestation root mismatch (expected ${expectedRoot}, got ${currentAttest.chain?.root})`,
       }));
     }
 
     // 2. Check skills
-    const currentSkills = collectSkills(target);
-    const skillMap = new Map(currentSkills.map((s) => [s.name, s]));
-    for (const expectedSkill of sbomData.skills || []) {
-      const current = skillMap.get(expectedSkill.name);
-      if (!current) {
-        problems.push(t('error.sbomTampered', { detail: `Missing skill ${expectedSkill.name}` }));
-      } else if (current.hash !== expectedSkill.hash) {
-        problems.push(t('error.sbomTampered', { detail: `Skill modified: ${expectedSkill.name}` }));
+    if (!Array.isArray(sbomData.skills)) {
+      problems.push(t('error.sbomInvalid', { detail: 'Missing skills section' }));
+    } else {
+      const currentSkills = collectSkills(target);
+      const skillMap = new Map(currentSkills.map((s) => [s.name, s]));
+      for (const expectedSkill of sbomData.skills) {
+        if (!isPlainObject(expectedSkill) || typeof expectedSkill.name !== 'string') {
+          problems.push(t('error.sbomInvalid', { detail: 'Malformed skill entry in skills section' }));
+          continue;
+        }
+        const current = skillMap.get(expectedSkill.name);
+        if (!current) {
+          problems.push(t('error.sbomTampered', { detail: `Missing skill ${expectedSkill.name}` }));
+        } else if (current.hash !== expectedSkill.hash) {
+          problems.push(t('error.sbomTampered', { detail: `Skill modified: ${expectedSkill.name}` }));
+        }
       }
     }
 
     // 3. Check policy
-    if (sbomData.policy) {
-      const policyFile = path.join(target, '.agents', 'config', 'policy.json');
-      const policyObj = readJson(policyFile);
-      if (!policyObj) {
-        problems.push(t('error.sbomTampered', { detail: 'Missing policy file .agents/config/policy.json' }));
+    if (!Object.prototype.hasOwnProperty.call(sbomData, 'policy')) {
+      problems.push(t('error.sbomInvalid', { detail: 'Missing policy section' }));
+    } else if (sbomData.policy !== null) {
+      if (!isPlainObject(sbomData.policy) || typeof sbomData.policy.digest !== 'string') {
+        problems.push(t('error.sbomInvalid', { detail: 'Malformed policy section' }));
       } else {
-        const curDigest = sha256(canonical(policyObj));
-        if (curDigest !== sbomData.policy.digest) {
-          problems.push(t('error.sbomTampered', { detail: 'Policy configuration modified' }));
-        }
-      }
-    }
-  } else if (sbomData.bomFormat === 'CycloneDX') {
-    // CycloneDX verification
-    for (const comp of sbomData.components || []) {
-      if (comp.type === 'data' && comp.name.startsWith('ai-skill-')) {
-        const skillName = comp.name.replace(/^ai-skill-/, '');
-        const skillPath = path.join(target, '.agents', 'skills', skillName, 'SKILL.md');
-        if (!fs.existsSync(skillPath)) {
-          problems.push(t('error.sbomTampered', { detail: `Missing skill ${skillName}` }));
+        const policyFile = path.join(target, '.agents', 'config', 'policy.json');
+        const policyObj = readJson(policyFile);
+        if (!policyObj) {
+          problems.push(t('error.sbomTampered', { detail: 'Missing policy file .agents/config/policy.json' }));
         } else {
-          const raw = fs.readFileSync(skillPath, 'utf8').replace(/\r\n/g, '\n');
-          const hash = sha256(Buffer.from(raw, 'utf8'));
-          const expHash = comp.hashes?.find((h) => h.alg === 'SHA-256')?.content;
-          if (expHash && hash !== expHash) {
-            problems.push(t('error.sbomTampered', { detail: `Skill modified: ${skillName}` }));
+          const curDigest = sha256(canonical(policyObj));
+          if (curDigest !== sbomData.policy.digest) {
+            problems.push(t('error.sbomTampered', { detail: 'Policy configuration modified' }));
           }
         }
       }
+    }
+  } else if (format === 'cyclonedx') {
+    if (typeof sbomData.specVersion !== 'string') {
+      problems.push(t('error.sbomInvalid', { detail: 'CycloneDX document is missing specVersion' }));
+    }
+    if (!Array.isArray(sbomData.components)) {
+      problems.push(t('error.sbomInvalid', { detail: 'CycloneDX document is missing its components section' }));
+    } else {
+      sbomData.components.forEach((comp, index) => {
+        if (!isPlainObject(comp)) {
+          problems.push(t('error.sbomInvalid', { detail: `Malformed CycloneDX component at index ${index}` }));
+          return;
+        }
+        if (comp.type !== 'data') return;
+        if (typeof comp.name !== 'string') {
+          problems.push(t('error.sbomInvalid', { detail: `Malformed CycloneDX component at index ${index}: name is not a string` }));
+          return;
+        }
+        if (!comp.name.startsWith('ai-skill-')) return;
+
+        const skillName = comp.name.replace(/^ai-skill-/, '');
+        if (comp.hashes !== undefined && !Array.isArray(comp.hashes)) {
+          problems.push(t('error.sbomInvalid', { detail: `Malformed CycloneDX component ${comp.name}: hashes is not a list` }));
+          return;
+        }
+        const expectedHash = (comp.hashes || [])
+          .find((h) => isPlainObject(h) && h.alg === 'SHA-256')?.content;
+        if (typeof expectedHash !== 'string') {
+          problems.push(t('error.sbomInvalid', { detail: `Skill ${skillName} has no SHA-256 hash` }));
+          return;
+        }
+        checkSkillHash({ target, skillName, expectedHash, problems, t });
+      });
+    }
+  } else {
+    // SPDX
+    if (!Array.isArray(sbomData.packages)) {
+      problems.push(t('error.sbomInvalid', { detail: 'SPDX document is missing its packages section' }));
+    } else {
+      sbomData.packages.forEach((pkg, index) => {
+        if (!isPlainObject(pkg)) {
+          problems.push(t('error.sbomInvalid', { detail: `Malformed SPDX package at index ${index}` }));
+          return;
+        }
+        if (typeof pkg.name !== 'string') {
+          problems.push(t('error.sbomInvalid', { detail: `Malformed SPDX package at index ${index}: name is not a string` }));
+          return;
+        }
+        if (!pkg.name.startsWith('ai-skill-')) return;
+
+        const skillName = pkg.name.replace(/^ai-skill-/, '');
+        if (pkg.checksums !== undefined && !Array.isArray(pkg.checksums)) {
+          problems.push(t('error.sbomInvalid', { detail: `Malformed SPDX package ${pkg.name}: checksums is not a list` }));
+          return;
+        }
+        const expectedHash = (pkg.checksums || [])
+          .find((c) => isPlainObject(c) && c.algorithm === 'SHA256')?.checksumValue;
+        if (typeof expectedHash !== 'string') {
+          problems.push(t('error.sbomInvalid', { detail: `Skill ${skillName} has no SHA256 checksum` }));
+          return;
+        }
+        checkSkillHash({ target, skillName, expectedHash, problems, t });
+      });
     }
   }
 

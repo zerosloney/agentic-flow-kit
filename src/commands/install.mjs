@@ -16,6 +16,7 @@ import { cleanupMigratedFiles } from '../install/migrations.mjs';
 import { scanGateConfigs } from '../install/gate-summary.mjs';
 import { buildVars } from '../render/tokens.mjs';
 import { HOST_NAMES, HOSTS, resolveHost, canonicalHostName } from '../hosts/registry.mjs';
+import { cliProbeAllowed } from '../models/probe.mjs';
 import { detectHosts } from '../hosts/detect.mjs';
 import { configureGit, HOOKS_PATH, isGitRepo, readLocalHooksPath } from '../git/config.mjs';
 import { isBinaryPath, writeBaseline } from '../install/baseline.mjs';
@@ -334,6 +335,9 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
       : (...line) => console.log(...line);
   const logger = onLog || (quiet || asJson ? () => {} : logLine);
   const previous = readManifest(target);
+  // 语言重放（与 upgrade/add-host 同口径）：不带 --lang 的重跑沿用 manifest 记录的语言，
+  // 否则 en 装户加装宿主/栈时会被整盘改写回 zh-CN；显式 --lang 仍可切换。
+  const currentLang = args.lang || previous?.language || lang;
   const profile = parseProfileArgs({
     stackArg: args.stacks,
     surfaceArgs: args.surfaces || [],
@@ -463,13 +467,14 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
     ? readInjectedModels({ target, hosts: planHosts })
     : {};
   // --probe-models 非交互路径无法逐条确认：探测前把宿主声明的命令打到人类进度流（审计痕迹；--json 时走 stderr）。
+  // 只预告会真正执行的探测；被拒绝的探测由 probeModels 输出拒绝原因与放行方式（--host-manifest）。
   if (flag(args, 'probe-models') && shouldProbe && modelMode !== 'inherit') {
     for (const host of planHosts) {
       const commands = (HOSTS[host]?.modelProbe?.cli || [])
         .filter((c) => c?.command)
         .map((c) => [c.command, ...(c.args || [])].join(' '))
         .join('; ');
-      if (commands) emit(t('install.probeCli', { host, commands }));
+      if (commands && cliProbeAllowed(host)) emit(t('install.probeCli', { host, commands }));
     }
   }
   const models = flag(args, 'no-model-config') ? null : resolveModels({
@@ -501,7 +506,7 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
     : (flag(args, 'devcontainer') ? true : previous?.devcontainer !== false);
 
   const plan = buildPlan({
-    target, hosts: planHosts, lang, stack, stacks, projectName, categories, models: models?.hosts, tier, hardened,
+    target, hosts: planHosts, lang: currentLang, stack, stacks, projectName, categories, models: models?.hosts, tier, hardened,
     mcp: mcpEnabled, surfaces,
     managedPermissions: previous?.managedPermissions || {},
     devcontainer: devcontainerEnabled,
@@ -517,7 +522,7 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
     projectName,
     stack,
     stacks,
-    language: lang,
+    language: currentLang,
     hosts: hostSet,
     kitVersion: KIT_VERSION,
     installedAt,
@@ -535,11 +540,9 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
       err.code = 'NO_MANIFEST';
       throw err;
     }
-    // 语言重放（与 upgrade 同口径）：en 装户不带 --lang 重跑时按 manifest 语言渲染，
-    // 否则模板语言与磁盘不符会整盘 skipped。只影响本分支；主流程 lang 语义不变。
-    const rebuildLang = args.lang || previous.language || lang;
+    // 语言重放与主流程同源（manifest 优先）；模板语言与磁盘不符会整盘 skipped。
     const rebuildPlan = buildPlan({
-      target, hosts: planHosts, lang: rebuildLang, stack, stacks, projectName, categories, models: models?.hosts, tier, hardened,
+      target, hosts: planHosts, lang: currentLang, stack, stacks, projectName, categories, models: models?.hosts, tier, hardened,
       mcp: mcpEnabled, surfaces,
       managedPermissions: previous?.managedPermissions || {},
       devcontainer: devcontainerEnabled,
@@ -553,7 +556,7 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
       projectName,
       stack,
       stacks,
-      language: rebuildLang,
+      language: currentLang,
       hosts: hostSet,
       kitVersion: KIT_VERSION,
       installedAt,
@@ -610,7 +613,7 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
   const policyDiff = explainPolicy ? explainPolicyDiff({ target, plan, vars }) : null;
 
   emit(t('install.start', { command: commandLabel, target }));
-  emit(t('install.plan', { hosts: hostSet.join(', '), stack: stacks.join(', '), lang, count: plan.entries.length }));
+  emit(t('install.plan', { hosts: hostSet.join(', '), stack: stacks.join(', '), lang: currentLang, count: plan.entries.length }));
   // 探测有结果 → 说明依据；无结果 → 也要出声（静默回退缺省会让误判无从发现）。
   if (detected?.mode) emit(t('install.productDetected', { product, reason: detected.reason }));
   else if (detected) emit(t('install.productUndetected', { product }));
@@ -632,7 +635,7 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
   if (dryRun) emit(t('install.dryRun'));
   const manifest = previous || emptyManifest({
     kitVersion: KIT_VERSION,
-    language: lang,
+    language: currentLang,
     hosts: hostSet,
     stack,
   });
@@ -683,7 +686,7 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
       ...manifest,
       version: KIT_VERSION,
       installedAt,
-      language: lang,
+      language: currentLang,
       hosts: hostSet,
       stack,
       surfaces,
@@ -803,7 +806,7 @@ function runInstallUnlocked({ args, t, lang, hosts, planHosts = hosts, categorie
       command: commandLabel,
       target,
       dryRun,
-      language: lang,
+      language: currentLang,
       stack,
       stacks,
       surfaces,

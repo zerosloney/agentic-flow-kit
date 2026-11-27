@@ -5,7 +5,7 @@
 // 职责：
 //   1. 缺陷模式提取与针对性补丁提炼引擎（基于历史处方与失败日志提取高频模式并生成防御补丁）；
 //   2. 影子沙箱与 A/B 候选生成机制（在隔离工作区生成候选 Arm B 与基线 Arm A，生成规范 Unified Diff）；
-//   3. 对抗评估验证与胜出判定引擎（双臂跑分比对，严格要求零回归且提升达标，支持安全应用与一键回滚）；
+//   3. 对抗评估验证与胜出判定引擎（有真实 runner 时双臂跑分比对，严格要求零回归且提升达标；无 runner 只做关键词静态比对并标记未验证，不得据此判胜，支持安全应用与一键回滚）；
 //   4. 端到端自优化工作流调度器（提取、补丁、沙箱对质、裁决与原子应用）。
 //
 // 零外部依赖，纯 Node.js 标准库实现。
@@ -393,12 +393,12 @@ export function evaluateCandidateArmPair(options = {}) {
       resA = runner(task, armA) || resA;
       resB = runner(task, armB) || resB;
     } else {
-      // 默认规则模拟判定
+      // 无真实执行器时只能做关键词静态比对；结果一律标记为未验证，不得据此宣布胜出
       const kw = task.expectedKeywords || [];
       const hasA = kw.length === 0 || kw.every((k) => (armA.content || '').includes(k));
       const hasB = kw.length === 0 || kw.every((k) => (armB.content || '').includes(k));
-      resA = { passed: Boolean(task.baselinePass ?? hasA), score: task.baselinePass ?? hasA ? 1.0 : 0.0 };
-      resB = { passed: Boolean(task.candidatePass ?? hasB), score: task.candidatePass ?? hasB ? 1.0 : 0.0 };
+      resA = { passed: hasA, score: hasA ? 1.0 : 0.0 };
+      resB = { passed: hasB, score: hasB ? 1.0 : 0.0 };
     }
 
     resultsA.push({ taskId: task.id || task.name || 'unnamed', ...resA });
@@ -443,11 +443,16 @@ export function evaluateCandidateArmPair(options = {}) {
   }
 
   // 判定状态机
+  const verified = Boolean(runner);
   let approved = false;
   let verdict = 'rejected';
   let reason = '';
 
-  if (regressions.length > 0) {
+  if (!verified) {
+    // 无真实 runner：关键词静态比对只能提示方向，不能证明候选真的转绿
+    verdict = 'unverified';
+    reason = '未提供真实测试执行器 (runner)，仅完成关键词静态比对，结果未验证，不判定候选胜出。';
+  } else if (regressions.length > 0) {
     approved = false;
     verdict = 'rejected_has_regressions';
     reason = `候选臂出现 ${regressions.length} 处能力回归。违反零回归铁律，拒绝应用。`;
@@ -463,6 +468,7 @@ export function evaluateCandidateArmPair(options = {}) {
 
   return {
     evaluated: true,
+    verified,
     approved,
     verdict,
     reason,
@@ -525,12 +531,22 @@ export function formatEvalTsv(testCases = [], resultsA = [], resultsB = []) {
  * @param {string} options.skillName - 技能名称
  * @param {string} options.candidateContent - 优化后的新内容
  * @param {object} options.proposal - 评测报告
+ * @param {boolean} options.allowUnverified - 是否允许未验证的 proposal 落盘（需显式开启）
  * @returns {{ applied: boolean, backupPath: string, targetPath: string }}
  */
 export function applySkillOptimization(root, options = {}) {
   const skillName = options.skillName;
   if (!skillName) {
     throw new Error('缺少必须的 skillName 参数');
+  }
+
+  if (options.proposal && options.proposal.verified === false && !options.allowUnverified) {
+    return {
+      applied: false,
+      targetPath: '',
+      backupPath: '',
+      reason: '评测结果未验证，禁止落盘；如确需应用请显式传入 allowUnverified',
+    };
   }
 
   const possiblePaths = [
@@ -546,15 +562,26 @@ export function applySkillOptimization(root, options = {}) {
 
   const backupPath = `${targetPath}.bak`;
 
-  // 备份原文件
+  // 备份原文件；已有 .bak 时先轮转，避免上一版被覆盖
   if (fs.existsSync(targetPath)) {
     const existing = fs.readFileSync(targetPath, 'utf8');
+    if (fs.existsSync(backupPath)) {
+      const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+      fs.renameSync(backupPath, `${backupPath}.${stamp}`);
+    }
     fs.writeFileSync(backupPath, existing, 'utf8');
   }
 
-  // 原子写入新内容
+  // 同目录临时文件 + rename，避免写一半留下残缺的 SKILL.md
   const newContent = String(options.candidateContent || '');
-  fs.writeFileSync(targetPath, newContent, 'utf8');
+  const tmpPath = `${targetPath}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(tmpPath, newContent, 'utf8');
+  try {
+    fs.renameSync(tmpPath, targetPath);
+  } catch (err) {
+    try { fs.unlinkSync(tmpPath); } catch { /* 临时文件清理失败不掩盖原始错误 */ }
+    throw err;
+  }
 
   // 追加记录审计日志
   const logDir = path.join(root, '.agents', 'evals');
@@ -566,6 +593,7 @@ export function applySkillOptimization(root, options = {}) {
     targetPath,
     backupPath,
     verdict: options.proposal?.verdict || 'winner_candidate',
+    verified: options.proposal?.verified !== false,
     deltaPassRate: options.proposal?.metrics?.deltaPassRate ?? 0,
     regressions: options.proposal?.metrics?.regressionsCount ?? 0,
   };
@@ -651,6 +679,7 @@ export function rollbackSkillOptimization(root, skillName) {
  * @param {Array<object>} options.testCases - 自定义测试集
  * @param {Function} options.runner - 测试执行器
  * @param {boolean} options.apply - 判定胜出后是否自动应用
+ * @param {boolean} options.allowUnverifiedApply - 评测未验证时仍允许应用（默认 false）
  * @param {number} options.minDelta - 最小胜出门限
  * @returns {object} 执行综合报告
  */
@@ -723,21 +752,17 @@ export function optimizeSkillWorkflow(options = {}) {
     skillName,
   });
 
-  // 6. 双臂对抗评估
+  // 6. 双臂对抗评估（默认用例只做关键词静态比对，未接 runner 时结果标记为未验证）
   const testCases = options.testCases || [
     {
       id: `task-robustness-${defectPatterns[0].category}`,
       name: `Robustness Gate for ${defectPatterns[0].category}`,
       expectedKeywords: patchResult.addedRules.map((r) => r.replace(/^[-\s*\[\]xX]+/, '').trim()),
-      baselinePass: false,
-      candidatePass: true,
     },
     {
       id: 'task-core-baseline-function',
       name: 'Existing Core Baseline Task',
       expectedKeywords: [],
-      baselinePass: true,
-      candidatePass: true,
     },
   ];
 
@@ -749,27 +774,45 @@ export function optimizeSkillWorkflow(options = {}) {
     minDelta: options.minDelta,
   });
 
-  // 7. 胜出后安全应用
+  // 7. 仅在已验证胜出（或显式放行未验证）后安全应用
   let appliedResult = null;
-  if (evalResult.approved && options.apply) {
-    appliedResult = applySkillOptimization(root, {
-      skillName,
-      candidateContent: patchResult.patchedContent,
-      proposal: evalResult,
-    });
+  let applySkipped = '';
+  if (options.apply) {
+    if (evalResult.approved) {
+      appliedResult = applySkillOptimization(root, {
+        skillName,
+        candidateContent: patchResult.patchedContent,
+        proposal: evalResult,
+      });
+    } else if (!evalResult.verified) {
+      if (options.allowUnverifiedApply) {
+        appliedResult = applySkillOptimization(root, {
+          skillName,
+          candidateContent: patchResult.patchedContent,
+          proposal: evalResult,
+          allowUnverified: true,
+        });
+      } else {
+        applySkipped = '评测结果未验证（未提供 runner）；如确需应用，请显式使用 --allow-unverified-apply';
+      }
+    } else {
+      applySkipped = evalResult.reason;
+    }
   }
 
   // 8. 清理沙箱
   shadow.cleanup();
 
   return {
-    success: evalResult.approved,
+    success: evalResult.evaluated && (evalResult.approved || !evalResult.verified),
     skillName,
     defectPatterns,
     patch: patchResult,
     diff: shadow.diff,
     evalResult,
+    verified: evalResult.verified,
     applied: Boolean(appliedResult?.applied),
+    applySkipped,
     targetPath: appliedResult?.targetPath,
     backupPath: appliedResult?.backupPath,
   };
@@ -800,6 +843,8 @@ export function parseArgs(args = []) {
       result.dryRun = true;
     } else if (arg === '--apply') {
       result.apply = true;
+    } else if (arg === '--allow-unverified-apply') {
+      result.allowUnverifiedApply = true;
     } else if (arg === '--min-delta' && args[i + 1]) {
       result.minDelta = Number(args[++i]) || 0.10;
     }
@@ -823,6 +868,7 @@ export function main() {
     console.log('选项:');
     console.log('  --skill <name>    指定目标技能名称');
     console.log('  --apply           评估胜出后自动应用到目标文件');
+    console.log('  --allow-unverified-apply  评测未验证时仍允许 --apply 落盘（显式放行）');
     console.log('  --dry-run         仅输出比对 Diff 与判定报告，不写入');
     console.log('  --min-delta <num> 胜出所需的最小通过率提升（默认 0.10）');
     process.exit(0);
@@ -843,10 +889,13 @@ export function main() {
       root,
       skillName: args.skill || 'eval',
       apply: args.apply && !args.dryRun,
+      allowUnverifiedApply: args.allowUnverifiedApply,
       minDelta: args.minDelta,
     });
     console.log(JSON.stringify(res, null, 2));
-    process.exit(res.success ? 0 : 1);
+    // --apply 被拒（未验证且未显式放行）也算失败，便于脚本化调用感知
+    const applied = !args.apply || args.dryRun || res.applied;
+    process.exit(res.success && applied ? 0 : 1);
   }
 
   console.log(`[skill-optimizer] 运行命令: ${args.command}, 技能: ${args.skill || '全量'}`);

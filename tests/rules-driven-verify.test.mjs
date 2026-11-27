@@ -434,3 +434,44 @@ rules:
     parseYamlSimple(badYaml);
   }, /(?:语法错误|缩进错误)/);
 });
+
+// 审计 D35：栈规则层此前 fail-open（坏文件只打一行 stderr、形状错误全静默），
+// 与项目层解析错误 fail-closed 不一致——栈层坏文件必须同样抛错，空项目文件仍合法。
+test('rules-loader: corrupt or shape-wrong stack rules fail closed; empty project rules stays legal', async () => {
+  const { loadProjectRules } = await import(scriptUrl('rules-loader.mjs'));
+
+  const tmp = makeTmpDir();
+  try {
+    const rulesDir = path.join(tmp, '.agents', 'rules');
+    fs.mkdirSync(rulesDir, { recursive: true });
+
+    // 1. 语法坏掉的栈文件：解析失败必须抛（此前只 stderr 警告，门表静默变绿）
+    fs.writeFileSync(path.join(rulesDir, 'stack.node.yml'), 'rules:\n  - id: product.build\n     bad indent here :\n  broken\n', 'utf8');
+    assert.throws(() => loadProjectRules(tmp), /stack\.node\.yml/, '坏栈文件应 fail-closed');
+
+    // 2. 形状错误（rules 非数组）：同样抛错（此前完全静默丢门）
+    fs.rmSync(path.join(rulesDir, 'stack.node.yml'));
+    fs.writeFileSync(path.join(rulesDir, 'stack.node.json'), '{"name":"node","rules":"not-an-array"}', 'utf8');
+    assert.throws(() => loadProjectRules(tmp), /stack\.node\.json/, 'rules 非数组应 fail-closed');
+
+    // 3. 顶层为数组的栈文件：不是映射，也抛错
+    fs.writeFileSync(path.join(rulesDir, 'stack.node.json'), JSON.stringify([{ id: 'product.x' }]), 'utf8');
+    assert.throws(() => loadProjectRules(tmp), /stack\.node\.json/, '顶层数组应 fail-closed');
+
+    // 4. 空项目规则文件 = 有意留空，仍合法，栈层照常装载
+    fs.writeFileSync(path.join(rulesDir, 'stack.node.json'), JSON.stringify({
+      name: 'stack.node',
+      rules: [{ id: 'product.node-lint', phase: 'verify', command: 'npm run lint' }],
+    }), 'utf8');
+    fs.writeFileSync(path.join(tmp, 'flow-rules.yml'), '', 'utf8');
+    const loaded = loadProjectRules(tmp);
+    assert.ok(loaded, '空项目文件不应返回 null');
+    assert.deepEqual(loaded.rules.map((r) => r.id), ['product.node-lint']);
+
+    // 5. 顶层为数组的项目文件：形状错误同样 fail-closed（此前静默 0 门）
+    fs.writeFileSync(path.join(tmp, 'flow-rules.yml'), '- id: product.a\n- id: product.b\n', 'utf8');
+    assert.throws(() => loadProjectRules(tmp), /flow-rules\.yml/, '列表形项目文件应 fail-closed');
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});

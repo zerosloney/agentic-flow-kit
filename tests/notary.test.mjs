@@ -294,3 +294,16 @@ test('i18n: notary commands respect --lang en', () => {
   assert.equal(verifyEn.status, 0, verifyEn.stderr);
   assert.match(verifyEn.stdout, /Signature verified successfully/);
 });
+
+test('installed gitignore keeps the notary private key out of git', () => {
+  const dir = initRepo();
+  const install = run(['install', '--agent', 'codex', '--stack', 'node', '--target', dir], dir);
+  assert.equal(install.status, 0, install.stderr);
+  const keygen = run(['keygen', '--target', dir], dir);
+  assert.equal(keygen.status, 0, keygen.stderr);
+
+  const check = spawnSync('git', ['check-ignore', '-v', '.agents/keys/flow-kit-key.pem'], { cwd: dir, encoding: 'utf8' });
+  const gitignore = fs.readFileSync(path.join(dir, '.gitignore'), 'utf8');
+  assert.equal(check.status, 0, `private key is not ignored:\n${check.stderr}${gitignore}`);
+  assert.match(check.stdout, /\.agents\/keys\//);
+});

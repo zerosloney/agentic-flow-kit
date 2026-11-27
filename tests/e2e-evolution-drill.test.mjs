@@ -353,16 +353,19 @@ describe('全套机制联合演练（8 大演进方向完整闭环验证）', ()
     // -----------------------------------------------------------------
     // 步骤 7: 技能资产自优化进化飞轮（方向 6: Skill Optimizer）
     // -----------------------------------------------------------------
+    // 演练未接真实 runner：评测结论为未验证，落盘须显式放行（与 skill-optimizer 的未验证保护一致）。
     const optResult = optimizeSkillWorkflow({
       root: workDir,
       skillName: 'calc-worker',
       prescriptions: [prescription],
       apply: true,
+      allowUnverifiedApply: true,
       minDelta: 0.10,
     });
 
     assert.equal(optResult.success, true, '技能自优化评测必须判定胜出');
-    assert.equal(optResult.applied, true, '优化成果应安全落盘应用');
+    assert.equal(optResult.verified, false, '未接 runner 的评测应标记为未验证');
+    assert.equal(optResult.applied, true, '显式放行后优化成果应安全落盘应用');
     assert.ok(fs.existsSync(optResult.backupPath), '应保留原始技能 .bak 备份');
 
     const patchedSkill = fs.readFileSync(optResult.targetPath, 'utf8');

@@ -4,7 +4,7 @@
 // 必须在消息可见的时点执法；commit-msg 时点合并状态文件（MERGE_HEAD / SQUASH_MSG）已落盘。
 // 提交时刻的顺序信号：暂存了产品路径时，每条路径必须出现在「本次提交能看见」的
 // workflow/plans 正文里，且该 plan 状态为 approved。
-//   看得见 = 已暂存用暂存 blob；否则用 HEAD；都没有则用未跟踪的工作区文件。
+//   看得见 = 已暂存用暂存 blob；否则用 HEAD；未跟踪的工作区文件不算（AI 可自写 approved 不留 git 痕迹）。
 //   done 的历史 plan 不算覆盖（否则旧 plan 里出现过的路径永远放行）；豁免 B（L1 单笔提交）：
 //   覆盖性 plan 文件本身与产品路径同批暂存时 done 亦可（plan(done)+代码+确认分片+凭证一笔入库）。
 //   draft 不算。工作区已改成 approved 但没暂存、HEAD 仍是 draft，也不算。
@@ -54,10 +54,21 @@ export function coveringDocs(docs, staged = new Set()) {
     && (d.status === 'approved' || (d.status === 'done' && staged.has(d.rel))));
 }
 
+// 覆盖判定的路径匹配按路径段边界：`src/a/b.css` 不得覆盖 `src/a/b.cs`，
+// `vendor/src/a.js` 也不得覆盖 `src/a.js`（includes 的子串误判）。允许 `./` 前缀；
+// 右边界额外允许句末 `.`（`Modified src/a.js.`），但 `.bak` 仍算同一路径前缀。
+export function mentionsPath(text, p) {
+  if (typeof text !== 'string' || !p) return false;
+  const esc = String(p).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const boundary = '[^A-Za-z0-9._/\\\\-]';
+  const right = `(?=$|${boundary}|\\.(?![A-Za-z0-9._/\\\\-]))`;
+  return new RegExp(`(?:^|${boundary})(?:\\./)?${esc}${right}`).test(text);
+}
+
 /** @param {string[]} paths @param {{rel:string,status:string,text:string}[]} docs @param {Set<string>} staged */
 export function decide(paths, docs, staged = new Set()) {
   const covers = coveringDocs(docs, staged);
-  const uncovered = paths.filter((p) => !covers.some((d) => d.text.includes(p)));
+  const uncovered = paths.filter((p) => !covers.some((d) => mentionsPath(d.text, p)));
   return { uncovered };
 }
 
@@ -132,23 +143,18 @@ function visibleDocs(stagedSet) {
   const headMap = parseLs(gitText(['ls-tree', '-r', 'HEAD', '--', 'workflow/plans']).stdout, 'head');
   const onDisk = walkPlans('workflow/plans', []);
   const wanted = new Map();
-  const untracked = [];
-  for (const rel of new Set([...indexMap.keys(), ...headMap.keys(), ...onDisk])) {
+  // 只认 git 索引 / HEAD 的 blob：未跟踪的 plan 可被 AI 自写 approved 且不留下 git 痕迹，
+  // 不构成覆盖锚点；它们只经 onDisk 进 hints，提示「工作区 approved 但本次提交看不见」。
+  for (const rel of new Set([...indexMap.keys(), ...headMap.keys()])) {
     if (!rel.startsWith('workflow/plans/')) continue;
     if (stagedSet.has(rel) && indexMap.has(rel)) wanted.set(rel, indexMap.get(rel));
     else if (headMap.has(rel)) wanted.set(rel, headMap.get(rel));
-    else if (!headMap.has(rel) && !indexMap.has(rel)) untracked.push(rel);
   }
   const blobs = catBatch([...wanted.values()]);
   const docs = [];
   for (const [rel, sha] of wanted) {
     const text = blobs.get(sha);
     if (text == null) continue;
-    docs.push({ rel, status: statusOf(text), text });
-  }
-  for (const rel of untracked) {
-    let text = '';
-    try { text = fs.readFileSync(rel, 'utf8'); } catch { continue; }
     docs.push({ rel, status: statusOf(text), text });
   }
   return { docs, onDisk };
@@ -160,7 +166,7 @@ function hints(uncovered, docs, onDisk) {
   for (const rel of onDisk) {
     let text = '';
     try { text = fs.readFileSync(rel, 'utf8'); } catch { continue; }
-    if (!uncovered.some((p) => text.includes(p))) continue;
+    if (!uncovered.some((p) => mentionsPath(text, p))) continue;
     const st = statusOf(text);
     if (st === 'draft') draftHits.push(rel);
     if (st === 'approved') {

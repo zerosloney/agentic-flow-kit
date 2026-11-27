@@ -1,10 +1,9 @@
 // fill-intent：起草 intent 草稿（背景与问题/历史教训防复发/目标/非目标/约束/影响面/触达红线/验收标准 8 节正文 + 确认与复核 共 9 节）
 // 读 workflow/intents/_TEMPLATE.md 的节标题 → 输出符合 frontmatter 受限子集（5 字段）的草稿到指定文件
 // 用法：flow-kit run fill-intent.mjs --module pipeline --level L1 --topic "test" --output /tmp/x.md
-// 零依赖；CLI 解析用最简字符串匹配；不替代 AI 起草——本工具只输出模板与提示句
-import fs from 'node:fs';
-import path from 'node:path';
+// 零外部依赖；CLI 解析用最简字符串匹配；不替代 AI 起草——本工具只输出模板与提示句
 import { ENUMS } from './workflow-enums.mjs';
+import { writeDraftDoc } from './stage-gates.mjs';
 
 const TODAY = new Date().toISOString().slice(0, 10);
 const LEVELS = ENUMS['level.all']; // 级别词表单源（.agents/config/workflow-enums.txt）
@@ -53,8 +52,8 @@ if (isMain) {
   if (!a.topic || !a.module || !a.output) fail('必填：--topic / --module / --output；选填：--level（默认 L1）/ --notes');
   if (!LEVELS.includes(a.level)) fail('level 必须在 ' + LEVELS.join('|') + '：' + a.level);
   const { body } = renderIntent(a);
-  fs.mkdirSync(path.dirname(a.output), { recursive: true });
-  fs.writeFileSync(a.output, body);
+  const w = writeDraftDoc(a.output, body);
+  if (!w.ok) fail(w.reason);
   console.log('✅ 已生成 intent 草稿：' + a.output + '（状态 draft / 级别 ' + a.level + ' / 模块 ' + a.module + '）');
 }
 export default renderIntent;

@@ -102,18 +102,54 @@ function loadPolicy() {
   };
 }
 
-function parseDockerfileImage(text) {
-  const m = /^FROM\s+(\S+)/im.exec(String(text || ''));
-  return m ? m[1] : null;
+// 逐 stage 解析 Dockerfile：基础镜像、别名、该 stage 最终生效的 USER。
+// 只看第一处 FROM / USER 会把后续 stage 的镜像与身份整个放行（审计 H3）。
+function parseDockerfileStages(text) {
+  const stages = [];
+  const aliases = new Map();
+  for (const line of String(text || '').split(/\r?\n/)) {
+    // Dockerfile 只认整行注释：行内 # 是命令的一部分。
+    if (!line.trim() || /^\s*#/.test(line)) continue;
+    const from = /^\s*FROM\s+(.*)$/i.exec(line);
+    if (from) {
+      // --platform=... 之类的构建参数不属于镜像名。
+      const tokens = from[1].trim().split(/\s+/).filter((token) => !token.startsWith('--'));
+      const base = tokens[0] || null;
+      const alias = (tokens[1] || '').toUpperCase() === 'AS' ? tokens[2] || null : null;
+      // FROM 可以引用先前 stage 的别名（不是拉镜像）：换成该 stage 的基础镜像再判白名单。
+      const image = base && aliases.has(base.toLowerCase()) ? aliases.get(base.toLowerCase()) : base;
+      if (alias) aliases.set(alias.toLowerCase(), image);
+      stages.push({ image, alias, user: null });
+      continue;
+    }
+    const user = /^\s*USER\s+(\S+)/i.exec(line);
+    if (user && stages.length) stages[stages.length - 1].user = user[1];
+  }
+  return stages;
 }
 
-// 钉定版本优先读 Dockerfile 的 ARG 默认值（生成器就是这么写的），没有 ARG 时退回安装目标上的字面版本。
+// USER 语法是 user[:group]：只看用户名部分，root 或 UID 0 都是 root 身份。
+function isRootUser(user) {
+  return /^(root|0+)$/i.test(String(user || '').split(':')[0]);
+}
+
+// 版本声明按全文件读：任何 stage 的 ARG 默认值或安装行都是声明。
+// `agentic-flow-kit@${FLOW_KIT_VERSION}` 这类变量引用由 ARG 解析，不算独立声明。
+function parseDockerfileKitVersions(text) {
+  const body = String(text || '')
+    .split(/\r?\n/)
+    .filter((line) => !/^\s*#/.test(line))
+    .join('\n');
+  const args = [...body.matchAll(/^\s*ARG\s+FLOW_KIT_VERSION=(\S+)/gim)].map((m) => m[1].trim());
+  const installs = [...body.matchAll(/agentic-flow-kit@([^\s"'\\]+)/g)]
+    .map((m) => m[1])
+    .filter((version) => !version.includes('$'));
+  return [...args, ...installs];
+}
+
+// 钉定版本优先读 ARG 默认值（生成器就是这么写的），没有 ARG 时退回安装行上的字面版本。
 function parseDockerfileKitVersion(text) {
-  const s = String(text || '');
-  const arg = /^\s*ARG\s+FLOW_KIT_VERSION=(\S+)/im.exec(s);
-  if (arg) return arg[1].trim();
-  const m = /agentic-flow-kit@([^\s"'\\]+)/.exec(s);
-  return m ? m[1] : null;
+  return parseDockerfileKitVersions(text)[0] || null;
 }
 
 function isConcreteVersion(version) {
@@ -170,23 +206,37 @@ function main() {
     problems.push(`${DOCKERFILE_REL}: 缺失`);
   } else {
     const text = fs.readFileSync(dockerAbs, 'utf8');
-    image = parseDockerfileImage(text);
-    if (!image) problems.push(`${DOCKERFILE_REL}: 缺少 FROM 指令`);
+    const stages = parseDockerfileStages(text);
+    if (!stages.length) problems.push(`${DOCKERFILE_REL}: 缺少 FROM 指令`);
     else {
-      if (!policy.allowedImagePrefixes.some((prefix) => image.startsWith(prefix))) {
-        problems.push(`镜像不在白名单内：${image}`);
+      for (const [index, stage] of stages.entries()) {
+        if (!stage.image) {
+          problems.push(`${DOCKERFILE_REL}: 第 ${index + 1} 个 stage 的 FROM 缺少镜像`);
+          continue;
+        }
+        if (!policy.allowedImagePrefixes.some((prefix) => stage.image.startsWith(prefix))) {
+          problems.push(`镜像不在白名单内：${stage.image}`);
+        }
+        const tag = imageTag(stage.image);
+        if (!tag) problems.push(`镜像未钉版本：${stage.image}`);
+        else if (policy.forbiddenTags.includes(tag)) problems.push(`镜像使用了浮动 tag「${tag}」：${stage.image}`);
       }
-      const tag = imageTag(image);
-      if (!tag) problems.push(`镜像未钉版本：${image}`);
-      else if (policy.forbiddenTags.includes(tag)) problems.push(`镜像使用了浮动 tag「${tag}」：${image}`);
-      if (STACK_IMAGES[stack] && image !== STACK_IMAGES[stack]) {
+      image = stages[stages.length - 1].image;
+      if (image && STACK_IMAGES[stack] && image !== STACK_IMAGES[stack]) {
         problems.push(`镜像与栈不符：${image} ≠ ${STACK_IMAGES[stack]}（stack=${stack}）`);
       }
     }
-    const userLine = /^\s*USER\s+(\S+)/m.exec(text);
-    if (!userLine) problems.push(`${DOCKERFILE_REL} 缺少 USER 指令（容器以 root 运行不安全）`);
-    else if (STACK_USER[stack] && userLine[1] !== STACK_USER[stack]) {
-      problems.push(`USER 与镜像不符：${userLine[1]} ≠ ${STACK_USER[stack]}（stack=${stack}）`);
+    // 多 stage 时每个 stage 的最终 USER 都要非 root，最后运行的 stage 还要对上镜像自带用户。
+    stages.forEach((stage, index) => {
+      if (!stage.user) {
+        problems.push(`${DOCKERFILE_REL} 第 ${index + 1} 个 stage 缺少 USER 指令（容器以 root 运行不安全）`);
+      } else if (isRootUser(stage.user)) {
+        problems.push(`${DOCKERFILE_REL} 第 ${index + 1} 个 stage 以 root 运行（USER ${stage.user}）`);
+      }
+    });
+    const lastUser = stages.length ? stages[stages.length - 1].user : null;
+    if (STACK_USER[stack] && lastUser && !isRootUser(lastUser) && lastUser !== STACK_USER[stack]) {
+      problems.push(`USER 与镜像不符：${lastUser} ≠ ${STACK_USER[stack]}（stack=${stack}）`);
     }
     const needsNode = Boolean(STACK_NEEDS_NODE[stack]);
     const hasNodeProvision = /^\s*ARG\s+NODE_VERSION=/m.test(text);
@@ -199,6 +249,10 @@ function main() {
     // 解到 /usr/local 是硬要求：解进子目录会让 npm 的 global bin 掉出 PATH。
     if (hasNodeProvision && !/-C \/usr\/local\s/.test(text)) {
       problems.push(`${DOCKERFILE_REL} 的 node tarball 必须解到 /usr/local（否则 npm 全局 bin 不在 PATH）`);
+    }
+    const declaredVersions = [...new Set(parseDockerfileKitVersions(text))];
+    if (declaredVersions.length > 1) {
+      problems.push(`${DOCKERFILE_REL}: flow-kit 版本声明不一致：${declaredVersions.join(' / ')}`);
     }
     kitVersion = parseDockerfileKitVersion(text);
     if (policy.requirePinnedFlowKit && !isConcreteVersion(kitVersion)) {

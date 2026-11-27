@@ -678,3 +678,98 @@ export function frozenFn(a) {
   });
   assert.equal(commentRes.ok, true);
 });
+
+test('Regression: duplicate declarations are tracked and frozen rules cover every instance', () => {
+  const base = `export function handler() { return 1; }
+export function handler() { return 2; }
+`;
+  assert.equal(
+    extractSymbols(base, '.mjs').filter((s) => s.name === 'handler').length,
+    2,
+    '同名声明应按出现次数全部保留'
+  );
+
+  const target = `export function handler() { return 999; }
+export function handler() { return 2; }
+`;
+  const dupRes = verifySemanticSandbox({
+    baseSourceMap: { 'src/dup.mjs': base },
+    targetSourceMap: { 'src/dup.mjs': target },
+    rules: parsePlanSymbolRules('- [x] src/dup.mjs (freeze: handler)'),
+  });
+  assert.equal(dupRes.ok, false, '修改被同名声明遮蔽的冻结符号必须被拦截');
+  assert.ok(dupRes.violations.some((v) => v.code === 'FROZEN_SYMBOL_BREACH' && v.symbol === 'handler'));
+
+  const regionRes = verifySemanticSandbox({
+    baseSourceMap: { 'src/dup.mjs': base },
+    targetSourceMap: { 'src/dup.mjs': `${base}initSideEffect();\n` },
+    rules: parsePlanSymbolRules('- [x] src/dup.mjs (freeze: handler)'),
+  });
+  assert.ok(
+    regionRes.violations.some((v) => v.code === 'UNAUTHORIZED_REGION_CHANGE'),
+    '仅有冻结规则时，符号区间外的改动也必须被拦截'
+  );
+
+  const tsBase = `interface Config { debug: boolean; }
+export class Config { save() { return "v1"; } }
+`;
+  const tsTarget = `interface Config { debug: boolean; }
+export class Config { save() { return "v2"; } }
+`;
+  const tsRes = verifySemanticSandbox({
+    baseSourceMap: { 'src/merge.ts': tsBase },
+    targetSourceMap: { 'src/merge.ts': tsTarget },
+    rules: parsePlanSymbolRules('- [x] src/merge.ts (freeze: Config)'),
+  });
+  assert.equal(tsRes.ok, false, 'interface/class 合并声明中 class 体改动必须被拦截');
+  assert.ok(tsRes.violations.some((v) => v.code === 'FROZEN_SYMBOL_BREACH' && v.symbol === 'Config'));
+});
+
+test('Regression: parsePlanSymbolRules stays linear on long plan lines', () => {
+  const line = `- ${'a.'.repeat(20000)}b.mjs (symbols: zzz`;
+  const startedAt = performance.now();
+  const parsed = parsePlanSymbolRules(line);
+  const elapsedMs = performance.now() - startedAt;
+  assert.deepEqual(parsed.allowedSymbols, {});
+  assert.deepEqual(parsed.frozenSymbols, {});
+  assert.ok(elapsedMs < 1000, `20000 个 token 的规则行解析耗时 ${elapsedMs.toFixed(0)}ms，应低于 1000ms`);
+});
+
+test('Regression: declaration-set changes are violations, not shifted pairings', () => {
+  const single = 'export function handler() { return 1; }\n';
+  const doubled = 'export function handler() { return 1; }\nexport function handler() { return 2; }\n';
+
+  const appendRes = verifySemanticSandbox({
+    baseSourceMap: { 'src/dup.mjs': single },
+    targetSourceMap: { 'src/dup.mjs': doubled },
+    rules: parsePlanSymbolRules('- [x] src/dup.mjs (freeze: handler)'),
+  });
+  assert.equal(appendRes.ok, false, '追加同名声明必须视为冻结符号变更');
+  assert.ok(appendRes.violations.some((v) => v.code === 'FROZEN_SYMBOL_BREACH' && v.symbol === 'handler'));
+
+  const deleteRes = verifySemanticSandbox({
+    baseSourceMap: { 'src/dup.mjs': doubled },
+    targetSourceMap: { 'src/dup.mjs': 'export function handler() { return 2; }\n' },
+    rules: parsePlanSymbolRules('- [x] src/dup.mjs (freeze: handler)'),
+  });
+  assert.equal(deleteRes.ok, false, '删除同名声明必须视为冻结符号变更');
+  assert.equal(deleteRes.diffs['src/dup.mjs'].bodyChanged.length, 0, '声明数量变化不得与残余声明错位配对');
+  assert.equal(deleteRes.diffs['src/dup.mjs'].declarationCountChanged.length, 1);
+
+  const unchangedRes = verifySemanticSandbox({
+    baseSourceMap: { 'src/dup.mjs': doubled },
+    targetSourceMap: { 'src/dup.mjs': doubled },
+    rules: parsePlanSymbolRules('- [x] src/dup.mjs (freeze: handler)'),
+  });
+  assert.equal(unchangedRes.ok, true, '同名声明未变时不得误报');
+
+  const allowedRes = verifySemanticSandbox({
+    baseSourceMap: { 'src/dup.mjs': doubled },
+    targetSourceMap: { 'src/dup.mjs': 'export function handler() { return 2; }\n' },
+    rules: parsePlanSymbolRules('- [x] src/dup.mjs (symbols: handler)'),
+  });
+  assert.ok(
+    allowedRes.violations.some((v) => v.code === 'SYMBOL_DECLARATION_COUNT_CHANGED'),
+    '授权符号的声明数量变化必须单独报告'
+  );
+});

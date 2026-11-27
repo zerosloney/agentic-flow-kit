@@ -385,3 +385,22 @@ test('clean signed envelope verifies through the default public key path', () =>
   assert.equal(res.signatureVerified.fingerprint, pair.fingerprint);
   assert.equal(res.warnings.length, 0);
 });
+
+test('handoff create follows renames, skips deletions, and keeps non-ASCII paths intact', () => {
+  const dir = initRepo();
+  spawnSync('git', ['config', 'core.quotepath', 'true'], { cwd: dir });
+  fs.writeFileSync(path.join(dir, 'old-name.js'), 'export const a = 1;\n', 'utf8');
+  fs.writeFileSync(path.join(dir, 'gone.js'), 'export const b = 2;\n', 'utf8');
+  spawnSync('git', ['add', '-A'], { cwd: dir });
+  spawnSync('git', ['-c', 'user.email=t@t', '-c', 'user.name=t', 'commit', '-q', '--no-verify', '-m', 'init'], { cwd: dir });
+  spawnSync('git', ['mv', 'old-name.js', 'new-name.js'], { cwd: dir });
+  fs.rmSync(path.join(dir, 'gone.js'));
+  fs.mkdirSync(path.join(dir, '资料'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '资料', '说明.md'), '# 说明\n', 'utf8');
+
+  const res = run(['handoff', 'create', '--from', 'code', '--to', 'review', '--target', dir, '--json'], dir);
+  assert.equal(res.status, 0, res.stderr);
+  const data = JSON.parse(res.stdout);
+  const envelope = JSON.parse(fs.readFileSync(data.file, 'utf8'));
+  assert.deepEqual(envelope.artifacts.map((a) => a.path).sort(), ['new-name.js', '资料/说明.md']);
+});

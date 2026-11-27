@@ -17,6 +17,7 @@ import {
 } from '../src/ci/gate.mjs';
 import { generateKeyPair, signPayload, writeSignatureFile } from '../src/install/notary.mjs';
 import { recordSkillEvalLog } from '../src/skills/eval-harness.mjs';
+import { readKitVersion } from '../src/install/version.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
@@ -199,20 +200,47 @@ test('generateCiWorkflow generates valid GitHub Actions and GitLab CI files', ()
   assert.equal(gh.created, true);
   assert.equal(fs.existsSync(gh.path), true);
   assert.match(gh.content, /AI-Native Zero-Trust Quality Gate/);
-  assert.match(gh.content, /agentic-flow-kit gate/);
+  assert.match(gh.content, /agentic-flow-kit@\d+\.\d+\.\d+ gate/);
 
   // 2. GitLab
   const gl = generateCiWorkflow({ provider: 'gitlab', target: dir, t });
   assert.equal(gl.created, true);
   assert.equal(fs.existsSync(gl.path), true);
   assert.match(gl.content, /ai-gate:/);
-  assert.match(gl.content, /agentic-flow-kit gate/);
+  assert.match(gl.content, /agentic-flow-kit@\d+\.\d+\.\d+ gate/);
   // 声明的工件必须真实存在：gate 只写 markdown，不得声明从未生成的 JUnit 报告
   assert.doesNotMatch(gl.content, /junit:/);
   assert.doesNotMatch(gl.content, /gate-summary\.xml/);
   assert.match(gl.content, /paths:/);
   assert.match(gl.content, /gate-summary\.md/);
   assert.match(gl.content, /when: always/);
+});
+
+// D26 追加：生成器写进用户项目的 ai-gate.yml 与安装模板同标准——
+// action 按完整 commit SHA 固定、最小权限、kit 版本与当前生成器一致。
+test('generateCiWorkflow pins actions, permissions, and the generator kit version', () => {
+  const dir = makeTmp('flow-kit-gate-ci-pin-');
+  const gh = generateCiWorkflow({ provider: 'github', target: dir, t });
+  const uses = gh.content.split(/\r?\n/).filter((line) => /^\s*uses:\s*\S+/.test(line));
+  assert.ok(uses.length >= 2, '生成的 GitHub 工作流应至少有两个第三方 action');
+  for (const line of uses) {
+    assert.match(
+      line.trim(),
+      /^uses:\s*[^@\s]+@[0-9a-f]{40}\s+#\s*v\d+\.\d+\.\d+$/,
+      `action 未按完整 SHA 固定：${line.trim()}`
+    );
+  }
+  assert.match(gh.content, /^permissions:\s*$/m);
+  assert.match(gh.content, /^\s+contents:\s*read\s*$/m);
+
+  const version = readKitVersion();
+  const pinned = new RegExp(`npx --yes agentic-flow-kit@${version.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')} gate --strict`);
+  assert.match(gh.content, pinned);
+  assert.doesNotMatch(gh.content, /npx --yes agentic-flow-kit(?!@)/);
+
+  const gl = generateCiWorkflow({ provider: 'gitlab', target: dir, t });
+  assert.match(gl.content, pinned);
+  assert.doesNotMatch(gl.content, /npx --yes agentic-flow-kit(?!@)/);
 });
 
 // 审查遗留批 2026-11-23：init-ci 对已存在的 .gitlab-ci.yml 不再无条件覆盖——默认抛 CONFIG_EXISTS
@@ -253,6 +281,85 @@ test('gate init-ci exits 1 on an existing .gitlab-ci.yml and --force overwrites'
   const forced = run(['gate', 'init-ci', '--provider', 'gitlab', '--force', '--target', dir], dir);
   assert.equal(forced.status, 0, forced.stderr);
   assert.match(fs.readFileSync(path.join(dir, '.gitlab-ci.yml'), 'utf8'), /ai-gate:/);
+});
+
+// 审计修复 2026-11-27：GitHub 分支与 GitLab 同契约。init-ci 默认 provider 就是 github，
+// 此前无条件重写 ai-gate.yml，会静默冲掉用户手改的工作流。
+test('generateCiWorkflow refuses to overwrite an existing GitHub workflow without force', () => {
+  const dir = makeTmp('flow-kit-gate-ci-gh-exists-');
+  const first = generateCiWorkflow({ provider: 'github', target: dir, t });
+  assert.equal(first.created, true);
+  fs.writeFileSync(first.path, '# user-tuned workflow', 'utf8');
+
+  assert.throws(
+    () => generateCiWorkflow({ provider: 'github', target: dir, t }),
+    (err) => {
+      assert.equal(err.code, 'CONFIG_EXISTS');
+      assert.match(err.message, /\.github\/workflows\/ai-gate\.yml/);
+      return true;
+    }
+  );
+  assert.equal(fs.readFileSync(first.path, 'utf8'), '# user-tuned workflow', 'existing file must not be silently overwritten');
+
+  const forced = generateCiWorkflow({ provider: 'github', target: dir, t, force: true });
+  assert.equal(forced.created, true);
+  assert.match(fs.readFileSync(forced.path, 'utf8'), /AI-Native Zero-Trust Quality Gate/);
+});
+
+test('gate init-ci exits 1 on an existing GitHub workflow and --force overwrites', () => {
+  const dir = makeTmp('flow-kit-gate-initci-gh-cli-');
+  const first = run(['gate', 'init-ci', '--target', dir], dir);
+  assert.equal(first.status, 0, first.stderr);
+
+  const again = run(['gate', 'init-ci', '--target', dir], dir);
+  assert.equal(again.status, 1, `CONFIG_EXISTS should map to CONFLICT(1), got ${again.status}: ${again.stderr}`);
+  assert.match(again.stderr, /ai-gate\.yml/);
+
+  const forced = run(['gate', 'init-ci', '--force', '--target', dir], dir);
+  assert.equal(forced.status, 0, forced.stderr);
+});
+
+// D25 补全：安装器已写 .github/workflows/ci.yml 时，init-ci 不能再生成第二条流水线；
+// 只按 kit 标记（name: ai-native-gates）判断，用户自己的 ci.yml 不算冲突。
+test('gate init-ci refuses when the kit-installed ci.yml is present', () => {
+  const dir = makeTmp('flow-kit-gate-installed-ci-');
+  const workflows = path.join(dir, '.github', 'workflows');
+  const installed = path.join(workflows, 'ci.yml');
+  const generated = path.join(workflows, 'ai-gate.yml');
+  fs.mkdirSync(workflows, { recursive: true });
+
+  // 用户自己的 ci.yml：无 kit 标记，不触发拒绝
+  fs.writeFileSync(installed, 'name: my-own-ci\n', 'utf8');
+  const unrelated = generateCiWorkflow({ provider: 'github', target: dir, t });
+  assert.equal(unrelated.created, true);
+  assert.equal(fs.existsSync(generated), true);
+
+  // 安装器生成的 ci.yml：按 kit 标记识别并拒绝，消息点名该文件且要求只保留一条流水线
+  fs.rmSync(generated);
+  fs.writeFileSync(installed, 'name: ai-native-gates\non: push\n', 'utf8');
+  assert.throws(
+    () => generateCiWorkflow({ provider: 'github', target: dir, t }),
+    (err) => {
+      assert.equal(err.code, 'CONFIG_EXISTS');
+      assert.match(err.message, /\.github\/workflows\/ci\.yml/);
+      assert.ok(
+        err.message.includes(t('gate.ciInstalledHint')),
+        `拒绝消息必须包含本地化提示（gate.ciInstalledHint）：${err.message}`
+      );
+      return true;
+    }
+  );
+  assert.equal(fs.existsSync(generated), false, '拒绝时不得写入第二条流水线');
+
+  // --force 仍然写入
+  const forced = generateCiWorkflow({ provider: 'github', target: dir, t, force: true });
+  assert.equal(forced.created, true);
+
+  // 自己的目标文件已存在：默认仍拒绝
+  assert.throws(
+    () => generateCiWorkflow({ provider: 'github', target: dir, t }),
+    (err) => err.code === 'CONFIG_EXISTS'
+  );
 });
 
 // 审查遗留批 2026-11-23：git 默认把非 ASCII 路径 C 转义（"文档/\350\257\264..."），增量范围漏判。

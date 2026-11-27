@@ -106,29 +106,49 @@ export function appendTimelineEvent(root, event = {}) {
 }
 
 /**
+ * 加载指定 runId 的全量时序轨迹，按行解析：损坏行跳过并计数，不丢整条链
+ * @param {string} root - 项目根目录
+ * @param {string} runId - 运行标识
+ * @returns {{ events: Array<object>, skippedLines: number, totalLines: number }}
+ */
+export function loadTimelineTraceReport(root, runId) {
+  if (!runId) return { events: [], skippedLines: 0, totalLines: 0 };
+  const safeRunId = String(runId).replace(/[^a-zA-Z0-9_-]/g, '_');
+  const traceFile = path.join(root, '.agents', 'traces', `${safeRunId}.timeline.jsonl`);
+
+  if (!fs.existsSync(traceFile)) return { events: [], skippedLines: 0, totalLines: 0 };
+
+  let content = '';
+  try {
+    content = fs.readFileSync(traceFile, 'utf8');
+  } catch {
+    return { events: [], skippedLines: 0, totalLines: 0 };
+  }
+
+  const lines = content.split('\n').map((line) => line.trim()).filter(Boolean);
+  const events = [];
+  let skippedLines = 0;
+  for (const line of lines) {
+    try {
+      const parsed = JSON.parse(line);
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) events.push(parsed);
+      else skippedLines += 1;
+    } catch {
+      skippedLines += 1;
+    }
+  }
+  events.sort((a, b) => a.seq - b.seq);
+  return { events, skippedLines, totalLines: lines.length };
+}
+
+/**
  * 加载指定 runId 的全量时序轨迹
  * @param {string} root - 项目根目录
  * @param {string} runId - 运行标识
  * @returns {Array<object>} 时序事件数组
  */
 export function loadTimelineTrace(root, runId) {
-  if (!runId) return [];
-  const safeRunId = String(runId).replace(/[^a-zA-Z0-9_-]/g, '_');
-  const traceFile = path.join(root, '.agents', 'traces', `${safeRunId}.timeline.jsonl`);
-
-  if (!fs.existsSync(traceFile)) return [];
-
-  try {
-    const content = fs.readFileSync(traceFile, 'utf8');
-    return content
-      .split('\n')
-      .map((line) => line.trim())
-      .filter(Boolean)
-      .map((line) => JSON.parse(line))
-      .sort((a, b) => a.seq - b.seq);
-  } catch {
-    return [];
-  }
+  return loadTimelineTraceReport(root, runId).events;
 }
 
 // ---------------------------------------------------------------------
@@ -306,7 +326,7 @@ export function diffTimelineNodes(eventA = {}, eventB = {}) {
  * @returns {object} 离线复盘包对象
  */
 export function exportPostMortemBundle(root, runId, options = {}) {
-  const events = loadTimelineTrace(root, runId);
+  const { events, skippedLines, totalLines } = loadTimelineTraceReport(root, runId);
   const keyframes = buildKeyframeIndex(events);
 
   // 尝试收集背书分片
@@ -342,6 +362,7 @@ export function exportPostMortemBundle(root, runId, options = {}) {
     runId,
     metrics: {
       totalEvents: events.length,
+      skippedLines,
       keyframesCount: keyframes.length,
       endorsementsCount: endorsements.length,
       prescriptionsCount: prescriptions.length,
@@ -351,6 +372,10 @@ export function exportPostMortemBundle(root, runId, options = {}) {
     endorsements,
     prescriptions,
   };
+
+  if (skippedLines > 0) {
+    bundle.warnings = [`跳过 ${skippedLines}/${totalLines} 行损坏记录——复盘包不完整`];
+  }
 
   if (options.saveToFile !== false) {
     const traceDir = path.join(root, '.agents', 'traces');
@@ -476,10 +501,13 @@ export function main() {
       console.error('错误: 请通过 --run 指定 runId');
       process.exit(1);
     }
-    const events = loadTimelineTrace(root, args.runId);
+    const { events, skippedLines, totalLines } = loadTimelineTraceReport(root, args.runId);
+    if (skippedLines > 0) {
+      console.error(`[timeline] 警告: 跳过 ${skippedLines}/${totalLines} 行损坏记录——查询结果不完整`);
+    }
     const filtered = queryTimelineEvents(events, { stage: args.stage });
     console.log(JSON.stringify(filtered, null, 2));
-    process.exit(0);
+    process.exit(skippedLines > 0 && events.length === 0 ? 1 : 0);
   }
 
   if (args.command === 'export') {
@@ -488,8 +516,9 @@ export function main() {
       process.exit(1);
     }
     const bundle = exportPostMortemBundle(root, args.runId);
+    for (const warning of bundle.warnings || []) console.error(`[timeline] 警告: ${warning}`);
     console.log(`[timeline] 成功导出复盘包: ${bundle.bundleFile}`);
-    process.exit(0);
+    process.exit(bundle.metrics.skippedLines > 0 && bundle.metrics.totalEvents === 0 ? 1 : 0);
   }
 }
 

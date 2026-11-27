@@ -3,6 +3,7 @@ import { makeTmp } from './helpers/tmp.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -230,4 +231,170 @@ test('sbom commands output localized English text with --lang en', () => {
   ]);
   assert.equal(rVerify.status, 0, rVerify.stderr);
   assert.match(rVerify.stdout, /AI Software Bill of Materials integrity verified:/);
+});
+
+function writeSbomFile(target, name, data) {
+  const file = path.join(target, name);
+  fs.writeFileSync(file, typeof data === 'string' ? data : JSON.stringify(data));
+  return file;
+}
+
+function runVerify(target, file) {
+  return runCli(target, ['sbom', 'verify', file, '--target', '.', '--lang', 'en', '--json']);
+}
+
+test('sbom verify fails closed on unrecognized or unreadable SBOM documents', () => {
+  const tmp = makeTmp('flow-kit-sbom-garbage-');
+  const target = setupTargetProject(tmp);
+
+  for (const [label, payload] of [
+    ['empty object', {}],
+    ['bare number', 5],
+    ['unrelated JSON', { name: 'not-a-sbom' }],
+  ]) {
+    const file = writeSbomFile(target, 'garbage.json', payload);
+    const r = runVerify(target, file);
+    assert.notEqual(r.status, 0, `${label} must fail verification`);
+    const res = json(r);
+    assert.equal(res.ok, false, label);
+    assert.ok(
+      res.problems.some((p) => /Unrecognized SBOM format/i.test(p)),
+      `${label} should name the format problem: ${res.problems.join('; ')}`,
+    );
+  }
+
+  const rMissing = runVerify(target, path.join(target, 'absent.json'));
+  assert.notEqual(rMissing.status, 0, 'missing SBOM file must fail verification');
+  assert.match(rMissing.stderr, /not found/i);
+
+  const badJson = writeSbomFile(target, 'bad.json', '{ not json');
+  const rBad = runVerify(target, badJson);
+  assert.notEqual(rBad.status, 0, 'unparsable SBOM file must fail verification');
+  assert.match(rBad.stderr, /Invalid SBOM file/i);
+});
+
+test('sbom verify fails when a required native section is missing or malformed', () => {
+  const tmp = makeTmp('flow-kit-sbom-native-shape-');
+  const target = setupTargetProject(tmp);
+  const sbomFile = path.join(target, 'native-sbom.json');
+  const rExport = runCli(target, ['sbom', 'export', '--out', sbomFile, '--target', '.', '--json']);
+  assert.equal(rExport.status, 0, rExport.stderr);
+  const native = JSON.parse(fs.readFileSync(sbomFile, 'utf8'));
+
+  const cases = [
+    ['missing proof chain', (d) => { delete d.proofChain; }, /proof chain/i],
+    ['missing proof chain root', (d) => { delete d.proofChain.root; }, /proof chain root/i],
+    ['missing skills', (d) => { delete d.skills; }, /skills section/i],
+    ['object skills', (d) => { d.skills = {}; }, /skills section/i],
+    ['missing policy', (d) => { delete d.policy; }, /policy section/i],
+  ];
+
+  for (const [label, mutate, pattern] of cases) {
+    const data = structuredClone(native);
+    mutate(data);
+    const file = writeSbomFile(target, 'native-mutated.json', data);
+    const r = runVerify(target, file);
+    assert.notEqual(r.status, 0, `${label} must fail verification`);
+    const res = json(r);
+    assert.equal(res.ok, false, label);
+    assert.ok(
+      res.problems.some((p) => pattern.test(p)),
+      `${label}: ${res.problems.join('; ')}`,
+    );
+    assert.doesNotMatch(r.stderr, /TypeError/, `${label} must not crash: ${r.stderr}`);
+  }
+});
+
+test('sbom verify rejects malformed CycloneDX components without crashing', () => {
+  const tmp = makeTmp('flow-kit-sbom-cdx-shape-');
+  const target = setupTargetProject(tmp);
+  const sbomFile = path.join(target, 'cdx.json');
+  const rExport = runCli(target, ['sbom', 'export', '--format', 'cyclonedx', '--out', sbomFile, '--target', '.', '--json']);
+  assert.equal(rExport.status, 0, rExport.stderr);
+  const cdx = JSON.parse(fs.readFileSync(sbomFile, 'utf8'));
+
+  const rClean = runVerify(target, sbomFile);
+  assert.equal(rClean.status, 0, `${rClean.stderr}\n${rClean.stdout}`);
+  assert.equal(json(rClean).ok, true);
+
+  const cases = [
+    ['non-array components', (d) => { d.components = 5; }, /components/i],
+    ['null component', (d) => { d.components = [null]; }, /component/i],
+    ['numeric skill name', (d) => { d.components = [{ type: 'data', name: 123 }]; }, /component/i],
+    ['non-array hashes', (d) => { d.components = [{ type: 'data', name: 'ai-skill-arena', hashes: 5 }]; }, /hashes/i],
+  ];
+
+  for (const [label, mutate, pattern] of cases) {
+    const data = structuredClone(cdx);
+    mutate(data);
+    const file = writeSbomFile(target, 'cdx-mutated.json', data);
+    const r = runVerify(target, file);
+    assert.notEqual(r.status, 0, `${label} must fail verification`);
+    const res = json(r);
+    assert.equal(res.ok, false, label);
+    assert.ok(res.problems.some((p) => pattern.test(p)), `${label}: ${res.problems.join('; ')}`);
+    assert.doesNotMatch(r.stderr, /TypeError/, `${label} must not crash: ${r.stderr}`);
+  }
+});
+
+test('sbom verify checks SPDX packages instead of passing them through', () => {
+  const tmp = makeTmp('flow-kit-sbom-spdx-verify-');
+  const target = setupTargetProject(tmp);
+  const sbomFile = path.join(target, 'spdx.json');
+  const rExport = runCli(target, ['sbom', 'export', '--format', 'spdx', '--out', sbomFile, '--target', '.', '--json']);
+  assert.equal(rExport.status, 0, rExport.stderr);
+
+  const rOk = runVerify(target, sbomFile);
+  assert.equal(rOk.status, 0, `${rOk.stderr}\n${rOk.stdout}`);
+  assert.equal(json(rOk).ok, true);
+
+  const firstSkillDir = fs.readdirSync(path.join(target, '.agents', 'skills'))[0];
+  fs.appendFileSync(path.join(target, '.agents', 'skills', firstSkillDir, 'SKILL.md'), '\n<!-- tampered content -->');
+
+  const rBad = runVerify(target, sbomFile);
+  assert.notEqual(rBad.status, 0, 'tampered SPDX skill must fail verification');
+  const resBad = json(rBad);
+  assert.equal(resBad.ok, false);
+  assert.ok(
+    resBad.problems.some((p) => /modified|Missing skill/i.test(p)),
+    `expected a skill mismatch: ${resBad.problems.join('; ')}`,
+  );
+
+  const noPackages = writeSbomFile(target, 'spdx-no-packages.json', { spdxVersion: 'SPDX-2.3' });
+  const rShape = runVerify(target, noPackages);
+  assert.notEqual(rShape.status, 0, 'SPDX document without packages must fail verification');
+  assert.ok(
+    json(rShape).problems.some((p) => /packages/i.test(p)),
+    `expected a packages problem: ${json(rShape).problems.join('; ')}`,
+  );
+});
+
+test('sbom verify contains traversal skill names to the project', () => {
+  const tmp = makeTmp('flow-kit-sbom-traversal-');
+  const target = setupTargetProject(tmp);
+
+  const outsideText = 'outside skill content\n';
+  fs.mkdirSync(path.join(tmp, 'outside'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, 'outside', 'SKILL.md'), outsideText);
+  const outsideHash = crypto.createHash('sha256').update(outsideText).digest('hex');
+
+  const sbom = {
+    bomFormat: 'CycloneDX',
+    specVersion: '1.5',
+    version: 1,
+    components: [
+      { type: 'data', name: 'ai-skill-../../outside', hashes: [{ alg: 'SHA-256', content: outsideHash }] },
+      { type: 'data', name: 'ai-skill-../../../outside', hashes: [{ alg: 'SHA-256', content: outsideHash }] },
+    ],
+  };
+  const file = writeSbomFile(target, 'traversal.json', sbom);
+
+  const r = runVerify(target, file);
+  assert.notEqual(r.status, 0, 'a traversal skill name must never resolve outside the project');
+  const res = json(r);
+  assert.equal(res.ok, false);
+  assert.ok(
+    res.problems.some((p) => /Skill path escapes project/i.test(p)),
+    `expected traversal to be rejected: ${res.problems.join('; ')}`,
+  );
 });

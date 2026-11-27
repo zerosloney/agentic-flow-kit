@@ -14,7 +14,7 @@
 //   workflow 活跃/档案 = workflow/INDEX.md 头部两行（同受生成物漂移门钉死）。
 // 用法：flow-kit run gen-narrative-claims.mjs [--root <dir>] [--check]
 //   默认 = 改写所有命中声明为单源真值（打印逐处变更）；--check = 漂移 exit 1（供门禁/CI）。
-// 测试面已随引擎减重退役（2026-10-28，owner 决策），本脚本现无测试兜底
+// 测试兜底：tests/gen-narrative-claims.test.mjs（2026-11-27 补：来源降级整类跳过、毒化缓存按门表重建）。
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -28,6 +28,19 @@ const argOf = (k) => {
   return i >= 0 && i + 1 < argv.length ? argv[i + 1] : '';
 };
 
+// ---- 静态门表核对：engine 门数由 verify.mjs 的 GATES 主表唯一决定；全量门数还含项目产品门/栈自动门，
+//      静态只能核下界（毒化缓存把 all 写小于基础门数即被识破并重建）。
+function gateTableCounts(verifySrc) {
+  const start = verifySrc.indexOf('const GATES = [');
+  const end = start >= 0 ? verifySrc.indexOf('\n];', start) : -1;
+  if (start < 0 || end < 0) return null;
+  const entries = verifySrc.slice(start, end).split(/\r?\n/).filter((line) => /^\s*\{ id: /.test(line));
+  return {
+    base: entries.length,
+    engine: entries.filter((line) => /cohort: 'engine'/.test(line)).length,
+  };
+}
+
 // ---- 单源取数：collectSources(root) → { ... } | 抛错（缺单源文件 = fail-loud，门与生成器同口径）----
 export function collectSources(root, scriptsDir = process.env.FLOW_KIT_RUNTIME_SCRIPTS || path.join(root, '.agents', 'scripts')) {
   const rd = (p) => fs.readFileSync(path.join(root, p), 'utf8');
@@ -40,6 +53,8 @@ export function collectSources(root, scriptsDir = process.env.FLOW_KIT_RUNTIME_S
     anchors += 1;
     if (row[1] === 'hard') epHard += 1; else epAdvisory += 1;
   }
+  // 版本行缺失或锚表为空 = 来源降级：锚数类整体置 null（跳过），不得按 0 改写
+  const anchorsReady = Boolean(vm) && anchors > 0;
   const idx = rd(path.join('wiki', 'INDEX.md'));
   const tm = idx.match(/合计：\*\*(\d+) 份\*\*知识文档，\*\*(\d+) 个主题\*\*/);
   // workflow 索引两行（2026-11-11 P0 补）：总览 s8「现状数字」原手抄 活跃 10 / 档案 833，
@@ -47,7 +62,7 @@ export function collectSources(root, scriptsDir = process.env.FLOW_KIT_RUNTIME_S
   const wfIdx = rd(path.join('workflow', 'INDEX.md'));
   const wfActive = wfIdx.match(/^## 活跃（(\d+)）/m);
   const wfArchive = wfIdx.match(/^## 档案计数（(\d+)/m);
-  let hooks = 0;
+  let hooks = null;
   const gh = path.join(root, '.githooks');
   if (fs.existsSync(gh)) hooks = fs.readdirSync(gh).filter((f) => fs.statSync(path.join(gh, f)).isFile()).length;
   // 模型侧载体计数（2026-11-11 P0）：总览图里的「commands/ N 个阶段指令」「roles/ N 个角色契约」
@@ -65,13 +80,21 @@ export function collectSources(root, scriptsDir = process.env.FLOW_KIT_RUNTIME_S
   // 门数缓存（2026-11-06 P1）：两次 spawn `node verify.mjs --list` 实测 ~500ms，占 wiki-consistency
   // 门一半。门数只取决于 verify.mjs 的 GATES 数组 → 按内容哈希缓存（改 verify.mjs 即重算）；
   // 缓存缺失/哈希不匹配/写失败一律回落逐次 spawn（原语义，不 fail-open 也不新增失败面）。
+  // 2026-11-27：缓存还须与 GATES 主表对账（engine 精确、all 下界）——缓存可被 agent 改写，
+  // 对不上就重建，不拿毒化数字去判定真文档漂移。
   let gc = null;
   try {
     const cacheFile = path.join(root, '.agents', 'cache', 'gate-counts.json');
-    const h = createHash('sha256').update(fs.readFileSync(path.join(SCRIPT_DIR, 'verify.mjs'))).digest('hex');
+    const verifySrc = fs.readFileSync(path.join(SCRIPT_DIR, 'verify.mjs'), 'utf8');
+    const h = createHash('sha256').update(verifySrc).digest('hex');
+    const table = gateTableCounts(verifySrc);
     try {
       const c = JSON.parse(fs.readFileSync(cacheFile, 'utf8'));
-      if (c && c.v === 1 && c.root === path.resolve(root) && c.verifyHash === h && Number.isInteger(c.all) && Number.isInteger(c.engine)) gc = c;
+      const tableOk = Boolean(table)
+        && c.engine === table.engine
+        && c.all >= table.base;
+      if (c && c.v === 1 && c.root === path.resolve(root) && c.verifyHash === h
+        && Number.isInteger(c.all) && Number.isInteger(c.engine) && tableOk) gc = c;
     } catch { /* 无缓存 */ }
     if (!gc) {
       const all = gateCount([]), engine = gateCount(['--engine']);
@@ -86,10 +109,12 @@ export function collectSources(root, scriptsDir = process.env.FLOW_KIT_RUNTIME_S
     }
   } catch { gc = null; }
   return {
-    sections: lanes.length,
-    hardSections: lanes.filter((x) => x[1] === 'hard').length,
+    sections: lanes.length || null,
+    hardSections: lanes.filter((x) => x[1] === 'hard').length || null,
     epVersion: vm ? Number(vm[1]) : null,
-    anchors, epHard, epAdvisory,
+    anchors: anchorsReady ? anchors : null,
+    epHard: anchorsReady ? epHard : null,
+    epAdvisory: anchorsReady ? epAdvisory : null,
     wikiFiles: tm ? Number(tm[1]) : null,
     wikiTopics: tm ? Number(tm[2]) : null,
     commands: countMd(path.join(root, '.agents', 'commands')),
@@ -103,97 +128,115 @@ export function collectSources(root, scriptsDir = process.env.FLOW_KIT_RUNTIME_S
 }
 
 // ---- 声明形态表（单源；门=verify-wiki-consistency §9 / 生成器=本脚本 main 共用）----
-// 每类：re（全局）/ want(S, m) → {ok, label} / render(S, m) → 改写串（形态固定，按已知短语重建）。
-// want 中任一单源为 null（取不到）→ 该类跳过（claims 计 0），不产生不可判定噪声。
+// 每类：needs（依赖的单源键）/ re（全局）/ want(S, m) → {ok, label} / render(S, m) → 改写串（形态固定，按已知短语重建）。
+// needs 中任一单源为 null（取不到或降级）→ 该类整类跳过（claims 计 0，改写不碰），不产生不可判定噪声。
 export function buildClaimClasses(S) {
   const c = [];
   const num = (v) => (typeof v === 'number' && Number.isFinite(v));
   c.push({
     id: 'sections',
+    needs: ['sections'],
     re: /(?:双车道|check-loop|闭环门禁)\s*(\d+)\s*段/g,
     want: (m) => ({ ok: num(S.sections) && Number(m[1]) === S.sections, label: `段数 ${m[1]}（单源 ${S.sections}）` }),
     render: (m) => m[0].replace(/\d+/, String(S.sections)),
   });
   c.push({
     id: 'hard-sections',
+    needs: ['hardSections'],
     re: /硬门\s*(\d+)\s*段/g,
     want: (m) => ({ ok: num(S.hardSections) && Number(m[1]) === S.hardSections, label: `硬门 ${m[1]} 段（单源 ${S.hardSections}）` }),
     render: (m) => `硬门 ${S.hardSections} 段`,
   });
   c.push({
     id: 'anchors-full',
+    needs: ['epVersion', 'anchors', 'epHard', 'epAdvisory'],
     re: /policy v(\d+)\s*[=＝]?\s*(\d+)\s*锚（\s*hard\s*(\d+)\s*·\s*advisory\s*(\d+)/g,
     want: (m) => ({ ok: num(S.anchors) && Number(m[1]) === S.epVersion && Number(m[2]) === S.anchors && Number(m[3]) === S.epHard && Number(m[4]) === S.epAdvisory, label: `policy v${m[1]} = ${m[2]} 锚（hard ${m[3]} · advisory ${m[4]}）（单源 v${S.epVersion} = ${S.anchors} 锚（hard ${S.epHard} · advisory ${S.epAdvisory}））` }),
     render: () => `policy v${S.epVersion} = ${S.anchors} 锚（hard ${S.epHard} · advisory ${S.epAdvisory}`,
   });
   c.push({
     id: 'anchors-bare',
+    needs: ['epVersion', 'anchors'],
     re: /policy v(\d+)\s*[=＝]?\s*(\d+)\s*锚(?!\s*（\s*hard)/g, // 负向先行：完整形态由 anchors-full 处理，防双计
     want: (m) => ({ ok: num(S.anchors) && Number(m[1]) === S.epVersion && Number(m[2]) === S.anchors, label: `policy v${m[1]} = ${m[2]} 锚（单源 v${S.epVersion} = ${S.anchors} 锚）` }),
     render: (m) => m[0].replace(/v\d+/, `v${S.epVersion}`).replace(/\d+\s*锚/, `${S.anchors} 锚`),
   });
   c.push({
     id: 'topics-docs',
+    needs: ['wikiTopics', 'wikiFiles'],
     re: /(\d+)\s*个主题、\s*(\d+)\s*份/g,
     want: (m) => ({ ok: num(S.wikiFiles) && Number(m[1]) === S.wikiTopics && Number(m[2]) === S.wikiFiles, label: `${m[1]} 个主题、${m[2]} 份（单源 ${S.wikiTopics} 主题 ${S.wikiFiles} 份）` }),
     render: () => `${S.wikiTopics} 个主题、${S.wikiFiles} 份`,
   });
   c.push({
     id: 'docs-topics',
+    needs: ['wikiFiles', 'wikiTopics'],
     re: /(\d+)\s*份\s*\/\s*(\d+)\s*主题/g,
     want: (m) => ({ ok: num(S.wikiFiles) && Number(m[1]) === S.wikiFiles && Number(m[2]) === S.wikiTopics, label: `${m[1]} 份 / ${m[2]} 主题（单源 ${S.wikiFiles} 份 / ${S.wikiTopics} 主题）` }),
     render: () => `${S.wikiFiles} 份 / ${S.wikiTopics} 主题`,
   });
   c.push({
     id: 'git-hooks',
+    needs: ['hooks'],
     re: /(\d+)\s*个\s*git\s*原生钩子/g,
     want: (m) => ({ ok: Number(m[1]) === S.hooks, label: `${m[1]} 个 git 原生钩子（.githooks 实有 ${S.hooks}）` }),
     render: () => `${S.hooks} 个 git 原生钩子`,
   });
   c.push({
     id: 'gates-full',
+    needs: ['gatesAll'],
     re: /全量\s*(\d+)\s*门/g,
     want: (m) => ({ ok: num(S.gatesAll) && Number(m[1]) === S.gatesAll, label: `全量 ${m[1]} 门（单源 ${S.gatesAll}）` }),
     render: (m) => m[0].replace(/\d+/, String(S.gatesAll)),
   });
   c.push({
     id: 'gates-full-rev',
+    needs: ['gatesAll'],
     re: /(\d+)\s*门全量/g,
     want: (m) => ({ ok: num(S.gatesAll) && Number(m[1]) === S.gatesAll, label: `${m[1]} 门全量（单源 ${S.gatesAll}）` }),
     render: (m) => m[0].replace(/\d+/, String(S.gatesAll)),
   });
   c.push({
     id: 'gates-engine',
+    needs: ['gatesEngine'],
     re: /增量门\s*(\d+)\s*门/g,
     want: (m) => ({ ok: num(S.gatesEngine) && Number(m[1]) === S.gatesEngine, label: `增量门 ${m[1]} 门（单源 ${S.gatesEngine}）` }),
     render: (m) => m[0].replace(/\d+/, String(S.gatesEngine)),
   });
   c.push({
     id: 'commands',
+    needs: ['commands'],
     re: /commands\/\s*(\d+)\s*个阶段指令/g,
     want: (m) => ({ ok: num(S.commands) && Number(m[1]) === S.commands, label: `commands ${m[1]} 个阶段指令（单源 .agents/commands 实有 ${S.commands} 篇）` }),
     render: (m) => m[0].replace(/\d+/, String(S.commands)),
   });
   c.push({
     id: 'roles',
+    needs: ['roles'],
     re: /roles\/\s*(\d+)\s*个角色契约/g,
     want: (m) => ({ ok: num(S.roles) && Number(m[1]) === S.roles, label: `roles ${m[1]} 个角色契约（单源 .agents/roles 实有 ${S.roles} 篇）` }),
     render: (m) => m[0].replace(/\d+/, String(S.roles)),
   });
   c.push({
     id: 'workflow-active',
+    needs: ['workflowActive'],
     re: /workflow 活跃<\/td><td>(\d+)<\/td>/g,
     want: (m) => ({ ok: num(S.workflowActive) && Number(m[1]) === S.workflowActive, label: `workflow 活跃 ${m[1]}（单源 workflow/INDEX.md 头部 ${S.workflowActive}）` }),
     render: () => `workflow 活跃</td><td>${S.workflowActive}</td>`,
   });
   c.push({
     id: 'workflow-archived',
+    needs: ['workflowArchived'],
     re: /workflow 档案<\/td><td>(\d+)<\/td>/g,
     want: (m) => ({ ok: num(S.workflowArchived) && Number(m[1]) === S.workflowArchived, label: `workflow 档案 ${m[1]}（单源 workflow/INDEX.md 头部 ${S.workflowArchived}）` }),
     render: () => `workflow 档案</td><td>${S.workflowArchived}</td>`,
   });
   return c;
 }
+
+// 依赖的单源有一个取不到（null/降级）就整类跳过：既不判定漂移，也不改写
+const usableClasses = (S) => buildClaimClasses(S)
+  .filter((cls) => (cls.needs || []).every((k) => typeof S[k] === 'number' && Number.isFinite(S[k])));
 
 // ---- 扫描面：wiki/ 活跃知识文档（排除 drafts-archive 与 *.visual-check.*，与 gen-wiki-board 口径一致）----
 function knowledgeDocs(root) {
@@ -220,7 +263,7 @@ function knowledgeDocs(root) {
 // checkNarrativeClaims(root) → { claims, mismatches: [{file, label}] }（门消费方 API）
 export function checkNarrativeClaims(root) {
   const S = collectSources(root);
-  const classes = buildClaimClasses(S);
+  const classes = usableClasses(S);
   const claims = [];
   const mismatches = [];
   for (const doc of knowledgeDocs(root)) {
@@ -253,7 +296,7 @@ if (isMain) {
   }
   // 默认 = 改写
   const S = collectSources(ROOT);
-  const classes = buildClaimClasses(S);
+  const classes = usableClasses(S);
   let changed = 0;
   for (const doc of knowledgeDocs(ROOT)) {
     let text = fs.readFileSync(doc.abs, 'utf8');

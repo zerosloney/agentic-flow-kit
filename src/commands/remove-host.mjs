@@ -14,13 +14,15 @@ import { stripHooksFromRoot } from '../install/hooks.mjs';
 import { stripManagedPermissions } from '../install/permissions.mjs';
 import { BASELINE_DIR } from '../install/baseline.mjs';
 import { HOOKS_PATH, readLocalHooksPath, setLocalHooksPath, unsetLocalHooksPath } from '../git/config.mjs';
-import { unwireUserHooks } from '../install/user-hooks.mjs';
+import { checkUserHooksConfig, unwireUserHooks } from '../install/user-hooks.mjs';
 import { HOSTS, HOST_NAMES, canonicalHostName } from '../hosts/registry.mjs';
 import { readInjectedModels } from '../models/resolve.mjs';
 import { makeT } from '../i18n.mjs';
 import { computeEnterprise, readKitVersion, resolveTarget } from './install.mjs';
 import { planInputsFromManifest, varsInputsFromManifest } from './replay.mjs';
 import { cleanEmptyDirs } from './prune.mjs';
+import { resolveInside } from '../install/path-guard.mjs';
+import { EXIT } from '../cli/exit.mjs';
 
 const MERGE_KINDS = new Set(['merge-gitattributes', 'merge-gitignore']);
 
@@ -217,12 +219,30 @@ function removeHostUnlocked({ args, t }) {
   let cleaned = 0;
   let skipped = 0;
   let kept = 0;
+  let invalid = 0;
+
+  const remaining = installed.filter((name) => !names.includes(name));
+  // 摘除后仍被剩余宿主接管为合并型配置的 rel；其余配置解除托管，
+  // 否则后续 uninstall 会把它当普通托管文件整文件删除（连同用户内容）。
+  const remainingConfigs = new Set(configTargetsFor({ target, manifest, hosts: remaining, lang }).keys());
+  // 用户级 hooks 配置先只读预检：损坏时在删除 / 重写任何文件之前中止。
+  if (!dryRun) {
+    for (const name of names) checkUserHooksConfig({ host: name, t: tt });
+  }
 
   print(tt('removeHost.title', { hosts: names.join(', '), target }));
   if (dryRun) print(tt('removeHost.dryRun'));
   for (const rel of Object.keys(manifest.files || {}).sort()) {
     if (!owned.has(rel)) continue;
-    const abs = path.join(target, rel);
+    // 宿主归属只看前缀：删除/改写前必须再按 target 边界解析，越界 key 只报告并保留。
+    const abs = resolveInside(target, rel);
+    if (!abs) {
+      invalid += 1;
+      nextFiles[rel] = manifest.files[rel];
+      items.push({ path: rel, action: 'invalid' });
+      print(tt('uninstall.invalid', { path: rel }));
+      continue;
+    }
     const managedHash = manifest.files[rel];
     if (configTargets.has(rel)) {
       // 本工具创建且未被改动的配置可整体删除；安装前已存在的文件只摘托管条目。
@@ -255,7 +275,8 @@ function removeHostUnlocked({ args, t }) {
       }
       if (result.invalid) {
         skipped += 1;
-        nextFiles[rel] = managedHash;
+        if (remainingConfigs.has(rel)) nextFiles[rel] = managedHash;
+        else delete nextFiles[rel];
         items.push({ path: rel, action: 'skip' });
         print(tt('removeHost.skipConfig', { path: rel }));
         continue;
@@ -272,7 +293,8 @@ function removeHostUnlocked({ args, t }) {
         continue;
       }
       if (!dryRun && result.text !== fs.readFileSync(abs, 'utf8')) fs.writeFileSync(abs, result.text, 'utf8');
-      nextFiles[rel] = sha256Text(result.text);
+      if (remainingConfigs.has(rel)) nextFiles[rel] = sha256Text(result.text);
+      else delete nextFiles[rel];
       cleaned += 1;
       items.push({ path: rel, action: 'clean' });
       print(tt('removeHost.configClean', { path: rel }));
@@ -309,7 +331,6 @@ function removeHostUnlocked({ args, t }) {
     print(tt('removeHost.delete', { path: rel }));
   }
 
-  const remaining = installed.filter((name) => !names.includes(name));
   // 宿主集合是渲染变量（engine.json / AGENTS.md / .gitignore）：移除后收敛其余托管文件。
   // 只改哈希仍等于 manifest 的文件；用户改过的保持原样，交给 diff / --force。
   const vars = varsFor({ target, manifest, hosts: remaining, lang });
@@ -375,12 +396,14 @@ function removeHostUnlocked({ args, t }) {
   }
 
   print(tt('removeHost.remaining', { hosts: remaining.join(', ') || tt('removeHost.none') }));
-  const summary = { deleted, cleaned, skipped, kept, blocks, refreshed, userHooksRemoved };
-  return finish(
+  const summary = { deleted, cleaned, skipped, kept, invalid, blocks, refreshed, userHooksRemoved };
+  const code = finish(
     { args, asJson, tt, items },
     { ...summary, hosts: names, remaining, dryRun, summaryKey: 'removeHost.summary' },
     skipped > 0,
   );
+  // 越界条目属损坏/敌意 manifest：即使没有 --strict 也以非零退出。
+  return invalid > 0 ? EXIT.TARGET : code;
 }
 
 // uninstall：删除全部托管文件；根记忆文件与用户改过的文件默认保留。
@@ -419,14 +442,28 @@ function uninstallUnlocked({ args, t }) {
   let cleaned = 0;
   let skipped = 0;
   let kept = 0;
+  let invalid = 0;
+
+  // 用户级 hooks 配置先只读预检：损坏时在删除任何托管文件之前中止，项目保持完整。
+  if (!dryRun) {
+    for (const name of manifest.hosts || []) checkUserHooksConfig({ host: name, t: tt });
+  }
 
   print(tt('uninstall.title', { target }));
   if (dryRun) print(tt('uninstall.dryRun'));
   for (const rel of Object.keys(manifest.files || {}).sort()) {
+    // manifest 可被篡改：解析到 target 之外的 key 只报告并保留，绝不进入删除/改写。
+    const abs = resolveInside(target, rel);
+    if (!abs) {
+      invalid += 1;
+      nextFiles[rel] = manifest.files[rel];
+      items.push({ path: rel, action: 'invalid' });
+      print(tt('uninstall.invalid', { path: rel }));
+      continue;
+    }
     if (mergeRels.has(rel)) continue; // 合并块单独处理，避免误删用户内容
     if (configTargets.has(rel)) {
       // 合并型配置可能混有用户内容：只有本工具创建且未被改动的文件可整体删除。
-      const abs = path.join(target, rel);
       const origin = manifest.mergeOrigins?.[rel];
       const unchanged = fs.existsSync(abs) && manifest.files[rel] && hashOf(abs) === manifest.files[rel];
       if (origin === 'created' && (force || unchanged)) {
@@ -476,7 +513,6 @@ function uninstallUnlocked({ args, t }) {
       print(tt('uninstall.cleanConfig', { path: rel }));
       continue;
     }
-    const abs = path.join(target, rel);
     const managedHash = manifest.files[rel];
     if (rootMemory.has(rel) && !force) {
       kept += 1;
@@ -546,7 +582,7 @@ function uninstallUnlocked({ args, t }) {
 
   let manifestRemoved = false;
   if (!dryRun) {
-    if (skipped === 0) {
+    if (skipped === 0 && invalid === 0) {
       // 还原安装前被覆盖的 core.hooksPath：仅当当前本地值仍是本工具的 .githooks
       // （用户后来自己改过就不动）；null 表示安装前未设置，取消该键即可。
       if ('prevHooksPath' in manifest && readLocalHooksPath(target) === HOOKS_PATH) {
@@ -562,7 +598,7 @@ function uninstallUnlocked({ args, t }) {
       cleanEmptyDirs(target, baselineAbs);
       manifestRemoved = true;
     } else {
-      // 保留用户改过的文件与其记录，供再次 uninstall --force 继续清理。
+      // 保留用户改过的文件、越界记录及 manifest 条目，供再次检查或清理。
       const kept = { ...manifest, hosts: [], files: nextFiles, mcpServers: nextMcpServers, managedPermissions: nextManagedPermissions, mergeOrigins: nextMergeOrigins, derived: [] };
       delete kept.enterprise;
       writeManifest(target, kept);
@@ -570,10 +606,12 @@ function uninstallUnlocked({ args, t }) {
   }
   print(tt(manifestRemoved ? 'uninstall.manifestRemoved' : 'uninstall.manifestKept'));
 
-  const summary = { deleted, cleaned, skipped, kept, blocks, userHooksRemoved };
-  return finish(
+  const summary = { deleted, cleaned, skipped, kept, invalid, blocks, userHooksRemoved };
+  const code = finish(
     { args, asJson, tt, items },
     { ...summary, dryRun, manifestRemoved, summaryKey: 'uninstall.summary' },
     skipped > 0,
   );
+  // 越界条目属损坏/敌意 manifest：即使没有 --strict 也以非零退出。
+  return invalid > 0 ? EXIT.TARGET : code;
 }

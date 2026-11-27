@@ -118,13 +118,20 @@ function addSkillLocked({ args, t, lang, target }) {
     if (update && !lock.skills?.[name]) {
       throw usageError(`--update 只受理 lockfile 中已登记的技能：${name}`, 'SKILL_NOT_FOUND');
     }
-    if (exists) fs.rmSync(dest, { recursive: true, force: true });
-    copySkillDir(source.dir, dest);
-
-    const lint = lintSkillDir(dest, { expectName: name, evalTaskIds: readEvalTaskIds(target) });
-    if (!lint.ok) {
-      fs.rmSync(dest, { recursive: true, force: true });
-      throw usageError(`技能未过准入检查：\n- ${lint.errors.join('\n- ')}`, 'SKILL_LINT');
+    // 新副本先落暂存目录过 lint，通过后才替换旧目录：--update/--force 失败时旧版本原样保留。
+    const staging = `${dest}.incoming-${process.pid}-${Date.now()}`;
+    let swapped = false;
+    try {
+      copySkillDir(source.dir, staging);
+      const lint = lintSkillDir(staging, { expectName: name, evalTaskIds: readEvalTaskIds(target) });
+      if (!lint.ok) {
+        throw usageError(`技能未过准入检查：\n- ${lint.errors.join('\n- ')}`, 'SKILL_LINT');
+      }
+      if (exists) fs.rmSync(dest, { recursive: true, force: true });
+      fs.renameSync(staging, dest);
+      swapped = true;
+    } finally {
+      if (!swapped) fs.rmSync(staging, { recursive: true, force: true });
     }
 
     const { files, checksum } = hashSkillDir(dest);

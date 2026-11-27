@@ -19,14 +19,20 @@ function fail(code, message) {
 
 function collectGitChangedFiles(target) {
   try {
-    const stdout = execFileSync('git', ['-C', target, 'status', '--porcelain', '-uall'], {
+    const stdout = execFileSync('git', ['-C', target, 'status', '--porcelain', '-z', '-uall'], {
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'ignore'],
     });
     const files = [];
-    for (const line of stdout.split(/\r?\n/)) {
-      if (!line.trim()) continue;
-      const fileRel = line.slice(3).trim().replace(/^"|"$/g, '');
+    // -z：路径原样输出（不做 core.quotepath 八进制转义）；重命名/复制记录占两段（新路径、原路径）。
+    const entries = stdout.split('\0');
+    for (let i = 0; i < entries.length; i += 1) {
+      const entry = entries[i];
+      if (!entry) continue;
+      const status = entry.slice(0, 2);
+      if (status.includes('R') || status.includes('C')) i += 1;
+      if (status.includes('D')) continue;
+      const fileRel = entry.slice(3);
       if (fileRel && !fileRel.startsWith('.agents/handoffs/') && !fileRel.startsWith('.agents/keys/')) {
         files.push(fileRel);
       }

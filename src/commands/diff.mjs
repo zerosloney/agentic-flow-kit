@@ -10,6 +10,7 @@ import { derivedModeOf, detectAnchorTextOverwritten } from '../install/derived.m
 import { makeT } from '../i18n.mjs';
 import { readKitVersion, resolveTarget } from './install.mjs';
 import { planInputsFromManifest, varsInputsFromManifest } from './replay.mjs';
+import { resolveInside } from '../install/path-guard.mjs';
 
 const KIND_ORDER = { missing: 0, 'user-modified': 1, 'kit-updated': 2, orphan: 3, unchanged: 4 };
 export const KIND_META = {
@@ -130,6 +131,13 @@ export function classifyEntry({ target, entry, vars, managedHash, derived = fals
 // 只读：对比 manifest 账本、磁盘现状与当前模板渲染结果。
 // kind 优先级：missing > user-modified > kit-updated > orphan > unchanged。
 export function buildDiff({ target, manifest }) {
+  // manifest 可被篡改：指向 target 之外的 key 不得读取，按损坏 manifest 报错。
+  const unsafeRel = Object.keys(manifest.files || {}).find((rel) => !resolveInside(target, rel));
+  if (unsafeRel) {
+    const err = new Error(`invalid install manifest entry: ${unsafeRel} (resolves outside the target) — restore it from git, or confirm it is abandoned, delete this file and reinstall`);
+    err.code = 'BAD_MANIFEST';
+    throw err;
+  }
   const { plan, vars, kitVersion } = buildState({ target, manifest });
   const planByRel = new Map(plan.entries.map((entry) => [entry.targetRel, entry]));
   const managed = manifest.files || {};

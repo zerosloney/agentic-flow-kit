@@ -3,6 +3,7 @@ import { makeTmp } from './helpers/tmp.mjs';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -187,4 +188,32 @@ test('fresh install lock blocks prune and leaves the manifest untouched', () => 
   assert.deepEqual(readManifest(dir), before);
   assert.equal(fs.existsSync(abs), true, 'blocked run must not delete orphan files');
   assert.equal(fs.existsSync(path.join(dir, '.agents/install.lock')), true, 'fresh lock must not be removed by the blocked run');
+});
+
+// manifest 可被篡改：解析到 target 之外的 key 绝不能变成删除指令。
+test('prune refuses manifest keys that resolve outside the target', () => {
+  const dir = tmpRepo();
+  install(dir);
+  const baseManifest = readManifest(dir);
+  const base = path.basename(dir);
+  const cases = [
+    { rel: `../${base}-victim.txt`, victim: true },
+    { rel: `../${base}-evil.txt`, victim: true },
+    { rel: path.join(os.tmpdir(), 'flow-kit-prune-absolute-victim.txt'), victim: false },
+    { rel: '\\\\server\\share\\flow-kit-prune-victim.txt', victim: false },
+  ];
+
+  for (const { rel, victim } of cases) {
+    const abs = path.resolve(dir, rel);
+    if (victim) fs.writeFileSync(abs, 'keep\n', 'utf8');
+    writeManifest(dir, { ...baseManifest, files: { ...baseManifest.files, [rel]: sha('keep\n') } });
+
+    const r = run(['prune', '--target', '.'], dir);
+    assert.equal(r.status, EXIT.TARGET, `${rel}: ${r.stderr}`);
+    assert.ok(r.stderr.includes(rel), `${rel} must be named in the error: ${r.stderr}`);
+    if (victim) {
+      assert.equal(fs.readFileSync(abs, 'utf8'), 'keep\n', `${rel} must not be deleted`);
+      fs.rmSync(abs, { force: true });
+    }
+  }
 });

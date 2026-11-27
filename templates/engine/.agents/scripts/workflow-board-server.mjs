@@ -666,6 +666,16 @@ function safeDocPath(raw) {
   return abs;
 }
 
+// 内联 <script> 的 JSON 转义（2026-11-27 tour-xss）：JSON.stringify 不转义 </script>，文件名可闭合脚本块；
+// 把 < > 与 U+2028/U+2029 转成 \u 形式，运行时值与 JSON.stringify 一致。
+function jsonForScript(v) {
+  return JSON.stringify(v)
+    .replace(/</g, '\\u003c')
+    .replace(/>/g, '\\u003e')
+    .replace(/\u2028/g, '\\u2028')
+    .replace(/\u2029/g, '\\u2029');
+}
+
 // ---- 开发全景（/tour 实时视图 + /api/tour 数据，2026-11-09）----
 // 模板单源 .agents/board/dev-tour.html；模型由 dev-tour-model.mjs 现场解析文档 + git 工作树。
 // 缓存 2.5s：前端 5s 轮询 + SSE 推送，避免每次请求都跑 git diff（大任务 300 文件时约 0.3~1s）。
@@ -1356,7 +1366,7 @@ export async function handleBoardRequest(req, res) {
       try {
         let html = fs.readFileSync(TOUR_TEMPLATE, 'utf8');
         html = html.replace('__TOUR_DATA__', 'null')
-          .replace('__TOUR_FILE__', JSON.stringify(rel))
+          .replace('__TOUR_FILE__', jsonForScript(rel))
           .replace('__TOUR_MODE__', '"live"');
         res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' });
         return res.end(html);
@@ -1369,6 +1379,7 @@ export async function handleBoardRequest(req, res) {
     // 低用视图（口径见 dev-tour SKILL 边界节），刻意不建查询聚合页。读写失败如实 500，不吞异常。
     if (url.pathname === '/api/tour/usage') {
       if (req.method !== 'POST') return sendJson(res, 405, { error: '仅接受 POST' });
+      if (!checkCsrf(req, PORT)) return sendJson(res, 403, { error: 'Origin 不受信任（CSRF 防御拦截）' });
       const chunks = [];
       let total = 0;
       for await (const c of req) {

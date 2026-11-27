@@ -49,6 +49,12 @@ const candidates = [
   `.agents/confirmations.d/${base}.jsonl`,
   '.agents/confirmations.jsonl',
 ];
+// confirm-doc 的 archive-on-close 会把同名家族整体 git mv 进 workflow/archive/<月>/<类型>/；
+// 该移动是本序列的产物，须与候选路径同等放行，否则步④恒拒绝提交。
+const archivedOf = (p) => {
+  const m = p.match(/^workflow\/archive\/\d{4}-\d{2}\/(intents|specs|plans|incidents)\/([^/]+)\.md$/);
+  return Boolean(m) && m[2] === base;
+};
 const TERMINAL = ['done', 'closed', 'cancelled', 'superseded'];
 function statusOf() {
   const nl = fs.readFileSync(abs, 'utf8').split(/\r?\n/);
@@ -105,13 +111,14 @@ if (!terminal) {
 }
 // ② 索引（生成器按磁盘重写 GENERATED 区，幂等）
 run('② gen-workflow-index', [path.join(SCRIPT_DIR, 'gen-workflow-index.mjs')]);
-// ③ git add 固定路径清单（只 add 有变更的候选）
-const changed = porcelain(['status', '--porcelain', '--', ...candidates]);
+// ③ git add 固定路径清单（只 add 有变更且仍在磁盘的候选——归档移动后源路径已删，add 它会 pathspec 失败）
+const changed = porcelain(['status', '--porcelain', '--', ...candidates])
+  .filter((p) => fs.existsSync(path.join(ROOT, p)));
 if (changed.length) run('③ git add', ['add', '--', ...changed], { cmd: 'git' });
 else console.log('[closeout] ③ 候选路径无变更，跳过 git add');
 // 提交前安全边界：暂存区若有候选清单之外的路径，拒绝提交（用户其它在途改动须自己提交）
 const staged = nameOnly(['diff', '--cached', '--name-only']);
-const foreign = staged.filter((p) => !candidates.includes(p));
+const foreign = staged.filter((p) => !candidates.includes(p) && !archivedOf(p));
 if (foreign.length) {
   console.error(`❌ 步骤 ④ 拒绝提交：暂存区有本序列之外的路径（${foreign.slice(0, 5).join('、')}${foreign.length > 5 ? '…' : ''}）——不夹带其它在途改动`);
   console.error(`   先单独提交或撤销这些路径，再重跑（本次已落态与索引，重跑幂等跳过）\n${RECOVER(doc)}`);

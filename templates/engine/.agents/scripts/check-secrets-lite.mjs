@@ -40,18 +40,21 @@ const STRONG_RULES = [
 
 const GENERIC_RULE = {
   id: 'generic-api-key',
-  re: /(?:api[_-]?key|apikey|access[_-]?key|secret|token|passwd|password|pwd|_auth|authorization)["']?\s*[:=]\s*["']?([A-Za-z0-9+/=_-]{16,})["']?/i,
+  // 值类含常见口令符号（审计 D38：值止于 `@!` 等符号会整类漏报 P@ssw0rd!2026x 这类真实口令）；
+  // 仍排除空白/引号/分号/点号/括号，避免吞掉相邻字段与代码表达式
+  re: /(?:api[_-]?key|apikey|access[_-]?key|secret|token|passwd|password|pwd|_auth|authorization)["']?\s*[:=]\s*["']?([A-Za-z0-9+/=_@!#%^&*-]{14,})["']?/i,
 };
 
 // 连接串口令：值与形态都强（`Password=xxx`），但 appsettings 属 owner 判定的非风险载体，
 // 故与 generic 同档——只对豁免清单外的文件执法。
 const CRED_RULE = {
   id: 'connection-string-password',
-  // 值限定为「无空白/分号/引号、不含点号与括号」的字面量——含 `.`/`(` 的必是代码表达式（process.env.X 等）
-  re: /\b(?:password|pwd)\s*=\s*(?!\*|\$|<|\{)[A-Za-z0-9_\-+/=]{12,}(?![A-Za-z0-9_.])/i,
+  // 值限定为「无空白/分号/引号、不含点号与括号」的字面量——含 `.`/`(` 的必是代码表达式（process.env.X 等）。
+  // 下限 8 配 matchLine 的形状判据：8–11 字符仅当含符号时执法（审计 D38：连接串 P@ssw0rd! 此前漏报）
+  re: /\b(?:password|pwd)\s*=\s*(?!\*|\$|<|\{)[A-Za-z0-9_\-+/=@!#%^&*]{8,}(?![A-Za-z0-9_.])/i,
 };
 
-const PLACEHOLDER = /^(?:x{4,}|0{4,}|your|my|example|sample|changeme|placeholder|dummy|fake|redacted|todo|none|null|undefined|test)/i;
+const PLACEHOLDER = /^(?:x{4,}|0{4,}|your|my[-_.]|example|sample|changeme|placeholder|dummy|fake|redacted|todo|none|null|undefined|test)/i;
 const ALLOW_MARK = /(?:gitleaks|secrets-lite):allow/;
 // appsettings*.json：owner 2026-10-27 判定开发库凭据 / JWT Secret 非风险（详见本文件头注）；
 // 仅 dotnet 栈生效——非 dotnet / 未声明栈按普通文件执法。
@@ -86,7 +89,10 @@ const redact = (s) => (s.length <= 8 ? '***' : `${s.slice(0, 4)}***${s.slice(-2)
 const weakNoise = (line, m) => {
   const v = m[1];
   if (PLACEHOLDER.test(v)) return true;
-  if (entropy(v) < 3.5) return true;
+  // 大小写+数字+符号齐全的口令形态（如 P@ssw0rd!2026x，熵 3.38）放宽熵阈值——
+  // 审计 D38：单一 3.5 阈值把它当噪声漏掉；纯字母/纯数字值的阈值不变，误报面不扩大
+  const complex = /[a-z]/.test(v) && /[A-Z]/.test(v) && /\d/.test(v) && /[^A-Za-z0-9_]/.test(v);
+  if (entropy(v) < (complex ? 3.0 : 3.5)) return true;
   if (!/\d/.test(v)) return true;                                  // 纯字母 = 标识符 / 常量名
   if (/^[0-9a-f]{8,20}$/i.test(v)) return true;                    // 短 hex = assembly token / GUID 片段
   if ((v.match(/-/g) || []).length >= 3) return true;              // 多连字符 = 描述性短语（如 integration-test-jwt-secret-2026-...）
@@ -107,8 +113,10 @@ export const matchLine = (line, { generic }) => {
   const c = CRED_RULE.re.exec(line);
   if (c) {
     const v = c[0].replace(/^[^=]*=/, '').trim();
-    // 口令须含数字或符号（纯大写/驼峰标识符如 process.env.SMOKE_ADMIN_PASSWORD 不算）
-    if ((/\d/.test(v) || /[^A-Za-z0-9_]/.test(v)) && !PLACEHOLDER.test(v)) {
+    const symbol = /[^A-Za-z0-9_]/.test(v);
+    // 口令须含数字或符号（纯大写/驼峰标识符如 process.env.SMOKE_ADMIN_PASSWORD 不算）；
+    // 8–11 字符的短值仅当含符号时执法（审计 D38），12+ 保持既有口径——纯数字短串误报面不扩大
+    if ((v.length >= 12 || symbol) && (/\d/.test(v) || symbol) && !PLACEHOLDER.test(v)) {
       return { rule: CRED_RULE.id, secret: redact(v) };
     }
   }

@@ -187,7 +187,8 @@ function idMatches(list, id) {
 // 判定单个包：返回 'allow' | 'deny' | 'unknown'
 export function judgeLicense(pkg, policy) {
   const exceptionKey = Object.keys(policy.exceptions).find((key) => {
-    const at = key.indexOf('@');
+    // scoped 包名以 @ 开头，版本分隔符取最后一个 @（首个 @ 属于包名）。
+    const at = key.lastIndexOf('@');
     if (at <= 0) return key === pkg.name;
     const [name, version] = [key.slice(0, at), key.slice(at + 1)];
     return name === pkg.name && (version === '*' || version === pkg.version);

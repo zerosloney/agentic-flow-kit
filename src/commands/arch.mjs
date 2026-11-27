@@ -57,6 +57,8 @@ export function archCommand({ args, t }) {
           cycles: result.cycles,
           boundaryViolations: result.boundaryViolations,
           privateViolations: result.privateViolations,
+          unresolvedImports: result.unresolvedImports,
+          unresolvedCount: result.unresolvedImports.length,
         }, null, 2));
       } else {
         console.log(t('arch.checkTitle', { count: result.totalFiles }));
@@ -76,6 +78,12 @@ export function archCommand({ args, t }) {
           }
           for (const v of result.privateViolations) {
             console.error(`  - [Private Import Violation] ${v.fromFile} -> ${v.targetFile}: ${v.reason}`);
+          }
+        }
+        if (result.unresolvedImports.length > 0) {
+          console.log(t('arch.checkUnresolved', { count: result.unresolvedImports.length }));
+          for (const u of result.unresolvedImports) {
+            console.log(`  - [Unresolved Import] ${u.fromFile} -> ${u.specifier}`);
           }
         }
       }

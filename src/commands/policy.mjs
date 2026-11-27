@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { writeAtomicSync } from '../install/atomic.mjs';
 import { readManifest, writeManifest, sha256File, sha256Text } from '../install/manifest.mjs';
 import { diffPolicyTexts, renderPolicyDiff, POLICY_REL } from '../install/policy-diff.mjs';
+import { resolveInside } from '../install/path-guard.mjs';
 
 function fail(code, message) {
   const err = new Error(message);
@@ -55,6 +56,12 @@ function normalizeRemoteSource(url, target) {
 }
 
 export function resolveRemotePolicy({ url, ref, target, t }) {
+  // url/ref 以 - 开头会被 git 当作选项解析（如 --upload-pack 可执行本地命令），必须在 spawn 前拒绝。
+  for (const value of [url, ref]) {
+    if (typeof value === 'string' && value.startsWith('-')) {
+      fail('BAD_ARGS', t ? t('error.policyRemoteArg', { value }) : `remote policy url/ref must not start with '-': ${value}`);
+    }
+  }
   const source = normalizeRemoteSource(url, target);
   let cleanup = () => {};
   let rootDir = null;
@@ -66,7 +73,7 @@ export function resolveRemotePolicy({ url, ref, target, t }) {
         fs.rmSync(tmp, { recursive: true, force: true });
       } catch {}
     };
-    const cloneArgs = ['clone', '--depth', '1', ...(ref ? ['--branch', ref] : []), source.url, tmp];
+    const cloneArgs = ['clone', '--depth', '1', ...(ref ? ['--branch', ref] : []), '--', source.url, tmp];
     const res = spawnSync('git', cloneArgs, { encoding: 'utf8', windowsHide: true });
     if (res.status !== 0) {
       cleanup();
@@ -144,7 +151,7 @@ export function checkPolicyDriftSync(target, localPolicy, remoteOverride = null,
   try {
     remoteHandle = resolveRemotePolicy({ url, ref, target, t });
   } catch (err) {
-    return { ok: false, error: err.message, url, ref };
+    return { ok: false, error: err.message, url, ref, code: err.code };
   }
 
   try {
@@ -158,7 +165,17 @@ export function checkPolicyDriftSync(target, localPolicy, remoteOverride = null,
     for (const key of keys) {
       const rel = surfaces[key];
       if (!rel) continue;
-      const localText = fs.existsSync(path.join(target, rel)) ? fs.readFileSync(path.join(target, rel), 'utf8') : '';
+      const localPath = resolveInside(target, rel);
+      if (!localPath) {
+        return {
+          ok: false,
+          error: t ? t('error.policySurfaceOutside', { path: rel }) : `policy surface path escapes target: ${rel}`,
+          url,
+          ref,
+          code: 'BAD_POLICY',
+        };
+      }
+      const localText = fs.existsSync(localPath) ? fs.readFileSync(localPath, 'utf8') : '';
       const remoteText = remoteHandle.readText(rel) ?? '';
       const surfaceDiffs = diffPolicyTexts(rel, localText, remoteText);
       changes.push(...surfaceDiffs);
@@ -240,6 +257,7 @@ function checkCommand({ args, t, target, asJson }) {
 
   const result = checkPolicyDriftSync(target, policy, remoteOverride, t);
   if (!result.ok) {
+    if (result.code === 'BAD_ARGS' || result.code === 'BAD_POLICY') fail(result.code, result.error);
     fail('POLICY_FETCH_FAILED', t('error.policyRemoteFetch', { error: result.error }));
   }
 
@@ -306,9 +324,10 @@ function syncCommand({ args, t, target, asJson }) {
     for (const key of keys) {
       const rel = surfaces[key];
       if (!rel) continue;
+      const localPath = resolveInside(target, rel);
+      if (!localPath) fail('BAD_POLICY', t('error.policySurfaceOutside', { path: rel }));
       const remoteText = remoteHandle.readText(rel);
       if (typeof remoteText === 'string') {
-        const localPath = path.join(target, rel);
         const normalized = remoteText.replace(/\r\n/g, '\n');
         const remoteHash = sha256Text(normalized);
         const managedHash = manifest?.files && rel in manifest.files ? manifest.files[rel] : null;

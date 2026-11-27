@@ -11,6 +11,8 @@
 //   不进 .agents/confirmations.jsonl（该台账行协议钉死 workflow 四目录 doc 路径，见
 //   check-ledger-invariant.mjs 行级 ④）。诚实边界：本地文件、非签名——删整份台账=审计面全失
 //   （与 check-loop 检查 15 台账同类边界），篡改单行则链断可检。
+//   2026-11-27：--verify 追加「config 现值 vs 末行 to」对质——直接手改配置而不写审计行即失败。
+//   .agents/trust-mode.json 属本机运行态，不应随仓库共享（.gitignore.engine 增补由 kit 模板 owner 处理）。
 import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
@@ -55,10 +57,27 @@ function appendAudit(action, from, to) {
 }
 
 function verifyAudit() {
+  const config = readConfig();
+  const current = {
+    enabled: !!config.enabled,
+    level: config.level ?? 0,
+    name: config.name || 'Strict',
+  };
+  const pristine = !current.enabled && current.level === 0 && current.name === 'Strict';
+  const mismatchNoLedger = () => {
+    console.error(`❌ 配置文件与审计台账不一致：config = ${JSON.stringify(current)}，但没有任何审计记录——配置文件被直接改写`);
+    process.exit(1);
+  };
   let lines;
   try {
     lines = fs.readFileSync(AUDIT_PATH, 'utf8').split(/\r?\n/).filter(Boolean);
   } catch {
+    if (!pristine) mismatchNoLedger();
+    console.log('✅ 无审计台账（从未变更过信任等级）');
+    process.exit(0);
+  }
+  if (!lines.length) {
+    if (!pristine) mismatchNoLedger();
     console.log('✅ 无审计台账（从未变更过信任等级）');
     process.exit(0);
   }
@@ -73,6 +92,17 @@ function verifyAudit() {
   });
   if (problems.length) {
     console.error(`❌ 审计链校验失败（${problems.length} 处）：\n  ${problems.join('\n  ')}`);
+    process.exit(1);
+  }
+  // 末行无后继，链校验管不到；用 config 现值对质末条 to（手改 config 不写审计行 → 必不一致）
+  const last = JSON.parse(lines[lines.length - 1]);
+  const expected = {
+    enabled: !!last?.to?.enabled,
+    level: last?.to?.level ?? 0,
+    name: last?.to?.name || 'Strict',
+  };
+  if (current.enabled !== expected.enabled || current.level !== expected.level || current.name !== expected.name) {
+    console.error(`❌ 配置文件与末条审计记录不一致：config = ${JSON.stringify(current)}，审计末行 to = ${JSON.stringify(expected)}——直接改写配置或末行被改`);
     process.exit(1);
   }
   console.log(`✅ 审计链完整（${lines.length} 条变更记录，无篡改信号）`);

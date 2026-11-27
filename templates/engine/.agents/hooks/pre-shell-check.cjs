@@ -157,6 +157,97 @@ function isForcePush(cmd) {
   });
 }
 
+// hasExpansion：命令是否含 shell 展开/转义（$ / 反引号）。commit 消息惯用法 `$(cat <<'EOF'…)`
+// 的替换体是纯文本 heredoc、不可执行，按既有口径豁免；其余 $/反引号一律视为展开痕迹。
+function hasExpansion(cmd) {
+  return /[$`]/.test(cmd.replace(/\$\(cat\s+<</g, '<<').replace(/["']/g, ''));
+}
+
+// expansionWords / expansionHits：deny/ask 面的展开门（E9-H1）。字面门只吃文本，
+// `git reset --$(echo hard)` 与 `git$IFS reset --hard` 均不含红线字样。这里按 shell 词法
+// 取每个词的**字面骨架**（展开段剥掉，dyn 标记该词含展开）：
+//   - 引号只去壳，引号内空格不断词（`echo "git reset --hard"` 不误判）；
+//   - $(…)/${…}/$VAR 整段剥出骨架；
+//   - 反引号有配对按命令替换剥出骨架，无配对按 PowerShell 转义前缀只丢反引号本身（头注宿主通道）。
+// 规则模式与词块逐 token 对齐：含展开的词可以补全当前 token（`--$(echo hard)` 的骨架 `--`
+// 命中 `--hard`），也可以整体展开为空（`git $IFS reset`）。展开命中一律 deny（fail-closed，
+// 内联展开值后重试即过；与 commit/merge/push 展开门同一裁定）。
+function skipExpansion(cmd, i) {
+  if (cmd[i] === '$' && cmd[i + 1] === '(') {
+    let depth = 1;
+    let j = i + 1;
+    for (j = i + 2; j < cmd.length; j += 1) {
+      if (cmd[j] === '(') depth += 1;
+      else if (cmd[j] === ')' && --depth === 0) break;
+    }
+    return j; // 未闭合吞到行尾（残缺命令，剩余文本不进骨架）
+  }
+  if (cmd[i] === '$' && cmd[i + 1] === '{') {
+    const end = cmd.indexOf('}', i + 2);
+    return end === -1 ? cmd.length - 1 : end;
+  }
+  if (cmd[i] === '`') {
+    const end = cmd.indexOf('`', i + 1);
+    return end === -1 ? i : end; // 无配对 = PowerShell 转义前缀
+  }
+  const m = /^[A-Za-z_][A-Za-z0-9_]*|^[0-9@*#?$!-]/.exec(cmd.slice(i + 1));
+  return m ? i + m[0].length : i;
+}
+
+function expansionWords(cmd) {
+  const words = [];
+  let lit = '';
+  let dyn = false;
+  let quote = '';
+  const flush = () => {
+    if (lit || dyn) words.push({ lit, dyn });
+    lit = '';
+    dyn = false;
+  };
+  for (let i = 0; i < cmd.length; i += 1) {
+    const ch = cmd[i];
+    const inQuote = quote !== '';
+    if (inQuote) {
+      if (ch === quote) { quote = ''; continue; }
+      if (ch !== '$' && ch !== '`') { lit += ch; continue; }
+    } else if (ch === "'" || ch === '"') {
+      quote = ch;
+      continue;
+    }
+    if (ch === '$' || ch === '`') {
+      dyn = true;
+      i = skipExpansion(cmd, i);
+      continue;
+    }
+    if (!inQuote && (/\s/.test(ch) || ch === ';' || ch === '|' || ch === '&')) { flush(); continue; }
+    lit += ch;
+  }
+  flush();
+  return words;
+}
+
+function expansionHits(pat, words) {
+  const tokens = pat.split(/\s+/).filter((t) => t && !/^\*+$/.test(t)).map((t) => t.replace(/^\*+|\*+$/g, ''));
+  // 旗标级条目（`--no-verify` / `* --no-verify*`）在展开面由 isNoVerify 扁平域执法；
+  // 只靠一个纯展开词就能「凭空」命中旗标会把 `echo $HOME` 一类普通命令全判死，故不在此对齐。
+  if (!tokens.length || tokens.some((t) => !t) || tokens[0].startsWith('-')) return false;
+  const walk = (wi, pi, dynHit) => {
+    if (pi === tokens.length) return dynHit;
+    if (wi === words.length) return false;
+    const w = words[wi];
+    if (!w.dyn) return w.lit === tokens[pi] && walk(wi + 1, pi + 1, dynHit);
+    if (!w.lit && walk(wi + 1, pi, true)) return true;
+    return tokens[pi].startsWith(w.lit) && walk(wi + 1, pi + 1, true);
+  };
+  // 起点必须锚在字面骨架上（模式首 token 的前缀）：纯展开词不得凭空开启匹配，
+  // 否则 `cp $SRC $DST` 一类普通命令会被 `dotnet ef` 两 token 全吞。
+  for (let j = 0; j < words.length; j += 1) {
+    const head = words[j];
+    if (head.lit && tokens[0].startsWith(head.lit) && walk(j, 0, false)) return true;
+  }
+  return false;
+}
+
 // gateMatch：比裸 includes 收紧三处（2026-09-24；p2-batch2 补 ③）——
 //   ① token 边界：'git checkout' 不再误吃 'git commit-msg'
 //   ② 剥离 git 全局参 -c <k=v> 与 -m <msg> 后以剥后文本为准——堵 'git -c x=y reset --hard' 绕过
@@ -168,16 +259,44 @@ function gateMatch(cmd, pat) {
   return norm !== cmd ? re.test(norm) : re.test(cmd);
 }
 
+// dequotedMatch：去引号骨架视图（D7 复核 2）。shell 里 `git "reset" --hard` 与 `g''it reset --hard`
+// 都是 `git reset --hard` 这个 argv，引号不参与命令语义；空引号对在骨架里自然消失。
+// 提交消息先按 stripMessages 剥除（与 gateMatch 同源），保住「prose 里的红线字样不拦」的既有口径。
+// fail-closed 边界：`echo "git reset --hard"` 这类纯引号内字样同样按红线判（与既有展开门同一取舍，
+// 改写/内联即过）——不区分「引号里是执行还是散文」，静态文本无法区分。
+function dequotedMatch(cmd, pat) {
+  return gateMatch(stripMessages(cmd).replace(/["']/g, ''), pat);
+}
+
+// interpreterPayloads：解释器包裹（bash/sh/zsh/dash/ksh 的 -c / -lc / -l -c 等形态）的 payload。
+// agent 把命令交给解释器执行时，payload 就是将被执行的内容——红线字样在 payload 里等同红线在命令里。
+// 双引号/单引号/裸串（到段末）都取；`/bin/bash`、`sudo bash` 等前缀一并认。payload 内出现 deny/ask
+// 清单字样即按清单判定（fail-closed：`bash -c "echo git reset --hard"` 也拦，改写即过）。
+function interpreterPayloads(cmd) {
+  const re = /(?:^|[\s;&|(\\/])(?:bash|sh|zsh|dash|ksh)(?:\s+-[A-Za-z]+)*\s+-[A-Za-z]*c[A-Za-z]*\s+(?:"([^"]*)"|'([^']*)'|([^;&|\r\n]+))/g;
+  const out = [];
+  for (const m of cmd.matchAll(re)) out.push((m[1] ?? m[2] ?? m[3] ?? '').trim());
+  return out.filter(Boolean);
+}
+
 if (isForcePush(command)) {
   deny('禁止执行: git push 强制推送（--force / -f / +refspec；项目红线：禁强制推送）');
 }
+// 1d) 解锁标记的 shell 通道（D8b 残口）：pre-write-check 已封死写工具侧创建/改写
+// .agents/tmp/write-gate-until，并让 --unlock 必须走终端；但 shell 允许清单含 node，echo/tee/cp/mv/touch
+// 与 node -e 仍能写出标记，标记存在即解锁受保护接线。命令文本只要出现标记名即 deny——
+// 大小写、正/反斜杠、绝对/相对路径、引号/反引号拆分一并归一；读、删同判（读可探测门禁状态，
+// 删亦属改动执法面）。变量拼接出的拼法（'write-'+'gate-until'）不在本门范围。
+if (command.toLowerCase().replace(/["'`\\]/g, '').includes('write-gate-until')) {
+  deny('禁止执行: 命令提及写入门禁解锁标记 .agents/tmp/write-gate-until（写、读、删一律禁——标记存在即绕过执法面自保护，读取可用于探测门禁状态；确需临时放行由用户执行 pre-write-check.cjs --unlock <分钟>）。项目红线：禁绕过门禁');
+}
 for (const d of denyList) {
-  if (gateMatch(command, d.pat)) {
+  if (gateMatch(command, d.pat) || dequotedMatch(command, d.pat)) {
     deny(`禁止执行: ${d.pat}（项目红线：${d.reason}）`);
   }
 }
 for (const a of askList) {
-  if (gateMatch(command, a.pat)) {
+  if (gateMatch(command, a.pat) || dequotedMatch(command, a.pat)) {
     ask(`需确认: ${a.pat}（项目 ask 策略：${a.reason}）`);
   }
 }
@@ -268,6 +387,51 @@ const gitSubcommands = commandMat.split(/&&|\|\||[;|\r\n]/).map(gitSubcommand);
 const isCommit = gitSubcommands.includes('commit');
 const isPush = gitSubcommands.includes('push');
 
+// 1c) 展开携带红线（E9-H1 / D7 复核）：字面门只吃文本——`git reset --$(echo hard)` /
+// `git$IFS reset --hard` / PowerShell 反引号转义 `git re`set --hard` 均不含红线字样。
+// 判定**逐段**：只有本段自身含展开时才用它的骨架对齐，跨段展开不得拿来补全另一段的模式
+// （`git push && echo $HOME` 的 $HOME 曾被拿来补全 --force）。仅 deny 清单 escalate 为 deny
+// （与 commit/merge/push 展开门同一裁定）；ask 清单的展开命中保持 ask，把决定权留给用户。
+// 无展开命令不进入本门，判定与既有行为完全一致。返回首个命中的清单条目。
+function expansionHitIn(cmd, list) {
+  for (const seg of cmd.split(/&&|\|\||[;|\r\n]/)) {
+    if (!hasExpansion(seg)) continue;
+    const words = expansionWords(stripMessages(seg));
+    const mat = materializeShQuotes(seg);
+    const hit = list.find((g) => expansionHits(g.pat, words) || gateMatch(mat, g.pat));
+    if (hit) return hit;
+  }
+  return null;
+}
+const red = expansionHitIn(command, denyList);
+if (red) {
+  deny(`禁止执行: ${red.pat}（命令含 shell 展开/转义，展开值文本层不可见，请内联展开值后重试。项目红线：禁以展开绕过门禁）`);
+}
+const need = expansionHitIn(command, askList);
+if (need) {
+  ask(`需确认: ${need.pat}（命令含 shell 展开/转义，展开值文本层不可见，请确认展开值后再执行。项目 ask 策略：${need.reason}）`);
+}
+
+// 1e) 解释器包裹 payload（D7 复核 2）：`bash -c "git reset --hard"` 的 payload 就是被执行内容，
+// stripMessages 会把包裹的 -c 值当 git 配置剥掉，所以字面门看不见它——这里单独取 payload 再判。
+// 仍逐条按 deny→ask 判定；payload 内的展开走同一逐段骨架门。
+const payloads = interpreterPayloads(command);
+if (payloads.length) {
+  let pNeed = null;
+  for (const payload of payloads) {
+    const pRed = denyList.find((g) => gateMatch(payload, g.pat) || dequotedMatch(payload, g.pat))
+      || expansionHitIn(payload, denyList);
+    if (pRed) {
+      deny(`禁止执行: 解释器包裹命令中的 ${pRed.pat}（payload 文本即被执行内容。项目红线：${pRed.reason}）`);
+    }
+    pNeed = pNeed || askList.find((g) => gateMatch(payload, g.pat) || dequotedMatch(payload, g.pat))
+      || expansionHitIn(payload, askList);
+  }
+  if (pNeed) {
+    ask(`需确认: 解释器包裹命令中的 ${pNeed.pat}（payload 文本即被执行内容。项目 ask 策略：${pNeed.reason}）`);
+  }
+}
+
 // no-verify 旗标拦截（2026-11-08 评审三轮整改收敛版，取代逐形态补丁）。设计三条：
 //   ① 子命令判定在原始命令上分段（与 gitSubcommands 同式同源：含 \r\n、认路径前缀/裸或大写 git(.exe)/全局选项）；
 //   ② 旗标判定在整条命令上引号感知分词（不走 stripMessages——其 -m 剥离会吞尾部引号破坏配对，
@@ -292,7 +456,13 @@ function isNoVerify(cmd) {
   const subs = gitSubcommands;
   // 十七轮补口（先于守卫判定）：一次性别名间接——`-c alias.ci='commit …'` 使真实子命令对守卫不可见，
   // 含 -c alias.* 的 git 命令一律拒（fail-closed，罕见合法形态去掉别名即过）。
-  if (/(?:^|[\s;|&])-c\s+alias\./i.test(command.replace(/["']/g, ''))) return true;
+  // E9-H2：短选项可紧贴取值（`-calias.ci=commit` 与 `-c=alias.…`），空白不是必要条件——只认空格形态
+  // 会让紧贴写法把别名带过守卫（git 照常展开 alias ci → commit -n）。
+  // 取值域双源：去引号原文（保住带空格引号值里的 alias. 字样）+ 物化文本（ANSI-C 空格解码后的
+  // 占位符折算为空白），$IFS/${IFS}/反斜杠转义的空格一并折算。
+  const aliasView = (t) => t.replace(/["']/g, '').replace(/\u0000/g, ' ').replace(/\$\{?IFS\}?/g, ' ').replace(/\\(\s)/g, '$1');
+  const aliasPat = /(?:^|[\s;|&])-c\s*=?\s*alias\./i;
+  if (aliasPat.test(aliasView(command)) || aliasPat.test(aliasView(commandMat))) return true;
   if (!subs.some((s) => s === 'commit' || s === 'merge' || s === 'push')) return false;
   // 十六轮统一收敛：三条腿各吃各的规范化文本，不再共用单一形态——
   //   ① 展开检测吃**去引号原文**（内容保留、$ 与反引号痕迹不被占位符抹除；十六轮实测物化文本
@@ -304,7 +474,7 @@ function isNoVerify(cmd) {
   // 惯用法豁免：`$(cat <<'EOF'…)` 是本仓提交消息标准写法，替换体为纯文本 heredoc。内容仍完整留在
   // 命令文本里——长旗标扁平域对**原始命令与物化文本双源取并集**（十七轮：物化域的占位符会抹除
   // heredoc 体内的旗标字样，而 bash 会把它替换进 argv），其余 $/反引号照拦。
-  if (/[$`]/.test(command.replace(/\$\(cat\s+<</g, '<<').replace(/["']/g, ''))) return true;
+  if (hasExpansion(command)) return true;
   const flat = (t) => t.toLowerCase().replace(/["'\\\s\u0000\u0001]/g, '');
   if (flat(command).includes('no-veri') || flat(commandMat).includes('no-veri')) return true;
   // 十七轮补口：大括号展开（--no-ver{ify,ify} / -{n,m}）与一次性别名（alias.ci）不需 $ 即可拼出
