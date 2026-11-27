@@ -7,19 +7,13 @@ import { writeAtomicSync } from '../install/atomic.mjs';
 import { readManifest, writeManifest, sha256File, sha256Text } from '../install/manifest.mjs';
 import { diffPolicyTexts, renderPolicyDiff, POLICY_REL } from '../install/policy-diff.mjs';
 import { resolveInside } from '../install/path-guard.mjs';
+import { resolveTarget } from '../install/target.mjs';
+export { resolveTarget };
 
 function fail(code, message) {
   const err = new Error(message);
   err.code = code;
   throw err;
-}
-
-export function resolveTarget(args) {
-  const target = path.resolve(args.target || process.cwd());
-  if (!fs.existsSync(target) || !fs.statSync(target).isDirectory()) {
-    fail('TARGET_MISSING', `target directory not found: ${target}`);
-  }
-  return target;
 }
 
 export function readLocalPolicy(target) {

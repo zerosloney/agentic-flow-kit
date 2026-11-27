@@ -5,9 +5,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { flag } from '../cli/args.mjs';
 import { HOSTS } from '../hosts/registry.mjs';
-import { readManifest, writeManifest } from '../install/manifest.mjs';
+import { readManifest, requireManifest, writeManifest } from '../install/manifest.mjs';
 import { acquireInstallLock } from '../install/lock.mjs';
-import { resolveTarget, runInstall } from './install.mjs';
+import { resolveTarget } from '../install/target.mjs';
+import { runInstall } from './install.mjs';
 import {
   LOCK_REL, SKILLS_REL, emptyLock, hashSkillDir, readLock, sha256Buffer, writeLock,
 } from '../skills/lock.mjs';
@@ -21,12 +22,6 @@ function usageError(message, code) {
   return err;
 }
 
-function requireManifest(target, t) {
-  const manifest = readManifest(target);
-  if (!manifest) throw usageError(t('error.noManifest'), 'NO_MANIFEST');
-  manifest.files = manifest.files || {};
-  return manifest;
-}
 
 function withoutFlag(args, name) {
   const flags = new Set([...(args.flags || [])].filter((f) => f !== name));

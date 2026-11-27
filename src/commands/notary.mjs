@@ -9,7 +9,7 @@ import {
   resolvePublicKeyPath,
 } from '../install/notary.mjs';
 import { buildAttestation } from '../install/attest.mjs';
-import { resolveTarget } from './install.mjs';
+import { resolveTarget } from '../install/target.mjs';
 
 function fail(code, message) {
   const err = new Error(message);

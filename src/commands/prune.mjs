@@ -1,10 +1,10 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { flag } from '../cli/args.mjs';
-import { readManifest, writeManifest } from '../install/manifest.mjs';
+import { readManifest, requireManifest, writeManifest } from '../install/manifest.mjs';
 import { acquireInstallLock } from '../install/lock.mjs';
 import { makeT } from '../i18n.mjs';
-import { resolveTarget } from './install.mjs';
+import { resolveTarget } from '../install/target.mjs';
 import { buildDiff } from './diff.mjs';
 import { pruneBaselines } from '../install/baseline.mjs';
 import { resolveInside } from '../install/path-guard.mjs';
@@ -44,12 +44,7 @@ export function pruneCommand({ args, t }) {
 
 function pruneUnlocked({ args, t }) {
   const target = resolveTarget(args);
-  const manifest = readManifest(target);
-  if (!manifest) {
-    const err = new Error(t('error.noManifest'));
-    err.code = 'NO_MANIFEST';
-    throw err;
-  }
+  const manifest = requireManifest(target, t);
   const dryRun = flag(args, 'dry-run');
   const force = flag(args, 'force');
   const asJson = flag(args, 'json');

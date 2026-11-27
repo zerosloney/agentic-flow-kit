@@ -1,5 +1,5 @@
 import { flag } from '../cli/args.mjs';
-import { resolveTarget } from './install.mjs';
+import { resolveTarget } from '../install/target.mjs';
 import {
   evaluateMcpCall,
   recordMcpAudit,

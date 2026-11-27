@@ -40,6 +40,27 @@ export function writeManifest(target, manifest) {
   writeAtomicSync(file, `${JSON.stringify(manifest, null, 2)}\n`);
 }
 
+export function requireManifest(targetOrT, maybeT) {
+  let target;
+  let t;
+  if (typeof targetOrT === 'function') {
+    target = process.cwd();
+    t = targetOrT;
+  } else {
+    target = targetOrT || process.cwd();
+    t = maybeT;
+  }
+  const manifest = readManifest(target);
+  if (!manifest) {
+    const message = typeof t === 'function' ? t('error.noManifest') : 'manifest not found';
+    const err = new Error(message);
+    err.code = 'NO_MANIFEST';
+    throw err;
+  }
+  manifest.files = manifest.files || {};
+  return manifest;
+}
+
 export function sha256Text(text) {
   return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
 }

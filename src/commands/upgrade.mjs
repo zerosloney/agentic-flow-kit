@@ -1,17 +1,13 @@
 import { flag } from '../cli/args.mjs';
-import { readManifest } from '../install/manifest.mjs';
+import { requireManifest } from '../install/manifest.mjs';
 import { migrateManifest } from '../install/migrations.mjs';
 import { makeT } from '../i18n.mjs';
-import { resolveTarget, runInstall } from './install.mjs';
+import { resolveTarget } from '../install/target.mjs';
+import { runInstall } from './install.mjs';
 
 export async function upgradeCommand({ args, t, lang }) {
   const target = resolveTarget(args);
-  let manifest = readManifest(target);
-  if (!manifest) {
-    const err = new Error(t('error.noManifest'));
-    err.code = 'NO_MANIFEST';
-    throw err;
-  }
+  let manifest = requireManifest(target, t);
   const currentLang = args.lang || manifest.language || lang;
   const tt = makeT(currentLang);
   let migration = null;

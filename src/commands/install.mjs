@@ -32,7 +32,8 @@ import {
 // 既有外部导入方（tools/lint-templates、tui/hud、workspace、bundle）零变化，模块内 KIT_VERSION 照常可用。
 import { readKitVersion } from '../install/version.mjs';
 import { detectProductMode, detectProductModeDetailed } from '../install/product-detect.mjs';
-export { readKitVersion, detectProductMode };
+import { resolveTarget } from '../install/target.mjs';
+export { readKitVersion, detectProductMode, resolveTarget };
 
 const KIT_VERSION = readKitVersion();
 
@@ -45,23 +46,6 @@ export function parsePortNumber(raw) {
   if (typeof raw === 'string' && !/^\d+$/.test(raw.trim())) return null;
   const n = Number(raw);
   return Number.isInteger(n) && n >= 1 && n <= 65535 ? n : null;
-}
-
-export function resolveTarget(args) {
-  const target = path.resolve(args.target || process.cwd());
-  if (!fs.existsSync(target)) {
-    const err = new Error(`target not found: ${target}`);
-    err.code = 'TARGET_MISSING';
-    throw err;
-  }
-  if (!fs.statSync(target).isDirectory()) {
-    // 复用 TARGET_MISSING 让退出码落在目标类（3）；专用映射需改 src/cli/exit.mjs（本次范围外）。
-    const t = makeT(args.lang || 'zh-CN');
-    const err = new Error(t('error.targetNotDirectory', { target }));
-    err.code = 'TARGET_MISSING';
-    throw err;
-  }
-  return target;
 }
 
 // 安装时间戳沿用已装 engine.json 的 createdAt（重跑 / 崩溃续装字节幂等）；读取口径与重放共用：replay.mjs 的 readInstalledAt。读不到（首装 / 损坏）返回 null。

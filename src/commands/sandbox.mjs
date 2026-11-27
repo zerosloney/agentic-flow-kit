@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { flag } from '../cli/args.mjs';
-import { resolveTarget } from './install.mjs';
+import { resolveTarget } from '../install/target.mjs';
 import { readManifest } from '../install/manifest.mjs';
 import {
   SANDBOX_CONFIG_REL,

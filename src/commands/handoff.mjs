@@ -9,7 +9,7 @@ import {
   listHandoffFiles,
 } from '../install/handoff.mjs';
 import { resolvePublicKeyPath } from '../install/notary.mjs';
-import { resolveTarget } from './install.mjs';
+import { resolveTarget } from '../install/target.mjs';
 
 function fail(code, message) {
   const err = new Error(message);

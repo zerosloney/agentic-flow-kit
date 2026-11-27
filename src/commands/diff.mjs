@@ -3,12 +3,12 @@ import path from 'node:path';
 import { flag } from '../cli/args.mjs';
 import { buildPlan } from '../install/plan.mjs';
 import { buildVars } from '../render/tokens.mjs';
-import { readManifest, sha256Text } from '../install/manifest.mjs';
+import { readManifest, requireManifest, sha256Text } from '../install/manifest.mjs';
 import { readPlanEntry, renderMergeBlock, extractMergeBlock, dedupeMergeBlock } from '../install/apply.mjs';
 import { readInjectedModels } from '../models/resolve.mjs';
 import { derivedModeOf, detectAnchorTextOverwritten } from '../install/derived.mjs';
 import { makeT } from '../i18n.mjs';
-import { resolveTarget } from './install.mjs';
+import { resolveTarget } from '../install/target.mjs';
 import { readKitVersion } from '../install/version.mjs';
 import { normalizeEol } from '../kernel/index.mjs';
 import { planInputsFromManifest, varsInputsFromManifest } from './replay.mjs';
@@ -206,15 +206,6 @@ export function buildDiff({ target, manifest }) {
   };
 }
 
-function requireManifest(target, t) {
-  const manifest = readManifest(target);
-  if (!manifest) {
-    const err = new Error(t('error.noManifest'));
-    err.code = 'NO_MANIFEST';
-    throw err;
-  }
-  return manifest;
-}
 
 export function diffCommand({ args, t }) {
   const target = resolveTarget(args);

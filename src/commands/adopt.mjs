@@ -9,7 +9,8 @@ import { DERIVED_RELS } from '../install/derived.mjs';
 import { HOSTS } from '../hosts/registry.mjs';
 import { detectHosts } from '../hosts/detect.mjs';
 import { buildState } from './diff.mjs';
-import { resolveHosts, resolveStack, resolveTarget, validateStacks } from './install.mjs';
+import { resolveTarget } from '../install/target.mjs';
+import { resolveHosts, resolveStack, validateStacks } from './install.mjs';
 import { readKitVersion } from '../install/version.mjs';
 
 const MERGE_KINDS = new Set(['merge-gitattributes', 'merge-gitignore']);

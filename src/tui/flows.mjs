@@ -6,7 +6,7 @@ import { HOSTS, HOST_NAMES } from '../hosts/registry.mjs';
 import { detectHosts } from '../hosts/detect.mjs';
 import { probeModels } from '../models/probe.mjs';
 import { ROLE_NAMES, loadRoleConfig, recommendRoles, summarizeModels } from '../models/resolve.mjs';
-import { readManifest } from '../install/manifest.mjs';
+import { readManifest, requireManifest } from '../install/manifest.mjs';
 import { detectStackDetail, STACKS, stackMarkerLabel, formatInstallLog, installLogNotable, installCommand, PRODUCT_MODES, SCAFFOLD_MODES, parsePortNumber, detectProductMode } from '../commands/install.mjs';
 import { STACK_REGISTRY } from '../install/stack-registry.mjs';
 import { stackDescription } from '../render/tokens.mjs';
@@ -142,12 +142,6 @@ function clip(text, max) {
   return out;
 }
 
-// 需要 manifest 的流统一从这里取：缺失即抛错终止，行为与各流内联写法一致。
-function requireManifest(t) {
-  const manifest = readManifest(process.cwd());
-  if (!manifest) throw new Error(t('error.noManifest'));
-  return manifest;
-}
 
 // 常规创建/更新只留在进度条上。冲突和非常规跳过先换行落盘，避免被下一帧 \\r 清掉。
 export function installProgressWrites({ action, msg, done, total }) {

@@ -1,11 +1,11 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { getField } from '../install/frontmatter.mjs';
-import { readManifest, sha256Text } from '../install/manifest.mjs';
+import { requireManifest, sha256Text } from '../install/manifest.mjs';
 import { KIT_ROOT } from '../install/plan.mjs';
 import { flag } from '../cli/args.mjs';
 import { makeT } from '../i18n.mjs';
-import { resolveTarget } from './install.mjs';
+import { resolveTarget } from '../install/target.mjs';
 import { buildState, classifyEntry, KIND_META } from './diff.mjs';
 
 function kitRel(abs) {
@@ -31,12 +31,7 @@ function sourceOf(entry) {
 
 export function explainCommand({ args, t }) {
   const target = resolveTarget(args);
-  const manifest = readManifest(target);
-  if (!manifest) {
-    const err = new Error(t('error.noManifest'));
-    err.code = 'NO_MANIFEST';
-    throw err;
-  }
+  const manifest = requireManifest(target, t);
   const tt = args.lang ? t : makeT(manifest.language || 'zh-CN');
   const input = args._[1];
   if (!input) {

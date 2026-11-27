@@ -7,7 +7,7 @@ import { spawnSync } from 'node:child_process';
 import { flag } from '../cli/args.mjs';
 import { readManifest } from '../install/manifest.mjs';
 import { checkDevcontainer, DEVCONTAINER_DOCKERFILE_REL, DEVCONTAINER_JSON_REL } from '../install/devcontainer.mjs';
-import { resolveTarget } from './install.mjs';
+import { resolveTarget } from '../install/target.mjs';
 
 function dockerAvailable() {
   const r = spawnSync('docker', ['--version'], { encoding: 'utf8', windowsHide: true });

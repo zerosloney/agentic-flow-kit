@@ -7,7 +7,7 @@ import {
   GITATTR_BEGIN, GITATTR_END, GITIGNORE_BEGIN, GITIGNORE_END,
   readPlanEntry, renderMergeBlock, replaceMergeBlock, stripMergeBlock,
 } from '../install/apply.mjs';
-import { MANIFEST_REL, readManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
+import { MANIFEST_REL, readManifest, requireManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
 import { acquireInstallLock } from '../install/lock.mjs';
 import { stripMcpFromRoot } from '../install/mcp.mjs';
 import { stripHooksFromRoot } from '../install/hooks.mjs';
@@ -18,7 +18,8 @@ import { checkUserHooksConfig, unwireUserHooks } from '../install/user-hooks.mjs
 import { HOSTS, HOST_NAMES, canonicalHostName } from '../hosts/registry.mjs';
 import { readInjectedModels } from '../models/resolve.mjs';
 import { makeT } from '../i18n.mjs';
-import { computeEnterprise, resolveTarget } from './install.mjs';
+import { resolveTarget } from '../install/target.mjs';
+import { computeEnterprise } from './install.mjs';
 import { readKitVersion } from '../install/version.mjs';
 import { planInputsFromManifest, varsInputsFromManifest } from './replay.mjs';
 import { cleanEmptyDirs } from './prune.mjs';
@@ -35,12 +36,7 @@ function mergeTargets(entry) {
 
 function resolveState(args, t) {
   const target = resolveTarget(args);
-  const manifest = readManifest(target);
-  if (!manifest) {
-    const err = new Error(t('error.noManifest'));
-    err.code = 'NO_MANIFEST';
-    throw err;
-  }
+  const manifest = requireManifest(target, t);
   const tt = args.lang ? t : makeT(manifest.language || 'zh-CN');
   return { target, manifest, tt, lang: manifest.language || 'zh-CN' };
 }

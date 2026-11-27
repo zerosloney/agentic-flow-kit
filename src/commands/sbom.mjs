@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { readManifest } from '../install/manifest.mjs';
+import { readManifest, requireManifest } from '../install/manifest.mjs';
 import { buildAttestation } from '../install/attest.mjs';
 import { parseFrontmatter } from '../install/frontmatter.mjs';
 import { readLocalModelRoles, readInjectedModels, ROLE_NAMES } from '../models/resolve.mjs';
@@ -9,7 +9,7 @@ import { readMcpServers } from '../install/mcp.mjs';
 import { readToolPolicy } from '../install/tool-policy.mjs';
 import { resolveInside } from '../install/path-guard.mjs';
 import { HOSTS } from '../hosts/registry.mjs';
-import { resolveTarget } from './install.mjs';
+import { resolveTarget } from '../install/target.mjs';
 import { signPayload, verifySignature, readSignatureFile, writeSignatureFile, canonical, sha256 } from '../install/notary.mjs';
 
 export const SBOM_SCHEMA = 'flow-kit-sbom/v1';
@@ -374,10 +374,7 @@ export function toSpdx(native) {
 }
 
 export function exportSbom({ target, out, format = 'native', days = 30, t }) {
-  const manifest = readManifest(target);
-  if (!manifest) {
-    fail('NO_MANIFEST', t('error.noManifest'));
-  }
+  const manifest = requireManifest(target, t);
 
   const native = buildNativeSbom({ target, manifest, days });
   let formattedData = native;
