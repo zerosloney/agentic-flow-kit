@@ -133,7 +133,40 @@ const CASES = [
   ['cat .agents/tmp/write-gate-until', 'deny', '读取标记同判 deny'],
   ['echo 30 > .agents/tmp/other-marker', 'allow', '相邻路径不误拦'],
   ['ls .agents/tmp', 'allow', '目录列举不误拦'],
-  ['echo write-gate', 'allow', '标记名前缀不误拦']
+  ['echo write-gate', 'allow', '标记名前缀不误拦'],
+  // 2026-11-27 逃逸整改：shell 各层转义只改文本不改 argv——反斜杠（POSIX）、反引号（PowerShell）、
+  // 脱字符（cmd.exe）去壳后都是同一命令，不得因多一个转义符就落入 allow。
+  ['g\\it reset --hard', 'deny', '反斜杠拆分命令名'],
+  ['git res\\et --hard', 'deny', '反斜杠拆分子命令'],
+  ['git reset --har\\d', 'deny', '反斜杠拆分旗标'],
+  ['git push origin --forc\\e', 'deny', '反斜杠拆分强推旗标'],
+  ['rm -r\\f build', 'ask', '反斜杠拆分 rm -rf'],
+  ['git re`se`t --hard', 'deny', '反引号拆分命令名'],
+  ['cmd /c "git re^set --hard"', 'deny', 'cmd 脱字符拆分命令名'],
+  // ${IFS}/$IFS（大小写不敏感）是 bash 词分隔符：不得把前后词粘成单个骨架绕过展开门。
+  ['git${IFS}reset${IFS}--hard', 'deny', 'IFS 分隔子命令与旗标'],
+  ['git${IFS}checkout${IFS}main', 'ask', 'IFS 分隔 ask 命令'],
+  ['rm${IFS}-rf${IFS}build', 'ask', 'IFS 分隔 rm -rf'],
+  // 解释器 payload 是独立命令文本：清单之外的代码层守卫（绕钩旗标 / hooksPath）也必须逐 payload 过。
+  ['bash -c "git commit --no-verify -m x"', 'deny', 'payload 长旗标绕钩'],
+  ['sh -c "git commit -n -m x"', 'deny', 'payload 短旗标绕钩'],
+  ['bash -c "git -c core.hooksPath=.evilhooks status"', 'deny', 'payload hooksPath 覆盖'],
+  ['git -c core.hoo\\ksPath=.evilhooks status', 'deny', '反斜杠拆分 hooksPath 键名'],
+  // PowerShell -EncodedCommand：编码载荷文本层不可见，代码级 fail-closed。
+  ['powershell -NoProfile -EncodedCommand ZgBvAG8A', 'deny', '-EncodedCommand 编码载荷'],
+  // git 全局选项不改变子命令语义：剥掉后与清单原文对齐。
+  ['git --no-pager reset --hard', 'deny', '全局选项前缀仍 deny'],
+  ['git -C . reset --hard', 'deny', '-C 前缀仍 deny'],
+  ['git --no-pager checkout main', 'ask', '全局选项前缀 checkout 仍 ask'],
+  ['git --no-pager branch -D feat', 'ask', '全局选项前缀删分支仍 ask'],
+  // 清单匹配大小写不敏感：SQL 大写拼法不得放行。
+  ['mysql -e "DROP DATABASE prod"', 'deny', '大写 DROP DATABASE 仍 deny'],
+  // 对照组：新增视图不得误拦普通命令。
+  ['node -v', 'allow', '普通命令仍 allow'],
+  ['echo hi', 'allow', '普通命令仍 allow'],
+  ['ls -la', 'allow', '普通命令仍 allow'],
+  // 对照组例外：本测试项目无 .githooks，commit 走门卫在岗探针 fail-loud（既有行为，非清单门）。
+  ['git commit -m "normal message"', 'deny', 'commit 走探针腿，非门禁误拦']
 ];
 
 for (const [command, expected, why] of CASES) {
@@ -145,8 +178,25 @@ for (const [command, expected, why] of CASES) {
 // PowerShell 是 CodeBuddy 实测次通道：反引号在 PowerShell 里是转义符，同一 payload 必须同判。
 test('pre-shell-check: PowerShell 通道同样拦展开红线', () => {
   assert.equal(decide('git re`set --hard', 'PowerShell'), 'deny');
+  assert.equal(decide('git re`se`t --hard', 'PowerShell'), 'deny');
   assert.equal(decide('git reset --hard', 'PowerShell'), 'deny');
   assert.equal(decide('echo $HOME', 'PowerShell'), 'allow');
+});
+
+// 探针在临时项目必然 deny git push，故用 reason 区分是强推腿还是探针腿——证明 --forc\e 按 argv 判中。
+test('pre-shell-check: 反斜杠拆分的强推旗标按强推腿 deny', () => {
+  const out = invoke('git push origin --forc\\e');
+  assert.equal(out.permissionDecision, 'deny');
+  assert.match(out.permissionDecisionReason, /强制推送/);
+});
+
+// 对照组：新转义视图不得把普通提交消息判成清单红线。临时项目无 .githooks，commit 必然落探针腿，
+// 故按 reason 区分——命中探针（钩子未挂载）才算对照通过，命中红线/绕钩即视图误拦。
+test('pre-shell-check: 普通提交消息不被新转义视图误拦', () => {
+  const out = invoke('git commit -m "normal message"');
+  assert.equal(out.permissionDecision, 'deny');
+  assert.match(out.permissionDecisionReason, /钩子未挂载/);
+  assert.doesNotMatch(out.permissionDecisionReason, /项目红线/);
 });
 
 // D8b 要求 deny reason 明说「读取同判」——只读标记也拦，理由必须写清，避免被当成误拦绕过。

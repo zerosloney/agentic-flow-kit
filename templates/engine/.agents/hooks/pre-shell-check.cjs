@@ -214,6 +214,18 @@ function expansionWords(cmd) {
       quote = ch;
       continue;
     }
+    // ${IFS}/$IFS（大小写不敏感）是 bash 的词分隔符：按空白处理——flush 当前词，不并入骨架。
+    // 该处词边界由展开决定，故紧随其后的词记 dyn：expansionHits 只对含 dyn 词的骨架判命中，
+    // 若两侧全成字面词，`git${IFS}reset${IFS}--hard` 会退化成无展开痕迹的骨架而漏过（fail-closed）。
+    if (!inQuote && ch === '$') {
+      const ifs = /^(?:\$\{IFS\}|\$IFS(?![\w]))/i.exec(cmd.slice(i));
+      if (ifs) {
+        flush();
+        dyn = true;
+        i += ifs[0].length - 1;
+        continue;
+      }
+    }
     if (ch === '$' || ch === '`') {
       dyn = true;
       i = skipExpansion(cmd, i);
@@ -254,7 +266,9 @@ function expansionHits(pat, words) {
 //   ③ 消息字样误触（p2-batch2）：带引号多词消息（-m "修 git push --force 误拦"）单 token 剥不净——
 //     剥离逻辑收敛到 stripMessages 单源（引号感知）
 function gateMatch(cmd, pat) {
-  const re = new RegExp(pat.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\w-])');
+  // 2026-11-27：改大小写不敏感（SQL/命令名单词大小写拼法一致放行会漏拦，如 DROP DATABASE）。
+  // fail-closed 取向：POSIX 上大写命令本就多半执行不了，多拦零代价；命中按清单原文报理由。
+  const re = new RegExp(pat.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?![\\w-])', 'i');
   const norm = stripMessages(cmd);
   return norm !== cmd ? re.test(norm) : re.test(cmd);
 }
@@ -268,6 +282,35 @@ function dequotedMatch(cmd, pat) {
   return gateMatch(stripMessages(cmd).replace(/["']/g, ''), pat);
 }
 
+// 清单匹配视图束（2026-11-27）：shell 各层转义只改文本、不改 argv——POSIX 反斜杠（`g\it` → git）、
+// PowerShell 反引号（`re`se`t` → reset）、cmd.exe 脱字符（`re^set` → reset）在各自壳里执行的都是
+// 去转义后的字面量。只比对原文时，一个转义符就能把红线命令拆成不含清单字样的文本。
+// git 全局选项（--no-pager / -C . / -c k=v）插在子命令前同样不改变 argv 子命令语义，剥掉后与清单对齐。
+// fail-closed：原文与任一视图命中即拦（误拦改写命令即过），与 dequotedMatch 同一取舍。
+const GIT_GLOBAL_OPTS_WITH_ARG = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env', '--exec-path']);
+const GIT_GLOBAL_STRIP_RE = new RegExp(
+  '(^|[\\s;|&])git\\s+(?:(?:' + [...GIT_GLOBAL_OPTS_WITH_ARG].join('|')
+    + ')(?:\\s*=\\s*|[\\s]+)(?:"[^"]*"|\'[^\']*\'|\\S+)\\s+|--?[A-Za-z][\\w-]*\\s+)*',
+  'gi'
+);
+function gitBareView(cmd) {
+  return cmd.replace(GIT_GLOBAL_STRIP_RE, '$1git ');
+}
+function shellViews(cmd) {
+  const noBs = cmd.replace(/\\(.)/g, '$1');
+  const noTicks = noBs.replace(/[`^]/g, '');
+  const out = [];
+  for (const v of [cmd, noBs, noTicks]) {
+    for (const w of [v, gitBareView(v)]) {
+      if (!out.includes(w)) out.push(w);
+    }
+  }
+  return out;
+}
+function listMatch(cmd, pat) {
+  return shellViews(cmd).some((v) => gateMatch(v, pat) || dequotedMatch(v, pat));
+}
+
 // interpreterPayloads：解释器包裹（bash/sh/zsh/dash/ksh 的 -c / -lc / -l -c 等形态）的 payload。
 // agent 把命令交给解释器执行时，payload 就是将被执行的内容——红线字样在 payload 里等同红线在命令里。
 // 双引号/单引号/裸串（到段末）都取；`/bin/bash`、`sudo bash` 等前缀一并认。payload 内出现 deny/ask
@@ -279,7 +322,9 @@ function interpreterPayloads(cmd) {
   return out.filter(Boolean);
 }
 
-if (isForcePush(command)) {
+// 2026-11-27：强推判定同样吃转义视图——`git push origin --forc\e` 的 argv 是 --force，
+// token 化判定只吃原文会漏；shellViews 已含去反斜杠/反引号/脱字符形态。
+if (shellViews(command).some(isForcePush)) {
   deny('禁止执行: git push 强制推送（--force / -f / +refspec；项目红线：禁强制推送）');
 }
 // 1d) 解锁标记的 shell 通道（D8b 残口）：pre-write-check 已封死写工具侧创建/改写
@@ -290,13 +335,18 @@ if (isForcePush(command)) {
 if (command.toLowerCase().replace(/["'`\\]/g, '').includes('write-gate-until')) {
   deny('禁止执行: 命令提及写入门禁解锁标记 .agents/tmp/write-gate-until（写、读、删一律禁——标记存在即绕过执法面自保护，读取可用于探测门禁状态；确需临时放行由用户执行 pre-write-check.cjs --unlock <分钟>）。项目红线：禁绕过门禁');
 }
+// PowerShell -EncodedCommand：base64(UTF-16LE) 载荷在命令文本层不可见，静态无法核对门禁；
+// 与 write-gate-until 同为代码级 fail-closed deny 先例（解码依赖系统 base64/码页，跨宿主不可靠）。
+if (/-encodedcommand/i.test(command)) {
+  deny('禁止执行: PowerShell -EncodedCommand（编码载荷文本层不可见，无法核对门禁；请改用明文命令后重试。项目红线：禁以编码载荷绕过门禁）');
+}
 for (const d of denyList) {
-  if (gateMatch(command, d.pat) || dequotedMatch(command, d.pat)) {
+  if (listMatch(command, d.pat)) {
     deny(`禁止执行: ${d.pat}（项目红线：${d.reason}）`);
   }
 }
 for (const a of askList) {
-  if (gateMatch(command, a.pat) || dequotedMatch(command, a.pat)) {
+  if (listMatch(command, a.pat)) {
     ask(`需确认: ${a.pat}（项目 ask 策略：${a.reason}）`);
   }
 }
@@ -306,7 +356,9 @@ for (const a of askList) {
 // ② 命令文本：剥除全部引号后扫 -c（含引号/紧贴/空值/布尔形态）与 --config-env、行内
 //    GIT_CONFIG_KEY_n= 赋值；只放行值恰为 .githooks 的 -c。fail-closed。
 // 已知可接受误拦：提交消息含字面 "-c core.hooksPath=…"（改写即过）。
-{
+// 2026-11-27：收成函数供解释器 payload 复用；flat 视图连反斜杠一并剥除（`core.hoo\ksPath` 是同一键的
+// 另一种 shell 拼法，剥引号不剥反斜杠会让键名躲过正则）。
+function hooksPathOverride(cmd) {
   const normP = (p) => path.resolve(projectRoot, p || '.').replace(/[\\/]+$/, '').toLowerCase();
   const envHit = Object.entries(process.env).some(([k, v]) => {
     if (!/^GIT_CONFIG_KEY_\d+$/.test(k) || !/^core\.hooksPath$/i.test(String(v || ''))) return false;
@@ -318,7 +370,7 @@ for (const a of askList) {
   });
   // 第八轮整改：① 剥 ANSI-C 引号前缀（$'…' → '…'）再剥引号，防 $'-c' 形态逃逸边界；
   // ② -c 多次出现按 git last-wins 语义，任一 hooksPath 值非 .githooks 即拒（fail-closed）。
-  const flat = command.replace(/\$(['"])/g, '$1').replace(/["']/g, '');
+  const flat = cmd.replace(/\$(['"])/g, '$1').replace(/["'\\]/g, '');
   const all = flat.match(/(?:^|[\s;|&])-c\s*=?\s*core\.hooksPath(?:=(\S*))?/gi) || [];
   const cfgEnv = /(?:^|[\s;|&])--config-env[=\s]+core\.hooksPath(?!\w)/i.test(flat);
   const inlineEnv = /GIT_CONFIG_KEY_\d+=\s*core\.hooksPath(?![\w=])/i.test(flat);
@@ -329,8 +381,13 @@ for (const a of askList) {
   const val = all.length ? ((all[all.length - 1].match(/=(\S*)/) || [null, ''])[1] ?? '') : null;
   if (envHit || cfgEnv || inlineEnv || (all.length > 0 && badVal)) {
     const why = envHit ? 'GIT_CONFIG_KEY 环境注入' : cfgEnv ? '--config-env' : inlineEnv ? '行内 GIT_CONFIG 赋值' : `值=${val || '(空/布尔)'}`;
-    deny(`禁止执行: 命令级/环境 hooksPath 覆盖（${why}，非 .githooks）——钩子将被整体跳过（项目红线：禁绕过 git 钩子）`);
+    return `命令级/环境 hooksPath 覆盖（${why}，非 .githooks）`;
   }
+  return '';
+}
+const hpWhy = hooksPathOverride(command);
+if (hpWhy) {
+  deny(`禁止执行: ${hpWhy}——钩子将被整体跳过（项目红线：禁绕过 git 钩子）`);
 }
 
 // ── 2) git commit / git push 前置检查 ──────────────────
@@ -342,7 +399,6 @@ for (const a of askList) {
 //          （`echo "git push"` 的 `"git push"` 是单个 token，天然不命中）。
 // 已知局限：`pwsh -c "git push"` 这类**嵌套 shell** 不命中——与 `echo "git push"` 文本同形，
 //   取「不误伤」一侧；core.hooksPath 正常时 git 自身仍会触发 pre-push。
-const GIT_GLOBAL_OPTS_WITH_ARG = new Set(['-C', '-c', '--git-dir', '--work-tree', '--namespace', '--config-env', '--exec-path']);
 function gitSubcommand(seg) {
   const tokens = seg.match(/"[^"]*"|'[^']*'|\S+/g) || []; // 引号感知：带空格的引号段=单 token（-C "a b"）
   // 2026-11-08 三轮整改：裸/大写 git(.exe) 与路径前缀形态一并认（此前精确 'git' 漏 git.exe / GIT；
@@ -415,16 +471,25 @@ if (need) {
 // 1e) 解释器包裹 payload（D7 复核 2）：`bash -c "git reset --hard"` 的 payload 就是被执行内容，
 // stripMessages 会把包裹的 -c 值当 git 配置剥掉，所以字面门看不见它——这里单独取 payload 再判。
 // 仍逐条按 deny→ask 判定；payload 内的展开走同一逐段骨架门。
+// 2026-11-27：payload 是独立命令文本，代码层守卫（isNoVerify / hooksPath 覆盖）必须逐 payload 过——
+// 外层命令的物化/扁平视图未必能代表 payload 的 argv（如 `sh -c "git commit -n"` 的短旗标只按段判定）。
 const payloads = interpreterPayloads(command);
 if (payloads.length) {
   let pNeed = null;
   for (const payload of payloads) {
-    const pRed = denyList.find((g) => gateMatch(payload, g.pat) || dequotedMatch(payload, g.pat))
+    if (isNoVerify(payload)) {
+      deny('禁止执行: 解释器包裹命令中的绕钩旗标（payload 文本即被执行内容。项目红线：commit/merge/push 三处一律禁绕过 git 钩子）');
+    }
+    const pHp = hooksPathOverride(payload);
+    if (pHp) {
+      deny(`禁止执行: ${pHp}（解释器 payload 文本即被执行内容）——钩子将被整体跳过（项目红线：禁绕过 git 钩子）`);
+    }
+    const pRed = denyList.find((g) => listMatch(payload, g.pat))
       || expansionHitIn(payload, denyList);
     if (pRed) {
       deny(`禁止执行: 解释器包裹命令中的 ${pRed.pat}（payload 文本即被执行内容。项目红线：${pRed.reason}）`);
     }
-    pNeed = pNeed || askList.find((g) => gateMatch(payload, g.pat) || dequotedMatch(payload, g.pat))
+    pNeed = pNeed || askList.find((g) => listMatch(payload, g.pat))
       || expansionHitIn(payload, askList);
   }
   if (pNeed) {
@@ -453,7 +518,10 @@ function isNoVerify(cmd) {
   // ANSI-C 转义先解码）。**静态边界收口（十五轮裁定）**：shell 变量/命令替换展开的旗标文本层不可
   // 见——含展开的 commit/merge/push 段一律拒（fail-closed，内联值即过）；CI/脚本不经本门。混合
   // 命令 push 干跑旗标/消息恰为整词短旗标/消息含美元数字（$5）为已知边界。
-  const subs = gitSubcommands;
+  // 2026-11-27：改为显式传参——解释器 payload 是独立命令文本，守卫必须能按 payload 重算子命令与物化视图
+  // （此前读全局 command/commandMat，payload 循环无法复用）。
+  const cmdMat = materializeShQuotes(cmd);
+  const subs = cmdMat.split(/&&|\|\||[;|\r\n]/).map(gitSubcommand);
   // 十七轮补口（先于守卫判定）：一次性别名间接——`-c alias.ci='commit …'` 使真实子命令对守卫不可见，
   // 含 -c alias.* 的 git 命令一律拒（fail-closed，罕见合法形态去掉别名即过）。
   // E9-H2：短选项可紧贴取值（`-calias.ci=commit` 与 `-c=alias.…`），空白不是必要条件——只认空格形态
@@ -462,7 +530,7 @@ function isNoVerify(cmd) {
   // 占位符折算为空白），$IFS/${IFS}/反斜杠转义的空格一并折算。
   const aliasView = (t) => t.replace(/["']/g, '').replace(/\u0000/g, ' ').replace(/\$\{?IFS\}?/g, ' ').replace(/\\(\s)/g, '$1');
   const aliasPat = /(?:^|[\s;|&])-c\s*=?\s*alias\./i;
-  if (aliasPat.test(aliasView(command)) || aliasPat.test(aliasView(commandMat))) return true;
+  if (aliasPat.test(aliasView(cmd)) || aliasPat.test(aliasView(cmdMat))) return true;
   if (!subs.some((s) => s === 'commit' || s === 'merge' || s === 'push')) return false;
   // 十六轮统一收敛：三条腿各吃各的规范化文本，不再共用单一形态——
   //   ① 展开检测吃**去引号原文**（内容保留、$ 与反引号痕迹不被占位符抹除；十六轮实测物化文本
@@ -474,14 +542,14 @@ function isNoVerify(cmd) {
   // 惯用法豁免：`$(cat <<'EOF'…)` 是本仓提交消息标准写法，替换体为纯文本 heredoc。内容仍完整留在
   // 命令文本里——长旗标扁平域对**原始命令与物化文本双源取并集**（十七轮：物化域的占位符会抹除
   // heredoc 体内的旗标字样，而 bash 会把它替换进 argv），其余 $/反引号照拦。
-  if (hasExpansion(command)) return true;
+  if (hasExpansion(cmd)) return true;
   const flat = (t) => t.toLowerCase().replace(/["'\\\s\u0000\u0001]/g, '');
-  if (flat(command).includes('no-veri') || flat(commandMat).includes('no-veri')) return true;
+  if (flat(cmd).includes('no-veri') || flat(cmdMat).includes('no-veri')) return true;
   // 十七轮补口：大括号展开（--no-ver{ify,ify} / -{n,m}）与一次性别名（alias.ci）不需 $ 即可拼出
   // 真旗标/真子命令——守卫段内含大括号展开形态或 -c alias.* 一律拒（fail-closed，罕见合法形态改写即过）。
-  if (/\{[^}]*,[^}]*\}/.test(command) && subs.length) return true;
+  if (/\{[^}]*,[^}]*\}/.test(cmd) && subs.length) return true;
   return subs.includes('commit') && (() => {
-    return commandMat.split(/&&|\|\||[;|\r\n]/).some((seg) => {
+    return cmdMat.split(/&&|\|\||[;|\r\n]/).some((seg) => {
       if (gitSubcommand(seg) !== 'commit') return false;
       return seg.split(/\s+/).some((t) => /^-[a-z]*n[a-z]*$/i.test(t.replace(/["']/g, '')));
     });
