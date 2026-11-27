@@ -213,8 +213,8 @@ export function redactSensitiveText(text, options = {}) {
 // ── 高危指令与越界路径安全校验 ──────────────────────────────────────────
 
 export const L3_DANGEROUS_PATTERNS = [
-  // 管道直通远程执行 (curl | bash, wget | sh)
-  /(?:curl|wget|fetch)\s+[^\n\r|]+\|\s*(?:bash|sh|zsh|dash|sudo)/i,
+  // 管道直通远程执行 (curl | bash, wget | sh, curl | base64 -d | sh)：中间可隔任意变换级
+  /(?:curl|wget|fetch)\s+[^\n\r|]+\|(?:[^\n\r|]*\|)*\s*(?:bash|sh|zsh|dash|ksh|python3?|node|sudo)\b/i,
   /\b(?:eval|bash|sh|zsh)\s+-c\s+["'].*?(?:curl|wget|base64)/i,
   // 破坏性整盘/根目录文件系统操作
   /\brm\s+-(?:rf|fr|r\s+-f|f\s+-r)\s+(?:\/|\/\*|~|\$HOME|\.\.\/|\*)\b/i,
@@ -288,13 +288,17 @@ function appendBounded(buf, chunk, maxBuffer) {
 export function checkPathTraversalEscape(cmdStr, root = process.cwd()) {
   const normalizedRoot = path.resolve(root);
 
-  // 1. 检查所有重定向写入至上级或工作区外路径，如 > ../../foo 或 > /etc/
-  for (const redirectMatch of cmdStr.matchAll(/(?:>{1,2})\s*([^\s;&|()]+)/g)) {
-    const targetFile = redirectMatch[1].replace(/["']/g, '');
-    if (!targetFile) continue;
+  const escapesRoot = (targetFile) => {
     const resolvedTarget = path.resolve(normalizedRoot, targetFile);
     const rel = path.relative(normalizedRoot, resolvedTarget);
-    if (rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) {
+    return rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel);
+  };
+
+  // 1. 检查所有重定向写入至上级或工作区外路径，如 > ../../foo 或 > /etc/；>| 为 noclobber 覆盖写，同样是写通道
+  for (const redirectMatch of cmdStr.matchAll(/(?:>>?\|?)\s*([^\s;&|()]+)/g)) {
+    const targetFile = redirectMatch[1].replace(/["']/g, '');
+    if (!targetFile) continue;
+    if (escapesRoot(targetFile)) {
       return {
         escaped: true,
         reason: `Disallowed write redirection escaping workspace root: ${targetFile}`,
@@ -302,7 +306,22 @@ export function checkPathTraversalEscape(cmdStr, root = process.cwd()) {
     }
   }
 
-  // 2. 检查多层级回退穿越模式 (如 ../../../..)
+  // 2. tee 是不经重定向算子的等价写通道，其文件参数按重定向目标同规则检查根目录
+  const teeCommandRe = new RegExp(`(?:^|[;&|(\\n]\\s*)${WRAPPER_PREFIX_SOURCE}tee\\b([^;&|()\\n]*)`, 'gi');
+  for (const teeMatch of cmdStr.matchAll(teeCommandRe)) {
+    for (const rawArg of teeMatch[1].trim().split(/\s+/)) {
+      const targetFile = rawArg.replace(/["']/g, '');
+      if (!targetFile || targetFile.startsWith('-')) continue;
+      if (escapesRoot(targetFile)) {
+        return {
+          escaped: true,
+          reason: `Disallowed tee write escaping workspace root: ${targetFile}`,
+        };
+      }
+    }
+  }
+
+  // 3. 检查多层级回退穿越模式 (如 ../../../..)
   const traversalDepthMatch = cmdStr.match(/\.\.[\\/]/g);
   if (traversalDepthMatch && traversalDepthMatch.length >= 3) {
     return {
