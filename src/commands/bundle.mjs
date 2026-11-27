@@ -4,21 +4,10 @@ import os from 'node:os';
 import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { TEMPLATES, LOCALES, RUNTIME_DIRS, RUNTIME_FILES } from '../install/plan.mjs';
-import { readKitVersion } from './install.mjs';
+import { readKitVersion } from '../install/version.mjs';
+import { canonical, sha256 } from '../install/notary.mjs';
 
 export const BUNDLE_SCHEMA = 'flow-kit-bundle/v1';
-
-function sha256(value) {
-  return crypto.createHash('sha256').update(value).digest('hex');
-}
-
-function canonical(value) {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${canonical(value[k])}`).join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
 
 function formatBytes(bytes) {
   if (bytes < 1024) return `${bytes} B`;

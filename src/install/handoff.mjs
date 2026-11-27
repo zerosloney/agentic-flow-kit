@@ -6,7 +6,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { signPayload, verifySignature } from './notary.mjs';
+import { signPayload, verifySignature, sha256 } from './notary.mjs';
 
 export const HANDOFF_SCHEMA = 'flow-kit-handoff/v1';
 
@@ -25,9 +25,6 @@ const SUSPICIOUS_DIRECTIVES = [
   { name: 'System Prompt Injection', regex: /<\|system\|>|<system_prompt>|<\/user_guidance>/i },
 ];
 
-function sha256(buffer) {
-  return crypto.createHash('sha256').update(buffer).digest('hex');
-}
 
 export function scanTaint(content) {
   const text = String(content || '');

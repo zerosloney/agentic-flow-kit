@@ -7,6 +7,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseJsonc } from './jsonc.mjs';
 import { parseYaml } from './yaml.mjs';
+import { RulesConfigError } from './errors.mjs';
+
+export { RulesConfigError };
 
 export const FACES = ['ui', 'code', 'tests', 'data', 'any'];
 export const PHASES = ['pre-commit', 'pre-write', 'pre-push', 'verify', 'local', 'always'];
@@ -14,12 +17,6 @@ export const SEVERITIES = ['block', 'warn'];
 export const SCOPES = ['repo', 'diff'];
 export const ASSERT_KINDS = ['content', 'require', 'absence', 'inventory', 'env', 'command', 'navProperties', 'plugin'];
 
-export class RulesConfigError extends Error {
-  constructor(message) {
-    super(message);
-    this.code = 'RULES_CONFIG';
-  }
-}
 
 const fail = (at, reason) => {
   throw new RulesConfigError(`${at} ${reason}`);

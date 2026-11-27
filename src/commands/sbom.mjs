@@ -10,23 +10,12 @@ import { readToolPolicy } from '../install/tool-policy.mjs';
 import { resolveInside } from '../install/path-guard.mjs';
 import { HOSTS } from '../hosts/registry.mjs';
 import { resolveTarget } from './install.mjs';
-import { signPayload, verifySignature, readSignatureFile, writeSignatureFile } from '../install/notary.mjs';
+import { signPayload, verifySignature, readSignatureFile, writeSignatureFile, canonical, sha256 } from '../install/notary.mjs';
 
 export const SBOM_SCHEMA = 'flow-kit-sbom/v1';
+
 export const CYCLONEDX_SPEC = '1.5';
 export const SPDX_SPEC = 'SPDX-2.3';
-
-function sha256(value) {
-  return crypto.createHash('sha256').update(value).digest('hex');
-}
-
-function canonical(value) {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value).sort().map((k) => `${JSON.stringify(k)}:${canonical(value[k])}`).join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
 
 function readText(abs) {
   try {

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { readManifest } from '../install/manifest.mjs';
-import { readKitVersion } from '../commands/install.mjs';
+import { readKitVersion } from '../install/version.mjs';
 import { runGateChecks } from '../ci/gate.mjs';
 import { listHandoffFiles, verifyHandoffEnvelope } from '../install/handoff.mjs';
 import { resolvePublicKeyPath } from '../install/notary.mjs';

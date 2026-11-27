@@ -362,21 +362,21 @@ export function detectCircularDependencies(graph) {
   return cycles;
 }
 
+export function getFileLayer(fileRel, layers = {}) {
+  for (const [layerName, layerDef] of Object.entries(layers)) {
+    if (layerDef.path && matchGlob(layerDef.path, fileRel)) {
+      return layerName;
+    }
+  }
+  return null;
+}
+
 export function checkLayerBoundaries(graph, config) {
   const layers = config.layers || {};
   const violations = [];
 
-  function getFileLayer(fileRel) {
-    for (const [layerName, layerDef] of Object.entries(layers)) {
-      if (layerDef.path && matchGlob(layerDef.path, fileRel)) {
-        return layerName;
-      }
-    }
-    return null;
-  }
-
   for (const [fromFile, targets] of graph.entries()) {
-    const fromLayer = getFileLayer(fromFile);
+    const fromLayer = getFileLayer(fromFile, layers);
     if (!fromLayer) continue;
 
     const layerDef = layers[fromLayer];
@@ -384,7 +384,7 @@ export function checkLayerBoundaries(graph, config) {
     if (!disallow.length) continue;
 
     for (const targetFile of targets) {
-      const targetLayer = getFileLayer(targetFile);
+      const targetLayer = getFileLayer(targetFile, layers);
       if (targetLayer && disallow.includes(targetLayer)) {
         violations.push({
           fromFile,
@@ -502,22 +502,13 @@ export function generateArchitectureMermaid(graph, config, violations = []) {
   const layerFiles = {};
   const ungrouped = [];
 
-  function getFileLayer(fileRel) {
-    for (const [layerName, layerDef] of Object.entries(layers)) {
-      if (layerDef.path && matchGlob(layerDef.path, fileRel)) {
-        return layerName;
-      }
-    }
-    return null;
-  }
-
   const allFiles = new Set([
     ...graph.keys(),
     ...[...graph.values()].flatMap((s) => [...s]),
   ]);
 
   for (const file of allFiles) {
-    const layer = getFileLayer(file);
+    const layer = getFileLayer(file, layers);
     if (layer) {
       if (!layerFiles[layer]) layerFiles[layer] = [];
       layerFiles[layer].push(file);

@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { readManifest } from '../install/manifest.mjs';
-import { readKitVersion } from './install.mjs';
+import { readKitVersion } from '../install/version.mjs';
 
 // 多仓 Workspace：显式清单 + 各仓安装摘要。只读聚合，不隐式发现仓库，
 // 也不把 workspace 配置混入单仓的 install-manifest。

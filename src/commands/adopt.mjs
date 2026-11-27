@@ -9,7 +9,8 @@ import { DERIVED_RELS } from '../install/derived.mjs';
 import { HOSTS } from '../hosts/registry.mjs';
 import { detectHosts } from '../hosts/detect.mjs';
 import { buildState } from './diff.mjs';
-import { readKitVersion, resolveHosts, resolveStack, resolveTarget, validateStacks } from './install.mjs';
+import { resolveHosts, resolveStack, resolveTarget, validateStacks } from './install.mjs';
+import { readKitVersion } from '../install/version.mjs';
 
 const MERGE_KINDS = new Set(['merge-gitattributes', 'merge-gitignore']);
 // 生成脚本会按磁盘现状重写这三份派生工件（索引/生效策略/引擎地图），

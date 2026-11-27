@@ -10,7 +10,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseJsonc } from './jsonc.mjs';
-import { readRulesFile, RulesConfigError } from './model.mjs';
+import { readRulesFile } from './model.mjs';
+import { RulesConfigError } from './errors.mjs';
 
 const arr = (v) => (Array.isArray(v) ? v : []);
 const isObj = (v) => Boolean(v) && typeof v === 'object' && !Array.isArray(v);

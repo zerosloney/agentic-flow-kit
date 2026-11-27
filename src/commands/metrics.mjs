@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { flag } from '../cli/args.mjs';
-import { readKitVersion, resolveTarget } from './install.mjs';
+import { resolveTarget } from './install.mjs';
+import { readKitVersion } from '../install/version.mjs';
 import {
   computeAiDoraMetrics,
   exportOpenTelemetryMetrics,

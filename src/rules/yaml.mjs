@@ -1,6 +1,6 @@
 // yaml — 零依赖 YAML 解析器与生成器（针对工作流与规则模型优化）
 // 规则包由开发者或 AI 频繁编辑与维护；提供对字典、列表、标量、多行块、注释及行内结构的原生支持。
-import { RulesConfigError } from './model.mjs';
+import { RulesConfigError } from './errors.mjs';
 
 function failYaml(rel, lineNum, msg) {
   const loc = rel ? `${rel} (line ${lineNum})` : `line ${lineNum}`;

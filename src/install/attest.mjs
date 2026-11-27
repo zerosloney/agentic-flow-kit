@@ -7,21 +7,12 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { readManifest } from './manifest.mjs';
+import { canonical, sha256 } from './notary.mjs';
 
 export const ATTEST_SCHEMA = 'flow-kit-attest/v1';
 const POLICY_REL = '.agents/config/policy.json';
 const EVAL_RESULTS = '.agents/evals/results.jsonl';
 const EVAL_LOG = '.agents/evals/eval-log.json';
-
-const sha256 = (value) => createHash('sha256').update(value).digest('hex');
-
-function canonical(value) {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
-  if (value && typeof value === 'object') {
-    return `{${Object.keys(value).sort().map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`).join(',')}}`;
-  }
-  return JSON.stringify(value);
-}
 
 function readBuffer(abs) {
   try {

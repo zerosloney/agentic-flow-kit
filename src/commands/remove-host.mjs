@@ -18,7 +18,8 @@ import { checkUserHooksConfig, unwireUserHooks } from '../install/user-hooks.mjs
 import { HOSTS, HOST_NAMES, canonicalHostName } from '../hosts/registry.mjs';
 import { readInjectedModels } from '../models/resolve.mjs';
 import { makeT } from '../i18n.mjs';
-import { computeEnterprise, readKitVersion, resolveTarget } from './install.mjs';
+import { computeEnterprise, resolveTarget } from './install.mjs';
+import { readKitVersion } from '../install/version.mjs';
 import { planInputsFromManifest, varsInputsFromManifest } from './replay.mjs';
 import { cleanEmptyDirs } from './prune.mjs';
 import { resolveInside } from '../install/path-guard.mjs';

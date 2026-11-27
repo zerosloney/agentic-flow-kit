@@ -8,7 +8,9 @@ import { readPlanEntry, renderMergeBlock, extractMergeBlock, dedupeMergeBlock } 
 import { readInjectedModels } from '../models/resolve.mjs';
 import { derivedModeOf, detectAnchorTextOverwritten } from '../install/derived.mjs';
 import { makeT } from '../i18n.mjs';
-import { readKitVersion, resolveTarget } from './install.mjs';
+import { resolveTarget } from './install.mjs';
+import { readKitVersion } from '../install/version.mjs';
+import { normalizeEol } from '../kernel/index.mjs';
 import { planInputsFromManifest, varsInputsFromManifest } from './replay.mjs';
 import { resolveInside } from '../install/path-guard.mjs';
 
@@ -31,9 +33,6 @@ function strictExit(args, result) {
   return flag(args, 'strict') && hasDrift(result.summary) ? 1 : 0;
 }
 
-function normalizeEol(text) {
-  return String(text).replace(/\r\n/g, '\n');
-}
 
 function expectedEntry(entry, vars) {
   if (MERGE_KINDS.has(entry.kind)) {

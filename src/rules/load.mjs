@@ -3,7 +3,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { loadLayer, mergeLayers, validateRule, RulesConfigError } from './model.mjs';
+import { loadLayer, mergeLayers, validateRule } from './model.mjs';
+import { RulesConfigError } from './errors.mjs';
 import { adaptLegacy } from './adapters.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
