@@ -2,6 +2,7 @@
 
 > 分支：`refactor/arch-governance`
 > 基线：1952 tests, 1948 pass, 0 fail, 4 skipped | 4/4 repo checks pass
+> 最终状态：1955 tests, 1951 pass, 0 fail, 4 skipped | 循环依赖 0 | 跨层违规 0
 
 ---
 
@@ -12,7 +13,7 @@
   bin/flow-kit.mjs -> src/cli/main.mjs, src/cli/args.mjs, src/cli/exit.mjs, src/tui/*
          │
          ▼
-[Commands / Use Cases]
+[Commands / Orchestration]
   src/commands/* (install, upgrade, doctor, gate, bundle, sbom, diff, etc.)
          │
          ▼
@@ -29,6 +30,8 @@
 [Kernel / Foundation]
   src/kernel/index.mjs : 散列摘要、脏树检测、三方合并
   src/install/version.mjs : 版本与引擎需求单源
+  src/install/target.mjs : 目标路径与目录校验单源
+  src/install/runtime-paths.mjs : 运行时模板与脚本路径单源
   src/i18n.mjs : 国际化与翻译单源
 ```
 
@@ -38,40 +41,41 @@
 
 | 编号 | 类别 | 现象与位置 | 治理动作 | 状态 |
 |---|---|---|---|---|
-| E-01 | 循环依赖 | `src/commands/install.mjs` ↔ `src/commands/bundle.mjs` | `bundle.mjs` 改从 `src/install/version.mjs` 引入 `readKitVersion` | 待处理 |
-| E-02 | 循环依赖 | `src/rules/model.mjs` ↔ `src/rules/yaml.mjs` | 抽离 `src/rules/errors.mjs`，解耦 `RulesConfigError` | 待处理 |
-| E-03 | 工具重复 | `sha256` / `canonical` 重复出现在 5 个文件 | 归一至 `src/install/notary.mjs`，消除各处平行手写 | 待处理 |
-| E-04 | 职责外溢 | 17 个命令从 `commands/install.mjs` 引入 `resolveTarget` | 提取 `src/install/target.mjs` 权威实现，迁移所有调用方 | 待处理 |
-| E-05 | 逻辑重复 | `requireManifest` 在 `diff.mjs`、`skills.mjs`、`flows.mjs` 重复 | 归一至 `src/install/manifest.mjs` 单源 | 待处理 |
-| E-06 | 逻辑重复 | `isObject` 校验在 5 个底层文件各自实现 | 建立通用 `isObject` 并在 `src/install/` 中统一复用 | 待处理 |
-| E-07 | 内部重复 | `getFileLayer` 在 `src/install/arch-guard.mjs` 内重复定义两次 | 提升至模块作用域单一函数 | 待处理 |
-| E-08 | 模块内聚 | `rehashDerivedArtifacts` 滞留在 `install.mjs` | 迁移至 `src/install/derived.mjs` 领域模块 | 待处理 |
-| E-09 | 防回归 | 仓库自身缺乏机器可执行的架构守卫测试 | 建立 `.agents/config/architecture.json` 与自动化架构测试 | 待处理 |
+| E-01 | 循环依赖 | `src/commands/install.mjs` ↔ `src/commands/bundle.mjs` | `bundle.mjs` 等改从 `src/install/version.mjs` 引入 `readKitVersion` | ✅ 已完成 (`e62ca67`) |
+| E-02 | 循环依赖 | `src/rules/model.mjs` ↔ `src/rules/yaml.mjs` | 抽离 `src/rules/errors.mjs`，解耦 `RulesConfigError` | ✅ 已完成 (`e62ca67`) |
+| E-03 | 工具重复 | `sha256` / `canonical` 重复出现在 5 个文件 | 归一至 `src/install/notary.mjs`，消除各处平行手写 | ✅ 已完成 (`e62ca67`) |
+| E-04 | 职责外溢 | 17 个命令从 `commands/install.mjs` 引入 `resolveTarget` | 提取 `src/install/target.mjs` 权威实现，迁移所有调用方 | ✅ 已完成 (`2acc10b`) |
+| E-05 | 逻辑重复 | `requireManifest` 在 `diff.mjs`、`skills.mjs`、`flows.mjs` 重复 | 归一至 `src/install/manifest.mjs` 单源，迁移所有命令 | ✅ 已完成 (`2acc10b`) |
+| E-06 | 跨层倒灌 | `src/install/derived.mjs` 从 `commands/runtime.mjs` 引入路径 | 提取 `src/install/runtime-paths.mjs` 单源，彻底消除跨层导入 | ✅ 已完成 (`566ebad`) |
+| E-07 | 内部重复 | `getFileLayer` 在 `src/install/arch-guard.mjs` 内重复定义两次 | 提升至模块作用域单一函数 | ✅ 已完成 (`e62ca67`) |
+| E-08 | 模块内聚 | `rehashDerivedArtifacts` 滞留在 `install.mjs` | 迁移至 `src/install/derived.mjs` 领域模块 | ✅ 已完成 (`fad354c`) |
+| E-09 | 防回归 | 仓库自身缺乏机器可执行的架构守卫测试 | 建立 `tests/kit-architecture.test.mjs` 自动化架构回归测试 | ✅ 已完成 (`566ebad`) |
 
 ---
 
 ## 三、治理批次与推进记录
 
-### Batch 1: 消除循环依赖与工具函数归一 (In Progress)
-- [ ] 解除 Cycle 1 (`install.mjs` ↔ `bundle.mjs`)
-- [ ] 解除 Cycle 2 (`model.mjs` ↔ `yaml.mjs`)
-- [ ] 归一 `sha256` 与 `canonical`，消除 4 处手写副本
-- [ ] 消除 `arch-guard.mjs` 内的重复 `getFileLayer`
-- [ ] 全量验证与独立提交
+### Batch 1: 消除循环依赖与工具函数归一 (`e62ca67`)
+- [x] 解除 Cycle 1 (`install.mjs` ↔ `bundle.mjs`)
+- [x] 解除 Cycle 2 (`model.mjs` ↔ `yaml.mjs`)
+- [x] 归一 `sha256` 与 `canonical`，消除 4 处手写副本
+- [x] 消除 `arch-guard.mjs` 内的重复 `getFileLayer`
+- [x] 验证循环依赖数从 2 降为 0
+- [x] 全量验证与独立提交
 
-### Batch 2: 目标路径解析解耦与 Manifest 统一 (Pending)
-- [ ] 新建 `src/install/target.mjs`
-- [ ] 迁移 17 个命令的 `resolveTarget` 调用
-- [ ] 在 `src/install/manifest.mjs` 增加 `requireManifest`，迁移 `diff`、`skills`、`flows`
-- [ ] 全量验证与独立提交
+### Batch 2: 目标路径解析解耦与 Manifest 统一 (`2acc10b`)
+- [x] 新建 `src/install/target.mjs`
+- [x] 迁移 18 个模块的 `resolveTarget` 调用，消除 `policy.mjs` 的重复定义
+- [x] 在 `src/install/manifest.mjs` 增加 `requireManifest`，迁移 9 处手写校验
+- [x] 全量验证与独立提交
 
-### Batch 3: 派生工件生命周期内聚 (Pending)
-- [ ] 将 `rehashDerivedArtifacts` / `generateDerivedArtifacts` 迁移入 `src/install/derived.mjs`
-- [ ] 在 `install.mjs` 保持别名导出以兼容历史测试
-- [ ] 全量验证与独立提交
+### Batch 3: 派生工件生命周期内聚 (`fad354c`)
+- [x] 将 `rehashDerivedArtifacts` / `generateDerivedArtifacts` 迁移入 `src/install/derived.mjs`
+- [x] 在 `install.mjs` 保持别名导出以兼容历史测试与外部导入方
+- [x] 全量验证与独立提交
 
-### Batch 4: 架构分层守卫与防回归机制 (Pending)
-- [ ] 建立 `.agents/config/architecture.json` 规则定义
-- [ ] 建立 `tests/kit-architecture.test.mjs` 架构回归测试
-- [ ] 确保测试集成入 `npm test`
-- [ ] 全量验证与独立提交
+### Batch 4: 架构分层守卫与防回归机制 (`566ebad`)
+- [x] 提取 `src/install/runtime-paths.mjs`，消除 `install` 对 `commands` 的唯一跨层依赖
+- [x] 建立 `tests/kit-architecture.test.mjs` 自动化架构回归测试
+- [x] 确保测试集成入 `npm test`，常态化防循环与防跨层
+- [x] 全量验证与独立提交
