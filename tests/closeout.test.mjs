@@ -66,3 +66,29 @@ test('暂存区里的无关路径仍然拒绝提交', () => {
   assert.match(r.stderr, /src\/unrelated\.txt/);
   assert.equal(git(root, ['log', '-1', '--format=%s']).stdout.trim(), 'init');
 });
+
+test('步骤④被拒后原命令原样重跑：档案文档找回并完成关单', () => {
+  const root = fixture();
+  const month = new Date().toISOString().slice(0, 7);
+  fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'src', 'unrelated.txt'), 'x\n');
+  assert.equal(git(root, ['add', 'src/unrelated.txt']).status, 0);
+
+  const r1 = runCloseout(root);
+  assert.equal(r1.status, 1, `应在步骤 ④ 拒绝提交：\n${r1.stdout}\n${r1.stderr}`);
+  assert.match(r1.stderr, /步骤 ④ 拒绝提交/);
+  const archived = path.join(root, 'workflow', 'archive', month, 'intents', 'demo.md');
+  assert.ok(fs.existsSync(archived), `拒绝时归档已发生：${archived}`);
+
+  const r2 = runCloseout(root);
+  assert.equal(r2.status, 1, `原因未修好时重跑仍应停在步骤 ④：\n${r2.stdout}\n${r2.stderr}`);
+  assert.match(r2.stderr, /步骤 ④ 拒绝提交/, '重跑必须到达步骤 ④，不得死在「文档不存在」');
+  assert.doesNotMatch(r2.stderr, /文档不存在/);
+
+  assert.equal(git(root, ['reset', '--', 'src/unrelated.txt']).status, 0);
+  const r3 = runCloseout(root);
+  assert.equal(r3.status, 0, `修好原因后原命令重跑应完成：\n${r3.stdout}\n${r3.stderr}`);
+  assert.equal(git(root, ['log', '-1', '--format=%s']).stdout.trim(), 'docs(workflow): demo 关单');
+  assert.equal(git(root, ['diff', '--cached', '--name-only']).stdout.trim(), '');
+  assert.ok(fs.existsSync(path.join(root, 'src', 'unrelated.txt')), '无关文件不被夹带提交，仍在工作区');
+});

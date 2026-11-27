@@ -31,14 +31,38 @@ for (let i = 0; i < argv.length; i++) {
 const DRY = argv.includes('--dry-run');
 const ROOT = path.resolve(argOf('--root') || process.env.FLOW_KIT_PROJECT_ROOT || path.join(SCRIPT_DIR, '..', '..'));
 
-const USAGE = '用法：flow-kit run closeout.mjs <workflow/{intents,specs,plans,incidents}/x.md> --delegated "<用户原话>" [--msg "<主题>"] [--root <仓库根>] [--dry-run]';
+const USAGE = '用法：flow-kit run closeout.mjs <workflow/{intents,specs,plans,incidents}/x.md | workflow/archive/YYYY-MM/{intents,specs,plans,incidents}/x.md> --delegated "<用户原话>" [--msg "<主题>"] [--root <仓库根>] [--dry-run]';
 const RECOVER = (doc) => `恢复：修掉报错原因后重跑同一命令（已完成的步骤幂等跳过）：flow-kit run closeout.mjs ${doc} --delegated "<用户原话>" [--msg "<主题>"]`;
 if (positional.length !== 1) { console.error(`❌ 需且仅需一份文档\n${USAGE}`); process.exit(1); }
-const doc = positional[0].replace(/\\/g, '/');
-if (!/^workflow\/(intents|specs|plans|incidents)\/[^/\\]+\.md$/.test(doc)) {
+let doc = positional[0].replace(/\\/g, '/');
+// 档案路径重入：archive-on-close 会把文档 git mv 进 workflow/archive/<终态月>/<类型>/；
+// 步骤④被拒后按恢复提示重跑时允许直接传档案路径（①按终态幂等跳过，③④照常收尾）。
+const DOC_RE = /^workflow\/(intents|specs|plans|incidents)\/([^/\\]+)\.md$/;
+const DOC_ARCHIVE_RE = /^workflow\/archive\/\d{4}-\d{2}\/(intents|specs|plans|incidents)\/[^/\\]+\.md$/;
+if (!DOC_RE.test(doc) && !DOC_ARCHIVE_RE.test(doc)) {
   console.error(`❌ 文档路径不合法：${doc}\n${USAGE}`); process.exit(1);
 }
-const abs = path.join(ROOT, doc);
+let abs = path.join(ROOT, doc);
+if (!fs.existsSync(abs) && DOC_RE.test(doc)) {
+  // 原路径失联 = 文档已被本序列归档移走（步骤④被拒后的重跑场景）：
+  // 到档案月目录找回同名同族文档，恢复命令才能原样重跑，而不是死在「文档不存在」。
+  const m = doc.match(DOC_RE);
+  let hits = [];
+  try {
+    hits = fs.readdirSync(path.join(ROOT, 'workflow', 'archive'))
+      .filter((d) => /^\d{4}-\d{2}$/.test(d))
+      .map((month) => `workflow/archive/${month}/${m[1]}/${m[2]}.md`)
+      .filter((p) => fs.existsSync(path.join(ROOT, p)));
+  } catch { /* 档案目录不存在 = 从未归档，按文档不存在处理 */ }
+  if (hits.length === 1) {
+    doc = hits[0];
+    abs = path.join(ROOT, doc);
+    console.log(`[closeout] 原路径已归档，续跑档案文档：${doc}`);
+  } else if (hits.length > 1) {
+    console.error(`❌ 原路径已归档且命中多个档案月（${hits.join('、')}），请直接传档案路径重跑`);
+    process.exit(1);
+  }
+}
 if (!fs.existsSync(abs)) { console.error(`❌ 文档不存在：${abs}`); process.exit(1); }
 
 const base = path.basename(doc, '.md');
