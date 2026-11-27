@@ -301,6 +301,13 @@ const MANAGED_RISK_PROBES = [
   ...L2_RULE_FAMILIES.flatMap((family) => deriveRuleProbes(family.body)),
 ];
 
+// 挂载 source 是绝对路径时才能脱离 target 解析；相对路径由运行时相对 target 解析，此处不臆判。
+function mountSourceIsFilesystemRoot(source) {
+  if (typeof source !== 'string' || !source || !path.isAbsolute(source)) return false;
+  const resolved = path.resolve(source);
+  return path.parse(resolved).root === resolved;
+}
+
 export function evaluateSandboxConfigIntegrity(config = {}) {
   const violations = [];
 
@@ -309,6 +316,31 @@ export function evaluateSandboxConfigIntegrity(config = {}) {
       code: 'SANDBOX_MODE_DISABLED',
       detail: `mode "disabled" removes sandbox isolation required by the managed policy`,
     });
+  } else {
+    // auto/strict/always 都要求隔离；network/dropPrivileges/mounts 任一放宽都会削弱托管隔离。
+    const network = config.network || 'bridge';
+    if (network !== 'bridge' && network !== 'none') {
+      violations.push({
+        code: 'SANDBOX_NETWORK_EXPOSED',
+        detail: `network "${network}" is not an isolated documented setting (allowed: "bridge", "none")`,
+      });
+    }
+
+    if (config.dropPrivileges === false) {
+      violations.push({
+        code: 'SANDBOX_PRIVILEGES_NOT_DROPPED',
+        detail: 'dropPrivileges is false: sandbox commands run as the image default user instead of a non-root user',
+      });
+    }
+
+    for (const mount of Array.isArray(config.mounts) ? config.mounts : []) {
+      if (mountSourceIsFilesystemRoot(mount?.source)) {
+        violations.push({
+          code: 'SANDBOX_MOUNT_ROOT_EXPOSED',
+          detail: `mount source "${mount.source}" exposes the host filesystem root`,
+        });
+      }
+    }
   }
 
   const safePatterns = config.rules?.safePatterns || [];

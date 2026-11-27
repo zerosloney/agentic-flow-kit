@@ -722,6 +722,58 @@ test('sandbox config integrity check fails closed on self-disable and class lowe
   assert.notEqual(loweredRoute.route, 'host');
 });
 
+test('sandbox config integrity rejects isolation-weakening fields in enforced modes', () => {
+  const networkHost = evaluateSandboxConfigIntegrity({ version: 1, mode: 'strict', network: 'host' });
+  assert.equal(networkHost.ok, false);
+  assert.ok(networkHost.violations.some(
+    (v) => v.code === 'SANDBOX_NETWORK_EXPOSED' && /network/.test(v.detail),
+  ), 'network: host must be reported as a violation mentioning network');
+
+  const noDrop = evaluateSandboxConfigIntegrity({
+    version: 1,
+    mode: 'strict',
+    network: 'bridge',
+    dropPrivileges: false,
+  });
+  assert.equal(noDrop.ok, false);
+  assert.ok(noDrop.violations.some((v) => v.code === 'SANDBOX_PRIVILEGES_NOT_DROPPED'));
+
+  for (const source of ['/', path.parse(process.cwd()).root]) {
+    const rootMount = evaluateSandboxConfigIntegrity({
+      version: 1,
+      mode: 'strict',
+      network: 'bridge',
+      dropPrivileges: true,
+      mounts: [{ source, target: '/host' }],
+    });
+    assert.equal(rootMount.ok, false, `root mount "${source}" must be rejected`);
+    assert.ok(rootMount.violations.some((v) => v.code === 'SANDBOX_MOUNT_ROOT_EXPOSED'));
+  }
+
+  // doctor 曾把该 auto 组合判为 ok+warn；字段放宽在完整性层必须直接失败。
+  const autoHost = evaluateSandboxConfigIntegrity({
+    version: 1,
+    mode: 'auto',
+    network: 'host',
+    dropPrivileges: false,
+    mounts: [{ source: '/', target: '/host' }],
+  });
+  assert.equal(autoHost.ok, false);
+  assert.equal(autoHost.violations.length, 3);
+});
+
+test('sandbox config integrity accepts a fully isolated config', () => {
+  const integrity = evaluateSandboxConfigIntegrity({
+    version: 1,
+    mode: 'strict',
+    network: 'bridge',
+    dropPrivileges: true,
+    mounts: [{ source: './workspace', target: '/workspace', readonly: true }],
+  });
+  assert.equal(integrity.ok, true);
+  assert.deepEqual(integrity.violations, []);
+});
+
 test('CLI flow-kit doctor fails the sandbox check when the project config disables isolation', () => {
   const dir = tmpRepo();
   initSandboxConfig(dir, { mode: 'auto' });
