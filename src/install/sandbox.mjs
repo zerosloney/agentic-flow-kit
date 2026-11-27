@@ -3,6 +3,25 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { STACK_IMAGES, STACK_CONTAINER_USER } from './devcontainer.mjs';
 import { readManifest } from './manifest.mjs';
+import {
+  redactSensitiveText,
+  sanitizeExecEnv,
+  validateExecutionSafety,
+  safeExecFileWithGuardrails,
+  safeExec,
+  ExecutionSafetyError,
+  killProcessTree,
+} from '../../templates/engine/.agents/scripts/execution-guardrails.mjs';
+
+export {
+  redactSensitiveText,
+  sanitizeExecEnv,
+  validateExecutionSafety,
+  safeExecFileWithGuardrails,
+  safeExec,
+  ExecutionSafetyError,
+  killProcessTree,
+};
 
 export const SANDBOX_CONFIG_REL = path.join('.agents', 'config', 'sandbox.json');
 
