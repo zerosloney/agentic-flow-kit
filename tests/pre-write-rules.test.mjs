@@ -135,6 +135,15 @@ test('a symlink spelling of a protected wiring file is judged as that file', (t)
     'deny must fire before any swap-in: the protected file stays untouched');
 });
 
+// NTFS 默认流拼写（::$DATA）同样经 realpath 解回实体文件，绕不开保护面。
+test('an NTFS ADS spelling of a protected wiring file is judged as that file', (t) => {
+  if (process.platform !== 'win32') return t.skip('NTFS-only: ADS 流语义');
+  const dir = fixture();
+  write(dir, '.agents/settings.json', json({ permissions: {} }));
+  const r = runHook(dir, '.agents/settings.json::$DATA', '{"permissions":{"deny":[]}}\n');
+  assert.equal(denied(r), true, r.stdout + r.stderr);
+});
+
 test('a symlink spelling of the confirmation ledger keeps the append-only rule', (t) => {
   const dir = fixture();
   write(dir, '.agents/confirmations.jsonl', '{"seq":1}\n');
