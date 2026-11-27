@@ -86,3 +86,58 @@ test('the runtime gate keeps accepting a compliant multi-stage Dockerfile', () =
   assert.equal(summary.ok, true);
   assert.equal(summary.kitVersion, '2.1.0');
 });
+
+// Docker 语义：FROM 引用先前 stage 时，没写 USER 的 stage 继承该 stage 的用户。
+test('the runtime gate accepts a stage that inherits a non-root user', () => {
+  const dir = repo([
+    'FROM mcr.microsoft.com/devcontainers/typescript-node:22 AS build',
+    'ARG FLOW_KIT_VERSION=2.1.0',
+    'USER node',
+    'FROM build AS runtime',
+    '',
+  ].join('\n'));
+  const { status, summary } = gate(dir);
+  assert.equal(status, 0, summary.problems?.join('; '));
+  assert.equal(summary.ok, true);
+  assert.equal(summary.kitVersion, '2.1.0');
+});
+
+test('the runtime gate rejects a stage that inherits root or switches back to it', () => {
+  const explicitRoot = repo([
+    'FROM mcr.microsoft.com/devcontainers/typescript-node:22 AS build',
+    'ARG FLOW_KIT_VERSION=2.1.0',
+    'USER node',
+    'FROM build AS runtime',
+    'USER root',
+    '',
+  ].join('\n'));
+  const switched = gate(explicitRoot);
+  assert.equal(switched.status, 1, switched.summary.problems?.join('; '));
+  assert.match(switched.summary.problems.join('; '), /USER root/);
+
+  const inheritedRoot = repo([
+    'FROM mcr.microsoft.com/devcontainers/typescript-node:22 AS build',
+    'ARG FLOW_KIT_VERSION=2.1.0',
+    'USER root',
+    'FROM build AS runtime',
+    '',
+  ].join('\n'));
+  const inherited = gate(inheritedRoot);
+  assert.equal(inherited.status, 1, inherited.summary.problems?.join('; '));
+  assert.match(inherited.summary.problems.join('; '), /第 2 个 stage 以 root 运行/);
+});
+
+// 外部镜像的运行用户静态不可知：没有显式 USER 仍按不安全处理，不能被继承逻辑放行。
+test('the runtime gate keeps rejecting external images without an explicit user', () => {
+  const dir = repo([
+    'FROM mcr.microsoft.com/devcontainers/typescript-node:22 AS build',
+    'ARG FLOW_KIT_VERSION=2.1.0',
+    'FROM mcr.microsoft.com/devcontainers/typescript-node:22 AS runtime',
+    '',
+  ].join('\n'));
+  const { status, summary } = gate(dir);
+  assert.equal(status, 1, summary.problems?.join('; '));
+  const text = summary.problems.join('; ');
+  assert.match(text, /第 1 个 stage 缺少 USER 指令/, text);
+  assert.match(text, /第 2 个 stage 缺少 USER 指令/, text);
+});
