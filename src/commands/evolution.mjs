@@ -164,14 +164,20 @@ export function translateOptimizeArgs(argv) {
   return { argv: out };
 }
 
+// args.mjs 的全局契约同时认 --key value 与 --key=value；包装层只剔除空格形式，
+// 等号形式会漏进翻译层被当成未知参数。这里两种拼写一并消费，空值（--key=）留给翻译层拒。
 function stripConsumed(argv) {
   const out = [];
   for (let i = 0; i < argv.length; i++) {
-    if (argv[i] === '--root' || argv[i] === '--target') {
-      i += 1;
+    const token = argv[i];
+    const eq = token.indexOf('=');
+    const name = eq === -1 ? token : token.slice(0, eq);
+    if (name === '--root' || name === '--target') {
+      if (eq === -1) i += 1;
+      else if (eq === token.length - 1) out.push(token);
       continue;
     }
-    out.push(argv[i]);
+    out.push(token);
   }
   return out;
 }

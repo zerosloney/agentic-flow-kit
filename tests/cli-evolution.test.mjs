@@ -85,3 +85,45 @@ test('cli: eval list --json 正确返回标准基准任务集列表', () => {
   assert.ok(data.length >= 5);
   assert.ok(data.some((f) => f.id === 'fix-syntax-bug'));
 });
+
+test('cli: shadow-run --target=<dir> 等号形式同样被消费', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-shadow-eq-'));
+  const run = spawnSync(process.execPath, [BIN, 'shadow-run', `--target=${root}`, '--clean', '--json'], { encoding: 'utf8' });
+  fs.rmSync(root, { recursive: true, force: true });
+  assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`);
+  assert.equal(JSON.parse(run.stdout).success, true);
+});
+
+test('cli: timeline --target=<dir> 等号形式同样被消费', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-timeline-eq-'));
+  const run = spawnSync(process.execPath, [BIN, 'timeline', `--target=${root}`, '--list', '--run', 'missing-run'], { encoding: 'utf8' });
+  fs.rmSync(root, { recursive: true, force: true });
+  assert.equal(run.status, 0, run.stderr);
+  assert.doesNotMatch(run.stdout, /未知参数/);
+  assert.deepEqual(JSON.parse(run.stdout), []);
+});
+
+test('cli: eval --target=<dir> 等号形式同样被消费', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-eval-eq-'));
+  const run = spawnSync(process.execPath, [BIN, 'eval', `--target=${root}`, '--benchmark', '--json'], { encoding: 'utf8' });
+  fs.rmSync(root, { recursive: true, force: true });
+  assert.equal(run.status, 0, `${run.stdout}\n${run.stderr}`);
+  const report = JSON.parse(run.stdout);
+  assert.equal(report.failedCases, 0);
+  assert.ok(report.totalCases >= 5);
+});
+
+test('cli: optimize-skill --root=<dir> 等号形式同样被消费', () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'fk-optimize-eq-'));
+  const run = spawnSync(process.execPath, [BIN, 'optimize-skill', `--root=${root}`, '--skill', 'eval', '--extract'], { encoding: 'utf8' });
+  fs.rmSync(root, { recursive: true, force: true });
+  assert.equal(run.status, 0, run.stderr);
+  assert.match(run.stdout, /运行命令: extract/);
+  assert.doesNotMatch(run.stdout, /未知参数/);
+});
+
+test('cli: 未知旗标的等号形式仍按未知参数拒绝', () => {
+  const run = spawnSync(process.execPath, [BIN, 'shadow-run', '--bogus=x'], { encoding: 'utf8' });
+  assert.equal(run.status, 2, run.stdout);
+  assert.match(run.stderr, /未知参数: --bogus=x/);
+});
