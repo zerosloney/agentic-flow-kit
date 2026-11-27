@@ -86,13 +86,24 @@ test('protected wiring paths match case variants', () => {
   assert.equal(fs.readFileSync(path.join(dir, '.agents/settings.json'), 'utf8'), '{}\n');
 });
 
-test('confirmation ledger append-only applies to case variants', () => {
+test('confirmation ledger append-only applies to case variants', (t) => {
+  if (process.platform !== 'win32') return t.skip('NTFS-only: 大小写不敏感查找');
   const dir = fixture();
   write(dir, '.agents/confirmations.jsonl', '{"seq":1}\n');
   spawnSync('git', ['add', '-A'], { cwd: dir });
   spawnSync('git', ['-c', 'user.email=kit@example.com', '-c', 'user.name=kit', 'commit', '-qm', 'init'], { cwd: dir });
   const r = runHook(dir, '.AGENTS/confirmations.jsonl', '{"seq":2}\n');
   assert.equal(denied(r), true, r.stdout + r.stderr);
+});
+
+test('case-variant ledger write is a different file on POSIX', (t) => {
+  if (process.platform === 'win32') return t.skip('POSIX-only: 大小写敏感查找');
+  const dir = fixture();
+  write(dir, '.agents/confirmations.jsonl', '{"seq":1}\n');
+  spawnSync('git', ['add', '-A'], { cwd: dir });
+  spawnSync('git', ['-c', 'user.email=kit@example.com', '-c', 'user.name=kit', 'commit', '-qm', 'init'], { cwd: dir });
+  const r = runHook(dir, '.AGENTS/confirmations.jsonl', '{"seq":2}\n');
+  assert.equal(denied(r), false, r.stdout + r.stderr);
 });
 
 // D8b：解锁标记只能由用户在终端创建；写工具不得自解拴绳。
