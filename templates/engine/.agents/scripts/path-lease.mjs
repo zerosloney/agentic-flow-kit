@@ -28,9 +28,41 @@ export function normalizeRel(rel) {
   return String(rel).replace(/\\/g, '/').replace(/^\.?\//, '').trim();
 }
 
+// 租约键必须跟随文件实体，而不是路径拼写：反斜杠、重复分隔符、. / .. 段、符号链接，以及 NTFS 上
+// 的大小写差异，都是同一文件的合法写法；只做词法清洗会让同一文件挂上多把锁（已实证四个 owner 同时
+// 持有）。实体解析优先 realpath；目标不存在（租约常作用于「将写」的新文件）时解析父目录再拼回
+// basename；解析到仓外或父目录也不可解时退回词法归一——租约只覆盖仓内路径。
+function canonical(root, rel) {
+  const lexical = String(rel).replace(/\\/g, '/').trim();
+  const flat = path.posix.normalize(lexical);
+  let out = flat === '.' ? '' : flat.replace(/\/+$/, '');
+  let real = null;
+  const abs = path.resolve(root, out);
+  try {
+    real = fs.realpathSync.native(abs);
+  } catch {
+    try {
+      real = path.join(fs.realpathSync.native(path.dirname(abs)), path.basename(abs));
+    } catch { /* 目标与父目录都不可解：按词法归一 */ }
+  }
+  if (real) {
+    const within = path.relative(path.resolve(root), real);
+    const inside = within === '' || (!path.isAbsolute(within) && within !== '..' && !within.startsWith(`..${path.sep}`));
+    if (inside) out = within;
+  }
+  out = out.replace(/\\/g, '/');
+  // NTFS 大小写不敏感，大小写变体指向同一实体；POSIX 大小写敏感是真实语义，保留原样。
+  return process.platform === 'win32' ? out.toLowerCase() : out;
+}
+
+// 键格式从 sha1(词法) 换成 sha1(实体) 使在途的旧键租约一次性失效——租约是 30-60 分钟 TTL 的
+// 短命运行态，换代可接受；导出供生产与测试共用，保证测试撒租约与线上算键同一口径。
+export function leaseKey(root, rel) {
+  return crypto.createHash('sha1').update(canonical(root, rel)).digest('hex');
+}
+
 function leaseFile(root, rel) {
-  const key = crypto.createHash('sha1').update(normalizeRel(rel)).digest('hex');
-  return path.join(leaseDir(root), `${key}.json`);
+  return path.join(leaseDir(root), `${leaseKey(root, rel)}.json`);
 }
 
 function defaultOwner() {
