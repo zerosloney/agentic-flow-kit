@@ -69,11 +69,53 @@ function defaultOwner() {
   return `${os.hostname()}/${process.pid}`;
 }
 
-function readLease(file) {
+function readText(file) {
   try {
-    return JSON.parse(fs.readFileSync(file, 'utf8'));
+    return fs.readFileSync(file, 'utf8');
   } catch {
     return null;
+  }
+}
+
+function parseLease(text) {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
+  }
+}
+
+function readLease(file) {
+  return parseLease(readText(file));
+}
+
+// 认领名 → 正式名必须非覆盖发布：rename 会覆盖期间新认领者已写好的租约（Windows 的
+// MOVEFILE_REPLACE_EXISTING 同样覆盖）。link 在目标已存在时以 EEXIST 失败（CAS）；不支持硬链接的
+// 卷退回复制 + EXCL 建标，同样不覆盖——内容完整先前已写在认领名上。
+function publishClaim(claim, file) {
+  try {
+    fs.linkSync(claim, file);
+  } catch (err) {
+    if (err.code === 'EEXIST') return false;
+    try {
+      fs.copyFileSync(claim, file, fs.constants.COPYFILE_EXCL);
+    } catch (copyErr) {
+      if (copyErr.code === 'EEXIST') return false;
+      throw copyErr;
+    }
+  }
+  fs.rmSync(claim, { force: true });
+  return true;
+}
+
+// .claiming- 是上次接管未收尾的残留（进程中断 / 归还失败）：内容可能是唯一一份在途租约，
+// 扫描时既不能当有效租约也不能删——跳过并告警，交人工核对后改回 .json（照 compact-ledgers 先例）。
+function claimResidue(root, file = null) {
+  const prefix = file ? `${path.basename(file)}.claiming-` : '';
+  try {
+    return fs.readdirSync(leaseDir(root)).filter((n) => n.includes('.claiming-') && n.startsWith(prefix));
+  } catch {
+    return [];
   }
 }
 
@@ -95,40 +137,49 @@ export function acquire(root, { rel, owner = defaultOwner(), ttlMinutes = 30, no
   };
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const body = JSON.stringify(row, null, 2);
-  // 新鲜租约一律 wx 独占创建；过期租约的接管是 CAS——先把观测到的那份原子改名到本进程私有路径
-  // （rename 成功者才拿到接管权），再 wx 写入。并发接管者要么 rename 落空、要么 wx 输掉，重读后
-  // 如实返回 ok:false——租约「同一路径同一时间只允许一个 owner」靠这一条保证。
-  let takeover = null;
+  // 新鲜租约一律 wx 独占创建。过期接管是「认领-核对」（与 compact-ledgers 同构）：rename 到本进程
+  // 私有认领名后，把认领文件与 rename 前读到的原文逐字节比对。rename 与读之间可能已有别的 owner
+  // 完整接管，只凭 rename 成功就写入会搬走人家的新租约（受控交错已实证：A 返回 ok:true 后被持旧读
+  // 的 B 搬空，C 在缺失窗口认领）。一致才发布自己的租约；不一致说明搬走的是更新的一份，原样归还
+  // 后按真实现任 owner 认输。
   for (let attempt = 0; attempt < 8; attempt++) {
     try {
       fs.writeFileSync(file, body, { flag: 'wx' });
-      return takeover ? { ok: true, lease: row, takeover } : { ok: true, lease: row };
+      return { ok: true, lease: row };
     } catch (err) {
       if (err.code !== 'EEXIST') throw err;
     }
-    const held = readLease(file);
+    const snapshot = readText(file);
+    const held = parseLease(snapshot);
     if (held && !expired(held, now.getTime())) {
       if (held.owner === String(owner)) return { ok: true, lease: held, renewed: false };
       return { ok: false, holder: held, lease: row };
     }
-    const grave = `${file}.${process.pid}.${crypto.randomBytes(6).toString('hex')}.stale`;
+    const claim = `${file}.claiming-${process.pid}-${crypto.randomBytes(6).toString('hex')}`;
     try {
-      fs.renameSync(file, grave);
+      fs.renameSync(file, claim);
     } catch (err) {
       if (err.code === 'ENOENT' || err.code === 'EPERM' || err.code === 'EACCES') continue;
       throw err;
     }
-    const stolen = readLease(grave);
-    if (held && !(stolen && stolen.owner === held.owner && stolen.expiresAt === held.expiresAt)) {
-      // 读后到 rename 之间租约已被换新：放回（wx 不覆盖现持有者），本轮认输重读
-      if (stolen) {
-        try { fs.writeFileSync(file, JSON.stringify(stolen, null, 2), { flag: 'wx' }); } catch { /* 已有新持有者 */ }
-      }
-      fs.rmSync(grave, { force: true });
+    const claimed = readText(claim);
+    if (claimed == null) continue; // 认领文件也消失：回到完整 acquire 重试
+    if (claimed !== snapshot) {
+      // 期间有新接管者写入：手里是更新的一份，非覆盖归还；正式名若已被占用，交给现任 owner
+      if (!publishClaim(claim, file)) fs.rmSync(claim, { force: true });
+      const current = readLease(file);
+      if (current && !expired(current, now.getTime())) return { ok: false, holder: current, lease: row };
+      continue; // 窗口内又被放空：重试完整 acquire
+    }
+    fs.writeFileSync(claim, body);
+    if (!publishClaim(claim, file)) {
+      // 核对后、发布前正式名被新认领者写入：认输并报告真实现任 owner
+      fs.rmSync(claim, { force: true });
+      const current = readLease(file);
+      if (current && !expired(current, now.getTime())) return { ok: false, holder: current, lease: row };
       continue;
     }
-    fs.rmSync(grave, { force: true });
-    takeover = held;
+    return { ok: true, lease: row, takeover: held };
   }
   return { ok: false, holder: readLease(file), lease: row };
 }
@@ -155,7 +206,7 @@ export function listLeases(root) {
   const dir = leaseDir(root);
   let names = [];
   try {
-    names = fs.readdirSync(dir).filter((n) => n.endsWith('.json')).sort();
+    names = fs.readdirSync(dir).filter((n) => n.endsWith('.json') && !n.includes('.claiming-')).sort();
   } catch {
     return [];
   }
@@ -208,6 +259,10 @@ function main() {
   }
 
   if (cmd === 'check') {
+    const residue = claimResidue(root, leaseFile(root, normalizeRel(rel)));
+    if (residue.length) {
+      console.warn(`[path-lease] ⚠ 跳过 ${residue.length} 个 .claiming- 残留（上次接管中断，内容可能是在途租约）：${residue.join('、')}；请人工核对后改回 .json 重跑。`);
+    }
     const res = check(root, { rel, owner });
     if (!res.ok) {
       console.error(`✗ ${rel} 被 ${res.holder?.owner || '?'} 持有至 ${res.holder?.expiresAt || '?'}`);
@@ -218,6 +273,10 @@ function main() {
   }
 
   if (cmd === 'sweep') {
+    const residue = claimResidue(root);
+    if (residue.length) {
+      console.warn(`[path-lease] ⚠ 跳过 ${residue.length} 个 .claiming- 残留（上次接管中断，内容可能是在途租约）：${residue.join('、')}；请人工核对后改回 .json 重跑。`);
+    }
     const removed = sweep(root);
     console.log(`swept ${removed.length}${removed.length ? `: ${removed.join(', ')}` : ''}`);
     return 0;

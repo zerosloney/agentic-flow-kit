@@ -106,3 +106,99 @@ test('NTFS 大小写变体拼写命中同一租约', (t) => {
   assert.equal(c.ok, false);
   assert.equal(c.holder.owner, 'A');
 });
+
+// 受控交错（已实证 ABA）：B 读到过期租约后、rename 前，A 完成一次完整接管。旧实现的 B 会把 A
+// 刚发布的新租约 rename 走，A 的 ok:true 落空；认领-核对必须发现搬走的不是自己读到的快照并归还。
+test('ABA：持旧读的 B 不得搬走 A 刚发布的新租约', () => {
+  const root = makeTmp('path-lease-');
+  const file = seedExpired(root);
+  let a = null;
+  let armed = true;
+  const origRename = fs.renameSync;
+  fs.renameSync = function patched(from, to) {
+    if (armed && path.resolve(String(from)) === path.resolve(file)) {
+      armed = false;
+      // B 的 rename 即将执行：先让 A 完整接管（临时还原 rename 避免递归拦截 A 的认领）
+      fs.renameSync = origRename;
+      try { a = acquire(root, { rel: REL, owner: 'A' }); } finally { fs.renameSync = patched; }
+    }
+    return origRename.call(fs, from, to);
+  };
+  let b;
+  try {
+    b = acquire(root, { rel: REL, owner: 'B' });
+  } finally {
+    fs.renameSync = origRename;
+  }
+  assert.equal(a && a.ok, true, `A 的接管必须成功：${JSON.stringify(a)}`);
+  assert.equal(b.ok, false, `B 不得搬走 A 的新租约：${JSON.stringify(b)}`);
+  assert.equal(b.holder.owner, 'A');
+  const held = check(root, { rel: REL, owner: 'A' });
+  assert.equal(held.ok, true, `A 的 ok:true 必须仍然成立：${JSON.stringify(held)}`);
+  assert.equal(held.holder.owner, 'A');
+});
+
+// 同一交错窗口里 C 已认领：B 核对发现搬走的是 A 的新租约，但正式名已被 C 占用——非覆盖归还
+// 不得回滚 C，B 认输并报告真实现任 owner。
+test('ABA 变体：窗口内 C 已认领时 B 认输并报告真实现任 owner', () => {
+  const root = makeTmp('path-lease-');
+  const file = seedExpired(root);
+  let a = null;
+  let c = null;
+  let armed = true;
+  const origRename = fs.renameSync;
+  fs.renameSync = function patched(from, to) {
+    if (!armed || path.resolve(String(from)) !== path.resolve(file)) return origRename.call(fs, from, to);
+    armed = false;
+    fs.renameSync = origRename;
+    try { a = acquire(root, { rel: REL, owner: 'A' }); } finally { fs.renameSync = patched; }
+    const result = origRename.call(fs, from, to); // B 的 rename 搬走 A 的新租约
+    fs.renameSync = origRename;
+    try { c = acquire(root, { rel: REL, owner: 'C' }); } finally { fs.renameSync = patched; }
+    return result;
+  };
+  let b;
+  try {
+    b = acquire(root, { rel: REL, owner: 'B' });
+  } finally {
+    fs.renameSync = origRename;
+  }
+  assert.equal(a && a.ok, true, `A 的接管必须成功：${JSON.stringify(a)}`);
+  assert.equal(c && c.ok, true, `C 应在缺失窗口认领成功：${JSON.stringify(c)}`);
+  assert.equal(b.ok, false, `B 必须认输：${JSON.stringify(b)}`);
+  assert.equal(b.holder.owner, 'C', `必须报告真实现任 owner：${JSON.stringify(b)}`);
+  assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).owner, 'C');
+  assert.ok(!fs.readdirSync(path.dirname(file)).some((n) => n.includes('.claiming-')), 'B 不得留下认领残留');
+});
+
+// 读到半写/损坏文件的接管者（readLease 返回 null）同样持有旧读：rename 前若 A 已完整接管，
+// 旧实现因「held 为空」跳过归还、直接销毁 A 的新租约；认领-核对按原文比对必须识别并归还。
+test('旧读解析失败的接管者不得销毁 A 刚发布的新租约', () => {
+  const root = makeTmp('path-lease-');
+  const file = path.join(leaseDir(root), leaseKey(root, REL) + '.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, ''); // 半写窗口：文件在、内容还不成 JSON
+  let a = null;
+  let armed = true;
+  const origRename = fs.renameSync;
+  fs.renameSync = function patched(from, to) {
+    if (armed && path.resolve(String(from)) === path.resolve(file)) {
+      armed = false;
+      fs.renameSync = origRename;
+      try { a = acquire(root, { rel: REL, owner: 'A' }); } finally { fs.renameSync = patched; }
+    }
+    return origRename.call(fs, from, to);
+  };
+  let b;
+  try {
+    b = acquire(root, { rel: REL, owner: 'B' });
+  } finally {
+    fs.renameSync = origRename;
+  }
+  assert.equal(a && a.ok, true, `A 的接管必须成功：${JSON.stringify(a)}`);
+  assert.equal(b.ok, false, `B 不得销毁 A 的新租约：${JSON.stringify(b)}`);
+  assert.equal(b.holder.owner, 'A');
+  const held = check(root, { rel: REL, owner: 'A' });
+  assert.equal(held.ok, true, `A 的 ok:true 必须仍然成立：${JSON.stringify(held)}`);
+  assert.equal(held.holder.owner, 'A');
+});
