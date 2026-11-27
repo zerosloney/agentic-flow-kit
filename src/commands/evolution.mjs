@@ -220,13 +220,15 @@ function forwardToScript(scriptName, { args, helpText, translate }) {
 
 export function timelineCommand({ args, t, lang }) {
   const helpText = `
-用法：flow-kit timeline [--run <id>] [--list | --export-html] [--stage <name>] [--json]
+用法：flow-kit timeline [--run <id>] [--list] [--stage <name>] [--json]
+      flow-kit timeline export --run <id> [--stage <name>] [--json]
 
 参数：
   --run <id>          指定流水线运行 ID
-  --list              查询规范时序事件流
-  --export-html <out> 导出自包含离线单页 HTML 复盘包
+  --list              查询规范时序事件流（须与 --run 同用；缺 --run 会退出并提示）
   --json              输出 JSON 格式
+
+export 子命令：flow-kit timeline export --run <id> 导出自包含离线单页 HTML 复盘包（文件按 runId 命名）
 `;
   return forwardToScript('timeline-trace', { args, helpText, translate: translateTimelineArgs });
 }

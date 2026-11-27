@@ -13,7 +13,8 @@ test('cli: timeline 命令顶层支持 --help', () => {
   const run = spawnSync(process.execPath, [BIN, 'timeline', '--help'], { encoding: 'utf8' });
   assert.equal(run.status, 0);
   assert.match(run.stdout, /flow-kit timeline/);
-  assert.match(run.stdout, /--export-html/);
+  assert.match(run.stdout, /flow-kit timeline export --run <id>/);
+  assert.doesNotMatch(run.stdout, /--export-html/);
 });
 
 test('cli: shadow-run 命令顶层支持 --help', () => {
@@ -42,6 +43,12 @@ test('cli: timeline --list --run 查询时序而不是打印脚本帮助', () =>
   assert.equal(run.status, 0, run.stderr);
   assert.doesNotMatch(run.stdout, /用法: node timeline-trace/);
   assert.deepEqual(JSON.parse(run.stdout), []);
+});
+
+test('cli: timeline --list 缺少 --run 时退出并提示', () => {
+  const run = spawnSync(process.execPath, [BIN, 'timeline', '--list'], { encoding: 'utf8' });
+  assert.notEqual(run.status, 0);
+  assert.match(run.stderr, /请通过 --run 指定 runId/);
 });
 
 test('cli: eval --benchmark --record 拒绝把夹具自检写成模型凭证', () => {
