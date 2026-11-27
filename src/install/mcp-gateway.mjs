@@ -325,7 +325,6 @@ export function evaluateMcpCall({
     }
   }
 
-  // 3.5 Unified Execution Guardrails for shell-like tool calls
   if (level === 'L2' || ['execute_command', 'shell', 'bash', 'run_script'].includes(tool)) {
     const cmdCandidate = shellCommandArg(args);
     if (cmdCandidate) {

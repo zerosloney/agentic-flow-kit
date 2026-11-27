@@ -151,12 +151,10 @@ export function pruneWorkOrderContext(context, budgetChars = 1200) {
 
   const prunedContext = { ...context };
 
-  // 1. 去重并保留前 4 条关联文档
   if (Array.isArray(prunedContext.relatedDocs)) {
     prunedContext.relatedDocs = [...new Set(prunedContext.relatedDocs)].slice(0, 4);
   }
 
-  // 2. 智能裁剪 kbHits：至多保留前 3 条，单条超 120 字符截断
   if (Array.isArray(prunedContext.kbHits)) {
     prunedContext.kbHits = prunedContext.kbHits.slice(0, 3).map((h) => {
       const s = String(h || '');
@@ -164,7 +162,6 @@ export function pruneWorkOrderContext(context, budgetChars = 1200) {
     });
   }
 
-  // 3. 智能折叠 stderrTail：首 3 行错误 + 尾 5 行退出，中间行折叠，总长不超过 400 字符
   if (typeof prunedContext.stderrTail === 'string' && prunedContext.stderrTail) {
     const lines = prunedContext.stderrTail.split(/\r?\n/).filter(Boolean);
     if (lines.length > 8) {
@@ -178,7 +175,6 @@ export function pruneWorkOrderContext(context, budgetChars = 1200) {
     }
   }
 
-  // 4. 智能裁剪交接单（Handoff Sheet）
   if (prunedContext.handoff && typeof prunedContext.handoff === 'object') {
     const h = { ...prunedContext.handoff };
     if (Array.isArray(h.touchSetAllowed) && h.touchSetAllowed.length > 10) {
@@ -193,7 +189,6 @@ export function pruneWorkOrderContext(context, budgetChars = 1200) {
     prunedContext.handoff = h;
   }
 
-  // 5. 智能裁剪角色上下文切片（Slices）
   if (prunedContext.slices && typeof prunedContext.slices === 'object') {
     const sl = { ...prunedContext.slices };
     if (typeof sl.planSlice === 'string' && sl.planSlice.length > 400) {

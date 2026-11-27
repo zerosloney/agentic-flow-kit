@@ -16,7 +16,6 @@ export function detectRunWatchdogAlert(run, options = {}) {
   const timeoutMs = options.timeoutThresholdMs ?? DEFAULT_WATCHDOG_CONFIG.timeoutThresholdMs;
   const warningMs = options.warningThresholdMs ?? DEFAULT_WATCHDOG_CONFIG.warningThresholdMs;
 
-  // 终态任务不产生活跃停滞告警
   if (['done', 'aborted'].includes(run.stopType)) return null;
 
   // 卡片投影（runCard/scanRuns）不外发全量 events，只带 gateTail 尾窗；raw run 无 gateTail → 回落 events，
@@ -25,7 +24,6 @@ export function detectRunWatchdogAlert(run, options = {}) {
   const lastActiveTs = Date.parse(run.updatedAt || run.createdAt || 0);
   const elapsedMs = Number.isFinite(lastActiveTs) && lastActiveTs > 0 ? Math.max(0, now - lastActiveTs) : 0;
 
-  // 1. 外部或主动熔断标记
   if (run.circuitBreak) {
     return {
       runId: run.runId,
@@ -38,7 +36,6 @@ export function detectRunWatchdogAlert(run, options = {}) {
     };
   }
 
-  // 2. 连续门禁失败或重试触顶 (retry cap exhausted)
   const route = run.route || (run.nextTarget ? [...events].reverse().find((e) => e.type === 'route' && e.from === run.stage) : null);
   if (run.stopType === 'gate-fail' && route && route.attempt >= route.cap) {
     return {
@@ -52,7 +49,6 @@ export function detectRunWatchdogAlert(run, options = {}) {
     };
   }
 
-  // 3. 门禁连续同质报错空转震荡 (loop oscillation)
   // 卡片路径只拿到 gateTail 尾窗（已按 gate 过滤），raw run 则拿全量 events，统一再筛一次。
   const gateEvents = events.filter((e) => e.type === 'gate');
   if (gateEvents.length >= 3) {
@@ -73,7 +69,6 @@ export function detectRunWatchdogAlert(run, options = {}) {
     }
   }
 
-  // 4. 阶段停滞/超时无心跳 (timeout)
   if (elapsedMs >= timeoutMs) {
     return {
       runId: run.runId,
@@ -106,7 +101,6 @@ export function inspectWatchdog(runs, options = {}) {
   const list = Array.isArray(runs) ? runs : (typeof options.scanRuns === 'function' ? options.scanRuns() : []);
   const alerts = [];
 
-  // 外部停机信号检查
   const stopSignalFile = path.join(root, '.agents', 'stop.signal');
   if (fs.existsSync(stopSignalFile)) {
     let reason = '存在 .agents/stop.signal 外部手动停机信号';
@@ -207,7 +201,6 @@ export async function executeCircuitBreak(runId, options = {}) {
     throw new Error(`找不到 run 文件: ${rel}`);
   }
 
-  // 1. 读取原 run 文件
   let run;
   try {
     run = JSON.parse(fs.readFileSync(abs, 'utf8'));
@@ -215,7 +208,6 @@ export async function executeCircuitBreak(runId, options = {}) {
     throw new Error(`读取 run 文件失败: ${e.message}`);
   }
 
-  // 2. 标记熔断状态
   run.stopType = 'aborted';
   run.abort = {
     to,
@@ -236,12 +228,10 @@ export async function executeCircuitBreak(runId, options = {}) {
   });
   run.updatedAt = new Date().toISOString();
 
-  // 3. 原子落盘
   const tmp = `${abs}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 6)}`;
   fs.writeFileSync(tmp, JSON.stringify(run, null, 2), 'utf8');
   fs.renameSync(tmp, abs);
 
-  // 4. 尝试异步调用 pipeline-run.mjs abort 确保文档状态与索引同步（若脚本存在）
   const script = path.join(scriptsDir, 'pipeline-run.mjs');
   if (!options.skipExec && fs.existsSync(script)) {
     execFile(process.execPath, [script, 'abort', '--run', runId, '--to', to, '--delegated', reason], {

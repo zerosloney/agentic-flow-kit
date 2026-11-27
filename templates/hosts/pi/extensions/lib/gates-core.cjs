@@ -217,7 +217,8 @@ if (require.main === module) {
   check('bash：重定向写入 .pi/ 判为写入', isPiWriteCommand('echo x > .pi/y'));
   check('bash：无关命令不拦', !isPiWriteCommand('git status'));
   check('接线完整性：当前仓库齐备', checkWiring(cwd).ok);
-  check('接线完整性：空目录报缺 4 项', checkWiring(path.join(cwd, '__no_such_repo__')).missing.length === 4);
+  const missing = checkWiring(path.join(cwd, '__no_such_repo__')).missing;
+  check('接线完整性：空目录缺两个接线文件', REQUIRED_FILES.every((f) => missing.includes(f)));
 
   for (const [name, ok] of cases) console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}`);
   const failed = cases.filter(([, ok]) => !ok).length;

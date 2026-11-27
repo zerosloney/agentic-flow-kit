@@ -91,7 +91,6 @@ describe('Unit 2: 防死循环与熔断预算控制器', () => {
     assert.equal(guard.recordStep({ status: 0, tokens: 500 }).halted, false);
     assert.equal(guard.tokensConsumed, 900);
 
-    // 第 3 步累计达到 1100，超过 1000
     const res = guard.recordStep({ status: 0, tokens: 200 });
     assert.equal(res.halted, true);
     assert.equal(res.status, DRIVER_STATUS.EXCEEDED_TOKEN_BUDGET);
