@@ -63,6 +63,28 @@ test('ordinary-code false positives do not grow', () => {
   }
 });
 
+// 拼接视图：完整密钥被拆进相邻字面量（构建期拼接），单看任一片段必漏
+test('split literals are reassembled before scanning', () => {
+  assert.equal(matchLine("const k = 'AKIA' + 'IOSFODNN7EXAMPLE';", { generic: true })?.rule, 'aws-access-key-id'); // secrets-lite:allow（回归样本，非真实密钥）
+  assert.equal(matchLine(`const t = 'ghp_' + '${'a'.repeat(36)}';`, { generic: true })?.rule, 'github-token'); // secrets-lite:allow
+  // 控制组：完整字面量照常命中；含动态操作数的拼接不并入
+  assert.equal(matchLine("const k = 'AKIAIOSFODNN7EXAMPLE';", { generic: true })?.rule, 'aws-access-key-id'); // secrets-lite:allow
+  assert.equal(matchLine("const k = 'AKIA' + suffix;", { generic: true }), null);
+});
+
+// URL userinfo 口令：scheme:// 后 user:密码@host（密码段可含 @，取 authority 内最后一个 @ 为界）
+test('URL userinfo passwords hit connection-string rule', () => {
+  const hit = matchLine("'postgres://user:P@ssw0rd!2026x@db.example/app'", { generic: true }); // secrets-lite:allow
+  assert.equal(hit?.rule, 'connection-string-password');
+});
+
+test('URL controls keep current verdicts', () => {
+  assert.equal(matchLine("fetch('https://x.example/cb?token=abcXYZ123456789')", { generic: true })?.rule, 'generic-api-key'); // secrets-lite:allow
+  assert.equal(matchLine("const u = 'https://user@host/path';", { generic: true }), null); // 无密码段
+  assert.equal(matchLine("const u = 'https://host:5432/path';", { generic: true }), null); // 端口非口令
+  assert.equal(matchLine("const u = 'postgres://user:${DB_PASS}@host/app';", { generic: true }), null); // 代码表达式
+});
+
 // 线性预算：200 KB 对抗行不得触发回溯爆炸（任何一条超预算即视为正则非线性）。
 test('scan stays linear on 200 KB adversarial lines', () => {
   const lines = [

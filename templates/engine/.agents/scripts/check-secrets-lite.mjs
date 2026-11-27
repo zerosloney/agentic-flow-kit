@@ -100,9 +100,41 @@ const weakNoise = (line, m) => {
   return false;
 };
 
-// 单行判定 → { rule, secret } 或 null
-export const matchLine = (line, { generic }) => {
-  if (ALLOW_MARK.test(line)) return null;
+// 拼接视图：把完整密钥拆进相邻字面量的写法（如 AWS key 的前缀与余下 16 位分处两个引号串），
+// 单看任一片段都不命中。只合并「字面量 + 字面量」链（动态操作数不并入）；
+// 构造是单遍正则替换，不引入嵌套量词回溯。
+const LITERAL_SRC = String.raw`'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|\x60(?:[^\x60\\]|\\.)*\x60`;
+const CONCAT_CHAIN_RE = new RegExp(`(?:${LITERAL_SRC})(?:\\s*\\+\\s*(?:${LITERAL_SRC}))+`, 'g');
+const LITERAL_RE = new RegExp(LITERAL_SRC, 'g');
+const concatView = (line) => {
+  if (!line.includes('+')) return line; // 快路径：无 `+` 不存在拼接
+  return line.replace(CONCAT_CHAIN_RE, (chain) => {
+    const parts = chain.match(LITERAL_RE) || [chain];
+    const quote = parts[0][0];
+    return quote + parts.map((p) => p.slice(1, -1)).join('') + quote;
+  });
+};
+
+// URL userinfo 口令：`scheme://user:密码@host`（连接串规则的第二种形态）。
+// 密码段允许含 `@`（RFC 之外的真实连接串写法常见），故以 authority 内最后一个 `@` 为界；
+// user@host（无冒号）与只有主机端口的 URL 不命中。
+const URL_USERINFO_RE = /:\/\/([^\s/'"]+)@/g;
+const userinfoHit = (line) => {
+  for (const m of line.matchAll(URL_USERINFO_RE)) {
+    const ui = m[1];
+    const sep = ui.indexOf(':');
+    if (sep < 0) continue; // 无口令段
+    const pw = ui.slice(sep + 1);
+    const classes = [/[a-z]/, /[A-Z]/, /\d/, /[^A-Za-z0-9]/].filter((re) => re.test(pw)).length;
+    if (pw.length < 8 && classes < 2) continue; // 短且单一字符类 = 端口 / 片段
+    if (PLACEHOLDER.test(pw) || /[${}<>]/.test(pw)) continue; // 占位符 / 代码表达式
+    return { rule: CRED_RULE.id, secret: redact(pw) };
+  }
+  return null;
+};
+
+// 单行规则扫描（不含 allow 与拼接编排）→ { rule, secret } 或 null
+const scanLine = (line, { generic }) => {
   for (const r of STRONG_RULES) {
     const m = r.re.exec(line);
     if (m) return { rule: r.id, secret: redact(m[0]) };
@@ -120,7 +152,17 @@ export const matchLine = (line, { generic }) => {
       return { rule: CRED_RULE.id, secret: redact(v) };
     }
   }
-  return null;
+  return userinfoHit(line);
+};
+
+// 单行判定 → { rule, secret } 或 null。raw 与拼接视图双扫，raw 命中优先（既有语义不变）。
+export const matchLine = (line, { generic }) => {
+  if (ALLOW_MARK.test(line)) return null;
+  const hit = scanLine(line, { generic });
+  if (hit) return hit;
+  const joined = concatView(line);
+  if (joined === line || ALLOW_MARK.test(joined)) return null;
+  return scanLine(joined, { generic });
 };
 
 export const loadBaselineFiles = (file) => {
