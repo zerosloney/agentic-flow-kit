@@ -114,6 +114,46 @@ test('write gate refuses a root-level flow-kit CLI shim', () => {
   assert.equal(denied(r), true, r.stdout + r.stderr);
 });
 
+// S2/S3 复审：保护面与解锁标记认实体不认拼写——符号链接、目录别名同样解回 .agents 实体后同判。
+function makeSymlink(t, target, linkPath, type) {
+  try {
+    fs.symlinkSync(target, linkPath, type);
+    return true;
+  } catch (e) {
+    t.skip(`无法创建符号链接（${e.code}），本环境跳过`);
+    return false;
+  }
+}
+
+test('a symlink spelling of a protected wiring file is judged as that file', (t) => {
+  const dir = fixture();
+  write(dir, '.agents/settings.json', json({ permissions: {} }));
+  if (!makeSymlink(t, path.join(dir, '.agents', 'settings.json'), path.join(dir, 'sym-settings.json'), 'file')) return;
+  const r = runHook(dir, 'sym-settings.json', '{"permissions":{"deny":[]}}\n');
+  assert.equal(denied(r), true, r.stdout + r.stderr);
+  assert.equal(fs.readFileSync(path.join(dir, '.agents', 'settings.json'), 'utf8'), json({ permissions: {} }),
+    'deny must fire before any swap-in: the protected file stays untouched');
+});
+
+test('a symlink spelling of the confirmation ledger keeps the append-only rule', (t) => {
+  const dir = fixture();
+  write(dir, '.agents/confirmations.jsonl', '{"seq":1}\n');
+  spawnSync('git', ['add', '-A'], { cwd: dir });
+  spawnSync('git', ['-c', 'user.email=kit@example.com', '-c', 'user.name=kit', 'commit', '-qm', 'init'], { cwd: dir });
+  if (!makeSymlink(t, path.join(dir, '.agents', 'confirmations.jsonl'), path.join(dir, 'sym-ledger.jsonl'), 'file')) return;
+  const r = runHook(dir, 'sym-ledger.jsonl', '{"seq":2}\n');
+  assert.equal(denied(r), true, r.stdout + r.stderr);
+});
+
+test('the unlock marker cannot be created through a directory symlink', (t) => {
+  const dir = fixture();
+  fs.mkdirSync(path.join(dir, '.agents', 'tmp'), { recursive: true });
+  const type = process.platform === 'win32' ? 'junction' : 'dir';
+  if (!makeSymlink(t, path.join(dir, '.agents'), path.join(dir, 'linkd'), type)) return;
+  const r = runHook(dir, 'linkd/tmp/write-gate-until', new Date(Date.now() + 60_000).toISOString());
+  assert.equal(denied(r), true, r.stdout + r.stderr);
+});
+
 // D8b：解锁标记只能由用户在终端创建；写工具不得自解拴绳。
 test('write gate refuses to create or change its own unlock marker', () => {
   const dir = fixture();

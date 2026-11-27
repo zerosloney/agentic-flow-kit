@@ -83,13 +83,22 @@ if (rel.startsWith('..')) process.exit(0); // 仓外文件不管
 // 受保护路径 / 解锁标记判据 case-fold：NTFS 大小写不敏感（.AGENTS/settings.json 落到
 // .agents/settings.json），这些匹配必须同判。
 const relKey = rel.toLowerCase();
-// 测试文件与内容判据按磁盘真实名字判定（不按路径拼写）：NTFS 上 footests.java 就是 FooTests.java；
+// 判据认实体不认拼写：NTFS 上 .AGENTS/settings.json 就是 .agents/settings.json；符号链接、
+// 8.3 短名、ADS 同样经 realpath 解回实体路径再判，目录别名绕不开保护面；
 // realpath 不可用 = 新文件，按请求拼写；解析到仓外则保留请求拼写。
 let realRel = rel;
 try {
   const real = path.relative(root, fs.realpathSync.native(abs)).replace(/\\/g, '/');
   if (real && !real.startsWith('..')) realRel = real;
-} catch { /* 目标尚不存在 */ }
+} catch {
+  // 新文件（目标尚不存在）：解父目录的符号链接后拼回文件名
+  try {
+    const realDir = fs.realpathSync.native(path.dirname(abs));
+    const real = path.relative(root, path.join(realDir, path.basename(abs))).replace(/\\/g, '/');
+    if (real && !real.startsWith('..')) realRel = real;
+  } catch { /* 父目录也不可解（仓外/不可达），按请求拼写 */ }
+}
+const realKey = realRel.toLowerCase();
 
 const deny = (reason) => {
   console.log(JSON.stringify({
@@ -110,7 +119,7 @@ const notify = (text) => {
 
 // ── 解锁标记自保护（不享 unlocked 豁免）────────────────
 // 标记是拴绳本身：写工具能创建/改写它 = AI 自解拴绳；只能由用户在自己的终端执行 --unlock 创建。
-if (/^\.agents\/tmp\/write-gate-until$/.test(relKey)) {
+if (/^\.agents\/tmp\/write-gate-until$/.test(relKey) || /^\.agents\/tmp\/write-gate-until$/.test(realKey)) {
   deny(`执法面自保护：${rel} 是写前门解锁标记，AI 不得自行创建或改写。如系用户明示：请用户在自己的终端执行 flow-kit hook pre-write-check.cjs --unlock <分钟>，完成后删除该文件。`);
 }
 
@@ -131,7 +140,7 @@ try {
 
 // ── 1) 执法面自保护 ───────────────────────────────────
 const WIRING_RE = /^(\.zcode\/config\.json|\.trae\/hooks\.json|\.codebuddy\/settings\.json|\.qoder\/settings\.json|\.qwen\/settings\.json|\.commandcode\/settings\.json|\.claude\/settings(\.local)?\.json|\.grok\/hooks\/.+\.json|\.github\/hooks\/.+\.json|\.agents\/hooks\/gates\.json|\.agents\/settings\.json)$/;
-if (!unlocked && WIRING_RE.test(relKey)) {
+if (!unlocked && (WIRING_RE.test(relKey) || WIRING_RE.test(realKey))) {
   deny(`执法面自保护：${rel} 是门禁接线/权限基线，AI 不得自行改写。如系用户明示的引擎变更：请用户执行 flow-kit hook pre-write-check.cjs --unlock <分钟> 临时放行（或用户手动改本文件），完成后删除解锁标记。`);
 }
 
@@ -180,7 +189,7 @@ const proposed = synthesize(data.tool_input, abs);
 
 // ── 2) 确认台账 append-only ───────────────────────────
 const LEDGER_RE = /^\.agents\/(confirmations\.jsonl|confirmations\.d\/.+)$/;
-if (proposed !== null && LEDGER_RE.test(relKey)) {
+if (proposed !== null && (LEDGER_RE.test(relKey) || LEDGER_RE.test(realKey))) {
   const head = spawnSync('git', ['-c', 'core.quotepath=off', 'show', `HEAD:${realRel}`], { encoding: 'utf8', cwd: root });
   if (head.status === 0 && !proposed.startsWith(String(head.stdout))) {
     deny(`确认台账只允许追加（append-only）：${rel} 的本次写入非 HEAD 版本的前缀扩展。重写/改写台账请走 confirm-doc / ledger-shards 工具，不直接编辑。`);
