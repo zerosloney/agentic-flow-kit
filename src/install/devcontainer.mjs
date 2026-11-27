@@ -196,13 +196,18 @@ export function parseDockerfileStages(text) {
       const base = tokens[0] || null;
       const alias = (tokens[1] || '').toUpperCase() === 'AS' ? tokens[2] || null : null;
       // FROM 可以引用先前 stage 的别名（不是拉镜像）：换成该 stage 的基础镜像再判白名单。
-      const image = base && aliases.has(base.toLowerCase()) ? aliases.get(base.toLowerCase()) : base;
-      if (alias) aliases.set(alias.toLowerCase(), image);
-      stages.push({ image, alias, user: null });
+      const parent = base && aliases.has(base.toLowerCase()) ? aliases.get(base.toLowerCase()) : -1;
+      const image = parent >= 0 ? stages[parent].image : base;
+      if (alias) aliases.set(alias.toLowerCase(), stages.length);
+      stages.push({ image, alias, user: null, parent, effectiveUser: null });
       continue;
     }
     const user = /^\s*USER\s+(\S+)/i.exec(line);
     if (user && stages.length) stages[stages.length - 1].user = user[1];
+  }
+  // Docker 语义：stage 没写 USER 时继承 FROM 目标的用户。FROM 外部镜像则运行用户静态不可知，仍视为未知。
+  for (const stage of stages) {
+    stage.effectiveUser = stage.user ?? (stage.parent >= 0 ? stages[stage.parent].effectiveUser : null);
   }
   return stages;
 }
@@ -308,13 +313,14 @@ export function checkDevcontainer({ target, stack = null }) {
     problems.push(`${DEVCONTAINER_DOCKERFILE_REL} 缺失`);
   } else {
     // 容器身份是构建前提：镜像里没有的用户，`docker build` 会直接失败。
-    // 多 stage 时每个 stage 的最终 USER 都要非 root，最后运行的 stage 还要对上镜像自带用户。
+    // 多 stage 时每个 stage 的有效用户都要非 root，最后运行的 stage 还要对上镜像自带用户。
+    // 有效用户含从 FROM 的 stage 继承来的身份；外部镜像无显式 USER 时仍未知，按不安全处理。
     const stages = parseDockerfileStages(state.dockerfile);
     stages.forEach((stage, index) => {
-      if (!stage.user) {
+      if (!stage.effectiveUser) {
         problems.push(`${DEVCONTAINER_DOCKERFILE_REL} 第 ${index + 1} 个 stage 缺少 USER 指令（容器以 root 运行不安全）`);
-      } else if (isRootUser(stage.user)) {
-        problems.push(`${DEVCONTAINER_DOCKERFILE_REL} 第 ${index + 1} 个 stage 以 root 运行（USER ${stage.user}）`);
+      } else if (isRootUser(stage.effectiveUser)) {
+        problems.push(`${DEVCONTAINER_DOCKERFILE_REL} 第 ${index + 1} 个 stage 以 root 运行（USER ${stage.effectiveUser}）`);
       }
     });
     const lastUser = stages.length ? stages[stages.length - 1].user : null;

@@ -285,6 +285,56 @@ test('the gate rejects a stage that switches back to root', () => {
   assert.match(state.problems.join('; '), /USER root/);
 });
 
+// Docker 语义：FROM 引用先前 stage 时，没写 USER 的 stage 继承该 stage 的用户。
+test('the gate accepts a stage that inherits a non-root user', () => {
+  const dir = dockerfileRepo([
+    'FROM mcr.microsoft.com/devcontainers/typescript-node:22 AS build',
+    'ARG FLOW_KIT_VERSION=2.1.0',
+    'USER node',
+    'FROM build AS runtime',
+  ]);
+  const state = checkDevcontainer({ target: dir, stack: 'typescript' });
+  assert.equal(state.ok, true, state.problems.join('; '));
+  assert.equal(state.kitVersion, '2.1.0');
+});
+
+test('the gate rejects a stage that inherits root or switches back to it', () => {
+  const explicitRoot = dockerfileRepo([
+    'FROM mcr.microsoft.com/devcontainers/typescript-node:22 AS build',
+    'ARG FLOW_KIT_VERSION=2.1.0',
+    'USER node',
+    'FROM build AS runtime',
+    'USER root',
+  ]);
+  const switched = checkDevcontainer({ target: explicitRoot, stack: 'typescript' });
+  assert.equal(switched.ok, false);
+  assert.match(switched.problems.join('; '), /USER root/);
+
+  const inheritedRoot = dockerfileRepo([
+    'FROM mcr.microsoft.com/devcontainers/typescript-node:22 AS build',
+    'ARG FLOW_KIT_VERSION=2.1.0',
+    'USER root',
+    'FROM build AS runtime',
+  ]);
+  const inherited = checkDevcontainer({ target: inheritedRoot, stack: 'typescript' });
+  assert.equal(inherited.ok, false);
+  assert.match(inherited.problems.join('; '), /第 2 个 stage 以 root 运行/);
+});
+
+// 外部镜像的运行用户静态不可知：没有显式 USER 仍按不安全处理，不能被继承逻辑放行。
+test('the gate keeps rejecting external images without an explicit user', () => {
+  const dir = dockerfileRepo([
+    'FROM mcr.microsoft.com/devcontainers/typescript-node:22 AS build',
+    'ARG FLOW_KIT_VERSION=2.1.0',
+    'FROM mcr.microsoft.com/devcontainers/typescript-node:22 AS runtime',
+  ]);
+  const state = checkDevcontainer({ target: dir, stack: 'typescript' });
+  assert.equal(state.ok, false);
+  const text = state.problems.join('; ');
+  assert.match(text, /第 1 个 stage 缺少 USER 指令/, text);
+  assert.match(text, /第 2 个 stage 缺少 USER 指令/, text);
+});
+
 // 版本声明按全文件读：后续 stage 的安装行与首个 stage 的 ARG 不一致时必须判红。
 test('the gate reads the flow-kit pin from every stage', () => {
   const consistent = dockerfileRepo([
