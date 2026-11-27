@@ -9,7 +9,10 @@ import { forgeFromRemote, originUrl } from '../install/forge.mjs';
 import { parseProfileArgs, STACKS } from '../install/profiles.mjs';
 import { stackMarkers } from '../install/stack-registry.mjs';
 import { applyPlan, readPlanEntry, summaryLine } from '../install/apply.mjs';
-import { DERIVED_ARTIFACTS, DERIVED_RELS } from '../install/derived.mjs';
+import {
+  DERIVED_ARTIFACTS, DERIVED_RELS, generateDerivedArtifacts, rehashDerivedArtifacts,
+} from '../install/derived.mjs';
+export { rehashDerivedArtifacts };
 import { emptyManifest, readManifest, sha256Text, writeManifest } from '../install/manifest.mjs';
 import { acquireInstallLock } from '../install/lock.mjs';
 import { cleanupMigratedFiles } from '../install/migrations.mjs';
@@ -161,42 +164,6 @@ export function installLogNotable(action, msg) {
   return false;
 }
 
-// 派生工件会改写已写入的托管文件（如 workflow/INDEX.md）；重算这些文件的哈希，
-// 否则 manifest 记录的是生成前的文本，fresh install 会立刻显示为漂移。
-// 被生成器改写的文件登记到 derived，diff 不对其做静态模板比对。
-export function rehashDerivedArtifacts({ target, result, derived, beforeDerived, baselineEnabled, warn, claimed = [] }) {
-  const claimedSet = new Set(claimed);
-  for (const rel of result.written || []) {
-    // 三方合并冲突/合并文件保留旧哈希，供 diff / doctor 继续提示未解决。
-    if ((result.skipRehash || []).includes(rel)) continue;
-    let text;
-    try {
-      text = fs.readFileSync(path.join(target, rel), 'utf8');
-    } catch (err) {
-      if (err?.code === 'ENOENT') {
-        /* 生成器删除的文件不保留 manifest 记录 */
-        delete result.files[rel];
-        derived.delete(rel);
-      } else {
-        // 瞬时读错误（Windows EBUSY/EPERM，杀毒/索引服务常见）：写入已成功、记录是写入文本的哈希，
-        // 保留记录留下可见漂移（doctor 可检出）而非静默失忆（升级永久 skip / uninstall 不清理）；
-        // 不 fail-loud，避免把瞬时错误放大成重跑半安装。
-        warn?.(`${rel}（读取失败 ${err?.code || err}，保留 manifest 记录）`);
-      }
-      continue;
-    }
-    const nextHash = sha256Text(text);
-    result.files[rel] = nextHash;
-    // 认领的派生工件即使本次生成器未改字节，也必须留在 derived 集合（issue #86：
-    // 否则 diff 拿静态模板比对，存量仓永久假漂移）。
-    if (beforeDerived[rel] !== nextHash || claimedSet.has(rel)) {
-      derived.add(rel);
-      // 派生工件在安装期重写，基线同步为最终文本，避免下次升级误判。
-      if (baselineEnabled) writeBaseline(target, rel, text);
-    } else derived.delete(rel);
-  }
-}
-
 // CLI 缺省进度行：action 前缀 + 消息（TUI 经 onLog 接管渲染）
 function logLine(action, msg) {
   console.log(formatInstallLog(action, msg));
@@ -205,30 +172,6 @@ function logLine(action, msg) {
 function normalizeModelMode(value) {
   const v = String(value || 'recommend').toLowerCase();
   return ['recommend', 'detect', 'inherit'].includes(v) ? v : 'recommend';
-}
-
-// 派生工件（索引/生效策略/引擎地图）从单源现场取数生成，不能静态随模板漂移。
-// 运行时实现已随包分发，因此从包内脚本执行，只把 cwd/根指向目标项目。
-// 只重生成「本次已装进目标」的产物：--scaffold none 时目标没有 workflow/ 面，
-// 生成器若照跑会凭空造出 workflow/ 目录（破坏「无脚手架即无 workflow」契约）。
-// skip：安装器判定「用户改过、保留现状」的产物——整文件生成的产物被跳过时，
-// 生成器不得再覆盖用户的改动（issue #86 静默吃数据）。
-function generateDerivedArtifacts(target, { skip = new Set() } = {}) {
-  for (const { script, rel } of DERIVED_ARTIFACTS) {
-    if (!fs.existsSync(path.join(target, rel))) continue; // 未装该产物 → 不生成（保持脚手架档语义）
-    if (skip.has(rel)) continue; // 用户改过且已保留现状 → 不重生成
-    const abs = path.join(RUNTIME_SCRIPTS, script);
-    if (!fs.existsSync(abs)) continue;
-    try {
-      spawnSync(process.execPath, [abs], {
-        cwd: target,
-        stdio: 'ignore',
-        windowsHide: true,
-        timeout: 30000,
-        env: { ...process.env, FLOW_KIT_PROJECT_ROOT: target },
-      });
-    } catch { /* 派生工件失败不阻断安装；verify/dream 会报漂移 */ }
-  }
 }
 
 const TIERS = ['lean', 'standard', 'enterprise'];
