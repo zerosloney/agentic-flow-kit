@@ -2,6 +2,49 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.14.0]
+
+### 新增
+
+- feat(board): 支持工作流双向控制看板、看门狗巡检与多模型打擂竞技场
+- feat(guardrails): 引入执行防脱缰护栏、敏感环境变量剥除与高危指令拦截
+
+### 修复
+
+- fix(cli): 注册 sandbox 完整性新违反码到 USAGE 退出类，契约测试补齐
+- fix(guardrails): 认 |> 与 tee 写通道，拉取经管道入解释器判 L3
+- fix(devcontainer): 安装侧门同款解析 FROM 继承，与模板门对齐
+- fix(secrets): 扫描拼接字面量视图与 URL userinfo 口令，拆分密钥不再漏检
+- fix(lease): 过期接管改认领-核对与 CAS 发布，持旧读者不再搬走新租约
+- fix(devcontainer): 模板门解析 FROM 别名继承，合法继承 USER 不再误拒
+- fix(sandbox): 完整性检查拒绝 host 网络/不降权/根挂载降级，AI 配置自降权不再静默
+- fix(evolution): stripConsumed 补齐 --key=value 契约形式，四命令不再误拒等号传参
+- fix(pipeline): 配置加载容忍 JSONC 行注释重试，真畸形仍 fail-closed
+- fix(ledger): 分片删除改 rename 认领制，归并窗口内的并发追加不再随片销毁
+- fix(board): 看门狗事件尾窗随卡片下发，loop_oscillation 在生产路径复活
+- fix(guardrails): shell 门多视图归一堵 13 种转义/选项/编码逃逸，载荷并过绕钩守卫
+- fix(lease): 租约键随文件实体走，同一文件的路径拼写变体不再各自持锁
+- fix(cline): 输入解析层 fail-closed——parameters 回退可达、畸形 JSON/BOM 阻止、认 run_command 单数
+- fix(tia): 未跟踪扫描显式关 quotepath 转义，非 ASCII 新文件不再漏判
+- fix(closeout): 归档后恢复命令可原样重跑，档案路径重入收尾
+- fix(guardrails): 写前门保护面与解锁标记按实体路径判定，符号链接拼写不再绕过
+- fix(guardrails): 宿主适配器按 PATH 绝对路径解析 flow-kit，堵住项目根 shim 劫持
+- fix(test): 账本大小写变体按平台拆分，POSIX 对照改为放行断言
+- fix(closeout): 无身份环境注入回退 git 身份，步骤④不再卡死
+- fix(review): 补上评测凭证、合并单源与引擎脚本英文说明
+- fix(audit): 修复代码审查报告的 55 项分级缺陷（严重3/高危12/中危40）
+
+### 文档
+
+- docs(timeline): 帮助文案对齐真实契约——去 --step/--export-html，教 export 子命令
+- docs(handbook): 整理沉淀 AI 原生工作流引擎全景架构白皮书与技术手册
+
+### 其他
+
+- chore(comments): 清理 17 条叙述性注释，pi 自检空目录断言改成员断言
+- test(guardrails): 钉住 NTFS ADS 流拼写的保护面同判
+- refactor(core): 修复日志硬编码与单源对齐，清理未用导入与废弃死代码
+
 ## [2.13.1]
 
 ### 新增
