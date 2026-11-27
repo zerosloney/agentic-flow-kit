@@ -1,0 +1,1289 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI-Native 软件工程工作流与治理引擎完全手册 · Agentic Flow Kit</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@400;500;600;700;800&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+<!-- Mermaid CDN -->
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+:root {
+  --bg-primary: #ffffff;
+  --bg-secondary: #f8fafc;
+  --bg-sidebar: #f1f5f9;
+  --bg-code: #0f172a;
+  --border-color: #e2e8f0;
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+  --accent: #2563eb;
+  --accent-hover: #1d4ed8;
+  --accent-light: #eff6ff;
+  --success: #16a34a;
+  --warning: #d97706;
+  --danger: #dc2626;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+  --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+  --sidebar-width: 290px;
+}
+
+[data-theme="dark"] {
+  --bg-primary: #0b0f19;
+  --bg-secondary: #111827;
+  --bg-sidebar: #0f172a;
+  --bg-code: #030712;
+  --border-color: #1f2937;
+  --text-primary: #f9fafb;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+  --accent: #3b82f6;
+  --accent-hover: #60a5fa;
+  --accent-light: #1e293b;
+  --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.5);
+  --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.5);
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: 'Inter', 'Noto Sans SC', system-ui, -apple-system, sans-serif;
+  background-color: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.7;
+  display: flex;
+  min-height: 100vh;
+}
+
+/* 顶部导航条 */
+.top-nav {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  background-color: var(--bg-primary);
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 24px;
+  z-index: 100;
+  backdrop-filter: blur(8px);
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--text-primary);
+  text-decoration: none;
+}
+.brand-badge {
+  background: linear-gradient(135deg, #2563eb, #7c3aed);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.nav-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.btn-icon {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  color: var(--text-primary);
+  padding: 8px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+.btn-icon:hover {
+  background: var(--accent-light);
+  border-color: var(--accent);
+}
+
+/* 侧边栏 */
+.sidebar {
+  position: fixed;
+  top: 60px;
+  bottom: 0;
+  left: 0;
+  width: var(--sidebar-width);
+  background-color: var(--bg-sidebar);
+  border-right: 1px solid var(--border-color);
+  overflow-y: auto;
+  padding: 24px 16px 40px;
+  z-index: 90;
+}
+.sidebar-title {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  margin-bottom: 12px;
+  padding-left: 8px;
+  font-weight: 700;
+}
+.toc-list {
+  list-style: none;
+}
+.toc-item {
+  margin-bottom: 4px;
+}
+.toc-item a {
+  display: block;
+  padding: 6px 10px;
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-size: 0.85rem;
+  border-radius: 6px;
+  transition: all 0.15s;
+  line-height: 1.4;
+}
+.toc-item a:hover {
+  background-color: var(--accent-light);
+  color: var(--accent);
+}
+.toc-item.active a {
+  background-color: var(--accent-light);
+  color: var(--accent);
+  font-weight: 600;
+}
+.toc-h1 { font-weight: 600; margin-top: 10px; }
+.toc-h2 { padding-left: 10px; }
+.toc-h3 { padding-left: 20px; font-size: 0.8rem; }
+
+/* 内容主体 */
+.main-wrapper {
+  margin-left: var(--sidebar-width);
+  margin-top: 60px;
+  flex: 1;
+  max-width: calc(100vw - var(--sidebar-width));
+  padding: 48px 60px 100px;
+}
+.article-content {
+  max-width: 960px;
+  margin: 0 auto;
+}
+
+/* 标题样式 */
+h1, h2, h3, h4 {
+  color: var(--text-primary);
+  font-weight: 700;
+  line-height: 1.3;
+  position: relative;
+}
+h1 { font-size: 2.2rem; margin-bottom: 1.2rem; padding-bottom: 0.8rem; border-bottom: 2px solid var(--border-color); }
+h2 { font-size: 1.55rem; margin-top: 2.8rem; margin-bottom: 1rem; padding-bottom: 0.4rem; border-bottom: 1px solid var(--border-color); }
+h3 { font-size: 1.25rem; margin-top: 2rem; margin-bottom: 0.8rem; }
+h4 { font-size: 1.05rem; margin-top: 1.5rem; margin-bottom: 0.6rem; }
+
+.heading-anchor:hover .anchor-link { opacity: 1; }
+.anchor-link {
+  position: absolute;
+  left: -24px;
+  opacity: 0;
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 400;
+  transition: opacity 0.2s;
+}
+
+p { margin-bottom: 1.15rem; color: var(--text-secondary); }
+strong { color: var(--text-primary); }
+hr { border: none; border-top: 1px solid var(--border-color); margin: 2.5rem 0; }
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+/* 引用块 */
+blockquote {
+  border-left: 4px solid var(--accent);
+  background-color: var(--bg-secondary);
+  padding: 12px 18px;
+  margin-bottom: 1.2rem;
+  border-radius: 0 8px 8px 0;
+  color: var(--text-secondary);
+  font-style: italic;
+}
+blockquote p { margin-bottom: 0; }
+
+/* 列表 */
+li {
+  color: var(--text-secondary);
+  margin-bottom: 0.45rem;
+  list-style-position: inside;
+}
+li.indent-2 { margin-left: 20px; }
+li.indent-4 { margin-left: 40px; }
+li input[type="checkbox"] { margin-right: 8px; vertical-align: middle; }
+
+/* 表格 */
+.table-container {
+  overflow-x: auto;
+  margin: 1.5rem 0;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  box-shadow: var(--shadow-sm);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.88rem;
+  text-align: left;
+}
+th {
+  background-color: var(--bg-secondary);
+  color: var(--text-primary);
+  font-weight: 600;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border-color);
+}
+td {
+  padding: 11px 16px;
+  border-bottom: 1px solid var(--border-color);
+  color: var(--text-secondary);
+}
+tr:last-child td { border-bottom: none; }
+tr:hover td { background-color: var(--accent-light); }
+
+/* 代码块 */
+code {
+  font-family: 'Fira Code', Consolas, Monaco, monospace;
+  font-size: 0.88em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background-color: var(--bg-secondary);
+  color: #d946ef;
+  border: 1px solid var(--border-color);
+}
+[data-theme="dark"] code { color: #f472b6; }
+
+.code-block-wrapper {
+  background-color: var(--bg-code);
+  border-radius: 10px;
+  margin: 1.5rem 0;
+  overflow: hidden;
+  box-shadow: var(--shadow-md);
+  border: 1px solid var(--border-color);
+}
+.code-block-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 16px;
+  background: rgba(255, 255, 255, 0.05);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+.code-lang-tag {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #94a3b8;
+  letter-spacing: 0.05em;
+}
+.copy-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: #cbd5e1;
+  padding: 4px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  transition: all 0.2s;
+}
+.copy-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+.code-block-wrapper pre {
+  padding: 16px;
+  overflow-x: auto;
+  line-height: 1.6;
+}
+.code-block-wrapper code {
+  background-color: transparent !important;
+  color: #e2e8f0 !important;
+  border: none !important;
+  padding: 0;
+  font-size: 0.86rem;
+  display: block;
+}
+
+/* Mermaid 容器 */
+.mermaid-box {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 10px;
+  padding: 24px;
+  margin: 1.8rem 0;
+  display: flex;
+  justify-content: center;
+  overflow-x: auto;
+  box-shadow: var(--shadow-sm);
+}
+
+/* 响应式适配 */
+@media (max-width: 1024px) {
+  .sidebar { transform: translateX(-100%); transition: transform 0.3s; }
+  .sidebar.open { transform: translateX(0); }
+  .main-wrapper { margin-left: 0; max-width: 100vw; padding: 32px 24px 80px; }
+  .menu-toggle { display: flex !important; }
+}
+
+.menu-toggle {
+  display: none;
+}
+
+@media print {
+  .top-nav, .sidebar, .copy-btn { display: none !important; }
+  .main-wrapper { margin-left: 0 !important; padding: 0 !important; }
+}
+</style>
+</head>
+<body>
+
+<header class="top-nav">
+  <div style="display:flex;align-items:center;gap:12px;">
+    <button class="btn-icon menu-toggle" onclick="toggleSidebar()" title="展开目录">☰ 目录</button>
+    <a href="#" class="brand">
+      <span>🛡️ Agentic Flow Kit</span>
+      <span class="brand-badge">Engine Handbook</span>
+    </a>
+  </div>
+  <div class="nav-actions">
+    <button class="btn-icon" onclick="window.print()" title="打印或保存为 PDF">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 6 2 18 2 18 9"></polyline><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"></path><rect x="6" y="14" width="12" height="8"></rect></svg>
+      <span>打印/PDF</span>
+    </button>
+    <button class="btn-icon" onclick="toggleTheme()" title="切换亮暗色模式">
+      <span id="theme-icon">🌙</span>
+      <span id="theme-text">暗色</span>
+    </button>
+  </div>
+</header>
+
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-title">手册目录导航 (TOC)</div>
+  <ul class="toc-list"><li class="toc-item toc-h1"><a href="#ai-native-软件工程工作流与治理引擎完全手册">AI-Native 软件工程工作流与治理引擎完全手册</a></li><li class="toc-item toc-h2"><a href="#目录-table-of-contents">目录 (Table of Contents)</a></li><li class="toc-item toc-h2"><a href="#1-范式跃迁-为什么需要-ai-native-软件工程引擎">1. 范式跃迁：为什么需要 AI-Native 软件工程引擎？</a></li><li class="toc-item toc-h3"><a href="#1-1-从代码补全-copilot-到自主协同-agentic-的代际鸿沟">1.1 从代码补全（Copilot）到自主协同（Agentic）的代际鸿沟</a></li><li class="toc-item toc-h3"><a href="#1-2-大语言模型在真实工程中的-脱缰五毒">1.2 大语言模型在真实工程中的“脱缰五毒”</a></li><li class="toc-item toc-h3"><a href="#1-3-核心哲学-用确定性的工程防线-包容不确定性的智能探索">1.3 核心哲学：用确定性的工程防线，包容不确定性的智能探索</a></li><li class="toc-item toc-h2"><a href="#2-系统架构与核心运作机制">2. 系统架构与核心运作机制</a></li><li class="toc-item toc-h3"><a href="#2-1-整体架构-工作流面-vs-工程治理面">2.1 整体架构：工作流面 vs 工程治理面</a></li><li class="toc-item toc-h3"><a href="#2-2-14-宿主适配与中性-hook-编译接线矩阵">2.2 14 宿主适配与中性 Hook 编译接线矩阵</a></li><li class="toc-item toc-h3"><a href="#2-3-门禁系统的四层叠加与全生命周期拦截">2.3 门禁系统的四层叠加与全生命周期拦截</a></li><li class="toc-item toc-h3"><a href="#2-4-全自动有限状态机引擎-pipeline-run">2.4 全自动有限状态机引擎（`pipeline-run`）</a></li><li class="toc-item toc-h3"><a href="#2-5-防脱缰与契约保护体系">2.5 防脱缰与契约保护体系</a></li><li class="toc-item toc-h3"><a href="#2-6-自愈免疫系统-知识处方匹配与退火淘汰">2.6 自愈免疫系统：知识处方匹配与退火淘汰</a></li><li class="toc-item toc-h3"><a href="#2-7-多智能体打擂竞技场与自动化评测闭环-arena-benchmark">2.7 多智能体打擂竞技场与自动化评测闭环 (Arena &amp; Benchmark)</a></li><li class="toc-item toc-h2"><a href="#3-使用指南与配置参考">3. 使用指南与配置参考</a></li><li class="toc-item toc-h3"><a href="#3-1-零依赖安装与项目初始化">3.1 零依赖安装与项目初始化</a></li><li class="toc-item toc-h3"><a href="#3-2-cli-核心命令系统全览">3.2 CLI 核心命令系统全览</a></li><li class="toc-item toc-h3"><a href="#3-3-项目自定义配置与门禁扩展规范">3.3 项目自定义配置与门禁扩展规范</a></li><li class="toc-item toc-h3"><a href="#3-4-研发流程与分级泳道-l0---l3-执行标准">3.4 研发流程与分级泳道（L0 - L3）执行标准</a></li><li class="toc-item toc-h2"><a href="#4-端到端实战演练案例">4. 端到端实战演练案例</a></li><li class="toc-item toc-h3"><a href="#4-1-案例一-l1-快速道-新功能从-plan-到关单全闭环">4.1 案例一：L1 快速道——新功能从 Plan 到关单全闭环</a></li><li class="toc-item toc-h3"><a href="#4-2-案例二-l2-契约道-共享-api-变更与跨模型独立复核">4.2 案例二：L2 契约道——共享 API 变更与跨模型独立复核</a></li><li class="toc-item toc-h3"><a href="#4-3-案例三-安全拦截-人件断档与知识处方自愈演练">4.3 案例三：安全拦截、人件断档与知识处方自愈演练</a></li><li class="toc-item toc-h2"><a href="#5-附录-速查表与常见排错指南">5. 附录：速查表与常见排错指南</a></li><li class="toc-item toc-h3"><a href="#5-1-常用诊断命令速查">5.1 常用诊断命令速查</a></li><li class="toc-item toc-h3"><a href="#5-2-常见错误与应急解锁方法">5.2 常见错误与应急解锁方法</a></li></ul>
+</aside>
+
+<main class="main-wrapper">
+  <article class="article-content">
+    <h1 id="ai-native-软件工程工作流与治理引擎完全手册" class="heading-anchor"><a href="#ai-native-软件工程工作流与治理引擎完全手册" class="anchor-link">#</a>AI-Native 软件工程工作流与治理引擎完全手册</h1>
+<blockquote><p><strong>面向人和智能体（Human & AI Agent）的双向权威指南</strong>  </p></blockquote>
+<blockquote><p>引擎版本：<code>agentic-flow-kit v1.x</code> ｜ 运行环境：<code>Node.js ≥ 22</code>（ESM、零运行时依赖）</p></blockquote>
+
+<hr />
+
+<h2 id="目录-table-of-contents" class="heading-anchor"><a href="#目录-table-of-contents" class="anchor-link">#</a>目录 (Table of Contents)</h2>
+
+<li class="numbered"><a href="#1-范式跃迁为什么需要-ai-native-软件工程引擎" target="_blank" rel="noopener noreferrer">范式跃迁：为什么需要 AI-Native 软件工程引擎？</a></li>
+<li class="indent-3">1.1 从代码补全（Copilot）到自主协同（Agentic）的代际鸿沟</li>
+<li class="indent-3">1.2 大语言模型在真实工程中的“脱缰五毒”</li>
+<li class="indent-3">1.3 核心哲学：用确定性的工程防线，包容不确定性的智能探索</li>
+<li class="numbered"><a href="#2-系统架构与核心运作机制" target="_blank" rel="noopener noreferrer">系统架构与核心运作机制</a></li>
+<li class="indent-3">2.1 整体架构：工作流面 vs 工程治理面</li>
+<li class="indent-3">2.2 14 宿主适配与中性 Hook 编译接线矩阵</li>
+<li class="indent-3">2.3 门禁系统的四层叠加与全生命周期拦截</li>
+<li class="indent-3">2.4 全自动有限状态机引擎（<code>pipeline-run</code>）</li>
+<li class="indent-3">2.5 防脱缰与契约保护体系（指纹绑定、语义沙箱、跨模型复核）</li>
+<li class="indent-3">2.6 自愈免疫系统：知识处方匹配与退火淘汰</li>
+<li class="numbered"><a href="#3-使用指南与配置参考" target="_blank" rel="noopener noreferrer">使用指南与配置参考</a></li>
+<li class="indent-3">3.1 零依赖安装与项目初始化</li>
+<li class="indent-3">3.2 CLI 核心命令系统全览</li>
+<li class="indent-3">3.3 项目自定义配置与门禁扩展规范</li>
+<li class="indent-3">3.4 研发流程与分级泳道（L0 - L3）执行标准</li>
+<li class="numbered"><a href="#4-端到端实战演练案例" target="_blank" rel="noopener noreferrer">端到端实战演练案例</a></li>
+<li class="indent-3">4.1 案例一：L1 快速道——新功能从 Plan 到关单全闭环</li>
+<li class="indent-3">4.2 案例二：L2 契约道——共享 API 变更与跨模型独立复核</li>
+<li class="indent-3">4.3 案例三：安全拦截、人件断档与知识处方自愈演练</li>
+<li class="numbered"><a href="#5-附录速查表与常见排错指南" target="_blank" rel="noopener noreferrer">附录：速查表与常见排错指南</a></li>
+
+<hr />
+
+<h2 id="1-范式跃迁-为什么需要-ai-native-软件工程引擎" class="heading-anchor"><a href="#1-范式跃迁-为什么需要-ai-native-软件工程引擎" class="anchor-link">#</a>1. 范式跃迁：为什么需要 AI-Native 软件工程引擎？</h2>
+
+<h3 id="1-1-从代码补全-copilot-到自主协同-agentic-的代际鸿沟" class="heading-anchor"><a href="#1-1-从代码补全-copilot-到自主协同-agentic-的代际鸿沟" class="anchor-link">#</a>1.1 从代码补全（Copilot）到自主协同（Agentic）的代际鸿沟</h3>
+
+<p>在过去数年，软件开发历经了两次 AI 范式转移：</p>
+<li class="numbered"><strong>辅助驾驶时代（Copilot 模式，2021-2023）</strong>：AI 扮演智能补全和聊天框角色，人类主导架构、编码、测试和 Git 提交，AI 仅在光标位置生成几十行代码。此时传统 Git 工作流与 CI/CD 尚足以应对。</li>
+<li class="numbered"><strong>自主智能体时代（Agentic 模式，2024 至今）</strong>：AI 获得终端（Shell）、文件编辑（Write/Edit）、网络检索和多轮自循环能力。AI 可以独立分析需求、跨十几个文件修改代码、执行构建命令、自测自修并提交 Git。</li>
+
+<p><strong>核心矛盾爆发</strong>：当 AI 拥有了写磁盘与敲终端的“手脚”，传统的软件工程基础设施开始失效。人类工程师如果依然采用“让 AI 自由发挥、人在最后做 Code Review”的模式，会面临指数级爆炸的心智负担与巨大的工程风险。</p>
+
+<h3 id="1-2-大语言模型在真实工程中的-脱缰五毒" class="heading-anchor"><a href="#1-2-大语言模型在真实工程中的-脱缰五毒" class="anchor-link">#</a>1.2 大语言模型在真实工程中的“脱缰五毒”</h3>
+
+<p>在工业级团队落地智能体研发时，普遍存在以下 5 大顽疾：</p>
+
+<div class="table-container"><table>
+<thead><tr><th>顽疾</th><th>典型表现</th><th>带来的灾难</th></tr></thead>
+<tbody>
+<tr><td><strong>① 认知漂移 (Goal Drift)</strong></td><td>任务推进到第 15 轮对话时，AI 逐渐淡忘最初的用户意图，自行衍生出无关变更。</td><td>产物偏离业务诉求，返工成本极高。</td></tr>
+<tr><td><strong>② 顺手重构 (Drive-by Refactoring)</strong></td><td>修一个简单 Bug，AI 顺便改写了相邻代码的格式、变量名、甚至重写底层公共库。</td><td>破坏 Git Blame 历史，引入隐蔽回归与破坏性变更。</td></tr>
+<tr><td><strong>③ 虚构承诺与假绿 (False Green)</strong></td><td>门禁因配置缺失或路径错误退出为 0，AI 误以为测试通过，向人类虚报完成。</td><td>致命缺陷混入主干，测试形同虚设。</td></tr>
+<tr><td><strong>④ 静默越权 (Privilege Creep)</strong></td><td>AI 遇到测试失败，自行篡改测试断言让其通过；或者私自删除门禁脚本以“消灭报错”。</td><td>软件安全防线被 AI 内部瓦解，解除自身安全栓绳。</td></tr>
+<tr><td><strong>⑤ 形式主义流程 (Process Overhead)</strong></td><td>改动一行注释或一个配置，逼迫 AI 写长篇立项文档，导致研发严重拖延。</td><td>工程师心智抗拒，最终倒退回无序乱改。</td></tr>
+</tbody></table></div>
+
+
+<h3 id="1-3-核心哲学-用确定性的工程防线-包容不确定性的智能探索" class="heading-anchor"><a href="#1-3-核心哲学-用确定性的工程防线-包容不确定性的智能探索" class="anchor-link">#</a>1.3 核心哲学：用确定性的工程防线，包容不确定性的智能探索</h3>
+
+<p><code>agentic-flow-kit</code> 的诞生，正是为了给 Agent 戴上<strong>不可被自解的工程缰绳</strong>，其遵循以下四大工程基石：</p>
+
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">CODE</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="">                    ┌─────────────────────────────────────────┐
+                    │        人类工程师 (Human-in-the-Loop)    │
+                    │        - 意图输入   - 承诺审批   - 最终签字│
+                    └────────────────────┬────────────────────┘
+                                         │ 明确点头授权
+                                         ▼
+ ┌─────────────────────────────────────────────────────────────────────────────────┐
+ │                            AI-Native 软件工程引擎                                │
+ │                                                                                 │
+ │   ┌───────────────────────┐                     ┌───────────────────────────┐   │
+ │   │  确定性状态机         │                     │  零信任工程防线           │   │
+ │   │  - 30+ 闭包阶段       │                     │  - 写前瞬间换入自卫       │   │
+ │   │  - 工单协议拆解       │                     │  - 命令终端高危探针       │   │
+ │   │  - 停机点原话代录     │                     │  - 承诺面指纹防篡改       │   │
+ │   └───────────┬───────────┘                     └─────────────┬─────────────┘   │
+ │               │                                               │                 │
+ │               └───────────────────────┬───────────────────────┘                 │
+ │                                       │ 驱动与约束                              │
+ │                                       ▼                                         │
+ │                      ┌─────────────────────────────────┐                        │
+ │                      │  多宿主 AI 智能体 (Agent Worker)│                        │
+ │                      │  (Claude / Cursor / Trae / ...) │                        │
+ │                      └─────────────────────────────────┘                        │
+ └───────────────────────────────────────┬─────────────────────────────────────────┘
+                                         │ 唯一真相源落地
+                                         ▼
+                    ┌─────────────────────────────────────────┐
+                    │          Git 仓库与只读公证台账          │
+                    │          (Git Commit / JSONL Union)     │
+                    └─────────────────────────────────────────┘</code></pre>
+</div>
+
+<li class="numbered"><strong>确定性约束自由度（Determinism Guides Freedom）</strong>：探索可以天马行空，但推进必须步步落实。状态推进只能由确定性状态机与断言脚本驱动，AI 不得自己修改文档状态。</li>
+<li class="numbered"><strong>人件确认门与原话代录（Await-Confirm & Delegated Quote）</strong>：关键节点（API 变更、Schema 破坏、架构红线、终态审批）到点必停。AI 必须转述要点并取得人类原话，机器台账以原话为锚，严禁私自放行。</li>
+<li class="numbered"><strong>承诺面指纹绑定（Approved-Content Binding）</strong>：人类点头那一刻，目标、判据与改动范围计算指纹锁定。AI 关单前若擅改承诺，直接 Hard-Block 拒收。</li>
+<li class="numbered"><strong>验证阶梯与零依赖自包含（Fail-Closed Verification）</strong>：门禁与运行时完全基于原生 Node.js，不依赖第三方库；门禁失败绝不静默放过（Fail-Closed）。</li>
+
+<hr />
+
+<h2 id="2-系统架构与核心运作机制" class="heading-anchor"><a href="#2-系统架构与核心运作机制" class="anchor-link">#</a>2. 系统架构与核心运作机制</h2>
+
+<h3 id="2-1-整体架构-工作流面-vs-工程治理面" class="heading-anchor"><a href="#2-1-整体架构-工作流面-vs-工程治理面" class="anchor-link">#</a>2.1 整体架构：工作流面 vs 工程治理面</h3>
+
+<p>整个 <code>agentic-flow-kit</code> 由两大支柱面协同构成：</p>
+
+<div class="mermaid-box"><pre class="mermaid">graph LR
+    subgraph Workflow[&quot;工作流面 (Workflow Plane)&quot;]
+        W1[&quot;需求意图 (intents)&quot;] --&gt; W2[&quot;设计规格 (specs)&quot;]
+        W2 --&gt; W3[&quot;改动方案 (plans)&quot;]
+        W3 --&gt; W4[&quot;全自动状态机 (pipeline-run)&quot;]
+        W4 --&gt; W5[&quot;关单归档 (archive)&quot;]
+    end
+
+    subgraph Governance[&quot;工程治理面 (Governance Plane)&quot;]
+        G1[&quot;宿主接线 (Host Hooks)&quot;]
+        G2[&quot;规则引擎 (Rules Overlay)&quot;]
+        G3[&quot;零信任卡口 (flow-kit gate)&quot;]
+        G4[&quot;防篡改台账 (Notary &amp; Ledgers)&quot;]
+    end
+
+    Workflow -.-&gt;|&quot;触发与约束&quot;| Governance
+    Governance -.-&gt;|&quot;裁决与自愈&quot;| Workflow</pre></div>
+
+<li class="indent-0"><strong>工作流面（管业务任务流转）</strong>：管理任务如何从一句话需求，逐步演化为规格设计、实施方案、任务工单，最终通过测试、留痕关单并归档。</li>
+<li class="indent-0"><strong>工程治理面（管操作底线防御）</strong>：管理 Agent 在宿主内的工具权限、命令行执行、写文件行为、Git 提交合规与 CI 自动化卡口。</li>
+
+<hr />
+
+<h3 id="2-2-14-宿主适配与中性-hook-编译接线矩阵" class="heading-anchor"><a href="#2-2-14-宿主适配与中性-hook-编译接线矩阵" class="anchor-link">#</a>2.2 14 宿主适配与中性 Hook 编译接线矩阵</h3>
+
+<p>每个 AI IDE / 客户端（Claude Code、Cursor、Trae、CodeBuddy 等）的原生目录与配置格式均不相同。<code>agentic-flow-kit</code> 确立了 <strong>中性 Hook 规格事实源</strong>（<code>.agents/hooks/gates.json</code>），在安装和升级时动态编译至目标宿主。</p>
+
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">CODE</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="">                ┌─────────────────────────────────┐
+                │   .agents/hooks/gates.json      │ (中性规格单一事实源)
+                └────────────────┬────────────────┘
+                                 │
+           ┌─────────────────────┼─────────────────────┐
+           ▼                     ▼                     ▼
+┌──────────────────┐  ┌──────────────────┐  ┌──────────────────┐
+│   Claude Code    │  │   Trae / ZCode   │  │  Cursor / Qoder  │
+│  .claude/config  │  │ .trae/hooks.json │  │  rules / prompts │
+└──────────────────┘  └──────────────────┘  └──────────────────┘</code></pre>
+</div>
+
+<h4 id="宿主合并纪律-merge-host" class="heading-anchor"><a href="#宿主合并纪律-merge-host" class="anchor-link">#</a>宿主合并纪律（Merge-Host）：</h4>
+<li class="indent-0"><strong>托管条目幂等接管</strong>：仅对 <code>flow-kit hook &lt;id&gt;</code> 这一类托管条目做增量更新。</li>
+<li class="indent-0"><strong>用户既有资产绝对保留</strong>：项目原先在 <code>.trae/hooks.json</code>、<code>.cursor/rules</code> 中自定义的私有 hooks、额外权限声明，引擎升级时<strong>一律保留，绝不抹除</strong>。</li>
+
+<hr />
+
+<h3 id="2-3-门禁系统的四层叠加与全生命周期拦截" class="heading-anchor"><a href="#2-3-门禁系统的四层叠加与全生命周期拦截" class="anchor-link">#</a>2.3 门禁系统的四层叠加与全生命周期拦截</h3>
+
+<p>门禁并不是静态的代码扫描器，而是一套随 Agent 活动周期层层设卡的<strong>立体防御阵列</strong>：</p>
+
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">CODE</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="">[Agent 敲击代码] ──&gt; ① 写前门拦截 (Pre-Write Hook)
+                         │ (合法文件/红线快照检测)
+[Agent 执行终端] ──&gt; ② 命令门拦截 (Pre-Shell Hook)
+                         │ (Deny/Ask 清单 + 探针)
+[Agent 提交代码] ──&gt; ③ Git 提交门 (commit-msg &amp; pre-commit)
+                         │ (Conventional Commits + 架构红线)
+[Agent 推送分支] ──&gt; ④ CI 质量门 (flow-kit gate --strict)
+                           (七大零信任守卫全部放行)</code></pre>
+</div>
+
+<h4 id="1-写前门-pretooluse-write-pre-write-check-cjs" class="heading-anchor"><a href="#1-写前门-pretooluse-write-pre-write-check-cjs" class="anchor-link">#</a>1. 写前门（<code>PreToolUse(write)</code> / <code>pre-write-check.cjs</code>）</h4>
+<p>在磁盘文件被改写的<strong>前一毫秒</strong>前置拦截：</p>
+<li class="indent-0"><strong>自保护机制</strong>：AI 尝试修改 <code>.agents/hooks/gates.json</code> 或宿主安全设置解开拴绳？<strong>直接 Deny 拒绝</strong>。如需放行，需人类在终端显式执行 <code>flow-kit run pre-write-check.cjs --unlock 10</code>。</li>
+<li class="indent-0"><strong>台账 Append-only 保护</strong>：确认台账（<code>confirmations.jsonl</code>）严禁被重置或改写历史，只允许逐字节向后追加。</li>
+<li class="indent-0"><strong>快照换入扫描</strong>：将 AI 提议的内容写入内存快照，临时换入运行架构红线扫描，违规立即中断并恢复现场。</li>
+
+<h4 id="2-命令门-pretooluse-shell-pre-shell-check-cjs" class="heading-anchor"><a href="#2-命令门-pretooluse-shell-pre-shell-check-cjs" class="anchor-link">#</a>2. 命令门（<code>PreToolUse(shell)</code> / <code>pre-shell-check.cjs</code>）</h4>
+<li class="indent-0"><strong>高危禁令（Deny）</strong>：拦截 <code>git push --force</code>、<code>git reset --hard</code>、<code>drop database</code>、<code>--no-verify</code>。</li>
+<li class="indent-0"><strong>危险操作确认（Ask）</strong>：<code>git checkout</code>、<code>rm -rf</code>、<code>git branch -D</code> 强制弹窗由人类审批。</li>
+<li class="indent-0"><strong>门卫在岗探针</strong>：每次提交前，毫秒级探测 <code>core.hooksPath</code> 是否指向 <code>.githooks</code>；若钩子被关闭，拦截命令，拒绝脱缰。</li>
+<li class="indent-0"><strong>凭据保护（Hardened）</strong>：禁止读取 <code>.env*</code>、<code>./secrets/**</code>、<code>~/.ssh/**</code>。</li>
+
+<h4 id="3-规则包的分层覆盖模型-rules-layering" class="heading-anchor"><a href="#3-规则包的分层覆盖模型-rules-layering" class="anchor-link">#</a>3. 规则包的分层覆盖模型（Rules Layering）</h4>
+<p>执行 <code>flow-kit rules check</code> 时，规则按以下顺序深度叠加（后者同 ID 覆盖前者）：</p>
+<p>$$\mathbf{legacy}\ (兼容旧配置) \longrightarrow \mathbf{stack}\ (内置技术栈规则) \longrightarrow \mathbf{project}\ (项目级自主规则) \longrightarrow \mathbf{local}\ (本机私有规则)$$</p>
+
+<hr />
+
+<h3 id="2-4-全自动有限状态机引擎-pipeline-run" class="heading-anchor"><a href="#2-4-全自动有限状态机引擎-pipeline-run" class="anchor-link">#</a>2.4 全自动有限状态机引擎（<code>pipeline-run</code>）</h3>
+
+<p><code>pipeline-run.mjs</code> 实现了全自动状态机，涵盖从需求分诊（Triage）到关单（Closeout）的全链路。</p>
+
+<h4 id="状态转移模型-核心链路" class="heading-anchor"><a href="#状态转移模型-核心链路" class="anchor-link">#</a>状态转移模型（核心链路）：</h4>
+<div class="mermaid-box"><pre class="mermaid">stateDiagram-v2
+    [*] --&gt; triage: start &quot;&lt;需求&gt;&quot;
+    triage --&gt; intent_draft: L2/L3 新需求
+    triage --&gt; plan_draft: L1 新需求
+    triage --&gt; incident_draft: Bug 修复
+
+    intent_draft --&gt; intent_confirm
+    intent_confirm --&gt; spec_draft: 人件确认放行
+    spec_draft --&gt; spec_review: 独立复核
+    spec_review --&gt; spec_confirm
+    spec_confirm --&gt; plan_draft: 人件确认放行
+
+    plan_draft --&gt; plan_confirm
+    plan_confirm --&gt; implement: 人件确认放行
+    implement --&gt; verify: 交付代码
+    
+    verify --&gt; changes_confirm: 门禁全绿
+    verify --&gt; fix: 门禁红 (onFail 路由, 重试≤3)
+    fix --&gt; verify
+
+    changes_confirm --&gt; code_review: 独立代码审阅
+    code_review --&gt; closeout: 复核通过
+    code_review --&gt; fix: 复核驳回
+    closeout --&gt; done: 关单入库
+    done --&gt; [*]</pre></div>
+
+<h4 id="停机点矩阵-pipeline-stop" class="heading-anchor"><a href="#停机点矩阵-pipeline-stop" class="anchor-link">#</a>停机点矩阵（<code>PIPELINE-STOP</code>）：</h4>
+<p>当状态机推进受阻或到达安全关卡时，通过固定格式停机：</p>
+<li class="indent-0"><code>PIPELINE-STOP work-order &lt;runId&gt; &lt;工单ID&gt;</code>：向 Agent 派发具体的任务工单；</li>
+<li class="indent-0"><code>PIPELINE-STOP await-confirm &lt;runId&gt; &lt;文档路径&gt;</code>：人类审批卡口，等待录入确认原话；</li>
+<li class="indent-0"><code>PIPELINE-STOP gate-fail &lt;runId&gt; &lt;阶段名&gt;</code>：门禁校验未通过，触发修复或自愈；</li>
+<li class="indent-0"><code>PIPELINE-STOP step &lt;runId&gt; &lt;阶段名&gt;</code>：单步断点暂停，供调试现场；</li>
+<li class="indent-0"><code>PIPELINE-STOP done &lt;runId&gt;</code>：全生命周期执行成功。</li>
+
+<hr />
+
+<h3 id="2-5-防脱缰与契约保护体系" class="heading-anchor"><a href="#2-5-防脱缰与契约保护体系" class="anchor-link">#</a>2.5 防脱缰与契约保护体系</h3>
+
+<h4 id="1-承诺面指纹算法-commitment-fingerprint" class="heading-anchor"><a href="#1-承诺面指纹算法-commitment-fingerprint" class="anchor-link">#</a>1. 承诺面指纹算法（Commitment Fingerprint）</h4>
+<p>当一份 <code>plan.md</code> 或 <code>spec.md</code> 被用户确认通过（<code>approved</code>）时，系统提取其判据核心计算不可逆 SHA-256 指纹：</p>
+<li class="indent-0"><strong>被锁定项（承诺面）</strong>：目标、非目标、改动方案、约束与风险、验收判定表。</li>
+<li class="indent-0"><strong>豁免归一项（关单动作）</strong>：验收勾选态（<code>- [ ]</code> $\to$ <code>- [x]</code>）、回填 commit SHA 证据、回填确认人与时间。</li>
+<li class="indent-0"><strong>违规即拒</strong>：若 AI 在执行阶段私自修改了承诺面的文字，指纹失效，关单时 <code>confirm-doc</code> 立即 Hard-Block。</li>
+
+<h4 id="2-改动授权范围与语义沙箱-semantic-sandbox" class="heading-anchor"><a href="#2-改动授权范围与语义沙箱-semantic-sandbox" class="anchor-link">#</a>2. 改动授权范围与语义沙箱（Semantic Sandbox）</h4>
+<p>AI 在实施阶段汇报改动文件时，必须与 Plan 声明完全一致：</p>
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">MARKDOWN</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="language-markdown">### 改动方案
+- src/services/order.ts (symbols: createOrder, calcTax; freeze: applyDiscount; freeze-exports)</code></pre>
+</div>
+<li class="indent-0"><strong>文件级</strong>：<code>flow-kit run pipeline-run.mjs next --files &quot;src/services/order.ts&quot;</code>，计划外文件拒绝写入。</li>
+<li class="indent-0"><strong>符号级</strong>：语义沙箱通过 AST 解析，强制只能修改 <code>createOrder</code>，一旦触碰 <code>applyDiscount</code> 或改写导出面，AST 门禁阻断退出。</li>
+
+<h4 id="3-跨模型独立复核背书-independent-review" class="heading-anchor"><a href="#3-跨模型独立复核背书-independent-review" class="anchor-link">#</a>3. 跨模型独立复核背书（Independent Review）</h4>
+<p>针对 L2/L3 需求，必须有独立 Reviewer 出具复核报告：</p>
+<li class="indent-0">背书记录在 <code>code-review.md</code> 中，标注 <code>&lt;角色&gt;@&lt;模型族&gt;</code>（例如：主开发由 Claude 完成，复核由 Gemini 独立完成）。</li>
+<li class="indent-0">模型认知隔离，避免同一模型产生的盲区与自圆其说。</li>
+
+<hr />
+
+<h3 id="2-6-自愈免疫系统-知识处方匹配与退火淘汰" class="heading-anchor"><a href="#2-6-自愈免疫系统-知识处方匹配与退火淘汰" class="anchor-link">#</a>2.6 自愈免疫系统：知识处方匹配与退火淘汰</h3>
+
+<p>当门禁校验挂掉时，引擎并不是机械地抛错，而是启动自愈飞轮（<code>self-healing-prescriptions.mjs</code>）：</p>
+
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">CODE</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="">[门禁报错发生]
+     │
+     ▼
+[失败特征提取] ──&gt; (分类: syntax / test / arch / touch-set / budget)
+     │
+     ▼
+[处方加权检索] ──&gt; 从 .agents/prescriptions.json 匹配最高置信度处方
+     │
+     ▼
+[自愈执行修复] ──&gt; 注入修复指令，Agent 退火重试 (Retry Budget)
+     │
+     ├── 修复成功 ──&gt; 增加处方置信度，沉淀为工程免疫资产
+     └── 修复失败 ──&gt; 扣减置信度，根据半衰期 (14天) 自动退火淘汰</code></pre>
+</div>
+
+<hr />
+
+<h3 id="2-7-多智能体打擂竞技场与自动化评测闭环-arena-benchmark" class="heading-anchor"><a href="#2-7-多智能体打擂竞技场与自动化评测闭环-arena-benchmark" class="anchor-link">#</a>2.7 多智能体打擂竞技场与自动化评测闭环 (Arena & Benchmark)</h3>
+
+<p>针对复杂方案选型或关键架构重构，单一模型生成往往存在局部最优或幻觉盲区。<code>agentic-flow-kit</code> 内置竞技场打擂（<code>arena-run.mjs</code>）与基准自动化评测体系（<code>agent-evaluator.mjs</code>）：</p>
+
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">CODE</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="">                  ┌──────────────────────────────────────────────┐
+                  │ 方案开擂 (initArena --arms plan-a,plan-b)    │
+                  └──────────────────────┬───────────────────────┘
+                                         │
+                 ┌───────────────────────┴───────────────────────┐
+                 ▼                                               ▼
+     [plan-a 独立 Worktree 沙盒]                     [plan-b 独立 Worktree 沙盒]
+     (赋能模型: claude-3-5-sonnet)                   (赋能模型: gemini-2.5-pro)
+                 │                                               │
+                 ▼                                               ▼
+          各臂独立编写与改动                              各臂独立编写与改动
+                 │                                               │
+                 └───────────────────────┬───────────────────────┘
+                                         │
+                                         ▼
+                  ┌──────────────────────────────────────────────┐
+                  │ 跑测与 5 维 Rubric 评测 (evalArena)          │
+                  │ - 任务达成率 (taskCompletion, 30%)           │
+                  │ - 门禁通过率 (gatePassRate, 25%)             │
+                  │ - 测试影响精度 (testImpactPrecision, 15%)    │
+                  │ - 单步执行效率 (stepEfficiency, 15%)         │
+                  │ - 边界合规度 (sandboxCompliance, 15%)        │
+                  └──────────────────────┬───────────────────────┘
+                                         │
+                                         ▼
+                  ┌──────────────────────────────────────────────┐
+                  │ 裁决报告与 ASCII 雷达对质图 (reportArena)    │
+                  │ 推荐最优底座 ──&gt; 一键嫁接回主干 (adoptArena) │
+                  └──────────────────────────────────────────────┘</code></pre>
+</div>
+
+<h4 id="1-独立-worktree-物理隔离与模型归属绑定" class="heading-anchor"><a href="#1-独立-worktree-物理隔离与模型归属绑定" class="anchor-link">#</a>1. 独立 Worktree 物理隔离与模型归属绑定</h4>
+<li class="indent-0">开擂时通过 <code>git worktree add</code> 派生完全独立的物理沙盒目录 <code>.agents/arena/&lt;topic&gt;/&lt;arm&gt;</code> 与专属分支 <code>arena/&lt;topic&gt;/&lt;arm&gt;</code>。</li>
+<li class="indent-0">支持 <code>--models &lt;arm1:model1,arm2:model2&gt;</code> 将不同大模型绑定至各候选臂，记录于 <code>arena.json</code> 元数据中。</li>
+
+<h4 id="2-5-维-rubric-评分卡与综合效能分" class="heading-anchor"><a href="#2-5-维-rubric-评分卡与综合效能分" class="anchor-link">#</a>2. 5 维 Rubric 评分卡与综合效能分</h4>
+<p>评测运行时（<code>agent-evaluator.mjs</code>）从五个核心维度计算综合分（权重归一，得分率 $\in [0, 1.0]$）：</p>
+<li class="indent-0"><strong>综合评分卡公式</strong>：</li>
+<p>  $$S = 0.30 \cdot C_{\text{task}} + 0.25 \cdot C_{\text{gate}} + 0.15 \cdot C_{\text{impact}} + 0.15 \cdot C_{\text{eff}} + 0.15 \cdot C_{\text{sandbox}}$$</p>
+<li class="indent-0"><strong>ASCII 效能雷达图</strong>：终端及对质 Markdown 报告中可视化呈现每个维度的得分标尺（如 <code>[████████░░░░] 85.0%</code>）。</li>
+
+<h4 id="3-终局裁决-嫁接与一键清退" class="heading-anchor"><a href="#3-终局裁决-嫁接与一键清退" class="anchor-link">#</a>3. 终局裁决、嫁接与一键清退</h4>
+<li class="indent-0"><strong>智能推荐最优底座</strong>：在全绿（PASS）的前提下优先选取综合效能分最高且耗时最少的分支推荐为胜出底座。</li>
+<li class="indent-0"><strong>一键裁决（Adopt）</strong>：<code>flow-kit run arena-run.mjs adopt --topic &lt;topic&gt; --arm &lt;winner&gt;</code> 自动将胜出臂的代码应用至主工程，并将其他臂安全归档。</li>
+<li class="indent-0"><strong>清退（Cleanup）</strong>：自动移除 worktree 与临时分支，杜绝工作区垃圾残留。</li>
+
+<h4 id="4-可视化-web-看板联动" class="heading-anchor"><a href="#4-可视化-web-看板联动" class="anchor-link">#</a>4. 可视化 Web 看板联动</h4>
+<li class="indent-0">实时 Web 看板（<code>workflow-board-server.mjs</code>）提供专属 <strong>竞技场视图</strong>（<code>#arena-view</code>）。</li>
+<li class="indent-0">实时展示各候选臂模型徽标、5 维柱状指示器、综合分数徽章、一键触发 Eval 评测、查看 Markdown 报告弹窗与一键 Adopt。</li>
+<li class="indent-0">历史基准排行榜实时拉取 <code>.agents/evals/results.jsonl</code>，可视化跟踪各模型随时间的效能表现演进。</li>
+
+<hr />
+
+<h2 id="3-使用指南与配置参考" class="heading-anchor"><a href="#3-使用指南与配置参考" class="anchor-link">#</a>3. 使用指南与配置参考</h2>
+
+<h3 id="3-1-零依赖安装与项目初始化" class="heading-anchor"><a href="#3-1-零依赖安装与项目初始化" class="anchor-link">#</a>3.1 零依赖安装与项目初始化</h3>
+
+<p>引擎无需全局安装沉重依赖，只依赖 Node.js ≥ 22。</p>
+
+<h4 id="初始化新项目" class="heading-anchor"><a href="#初始化新项目" class="anchor-link">#</a>初始化新项目：</h4>
+<p>在任意项目根目录下运行：</p>
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">BASH</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="language-bash"># 交互式初始化向导
+npx agentic-flow-kit init
+
+# 或非交互静默初始化
+npx agentic-flow-kit init --stack node --host claude,trae --lang zh-CN --yes</code></pre>
+</div>
+
+<h4 id="检查环境在位状态-上岗体检" class="heading-anchor"><a href="#检查环境在位状态-上岗体检" class="anchor-link">#</a>检查环境在位状态（上岗体检）：</h4>
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">BASH</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="language-bash"># 体检本地配置与门卫完整性
+npx agentic-flow-kit doctor
+
+# 一键修复缺失的配置（如 hooksPath、合并驱动）
+npx agentic-flow-kit run check-local-gates.mjs --fix</code></pre>
+</div>
+
+<hr />
+
+<h3 id="3-2-cli-核心命令系统全览" class="heading-anchor"><a href="#3-2-cli-核心命令系统全览" class="anchor-link">#</a>3.2 CLI 核心命令系统全览</h3>
+
+<p><code>agentic-flow-kit</code> 提供了直观、一致的 CLI 命令：</p>
+
+<div class="table-container"><table>
+<thead><tr><th>命令</th><th>别名 / 子命令</th><th>说明</th></tr></thead>
+<tbody>
+<tr><td><code>flow-kit init</code></td><td>-</td><td>向当前仓库全新注入工作流引擎与治理体系</td></tr>
+<tr><td><code>flow-kit doctor</code></td><td><code>--deep</code>, <code>--attest</code></td><td>全仓体检、宿主接线检查、出具密码学安装证明链</td></tr>
+<tr><td><code>flow-kit gate</code></td><td><code>check</code>, <code>init-ci</code></td><td>针对当前 PR/变更集执行零信任质量门；一键生成 CI 配置文件</td></tr>
+<tr><td><code>flow-kit rules</code></td><td><code>check</code>, <code>explain</code></td><td>运行分层规则包扫描；解释某条规则的触发原因与覆盖链</td></tr>
+<tr><td><code>flow-kit run &lt;script&gt;</code></td><td>-</td><td>在引擎受管运行时内执行 <code>.agents/scripts/</code> 中的内置工具</td></tr>
+<tr><td><code>flow-kit pipeline-run</code></td><td><code>start</code>, <code>next</code>, <code>status</code>, <code>watch</code></td><td>驱动全自动有限状态机工作流</td></tr>
+<tr><td><code>flow-kit run arena-run.mjs</code></td><td><code>init</code>, <code>status</code>, <code>eval</code>, <code>report</code>, <code>adopt</code>, <code>cleanup</code></td><td>方案打擂竞技场：物理 worktree 隔离沙盒与 5 维 Rubric 评测对质矩阵</td></tr>
+<tr><td><code>flow-kit run agent-evaluator.mjs</code></td><td><code>run</code>, <code>record</code>, <code>list</code></td><td>自动化评测基准套件：运行标准用例、多维打分与门禁合规凭证签发</td></tr>
+<tr><td><code>flow-kit add-host</code></td><td>-</td><td>为已有引擎的项目追加新的宿主适配层</td></tr>
+<tr><td><code>flow-kit upgrade</code></td><td><code>--explain-policy</code></td><td>安全升级引擎，支持语义化策略差异审计，保留用户私有配置</td></tr>
+</tbody></table></div>
+
+
+<hr />
+
+<h3 id="3-3-项目自定义配置与门禁扩展规范" class="heading-anchor"><a href="#3-3-项目自定义配置与门禁扩展规范" class="anchor-link">#</a>3.3 项目自定义配置与门禁扩展规范</h3>
+
+<p>项目完全可以根据自身架构，定义专属门禁与规则。</p>
+
+<h4 id="1-编写项目规则包-flow-rules-yml" class="heading-anchor"><a href="#1-编写项目规则包-flow-rules-yml" class="anchor-link">#</a>1. 编写项目规则包：<code>flow-rules.yml</code></h4>
+<p>在项目根目录放置 <code>flow-rules.yml</code>：</p>
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">YAML</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="language-yaml">version: 1
+rules:
+  - id: custom.no-raw-sql
+    name: &quot;禁止在控制层编写原生 SQL&quot;
+    phase: pre-commit
+    face: code
+    severity: block
+    scope: diff
+    when: [&quot;path:src/controllers/&quot;]
+    assert:
+      kind: content
+      args:
+        targets: [&quot;src/controllers&quot;]
+        ext: [&quot;.ts&quot;, &quot;.js&quot;]
+        pattern: &quot;(SELECT|INSERT|UPDATE|DELETE)\\s+FROM&quot;
+    message:
+      zh: &quot;Controller 层禁止直接拼接 SQL，必须经由 Repository 访问&quot;
+      en: &quot;Raw SQL is forbidden in controllers&quot;
+
+  - id: custom.test-coverage
+    name: &quot;核心业务模块单测运行&quot;
+    phase: verify
+    face: tests
+    severity: block
+    assert:
+      kind: command
+      args:
+        run: &quot;npm run test:unit&quot;
+        cwd: &quot;.&quot;
+    message:
+      zh: &quot;单元测试失败，阻断交付&quot;
+      en: &quot;Unit tests failed&quot;</code></pre>
+</div>
+
+<h4 id="2-产品门多包拆分-agents-config-product-gates-json" class="heading-anchor"><a href="#2-产品门多包拆分-agents-config-product-gates-json" class="anchor-link">#</a>2. 产品门多包拆分：<code>.agents/config/product-gates.&lt;name&gt;.json</code></h4>
+<p>对于大中型模块，支持拆分产品门配置文件（如 <code>product-gates.payment.json</code>）：</p>
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">JSON</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="language-json">{
+  &quot;gates&quot;: [
+    {
+      &quot;id&quot;: &quot;payment-api-compat&quot;,
+      &quot;name&quot;: &quot;支付接口向前兼容性检测&quot;,
+      &quot;cmd&quot;: &quot;npm run test:compat&quot;,
+      &quot;folder&quot;: &quot;modules/payment&quot;,
+      &quot;deps&quot;: [&quot;custom.test-coverage&quot;],
+      &quot;timeoutMs&quot;: 60000
+    }
+  ]
+}</code></pre>
+</div>
+
+<hr />
+
+<h3 id="3-4-研发流程与分级泳道-l0---l3-执行标准" class="heading-anchor"><a href="#3-4-研发流程与分级泳道-l0---l3-执行标准" class="anchor-link">#</a>3.4 研发流程与分级泳道（L0 - L3）执行标准</h3>
+
+<p>在发起研发任务时，人类与 AI 严格按照定级标准分流：</p>
+
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">CODE</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="">                    ┌──────────────────┐
+                    │   发起研发任务   │
+                    └────────┬─────────┘
+                             │
+            ┌────────────────┼────────────────┐
+            ▼                ▼                ▼
+     [轻微文案/注释]   [常规业务功能]    [契约变更/架构调整]
+         (L0)             (L1)             (L2 / L3)
+            │                │                │
+      直接快速改动      起草单份 Plan      Intent → Spec → Plan
+            │                │                │
+            │           人类点头确认      人类审批 + 独立复核
+            │                │                │
+            └───────────────►▼◄───────────────┘
+                        实施与自测
+                             │
+                      通过 CI / 静态门
+                             │
+                        关单并归档</code></pre>
+</div>
+
+<li class="indent-0"><strong>L1 准则</strong>：严禁写臃肿的 <code>intent.md</code> 与 <code>spec.md</code>。直接起草 <code>plans/YYYY-MM-DD-&lt;主题&gt;.md</code>，人类在对话框打出“可以/同意”，记录原话后即可施工。</li>
+<li class="indent-0"><strong>L2/L3 准则</strong>：必须出具 <code>specs/</code> 规格文件；必须由独立的 <code>independent-reviewer</code> 角色完成审查并背书。</li>
+
+<hr />
+
+<h2 id="4-端到端实战演练案例" class="heading-anchor"><a href="#4-端到端实战演练案例" class="anchor-link">#</a>4. 端到端实战演练案例</h2>
+
+<h3 id="4-1-案例一-l1-快速道-新功能从-plan-到关单全闭环" class="heading-anchor"><a href="#4-1-案例一-l1-快速道-新功能从-plan-到关单全闭环" class="anchor-link">#</a>4.1 案例一：L1 快速道——新功能从 Plan 到关单全闭环</h3>
+
+<h4 id="场景设定" class="heading-anchor"><a href="#场景设定" class="anchor-link">#</a>场景设定：</h4>
+<p>用户需要为电商系统的用户服务新增一个“导出个人数据（GDPR）”的接口。</p>
+
+<h4 id="step-1-启动状态机任务" class="heading-anchor"><a href="#step-1-启动状态机任务" class="anchor-link">#</a>Step 1: 启动状态机任务</h4>
+<p>开发者在终端或对话框中下达指令：</p>
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">BASH</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="language-bash">flow-kit run pipeline-run.mjs start &quot;新增用户个人数据导出导出接口&quot; --hint &quot;kind=require level=L1 module=user topic=export-profile&quot;</code></pre>
+</div>
+
+<h4 id="step-2-响应首个工单并起草-plan" class="heading-anchor"><a href="#step-2-响应首个工单并起草-plan" class="anchor-link">#</a>Step 2: 响应首个工单并起草 Plan</h4>
+<p>状态机输出：</p>
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">TEXT</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="language-text">PIPELINE-STOP work-order run-20261126-001 plan-fill</code></pre>
+</div>
+<p>Agent 读取工单并在 <code>workflow/tasks/2026-11-26-export-profile/plan.md</code> 起草实施方案：</p>
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">MARKDOWN</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="language-markdown"># 计划: 用户个人数据导出功能
+- 模块: user
+- 级别: L1
+
+### 改动方案
+- src/controllers/user.ts
+- src/services/export.ts
+- tests/export.test.ts
+
+### 验收标准
+- [ ] 1. GET /api/user/export 返回符合 JSON Schema 的用户明细
+- [ ] 2. 自动化测试用例覆盖正常导出与未鉴权场景</code></pre>
+</div>
+<p>Agent 提交起草内容并推进：</p>
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">BASH</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="language-bash">flow-kit run pipeline-run.mjs next</code></pre>
+</div>
+
+<h4 id="step-3-到达人件确认门-await-confirm" class="heading-anchor"><a href="#step-3-到达人件确认门-await-confirm" class="anchor-link">#</a>Step 3: 到达人件确认门（Await-Confirm）</h4>
+<p>状态机检测到 Plan 已准备好，自动停机：</p>
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">TEXT</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="language-text">PIPELINE-STOP await-confirm run-20261126-001 workflow/tasks/2026-11-26-export-profile/plan.md</code></pre>
+</div>
+<p>Agent 转向用户汇报：“计划已起草完成，主要改动 <code>user.ts</code> 与 <code>export.ts</code>，请确认是否可以开工？”  </p>
+<p>用户在聊天框输入：<strong>“方案很好，按这个开始写代码吧。”</strong>  </p>
+<p>Agent 将用户原话一字不差代录推进：</p>
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">BASH</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="language-bash">flow-kit run pipeline-run.mjs next --delegated &quot;方案很好，按这个开始写代码吧。&quot;</code></pre>
+</div>
+<blockquote><p><em>注：系统自动调用 <code>confirm-doc.mjs</code>，更新状态为 <code>approved</code>，并计算承诺面指纹锁定。</em></p></blockquote>
+
+<h4 id="step-4-实施代码并校验范围" class="heading-anchor"><a href="#step-4-实施代码并校验范围" class="anchor-link">#</a>Step 4: 实施代码并校验范围</h4>
+<p>状态机派发实施工单：</p>
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">TEXT</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="language-text">PIPELINE-STOP work-order run-20261126-001 implement</code></pre>
+</div>
+<p>Agent 编写业务代码与测试代码。编写完成后，调用推进，并附带改动文件声明：</p>
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">BASH</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="language-bash">flow-kit run pipeline-run.mjs next --files &quot;src/controllers/user.ts,src/services/export.ts,tests/export.test.ts&quot;</code></pre>
+</div>
+<blockquote><p><em>若 Agent 擅自改动了 <code>src/index.ts</code>，<code>--files</code> 检查与 Git 状态不一致，状态机将立即拦截。</em></p></blockquote>
+
+<h4 id="step-5-验证门与自动关单" class="heading-anchor"><a href="#step-5-验证门与自动关单" class="anchor-link">#</a>Step 5: 验证门与自动关单</h4>
+<p>状态机自动触发测试与质量门禁：</p>
+<li class="numbered">运行 <code>npm test</code> 与静态规则检查（全绿）；</li>
+<li class="numbered">校验承诺面指纹无漂移；</li>
+<li class="numbered">勾选验收项 <code>- [x]</code> 并附带 Git 提交哈希；</li>
+<li class="numbered">状态机完成关单，输出：</li>
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">TEXT</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="language-text">PIPELINE-STOP done run-20261126-001
+✨ 任务已圆满闭环，产物已沉淀至 workflow/archive/2026-11/</code></pre>
+</div>
+
+<hr />
+
+<h3 id="4-2-案例二-l2-契约道-共享-api-变更与跨模型独立复核" class="heading-anchor"><a href="#4-2-案例二-l2-契约道-共享-api-变更与跨模型独立复核" class="anchor-link">#</a>4.2 案例二：L2 契约道——共享 API 变更与跨模型独立复核</h3>
+
+<h4 id="场景设定" class="heading-anchor"><a href="#场景设定" class="anchor-link">#</a>场景设定：</h4>
+<p>支付模块重构：修改对全系统开放的 <code>processPayment</code> 核心接口签名，追加多币种转换参数。属于契约级变更（L2）。</p>
+
+<h4 id="流程实况" class="heading-anchor"><a href="#流程实况" class="anchor-link">#</a>流程实况：</h4>
+<li class="numbered"><strong>启动分诊</strong>：系统自动分流到 <code>intent-draft</code> $\to$ <code>spec-draft</code> 防御道；</li>
+<li class="numbered"><strong>规格起草</strong>：产出 <code>spec.md</code>，明确定义向前兼容逻辑与错误码映射表；</li>
+<li class="numbered"><strong>强制跨模型独立复核</strong>：</li>
+<li class="indent-3">状态机停机：<code>PIPELINE-STOP work-order &lt;id&gt; spec-review</code>；</li>
+<li class="indent-3">切换至 Reviewer Agent（如接入不同的大模型），独立拉起会话审查规格；</li>
+<li class="indent-3">Reviewer 审查无误后，签署背书：</li>
+<p>     ```markdown</p>
+<p>     ### 确认与复核</p>
+<li class="indent-5">独立复核: 通过 (reviewer@gemini-2.5-pro 针对兼容性矩阵审阅无误)</li>
+<p>     ```</p>
+<li class="numbered"><strong>用户审批规格</strong> $\to$ 生成实施 Plan $\to$ 代码实施；</li>
+<li class="numbered"><strong>代码 Diff 独立复核（Code-Review）</strong>：不仅审规格，执行器固定复核基准 SHA，Reviewer 审查代码 Git Diff，避免货不对板；</li>
+<li class="numbered">全部绿灯后合入主干。</li>
+
+<hr />
+
+<h3 id="4-3-案例三-安全拦截-人件断档与知识处方自愈演练" class="heading-anchor"><a href="#4-3-案例三-安全拦截-人件断档与知识处方自愈演练" class="anchor-link">#</a>4.3 案例三：安全拦截、人件断档与知识处方自愈演练</h3>
+
+<h4 id="场景-1-ai-试图私自越权解除门禁" class="heading-anchor"><a href="#场景-1-ai-试图私自越权解除门禁" class="anchor-link">#</a>场景 1：AI 试图私自越权解除门禁</h4>
+<p>AI 在排查一个格式报错时，认为门禁规则多余，调用工具试图删除 <code>.agents/hooks/gates.json</code>：</p>
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">JSON</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="language-json">// AI 尝试调用 Edit 工具改写 gates.json</code></pre>
+</div>
+<p><strong>引擎反应</strong>：</p>
+<p>写前门瞬间激活：</p>
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">TEXT</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="language-text">❌ pre-write-check: 拦截写入！.agents/hooks/gates.json 属于系统核心执法面，受自保护防御机制约束，禁止 AI 自行修改解除拴绳！</code></pre>
+</div>
+<p>AI 报错退回，安全防线坚如磐石。</p>
+
+<h4 id="2-场景-2-测试挂掉触发处方自愈" class="heading-anchor"><a href="#2-场景-2-测试挂掉触发处方自愈" class="anchor-link">#</a>2. 场景 2：测试挂掉触发处方自愈</h4>
+<p>AI 在实施阶段引入了未导出的模块名，导致 <code>npm test</code> 挂掉：</p>
+<li class="numbered">状态机检测到 <code>verify</code> 失败，触发 <code>onFail</code> 路由，进入 <code>fix</code> 阶段；</li>
+<li class="numbered">处方系统（<code>self-healing-prescriptions.mjs</code>）提取报错签名 <code>TS2305: Module has no exported member</code>；</li>
+<li class="numbered">匹配到历史高置信度处方：</li>
+<p>   ```json</p>
+<p>   {</p>
+<p>     "id": "rx-syntax-import-fix",</p>
+<p>     "actionableFix": "检查 import 命名与目标文件 export 是否同名，修复大小写与解构命名"</p>
+<p>   }</p>
+<p>   ```</p>
+<li class="numbered">状态机派发带处方建议的 <code>fix</code> 工单，AI 根据建议 1 次修复成功，重试预算由 3 减为 2，流水线恢复畅通并最终通过。</li>
+
+<hr />
+
+<h2 id="5-附录-速查表与常见排错指南" class="heading-anchor"><a href="#5-附录-速查表与常见排错指南" class="anchor-link">#</a>5. 附录：速查表与常见排错指南</h2>
+
+<h3 id="5-1-常用诊断命令速查" class="heading-anchor"><a href="#5-1-常用诊断命令速查" class="anchor-link">#</a>5.1 常用诊断命令速查</h3>
+
+
+<div class="code-block-wrapper">
+  <div class="code-block-header">
+    <span class="code-lang-tag">BASH</span>
+    <button class="copy-btn" onclick="copyCode(this)" title="复制代码">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>
+      <span>复制</span>
+    </button>
+  </div>
+  <pre><code class="language-bash"># 1. 检查引擎与门卫配置
+npx agentic-flow-kit doctor
+
+# 2. 针对当前 PR 执行门禁校验
+npx agentic-flow-kit gate check --strict
+
+# 3. 解释某条规则为什么被激活
+npx agentic-flow-kit rules explain custom.no-raw-sql
+
+# 4. 打开实时可视化工作流看板
+npx agentic-flow-kit run ensure-board.mjs
+
+# 5. 检索知识库与归档规格
+npx agentic-flow-kit run kb-search.mjs &quot;GDPR导出&quot;
+
+# 6. 发起方案打擂与多模型评测 (Arena)
+npx agentic-flow-kit run arena-run.mjs init --topic refactor-auth --arms plan-a,plan-b --models gpt-4o,claude-3-5-sonnet
+npx agentic-flow-kit run arena-run.mjs eval --topic refactor-auth
+npx agentic-flow-kit run arena-run.mjs report --topic refactor-auth
+
+# 7. 运行智能体自动化评测基准套件 (Benchmark)
+npx agentic-flow-kit run agent-evaluator.mjs run --record</code></pre>
+</div>
+
+<h3 id="5-2-常见错误与应急解锁方法" class="heading-anchor"><a href="#5-2-常见错误与应急解锁方法" class="anchor-link">#</a>5.2 常见错误与应急解锁方法</h3>
+
+<div class="table-container"><table>
+<thead><tr><th>错误特征</th><th>产生原因</th><th>应对解决办法</th></tr></thead>
+<tbody>
+<tr><td><code>write-gates deny</code></td><td>AI 试图修改受保护的 <code>.agents/</code> 或宿主安全配置文件</td><td>人类确认需要修改时，在终端执行 <code>flow-kit run pre-write-check.cjs --unlock 15</code> 临时解锁 15 分钟。</td></tr>
+<tr><td><code>Commitment fingerprint mismatch</code></td><td>在文档 Approved 后，改动方案或验收判据被手改</td><td>人类与 AI 再次沟通，人类点头后由 AI 执行 <code>confirm-doc &lt;doc&gt; --reconfirm --delegated &quot;&lt;原话&gt;&quot;</code> 重录指纹。</td></tr>
+<tr><td><code>pre-shell-check: hooksPath mismatch</code></td><td>Git 配置的钩子路径被改动或掉线</td><td>运行 <code>git config core.hooksPath .githooks</code> 或 <code>flow-kit run check-local-gates.mjs --fix</code> 自动修复。</td></tr>
+<tr><td><code>PIPELINE-STOP await-confirm 卡住</code></td><td>状态机等待人类明确确认信号</td><td>开发者在对话框明确回复审批意见（如“同意/通过”），AI 携带原话回跑 <code>next --delegated &quot;&lt;原话&gt;&quot;</code>。</td></tr>
+</tbody></table></div>
+
+
+<hr />
+<p><em>手册维护记录：本项目手册由 <code>agentic-flow-kit</code> 全局架构探索提炼生成，随引擎版本持续演进。</em></p>
+
+  </article>
+</main>
+
+<script>
+// 初始化 Mermaid
+mermaid.initialize({
+  startOnLoad: true,
+  theme: document.documentElement.getAttribute('data-theme') === 'dark' ? 'dark' : 'default',
+  securityLevel: 'loose'
+});
+
+// 主题切换
+function toggleTheme() {
+  const current = document.documentElement.getAttribute('data-theme');
+  const next = current === 'dark' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', next);
+  localStorage.setItem('handbook-theme', next);
+  document.getElementById('theme-icon').textContent = next === 'dark' ? '☀️' : '🌙';
+  document.getElementById('theme-text').textContent = next === 'dark' ? '亮色' : '暗色';
+}
+
+const savedTheme = localStorage.getItem('handbook-theme');
+if (savedTheme) {
+  document.documentElement.setAttribute('data-theme', savedTheme);
+  document.getElementById('theme-icon').textContent = savedTheme === 'dark' ? '☀️' : '🌙';
+  document.getElementById('theme-text').textContent = savedTheme === 'dark' ? '亮色' : '暗色';
+}
+
+// 侧边栏展开
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+// 复制代码
+function copyCode(btn) {
+  const code = btn.closest('.code-block-wrapper').querySelector('code').innerText;
+  navigator.clipboard.writeText(code).then(() => {
+    const textSpan = btn.querySelector('span');
+    const originalText = textSpan.textContent;
+    textSpan.textContent = '已复制!';
+    btn.style.color = '#4ade80';
+    setTimeout(() => {
+      textSpan.textContent = originalText;
+      btn.style.color = '';
+    }, 2000);
+  });
+}
+
+// 目录滚动联动
+const headings = document.querySelectorAll('.heading-anchor');
+const tocLinks = document.querySelectorAll('.toc-item a');
+
+window.addEventListener('scroll', () => {
+  let currentId = '';
+  headings.forEach(h => {
+    const rect = h.getBoundingClientRect();
+    if (rect.top <= 120) {
+      currentId = h.id;
+    }
+  });
+
+  tocLinks.forEach(link => {
+    const parent = link.closest('.toc-item');
+    if (link.getAttribute('href') === '#' + currentId) {
+      parent.classList.add('active');
+    } else {
+      parent.classList.remove('active');
+    }
+  });
+});
+</script>
+
+</body>
+</html>
