@@ -1,8 +1,8 @@
 # 代码库架构治理与降熵演化进度表 (Refactoring Progress)
 
-> 分支：`refactor/arch-governance`
+> 分支：`refactor/arch-governance`（已 Fast-Forward 合入 `main`）
 > 基线：1952 tests, 1948 pass, 0 fail, 4 skipped | 4/4 repo checks pass
-> 最终状态：1955 tests, 1951 pass, 0 fail, 4 skipped | 循环依赖 0 | 跨层违规 0
+> 最终状态：1955 tests, 1951 pass, 0 fail, 4 skipped | 循环依赖 0 | 跨层违规 0 | 100% 通过
 
 ---
 
@@ -74,8 +74,15 @@
 - [x] 在 `install.mjs` 保持别名导出以兼容历史测试与外部导入方
 - [x] 全量验证与独立提交
 
-### Batch 4: 架构分层守卫与防回归机制 (`566ebad`)
+### Batch 4: 架构分层守卫与防回归机制 (`566ebad`, `3308350`)
 - [x] 提取 `src/install/runtime-paths.mjs`，消除 `install` 对 `commands` 的唯一跨层依赖
 - [x] 建立 `tests/kit-architecture.test.mjs` 自动化架构回归测试
+- [x] 保证 `agentic-flow-kit/kernel` 外部契约 4 函数精确锁定不变
 - [x] 确保测试集成入 `npm test`，常态化防循环与防跨层
 - [x] 全量验证与独立提交
+
+### Batch 5: 全量套件端到端验证与主干合流 (`main`)
+- [x] 运行全量测试套件 `npm test`：1955 项测试（1951 通过，0 失败，4 跳过）
+- [x] 运行工程检查套件：`check:i18n` (147 文件)、`lint:templates` (5 矩阵)、`policy:check` (46 机制)、`devcontainer:check` (9 栈) 全部通过
+- [x] Fast-Forward 合入 `main` 分支并清理临时 worktree
+- [x] 更新 ADR 与架构治理总报告工件
