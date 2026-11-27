@@ -8,7 +8,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 
-export const normalizeEol = (text) => String(text).replace(/\r\n/g, '\n');
+const normalizeEol = (text) => String(text).replace(/\r\n/g, '\n');
 
 // sha256（CRLF→LF 归一后）——判据摘要，非密码学用途。
 export function hashText(text) {

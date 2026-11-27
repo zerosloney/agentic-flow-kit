@@ -10,9 +10,12 @@ import { derivedModeOf, detectAnchorTextOverwritten } from '../install/derived.m
 import { makeT } from '../i18n.mjs';
 import { resolveTarget } from '../install/target.mjs';
 import { readKitVersion } from '../install/version.mjs';
-import { normalizeEol } from '../kernel/index.mjs';
 import { planInputsFromManifest, varsInputsFromManifest } from './replay.mjs';
 import { resolveInside } from '../install/path-guard.mjs';
+
+function normalizeEol(text) {
+  return String(text).replace(/\r\n/g, '\n');
+}
 
 const KIND_ORDER = { missing: 0, 'user-modified': 1, 'kit-updated': 2, orphan: 3, unchanged: 4 };
 export const KIND_META = {
