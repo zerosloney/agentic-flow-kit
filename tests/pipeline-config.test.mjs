@@ -79,6 +79,48 @@ describe('Unit 1: 流水线配置严格加载 (Fail-Closed)', () => {
       (err) => err.code === 'BAD_CONFIG' && err.message.includes('顶层必须为 JSON 对象')
     );
   });
+
+  test('前导整行 // 注释可被容忍（存量项目部署注释）', () => {
+    const pipelinePath = path.join(configDir, 'pipeline.json');
+    fs.writeFileSync(pipelinePath, '// 部署注释\n{\n  "version": 1\n}\n', 'utf8');
+
+    const loaded = loadPipelineConfig(tmpRoot);
+    assert.equal(loaded.version, 1);
+  });
+
+  test('字符串外的行尾 // 注释可被容忍', () => {
+    const pipelinePath = path.join(configDir, 'pipeline.json');
+    fs.writeFileSync(pipelinePath, '{\n  "version": 1 // 行尾注释\n}\n', 'utf8');
+
+    const loaded = loadPipelineConfig(tmpRoot);
+    assert.equal(loaded.version, 1);
+  });
+
+  test('字符串内的双斜杠不被当作注释', () => {
+    const pipelinePath = path.join(configDir, 'pipeline.json');
+    fs.writeFileSync(pipelinePath, '{\n  "url": "http://x//not-comment"\n}\n', 'utf8');
+
+    const loaded = loadPipelineConfig(tmpRoot);
+    assert.equal(loaded.url, 'http://x//not-comment');
+  });
+
+  test('前导整行 # 注释可被容忍', () => {
+    const pipelinePath = path.join(configDir, 'pipeline.json');
+    fs.writeFileSync(pipelinePath, '# hash 注释\n{\n  "version": 1\n}\n', 'utf8');
+
+    const loaded = loadPipelineConfig(tmpRoot);
+    assert.equal(loaded.version, 1);
+  });
+
+  test('对象后随垃圾字符仍必须抛出 BAD_CONFIG (fail-closed)', () => {
+    const pipelinePath = path.join(configDir, 'pipeline.json');
+    fs.writeFileSync(pipelinePath, '{ "a": 1 }\nx\n', 'utf8');
+
+    assert.throws(
+      () => loadPipelineConfig(tmpRoot),
+      (err) => err.code === 'BAD_CONFIG' && err.message.includes('JSON 解析失败')
+    );
+  });
 });
 
 describe('Unit 2: 多语言等效上下文单位估算与智能裁剪', () => {

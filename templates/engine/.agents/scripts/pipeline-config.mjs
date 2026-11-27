@@ -1,6 +1,44 @@
 // pipeline-config.mjs — 流水线配置加载（fail-closed）与上下文预算校准
+// 解析策略：先按严格 JSON 解析；失败时容忍 JSONC 行注释再试一次（存量项目升级前常见
+// 人工部署注释），仍失败才抛 BAD_CONFIG——真畸形 JSON 照样拒，带注释的旧配置不再砖。
 import fs from 'node:fs';
 import path from 'node:path';
+
+// 剥离字符串字面量之外的 `//` 行尾注释：逐行状态机跟踪是否在 " 内与转义 \。
+// 不认 /* */ 块注释：只做逐行判断，避免跨行块边界猜错而吞掉真实内容；
+// 字符串内的 // 原样保留（如 "url": "http://x//y"）。
+function stripTrailingLineComment(line) {
+  let inString = false;
+  for (let i = 0; i < line.length; i += 1) {
+    const ch = line[i];
+    if (inString) {
+      if (ch === '\\') {
+        i += 1;
+      } else if (ch === '"') {
+        inString = false;
+      }
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === '/' && line[i + 1] === '/') return line.slice(0, i);
+  }
+  return line;
+}
+
+// JSONC 注释剥离（仅整行 // / # 与字符串外的行尾 //）。规则故意从严：剥离后仍 parse 失败
+// 就照旧抛 BAD_CONFIG，真畸形 JSON 依旧被拒，fail-closed 合同不破。
+function stripJsoncComments(raw) {
+  const out = [];
+  for (const line of raw.split(/\r?\n/)) {
+    const trimmed = line.trimStart();
+    if (trimmed.startsWith('//') || trimmed.startsWith('#')) continue;
+    out.push(stripTrailingLineComment(line));
+  }
+  return out.join('\n');
+}
 
 function readJsonStrict(file, label) {
   let raw;
@@ -15,9 +53,16 @@ function readJsonStrict(file, label) {
   try {
     parsed = JSON.parse(raw);
   } catch (err) {
-    const e = new Error(`${label} JSON 解析失败 (${file}): ${err.message}`);
-    e.code = 'BAD_CONFIG';
-    throw e;
+    // 本仓模板生成的 pipeline.json 不含注释，但存量项目升级前常见人工加的部署注释；
+    // 旧加载器对解析失败静默降级 {}，新版 fail-closed 直接抛会让这些项目每次
+    // start/next/resume 都挂。故先剥离注释重试一次，仍失败才按原错误报 BAD_CONFIG。
+    try {
+      parsed = JSON.parse(stripJsoncComments(raw));
+    } catch {
+      const e = new Error(`${label} JSON 解析失败 (${file}): ${err.message}`);
+      e.code = 'BAD_CONFIG';
+      throw e;
+    }
   }
   if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
     const e = new Error(`${label} 顶层必须为 JSON 对象 (${file})`);
