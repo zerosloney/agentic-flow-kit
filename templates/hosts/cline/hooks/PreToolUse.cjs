@@ -64,8 +64,8 @@ const GATE_TOOL_ALIAS = {
   apply_patch: 'write',
 };
 
-// 该工具名是否属于「命令门」范畴（shell 家族）
-const SHELL_TOOLS = new Set(['run_commands', 'bash', 'execute_command', 'shell', 'terminal']);
+// 该工具名是否属于「命令门」范畴（shell 家族）；run_command 是 run_commands 的单数变体，漏认即静默放行
+const SHELL_TOOLS = new Set(['run_commands', 'run_command', 'bash', 'execute_command', 'shell', 'terminal']);
 // 该工具名是否属于「写前门」范畴
 const WRITE_TOOLS = new Set(['editor', 'apply_patch', 'write', 'edit', 'multiedit', 'replace_in_file', 'write_to_file']);
 
@@ -84,9 +84,10 @@ function extractToolCall(payload) {
   const ptu = payload.preToolUse && typeof payload.preToolUse === 'object' ? payload.preToolUse : {};
   const name = typeof tc.name === 'string' && tc.name ? tc.name
     : typeof ptu.toolName === 'string' && ptu.toolName ? ptu.toolName : '';
-  // input 优先用原始对象；若只有字符串化 parameters（部分宿主变体）则尝试 JSON 解析
-  let input = tc.input && typeof tc.input === 'object' ? tc.input : {};
-  if (!input || typeof input !== 'object') {
+  // input 优先用原始对象；缺失或非对象时置 null 而非 {}，否则对象恒真，
+  // 只有字符串化 parameters 的宿主变体永远进不了下面的解析分支，会被空入参静默放行
+  let input = tc.input && typeof tc.input === 'object' ? tc.input : null;
+  if (!input) {
     const raw = ptu.parameters;
     if (typeof raw === 'string' && raw.trim()) {
       try { input = JSON.parse(raw); } catch { input = {}; }
@@ -262,13 +263,16 @@ function emitControl(control) {
 }
 
 function main() {
-  const raw = readStdin();
+  // Windows 工具链/管道可能带 UTF-8 BOM，不剥会让合法 payload 在 parse 处失败
+  const raw = readStdin().replace(/^\uFEFF/, '');
   if (!raw.trim()) return; // 无 payload，放行
   let payload;
   try {
     payload = JSON.parse(raw);
   } catch {
-    return; // 解析失败，放行
+    // 非空 payload 读不出来就无法判定工具与入参，放行等于绕过门禁；fail-closed
+    emitControl({ cancel: true, cancelReason: 'Cline payload 无法解析（JSON 非法），按 fail-closed 阻止本次调用。' });
+    return;
   }
 
   const { name, input } = extractToolCall(payload);

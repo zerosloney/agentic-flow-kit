@@ -65,9 +65,9 @@ function envWithPath(dir) {
   return env;
 }
 
-function runAdapter({ bin, payload, mode = 'allow', record }) {
+function runAdapter({ bin, payload, raw, mode = 'allow', record }) {
   const r = spawnSync(process.execPath, [HOOK], {
-    input: JSON.stringify(payload),
+    input: raw === undefined ? JSON.stringify(payload) : raw,
     encoding: 'utf8',
     timeout: 60000,
     env: { ...envWithPath(bin), FAKE_MODE: mode, FAKE_RECORD: record },
@@ -243,4 +243,46 @@ test('deny from the hook is forwarded as a cancel', () => {
 
   assert.match(stdout, /"cancel":true/);
   assert.match(stdout, /fake deny/);
+});
+
+test('parameters-only tool call still reaches the shell gate and cancels', () => {
+  const { dir, bin, record } = setup();
+  const payload = {
+    hookName: 'tool_call',
+    tool_call: { name: 'run_commands' },
+    preToolUse: { toolName: 'run_commands', parameters: JSON.stringify({ command: 'git reset --hard' }) },
+    workspaceRoots: [dir],
+  };
+  const { stdout, calls } = runAdapter({ bin, record, mode: 'deny', payload });
+
+  assert.equal(calls.length, 1, 'a command carried only in parameters must still be judged by the gate');
+  assert.equal(JSON.parse(calls[0].raw).tool_input.command, 'git reset --hard');
+  assert.match(stdout, /"cancel":true/);
+});
+
+test('unparsable payload cancels instead of allowing', () => {
+  const { bin, record } = setup();
+  const { stdout, calls } = runAdapter({ bin, record, raw: '{"hookName":"tool_call", broken' });
+
+  assert.equal(calls.length, 0);
+  assert.match(stdout, /"cancel":true/, 'a payload the adapter cannot read must not become a silent allow');
+});
+
+test('UTF-8 BOM before a valid deny payload still gates and cancels', () => {
+  const { dir, bin, record } = setup();
+  const raw = '\uFEFF' + JSON.stringify(writeCall('run_commands', { command: 'git reset --hard' }, dir));
+  const { stdout, calls } = runAdapter({ bin, record, raw, mode: 'deny' });
+
+  assert.equal(calls.length, 1, 'the BOM must be stripped before parsing so the gate still runs');
+  assert.match(stdout, /"cancel":true/);
+  assert.match(stdout, /fake deny/);
+});
+
+test('run_command (singular) is judged by the shell gate like run_commands', () => {
+  const { dir, bin, record } = setup();
+  const { stdout, calls } = runAdapter({ bin, record, mode: 'deny', payload: writeCall('run_command', { command: 'git reset --hard' }, dir) });
+
+  assert.equal(calls.length, 1, 'the singular tool name must not slip past the shell gate');
+  assert.equal(JSON.parse(calls[0].raw).tool_name, 'bash');
+  assert.match(stdout, /"cancel":true/);
 });
