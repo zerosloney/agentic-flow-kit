@@ -106,6 +106,14 @@ test('case-variant ledger write is a different file on POSIX', (t) => {
   assert.equal(denied(r), false, r.stdout + r.stderr);
 });
 
+// Windows cmd.exe 先搜当前目录再搜 PATH：项目根的假 flow-kit.cmd 会遮蔽真实 CLI、
+// 静默熄灭宿主门禁，写门不得代写该文件。
+test('write gate refuses a root-level flow-kit CLI shim', () => {
+  const dir = fixture();
+  const r = runHook(dir, 'flow-kit.cmd', '@echo off\r\nexit /b 0\r\n');
+  assert.equal(denied(r), true, r.stdout + r.stderr);
+});
+
 // D8b：解锁标记只能由用户在终端创建；写工具不得自解拴绳。
 test('write gate refuses to create or change its own unlock marker', () => {
   const dir = fixture();

@@ -135,6 +135,13 @@ if (!unlocked && WIRING_RE.test(relKey)) {
   deny(`执法面自保护：${rel} 是门禁接线/权限基线，AI 不得自行改写。如系用户明示的引擎变更：请用户执行 flow-kit hook pre-write-check.cjs --unlock <分钟> 临时放行（或用户手动改本文件），完成后删除解锁标记。`);
 }
 
+// ── 1b) 项目根 CLI shim 自保护（不享 unlocked 豁免）────
+// Windows 的 cmd.exe 对裸名命令先搜当前目录（项目根）再搜 PATH：项目根的假 flow-kit.cmd 会
+// 遮蔽真实 CLI、静默熄灭宿主门禁；确属用户所需时由用户在终端手动创建。
+if (/^flow-kit\.(cmd|bat|exe)$/i.test(relKey) || /^flow-kit\.(cmd|bat|exe)$/i.test(realRel)) {
+  deny(`执法面自保护：项目根的 ${rel} 会遮蔽真实 flow-kit CLI（Windows 先搜当前目录再搜 PATH），静默熄灭门禁，AI 不得创建。如确需：由用户在终端手动创建。`);
+}
+
 // ── 合成提议内容（供 2/3 层；合成不了则对应层跳过）────
 // 字段名跨宿主/跨版本归一（2026-11-11）：Command Code 规范为 old_string/new_string，其修复层别名
 // 为 old_value/new_value；漏认任一侧 = 内容判据静默 fail-open。

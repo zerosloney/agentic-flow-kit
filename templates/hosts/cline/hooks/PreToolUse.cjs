@@ -32,6 +32,31 @@ const path = require('node:path');
 const TIMEOUT_MS = 30000;
 const ROOT = path.resolve(__dirname, '..', '..'); // .cline/hooks → 仓库根
 
+// Windows 的 cmd.exe 对裸名命令先搜当前目录（项目根）再搜 PATH：项目根放一个假 flow-kit.cmd
+// 就能静默熄灭全部门禁。因此不用裸名 spawn，改为显式沿 PATH 解析出绝对路径再调用；
+// FLOW_KIT_CLI 可显式指定；解析不到按「门禁没跑成」处理（error → 阻止），fail-closed。
+function resolveFlowKit() {
+  if (process.env.FLOW_KIT_CLI) return process.env.FLOW_KIT_CLI;
+  const exts = process.platform === 'win32' ? ['.cmd', '.bat', '.exe'] : [''];
+  const dirs = String(process.env.PATH || process.env.Path || '').split(path.delimiter).filter(Boolean);
+  for (const dir of dirs) {
+    for (const ext of exts) {
+      const p = path.join(dir, 'flow-kit' + ext);
+      if (fs.existsSync(p)) return p;
+    }
+  }
+  return null;
+}
+const FLOW_KIT_BIN = resolveFlowKit();
+
+// Windows 用整串命令（无 args 数组）：绝对路径绕开 cmd 的当前目录搜索，也不触发 DEP0190（shell+args）；
+// 子命令均为本文件固定字面量，无注入面。
+function spawnFlowKit(args, opts) {
+  return process.platform === 'win32'
+    ? spawnSync(`"${FLOW_KIT_BIN}" ${args.join(' ')}`, { shell: true, ...opts })
+    : spawnSync(FLOW_KIT_BIN, args, opts);
+}
+
 // Cline 工具名 → 仓库 hook 工具名（喂给 .agents/hooks/*.cjs 的 tool_name）
 const GATE_TOOL_ALIAS = {
   run_commands: 'bash',
@@ -189,12 +214,14 @@ function toRepoPayload(gateTool, input, cwd) {
 // 调用包内 hook，返回 { decision, reason, context }
 // decision: allow / ask / deny / error；error = 门禁没跑成或答案不可用，调用方按阻止处理
 function callRepoHook(hook, payload) {
-  const r = spawnSync('flow-kit', ['hook', hook], {
+  if (!FLOW_KIT_BIN) {
+    return { decision: 'error', reason: 'flow-kit CLI 未沿 PATH 解析到（可用 FLOW_KIT_CLI 指定绝对路径）。为避免静默绕过，本次调用已阻止。' };
+  }
+  const r = spawnFlowKit(['hook', hook], {
     input: JSON.stringify(payload),
     encoding: 'utf8',
     timeout: TIMEOUT_MS,
     cwd: ROOT,
-    shell: process.platform === 'win32',
   });
   if (r.error) {
     return { decision: 'error', reason: `仓库 hook 调用失败（${hook}）：${r.error.message}。为避免静默绕过，本次调用已阻止。` };

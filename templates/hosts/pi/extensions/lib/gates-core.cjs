@@ -11,6 +11,31 @@ const path = require('node:path');
 
 const TIMEOUT_MS = 30000;
 
+// Windows 的 cmd.exe 对裸名命令先搜当前目录（项目根）再搜 PATH：项目根放一个假 flow-kit.cmd
+// 就能静默熄灭全部门禁。因此不用裸名 spawn，改为显式沿 PATH 解析出绝对路径再调用；
+// FLOW_KIT_CLI 可显式指定；解析不到按门禁失败处理，fail-closed。
+function resolveFlowKit() {
+  if (process.env.FLOW_KIT_CLI) return process.env.FLOW_KIT_CLI;
+  const exts = process.platform === 'win32' ? ['.cmd', '.bat', '.exe'] : [''];
+  const dirs = String(process.env.PATH || process.env.Path || '').split(path.delimiter).filter(Boolean);
+  for (const dir of dirs) {
+    for (const ext of exts) {
+      const p = path.join(dir, 'flow-kit' + ext);
+      if (fs.existsSync(p)) return p;
+    }
+  }
+  return null;
+}
+const FLOW_KIT_BIN = resolveFlowKit();
+
+// Windows 用整串命令（无 args 数组）：绝对路径绕开 cmd 的当前目录搜索，也不触发 DEP0190（shell+args）；
+// 子命令均为本文件固定字面量，无注入面。
+function spawnFlowKit(args, opts) {
+  return process.platform === 'win32'
+    ? spawnSync(`"${FLOW_KIT_BIN}" ${args.join(' ')}`, { shell: true, ...opts })
+    : spawnSync(FLOW_KIT_BIN, args, opts);
+}
+
 // 代码执行类工具的门禁视图：pre-shell-check.cjs:49 只认 bash/shell 家族工具名，
 // 故在适配层把新工具规范化为 bash 并交出其命令文本；判据仍单源在 .agents/hooks/。
 const GATE_TOOL_ALIAS = { ctx_execute: 'bash', ctx_batch: 'bash' };
@@ -77,13 +102,15 @@ function parseGateOutput(stdout) {
 
 function runGate(scriptName, payload, cwd) {
   const hook = scriptName.replace(/\.(cjs|mjs)$/, '');
-  const r = spawnSync('flow-kit', ['hook', hook], {
+  if (!FLOW_KIT_BIN) {
+    return { failed: true, failure: 'flow-kit CLI 未沿 PATH 解析到（可用 FLOW_KIT_CLI 指定绝对路径）', status: null, output: null };
+  }
+  const r = spawnFlowKit(['hook', hook], {
     cwd,
     input: JSON.stringify(payload),
     encoding: 'utf8',
     timeout: TIMEOUT_MS,
     windowsHide: true,
-    shell: process.platform === 'win32',
   });
   return {
     failed: Boolean(r.error) || r.status !== 0,
@@ -126,11 +153,9 @@ function isPiWriteCommand(command) {
 
 function checkWiring(cwd) {
   const missing = REQUIRED_FILES.filter((f) => !fs.existsSync(path.join(cwd, f)));
-  const cli = spawnSync('flow-kit', ['--version'], {
-    encoding: 'utf8',
-    windowsHide: true,
-    shell: process.platform === 'win32',
-  });
+  const cli = FLOW_KIT_BIN
+    ? spawnFlowKit(['--version'], { encoding: 'utf8', windowsHide: true, timeout: TIMEOUT_MS })
+    : { error: new Error('flow-kit CLI 未沿 PATH 解析到') };
   if (cli.error || cli.status !== 0) missing.push('flow-kit CLI');
   return { ok: missing.length === 0, missing };
 }

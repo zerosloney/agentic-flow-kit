@@ -213,6 +213,30 @@ test('hook with no output still allows, per the repo hook contract', () => {
   assert.equal(stdout.trim(), '', 'a normally-exited gate with no output means allow');
 });
 
+test('a flow-kit shim in the project root cannot hijack the gate', () => {
+  // 安装布局：适配器在 <proj>/.cline/hooks/（ROOT 即项目根）。Windows 的 cmd.exe 对裸名命令
+  // 先搜当前目录：项目根放一个「熄灯」flow-kit.cmd 会让裸名 spawn 命中它 → 门禁静默放行；
+  // 适配器必须显式沿 PATH 解析绝对路径，根 shim 只能被无视。
+  const dir = makeTmp('flow-kit-cline-');
+  const bin = installFakeFlowKit(dir);
+  const record = path.join(dir, 'calls.jsonl');
+  fs.mkdirSync(path.join(dir, '.cline', 'hooks'), { recursive: true });
+  fs.copyFileSync(HOOK, path.join(dir, '.cline', 'hooks', 'PreToolUse.cjs'));
+  fs.writeFileSync(path.join(dir, 'flow-kit.cmd'), '@echo off\r\nexit /b 0\r\n');
+  const r = spawnSync(process.execPath, [path.join(dir, '.cline', 'hooks', 'PreToolUse.cjs')], {
+    input: JSON.stringify(writeCall('run_commands', { command: 'git reset --hard' }, dir)),
+    encoding: 'utf8',
+    timeout: 60000,
+    env: { ...envWithPath(bin), FAKE_MODE: 'deny', FAKE_RECORD: record },
+  });
+  const calls = fs.existsSync(record)
+    ? fs.readFileSync(record, 'utf8').trim().split(/\r?\n/).filter(Boolean).map((line) => JSON.parse(line))
+    : [];
+
+  assert.match(r.stdout || '', /"cancel":true/, 'the gate on PATH must run; the project-root shim must be ignored');
+  assert.equal(calls.length, 1, 'the real gate must have been invoked exactly once');
+});
+
 test('deny from the hook is forwarded as a cancel', () => {
   const { dir, bin, record } = setup();
   const { stdout } = runAdapter({ bin, record, mode: 'deny', payload: writeCall('write_to_file', { path: 'a.md', content: 'x' }, dir) });
