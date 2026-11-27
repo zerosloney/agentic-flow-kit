@@ -11,7 +11,7 @@
 import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
-import { RUNTIME_SCRIPTS } from '../commands/runtime.mjs';
+import { RUNTIME_SCRIPTS } from './runtime-paths.mjs';
 import { sha256Text } from './manifest.mjs';
 import { writeBaseline } from './baseline.mjs';
 
