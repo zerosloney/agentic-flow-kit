@@ -85,7 +85,14 @@ function main() {
     process.exit(0);
   }
 
-  const shardFiles = fs.readdirSync(shardDir).filter((f) => f.endsWith('.jsonl')).sort();
+  const entries = fs.readdirSync(shardDir);
+  // .claiming- 是上次认领未收尾的残留（进程中断/改回原名失败）：内容可能是唯一副本，
+  // 既不能当分片归并也不能删——跳过并告警，交人工核对后改回 .jsonl 重跑（按行去重，重跑安全）。
+  const claimingResidue = entries.filter((f) => f.includes('.claiming-'));
+  if (claimingResidue.length) {
+    console.warn(`[compact-ledgers] ⚠ 跳过 ${claimingResidue.length} 个 .claiming- 残留（上次归并中断/改回失败，内容可能是唯一副本）：${claimingResidue.join('、')}；请人工核对后改回 .jsonl 重跑。`);
+  }
+  const shardFiles = entries.filter((f) => f.endsWith('.jsonl') && !f.includes('.claiming-')).sort();
   if (shardFiles.length === 0) {
     console.log('[compact-ledgers] 分片目录无 .jsonl 文件，无需打包。');
     process.exit(0);
@@ -134,26 +141,45 @@ function main() {
   }
 
   // 删除只作用于可归并片；保留片原样留在 .agents/confirmations.d/
-  // 删除前复核分片内容与快照逐字节一致：快照（:97-106）与删除之间的并发追加不能随片销毁，
-  // 内容已变即保留待下轮（合并按行去重，重跑安全）。复核/删除失败一律出账并非零退出。
+  // 「复核后再删」仍有并发窗口（已实证：复核读与 unlink 之间按旧路径追加的行会随片销毁且 exit 0）：
+  // 改为 rename 原子认领 → 读认领文件与快照逐字节比对 → 一致才删。认领后旧路径已不存在，按路径
+  // 追加者只会新建分片文件（下轮扫描自然归并），持旧 fd 的写入则落到已改名 inode——被下方比对捕获后
+  // 改回原名保留，绝不随片销毁。认领/读取/删除任一失败一律出账并非零退出。
   const uncleared = [];
   for (const s of plan.mergedShards) {
     const abs = path.join(shardDir, s.file);
+    const claimed = `${abs}.claiming-${process.pid}-${Date.now()}`;
+    // 认领名不在扫描清单内，滞留即从归并视野消失（数据仍在、但需人工介入）：能改回原名就改回
+    const reclaim = (reason) => {
+      let why = reason;
+      try {
+        fs.renameSync(claimed, abs);
+      } catch (err) {
+        why += `；改回原名失败（${err.message}），滞留为 ${path.basename(claimed)}，下轮扫描将跳过 .claiming- 残留`;
+      }
+      uncleared.push(`${s.file}（${why}）`);
+    };
+    try {
+      fs.renameSync(abs, claimed);
+    } catch (err) {
+      uncleared.push(`${s.file}（认领失败：${err.message}）`);
+      continue;
+    }
     let current;
     try {
-      current = fs.readFileSync(abs, 'utf8');
+      current = fs.readFileSync(claimed, 'utf8');
     } catch (err) {
-      uncleared.push(`${s.file}（复核读取失败：${err.message}）`);
+      reclaim(`复核读取失败：${err.message}`);
       continue;
     }
     if (current !== shardTexts.get(s.file)) {
-      uncleared.push(`${s.file}（归并期间内容有追加，已保留）`);
+      reclaim('归并期间内容有追加，已保留');
       continue;
     }
     try {
-      fs.unlinkSync(abs);
+      fs.unlinkSync(claimed);
     } catch (err) {
-      uncleared.push(`${s.file}（删除失败：${err.message}）`);
+      reclaim(`删除失败：${err.message}`);
     }
   }
 

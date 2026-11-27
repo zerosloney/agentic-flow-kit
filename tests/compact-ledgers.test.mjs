@@ -243,10 +243,36 @@ if (mode === 'append') {
     }
     return r;
   };
+} else if (mode === 'append-after-claim') {
+  // 认领 rename 生效后、比对读之前：尾巴写进已认领 inode（POSIX 持旧 fd 追加的等价模拟）
+  const realRename = fs.renameSync.bind(fs);
+  let injected = false;
+  fs.renameSync = (from, to) => {
+    const r = realRename(from, to);
+    if (!injected && String(to).includes('.claiming-')) {
+      injected = true;
+      fs.appendFileSync(to, process.env.COMPACT_TEST_ROW + '\\n');
+    }
+    return r;
+  };
+} else if (mode === 'append-at-unlink') {
+  // 比对通过后、unlink 之前：写者落盘到认领 inode，并让删除失败（Windows 占用语义）；
+  // 记录 unlink 目标供断言认领名已生效（旧实现直删原路径，本用例必红）
+  const realUnlink = fs.unlinkSync.bind(fs);
+  let injected = false;
+  fs.unlinkSync = (p) => {
+    if (!injected) {
+      injected = true;
+      fs.writeFileSync(process.env.COMPACT_TEST_UNLINK_PATH, String(p));
+      fs.appendFileSync(p, process.env.COMPACT_TEST_ROW + '\\n');
+      throw Object.assign(new Error('EACCES: simulated unlink failure'), { code: 'EACCES' });
+    }
+    return realUnlink(p);
+  };
 } else if (mode === 'unlink-fail') {
   const realUnlink = fs.unlinkSync.bind(fs);
   fs.unlinkSync = (p) => {
-    if (String(p).endsWith('.jsonl')) throw Object.assign(new Error('EACCES: simulated unlink failure'), { code: 'EACCES' });
+    if (String(p).includes('.jsonl')) throw Object.assign(new Error('EACCES: simulated unlink failure'), { code: 'EACCES' });
     return realUnlink(p);
   };
 }
@@ -292,5 +318,40 @@ test('集成：分片删除失败时出账并非零退出，分片与已归并�
   assert.match(r.stderr, /x\.jsonl/);
   assert.ok(fs.existsSync(shard), '删除失败时分片保持原样');
   assert.ok(fs.existsSync(mainPath) && fs.readFileSync(mainPath, 'utf8').includes(shardRow), '主台账已归并行不受影响');
+});
+
+// ---- 认领制：断言原有两条语义不变，另锁认领窗口内的两个追加时机 ----
+test('集成：认领期间内容有追加（认领前已写尾巴）→ 分片改回原名保留，uncleared 出账并退出 1', () => {
+  const { dir, shard, mainPath, shardRow } = shardFixture();
+  const appended = mkRow(T(3), 's2');
+  const r = runWithHook(dir, 'append-after-claim', { COMPACT_TEST_ROW: appended });
+  assert.notEqual(r.status, 0, `认领期追加应非零退出: ${r.stdout}\n${r.stderr}`);
+  assert.ok(fs.existsSync(shard), '认领文件必须改回原名保留，不能被删除');
+  assert.ok(!fs.readdirSync(path.dirname(shard)).some((f) => f.includes('.claiming-')), '改回成功后不得留 .claiming- 残留');
+  const shardText = fs.readFileSync(shard, 'utf8');
+  assert.ok(shardText.includes(shardRow) && shardText.includes(appended), '快照行与认领期追加行都须保留');
+  assert.ok(fs.readFileSync(mainPath, 'utf8').includes(shardRow), '快照内的分片行仍应已归并进主台账');
+  assert.match(r.stderr, /未清理/);
+  assert.match(r.stderr, /归并期间内容有追加，已保留/);
+  assert.match(r.stderr, /x\.jsonl/);
+});
+
+test('集成：认领后 unlink 前的追加不随片销毁（删除失败 → 认领文件改回），uncleared 出账并退出 1', () => {
+  const { dir, shard, mainPath, shardRow } = shardFixture();
+  const appended = mkRow(T(3), 's2');
+  const unlinkTarget = path.join(dir, 'unlink-target.txt');
+  const r = runWithHook(dir, 'append-at-unlink', { COMPACT_TEST_ROW: appended, COMPACT_TEST_UNLINK_PATH: unlinkTarget });
+  assert.notEqual(r.status, 0, `unlink 前追加应非零退出: ${r.stdout}\n${r.stderr}`);
+  // 删除目标必须是 .claiming- 认领名：rename 认领已生效；旧实现直删原路径，无法通过本断言
+  assert.match(fs.readFileSync(unlinkTarget, 'utf8'), /\.jsonl\.claiming-\d+-\d+$/, 'unlink 目标应为认领文件');
+  assert.ok(fs.existsSync(shard), '删除失败后认领文件改回原名，分片保留');
+  const shardText = fs.readFileSync(shard, 'utf8');
+  assert.ok(shardText.includes(appended), 'unlink 前追加的行必须仍在分片中，不能被删');
+  assert.ok(shardText.includes(shardRow), '快照行随认领文件一并保留');
+  assert.ok(fs.readFileSync(mainPath, 'utf8').includes(shardRow), '快照内的分片行仍应已归并进主台账');
+  assert.ok(!fs.readdirSync(path.dirname(shard)).some((f) => f.includes('.claiming-')), '改回成功后不得留 .claiming- 残留');
+  assert.match(r.stderr, /未清理/);
+  assert.match(r.stderr, /删除失败/);
+  assert.match(r.stderr, /x\.jsonl/);
 });
 
