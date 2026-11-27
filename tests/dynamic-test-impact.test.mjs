@@ -48,6 +48,32 @@ test('dynamic-test-impact: 未跟踪的新文件算进变更集合', () => {
   assert.ok(gitFiles.files.includes('src-new.mjs'), JSON.stringify(gitFiles));
 });
 
+// Linux/macOS 默认 core.quotepath=true：未跟踪的非 ASCII 路径被引号转义后按拼写比对不中，
+// 会误判「变更文件不涉及源码与测试」而选零个测试；untracked 扫描必须显式关掉转义。
+test('dynamic-test-impact: quotepath 转义开启时未跟踪的非 ASCII 路径仍算进变更集合', () => {
+  const root = makeTmp('tia-quotepath-');
+  spawnSync('git', ['init', '-q'], { cwd: root });
+  assert.equal(spawnSync('git', ['config', 'core.quotepath', 'true'], { cwd: root }).status, 0);
+  fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'README.md'), 'base\n');
+  for (const args of [
+    ['config', 'user.email', 'test@example.com'],
+    ['config', 'user.name', 'tester'],
+    ['add', 'README.md'],
+    ['commit', '-q', '-m', 'base'],
+  ]) {
+    const r = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+  }
+  fs.writeFileSync(path.join(root, 'src', '新模块.mjs'), 'export const n = 1;\n');
+  const gitFiles = changedFilesFromGit(null, root);
+  assert.equal(gitFiles.error, null);
+  assert.ok(
+    gitFiles.files.some((f) => f === 'src/新模块.mjs'),
+    `非 ASCII 路径必须以未转义拼写出现：${JSON.stringify(gitFiles.files)}`,
+  );
+});
+
 test('assembleWorkOrderContext 把动态选测写进工单而不是吞掉 ReferenceError', () => {
   const root = makeTmp('tia-wo-');
   fs.mkdirSync(path.join(root, 'src'), { recursive: true });

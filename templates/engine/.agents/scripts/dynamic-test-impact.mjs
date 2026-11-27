@@ -800,7 +800,9 @@ export function changedFilesFromGit(range = null, root = ROOT) {
     .filter(Boolean);
 
   // git diff HEAD 不列出未跟踪文件。新建且尚未 git add 的源码也是这次改动。
-  const untracked = spawnSync('git', ['ls-files', '--others', '--exclude-standard'], {
+  // core.quotepath=off 必须显式关：Linux/macOS 默认 true 会把非 ASCII 文件名引号转义成
+  // `"src/\346\226\260…"`，按拼写比对即漏判「不涉及源码与测试」（同函数上方 git diff 一致）。
+  const untracked = spawnSync('git', ['-c', 'core.quotepath=off', 'ls-files', '--others', '--exclude-standard'], {
     cwd: root,
     encoding: 'utf8',
     shell: false,
