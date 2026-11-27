@@ -16,6 +16,7 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { t } from './lang.mjs';
 
 // ---------------------------------------------------------------------
 // 1. 常量与错误状态定义
@@ -25,6 +26,7 @@ export const DRIVER_STATUS = {
   SUCCESS: 'success',
   FAILED: 'failed',
   EXCEEDED_STEP_BUDGET: 'exceeded_step_budget',
+  EXCEEDED_TOKEN_BUDGET: 'exceeded_token_budget',
   TIMEOUT: 'timeout',
   CIRCUIT_BREAKER_TRIGGERED: 'circuit_breaker_triggered',
   STALL_DETECTED: 'stall_detected',
@@ -36,6 +38,7 @@ export const DEFAULT_BUDGET_CONFIG = {
   maxWallClockMs: 60000,
   maxConsecutiveFailures: 3,
   stallWindowSize: 3,
+  maxTokens: 0,
 };
 
 function cleanSubprocessEnv(extra = {}) {
@@ -96,6 +99,7 @@ export function createDriverAdapter(options = {}) {
           stdout,
           stderr,
           durationMs,
+          tokens: Number(mockRes.tokens) || Number(mockRes.totalTokens) || 0,
           parsedEvents: parseDriverEvents(stdout, stderr),
         };
       }
@@ -116,12 +120,18 @@ export function createDriverAdapter(options = {}) {
         const durationMs = Date.now() - startTime;
         const stdout = res.stdout || '';
         const stderr = res.stderr || '';
+        let tokens = 0;
+        const tokenMatch = stdout.match(/\[tokens?:(\d+)\]/i);
+        if (tokenMatch) {
+          tokens = parseInt(tokenMatch[1], 10);
+        }
 
         return {
           status: res.status ?? (res.error ? 1 : 0),
           stdout,
           stderr,
           durationMs,
+          tokens,
           error: res.error,
           parsedEvents: parseDriverEvents(stdout, stderr),
         };
@@ -179,8 +189,10 @@ export class StepBudgetGuard {
     this.maxSteps = Number(config.maxSteps) || DEFAULT_BUDGET_CONFIG.maxSteps;
     this.maxWallClockMs = Number(config.maxWallClockMs) || DEFAULT_BUDGET_CONFIG.maxWallClockMs;
     this.maxConsecutiveFailures = Number(config.maxConsecutiveFailures) || DEFAULT_BUDGET_CONFIG.maxConsecutiveFailures;
+    this.maxTokens = Number(config.maxTokens) > 0 ? Number(config.maxTokens) : 0;
 
     this.stepsExecuted = 0;
+    this.tokensConsumed = 0;
     this.consecutiveFailures = 0;
     this.startTime = Date.now();
     this.history = [];
@@ -193,6 +205,8 @@ export class StepBudgetGuard {
    */
   recordStep(stepRecord = {}) {
     this.stepsExecuted += 1;
+    const stepTokens = Number(stepRecord.tokens) || Number(stepRecord.totalTokens) || 0;
+    this.tokensConsumed += stepTokens;
     const now = Date.now();
     const elapsedMs = now - this.startTime;
 
@@ -207,6 +221,8 @@ export class StepBudgetGuard {
       step: this.stepsExecuted,
       isSuccess,
       elapsedMs,
+      tokens: stepTokens,
+      totalTokens: this.tokensConsumed,
       ...stepRecord,
     });
 
@@ -234,6 +250,15 @@ export class StepBudgetGuard {
         halted: true,
         status: DRIVER_STATUS.CIRCUIT_BREAKER_TRIGGERED,
         reason: `触发连续失败熔断（连续 ${this.consecutiveFailures} 步失败，上限 ${this.maxConsecutiveFailures}）`,
+      };
+    }
+
+    // 4. Token 硬预算限制熔断
+    if (this.maxTokens > 0 && this.tokensConsumed > this.maxTokens) {
+      return {
+        halted: true,
+        status: DRIVER_STATUS.EXCEEDED_TOKEN_BUDGET,
+        reason: `超过最大 Token 预算限制（当前已消耗 ${this.tokensConsumed} tokens，上限 ${this.maxTokens} tokens）`,
       };
     }
 
@@ -520,6 +545,7 @@ export function runShadowExecution(options = {}) {
         status: execResult.status,
         durationMs: execResult.durationMs,
         events: execResult.parsedEvents,
+        tokens: execResult.tokens || execResult.totalTokens || 0,
       });
 
       stepHistory.push({
@@ -528,6 +554,7 @@ export function runShadowExecution(options = {}) {
         durationMs: execResult.durationMs,
         status: execResult.status,
         events: execResult.parsedEvents,
+        tokens: execResult.tokens || execResult.totalTokens || 0,
       });
 
       if (budgetCheck.halted) {
@@ -553,10 +580,12 @@ export function runShadowExecution(options = {}) {
       stagesCompleted: stages.slice(0, currentStageIndex),
       remainingStages: stages.slice(currentStageIndex),
       totalSteps: budget.stepsExecuted,
+      totalTokens: budget.tokensConsumed,
       totalDurationMs,
       fileChanges: fileDiff,
       stepHistory,
       shadowDir: options.dryRun ? null : shadowDir,
+      task: options.task || null,
     };
 
     return report;
@@ -576,7 +605,9 @@ export function parseArgs(args = []) {
     command: 'help',
     maxSteps: 10,
     maxWallClockMs: 60000,
+    maxTokens: 0,
     dryRun: true,
+    task: '',
     stages: ['plan', 'implement', 'verify'],
     raw: args,
   };
@@ -589,8 +620,12 @@ export function parseArgs(args = []) {
       result.maxSteps = Number(args[++i]) || 10;
     } else if (arg === '--timeout-ms' && args[i + 1]) {
       result.maxWallClockMs = Number(args[++i]) || 60000;
+    } else if (arg === '--max-tokens' && args[i + 1]) {
+      result.maxTokens = Number(args[++i]) || 0;
     } else if (arg === '--keep') {
       result.dryRun = false;
+    } else if (arg === '--task' && args[i + 1]) {
+      result.task = args[++i];
     }
   }
 
@@ -602,15 +637,32 @@ export function main() {
   const root = process.cwd();
 
   if (args.command === 'help') {
-    console.log('用法: node headless-driver.mjs <command> [options]');
-    console.log('');
-    console.log('命令:');
-    console.log('  shadow    启动隔离影子试跑并全景复盘');
-    console.log('');
-    console.log('选项:');
-    console.log('  --max-steps <n>     最大步数预算（默认 10）');
-    console.log('  --timeout-ms <ms>   总超时时间（默认 60000ms）');
-    console.log('  --keep              保留影子工作区（默认自动清理）');
+    console.log(t(
+      [
+        '用法: node headless-driver.mjs <command> [options]',
+        '',
+        '命令:',
+        '  shadow    启动隔离影子试跑并全景复盘',
+        '',
+        '选项:',
+        '  --max-steps <n>     最大步数预算（默认 10）',
+        '  --timeout-ms <ms>   总超时时间（默认 60000ms）',
+        '  --max-tokens <n>    最大 Token 消耗预算（默认 0 不限制）',
+        '  --keep              保留影子工作区（默认自动清理）',
+      ].join('\n'),
+      [
+        'Usage: node headless-driver.mjs <command> [options]',
+        '',
+        'Commands:',
+        '  shadow    Run an isolated shadow trial and print the report',
+        '',
+        'Options:',
+        '  --max-steps <n>     Step budget (default 10)',
+        '  --timeout-ms <ms>   Wall-clock budget in milliseconds (default 60000)',
+        '  --max-tokens <n>    Token budget (default 0, unlimited)',
+        '  --keep              Keep the shadow workspace (cleaned up by default)',
+      ].join('\n'),
+    ));
     process.exit(0);
   }
 
@@ -620,8 +672,12 @@ export function main() {
       budgetConfig: {
         maxSteps: args.maxSteps,
         maxWallClockMs: args.maxWallClockMs,
+        maxTokens: args.maxTokens,
       },
       dryRun: args.dryRun,
+      // --keep 把 dryRun 设为 false。默认 autoCleanup 不是 false，finally 仍会删目录。
+      autoCleanup: args.dryRun,
+      task: args.task,
     });
     console.log(JSON.stringify(report, null, 2));
     process.exit(report.success ? 0 : 1);

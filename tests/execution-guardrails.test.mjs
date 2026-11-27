@@ -254,3 +254,27 @@ test('src/install/sandbox.mjs re-exports execution guardrails primitives', () =>
   assert.equal(sanitized.PATH, '/bin');
   assert.equal(sanitized.AWS_SECRET, undefined);
 });
+
+test('validateExecutionSafety catches secondary redirection escape and compound L1 command bypass', () => {
+  const workspaceRoot = 'E:/projects/my-app';
+
+  // 缺陷1：同一命令中第二处重定向逃逸工作区
+  const multiRedirect = validateExecutionSafety('echo ok > local.txt && echo pwn > ../../evil.txt', { root: workspaceRoot });
+  assert.equal(multiRedirect.safe, false);
+  assert.equal(multiRedirect.traversalDetected, true);
+  assert.equal(multiRedirect.level, 'L3');
+
+  // 缺陷2：复合命令不得因为前半段命中 npm test 就被误判为「Standard test, lint, or audit gate command」
+  const compound = validateExecutionSafety('npm test && rm -rf src');
+  assert.notEqual(compound.reason, 'Standard test, lint, or audit gate command');
+});
+
+test('safeExecFileWithGuardrails enforces exact maxBuffer cap', async () => {
+  const res = await safeExecFileWithGuardrails(
+    process.execPath,
+    ['-e', 'process.stdout.write("A".repeat(200))'],
+    { maxBuffer: 50 },
+  );
+  assert.equal(res.status, 0);
+  assert.equal(res.stdout.length, 50);
+});

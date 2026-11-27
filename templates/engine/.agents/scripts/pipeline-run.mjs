@@ -77,8 +77,20 @@ import {
   computeTestImpact,
 } from './dynamic-test-impact.mjs';
 import { commitmentFingerprint, readLedger } from './stage-gates.mjs';
+import {
+  loadPipelineConfig,
+  loadDispatchConfig,
+  loadModelRolesConfig,
+  estimateContextUnits,
+  pruneWorkOrderContext,
+} from './pipeline-config.mjs';
 
 export {
+  loadPipelineConfig,
+  loadDispatchConfig,
+  loadModelRolesConfig,
+  estimateContextUnits,
+  pruneWorkOrderContext,
   resolveReviewEndorsement,
   loadAllEndorsements,
   parsePlanSymbolRules,
@@ -126,40 +138,7 @@ function ctxEnv(overrideRoot) {
   };
 }
 
-// 阶段产物契约（R3-5）：可选配置，缺失/非法时退回空对象（不改变旧行为）。
-function loadPipelineConfig(root) {
-  try {
-    const cfg = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'config', 'pipeline.json'), 'utf8'));
-    return cfg && typeof cfg === 'object' ? cfg : {};
-  } catch { return {}; }
-}
-
-// 派发与预算配置（可选，缺失/非法时退回空对象）
-function loadDispatchConfig(root) {
-  try {
-    const cfg = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'config', 'dispatch.json'), 'utf8'));
-    return cfg && typeof cfg === 'object' ? cfg : {};
-  } catch { return {}; }
-}
-
-// 模型角色映射配置（可选，优先 .agents/config/model-roles.local.json，回退 model-roles.json）
-export function loadModelRolesConfig(root) {
-  try {
-    const localFile = path.join(root, '.agents', 'config', 'model-roles.local.json');
-    if (fs.existsSync(localFile)) {
-      const cfg = JSON.parse(fs.readFileSync(localFile, 'utf8'));
-      if (cfg && typeof cfg === 'object') return cfg;
-    }
-  } catch {}
-  try {
-    const defaultFile = path.join(root, '.agents', 'config', 'model-roles.json');
-    if (fs.existsSync(defaultFile)) {
-      const cfg = JSON.parse(fs.readFileSync(defaultFile, 'utf8'));
-      if (cfg && typeof cfg === 'object') return cfg;
-    }
-  } catch {}
-  return {};
-}
+// 配置加载已迁移至 pipeline-config.mjs（文件损坏 fail-closed 报错）
 
 // 模型角色与执行代理绑定解析（Wave 1 调度机制）
 export function resolveWorkOrderRole(ctx, order, run) {
@@ -545,101 +524,7 @@ function summarizeDoc(text) {
   return body.slice(0, 3).join(' / ').slice(0, 200);
 }
 
-// ── 工单上下文精简与 Token 预算（Option 2） ─────────────────────────────
-export function pruneWorkOrderContext(context, budgetChars = 1200) {
-  if (!context || typeof context !== 'object') {
-    return { budget: { originalChars: 0, prunedChars: 0, budgetChars, pruned: false, savingsPercent: 0 } };
-  }
-  const originalChars = JSON.stringify(context).length;
-  if (originalChars <= budgetChars) {
-    return {
-      ...context,
-      budget: { originalChars, prunedChars: originalChars, budgetChars, pruned: false, savingsPercent: 0 },
-    };
-  }
-
-  const prunedContext = { ...context };
-
-  // 1. 去重并保留前 4 条关联文档
-  if (Array.isArray(prunedContext.relatedDocs)) {
-    prunedContext.relatedDocs = [...new Set(prunedContext.relatedDocs)].slice(0, 4);
-  }
-
-  // 2. 智能裁剪 kbHits：至多保留前 3 条，单条超 120 字符截断
-  if (Array.isArray(prunedContext.kbHits)) {
-    prunedContext.kbHits = prunedContext.kbHits.slice(0, 3).map((h) => {
-      const s = String(h || '');
-      return s.length > 120 ? s.slice(0, 117) + '...' : s;
-    });
-  }
-
-  // 3. 智能折叠 stderrTail：首 3 行错误 + 尾 5 行退出，中间行折叠，总长不超过 400 字符
-  if (typeof prunedContext.stderrTail === 'string' && prunedContext.stderrTail) {
-    const lines = prunedContext.stderrTail.split(/\r?\n/).filter(Boolean);
-    if (lines.length > 8) {
-      const head = lines.slice(0, 3);
-      const tail = lines.slice(-5);
-      const skipped = lines.length - 8;
-      prunedContext.stderrTail = [...head, `... [跳过 ${skipped} 行堆栈/输出] ...`, ...tail].join('\n');
-    }
-    if (prunedContext.stderrTail.length > 400) {
-      prunedContext.stderrTail = prunedContext.stderrTail.slice(0, 397) + '...';
-    }
-  }
-
-  // 4. 智能裁剪交接单（Handoff Sheet）
-  if (prunedContext.handoff && typeof prunedContext.handoff === 'object') {
-    const h = { ...prunedContext.handoff };
-    if (Array.isArray(h.touchSetAllowed) && h.touchSetAllowed.length > 10) {
-      h.touchSetAllowed = h.touchSetAllowed.slice(0, 10);
-    }
-    if (Array.isArray(h.touchSetForbidden) && h.touchSetForbidden.length > 10) {
-      h.touchSetForbidden = h.touchSetForbidden.slice(0, 10);
-    }
-    if (typeof h.notes === 'string' && h.notes.length > 200) {
-      h.notes = h.notes.slice(0, 197) + '...';
-    }
-    prunedContext.handoff = h;
-  }
-
-  // 5. 智能裁剪角色上下文切片（Slices）
-  if (prunedContext.slices && typeof prunedContext.slices === 'object') {
-    const sl = { ...prunedContext.slices };
-    if (typeof sl.planSlice === 'string' && sl.planSlice.length > 400) {
-      sl.planSlice = sl.planSlice.slice(0, 397) + '...';
-    }
-    if (typeof sl.acceptanceCriteria === 'string' && sl.acceptanceCriteria.length > 400) {
-      sl.acceptanceCriteria = sl.acceptanceCriteria.slice(0, 397) + '...';
-    }
-    if (typeof sl.changePlan === 'string' && sl.changePlan.length > 400) {
-      sl.changePlan = sl.changePlan.slice(0, 397) + '...';
-    }
-    if (Array.isArray(sl.allowedFiles) && sl.allowedFiles.length > 10) {
-      sl.allowedFiles = sl.allowedFiles.slice(0, 10);
-    }
-    if (Array.isArray(sl.prescriptions)) {
-      sl.prescriptions = sl.prescriptions.slice(0, 5).map((p) => {
-        const s = String(p || '');
-        return s.length > 120 ? s.slice(0, 117) + '...' : s;
-      });
-    }
-    prunedContext.slices = sl;
-  }
-
-  const prunedChars = JSON.stringify(prunedContext).length;
-  const pruned = prunedChars < originalChars;
-  const savingsPercent = originalChars > 0 ? Math.max(0, Math.round(((originalChars - prunedChars) / originalChars) * 100)) : 0;
-
-  prunedContext.budget = {
-    originalChars,
-    prunedChars,
-    budgetChars,
-    pruned,
-    savingsPercent,
-  };
-
-  return prunedContext;
-}
+// 工单上下文精简与预算校准已迁移至 pipeline-config.mjs
 
 // ── 动态上下文装配器（Context Assembler） ─────────────────────────────
 export function extractDocSection(content, sectionHeading) {
@@ -747,7 +632,7 @@ export function assembleWorkOrderContext(ctx, run, order) {
   // 注入动态测试影响建议 (Dynamic Test Impact Slices)
   if (targetFiles.length > 0) {
     try {
-      const impactDecision = selectDynamicTestImpact(ROOT, targetFiles, { fallbackOnUntested: false });
+      const impactDecision = selectDynamicTestImpact(ctx.root, targetFiles, { fallbackOnUntested: false });
       if (impactDecision && impactDecision.impactedTests?.length > 0) {
         slices.dynamicTestImpact = {
           mode: impactDecision.mode,

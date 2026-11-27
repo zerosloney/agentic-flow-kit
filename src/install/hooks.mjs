@@ -208,6 +208,47 @@ function managedScript(hook, scripts, refs = null) {
   return null;
 }
 
+// 托管命令的稳定形状。规格删掉某条之后，旧的 flow-kit hook <id> 仍要能被认出来。
+function flowKitHookId(hook) {
+  const text = hookRefs(hook).replace(/\s+/g, ' ');
+  const match = text.match(/(?:^| )flow-kit hook ([A-Za-z0-9._-]+)(?: |$)/);
+  return match ? match[1] : null;
+}
+
+function stripStaleManagedHooks(events, spec, cfg) {
+  const scripts = new Set((spec || []).map((item) => item.script));
+  const refs = managedRefs(spec || [], cfg);
+  const hooksKey = cfg.hooksKey || 'hooks';
+  let changed = false;
+  for (const [event, list] of Object.entries(events)) {
+    if (!Array.isArray(list) || list.length === 0) continue;
+    const keptGroups = [];
+    for (const group of list) {
+      if (!isObject(group) || !Array.isArray(group[hooksKey])) {
+        keptGroups.push(group);
+        continue;
+      }
+      const hooks = group[hooksKey].filter((hook) => {
+        const id = flowKitHookId(hook);
+        if (!id) return true;
+        if (managedScript(hook, scripts, refs)) return true;
+        changed = true;
+        return false;
+      });
+      if (hooks.length) keptGroups.push(hooks.length === group[hooksKey].length ? group : { ...group, [hooksKey]: hooks });
+      else changed = true;
+    }
+    if (!keptGroups.length) {
+      delete events[event];
+      changed = true;
+    } else if (JSON.stringify(events[event]) !== JSON.stringify(keptGroups)) {
+      events[event] = keptGroups;
+      changed = true;
+    }
+  }
+  return changed;
+}
+
 function eventsOwner(root, cfg, create) {
   const segments = String(cfg?.container || 'hooks').split('.');
   let node = root;
@@ -230,7 +271,12 @@ function eventsOwner(root, cfg, create) {
 
 // 只替换指向托管脚本的 hook 条目；用户自建 hook、其它事件、其它顶层键原样保留。
 export function mergeHooksIntoRoot(root, spec, cfg) {
-  if (!isObject(root) || !Array.isArray(spec) || !spec.length) return false;
+  if (!isObject(root) || !Array.isArray(spec)) return false;
+  if (!spec.length) {
+    const owner = eventsOwner(root, cfg, false);
+    if (!owner) return false;
+    return stripStaleManagedHooks(owner, spec, cfg);
+  }
   const groups = compileHookGroups(spec, cfg);
   if (!groups.length) return false;
   const scripts = new Set(spec.map((item) => item.script));
@@ -261,6 +307,8 @@ export function mergeHooksIntoRoot(root, spec, cfg) {
     if (JSON.stringify(next) !== JSON.stringify(list)) changed = true;
     events[event] = next;
   }
+  const owner = eventsOwner(root, cfg, false);
+  if (owner) changed = stripStaleManagedHooks(owner, spec, cfg) || changed;
   return changed;
 }
 
@@ -329,6 +377,10 @@ export function findHookDrift(root, spec, cfg) {
         for (const hook of group[cfg.hooksKey || 'hooks']) {
           const script = managedScript(hook, scripts, refs);
           if (script) actual.add(`${event}|${matcher}|${script}`);
+          else {
+            const id = flowKitHookId(hook);
+            if (id) actual.add(`${event}|${matcher}|flow-kit hook ${id}`);
+          }
         }
       }
     }

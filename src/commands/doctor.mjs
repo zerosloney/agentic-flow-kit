@@ -512,7 +512,8 @@ export function doctorCommand({ args, t }) {
 
   runGate('architecture-redlines', '.agents/hooks/architecture-redlines.json', (d) => shape(d, () => {
     const known = ['forbidden', 'noNavigationProperties', 'catchRequires'];
-    const unknown = Object.keys(d).filter((k) => !known.includes(k));
+    const unknown = Object.keys(d).filter((k) => k !== '_note' && !known.includes(k));
+    if (d._note !== undefined && typeof d._note !== 'string') return { state: 'error', error: t('doctor.gateUnknownKeys', { keys: '_note' }) };
     if (unknown.length) return { state: 'error', error: t('doctor.gateUnknownKeys', { keys: unknown.join(', ') }) };
     const bad = known.find((k) => d[k] !== undefined && !Array.isArray(d[k]));
     if (bad) return { state: 'error', error: t('doctor.gateArrayField', { field: bad }) };
@@ -520,7 +521,8 @@ export function doctorCommand({ args, t }) {
   }));
 
   runGate('delete-guard', '.agents/hooks/delete-guard.json', (d) => shape(d, () => {
-    const unknown = Object.keys(d).filter((k) => k !== 'scan');
+    const unknown = Object.keys(d).filter((k) => k !== 'scan' && k !== '_note');
+    if (d._note !== undefined && typeof d._note !== 'string') return { state: 'error', error: t('doctor.gateUnknownKeys', { keys: '_note' }) };
     if (unknown.length) return { state: 'error', error: t('doctor.gateUnknownKeys', { keys: unknown.join(', ') }) };
     if (!Array.isArray(d.scan)) return { state: 'error', error: t('doctor.gateArrayField', { field: 'scan' }) };
     return d.scan.length ? {} : { state: 'error', error: t('doctor.gateEmptyField', { field: 'scan' }) };
@@ -528,7 +530,8 @@ export function doctorCommand({ args, t }) {
 
   runGate('audit-fields', '.agents/hooks/audit-fields.json', (d) => shape(d, () => {
     const known = ['fields', 'ext', 'allowFiles', 'allowLines'];
-    const unknown = Object.keys(d).filter((k) => !known.includes(k));
+    const unknown = Object.keys(d).filter((k) => k !== '_note' && !known.includes(k));
+    if (d._note !== undefined && typeof d._note !== 'string') return { state: 'error', error: t('doctor.gateUnknownKeys', { keys: '_note' }) };
     if (unknown.length) return { state: 'error', error: t('doctor.gateUnknownKeys', { keys: unknown.join(', ') }) };
     if (!Array.isArray(d.fields)) return { state: 'error', error: t('doctor.gateArrayField', { field: 'fields' }) };
     return d.fields.length ? {} : { state: 'error', error: t('doctor.gateEmptyField', { field: 'fields' }) };

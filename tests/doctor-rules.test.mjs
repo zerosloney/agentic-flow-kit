@@ -81,6 +81,18 @@ test('fresh dotnet install: rules row names legacy + stack layer, gate coverage 
   assert.match(row(en, 'gate coverage').detail, /^gate families:/);
 });
 
+test('doctor accepts _note on architecture-redlines', () => {
+  const dir = tmpRepo();
+  install(dir);
+  fs.mkdirSync(path.join(dir, '.agents', 'hooks'), { recursive: true });
+  fs.writeFileSync(path.join(dir, '.agents', 'hooks', 'architecture-redlines.json'), '{ "_note": "注释" }\n');
+  const doc = doctor(dir);
+  const gate = row(doc, 'gate architecture-redlines');
+  assert.ok(gate, 'architecture-redlines row must exist');
+  assert.equal(gate.ok, true);
+  assert.doesNotMatch(gate.detail, /_note/);
+});
+
 test('project layer arch. rule counts as configured architecture gate and increments enabled block count', () => {
   const dir = tmpRepo();
   install(dir);

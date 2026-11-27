@@ -278,7 +278,9 @@ export function verifyBundle(bundleHandle, t = null) {
     }
 
     const digest = sha256(canonical({ files: fileHashes }));
-    if (manifest.digest && manifest.digest !== digest) {
+    if (typeof manifest.digest !== 'string' || manifest.digest.length === 0) {
+      corruptions.push('missing bundle digest in bundle-manifest.json');
+    } else if (manifest.digest !== digest) {
       corruptions.push(`digest mismatch: expected ${manifest.digest}, computed ${digest}`);
     }
 
@@ -303,6 +305,10 @@ export function verifyBundle(bundleHandle, t = null) {
   for (const [rel, entry] of Object.entries(bundle.files || {})) {
     if (isUnsafeBundleRel(rel)) {
       corruptions.push(`${rel} (unsafe path)`);
+    }
+    if (!entry || typeof entry !== 'object' || typeof entry.content !== 'string') {
+      corruptions.push(`${rel} (invalid entry content)`);
+      continue;
     }
     let buf;
     if (entry.encoding === 'base64') {

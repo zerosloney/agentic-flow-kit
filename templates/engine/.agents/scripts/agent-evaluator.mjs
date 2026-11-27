@@ -20,6 +20,7 @@ import { extractSymbols, diffSymbols } from './semantic-sandbox.mjs';
 import { buildEndorsementToken, validateEndorsementToken, writeEndorsementToken, resolveReviewEndorsement } from './endorsement-protocol.mjs';
 import { isCoreInfraFile, selectDynamicTestImpact } from './dynamic-test-impact.mjs';
 import { createPrescription, matchPrescriptions, recordFeedback } from './self-healing-prescriptions.mjs';
+import { t } from './lang.mjs';
 
 export const DEFAULT_RUBRIC_WEIGHTS = {
   taskCompletion: 0.35,
@@ -674,7 +675,11 @@ export function executeBenchmarkSuite({
   };
 
   let recordReceipt = null;
-  if (record) {
+  // runner 缺省时夹具会写入标准答案。那次通过率不是模型得分，不能进凭证。
+  if (record && typeof runner !== 'function') {
+    suiteSummary.recorded = false;
+    suiteSummary.recordSkipped = 'no-runner';
+  } else if (record) {
     const note = `Evaluator run: composite=${averageComposite}, passRate=${passRate}`;
     try {
       recordReceipt = recordEval(root, {
@@ -791,7 +796,7 @@ export function main(argv = process.argv.slice(2)) {
     if (json) {
       console.log(JSON.stringify(list, null, 2));
     } else {
-      console.log('可用基准任务集（Standard Benchmark Fixtures）：');
+      console.log(t('可用基准任务集（Standard Benchmark Fixtures）：', 'Available benchmark fixtures:'));
       for (const f of list) {
         console.log(`  - [${f.id}] (${f.category}) ${f.name}: ${f.description}`);
       }
@@ -805,17 +810,31 @@ export function main(argv = process.argv.slice(2)) {
     if (fixtureId && typeof fixtureId === 'string') {
       fixtures = STANDARD_BENCHMARKS.filter((f) => f.id === fixtureId);
       if (!fixtures.length) {
-        console.error(`未知 fixture: ${fixtureId}（通过 agent-evaluator.mjs list 查看可用夹具）`);
+        console.error(t(
+          `未知 fixture: ${fixtureId}（通过 agent-evaluator.mjs list 查看可用夹具）`,
+          `Unknown fixture: ${fixtureId} (see agent-evaluator.mjs list)`,
+        ));
         return 2;
       }
+    }
+
+    // 不传 --runner 时，夹具的 run() 会自己写入标准答案再打分。
+    // 这只能证明夹具能跑通，不能当作某个模型的通过率，也不能写入凭证。
+    const hasRunner = argv.includes('--runner');
+    if (record && !hasRunner) {
+      console.error(t(
+        '拒绝登记：没有 --runner 时夹具会写入标准答案，不能当作模型通过率写入凭证',
+        'Refusing to record: without --runner the fixture writes the answer key, so the pass rate is not a model score',
+      ));
+      return 2;
     }
 
     const suite = executeBenchmarkSuite({
       fixtures,
       threshold,
-      model: typeof model === 'string' ? model : 'default-agent',
+      model: hasRunner ? (typeof model === 'string' ? model : 'default-agent') : 'harness-self-check',
       root,
-      record,
+      record: hasRunner && record,
     });
 
     if (reportPath && typeof reportPath === 'string') {
@@ -827,17 +846,32 @@ export function main(argv = process.argv.slice(2)) {
     if (json) {
       console.log(JSON.stringify(suite, null, 2));
     } else {
+      if (!hasRunner) {
+        console.log(t(
+          '夹具自检（未提供 --runner，结果不是模型得分）',
+          'Harness self-check (no --runner, this is not a model score)',
+        ));
+      }
       console.log(renderAsciiRadar(suite.averageScores, suite.weights, suite.averageComposite));
-      console.log(`\n结果: ${suite.status.toUpperCase()} | 通过率: ${(suite.passRate * 100).toFixed(1)}% (${suite.passedCases}/${suite.totalCases}) | 模型: ${suite.model}`);
+      console.log(t(
+        `\n结果: ${suite.status.toUpperCase()} | 通过率: ${(suite.passRate * 100).toFixed(1)}% (${suite.passedCases}/${suite.totalCases}) | 模型: ${suite.model}`,
+        `\nResult: ${suite.status.toUpperCase()} | pass rate: ${(suite.passRate * 100).toFixed(1)}% (${suite.passedCases}/${suite.totalCases}) | model: ${suite.model}`,
+      ));
       if (record && suite.recorded) {
-        console.log(`已将凭证自动登记至 agent-eval: signature=${suite.receipt?.signature?.slice(0, 12)}`);
+        console.log(t(
+          `已将凭证自动登记至 agent-eval: signature=${suite.receipt?.signature?.slice(0, 12)}`,
+          `Recorded an agent-eval credential: signature=${suite.receipt?.signature?.slice(0, 12)}`,
+        ));
       }
     }
 
     return suite.status === 'pass' ? 0 : 1;
   }
 
-  console.error(`未知命令: ${cmd}（支持 run, list）`);
+  console.error(t(
+    `未知命令: ${cmd}（支持 run, list）`,
+    `Unknown command: ${cmd} (supported: run, list)`,
+  ));
   return 2;
 }
 

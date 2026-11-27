@@ -359,3 +359,20 @@ test('evalArena & reportArena: 生成 5 维 Rubric 评分卡、综合效能分�
     cleanupArena({ root, topic: 'radar-duel', force: true });
   }
 });
+
+test('evalArena: 接入执行护栏拦截高危 testCmd 并脱敏输出', () => {
+  const root = initTestRepo();
+  initArena({
+    root,
+    topic: 'guardrail-duel',
+    arms: ['arm-a', 'arm-b'],
+  });
+  try {
+    assert.throws(
+      () => evalArena({ root, topic: 'guardrail-duel', testCmd: 'sudo rm -rf /' }),
+      (err) => err.code === 'UNSAFE_TEST_CMD',
+    );
+  } finally {
+    cleanupArena({ root, topic: 'guardrail-duel', force: true });
+  }
+});

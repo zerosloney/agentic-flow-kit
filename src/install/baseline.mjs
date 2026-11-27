@@ -1,8 +1,7 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { writeAtomicSync } from './atomic.mjs';
+import { mergeThreeWay as kernelMergeThreeWay } from '../kernel/index.mjs';
 
 // 基线留存：保存上次由工具写入的文本内容，供升级时做三方合并。
 // 目录默认被 .gitignore 忽略（.agents/.kit/）；可用 --no-baseline 关闭。
@@ -87,33 +86,7 @@ export function pruneBaselines(target, keepRels, { dryRun = false } = {}) {
   return removed;
 }
 
-// 三方合并：git merge-file 以 baseline 为 base、磁盘为 ours、新模板为 theirs。
-// 返回 clean 时 text 为合并结果；conflict 时 text 带冲突标记；git 不可用返回 unavailable，
-// 由调用方回退到旧的哈希冲突跳过语义。
-export function mergeThreeWay({ base, ours, theirs }) {
-  let dir;
-  try {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'flow-kit-merge-'));
-    const oursFile = path.join(dir, 'ours');
-    const baseFile = path.join(dir, 'base');
-    const theirsFile = path.join(dir, 'theirs');
-    fs.writeFileSync(oursFile, ours, 'utf8');
-    fs.writeFileSync(baseFile, base, 'utf8');
-    fs.writeFileSync(theirsFile, theirs, 'utf8');
-    const result = spawnSync(
-      'git',
-      ['merge-file', '-p', '-q', '-L', 'current', '-L', 'baseline', '-L', 'kit', oursFile, baseFile, theirsFile],
-      { encoding: 'utf8', windowsHide: true },
-    );
-    // git merge-file 的退出码是冲突块数量（最多 127）；>=128 才是 git 自身错误。
-    if (result.error || result.status < 0 || result.status > 127) return { status: 'unavailable' };
-    return {
-      status: result.status === 0 ? 'clean' : 'conflict',
-      text: result.stdout,
-    };
-  } catch {
-    return { status: 'unavailable' };
-  } finally {
-    if (dir) fs.rmSync(dir, { recursive: true, force: true });
-  }
+// 三方合并单源在 kernel.mergeThreeWay（CRLF 归一、信号退出 unavailable）。
+export function mergeThreeWay(input) {
+  return kernelMergeThreeWay(input);
 }

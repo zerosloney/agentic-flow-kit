@@ -16,6 +16,7 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { loadPrescriptionStore } from './self-healing-prescriptions.mjs';
+import { t } from './lang.mjs';
 
 // ---------------------------------------------------------------------
 // 1. 常量与事件契约定义
@@ -484,26 +485,44 @@ export function main() {
   const root = process.cwd();
 
   if (args.command === 'help') {
-    console.log('用法: node timeline-trace.mjs <command> [options]');
-    console.log('');
-    console.log('命令:');
-    console.log('  query   查询指定 runId 的时序事件链');
-    console.log('  export  导出指定 runId 的离线复盘包与可视化 HTML');
-    console.log('');
-    console.log('选项:');
-    console.log('  --run <id>       指定流水线运行 ID');
-    console.log('  --stage <name>   按阶段过滤');
+    console.log(t(
+      [
+        '用法: node timeline-trace.mjs <command> [options]',
+        '',
+        '命令:',
+        '  query   查询指定 runId 的时序事件链',
+        '  export  导出指定 runId 的离线复盘包与可视化 HTML',
+        '',
+        '选项:',
+        '  --run <id>       指定流水线运行 ID',
+        '  --stage <name>   按阶段过滤',
+      ].join('\n'),
+      [
+        'Usage: node timeline-trace.mjs <command> [options]',
+        '',
+        'Commands:',
+        '  query   Query the timeline for a run id',
+        '  export  Export the offline review bundle and HTML',
+        '',
+        'Options:',
+        '  --run <id>       Pipeline run id',
+        '  --stage <name>   Filter by stage',
+      ].join('\n'),
+    ));
     process.exit(0);
   }
 
   if (args.command === 'query') {
     if (!args.runId) {
-      console.error('错误: 请通过 --run 指定 runId');
+      console.error(t('错误: 请通过 --run 指定 runId', 'Error: pass --run <id>'));
       process.exit(1);
     }
     const { events, skippedLines, totalLines } = loadTimelineTraceReport(root, args.runId);
     if (skippedLines > 0) {
-      console.error(`[timeline] 警告: 跳过 ${skippedLines}/${totalLines} 行损坏记录——查询结果不完整`);
+      console.error(t(
+        `[timeline] 警告: 跳过 ${skippedLines}/${totalLines} 行损坏记录——查询结果不完整`,
+        `[timeline] warning: skipped ${skippedLines}/${totalLines} corrupt lines — query is incomplete`,
+      ));
     }
     const filtered = queryTimelineEvents(events, { stage: args.stage });
     console.log(JSON.stringify(filtered, null, 2));
@@ -512,12 +531,17 @@ export function main() {
 
   if (args.command === 'export') {
     if (!args.runId) {
-      console.error('错误: 请通过 --run 指定 runId');
+      console.error(t('错误: 请通过 --run 指定 runId', 'Error: pass --run <id>'));
       process.exit(1);
     }
     const bundle = exportPostMortemBundle(root, args.runId);
-    for (const warning of bundle.warnings || []) console.error(`[timeline] 警告: ${warning}`);
-    console.log(`[timeline] 成功导出复盘包: ${bundle.bundleFile}`);
+    for (const warning of bundle.warnings || []) {
+      console.error(t(`[timeline] 警告: ${warning}`, `[timeline] warning: ${warning}`));
+    }
+    console.log(t(
+      `[timeline] 成功导出复盘包: ${bundle.bundleFile}`,
+      `[timeline] exported review bundle: ${bundle.bundleFile}`,
+    ));
     process.exit(bundle.metrics.skippedLines > 0 && bundle.metrics.totalEvents === 0 ? 1 : 0);
   }
 }

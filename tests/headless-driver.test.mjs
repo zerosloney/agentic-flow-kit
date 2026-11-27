@@ -84,6 +84,20 @@ describe('Unit 2: 防死循环与熔断预算控制器', () => {
     assert.equal(res.status, DRIVER_STATUS.CIRCUIT_BREAKER_TRIGGERED);
   });
 
+  test('StepBudgetGuard 正确处理 Token 预算超限熔断', () => {
+    const guard = new StepBudgetGuard({ maxTokens: 1000 });
+
+    assert.equal(guard.recordStep({ status: 0, tokens: 400 }).halted, false);
+    assert.equal(guard.recordStep({ status: 0, tokens: 500 }).halted, false);
+    assert.equal(guard.tokensConsumed, 900);
+
+    // 第 3 步累计达到 1100，超过 1000
+    const res = guard.recordStep({ status: 0, tokens: 200 });
+    assert.equal(res.halted, true);
+    assert.equal(res.status, DRIVER_STATUS.EXCEEDED_TOKEN_BUDGET);
+    assert.equal(guard.tokensConsumed, 1100);
+  });
+
   test('StallDetector 连续 3 步状态指纹一致时精准检测死循环', () => {
     const detector = new StallDetector(3);
 
@@ -201,11 +215,36 @@ describe('Unit 3: 影子工作区隔离与试跑调度', () => {
     assert.equal(report.status, DRIVER_STATUS.CIRCUIT_BREAKER_TRIGGERED);
   });
 
+  test('runShadowExecution 遭遇 Token 超限时优雅熔断终止并记录 totalTokens', () => {
+    const adapter = createDriverAdapter({
+      type: 'mock',
+      mockFn: () => ({
+        status: 0,
+        stdout: '[stage:run] OK',
+        tokens: 600,
+      }),
+    });
+
+    const report = runShadowExecution({
+      root: tmpRoot,
+      adapter,
+      stages: ['plan', 'implement', 'verify'],
+      budgetConfig: { maxTokens: 1000 },
+      dryRun: true,
+    });
+
+    assert.equal(report.success, false);
+    assert.equal(report.status, DRIVER_STATUS.EXCEEDED_TOKEN_BUDGET);
+    assert.equal(report.totalTokens, 1200);
+    assert.ok(report.haltReason.includes('Token 预算限制'));
+  });
+
   test('parseArgs 能够正确解析命令行参数', () => {
-    const args = parseArgs(['shadow', '--max-steps', '20', '--timeout-ms', '90000', '--keep']);
+    const args = parseArgs(['shadow', '--max-steps', '20', '--timeout-ms', '90000', '--max-tokens', '50000', '--keep']);
     assert.equal(args.command, 'shadow');
     assert.equal(args.maxSteps, 20);
     assert.equal(args.maxWallClockMs, 90000);
+    assert.equal(args.maxTokens, 50000);
     assert.equal(args.dryRun, false);
   });
 });

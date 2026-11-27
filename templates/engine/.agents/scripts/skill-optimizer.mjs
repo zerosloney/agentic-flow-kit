@@ -16,6 +16,7 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { loadPrescriptionStore } from './self-healing-prescriptions.mjs';
+import { t } from './lang.mjs';
 
 // ---------------------------------------------------------------------
 // 1. 缺陷模式库与提炼契约 (Defect Patterns & Extraction Engine)
@@ -858,25 +859,44 @@ export function main() {
   const root = process.cwd();
 
   if (args.command === 'help') {
-    console.log('用法: node skill-optimizer.mjs <command> [options]');
-    console.log('');
-    console.log('命令:');
-    console.log('  extract   从失败日志与处方库提取缺陷模式');
-    console.log('  optimize  自动提炼补丁并在影子沙箱中进行 A/B 对抗评估');
-    console.log('  rollback  一键回滚最近一次技能优化');
-    console.log('');
-    console.log('选项:');
-    console.log('  --skill <name>    指定目标技能名称');
-    console.log('  --apply           评估胜出后自动应用到目标文件');
-    console.log('  --allow-unverified-apply  评测未验证时仍允许 --apply 落盘（显式放行）');
-    console.log('  --dry-run         仅输出比对 Diff 与判定报告，不写入');
-    console.log('  --min-delta <num> 胜出所需的最小通过率提升（默认 0.10）');
+    console.log(t(
+      [
+        '用法: node skill-optimizer.mjs <command> [options]',
+        '',
+        '命令:',
+        '  extract   从失败日志与处方库提取缺陷模式',
+        '  optimize  自动提炼补丁并在影子沙箱中进行 A/B 对抗评估',
+        '  rollback  一键回滚最近一次技能优化',
+        '',
+        '选项:',
+        '  --skill <name>    指定目标技能名称',
+        '  --apply           评估胜出后自动应用到目标文件',
+        '  --allow-unverified-apply  评测未验证时仍允许 --apply 落盘（显式放行）',
+        '  --dry-run         仅输出比对 Diff 与判定报告，不写入',
+        '  --min-delta <num> 胜出所需的最小通过率提升（默认 0.10）',
+      ].join('\n'),
+      [
+        'Usage: node skill-optimizer.mjs <command> [options]',
+        '',
+        'Commands:',
+        '  extract   Extract defect patterns from failure logs and prescriptions',
+        '  optimize  Draft a patch and judge it in a shadow A/B trial',
+        '  rollback  Roll back the latest skill optimization',
+        '',
+        'Options:',
+        '  --skill <name>    Target skill name',
+        '  --apply           Apply the winning version to the target file',
+        '  --allow-unverified-apply  Allow --apply when the eval was not verified',
+        '  --dry-run         Print the diff and verdict without writing',
+        '  --min-delta <num> Minimum pass-rate gain required to win (default 0.10)',
+      ].join('\n'),
+    ));
     process.exit(0);
   }
 
   if (args.command === 'rollback') {
     if (!args.skill) {
-      console.error('错误: 请通过 --skill 指定需要回滚的技能');
+      console.error(t('错误: 请通过 --skill 指定需要回滚的技能', 'Error: pass --skill <name> to roll back'));
       process.exit(1);
     }
     const res = rollbackSkillOptimization(root, args.skill);
@@ -898,7 +918,10 @@ export function main() {
     process.exit(res.success && applied ? 0 : 1);
   }
 
-  console.log(`[skill-optimizer] 运行命令: ${args.command}, 技能: ${args.skill || '全量'}`);
+  console.log(t(
+    `[skill-optimizer] 运行命令: ${args.command}, 技能: ${args.skill || '全量'}`,
+    `[skill-optimizer] command: ${args.command}, skill: ${args.skill || 'all'}`,
+  ));
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === path.resolve(process.argv[1])) {

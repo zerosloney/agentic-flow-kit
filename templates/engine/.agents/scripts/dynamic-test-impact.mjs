@@ -16,6 +16,7 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { builtinModules } from 'node:module';
 import { fileURLToPath } from 'node:url';
+import { t } from './lang.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = process.env.FLOW_KIT_PROJECT_ROOT
@@ -595,7 +596,10 @@ function buildGraphWithScanLimit(root, options, warnings) {
   if (Array.isArray(options.files)) return buildDependencyGraph(root, options);
   const scanned = scanRepositoryFiles(root, options.scanDirs, maxScanFiles);
   if (scanned.length > maxScanFiles) {
-    warnings.push(`仓库代码文件超过 ${maxScanFiles} 个，未构建依赖图，回退全量`);
+    warnings.push(t(
+      `仓库代码文件超过 ${maxScanFiles} 个，未构建依赖图，回退全量`,
+      `More than ${maxScanFiles} code files, dependency graph not built, falling back to the full suite`,
+    ));
     return null;
   }
   return buildDependencyGraph(root, { ...options, files: scanned });
@@ -619,7 +623,7 @@ export function selectDynamicTestImpact(root, changedFiles, options = {}) {
     const depGraph = buildGraphWithScanLimit(root, options, warnings);
     return createDecision(
       'full',
-      '显式指定全量测试',
+      t('显式指定全量测试', 'Full run requested'),
       depGraph ? [...depGraph.testFiles].sort() : [],
       files,
       depGraph,
@@ -629,30 +633,36 @@ export function selectDynamicTestImpact(root, changedFiles, options = {}) {
 
   // 2. 变更集合为空
   if (files.length === 0) {
-    return createDecision('none', '变更文件集合为空', [], files, graph, warnings);
+    return createDecision('none', t('变更文件集合为空', 'No changed files'), [], files, graph, warnings);
   }
 
   // 3. 核心基础设施或全局策略触碰兜底
   const coreTouched = files.filter(isCoreInfraFile);
   if (coreTouched.length > 0) {
-    warnings.push(`核心文件变更触碰安全兜底: ${coreTouched.join(', ')}`);
-    return createDecision('full', `触碰核心基础设施文件 (${coreTouched.length} 个)，回退全量回归`, [], files, graph, warnings);
+    warnings.push(t(
+      `核心文件变更触碰安全兜底: ${coreTouched.join(', ')}`,
+      `Core file change hit the safety fallback: ${coreTouched.join(', ')}`,
+    ));
+    return createDecision('full', t(
+      `触碰核心基础设施文件 (${coreTouched.length} 个)，回退全量回归`,
+      `Touched ${coreTouched.length} core infrastructure file(s), falling back to the full suite`,
+    ), [], files, graph, warnings);
   }
 
   // 4. 变更集合不含代码/测试文件：无需建图（绝不为此扫描全仓）
   if (!files.some((f) => isCodeFile(f) || isTestFile(f))) {
-    return createDecision('none', '变更文件不涉及源码与测试', [], files, null, warnings);
+    return createDecision('none', t('变更文件不涉及源码与测试', 'Changed files are not source or tests'), [], files, null, warnings);
   }
 
   // 5. 构建或复用依赖图（超限时回退全量）
   const depGraph = buildGraphWithScanLimit(root, options, warnings);
   if (!depGraph) {
-    return createDecision('full', '仓库代码文件超过扫描上限，回退全量', [], files, null, warnings);
+    return createDecision('full', t('仓库代码文件超过扫描上限，回退全量', 'Code file count exceeded the scan limit, falling back to the full suite'), [], files, null, warnings);
   }
   const totalKnownTests = depGraph.testFiles.size;
 
   if (totalKnownTests === 0) {
-    return createDecision('none', '项目中未探测到有效测试文件', [], files, depGraph, warnings);
+    return createDecision('none', t('项目中未探测到有效测试文件', 'No test files detected'), [], files, depGraph, warnings);
   }
 
   // 6. 传导计算
@@ -663,7 +673,10 @@ export function selectDynamicTestImpact(root, changedFiles, options = {}) {
     .filter((f) => depGraph.testFiles.has(f))
     .sort();
   if (unresolvedTestFiles.length > 0) {
-    warnings.push(`存在 ${unresolvedTestFiles.length} 个测试文件包含无法解析的导入，已保守纳入受影响集`);
+    warnings.push(t(
+      `存在 ${unresolvedTestFiles.length} 个测试文件包含无法解析的导入，已保守纳入受影响集`,
+      `${unresolvedTestFiles.length} test file(s) have unresolvable imports and were included conservatively`,
+    ));
     const impacted = new Set(impact.impactedTests);
     for (const f of unresolvedTestFiles) impacted.add(f);
     impact.impactedTests = [...impacted].sort();
@@ -674,34 +687,43 @@ export function selectDynamicTestImpact(root, changedFiles, options = {}) {
   const unmappedCode = impact.unmappedFiles.filter(isCodeFile);
 
   if (unmappedCode.length > 0) {
-    warnings.push(`存在未纳入依赖图的源码变更: ${unmappedCode.join(', ')}`);
+    warnings.push(t(
+      `存在未纳入依赖图的源码变更: ${unmappedCode.join(', ')}`,
+      `Source changes missing from the dependency graph: ${unmappedCode.join(', ')}`,
+    ));
     if (fallbackOnUntested) {
-      return createDecision('full', '存在未知或未映射源码变更，安全回退全量', [], files, depGraph, warnings, impact);
+      return createDecision('full', t('存在未知或未映射源码变更，安全回退全量', 'Unknown or unmapped source changes, falling back to the full suite'), [], files, depGraph, warnings, impact);
     }
   }
 
   // 8. 若修改了源码但受影响测试集为空
   if (codeChanges.length > 0 && impact.impactedTests.length === 0) {
     if (fallbackOnUntested) {
-      warnings.push(`变更的源码未被任何测试引用: ${codeChanges.join(', ')}`);
-      return createDecision('full', '变更源码缺乏测试拓扑覆盖，安全回退全量', [], files, depGraph, warnings, impact);
+      warnings.push(t(
+        `变更的源码未被任何测试引用: ${codeChanges.join(', ')}`,
+        `Changed source is not imported by any test: ${codeChanges.join(', ')}`,
+      ));
+      return createDecision('full', t('变更源码缺乏测试拓扑覆盖，安全回退全量', 'Changed source has no test coverage in the graph, falling back to the full suite'), [], files, depGraph, warnings, impact);
     }
   }
 
   // 9. 仅修改非代码文件（如 markdown / 文档 / 静态图片）
   if (codeChanges.length === 0 && impact.impactedTests.length === 0) {
-    return createDecision('none', '变更文件不涉及源码与测试', [], files, depGraph, warnings, impact);
+    return createDecision('none', t('变更文件不涉及源码与测试', 'Changed files are not source or tests'), [], files, depGraph, warnings, impact);
   }
 
   // 10. 选中用例覆盖全部测试
   if (impact.impactedTests.length >= totalKnownTests) {
-    return createDecision('full', '动态拓扑选测覆盖全量测试集', impact.impactedTests, files, depGraph, warnings, impact);
+    return createDecision('full', t('动态拓扑选测覆盖全量测试集', 'Dynamic selection covers the full test set'), impact.impactedTests, files, depGraph, warnings, impact);
   }
 
   // 11. 精准增量子集
   return createDecision(
     'incremental',
-    `动态拓扑选测覆盖 ${impact.impactedTests.length}/${totalKnownTests} 个测试用例`,
+    t(
+      `动态拓扑选测覆盖 ${impact.impactedTests.length}/${totalKnownTests} 个测试用例`,
+      `Dynamic selection covers ${impact.impactedTests.length}/${totalKnownTests} test file(s)`,
+    ),
     impact.impactedTests,
     files,
     depGraph,
@@ -765,7 +787,10 @@ export function changedFilesFromGit(range = null, root = ROOT) {
   if (r.status !== 0) {
     return {
       files: [],
-      error: `git diff 失败: ${(r.stderr || '').trim()}`,
+      error: t(
+        `git diff 失败: ${(r.stderr || '').trim()}`,
+        `git diff failed: ${(r.stderr || '').trim()}`,
+      ),
     };
   }
 
@@ -774,6 +799,19 @@ export function changedFilesFromGit(range = null, root = ROOT) {
     .map(normalizePath)
     .filter(Boolean);
 
+  // git diff HEAD 不列出未跟踪文件。新建且尚未 git add 的源码也是这次改动。
+  const untracked = spawnSync('git', ['ls-files', '--others', '--exclude-standard'], {
+    cwd: root,
+    encoding: 'utf8',
+    shell: false,
+  });
+  if (untracked.status === 0) {
+    for (const line of (untracked.stdout || '').split(/\r?\n/)) {
+      const rel = normalizePath(line);
+      if (rel && !files.includes(rel)) files.push(rel);
+    }
+  }
+
   return { files, error: null };
 }
 
@@ -781,18 +819,36 @@ export function changedFilesFromGit(range = null, root = ROOT) {
 
 export function formatDynamicDecision(decision) {
   const lines = [];
-  lines.push(`模式: ${decision.mode} (${decision.reason})`);
-  lines.push(`变更文件: ${decision.changedFiles.length} 个`);
-  lines.push(`命中测试: ${decision.impactedTests.length}/${decision.totalKnownTests} 个`);
-  lines.push(`跳过测试: ${decision.skippedTestsCount} 个 (加速比 ${(decision.accelerationRatio * 100).toFixed(1)}%)`);
+  lines.push(t(
+    `模式: ${decision.mode} (${decision.reason})`,
+    `Mode: ${decision.mode} (${decision.reason})`,
+  ));
+  lines.push(t(
+    `变更文件: ${decision.changedFiles.length} 个`,
+    `Changed files: ${decision.changedFiles.length}`,
+  ));
+  lines.push(t(
+    `命中测试: ${decision.impactedTests.length}/${decision.totalKnownTests} 个`,
+    `Selected tests: ${decision.impactedTests.length}/${decision.totalKnownTests}`,
+  ));
+  lines.push(t(
+    `跳过测试: ${decision.skippedTestsCount} 个 (加速比 ${(decision.accelerationRatio * 100).toFixed(1)}%)`,
+    `Skipped tests: ${decision.skippedTestsCount} (speedup ${(decision.accelerationRatio * 100).toFixed(1)}%)`,
+  ));
   if (decision.directImpactedTests.length) {
-    lines.push(`直接影响测试: ${decision.directImpactedTests.length} 个`);
+    lines.push(t(
+      `直接影响测试: ${decision.directImpactedTests.length} 个`,
+      `Directly impacted tests: ${decision.directImpactedTests.length}`,
+    ));
   }
   if (decision.transitiveImpactedTests.length) {
-    lines.push(`间接传导测试: ${decision.transitiveImpactedTests.length} 个`);
+    lines.push(t(
+      `间接传导测试: ${decision.transitiveImpactedTests.length} 个`,
+      `Transitively impacted tests: ${decision.transitiveImpactedTests.length}`,
+    ));
   }
   for (const w of decision.warnings) {
-    lines.push(`警告: ${w}`);
+    lines.push(t(`警告: ${w}`, `Warning: ${w}`));
   }
   return lines.join('\n');
 }
@@ -800,6 +856,27 @@ export function formatDynamicDecision(decision) {
 // CLI 执行入口
 if (process.argv[1] && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))) {
   const args = process.argv.slice(2);
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log(t(
+      [
+        '用法: node dynamic-test-impact.mjs [--files a,b] [--range <old> <new>] [--json]',
+        '',
+        '选项:',
+        '  --files <list>       逗号分隔的变更文件。缺省时用 git diff HEAD 加未跟踪文件',
+        '  --range <old> <new>  用 git diff old..new 作为变更集合',
+        '  --json               输出 JSON',
+      ].join('\n'),
+      [
+        'Usage: node dynamic-test-impact.mjs [--files a,b] [--range <old> <new>] [--json]',
+        '',
+        'Options:',
+        '  --files <list>       Comma-separated changed files. Default is git diff HEAD plus untracked files',
+        '  --range <old> <new>  Use git diff old..new as the change set',
+        '  --json               Print JSON',
+      ].join('\n'),
+    ));
+    process.exit(0);
+  }
   const jsonMode = args.includes('--json');
   let files = [];
   let range = null;

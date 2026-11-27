@@ -30,6 +30,18 @@
     "claude-sonnet-4-5-20250929": { "inputPerMTok": 3, "outputPerMTok": 15 },
     "claude-haiku-5-5": { "inputPerMTok": 0.1, "outputPerMTok": 0.5 },
     "claude-haiku-4-5": { "inputPerMTok": 1, "outputPerMTok": 5 },
-    "claude-haiku-4-5-20251001": { "inputPerMTok": 1, "outputPerMTok": 5 }
+    "claude-haiku-4-5-20251001": { "inputPerMTok": 1, "outputPerMTok": 5 },
+    "gpt-4o": { "inputPerMTok": 2.5, "outputPerMTok": 10 },
+    "gpt-4o-mini": { "inputPerMTok": 0.15, "outputPerMTok": 0.6 },
+    "o1": { "inputPerMTok": 15, "outputPerMTok": 60 },
+    "o3-mini": { "inputPerMTok": 1.1, "outputPerMTok": 4.4 },
+    "deepseek-chat": { "inputPerMTok": 0.27, "outputPerMTok": 1.1 },
+    "deepseek-reasoner": { "inputPerMTok": 0.55, "outputPerMTok": 2.19 },
+    "qwen-max": { "inputPerMTok": 2.8, "outputPerMTok": 8.4 },
+    "qwen-plus": { "inputPerMTok": 0.56, "outputPerMTok": 1.68 },
+    "qwen-turbo": { "inputPerMTok": 0.04, "outputPerMTok": 0.16 },
+    "gemini-2.0-flash": { "inputPerMTok": 0.1, "outputPerMTok": 0.4 },
+    "gemini-1.5-pro": { "inputPerMTok": 1.25, "outputPerMTok": 5.0 },
+    "gemini-1.5-flash": { "inputPerMTok": 0.075, "outputPerMTok": 0.3 }
   }
 }

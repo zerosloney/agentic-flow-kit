@@ -123,6 +123,25 @@ test('evaluateMcpCall blocks prohibited L3 operations and unsafe parameters', ()
   });
   assert.equal(r4.allowed, false);
   assert.equal(r4.decision, 'DENIED_PARAM');
+
+  // Execution guardrails blocked command (e.g. redirection escape)
+  const rGuard = evaluateMcpCall({
+    role: 'coder',
+    tool: 'execute_command',
+    args: { command: 'echo evil > ../../escape.txt' },
+  });
+  assert.equal(rGuard.allowed, false);
+  assert.equal(rGuard.decision, 'DENIED_PARAM');
+  assert.ok(rGuard.reason.includes('Execution guardrails blocked command'));
+
+  const rArgv = evaluateMcpCall({
+    role: 'coder',
+    tool: 'execute_command',
+    args: { command: ['rm', '-rf', '/'] },
+  });
+  assert.equal(rArgv.allowed, false);
+  assert.equal(rArgv.decision, 'DENIED_PARAM');
+  assert.ok(rArgv.reason.includes('Execution guardrails blocked command'));
 });
 
 test('evaluateMcpCall enforces token and call rate limits', () => {

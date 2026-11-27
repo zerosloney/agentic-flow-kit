@@ -324,6 +324,24 @@ test('Qwen settings.json carries hooks and MCP in one idempotent file', () => {
   assert.deepEqual(readInstalledGroups('qwen', nomcp), golden('qwen'));
 });
 
+test('removing an event from the spec drops its managed hook and doctor sees no extra', () => {
+  const hooks = spec();
+  const cfg = HOSTS.claude.hooks.events;
+  const root = {};
+  assert.equal(mergeHooksIntoRoot(root, hooks, cfg), true);
+  const before = JSON.stringify(root);
+  assert.match(before, /session-context/);
+  const without = hooks.filter((item) => !String(item.script).includes('session-context'));
+  assert.equal(mergeHooksIntoRoot(root, without, cfg), true);
+  assert.doesNotMatch(JSON.stringify(root), /session-context/);
+  root.hooks.SessionStart = [{ matcher: '', hooks: [{ command: 'echo user' }, { command: 'flow-kit hook session-context' }] }];
+  assert.equal(mergeHooksIntoRoot(root, without, cfg), true);
+  assert.deepEqual(root.hooks.SessionStart, [{ matcher: '', hooks: [{ command: 'echo user' }] }]);
+  const drift = findHookDrift(root, without, cfg);
+  assert.equal(drift.extra.length, 0);
+  assert.equal(drift.missing.length, 0);
+});
+
 test('invalid hook specs are rejected and merge is a no-op on empty input', () => {
   assert.equal(parseHookSpec('{'), null);
   assert.equal(parseHookSpec('{"hooks":[{"event":"PreToolUse","tool":"write"}]}'), null);

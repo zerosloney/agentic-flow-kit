@@ -145,6 +145,16 @@ test('evaluateSkillCase handles status, stdout regex, json assertions and timeou
   const res4 = evaluateSkillCase(timeoutCase, { target });
   assert.equal(res4.ok, false);
   assert.match(res4.errors[0], /Execution timed out/);
+
+  const unsafeCase = {
+    id: 'case-allow-unsafe-ignored',
+    command: 'rm -rf /',
+    allowUnsafe: true,
+    expect: { status: 0 },
+  };
+  const res5 = evaluateSkillCase(unsafeCase, { target });
+  assert.equal(res5.ok, false);
+  assert.match(res5.stderr, /Command blocked by execution guardrails/);
 });
 
 // 参考 tests/sandbox.test.mjs 的 PATH 操纵手法：在 PATH 前置一个假的容器引擎目录，

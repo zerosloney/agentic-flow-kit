@@ -266,10 +266,18 @@ export const L0_SAFE_PATTERNS = [
 ];
 
 export const L1_SAFE_PATTERNS = [
-  /\b(?:npm\s+test|node\s+--test|pytest|python\s+-m\s+(?:unittest|pytest)|cargo\s+test|cargo\s+check|cargo\s+clippy|go\s+test|mvn\s+test|gradle\s+test)\b/i,
-  /\b(?:npm\s+run\s+(?:lint|check|test[a-z0-9_-]*)|eslint|prettier\s+--check)\b/i,
+  /^(?:npm\s+test|node\s+--test|pytest|python\s+-m\s+(?:unittest|pytest)|cargo\s+test|cargo\s+check|cargo\s+clippy|go\s+test|mvn\s+test|gradle\s+test)\b/i,
+  /^(?:npm\s+run\s+(?:lint|check|test[a-z0-9_-]*)|eslint|prettier\s+--check)\b/i,
   /^flow-kit\s+(?:arch\s+check|mcp\s+audit|metrics\s+check)\b/i,
 ];
+
+const SHELL_CHAIN_RE = /[;&|\n`]|\$\(/;
+
+function appendBounded(buf, chunk, maxBuffer) {
+  if (buf.length >= maxBuffer) return buf;
+  const remaining = maxBuffer - buf.length;
+  return buf + (chunk.length > remaining ? chunk.slice(0, remaining) : chunk);
+}
 
 /**
  * 校验执行命令是否越过项目根目录尝试非法路径逃逸
@@ -280,13 +288,13 @@ export const L1_SAFE_PATTERNS = [
 export function checkPathTraversalEscape(cmdStr, root = process.cwd()) {
   const normalizedRoot = path.resolve(root);
 
-  // 1. 检查是否存在危险的重定向写入至上级或系统盘根目录，如 > ../../foo 或 > /etc/
-  const redirectMatch = /(?:>{1,2})\s*([^\s;&|()]+)/.exec(cmdStr);
-  if (redirectMatch) {
+  // 1. 检查所有重定向写入至上级或工作区外路径，如 > ../../foo 或 > /etc/
+  for (const redirectMatch of cmdStr.matchAll(/(?:>{1,2})\s*([^\s;&|()]+)/g)) {
     const targetFile = redirectMatch[1].replace(/["']/g, '');
+    if (!targetFile) continue;
     const resolvedTarget = path.resolve(normalizedRoot, targetFile);
     const rel = path.relative(normalizedRoot, resolvedTarget);
-    if (rel.startsWith('..') || path.isAbsolute(targetFile) && !resolvedTarget.startsWith(normalizedRoot)) {
+    if (rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel)) {
       return {
         escaped: true,
         reason: `Disallowed write redirection escaping workspace root: ${targetFile}`,
@@ -412,17 +420,19 @@ export function validateExecutionSafety(cmd, options = {}) {
     }
   }
 
-  // 7. 内置 L1 测试与门禁规则
-  for (const rx of L1_SAFE_PATTERNS) {
-    if (rx.test(cmdStr)) {
-      return {
-        safe: true,
-        level: 'L1',
-        dangerous: false,
-        reason: 'Standard test, lint, or audit gate command',
-        matchedPattern: rx.source,
-        traversalDetected: false,
-      };
+  // 7. 内置 L1 测试与门禁规则（仅限未拼接复合连接符的单条命令）
+  if (!SHELL_CHAIN_RE.test(cmdStr)) {
+    for (const rx of L1_SAFE_PATTERNS) {
+      if (rx.test(cmdStr)) {
+        return {
+          safe: true,
+          level: 'L1',
+          dangerous: false,
+          reason: 'Standard test, lint, or audit gate command',
+          matchedPattern: rx.source,
+          traversalDetected: false,
+        };
+      }
     }
   }
 
@@ -518,18 +528,14 @@ export function safeExecFileWithGuardrails(file, args = [], options = {}) {
     if (child.stdout) {
       child.stdout.setEncoding('utf8');
       child.stdout.on('data', (chunk) => {
-        if (stdoutBuf.length < maxBuffer) {
-          stdoutBuf += chunk;
-        }
+        stdoutBuf = appendBounded(stdoutBuf, chunk, maxBuffer);
       });
     }
 
     if (child.stderr) {
       child.stderr.setEncoding('utf8');
       child.stderr.on('data', (chunk) => {
-        if (stderrBuf.length < maxBuffer) {
-          stderrBuf += chunk;
-        }
+        stderrBuf = appendBounded(stderrBuf, chunk, maxBuffer);
       });
     }
 
@@ -617,18 +623,14 @@ export function safeExec(commandString, options = {}) {
     if (child.stdout) {
       child.stdout.setEncoding('utf8');
       child.stdout.on('data', (chunk) => {
-        if (stdoutBuf.length < maxBuffer) {
-          stdoutBuf += chunk;
-        }
+        stdoutBuf = appendBounded(stdoutBuf, chunk, maxBuffer);
       });
     }
 
     if (child.stderr) {
       child.stderr.setEncoding('utf8');
       child.stderr.on('data', (chunk) => {
-        if (stderrBuf.length < maxBuffer) {
-          stderrBuf += chunk;
-        }
+        stderrBuf = appendBounded(stderrBuf, chunk, maxBuffer);
       });
     }
 

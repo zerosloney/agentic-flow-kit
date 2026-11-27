@@ -1,8 +1,7 @@
 // kernel 门面（issue #75，2026-11-22）——安装机件判据原语单源，供同源插件经包 exports
 // （`agentic-flow-kit/kernel`）复用；判据口径 = 插件侧已验证超集：文本判据一律 CRLF→LF 归一
-//（Windows CRLF 检出与 LF 手存不产生判据漂移）。kit 自身 install 链路不经此门面（内部迁移
-// 另行工单），与 src/install/baseline.mjs 的 mergeThreeWay 是「并存待收敛」关系——那边未归一，
-// 迁移时以本文件口径为准。
+//（Windows CRLF 检出与 LF 手存不产生判据漂移）。安装三方合并由
+// src/install/baseline.mjs 的 mergeThreeWay 转到本文件，口径只留这一份。
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';

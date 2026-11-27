@@ -64,6 +64,13 @@ import { loadFaces, isProductPath } from './faces.mjs';
 // freshVerify(root)：返回 24h 窗口内最新绿行对象（判定单源 policy.latestFreshVerifyLine）。只读，
 // 台账缺失/不可读一律 null（=无凭证，advisory 层 fail-open）。返回对象而非布尔是为了比对绿行的
 // 业务脏路径快照（「verify 之后又改了业务代码」）。
+// pipeline 把 intent/spec/plan 写在 workflow/tasks/<任务>/ 下。关单门原先只认手动目录前缀。
+function taskRole(doc) {
+  const match = String(doc || '').replace(/\\/g, '/').match(/^workflow\/tasks\/([^/]+)\/(intent|spec|plan|incident)\.md$/);
+  if (!match) return null;
+  return { task: match[1], kind: match[2], dir: `workflow/tasks/${match[1]}` };
+}
+
 function freshVerify(root) {
   try {
     const p = path.join(root, '.agents', 'verifications.jsonl');
@@ -414,7 +421,11 @@ if (isMain) {
     }
     // 逐阶段前置门（stage-gate-machine）：specs/plans 的 draft→approved 须前置已确认
     // （plan 另须入口级别 L2/L3 时同名 spec 已确认）——未过拒绝落账（不写盘、不 append 台账）。
-    if (target === 'approved' && (doc.startsWith('workflow/specs/') || doc.startsWith('workflow/plans/'))) {
+    const task = taskRole(doc);
+    const isSpec = doc.startsWith('workflow/specs/') || task?.kind === 'spec';
+    const isPlan = doc.startsWith('workflow/plans/') || task?.kind === 'plan';
+    const isIntent = doc.startsWith('workflow/intents/') || task?.kind === 'intent';
+    if (target === 'approved' && (isSpec || isPlan)) {
       const gate = confirmGateFor(root, doc);
       if (!gate.ok) {
         console.error(`❌ ${doc} 未过逐阶段前置门（stage-gates）：${gate.reason}`);
@@ -430,9 +441,9 @@ if (isMain) {
       // 配对硬门已于 2026-10-21「门禁极小化第 1 批」降为 WARN（s01-pairing.mjs），
       // 「L2/L3 无 spec」遂失去唯一机器兜底（review.md P0 必拦项声明的兜底已名存实亡）——
       // 执法点前移到关单动作时刻（与 §14 approved 留痕降档同一思路：门退了，闭环不退）。
-      if (doc.startsWith('workflow/intents/') && (lvl === 'L2' || lvl === 'L3')) {
-        const base = path.basename(doc, '.md');
-        const sp = specConfirmed(root, base);
+      if (isIntent && (lvl === 'L2' || lvl === 'L3')) {
+        const base = task ? task.task : path.basename(doc, '.md');
+        const sp = specConfirmed(root, base, task ? `${task.dir}/spec.md` : null);
         if (!sp.ok) {
           console.error(`❌ ${doc} 未过 L2/L3 intent 关单门（同名 spec 必确认）：${sp.reason}`);
           console.error('   先走 stages.md Design 章完成同名 spec 确认，再关本 intent（本份未落账、未写盘）');
@@ -441,14 +452,14 @@ if (isMain) {
         }
         // 关单完成度（closeout-completeness 2026-10-24）：同名 plan 已确认 + 独立复核落盘行。
         // 此前两项只有 closeout skill §0 的流程内自核（s01 仅 WARN）——agent 跳过自核即可合规关单。
-        const pl = planConfirmedFor(root, base);
+        const pl = planConfirmedFor(root, base, task ? `${task.dir}/plan.md` : null);
         if (!pl.ok) {
           console.error(`❌ ${doc} 未过 L2/L3 intent 关单门（同名 plan 必已确认）：${pl.reason}`);
           console.error('   先走 stages.md Build 章完成同名 plan 并确认（approved），再关本 intent（本份未落账、未写盘）');
           refused++;
           continue;
         }
-        const rv = reviewLineFor(root, base);
+        const rv = reviewLineFor(root, base, task ? [[null, `${task.dir}/intent.md`], [null, `${task.dir}/spec.md`]] : null);
         if (!rv.ok) {
           console.error(`❌ ${doc} 未过 L2/L3 intent 关单门（独立复核缺失）：${rv.reason}`);
           console.error('   回 stages.md Test §4 补独立复核，落盘行须含「复核上下文：<会话/子代理 id>」，再关（本份未落账、未写盘）');
@@ -479,9 +490,8 @@ if (isMain) {
       // 日期缺失/非法、日期 < delegationSince 锚前存量、同名 incident 在场（修复族——记法「修复类不记」）。
       // 此前该条件只在 check-loop --hygiene §18 事后 WARN——「该写而未写」漂移数月才可见，前移到
       // 关单动作时刻当场拦（与 §14 approved 留痕降档后执法点前移同一思路：门退了，闭环不退）。
-      if ((lvl === 'L2' || lvl === 'L3')
-        && (doc.startsWith('workflow/intents/') || doc.startsWith('workflow/specs/') || doc.startsWith('workflow/plans/'))) {
-        const base = path.basename(doc, '.md');
+      if ((lvl === 'L2' || lvl === 'L3') && (isIntent || isSpec || isPlan)) {
+        const base = task ? task.task : path.basename(doc, '.md');
         // 日期：frontmatter 优先，缺则回落文件名前缀——plan 无「日期」字段（fill-plan 不写、模板亦无），
         // 旧判据「无日期即整段跳过」使本门对绝大多数 L2/L3 plan 静默失效（2026-10-27 实证 57 份
         // 2026-10-06 锚后新建 L2/L3 文档因缺日期整体绕开本门）。沿检查 15 / 19 既有口径补文件名兜底。

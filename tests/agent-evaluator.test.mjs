@@ -197,7 +197,7 @@ test('executeBenchmarkSuite runs full benchmark suite and renders markdown repor
   assert.ok(md.includes('| `prescription-self-healing` |'));
 });
 
-test('executeBenchmarkSuite with record:true records credential into agent-eval gate', () => {
+test('executeBenchmarkSuite with record:true and no runner does not write an eval credential', () => {
   const root = makeTmp('evaluator-integration-');
 
   // Setup minimal .agents/config/agent-eval.json
@@ -214,29 +214,19 @@ test('executeBenchmarkSuite with record:true records credential into agent-eval 
   assert.equal(before.ok, false);
   assert.equal(before.reason, 'no-eval-for-tree');
 
-  // Execute suite with record: true
   const suite = executeBenchmarkSuite({
     root,
     model: 'benchmarking-runner',
     record: true,
   });
 
-  assert.equal(suite.recorded, true);
-  assert.ok(suite.receipt);
-  assert.equal(suite.receipt.tasks, 5);
-  assert.equal(suite.receipt.passRate, 1.0);
+  assert.equal(suite.recorded, false);
+  assert.equal(suite.recordSkipped, 'no-runner');
+  assert.equal(fs.existsSync(path.join(root, '.agents', 'evals', 'eval-log.json')), false);
 
-  // Now agent-eval gate check must pass
   const after = evaluate(root);
-  assert.equal(after.ok, true);
-  assert.equal(after.reason, 'pass');
-
-  // Verify eval-log.json exists and has entries
-  const logPath = path.join(root, '.agents', 'evals', 'eval-log.json');
-  assert.ok(fs.existsSync(logPath));
-  const logContent = JSON.parse(fs.readFileSync(logPath, 'utf8'));
-  assert.ok(Array.isArray(logContent.entries));
-  assert.equal(logContent.entries[0].passRate, 1.0);
+  assert.equal(after.ok, false);
+  assert.equal(after.reason, 'no-eval-for-tree');
 });
 
 test('CLI interaction supports list and run commands', () => {

@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
+import { validateExecutionSafety } from '../../templates/engine/.agents/scripts/execution-guardrails.mjs';
 
 export const MCP_GATEWAY_CONFIG_REL = '.agents/config/mcp-gateway.json';
 export const MCP_AUDIT_LOG_REL = '.agents/mcp-audit.jsonl';
@@ -180,6 +181,15 @@ export function matchPathPattern(pattern, filePath) {
   return new RegExp(`^${escaped}$`).test(normalized);
 }
 
+function shellCommandArg(args) {
+  const raw = args?.command ?? args?.cmd ?? args?.script;
+  if (typeof raw === 'string') return raw.trim() ? raw : null;
+  if (Array.isArray(raw) && raw.length > 0 && raw.every((part) => typeof part === 'string')) {
+    return raw.some((part) => part.trim()) ? raw : null;
+  }
+  return null;
+}
+
 export function matchArgsPattern(pattern, args) {
   if (!args) return false;
   const str = typeof args === 'string' ? args : JSON.stringify(args);
@@ -311,6 +321,28 @@ export function evaluateMcpCall({
             }
           }
         }
+      }
+    }
+  }
+
+  // 3.5 Unified Execution Guardrails for shell-like tool calls
+  if (level === 'L2' || ['execute_command', 'shell', 'bash', 'run_script'].includes(tool)) {
+    const cmdCandidate = shellCommandArg(args);
+    if (cmdCandidate) {
+      const safety = validateExecutionSafety(cmdCandidate, {
+        root: target || process.cwd(),
+        allowL2: true,
+      });
+      if (!safety.safe) {
+        return {
+          allowed: false,
+          decision: 'DENIED_PARAM',
+          reason: `Execution guardrails blocked command (${safety.level}): ${safety.reason}`,
+          level: safety.level,
+          role,
+          server,
+          tool,
+        };
       }
     }
   }

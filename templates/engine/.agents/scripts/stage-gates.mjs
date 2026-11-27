@@ -249,8 +249,8 @@ function entryConfirmedAt(root, intentRel, incRel, missingReason) {
 }
 
 // specConfirmed：plan 门的 L2/L3 追加要求
-export function specConfirmed(root, base) {
-  return specConfirmedAt(root, `workflow/specs/${base}.md`);
+export function specConfirmed(root, base, rel = null) {
+  return specConfirmedAt(root, rel || `workflow/specs/${base}.md`);
 }
 
 function specConfirmedAt(root, rel) {
@@ -280,22 +280,23 @@ function archiveCandidates(root, kind, base) {
 // 边界（2026-10-24 复核 m2）：plan 被合法置 superseded/cancelled 时本门恒拒——该 intent 的 →done
 // 通道随之关闭（superseded 不可逆）。正确处置是**intent 同步 superseded**，不是放宽本门；勿在
 // 此处加 superseded 放行（否则「plan 已废弃但 intent 照样关单」成为逃逸路径）。
-export function planConfirmedFor(root, base) {
-  const rel = `workflow/plans/${base}.md`;
-  const abs = path.join(root, rel);
-  const target = fs.existsSync(abs) ? abs : archiveCandidates(root, 'plans', base)[0];
-  if (!target) return { ok: false, reason: `缺同名 plan（${rel}，活跃与归档均未命中）` };
-  return judgeDoc(root, target, rel, ENTRY_STATUSES);
+export function planConfirmedFor(root, base, rel = null) {
+  const useRel = rel || `workflow/plans/${base}.md`;
+  const abs = path.join(root, useRel);
+  const target = fs.existsSync(abs) ? abs : (rel ? null : archiveCandidates(root, 'plans', base)[0]);
+  if (!target) return { ok: false, reason: `缺同名 plan（${useRel}，活跃与归档均未命中）` };
+  return judgeDoc(root, target, useRel, ENTRY_STATUSES);
 }
 
 // reviewLineFor：L2/L3 关单门——intent 或同名 spec 正文须有独立复核落盘行，且含可证伪基底。
 // 判据与 check-loop s01（`^- 独立复核：`）及 closeout §0.3（行内含「复核上下文：」）单源。
 const REVIEW_LINE_RE = /^- 独立复核：/;
-export function reviewLineFor(root, base) {
+export function reviewLineFor(root, base, rels = null) {
   const found = [];
-  for (const [kind, rel] of [['intents', `workflow/intents/${base}.md`], ['specs', `workflow/specs/${base}.md`]]) {
+  const targets = rels || [['intents', `workflow/intents/${base}.md`], ['specs', `workflow/specs/${base}.md`]];
+  for (const [kind, rel] of targets) {
     const abs = path.join(root, rel);
-    const paths = fs.existsSync(abs) ? [abs] : archiveCandidates(root, kind, base);
+    const paths = fs.existsSync(abs) ? [abs] : (kind ? archiveCandidates(root, kind, base) : []);
     for (const p of paths) {
       // 逐行全取（2026-10-24 复核 m1）：原 find() 只取每个文件**首个**「- 独立复核：」行——
       // 首行无「复核上下文：」而后续行有时会误拒（实证 specs/2026-10-18-po-concurrent-overorder-lost-update.md:202/:204）
@@ -615,9 +616,11 @@ export function draftGateFor(kind, root, base, opts = {}) {
 
 // confirmGateFor：确认门总判（confirm-doc 用；docRel = workflow/specs/... 或 workflow/plans/...）
 export function confirmGateFor(root, docRel) {
-  const base = path.basename(docRel).replace(/\.md$/, '');
-  const kind = docRel.startsWith('workflow/specs/') ? 'spec' : 'plan';
-  const g = draftGateFor(kind, root, base);
+  const norm = String(docRel || '').replace(/\\/g, '/');
+  const task = norm.match(/^workflow\/tasks\/([^/]+)\/(spec|plan)\.md$/);
+  const base = path.basename(norm).replace(/\.md$/, '');
+  const kind = task ? task[2] : (norm.startsWith('workflow/specs/') ? 'spec' : 'plan');
+  const g = draftGateFor(kind, root, base, task ? { taskDir: `workflow/tasks/${task[1]}` } : {});
   if (!g.ok) return g;
   // 歧义清单门（clarify-ledger）+ 前提质询门（premise-interrogation）+ 验收覆盖门（coverage-map）：
   // 只在 spec 的 draft→approved 前置上叠加；plan 与存量（锚前/缺日期）不涉。

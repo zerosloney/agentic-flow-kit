@@ -5,6 +5,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 import {
   MAX_SCAN_FILES,
@@ -18,6 +19,7 @@ import {
   buildDependencyGraph,
   computeTestImpact,
   selectDynamicTestImpact,
+  changedFilesFromGit,
   formatDynamicDecision,
 } from '../templates/engine/.agents/scripts/dynamic-test-impact.mjs';
 
@@ -26,6 +28,41 @@ import {
 } from '../templates/engine/.agents/scripts/pipeline-run.mjs';
 
 import { makeTmp } from './helpers/tmp.mjs';
+
+test('dynamic-test-impact: 未跟踪的新文件算进变更集合', () => {
+  const root = makeTmp('tia-untracked-');
+  spawnSync('git', ['init', '-q'], { cwd: root });
+  fs.writeFileSync(path.join(root, 'README.md'), 'base\n');
+  for (const args of [
+    ['config', 'user.email', 'test@example.com'],
+    ['config', 'user.name', 'tester'],
+    ['add', 'README.md'],
+    ['commit', '-q', '-m', 'base'],
+  ]) {
+    const r = spawnSync('git', args, { cwd: root, encoding: 'utf8' });
+    assert.equal(r.status, 0, r.stderr);
+  }
+  fs.writeFileSync(path.join(root, 'src-new.mjs'), 'export const n = 1;\n');
+  const gitFiles = changedFilesFromGit(null, root);
+  assert.equal(gitFiles.error, null);
+  assert.ok(gitFiles.files.includes('src-new.mjs'), JSON.stringify(gitFiles));
+});
+
+test('assembleWorkOrderContext 把动态选测写进工单而不是吞掉 ReferenceError', () => {
+  const root = makeTmp('tia-wo-');
+  fs.mkdirSync(path.join(root, 'src'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'tests'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'src', 'a.mjs'), 'export const a = 1;\n');
+  fs.writeFileSync(path.join(root, 'tests', 'a.test.mjs'), "import { a } from '../src/a.mjs';\n");
+  const decision = selectDynamicTestImpact(root, ['src/a.mjs'], { fallbackOnUntested: false });
+  assert.ok(decision.impactedTests.length > 0, JSON.stringify(decision));
+  const ctx = assembleWorkOrderContext({ root }, { docs: {} }, {
+    kind: 'implement',
+    context: { files: ['src/a.mjs'] },
+  });
+  assert.ok(ctx.slices.dynamicTestImpact, 'dynamicTestImpact missing');
+  assert.ok(ctx.slices.dynamicTestImpact.impactedTests.includes('tests/a.test.mjs'));
+});
 
 test('dynamic-test-impact: 路径规范化与文件类型探测', () => {
   assert.equal(normalizePath('src\\utils\\foo.mjs'), 'src/utils/foo.mjs');

@@ -4,6 +4,7 @@ import crypto from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { hashSkillDir } from './lock.mjs';
 import { sanitizeHostEnv, executeSandbox } from '../install/sandbox.mjs';
+import { validateExecutionSafety } from '../../templates/engine/.agents/scripts/execution-guardrails.mjs';
 
 export const DEFAULT_EVAL_THRESHOLD = 0.8;
 export const DEFAULT_EVAL_MAX_AGE_DAYS = 30;
@@ -189,42 +190,50 @@ export function evaluateSkillCase(caseItem, { target, timeoutMs, sandbox = false
       stderr = err.message;
     }
   } else {
-    const sanitizedBase = sanitizeHostEnv(process.env);
-    const runEnv = { ...sanitizedBase, ...env, ...(caseItem.env || {}) };
-    const useShell = caseItem.shell === true || (typeof caseItem.command === 'string' && !caseItem.args?.length);
-
-    try {
-      let res;
-      if (typeof caseItem.command === 'string' && !caseItem.args?.length) {
-        res = spawnSync(caseItem.command, {
-          cwd: target,
-          encoding: 'utf8',
-          input: caseItem.stdin ?? '',
-          timeout,
-          env: runEnv,
-          shell: true,
-          windowsHide: true,
-        });
-      } else {
-        res = spawnSync(cmd === 'node' ? process.execPath : cmd, args, {
-          cwd: target,
-          encoding: 'utf8',
-          input: caseItem.stdin ?? '',
-          timeout,
-          env: runEnv,
-          shell: useShell,
-          windowsHide: true,
-        });
-      }
-      status = res.status ?? 1;
-      stdout = res.stdout || '';
-      stderr = res.stderr || '';
-      if (res.error?.code === 'ETIMEDOUT') {
-        timedOut = true;
-      }
-    } catch (err) {
+    // 用例来自技能数据集，和命令写在同一份 JSON 里。数据集里的 allowUnsafe 不能关掉护栏。
+    const safety = validateExecutionSafety(fullCommandString, { root: target, allowL2: true });
+    if (!safety.safe) {
       status = 1;
-      stderr = err.message;
+      stdout = '';
+      stderr = `Command blocked by execution guardrails (${safety.level}): ${safety.reason}`;
+    } else {
+      const sanitizedBase = sanitizeHostEnv(process.env);
+      const runEnv = { ...sanitizedBase, ...env, ...(caseItem.env || {}) };
+      const useShell = caseItem.shell === true || (typeof caseItem.command === 'string' && !caseItem.args?.length);
+
+      try {
+        let res;
+        if (typeof caseItem.command === 'string' && !caseItem.args?.length) {
+          res = spawnSync(caseItem.command, {
+            cwd: target,
+            encoding: 'utf8',
+            input: caseItem.stdin ?? '',
+            timeout,
+            env: runEnv,
+            shell: true,
+            windowsHide: true,
+          });
+        } else {
+          res = spawnSync(cmd === 'node' ? process.execPath : cmd, args, {
+            cwd: target,
+            encoding: 'utf8',
+            input: caseItem.stdin ?? '',
+            timeout,
+            env: runEnv,
+            shell: useShell,
+            windowsHide: true,
+          });
+        }
+        status = res.status ?? 1;
+        stdout = res.stdout || '';
+        stderr = res.stderr || '';
+        if (res.error?.code === 'ETIMEDOUT') {
+          timedOut = true;
+        }
+      } catch (err) {
+        status = 1;
+        stderr = err.message;
+      }
     }
   }
 

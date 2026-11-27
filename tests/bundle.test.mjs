@@ -310,3 +310,35 @@ test('bundle directory verify passes for plain bundle without hosts/', () => {
   assert.equal(verified.ok, true);
   assert.ok(verified.fileCount > 0);
 });
+
+test('bundle verify rejects directory bundle with missing digest and malformed JSON entry content', () => {
+  const tmp = makeTmp('flow-kit-bundle-missing-digest-');
+  const bundlePath = path.join(tmp, 'plain.bundle.json');
+  packBundle({ out: bundlePath });
+
+  const unpackDir = path.join(tmp, 'unpacked');
+  unpackBundle(readBundle(bundlePath), unpackDir);
+
+  // 缺陷3a：目录型 bundle 缺失 digest 时必须 fail-closed
+  const manifestPath = path.join(unpackDir, 'bundle-manifest.json');
+  const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
+  delete manifest.digest;
+  fs.writeFileSync(manifestPath, JSON.stringify(manifest), 'utf8');
+
+  assert.throws(
+    () => verifyBundle(readBundle(unpackDir)),
+    (err) => err.code === 'BUNDLE_CORRUPTED' && /missing bundle digest/.test(err.message),
+  );
+
+  // 缺陷3b：JSON bundle 的 entry.content 非字符串时抛出 BUNDLE_CORRUPTED 而非 TypeError
+  const raw = JSON.parse(fs.readFileSync(bundlePath, 'utf8'));
+  const firstKey = Object.keys(raw.files)[0];
+  raw.files[firstKey].content = null;
+  const badJsonPath = path.join(tmp, 'bad-entry.bundle.json');
+  fs.writeFileSync(badJsonPath, JSON.stringify(raw), 'utf8');
+
+  assert.throws(
+    () => verifyBundle(readBundle(badJsonPath)),
+    (err) => err.code === 'BUNDLE_CORRUPTED' && /invalid entry content/.test(err.message),
+  );
+});

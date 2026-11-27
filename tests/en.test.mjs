@@ -454,3 +454,39 @@ test('en rules export messages are English', () => {
   assert.match(again.stderr, /flow-rules\.yml already exists \(use --force to overwrite\)/);
   assert.doesNotMatch(again.stderr, /已存在/, 'en output must not fall back to the zh sentence');
 });
+
+test('zh runtime help for headless-driver and timeline-trace stays the Chinese text', () => {
+  const headless = spawnSync(process.execPath, [path.join(KIT, 'templates/engine/.agents/scripts/headless-driver.mjs'), '--help'], { encoding: 'utf8' });
+  assert.equal(headless.status, 0);
+  assert.equal(headless.stdout, [
+    '用法: node headless-driver.mjs <command> [options]',
+    '',
+    '命令:',
+    '  shadow    启动隔离影子试跑并全景复盘',
+    '',
+    '选项:',
+    '  --max-steps <n>     最大步数预算（默认 10）',
+    '  --timeout-ms <ms>   总超时时间（默认 60000ms）',
+    '  --max-tokens <n>    最大 Token 消耗预算（默认 0 不限制）',
+    '  --keep              保留影子工作区（默认自动清理）',
+    '',
+  ].join('\n'));
+  const timeline = spawnSync(process.execPath, [path.join(KIT, 'templates/engine/.agents/scripts/timeline-trace.mjs'), '--help'], { encoding: 'utf8' });
+  assert.equal(timeline.status, 0);
+  assert.match(timeline.stdout, /^用法: node timeline-trace\.mjs/);
+  assert.doesNotMatch(timeline.stdout, /Usage:/);
+});
+
+test('en install run help for headless-driver and timeline-trace is English', () => {
+  const dir = tmpRepo();
+  const installed = run(['install', '--agent', 'claude', '--lang', 'en', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(installed.status, 0, installed.stderr);
+  const headless = run(['run', 'headless-driver.mjs', '--help'], dir);
+  assert.equal(headless.status, 0, headless.stderr);
+  assert.match(headless.stdout, /Usage: node headless-driver\.mjs/);
+  assert.doesNotMatch(headless.stdout, /用法/);
+  const timeline = run(['run', 'timeline-trace.mjs', '--help'], dir);
+  assert.equal(timeline.status, 0, timeline.stderr);
+  assert.match(timeline.stdout, /Usage: node timeline-trace\.mjs/);
+  assert.doesNotMatch(timeline.stdout, /用法/);
+});

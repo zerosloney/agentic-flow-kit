@@ -61,6 +61,19 @@ test('confirm-doc accepts workflow/tasks/<task>/plan.md: ledger row + draft→ap
   assert.match(fs.readFileSync(path.join(root, rel), 'utf8'), /^状态: approved$/m);
 });
 
+test('confirm-doc refuses L2 task intent done when the sibling spec is missing', () => {
+  const root = tmpRoot();
+  const rel = 'workflow/tasks/2026-11-18-demo/intent.md';
+  writeDoc(root, rel, 'approved');
+  const abs = path.join(root, rel);
+  fs.writeFileSync(abs, fs.readFileSync(abs, 'utf8').replace('级别: L1', '级别: L2'));
+  const r = run(['run', 'confirm-doc.mjs', '--', rel, '--delegated', '原话：可以关单', '--root', root], root);
+  assert.equal(r.status, 2, `${r.stdout}\n${r.stderr}`);
+  assert.match(`${r.stdout}${r.stderr}`, /同名 spec/);
+  assert.match(fs.readFileSync(abs, 'utf8'), /^状态: approved$/m);
+  assert.equal(readLedger(root).length, 0);
+});
+
 test('confirm-doc still rejects tasks paths that are not exactly <task>/<file>.md', () => {
   const root = tmpRoot();
   const flat = 'workflow/tasks/plan.md'; // 缺任务目录层

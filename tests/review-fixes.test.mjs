@@ -71,6 +71,15 @@ test('remove-host strips managed entries but keeps pre-existing user content', (
   assert.equal('hooks' in afterUninstall, false);
 });
 
+test('three-way merge keeps both edits when the worktree is only CRLF', () => {
+  const base = 'a\nb\nc\nd\ne\n';
+  const ours = 'a\r\nUSER\r\nc\r\nd\r\ne\r\n';
+  const theirs = 'a\nb\nc\nd\nKIT\n';
+  const merged = mergeThreeWay({ base, ours, theirs });
+  assert.equal(merged.status, 'clean');
+  assert.equal(merged.text, 'a\nUSER\nc\nd\nKIT\n');
+});
+
 test('three-way merge reports every multi-hunk conflict as conflict, not unavailable', () => {
   const base = 'a\nb\nc\nd\ne\nf\n';
   const ours = 'A\nb\nc\nd\ne\nF\n';

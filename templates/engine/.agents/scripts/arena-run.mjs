@@ -16,6 +16,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { computeCompositeScore, renderAsciiRadar, DEFAULT_RUBRIC_WEIGHTS } from './agent-evaluator.mjs';
+import { validateExecutionSafety, sanitizeExecEnv, redactSensitiveText } from './execution-guardrails.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const GIT = process.env.CHECK_LOOP_GIT || (process.platform === 'win32' ? 'git.exe' : 'git');
@@ -287,6 +288,13 @@ export function evalArena({ root: explicitRoot, topic, testCmd, timeoutMs = 1200
     }
     if (!command) command = 'node -e "process.exit(0)"';
 
+    const safety = validateExecutionSafety(command, { root: armDir, allowL2: true });
+    if (!safety.safe) {
+      const err = new Error(`arena-run: 评测命令被执行护栏拦截 (${safety.level}): ${safety.reason}`);
+      err.code = 'UNSAFE_TEST_CMD';
+      throw err;
+    }
+
     const shell = process.platform === 'win32' ? 'cmd.exe' : 'sh';
     const shellArgs = process.platform === 'win32' ? ['/d', '/s', '/c', command] : ['-c', command];
 
@@ -296,6 +304,7 @@ export function evalArena({ root: explicitRoot, topic, testCmd, timeoutMs = 1200
       encoding: 'utf8',
       timeout: timeoutMs,
       maxBuffer: 16 * 1024 * 1024,
+      env: sanitizeExecEnv(process.env),
     });
     const durationMs = Date.now() - start;
 
@@ -366,7 +375,7 @@ export function evalArena({ root: explicitRoot, topic, testCmd, timeoutMs = 1200
       scores: rubric.scores,
       compositeScore: rubric.composite,
       passed: rubric.passed,
-      stdoutExcerpt: (execRes.stdout || '').slice(-2000),
+      stdoutExcerpt: redactSensitiveText(execRes.stdout || '').slice(-2000),
     };
   }
 
