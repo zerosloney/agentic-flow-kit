@@ -15,6 +15,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
+import { computeCompositeScore, renderAsciiRadar, DEFAULT_RUBRIC_WEIGHTS } from './agent-evaluator.mjs';
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
 export const GIT = process.env.CHECK_LOOP_GIT || (process.platform === 'win32' ? 'git.exe' : 'git');
@@ -77,7 +78,7 @@ export function writeArenaMeta(root, topic, data) {
 }
 
 // 1. init: 开擂派生
-export function initArena({ root: explicitRoot, topic, arms = ['plan-a', 'plan-b'], base = 'HEAD', force = false } = {}) {
+export function initArena({ root: explicitRoot, topic, arms = ['plan-a', 'plan-b'], models, base = 'HEAD', force = false } = {}) {
   const root = resolveProjectRoot(explicitRoot);
   assertGitRepo(root);
 
@@ -92,6 +93,24 @@ export function initArena({ root: explicitRoot, topic, arms = ['plan-a', 'plan-b
   for (const arm of armList) {
     if (!/^[a-zA-Z0-9_-]+$/.test(arm)) {
       throw new Error(`arena-run: 候选臂名称不合法 "${arm}"，必须匹配 /^[a-zA-Z0-9_-]+$/`);
+    }
+  }
+
+  const modelMap = {};
+  if (models) {
+    if (typeof models === 'object' && !Array.isArray(models)) {
+      Object.assign(modelMap, models);
+    } else {
+      const mList = Array.isArray(models) ? models : String(models).split(/[,，]/).map((s) => s.trim()).filter(Boolean);
+      for (let i = 0; i < mList.length; i++) {
+        const item = mList[i];
+        if (item.includes(':') || item.includes('=')) {
+          const [k, v] = item.split(/[:=]/);
+          if (k && v) modelMap[k.trim()] = v.trim();
+        } else if (armList[i]) {
+          modelMap[armList[i]] = item;
+        }
+      }
     }
   }
 
@@ -151,6 +170,7 @@ export function initArena({ root: explicitRoot, topic, arms = ['plan-a', 'plan-b
       branch,
       dir: path.relative(root, armDir).replace(/\\/g, '/'),
       status: 'ready',
+      model: modelMap[arm] || 'default',
     };
   }
 
@@ -165,6 +185,37 @@ export function initArena({ root: explicitRoot, topic, arms = ['plan-a', 'plan-b
 
   writeArenaMeta(root, topic, meta);
   return meta;
+}
+
+// 扫描所有主题列表
+export function listArenaTopics(explicitRoot) {
+  const root = resolveProjectRoot(explicitRoot);
+  const arenaBase = path.join(root, '.agents', 'arena');
+  if (!fs.existsSync(arenaBase)) return [];
+  const entries = fs.readdirSync(arenaBase, { withFileTypes: true });
+  const topics = [];
+  for (const entry of entries) {
+    if (entry.isDirectory()) {
+      const jsonFile = path.join(arenaBase, entry.name, 'arena.json');
+      if (fs.existsSync(jsonFile)) {
+        try {
+          const data = JSON.parse(fs.readFileSync(jsonFile, 'utf8'));
+          topics.push({
+            topic: entry.name,
+            status: data.status,
+            createdAt: data.createdAt,
+            baseCommit: data.baseCommit,
+            adoptedArm: data.adoptedArm,
+            armsCount: Object.keys(data.arms || {}).length,
+            arms: Object.keys(data.arms || {}),
+          });
+        } catch {
+          // ignore corrupted json
+        }
+      }
+    }
+  }
+  return topics.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
 }
 
 // 2. status: 状态查询
@@ -197,28 +248,11 @@ export function statusArena({ root: explicitRoot, topic } = {}) {
   }
 
   // 扫描所有主题
-  const arenaBase = path.join(root, '.agents', 'arena');
-  if (!fs.existsSync(arenaBase)) return { topics: [] };
-  const entries = fs.readdirSync(arenaBase, { withFileTypes: true });
-  const topics = [];
-  for (const entry of entries) {
-    if (entry.isDirectory()) {
-      const jsonFile = path.join(arenaBase, entry.name, 'arena.json');
-      if (fs.existsSync(jsonFile)) {
-        try {
-          const data = JSON.parse(fs.readFileSync(jsonFile, 'utf8'));
-          topics.push({ topic: entry.name, status: data.status, createdAt: data.createdAt, arms: Object.keys(data.arms || {}) });
-        } catch {
-          // ignore corrupted json
-        }
-      }
-    }
-  }
-  return { topics };
+  return { topics: listArenaTopics(root) };
 }
 
 // 3. eval: 跑分评测
-export function evalArena({ root: explicitRoot, topic, testCmd, timeoutMs = 120000 } = {}) {
+export function evalArena({ root: explicitRoot, topic, testCmd, timeoutMs = 120000, rubricWeights } = {}) {
   const root = resolveProjectRoot(explicitRoot);
   assertGitRepo(root);
 
@@ -282,6 +316,42 @@ export function evalArena({ root: explicitRoot, topic, testCmd, timeoutMs = 1200
     }
 
     const isPass = execRes.status === 0;
+
+    // 多维 Rubric 评分卡推导 (对标 Co-Sight GoldEval / agent-evaluator 契约)
+    const taskCompletion = isPass ? 1.0 : 0.0;
+    const gatePassRate = isPass ? 1.0 : 0.0;
+
+    // 代码变动精确度 (diffPrecision / testImpactPrecision)
+    let testImpactPrecision = 1.0;
+    if (filesChanged === 0 && insertions === 0 && deletions === 0) {
+      testImpactPrecision = 0.5;
+    } else {
+      const filePenalty = Math.max(0, filesChanged - 1) * 0.1;
+      const linesPenalty = Math.max(0, (insertions + deletions) - 50) * 0.002;
+      testImpactPrecision = Math.max(0.1, Math.min(1.0, 1.0 - filePenalty - linesPenalty));
+    }
+    testImpactPrecision = Math.round(testImpactPrecision * 10000) / 10000;
+
+    // 耗时效率 (stepEfficiency / efficiency)
+    let stepEfficiency = 1.0;
+    if (durationMs > 5000) {
+      stepEfficiency = Math.max(0.1, 1.0 - (durationMs - 5000) / 45000);
+    }
+    stepEfficiency = Math.round(stepEfficiency * 10000) / 10000;
+
+    // 沙箱安全与执行状态 (sandboxCompliance)
+    const sandboxCompliance = execRes.status === 0 ? 1.0 : (execRes.status === null ? 0.0 : 0.4);
+
+    const rawScores = {
+      taskCompletion,
+      gatePassRate,
+      sandboxCompliance,
+      testImpactPrecision,
+      stepEfficiency,
+    };
+
+    const rubric = computeCompositeScore(rawScores, rubricWeights);
+
     armInfo.evaluation = {
       evaluatedAt: new Date().toISOString(),
       testCmd: command,
@@ -293,6 +363,9 @@ export function evalArena({ root: explicitRoot, topic, testCmd, timeoutMs = 1200
         insertions,
         deletions,
       },
+      scores: rubric.scores,
+      compositeScore: rubric.composite,
+      passed: rubric.passed,
       stdoutExcerpt: (execRes.stdout || '').slice(-2000),
     };
   }
@@ -311,24 +384,30 @@ export function reportArena({ root: explicitRoot, topic, output } = {}) {
   if (arms.length === 0) return '# 方案打擂对质报告 (无候选臂)\n';
 
   const rows = [];
-  // 裁决推荐推导
+  // 裁决推荐推导 (综合评分优先，耗时次优)
   let bestPassArm = null;
+  let maxComposite = -1;
   let minDuration = Infinity;
 
   for (const [arm, info] of arms) {
     const ev = info.evaluation;
     if (ev && ev.testStatus === 'PASS') {
-      if (ev.durationMs < minDuration) {
+      const comp = typeof ev.compositeScore === 'number' ? ev.compositeScore : 1.0;
+      if (comp > maxComposite || (comp === maxComposite && ev.durationMs < minDuration)) {
+        maxComposite = comp;
         minDuration = ev.durationMs;
         bestPassArm = arm;
       }
     }
   }
 
+  const radarSections = [];
+
   for (const [arm, info] of arms) {
     const ev = info.evaluation;
+    const model = info.model || 'default';
     if (!ev) {
-      rows.push(`| **${arm}** | ⏳ 未评测 (PENDING) | — | — | 待执行 eval |`);
+      rows.push(`| **${arm}** | \`${model}\` | ⏳ 未评测 (PENDING) | — | — | — | — | 待执行 eval |`);
       continue;
     }
     // 审查遗留批 2026-11-23：MISSING_WORKTREE 按 skip/missing 展示（不计失败，不误报 ❌ FAIL）；
@@ -337,6 +416,13 @@ export function reportArena({ root: explicitRoot, topic, output } = {}) {
     const statusIcon = missing ? '⏭️ SKIP (工作树缺失)' : (ev.testStatus === 'PASS' ? '✅ PASS' : '❌ FAIL');
     const dur = missing ? '—' : `${ev.durationMs.toLocaleString()} ms`;
     const diffStr = ev.diff ? `+${ev.diff.insertions} / -${ev.diff.deletions} (${ev.diff.filesChanged} files)` : '—';
+    const compStr = missing || ev.compositeScore == null ? '—' : `${(ev.compositeScore * 100).toFixed(1)}%`;
+
+    let radarMini = '—';
+    if (!missing && ev.compositeScore != null) {
+      const filled = Math.min(10, Math.max(0, Math.round(ev.compositeScore * 10)));
+      radarMini = `\`[${'█'.repeat(filled)}${'░'.repeat(10 - filled)}]\``;
+    }
 
     let verdict = '可选候选';
     if (missing) {
@@ -344,23 +430,31 @@ export function reportArena({ root: explicitRoot, topic, output } = {}) {
     } else if (ev.testStatus === 'FAIL') {
       verdict = '⚠️ 测试未通过 (需排障)';
     } else if (arm === bestPassArm) {
-      verdict = '🌟 推荐底座 (通过且耗时最优)';
+      verdict = '🌟 推荐底座 (通过且综合评分最优)';
     } else {
       verdict = '✅ 可选底座 / 可嫁接';
     }
 
-    rows.push(`| **${arm}** | ${statusIcon} (exit ${ev.exitCode}) | ${dur} | ${diffStr} | ${verdict} |`);
+    rows.push(`| **${arm}** | \`${model}\` | ${statusIcon} (exit ${ev.exitCode}) | ${compStr} | ${radarMini} | ${dur} | ${diffStr} | ${verdict} |`);
+
+    if (ev.scores) {
+      radarSections.push(`##### 候选臂 [${arm}] (${model}) 维度评分卡\n\`\`\`text\n${renderAsciiRadar(ev.scores, DEFAULT_RUBRIC_WEIGHTS, ev.compositeScore)}\n\`\`\``);
+    }
   }
 
   const lines = [
     `### 方案打擂实测对质矩阵 (Arena Evaluation Matrix) - ${meta.topic}`,
     `> 基线提交：\`${(meta.baseCommit || '').slice(0, 10)}\` | 状态：\`${meta.status}\` | 评测记录：${new Date().toISOString()}`,
     '',
-    '| 候选臂 (Arm) | 验证状态 (Verify) | 执行耗时 (Duration) | 代码规模 (Diff) | 推荐判据 (Verdict) |',
-    '| :--- | :--- | :--- | :--- | :--- |',
+    '| 候选臂 (Arm) | 赋能模型 (Model) | 验证状态 (Verify) | 综合评分 (Score) | 雷达简谱 (Radar) | 执行耗时 (Duration) | 代码规模 (Diff) | 推荐判据 (Verdict) |',
+    '| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |',
     ...rows,
     '',
   ];
+
+  if (radarSections.length) {
+    lines.push('#### 多维评分卡对质细项 (Rubric Breakdown)', '', ...radarSections, '');
+  }
 
   const markdown = lines.join('\n');
 
@@ -507,7 +601,7 @@ function printHelp() {
 
 命令：
   init     创建工作树隔离沙盒与候选臂分支
-           --topic <name> [--arms plan-a,plan-b] [--base HEAD] [--force]
+           --topic <name> [--arms plan-a,plan-b] [--models gpt-4o,claude-3-5-sonnet] [--base HEAD] [--force]
   status   检视打擂进行态、代码脏污与 diff 规模
            [--topic <name>] [--json]
   eval     在各臂沙盒中独立跑测，采集耗时与度量
@@ -544,6 +638,7 @@ async function main() {
           root,
           topic: args.topic,
           arms: args.arms,
+          models: args.models,
           base: args.base,
           force: Boolean(args.force),
         });

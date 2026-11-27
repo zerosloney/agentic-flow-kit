@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { makeTmp } from './helpers/tmp.mjs';
 import {
   initArena,
+  listArenaTopics,
   statusArena,
   evalArena,
   reportArena,
@@ -293,4 +294,68 @@ test('reportArena: MISSING_WORKTREE 按 skip 展示不计失败，报告不再�
   assert.ok(md.includes('🌟 推荐底座'), '存活臂照常参与裁决推荐');
 
   cleanupArena({ root, topic: 'missing-duel' });
+});
+
+test('initArena: 支持分配多模型归属并在元数据中正确记录', () => {
+  const root = initTestRepo();
+  try {
+    const meta = initArena({
+      root,
+      topic: 'multi-model-duel',
+      arms: ['arm-gpt', 'arm-claude'],
+      models: ['gpt-4o', 'claude-3-5-sonnet'],
+    });
+
+    assert.equal(meta.arms['arm-gpt'].model, 'gpt-4o');
+    assert.equal(meta.arms['arm-claude'].model, 'claude-3-5-sonnet');
+
+    const topics = listArenaTopics(root);
+    assert.ok(topics.some((t) => t.topic === 'multi-model-duel' && t.armsCount === 2));
+  } finally {
+    cleanupArena({ root, topic: 'multi-model-duel', force: true });
+  }
+});
+
+test('evalArena & reportArena: 生成 5 维 Rubric 评分卡、综合效能分与 ASCII 雷达图', () => {
+  const root = initTestRepo();
+  try {
+    initArena({
+      root,
+      topic: 'radar-duel',
+      arms: ['arm-fast', 'arm-safe'],
+      models: 'gpt-4o,claude-3-5-sonnet',
+    });
+
+    const meta = readArenaMeta(root, 'radar-duel');
+    const fastDir = path.join(root, meta.arms['arm-fast'].dir);
+    // 给 arm-fast 编写正常优化代码
+    fs.writeFileSync(
+      path.join(fastDir, 'math.js'),
+      'export function add(a, b) { return (a | 0) + (b | 0); }\n',
+      'utf8'
+    );
+
+    const evaluated = evalArena({ root, topic: 'radar-duel', testCmd: 'node test.js' });
+    const fastEval = evaluated.arms['arm-fast'].evaluation;
+    assert.equal(fastEval.testStatus, 'PASS');
+    assert.ok(fastEval.scores, '应包含 5 维 Rubric 评分');
+    assert.equal(typeof fastEval.scores.taskCompletion, 'number');
+    assert.equal(typeof fastEval.scores.gatePassRate, 'number');
+    assert.equal(typeof fastEval.scores.sandboxCompliance, 'number');
+    assert.equal(typeof fastEval.scores.testImpactPrecision, 'number');
+    assert.equal(typeof fastEval.scores.stepEfficiency, 'number');
+    assert.equal(typeof fastEval.compositeScore, 'number');
+    assert.ok(fastEval.compositeScore > 0, '综合效能分应大于 0');
+
+    const md = reportArena({ root, topic: 'radar-duel' });
+    assert.ok(md.includes('方案打擂实测对质矩阵'));
+    assert.ok(md.includes('模型'));
+    assert.ok(md.includes('gpt-4o'));
+    assert.ok(md.includes('claude-3-5-sonnet'));
+    assert.ok(md.includes('综合评分'));
+    assert.ok(md.includes('多维评分卡对质细项'));
+    assert.ok(md.includes('维度评分卡'));
+  } finally {
+    cleanupArena({ root, topic: 'radar-duel', force: true });
+  }
 });

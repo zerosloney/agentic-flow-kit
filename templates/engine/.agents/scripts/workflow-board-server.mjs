@@ -20,6 +20,15 @@ import { projectTasks } from './gen-workflow-index.mjs'; // 任务投影单源�
 import { funnelFromLedger, loadFirstAdded, scanReviews, calendarMonthsBetween } from './metrics-core.mjs';
 import { buildTour } from './dev-tour-model.mjs';
 import { resolveBoardPort } from './board-port.mjs';
+import { sanitizeExecEnv, redactSensitiveText } from './execution-guardrails.mjs';
+import {
+  listArenaTopics,
+  statusArena,
+  evalArena,
+  reportArena,
+  adoptArena,
+  cleanupArena,
+} from './arena-run.mjs';
 
 const ROOT = process.env.FLOW_KIT_PROJECT_ROOT
   || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -84,6 +93,262 @@ export function parseRunFile(text) {
   return j;
 }
 
+// ---- 看门狗巡检与熔断状态机（2026-11-26 watchdog-daemon）----
+export const DEFAULT_WATCHDOG_CONFIG = {
+  timeoutThresholdMs: 15 * 60 * 1000, // 15 分钟停滞超时
+  warningThresholdMs: 8 * 60 * 1000,  // 8 分钟停滞预警
+  stallWindowSize: 3,
+};
+
+export function detectRunWatchdogAlert(run, options = {}) {
+  if (!run || typeof run !== 'object') return null;
+  const now = options.now ?? Date.now();
+  const timeoutMs = options.timeoutThresholdMs ?? DEFAULT_WATCHDOG_CONFIG.timeoutThresholdMs;
+  const warningMs = options.warningThresholdMs ?? DEFAULT_WATCHDOG_CONFIG.warningThresholdMs;
+
+  // 终态任务不产生活跃停滞告警
+  if (['done', 'aborted'].includes(run.stopType)) return null;
+
+  const events = Array.isArray(run.events) ? run.events : [];
+  const lastActiveTs = Date.parse(run.updatedAt || run.createdAt || 0);
+  const elapsedMs = Number.isFinite(lastActiveTs) && lastActiveTs > 0 ? Math.max(0, now - lastActiveTs) : 0;
+
+  // 1. 外部或主动熔断标记
+  if (run.circuitBreak) {
+    return {
+      runId: run.runId,
+      stage: run.stage || 'unknown',
+      type: 'circuit_break',
+      severity: 'critical',
+      elapsedMs,
+      message: `流水线已被看门狗紧急熔断: ${run.circuitBreak.reason || 'manual_circuit_break'}`,
+      suggestedAction: 'archive',
+    };
+  }
+
+  // 2. 连续门禁失败或重试触顶 (retry cap exhausted)
+  const route = run.route || (run.nextTarget ? [...events].reverse().find((e) => e.type === 'route' && e.from === run.stage) : null);
+  if (run.stopType === 'gate-fail' && route && route.attempt >= route.cap) {
+    return {
+      runId: run.runId,
+      stage: run.stage || 'verify',
+      type: 'retry_cap',
+      severity: 'critical',
+      elapsedMs,
+      message: `阶段 [${run.stage || 'verify'}] 质量修复回环已达上限 (${route.attempt}/${route.cap} 次)，无法自动收敛`,
+      suggestedAction: 'human_confirm',
+    };
+  }
+
+  // 3. 门禁连续同质报错空转震荡 (loop oscillation)
+  const gateEvents = events.filter((e) => e.type === 'gate');
+  if (gateEvents.length >= 3) {
+    const recent3 = gateEvents.slice(-3);
+    const allFailed = recent3.every((e) => e.exit !== 0);
+    const sameGate = recent3.every((e) => e.gate === recent3[0].gate);
+    const sameExit = recent3.every((e) => e.exit === recent3[0].exit);
+    if (allFailed && sameGate && sameExit) {
+      return {
+        runId: run.runId,
+        stage: run.stage || 'verify',
+        type: 'loop_oscillation',
+        severity: 'critical',
+        elapsedMs,
+        message: `检测到门禁 [${recent3[0].gate}] 连续 ${recent3.length} 次报错退出码 ${recent3[0].exit}，陷入死循环震荡`,
+        suggestedAction: 'circuit_break',
+      };
+    }
+  }
+
+  // 4. 阶段停滞/超时无心跳 (timeout)
+  if (elapsedMs >= timeoutMs) {
+    return {
+      runId: run.runId,
+      stage: run.stage || 'unknown',
+      type: 'timeout',
+      severity: 'critical',
+      elapsedMs,
+      message: `流水线在 [${run.stage || '当前阶段'}] 已停滞 ${Math.round(elapsedMs / 60000)} 分钟无响应（心跳超时，可能由于 Agent 卡死或环境中断）`,
+      suggestedAction: 'circuit_break',
+    };
+  }
+  if (elapsedMs >= warningMs) {
+    return {
+      runId: run.runId,
+      stage: run.stage || 'unknown',
+      type: 'timeout',
+      severity: 'warning',
+      elapsedMs,
+      message: `流水线在 [${run.stage || '当前阶段'}] 已持续 ${Math.round(elapsedMs / 60000)} 分钟未更新状态（接近超时阈值）`,
+      suggestedAction: 'inspect',
+    };
+  }
+
+  return null;
+}
+
+export function inspectWatchdog(runs, options = {}) {
+  const now = options.now ?? Date.now();
+  const root = options.root || ROOT;
+  const list = Array.isArray(runs) ? runs : scanRuns();
+  const alerts = [];
+
+  // 外部停机信号检查
+  const stopSignalFile = path.join(root, '.agents', 'stop.signal');
+  if (fs.existsSync(stopSignalFile)) {
+    let reason = '存在 .agents/stop.signal 外部手动停机信号';
+    try {
+      const c = fs.readFileSync(stopSignalFile, 'utf8').trim();
+      if (c) reason = c;
+    } catch {}
+    alerts.push({
+      runId: '*',
+      stage: '*',
+      type: 'stop_signal',
+      severity: 'critical',
+      elapsedMs: 0,
+      message: `全局停机信号激活: ${reason}`,
+      suggestedAction: 'circuit_break',
+    });
+  }
+
+  const activeRuns = [];
+  let circuitBrokenCount = 0;
+
+  for (const r of list) {
+    const isTerminal = ['done', 'aborted'].includes(r.stopType);
+    if (!isTerminal) {
+      activeRuns.push(r);
+    }
+    if (r.stopType === 'aborted' || r.circuitBreak) {
+      circuitBrokenCount += 1;
+    }
+    const alert = detectRunWatchdogAlert(r, { ...options, now });
+    if (alert) {
+      alerts.push(alert);
+    }
+  }
+
+  const criticalCount = alerts.filter((a) => a.severity === 'critical').length;
+  const warningCount = alerts.filter((a) => a.severity === 'warning').length;
+  const stalledCount = alerts.filter((a) => a.runId !== '*').length;
+
+  let healthScore = 100;
+  if (activeRuns.length > 0) {
+    healthScore = Math.max(0, 100 - (criticalCount * 35 + warningCount * 15));
+  } else if (alerts.length > 0) {
+    healthScore = 50;
+  }
+
+  const status = criticalCount > 0 ? 'critical' : warningCount > 0 ? 'warning' : 'ok';
+
+  return {
+    ok: true,
+    timestamp: new Date(now).toISOString(),
+    status,
+    health: status,
+    activeRuns: activeRuns.length,
+    stalledRuns: stalledCount,
+    criticalAlerts: criticalCount,
+    warningAlerts: warningCount,
+    summary: {
+      totalRuns: list.length,
+      activeRuns: activeRuns.length,
+      healthyRuns: Math.max(0, activeRuns.length - stalledCount),
+      stalledRuns: stalledCount,
+      circuitBrokenRuns: circuitBrokenCount,
+      healthScore,
+      criticalAlerts: criticalCount,
+      warningAlerts: warningCount,
+    },
+    alerts,
+    config: {
+      timeoutThresholdMs: options.timeoutThresholdMs ?? DEFAULT_WATCHDOG_CONFIG.timeoutThresholdMs,
+      warningThresholdMs: options.warningThresholdMs ?? DEFAULT_WATCHDOG_CONFIG.warningThresholdMs,
+      stallWindowSize: options.stallWindowSize ?? DEFAULT_WATCHDOG_CONFIG.stallWindowSize,
+    },
+  };
+}
+
+export async function executeCircuitBreak(runId, options = {}) {
+  const root = options.root || ROOT;
+  const scriptsDir = options.scriptsDir || SCRIPTS_DIR;
+  const reason = options.reason || '看门狗检测到任务停滞并执行紧急熔断';
+  const to = options.to || 'cancelled';
+
+  if (!isValidRunId(runId)) {
+    throw new Error('非法的 runId 格式');
+  }
+
+  let runsDir = path.join(root, '.agents', 'cache', 'pipeline-runs');
+  if (!fs.existsSync(runsDir)) {
+    const fallbackDir = path.join(root, '.agents', 'pipeline-runs');
+    if (fs.existsSync(fallbackDir)) runsDir = fallbackDir;
+  }
+  const rel = `${runId}.json`;
+  const abs = path.resolve(runsDir, rel);
+  if (!abs.startsWith(runsDir + path.sep) || !fs.existsSync(abs)) {
+    throw new Error(`找不到 run 文件: ${rel}`);
+  }
+
+  // 1. 读取原 run 文件
+  let run;
+  try {
+    run = JSON.parse(fs.readFileSync(abs, 'utf8'));
+  } catch (e) {
+    throw new Error(`读取 run 文件失败: ${e.message}`);
+  }
+
+  // 2. 标记熔断状态
+  run.stopType = 'aborted';
+  run.abort = {
+    to,
+    note: `[WATCHDOG_CIRCUIT_BREAK] ${reason}`,
+  };
+  run.circuitBreak = {
+    triggeredAt: new Date().toISOString(),
+    reason,
+    by: options.by || 'watchdog',
+  };
+  if (!Array.isArray(run.events)) run.events = [];
+  run.events.push({
+    type: 'circuit-break',
+    by: options.by || 'watchdog',
+    reason,
+    to,
+    ts: new Date().toISOString(),
+  });
+  run.updatedAt = new Date().toISOString();
+
+  // 3. 原子落盘
+  const tmp = `${abs}.tmp.${Date.now()}.${Math.random().toString(36).slice(2, 6)}`;
+  fs.writeFileSync(tmp, JSON.stringify(run, null, 2), 'utf8');
+  fs.renameSync(tmp, abs);
+
+  // 4. 尝试异步调用 pipeline-run.mjs abort 确保文档状态与索引同步（若脚本存在）
+  const script = path.join(scriptsDir, 'pipeline-run.mjs');
+  if (!options.skipExec && fs.existsSync(script)) {
+    execFile(process.execPath, [script, 'abort', '--run', runId, '--to', to, '--delegated', reason], {
+      cwd: root,
+      env: sanitizeExecEnv({ ...process.env, FLOW_KIT_PROJECT_ROOT: root, FLOW_KIT_RUNTIME_SCRIPTS: scriptsDir }),
+      encoding: 'utf8',
+      windowsHide: true,
+    }, (err) => {
+      if (err) {
+        // pipeline-run 补跑失败仅作为日志提示，不影响状态机已熔断的事实
+      }
+    });
+  }
+
+  return {
+    ok: true,
+    runId,
+    status: 'aborted',
+    reason,
+    circuitBreak: run.circuitBreak,
+  };
+}
+
 // 单 run 卡片（/api/runs 载荷元素）：runId / requirement / stage / stopType / updatedAt / triage / 事件数 / 阶段条
 // 退回态（R6-1）：仅当 run 挂着未消费的 nextTarget 时，阶段条尾部追加「↩ 退回 <to>（<from> <attempt>/<cap>）」
 // ——attempt/cap 取该失败阶段最近一次 route 事件（stopGateFail 置 nextTarget 后必发 route）；route/route-enter
@@ -109,6 +374,9 @@ export function runCard(run) {
     workOrder: run.workOrder ? { id: run.workOrder.id, kind: run.workOrder.kind, title: run.workOrder.title, goal: run.workOrder.goal } : null,
     awaitConfirm: run.awaitConfirm ? { doc: run.awaitConfirm.doc, points: run.awaitConfirm.points, ledger: Boolean(run.awaitConfirm.ledger) } : null,
     gateFail: run.gateFail ? { gate: run.gateFail.gate, exit: run.gateFail.exit, hint: run.gateFail.hint } : null,
+    inFlight: Boolean(run.inFlight),
+    circuitBreak: run.circuitBreak || null,
+    watchdogAlert: detectRunWatchdogAlert(run),
   };
 }
 
@@ -138,6 +406,18 @@ export function safeRunPath(rel) {
   const abs = path.resolve(PIPELINE_RUNS, rel);
   if (!abs.startsWith(PIPELINE_RUNS + path.sep) || !abs.endsWith('.json')) return null;
   return abs;
+}
+
+// Git 路径白名单检查（防路径穿越与参数注入，export 供测试直测）
+export function safeGitPath(rel, root = ROOT) {
+  if (!rel) return '';
+  const clean = String(rel).trim().replace(/\\/g, '/');
+  if (!clean || clean.startsWith('/') || clean.includes('../') || clean.includes('\0')) return null;
+  if (clean.startsWith('-')) return null;
+  const abs = path.resolve(root, clean);
+  const normalizedRoot = path.resolve(root);
+  if (!abs.startsWith(normalizedRoot + path.sep) && abs !== normalizedRoot) return null;
+  return clean;
 }
 
 // ---- 引擎台账聚合（2026-10-22 board-engine-views：A1 门禁成本趋势 / A3 判定流水）----
@@ -378,7 +658,9 @@ async function scanBoard() {
 }
 
 // ---- 路径白名单：resolve 后必须仍在 workflow/ 内 ----
-function safeDocPath(rel) {
+function safeDocPath(raw) {
+  let rel = String(raw || '').replace(/\\/g, '/');
+  if (rel.startsWith('workflow/')) rel = rel.slice('workflow/'.length);
   const abs = path.resolve(WORKFLOW, rel);
   if (!abs.startsWith(WORKFLOW + path.sep) || !abs.endsWith('.md')) return null;
   return abs;
@@ -461,9 +743,23 @@ function gitLog(rel) {
 // ---- SSE 广播：fs.watch 防抖 500ms（AI 写盘常连发多事件，合并为一次推送）----
 const sseClients = new Set();
 let debounceTimer = null;
-function broadcast(event) {
-  for (const res of sseClients) { if (!res.destroyed) res.write(`event: ${event}\ndata: {}\n\n`); }
+function broadcast(event, data = {}) {
+  const payload = typeof data === 'object' ? JSON.stringify(data) : String(data);
+  for (const res of sseClients) { if (!res.destroyed) res.write(`event: ${event}\ndata: ${payload}\n\n`); }
 }
+// 看门狗后台定期巡检（15s）：发现新增停滞/死锁告警主动广播推送
+let lastWatchdogAlertCount = 0;
+function runWatchdogTicker() {
+  try {
+    const status = inspectWatchdog(undefined, { root: ROOT });
+    const currentAlertCount = (status && Array.isArray(status.alerts)) ? status.alerts.length : 0;
+    if (currentAlertCount > 0 && currentAlertCount !== lastWatchdogAlertCount) {
+      broadcast('watchdog-alert', status);
+    }
+    lastWatchdogAlertCount = currentAlertCount;
+  } catch {}
+}
+setInterval(runWatchdogTicker, 15000).unref();
 // 统一监听回调：workflow/ 文档 + pipeline-runs/ 执行器 run 文件任一变化 → 500ms 防抖广播 changed
 function onWatchChange() {
   clearTimeout(debounceTimer);
@@ -573,6 +869,11 @@ export function isValidGateName(gate) {
   return typeof gate === 'string' && /^(check-[a-z0-9-]+|verify(-[a-z0-9-]+)?)$/.test(gate);
 }
 
+// 竞技场主题与候选臂名称格式校验防路径穿越与非法注入（字母、数字、连字符、下划线，1~64 字符）
+export function isValidArenaTopic(topic) {
+  return typeof topic === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(topic);
+}
+
 async function readReqJson(req, limit = 65536) {
   const chunks = [];
   let total = 0;
@@ -672,7 +973,7 @@ export async function handleBoardRequest(req, res) {
 
       execFile(process.execPath, [script, ...args], {
         cwd: ROOT,
-        env: { ...process.env, FLOW_KIT_PROJECT_ROOT: ROOT, FLOW_KIT_RUNTIME_SCRIPTS: SCRIPTS_DIR },
+        env: sanitizeExecEnv({ ...process.env, FLOW_KIT_PROJECT_ROOT: ROOT, FLOW_KIT_RUNTIME_SCRIPTS: SCRIPTS_DIR }),
         encoding: 'utf8',
         maxBuffer: 10 * 1024 * 1024,
         windowsHide: true,
@@ -681,8 +982,8 @@ export async function handleBoardRequest(req, res) {
         return sendJson(res, 200, {
           ok: !err,
           exit: err ? (typeof err.code === 'number' ? err.code : 1) : 0,
-          stdout: stdout || '',
-          stderr: stderr || '',
+          stdout: redactSensitiveText(stdout || ''),
+          stderr: redactSensitiveText(stderr || ''),
         });
       });
       return;
@@ -711,7 +1012,7 @@ export async function handleBoardRequest(req, res) {
 
       execFile(process.execPath, [script, ...args], {
         cwd: ROOT,
-        env: { ...process.env, FLOW_KIT_PROJECT_ROOT: ROOT, FLOW_KIT_RUNTIME_SCRIPTS: SCRIPTS_DIR },
+        env: sanitizeExecEnv({ ...process.env, FLOW_KIT_PROJECT_ROOT: ROOT, FLOW_KIT_RUNTIME_SCRIPTS: SCRIPTS_DIR }),
         encoding: 'utf8',
         maxBuffer: 10 * 1024 * 1024,
         windowsHide: true,
@@ -720,8 +1021,8 @@ export async function handleBoardRequest(req, res) {
         return sendJson(res, 200, {
           ok: !err,
           exit: err ? (typeof err.code === 'number' ? err.code : 1) : 0,
-          stdout: stdout || '',
-          stderr: stderr || '',
+          stdout: redactSensitiveText(stdout || ''),
+          stderr: redactSensitiveText(stderr || ''),
         });
       });
       return;
@@ -747,7 +1048,7 @@ export async function handleBoardRequest(req, res) {
 
       execFile(process.execPath, [script], {
         cwd: ROOT,
-        env: { ...process.env, FLOW_KIT_PROJECT_ROOT: ROOT, FLOW_KIT_RUNTIME_SCRIPTS: SCRIPTS_DIR },
+        env: sanitizeExecEnv({ ...process.env, FLOW_KIT_PROJECT_ROOT: ROOT, FLOW_KIT_RUNTIME_SCRIPTS: SCRIPTS_DIR }),
         encoding: 'utf8',
         maxBuffer: 10 * 1024 * 1024,
         windowsHide: true,
@@ -756,8 +1057,8 @@ export async function handleBoardRequest(req, res) {
           ok: !err,
           gate,
           exit: err ? (typeof err.code === 'number' ? err.code : 1) : 0,
-          stdout: stdout || '',
-          stderr: stderr || '',
+          stdout: redactSensitiveText(stdout || ''),
+          stderr: redactSensitiveText(stderr || ''),
         });
       });
       return;
@@ -776,6 +1077,266 @@ export async function handleBoardRequest(req, res) {
         return sendJson(res, 200, { ok: true, files });
       });
       return;
+    }
+
+    if (url.pathname === '/api/git/diff') {
+      if (req.method !== 'GET') return sendJson(res, 405, { error: '仅接受 GET' });
+      const file = url.searchParams.get('file') || '';
+      const staged = url.searchParams.get('staged');
+      const safePath = safeGitPath(file, ROOT);
+      if (file && safePath === null) {
+        return sendJson(res, 400, { error: '路径不合法（必须为仓库内相对路径）' });
+      }
+
+      const runGitDiff = (args) => new Promise((resolve) => {
+        execFile('git', args, {
+          cwd: ROOT,
+          encoding: 'utf8',
+          maxBuffer: 10 * 1024 * 1024,
+          windowsHide: true,
+        }, (err, stdout, stderr) => {
+          const isErr = err && err.code !== 1 && !stdout;
+          resolve({ err: isErr ? err : null, stdout: redactSensitiveText(stdout || ''), stderr: redactSensitiveText(stderr || '') });
+        });
+      });
+
+      let gitArgs = [];
+      if (staged === '1') {
+        gitArgs = ['diff', '--cached'];
+      } else if (staged === '0') {
+        gitArgs = ['diff'];
+      } else {
+        gitArgs = ['diff', 'HEAD'];
+      }
+      if (safePath) {
+        gitArgs.push('--', safePath);
+      }
+
+      let resDiff = await runGitDiff(gitArgs);
+      if (resDiff.err && gitArgs[1] === 'HEAD') {
+        const fallbackArgs = ['diff'];
+        if (safePath) fallbackArgs.push('--', safePath);
+        resDiff = await runGitDiff(fallbackArgs);
+      }
+
+      if (!resDiff.err && !resDiff.stdout && safePath) {
+        const fullPath = path.resolve(ROOT, safePath);
+        if (fs.existsSync(fullPath) && fs.statSync(fullPath).isFile()) {
+          const untrackedDiff = await runGitDiff(['diff', '--no-index', '--', '/dev/null', safePath]);
+          if (untrackedDiff.stdout) {
+            resDiff = untrackedDiff;
+          }
+        }
+      }
+
+      if (resDiff.err) {
+        return sendJson(res, 500, { error: `git diff 执行失败: ${resDiff.stderr || resDiff.err.message}` });
+      }
+
+      return sendJson(res, 200, {
+        ok: true,
+        file: safePath || '',
+        diff: resDiff.stdout || '',
+      });
+    }
+
+    if (url.pathname === '/api/pipeline/config') {
+      if (req.method !== 'GET') return sendJson(res, 405, { error: '仅接受 GET' });
+      const p = path.join(ROOT, '.agents', 'config', 'pipeline.json');
+      if (!fs.existsSync(p)) return sendJson(res, 404, { error: 'pipeline.json 不存在' });
+      try {
+        const cfg = JSON.parse(fs.readFileSync(p, 'utf8'));
+        return sendJson(res, 200, { ok: true, config: cfg });
+      } catch (e) {
+        return sendJson(res, 500, { error: `读取 pipeline.json 失败: ${e.message}` });
+      }
+    }
+
+    // 看门狗智能巡检端点（2026-11-26 watchdog-daemon）：读取当前流水线健康度、停滞与死循环告警
+    if (url.pathname === '/api/watchdog/status') {
+      if (req.method !== 'GET') return sendJson(res, 405, { error: '仅接受 GET' });
+      const timeoutMs = Number(url.searchParams.get('timeoutMs')) || undefined;
+      const warningMs = Number(url.searchParams.get('warningMs')) || undefined;
+      const status = inspectWatchdog(undefined, { root: ROOT, timeoutThresholdMs: timeoutMs, warningThresholdMs: warningMs });
+      return sendJson(res, 200, status);
+    }
+
+    // 看门狗紧急熔断端点（2026-11-26 watchdog-daemon）：一键终止失控/停滞/死锁流水线
+    if (url.pathname === '/api/watchdog/circuit-break') {
+      if (req.method !== 'POST') return sendJson(res, 405, { error: '仅接受 POST' });
+      if (!checkCsrf(req, PORT)) return sendJson(res, 403, { error: 'Origin 不受信任（CSRF 防御拦截）' });
+      let body;
+      try {
+        body = await readReqJson(req);
+      } catch (e) {
+        return sendJson(res, 400, { error: `请求体解析失败: ${e.message}` });
+      }
+      const runId = String(body.runId || '').trim();
+      if (!isValidRunId(runId)) {
+        return sendJson(res, 400, { error: '缺少或非法的 runId' });
+      }
+      try {
+        const result = await executeCircuitBreak(runId, {
+          root: ROOT,
+          scriptsDir: SCRIPTS_DIR,
+          reason: body.reason,
+          to: body.to,
+          by: 'user_board_action',
+        });
+        broadcast('changed');
+        broadcast('watchdog-alert', result);
+        return sendJson(res, 200, result);
+      } catch (e) {
+        const code = e.message.includes('找不到') ? 404 : 500;
+        return sendJson(res, code, { error: `熔断执行失败: ${e.message}` });
+      }
+    }
+
+    // 方案5 竞技场与多模型评测端点
+    if (url.pathname === '/api/arena/topics') {
+      if (req.method !== 'GET') return sendJson(res, 405, { error: '仅接受 GET' });
+      try {
+        const topics = listArenaTopics(ROOT);
+        return sendJson(res, 200, { ok: true, topics });
+      } catch (e) {
+        return sendJson(res, 500, { error: `获取竞技场主题失败: ${e.message}` });
+      }
+    }
+
+    if (url.pathname === '/api/arena/status') {
+      if (req.method !== 'GET') return sendJson(res, 405, { error: '仅接受 GET' });
+      const topic = url.searchParams.get('topic');
+      if (!topic || !isValidArenaTopic(topic)) {
+        return sendJson(res, 400, { error: '缺少或非法的 topic 参数' });
+      }
+      try {
+        const status = statusArena({ root: ROOT, topic });
+        return sendJson(res, 200, { ok: true, ...status });
+      } catch (e) {
+        const code = e.code === 'ARENA_NOT_FOUND' || e.message.includes('未找到') || e.message.includes('未初始化') || e.message.includes('不存在') ? 404 : 500;
+        return sendJson(res, code, { error: `获取打擂状态失败: ${e.message}` });
+      }
+    }
+
+    if (url.pathname === '/api/arena/report') {
+      if (req.method !== 'GET') return sendJson(res, 405, { error: '仅接受 GET' });
+      const topic = url.searchParams.get('topic');
+      if (!topic || !isValidArenaTopic(topic)) {
+        return sendJson(res, 400, { error: '缺少或非法的 topic 参数' });
+      }
+      try {
+        const resReport = reportArena({ root: ROOT, topic });
+        return sendJson(res, 200, { ok: true, topic, ...resReport });
+      } catch (e) {
+        const code = e.code === 'ARENA_NOT_FOUND' || e.message.includes('未找到') || e.message.includes('未初始化') || e.message.includes('不存在') ? 404 : 500;
+        return sendJson(res, code, { error: `生成对质报告失败: ${e.message}` });
+      }
+    }
+
+    if (url.pathname === '/api/arena/eval') {
+      if (req.method !== 'POST') return sendJson(res, 405, { error: '仅接受 POST' });
+      if (!checkCsrf(req, PORT)) return sendJson(res, 403, { error: 'Origin 不受信任（CSRF 防御拦截）' });
+      let body;
+      try {
+        body = await readReqJson(req);
+      } catch (e) {
+        return sendJson(res, 400, { error: `请求体解析失败: ${e.message}` });
+      }
+      const topic = String(body.topic || '').trim();
+      if (!isValidArenaTopic(topic)) {
+        return sendJson(res, 400, { error: '缺少或非法的 topic 参数' });
+      }
+      try {
+        const result = evalArena({
+          root: ROOT,
+          topic,
+          testCmd: body.testCmd,
+          timeoutMs: body.timeoutMs ? Number(body.timeoutMs) : undefined,
+        });
+        broadcast('changed');
+        broadcast('arena-eval', { topic, result });
+        return sendJson(res, 200, { ok: true, ...result });
+      } catch (e) {
+        const code = e.code === 'ARENA_NOT_FOUND' || e.message.includes('未找到') || e.message.includes('不存在') ? 404 : 500;
+        return sendJson(res, code, { error: `跑测评估失败: ${e.message}` });
+      }
+    }
+
+    if (url.pathname === '/api/arena/adopt') {
+      if (req.method !== 'POST') return sendJson(res, 405, { error: '仅接受 POST' });
+      if (!checkCsrf(req, PORT)) return sendJson(res, 403, { error: 'Origin 不受信任（CSRF 防御拦截）' });
+      let body;
+      try {
+        body = await readReqJson(req);
+      } catch (e) {
+        return sendJson(res, 400, { error: `请求体解析失败: ${e.message}` });
+      }
+      const topic = String(body.topic || '').trim();
+      const arm = String(body.arm || '').trim();
+      if (!isValidArenaTopic(topic) || !isValidArenaTopic(arm)) {
+        return sendJson(res, 400, { error: '缺少或非法的 topic 或 arm 参数' });
+      }
+      try {
+        const result = adoptArena({
+          root: ROOT,
+          topic,
+          arm,
+          clean: Boolean(body.clean),
+        });
+        broadcast('changed');
+        return sendJson(res, 200, { ok: true, ...result });
+      } catch (e) {
+        return sendJson(res, 500, { error: `采纳方案失败: ${e.message}` });
+      }
+    }
+
+    if (url.pathname === '/api/arena/cleanup') {
+      if (req.method !== 'POST') return sendJson(res, 405, { error: '仅接受 POST' });
+      if (!checkCsrf(req, PORT)) return sendJson(res, 403, { error: 'Origin 不受信任（CSRF 防御拦截）' });
+      let body;
+      try {
+        body = await readReqJson(req);
+      } catch (e) {
+        return sendJson(res, 400, { error: `请求体解析失败: ${e.message}` });
+      }
+      const topic = String(body.topic || '').trim();
+      if (!isValidArenaTopic(topic)) {
+        return sendJson(res, 400, { error: '缺少或非法的 topic 参数' });
+      }
+      try {
+        const result = cleanupArena({
+          root: ROOT,
+          topic,
+          force: Boolean(body.force),
+        });
+        broadcast('changed');
+        return sendJson(res, 200, { ok: true, ...result });
+      } catch (e) {
+        return sendJson(res, 500, { error: `收擂清理失败: ${e.message}` });
+      }
+    }
+
+    if (url.pathname === '/api/eval/benchmarks') {
+      if (req.method !== 'GET') return sendJson(res, 405, { error: '仅接受 GET' });
+      const resultsFile = path.join(ROOT, '.agents', 'evals', 'results.jsonl');
+      if (!fs.existsSync(resultsFile)) {
+        return sendJson(res, 200, { ok: true, results: [] });
+      }
+      try {
+        const content = fs.readFileSync(resultsFile, 'utf8');
+        const results = [];
+        for (const line of content.split(/\r?\n/)) {
+          if (!line.trim()) continue;
+          try {
+            results.push(JSON.parse(line));
+          } catch {
+            // ignore malformed line
+          }
+        }
+        return sendJson(res, 200, { ok: true, results });
+      } catch (e) {
+        return sendJson(res, 500, { error: `读取评测基准记录失败: ${e.message}` });
+      }
     }
 
     // 开发全景：/api/tour 返回模型；/tour 返回单页模板（模板内 __TOUR_FILE__ 指向当前文档）
