@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import {
   parseRunFile,
   runCard,
+  scanRuns,
   activeRunsCount,
   safeRunPath,
   safeGitPath,
@@ -839,4 +840,100 @@ test('tour 路由: 文件名不得闭合 script 块，用量写入拒绝不受�
     }
     server.close();
   }
+});
+
+// 2026-11-27 watchdog-loop-scan 回归：生产 scanRuns 路径对每个 run 过 runCard，卡片曾丢掉 events，
+// 事件驱动的 loop_oscillation 在 /api/watchdog/status 恒无输入；gateTail 尾窗让检测器重新拿到门禁事件。
+test('scanRuns 投影后的卡片可触发 loop_oscillation', () => {
+  const now = 1732600000000;
+  const root = process.env.FLOW_KIT_PROJECT_ROOT
+    ? path.resolve(process.env.FLOW_KIT_PROJECT_ROOT)
+    : path.join(REPO, 'templates', 'engine'); // 与模块内 ROOT 缺省值同口径
+  const runsDir = path.join(root, '.agents', 'cache', 'pipeline-runs'); // 与模块内 PIPELINE_RUNS 同口径
+  const runId = `2026-11-27-wd-scan-${process.pid}-${Date.now()}`;
+  const runFile = path.join(runsDir, `${runId}.json`);
+  const oscillating = {
+    runId,
+    requirement: '看门狗 scanRuns 投影回归',
+    stage: 'verify',
+    stopType: 'gate-fail',
+    updatedAt: new Date(now - 1000).toISOString(),
+    events: [
+      { type: 'run-created', t: '2026-11-27T00:00:00.000Z' },
+      { type: 'gate', gate: 'check-loop', exit: 0, at: '2026-11-27T00:01:00.000Z' },
+      { type: 'gate', gate: 'unit-test', exit: 1, at: '2026-11-27T00:02:00.000Z' },
+      { type: 'gate', gate: 'unit-test', exit: 1, at: '2026-11-27T00:03:00.000Z' },
+      { type: 'gate', gate: 'unit-test', exit: 1, at: '2026-11-27T00:04:00.000Z' },
+    ],
+  };
+  fs.mkdirSync(runsDir, { recursive: true });
+  fs.writeFileSync(runFile, JSON.stringify(oscillating, null, 2), 'utf8');
+
+  try {
+    const card = scanRuns().find((c) => c.runId === runId);
+    assert.ok(card, 'scanRuns 应投影出新写入的 run 卡片');
+    assert.equal(card.events, undefined, '卡片不外发全量 events');
+    assert.equal(card.gateTail.length, DEFAULT_WATCHDOG_CONFIG.stallWindowSize);
+
+    const alert = detectRunWatchdogAlert(card, { now });
+    assert.ok(alert);
+    assert.equal(alert.type, 'loop_oscillation');
+    assert.equal(alert.severity, 'critical');
+
+    // /api/watchdog/status 同路径：inspectWatchdog 不传 runs → 内部 scanRuns → 逐卡片巡检
+    const status = inspectWatchdog(undefined, { now, root: REPO });
+    assert.ok(status.alerts.some((a) => a.runId === runId && a.type === 'loop_oscillation'), '巡检应报出该 run 的震荡告警');
+  } finally {
+    fs.rmSync(runFile, { force: true });
+    // 只回收本测试可能新建的空目录链；非空（真实运行数据）时 rmdir 失败即跳过
+    for (const dir of [runsDir, path.dirname(runsDir), path.dirname(path.dirname(runsDir))]) {
+      try { fs.rmdirSync(dir); } catch { /* 目录非空或不存在 */ }
+    }
+  }
+});
+
+test('runCard gateTail 尾窗封顶，不膨胀卡片', () => {
+  const manyGates = Array.from({ length: 10 }, (_, i) => ({
+    type: 'gate',
+    gate: i === 9 ? 'check-loop' : 'unit-test',
+    exit: 1,
+    at: `2026-11-27T00:0${i}:00.000Z`,
+    reason: '不该被投影',
+  }));
+  const card = runCard({
+    runId: '2026-11-27-gate-tail',
+    stage: 'verify',
+    stopType: 'gate-fail',
+    updatedAt: '2026-11-27T01:00:00.000Z',
+    events: [{ type: 'run-created' }, ...manyGates],
+  });
+
+  assert.equal(card.gateTail.length, DEFAULT_WATCHDOG_CONFIG.stallWindowSize);
+  assert.ok(card.gateTail.length <= DEFAULT_WATCHDOG_CONFIG.stallWindowSize);
+  assert.deepEqual(card.gateTail.map((e) => e.gate), ['unit-test', 'unit-test', 'check-loop']);
+  assert.deepEqual(Object.keys(card.gateTail[0]).sort(), ['exit', 'gate', 'type'], '只投影检测器消费的字段');
+  assert.equal(card.lastGateName, 'check-loop');
+  assert.equal(card.eventCount, 11);
+});
+
+test('raw run 直驱检测行为不变（无 gateTail 时仍吃全量 events）', () => {
+  const now = 1732600000000;
+  const rawRun = {
+    runId: '2026-11-27-raw-events',
+    stage: 'verify',
+    stopType: 'gate-fail',
+    updatedAt: new Date(now - 1000).toISOString(),
+    events: [
+      { type: 'gate', gate: 'unit-test', exit: 1 },
+      { type: 'gate', gate: 'unit-test', exit: 1 },
+      { type: 'gate', gate: 'unit-test', exit: 1 },
+      { type: 'run-created' }, // 尾窗外的非 gate 事件不影响判定
+    ],
+  };
+  assert.equal(rawRun.gateTail, undefined);
+
+  const alert = detectRunWatchdogAlert(rawRun, { now });
+  assert.ok(alert);
+  assert.equal(alert.type, 'loop_oscillation');
+  assert.equal(alert.severity, 'critical');
 });

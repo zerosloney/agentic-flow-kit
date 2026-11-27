@@ -115,6 +115,11 @@ export function runCard(run) {
   const route = run.nextTarget
     ? [...events].reverse().find((e) => e.type === 'route' && e.from === run.stage)
     : null;
+  // 看门狗 loop_oscillation 依赖连续门禁事件，而卡片是 /api/board 全量载荷、不外发 events：
+  // 只带最后 stallWindowSize 条 gate 事件（检测器恰以连续 3 条同质失败判定），字段按检测器消费裁剪，避免卡片膨胀。
+  const gateEvents = events.filter((e) => e.type === 'gate');
+  const gateTail = gateEvents.slice(-DEFAULT_WATCHDOG_CONFIG.stallWindowSize)
+    .map((e) => ({ type: 'gate', gate: e.gate, exit: e.exit }));
   return {
     runId: run.runId,
     requirement: run.requirement || '',
@@ -123,6 +128,8 @@ export function runCard(run) {
     updatedAt: run.updatedAt || run.createdAt || '',
     triage: run.triage || null,
     eventCount: events.length,
+    gateTail,
+    lastGateName: gateEvents.length ? gateEvents[gateEvents.length - 1].gate : null,
     nextTarget: run.nextTarget || null,
     stageBar: stageBar(run) + (route ? ` ↩ 退回 ${route.to}（${route.from} ${route.attempt}/${route.cap}）` : ''),
     docs: run.docs || null,

@@ -19,7 +19,9 @@ export function detectRunWatchdogAlert(run, options = {}) {
   // 终态任务不产生活跃停滞告警
   if (['done', 'aborted'].includes(run.stopType)) return null;
 
-  const events = Array.isArray(run.events) ? run.events : [];
+  // 卡片投影（runCard/scanRuns）不外发全量 events，只带 gateTail 尾窗；raw run 无 gateTail → 回落 events，
+  // 直驱未投影 run 的既有调用/测试行为不变。
+  const events = Array.isArray(run.gateTail) ? run.gateTail : (Array.isArray(run.events) ? run.events : []);
   const lastActiveTs = Date.parse(run.updatedAt || run.createdAt || 0);
   const elapsedMs = Number.isFinite(lastActiveTs) && lastActiveTs > 0 ? Math.max(0, now - lastActiveTs) : 0;
 
@@ -51,6 +53,7 @@ export function detectRunWatchdogAlert(run, options = {}) {
   }
 
   // 3. 门禁连续同质报错空转震荡 (loop oscillation)
+  // 卡片路径只拿到 gateTail 尾窗（已按 gate 过滤），raw run 则拿全量 events，统一再筛一次。
   const gateEvents = events.filter((e) => e.type === 'gate');
   if (gateEvents.length >= 3) {
     const recent3 = gateEvents.slice(-3);
