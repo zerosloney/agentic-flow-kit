@@ -2,6 +2,30 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.14.1]
+
+### 新增
+
+- feat(arch): enforce repository architecture boundaries and cycle-free invariants
+
+### 修复
+
+- fix(arch): 架构守卫收口 src 扫描范围，补 ci/render 分层并封堵未归层逃逸
+- fix(kernel): preserve exact package export contract and restore local diff eol normalizer
+
+### 文档
+
+- docs: ADR 收口为已实施并如实记录偏离，进度表恢复 E-06 并补记 E-10
+- docs: complete architecture governance progress report and merge record
+- docs: update refactoring progress report with completed batches
+
+### 其他
+
+- chore(arch): 清理架构治理系列遗留的孤儿导入、死 shim 与残留空行
+- refactor(install): encapsulate derived artifacts lifecycle in derived module
+- refactor(cli): decouple target resolution and manifest loading from install command
+- refactor(core): break circular dependencies and canonicalize duplicated utilities
+
 ## [2.14.0]
 
 ### 新增
