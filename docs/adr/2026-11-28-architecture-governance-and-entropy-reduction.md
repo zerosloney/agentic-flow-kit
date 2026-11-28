@@ -1,7 +1,9 @@
 # ADR 2026-11-28：代码库系统性架构降熵、规范化归一与模块解耦
 
 ## 状态
-已批准 / 执行中 (Accepted / In Progress)
+已实施 (Implemented) — 决策主体已落地（`e62ca67..beb48f3` 已合入 `main`）。两项偏离如实记录：
+1. 上下文 §2 中的 `isObject` 归一未在本轮执行，顺延为后续批次（对应 REFACTORING_PROGRESS.md E-06 待处理）。
+2. 决策 §7 原计划的 `.agents/config/architecture.json` 配置文件未落地，由 `tests/kit-architecture.test.mjs` 以硬编码层规则等价实现替代。
 
 ## 上下文
 `agentic-flow-kit` 是面向 AI-Native 工作流引擎的安装器 CLI（Node.js ≥22、ESM、零运行时依赖）。随着系统演进至 14 个宿主、多栈配置、多层规则引擎、沙箱与门禁支持，代码库积累了以下架构熵：
@@ -40,8 +42,8 @@
 6. **Deletion over Accumulation**：
    - 迁移旧调用方，删除冗余私有辅助函数与平行实现，不保留无调用的历史残留。
 7. **Enforceable Architecture**：
-   - 为本仓库建立 `.agents/config/architecture.json`。
-   - 在 `tests/` 下建立自动化架构防回归测试，确保未来开发零循环依赖、零分层破损。
+   - 在 `tests/` 下建立自动化架构防回归测试（`tests/kit-architecture.test.mjs`，扫描范围收口至 `src/**`），确保未来开发零循环依赖、零分层破损。
+   - （2026-11-28 修正：原计划的 `.agents/config/architecture.json` 配置文件未落地，由上述测试中的硬编码层规则等价替代。）
 
 ## 影响评估
 - 向后兼容：所有向外导出的公共接口（如 `package.json` 的 exports、测试中直接引用的符号）均保持原签名或保留别名转发，现有 1952 个测试 100% 保持通过。

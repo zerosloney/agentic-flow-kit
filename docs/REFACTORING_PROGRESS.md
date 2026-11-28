@@ -46,10 +46,11 @@
 | E-03 | 工具重复 | `sha256` / `canonical` 重复出现在 5 个文件 | 归一至 `src/install/notary.mjs`，消除各处平行手写 | ✅ 已完成 (`e62ca67`) |
 | E-04 | 职责外溢 | 17 个命令从 `commands/install.mjs` 引入 `resolveTarget` | 提取 `src/install/target.mjs` 权威实现，迁移所有调用方 | ✅ 已完成 (`2acc10b`) |
 | E-05 | 逻辑重复 | `requireManifest` 在 `diff.mjs`、`skills.mjs`、`flows.mjs` 重复 | 归一至 `src/install/manifest.mjs` 单源，迁移所有命令 | ✅ 已完成 (`2acc10b`) |
-| E-06 | 跨层倒灌 | `src/install/derived.mjs` 从 `commands/runtime.mjs` 引入路径 | 提取 `src/install/runtime-paths.mjs` 单源，彻底消除跨层导入 | ✅ 已完成 (`566ebad`) |
+| E-06 | 逻辑重复 | `isObject` 校验在 5 个底层文件各自实现 | 建立通用 `isObject` 并在 `src/install/` 中统一复用 | ⏳ 待处理（未随本轮执行，顺延） |
 | E-07 | 内部重复 | `getFileLayer` 在 `src/install/arch-guard.mjs` 内重复定义两次 | 提升至模块作用域单一函数 | ✅ 已完成 (`e62ca67`) |
 | E-08 | 模块内聚 | `rehashDerivedArtifacts` 滞留在 `install.mjs` | 迁移至 `src/install/derived.mjs` 领域模块 | ✅ 已完成 (`fad354c`) |
 | E-09 | 防回归 | 仓库自身缺乏机器可执行的架构守卫测试 | 建立 `tests/kit-architecture.test.mjs` 自动化架构回归测试 | ✅ 已完成 (`566ebad`) |
+| E-10 | 跨层倒灌 | `src/install/derived.mjs` 从 `commands/runtime.mjs` 引入路径（执行期新发现，曾误记为 E-06） | 提取 `src/install/runtime-paths.mjs` 单源，彻底消除跨层导入 | ✅ 已完成 (`566ebad`) |
 
 ---
 
