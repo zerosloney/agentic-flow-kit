@@ -19,6 +19,25 @@ function isFormLine(line) {
   return false;
 }
 
+
+// 否定语境行剔除（2026-11-28，通用误报类）：正文常写「不触 API/DTO/schema」「无 schema 变更」——
+// 这是「不触达」的说明而非触达声明。2026-11-28 仓内实证：一份 done 的 L1 plan 因一句「不触 API/DTO/schema」
+// 被判红线 hard-block，而同一提交在 CI（项目 fork）为绿——本地/CI 判据分叉的成因之一。
+// 边界如实声明：只识别否定词与关键词同句/紧邻的形态；「schema 变更后不做回滚」这类真实触达会被误剔
+// （罕见，人工复核兜底）。L2 组（编码权威/共享契约…）暂未覆盖——未观测到同类误报。
+const TOUCH_TERM_RE = /schema|迁移\s*SQL|DI\s*链|认证与中间件管线/i;
+const NON_TOUCH_RES = [
+  /无\s*[^，。；|\n]{0,6}(?:schema|迁移\s*SQL|DI\s*链|认证与中间件管线)/i,
+  /不(?:改|写|新增|引入|涉及|触及?|碰|动|做|变更|含)[^，。；|\n]{0,12}(?:schema|迁移\s*SQL|DI\s*链|认证与中间件管线)/i,
+  /(?:schema|迁移\s*SQL|DI\s*链|认证与中间件管线)[^。|\n]{0,12}(?:不做|不改|不涉及|不触及|无变更)/i,
+];
+
+/** 该行出现的触达关键词是否处于否定语境（「不触 …」/「… 无变更」）。消费方可据此打印豁免行。 */
+export function isNonTouchLine(line) {
+  const t = String(line || '').trim();
+  if (!t || !TOUCH_TERM_RE.test(t)) return false;
+  return NON_TOUCH_RES.some((re) => re.test(t));
+}
 export function touchProblems(text, level) {
   const have = rankOf(level);
   const hits = { L2: [], L3: [] };
@@ -30,6 +49,7 @@ export function touchProblems(text, level) {
       continue;
     }
     if (isFormLine(line)) continue;
+    if (isNonTouchLine(line)) continue; // 否定声明不计入触达面（2026-11-28）
     for (const group of TOUCH) {
       for (const term of group.terms) {
         if (t.includes(term) && !hits[group.min].includes(term)) hits[group.min].push(term);
