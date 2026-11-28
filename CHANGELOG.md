@@ -2,6 +2,16 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.14.2]
+
+### 修复
+
+- fix(check-ledger-invariant): 无 trunk 时声明区间核查失败改为 fail-closed，不放行未验证基线
+- fix(wiki): 生成区目录（缺省 _memory）不参与主题登记，memory-wiki --check 对未生成态降级
+- fix(exports): 补全 package.json、bin 与 templates 导出，解除下游 ESM 访问封锁
+- fix(installer): 文本判据哈希统一 CRLF→LF 归一，消除 Windows 检出的「用户修改」假阳性
+- fix(check-ledger-invariant): 仓库声明基线改按 trunk 归属判定，修复恒不可满足的旧判据（#90）
+
 ## [2.14.1]
 
 ### 新增
