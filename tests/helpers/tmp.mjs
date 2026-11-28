@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 
 const created = new Set();
 let registered = false;
@@ -29,4 +30,14 @@ export function makeTmp(prefix = 'flow-kit-test-') {
     process.on('exit', cleanup);
   }
   return dir;
+}
+
+// 隔离用户目录（HOME + USERPROFILE）的 CLI 子进程运行器：阻断 userHooks 等能力写宿主机真实家目录。
+export function makeIsolatedCliRunner(binPath, prefix = 'flow-kit-home-') {
+  const fakeHome = makeTmp(prefix);
+  return (args, cwd = process.cwd(), env = {}) => spawnSync(process.execPath, [binPath, ...args], {
+    cwd,
+    encoding: 'utf8',
+    env: { ...process.env, HOME: fakeHome, USERPROFILE: fakeHome, FLOW_KIT_TEST: '1', ...env },
+  });
 }

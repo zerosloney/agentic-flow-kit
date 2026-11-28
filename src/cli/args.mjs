@@ -1,4 +1,37 @@
 // 极简参数解析：--key value / --flag / --key=value；--agent / --stack 可重复。
+// 演进子命令专属布尔开关（与 src/commands/evolution.mjs 共享单源，避免两处同步漂移）。
+export const EVOLUTION_COMMAND_FLAGS = Object.freeze({
+  timeline: ['list'],
+  'shadow-run': ['clean', 'status', 'keep'],
+  eval: ['benchmark', 'rubric', 'record'],
+  'optimize-skill': ['extract', 'arbitrate', 'apply', 'dry-run', 'rollback'],
+});
+
+// 已知纯布尔开关闭集：紧邻位置参数（如 `remove-host --dry-run claude`、`gate --strict check`）时不吞后继 token。
+export const BOOLEAN_FLAGS = new Set([
+  'all', 'allow-network', 'attest', 'auto-hosts',
+  'badge', 'baseline', 'baseline-only', 'deep',
+  'devcontainer', 'diff', 'dry-run', 'explain-policy', 'fix',
+  'force', 'git-config', 'gzip', 'h', 'hardened', 'help', 'hooks', 'hud',
+  'init-ci', 'json', 'markdown', 'no-baseline', 'no-devcontainer',
+  'no-git-config', 'no-mcp', 'no-model-config', 'no-verify-lock', 'offline',
+  'permissions', 'probe-models', 'sandbox', 'sign',
+  'staged', 'strict', 'track-hosts', 'update', 'v', 'w', 'watch', 'with-commands',
+  ...Object.values(EVOLUTION_COMMAND_FLAGS).flat(),
+]);
+
+// 同名双模开关按顶层命令消歧：
+// --version 仅在 metrics 子命令取值；
+// --summary 在 handoff 与 timeline 子命令取值；
+// --status 在 timeline 子命令取值（shadow-run 下为纯布尔）。
+function isBooleanFlag(key, args) {
+  if (key === 'version') return args._[0] !== 'metrics';
+  if (key === 'summary') return args._[0] !== 'handoff' && args._[0] !== 'timeline';
+  if (key === 'status') return args._[0] !== 'timeline';
+  if (BOOLEAN_FLAGS.has(key)) return true;
+  return false;
+}
+
 export function parseArgs(argv) {
   const args = { _: [], agents: [], models: [], hostManifests: [], surfaces: [], stacks: [], repos: [], flags: new Set() };
   const takeValue = (i) => {
@@ -26,6 +59,10 @@ export function parseArgs(argv) {
       continue;
     }
     const key = raw.slice(2);
+    if (isBooleanFlag(key, args)) {
+      args.flags.add(key);
+      continue;
+    }
     const value = takeValue(i);
     if (value != null) {
       if (key === 'agent') args.agents.push(value);

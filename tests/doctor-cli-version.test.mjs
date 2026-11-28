@@ -5,7 +5,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { flowKitVersionDrift } from '../src/commands/doctor.mjs';
+import { doctorCommand, flowKitVersionDrift } from '../src/commands/doctor.mjs';
+import { parseArgs } from '../src/cli/args.mjs';
+import { makeT } from '../src/i18n.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
@@ -103,4 +105,47 @@ test('doctor skips the version comparison when the flow-kit on PATH prints no ve
   const item = flowKitCliCheck(doctorJson(dir, binDir));
   assert.equal(item.ok, true);
   assert.equal(item.warn, false);
+});
+
+test('doctorCommand isolates mcpPolicyCache per invocation across different targets', () => {
+  const badDir = tmpRepo();
+  const cleanDir = tmpRepo();
+  assert.equal(runIn(['install', '--agent', 'claude', '--stack', 'node', '--target', '.'], badDir).status, 0);
+  assert.equal(runIn(['install', '--agent', 'claude', '--stack', 'node', '--target', '.'], cleanDir).status, 0);
+
+  // Declare an over-broad toolPolicy only in badDir (valid JSON so buildDiff passes, fails runtime tool reconciliation)
+  fs.mkdirSync(path.join(badDir, '.flow-kit', 'mcp'), { recursive: true });
+  fs.writeFileSync(
+    path.join(badDir, '.flow-kit', 'mcp', 'servers.json'),
+    JSON.stringify({
+      servers: {
+        'flow-kit-wiki': { command: 'flow-kit', args: ['run', 'wiki-mcp'] },
+      },
+      toolPolicy: {
+        mode: 'allow',
+        servers: { 'flow-kit-wiki': ['wiki_search', 'nonexistent_tool'] },
+      },
+    }),
+    'utf8',
+  );
+
+  const t = makeT('en');
+  const origLog = console.log;
+  const runDoctorInProcess = (target) => {
+    let captured = '';
+    console.log = (line) => { captured += `${line}\n`; };
+    try {
+      const code = doctorCommand({ args: parseArgs(['doctor', '--target', target, '--json']), t });
+      return { code, json: JSON.parse(captured) };
+    } finally {
+      console.log = origLog;
+    }
+  };
+
+  const first = runDoctorInProcess(badDir);
+  assert.equal(first.code, 1);
+  assert.ok(first.json.checks.some((c) => c.name === 'mcp policy claude' && c.ok === false));
+
+  const second = runDoctorInProcess(cleanDir);
+  assert.equal(second.code, 0, `cleanDir must not inherit badDir mcpPolicyCache: ${JSON.stringify(second.json.checks.filter((c) => !c.ok))}`);
 });

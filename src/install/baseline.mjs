@@ -90,7 +90,7 @@ export function pruneBaselines(target, keepRels, { dryRun = false } = {}) {
 // 三方合并：git merge-file 以 baseline 为 base、磁盘为 ours、新模板为 theirs。
 // 返回 clean 时 text 为合并结果；conflict 时 text 带冲突标记；git 不可用返回 unavailable，
 // 由调用方回退到旧的哈希冲突跳过语义。
-export function mergeThreeWay({ base, ours, theirs }) {
+export function mergeThreeWay({ base, ours, theirs }, { exec = spawnSync } = {}) {
   let dir;
   try {
     dir = fs.mkdtempSync(path.join(os.tmpdir(), 'flow-kit-merge-'));
@@ -100,13 +100,16 @@ export function mergeThreeWay({ base, ours, theirs }) {
     fs.writeFileSync(oursFile, ours, 'utf8');
     fs.writeFileSync(baseFile, base, 'utf8');
     fs.writeFileSync(theirsFile, theirs, 'utf8');
-    const result = spawnSync(
+    const result = exec(
       'git',
       ['merge-file', '-p', '-q', '-L', 'current', '-L', 'baseline', '-L', 'kit', oursFile, baseFile, theirsFile],
       { encoding: 'utf8', windowsHide: true },
     );
     // git merge-file 的退出码是冲突块数量（最多 127）；>=128 才是 git 自身错误。
-    if (result.error || result.status < 0 || result.status > 127) return { status: 'unavailable' };
+    // git 被信号终止时 status 为 null（null < 0 / null > 127 均为 false），非数值须归入 unavailable。
+    if (result.error || typeof result.status !== 'number' || result.status < 0 || result.status > 127) {
+      return { status: 'unavailable' };
+    }
     return {
       status: result.status === 0 ? 'clean' : 'conflict',
       text: result.stdout,

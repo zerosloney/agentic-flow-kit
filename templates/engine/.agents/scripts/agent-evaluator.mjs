@@ -765,6 +765,9 @@ export function renderMarkdownReport(suiteSummary) {
 // ---------------------------------------------------------------------
 
 function argOf(argv, name, fallback = null) {
+  const eqPrefix = `--${name}=`;
+  const eqToken = argv.find((a) => a.startsWith(eqPrefix));
+  if (eqToken !== undefined) return eqToken.slice(eqPrefix.length);
   const i = argv.indexOf(`--${name}`);
   if (i < 0) return fallback;
   const v = argv[i + 1];
@@ -773,16 +776,23 @@ function argOf(argv, name, fallback = null) {
 
 export function main(argv = process.argv.slice(2)) {
   const cmd = argv[0] || 'run';
-  const root = path.resolve(argOf(argv, 'root', process.cwd()));
+  const root = path.resolve(argOf(argv, 'root', process.env.FLOW_KIT_PROJECT_ROOT || process.cwd()));
   const json = argv.includes('--json');
+  const rubric = argv.includes('--rubric');
   const record = argv.includes('--record');
   const model = argOf(argv, 'model', 'default-agent');
   const reportPath = argOf(argv, 'report');
+  const evalLogArg = argOf(argv, 'eval-log');
   const thresholdArg = argOf(argv, 'threshold');
+  const categoryArg = argOf(argv, 'category');
   const threshold = thresholdArg ? Number(thresholdArg) : 0.8;
 
   if (cmd === 'list') {
-    const list = STANDARD_BENCHMARKS.map((f) => ({
+    let fixtures = STANDARD_BENCHMARKS;
+    if (categoryArg && typeof categoryArg === 'string') {
+      fixtures = fixtures.filter((f) => f.category === categoryArg);
+    }
+    const list = fixtures.map((f) => ({
       id: f.id,
       name: f.name,
       category: f.category,
@@ -802,8 +812,15 @@ export function main(argv = process.argv.slice(2)) {
   if (cmd === 'run') {
     const fixtureId = argOf(argv, 'fixture');
     let fixtures = STANDARD_BENCHMARKS;
+    if (categoryArg && typeof categoryArg === 'string') {
+      fixtures = fixtures.filter((f) => f.category === categoryArg);
+      if (!fixtures.length) {
+        console.error(`未知 category 或无匹配用例: ${categoryArg}`);
+        return 2;
+      }
+    }
     if (fixtureId && typeof fixtureId === 'string') {
-      fixtures = STANDARD_BENCHMARKS.filter((f) => f.id === fixtureId);
+      fixtures = fixtures.filter((f) => f.id === fixtureId);
       if (!fixtures.length) {
         console.error(`未知 fixture: ${fixtureId}（通过 agent-evaluator.mjs list 查看可用夹具）`);
         return 2;
@@ -816,6 +833,7 @@ export function main(argv = process.argv.slice(2)) {
       model: typeof model === 'string' ? model : 'default-agent',
       root,
       record,
+      evalLog: evalLogArg || undefined,
     });
 
     if (reportPath && typeof reportPath === 'string') {
@@ -824,10 +842,22 @@ export function main(argv = process.argv.slice(2)) {
       fs.writeFileSync(absReport, renderMarkdownReport(suite), 'utf8');
     }
 
+    if (rubric) {
+      suite.rubric = {
+        weights: suite.weights,
+        radar: renderAsciiRadar(suite.averageScores, suite.weights, suite.averageComposite),
+      };
+    }
+
     if (json) {
       console.log(JSON.stringify(suite, null, 2));
     } else {
       console.log(renderAsciiRadar(suite.averageScores, suite.weights, suite.averageComposite));
+      if (rubric) {
+        for (const [dim, w] of Object.entries(suite.weights || {})) {
+          console.log(`  - ${dim}: score=${((suite.averageScores[dim] ?? 0) * 100).toFixed(1)}% weight=${(w * 100).toFixed(0)}%`);
+        }
+      }
       console.log(`\n结果: ${suite.status.toUpperCase()} | 通过率: ${(suite.passRate * 100).toFixed(1)}% (${suite.passedCases}/${suite.totalCases}) | 模型: ${suite.model}`);
       if (record && suite.recorded) {
         console.log(`已将凭证自动登记至 agent-eval: signature=${suite.receipt?.signature?.slice(0, 12)}`);

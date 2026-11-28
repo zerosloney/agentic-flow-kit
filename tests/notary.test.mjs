@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { makeTmp } from './helpers/tmp.mjs';
+import { makeIsolatedCliRunner, makeTmp } from './helpers/tmp.mjs';
 import {
   generateKeyPair,
   computePublicKeyFingerprint,
@@ -19,13 +19,7 @@ import {
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
 
-function run(args, cwd = process.cwd(), env = {}) {
-  return spawnSync(process.execPath, [BIN, ...args], {
-    cwd,
-    encoding: 'utf8',
-    env: { ...process.env, FLOW_KIT_TEST: '1', ...env },
-  });
-}
+const run = makeIsolatedCliRunner(BIN, 'notary-home-');
 
 function initRepo() {
   const dir = makeTmp('notary-test-');

@@ -131,6 +131,46 @@ export function loadTimelineTrace(root, runId) {
   }
 }
 
+/**
+ * 列出所有已记录的时序轨迹运行元数据
+ * @param {string} root - 项目根目录
+ * @returns {Array<object>} 时序运行列表
+ */
+export function listTimelineTraces(root) {
+  const traceDir = path.join(root, '.agents', 'traces');
+  if (!fs.existsSync(traceDir)) return [];
+  let files = [];
+  try {
+    files = fs.readdirSync(traceDir).filter((f) => f.endsWith('.timeline.jsonl'));
+  } catch {
+    return [];
+  }
+  const list = [];
+  for (const f of files) {
+    const filePath = path.join(traceDir, f);
+    try {
+      const content = fs.readFileSync(filePath, 'utf8').trim();
+      if (!content) continue;
+      const lines = content.split('\n').filter(Boolean);
+      if (lines.length === 0) continue;
+      const first = JSON.parse(lines[0]);
+      const last = JSON.parse(lines[lines.length - 1]);
+      list.push({
+        runId: first.runId || f.replace('.timeline.jsonl', ''),
+        eventCount: lines.length,
+        startTime: first.timestamp,
+        lastTime: last.timestamp,
+        lastStage: last.stage || null,
+        status: last.status || 'unknown',
+        traceFile: filePath,
+      });
+    } catch {
+      // 忽略无法解析的异常分片
+    }
+  }
+  return list.sort((a, b) => new Date(b.lastTime).getTime() - new Date(a.lastTime).getTime());
+}
+
 // ---------------------------------------------------------------------
 // 2. 关键帧提取与时间旅行状态投影 (Keyframe Replay & Time Travel)
 // ---------------------------------------------------------------------
@@ -436,18 +476,50 @@ export function parseArgs(args = []) {
     command: 'help',
     runId: '',
     stage: '',
+    exportHtml: '',
+    step: null,
+    eventType: '',
+    summary: '',
+    actor: '',
+    status: '',
+    root: '',
+    json: false,
     export: false,
     raw: args,
   };
 
+  const readVal = (idx, prefix) => {
+    if (args[idx].startsWith(`${prefix}=`)) return [args[idx].slice(prefix.length + 1), idx];
+    if (args[idx] === prefix && args[idx + 1] != null) return [args[idx + 1], idx + 1];
+    return null;
+  };
+
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === 'append' || arg === 'query' || arg === 'export' || arg === 'replay') {
+    if (arg === 'append' || arg === 'query' || arg === 'export' || arg === 'replay' || arg === 'list' || arg === 'help') {
       result.command = arg;
-    } else if (arg === '--run' && args[i + 1]) {
-      result.runId = args[++i];
-    } else if (arg === '--stage' && args[i + 1]) {
-      result.stage = args[++i];
+      continue;
+    }
+    const runHit = readVal(i, '--run');
+    if (runHit) { [result.runId, i] = runHit; continue; }
+    const stageHit = readVal(i, '--stage');
+    if (stageHit) { [result.stage, i] = stageHit; continue; }
+    const htmlHit = readVal(i, '--export-html');
+    if (htmlHit) { [result.exportHtml, i] = htmlHit; continue; }
+    const stepHit = readVal(i, '--step');
+    if (stepHit) { result.step = Number(stepHit[0]); i = stepHit[1]; continue; }
+    const typeHit = readVal(i, '--event-type');
+    if (typeHit) { [result.eventType, i] = typeHit; continue; }
+    const sumHit = readVal(i, '--summary');
+    if (sumHit) { [result.summary, i] = sumHit; continue; }
+    const actHit = readVal(i, '--actor');
+    if (actHit) { [result.actor, i] = actHit; continue; }
+    const statHit = readVal(i, '--status');
+    if (statHit) { [result.status, i] = statHit; continue; }
+    const rootHit = readVal(i, '--root');
+    if (rootHit) { [result.root, i] = rootHit; continue; }
+    if (arg === '--json') {
+      result.json = true;
     }
   }
 
@@ -456,18 +528,59 @@ export function parseArgs(args = []) {
 
 export function main() {
   const args = parseArgs(process.argv.slice(2));
-  const root = process.cwd();
+  const root = path.resolve(args.root || process.env.FLOW_KIT_PROJECT_ROOT || process.cwd());
 
   if (args.command === 'help') {
     console.log('用法: node timeline-trace.mjs <command> [options]');
     console.log('');
     console.log('命令:');
+    console.log('  list    列出所有已记录的时序轨迹运行');
     console.log('  query   查询指定 runId 的时序事件链');
+    console.log('  append  向指定 runId 追加一条时序事件');
     console.log('  export  导出指定 runId 的离线复盘包与可视化 HTML');
+    console.log('  replay  重放指定 runId 在某个时刻或关键帧的状态快照');
     console.log('');
     console.log('选项:');
-    console.log('  --run <id>       指定流水线运行 ID');
-    console.log('  --stage <name>   按阶段过滤');
+    console.log('  --run <id>          指定流水线运行 ID');
+    console.log('  --stage <name>      按阶段过滤');
+    console.log('  --export-html <out> 导出单页离线复盘 HTML');
+    console.log('  --step <idx>        指定回溯步骤');
+    console.log('  --json              输出 JSON 格式');
+    process.exit(0);
+  }
+
+  if (args.command === 'list' || (args.command === 'query' && !args.runId)) {
+    const traces = listTimelineTraces(root);
+    if (args.json) {
+      console.log(JSON.stringify(traces, null, 2));
+    } else {
+      if (traces.length === 0) {
+        console.log('未找到任何时序轨迹（.agents/traces/ 暂无记录）');
+      } else {
+        console.log(`已记录的时序轨迹列表 (${traces.length} 条)：`);
+        for (const t of traces) {
+          console.log(`  - [${t.runId}] 事件数: ${t.eventCount} | 阶段: ${t.lastStage} | 状态: ${t.status} | 最终时间: ${t.lastTime}`);
+        }
+      }
+    }
+    process.exit(0);
+  }
+
+  if (args.command === 'append') {
+    if (!args.runId) {
+      console.error('错误: append 命令必须通过 --run 指定 runId');
+      process.exit(1);
+    }
+    const traceFile = appendTimelineEvent(root, {
+      runId: args.runId,
+      stage: args.stage || 'unknown',
+      eventType: args.eventType || 'STEP_EXECUTED',
+      status: args.status || 'success',
+      summary: args.summary || '',
+      actor: args.actor || 'cli',
+    });
+    if (args.json) console.log(JSON.stringify({ ok: true, runId: args.runId, traceFile }, null, 2));
+    else console.log(`[timeline] 事件已追加至: ${traceFile}`);
     process.exit(0);
   }
 
@@ -488,7 +601,27 @@ export function main() {
       process.exit(1);
     }
     const bundle = exportPostMortemBundle(root, args.runId);
-    console.log(`[timeline] 成功导出复盘包: ${bundle.bundleFile}`);
+    if (args.exportHtml) {
+      const htmlPath = path.resolve(root, args.exportHtml);
+      fs.mkdirSync(path.dirname(htmlPath), { recursive: true });
+      fs.writeFileSync(htmlPath, renderPostMortemHtml(bundle), 'utf8');
+      bundle.htmlFile = htmlPath;
+    }
+    if (args.json) console.log(JSON.stringify(bundle, null, 2));
+    else console.log(`[timeline] 成功导出复盘包: ${bundle.htmlFile || bundle.bundleFile}`);
+    process.exit(0);
+  }
+
+  if (args.command === 'replay') {
+    if (!args.runId) {
+      console.error('错误: 请通过 --run 指定 runId');
+      process.exit(1);
+    }
+    const events = loadTimelineTrace(root, args.runId);
+    const idx = Number.isFinite(args.step) ? Math.max(0, Math.min(events.length - 1, args.step)) : events.length - 1;
+    const target = events[idx] || new Date().toISOString();
+    const state = projectStateAtTimestamp(events, target);
+    console.log(JSON.stringify(state, null, 2));
     process.exit(0);
   }
 }

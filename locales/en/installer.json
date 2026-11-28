@@ -557,5 +557,6 @@
   "gate.diffPolicyNoChanges": "0 policy definitions modified in diff scope ({{count}} files changed)",
   "gate.diffScopeFailed": "Failed to resolve diff scope (git diff/status unavailable); falling back to full checks",
   "gate.badgeSaved": "Gate badge generated: {{file}}",
+  "shadowRun.cleaned": "[shadow-run] Cleaned {{count}} shadow sandbox directory(ies)",
   "error.gateUsage": "Usage: flow-kit gate [check|badge|init-ci] [options]"
 }

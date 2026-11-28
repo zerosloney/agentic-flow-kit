@@ -169,19 +169,19 @@ async function main(argv) {
     }
     case 'timeline': {
       const { timelineCommand } = await import('../commands/evolution.mjs');
-      return timelineCommand({ args, t, lang });
+      return timelineCommand({ args, rawArgv: argv.slice(1), t, lang });
     }
     case 'shadow-run': {
       const { shadowRunCommand } = await import('../commands/evolution.mjs');
-      return shadowRunCommand({ args, t, lang });
+      return shadowRunCommand({ args, rawArgv: argv.slice(1), t, lang });
     }
     case 'eval': {
       const { evalCommand } = await import('../commands/evolution.mjs');
-      return evalCommand({ args, t, lang });
+      return evalCommand({ args, rawArgv: argv.slice(1), t, lang });
     }
     case 'optimize-skill': {
       const { optimizeSkillCommand } = await import('../commands/evolution.mjs');
-      return optimizeSkillCommand({ args, t, lang });
+      return optimizeSkillCommand({ args, rawArgv: argv.slice(1), t, lang });
     }
     default:
       {

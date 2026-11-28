@@ -549,6 +549,7 @@ export function runShadowExecution(options = {}) {
     const report = {
       success: finalStatus === DRIVER_STATUS.SUCCESS,
       status: finalStatus,
+      task: options.task || null,
       haltReason: haltReason || (finalStatus === DRIVER_STATUS.SUCCESS ? '阶段闭环执行成功' : '试跑终止'),
       stagesCompleted: stages.slice(0, currentStageIndex),
       remainingStages: stages.slice(currentStageIndex),
@@ -571,26 +572,87 @@ export function runShadowExecution(options = {}) {
 // 4. 命令行交互入口 (CLI Entry)
 // ---------------------------------------------------------------------
 
+export function cleanShadowWorkspaces(tmpBase = os.tmpdir()) {
+  let cleaned = 0;
+  try {
+    for (const ent of fs.readdirSync(tmpBase, { withFileTypes: true })) {
+      if (ent.isDirectory() && (ent.name.startsWith('agent-shadow-run-') || ent.name.startsWith('shadow-exec-'))) {
+        fs.rmSync(path.join(tmpBase, ent.name), { recursive: true, force: true });
+        cleaned += 1;
+      }
+    }
+  } catch { /* ignore tmp cleanup errors */ }
+  return cleaned;
+}
+
+export function getShadowWorkspacesStatus(tmpBase = os.tmpdir()) {
+  const workspaces = [];
+  try {
+    for (const ent of fs.readdirSync(tmpBase, { withFileTypes: true })) {
+      if (ent.isDirectory() && (ent.name.startsWith('agent-shadow-run-') || ent.name.startsWith('shadow-exec-'))) {
+        const full = path.join(tmpBase, ent.name);
+        let createdAt = null;
+        try {
+          createdAt = fs.statSync(full).mtime.toISOString();
+        } catch { /* ignore */ }
+        workspaces.push({
+          name: ent.name,
+          path: full,
+          createdAt,
+        });
+      }
+    }
+  } catch { /* ignore tmp errors */ }
+  return {
+    count: workspaces.length,
+    workspaces,
+  };
+}
+
 export function parseArgs(args = []) {
   const result = {
     command: 'help',
+    task: '',
     maxSteps: 10,
     maxWallClockMs: 60000,
     dryRun: true,
     stages: ['plan', 'implement', 'verify'],
+    root: '',
+    json: false,
     raw: args,
+  };
+
+  const readVal = (idx, prefix) => {
+    if (args[idx].startsWith(`${prefix}=`)) return [args[idx].slice(prefix.length + 1), idx];
+    if (args[idx] === prefix && args[idx + 1] != null) return [args[idx + 1], idx + 1];
+    return null;
   };
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === 'shadow' || arg === 'status' || arg === 'help') {
+    if (arg === 'shadow' || arg === 'clean' || arg === 'status' || arg === 'help') {
       result.command = arg;
-    } else if (arg === '--max-steps' && args[i + 1]) {
-      result.maxSteps = Number(args[++i]) || 10;
-    } else if (arg === '--timeout-ms' && args[i + 1]) {
-      result.maxWallClockMs = Number(args[++i]) || 60000;
-    } else if (arg === '--keep') {
+      continue;
+    }
+    const taskHit = readVal(i, '--task');
+    if (taskHit) { [result.task, i] = taskHit; continue; }
+    const stepsHit = readVal(i, '--max-steps');
+    if (stepsHit) { result.maxSteps = Number(stepsHit[0]) || 10; i = stepsHit[1]; continue; }
+    const timeoutHit = readVal(i, '--timeout-ms') || readVal(i, '--timeout');
+    if (timeoutHit) { result.maxWallClockMs = Number(timeoutHit[0]) || 60000; i = timeoutHit[1]; continue; }
+    const stagesHit = readVal(i, '--stages');
+    if (stagesHit) {
+      result.stages = String(stagesHit[0]).split(',').map((s) => s.trim()).filter(Boolean);
+      i = stagesHit[1];
+      continue;
+    }
+    const rootHit = readVal(i, '--root');
+    if (rootHit) { [result.root, i] = rootHit; continue; }
+    if (arg === '--keep') {
       result.dryRun = false;
+    }
+    if (arg === '--json') {
+      result.json = true;
     }
   }
 
@@ -599,24 +661,43 @@ export function parseArgs(args = []) {
 
 export function main() {
   const args = parseArgs(process.argv.slice(2));
-  const root = process.cwd();
+  const root = path.resolve(args.root || process.env.FLOW_KIT_PROJECT_ROOT || process.cwd());
 
   if (args.command === 'help') {
     console.log('用法: node headless-driver.mjs <command> [options]');
     console.log('');
     console.log('命令:');
     console.log('  shadow    启动隔离影子试跑并全景复盘');
+    console.log('  clean     清理残留影子工作区目录');
+    console.log('  status    查看当前残留或活跃影子沙箱状态');
     console.log('');
     console.log('选项:');
+    console.log('  --task <desc>       指定试跑目标任务描述');
     console.log('  --max-steps <n>     最大步数预算（默认 10）');
     console.log('  --timeout-ms <ms>   总超时时间（默认 60000ms）');
+    console.log('  --stages <s1,s2>    指定执行阶段序列');
     console.log('  --keep              保留影子工作区（默认自动清理）');
+    console.log('  --json              输出 JSON 格式');
+    process.exit(0);
+  }
+
+  if (args.command === 'clean') {
+    const cleaned = cleanShadowWorkspaces();
+    console.log(JSON.stringify({ ok: true, cleaned }, null, 2));
+    process.exit(0);
+  }
+
+  if (args.command === 'status') {
+    const status = getShadowWorkspacesStatus();
+    console.log(JSON.stringify(status, null, 2));
     process.exit(0);
   }
 
   if (args.command === 'shadow') {
     const report = runShadowExecution({
       root,
+      task: args.task || null,
+      stages: args.stages,
       budgetConfig: {
         maxSteps: args.maxSteps,
         maxWallClockMs: args.maxWallClockMs,

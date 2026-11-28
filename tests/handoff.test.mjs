@@ -4,7 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { makeTmp } from './helpers/tmp.mjs';
+import { makeIsolatedCliRunner, makeTmp } from './helpers/tmp.mjs';
 import {
   scanTaint,
   createHandoffEnvelope,
@@ -15,17 +15,13 @@ import {
   HANDOFF_SCHEMA,
 } from '../src/install/handoff.mjs';
 import { generateKeyPair } from '../src/install/notary.mjs';
+import { runGateChecks } from '../src/ci/gate.mjs';
+import { makeT } from '../src/i18n.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
 
-function run(args, cwd = process.cwd(), env = {}) {
-  return spawnSync(process.execPath, [BIN, ...args], {
-    cwd,
-    encoding: 'utf8',
-    env: { ...process.env, FLOW_KIT_TEST: '1', ...env },
-  });
-}
+const run = makeIsolatedCliRunner(BIN, 'handoff-home-');
 
 function initRepo() {
   const dir = makeTmp('handoff-test-');
@@ -384,4 +380,62 @@ test('clean signed envelope verifies through the default public key path', () =>
   assert.ok(res.signatureVerified);
   assert.equal(res.signatureVerified.fingerprint, pair.fingerprint);
   assert.equal(res.warnings.length, 0);
+});
+
+test('handoff core guards against path escape, signature stripping, and corrupted envelopes', () => {
+  const dir = initRepo();
+  const outsideDir = makeTmp('handoff-outside-');
+  const outsideFile = path.join(outsideDir, 'secret.txt');
+  fs.writeFileSync(outsideFile, 'top-secret', 'utf8');
+  const relEscape = path.relative(dir, outsideFile).replace(/\\/g, '/');
+
+  // 1. Core createHandoffEnvelope & verifyHandoffEnvelope block ../ path escape
+  assert.throws(
+    () => createHandoffEnvelope({
+      target: dir,
+      fromRole: 'code',
+      toRole: 'review',
+      artifacts: [relEscape],
+    }),
+    /escapes target directory/i,
+  );
+
+  fs.writeFileSync(path.join(dir, 'ok.js'), 'export default 1;\n', 'utf8');
+  const pair = generateKeyPair('ed25519');
+  const signed = createHandoffEnvelope({
+    target: dir,
+    fromRole: 'code',
+    toRole: 'review',
+    artifacts: ['ok.js'],
+    signWithKey: pair.privateKey,
+  });
+
+  const escapedVerify = verifyHandoffEnvelope({
+    target: dir,
+    envelope: { ...signed, artifacts: [{ path: relEscape, hash: 'sha256:00' }] },
+  });
+  assert.equal(escapedVerify.ok, false);
+  assert.ok(escapedVerify.problems.some((p) => /escapes target directory/i.test(p)));
+
+  // 2. Signature stripping fails when publicKeyPem is provided
+  const stripped = verifyHandoffEnvelope({
+    target: dir,
+    envelope: { ...signed, signature: null },
+    publicKeyPem: pair.publicKey,
+  });
+  assert.equal(stripped.ok, false);
+  assert.ok(stripped.problems.some((p) => /missing cryptographic signature/i.test(p)));
+
+  // 3. Corrupted / schema-tampered handoff files in .agents/handoffs fail gate & listInvalid
+  const handoffsDir = path.join(dir, '.agents', 'handoffs');
+  fs.mkdirSync(handoffsDir, { recursive: true });
+  fs.writeFileSync(path.join(handoffsDir, 'corrupt.json'), '{broken-json', 'utf8');
+  const listed = listHandoffFiles(dir, { includeInvalid: true });
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0].envelope, null);
+  assert.ok(listed[0].invalidReason);
+
+  const gateRes = runGateChecks({ target: dir, rules: ['notary'], t: makeT('en') });
+  assert.equal(gateRes.passed, false);
+  assert.equal(gateRes.guards[0].status, 'failed');
 });

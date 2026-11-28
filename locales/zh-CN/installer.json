@@ -557,5 +557,6 @@
   "gate.diffPolicyNoChanges": "增量范围内未涉及中央策略规约变更（共 {{count}} 个文件变更）",
   "gate.diffScopeFailed": "差异集解析失败（git diff/status 均不可用），已回退全量检查",
   "gate.badgeSaved": "已生成门禁状态徽章：{{file}}",
+  "shadowRun.cleaned": "[shadow-run] 已清理 {{count}} 个影子沙箱目录",
   "error.gateUsage": "用法：flow-kit gate [check|badge|init-ci] [options]"
 }

@@ -454,3 +454,11 @@ test('en rules export messages are English', () => {
   assert.match(again.stderr, /flow-rules\.yml already exists \(use --force to overwrite\)/);
   assert.doesNotMatch(again.stderr, /已存在/, 'en output must not fall back to the zh sentence');
 });
+
+test('en shadow-run --clean outputs localized English message', () => {
+  const dir = tmpRepo();
+  const r = run(['shadow-run', '--clean', '--lang', 'en'], dir);
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /\[shadow-run\] Cleaned \d+ shadow sandbox directory\(ies\)/);
+  assert.doesNotMatch(r.stdout, /已清理/, 'en output must not fall back to the zh sentence');
+});

@@ -786,22 +786,48 @@ export function parseArgs(args = []) {
     dryRun: false,
     apply: false,
     rollback: false,
+    arbitrate: false,
+    extract: false,
     minDelta: 0.10,
+    root: '',
+    json: false,
     raw: args,
+  };
+
+  const readVal = (idx, prefix) => {
+    if (args[idx].startsWith(`${prefix}=`)) return [args[idx].slice(prefix.length + 1), idx];
+    if (args[idx] === prefix && args[idx + 1] != null) return [args[idx + 1], idx + 1];
+    return null;
   };
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    if (arg === 'extract' || arg === 'optimize' || arg === 'eval' || arg === 'rollback') {
+    if (arg === 'extract' || arg === 'optimize' || arg === 'eval' || arg === 'rollback' || arg === 'help') {
       result.command = arg;
-    } else if (arg === '--skill' && args[i + 1]) {
-      result.skill = args[++i];
-    } else if (arg === '--dry-run') {
+      continue;
+    }
+    const skillHit = readVal(i, '--skill');
+    if (skillHit) { [result.skill, i] = skillHit; continue; }
+    const rootHit = readVal(i, '--root');
+    if (rootHit) { [result.root, i] = rootHit; continue; }
+    const deltaHit = readVal(i, '--min-delta');
+    if (deltaHit) { result.minDelta = Number(deltaHit[0]) || 0.10; i = deltaHit[1]; continue; }
+
+    if (arg === '--dry-run') {
       result.dryRun = true;
     } else if (arg === '--apply') {
       result.apply = true;
-    } else if (arg === '--min-delta' && args[i + 1]) {
-      result.minDelta = Number(args[++i]) || 0.10;
+    } else if (arg === '--arbitrate') {
+      result.arbitrate = true;
+      if (result.command === 'help') result.command = 'optimize';
+    } else if (arg === '--extract') {
+      result.extract = true;
+      if (result.command === 'help') result.command = 'extract';
+    } else if (arg === '--rollback') {
+      result.rollback = true;
+      if (result.command === 'help') result.command = 'rollback';
+    } else if (arg === '--json') {
+      result.json = true;
     }
   }
 
@@ -810,7 +836,7 @@ export function parseArgs(args = []) {
 
 export function main() {
   const args = parseArgs(process.argv.slice(2));
-  const root = process.cwd();
+  const root = path.resolve(args.root || process.env.FLOW_KIT_PROJECT_ROOT || process.cwd());
 
   if (args.command === 'help') {
     console.log('用法: node skill-optimizer.mjs <command> [options]');
@@ -825,6 +851,7 @@ export function main() {
     console.log('  --apply           评估胜出后自动应用到目标文件');
     console.log('  --dry-run         仅输出比对 Diff 与判定报告，不写入');
     console.log('  --min-delta <num> 胜出所需的最小通过率提升（默认 0.10）');
+    console.log('  --json            输出 JSON 格式');
     process.exit(0);
   }
 
@@ -834,8 +861,25 @@ export function main() {
       process.exit(1);
     }
     const res = rollbackSkillOptimization(root, args.skill);
-    console.log(res.message);
+    if (args.json) console.log(JSON.stringify(res, null, 2));
+    else console.log(res.message);
     process.exit(res.rolledBack ? 0 : 1);
+  }
+
+  if (args.command === 'extract') {
+    const prescriptions = loadPrescriptionStore(root);
+    const defectPatterns = extractDefectPatterns({ prescriptions, skillName: args.skill || '' });
+    if (args.json) {
+      console.log(JSON.stringify({ skillName: args.skill || null, defectPatterns }, null, 2));
+    } else {
+      console.log(`缺陷模式提取结果（技能: ${args.skill || '全量'}，共 ${defectPatterns.length} 项）：`);
+      for (const p of defectPatterns) {
+        console.log(`  - [${p.id}] (${p.category}) ${p.title} 出现 ${p.occurrences} 次`);
+        console.log(`    根因: ${p.rootCause}`);
+        console.log(`    条款: ${p.checklistRule}`);
+      }
+    }
+    process.exit(0);
   }
 
   if (args.command === 'optimize') {
@@ -845,7 +889,22 @@ export function main() {
       apply: args.apply && !args.dryRun,
       minDelta: args.minDelta,
     });
-    console.log(JSON.stringify(res, null, 2));
+    if (args.json) {
+      console.log(JSON.stringify(res, null, 2));
+    } else {
+      console.log(`[skill-optimizer] 优化裁决结果: ${res.success ? 'PASS (胜出)' : 'FAIL (未胜出)'}`);
+      if (res.evalResult) {
+        console.log(`  - 决策结论: ${res.evalResult.verdict} (${res.evalResult.reason})`);
+        const m = res.evalResult.metrics;
+        if (m) {
+          console.log(`  - 基线通过率: ${(m.baseline.passRate * 100).toFixed(1)}% -> 候选通过率: ${(m.candidate.passRate * 100).toFixed(1)}%`);
+          console.log(`  - 增益: +${(m.deltaPassRate * 100).toFixed(1)}% | 回归数: ${m.regressionsCount}`);
+        }
+      }
+      if (res.applied) {
+        console.log(`  - 已应用至: ${res.targetPath} (备份: ${res.backupPath})`);
+      }
+    }
     process.exit(res.success ? 0 : 1);
   }
 

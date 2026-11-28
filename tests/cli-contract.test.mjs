@@ -7,6 +7,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { EXIT, exitCodeForError, REGISTERED_ERROR_CODES, IO_ERROR_CODES } from '../src/cli/exit.mjs';
+import { parseArgs, flag } from '../src/cli/args.mjs';
 import { COMMANDS } from '../src/cli/main.mjs';
 import { STACKS } from '../src/install/profiles.mjs';
 
@@ -332,4 +333,48 @@ test('list-hosts --json lists the registry surface', () => {
   assert.equal(claude.dir, '.claude');
   assert.equal(claude.modelField, 'model');
   assert.ok(hosts.every((h) => h.skills === null || typeof h.skills === 'string'));
+});
+
+test('parseArgs keeps boolean flags boolean even when placed right before positional arguments', () => {
+  const r1 = parseArgs(['remove-host', '--dry-run', 'claude']);
+  assert.equal(flag(r1, 'dry-run'), true);
+  assert.deepEqual(r1._, ['remove-host', 'claude']);
+
+  const r2 = parseArgs(['gate', '--strict', '--json', 'check']);
+  assert.equal(flag(r2, 'strict'), true);
+  assert.equal(flag(r2, 'json'), true);
+  assert.deepEqual(r2._, ['gate', 'check']);
+
+  const r3 = parseArgs(['explain', '--json', '.agents/commands/new-task.md']);
+  assert.equal(flag(r3, 'json'), true);
+  assert.deepEqual(r3._, ['explain', '.agents/commands/new-task.md']);
+
+  // Explicit --flag=false / --flag=true still works as before
+  const r4 = parseArgs(['install', '--dry-run=false', 'extra']);
+  assert.equal(flag(r4, 'dry-run'), false);
+  assert.deepEqual(r4._, ['install', 'extra']);
+
+  // Dual-mode --version & --summary disambiguate by command context
+  const r5 = parseArgs(['--version', 'install']);
+  assert.equal(flag(r5, 'version'), true);
+  assert.deepEqual(r5._, ['install']);
+
+  const r6 = parseArgs(['metrics', 'export', '--version', '2.0.0']);
+  assert.equal(r6.version, '2.0.0');
+
+  const r7 = parseArgs(['mcp', '--summary', 'audit']);
+  assert.equal(flag(r7, 'summary'), true);
+  assert.deepEqual(r7._, ['mcp', 'audit']);
+
+  const r8 = parseArgs(['handoff', 'create', '--summary', 'handoff note']);
+  assert.equal(r8.summary, 'handoff note');
+
+  const r9 = parseArgs(['timeline', 'append', '--run', 'run-1', '--summary', 'step done', '--status', 'success']);
+  assert.equal(r9.summary, 'step done');
+  assert.equal(r9.status, 'success');
+  assert.deepEqual(r9._, ['timeline', 'append']);
+
+  const r10 = parseArgs(['shadow-run', '--status', '--json']);
+  assert.equal(flag(r10, 'status'), true);
+  assert.deepEqual(r10._, ['shadow-run']);
 });

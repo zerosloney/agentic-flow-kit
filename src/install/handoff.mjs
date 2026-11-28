@@ -51,21 +51,29 @@ export function scanTaint(content) {
   };
 }
 
-export function computeArtifactHash(target, relPath) {
-  const abs = path.resolve(target, relPath);
-  if (!fs.existsSync(abs)) {
-    return null;
-  }
+function resolveArtifactWithinTarget(target, relPath) {
+  if (typeof relPath !== 'string' || !relPath.trim()) return null;
+  const targetAbs = path.resolve(target);
+  const targetBase = targetAbs.endsWith(path.sep) ? targetAbs : targetAbs + path.sep;
+  const abs = path.resolve(targetAbs, relPath);
+  if (abs === targetAbs || !abs.startsWith(targetBase)) return null;
+  return abs;
+}
+
+function hashResolvedArtifact(abs, relPath) {
+  if (!abs || !fs.existsSync(abs)) return null;
   const stat = fs.statSync(abs);
-  if (stat.isDirectory()) {
-    return null;
-  }
+  if (stat.isDirectory()) return null;
   const content = fs.readFileSync(abs);
   return {
     path: relPath.replace(/\\/g, '/'),
     size: stat.size,
     hash: `sha256:${sha256(content)}`,
   };
+}
+
+export function computeArtifactHash(target, relPath) {
+  return hashResolvedArtifact(resolveArtifactWithinTarget(target, relPath), relPath);
 }
 
 export function generateHandoffId() {
@@ -107,17 +115,22 @@ export function createHandoffEnvelope({
   const artifactEntries = [];
   for (const rel of artifacts) {
     const normRel = String(rel).replace(/\\/g, '/').replace(/^\.\//, '');
-    if (normRel.startsWith('.env') || normRel.includes('/.env')) {
+    const lowerRel = normRel.toLowerCase();
+    if (lowerRel.startsWith('.env') || lowerRel.includes('/.env')) {
       allFindings.push({ type: 'SECRET_FILE', name: normRel });
     }
-    const info = computeArtifactHash(target, normRel);
+    const absArtifact = resolveArtifactWithinTarget(target, normRel);
+    if (!absArtifact) {
+      throw new Error(`Handoff artifact path escapes target directory: ${normRel}`);
+    }
+    const info = hashResolvedArtifact(absArtifact, normRel);
     if (!info) {
       throw new Error(`Artifact not found or invalid: ${normRel}`);
     }
 
     // 检查文本工件内容中的凭证泄漏
     try {
-      const textSample = fs.readFileSync(path.resolve(target, normRel), 'utf8');
+      const textSample = fs.readFileSync(absArtifact, 'utf8');
       const artTaint = scanTaint(textSample);
       for (const f of artTaint.findings) {
         if (f.type === 'SECRET_LEAK') {
@@ -200,18 +213,30 @@ export function verifyHandoffEnvelope({
   }
 
   // 工件完整性与篡改核验
-  for (const art of envelope.artifacts || []) {
-    const current = computeArtifactHash(target, art.path);
+  for (const art of Array.isArray(envelope.artifacts) ? envelope.artifacts : []) {
+    if (!art || typeof art.path !== 'string') {
+      problems.push(`Invalid artifact entry: ${JSON.stringify(art)}`);
+      continue;
+    }
+    const absArt = resolveArtifactWithinTarget(target, art.path);
+    if (!absArt) {
+      problems.push(`Artifact path escapes target directory: ${art.path}`);
+      continue;
+    }
+    const current = hashResolvedArtifact(absArt, art.path);
     if (!current) {
       problems.push(`Missing artifact: ${art.path}`);
     } else if (current.hash !== art.hash) {
-      problems.push(`Artifact modified: ${art.path} (expected ${art.hash.slice(0, 16)}, got ${current.hash.slice(0, 16)})`);
+      problems.push(`Artifact modified: ${art.path} (expected ${String(art.hash || '').slice(0, 16)}, got ${current.hash.slice(0, 16)})`);
     }
   }
 
   // 防污染重新复核（与创建侧同一分级口径）：
   // 凭证泄露类发现进 problems 并导致 ok:false；可疑指令只进 warnings，不阻断交接。
-  const taint = scanTaint(envelope.summary + '\n' + (envelope.assumptions || []).join('\n'));
+  const assumptionsText = Array.isArray(envelope.assumptions)
+    ? envelope.assumptions.join('\n')
+    : String(envelope.assumptions ?? '');
+  const taint = scanTaint(`${envelope.summary ?? ''}\n${assumptionsText}`);
   for (const f of taint.findings) {
     if (f.type === 'SUSPICIOUS_DIRECTIVE') {
       warnings.push(`Context taint warning: ${f.type} (${f.name})`);
@@ -220,7 +245,7 @@ export function verifyHandoffEnvelope({
     }
   }
 
-  // 密码学公证验签（如果信封包含签名且提供了公钥）
+  // 密码学公证验签（提供公钥时要求必须签名，阻断剥离 signature 绕过）
   let signatureVerified = null;
   if (envelope.signature) {
     if (!publicKeyPem) {
@@ -242,6 +267,8 @@ export function verifyHandoffEnvelope({
         };
       }
     }
+  } else if (publicKeyPem) {
+    problems.push('Missing cryptographic signature (public key is configured)');
   }
 
   return {
@@ -272,7 +299,7 @@ export function writeHandoffFile(filePath, envelope) {
   return path.resolve(filePath);
 }
 
-export function listHandoffFiles(target) {
+export function listHandoffFiles(target, { includeInvalid = false } = {}) {
   const dir = path.join(target, '.agents', 'handoffs');
   if (!fs.existsSync(dir)) return [];
   const files = [];
@@ -285,6 +312,15 @@ export function listHandoffFiles(target) {
           file: abs,
           name: ent.name,
           envelope,
+        });
+      } else if (includeInvalid) {
+        files.push({
+          file: abs,
+          name: ent.name,
+          envelope: null,
+          invalidReason: !envelope
+            ? 'Invalid or corrupted handoff JSON'
+            : `Unsupported handoff schema: ${envelope.schema}`,
         });
       }
     }

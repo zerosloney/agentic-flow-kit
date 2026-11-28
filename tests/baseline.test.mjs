@@ -6,7 +6,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { applyPlan } from '../src/install/apply.mjs';
-import { BASELINE_DIR, listBaselines, readBaseline } from '../src/install/baseline.mjs';
+import { BASELINE_DIR, listBaselines, mergeThreeWay, readBaseline } from '../src/install/baseline.mjs';
 import { readManifest, sha256Text } from '../src/install/manifest.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -285,4 +285,32 @@ test('--baseline-only without a manifest exits 3', () => {
   const r = run(['install', '--agent', 'claude', '--stack', 'node', '--target', '.', '--baseline-only'], dir);
   assert.equal(r.status, 3);
   assert.match(`${r.stdout}${r.stderr}`, /install/);
+});
+
+test('mergeThreeWay returns unavailable on signal-killed git (status null) and applyPlan preserves user file', () => {
+  const killed = mergeThreeWay(
+    { base: 'v1\n', ours: 'user v1\n', theirs: 'kit v2\n' },
+    { exec: () => ({ status: null, signal: 'SIGKILL', stdout: '' }) },
+  );
+  assert.deepEqual(killed, { status: 'unavailable' });
+
+  if (process.platform !== 'win32') {
+    const dir = tmpRepo();
+    const rel = 'notes/signal.txt';
+    const first = apply({ target: dir, rel, text: 'v1\n' });
+    fs.writeFileSync(path.join(dir, rel), 'user precious edit\n', 'utf8');
+
+    const shimDir = makeTmp('flow-kit-git-sigkill-');
+    fs.writeFileSync(path.join(shimDir, 'git'), '#!/bin/sh\nkill -9 $$\n', { mode: 0o755 });
+    const prevPath = process.env.PATH;
+    try {
+      process.env.PATH = `${shimDir}${path.delimiter}${prevPath}`;
+      const res = apply({ target: dir, rel, text: 'kit v2\n', manifest: { files: first.files } });
+      assert.equal(res.stats.conflict, 1);
+      assert.equal(res.stats.conflictKeep, 1);
+      assert.equal(fs.readFileSync(path.join(dir, rel), 'utf8'), 'user precious edit\n');
+    } finally {
+      process.env.PATH = prevPath;
+    }
+  }
 });
