@@ -2,6 +2,16 @@
 
 本文件由 tools/gen-changelog.mjs 从 Conventional Commits 生成，勿手改；重渲染用 --write。
 
+## [2.14.3]
+
+### 修复
+
+- fix(check-loop): 红线判低剔除否定语境 + 支持项目策略 redline.activeOnly
+
+### 文档
+
+- docs(check-loop): 修 check-loop.json 小节与后续标题间缺失的空行（PR #92 审查收口）
+
 ## [2.14.2]
 
 ### 修复
