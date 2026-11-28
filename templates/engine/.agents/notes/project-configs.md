@@ -18,8 +18,18 @@
 | `.agents/hooks/notify-guard.json` | 通知守卫：扫描目录 / 扩展名 / 命中正则 / 豁免文件 | pre-commit 静态门（目标目录全量） | 用内建默认（frontend/src + .vue/.ts + message.error/warning/info + utils/notify.ts 豁免） | exit 2 |
 | `.agents/config/test-impact-map.json` | 影响面选测映射 | pre-push 选测；CI 重档 `--full` | 骨架态 SKIP exit 0（文件缺失属前置缺失 exit 1） | 读取/校验失败 exit 1 |
 | `.agents/config/local-gates.json` | 本机必设环境变量（专用测试库） | `flow-kit run check-local-gates.mjs`、doctor `--deep` | SKIP（不拦） | 解析失败按缺项计 exit 1 |
+| `.agents/config/check-loop.json` | check-loop 段策略（`redline.activeOnly`） | `flow-kit run check-loop.mjs`（pre-push / CI / 手动） | 默认判定：终态文档也判红线 | 解析失败 = 未启用（回落默认判定，不静默放行） |
 | `.agents/config/lane-surfaces.txt` | L2 触达面 ERE 清单 | verify `lane-surface-ci`（关单 / CI diff 面） | 缺失或空 = 不校验 | 非法 ERE → 拦截 |
 | `.agents/config/workflow-modules.txt` | workflow 模块词表 | 建档 / triage / 索引 / 检索 | 空 = 不校验 `模块:` 取值 | 词表外取值被 triage 拒绝 |
+
+## .agents/config/check-loop.json
+
+- **作用**：check-loop 的段级策略开关（可选）。当前唯一字段 `redline.activeOnly`。
+- **语义**：`{"redline":{"activeOnly":true}}` → §1 红线判低只判活跃态文档（`draft` / `approved`），终态（`done` / `superseded` / `cancelled`）不判。
+- **何时触发**：`flow-kit run check-loop.mjs`（pre-push / CI / 手动）。
+- **未配置语义**：全量判定（终态文档也判红线）——缺省行为不变。
+- **适用场景**：历史文档继续沉淀的项目；批量补级别会触发大量已 approved 文档的承诺面漂移（须逐份重确认）时，用它替代「按文件名日期豁免」这类移动靶口径。
+- **边界**：只影响红线段；配对/回归证据/确认指纹/收敛对账等其余段不受影响。否定声明（「不触 … schema」）的剔除是 kit 内建通用规则，无需配置。
 
 ## .agents/config/project-faces.json
 

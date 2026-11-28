@@ -12,10 +12,28 @@ import {
   addedDateOf, warnEvidenceExempt, VERIFY_GREEN_RE, verifyEvidenceTruth,
   versionGreater, fmStatus, bindingSha256, readdirOrNull, isDirectoryOrNull,
 } from '../check-loop-kit.mjs';
-import { touchProblems, externalReviewId } from '../touch-set.mjs';
+import { touchProblems, isNonTouchLine, externalReviewId } from '../touch-set.mjs';
+
+// 项目策略（可选，`.agents/config/check-loop.json`）：
+//   redline.activeOnly = true → 只判活跃态文档（draft/approved），终态（done/superseded/cancelled）不判。
+// 背景（2026-11-28）：owner 裁定「历史文档继续沉淀就得反复前移豁免日」，且批量补级别会触发大量已 approved
+// 文档的承诺面漂移（须逐份重确认）。该口径属项目策略，故做成配置而非改 kit 默认——缺省仍全量判定。
+// 文件缺失/解析失败 = 未启用（fail-open 到默认判定，不静默放行）。
+const PROJECT_CHECK_LOOP = (() => {
+  try { return JSON.parse(fs.readFileSync(path.join(ROOT, '.agents', 'config', 'check-loop.json'), 'utf8')); }
+  catch { return null; }
+})();
+const REDLINE_ACTIVE_ONLY = Boolean(
+  PROJECT_CHECK_LOOP && PROJECT_CHECK_LOOP.redline && PROJECT_CHECK_LOOP.redline.activeOnly === true,
+);
 
 function pushRedline(file, base, lvl) {
-  for (const p of touchProblems((linesOf(file) || []).join('\n'), lvl)) {
+  if (REDLINE_ACTIVE_ONLY && inSet(fmGet(file, '状态'), ENUMS['doc.status.terminal'])) return;
+  const lines = linesOf(file) || [];
+  for (const line of lines) {
+    if (isNonTouchLine(line)) console.error(`check-loop: 红线判低豁免（否定声明）${base}: ${line.trim()}`);
+  }
+  for (const p of touchProblems(lines.join('\n'), lvl)) {
     blockers.push(`- [红线判低] ${base} ${p}`);
   }
 }
