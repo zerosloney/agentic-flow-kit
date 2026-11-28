@@ -8,7 +8,10 @@
     "flow-kit": "bin/flow-kit.mjs"
   },
   "exports": {
-    "./kernel": "./src/kernel/index.mjs"
+    "./kernel": "./src/kernel/index.mjs",
+    "./package.json": "./package.json",
+    "./bin/*": "./bin/*",
+    "./templates/*": "./templates/*"
   },
   "engines": {
     "node": ">=22"
