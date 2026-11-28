@@ -14,10 +14,22 @@ import { generateDerivedArtifacts, rehashDerivedArtifacts } from '../src/install
 
 const KIT_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 
-test('repository architecture: src/ contains zero circular dependencies', () => {
-  const graph = buildDependencyGraph(KIT_ROOT, {
+// 只守卫 src/**：全仓扫描会把 tmp/、docs/、.zcode/、migrations/ 等未跟踪或随机器
+// 状态变化的目录带进图里，导致 CI 与本地扫描文件集不一致；按 src/ 前缀白名单收口。
+function buildSrcGraph() {
+  const full = buildDependencyGraph(KIT_ROOT, {
     exclude: ['**/templates/**', '**/tests/**', '**/bin/**', '**/tools/**'],
   });
+  const graph = new Map();
+  for (const [file, deps] of full) {
+    if (!file.startsWith('src/')) continue;
+    graph.set(file, new Set([...deps].filter((dep) => dep.startsWith('src/'))));
+  }
+  return graph;
+}
+
+test('repository architecture: src/ contains zero circular dependencies', () => {
+  const graph = buildSrcGraph();
 
   const cycles = detectCircularDependencies(graph);
   assert.equal(
@@ -28,9 +40,7 @@ test('repository architecture: src/ contains zero circular dependencies', () => 
 });
 
 test('repository architecture: strict layer boundaries and downward dependency flow', () => {
-  const graph = buildDependencyGraph(KIT_ROOT, {
-    exclude: ['**/templates/**', '**/tests/**', '**/bin/**', '**/tools/**'],
-  });
+  const graph = buildSrcGraph();
 
   const layerOf = (file) => {
     const rel = file.replace(/\\/g, '/');
@@ -41,6 +51,8 @@ test('repository architecture: strict layer boundaries and downward dependency f
     if (rel.startsWith('src/models/')) return 'models';
     if (rel.startsWith('src/rules/')) return 'rules';
     if (rel.startsWith('src/skills/')) return 'skills';
+    if (rel.startsWith('src/ci/')) return 'ci';
+    if (rel.startsWith('src/render/')) return 'render';
     if (rel.startsWith('src/install/')) return 'install';
     if (rel.startsWith('src/commands/')) return 'commands';
     if (rel.startsWith('src/tui/')) return 'tui';
@@ -51,6 +63,10 @@ test('repository architecture: strict layer boundaries and downward dependency f
   const violations = [];
   for (const [file, deps] of graph.entries()) {
     const fromLayer = layerOf(file);
+    // src 内每个文件都必须归入某一层：落入 other 意味着新目录逃逸出分层守卫。
+    if (fromLayer === 'other') {
+      violations.push(`${file} is not assigned to any layer`);
+    }
     for (const dep of deps) {
       const toLayer = layerOf(dep);
 
@@ -59,8 +75,8 @@ test('repository architecture: strict layer boundaries and downward dependency f
         violations.push(`${file} (${fromLayer}) -> ${dep} (${toLayer})`);
       }
 
-      // domain layers (install, rules, models, hosts, skills) must never depend on upper layers (commands, tui, cli)
-      if (['install', 'rules', 'models', 'hosts', 'skills'].includes(fromLayer)
+      // domain layers (install, rules, models, hosts, skills, ci, render) must never depend on upper layers (commands, tui, cli)
+      if (['install', 'rules', 'models', 'hosts', 'skills', 'ci', 'render'].includes(fromLayer)
           && ['commands', 'cli', 'tui'].includes(toLayer)) {
         violations.push(`${file} (${fromLayer}) -> ${dep} (${toLayer})`);
       }
