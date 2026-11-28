@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import crypto from 'node:crypto';
 import zlib from 'node:zlib';
 import { TEMPLATES, LOCALES, RUNTIME_DIRS, RUNTIME_FILES } from '../install/plan.mjs';
 import { readKitVersion } from '../install/version.mjs';

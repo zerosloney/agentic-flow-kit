@@ -17,7 +17,6 @@ export const SEVERITIES = ['block', 'warn'];
 export const SCOPES = ['repo', 'diff'];
 export const ASSERT_KINDS = ['content', 'require', 'absence', 'inventory', 'env', 'command', 'navProperties', 'plugin'];
 
-
 const fail = (at, reason) => {
   throw new RulesConfigError(`${at} ${reason}`);
 };

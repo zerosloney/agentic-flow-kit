@@ -8,7 +8,6 @@ import { readManifest, writeManifest, sha256File, sha256Text } from '../install/
 import { diffPolicyTexts, renderPolicyDiff, POLICY_REL } from '../install/policy-diff.mjs';
 import { resolveInside } from '../install/path-guard.mjs';
 import { resolveTarget } from '../install/target.mjs';
-export { resolveTarget };
 
 function fail(code, message) {
   const err = new Error(message);

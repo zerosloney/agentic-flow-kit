@@ -25,7 +25,6 @@ const SUSPICIOUS_DIRECTIVES = [
   { name: 'System Prompt Injection', regex: /<\|system\|>|<system_prompt>|<\/user_guidance>/i },
 ];
 
-
 export function scanTaint(content) {
   const text = String(content || '');
   const findings = [];

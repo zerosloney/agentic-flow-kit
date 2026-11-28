@@ -36,7 +36,6 @@ function strictExit(args, result) {
   return flag(args, 'strict') && hasDrift(result.summary) ? 1 : 0;
 }
 
-
 function expectedEntry(entry, vars) {
   if (MERGE_KINDS.has(entry.kind)) {
     const { begin, end, block } = renderMergeBlock(entry, vars);
@@ -208,7 +207,6 @@ export function buildDiff({ target, manifest }) {
     items,
   };
 }
-
 
 export function diffCommand({ args, t }) {
   const target = resolveTarget(args);

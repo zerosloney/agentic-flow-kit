@@ -1,6 +1,5 @@
 import fs from 'node:fs';
 import path from 'node:path';
-import { spawnSync } from 'node:child_process';
 import { flag } from '../cli/args.mjs';
 import { makeT } from '../i18n.mjs';
 import { buildPlan, CI_MODES, ciModeFor, ciTemplateRels, TEMPLATES, LOCALES } from '../install/plan.mjs';

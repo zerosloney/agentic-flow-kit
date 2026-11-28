@@ -22,7 +22,6 @@ function usageError(message, code) {
   return err;
 }
 
-
 function withoutFlag(args, name) {
   const flags = new Set([...(args.flags || [])].filter((f) => f !== name));
   return { ...args, flags };

@@ -4,7 +4,6 @@
 // 归档后重新生成即可比对 root；需要第三方签名时在归档侧对 JSON 签名即可。
 import fs from 'node:fs';
 import path from 'node:path';
-import { createHash } from 'node:crypto';
 import { spawnSync } from 'node:child_process';
 import { readManifest } from './manifest.mjs';
 import { canonical, sha256 } from './notary.mjs';

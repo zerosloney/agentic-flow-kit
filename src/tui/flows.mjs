@@ -142,7 +142,6 @@ function clip(text, max) {
   return out;
 }
 
-
 // 常规创建/更新只留在进度条上。冲突和非常规跳过先换行落盘，避免被下一帧 \\r 清掉。
 export function installProgressWrites({ action, msg, done, total }) {
   const writes = [];
