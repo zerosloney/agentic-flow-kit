@@ -5,7 +5,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { readManifest } from './manifest.mjs';
+import { readManifest, sha256Text } from './manifest.mjs';
 import { canonical, sha256 } from './notary.mjs';
 
 export const ATTEST_SCHEMA = 'flow-kit-attest/v1';
@@ -102,7 +102,8 @@ export function buildAttestation(target) {
       problems.push(`缺失托管文件: ${rel}`);
       continue;
     }
-    const actual = sha256(buffer);
+    // 与 manifest 同口径（文本哈希 CRLF→LF 归一，issue #87）：托管文件均为文本，按归一化文本哈希比对。
+    const actual = sha256Text(buffer.toString('utf8'));
     if (actual !== files[rel]) problems.push(`哈希不匹配: ${rel}`);
   }
 

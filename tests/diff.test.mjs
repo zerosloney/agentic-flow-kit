@@ -316,3 +316,24 @@ test('diff rejects a manifest entry that resolves outside the target', () => {
   }
 });
 
+// issue #87：Windows（core.autocrlf）CRLF 检出不得被误判为用户修改——文本哈希 CRLF→LF 归一。
+test('diff treats a CRLF checkout of an unchanged managed file as unchanged', () => {
+  const dir = tmpRepo();
+  install(dir);
+  const rel = '.agents/commands/new-task.md';
+  const abs = path.join(dir, rel);
+  const lf = fs.readFileSync(abs, 'utf8');
+  assert.ok(lf.includes('\n'), 'fixture must contain newlines');
+  fs.writeFileSync(abs, lf.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n'), 'utf8');
+
+  const result = diffJson(dir);
+  assert.equal(itemOf(result, rel).kind, 'unchanged');
+  assert.equal(result.summary.userModified, 0, JSON.stringify(result.summary));
+
+  // 对照：真实内容改动仍须报 user-modified。
+  fs.appendFileSync(abs, '\n<!-- user edit -->\n', 'utf8');
+  const changed = diffJson(dir);
+  assert.equal(itemOf(changed, rel).kind, 'user-modified');
+  assert.equal(changed.summary.userModified, 1, JSON.stringify(changed.summary));
+});
+

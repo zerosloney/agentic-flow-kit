@@ -33,6 +33,13 @@ function exists(dir, rel) {
   return fs.existsSync(path.join(dir, rel));
 }
 
+// issue #87：文本判据哈希 CRLF→LF 归一；Buffer 输入按 UTF-8 解码后与等值字符串同口径。
+test('sha256Text normalizes CRLF and treats a Buffer like its string form', () => {
+  assert.equal(sha256Text('a\r\nb'), sha256Text('a\nb'));
+  const text = 'line1\r\nline2\n';
+  assert.equal(sha256Text(Buffer.from(text, 'utf8')), sha256Text(text));
+});
+
 test('fresh install creates engine, host, scaffold and manifest', () => {
   const dir = tmpRepo();
   const r = run(['install', '--agent', 'trae', '--lang', 'zh-CN', '--stack', 'node', '--target', '.'], dir);
@@ -165,6 +172,25 @@ test('upgrade conflicts on a modified managed file and --force overwrites', () =
 
   const r3 = run(['upgrade', '--target', '.', '--force'], dir);
   assert.equal(r3.status, 0, r3.stderr);
+  assert.equal(fs.readFileSync(file, 'utf8'), original);
+});
+
+// issue #87：Windows（core.autocrlf）CRLF 检出不是用户修改——upgrade 须走干净更新，
+// 而不是「已安装后被修改」的保留 / 三方合并分支。
+test('upgrade treats a CRLF checkout of an unchanged managed file as a clean update', () => {
+  const dir = tmpRepo();
+  const r1 = run(['install', '--agent', 'trae', '--lang', 'zh-CN', '--stack', 'node', '--target', '.'], dir);
+  assert.equal(r1.status, 0, r1.stderr);
+  const rel = '.agents/commands/new-task.md';
+  const file = path.join(dir, rel);
+  const original = fs.readFileSync(file, 'utf8');
+  assert.ok(original.includes('\n'), 'fixture must contain newlines');
+  fs.writeFileSync(file, original.replace(/\r\n/g, '\n').replace(/\n/g, '\r\n'), 'utf8');
+
+  const r2 = run(['upgrade', '--target', '.'], dir);
+  assert.equal(r2.status, 0, r2.stderr);
+  assert.doesNotMatch(r2.stdout, /已安装后被修改|三方合并|保留用户修改/);
+  // 干净更新会按模板文本重写为 LF（内容与装后原文一致）。
   assert.equal(fs.readFileSync(file, 'utf8'), original);
 });
 

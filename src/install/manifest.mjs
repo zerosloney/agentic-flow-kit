@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { writeAtomicSync } from './atomic.mjs';
+import { hashText } from '../kernel/index.mjs';
 
 export const MANIFEST_REL = '.agents/install-manifest.json';
 export const CURRENT_SCHEMA_VERSION = 3;
@@ -61,8 +62,10 @@ export function requireManifest(targetOrT, maybeT) {
   return manifest;
 }
 
+// 文本判据摘要统一走 kernel：哈希前 CRLF→LF 归一，Windows（core.autocrlf）CRLF 检出
+// 与 LF manifest 不产生假「用户修改」（issue #87）。
 export function sha256Text(text) {
-  return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
+  return hashText(text);
 }
 
 export function sha256File(abs) {

@@ -227,7 +227,8 @@ function linkCommand({ args, t, target, asJson }) {
 
   const manifest = readManifest(target);
   if (manifest?.files && POLICY_REL in manifest.files) {
-    manifest.files[POLICY_REL] = sha256File(path.join(target, POLICY_REL));
+    // 与 manifest 其余条目同口径（文本哈希 CRLF→LF 归一，issue #87）：sha256File 原始字节会在 CRLF 检出下产生假阳性。
+    manifest.files[POLICY_REL] = sha256Text(fs.readFileSync(path.join(target, POLICY_REL), 'utf8'));
     writeManifest(target, manifest);
   }
 
@@ -327,7 +328,8 @@ function syncCommand({ args, t, target, asJson }) {
 
         // 用户改过的托管策略面不静默覆盖：与 manifest 对账后跳过，交由用户解决。
         if (managedHash && fs.existsSync(localPath)) {
-          const localHash = sha256File(localPath);
+          // 与 manifest 同口径（文本哈希 CRLF→LF 归一）：CRLF 检出不算用户修改（issue #87）。
+          const localHash = sha256Text(fs.readFileSync(localPath, 'utf8'));
           if (localHash !== managedHash) {
             conflicts.push({
               surface: key,
@@ -358,7 +360,8 @@ function syncCommand({ args, t, target, asJson }) {
     writeLocalPolicy(target, policy);
 
     if (manifest?.files) {
-      manifest.files[POLICY_REL] = sha256File(path.join(target, POLICY_REL));
+      // 与 manifest 其余条目同口径（文本哈希 CRLF→LF 归一，issue #87）：sha256File 原始字节会在 CRLF 检出下产生假阳性。
+      manifest.files[POLICY_REL] = sha256Text(fs.readFileSync(path.join(target, POLICY_REL), 'utf8'));
       writeManifest(target, manifest);
     }
 
