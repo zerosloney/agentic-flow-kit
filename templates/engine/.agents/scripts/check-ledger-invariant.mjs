@@ -192,6 +192,9 @@ const REPO_BASELINE = (() => {
     return sha;
   }
   // ② 无远端 trunk：退回旧严格判据（声明文件在区间内未被提交改动）——不把「无法验证」伪装成「可信」。
+  //   rev-list 本身失败（声明不可达 / 对象库异常 / 瞬时 spawn 失败）≠「区间内无改动」：判据跑不起来
+  //   时同样不采用（fail-closed，全史扫描兜底）。旧代码把异常吞掉后落入 return sha——并行负载下
+  //   git 瞬时失败会让未通过反篡改核查的声明直接生效（实测全量测试假绿 exit 0，2026-11-28）。
   try {
     const touched = execFileSync('git', ['rev-list', `${sha}..HEAD`, '--', '.agents/notes/ledger-history-baseline.md'],
       { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
@@ -199,7 +202,10 @@ const REPO_BASELINE = (() => {
       console.error(`[warn] 仓库声明基线 ${sha.slice(0, 10)} 无法验证归属（无可用远端 trunk ref：${TRUNK_REFS.join(' / ')}），且声明文件在声明区间内仍被提交改动（${touched.split(/\s+/).length} 个提交）——声明可自我豁免本 PR 的篡改，不采用；回落内置基线/全史扫描。可在有 trunk 的克隆里运行，或用 env 覆盖口`);
       return '';
     }
-  } catch { /* 非 git / 无 HEAD / 声明不可达：交给下方 cat-file 校验 */ }
+  } catch (err) {
+    console.error(`[warn] 仓库声明基线 ${sha.slice(0, 10)} 的声明区间核查无法执行（git rev-list 失败：${err && err.message ? err.message : err}）——无法验证即不采用，回落内置基线/全史扫描`);
+    return '';
+  }
   return sha;
 })();
 // 2026-11-05 定点豁免（owner 声明，缘由见头注「2026-11-05 定点豁免」）：main 线两次回滚提交。

@@ -81,6 +81,22 @@ test('仓库声明基线在声明区间内被提交改动 → 不采用、告警
   assert.match(r.stderr, /前缀破坏/);
 });
 
+// 2026-11-28 全量套件并行负载下复现的 fail-open（#90 修复收口）：无 trunk 时 git rev-list 失败
+// （瞬时 spawn 失败 / 声明不可达）被旧 catch 吞掉后落入 return sha——未通过反篡改核查的声明直接
+// 生效，篡改被豁免 exit 0 假绿。修复后 fail-closed：核查无法执行 = 不采用 + loud 告警 + 全史兜底。
+// 不可达声明值可确定性触发同一路径（rev-list 必抛「unknown revision」）。
+test('声明区间核查无法执行（git rev-list 失败）→ fail-closed：不采用、告警，篡改提交仍被抓', () => {
+  const { dir } = tamperedRepo();
+  write(dir, NOTE, `LEDGER_HISTORY_BASELINE=${'d'.repeat(40)}\n`);
+  commit(dir, 'declare unreachable baseline');
+
+  const r = run(dir);
+  assert.notEqual(r.status, 0, `核查失败不得放行声明: ${r.stdout}\n${r.stderr}`);
+  assert.match(r.stderr, /仓库声明基线/);
+  assert.match(r.stderr, /核查无法执行/);
+  assert.match(r.stderr, /前缀破坏/);
+});
+
 test('被 git 跟踪的历史索引缓存不可信 → 忽略并重建，篡改仍被抓', () => {
   const { dir } = tamperedRepo();
   const head = git(dir, ['rev-parse', '--short', 'HEAD']).stdout.trim();
