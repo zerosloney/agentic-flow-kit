@@ -19,7 +19,7 @@ description: 项目 wiki 整理与验证技能。负责将散落文档归位到 
 - **命名规范**：`<主题>-<关键词>[-范围/版本].ext`。
 - **权威性**：`.md` 为内容源 $\rightarrow$ `.html` 为展示快照。冲突时以 `.md` 为准。
 - **操作限制**：仅执行复制 (`Copy-Item`/`cp`)。删除原文件必须获得用户单独确认。
-- **生成区**：`wiki/_memory/` 由 `flow-kit run memory-wiki.mjs` 生成（claims/incidents/session-logs 的记忆表示），**禁止手改**；漂移用 `--check` 发现。
+- **生成区**：`wiki/_memory/` 由 `flow-kit run memory-wiki.mjs` 生成（claims/incidents/session-logs 的记忆表示），**禁止手改**；漂移用 `--check` 发现。`_memory` 为生成区：不计入主题/合计、不参与三方登记；生成页可不入库，`--check` 对未生成状态降级为提示（exit 0）。
 - **单写者**：并行 agent 写同一页面前先 `flow-kit run path-lease.mjs acquire --path <page>`，写完 `release`；一页一 agent，禁止多人同时改一页。
 
 ## 标准操作流程
@@ -46,7 +46,7 @@ flow-kit run verify-wiki-consistency.mjs
 flow-kit run memory-wiki.mjs --check   # 记忆表示（wiki/_memory）是否最新
 ```
 **验收标准**：
-- `exit 0` 且输出 `✅ wiki 三方一致`；`memory-wiki --check` 无漂移（漂移则跑无参生成）。
+- `exit 0` 且输出 `✅ wiki 三方一致`；`memory-wiki --check` 无漂移（漂移则跑无参生成；生成区未生成/未入库时仅提示，exit 0）。
 - 检查项涵盖：磁盘 $\leftrightarrow$ INDEX $\leftrightarrow$ 看板 DATA $\leftrightarrow$ 数据维护台账 $\leftrightarrow$ 链接可达性。
 
 ## 维护须知

@@ -13,6 +13,9 @@ import { loadWikiNames } from './wiki-names.mjs';
 
 const WIKI = 'wiki';
 const NAMES = loadWikiNames(process.cwd());
+// 生成区豁免（issue #89）：wiki/<generated>/ 由脚本生成，与 drafts-archive 同位跳过——
+// 不进 diskTopics/diskFiles/activeTree（生成页不参与三方比对、合计、断链守卫）。
+const SKIP_DIRS = new Set(['drafts-archive', ...NAMES.generated]);
 const problems = [];
 const notes = [];
 
@@ -70,7 +73,7 @@ for (const dEnt of fs.readdirSync(WIKI, { withFileTypes: true })) {
   if (!isDirEntry(dEnt, WIKI)) continue;
   const d = dEnt.name;
   const p = path.join(WIKI, d);
-  if (d === 'drafts-archive') continue;
+  if (SKIP_DIRS.has(d)) continue;
   diskTopics.add(d);
   // gitignore 豁免消费（p2-batch2 复核 P1-3）：gen 侧排除 ignored 本机件，verify 须同口径——
   // 否则「gen 恒写 N、verify 恒数 N+1」门禁死锁且自愈指引（重跑 gen）无效

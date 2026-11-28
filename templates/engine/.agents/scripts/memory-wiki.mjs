@@ -25,6 +25,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { recheckClaims } from './claims.mjs';
 
+// 输出目录硬编码为生成区缺省（对应 wiki-names.mjs 中 loadWikiNames().generated 的缺省值
+// WIKI_GENERATED_DEFAULTS = ['_memory']，issue #89：gen/verify 侧按该配置跳过本目录，不当作普通主题计数）。
 const OUT_DIR = path.join('wiki', '_memory');
 
 function readText(file) {
@@ -272,6 +274,12 @@ function main() {
   const root = path.resolve(rootIdx >= 0 ? argv[rootIdx + 1] : process.cwd());
   const check = argv.includes('--check');
   const dryRun = argv.includes('--dry-run');
+  // 生成区未生成/未入库的常态（fresh clone、生成页不入库）：issue #89——--check 降级为提示 exit 0，
+  // 不再恒红；目录存在但内容漂移时下面照常判红（exit 1）。
+  if (check && !fs.existsSync(path.join(root, OUT_DIR))) {
+    console.log(`提示：${OUT_DIR.replace(/\\/g, '/')} 不存在（生成区未生成或未入库，属常态）——memory-wiki --check 跳过漂移判定。`);
+    return 0;
+  }
   const res = syncMemoryWiki(root, { check, dryRun });
   const summary = `claims=${res.counts.claims} incidents=${res.counts.incidents} lessons=${res.counts.lessons} papercuts=${res.counts.papercuts}`;
   if (check) {

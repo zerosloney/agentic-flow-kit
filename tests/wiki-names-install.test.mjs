@@ -84,6 +84,43 @@ test('en install runs wiki verification and board generation on the English layo
   assert.equal(exists(dir, 'wiki/知识沉淀总览.html'), false, 'gen must not create a Chinese board file');
 });
 
+// issue #89：wiki/_memory 是生成区——不参与主题登记，INDEX/看板不登记它时 verify 仍绿，
+// gen 重生成也不把它算进文件/主题计数、不产生速览表行。
+test('generated area wiki/_memory is exempt from topic registration', () => {
+  const dir = tmpRepo();
+  install(dir, 'node', 'zh-CN');
+
+  // 基线：安装态先跑一次 gen，拿到不含生成区的稳定计数
+  const base = run(['run', 'gen-wiki-board.mjs'], dir);
+  assert.equal(base.status, 0, `${base.stdout}\n${base.stderr}`);
+  const counts = base.stdout.match(/文件 (\d+) 份 \/ 主题 (\d+) 个/);
+  assert.ok(counts, base.stdout);
+
+  fs.mkdirSync(path.join(dir, 'wiki', '_memory'), { recursive: true });
+  for (const name of ['INDEX.md', 'incidents.md', 'papercuts.md']) {
+    fs.writeFileSync(path.join(dir, 'wiki', '_memory', name), `# ${name}\n`, 'utf8');
+  }
+
+  // 生成页存在但 INDEX/看板未登记：修复前此处必红（磁盘多出第 N 个主题 + 合计不符）
+  const verifyBefore = run(['run', 'verify-wiki-consistency.mjs'], dir);
+  assert.equal(verifyBefore.status, 0, `${verifyBefore.stdout}\n${verifyBefore.stderr}`);
+  assert.match(verifyBefore.stdout, new RegExp(`文件 ${counts[1]} 份 / 主题 ${counts[2]} 个`));
+
+  const gen = run(['run', 'gen-wiki-board.mjs'], dir);
+  assert.equal(gen.status, 0, `${gen.stdout}\n${gen.stderr}`);
+  assert.ok(gen.stdout.includes(`文件 ${counts[1]} 份 / 主题 ${counts[2]} 个`), gen.stdout);
+  assert.equal(gen.stdout.includes('_memory'), false, gen.stdout);
+
+  assert.equal(read(dir, 'wiki/INDEX.md').includes('| _memory |'), false, 'INDEX 速览表不得出现生成区行');
+  const boardData = JSON.parse(read(dir, 'wiki/知识沉淀总览.html').match(/const DATA = (\{[\s\S]*?\n\});/)[1]);
+  assert.equal(boardData.topics.some((t) => t.name === '_memory'), false);
+  assert.equal(boardData.summary.files, Number(counts[1]));
+  assert.equal(boardData.summary.topics, Number(counts[2]));
+
+  const verifyAfter = run(['run', 'verify-wiki-consistency.mjs'], dir);
+  assert.equal(verifyAfter.status, 0, `${verifyAfter.stdout}\n${verifyAfter.stderr}`);
+});
+
 test('zh-CN install keeps Chinese wiki paths and writes no options.wiki', () => {
   const dir = tmpRepo();
   install(dir, 'node', 'zh-CN');

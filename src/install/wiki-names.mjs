@@ -36,6 +36,7 @@ export function localizePath(rel, lang) {
 }
 
 // 写进目标项目 engine.json options.wiki 的协议名（不带 wiki/ 前缀）。
+// 不写 generated 键：引擎缺省 ['_memory']（issue #89，生成区目录不参与主题登记），缺省即生效。
 export function wikiProtocolNames(lang) {
   const target = resolveLang(lang);
   return {

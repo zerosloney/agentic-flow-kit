@@ -12,8 +12,12 @@ export const WIKI_NAME_DEFAULTS = Object.freeze({
   dataFixBatch: '数据修复',     // 数据维护下的数据修复批次目录
 });
 
+// 生成区目录（issue #89）：位于 wiki/ 主题根下、由脚本生成，不参与「主题 ↔ INDEX ↔ 看板」三方登记。
+// 与上面四键分开（值为数组），改名/增补走 options.wiki.generated；缺省 _memory。
+export const WIKI_GENERATED_DEFAULTS = Object.freeze(['_memory']);
+
 export function loadWikiNames(root = process.cwd()) {
-  const names = { ...WIKI_NAME_DEFAULTS };
+  const names = { ...WIKI_NAME_DEFAULTS, generated: [...WIKI_GENERATED_DEFAULTS] };
   let cfg;
   try {
     cfg = JSON.parse(fs.readFileSync(path.join(root, '.agents', 'config', 'engine.json'), 'utf8'));
@@ -27,5 +31,8 @@ export function loadWikiNames(root = process.cwd()) {
     const v = wiki[key];
     if (typeof v === 'string' && v.length > 0) names[key] = v;
   }
+  // generated 单独分支（issue #89）：仅接受「成员全为非空字符串」的数组，其余（类型错/成员非法）回退缺省
+  const gen = wiki.generated;
+  if (Array.isArray(gen) && gen.every((v) => typeof v === 'string' && v.length > 0)) names.generated = [...gen];
   return names;
 }

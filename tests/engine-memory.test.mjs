@@ -3,6 +3,8 @@ import { makeTmp } from './helpers/tmp.mjs';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { appendEvent, readEvents, digestEvents } from '../templates/engine/.agents/scripts/session-log.mjs';
 import { buildMemoryWiki, syncMemoryWiki } from '../templates/engine/.agents/scripts/memory-wiki.mjs';
 import { auditBudget, suggestPromotions } from '../templates/engine/.agents/scripts/memory-tier.mjs';
@@ -15,6 +17,8 @@ import { addClaim } from '../templates/engine/.agents/scripts/claims.mjs';
 function tmp() {
   return makeTmp('engine-mem-');
 }
+
+const MEMORY_WIKI = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'templates', 'engine', '.agents', 'scripts', 'memory-wiki.mjs');
 
 function write(root, rel, text) {
   const abs = path.join(root, rel);
@@ -56,6 +60,15 @@ test('memory-wiki is idempotent and reports drift', () => {
   appendEvent(root, { type: 'correction', text: 'new lesson', tag: 'verify' });
   res = syncMemoryWiki(root, { check: true });
   assert.ok(res.changed.includes('wiki/_memory/lessons.md'));
+});
+
+test('memory-wiki --check degrades to a hint when the generated area is absent', () => {
+  // issue #89：fresh clone / 生成页不入库时 wiki/_memory 整体缺失，--check 不再恒红
+  const root = tmp();
+  const r = spawnSync(process.execPath, [MEMORY_WIKI, '--check', '--root', root], { encoding: 'utf8' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /提示：wiki\/_memory 不存在（生成区未生成或未入库，属常态）/);
+  assert.equal(fs.existsSync(path.join(root, 'wiki', '_memory')), false, '--check 不得写盘');
 });
 
 test('memory-tier budget and promotion candidates', () => {

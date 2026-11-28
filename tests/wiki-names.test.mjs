@@ -8,7 +8,7 @@ import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { makeTmp } from './helpers/tmp.mjs';
-import { loadWikiNames, WIKI_NAME_DEFAULTS } from '../templates/engine/.agents/scripts/wiki-names.mjs';
+import { loadWikiNames, WIKI_NAME_DEFAULTS, WIKI_GENERATED_DEFAULTS } from '../templates/engine/.agents/scripts/wiki-names.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SCRIPTS = path.join(KIT, 'templates', 'engine', '.agents', 'scripts');
@@ -73,33 +73,59 @@ const VERIFY_ENV = { FLOW_KIT_RUNTIME_SCRIPTS: SCRIPTS };
 
 // ---------- 1. loadWikiNames 单元行为 ----------
 
+// 缺省生成区（issue #89）：四键协议名 + generated 数组
+const NAME_DEFAULTS = Object.freeze({ ...WIKI_NAME_DEFAULTS, generated: [...WIKI_GENERATED_DEFAULTS] });
+
 test('loadWikiNames: defaults when engine.json is missing', () => {
   const dir = makeTmp('flow-kit-wiki-names-');
-  assert.deepEqual(loadWikiNames(dir), { ...WIKI_NAME_DEFAULTS });
+  assert.deepEqual(loadWikiNames(dir), NAME_DEFAULTS);
 });
 
 test('loadWikiNames: defaults when engine.json is unparseable', () => {
   const dir = makeTmp('flow-kit-wiki-names-');
   write(path.join(dir, '.agents', 'config', 'engine.json'), '{ not json');
-  assert.deepEqual(loadWikiNames(dir), { ...WIKI_NAME_DEFAULTS });
+  assert.deepEqual(loadWikiNames(dir), NAME_DEFAULTS);
 });
 
 test('loadWikiNames: full options.wiki override', () => {
   const dir = makeTmp('flow-kit-wiki-names-');
   writeEngine(dir, { wiki: EN });
-  assert.deepEqual(loadWikiNames(dir), { ...EN });
+  assert.deepEqual(loadWikiNames(dir), { ...EN, generated: [...WIKI_GENERATED_DEFAULTS] });
 });
 
 test('loadWikiNames: partial override merges with defaults', () => {
   const dir = makeTmp('flow-kit-wiki-names-');
   writeEngine(dir, { wiki: { maintenance: 'data-maintenance' } });
-  assert.deepEqual(loadWikiNames(dir), { ...WIKI_NAME_DEFAULTS, maintenance: 'data-maintenance' });
+  assert.deepEqual(loadWikiNames(dir), { ...NAME_DEFAULTS, maintenance: 'data-maintenance' });
 });
 
 test('loadWikiNames: non-string / empty values are ignored', () => {
   const dir = makeTmp('flow-kit-wiki-names-');
   writeEngine(dir, { wiki: { board: 42, maintenance: '', schemaBatch: null, dataFixBatch: ['x'] } });
-  assert.deepEqual(loadWikiNames(dir), { ...WIKI_NAME_DEFAULTS });
+  assert.deepEqual(loadWikiNames(dir), NAME_DEFAULTS);
+});
+
+// generated（issue #89）：无键用缺省 / 合法数组覆盖 / 非法类型或成员回退缺省
+test('loadWikiNames: generated defaults to _memory and accepts a string array override', () => {
+  const noKey = makeTmp('flow-kit-wiki-names-');
+  writeEngine(noKey, { wiki: { maintenance: 'data-maintenance' } });
+  assert.deepEqual(loadWikiNames(noKey).generated, ['_memory']);
+
+  const overridden = makeTmp('flow-kit-wiki-names-');
+  writeEngine(overridden, { wiki: { generated: ['_memory', 'cache'] } });
+  assert.deepEqual(loadWikiNames(overridden).generated, ['_memory', 'cache']);
+
+  const empty = makeTmp('flow-kit-wiki-names-');
+  writeEngine(empty, { wiki: { generated: [] } });
+  assert.deepEqual(loadWikiNames(empty).generated, []);
+});
+
+test('loadWikiNames: invalid generated falls back to _memory', () => {
+  for (const bad of ['_memory', [1], [''], [null], [{ dir: '_memory' }], {}]) {
+    const dir = makeTmp('flow-kit-wiki-names-');
+    writeEngine(dir, { wiki: { generated: bad } });
+    assert.deepEqual(loadWikiNames(dir).generated, ['_memory'], JSON.stringify(bad));
+  }
 });
 
 // ---------- 2. 英文布局：脚本按 options.wiki 取名 ----------

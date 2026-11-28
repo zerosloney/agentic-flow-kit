@@ -13,6 +13,9 @@ import { execSync } from 'node:child_process';
 import { loadWikiNames } from './wiki-names.mjs';
 
 const NAMES = loadWikiNames(process.cwd());
+// 生成区豁免（issue #89）：wiki/<generated>/ 由脚本生成，与 drafts-archive 同位跳过——
+// 不进 diskTopics、不计 totalFiles、不产生速览表行/映射表节/看板 DATA 主题。
+const SKIP_DIRS = new Set(['drafts-archive', ...NAMES.generated]);
 
 const USAGE = `用法：flow-kit run gen-wiki-board.mjs [--dry-run] [--help]
 
@@ -68,7 +71,7 @@ const isKnowledgeDoc = (f) => /\.(md|html)$/i.test(f) && !/\.visual-check\./i.te
 const diskTopics = new Map(); // name -> [{ name: '文件名或 子目录/文件名', dir: 'wiki/主题[/子目录]/' }]
 for (const d of fs.readdirSync(WIKI)) {
   const p = path.join(WIKI, d);
-  if (!fs.statSync(p).isDirectory() || d === 'drafts-archive') continue;
+  if (!fs.statSync(p).isDirectory() || SKIP_DIRS.has(d)) continue;
   // gitignore 豁免消费（p2-batch2 扩面落点）：gitIgnoredArchive 集合现为全 wiki/ 的忽略件相对路径——
   // 活跃区 entries 构建处按「主题/文件」与「主题/子目录/文件」过滤（复核 P1-2：扩面集合此前无消费点=死代码）
   const isIgnored = (rel) => { const k = rel.endsWith('/') ? rel.slice(0, -1) : rel; return gitIgnoredArchive.has(`${d}/${k}`) || gitIgnoredArchive.has(`${d}/${k}/`); }; // 尾斜杠归一（复核 P2-a；endsWith 替代正则——此文件转义层过于嘈杂）
