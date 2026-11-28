@@ -73,6 +73,10 @@
 //     仓库声明文件 .agents/notes/ledger-history-baseline.md（owner 在装户仓内声明，内置基线只对本仓
 //     有效）> 内置基线。与内置同值的 env 不再误报「测试用覆盖口」；无任何有效基线时 loud 提示
 //     「未声明历史基线 / 全史扫描」及声明方式，不再静默（仍 fail-open 于深度、fail-closed 于内容）。
+//   2026-11-28 issue #90：仓库内声明基线的反篡改判据改为「基线必须落在 trunk 已发布历史里」。
+//     旧判据（声明文件在 <sha>..HEAD 内未被提交改动）与「写声明必改该文件」自相矛盾——声明值写在被检查
+//     的文件里，设值提交必落在区间内，声明恒不可满足；装户仓因此一律回落内置基线做全史扫描（假红）。
+//     合法形态（声明提交晚于基线提交、此后仅追加叙述）不再误杀；PR 分支自造的基线仍被拦。
 //
 // 复核红线申报（2026-11-24 issue #84）：independent-reviewer 的只读禁令在 2026-11-23 双臂评测中被
 //   操作者「顺手修掉并提交」指令 2/2 穿透（均未 HALT）。契约升格后，违例须在复核意见级台账
@@ -157,17 +161,45 @@ const REPO_BASELINE = (() => {
     sha = m ? m[1] : '';
   } catch { return ''; }
   if (!sha) return '';
-  // 声明可信性（2026-11 审计 D45）：声明文件本身在版本库内、PR 可写。若它在声明区间（<sha>..HEAD）
-  // 内仍被提交改动，声明即可自我豁免本次 PR 的篡改提交（两提交 PR：先改台账，再把篡改提交声明为
-  // 基线）——不采用并 loud 回落内置基线。未提交的本地声明、与基线同提交或声明后未再改动的声明不受影响。
+  // 声明可信性（issue #90，取代 2026-11 审计 D45 旧判据）：旧判据要求「声明文件在 <sha>..HEAD 内未被
+  // 提交改动」，但写声明本身就要改这个文件——声明恒不可满足（声明值写在被检查的文件里，设值提交必在
+  // 区间内），装户仓一律回落内置基线/全史扫描（实证：声明已提交的仓 exit 1 / 10.8s，注入 env 后 exit 0 / 2.8s）。
+  // 新判据分两级：
+  //   ① 有远端 trunk（origin/main|master|develop，可用 KIT_TRUNK_REFS 覆盖）→ 声明值必须落在 trunk
+  //     已发布历史内。PR 分支自造的基线（先改台账、再把该提交声明为基线）不在 trunk 上 → 不采用；
+  //     owner 在干线上前移基线（声明提交晚于基线提交、此后仅追加叙述）照常生效——正是旧判据误杀的合法形态。
+  //   ② 无远端 trunk（离线副本/单分支新仓）→ 退回旧严格判据：声明文件在 <sha>..HEAD 内被提交改动即不采用。
+  //     此时无法验证「基线已发布」，宁可假红也不放行自我豁免（同分支内篡改+声明仍被拦）。
+  // 残余风险：持有 trunk 直推权者可在同一次推送内自造基线；强形态仍是 CI 注入 env（env > 声明 > 内置）。
+  const TRUNK_REFS = (process.env.KIT_TRUNK_REFS || 'origin/main,origin/master,origin/develop')
+    .split(',').map((s) => s.trim()).filter(Boolean);
+  const trunk = TRUNK_REFS.filter((r) => {
+    try { execFileSync('git', ['rev-parse', '--verify', `${r}^{commit}`], { cwd: ROOT, stdio: 'ignore' }); return true; }
+    catch { return false; }
+  });
+  let full = '';
+  try { full = execFileSync('git', ['rev-parse', '--verify', `${sha}^{commit}`],
+    { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { /* 交给下方 cat-file 校验 */ }
+  if (trunk.length && full) {
+    const onTrunk = trunk.some((r) => {
+      try { execFileSync('git', ['merge-base', '--is-ancestor', full, r], { cwd: ROOT, stdio: 'ignore' }); return true; }
+      catch { return false; }
+    });
+    if (!onTrunk) {
+      console.error(`[warn] 仓库声明基线 ${sha.slice(0, 10)} 不在 trunk（${trunk.join(' / ')}）历史内——分支内自造的基线不生效，回落内置基线/全史扫描；owner 前移基线请先在干线发布（或用 env 覆盖口）`);
+      return '';
+    }
+    return sha;
+  }
+  // ② 无远端 trunk：退回旧严格判据（声明文件在区间内未被提交改动）——不把「无法验证」伪装成「可信」。
   try {
     const touched = execFileSync('git', ['rev-list', `${sha}..HEAD`, '--', '.agents/notes/ledger-history-baseline.md'],
       { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim();
     if (touched) {
-      console.error(`[warn] 仓库声明基线 ${sha.slice(0, 10)} 在声明区间内仍被提交改动（${touched.split(/\s+/).length} 个提交）——声明可自我豁免本 PR 的篡改，不采用；回落内置基线/全史扫描。owner 声明请把含声明的提交本身作为基线，或走 env 覆盖口`);
+      console.error(`[warn] 仓库声明基线 ${sha.slice(0, 10)} 无法验证归属（无可用远端 trunk ref：${TRUNK_REFS.join(' / ')}），且声明文件在声明区间内仍被提交改动（${touched.split(/\s+/).length} 个提交）——声明可自我豁免本 PR 的篡改，不采用；回落内置基线/全史扫描。可在有 trunk 的克隆里运行，或用 env 覆盖口`);
       return '';
     }
-  } catch { /* 非 git / 无 HEAD / 声明不可达：交给下方 HISTORY_BASELINE 的 cat-file 校验 */ }
+  } catch { /* 非 git / 无 HEAD / 声明不可达：交给下方 cat-file 校验 */ }
   return sha;
 })();
 // 2026-11-05 定点豁免（owner 声明，缘由见头注「2026-11-05 定点豁免」）：main 线两次回滚提交。
