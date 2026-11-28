@@ -13,10 +13,10 @@ import {
   evaluateSkillCase,
   recordSkillEvalLog,
   runSkillEvalSuite,
-  checkSkillsEvalHealth,
   EVAL_LOG_REL,
   EVAL_RESULTS_REL,
 } from '../src/skills/eval-harness.mjs';
+import { runGovernanceProbes } from '../src/governance/probes.mjs';
 import { makeT } from '../src/i18n.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
@@ -254,19 +254,19 @@ test('runSkillEvalSuite and recordSkillEvalLog records evidence', () => {
   assert.ok(typeof entry.signature === 'string' && entry.signature.length > 0);
 });
 
-test('checkSkillsEvalHealth detects missing, failing, and healthy skill evals', () => {
+test('skills governance probe detects missing, failing, and healthy skill evals', () => {
   const target = makeTarget();
   const t = makeT('zh-CN');
 
-  // 1. Skills exist but no datasets -> returns warn
+  // 1. Skills exist but no datasets -> returns warned
   const skillDir = path.join(target, '.agents', 'skills', 'custom-skill');
   fs.mkdirSync(skillDir, { recursive: true });
   fs.writeFileSync(path.join(skillDir, 'SKILL.md'), '---\nname: custom-skill\n---\n');
 
-  let health = checkSkillsEvalHealth(target, t);
-  assert.equal(health.ok, true);
-  assert.equal(health.warn, true);
-  assert.match(health.detail, /未发现回归评测数据集/);
+  let probeBatch = runGovernanceProbes({ target, probes: ['skills'], t });
+  assert.equal(probeBatch.probes[0].status, 'warned');
+  assert.equal(probeBatch.checks[0].warn, true);
+  assert.match(probeBatch.checks[0].detail, /未发现回归评测数据集/);
 
   // 2. Add dataset but no eval-log yet -> reports missing eval
   const evalsDir = path.join(skillDir, 'evals');
@@ -276,12 +276,12 @@ test('checkSkillsEvalHealth detects missing, failing, and healthy skill evals', 
     JSON.stringify({ version: 1, skill: 'custom-skill', cases: [] }),
   );
 
-  health = checkSkillsEvalHealth(target, t);
-  assert.equal(health.ok, true);
-  assert.equal(health.warn, true);
-  assert.match(health.detail, /缺少评测日志凭证/);
+  probeBatch = runGovernanceProbes({ target, probes: ['skills'], t });
+  assert.equal(probeBatch.probes[0].status, 'warned');
+  assert.equal(probeBatch.checks[0].warn, true);
+  assert.match(probeBatch.checks[0].detail, /缺少评测日志凭证/);
 
-  // 3. Record failing eval (passRate 0.5 < threshold 0.8) -> reports ok: false
+  // 3. Record failing eval (passRate 0.5 < threshold 0.8) -> reports failed
   recordSkillEvalLog(target, {
     skill: 'custom-skill',
     passRate: 0.5,
@@ -291,11 +291,12 @@ test('checkSkillsEvalHealth detects missing, failing, and healthy skill evals', 
     outcome: 'fail',
   });
 
-  health = checkSkillsEvalHealth(target, t);
-  assert.equal(health.ok, false);
-  assert.match(health.detail, /评测未达标/);
+  probeBatch = runGovernanceProbes({ target, probes: ['skills'], t });
+  assert.equal(probeBatch.probes[0].status, 'failed');
+  assert.equal(probeBatch.checks[0].ok, false);
+  assert.match(probeBatch.checks[0].detail, /评测未达标/);
 
-  // 4. Record passing eval -> reports ok: true
+  // 4. Record passing eval -> reports passed
   recordSkillEvalLog(target, {
     skill: 'custom-skill',
     passRate: 1.0,
@@ -305,10 +306,10 @@ test('checkSkillsEvalHealth detects missing, failing, and healthy skill evals', 
     outcome: 'pass',
   });
 
-  health = checkSkillsEvalHealth(target, t);
-  assert.equal(health.ok, true);
-  assert.equal(health.warn, undefined);
-  assert.match(health.detail, /技能评测凭证核验通过/);
+  probeBatch = runGovernanceProbes({ target, probes: ['skills'], t });
+  assert.equal(probeBatch.probes[0].status, 'passed');
+  assert.equal(probeBatch.checks[0].ok, true);
+  assert.match(probeBatch.checks[0].detail, /技能评测凭证核验通过/);
 });
 
 test('flow-kit skills eval CLI command execution and JSON output', () => {
@@ -343,7 +344,7 @@ test('flow-kit skills eval CLI command execution and JSON output', () => {
   assert.equal(parsed.suites[0].skill, 'cli-skill');
   assert.equal(parsed.suites[0].passRate, 1);
 
-  // Run doctor to verify checkSkillsEvalHealth integration in doctor CLI
+  // Run doctor to verify skills governance probe integration in doctor CLI
   const rDoc = cli(target, ['doctor', '--json']);
   assert.equal(rDoc.status, 0, rDoc.stderr || rDoc.stdout);
   const docJson = JSON.parse(rDoc.stdout);

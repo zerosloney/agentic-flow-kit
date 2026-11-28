@@ -2,9 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { readManifest } from '../install/manifest.mjs';
 import { readKitVersion } from '../commands/install.mjs';
-import { runGateChecks } from '../ci/gate.mjs';
-import { listHandoffFiles, verifyHandoffEnvelope } from '../install/handoff.mjs';
-import { resolvePublicKeyPath } from '../install/notary.mjs';
+import { runGovernanceProbes, toGateVerdict } from '../governance/probes.mjs';
 import { findSkillDatasets } from '../skills/eval-harness.mjs';
 import { computeAiDoraMetrics } from '../install/metrics.mjs';
 import { box, cyan, green, red, yellow, bold, dim } from './ansi.mjs';
@@ -61,42 +59,9 @@ export function gatherHudState(target, t, { cache = null, now = Date.now(), ttlM
     gateResult = cache.gate;
     handoffStats = cache.handoffs;
   } else {
-    gateResult = runGateChecks({ target: absTarget, strict: false, t });
-
-    let handoffs = [];
-    let tamperedHandoffs = 0;
-    let warnedHandoffs = 0;
-    const handoffWarnings = [];
-    const pubKeyPath = resolvePublicKeyPath(absTarget);
-    const pubKey = fs.existsSync(pubKeyPath) ? fs.readFileSync(pubKeyPath, 'utf8') : null;
-
-    try {
-      handoffs = listHandoffFiles(absTarget);
-      for (const h of handoffs) {
-        const v = verifyHandoffEnvelope({ target: absTarget, envelope: h.envelope, publicKeyPem: pubKey });
-        if (!v.ok) {
-          tamperedHandoffs += 1;
-        } else if (v.warnings && v.warnings.length) {
-          // 可疑指令不阻断交接，但必须可见：hud 统计并在面板列出。
-          warnedHandoffs += 1;
-          for (const w of v.warnings) {
-            if (handoffWarnings.length < 5) handoffWarnings.push(w);
-          }
-        }
-      }
-    } catch {}
-
-    handoffStats = {
-      total: handoffs.length,
-      pending: handoffs.filter((h) => h.envelope?.status === 'pending').length,
-      accepted: handoffs.filter((h) => h.envelope?.status === 'accepted').length,
-      completed: handoffs.filter((h) => h.envelope?.status === 'completed').length,
-      rejected: handoffs.filter((h) => h.envelope?.status === 'rejected').length,
-      tampered: tamperedHandoffs,
-      warned: warnedHandoffs,
-      warnings: handoffWarnings,
-      clean: tamperedHandoffs === 0,
-    };
+    const probeBatch = runGovernanceProbes({ target: absTarget, t });
+    gateResult = toGateVerdict(probeBatch, { strict: false });
+    handoffStats = probeBatch.handoffs;
 
     if (cache != null) {
       cache.at = now;

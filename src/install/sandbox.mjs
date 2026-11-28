@@ -219,6 +219,54 @@ export function initSandboxConfig(target, options = {}) {
   return { file, config };
 }
 
+function compileCustomPattern(pat) {
+  if (pat instanceof RegExp) return pat;
+  try {
+    return new RegExp(String(pat), 'i');
+  } catch (cause) {
+    const err = new Error(`Invalid sandbox regex pattern "${pat}": ${cause.message}`);
+    err.code = 'BAD_POLICY';
+    throw err;
+  }
+}
+
+// L0 仅授予单条纯只读命令：含未转义的串联/管道/重定向/命令替换（双引号内 ` 与 $( 仍会求值）一律不得判 L0。
+function hasUnquotedShellMeta(cmdStr) {
+  let quote = null;
+  for (let i = 0; i < cmdStr.length; i += 1) {
+    const ch = cmdStr[i];
+    if (ch === '\\' && quote !== "'") {
+      i += 1;
+      continue;
+    }
+    if (quote === "'") {
+      if (ch === "'") quote = null;
+      continue;
+    }
+    if (quote === '"') {
+      if (ch === '"') {
+        quote = null;
+        continue;
+      }
+      if (ch === '`' || (ch === '$' && cmdStr[i + 1] === '(')) return true;
+      continue;
+    }
+    if (ch === "'" || ch === '"') {
+      quote = ch;
+      continue;
+    }
+    if (ch === ';' || ch === '&' || ch === '|' || ch === '>' || ch === '<' || ch === '`' || ch === '\n' || ch === '\r') {
+      return true;
+    }
+    if (ch === '$' && cmdStr[i + 1] === '(') return true;
+  }
+  return false;
+}
+
+function isMutatingFind(cmdStr) {
+  return /^find\b/i.test(cmdStr) && /\s-(?:delete|exec|execdir|ok|okdir|fprint0?|fls)\b/i.test(cmdStr);
+}
+
 export function classifyCommandRisk(cmd, customRules = {}) {
   const cmdStr = Array.isArray(cmd) ? cmd.join(' ').trim() : String(cmd || '').trim();
   if (!cmdStr) {
@@ -233,7 +281,7 @@ export function classifyCommandRisk(cmd, customRules = {}) {
   // 1. 自定义高危规则先行检测
   const customDangerous = customRules.dangerousPatterns || [];
   for (const pat of customDangerous) {
-    const rx = pat instanceof RegExp ? pat : new RegExp(pat, 'i');
+    const rx = compileCustomPattern(pat);
     if (rx.test(cmdStr)) {
       return {
         level: 'L3',
@@ -259,7 +307,7 @@ export function classifyCommandRisk(cmd, customRules = {}) {
   // 3. 自定义安全白名单规则
   const customSafe = customRules.safePatterns || [];
   for (const pat of customSafe) {
-    const rx = pat instanceof RegExp ? pat : new RegExp(pat, 'i');
+    const rx = compileCustomPattern(pat);
     if (rx.test(cmdStr)) {
       return {
         level: 'L1',
@@ -282,15 +330,17 @@ export function classifyCommandRisk(cmd, customRules = {}) {
     }
   }
 
-  // 5. 内置 L0 纯只读规则
-  for (const rx of L0_SAFE_PATTERNS) {
-    if (rx.test(cmdStr)) {
-      return {
-        level: 'L0',
-        dangerous: false,
-        reason: 'Read-only safe command',
-        matchedPattern: rx.source,
-      };
+  // 5. 内置 L0 纯只读规则（禁止未引用的串联/重定向/命令替换及破坏性 find 参数）
+  if (!hasUnquotedShellMeta(cmdStr) && !isMutatingFind(cmdStr)) {
+    for (const rx of L0_SAFE_PATTERNS) {
+      if (rx.test(cmdStr)) {
+        return {
+          level: 'L0',
+          dangerous: false,
+          reason: 'Read-only safe command',
+          matchedPattern: rx.source,
+        };
+      }
     }
   }
 
@@ -541,77 +591,3 @@ export function executeSandbox({
   };
 }
 
-export function checkSandboxHealth(target, t) {
-  const configFile = path.join(target, SANDBOX_CONFIG_REL);
-  if (!fs.existsSync(configFile)) return null;
-
-  try {
-    const raw = fs.readFileSync(configFile, 'utf8');
-    const cfg = JSON.parse(raw);
-    if (!cfg || typeof cfg !== 'object') {
-      return {
-        ok: false,
-        name: 'sandbox isolation',
-        detail: t('doctor.sandboxConfigInvalid'),
-      };
-    }
-
-    const engine = detectContainerEngine(cfg.engine || 'auto');
-    const mode = cfg.mode || 'auto';
-    const network = cfg.network || 'bridge';
-
-    if (mode === 'strict' || mode === 'always') {
-      if (!engine.available) {
-        return {
-          ok: false,
-          name: 'sandbox isolation',
-          detail: t('doctor.sandboxEngineMissing', { mode }),
-          fix: t('doctor.sandboxEngineFix'),
-        };
-      }
-      return {
-        ok: true,
-        name: 'sandbox isolation',
-        detail: t('doctor.sandboxOk', {
-          engine: `${engine.engine} (${engine.version || 'detected'})`,
-          mode,
-          network,
-        }),
-      };
-    }
-
-    if (mode === 'auto') {
-      if (!engine.available) {
-        return {
-          ok: true,
-          name: 'sandbox isolation',
-          detail: t('doctor.sandboxDegraded', { mode: 'auto' }),
-          warn: true,
-          fix: t('doctor.sandboxEngineFix'),
-        };
-      }
-      return {
-        ok: true,
-        name: 'sandbox isolation',
-        detail: t('doctor.sandboxOk', {
-          engine: `${engine.engine} (${engine.version || 'detected'})`,
-          mode,
-          network,
-        }),
-      };
-    }
-
-    // mode === 'disabled'
-    return {
-      ok: true,
-      name: 'sandbox isolation',
-      detail: `mode: disabled`,
-    };
-  } catch {
-    return {
-      ok: false,
-      name: 'sandbox isolation',
-      detail: t('doctor.sandboxConfigInvalid'),
-    };
-  }
-}

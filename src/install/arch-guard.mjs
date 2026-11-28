@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { makeT } from '../i18n.mjs';
+import { globToRegExp } from '../rules/glob.mjs';
 
 export const ARCH_CONFIG_REL = path.join('.agents', 'config', 'architecture.json');
 
@@ -99,27 +100,9 @@ export const ARCH_PRESETS = {
 };
 
 export function matchGlob(pattern, filePath) {
-  const p = filePath.replace(/\\/g, '/').replace(/^\.\//, '');
-  let pat = pattern.replace(/\\/g, '/').replace(/^\.\//, '');
-
-  let prefix = '^';
-  if (pat.startsWith('**/')) {
-    prefix = '(?:^|.*/)';
-    pat = pat.slice(3);
-  }
-
-  let suffix = '$';
-  if (pat.endsWith('/**')) {
-    suffix = '(?:/.*|$)';
-    pat = pat.slice(0, -3);
-  }
-
-  const body = pat
-    .replace(/[.+^${}()|[\]\\]/g, '\\$&')
-    .replace(/\*\*/g, '.*')
-    .replace(/\*/g, '[^/]*');
-
-  return new RegExp(`${prefix}${body}${suffix}`).test(p);
+  const p = String(filePath || '').replace(/\\/g, '/').replace(/^\.\//, '');
+  const pat = String(pattern || '').replace(/\\/g, '/').replace(/^\.\//, '');
+  return globToRegExp(pat).test(p);
 }
 
 export function stripComments(source, ext) {
@@ -402,10 +385,10 @@ export function loadArchConfig(root) {
   if (!fs.existsSync(file)) return null;
   try {
     return JSON.parse(fs.readFileSync(file, 'utf8'));
-  } catch (err) {
-    const e = new Error(`invalid architecture.json: ${err.message}`);
-    e.code = 'BAD_ARCH_CONFIG';
-    throw e;
+  } catch (cause) {
+    const err = new Error(`invalid architecture.json: ${cause.message}`);
+    err.code = 'BAD_ARCH_CONFIG';
+    throw err;
   }
 }
 
@@ -540,33 +523,3 @@ export function generateArchitectureMermaid(graph, config, violations = []) {
   return lines.join('\n');
 }
 
-export function checkArchHealth(target, t) {
-  const configFile = path.join(target, ARCH_CONFIG_REL);
-  if (!fs.existsSync(configFile)) return null;
-
-  try {
-    const res = evaluateArchitecture(target);
-    if (res.ok) {
-      return {
-        ok: true,
-        name: 'architecture guard',
-        detail: t('doctor.archOk', { files: res.totalFiles }),
-      };
-    }
-    const totalViolations = res.cycles.length + res.boundaryViolations.length + res.privateViolations.length;
-    return {
-      ok: false,
-      name: 'architecture guard',
-      detail: t('doctor.archViolations', { count: totalViolations }),
-      fix: t('doctor.archFixHint'),
-      warn: false,
-    };
-  } catch (err) {
-    return {
-      ok: false,
-      name: 'architecture guard',
-      detail: t('doctor.archError', { detail: err.message }),
-      warn: true,
-    };
-  }
-}

@@ -1,13 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
-import { checkArchHealth } from '../install/arch-guard.mjs';
-import { checkSkillsEvalHealth } from '../skills/eval-harness.mjs';
-import { checkMcpGatewayHealth } from '../install/mcp-gateway.mjs';
-import { checkSandboxHealth } from '../install/sandbox.mjs';
-import { verifySignature, readSignatureFile, resolvePublicKeyPath } from '../install/notary.mjs';
-import { listHandoffFiles, verifyHandoffEnvelope } from '../install/handoff.mjs';
-import { computeAiDoraMetrics, checkMetricsThresholds } from '../install/metrics.mjs';
+import { runGovernanceProbes, toGateVerdict, notaryTouches } from '../governance/probes.mjs';
+
+export { notaryTouches };
 
 /**
  * 解析 Git 差异变更集文件列表（用于增量卡口 / PR 范围收敛）
@@ -54,183 +50,6 @@ export function resolveChangedFiles(target, { since = null } = {}) {
 }
 
 /**
- * 判定变更文件集是否触碰公证证据链（导出纯函数供单测）
- * 安全修复批 2026-11-23（fail-closed）：判定集从「签名/交接文件」扩展到公证载荷
- * （attestation / sbom）——只改载荷不改签名文件同样必须触发验签，防绕过。
- * 路径锚点须与载荷落盘路径同步（.agents/attestation.json / .agents/sbom.json，见 commands/notary.mjs）。
- */
-export function notaryTouches(files) {
-  const list = Array.isArray(files) ? files : [];
-  return list.some((f) =>
-    f.startsWith('.agents/notary')
-    || f.endsWith('.sig')
-    || f.startsWith('.agents/handoffs/')
-    || f.startsWith('.agents/attestation')
-    || f.startsWith('.agents/sbom'),
-  );
-}
-
-/**
- * 校验公证签名证明链与防篡改
- */
-function checkNotaryProofGuard(target, t) {
-  const pubKeyPath = resolvePublicKeyPath(target);
-  const pubKey = fs.existsSync(pubKeyPath) ? fs.readFileSync(pubKeyPath, 'utf8') : null;
-
-  const attestationSigPath = path.join(target, '.agents', 'attestation.sig');
-  const attestationPath = path.join(target, '.agents', 'attestation.json');
-  const sbomSigPath = path.join(target, '.agents', 'sbom.sig');
-  const sbomPath = path.join(target, '.agents', 'sbom.json');
-  const handoffsDir = path.join(target, '.agents', 'handoffs');
-
-  let checkedCount = 0;
-  const violations = [];
-
-  // 1. 检查 attestation 签名
-  if (fs.existsSync(attestationSigPath)) {
-    checkedCount += 1;
-    if (!pubKey) {
-      violations.push(t('gate.notaryMissingKey', { file: 'attestation.sig' }) || 'Missing notary public key for attestation.sig');
-    } else if (!fs.existsSync(attestationPath)) {
-      violations.push(t('gate.notaryMissingPayload', { file: 'attestation.json' }) || 'Missing attestation.json payload');
-    } else {
-      try {
-        const sigObj = readSignatureFile(attestationSigPath);
-        const payload = JSON.parse(fs.readFileSync(attestationPath, 'utf8'));
-        const verifyRes = verifySignature({ payload, signatureObject: sigObj, publicKeyPem: pubKey });
-        if (!verifyRes.ok) {
-          violations.push(t('gate.notaryTampered', { file: 'attestation.json', error: verifyRes.detail || verifyRes.error }));
-        }
-      } catch (err) {
-        violations.push(t('gate.notaryTampered', { file: 'attestation.json', error: err.message }));
-      }
-    }
-  }
-
-  // 2. 检查 sbom 签名
-  if (fs.existsSync(sbomSigPath)) {
-    checkedCount += 1;
-    if (!pubKey) {
-      violations.push(t('gate.notaryMissingKey', { file: 'sbom.sig' }) || 'Missing notary public key for sbom.sig');
-    } else if (!fs.existsSync(sbomPath)) {
-      violations.push(t('gate.notaryMissingPayload', { file: 'sbom.json' }) || 'Missing sbom.json payload');
-    } else {
-      try {
-        const sigObj = readSignatureFile(sbomSigPath);
-        const payload = JSON.parse(fs.readFileSync(sbomPath, 'utf8'));
-        const verifyRes = verifySignature({ payload, signatureObject: sigObj, publicKeyPem: pubKey });
-        if (!verifyRes.ok) {
-          violations.push(t('gate.notaryTampered', { file: 'sbom.json', error: verifyRes.detail || verifyRes.error }));
-        }
-      } catch (err) {
-        violations.push(t('gate.notaryTampered', { file: 'sbom.json', error: err.message }));
-      }
-    }
-  }
-
-  // 3. 检查多智能体交接信封
-  if (fs.existsSync(handoffsDir)) {
-    const handoffs = listHandoffFiles(target);
-    for (const hItem of handoffs) {
-      checkedCount += 1;
-      const verifyRes = verifyHandoffEnvelope({
-        target,
-        envelope: hItem.envelope,
-        publicKeyPem: pubKey,
-      });
-      if (!verifyRes.ok) {
-        // verifyHandoffEnvelope 以 problems 数组回报原因（无 reason 字段）；直接取 reason 会渲染成 undefined。
-        violations.push(t('gate.handoffTampered', {
-          id: hItem.envelope?.id || hItem.file,
-          error: (verifyRes.problems || []).join('; '),
-        }));
-      }
-    }
-  }
-
-  if (checkedCount === 0) {
-    return {
-      name: 'notary',
-      title: t('gate.guardNotaryTitle') || 'Cryptographic Notary & Proof Integrity',
-      status: 'skipped',
-      reason: t('gate.notaryNoSignatures') || 'No signed attestations or handoffs found in project',
-    };
-  }
-
-  if (violations.length > 0) {
-    return {
-      name: 'notary',
-      title: t('gate.guardNotaryTitle') || 'Cryptographic Notary & Proof Integrity',
-      status: 'failed',
-      reason: violations.join('; '),
-      hint: t('gate.notaryFixHint') || 'Run flow-kit sign or re-verify compromised signatures',
-      details: { violations },
-    };
-  }
-
-  return {
-    name: 'notary',
-    title: t('gate.guardNotaryTitle') || 'Cryptographic Notary & Proof Integrity',
-    status: 'passed',
-    reason: t('gate.notaryOk', { count: checkedCount }) || `All ${checkedCount} signed proofs verified intact`,
-    details: { count: checkedCount },
-  };
-}
-
-/**
- * 校验中央策略面合规
- */
-function checkPolicyGuard(target, t) {
-  const policyFile = path.join(target, '.agents', 'policy.json');
-  if (!fs.existsSync(policyFile)) {
-    return {
-      name: 'policy',
-      title: t('gate.guardPolicyTitle') || 'Central Enterprise Policy Alignment',
-      status: 'skipped',
-      reason: t('gate.policyNoConfig') || 'No .agents/policy.json defined',
-    };
-  }
-
-  try {
-    const policy = JSON.parse(fs.readFileSync(policyFile, 'utf8'));
-    if (!policy || typeof policy !== 'object') {
-      return {
-        name: 'policy',
-        title: t('gate.guardPolicyTitle') || 'Central Enterprise Policy Alignment',
-        status: 'failed',
-        reason: t('gate.policyInvalid') || 'Invalid policy.json format',
-      };
-    }
-
-    if (policy.remotePolicyServer && !policy.lastSyncedAt) {
-      return {
-        name: 'policy',
-        title: t('gate.guardPolicyTitle') || 'Central Enterprise Policy Alignment',
-        status: 'warned',
-        reason: t('gate.policyUnsynced') || 'Central policy server configured but not synced yet',
-        hint: t('gate.policySyncHint') || 'Run flow-kit policy pull to synchronize with central baseline',
-      };
-    }
-
-    return {
-      name: 'policy',
-      title: t('gate.guardPolicyTitle') || 'Central Enterprise Policy Alignment',
-      status: 'passed',
-      reason: t('gate.policyPass', { version: policy.version || '1.0' }) || `Policy configuration valid (version: ${policy.version || '1.0'})`,
-      details: { version: policy.version },
-    };
-  } catch (err) {
-    return {
-      name: 'policy',
-      title: t('gate.guardPolicyTitle') || 'Central Enterprise Policy Alignment',
-      status: 'failed',
-      // 与「格式非法」分支同口径：本地化结论 + 原始解析错误，避免同一失败类出现两种文案。
-      reason: `${t('gate.policyInvalid') || 'Invalid policy.json format'}: ${err.message}`,
-    };
-  }
-}
-
-/**
  * 执行全要素零信任合流门禁卡口检测
  */
 export function runGateChecks({
@@ -242,13 +61,7 @@ export function runGateChecks({
   since = null,
   t,
 }) {
-  const selectedRules = rules && rules.length ? new Set(rules.map((r) => r.trim().toLowerCase())) : null;
-  const isEnabled = (name) => !selectedRules || selectedRules.has(name);
-
   const startMs = Date.now();
-  const guards = [];
-
-  // 计算增量 PR 差异集文件
   let changedFiles = null;
   let diffScoping = null;
   if (diff || since) {
@@ -261,369 +74,27 @@ export function runGateChecks({
         files: changedFiles,
       };
     } else {
-      // 无法解析差异集时回退全量检查（fail-closed），而不是把空集当作有效范围跳过守卫
       process.stderr.write(
-        `${t('gate.diffScopeFailed') || 'Failed to resolve diff scope, falling back to full checks'}\n`,
+        `${(t && t('gate.diffScopeFailed')) || 'Failed to resolve diff scope, falling back to full checks'}\n`,
       );
     }
   }
 
-  // 1. Architecture Layering & Boundary Guard
-  if (isEnabled('arch')) {
-    const archStart = Date.now();
-    try {
-      const archConfigPath = path.join(target, '.agents', 'config', 'architecture.json');
-      const hasArchConfig = fs.existsSync(archConfigPath);
-      const touchesArch = !diffScoping || (hasArchConfig && changedFiles.some(
-        (f) => f.startsWith('src/') || f.includes('architecture.json'),
-      ));
-
-      if (diffScoping && hasArchConfig && !touchesArch) {
-        guards.push({
-          name: 'arch',
-          title: t('gate.guardArchTitle') || 'Architecture Layering & Boundary Guard',
-          status: 'passed',
-          reason: t('gate.diffArchNoChanges', { count: changedFiles.length })
-            || `0 architecture layer files modified in diff scope (${changedFiles.length} files changed)`,
-          durationMs: Date.now() - archStart,
-        });
-      } else {
-        const res = checkArchHealth(target, t);
-        if (!res) {
-          guards.push({
-            name: 'arch',
-            title: t('gate.guardArchTitle') || 'Architecture Layering & Boundary Guard',
-            status: 'skipped',
-            reason: t('arch.noConfig') || 'No architecture layering config found (optional)',
-            durationMs: Date.now() - archStart,
-          });
-        } else if (!res.ok) {
-          guards.push({
-            name: 'arch',
-            title: t('gate.guardArchTitle') || 'Architecture Layering & Boundary Guard',
-            status: 'failed',
-            reason: res.detail || res.reason,
-            hint: res.fix || res.hint || t('doctor.archFixHint'),
-            details: { violations: res.violations, cycles: res.cycles, layerViolations: res.layerViolations, privateViolations: res.privateViolations },
-            durationMs: Date.now() - archStart,
-          });
-        } else {
-          guards.push({
-            name: 'arch',
-            title: t('gate.guardArchTitle') || 'Architecture Layering & Boundary Guard',
-            status: 'passed',
-            reason: res.detail || res.reason || t('arch.checkPass') || 'No circular dependencies or boundary violations',
-            durationMs: Date.now() - archStart,
-          });
-        }
-      }
-    } catch (e) {
-      guards.push({
-        name: 'arch',
-        title: t('gate.guardArchTitle') || 'Architecture Layering & Boundary Guard',
-        status: 'failed',
-        reason: e.message,
-        durationMs: Date.now() - archStart,
-      });
-    }
-  }
-
-  // 2. Skills Regression Eval Guard
-  if (isEnabled('skills')) {
-    const skillStart = Date.now();
-    try {
-      const touchesSkills = !diffScoping || changedFiles.some(
-        (f) => f.startsWith('.agents/skills/') || f.startsWith('.agents/evals/'),
-      );
-
-      if (diffScoping && !touchesSkills) {
-        guards.push({
-          name: 'skills',
-          title: t('gate.guardSkillsTitle') || 'Skills Regression Eval Guard',
-          status: 'passed',
-          reason: t('gate.diffSkillsNoChanges', { count: changedFiles.length })
-            || `0 skill assets modified in diff scope (${changedFiles.length} files changed)`,
-          durationMs: Date.now() - skillStart,
-        });
-      } else {
-        const res = checkSkillsEvalHealth(target, t);
-        if (!res) {
-          guards.push({
-            name: 'skills',
-            title: t('gate.guardSkillsTitle') || 'Skills Regression Eval Guard',
-            status: 'skipped',
-            reason: t('gate.guardSkillsNoSkills') || 'No custom skills installed',
-            durationMs: Date.now() - skillStart,
-          });
-        } else if (!res.ok) {
-          guards.push({
-            name: 'skills',
-            title: t('gate.guardSkillsTitle') || 'Skills Regression Eval Guard',
-            status: res.warn && !strict ? 'warned' : 'failed',
-            reason: res.detail,
-            hint: res.fix || res.hint,
-            durationMs: Date.now() - skillStart,
-          });
-        } else {
-          guards.push({
-            name: 'skills',
-            title: t('gate.guardSkillsTitle') || 'Skills Regression Eval Guard',
-            status: 'passed',
-            reason: res.detail || t('doctor.skillsEvalOk', { count: res.count }),
-            durationMs: Date.now() - skillStart,
-          });
-        }
-      }
-    } catch (e) {
-      guards.push({
-        name: 'skills',
-        title: t('gate.guardSkillsTitle') || 'Skills Regression Eval Guard',
-        status: 'failed',
-        reason: e.message,
-        durationMs: Date.now() - skillStart,
-      });
-    }
-  }
-
-  // 3. MCP RBAC & Tool Gateway Guard
-  if (isEnabled('mcp')) {
-    const mcpStart = Date.now();
-    try {
-      const touchesMcp = !diffScoping || changedFiles.some(
-        (f) => f.startsWith('.agents/mcp') || f.includes('mcp.json'),
-      );
-
-      if (diffScoping && !touchesMcp) {
-        guards.push({
-          name: 'mcp',
-          title: t('gate.guardMcpTitle') || 'MCP Gateway & RBAC Audit Guard',
-          status: 'passed',
-          reason: t('gate.diffMcpNoChanges', { count: changedFiles.length })
-            || `0 MCP configurations modified in diff scope (${changedFiles.length} files changed)`,
-          durationMs: Date.now() - mcpStart,
-        });
-      } else {
-        const res = checkMcpGatewayHealth(target, t);
-        if (!res) {
-          guards.push({
-            name: 'mcp',
-            title: t('gate.guardMcpTitle') || 'MCP Gateway & RBAC Audit Guard',
-            status: 'skipped',
-            reason: t('gate.guardMcpPass') || 'No MCP gateway config defined (optional)',
-            durationMs: Date.now() - mcpStart,
-          });
-        } else if (!res.ok) {
-          guards.push({
-            name: 'mcp',
-            title: t('gate.guardMcpTitle') || 'MCP Gateway & RBAC Audit Guard',
-            status: res.warn && !strict ? 'warned' : 'failed',
-            reason: res.detail || res.reason,
-            hint: res.fix || res.hint,
-            durationMs: Date.now() - mcpStart,
-          });
-        } else {
-          guards.push({
-            name: 'mcp',
-            title: t('gate.guardMcpTitle') || 'MCP Gateway & RBAC Audit Guard',
-            status: 'passed',
-            reason: res.detail || t('gate.guardMcpPass') || '0 unauthorized or blocked privilege escalations',
-            durationMs: Date.now() - mcpStart,
-          });
-        }
-      }
-    } catch (e) {
-      guards.push({
-        name: 'mcp',
-        title: t('gate.guardMcpTitle') || 'MCP Gateway & RBAC Audit Guard',
-        status: 'failed',
-        reason: e.message,
-        durationMs: Date.now() - mcpStart,
-      });
-    }
-  }
-
-  // 4. Execution Sandbox Route Guard
-  if (isEnabled('sandbox')) {
-    const sbStart = Date.now();
-    try {
-      const touchesSandbox = !diffScoping || changedFiles.some(
-        (f) => f.includes('sandbox.json') || f.includes('Dockerfile') || f.includes('devcontainer'),
-      );
-
-      if (diffScoping && !touchesSandbox) {
-        guards.push({
-          name: 'sandbox',
-          title: t('gate.guardSandboxTitle') || 'Container Sandbox Isolation Guard',
-          status: 'passed',
-          reason: t('gate.diffSandboxNoChanges', { count: changedFiles.length })
-            || `0 sandbox configurations modified in diff scope (${changedFiles.length} files changed)`,
-          durationMs: Date.now() - sbStart,
-        });
-      } else {
-        const res = checkSandboxHealth(target, t);
-        if (!res) {
-          guards.push({
-            name: 'sandbox',
-            title: t('gate.guardSandboxTitle') || 'Container Sandbox Isolation Guard',
-            status: 'skipped',
-            reason: t('sandbox.noConfig') || 'No sandbox config found (optional)',
-            durationMs: Date.now() - sbStart,
-          });
-        } else if (!res.ok) {
-          guards.push({
-            name: 'sandbox',
-            title: t('gate.guardSandboxTitle') || 'Container Sandbox Isolation Guard',
-            status: res.warn && !strict ? 'warned' : 'failed',
-            reason: res.detail || res.reason,
-            hint: res.fix || res.hint,
-            durationMs: Date.now() - sbStart,
-          });
-        } else {
-          guards.push({
-            name: 'sandbox',
-            title: t('gate.guardSandboxTitle') || 'Container Sandbox Isolation Guard',
-            status: 'passed',
-            reason: res.detail || 'Container sandbox ready',
-            durationMs: Date.now() - sbStart,
-          });
-        }
-      }
-    } catch (e) {
-      guards.push({
-        name: 'sandbox',
-        title: t('gate.guardSandboxTitle') || 'Container Sandbox Isolation Guard',
-        status: 'failed',
-        reason: e.message,
-        durationMs: Date.now() - sbStart,
-      });
-    }
-  }
-
-  // 5. Cryptographic Notary & Proof Guard
-  if (isEnabled('notary')) {
-    const notaryStart = Date.now();
-    try {
-      const touchesNotary = !diffScoping || notaryTouches(changedFiles);
-
-      if (diffScoping && !touchesNotary) {
-        guards.push({
-          name: 'notary',
-          title: t('gate.guardNotaryTitle') || 'Cryptographic Notary & Proof Integrity',
-          status: 'passed',
-          reason: t('gate.diffNotaryNoChanges', { count: changedFiles.length })
-            || `0 signed proofs or handoffs modified in diff scope (${changedFiles.length} files changed)`,
-          durationMs: Date.now() - notaryStart,
-        });
-      } else {
-        const res = checkNotaryProofGuard(target, t);
-        res.durationMs = Date.now() - notaryStart;
-        guards.push(res);
-      }
-    } catch (e) {
-      guards.push({
-        name: 'notary',
-        title: t('gate.guardNotaryTitle') || 'Cryptographic Notary & Proof Integrity',
-        status: 'failed',
-        reason: e.message,
-        durationMs: Date.now() - notaryStart,
-      });
-    }
-  }
-
-  // 6. Central Enterprise Policy Alignment
-  if (isEnabled('policy')) {
-    const policyStart = Date.now();
-    try {
-      const touchesPolicy = !diffScoping || changedFiles.some((f) => f.includes('policy.json'));
-      if (diffScoping && !touchesPolicy) {
-        guards.push({
-          name: 'policy',
-          title: t('gate.guardPolicyTitle') || 'Central Enterprise Policy Alignment',
-          status: 'passed',
-          reason: t('gate.diffPolicyNoChanges', { count: changedFiles.length })
-            || `0 policy definitions modified in diff scope (${changedFiles.length} files changed)`,
-          durationMs: Date.now() - policyStart,
-        });
-      } else {
-        const res = checkPolicyGuard(target, t);
-        res.durationMs = Date.now() - policyStart;
-        guards.push(res);
-      }
-    } catch (e) {
-      guards.push({
-        name: 'policy',
-        title: t('gate.guardPolicyTitle') || 'Central Enterprise Policy Alignment',
-        status: 'failed',
-        reason: e.message,
-        durationMs: Date.now() - policyStart,
-      });
-    }
-  }
-
-  // 7. AI-DORA Quality Baseline Guard
-  if (isEnabled('metrics')) {
-    const metricsStart = Date.now();
-    try {
-      const metrics = computeAiDoraMetrics(target, { days: 30 });
-      // 安全修复批 2026-11-23：checkMetricsThresholds 返回 { ok, violations } 对象，
-      // 此处按对象解构取 violations——原先误当数组取 .length 恒为 undefined，守卫形同虚设
-      const { violations } = checkMetricsThresholds(metrics, thresholds);
-      if (violations.length > 0) {
-        guards.push({
-          name: 'metrics',
-          title: t('gate.guardMetricsTitle') || 'AI-DORA Quality Baseline Guard',
-          status: 'failed',
-          reason: violations.join('; '),
-          details: { tier: metrics.dora.tier, violations },
-          durationMs: Date.now() - metricsStart,
-        });
-      } else {
-        const tierDesc = metrics.dora.tier ? `AI-DORA tier: ${metrics.dora.tier}` : 'No recent failures';
-        guards.push({
-          name: 'metrics',
-          title: t('gate.guardMetricsTitle') || 'AI-DORA Quality Baseline Guard',
-          status: 'passed',
-          reason: t('gate.metricsPass', { tier: metrics.dora.tier || 'N/A' }) || `${tierDesc}, all metrics within baseline`,
-          details: { tier: metrics.dora.tier },
-          durationMs: Date.now() - metricsStart,
-        });
-      }
-    } catch (e) {
-      guards.push({
-        name: 'metrics',
-        title: t('gate.guardMetricsTitle') || 'AI-DORA Quality Baseline Guard',
-        status: 'failed',
-        reason: e.message,
-        durationMs: Date.now() - metricsStart,
-      });
-    }
-  }
-
-  const passedCount = guards.filter((g) => g.status === 'passed').length;
-  const failedCount = guards.filter((g) => g.status === 'failed').length;
-  const warnedCount = guards.filter((g) => g.status === 'warned').length;
-  const skippedCount = guards.filter((g) => g.status === 'skipped').length;
-
-  const passed = failedCount === 0 && (!strict || warnedCount === 0);
-  const verdict = passed ? 'APPROVED' : 'REJECTED';
-
-  return {
-    verdict,
-    passed,
-    strict,
+  const probeBatch = runGovernanceProbes({
     target,
+    strict,
+    rules,
+    thresholds,
     diffScoping,
-    createdAt: new Date().toISOString(),
+    changedFiles,
+    t,
+  });
+
+  return toGateVerdict(probeBatch, {
+    strict,
+    diffScoping,
     durationMs: Date.now() - startMs,
-    summary: {
-      total: guards.length,
-      passed: passedCount,
-      failed: failedCount,
-      warned: warnedCount,
-      skipped: skippedCount,
-    },
-    guards,
-  };
+  });
 }
 
 /**
@@ -794,6 +265,14 @@ export function renderGateMarkdown(result, t) {
   return lines.join('\n');
 }
 
+function ensureCiNotExists(filePath, relLabel, force, t) {
+  if (fs.existsSync(filePath) && !force) {
+    const err = new Error(t('gate.ciExists', { path: relLabel }));
+    err.code = 'CONFIG_EXISTS';
+    throw err;
+  }
+}
+
 /**
  * 生成 CI 自动化工作流配置
  */
@@ -801,13 +280,8 @@ export function generateCiWorkflow({ provider = 'github', target, t, force = fal
   const normProvider = String(provider).toLowerCase();
   if (normProvider === 'gitlab') {
     const gitlabPath = path.join(target, '.gitlab-ci.yml');
-    // 审查遗留批 2026-11-23：已存在的 .gitlab-ci.yml 不再无条件覆盖（fail-closed）——
-    // 用户手写的 CI 配置被静默重写属于破坏性副作用；--force 才允许覆盖。
-    if (fs.existsSync(gitlabPath) && !force) {
-      const err = new Error(t('gate.ciExists', { path: '.gitlab-ci.yml' }));
-      err.code = 'CONFIG_EXISTS';
-      throw err;
-    }
+    // 审查遗留批 2026-11-23：已存在的 CI 配置不再无条件覆盖（fail-closed）；--force 才允许覆盖。
+    ensureCiNotExists(gitlabPath, '.gitlab-ci.yml', force, t);
     const content = `# AI-Native Zero-Trust Quality Gate
 ai-gate:
   stage: test
@@ -828,8 +302,9 @@ ai-gate:
 
   // GitHub Actions (默认)
   const ghDir = path.join(target, '.github', 'workflows');
-  fs.mkdirSync(ghDir, { recursive: true });
   const ghPath = path.join(ghDir, 'ai-gate.yml');
+  ensureCiNotExists(ghPath, '.github/workflows/ai-gate.yml', force, t);
+  fs.mkdirSync(ghDir, { recursive: true });
   const content = `name: AI-Native Zero-Trust Quality Gate
 
 on:

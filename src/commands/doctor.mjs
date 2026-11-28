@@ -17,18 +17,13 @@ import { buildAttestation, writeAttestation } from '../install/attest.mjs';
 import { compilePermissions, permissionDrift } from '../install/permissions.mjs';
 import { ROLE_NAMES, readInjectedModels, readLocalModelRoles } from '../models/resolve.mjs';
 import { computeEnterprise, GIT_HOOKS, PROOF_CHAIN_FILES, resolveTarget } from './install.mjs';
-import { readLocalPolicy, checkPolicyDriftSync } from './policy.mjs';
 import { verifySbom } from './sbom.mjs';
 import { parseJsonc } from '../rules/jsonc.mjs';
 import { splitWaivers } from '../rules/model.mjs';
 import { loadModel } from '../rules/load.mjs';
 import { readPluginStatus } from '../rules/plugin-status.mjs';
-import { verifySignature, signPayload, readSignatureFile, writeSignatureFile, resolvePublicKeyPath } from '../install/notary.mjs';
-import { listHandoffFiles, verifyHandoffEnvelope } from '../install/handoff.mjs';
-import { checkMcpGatewayHealth } from '../install/mcp-gateway.mjs';
-import { checkArchHealth } from '../install/arch-guard.mjs';
-import { checkSandboxHealth } from '../install/sandbox.mjs';
-import { checkSkillsEvalHealth } from '../skills/eval-harness.mjs';
+import { signPayload, writeSignatureFile } from '../install/notary.mjs';
+import { runGovernanceProbes } from '../governance/probes.mjs';
 import { RUNTIME_SCRIPTS, RUNTIME_HOOKS, KIT_ROOT } from './runtime.mjs';
 import { buildDiff } from './diff.mjs';
 import { WIKI_NAMES, WIKI_TOPIC_KEYS } from '../install/wiki-names.mjs';
@@ -47,7 +42,6 @@ const HOOK_INAPPLICABLE_REASONS = {
 // doctor 拿它和 toolPolicy.servers 声明做双向对账。
 const MCP_RUNTIME_TOOLS = [{ name: 'wiki_search' }];
 const allowedHas = (policy, server, tool) => Boolean(policy?.servers?.[server]?.has(tool));
-let mcpPolicyCache;
 
 // R5-1b：运行时实现应随包分发；目标项目里残留的旧脚本/hook 代码只作 advisory。
 // 只对照包内确实存在的运行时文件，避免把项目自建的 hook 误报为遗留。
@@ -182,6 +176,7 @@ export function doctorCommand({ args, t }) {
     add(fs.existsSync(path.join(target, '.githooks', hook)), `hook ${hook}`, '');
   }
 
+  let mcpPolicyCache;
   for (const host of manifest?.hosts || []) {
     const h = HOSTS[host];
     if (!h) {
@@ -452,16 +447,9 @@ export function doctorCommand({ args, t }) {
   }
 
   // 远程中央策略基线对账：存在 policy.json 且声明了 remote 时，核对与中央基线的漂移状态
-  const localPolicy = readLocalPolicy(target);
-  if (localPolicy?.remote?.url) {
-    const check = checkPolicyDriftSync(target, localPolicy, null, t);
-    if (!check.ok) {
-      add(true, 'policy-remote unreachable', t('doctor.policyRemoteError', { error: check.error }), '', { warn: true });
-    } else if (!check.synced) {
-      add(true, 'policy-remote drift', t('doctor.policyRemoteDrift', { count: check.changes.length, url: localPolicy.remote.url }), t('doctor.policyRemoteHint'), { warn: true });
-    } else {
-      add(true, 'policy-remote', t('doctor.policyRemoteOk', { url: localPolicy.remote.url, ref: check.ref }));
-    }
+  const policyProbe = runGovernanceProbes({ target, probes: ['policy'], policy: { remote: true }, t }).byId.policy;
+  for (const c of policyProbe?.doctorChecks || []) {
+    add(c.ok, c.name, c.detail, c.fix || '', c.warn ? { warn: true } : {});
   }
 
   // 项目级门禁配置覆盖率（gate coverage，advisory）：逐项报告已配置 / 未配置（SKIP）/ 配置错误。
@@ -693,109 +681,32 @@ export function doctorCommand({ args, t }) {
     }
   }
 
-  // 密码学公证签名校验（如果存在 .agents/attestation.sig 或 .agents/sbom.sig）
-  let pubKeyPath = args.pubkey ? path.resolve(args.pubkey) : null;
-  if (!pubKeyPath && args.key) {
-    const candidatePub = String(args.key).endsWith('.pub.pem') ? path.resolve(args.key) : path.resolve(args.key).replace(/\.pem$/, '.pub.pem');
-    if (fs.existsSync(candidatePub)) pubKeyPath = candidatePub;
+  // 运行治理探针检测公证证明链、网关、架构、沙箱、技能回归
+  const govProbes = runGovernanceProbes({
+    target,
+    probes: ['notary', 'mcp', 'arch', 'sandbox', 'skills'],
+    notary: { pubkey: args.pubkey, key: args.key, sbom: sbomPath },
+    t,
+  });
+  for (const c of govProbes.byId.notary?.doctorChecks || []) {
+    add(c.ok, c.name, c.detail, c.fix || '', c.warn ? { warn: true } : {});
   }
-  // 公钥路径单源：keygen 默认优先，legacy .agents/notary/public.pem 回退（PR #77 审查跟进）
-  if (!pubKeyPath) pubKeyPath = resolvePublicKeyPath(target);
-
-  const attestSigPath = path.join(target, '.agents', 'attestation.sig');
-  if (fs.existsSync(attestSigPath)) {
-    if (!pubKeyPath || !fs.existsSync(pubKeyPath)) {
-      add(false, 'signature attestation', t('doctor.sigMissingKey'));
-    } else {
-      try {
-        const pubKey = fs.readFileSync(pubKeyPath, 'utf8');
-        const sigObj = readSignatureFile(attestSigPath);
-        const payload = fs.existsSync(path.join(target, '.agents', 'attestation.json'))
-          ? JSON.parse(fs.readFileSync(path.join(target, '.agents', 'attestation.json'), 'utf8'))
-          : buildAttestation(target);
-        const verifyRes = verifySignature({ payload, signatureObject: sigObj, publicKeyPem: pubKey });
-        if (verifyRes.ok) {
-          add(true, 'signature attestation', t('doctor.sigAttestationOk', { fp: verifyRes.fingerprint }));
-        } else {
-          add(false, 'signature attestation', t('doctor.sigAttestationFailed', { detail: verifyRes.detail || verifyRes.error }));
-        }
-      } catch (e) {
-        add(false, 'signature attestation', t('doctor.sigAttestationFailed', { detail: e.message }));
-      }
-    }
+  for (const c of govProbes.byId.mcp?.doctorChecks || []) {
+    add(c.ok, c.name, c.detail, c.fix || '', c.warn ? { warn: true } : {});
   }
-
-  const sbomSigPath = path.join(target, '.agents', 'sbom.sig');
-  if (fs.existsSync(sbomSigPath)) {
-    if (!pubKeyPath || !fs.existsSync(pubKeyPath)) {
-      add(false, 'signature sbom', t('doctor.sigMissingKey'));
-    } else if (!sbomPath || !fs.existsSync(sbomPath)) {
-      add(false, 'signature sbom', t('doctor.sigMissingSbom'));
-    } else {
-      try {
-        const pubKey = fs.readFileSync(pubKeyPath, 'utf8');
-        const sigObj = readSignatureFile(sbomSigPath);
-        const payload = JSON.parse(fs.readFileSync(sbomPath, 'utf8'));
-        const verifyRes = verifySignature({ payload, signatureObject: sigObj, publicKeyPem: pubKey });
-        if (verifyRes.ok) {
-          add(true, 'signature sbom', t('doctor.sigSbomOk', { fp: verifyRes.fingerprint }));
-        } else {
-          add(false, 'signature sbom', t('doctor.sigSbomFailed', { detail: verifyRes.detail || verifyRes.error }));
-        }
-      } catch (e) {
-        add(false, 'signature sbom', t('doctor.sigSbomFailed', { detail: e.message }));
-      }
-    }
+  for (const c of govProbes.byId.arch?.doctorChecks || []) {
+    const extra = c.warn ? { warn: true } : {};
+    if (c.violations !== undefined) extra.violations = c.violations;
+    if (c.cycles !== undefined) extra.cycles = c.cycles;
+    if (c.layerViolations !== undefined) extra.layerViolations = c.layerViolations;
+    if (c.privateViolations !== undefined) extra.privateViolations = c.privateViolations;
+    add(c.ok, c.name, c.detail, c.fix || '', extra);
   }
-
-  // 多智能体接力协同契约体检（如果存在 .agents/handoffs/）
-  const handoffsDir = path.join(target, '.agents', 'handoffs');
-  if (fs.existsSync(handoffsDir)) {
-    const handoffFiles = listHandoffFiles(target);
-    for (const hItem of handoffFiles) {
-      const pubKey = pubKeyPath && fs.existsSync(pubKeyPath) ? fs.readFileSync(pubKeyPath, 'utf8') : null;
-      const verifyRes = verifyHandoffEnvelope({
-        target,
-        envelope: hItem.envelope,
-        publicKeyPem: pubKey,
-      });
-      if (verifyRes.ok) {
-        add(true, `handoff ${hItem.envelope.id}`, t('doctor.handoffOk', {
-          id: hItem.envelope.id,
-          from: hItem.envelope.fromRole,
-          to: hItem.envelope.toRole,
-        }));
-      } else {
-        add(false, `handoff ${hItem.envelope.id}`, t('doctor.handoffDrift', {
-          id: hItem.envelope.id,
-          problems: verifyRes.problems.join('; '),
-        }));
-      }
-    }
+  for (const c of govProbes.byId.sandbox?.doctorChecks || []) {
+    add(c.ok, c.name, c.detail, c.fix || '', c.warn ? { warn: true } : {});
   }
-
-  // 动态 MCP 网关健康度与审计异常巡检
-  const mcpHealth = checkMcpGatewayHealth(target, t);
-  if (mcpHealth) {
-    add(mcpHealth.ok, mcpHealth.name, mcpHealth.detail, mcpHealth.fix || '', { warn: mcpHealth.warn });
-  }
-
-  // 架构分层契约与防侵蚀巡检
-  const archHealth = checkArchHealth(target, t);
-  if (archHealth) {
-    add(archHealth.ok, archHealth.name, archHealth.detail, archHealth.fix || '', { warn: archHealth.warn });
-  }
-
-  // 可插拔即时沙箱与高危指令隔离巡检
-  const sandboxHealth = checkSandboxHealth(target, t);
-  if (sandboxHealth) {
-    add(sandboxHealth.ok, sandboxHealth.name, sandboxHealth.detail, sandboxHealth.fix || '', { warn: sandboxHealth.warn });
-  }
-
-  // 技能回归评测凭证与基准用例巡检
-  const skillsEvalHealth = checkSkillsEvalHealth(target, t);
-  if (skillsEvalHealth) {
-    add(skillsEvalHealth.ok, skillsEvalHealth.name, skillsEvalHealth.detail, skillsEvalHealth.fix || '', { warn: skillsEvalHealth.warn });
+  for (const c of govProbes.byId.skills?.doctorChecks || []) {
+    add(c.ok, c.name, c.detail, c.fix || '', c.warn ? { warn: true } : {});
   }
 
   // 模型配置是用户本地状态：存在则校验，缺失不失败（旧安装保持 doctor 全过）。

@@ -3,6 +3,40 @@ import path from 'node:path';
 import { flag } from '../cli/args.mjs';
 import { runGateChecks, renderGateText, renderGateMarkdown, generateCiWorkflow, generateGateBadge } from '../ci/gate.mjs';
 
+function badGateUsage(message) {
+  const err = new Error(message);
+  err.code = 'BAD_GATE_USAGE';
+  throw err;
+}
+
+function parseRulesArg(args) {
+  if (args.flags?.has('rules')) badGateUsage('`--rules` requires a comma-separated value');
+  if (args.rules == null) return null;
+  const list = String(args.rules).split(',').map((s) => s.trim()).filter(Boolean);
+  if (!list.length) badGateUsage('`--rules` must specify at least one guard name');
+  return list;
+}
+
+function parseNumericThreshold(args, key) {
+  const flagName = `--${key}`;
+  if (args.flags?.has(key)) badGateUsage(`${flagName} requires a numeric value`);
+  const raw = args[key];
+  if (raw == null) return undefined;
+  const s = String(raw).trim();
+  const n = Number(s);
+  if (!s || !Number.isFinite(n)) badGateUsage(`Invalid numeric value for ${flagName}: ${raw}`);
+  return n;
+}
+
+function parseCommonGateOptions(args) {
+  return {
+    strict: flag(args, 'strict'),
+    rules: parseRulesArg(args),
+    diff: flag(args, 'diff'),
+    since: args.since || null,
+  };
+}
+
 /**
  * gate / ci 命令处理器
  */
@@ -22,10 +56,7 @@ export async function gateCommand({ args, t, lang = 'zh-CN' }) {
 
   // 2. 生成状态徽章 (flow-kit gate badge)
   if (sub === 'badge' || flag(args, 'badge')) {
-    const strict = flag(args, 'strict');
-    const rules = typeof args.rules === 'string' ? args.rules.split(',') : null;
-    const diff = flag(args, 'diff');
-    const since = args.since || null;
+    const { strict, rules, diff, since } = parseCommonGateOptions(args);
     const badgeFormat = args.format || args['badge-format'] || 'markdown';
 
     const result = runGateChecks({ target, strict, rules, diff, since, t });
@@ -44,22 +75,21 @@ export async function gateCommand({ args, t, lang = 'zh-CN' }) {
   }
 
   if (sub !== 'check' && sub !== 'run') {
-    const err = new Error(t('error.gateUsage') || 'Usage: flow-kit gate [check|badge|init-ci] [options]');
-    err.code = 'BAD_GATE_USAGE';
-    throw err;
+    badGateUsage(t('error.gateUsage') || 'Usage: flow-kit gate [check|badge|init-ci] [options]');
   }
 
   // 3. 执行零信任门禁卡口检查
-  const strict = flag(args, 'strict');
-  const rules = typeof args.rules === 'string' ? args.rules.split(',') : null;
-  const diff = flag(args, 'diff');
-  const since = args.since || null;
+  const { strict, rules, diff, since } = parseCommonGateOptions(args);
 
   const thresholds = {};
-  if (args['max-cfr'] != null) thresholds.maxCfr = Number(args['max-cfr']);
-  if (args['min-pass-rate'] != null) thresholds.minPassRate = Number(args['min-pass-rate']);
-  if (args['max-mttr'] != null) thresholds.maxMttr = Number(args['max-mttr']);
-  if (args['max-rework'] != null) thresholds.maxRework = Number(args['max-rework']);
+  const maxCfr = parseNumericThreshold(args, 'max-cfr');
+  const minPassRate = parseNumericThreshold(args, 'min-pass-rate');
+  const maxMttr = parseNumericThreshold(args, 'max-mttr');
+  const maxRework = parseNumericThreshold(args, 'max-rework');
+  if (maxCfr !== undefined) thresholds.maxCfr = maxCfr;
+  if (minPassRate !== undefined) thresholds.minPassRate = minPassRate;
+  if (maxMttr !== undefined) thresholds.maxMttr = maxMttr;
+  if (maxRework !== undefined) thresholds.maxRework = maxRework;
 
   const result = runGateChecks({
     target,

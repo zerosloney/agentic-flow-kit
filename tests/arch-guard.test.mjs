@@ -14,12 +14,12 @@ import {
   checkLayerBoundaries,
   checkPrivateImports,
   generateArchitectureMermaid,
-  checkArchHealth,
   evaluateArchitecture,
   initArchConfig,
   ARCH_CONFIG_REL,
   ARCH_PRESETS,
 } from '../src/install/arch-guard.mjs';
+import { runGovernanceProbes } from '../src/governance/probes.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const BIN = path.join(KIT, 'bin', 'flow-kit.mjs');
@@ -188,18 +188,21 @@ test('generateArchitectureMermaid outputs valid Mermaid flowchart', () => {
   assert.match(mermaid, /-\.->\|VIOLATION\|/);
 });
 
-test('checkArchHealth integrates with doctor', () => {
+test('architecture guard integrates with doctor probe', () => {
   const tmp = makeTmp();
 
-  // No config -> returns null
-  assert.equal(checkArchHealth(tmp, (k) => k), null);
+  // No config -> probe skipped
+  const pNone = runGovernanceProbes({ target: tmp, probes: ['arch'] });
+  assert.equal(pNone.probes[0].status, 'skipped');
+  assert.equal(pNone.checks.length, 0);
 
   // Init clean preset
   initArchConfig(tmp, { preset: 'clean' });
 
   // Clean setup -> returns ok
-  const hOk = checkArchHealth(tmp, (k) => k);
-  assert.equal(hOk.ok, true);
+  const pOk = runGovernanceProbes({ target: tmp, probes: ['arch'] });
+  assert.equal(pOk.probes[0].status, 'passed');
+  assert.equal(pOk.checks[0].ok, true);
 
   // Create violation
   fs.mkdirSync(path.join(tmp, 'src', 'domain'), { recursive: true });
@@ -211,8 +214,9 @@ test('checkArchHealth integrates with doctor', () => {
     'utf8',
   );
 
-  const hFail = checkArchHealth(tmp, (k) => k);
-  assert.equal(hFail.ok, false);
+  const pFail = runGovernanceProbes({ target: tmp, probes: ['arch'] });
+  assert.equal(pFail.probes[0].status, 'failed');
+  assert.equal(pFail.checks[0].ok, false);
 });
 
 test('CLI flow-kit arch init, check, and graph integration', () => {
@@ -295,4 +299,17 @@ test('CLI arch init exits 2 on unknown preset', () => {
   assert.equal(bad.status, 2);
   assert.match(bad.stderr, /未知的架构预设/);
   assert.equal(fs.existsSync(path.join(tmp, ARCH_CONFIG_REL)), false);
+});
+
+test('matchGlob handles mid-path ** across nested directories and invalid architecture.json exits 2', () => {
+  assert.equal(matchGlob('packages/**/domain/*.mjs', 'packages/a/b/domain/order.mjs'), true);
+  assert.equal(matchGlob('packages/**/domain/*.mjs', 'packages/order/domain/order.mjs'), true);
+  assert.equal(matchGlob('packages/**/domain/*.mjs', 'packages/domain/order.mjs'), true);
+  assert.equal(matchGlob('packages/**/domain/*.mjs', 'packages/a/b/infra/db.mjs'), false);
+
+  const tmp = makeTmp();
+  fs.mkdirSync(path.join(tmp, '.agents', 'config'), { recursive: true });
+  fs.writeFileSync(path.join(tmp, ARCH_CONFIG_REL), '{invalid-json', 'utf8');
+  const badCfg = run(['arch', 'check', '--target', tmp], KIT);
+  assert.equal(badCfg.status, 2);
 });

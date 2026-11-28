@@ -7,7 +7,9 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { makeTmp } from './helpers/tmp.mjs';
 import { makeT } from '../src/i18n.mjs';
-import { runGateChecks } from '../src/ci/gate.mjs';
+import { generateCiWorkflow, generateGateBadge, notaryTouches, renderGateMarkdown, renderGateText, runGateChecks } from '../src/ci/gate.mjs';
+import { gateCommand } from '../src/commands/gate.mjs';
+import { parseArgs } from '../src/cli/args.mjs';
 import { generateKeyPair, signPayload, writeSignatureFile } from '../src/install/notary.mjs';
 
 const t = makeT('zh-CN');
@@ -162,4 +164,100 @@ test('policy guard: 合规策略 → passed', () => {
 
   assert.equal(guard.status, 'passed');
   assert.match(guard.reason, /1\.0/);
+});
+
+test('gate contracts: canonical .agents/config/policy.json, doraTier, arch details, notaryTouches keys, GitHub --force, and NaN threshold rejection', async () => {
+  const dir = makeTmp('gate-contracts-s5-');
+
+  // 1. Canonical .agents/config/policy.json is recognized (not skipped)
+  fs.mkdirSync(path.join(dir, '.agents', 'config'), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, '.agents', 'config', 'policy.json'),
+    JSON.stringify({ version: '2.0' }),
+    'utf8',
+  );
+  const { guard: policyGuard } = guardOf(dir, 'policy');
+  assert.equal(policyGuard.status, 'passed');
+  assert.equal(policyGuard.details?.version, '2.0');
+
+  // 2. Metrics guard exposes top-level doraTier instead of undefined
+  const { guard: metricsGuard } = guardOf(dir, 'metrics');
+  assert.ok(typeof metricsGuard.details?.tier === 'string' && metricsGuard.details.tier.length > 0);
+
+  // 3. Arch guard populates structured violation details on boundary/cycle failure
+  fs.mkdirSync(path.join(dir, 'src', 'a'), { recursive: true });
+  fs.mkdirSync(path.join(dir, 'src', 'b'), { recursive: true });
+  fs.writeFileSync(
+    path.join(dir, '.agents', 'config', 'architecture.json'),
+    JSON.stringify({
+      layers: { a: { path: 'src/a/**', disallow: ['b'] }, b: { path: 'src/b/**' } },
+      rules: { noCircularDependencies: true },
+    }),
+    'utf8',
+  );
+  fs.writeFileSync(path.join(dir, 'src', 'b', 'mod.mjs'), 'export const x = 1;\n', 'utf8');
+  fs.writeFileSync(path.join(dir, 'src', 'a', 'mod.mjs'), 'import "../b/mod.mjs";\n', 'utf8');
+  const { guard: archGuard } = guardOf(dir, 'arch');
+  assert.equal(archGuard.status, 'failed');
+  assert.equal(archGuard.details?.violations, 1);
+  assert.equal(archGuard.details?.layerViolations?.length, 1);
+
+  // 4. notaryTouches includes .agents/keys/
+  assert.equal(notaryTouches(['.agents/keys/flow-kit-key.pub.pem']), true);
+
+  // 5. generateCiWorkflow protects existing GitHub workflow unless force=true
+  generateCiWorkflow({ provider: 'github', target: dir, t, force: false });
+  assert.throws(
+    () => generateCiWorkflow({ provider: 'github', target: dir, t, force: false }),
+    (err) => err.code === 'CONFIG_EXISTS',
+  );
+
+  // 6. gateCommand & runGateChecks reject non-numeric/bare thresholds and empty/bare --rules
+  await assert.rejects(
+    () => gateCommand({ args: parseArgs(['gate', 'check', '--target', dir, '--max-cfr', 'not-a-number']), t }),
+    (err) => err.code === 'BAD_GATE_USAGE',
+  );
+  await assert.rejects(
+    () => gateCommand({ args: parseArgs(['gate', 'check', '--target', dir, '--max-cfr']), t }),
+    (err) => err.code === 'BAD_GATE_USAGE',
+  );
+  await assert.rejects(
+    () => gateCommand({ args: parseArgs(['gate', 'check', '--target', dir, '--rules', '']), t }),
+    (err) => err.code === 'BAD_GATE_USAGE',
+  );
+  await assert.rejects(
+    () => gateCommand({ args: parseArgs(['gate', 'check', '--target', dir, '--rules']), t }),
+    (err) => err.code === 'BAD_GATE_USAGE',
+  );
+  assert.throws(
+    () => runGateChecks({ target: dir, thresholds: { maxCfr: Number.NaN }, t }),
+    (err) => err.code === 'BAD_GATE_USAGE',
+  );
+  assert.throws(
+    () => runGateChecks({ target: dir, rules: [], t }),
+    (err) => err.code === 'BAD_GATE_USAGE',
+  );
+
+  // 7. In-process gateCommand check / badge / init-ci + renderers roundtrip
+  const outDir = makeTmp('gate-cmd-inproc-');
+  const origLog = console.log;
+  console.log = () => {};
+  try {
+    assert.equal(await gateCommand({ args: parseArgs(['gate', 'init-ci', '--target', outDir]), t }), 0);
+    assert.equal(await gateCommand({ args: parseArgs(['gate', 'badge', '--target', outDir, '--rules', 'policy', '--out', 'badge.md']), t }), 0);
+    assert.equal(await gateCommand({
+      args: parseArgs(['gate', 'check', '--target', outDir, '--rules', 'policy', '--json', '--out', 'report.md', '--badge-out', 'badge.svg']),
+      t,
+    }), 0);
+  } finally {
+    console.log = origLog;
+  }
+  assert.equal(fs.existsSync(path.join(outDir, 'badge.md')), true);
+  assert.equal(fs.existsSync(path.join(outDir, 'report.md')), true);
+  assert.equal(fs.existsSync(path.join(outDir, 'badge.svg')), true);
+
+  const fullRes = runGateChecks({ target: dir, strict: true, t });
+  assert.match(renderGateText(fullRes, t), /REJECTED/);
+  assert.match(renderGateMarkdown(fullRes, t), /REJECTED/);
+  assert.match(generateGateBadge(fullRes, { format: 'svg' }), /<svg/);
 });

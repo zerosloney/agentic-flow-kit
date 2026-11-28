@@ -13,10 +13,10 @@ import {
   evaluateMcpCall,
   recordMcpAudit,
   queryMcpAudit,
-  checkMcpGatewayHealth,
   MCP_GATEWAY_CONFIG_REL,
   MCP_AUDIT_LOG_REL,
 } from '../src/install/mcp-gateway.mjs';
+import { runGovernanceProbes } from '../src/governance/probes.mjs';
 import { makeT } from '../src/i18n.mjs';
 
 const KIT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
@@ -255,34 +255,36 @@ test('recordMcpAudit and queryMcpAudit compute accurate analytics', () => {
   assert.equal(filtered.entries[0].tool, 'wiki_search');
 });
 
-test('checkMcpGatewayHealth detects anomalies and config validity', () => {
+test('mcp governance probe detects anomalies and config validity', () => {
   const tmp = makeTmp('flow-kit-mcp-health-');
   const t = makeT('zh-CN');
 
-  // Initially no audit log -> returns null
-  assert.equal(checkMcpGatewayHealth(tmp, t), null);
+  // Initially no audit log -> skipped
+  const p0 = runGovernanceProbes({ target: tmp, probes: ['mcp'], t });
+  assert.equal(p0.probes[0].status, 'skipped');
 
   // Healthy log (<= 5 denials)
   for (let i = 0; i < 10; i++) {
     recordMcpAudit(tmp, { role: 'coder', tool: 'wiki_search', decision: 'ALLOWED' });
   }
-  const h1 = checkMcpGatewayHealth(tmp, t);
-  assert.equal(h1.ok, true);
+  const p1 = runGovernanceProbes({ target: tmp, probes: ['mcp'], t });
+  assert.equal(p1.probes[0].status, 'passed');
+  assert.equal(p1.checks.find((c) => c.name === 'mcp-audit')?.ok, true);
 
   // Unhealthy log (> 5 denials)
   for (let i = 0; i < 6; i++) {
     recordMcpAudit(tmp, { role: 'coder', tool: 'write_file', decision: 'DENIED_PARAM', reason: 'Blocked' });
   }
-  const h2 = checkMcpGatewayHealth(tmp, t);
-  assert.equal(h2.ok, false);
-  assert.equal(h2.warn, true);
+  const p2 = runGovernanceProbes({ target: tmp, probes: ['mcp'], t });
+  assert.equal(p2.probes[0].status, 'warned');
+  assert.equal(p2.checks.find((c) => c.name === 'mcp-audit anomalies')?.warn, true);
 
   // Malformed config
   fs.mkdirSync(path.join(tmp, '.agents', 'config'), { recursive: true });
   fs.writeFileSync(path.join(tmp, MCP_GATEWAY_CONFIG_REL), 'invalid json', 'utf8');
-  const h3 = checkMcpGatewayHealth(tmp, t);
-  assert.equal(h3.ok, false);
-  assert.match(h3.detail, /mcp-gateway\.json/);
+  const p3 = runGovernanceProbes({ target: tmp, probes: ['mcp'], t });
+  assert.equal(p3.probes[0].status, 'failed');
+  assert.equal(p3.checks.find((c) => c.name === 'mcp-gateway config')?.ok, false);
 });
 
 test('CLI mcp check-call, audit and stats commands work end-to-end', () => {

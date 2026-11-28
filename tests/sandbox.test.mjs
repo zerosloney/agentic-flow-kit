@@ -15,7 +15,6 @@ import {
   buildContainerRunArgs,
   routeCommand,
   executeSandbox,
-  checkSandboxHealth,
 } from '../src/install/sandbox.mjs';
 import { makeT } from '../src/i18n.mjs';
 
@@ -514,4 +513,40 @@ test('CLI flow-kit doctor reports sandbox isolation check', () => {
   const check = dataAfter.checks.find((c) => c.name === 'sandbox isolation');
   assert.ok(check, 'sandbox isolation check must be present in doctor');
   assert.equal(typeof check.ok, 'boolean');
+});
+
+test('classifyCommandRisk and strict routeCommand block L0 prefix chaining, redirection, destructive find, and invalid custom regex', () => {
+  const bypassAttempts = [
+    'git status && node -e "process.exit(0)"',
+    'ls -la; touch pwned',
+    'cat package.json > overwritten.json',
+    'git log | tee out.log',
+    'find . -name "*.tmp" -delete',
+    'find . -exec rm {} +',
+  ];
+
+  const savedPath = process.env.PATH;
+  try {
+    process.env.PATH = makeTmp('flow-kit-empty-path-s9-');
+    for (const cmd of bypassAttempts) {
+      const risk = classifyCommandRisk(cmd);
+      assert.notEqual(risk.level, 'L0', `chained/mutating command "${cmd}" must not be classified as L0`);
+
+      const routed = routeCommand({
+        target: '.',
+        command: cmd,
+        configOverride: { mode: 'strict' },
+      });
+      assert.equal(routed.route, 'sandbox', `strict mode must route "${cmd}" to sandbox, not host`);
+      assert.equal(routed.canExecute, false);
+    }
+  } finally {
+    process.env.PATH = savedPath;
+  }
+
+  // Invalid custom regex throws a registered error code instead of raw SyntaxError
+  assert.throws(
+    () => classifyCommandRisk('git status', { dangerousPatterns: ['[unclosed'] }),
+    (err) => err.code === 'BAD_POLICY',
+  );
 });
